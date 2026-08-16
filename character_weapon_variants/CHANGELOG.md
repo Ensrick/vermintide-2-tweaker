@@ -1,5 +1,23 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.520-dev (2026-08-16) -- Half-Swording style, Outrider projectile wire, durable crowbill transforms (#916, #1320, #747) [verify-fix]
+
+- Half-Swording combat style for two-handed swords (#916): the greatsword
+  family gains a half_swording style package sourcing the burn-scrubbed maul
+  template and the one-handed hammer state machine, appended to the public
+  order for the Empire and Witch Hunter greatswords, the Bastard Sword, and
+  the Imperial Longsword with ordinals preserved; receiver 3P remaps only
+  where the existing Maul mapping was insufficient. New check
+  `issue916_half_swording_combat_style_contract`.
+- The Outrider grenade projectile resolves its own authored unit (#1320): the
+  clone's lookup_data is re-stamped and the clone template name registered in
+  NetworkLookup.item_template_names with reservation-stable, fail-closed
+  ordering per the exact-catalog wire pattern; the native Trollhammer is
+  untouched on every peer.
+- Crowbill transform runtime migrated to the durable-transform pattern
+  (schedule/apply/readback with retained-proof receipts), replacing the
+  OR-of-setters shape under the #747 umbrella; no behavior change intended.
+
 ## 0.1.519-dev (2026-08-16) -- Crowbill husk admission, Outrider tunes, ammo disjointness, browser contract (#719, #1186, #1188, #419) [verify-fix]
 
 - Remote players now see the authored Imperial and Dawi Crowbill models instead

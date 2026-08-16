@@ -22,12 +22,24 @@ return function(H, repo_root)
 			"units/beings/player/first_person_base/state_machines/melee/2h_sword")
 		H.equal(family_policy.styles.bretonnian.template, "bastard_sword_template")
 		H.equal(family_policy.styles.kerillian.template, policy.KERILLIAN_TEMPLATE)
+		-- #916: Half-Swording is appended after every pre-existing ordinal.
+		H.equal(family_policy.styles.half_swording.template, "maul_template")
+		H.equal(family_policy.styles.half_swording.resource,
+			"units/beings/player/first_person_base/state_machines/melee/brw_hammer")
+		H.equal(family_policy.styles.half_swording.receivers, nil)
 		local next_id = policy.next_style("es_2h_sword", current)
 		H.equal(next_id, "kerillian")
 		next_id = policy.next_style("es_2h_sword", next_id)
 		H.equal(next_id, "bretonnian")
 		next_id = policy.next_style("es_2h_sword", next_id)
+		H.equal(next_id, "half_swording")
+		next_id = policy.next_style("es_2h_sword", next_id)
 		H.equal(next_id, "greatsword")
+		local half_package = policy.package("es_2h_sword", "half_swording")
+		H.equal(half_package.template, "maul_template")
+		H.equal(half_package.presentation, nil)
+		H.equal(half_package.remap_key, nil)
+		H.equal(half_package.required_dlc, nil)
 		local bret_package = policy.package("es_2h_sword", "bretonnian")
 		H.equal(bret_package.presentation.transform_key, "greatsword_bretonnian")
 		H.equal(policy.package("es_bastard_sword", "bretonnian").presentation, nil)
@@ -35,7 +47,11 @@ return function(H, repo_root)
 		H.equal(policy.style("es_bastard_sword"), "bretonnian")
 		H.equal(policy.next_style("es_bastard_sword", "bretonnian"), "greatsword")
 		H.equal(policy.next_style("es_bastard_sword", "greatsword"), "kerillian")
-		H.equal(policy.next_style("es_bastard_sword", "kerillian"), "bretonnian")
+		H.equal(policy.next_style("es_bastard_sword", "kerillian"), "half_swording")
+		H.equal(policy.next_style("es_bastard_sword", "half_swording"), "bretonnian")
+		-- #916: the Half-Swording package never overrides the receiver mesh.
+		H.equal(policy.package("es_bastard_sword", "half_swording").template, "maul_template")
+		H.equal(policy.package("es_bastard_sword", "half_swording").presentation, nil)
 		H.equal(policy.package("es_bastard_sword", "greatsword").template,
 			policy.BRETONNIAN_GREATSWORD_TEMPLATE)
 		H.equal(policy.package("es_bastard_sword", "greatsword").presentation.transform_key,
@@ -48,7 +64,12 @@ return function(H, repo_root)
 		H.equal(policy.style("wh_2h_sword"), "greatsword")
 		H.equal(policy.next_style("wh_2h_sword", "greatsword"), "kerillian")
 		H.equal(policy.next_style("wh_2h_sword", "kerillian"), "bretonnian")
-		H.equal(policy.next_style("wh_2h_sword", "bretonnian"), "greatsword")
+		H.equal(policy.next_style("wh_2h_sword", "bretonnian"), "half_swording")
+		H.equal(policy.next_style("wh_2h_sword", "half_swording"), "greatsword")
+		-- #916: Saltzpyre needs no receiver remap; his 3P body already plays the
+		-- greathammer vocabulary the Maul remap targets (wh_2h_hammer's kruber
+		-- style carries no receiver either).
+		H.equal(policy.package("wh_2h_sword", "half_swording").remap_key, nil)
 		local saltz_bret = policy.package("wh_2h_sword", "bretonnian")
 		H.equal(saltz_bret.template, policy.SALTZ_BRETONNIAN_TEMPLATE)
 		H.equal(saltz_bret.remap_key, "bretonnian_greatsword_to_saltz")
@@ -73,12 +94,14 @@ return function(H, repo_root)
 	end)
 
 	H.test("CWV inventory indicator follows each exact member cycle", function()
-		H.equal(policy.moveset_indicator("es_bastard_sword", "bretonnian"), "Moveset 1 / 3")
-		H.equal(policy.moveset_indicator("es_bastard_sword", "greatsword"), "Moveset 2 / 3")
-		H.equal(policy.moveset_indicator("es_bastard_sword", "kerillian", nil, true), "3 / 3")
-		H.equal(policy.moveset_indicator("es_2h_sword", "greatsword"), "Moveset 1 / 3")
-		H.equal(policy.moveset_indicator("es_2h_sword", "kerillian"), "Moveset 2 / 3")
-		H.equal(policy.moveset_indicator("es_2h_sword", "bretonnian"), "Moveset 3 / 3")
+		H.equal(policy.moveset_indicator("es_bastard_sword", "bretonnian"), "Moveset 1 / 4")
+		H.equal(policy.moveset_indicator("es_bastard_sword", "greatsword"), "Moveset 2 / 4")
+		H.equal(policy.moveset_indicator("es_bastard_sword", "kerillian", nil, true), "3 / 4")
+		H.equal(policy.moveset_indicator("es_bastard_sword", "half_swording"), "Moveset 4 / 4")
+		H.equal(policy.moveset_indicator("es_2h_sword", "greatsword"), "Moveset 1 / 4")
+		H.equal(policy.moveset_indicator("es_2h_sword", "kerillian"), "Moveset 2 / 4")
+		H.equal(policy.moveset_indicator("es_2h_sword", "bretonnian"), "Moveset 3 / 4")
+		H.equal(policy.moveset_indicator("es_2h_sword", "half_swording", nil, true), "4 / 4")
 		H.equal(policy.moveset_indicator("es_handgun", "greatsword"), nil)
 	end)
 
@@ -307,7 +330,7 @@ return function(H, repo_root)
 			item_1_1 = button_item,
 			cwv_style_hotspot_1_1 = { cwv_visible = true },
 		}
-		local expected = { "kerillian", "bretonnian", "greatsword" }
+		local expected = { "kerillian", "bretonnian", "half_swording", "greatsword" }
 		for index, style_id in ipairs(expected) do
 			local hotspot = content.cwv_style_hotspot_1_1
 			hotspot.on_pressed = true

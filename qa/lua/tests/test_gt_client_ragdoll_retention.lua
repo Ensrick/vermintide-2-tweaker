@@ -9,6 +9,7 @@ return function(H, repo_root)
         options = options or {}
         local hooks = {}
         local registrations = {}
+        local updates = {}
         local prints = {}
         local mod = {
             get = function(_, key)
@@ -20,6 +21,9 @@ return function(H, repo_root)
             end,
             _gt_rt_register = function(name, fn)
                 registrations[name] = fn
+            end,
+            _gt_register_update = function(name, fn)
+                updates[name] = fn
             end,
         }
 
@@ -98,7 +102,7 @@ return function(H, repo_root)
         _G.printf = old.printf
         if not ok then error(err, 0) end
 
-        return mod, hooks, registrations, prints, managers
+        return mod, hooks, registrations, prints, managers, updates
     end
 
     local function fake_spawner(options)
@@ -248,6 +252,56 @@ return function(H, repo_root)
         H.equal(vanilla_calls, 1)
         H.equal(#self.spawned, 1)
         H.equal(self.spawned[1].pose_source, unit)
+    end)
+
+    H.test("GT #332 Max Ragdolls 0 retains nothing and clamps clean", function()
+        local mod, hooks, registrations = load_runtime({ cap = 0 })
+        local self, add = fake_spawner()
+        add(17)
+        local vanilla_calls = 0
+        hooks["UnitSpawner.destroy_game_object_unit"](
+            function() vanilla_calls = vanilla_calls + 1 end, self, 17, "host")
+        -- Vanilla teardown still forwarded exactly once; zero cap = no snapshot.
+        H.equal(vanilla_calls, 1)
+        H.equal(#self.spawned, 0)
+        -- Clamp admits 0 (the old math.max(1, ...) floor promoted 0 to 1),
+        -- stays floored at 0 for garbage, and keeps the nil default at 24.
+        H.equal(mod._gt332_requested_cap(0), 0)
+        H.equal(mod._gt332_requested_cap(-5), 0)
+        H.equal(mod._gt332_requested_cap(nil), 24)
+        H.equal(mod._gt332_requested_cap(301), 300)
+        -- The regression check must hold with the widened clamp in place.
+        H.equal(registrations.issue332_client_ragdoll_retention(), nil)
+    end)
+
+    H.test("GT #332 bounded timer prunes over-cap corpses without a new death", function()
+        local mod, hooks, _, _, managers, updates = load_runtime({ cap = 2 })
+        local tick = updates.gt332_client_corpse_reconcile
+        H.truthy(tick)
+        local self, add = fake_spawner()
+        add(1)
+        add(2)
+        local hook = hooks["UnitSpawner.destroy_game_object_unit"]
+        hook(function() end, self, 1, "host")
+        hook(function() end, self, 2, "host")
+        H.equal(#self.marked, 0)
+
+        -- The user lowers the cap to 0 mid-mission; no further death arrives.
+        -- Before the timer, these clones lingered until the NEXT kill.
+        mod.get = function() return 0 end
+        managers.state.unit_spawner = self
+        tick(0.5)
+        H.equal(#self.marked, 0)   -- below the 1 s period: not due yet
+        tick(0.6)
+        H.equal(#self.marked, 2)   -- period crossed: pruned to the live cap
+        H.equal(self.spawned[1].marked, true)
+        H.equal(self.spawned[2].marked, true)
+
+        -- Host guard: a server-side spawner is never reconciled by the timer.
+        local host_spawner = fake_spawner({ is_server = true })
+        managers.state.unit_spawner = host_spawner
+        tick(1.5)
+        H.equal(#host_spawner.marked, 0)
     end)
 
     H.test("GT #332 client corpse retention adds no mod RPC surface", function()

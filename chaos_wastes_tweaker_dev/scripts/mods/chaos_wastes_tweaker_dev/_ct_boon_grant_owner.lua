@@ -408,6 +408,7 @@ mod:hook("DeusRunController", "add_power_ups", function(func, self, new_power_up
                         -- string re-interprets the %.1f and prints "<Invalid string
                         -- format>". Pass the parts as args so mod:echo formats ONCE; the
                         -- boon name's % is then inert (a %s substitution value).
+                        -- allow-echo: user-opted-in announce_bot_boons chat notice (checkbox, default off) naming each bot grant; not routine diagnostics (#727)
                         mod:echo("[ct] Bot %s got boon: %s (%s)",
                             tostring(bot.name and bot:name() or "?"),
                             tostring(mod._ct_boon_display_name(bot_name)),

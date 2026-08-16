@@ -47,6 +47,21 @@ return function(H, repo_root)
 		H.equal(missing_reason, "lookup_missing")
 	end)
 
+	H.test("Enemy Tweaker owns and loads the exact canonical NetworkLookup helper", function()
+		local et_consumer_path = repo_root
+			.. "/enemy_tweaker/scripts/mods/enemy_tweaker/_lib_network_lookup.lua"
+		H.equal(read(et_consumer_path), read(canonical_path), "et helper copy drifted")
+		local manifest = read(repo_root .. "/tools/shared_lib/manifest.psd1")
+		H.truthy(manifest:find(
+			'"enemy_tweaker/scripts/mods/enemy_tweaker/_lib_network_lookup.lua"',
+			1, true), "et helper is absent from the shared-library manifest")
+		local consumer = read(repo_root
+			.. "/enemy_tweaker/scripts/mods/enemy_tweaker/_et_boss_ideas.lua")
+		H.truthy(consumer:find(
+			'mod:dofile("scripts/mods/enemy_tweaker/_lib_network_lookup")',
+			1, true), "et does not load its helper copy")
+	end)
+
 	H.test("WOC owns and loads the exact canonical NetworkLookup helper", function()
 		H.equal(read(consumer_path), read(canonical_path), "WOC helper copy drifted")
 		local manifest = read(repo_root .. "/tools/shared_lib/manifest.psd1")
