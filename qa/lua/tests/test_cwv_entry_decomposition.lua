@@ -36,6 +36,10 @@ return function(H, repo_root)
     local musket_ammo_hud = read("_cwv_musket_ammo_hud.lua")
     local lifecycle = read("_cwv_commands_lifecycle.lua")
     local identity = read("_cwv_regression_identity.lua")
+    -- #1188/#1186 split out of the identity owner when it crossed the section 2.1
+    -- hard limit; it dofiles BETWEEN identity and render, so its checks keep the
+    -- registration slots they already held.
+    local husk_ammo = read("_cwv_regression_husk_ammo.lua")
     local render = read("_cwv_regression_render.lua")
     local javelin_runtime = read("_cwv_javelin_runtime_owner.lua")
     local rapier_runtime = read("_cwv_rapier_runtime_owner.lua")
@@ -126,6 +130,7 @@ return function(H, repo_root)
         local menu_preview_at = assert(entry:find("_cwv_menu_preview_owner", 1, true))
         local lifecycle_at = assert(entry:find("_cwv_commands_lifecycle", 1, true))
         local identity_at = assert(entry:find("_cwv_regression_identity", 1, true))
+        local husk_ammo_at = assert(entry:find("_cwv_regression_husk_ammo", 1, true))
         local render_at = assert(entry:find("_cwv_regression_render", 1, true))
         H.truthy(cross_at < core_at)
         -- #1159: the husk-residency owner force-loads at boot, long before the
@@ -169,7 +174,11 @@ return function(H, repo_root)
         H.truthy(menu_preview_at < lifecycle_at)
         H.truthy(husk_at < lifecycle_at)
         H.truthy(lifecycle_at < identity_at)
-        H.truthy(identity_at < render_at)
+        -- The husk-ammo owner sits BETWEEN its two siblings: _rt_register appends
+        -- to one ordered runner list, so that position is what preserves the
+        -- registration slots its checks held before the split.
+        H.truthy(identity_at < husk_ammo_at)
+        H.truthy(husk_ammo_at < render_at)
     end)
 
     H.test("CWV companion detection crosses the phased bootstrap boundary", function()
@@ -392,7 +401,11 @@ return function(H, repo_root)
 
     H.test("CWV regression registration split preserves all checks and boundary", function()
         local names = {}
-        for name in (identity .. "\n" .. render):gmatch('_rt_register%("([^"]+)"') do
+        -- Concatenated in ENTRY DOFILE ORDER, so the index pins below describe the
+        -- order the runner actually registers in, not the order files happen to
+        -- be read here.
+        for name in (identity .. "\n" .. husk_ammo .. "\n" .. render)
+                :gmatch('_rt_register%("([^"]+)"') do
             names[#names + 1] = name
         end
         H.equal(#names, 87)
@@ -403,8 +416,11 @@ return function(H, repo_root)
         H.equal(names[39], "cwv_husk_transform_coverage")
         H.equal(names[40], "cwv_husk_stale_unit_and_postcondition")
         -- issue 399 appended the husk ammo-adapter drive as an identity check;
-        -- #914 and #1108 each added one earlier identity check, and #1186/#1188
-        -- appended two more, so the identity/render boundary now follows slot 44.
+        -- #914 and #1108 each added one earlier identity check. Slots 43-44 moved
+        -- OUT of the identity owner into _cwv_regression_husk_ammo when that file
+        -- crossed the section 2.1 hard limit; because the entry dofiles it between
+        -- its two siblings the slots themselves are unchanged, so this sequence is
+        -- the split's proof as well as the boundary's.
         H.equal(names[41], "issue399_outrider_husk_ammo_adapter")
         H.equal(names[42], "issue1204_deus_identity_uses_committed_parity")
         H.equal(names[43], "issue1186_outrider_projectile_reads_cloned_tunes")

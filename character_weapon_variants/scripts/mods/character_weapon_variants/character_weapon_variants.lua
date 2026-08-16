@@ -1571,4 +1571,5 @@ local _cwv_regression_context = {
 	custom_skin_keys = _custom_skin_keys,
 }
 mod:dofile("scripts/mods/character_weapon_variants/_cwv_regression_identity")(mod, _cwv_regression_context)
+mod:dofile("scripts/mods/character_weapon_variants/_cwv_regression_husk_ammo")(mod, _cwv_regression_context)
 mod:dofile("scripts/mods/character_weapon_variants/_cwv_regression_render")(mod, _cwv_regression_context)

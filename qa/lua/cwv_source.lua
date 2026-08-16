@@ -32,6 +32,7 @@ local MODULES_IN_INSTALL_ORDER = {
     "_cwv_menu_preview_owner.lua",
     "_cwv_commands_lifecycle.lua",
     "_cwv_regression_identity.lua",
+    "_cwv_regression_husk_ammo.lua",
     "_cwv_regression_render.lua",
 }
 
