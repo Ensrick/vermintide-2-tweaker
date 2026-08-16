@@ -49,6 +49,10 @@ local _is_unit = mod._cos.is_unit
 -- stateless, so a per-consumer dofile instance is safe.
 local GLOW_INSTANCE_POLICY = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_instance_policy")
 local GLOW_PREVIEW_POLICY = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_preview_policy")
+-- #1147: pure surface-repaint policy (payload resolution + per-item paint math
+-- + postcondition classifier) for the preview/score surfaces. Pure and
+-- stateless, so a per-consumer dofile instance is safe.
+local GLOW_SURFACE_POLICY = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_surface_policy")
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md section 3.6). Byte-identical
 -- copies of the entry's _dbg / _dbg_alert so the moved glow functions keep calling
@@ -307,6 +311,24 @@ end
 -- v0.9.0-dev: per-peer glow apply. `owner_peer_id` resolves which peer's
 -- settings drive the override. nil means "local viewer" (legacy behavior for
 -- NPC display weapons, pickups, etc.).
+-- Engine write primitive + shared deps handed to the pure surface policy.
+-- The paint MATH itself (component clamps, HDR scaling, variable spans,
+-- disabled zero-paint) moved verbatim to _cos_glow_surface_policy.paint_per_item
+-- (#1147) so the offline suite drives the real repaint; this wrapper keeps the
+-- pcall'd engine boundary byte-equivalent to the previous inline writes.
+local function _glow_write_vec3(unit, var_name, x, y, z)
+    pcall(Unit.set_vector3_for_materials, unit, var_name, Vector3(x, y, z))
+end
+
+-- One shared table (no per-call allocation): the pure policy's injected
+-- primitives are exactly this module's existing ones.
+local _SURFACE_REPAINT_DEPS = {
+    var_brightness = _GLOW_VAR_BRIGHTNESS,
+    write = _glow_write_vec3,
+    is_unit = _is_unit,
+    match = _remote_glow_matches,
+}
+
 local function _apply_glow_to_unit(unit, owner_peer_id)
     if not unit or not _is_unit(unit) then return end
     -- v0.9.6 M2: per-item override BEFORE the global toggle gate. The
@@ -324,76 +346,12 @@ local function _apply_glow_to_unit(unit, owner_peer_id)
             local bid = mod._unit_to_backend_id[unit]
             pi = bid and mod._per_item_glow_runtime[bid] or nil
         end
-        if type(pi) == "table" then
-                -- v0.9.8: per-item explicit OFF toggle. If user disabled
-                -- glow for this item, paint zeros (effectively disable)
-                -- and skip both per-item and global paths. Vanilla
-                -- material set_vector3 with zeros = no emissive output.
-                if pi.disabled then
-                    for var_name, _ in pairs(_GLOW_VAR_BRIGHTNESS) do
-                        pcall(Unit.set_vector3_for_materials, unit, var_name, Vector3(0, 0, 0))
-                    end
-                    return
-                end
-                -- v0.9.8: helper for per-component HDR scaling. Reads
-                -- shader var's native brightness from _GLOW_VAR_BRIGHTNESS,
-                -- multiplies by user intensity, divides by 255 (user RGB
-                -- is 0-255), writes to material.
-                local function _paint_var(var_name, r, g, b, intensity)
-                    local info = _GLOW_VAR_BRIGHTNESS[var_name]
-                    if not info then return end
-                    -- Peer payloads are untrusted. Ignore malformed component
-                    -- values rather than allowing arithmetic on strings/tables.
-                    if type(r) ~= "number" or type(g) ~= "number" or type(b) ~= "number"
-                        or type(intensity) ~= "number" then return end
-                    r = math.max(0, math.min(255, r))
-                    g = math.max(0, math.min(255, g))
-                    b = math.max(0, math.min(255, b))
-                    intensity = math.max(0, math.min(5, intensity))
-                    local scale = (info.brightness or 1) * intensity / 255
-                    pcall(Unit.set_vector3_for_materials, unit, var_name,
-                        Vector3(r * scale, g * scale, b * scale))
-                end
-                local function _component_active(component)
-                    return type(component) == "table"
-                        and type(component.intensity) == "number"
-                        and component.intensity > 0
-                end
-                -- RUNE family: single channel.
-                if _component_active(pi.rune) then
-                    _paint_var("rune_emissive_color",
-                        pi.rune.r or 0, pi.rune.g or 0, pi.rune.b or 0, pi.rune.intensity)
-                end
-                -- v0.9.8: MAGIC family components. Each component spans
-                -- multiple shader vars (lower = glow_high+glow_low,
-                -- upper = smoke_high+smoke_low, dots = single). All share
-                -- the user's RGB at scaled brightness so vanilla's
-                -- coordinated brightness pairs remain proportional.
-                if _component_active(pi.lower) then
-                    _paint_var("color_glow_high",
-                        pi.lower.r or 0, pi.lower.g or 0, pi.lower.b or 0, pi.lower.intensity)
-                    _paint_var("color_glow_low",
-                        pi.lower.r or 0, pi.lower.g or 0, pi.lower.b or 0, pi.lower.intensity)
-                end
-                if _component_active(pi.upper) then
-                    _paint_var("color_smoke_high",
-                        pi.upper.r or 0, pi.upper.g or 0, pi.upper.b or 0, pi.upper.intensity)
-                    _paint_var("color_smoke_low",
-                        pi.upper.r or 0, pi.upper.g or 0, pi.upper.b or 0, pi.upper.intensity)
-                end
-                if _component_active(pi.dots) then
-                    _paint_var("color_dots",
-                        pi.dots.r or 0, pi.dots.g or 0, pi.dots.b or 0, pi.dots.intensity)
-                end
-                -- If ANY component painted, treat per-item as fully
-                -- handled — skip global override. Detection: at least
-                -- one component had intensity > 0.
-                if _component_active(pi.rune)
-                    or _component_active(pi.lower)
-                    or _component_active(pi.upper)
-                    or _component_active(pi.dots) then
-                    return
-                end
+        -- Per-item paint delegated to the shared pure policy (#1147); a
+        -- handled unit (disabled OR any active component) skips the global
+        -- override exactly as the previous inline block did.
+        if type(pi) == "table"
+                and GLOW_SURFACE_POLICY.paint_per_item(unit, pi, _SURFACE_REPAINT_DEPS) then
+            return
         end
     end
     if not _glow_override_enabled(owner_peer_id) then return end
@@ -776,6 +734,133 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 end)
 
 -- ============================================================
+-- #1147: surface glow repaint (preview + score) with postcondition receipts
+-- ============================================================
+-- The husk_wield path was the ONLY glow repaint emitter (host+client evidence
+-- 2026-08-03); the score lineup and the inventory character preview surfaces
+-- either never painted or reported call completion as success. These adapters
+-- route both surfaces through the #660 render-identity descriptors (the same
+-- matcher the husk consumers use -- score rows have NO owner-local backend
+-- ids) and report success ONLY from the painted-mesh postcondition.
+local COS1147_RECEIPT_CAP = 24
+local _cos1147_receipts = 0
+local _cos1147_seen = {}
+local function _cos1147_log(key, fmt, ...)
+    if _cos1147_seen[key] or _cos1147_receipts >= COS1147_RECEIPT_CAP then return end
+    _cos1147_seen[key] = true
+    _cos1147_receipts = _cos1147_receipts + 1
+    if not pcall(printf, fmt, ...) then
+        pcall(printf, "[cos:1147] (receipt format error)")
+    end
+end
+
+-- Painted-mesh postcondition: read the authored mesh identity and prove at
+-- least one material on the painted unit exposes a glow variable. Every
+-- engine touch is pcall'd; Material.num_parameters/parameter_name are NEVER
+-- called (resource_manager.cpp fault past pcall, cosmetics_tweaker.lua:435).
+local function _glow_surface_postcondition(unit)
+    if not unit or not _is_unit(unit) then
+        return GLOW_SURFACE_POLICY.classify_postcondition({ alive = false }), "<not-unit>"
+    end
+    local mesh_name = "<no-unit_name>"
+    local ok_has, has = pcall(Unit.has_data, unit, "unit_name")
+    if ok_has and has then
+        local ok_get, name = pcall(Unit.get_data, unit, "unit_name")
+        if ok_get and name then mesh_name = tostring(name) end
+    end
+    local capable = false
+    local ok_n, num = pcall(Unit.num_meshes, unit)
+    if ok_n and type(num) == "number" then
+        for i = 0, num - 1 do
+            local ok_m, mesh = pcall(Unit.mesh, unit, i)
+            if ok_m and mesh then
+                local ok_nm, n_mats = pcall(Mesh.num_materials, mesh)
+                if ok_nm and type(n_mats) == "number" then
+                    for j = 0, n_mats - 1 do
+                        local ok_mat, mat = pcall(Mesh.material, mesh, j)
+                        if ok_mat and mat and Material and Material.has_variable then
+                            for var_name in pairs(_GLOW_VAR_BRIGHTNESS) do
+                                local okv, hasv = pcall(Material.has_variable, mat, var_name)
+                                if okv and hasv then capable = true break end
+                            end
+                        end
+                        if capable then break end
+                    end
+                end
+            end
+            if capable then break end
+        end
+    end
+    local verdict = GLOW_SURFACE_POLICY.classify_postcondition({
+        alive = true, mesh_name = mesh_name, glow_capable = capable,
+    })
+    return verdict, mesh_name
+end
+
+-- Paint a wearer's active per-item glow onto surface units that carry no
+-- owner-local backend id (score lineup rows; preview fallbacks). Local and
+-- remote wearers resolve through the same transported payload; the local
+-- wearer's live active payload covers the pre-echo window.
+local function _apply_wearer_surface_glow(units, wearer_peer, site)
+    local peer_state, source = GLOW_SURFACE_POLICY.resolve_wearer_state(
+        _glow_by_peer, wearer_peer, _glow_is_local_peer(wearer_peer), {
+            active_per_item_glow = mod._active_per_item_glow,
+            active_per_item_glow_identity = mod._active_per_item_glow_identity,
+            active_per_item_glow_slot = mod._active_per_item_glow_slot,
+        })
+    if not peer_state then
+        if source == "no-payload" then
+            _cos1147_log(tostring(site) .. "|" .. tostring(wearer_peer) .. "|no-payload",
+                "[cos:1147] repaint path=%s wearer=%s source=no-payload painted=0",
+                tostring(site), tostring(wearer_peer))
+        end
+        return 0, source
+    end
+    local painted, considered, matched = GLOW_SURFACE_POLICY.repaint(
+        units, peer_state, _SURFACE_REPAINT_DEPS)
+    local post, mesh = "no-paint", "-"
+    if painted > 0 then
+        for _, unit in pairs(units) do
+            if unit and _is_unit(unit) and _remote_glow_matches(unit, peer_state) then
+                post, mesh = _glow_surface_postcondition(unit)
+                break
+            end
+        end
+    end
+    _cos1147_log(table.concat({ tostring(site), tostring(wearer_peer),
+            tostring(peer_state.active_per_item_glow_identity), post }, "|"),
+        "[cos:1147] repaint path=%s wearer=%s source=%s considered=%d matched=%d painted=%d mesh=%s post=%s",
+        tostring(site), tostring(wearer_peer), tostring(source),
+        considered, matched, painted, tostring(mesh), post)
+    return painted, source
+end
+
+-- Postcondition receipt for the backend-id-keyed preview paint that already
+-- runs at the _spawn_item_post seam: names the painted mesh and whether the
+-- per-item state existed at paint time (cold-load parity evidence). Silent
+-- when the session holds no per-item glow at all, so the bounded cap is
+-- spent only on sessions where parity is actually owed.
+local function _report_surface_glow(unit, bid, skin, site)
+    if not unit or not _is_unit(unit) then return end
+    local runtime = mod._per_item_glow_runtime
+    local pi = bid and runtime and runtime[bid] or nil
+    local state
+    if type(pi) ~= "table" then
+        if type(runtime) ~= "table" or next(runtime) == nil then return end
+        state = "none"
+    elseif pi.disabled then
+        state = "disabled"
+    else
+        state = "active"
+    end
+    local post, mesh = _glow_surface_postcondition(unit)
+    _cos1147_log(table.concat({ tostring(site), tostring(bid),
+            tostring(skin), state, post }, "|"),
+        "[cos:1147] repaint path=%s bid=%s skin=%s state=%s mesh=%s post=%s",
+        tostring(site), tostring(bid), tostring(skin), state, tostring(mesh), post)
+end
+
+-- ============================================================
 -- Exports (mod._cos) consumed by the render hooks in the entry
 -- ============================================================
 -- Coupling point 2 (peer-owner lookup): the in-game create_equipment hook resolves
@@ -789,3 +874,9 @@ mod._cos.glow_owner_peer_for_unit = _glow_owner_peer_for_unit
 mod._cos.bind_glow_unit = _bind_glow_unit
 mod._cos.remote_glow_matches = _remote_glow_matches
 mod._cos.remote_glow_context_matches = _remote_glow_context_matches
+-- #1147: preview/score surface glow (consumed by _cos_preview_runtime's
+-- _spawn_item_post seam; postcondition helper shared with runtime checks).
+mod._cos.apply_wearer_surface_glow = _apply_wearer_surface_glow
+mod._cos.report_surface_glow = _report_surface_glow
+mod._cos.glow_surface_postcondition = _glow_surface_postcondition
+mod._cos.glow_surface_policy = GLOW_SURFACE_POLICY

@@ -341,8 +341,14 @@ return {
 		--   inventory-mannequin paths only; browser/forge show baked glow (650).
 		-- customize (edge): toggling a preset does NOT live-repaint a spawned
 		--   weapon (GLOW_SYSTEM section Activation) -- needs a fresh wield.
-		-- lobby/score_team stay unsupported: 1147 tracks the glow one-off there
-		--   and no shipped adapter drives either surface today.
+		-- score_team: 1147 -- _cos_preview_runtime._spawn_item_post routes score
+		--   rows (wearer stamped by the TeamPreviewer._spawn_hero hook) through
+		--   _cos_glow.lua's apply_wearer_surface_glow: the transported
+		--   _glow_by_peer payload matched by render identity
+		--   (_cos_glow_surface_policy, offline-driven by
+		--   test_cos_glow_surface_policy.lua). Success is the painted-mesh
+		--   postcondition, never call completion.
+		-- lobby stays unsupported: no lobby adapter shipped (1147 tracks it).
 		-- ================================================================
 		glow_overrides = {
 			matrix = (function()
@@ -351,24 +357,28 @@ return {
 					customize = "Toggling a glow preset does not live-repaint an already-spawned weapon (GLOW_SYSTEM section Activation); the new preset takes effect on the next wield. Degrades to the previously painted glow.",
 					mod_disable_restore = FB_DISABLE,
 				}
+				local score_edges = plus(open, { peer_ready = UNSUP })
+				local score_notes = plus(open_notes, {
+					peer_ready = "A score row for a wearer whose cos_glow_apply broadcast never landed (peer readied before the echo, or wearer without Cosmetics) resolves no payload and fails closed to the baked glow. The local wearer's live active payload covers the pre-echo window; remote wearers depend on the transport.",
+				})
 				return build(
 					{
 						owner_1p = IMPL, owner_3p = IMPL, bot = UNSUP,
 						inventory_preview = IMPL, illusion_browser = UNSUP, cim_preview = UNSUP,
-						lobby = UNSUP, score_team = UNSUP, hold_tab = UNSUP,
+						lobby = UNSUP, hold_tab = UNSUP,
 					},
 					{
 						bot              = "Glow presets are keyed per exact backend item the owner configured; bots wield default-loadout items with no preset and render vanilla glow. Safe by design.",
 						illusion_browser = "Glow re-key runs on create_equipment / _wield_slot / _spawn_item_unit (in-game + inventory mannequin); the LootItemUnitPreviewer illusion-browser path does not re-apply the per-item glow preset -- the browser shows the mesh's baked glow only. Tracked 650 (glow composition) and 796 (exact glow preview ownership).",
 						cim_preview      = "The Athanor forge previewer is not hooked for glow; renders baked glow only. Tracked 650.",
-						lobby            = "No lobby-card previewer hook; the lobby portrait is 2D. Tracked 1147 (glow one-off on the lobby/score surfaces) and the lobby-preview gap.",
-						score_team       = "Score apply is hat/armor only; weapon glow presets are not applied on the score lineup. Tracked 1147 and 513-class / 650.",
+						lobby            = "No lobby-card previewer hook; the lobby portrait is 2D. Tracked 1147 (glow one-off on the lobby surface) and the lobby-preview gap.",
 						hold_tab         = "Glow is a 3D material property; Hold-Tab shows 2D slot icons. Not applicable by surface.",
 					},
 					open, open_notes,
 					{
 						husk = husk_row(open, open_notes,
 							"The per-peer cos_glow_apply transport (_cos_glow_transport.lua) paints from the _glow_by_peer cache through _cos_glow.lua; a peer without Cosmetics, or a paint that lands before the mesh is resident, renders the mesh's baked glow. Degrades to the resident vanilla baked glow."),
+						score_team = row(IMPL, nil, score_edges, score_notes),
 					})
 			end)(),
 		},
