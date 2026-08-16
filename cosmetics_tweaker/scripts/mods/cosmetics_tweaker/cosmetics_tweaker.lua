@@ -107,7 +107,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.211-dev"
+local MOD_VERSION = "0.9.212-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -912,8 +912,8 @@ local _offhand_paint_mesh_ok =
     _cos_offhand_apply_runtime.offhand_paint_mesh_ok
 local _apply_authored_offhand_to_unit =
     _cos_offhand_apply_runtime.apply_authored_offhand_to_unit
-local _apply_la_offhand_to_units =
-    _cos_offhand_apply_runtime.apply_la_offhand_to_units
+local _apply_la_offhand_to_units = _cos_offhand_apply_runtime.apply_la_offhand_to_units
+local _cos_cim_preview = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_cim_preview_wiring")(mod, get_mod, _get_offhand_options, _offhand_session_state, _offhand_selection, _resolve_authored_offhand_variant, _apply_authored_offhand_to_unit, _is_unit, LA_BRIDGE)
 -- In-game keep / mission body + the item unit-table resolution it brackets.
 -- THREE RENDERING PATHS COVERAGE:
 --   - In-game (GearUtils.create_equipment): _cos_equipment_assembly.lua
@@ -939,7 +939,7 @@ mod:dofile("scripts/mods/cosmetics_tweaker/_cos_equipment_assembly").install(mod
     offhand_session_state = _offhand_session_state,
     override_package_ready = _override_package_ready,
     resolve_authored_offhand_mesh = _resolve_authored_offhand_mesh,
-    resolve_authored_offhand_variant = _resolve_authored_offhand_variant,
+    resolve_authored_offhand_variant = _resolve_authored_offhand_variant, cim_preview = _cos_cim_preview,
     get_current_husk_wield = function()
         return HUSK_WIELD_RUNTIME.current(mod)
     end,
@@ -968,9 +968,8 @@ mod:dofile("scripts/mods/cosmetics_tweaker/_cos_preview_runtime").install(mod, {
     get_active_customization_backend_id = function()
         return _active_customization_backend_id
     end,
-    get_mod = get_mod,
+    get_mod = get_mod, cim_preview = _cos_cim_preview,
 })
-
 -- ============================================================
 -- LA loadout state + the two vanilla-RPC net-safe senders
 --   -> _cos_la_loadout_safety.lua (#1159)

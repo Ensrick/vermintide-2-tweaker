@@ -8,6 +8,33 @@ Last updated: 2026-08-13.
 
 ---
 
+## #943 - Fire Sword heavy attack tweaks
+
+| Field | Check |
+|---|---|
+| Candidate version | Pending ship (version assigned by the coordinator at claim time). |
+| Off state | With both settings off, every inspected `default` chain edge and every `heavy_attack_spell` timing value is numerically identical to vanilla, including after repeated on/off cycles. |
+| Sweep opener | Enable **Flame Sword: Sweep Opens Heavies** only. An idle charged heavy opens with the sweep, the follow-up heavy is the nova, and both keep vanilla timing. Lights, push, block, weapon special, and the tooltip comparison stay vanilla. |
+| Nova slowdown | Enable **Flame Sword: 10% Slower Nova Heavy** only. The nova stays the opener; its swing, hit, damage window, movement-slow window, and heavy continuation windows are all 10% longer with no cumulative drift across toggles or state transitions. |
+| Composition | Both on: sweep opens, nova follows, only the nova is slower. |
+| Isolation | Per-template-identity capture: a replaced/late template re-captures fresh vanilla values; no other Fire Sword action or other weapon changes. Wire-safe: sub_action re-route between vanilla names + attacker-local melee timing only. |
+| Automated | Offline `test_wt_fire_sword.lua`; `/wt_regression_test`: `issue943_fire_sword_heavy_contract` (fixture projection + live idle-edge audit). |
+
+---
+
+## #1023 - live Hold-Pose HUD row (dev only)
+
+| Field | Check |
+|---|---|
+| Candidate version | Pending ship (version assigned by the coordinator at claim time). |
+| Visibility | The row appears only while the Hold-Pose master and the focused channel are enabled AND a live local-owner target unit resolves. Bypass, losing the unit, or leaving the applicable state removes the row without erasing saved values. |
+| Focus | The row identifies First Person/Third Person and Right Hand/Left Hand and follows the last relevant `wt_dev_hp_*` edit, including enable toggles and settings batches. |
+| Values | Displayed Pos X/Y/Z (+0.000 m precision) and Rot P/Y/R (+0.0 deg precision) exactly match the normalized `_component_plan` handed to `_apply_pose_to`; no internal item key is rendered. |
+| Ownership | One `IngameHud.update` post-hook mod-wide, read-only, local-only; no RPC, no shared-template mutation, no public-widget exposure. Existing #616/#569 Hold-Pose regressions remain green. |
+| Automated | Offline `test_wt_hold_pose.lua` (#1023 sections); `/wt_regression_test`: `issue1023_live_hold_pose_hud`. |
+
+---
+
 ## #1190 - loadout-row weapon isolation
 
 | Field | Check |

@@ -27,36 +27,83 @@ local Policy = require("scripts/mods/event_tweaker/event_tweaker_shadow_policy")
 local SHADOW_CHANNEL = "et_shadow_adventure_v1"
 local SHADOW_SCHEMA = 1
 local shadow_template
-local shadow_sub_buff
 local adapter_ready = false
 
 local function _in_native_weave()
     return ET.weave_wind_active and ET.weave_wind_active() == true
 end
 
--- Issue 1123: the damage-reduction multiplier is session-scoped, never a boot
--- write. Vanilla ships this sub-buff with NO multiplier (only stat_buff +
--- wind_mutator, buff_templates.lua), so outside a Weave BuffExtension resolves
--- "multiplier or 0" and the buff is a zero-effect marker - exactly what Chaos
--- Wastes' mutator_curse_belakors_shadows expects when it adds the SAME shared
--- buff. A load-time template write leaked 90 percent damage reduction into
--- every CW Be'lakor run. Apply on Adventure Shadow start, restore on stop.
--- Real Weaves are unaffected either way: BuffExtension overwrites from active
--- wind settings at both add and remove time.
-local multiplier_applied = false
-local function _apply_adventure_multiplier()
-    if shadow_sub_buff and not multiplier_applied then
-        shadow_sub_buff.multiplier = Policy.ADVENTURE_DAMAGE_TAKEN
-        multiplier_applied = true
-        pcall(printf, "[et:1123] shadow damage_taken multiplier "
-            .. tostring(Policy.ADVENTURE_DAMAGE_TAKEN) .. " applied for Adventure Shadow")
+-- Issues 413 + 1123: the damage-reduction value is session-scoped AND is never
+-- written onto the SHARED vanilla table. Vanilla ships the
+-- mutator_shadow_damage_reduction sub-buff with NO multiplier (only stat_buff +
+-- wind_mutator, buff_templates.lua:6322-6330), so outside a Weave BuffExtension
+-- resolves "multiplier or 0" and the buff is a zero-effect marker - exactly
+-- what Chaos Wastes' mutator_curse_belakors_shadows expects when it adds the
+-- SAME shared template by name (mutator_curse_belakors_shadows.lua:87). An
+-- earlier in-place template write leaked 90 percent damage reduction into
+-- every CW Be'lakor run. The adapter therefore keeps a private CLONE with the
+-- vanilla Ulgu value (WindSettings.shadow.damage_taken = -0.8 at every
+-- difficulty and wind strength, wind_settings.lua:1615-1669) baked in, and
+-- swaps the BuffTemplates ENTRY to that clone only while an Adventure Shadow
+-- session runs. This is safe because BuffExtension resolves templates by NAME
+-- at add time (buff_extension.lua:173 -> buff_utils.lua:257-261) and captures
+-- both the multiplier and a direct sub-buff-table reference on the buff
+-- INSTANCE (buff_extension.lua:~300 / _remove_stat_buff:1118-1121), so buffs
+-- added during the session subtract correctly even after the swap-back. The
+-- vanilla table itself is NEVER mutated. Restore runs at session stop AND on
+-- mod disable. Real Weaves are unaffected either way: the wind_mutator branch
+-- overwrites the multiplier from active wind settings at both add and remove
+-- time (buff_extension.lua:649-657 / 1127-1135).
+local vanilla_shadow_buff_template
+local adventure_shadow_buff_template
+local template_swapped = false
+
+local function _clone_shadow_buff_template(template)
+    local clone = {}
+    for k, v in pairs(template) do
+        clone[k] = v
     end
+    local buffs = {}
+    for i = 1, #template.buffs do
+        local sub = {}
+        for k, v in pairs(template.buffs[i]) do
+            sub[k] = v
+        end
+        buffs[i] = sub
+    end
+    clone.buffs = buffs
+    return clone
 end
-local function _restore_vanilla_multiplier()
-    if shadow_sub_buff and multiplier_applied then
-        shadow_sub_buff.multiplier = nil
-        multiplier_applied = false
-        pcall(printf, "[et:1123] shadow damage_taken multiplier restored to vanilla nil")
+
+local function _swap_in_adventure_template()
+    local buff_templates = rawget(_G, "BuffTemplates")
+    if template_swapped or not buff_templates
+        or not vanilla_shadow_buff_template or not adventure_shadow_buff_template then
+        return
+    end
+    buff_templates.mutator_shadow_damage_reduction = adventure_shadow_buff_template
+    template_swapped = true
+    pcall(printf, "[et:413] shadow damage-reduction entry swapped to Adventure clone (damage_taken "
+        .. tostring(Policy.ADVENTURE_DAMAGE_TAKEN) .. "; vanilla table untouched)")
+end
+
+local function _restore_vanilla_template()
+    if not template_swapped then
+        return
+    end
+    template_swapped = false
+    local buff_templates = rawget(_G, "BuffTemplates")
+    if not buff_templates then
+        return
+    end
+    if buff_templates.mutator_shadow_damage_reduction == adventure_shadow_buff_template then
+        buff_templates.mutator_shadow_damage_reduction = vanilla_shadow_buff_template
+        pcall(printf, "[et:413] shadow damage-reduction entry restored to the vanilla template")
+    else
+        -- A third party replaced the entry after our swap; writing vanilla
+        -- back would clobber THEIR state. The vanilla table was never
+        -- mutated, so no et residue remains either way.
+        pcall(printf, "[et:413] WARNING shadow damage-reduction entry was replaced mid-session by another mod; left as found")
     end
 end
 
@@ -84,7 +131,7 @@ local function _server_start(context, data)
     data.et413_buffs = {}
     data.buff_system = entity and entity:system("buff_system") or nil
     data.hero_side = side and side:get_side_from_name("heroes") or nil
-    _apply_adventure_multiplier()
+    _swap_in_adventure_template()
 end
 
 local function _remove_server_buff(data, unit)
@@ -165,8 +212,10 @@ local function _server_stop(context, data, is_destroy)
         end
         -- Safe before pending client-side removals: BuffExtension removal
         -- subtracts the multiplier captured on the buff INSTANCE at add time
-        -- (buff_extension.lua _remove_stat_buff), not the template value.
-        _restore_vanilla_multiplier()
+        -- (buff_extension.lua _remove_stat_buff:1118-1121), and the instance
+        -- keeps its own reference to the clone's sub-buff table, so the
+        -- swap-back cannot orphan or re-price an outstanding buff.
+        _restore_vanilla_template()
     end
     return shadow_template._et413_original_server_stop(context, data, is_destroy)
 end
@@ -181,7 +230,7 @@ local function _client_start(context, data)
     data.et413_client_index = 0
     data.et413_faded_units = {}
     data.hero_side = side and side:get_side_from_name("heroes") or nil
-    _apply_adventure_multiplier()
+    _swap_in_adventure_template()
 end
 
 local function _client_update(context, data, dt, t)
@@ -248,7 +297,7 @@ local function _client_stop(context, data, is_destroy)
                 end
             end
         end
-        _restore_vanilla_multiplier()
+        _restore_vanilla_template()
     end
     return shadow_template._et413_original_client_stop(context, data, is_destroy)
 end
@@ -303,12 +352,28 @@ do
         shadow_template.client.update = _client_update
         shadow_template.server.stop_function = _server_stop
         shadow_template.client.stop_function = _client_stop
-        -- Issue 1123: capture the shared sub-buff only. The damage-reduction
-        -- multiplier is applied per Adventure Shadow session (start/stop
-        -- above), never at load: a boot-time write leaks into Chaos Wastes,
-        -- where mutator_curse_belakors_shadows adds this same shared buff and
-        -- vanilla expects it to resolve to zero outside a Weave.
-        shadow_sub_buff = sub_buff
+        -- Issues 413 + 1123: never write onto the shared vanilla buff table.
+        -- Capture the vanilla template reference (stashed on shadow_template
+        -- so a VMF developer reload during an active session cannot mistake
+        -- our still-installed clone for vanilla), build the Adventure clone
+        -- once, and let the session start/stop functions above swap the
+        -- BuffTemplates ENTRY between the two.
+        shadow_template._et413_vanilla_shadow_buff_template =
+            shadow_template._et413_vanilla_shadow_buff_template or shadow_buff
+        vanilla_shadow_buff_template = shadow_template._et413_vanilla_shadow_buff_template
+        adventure_shadow_buff_template = _clone_shadow_buff_template(vanilla_shadow_buff_template)
+        adventure_shadow_buff_template.buffs[1].multiplier = Policy.ADVENTURE_DAMAGE_TAKEN
+        adventure_shadow_buff_template._et413_adventure_clone = true
+        -- A VMF developer reload mid-session resets this module's bookkeeping;
+        -- if a PRIOR instance's clone is still installed, put vanilla back now
+        -- (the clone marker distinguishes our stale clone from a third party's
+        -- legitimate replacement, which is left as found).
+        local stale = buffs.mutator_shadow_damage_reduction
+        if stale ~= vanilla_shadow_buff_template and type(stale) == "table"
+            and stale._et413_adventure_clone then
+            buffs.mutator_shadow_damage_reduction = vanilla_shadow_buff_template
+            pcall(printf, "[et:413] stale Adventure clone from a prior module instance restored to vanilla")
+        end
         adapter_ready = true
     else
         pcall(printf, "[et:413] Adventure Shadow adapter unavailable: vanilla template/buff contract changed")
@@ -379,13 +444,36 @@ ET.shadow_adventure_plan = _plan
 ET.notify_shadow_drop = _notify_drop
 ET.shadow_adventure_adapter_ready = function() return adapter_ready end
 
+-- VMF lifecycle: et is is_togglable, so disabling it mid-session must not
+-- leave the Adventure clone installed in BuffTemplates. This is et's ONLY
+-- mod.on_disabled (grep-verified 2026-08-15; VMF keeps exactly one - merge
+-- here instead of assigning a second).
+mod.on_disabled = function()
+    _restore_vanilla_template()
+end
+
 rt_register("issue413_shadow_adventure_adapter", function()
     if not adapter_ready then return "Adventure Shadow template adapter was not installed" end
-    if not multiplier_applied and shadow_sub_buff and shadow_sub_buff.multiplier ~= nil then
-        return "Shadow damage-reduction multiplier leaked into the dormant shared template (issue 1123)"
+    local vanilla_sub = vanilla_shadow_buff_template and vanilla_shadow_buff_template.buffs
+        and vanilla_shadow_buff_template.buffs[1]
+    if vanilla_sub and vanilla_sub.multiplier ~= nil then
+        return "vanilla shadow buff template was mutated in place (issues 413/1123: it must stay multiplier-free for Chaos Wastes)"
+    end
+    local buff_templates = rawget(_G, "BuffTemplates")
+    local live = buff_templates and buff_templates.mutator_shadow_damage_reduction
+    if not template_swapped and live == adventure_shadow_buff_template then
+        return "Adventure clone left installed outside a Shadow session (issue 413 restore failed)"
+    end
+    if template_swapped and live ~= adventure_shadow_buff_template then
+        return "Shadow session marked active but the BuffTemplates entry is not the Adventure clone (issue 413)"
+    end
+    local adv_sub = adventure_shadow_buff_template and adventure_shadow_buff_template.buffs
+        and adventure_shadow_buff_template.buffs[1]
+    if not adv_sub or adv_sub.multiplier ~= Policy.ADVENTURE_DAMAGE_TAKEN then
+        return "Adventure clone lost the vanilla Ulgu damage_taken value (issue 413)"
     end
     if Policy.ADVENTURE_DAMAGE_TAKEN ~= -0.8 then
-        return "Adventure Shadow damage_taken constant drifted from the vanilla wind value -0.8"
+        return "Adventure Shadow damage_taken constant drifted from the vanilla wind value -0.8 (wind_settings.lua:1615)"
     end
     if not shadow_parity or not shadow_parity:is_installed() then
         return "Adventure Shadow capability beacon was not installed"

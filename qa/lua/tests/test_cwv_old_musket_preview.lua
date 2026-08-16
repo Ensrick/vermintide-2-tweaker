@@ -209,16 +209,17 @@ return function(H, repo_root)
         local Runtime = dofile(repo_root
             .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_forge_preview.lua")
         local hook
+        local constructor_hooks = {}
         local set_position
         local logged = 0
         local active = true
         local ok, reason = Runtime.install({
             mod = {
                 hook = function(_, class_name, method_name, callback)
-                    H.equal(class_name, "HeroWindowWeaveProperties")
                     H.equal(method_name, "_create_item_previewer")
-                    H.equal(hook, nil, "runtime registered more than one hook")
-                    hook = callback
+                    H.equal(constructor_hooks[class_name], nil,
+                        "runtime duplicated a constructor hook")
+                    constructor_hooks[class_name] = callback
                 end,
             },
             policy = Cim,
@@ -234,7 +235,12 @@ return function(H, repo_root)
         })
         H.equal(ok, true)
         H.equal(reason, nil)
+        hook = constructor_hooks.HeroWindowWeaveProperties
         H.equal(type(hook), "function")
+        H.equal(type(constructor_hooks.HeroWindowWeaveForgeWeapons), "function")
+        H.equal(constructor_hooks.HeroWindowWeaveForgeOverview, nil,
+            "Overview is composed into the existing mission-safety hook")
+        H.equal(type(Runtime.invoke_constructor), "function")
 
         local previewer = hook(function()
             return { _spawn_position = { -0.85, 3, 0.05 }, _link_unit = {} }
@@ -320,12 +326,12 @@ return function(H, repo_root)
         local Runtime = dofile(repo_root
             .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_forge_preview.lua")
         local hook, registrations = nil, 0
+        local constructor_hooks = {}
         local mod = {
             hook = function(_, class_name, method_name, callback)
-                H.equal(class_name, "HeroWindowWeaveProperties")
                 H.equal(method_name, "_create_item_previewer")
                 registrations = registrations + 1
-                hook = callback
+                constructor_hooks[class_name] = callback
             end,
         }
         local set_position
@@ -356,7 +362,8 @@ return function(H, repo_root)
 
         H.equal(Runtime.install(deps(policy(1))), true)
         H.equal(Runtime.install(deps(policy(2))), true)
-        H.equal(registrations, 1)
+        H.equal(registrations, 2)
+        hook = constructor_hooks.HeroWindowWeaveProperties
         local previewer = hook(function()
             return { _spawn_position = { 0, 3, 0 }, _link_unit = {} }
         end, {}, {}, { data = { key = "es_longbow", slot_type = "ranged" } })
@@ -374,6 +381,9 @@ return function(H, repo_root)
         local runtime_file = assert(io.open(root .. "_cim_forge_preview.lua", "rb"))
         local runtime = runtime_file:read("*a")
         runtime_file:close()
+        local safety_file = assert(io.open(root .. "_cim_mission_forge_safety.lua", "rb"))
+        local safety = safety_file:read("*a")
+        safety_file:close()
         local owner_file = assert(io.open(root .. "_cim_forge_preview_owner.lua", "rb"))
         local owner = owner_file:read("*a")
         owner_file:close()
@@ -381,10 +391,13 @@ return function(H, repo_root)
         H.truthy(entry:find("scripts/mods/crafting_in_modded_dev/_cim_forge_preview_owner", 1, true))
         H.truthy(owner:find("state.preview_runtime.install_runtime(", 1, true))
         H.truthy(runtime:find('deps.mod:hook("HeroWindowWeaveProperties", "_create_item_previewer"', 1, true))
-        H.truthy(runtime:find("state.callback = function(func, self, viewport_widget, item)", 1, true))
+        H.truthy(runtime:find("state.properties_callback = function(func, self, viewport_widget, item, ...)", 1, true))
+        H.equal(runtime:find('deps.mod:hook("HeroWindowWeaveForgeOverview", "_create_item_previewer"', 1, true), nil)
+        H.truthy(safety:find('preview_runtime.invoke_constructor(mod, "overview", func, self,', 1, true))
+        H.truthy(runtime:find('deps.mod:hook("HeroWindowWeaveForgeWeapons", "_create_item_previewer"', 1, true))
         H.truthy(runtime:find("current.policy.properties_preview_position", 1, true))
         H.truthy(runtime:find("previewer._unit_start_position_boxed = adjusted_box", 1, true))
-        H.truthy(runtime:find("if not current.is_active() or not previewer then return previewer end", 1, true))
+        H.truthy(runtime:find("if not current.is_active() or not previewer then", 1, true))
         H.truthy(runtime:find("pcall(current.vector3, dx, dy, dz)", 1, true))
     end)
 

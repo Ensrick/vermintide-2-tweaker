@@ -337,7 +337,13 @@ shipping. Agent publication is headless and opens no interactive window.
     latest release manifest, inspects the recorded
     source commits with a blob-filtered full Git history, and rejects stale
     versions, invented commands, missing diagnostic receipts, and contradictory
-    manifests. Two visible legacy carry-forward entries without `source_commit`
+    manifests. The dedicated workflow's non-cone sparse checkout includes
+    `qa`, `tools`, and current `*/scripts/mods/` paths so shared Lua blobs hydrate
+    in the checkout pack rather than through repeated lazy historical fetches;
+    drift-missing deployed blobs are batch-prefetched, the guard logs per-phase
+    timings against its five-minute budget, and bundle trees remain absent while
+    exact recorded commits remain authoritative.
+    Two visible legacy carry-forward entries without `source_commit`
     may use current source only when its version exactly equals the deployed
     manifest version. Fix the card, do not retry the build.
   - `gh issue edit <N> --remove-label not-started --add-label verify-fix` only

@@ -47,6 +47,9 @@ local mod = get_mod("event_tweaker")
 local ET = mod._evt
 local rt_register = ET.rt_register
 local preview_selection = ET.preview_selection
+-- Shared curse catalog (require = evaluated once and cached, same table as the
+-- data/localization files see) - carries the issue 1149 god-icon fallback.
+local Curses = require("scripts/mods/event_tweaker/event_tweaker_curses")
 
 -- Marker for the issue532 regression check (a refactor that drops the block trips it).
 local EVT_MUTATOR_PREVIEW_532_MARKER = "mutator_preview_ingame_playerlist_v0.4.30"
@@ -69,15 +72,14 @@ function mod._evt_mutator_display(name)
     return tostring(name)
 end
 
--- Icon texture name where the template exposes one, else nil (name-only row).
+-- Icon texture name: the template's own in-game icon where it exposes one,
+-- else the curse's god-theme icon (the icon vanilla's Deus curse UI shows,
+-- deus_curse_ui.lua:106/144 - issue 1149: several managed curse templates
+-- ship no per-template icon), else nil (name-only row).
 function mod._evt_mutator_icon(name)
     local MT = rawget(_G, "MutatorTemplates")
     local tmpl = MT and MT[name]
-    local icon = tmpl and tmpl.icon
-    if type(icon) == "string" and icon ~= "" then
-        return icon
-    end
-    return nil
+    return Curses.icon_for(name, tmpl)
 end
 
 -- ---- ct coordination -----------------------------------------------------------
@@ -274,5 +276,29 @@ rt_register("issue532_mutator_preview_wired", function()
     end
     if type(mod:get("preview_active_mutators")) ~= "boolean" then
         return "#532 REGRESSION: preview_active_mutators checkbox not registered (mod:get non-boolean)"
+    end
+end)
+
+-- issue 1149 (localization half): every managed Cursed Adventure modifier must
+-- surface a clean localized options label (no raw mutator key anywhere in the
+-- player-facing string) and resolve an in-game icon for the Tab-hold preview.
+rt_register("issue1149_modifier_loc_icon_coverage", function()
+    local managed = Curses.MANAGED_CURSES
+    for i = 1, #managed do
+        local id = managed[i].id
+        local title = mod:localize("mut_" .. id)
+        if type(title) ~= "string" or title == "" then
+            return "#1149 REGRESSION: no options label registered for " .. id
+        end
+        if title:find(id, 1, true) or title:find("mut_", 1, true) then
+            return "#1149 REGRESSION: options label for " .. id .. " still shows the raw mutator key"
+        end
+        local tooltip = mod:localize("mut_" .. id .. "_tooltip")
+        if type(tooltip) ~= "string" or tooltip:find("[" .. id .. "]", 1, true) then
+            return "#1149 REGRESSION: tooltip for " .. id .. " missing or still bracket-tagged with the raw key"
+        end
+        if not mod._evt_mutator_icon(id) then
+            return "#1149 REGRESSION: no in-game icon resolves for " .. id .. " (template icon + god-theme fallback both missing)"
+        end
     end
 end)

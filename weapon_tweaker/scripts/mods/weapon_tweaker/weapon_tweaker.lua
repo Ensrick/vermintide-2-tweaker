@@ -91,7 +91,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.306-beta"
+local MOD_VERSION = "0.12.307-beta"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -115,7 +115,9 @@ local CT_WT_ITEMMASTERLIST_RAWGET_MARKER_v0_12_73 = "wt-itemmasterlist-rawget-ha
 mod:dofile("scripts/mods/weapon_tweaker/_safe_hook")
 
 local _wt_axe_balance_policy = mod:dofile("scripts/mods/weapon_tweaker/_wt_axe_balance")
-local _wt_axe_balance = _wt_axe_balance_policy.new()
+-- Fire Sword heavy-attack policy (#943): two default-off projections from one
+-- per-template-identity baseline (sweep opener + nova slowdown).
+local _wt_fire_sword_policy = mod:dofile("scripts/mods/weapon_tweaker/_wt_fire_sword")
 local _wt_grip_offset_policy = mod:dofile("scripts/mods/weapon_tweaker/_wt_grip_offset_policy")
 local _wt_skullsplitter_hand_policy = mod:dofile("scripts/mods/weapon_tweaker/_wt_skullsplitter_hand")
 -- Bret Sword & Shield damage buff (self-applies at load when wt_brett_sword_shield_buff is ON;
@@ -915,6 +917,7 @@ mod.on_game_state_changed = function(status, state_name)
     patch_career_actions_on_weapons()
     apply_trait_filters()
     if mod._wt_apply_axe_balance then mod._wt_apply_axe_balance(nil, false) end
+    if mod._wt_apply_fire_sword then mod._wt_apply_fire_sword(nil, false) end
     if mod._wt374_seed_energy_data then mod._wt374_seed_energy_data() end
     _wt_bolt_staff_overcharge_runtime.apply()
     -- Re-attempt the Necromancer FX force-load (idempotent). DLC ownership can be
@@ -958,6 +961,7 @@ mod.on_disabled = function()
     if weapon_backend.overcharge_presentation then pcall(weapon_backend.overcharge_presentation.restore) end
     _wt_bolt_staff_overcharge_runtime.revert()
     if mod._wt_apply_axe_balance then mod._wt_apply_axe_balance(nil, true) end
+    if mod._wt_apply_fire_sword then mod._wt_apply_fire_sword(nil, true) end
     if mod._wt374_revert_energy_data then mod._wt374_revert_energy_data() end
     clear_weapon_unlocks()
     clear_career_action_injections()
@@ -971,6 +975,7 @@ local _wt_rework_runtime = _wt_rework_master_runtime_module.new(
         if mod.wt_apply_brett_buff then mod.wt_apply_brett_buff() end
         _wt_bolt_staff_overcharge_runtime.apply()
         if mod._wt_apply_axe_balance then mod._wt_apply_axe_balance(nil, false) end
+        if mod._wt_apply_fire_sword then mod._wt_apply_fire_sword(nil, false) end
     end)
 mod._wt.rework_master_runtime = _wt_rework_runtime
 
@@ -983,82 +988,23 @@ mod:dofile("scripts/mods/weapon_tweaker/_wt_settings_runtime").install({
     bolt_policy = _wt_bolt_staff_overcharge,
     bolt_runtime = _wt_bolt_staff_overcharge_runtime,
     balance_policy = _wt_axe_balance_policy,
+    fire_sword_policy = _wt_fire_sword_policy,
 })
 
-do
-    local function register_profile(name)
-        local lookup = NetworkLookup and NetworkLookup.damage_profiles
-        if type(name) ~= "string" or not lookup or rawget(lookup, name) then return end
-        local index = #lookup + 1
-        rawset(lookup, index, name)
-        rawset(lookup, name, index)
-    end
-    mod._wt_apply_axe_balance = function(setting_id, force_off)
-        if type(Weapons) ~= "table" then return end
-        local function enabled(id, default_on)
-            if force_off then return false end
-            local value = mod:get(id)
-            if value == nil then return default_on == true end
-            return value == true
-        end
-        if not setting_id or setting_id == _wt_axe_balance_policy.GREATAXE_LIGHT_CRIT_SETTING then
-            _wt_axe_balance:apply_greataxe_crit(
-                enabled(_wt_axe_balance_policy.GREATAXE_LIGHT_CRIT_SETTING, true), Weapons)
-        end
-        if not setting_id or setting_id == _wt_axe_balance_policy.DUAL_AXES_LIGHT_CRIT_SETTING then
-            _wt_axe_balance:apply_dual_crit(
-                enabled(_wt_axe_balance_policy.DUAL_AXES_LIGHT_CRIT_SETTING, true), Weapons)
-        end
-        if not setting_id or setting_id == _wt_axe_balance_policy.DUAL_AXES_CLEAVE_SETTING then
-            if type(DamageProfileTemplates) == "table" and type(PowerLevelTemplates) == "table" then
-                mod._wt431_custom_profile_fallback = mod._wt431_custom_profile_fallback or {}
-                local parity_allowed = type(mod._wt431_profiles_allowed) == "function"
-                    and mod._wt431_profiles_allowed() == true
-                _wt_axe_balance:apply_dual_cleave(
-                    enabled(_wt_axe_balance_policy.DUAL_AXES_CLEAVE_SETTING, true), Weapons,
-                    DamageProfileTemplates, PowerLevelTemplates,
-                    function(value) return table.clone(value, true) end, register_profile,
-                    mod._wt431_custom_profile_fallback, parity_allowed)
-            end
-        end
-        if not setting_id or setting_id == _wt_axe_balance_policy.ONE_HAND_AXE_CLEAVE_SETTING then
-            if type(DamageProfileTemplates) == "table" and type(PowerLevelTemplates) == "table" then
-                mod._wt431_custom_profile_fallback = mod._wt431_custom_profile_fallback or {}
-                local parity_allowed = type(mod._wt431_profiles_allowed) == "function"
-                    and mod._wt431_profiles_allowed() == true
-                _wt_axe_balance:apply_one_hand_axe_cleave(
-                    enabled(_wt_axe_balance_policy.ONE_HAND_AXE_CLEAVE_SETTING, false), Weapons,
-                    DamageProfileTemplates, PowerLevelTemplates,
-                    function(value) return table.clone(value, true) end, register_profile,
-                    mod._wt431_custom_profile_fallback, parity_allowed)
-            end
-        end
-        if not setting_id or setting_id == _wt_axe_balance_policy.COG_HAMMER_HEAVY_SPEED_SETTING then
-            _wt_axe_balance:apply_cog_heavy_speed(
-                enabled(_wt_axe_balance_policy.COG_HAMMER_HEAVY_SPEED_SETTING, false), Weapons)
-        end
-        if not setting_id or setting_id == _wt_axe_balance_policy.MACE_SWORD_SPEED_SETTING then
-            _wt_axe_balance:apply_mace_sword_speed(
-                enabled(_wt_axe_balance_policy.MACE_SWORD_SPEED_SETTING, false), Weapons)
-        end
-        if not setting_id or setting_id == _wt_axe_balance_policy.EXECUTIONER_LIGHT_HEADSHOT_SETTING then
-            if type(DamageProfileTemplates) == "table" then
-                mod._wt431_custom_profile_fallback = mod._wt431_custom_profile_fallback or {}
-                local parity_allowed = type(mod._wt431_profiles_allowed) == "function"
-                    and mod._wt431_profiles_allowed() == true
-                local count = _wt_axe_balance:apply_executioner_light_headshot(
-                    enabled(_wt_axe_balance_policy.EXECUTIONER_LIGHT_HEADSHOT_SETTING, false),
-                    Weapons, DamageProfileTemplates,
-                    function(value) return table.clone(value, true) end, register_profile,
-                    mod._wt431_custom_profile_fallback, parity_allowed)
-                pcall(printf, "[wt:664] applied: executioner_light_actions=%d enabled=%s parity=%s multiplier=%.2f",
-                    count, tostring(enabled(_wt_axe_balance_policy.EXECUTIONER_LIGHT_HEADSHOT_SETTING, false)),
-                    tostring(parity_allowed), _wt_axe_balance_policy.EXECUTIONER_HEADSHOT_MULT)
-            end
-        end
-    end
-    mod._wt_apply_axe_balance(nil, false)
-end
+-- The #601/#621/#622/#623/#664 balance adapter (mod._wt_apply_axe_balance) is
+-- owned by _wt_axe_balance.lua. Installed HERE rather than at its manifest
+-- dofile above because install applies once, and that first apply must have
+-- registered every generated custom damage profile into NetworkLookup before
+-- the #431 parity beacon below reads the catalog.
+_wt_axe_balance_policy.install(mod)
+
+-- ============================================================
+-- Issue 943: Fire Sword heavy-attack projections
+-- ============================================================
+-- The bounded apply seam (mod._wt_apply_fire_sword) is owned by
+-- _wt_fire_sword.lua; installing here keeps the load-time apply at the exact
+-- manifest position the adapter used to occupy.
+_wt_fire_sword_policy.install(mod)
 
 -- ============================================================
 -- Issue 431: exact peer-catalog gate + unconditional wire floor
@@ -1404,6 +1350,7 @@ local _wt_runtime_check_deps = {
     skullsplitter_hand_policy = _wt_skullsplitter_hand_policy,
     weapon_backend = weapon_backend,
     deepwood_runtime = _deepwood_runtime,
+    fire_sword_policy = _wt_fire_sword_policy,
 }
 _wt_runtime_checks.install(mod, _rt_register, _wt_runtime_check_deps)
 -- WT_PUBLIC_OVERLAY_BEGIN:public-beta-surface-regression

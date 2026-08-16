@@ -215,12 +215,12 @@ do
                 if not loc[key] then
                     local dn = Loc and Loc(tmpl.display_name) or nil
                     local de = Loc and Loc(tmpl.description) or nil
-                    -- Runtime-discovered "Other Mutators"
-                    -- entries are the Deed-Mutators-Selector port (added
-                    -- 0.4.14-dev), never confirmed in-game -> . Title
-                    -- only; the _tooltip line is untagged per doctrine.
-                    loc[key]               = en("" .. _safe(dn, name) .. " [" .. name .. "]")
-                    loc[key .. "_tooltip"] = en("[" .. name .. "] " .. _safe(de, name))
+                    -- Issue 1149: labels are the game's OWN localized
+                    -- display_name/description, with a humanized fallback.
+                    -- Raw mutator ids never appear in player-facing text
+                    -- (they used to ride the title as "[<id>]" markers).
+                    loc[key]               = en(_safe(dn, name))
+                    loc[key .. "_tooltip"] = en(_safe(de, name))
                 end
             end
         end
@@ -237,7 +237,7 @@ do
             local dn = Loc and tmpl and Loc(tmpl.display_name) or nil
             local de = Loc and tmpl and Loc(tmpl.description) or nil
             loc[key]               = en("Curse: " .. _safe(dn, c.id))
-            loc[key .. "_tooltip"] = en("[" .. c.id .. "] " .. _safe(de, c.id)
+            loc[key .. "_tooltip"] = en(_safe(de, c.id)
                 .. ". Chaos Wastes curse on a standard adventure map (god: " .. tostring(c.god)
                 .. "). Needs ALL current players to run the mod (clients load the curse package too). Selecting a package-bearing curse closes the lobby to new joins until it is unselected, because admitting a late peer before package proof can crash that peer."
                 .. (c.experimental and " Adventure limitation: may be inert without the Deus economy and mission flow." or ""))

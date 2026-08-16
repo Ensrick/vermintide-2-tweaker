@@ -1170,6 +1170,195 @@
             )
         }
         @{
+            Id = 'cosmetics.issue481.cim-exact-offhand-preview'
+            Issue = 481
+            Claim = 'structural-only'
+            Owners = @(
+                'crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_forge_preview.lua'
+                'crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_mission_forge_safety.lua'
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_cim_preview.lua'
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_cim_preview_wiring.lua'
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_equipment_assembly.lua'
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_preview_runtime.lua'
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_la_bridge.lua'
+                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua'
+            )
+            Concerns = @(
+                @{
+                    Name = 'unit_identity'
+                    Surfaces = @{
+                        owner_1p = @{ Disposition = 'not-applicable'; Reason = 'the CIM constructor context is never published around live first-person equipment construction' }
+                        owner_3p = @{ Disposition = 'not-applicable'; Reason = 'the CIM constructor context is never published around live third-person equipment construction' }
+                        bot = @{ Disposition = 'not-applicable'; Reason = 'bot equipment does not enter a CIM Athanor constructor' }
+                        husk = @{ Disposition = 'not-applicable'; Reason = 'remote husks never consume owner-local CIM preview context' }
+                        inventory_preview = @{ Disposition = 'not-applicable'; Reason = 'inventory preview has its own item identity adapter and receives no CIM marker' }
+                        illusion_browser = @{ Disposition = 'not-applicable'; Reason = 'ordinary illusion-browser instances receive no CIM marker and retain their existing identity policy' }
+                        cim_preview = @{ Disposition = 'covered'; Evidence = 'all three real Athanor constructors publish one stack-scoped exact context during synchronous unit resolution and attach that same table to only the returned previewer' }
+                        crafting_preview = @{ Disposition = 'not-applicable'; Reason = 'the ordinary crafting bench does not enter a CIM Athanor constructor' }
+                        lobby = @{ Disposition = 'not-applicable'; Reason = 'lobby presentation receives no CIM constructor marker' }
+                        score_team = @{ Disposition = 'not-applicable'; Reason = 'score presentation receives no CIM constructor marker' }
+                        hold_tab = @{ Disposition = 'not-applicable'; Reason = 'Hold-Tab reconstructs cards without a CIM previewer instance' }
+                        specials = @{ Disposition = 'not-applicable'; Reason = 'weapon-special presentation does not construct an Athanor previewer' }
+                        remote_audio = @{ Disposition = 'not-applicable'; Reason = 'the local CIM preview context owns no audio identity' }
+                        hud_panels = @{ Disposition = 'not-applicable'; Reason = 'career HUD panels do not construct an Athanor item previewer' }
+                        portraits = @{ Disposition = 'not-applicable'; Reason = 'portrait renderers do not construct an Athanor item previewer' }
+                        item_card_2d = @{ Disposition = 'not-applicable'; Reason = 'the contract classifies a live 3D previewer rather than a 2D item card' }
+                        inventory_tooltip = @{ Disposition = 'not-applicable'; Reason = 'tooltips do not consume the CIM preview marker' }
+                    }
+                    ReplayEdges = @{
+                        instance_load = @{ Disposition = 'not-applicable'; Reason = 'the context is constructed per preview and is not persisted' }
+                        initial_spawn = @{ Disposition = 'not-applicable'; Reason = 'gameplay spawn does not enter the Athanor constructor scope' }
+                        equip = @{ Disposition = 'not-applicable'; Reason = 'equipping an item does not construct the local Athanor preview' }
+                        wield = @{ Disposition = 'not-applicable'; Reason = 'wield does not construct the local Athanor preview' }
+                        customize = @{ Disposition = 'not-applicable'; Reason = 'the Cosmetics customization browser uses a separate identity transaction' }
+                        style_change = @{ Disposition = 'not-applicable'; Reason = 'style state is outside the exact CIM preview-context identity' }
+                        career_change = @{ Disposition = 'not-applicable'; Reason = 'career change does not replay a retained CIM preview context' }
+                        mission_transition = @{ Disposition = 'not-applicable'; Reason = 'the context owns no cross-world or mission state' }
+                        respawn = @{ Disposition = 'not-applicable'; Reason = 'respawn does not replay local Athanor preview identity' }
+                        hot_join = @{ Disposition = 'not-applicable'; Reason = 'the context is owner-local and sends no peer payload' }
+                        peer_ready = @{ Disposition = 'not-applicable'; Reason = 'the context is owner-local and sends no peer payload' }
+                        parity_ready = @{ Disposition = 'not-applicable'; Reason = 'the context sends no content-parity payload' }
+                        rejoin = @{ Disposition = 'not-applicable'; Reason = 'rejoin does not replay local Athanor preview identity' }
+                        preview_open = @{ Disposition = 'covered'; Evidence = 'a fresh constructor generation wraps synchronous BackendUtils resolution and marks exactly its returned previewer' }
+                        preview_reopen = @{ Disposition = 'covered'; Evidence = 'a reopened constructor receives a new generation; nested, failed, foreign, backendless, and stale contexts fail closed' }
+                        lobby_score_create = @{ Disposition = 'not-applicable'; Reason = 'lobby and score constructors never receive a CIM marker' }
+                        mod_disable_restore = @{ Disposition = 'deferred'; Reason = 'live disable while an already-open Athanor previewer exists has no independent runtime observation' }
+                    }
+                    Tests = @(
+                        @{
+                            Path = 'qa/lua/tests/test_cim_forge_preview_owner.lua'
+                            Names = @(
+                                'CIM exact preview context wraps all three real constructors'
+                                'CIM preview context is stack-safe and clears after errors'
+                                'CIM preview context targets all three decompiled Athanor constructors'
+                            )
+                            Surfaces = @('cim_preview')
+                            ReplayEdges = @('preview_open', 'preview_reopen')
+                        }
+                        @{
+                            Path = 'qa/lua/tests/test_cos_equipment_assembly.lua'
+                            Names = @('cos equipment assembly admits only exact CIM context')
+                            Surfaces = @('cim_preview')
+                            ReplayEdges = @('preview_open', 'preview_reopen')
+                        }
+                    )
+                }
+                @{
+                    Name = 'material'
+                    Surfaces = @{
+                        owner_1p = @{ Disposition = 'not-applicable'; Reason = 'this adapter applies only to the local Athanor preview' }
+                        owner_3p = @{ Disposition = 'not-applicable'; Reason = 'this adapter applies only to the local Athanor preview' }
+                        bot = @{ Disposition = 'not-applicable'; Reason = 'bots never consume the local Athanor preview transaction' }
+                        husk = @{ Disposition = 'not-applicable'; Reason = 'the transaction is local and publishes no material payload to husks' }
+                        inventory_preview = @{ Disposition = 'not-applicable'; Reason = 'inventory preview retains its existing Cosmetics material owner' }
+                        illusion_browser = @{ Disposition = 'not-applicable'; Reason = 'the ordinary illusion browser retains its existing Cosmetics material owner' }
+                        cim_preview = @{ Disposition = 'covered'; Evidence = 'only an exact backend-owned current Loremaster selection with resident 3P unit and an already-loaded known parent enters the bounded generation-safe material reconcile' }
+                        crafting_preview = @{ Disposition = 'not-applicable'; Reason = 'ordinary crafting preview does not consume this adapter' }
+                        lobby = @{ Disposition = 'not-applicable'; Reason = 'lobby material presentation does not consume this adapter' }
+                        score_team = @{ Disposition = 'not-applicable'; Reason = 'score material presentation does not consume this adapter' }
+                        hold_tab = @{ Disposition = 'not-applicable'; Reason = 'Hold-Tab renders 2D cards rather than the live preview material' }
+                        specials = @{ Disposition = 'not-applicable'; Reason = 'weapon-special materials are outside this preview transaction' }
+                        remote_audio = @{ Disposition = 'not-applicable'; Reason = 'material reconcile owns no audio behavior' }
+                        hud_panels = @{ Disposition = 'not-applicable'; Reason = 'HUD panels do not render the Athanor weapon material' }
+                        portraits = @{ Disposition = 'not-applicable'; Reason = 'portraits do not render the Athanor weapon material' }
+                        item_card_2d = @{ Disposition = 'not-applicable'; Reason = '2D cards consume icons rather than this material reconcile' }
+                        inventory_tooltip = @{ Disposition = 'not-applicable'; Reason = 'tooltips consume text and icons rather than this material reconcile' }
+                    }
+                    ReplayEdges = @{
+                        instance_load = @{ Disposition = 'not-applicable'; Reason = 'the adapter persists no engine material object' }
+                        initial_spawn = @{ Disposition = 'not-applicable'; Reason = 'gameplay initial spawn uses a different material owner' }
+                        equip = @{ Disposition = 'not-applicable'; Reason = 'gameplay equip uses a different material owner' }
+                        wield = @{ Disposition = 'not-applicable'; Reason = 'gameplay wield uses a different material owner' }
+                        customize = @{ Disposition = 'not-applicable'; Reason = 'the adapter consumes an already-committed exact selection and writes no picker state' }
+                        style_change = @{ Disposition = 'not-applicable'; Reason = 'combat style is outside the Loremaster offhand material selection' }
+                        career_change = @{ Disposition = 'not-applicable'; Reason = 'career change does not replay this preview transaction' }
+                        mission_transition = @{ Disposition = 'not-applicable'; Reason = 'the adapter retains no cross-world material object' }
+                        respawn = @{ Disposition = 'not-applicable'; Reason = 'respawn does not replay a local preview material job' }
+                        hot_join = @{ Disposition = 'not-applicable'; Reason = 'the adapter sends no peer material payload' }
+                        peer_ready = @{ Disposition = 'not-applicable'; Reason = 'the adapter sends no peer material payload' }
+                        parity_ready = @{ Disposition = 'not-applicable'; Reason = 'the adapter sends no content-parity payload' }
+                        rejoin = @{ Disposition = 'not-applicable'; Reason = 'rejoin does not replay a local preview material job' }
+                        preview_open = @{ Disposition = 'covered'; Evidence = 'spawn_data hand/path pairing creates a bounded job and applies only through the existing guarded exact-material adapter' }
+                        preview_reopen = @{ Disposition = 'covered'; Evidence = 'destroy releases the per-previewer parent lease and a new generation cannot execute stale queued work' }
+                        lobby_score_create = @{ Disposition = 'not-applicable'; Reason = 'lobby and score creation do not consume this material adapter' }
+                        mod_disable_restore = @{ Disposition = 'deferred'; Reason = 'already-painted live preview restoration on Cosmetics disable is not proven in game' }
+                    }
+                    Tests = @(
+                        @{
+                            Path = 'qa/lua/tests/test_cos_cim_preview.lua'
+                            Names = @(
+                                'Cosmetics CIM preview exact identity fails closed'
+                                'Cosmetics CIM preview retains only an already-loaded parent'
+                                'Cosmetics CIM preview keeps malformed scopes off generic load'
+                                'Cosmetics CIM preview matches hand path and applies at neutral surface'
+                                'Cosmetics CIM preview retries boundedly then retains base'
+                                'Cosmetics CIM preview isolates generations and simultaneous previewers'
+                                'Cosmetics CIM preview drops stale work across destroy and reopen'
+                                'Cosmetics CIM source contains no unsafe native setters'
+                            )
+                            Surfaces = @('cim_preview')
+                            ReplayEdges = @('preview_open', 'preview_reopen')
+                        }
+                        @{
+                            Path = 'qa/lua/tests/test_cos_preview_runtime.lua'
+                            Names = @('Cosmetics preview runtime never falls from CIM into generic parent load')
+                            Surfaces = @('cim_preview')
+                            ReplayEdges = @('preview_open', 'preview_reopen')
+                        }
+                    )
+                }
+                @{
+                    Name = 'transform'
+                    Surfaces = @{
+                        owner_1p = @{ Disposition = 'not-applicable'; Reason = 'this surface decision is scoped only to CIM-marked previewers' }
+                        owner_3p = @{ Disposition = 'not-applicable'; Reason = 'this surface decision is scoped only to CIM-marked previewers' }
+                        bot = @{ Disposition = 'not-applicable'; Reason = 'bots never consume a CIM-marked previewer' }
+                        husk = @{ Disposition = 'not-applicable'; Reason = 'husks never consume a CIM-marked previewer' }
+                        inventory_preview = @{ Disposition = 'not-applicable'; Reason = 'inventory preview keeps its existing transform policy' }
+                        illusion_browser = @{ Disposition = 'not-applicable'; Reason = 'ordinary illusion preview keeps its existing generic transform policy' }
+                        cim_preview = @{ Disposition = 'covered'; Evidence = 'the exact CIM surface explicitly bypasses the generic customization 2.0 scale path and starts from the native neutral transform pending visual proof' }
+                        crafting_preview = @{ Disposition = 'not-applicable'; Reason = 'ordinary crafting preview does not consume this surface classifier' }
+                        lobby = @{ Disposition = 'not-applicable'; Reason = 'lobby transform is outside this surface classifier' }
+                        score_team = @{ Disposition = 'not-applicable'; Reason = 'score transform is outside this surface classifier' }
+                        hold_tab = @{ Disposition = 'not-applicable'; Reason = 'Hold-Tab renders no live weapon transform' }
+                        specials = @{ Disposition = 'not-applicable'; Reason = 'weapon-special transform is outside this preview classifier' }
+                        remote_audio = @{ Disposition = 'not-applicable'; Reason = 'transform classification owns no audio behavior' }
+                        hud_panels = @{ Disposition = 'not-applicable'; Reason = 'HUD panels render no Athanor weapon transform' }
+                        portraits = @{ Disposition = 'not-applicable'; Reason = 'portraits render no Athanor weapon transform' }
+                        item_card_2d = @{ Disposition = 'not-applicable'; Reason = '2D cards render no live weapon transform' }
+                        inventory_tooltip = @{ Disposition = 'not-applicable'; Reason = 'tooltips render no live weapon transform' }
+                    }
+                    ReplayEdges = @{
+                        instance_load = @{ Disposition = 'not-applicable'; Reason = 'the neutral decision retains no transform state' }
+                        initial_spawn = @{ Disposition = 'not-applicable'; Reason = 'gameplay spawn uses a separate transform owner' }
+                        equip = @{ Disposition = 'not-applicable'; Reason = 'gameplay equip uses a separate transform owner' }
+                        wield = @{ Disposition = 'not-applicable'; Reason = 'gameplay wield uses a separate transform owner' }
+                        customize = @{ Disposition = 'not-applicable'; Reason = 'the generic customization transform remains owned by the ordinary browser path' }
+                        style_change = @{ Disposition = 'not-applicable'; Reason = 'style transforms are outside this CIM surface decision' }
+                        career_change = @{ Disposition = 'not-applicable'; Reason = 'career change does not replay a retained CIM transform' }
+                        mission_transition = @{ Disposition = 'not-applicable'; Reason = 'the native neutral decision stores no cross-world transform' }
+                        respawn = @{ Disposition = 'not-applicable'; Reason = 'respawn does not replay a local CIM transform' }
+                        hot_join = @{ Disposition = 'not-applicable'; Reason = 'the decision sends no peer payload' }
+                        peer_ready = @{ Disposition = 'not-applicable'; Reason = 'the decision sends no peer payload' }
+                        parity_ready = @{ Disposition = 'not-applicable'; Reason = 'the decision sends no parity payload' }
+                        rejoin = @{ Disposition = 'not-applicable'; Reason = 'rejoin does not replay a local CIM transform' }
+                        preview_open = @{ Disposition = 'covered'; Evidence = 'surface classification occurs before generic preview transform application and returns early without a scale write' }
+                        preview_reopen = @{ Disposition = 'covered'; Evidence = 'each replacement CIM marker repeats the same neutral decision while ordinary previewers still take the generic scale path' }
+                        lobby_score_create = @{ Disposition = 'not-applicable'; Reason = 'lobby and score constructors never receive this CIM classifier' }
+                        mod_disable_restore = @{ Disposition = 'not-applicable'; Reason = 'the CIM branch writes no transform that would require restoration' }
+                    }
+                    Tests = @(
+                        @{
+                            Path = 'qa/lua/tests/test_cos_preview_runtime.lua'
+                            Names = @('Cosmetics preview runtime routes CIM without generic LA scale')
+                            Surfaces = @('cim_preview')
+                            ReplayEdges = @('preview_open', 'preview_reopen')
+                        }
+                    )
+                }
+            )
+        }
+        @{
             Id = 'cosmetics.issue48.cim-exact-glow-persistence'
             Issue = 48
             Claim = 'structural-only'

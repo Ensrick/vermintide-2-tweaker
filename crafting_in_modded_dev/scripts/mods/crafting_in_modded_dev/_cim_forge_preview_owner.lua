@@ -1,7 +1,8 @@
 -- Athanor weapon-preview guard, placement, and bounded diagnostics owner.
 -- Vanilla's LootItemUnitPreviewer loads held-unit packages before spawning and
--- later creates the display/link unit and attached item units.  Keep all five
--- hooks on that one lifecycle in their original registration order.
+-- later creates the display/link unit and attached item units. Keep the six
+-- owner hooks on that lifecycle in their original registration order. The
+-- Overview constructor composes through mission safety's existing #882 hook.
 return function(ctx)
     assert(type(ctx) == "table", "CIM forge preview owner requires context")
     local mod = assert(ctx.mod, "CIM forge preview owner requires mod")

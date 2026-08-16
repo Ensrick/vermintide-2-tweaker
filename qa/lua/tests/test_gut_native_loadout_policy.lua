@@ -868,22 +868,80 @@ return function(H, repo_root)
             "outer hook is not gated to the complete loadout-slot partition")
     end)
 
-    H.test("issue 402 native loadout row integrity covers every slot", function()
-        local runtime_path = repo_root
-            .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_native_loadouts.lua"
-        local file = assert(io.open(runtime_path, "rb"))
-        local source = file:read("*a")
-        file:close()
-        H.truthy(source:find("local function _repair_missing_loadout_slots(entry, official_rows)", 1, true),
-            "missing-slot migration helper absent")
-        H.truthy(source:find("entry._slot_integrity_v2 = true", 1, true),
-            "slot-integrity migration marker absent")
-        H.truthy(source:find("for i = 1, #LOADOUT_SLOT_NAMES do", 1, true),
-            "corrupt-row predicate is not based on the canonical slot list")
-        H.truthy(source:find("if row[slot] == nil then return true end", 1, true),
-            "nil native loadout slots are not treated as corrupt")
-        H.truthy(source:find("slots_repaired = _repair_missing_loadout_slots(entry, cd)", 1, true),
-            "seed repair does not run the full-slot migration")
+    -- Canonical loadout slot list (backend_interface_item_playfab.lua:25-35),
+    -- mirroring LOADOUT_SLOT_NAMES in _gut_native_loadouts.lua.
+    local SLOT_NAMES = {
+        "slot_ranged", "slot_melee", "slot_skin", "slot_hat",
+        "slot_necklace", "slot_ring", "slot_trinket_1", "slot_frame", "slot_pose",
+    }
+    local JEWELRY = { slot_necklace = true, slot_ring = true, slot_trinket_1 = true }
+
+    local function full_row(prefix)
+        local row = {}
+        for _, slot in ipairs(SLOT_NAMES) do row[slot] = prefix .. slot end
+        return row
+    end
+
+    H.test("issues 375/402 row integrity repairs missing slots, never deliberate unequips", function()
+        -- Vanilla marks exactly the three jewelry slots unequippable
+        -- (inventory_settings.lua:43/52/61): empty jewelry is a legitimate choice.
+        H.truthy(type(Policy.UNEQUIPPABLE_SLOTS) == "table")
+        for slot in pairs(JEWELRY) do
+            H.equal(Policy.is_unequippable_slot(slot), true)
+        end
+        H.equal(Policy.is_unequippable_slot("slot_melee"), false)
+        H.equal(Policy.is_unequippable_slot("slot_hat"), false)
+
+        -- Predicate: nil row corrupt; complete row healthy; each never-emptiable slot
+        -- missing => corrupt; each jewelry slot missing => still healthy.
+        H.equal(Policy.row_is_corrupt_partial(nil, SLOT_NAMES), true)
+        H.equal(Policy.row_is_corrupt_partial(full_row("x_"), SLOT_NAMES), false)
+        for _, slot in ipairs(SLOT_NAMES) do
+            local row = full_row("x_")
+            row[slot] = nil
+            H.equal(Policy.row_is_corrupt_partial(row, SLOT_NAMES), not JEWELRY[slot],
+                "predicate wrong for missing " .. slot)
+        end
+
+        -- Migration pass: fills genuinely-missing visual slots from official, leaves
+        -- deliberately-emptiable jewelry empty, never clobbers owned values.
+        local official = full_row("off_")
+        local entry = { loadouts = { { slot_melee = "own_m", slot_ranged = "own_r" } } }
+        local repaired = Policy.repair_missing_loadout_slots(entry, { official }, SLOT_NAMES)
+        H.equal(repaired, 4)  -- skin, hat, frame, pose
+        local row = entry.loadouts[1]
+        H.equal(row.slot_melee, "own_m")
+        H.equal(row.slot_ranged, "own_r")
+        H.equal(row.slot_skin, "off_slot_skin")
+        H.equal(row.slot_hat, "off_slot_hat")
+        H.equal(row.slot_necklace, nil)
+        H.equal(row.slot_ring, nil)
+        H.equal(row.slot_trinket_1, nil)
+
+        -- A healthy row with a deliberate ring unequip survives the migration intact.
+        local edited = full_row("own_")
+        edited.slot_ring = nil
+        local entry2 = { loadouts = { edited } }
+        H.equal(Policy.repair_missing_loadout_slots(entry2, { official }, SLOT_NAMES), 0)
+        H.equal(edited.slot_ring, nil)
+    end)
+
+    H.test("issue 375 corrupt-row refill repairs everything except accessory slots", function()
+        local official = full_row("off_")
+        official.talents = "1,2,3,4,5,6"
+        -- Corruption signature: lost its melee. Genuinely-missing slots (and talents)
+        -- refill; jewelry holes stay empty; owned values survive.
+        local corrupt = { slot_ranged = "own_r" }
+        H.equal(Policy.row_is_corrupt_partial(corrupt, SLOT_NAMES), true)
+        local filled = Policy.repair_corrupt_row(corrupt, official)
+        H.equal(filled, 6)  -- melee, skin, hat, frame, pose, talents
+        H.equal(corrupt.slot_melee, "off_slot_melee")
+        H.equal(corrupt.slot_ranged, "own_r")
+        H.equal(corrupt.slot_hat, "off_slot_hat")
+        H.equal(corrupt.talents, "1,2,3,4,5,6")
+        H.equal(corrupt.slot_necklace, nil)
+        H.equal(corrupt.slot_ring, nil)
+        H.equal(corrupt.slot_trinket_1, nil)
     end)
 
     H.test("issue 1033 native reseed is one bounded mod-owned transaction", function()

@@ -162,6 +162,12 @@ mod:hook("HeroWindowWeaveForgeOverview", "_create_item_previewer",
                 tostring((data and data.key) or (item and item.key) or "<?>"),
                 tonumber(x_offset) or 0, tonumber(adjusted_x) or 0)
         end
+        local preview_runtime = mod._cim_forge_preview
+        if type(preview_runtime) == "table"
+                and type(preview_runtime.invoke_constructor) == "function" then
+            return preview_runtime.invoke_constructor(mod, "overview", func, self,
+                viewport_widget, item, adjusted_x, invert_start_rotation)
+        end
         return func(self, viewport_widget, item, adjusted_x, invert_start_rotation)
     end)
 

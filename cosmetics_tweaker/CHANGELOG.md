@@ -1,5 +1,22 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.212-dev (2026-08-15) -- Athanor preview gate recovery + exact CIM preview adapter (#481) [verify-fix]
+
+- Loremaster's Armoury skins no longer silently vanish from Athanor previews
+  (#481). New `_cos_la_gate_recovery.lua` (donor: the CWV #474 recipe) turns
+  both `_la_bridge.lua` refusal gates into recoverable, named events: a
+  bounded `[cos:481] preview gate REFUSED gate=... reason=... recovery=...`
+  printf (once per gate+key, capped) plus at most ONE session package lease
+  per declared vanilla parent for the `unit-materials` gate; the LA-owned
+  `texture-set` gate stays marker-only by design (third-party bundles never
+  lease). The exact-identity CIM preview adapter (`_cim_forge_preview.lua`
+  producer wrapping the three Athanor constructors, consumed by
+  `_cos_cim_preview.lua`/`_cos_cim_preview_wiring.lua`) routes its own
+  `parent-not-loaded`/`unit-not-resident` refusals through the same recovery.
+  Offline: new `test_cos_la_gate_recovery.lua` (lease boundedness, unsafe
+  owner refusal, marker caps) + refusal-routing coverage; full suite 2,810
+  green. Refs #481, #742, #696.
+
 ## 0.9.211-dev (2026-08-13) -- expose committed per-hand identity to CWV (#579) [verify-fix]
 
 - Added a read-only cross-mod provider for an exact backend instance's committed
