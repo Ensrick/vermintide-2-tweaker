@@ -125,6 +125,32 @@ function HuskIdentityRuntime.install(mod, deps)
                 or (slot_name == w_item.key)
                 or (slot_name == w_item.item_type)
                 or (allow_slot_key == true and slot_name == w_slot_name)
+            -- #476: a CWV wearer stores weapon-side entries under OWNER-LOCAL
+            -- keys (variant item_type + variant template). The husk wields the
+            -- vanilla BASE item, so no candidate above can ever produce those
+            -- keys on an observer. Extend the candidate set with the wearer's
+            -- exact CWV variant identity, resolved through the same
+            -- fingerprint-validated provider the #583 dual-hand check uses.
+            -- Fails closed to the vanilla family (candidates stay unchanged)
+            -- and never admits the shared base template (#514 collision).
+            if not match then
+                local peer_identity = mod._cos_cwv_peer_identity
+                local player = inv and (inv._player or inv.player)
+                local wearer_peer = player and player.peer_id
+                if wearer_peer and peer_identity
+                        and type(peer_identity.husk_variant_candidates)
+                            == "function" then
+                    local cands = peer_identity.husk_variant_candidates(
+                        state.get_mod("character_weapon_variants"),
+                        { wearer_peer = wearer_peer, slot_name = w_slot_name },
+                        w_item)
+                    if cands then
+                        match = (slot_name == cands.variant_key)
+                            or (cands.template ~= nil
+                                and slot_name == cands.template)
+                    end
+                end
+            end
             return match, w_item
         end
 
