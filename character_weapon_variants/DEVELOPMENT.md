@@ -19,6 +19,12 @@ explicit engine-surface review:
   It receives every engine table it uses through an explicit dependency table,
   runs those constructors in their original order, and owns no hooks, commands,
   appearance, parity, or lifecycle behavior.
+- `_cwv_musket_runtime.lua` owns both Musket template families, their stance and
+  remote-fire behavior, and the install boundary for the Old Musket ammo pool.
+  `_cwv_musket_ammo_pool.lua` owns gameplay reserve state by exact player and
+  slot. `_cwv_musket_ammo_hud.lua` is its presentation-only consumer: it may
+  select an active exact extension for the two native HUDs, but may not mutate
+  ammo, add an update loop, or widen the network surface.
 - `_cwv_skin_registry.lua` owns base variant skin/combinations registration and
   the curated custom-illusion catalog. `_cwv_illusion_families.lua` immediately
   extends the returned `custom_skin_keys` table with the generated Spear,
@@ -72,6 +78,10 @@ load order should read the entry file directly.
   ordered skin owners. Never reorder a registrar or rebuild `custom_skin_keys`:
   the backend-unlock, appearance, wire-policy, and regression consumers retain
   the exact table returned by `_cwv_skin_registry.lua`.
+- Put Old Musket reserve mutations and owner/slot membership in
+  `_cwv_musket_ammo_pool.lua`; put only native counter selection in
+  `_cwv_musket_ammo_hud.lua`, installed from `_cwv_musket_runtime.lua` after the
+  pool exists. A HUD fix must never create a second ammo authority.
 
 ## Registration and acquisition contract
 
