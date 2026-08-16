@@ -1183,7 +1183,7 @@
             )
         }
         @{
-            ModId='ct_dev'; ModTree='0530c34ec5a5ca124d101561e310f3b3d48e3d4f'
+            ModId='ct_dev'; ModTree='75173a24c5243552af505d95777f57ef9cd74beb'
             Source='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_skull52.lua'
             Marker='[ct:skull52]'; AddRoute=$true
             Signature='[ct:skull52] %s'
@@ -1280,7 +1280,7 @@
             )
         }
         @{
-            ModId='ct_dev'; ModTree='0530c34ec5a5ca124d101561e310f3b3d48e3d4f'
+            ModId='ct_dev'; ModTree='75173a24c5243552af505d95777f57ef9cd74beb'
             Source='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_altar_reuse_owner.lua'
             Marker='[ct:xchar105]'
             Signature='[ct:xchar105] upgrade-altar slot=%s career=%s rarity=%s pre_key=%s post_key=%s %s'

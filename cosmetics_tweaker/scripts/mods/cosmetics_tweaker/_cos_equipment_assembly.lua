@@ -182,6 +182,33 @@ function EquipmentAssembly.install(mod, deps)
                 local template = item_data and item_data.template
                 local equips = _la_equips_by_peer and _la_equips_by_peer[_current_husk_wield.wearer_peer]
                 local entry = equips and template and equips[template]
+                -- #476: the wearer stores CWV picks under OWNER-LOCAL keys
+                -- (variant item_type + variant template) that the observer's
+                -- vanilla base template can never reach. Resolve the wearer's
+                -- exact CWV variant once per call (fail-closed: nil keeps the
+                -- vanilla family read untouched) and retry both stores below
+                -- under those keys. The shared base template is never a
+                -- candidate (#514 collision class).
+                local cwv_cands_resolved, cwv_cands = false, nil
+                local function _cwv_store_candidates()
+                    if not cwv_cands_resolved then
+                        cwv_cands_resolved = true
+                        local peer_identity = mod._cos_cwv_peer_identity
+                        if peer_identity and type(peer_identity.husk_variant_candidates) == "function" then
+                            cwv_cands = peer_identity.husk_variant_candidates(
+                                get_mod("character_weapon_variants"),
+                                _current_husk_wield, item_data)
+                        end
+                    end
+                    return cwv_cands
+                end
+                if not entry and equips then
+                    local cands = _cwv_store_candidates()
+                    if cands then
+                        entry = (cands.template and equips[cands.template])
+                            or equips[cands.variant_key]
+                    end
+                end
                 if entry then
                     local career_ok, career_reason =
                         mod._cos_husk_identity.entry_matches_career(
@@ -342,6 +369,16 @@ function EquipmentAssembly.install(mod, deps)
                 local vstore = mod._offhand_mesh_by_peer
                 local vwear  = vstore and vstore[_current_husk_wield.wearer_peer]
                 local vhands = vwear and template and vwear[template]
+                -- #476: same owner-local key namespace as the LA read above -
+                -- the #416 store receives the wearer's weapon_key/template_key
+                -- emits, so retry it under the resolved CWV candidates too.
+                if type(vhands) ~= "table" and vwear then
+                    local cands = _cwv_store_candidates()
+                    if cands then
+                        vhands = (cands.template and vwear[cands.template])
+                            or vwear[cands.variant_key]
+                    end
+                end
                 -- #518: vanilla offhand mesh picks yield in a deus run too (same
                 -- template-key leak as the LA branch above).
                 if type(vhands) == "table" and not _deus_yield then

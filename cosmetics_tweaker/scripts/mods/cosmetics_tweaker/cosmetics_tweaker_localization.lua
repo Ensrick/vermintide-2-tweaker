@@ -152,6 +152,9 @@ local loc = {
     cos_unlock_weapon_poses = {
         en = "Unlock Heroic Weapon Poses",
     },
+    weapon_pose = {
+        en = "Weapon Pose",
+    },
     cos_unlock_weapon_poses_tooltip = {
         en = "Shows every authored heroic pose for the weapon you are holding on the social wheel in the modded realm. This does not grant or alter official backend ownership. Weapons without their own authored pose icons remain unchanged while compatibility diagnostics are collected.",
     },
@@ -201,6 +204,13 @@ local loc = {
     },
     ct_es_deus_we_02_description = {
         en = "Kerillian's exotic elven spear and shield on Kruber.",
+    },
+
+    ct_es_2h_hammer_tut_01_name = {
+        en = "Prologue Wooden Mallet",
+    },
+    ct_es_2h_hammer_tut_01_description = {
+        en = "The wooden training mallet from Kruber's Prologue, swung as a Great Hammer.",
     },
 
     tpe_group = {

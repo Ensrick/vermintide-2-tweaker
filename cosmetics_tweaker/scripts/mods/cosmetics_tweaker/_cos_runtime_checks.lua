@@ -1004,12 +1004,19 @@ _rt_register("glow_manual_editor_button_377", function()
     end
 end)
 
+-- #485: the check must EXECUTE the production catalog and decision table, not
+-- merely prove the seams exist - a marker-only check still passed after the
+-- authored rows, the fallback boundary, or the rebuild pulse regressed.
 _rt_register("issue485_authored_weapon_poses_local_only", function()
     if not WEAPON_POSES or WEAPON_POSES.marker ~= "social_wheel_authored_catalog_485" then
         return "weapon-pose module marker missing"
     end
     local policy = WEAPON_POSES.policy
-    if not policy or type(policy.build_catalog) ~= "function" or type(policy.for_parent) ~= "function" then
+    if not policy or type(policy.build_catalog) ~= "function"
+        or type(policy.for_parent) ~= "function"
+        or type(policy.decide) ~= "function"
+        or type(policy.validate_catalog) ~= "function"
+        or type(policy.rebuild_armed) ~= "function" then
         return "weapon-pose catalog policy incomplete"
     end
     local widgets = require("scripts/mods/cosmetics_tweaker/cosmetics_tweaker_data").options.widgets
@@ -1026,6 +1033,89 @@ _rt_register("issue485_authored_weapon_poses_local_only", function()
     if not cls or type(cls._gather_weapon_poses_by_parent_item) ~= "function" then
         return "SocialWheelUI pose gather seam missing"
     end
+    -- Execute the PRODUCTION catalog against the live authored rows:
+    -- exact-parent complete, deterministic, animation-backed, no master writes.
+    local iml = rawget(_G, "ItemMasterList")
+    if type(iml) ~= "table" then return "ItemMasterList unavailable" end
+    local catalog = policy.build_catalog(iml)
+    local parents, rows_total = 0, 0
+    for _, rows in pairs(catalog) do
+        parents = parents + 1
+        rows_total = rows_total + #rows
+    end
+    if parents == 0 then
+        return "production catalog is empty (no authored weapon_pose rows)"
+    end
+    local violation = policy.validate_catalog(catalog, iml)
+    if violation then return "production catalog violation: " .. violation end
+    local rebuilt = policy.build_catalog(iml)
+    for parent, rows in pairs(catalog) do
+        local rrows = rebuilt[parent]
+        if type(rrows) ~= "table" or #rrows ~= #rows then
+            return "rebuild changed catalog shape for " .. tostring(parent)
+        end
+        for i = 1, #rows do
+            if rrows[i].ItemId ~= rows[i].ItemId then
+                return "rebuild is not deterministic for " .. tostring(parent)
+            end
+        end
+    end
+    -- Invalid and cross-parent rows must be rejected by the same builder.
+    local probe_master = {
+        rt485_valid_b = { item_type = "weapon_pose", parent = "rt485_parent",
+            pose_index = 2, data = { anim_event = "rt485_anim_b" } },
+        rt485_valid_a = { item_type = "weapon_pose", parent = "rt485_parent",
+            pose_index = 1, data = { anim_event = "rt485_anim_a" } },
+        rt485_no_anim = { item_type = "weapon_pose", parent = "rt485_parent",
+            pose_index = 3, data = {} },
+        rt485_no_index = { item_type = "weapon_pose", parent = "rt485_parent",
+            data = { anim_event = "rt485_anim_x" } },
+        rt485_not_pose = { item_type = "weapon_skin", parent = "rt485_parent",
+            pose_index = 4, data = { anim_event = "rt485_anim_y" } },
+        rt485_other = { item_type = "weapon_pose", parent = "rt485_other",
+            pose_index = 1, data = { anim_event = "rt485_anim_z" } },
+    }
+    local probe_rows = policy.for_parent(policy.build_catalog(probe_master), "rt485_parent")
+    if not probe_rows or #probe_rows ~= 2
+        or probe_rows[1].ItemId ~= "rt485_valid_a"
+        or probe_rows[2].ItemId ~= "rt485_valid_b" then
+        return "builder admitted an invalid or cross-parent row"
+    end
+    if probe_master.rt485_valid_a.backend_id ~= nil then
+        return "builder stamped backend identity onto a master row"
+    end
+    -- The three realm/setting decisions stay distinct, and unsupported
+    -- parents resolve to their own vanilla outcome.
+    local d_authored = policy.decide(true, true, probe_rows)
+    local d_off = policy.decide(false, true, probe_rows)
+    local d_official = policy.decide(true, false, probe_rows)
+    local d_unsupported = policy.decide(true, true, nil)
+    if d_authored ~= "authored"
+        or d_off ~= "vanilla-setting-off"
+        or d_official ~= "vanilla-official-realm"
+        or d_unsupported ~= "vanilla-unsupported-parent"
+        or d_off == d_official then
+        return "realm/setting/support decisions are not distinct"
+    end
+    if type(WEAPON_POSES.decision_for) ~= "function"
+        or type(WEAPON_POSES.note_unsupported) ~= "function" then
+        return "gather decision seams missing"
+    end
+    -- Unsupported parents emit ONE bounded diagnostic identity, then stay silent.
+    if WEAPON_POSES.note_unsupported("rt485_probe_parent") ~= true
+        or WEAPON_POSES.note_unsupported("rt485_probe_parent") ~= false then
+        return "unsupported-parent diagnostic is not bounded to one emission"
+    end
+    -- Exactly one armed wheel rebuild per option flip.
+    local holder = {}
+    if policy.rebuild_armed(holder, "_cos485_pose_unlock_state", true) ~= true
+        or policy.rebuild_armed(holder, "_cos485_pose_unlock_state", true) ~= false
+        or policy.rebuild_armed(holder, "_cos485_pose_unlock_state", false) ~= true
+        or policy.rebuild_armed(holder, "_cos485_pose_unlock_state", false) ~= false then
+        return "option flip did not arm exactly one wheel rebuild"
+    end
+    pcall(printf, "[cos:485] catalog executed parents=%d rows=%d decisions=distinct rebuild=one-shot",
+        parents, rows_total)
 end)
 
 _rt_register("tpe_wield_hook_installed", function()
