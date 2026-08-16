@@ -53,4 +53,38 @@ function M.resolve_husk(base_item_type, cwv_mod, husk_wield, item_data, allowed_
     })
 end
 
+-- #476: store-read candidates for a husk entry the WEARER emitted under
+-- owner-local CWV keys (`entry.weapon_key` = the CWV variant item_type,
+-- `entry.template_key` = that variant's template). The observer's husk item
+-- is the vanilla BASE, so every candidate derived from it misses both keys.
+-- Resolve the wearer's exact variant through the fingerprint-validated
+-- provider (same trust anchor as resolve_husk) and return the variant key
+-- plus its LOCAL ItemMasterList template. Fails closed to nil - vanilla
+-- family candidates only - on any provider, descriptor, or registration
+-- doubt, and NEVER surfaces the shared vanilla base template: that key would
+-- match a native wielder of the same family (#514 collision class).
+function M.husk_variant_candidates(cwv_mod, husk_wield, item_data, item_master_list)
+    item_master_list = item_master_list or rawget(_G, "ItemMasterList")
+    if type(item_master_list) ~= "table" then return nil, "no_item_master" end
+    item_data = item_data or {}
+    -- Admission set for resolve_item_type's plain-table membership contract:
+    -- exactly "a locally registered cwv_* clone row", resolved per key so it
+    -- can never drift from CWV's live catalog the way a static list would.
+    local allowed = setmetatable({}, { __index = function(_, key)
+        if type(key) ~= "string" or string.sub(key, 1, 4) ~= "cwv_" then
+            return nil
+        end
+        local row = rawget(item_master_list, key)
+        return (type(row) == "table" and type(row.template) == "string")
+            or nil
+    end })
+    local variant_key, state = M.resolve_husk(nil, cwv_mod, husk_wield,
+        item_data, allowed)
+    if state ~= "exact" or not variant_key then return nil, state end
+    local row = rawget(item_master_list, variant_key)
+    local template = row and row.template
+    if template == item_data.template then template = nil end
+    return { variant_key = variant_key, template = template }, state
+end
+
 return M

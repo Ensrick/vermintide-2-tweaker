@@ -69,6 +69,30 @@ local _custom_illusions = {
         template         = "two_handed_heavy_spears_template",
         can_wield        = { "es_mercenary", "es_knight", "es_huntsman", "es_questingknight" },
     },
+
+    -- #913: the Prologue wooden mallet on Kruber's Great Hammer. The tutorial
+    -- backend item (es_2h_hammer_tutorial, can_wield empire_soldier_tutorial
+    -- only) stays untouched; only its shipped unit is borrowed. Unit, template,
+    -- and icons are the vanilla tutorial rows' own (decompile:
+    -- item_master_list_exported.lua es_2h_hammer_tutorial /
+    -- item_master_list_scorpion.lua es_2h_hammer_tutorial_magic_01, both on
+    -- two_handed_hammers_template_1). The 1p+3p units sit in vanilla's
+    -- inventory_package_list (inventory_package_list.lua:1124-1125), so the
+    -- existing custom-illusion walk in _force_load_all_offhand_packages
+    -- declares the package dependency on every peer (#913 path 2); can_wield
+    -- mirrors the vanilla es_2h_hammer base row.
+    {
+        skin_key         = "ct_es_2h_hammer_tut_01",
+        matching_weapon  = "es_2h_hammer",
+        display_name     = "Prologue Wooden Mallet",
+        rarity           = "exotic",
+        right_hand_unit  = "units/weapons/player/wpn_empire_2h_hammer_tutorial/wpn_empire_2h_hammer_tut_01",
+        display_unit     = "units/weapons/weapon_display/display_2h_hammers",
+        template         = "two_handed_hammers_template_1",
+        can_wield        = { "es_mercenary", "es_knight", "es_huntsman" },
+        hud_icon         = "weapon_generic_icon_hammer2h",
+        inventory_icon   = "icon_wpn_empire_2h_hammer_01_t1",
+    },
 }
 
 local _custom_skin_keys = COS.custom_skin_keys
@@ -80,6 +104,12 @@ local function _register_custom_illusions()
         local skin_key = illusion.skin_key
         if _custom_skin_keys[skin_key] then goto continue end
 
+        -- #913: entries may carry their own icon pair; the historical staff /
+        -- mace-shield icons stay the defaults for the pre-existing rows.
+        local hud_icon = illusion.hud_icon or "weapon_generic_icon_staff_3"
+        local inventory_icon = illusion.inventory_icon
+            or "icon_wpn_empire_shield_01_t1_mace"
+
         ItemMasterList[skin_key] = {
             item_type         = "weapon_skin",
             slot_type         = "weapon_skin",
@@ -88,8 +118,8 @@ local function _register_custom_illusions()
             display_name      = skin_key .. "_name",
             description       = skin_key .. "_description",
             display_unit      = illusion.display_unit,
-            hud_icon          = "weapon_generic_icon_staff_3",
-            inventory_icon    = "icon_wpn_empire_shield_01_t1_mace",
+            hud_icon          = hud_icon,
+            inventory_icon    = inventory_icon,
             information_text  = "information_weapon_skin",
             right_hand_unit   = illusion.right_hand_unit,
             left_hand_unit    = illusion.left_hand_unit,
@@ -101,8 +131,8 @@ local function _register_custom_illusions()
             description     = skin_key .. "_description",
             display_name    = skin_key .. "_name",
             display_unit    = illusion.display_unit,
-            hud_icon        = "weapon_generic_icon_staff_3",
-            inventory_icon  = "icon_wpn_empire_shield_01_t1_mace",
+            hud_icon        = hud_icon,
+            inventory_icon  = inventory_icon,
             rarity          = illusion.rarity,
             right_hand_unit = illusion.right_hand_unit,
             left_hand_unit  = illusion.left_hand_unit,

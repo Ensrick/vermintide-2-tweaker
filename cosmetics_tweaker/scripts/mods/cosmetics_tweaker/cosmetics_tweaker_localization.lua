@@ -203,6 +203,13 @@ local loc = {
         en = "Kerillian's exotic elven spear and shield on Kruber.",
     },
 
+    ct_es_2h_hammer_tut_01_name = {
+        en = "Prologue Wooden Mallet",
+    },
+    ct_es_2h_hammer_tut_01_description = {
+        en = "The wooden training mallet from Kruber's Prologue, swung as a Great Hammer.",
+    },
+
     tpe_group = {
         en = "Third-Person Equipment",
     },
