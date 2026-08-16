@@ -1,5 +1,21 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.338-dev (2026-08-16) -- production-path harnesses + screen-particle instrumentation (#232, #274, #209) [verify-fix]
+
+- Bot victory-pose coverage now exercises the production hook chain (#232):
+  the offline harness and the runtime check capture the VMF-registered
+  callbacks, compose them as VMF does, and drive a fake bot spawn through the
+  real delegation - spawn-depth, argument-order, and composition regressions
+  now fail instead of passing on registration booleans.
+- Cutscene policy coverage does the same (#274): intro-skip, delayed
+  straggler, and outro replay against a fake cutscene system prove the outro
+  camera delegate actually runs and HUD/camera state survives.
+- [diag] Screen-particle lifecycle instrumentation (#209): bounded `[gut:209]`
+  rows wrap screen-particle create/stop/destroy (effect, callsite, particle
+  id, camera mode) plus a camera-transition receipt listing live particle IDs
+  at third-person entry/exit. One solo run with overcharge, a vortex grab,
+  and a status effect names the surviving owners.
+
 ## 0.2.337-dev (2026-08-16) -- Dialogue tab isolation control row (#998) [verify-fix]
 
 - The Mod Tweaker Dialogue tab renders Character Dialogue's new automatic
