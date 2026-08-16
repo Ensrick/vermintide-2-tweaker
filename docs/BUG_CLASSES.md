@@ -1126,6 +1126,17 @@ gut_dev `_gut_gui_material_guard.lua` (pose atlas + store atlas + area videos in
 
 **Fix template.** Never purge synchronously in `remove_player`. Defer with a deadline (cosmetics uses 30s) and cancel in a `PlayerManager.add_remote_player` hook_safe - transitions re-add peers within seconds, genuine disconnects never do. Skip the local peer entirely. See cosmetics_tweaker 0.9.71-dev `[la-state] PEER-PURGE scheduled/canceled/executed`.
 
+**Narrow exception -- rehydratable transport caches.** A client may clear a
+remote human's *ephemeral semantic transport cache* synchronously only when all
+of the following are proven: the local peer, bots, and server path are excluded;
+cleanup is recipient-scoped rather than global; no persisted choice is deleted;
+and a bounded peer-ready pull reconstructs the state from current authoritative
+slots after the transition. CWV #914 is the reference: it clears only remote
+identity/request/delivery and `<peer>|<slot>` dedupe routes, preserves shared
+`others|<slot>` signatures, and leaves the request generation unconsumed when
+local slots are not ready. This exception does not apply to Cosmetics' saved or
+Apply-gated selections.
+
 **Related.** A second transition-window class rides along: RPCs sent to/from a peer that is mid-load are dropped silently with no error (same session: three client->host packets between 17:28:26-17:28:55 never arrived; keep-time round-trip was 98ms). Any "send once on state change" design must retry-until-acked or pull-on-ready-with-ack (cosmetics `cos_la_state_req`/`cos_la_state_ack`).
 
 ---
