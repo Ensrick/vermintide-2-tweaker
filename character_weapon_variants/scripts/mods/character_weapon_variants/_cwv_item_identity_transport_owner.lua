@@ -5,6 +5,19 @@ local function install(mod, ctx)
 	local _custom_skin_keys = assert(ctx.custom_skin_keys,
 		"cwv identity transport owner requires custom_skin_keys")
 
+	-- #1320: the Outrider Grenade Launcher's projectile wire (clone lookup_data
+	-- re-stamp + NetworkLookup.item_template_names registration) is item-identity
+	-- wire surface. It installs from THIS owner because the entry manifest is
+	-- frozen at its decomposition ceiling; the Outrider template already exists
+	-- (core templates install far earlier in the entry order).
+	mod:dofile("scripts/mods/character_weapon_variants/_cwv_outrider_projectile_wire")
+		.install(mod, {
+			om = _om,
+			network_lookup = mod:dofile(
+				"scripts/mods/character_weapon_variants/_lib_network_lookup"),
+			printf = printf,
+		})
+
 	-- ============================================================
 	-- issue 278: net-safe loadout sync for cwv variant keys
 	-- ============================================================

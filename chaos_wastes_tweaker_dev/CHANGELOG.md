@@ -1,5 +1,18 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.343-dev (2026-08-16) -- parity-restore stack re-broadcast + receipts (#249, #322, #727) [verify-fix]
+
+- Clients receive their meta ammo-stack buffs again after a parity
+  degrade/restore cycle (#249): the restore path re-broadcasts stack buffs to
+  every connected peer under the same peer-parity gate, with a bounded
+  `[ct:249]` receipt counting re-broadcast stacks per peer. Shares its
+  client-never-activates signature with #289 - one co-op run decides both.
+- [diag] Linked-pickup spawns emit one bounded `[ct:322]` row (object id,
+  pickup name, peer role, ~10/mission cap) so the pending #322 ruling can
+  close on log evidence at zero extra cost.
+- Routine ct_dev diagnostics moved off the chat echo channel to guarded
+  printf per the #727 sweep; user-invoked replies keep their annotated echo.
+
 ## 0.7.342-dev (2026-08-15) -- Manann ready-state display + Adventure illusion preservation (#358, #917) [verify-fix]
 
 - **Manann's Tempest cooldown display: persistent ready state (#358).** The

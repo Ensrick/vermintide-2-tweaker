@@ -517,6 +517,31 @@ local function _spawn_item_post(self, item_name, spawn_data)
                     state.glow_log("rehydrate path=hero_preview bid=%s skin=%s slot=%s",
                         tostring(bid), tostring(skin), tostring(slot_type))
                 end
+                -- #1147: score lineup rows carry wearer identity but no
+                -- owner-local backend ids (team_previewer.lua:126 equips with
+                -- backend_id nil), so the bid-keyed paint above cannot fire
+                -- there. Route their glow through the transported wearer
+                -- payload -- the same render-identity descriptors the husk
+                -- consumers use. The re-bind drops the ambiguous slot_type
+                -- namespace ("melee" vs the payload's "slot_melee") so the
+                -- shared matcher constrains on skin/item identity only.
+                if self._cos_wearer_peer and mod._cos.apply_wearer_surface_glow then
+                    if mod._cos.bind_glow_unit then
+                        mod._cos.bind_glow_unit(slot.right, nil, skin, nil,
+                            info.name, item_data and item_data.template)
+                        mod._cos.bind_glow_unit(slot.left, nil, skin, nil,
+                            info.name, item_data and item_data.template)
+                    end
+                    mod._cos.apply_wearer_surface_glow(
+                        { slot.right, slot.left }, self._cos_wearer_peer,
+                        "score_team")
+                elseif mod._cos.report_surface_glow then
+                    -- Inventory character preview: the bid-keyed paint above
+                    -- already ran; record its painted-mesh postcondition
+                    -- (cold-load parity evidence, bounded, [cos:1147]).
+                    mod._cos.report_surface_glow(
+                        slot.right, bid, skin, "hero_previewer")
+                end
             end
         end
     end

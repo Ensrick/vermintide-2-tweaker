@@ -1,5 +1,19 @@
 # General Tweaker Changelog
 
+## 0.2.268-dev (2026-08-16) -- ragdoll 0 = off, reconcile timer, diag shapes (#332, #309, #169) [verify-fix]
+
+- Max Ragdolls now accepts 0 as fully off, and the corpse-cap reconcile runs
+  on a bounded timer instead of only on the next death, so lowering the cap
+  takes effect within a couple of seconds (#332 groundwork; the Tzeentch
+  explosion question on the issue stays open for the user).
+- The disconnect-grace diagnostic returns nil on success per the runner
+  contract, so healthy wiring no longer prints as FAIL (#309 residue; the
+  design ruling on the issue stays open for the user).
+- Debug-probe gating reads real VMF logging state through a
+  `vmf_debug_enabled` helper instead of the retired `enable_debug_logging`
+  setting; a repo test rejects executable reads/writes of the retired key
+  (#169, dev stream; the stable copy rides the next promotion).
+
 ## 0.2.267-dev (2026-08-15) -- host-authoritative duplicate careers + bot settings text pass (#1150) [verify-fix]
 
 - Allow Duplicate Careers is now host-authoritative (#1150). The host

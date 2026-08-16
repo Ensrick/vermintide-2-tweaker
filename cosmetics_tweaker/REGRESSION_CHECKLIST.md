@@ -4,7 +4,7 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-08-13.
+Last updated: 2026-08-16.
 
 ---
 ## Athanor exact offhand preview ownership (#481)
@@ -22,6 +22,25 @@ Last updated: 2026-08-13.
 | Arbitration | An exact row-2 component owns the shield. The whole-skin Purpure/Azure fallback runs only when no independent component is selected, so two providers never paint one preview target. |
 | Scope | Preserve the overview's intentional melee/ranged previewers; do not destroy previews based on equal world-space pivots because each viewport owns a separate world. The adapter adds no RPC, persistence, command, direct native setter, or independent polling owner. |
 | Detection | Offline `test_cim_forge_preview_owner.lua`, `test_cos_equipment_assembly.lua`, `test_cos_cim_preview.lua`, `test_cos_la_gate_recovery.lua`, and `test_cos_preview_runtime.lua` cover the producer/consumer transaction and refusal recovery. In-game verification still must prove exact offhand mesh/material on all three Athanor surfaces, first-open/reopen, simultaneous previewers, neutral transform, and resident base on timeout/missing identity. |
+
+---
+## LA pre-spawn parent-package lease (#696)
+
+| Field | Value |
+|---|---|
+| Boundary | Log #940: the invariant MeshObject warnings (`5a0213f3`/`6e98026a`/`c61ad6e5` = murmur64 upper-32 of the authored slot names `LA_message_board_texture`/`LA_message_board_papers_texture`/`shield`) fire at NATIVE spawn, before Material-Hijack's `[cos:696]` bind brackets. `_cos_la_prespawn_lease.lua` queues one bounded session lease per declared vanilla parent package for exactly the five traced unit paths at the all-mods-loaded edge; the `UnitSpawner.spawn_local_unit` seam records per-path residency once. |
+| Safety | Only the declared Breton black_and_gold skin package (`cosmetics_lake.lua:36`) and per-unit `units/weapons/player/...` shield donors are ever leased; `can_get` preflight fails closed; LA-gated; no bind is substituted, suppressed, or reordered. |
+| Detection | Offline `test_cos_la_prespawn_lease.lua`; `/cos_regression_test` passes `issue696_la_prespawn_parent_lease`; in-game, one keep entry logs `[cos:696] pre-spawn lease pkg=... verdict=queued` at load and `pre-spawn observe ... resident=...` at the first traced spawn. The live comparison is the warning count for those three hashes across keep/preview/mission versus log #940. |
+
+---
+## Preview and score surface glow parity (#1147)
+
+| Field | Value |
+|---|---|
+| Boundary | `repaint path=husk_wield` was the only glow repaint emitter. Score lineup rows equip with `backend_id nil` (team_previewer.lua:126), so the bid-keyed paint cannot run there; `_cos_preview_runtime._spawn_item_post` now routes score rows (wearer stamped by the `TeamPreviewer._spawn_hero` hook) through `mod._cos.apply_wearer_surface_glow`, matching the transported `_glow_by_peer` payload by render identity (`_cos_glow_surface_policy` + `_cos_glow_instance_policy.remote_match`); the local wearer's live active payload covers the pre-echo window. |
+| Predicate | Success on preview/score surfaces is the painted-mesh postcondition (named mesh exposing a glow variable), never call completion; the offhand previewer PAINT trace reports `ok-mesh-verified`/`ok-mesh-unverified`/`ok-mesh-mismatch` instead of bare `true`. Per-item paint math is shared (moved verbatim into the pure policy) so owner/husk/preview/score cannot drift. |
+| Fail-closed | No payload, no identity match, or an unnameable mesh renders the resident baked glow -- never a family-wide paint (#48 bleed class). |
+| Detection | Offline `test_cos_glow_surface_policy.lua` (drives the real repaint executor + paint math with a recording writer); `/cos_regression_test` passes `issue1147_surface_glow_repaint_wired`; in-game receipts on the bounded `[cos:1147]` channel (`repaint path=score_team|hero_previewer ... post=verified`). Census: `glow_overrides.score_team` is implemented with `peer_ready` unsupported. |
 
 ---
 ## CWV Sword+Mace picker-family census (#704)

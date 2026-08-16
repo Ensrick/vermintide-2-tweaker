@@ -480,6 +480,9 @@ local loc = {
     -- v0.7.240-dev (#426): label for the peer-parity chat notice ("Peer-parity:
     -- disabled <label>..."). This is runtime feedback, not a menu option title.
     ct_gated_modded_boons = { en = "Modded Boons and Miracles" },
+    -- issue 249: label for the parity-restore stack re-sync gated feature in the
+    -- same peer-parity chat notice. Runtime feedback, not a menu option title.
+    ct_gated_boon_stack_resync = { en = "Boon Stack Re-Sync" },
     disable_boon_ct_boon_vauls_anvil = { en = "Disable Boon: (Mod Boon) Vaul's Anvil" },
     start_boon_ct_boon_vauls_anvil   = { en = "Starting Boon: (Mod Boon) Vaul's Anvil" },
     disable_boon_ct_boon_vauls_anvil_tooltip = { en = "(Mod Boon) Boon variant with the same effect as the trait. Requires the matching Rework toggle." },

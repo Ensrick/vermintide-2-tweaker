@@ -940,6 +940,78 @@ _rt_register("issue481_athanor_exact_offhand_target", function()
     end
 end)
 
+-- #696: the pre-spawn parent-package lease for the four #940-traced LA units
+-- must stay wired on the active MH embed with its safety contract intact
+-- (declared vanilla parents only, session-bounded, LA-gated).
+_rt_register("issue696_la_prespawn_parent_lease", function()
+    local lease = MH_EMBED and MH_EMBED.prespawn_lease
+    if type(lease) ~= "table" then return "prespawn lease missing from MH embed" end
+    if lease.dormant then return nil end   -- dormant embed owns no spawn seam
+    if type(lease.lease_all) ~= "function"
+        or type(lease.observe_spawn) ~= "function" then
+        return "prespawn lease API incomplete"
+    end
+    local Module = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_prespawn_lease")
+    local traced = 0
+    for unit_path, packages in pairs(Module.UNIT_PARENT_PACKAGES) do
+        traced = traced + 1
+        for _, pkg in ipairs(packages) do
+            if pkg:find("units/weapons/player/", 1, true) ~= 1
+                and pkg ~= Module.BRETON_SKIN_PACKAGE then
+                return "unsafe lease target declared: " .. tostring(pkg)
+            end
+        end
+        if not unit_path:find("units/", 1, true) then
+            return "lease map keyed by a non-unit path"
+        end
+    end
+    if traced ~= 5 then
+        return "lease map drifted from the five #940-traced unit paths"
+    end
+end)
+
+-- #1147: preview/score glow parity must keep its surface adapter, its pure
+-- policy, and the painted-mesh postcondition predicate wired.
+_rt_register("issue1147_surface_glow_repaint_wired", function()
+    if type(mod._cos.apply_wearer_surface_glow) ~= "function" then
+        return "wearer surface glow adapter missing"
+    end
+    if type(mod._cos.report_surface_glow) ~= "function" then
+        return "preview glow postcondition receipt missing"
+    end
+    if type(mod._cos.glow_surface_postcondition) ~= "function" then
+        return "glow postcondition helper missing"
+    end
+    local P = mod._cos.glow_surface_policy
+    if type(P) ~= "table" or type(P.resolve_wearer_state) ~= "function"
+        or type(P.paint_per_item) ~= "function"
+        or type(P.repaint) ~= "function"
+        or type(P.classify_postcondition) ~= "function" then
+        return "glow surface policy API incomplete"
+    end
+    -- Pure predicate self-check (no engine state): success is painted-mesh
+    -- identity, never call completion.
+    if P.classify_postcondition({ alive = true, mesh_name = "<no-unit_name>",
+            glow_capable = true }) ~= "unnamed-mesh" then
+        return "postcondition accepts an unnameable mesh (call-completion regression)"
+    end
+    if P.classify_postcondition({ alive = true,
+            mesh_name = "units/weapons/player/wpn_x/wpn_x_3p",
+            glow_capable = true }) ~= "verified" then
+        return "postcondition rejects a named glow-capable mesh"
+    end
+    -- Pure paint self-check: the disabled state must claim the unit by
+    -- zero-painting every declared variable through the injected writer.
+    local writes = 0
+    local claimed = P.paint_per_item({}, { disabled = true }, {
+        var_brightness = { rune_emissive_color = { brightness = 9 } },
+        write = function() writes = writes + 1 end,
+    })
+    if not claimed or writes ~= 1 then
+        return "pure per-item paint drifted (disabled zero-paint contract)"
+    end
+end)
+
 mod:command("verify_gk_set", "Verify the #629 Grail Knight cosmetic-set resource and registration contract", function()
     local err = _issue629_grail_knight_set_contract()
     if err then
