@@ -16,16 +16,16 @@ same backlog counted twice and are excluded from the deduplicated totals below.
 
 ## Totals
 
-Deduplicated backlog: **3624 unsupported pairs** of 4624 declared (78.4%), across 34 families in 4 mods.
+Deduplicated backlog: **3623 unsupported pairs** of 4624 declared (78.4%), across 34 families in 4 mods.
 
-Including the wt_dev mirror: 4049 unsupported of 5168 declared.
+Including the wt_dev mirror: 4048 unsupported of 5168 declared.
 
 ### Per mod
 
 | Mod | Families | Pairs | Implemented | Unsupported | Unsupported % |
 |---|---:|---:|---:|---:|---:|
 | character_weapon_variants | 21 | 2856 | 623 | 2233 | 78.2% |
-| cosmetics_tweaker | 8 | 1088 | 211 | 877 | 80.6% |
+| cosmetics_tweaker | 8 | 1088 | 212 | 876 | 80.5% |
 | weapon_tweaker | 4 | 544 | 119 | 425 | 78.1% |
 | weapon_tweaker_dev (mirror) | 4 | 544 | 119 | 425 | 78.1% |
 | weapons_of_chaos | 1 | 136 | 47 | 89 | 65.4% |
@@ -40,7 +40,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | husk | 272 | 28 | 244 | 89.7% |
 | inventory_preview | 272 | 173 | 99 | 36.4% |
 | illusion_browser | 272 | 125 | 147 | 54.0% |
-| cim_preview | 272 | 106 | 166 | 61.0% |
+| cim_preview | 272 | 107 | 165 | 60.7% |
 | crafting_preview | 272 | 0 | 272 | 100.0% |
 | lobby | 272 | 11 | 261 | 96.0% |
 | score_team | 272 | 18 | 254 | 93.4% |
@@ -60,7 +60,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | peer_ready | 578 | 168 | 410 | 70.9% |
 | equip | 578 | 189 | 389 | 67.3% |
 | customize | 578 | 171 | 407 | 70.4% |
-| preview_open | 578 | 185 | 393 | 68.0% |
+| preview_open | 578 | 186 | 392 | 67.8% |
 | mission_transition | 578 | 47 | 531 | 91.9% |
 | respawn | 578 | 60 | 518 | 89.6% |
 | mod_disable_restore | 578 | 0 | 578 | 100.0% |
@@ -1198,7 +1198,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | per_receiver_scale | No illusion-browser scale adapter; the weapon renders at native scale there. Safe. Tracked 660. |
 | weapons_of_chaos | enemy_weapon_relic | mod.on_disabled (weapons_of_chaos.lua:1592) clears transform tracking and stops audio but does not re-key already-spawned units to the base mesh; the authored mesh persists until the next re-equip or mission load. Degrades to the resident cloned vanilla sword. |
 
-### cim_preview (198 unsupported pairs)
+### cim_preview (197 unsupported pairs)
 
 #### cim_preview x instance_load (17)
 
@@ -1210,8 +1210,8 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | cosmetics_tweaker | custom_weapon_illusions | ct_* illusions surface in the Athanor via the shared get_unlocked_weapon_skins unlock, but cosmetics installs no Athanor previewer hook and there is no in-game confirmation the forge renders the ct_* mesh/paint. Unverified; tracked as the cim-preview illusion gap. |
 | cosmetics_tweaker | glow_overrides | The Athanor forge previewer is not hooked for glow; renders baked glow only. Tracked 650. |
 | cosmetics_tweaker | la_hat_skin_clones | The Athanor (crafting_in_modded) forges weapons; hats/armor have no forge-preview surface, and cosmetics installs no Athanor hook. Not applicable by surface. |
-| cosmetics_tweaker | offhand_shield_swaps | The offhand row-2 picker lives in cosmetics' customization window (HeroWindowItemCustomization / LootItemUnitPreviewer), not the Athanor; cim's forge preview renders the base offhand. Tracked as the cim-preview offhand gap. |
-| cosmetics_tweaker | weapon_model_scale_grip | Scale apply is bound to cosmetics' three render hooks; the Athanor forge previewer is not among them and renders native scale. Tracked as the cim-preview transform gap. |
+| cosmetics_tweaker | offhand_shield_swaps | #481 is deliberately limited to exact Athanor preview construction. Non-preview edges and unproven identity/readiness retain the resident base offhand. |
+| cosmetics_tweaker | weapon_model_scale_grip | #481 classifies the exact Athanor surface but deliberately bypasses the generic customization 2.0 scale path; it renders native neutral scale pending visual proof. Tracked as the cim-preview transform gap. |
 | cosmetics_tweaker | weapon_poses | Poses have no forge-preview surface. Not applicable. |
 | weapon_tweaker | cross_character_port | No Athanor/CIM craft-preview wield resolver; preview shows the source template base stance, no crash. Tracked 660. |
 | weapon_tweaker | grip_hold_override | No Athanor/CIM transform adapter; grip/rotation offsets not applied. Native grip; safe. Tracked 660. |
@@ -1232,8 +1232,8 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | cosmetics_tweaker | custom_weapon_illusions | ct_* illusions surface in the Athanor via the shared get_unlocked_weapon_skins unlock, but cosmetics installs no Athanor previewer hook and there is no in-game confirmation the forge renders the ct_* mesh/paint. Unverified; tracked as the cim-preview illusion gap. |
 | cosmetics_tweaker | glow_overrides | The Athanor forge previewer is not hooked for glow; renders baked glow only. Tracked 650. |
 | cosmetics_tweaker | la_hat_skin_clones | The Athanor (crafting_in_modded) forges weapons; hats/armor have no forge-preview surface, and cosmetics installs no Athanor hook. Not applicable by surface. |
-| cosmetics_tweaker | offhand_shield_swaps | The offhand row-2 picker lives in cosmetics' customization window (HeroWindowItemCustomization / LootItemUnitPreviewer), not the Athanor; cim's forge preview renders the base offhand. Tracked as the cim-preview offhand gap. |
-| cosmetics_tweaker | weapon_model_scale_grip | Scale apply is bound to cosmetics' three render hooks; the Athanor forge previewer is not among them and renders native scale. Tracked as the cim-preview transform gap. |
+| cosmetics_tweaker | offhand_shield_swaps | #481 is deliberately limited to exact Athanor preview construction. Non-preview edges and unproven identity/readiness retain the resident base offhand. |
+| cosmetics_tweaker | weapon_model_scale_grip | #481 classifies the exact Athanor surface but deliberately bypasses the generic customization 2.0 scale path; it renders native neutral scale pending visual proof. Tracked as the cim-preview transform gap. |
 | cosmetics_tweaker | weapon_poses | Poses have no forge-preview surface. Not applicable. |
 | weapon_tweaker | cross_character_port | No Athanor/CIM craft-preview wield resolver; preview shows the source template base stance, no crash. Tracked 660. |
 | weapon_tweaker | grip_hold_override | No Athanor/CIM transform adapter; grip/rotation offsets not applied. Native grip; safe. Tracked 660. |
@@ -1254,8 +1254,8 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | cosmetics_tweaker | custom_weapon_illusions | ct_* illusions surface in the Athanor via the shared get_unlocked_weapon_skins unlock, but cosmetics installs no Athanor previewer hook and there is no in-game confirmation the forge renders the ct_* mesh/paint. Unverified; tracked as the cim-preview illusion gap. |
 | cosmetics_tweaker | glow_overrides | The Athanor forge previewer is not hooked for glow; renders baked glow only. Tracked 650. |
 | cosmetics_tweaker | la_hat_skin_clones | The Athanor (crafting_in_modded) forges weapons; hats/armor have no forge-preview surface, and cosmetics installs no Athanor hook. Not applicable by surface. |
-| cosmetics_tweaker | offhand_shield_swaps | The offhand row-2 picker lives in cosmetics' customization window (HeroWindowItemCustomization / LootItemUnitPreviewer), not the Athanor; cim's forge preview renders the base offhand. Tracked as the cim-preview offhand gap. |
-| cosmetics_tweaker | weapon_model_scale_grip | Scale apply is bound to cosmetics' three render hooks; the Athanor forge previewer is not among them and renders native scale. Tracked as the cim-preview transform gap. |
+| cosmetics_tweaker | offhand_shield_swaps | #481 is deliberately limited to exact Athanor preview construction. Non-preview edges and unproven identity/readiness retain the resident base offhand. |
+| cosmetics_tweaker | weapon_model_scale_grip | #481 classifies the exact Athanor surface but deliberately bypasses the generic customization 2.0 scale path; it renders native neutral scale pending visual proof. Tracked as the cim-preview transform gap. |
 | cosmetics_tweaker | weapon_poses | Poses have no forge-preview surface. Not applicable. |
 | weapon_tweaker | cross_character_port | No Athanor/CIM craft-preview wield resolver; preview shows the source template base stance, no crash. Tracked 660. |
 | weapon_tweaker | grip_hold_override | No Athanor/CIM transform adapter; grip/rotation offsets not applied. Native grip; safe. Tracked 660. |
@@ -1277,8 +1277,8 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | cosmetics_tweaker | custom_weapon_illusions | ct_* illusions surface in the Athanor via the shared get_unlocked_weapon_skins unlock, but cosmetics installs no Athanor previewer hook and there is no in-game confirmation the forge renders the ct_* mesh/paint. Unverified; tracked as the cim-preview illusion gap. |
 | cosmetics_tweaker | glow_overrides | The Athanor forge previewer is not hooked for glow; renders baked glow only. Tracked 650. |
 | cosmetics_tweaker | la_hat_skin_clones | The Athanor (crafting_in_modded) forges weapons; hats/armor have no forge-preview surface, and cosmetics installs no Athanor hook. Not applicable by surface. |
-| cosmetics_tweaker | offhand_shield_swaps | The offhand row-2 picker lives in cosmetics' customization window (HeroWindowItemCustomization / LootItemUnitPreviewer), not the Athanor; cim's forge preview renders the base offhand. Tracked as the cim-preview offhand gap. |
-| cosmetics_tweaker | weapon_model_scale_grip | Scale apply is bound to cosmetics' three render hooks; the Athanor forge previewer is not among them and renders native scale. Tracked as the cim-preview transform gap. |
+| cosmetics_tweaker | offhand_shield_swaps | #481 is deliberately limited to exact Athanor preview construction. Non-preview edges and unproven identity/readiness retain the resident base offhand. |
+| cosmetics_tweaker | weapon_model_scale_grip | #481 classifies the exact Athanor surface but deliberately bypasses the generic customization 2.0 scale path; it renders native neutral scale pending visual proof. Tracked as the cim-preview transform gap. |
 | cosmetics_tweaker | weapon_poses | Poses have no forge-preview surface. Not applicable. |
 | weapon_tweaker | cross_character_port | No Athanor/CIM craft-preview wield resolver; preview shows the source template base stance, no crash. Tracked 660. |
 | weapon_tweaker | grip_hold_override | No Athanor/CIM transform adapter; grip/rotation offsets not applied. Native grip; safe. Tracked 660. |
@@ -1289,7 +1289,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | weapon_tweaker_dev | model_substitute_queue | No Athanor/CIM mesh-swap adapter; the source weapon mesh renders. Safe. Tracked 660. |
 | weapon_tweaker_dev | per_receiver_scale | No Athanor/CIM scale adapter; native scale renders. Safe. Tracked 660. |
 
-#### cim_preview x preview_open (16)
+#### cim_preview x preview_open (15)
 
 | Mod | Family | Fallback note |
 |---|---|---|
@@ -1298,8 +1298,7 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | cosmetics_tweaker | custom_weapon_illusions | ct_* illusions surface in the Athanor via the shared get_unlocked_weapon_skins unlock, but cosmetics installs no Athanor previewer hook and there is no in-game confirmation the forge renders the ct_* mesh/paint. Unverified; tracked as the cim-preview illusion gap. |
 | cosmetics_tweaker | glow_overrides | The Athanor forge previewer is not hooked for glow; renders baked glow only. Tracked 650. |
 | cosmetics_tweaker | la_hat_skin_clones | The Athanor (crafting_in_modded) forges weapons; hats/armor have no forge-preview surface, and cosmetics installs no Athanor hook. Not applicable by surface. |
-| cosmetics_tweaker | offhand_shield_swaps | The offhand row-2 picker lives in cosmetics' customization window (HeroWindowItemCustomization / LootItemUnitPreviewer), not the Athanor; cim's forge preview renders the base offhand. Tracked as the cim-preview offhand gap. |
-| cosmetics_tweaker | weapon_model_scale_grip | Scale apply is bound to cosmetics' three render hooks; the Athanor forge previewer is not among them and renders native scale. Tracked as the cim-preview transform gap. |
+| cosmetics_tweaker | weapon_model_scale_grip | #481 classifies the exact Athanor surface but deliberately bypasses the generic customization 2.0 scale path; it renders native neutral scale pending visual proof. Tracked as the cim-preview transform gap. |
 | cosmetics_tweaker | weapon_poses | Poses have no forge-preview surface. Not applicable. |
 | weapon_tweaker | cross_character_port | No Athanor/CIM craft-preview wield resolver; preview shows the source template base stance, no crash. Tracked 660. |
 | weapon_tweaker | grip_hold_override | No Athanor/CIM transform adapter; grip/rotation offsets not applied. Native grip; safe. Tracked 660. |
@@ -1340,8 +1339,8 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | cosmetics_tweaker | custom_weapon_illusions | ct_* illusions surface in the Athanor via the shared get_unlocked_weapon_skins unlock, but cosmetics installs no Athanor previewer hook and there is no in-game confirmation the forge renders the ct_* mesh/paint. Unverified; tracked as the cim-preview illusion gap. |
 | cosmetics_tweaker | glow_overrides | The Athanor forge previewer is not hooked for glow; renders baked glow only. Tracked 650. |
 | cosmetics_tweaker | la_hat_skin_clones | The Athanor (crafting_in_modded) forges weapons; hats/armor have no forge-preview surface, and cosmetics installs no Athanor hook. Not applicable by surface. |
-| cosmetics_tweaker | offhand_shield_swaps | The offhand row-2 picker lives in cosmetics' customization window (HeroWindowItemCustomization / LootItemUnitPreviewer), not the Athanor; cim's forge preview renders the base offhand. Tracked as the cim-preview offhand gap. |
-| cosmetics_tweaker | weapon_model_scale_grip | Scale apply is bound to cosmetics' three render hooks; the Athanor forge previewer is not among them and renders native scale. Tracked as the cim-preview transform gap. |
+| cosmetics_tweaker | offhand_shield_swaps | #481 is deliberately limited to exact Athanor preview construction. Non-preview edges and unproven identity/readiness retain the resident base offhand. |
+| cosmetics_tweaker | weapon_model_scale_grip | #481 classifies the exact Athanor surface but deliberately bypasses the generic customization 2.0 scale path; it renders native neutral scale pending visual proof. Tracked as the cim-preview transform gap. |
 | cosmetics_tweaker | weapon_poses | Poses have no forge-preview surface. Not applicable. |
 | weapon_tweaker | cross_character_port | No Athanor/CIM craft-preview wield resolver; preview shows the source template base stance, no crash. Tracked 660. |
 | weapon_tweaker | grip_hold_override | No Athanor/CIM transform adapter; grip/rotation offsets not applied. Native grip; safe. Tracked 660. |
@@ -1383,8 +1382,8 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | cosmetics_tweaker | custom_weapon_illusions | ct_* illusions surface in the Athanor via the shared get_unlocked_weapon_skins unlock, but cosmetics installs no Athanor previewer hook and there is no in-game confirmation the forge renders the ct_* mesh/paint. Unverified; tracked as the cim-preview illusion gap. |
 | cosmetics_tweaker | glow_overrides | The Athanor forge previewer is not hooked for glow; renders baked glow only. Tracked 650. |
 | cosmetics_tweaker | la_hat_skin_clones | The Athanor (crafting_in_modded) forges weapons; hats/armor have no forge-preview surface, and cosmetics installs no Athanor hook. Not applicable by surface. |
-| cosmetics_tweaker | offhand_shield_swaps | The offhand row-2 picker lives in cosmetics' customization window (HeroWindowItemCustomization / LootItemUnitPreviewer), not the Athanor; cim's forge preview renders the base offhand. Tracked as the cim-preview offhand gap. |
-| cosmetics_tweaker | weapon_model_scale_grip | Scale apply is bound to cosmetics' three render hooks; the Athanor forge previewer is not among them and renders native scale. Tracked as the cim-preview transform gap. |
+| cosmetics_tweaker | offhand_shield_swaps | #481 is deliberately limited to exact Athanor preview construction. Non-preview edges and unproven identity/readiness retain the resident base offhand. |
+| cosmetics_tweaker | weapon_model_scale_grip | #481 classifies the exact Athanor surface but deliberately bypasses the generic customization 2.0 scale path; it renders native neutral scale pending visual proof. Tracked as the cim-preview transform gap. |
 | cosmetics_tweaker | weapon_poses | Poses have no forge-preview surface. Not applicable. |
 | weapon_tweaker | cross_character_port | No Athanor/CIM craft-preview wield resolver; preview shows the source template base stance, no crash. Tracked 660. |
 | weapon_tweaker | grip_hold_override | No Athanor/CIM transform adapter; grip/rotation offsets not applied. Native grip; safe. Tracked 660. |
@@ -1425,8 +1424,8 @@ Including the wt_dev mirror: 4049 unsupported of 5168 declared.
 | cosmetics_tweaker | custom_weapon_illusions | ct_* illusions surface in the Athanor via the shared get_unlocked_weapon_skins unlock, but cosmetics installs no Athanor previewer hook and there is no in-game confirmation the forge renders the ct_* mesh/paint. Unverified; tracked as the cim-preview illusion gap. |
 | cosmetics_tweaker | glow_overrides | The Athanor forge previewer is not hooked for glow; renders baked glow only. Tracked 650. |
 | cosmetics_tweaker | la_hat_skin_clones | The Athanor (crafting_in_modded) forges weapons; hats/armor have no forge-preview surface, and cosmetics installs no Athanor hook. Not applicable by surface. |
-| cosmetics_tweaker | offhand_shield_swaps | The offhand row-2 picker lives in cosmetics' customization window (HeroWindowItemCustomization / LootItemUnitPreviewer), not the Athanor; cim's forge preview renders the base offhand. Tracked as the cim-preview offhand gap. |
-| cosmetics_tweaker | weapon_model_scale_grip | Scale apply is bound to cosmetics' three render hooks; the Athanor forge previewer is not among them and renders native scale. Tracked as the cim-preview transform gap. |
+| cosmetics_tweaker | offhand_shield_swaps | #481 is deliberately limited to exact Athanor preview construction. Non-preview edges and unproven identity/readiness retain the resident base offhand. |
+| cosmetics_tweaker | weapon_model_scale_grip | #481 classifies the exact Athanor surface but deliberately bypasses the generic customization 2.0 scale path; it renders native neutral scale pending visual proof. Tracked as the cim-preview transform gap. |
 | cosmetics_tweaker | weapon_poses | Poses have no forge-preview surface. Not applicable. |
 | weapon_tweaker | cross_character_port | No Athanor/CIM craft-preview wield resolver; preview shows the source template base stance, no crash. Tracked 660. |
 | weapon_tweaker | grip_hold_override | No Athanor/CIM transform adapter; grip/rotation offsets not applied. Native grip; safe. Tracked 660. |

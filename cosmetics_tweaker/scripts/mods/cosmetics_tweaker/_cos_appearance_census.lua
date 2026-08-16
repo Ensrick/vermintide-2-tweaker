@@ -72,8 +72,12 @@
 --                    the authored-set path. Remote players co-located in the
 --                    shared keep render through the husk surface; the
 --                    matchmaking lobby portrait keeps vanilla.
---   * cim_preview -- the Athanor is crafting_in_modded's forge previewer;
---                    cosmetics installs no hook there.
+--   * cim_preview -- the Athanor is crafting_in_modded's forge previewer. The
+--                    exact #481 adapter implements only backend-owned offhand
+--                    material/unit selection at the census' preview_open edge;
+--                    the fuller appearance contract separately covers reopen;
+--                    every
+--                    other family/edge remains unsupported unless stated.
 --   * mod_disable_restore (edge) -- NO family runs an explicit restore reconciler
 --                    on mod disable (the S3 reconciler is W2-pending). Per-unit
 --                    overrides drop incidentally on the next respawn/full restart;
@@ -218,6 +222,10 @@ return {
 		--   husk branch (:4641) + cos_la_apply offhand_unit field (section 6.9).
 		-- inventory_preview: HeroPreviewer/MenuWorldPreviewer._spawn_item (:5694/:5695).
 		-- illusion_browser: LootItemUnitPreviewer.spawn_units (:5824) row-2 picker.
+		-- cim_preview: CIM's three constructor scopes + returned-instance marker
+		--   feed exact identity into equipment resolution, then a generation-safe
+		--   bounded material reconcile at preview_open (#481); the separate
+		--   appearance contract carries preview_reopen, absent from census v2.
 		-- score_team: NOT applied -- TeamPreviewer apply covers slot_hat/slot_skin only.
 		-- instance_load: the picker's selection is applied on equip/customize, not
 		--   at module load, so instance_load was already a hole in the edge vector.
@@ -237,7 +245,7 @@ return {
 					},
 					{
 						bot         = "Offhand picks are keyed to the human wearer's per-backend_id _offhand_selection; bots wield the default loadout with no selection and render the base offhand. Safe (vanilla).",
-						cim_preview = "The offhand row-2 picker lives in cosmetics' customization window (HeroWindowItemCustomization / LootItemUnitPreviewer), not the Athanor; cim's forge preview renders the base offhand. Tracked as the cim-preview offhand gap.",
+						cim_preview = "Only preview_open is implemented in census v2 by #481's exact CIM context (the appearance contract separately covers preview_reopen). Synthetic/backendless, foreign, stale, nonresident, or timed-out identities retain the resident base offhand; other lifecycle edges remain unsupported pending in-game proof.",
 						lobby       = "No lobby-card previewer hook; co-located keep rendering rides the husk surface. Matchmaking lobby portrait keeps vanilla. Tracked as the lobby-preview gap.",
 						score_team  = "TeamPreviewer score apply covers slot_hat/slot_skin only (:5454,:5501); offhand/weapon meshes render the net-safe base on the score lineup. Tracked as the weapon-on-score gap, 513-class.",
 						hold_tab    = "Hold-Tab reconstructs the item from the loadout snapshot with no backend_id, so the exact-instance offhand selection cannot resolve (WEAPON_APPEARANCE_STANDARD section 2 snapshot rule); the card falls back to the reconstructed vanilla item. Tracked 233-class remote-card gap.",
@@ -246,6 +254,9 @@ return {
 					{
 						husk = husk_row(open, open_notes,
 							"373 (Loremaster skins on Weavebound shields) has a failing host/client verification, so the offhand husk channel is disproven for at least the LA-shield case; the 416 _offhand_mesh_by_peer store carries the vanilla-mesh case. Degrades to the resident vanilla offhand."),
+						cim_preview = row(UNSUP,
+							"#481 is deliberately limited to exact Athanor preview construction. Non-preview edges and unproven identity/readiness retain the resident base offhand.",
+							{ preview_open = IMPL }),
 					})
 			end)(),
 		},
@@ -309,7 +320,7 @@ return {
 					},
 					{
 						husk        = "The scale/grip apply runs in GearUtils.create_equipment (owner/bot) and the two previewers; the husk wield path (SimpleHuskInventoryExtension._wield_slot / get_item_units husk branch) never re-applies scale, so remote husks render native scale. Tracked as the husk-transform gap (WEAPON_APPEARANCE_STANDARD section 3 Transform/Husk).",
-						cim_preview = "Scale apply is bound to cosmetics' three render hooks; the Athanor forge previewer is not among them and renders native scale. Tracked as the cim-preview transform gap.",
+						cim_preview = "#481 classifies the exact Athanor surface but deliberately bypasses the generic customization 2.0 scale path; it renders native neutral scale pending visual proof. Tracked as the cim-preview transform gap.",
 						lobby       = "No lobby-card previewer hook; the lobby portrait is 2D. Tracked as the lobby-preview gap.",
 						score_team  = "Score lineup weapons are not scaled (score apply is hat/armor only). Tracked 513-class weapon-on-score gap.",
 						hold_tab    = "Scale is a 3D mesh property; Hold-Tab shows 2D slot icons with no mesh. Not applicable by surface.",

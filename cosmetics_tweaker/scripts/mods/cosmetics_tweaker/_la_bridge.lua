@@ -1305,7 +1305,8 @@ local function _probe_la_unit_materials(unit, armoury_key)
 end
 
 -- v0.9.41-dev (#149): AV-safety precheck for painting a kind="unit" LA shield
--- in the "ingame" / "network_husk" contexts. `Unit.set_texture_for_materials`
+-- in the "ingame" / "network_husk" / exact "cim_preview" contexts.
+-- `Unit.set_texture_for_materials`
 -- is a C-level call that access-violates at offset 0x8 (BYPASSING pcall) when a
 -- target material is the engine null sentinel (#ID[00000000]) — the failure
 -- mode that kept the in-game paint gated off through v0.8.46/47/48. That null
@@ -1342,7 +1343,8 @@ local function _paint_offhand_textures_locally(unit, variant, armoury_key, conte
     -- re-enabled painting for the "ingame" / "network_husk" contexts (the real
     -- mission / husk bodies, where the parent material IS bound) behind the
     -- _kind_unit_paint_is_safe precheck — those were the host's bare-mesh and
-    -- the client's no-skin symptoms. See the per-context routing below.
+    -- the client's no-skin symptoms. #481 sends an exact CIM preview here only
+    -- after its known parent is retained. See the per-context routing below.
     if variant.kind == "unit" then
         -- Context routing for kind="unit" custom-mesh shields:
         --
@@ -1352,7 +1354,8 @@ local function _paint_offhand_textures_locally(unit, variant, armoury_key, conte
         --     the parent vanilla material before painting (else the paint AVs),
         --     and scale the unit up to a visible size. (v0.8.45-49 history.)
         --
-        --   * "ingame" / "network_husk": the in-mission / remote-husk body
+        --   * "ingame" / "network_husk" / "cim_preview": the in-mission /
+        --     remote-husk body or exact Athanor preview
         --     spawns the LA mesh through the real game pipeline, so its
         --     `mat_to_use` parent material is already bound at engine level. We
         --     must NOT Unit.set_all_materials (doing so in v0.8.47 made the
@@ -1392,9 +1395,12 @@ local function _paint_offhand_textures_locally(unit, variant, armoury_key, conte
                 end
             end
             -- Fall through to the texture-painting code below.
-        elseif context == "ingame" or context == "network_husk" then
+        elseif context == "ingame" or context == "network_husk"
+                or context == "cim_preview" then
             -- v0.9.41-dev (#149): paint the heraldry onto the real in-mission /
-            -- husk LA mesh. NO set_all_materials, NO scale (previewer-only).
+            -- husk LA mesh. #481's Athanor adapter reaches the same guarded
+            -- route only after retaining the already-loaded parent package.
+            -- NO set_all_materials and NO preview scale.
             -- AV-safety precheck so a null-material case degrades to "no paint"
             -- instead of a C-level access violation that bypasses pcall.
             -- Fall through to the texture-painting code below.

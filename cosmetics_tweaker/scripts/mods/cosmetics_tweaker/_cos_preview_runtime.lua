@@ -58,6 +58,7 @@ function PreviewRuntime.install(mod, deps)
         deps.get_active_customization_backend_id,
         "get_active_customization_backend_id is required")
     state.get_mod = assert(deps.get_mod, "get_mod is required")
+    state.cim_preview = assert(deps.cim_preview, "cim_preview is required")
 
     if state.installed then
         mod._cos_score_peer_for_profile = state.score_peer_for_profile
@@ -583,6 +584,49 @@ mod:hook("MenuWorldPreviewer", "_spawn_item", _spawn_item_wrapper)
 local _la_parent_pkg_ref_by_previewer = setmetatable({}, { __mode = "k" })
 
 mod:hook("LootItemUnitPreviewer", "load_package", function(func, self, package_name)
+    local cim_captured, cim_reason, cim_scoped = state.cim_preview.capture_load(
+        self, package_name)
+    if cim_captured then
+        self._packages_to_load[package_name] = true
+        self._loaded_packages[package_name] = true
+        state.dbg("[cos:481] CIM preview package captured path=%s state=%s",
+            tostring(package_name), tostring(cim_reason))
+        return
+    end
+    if cim_scoped then
+        if not package_name then
+            state.dbg_alert("[cos:481] CIM preview blocked nil package path state=%s",
+                tostring(cim_reason))
+            return
+        end
+        local unit_resident = package_name and Application
+            and Application.can_get
+            and Application.can_get("unit", package_name)
+        local real_package = package_name and Application
+            and Application.can_get
+            and Application.can_get("package", package_name)
+        if unit_resident and not real_package then
+            -- The CIM policy has already refused any unsafe parent acquisition.
+            -- Gate-flip only the proven resident unit; do not fall through to
+            -- the ordinary browser's generic LA parent-loader.
+            self._packages_to_load[package_name] = true
+            self._loaded_packages[package_name] = true
+            state.dbg("[cos:481] CIM base retained path=%s state=%s",
+                tostring(package_name), tostring(cim_reason))
+            return
+        end
+        if not real_package then
+            -- The upstream CIM resource guard should make this unreachable.
+            -- Leave one incomplete gate instead of asking PackageManager to
+            -- materialize an unproven path or letting spawn proceed.
+            self._packages_to_load[package_name] = true
+            self._loaded_packages[package_name] = false
+            state.dbg_alert("[cos:481] CIM preview blocked missing path=%s state=%s",
+                tostring(package_name), tostring(cim_reason))
+            return
+        end
+        return func(self, package_name)
+    end
     if package_name and Application and Application.can_get
         and Application.can_get("unit", package_name)
         and not Application.can_get("package", package_name)
@@ -644,6 +688,7 @@ end)
 -- resource goes through PackageManager's delayed-unload queue). Sole cosmetics
 -- hook on (LootItemUnitPreviewer, destroy) - grep-verified 2026-07-11.
 mod:hook_safe("LootItemUnitPreviewer", "destroy", function(self)
+    state.cim_preview.destroy(self)
     local refs = _la_parent_pkg_ref_by_previewer[self]
     if not refs then return end
     _la_parent_pkg_ref_by_previewer[self] = nil
@@ -676,11 +721,32 @@ mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data
     local item_data = item.data
     local left_path  = spawn_data and spawn_data[1] and spawn_data[1].unit_name or nil
     local right_path = spawn_data and spawn_data[2] and spawn_data[2].unit_name or nil
+    local surface = state.cim_preview.surface(self)
+    local active_backend_id = nil
+    local active_item_type = nil
+    if surface ~= "cim_preview" then
+        active_backend_id = state.get_active_customization_backend_id()
+        active_item_type = mod._active_customization_item_type
+    end
     local preview = state.glow_preview_policy.resolve_spawn(item,
-        state.get_active_customization_backend_id(),
-        mod._active_customization_item_type, state.resolve_item_type,
+        active_backend_id, active_item_type, state.resolve_item_type,
         mod._la_instance_policy.resolve_preview_backend_id)
     local skin_key, has_skin, preview_backend_id = preview.skin, preview.has_skin, preview.preview_backend_id
+
+    if surface == "cim_preview" then
+        -- Exact CIM identity and the unit-table override were resolved inside
+        -- construction. The returned-instance adapter now owns paint/readiness
+        -- reconcile. Never feed Athanor through the generic customization
+        -- fallback or its historical LA 2.0 scale path.
+        state.cim_preview.spawn(self, spawn_data, units,
+            self._background_world or self._world or self.world)
+        if units then
+            state.glow_preview_policy.bind_spawned(
+                units, preview, state.glow_picker, mod._cos, state.dbg)
+            mod._cos.apply_glow_override({ units[1], units[2] })
+        end
+        return units
+    end
 
     -- LA offhand paint: spawn order is left (shield) = index 1, right (weapon) = index 2.
     -- Use the freshly-returned `units` array, not self._spawned_units (not yet assigned).
@@ -738,7 +804,9 @@ mod:hook("LootItemUnitPreviewer", "update", function(func, self, dt, t, input_se
     if self._zoom_dirty and not self._unit_start_position_boxed then
         self._zoom_dirty = nil
     end
-    return func(self, dt, t, input_service)
+    local result = func(self, dt, t, input_service)
+    state.cim_preview.update(self)
+    return result
 end)
 
     local owner = {
