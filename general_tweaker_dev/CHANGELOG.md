@@ -1,5 +1,24 @@
 # General Tweaker Changelog
 
+## 0.2.267-dev (2026-08-15) -- host-authoritative duplicate careers + bot settings text pass (#1150) [verify-fix]
+
+- Allow Duplicate Careers is now host-authoritative (#1150). The host
+  advertises its setting through Steam lobby data (`gtw_dupc`, merged into the
+  stored lobby-data table); a joining client's hero-select and lobby checks
+  follow the HOST's state instead of the client's local toggle, so host ON
+  lets any client pick a duplicate and host OFF (or a gt-less host) keeps
+  vanilla blocking regardless of the client's toggle. Reservation decisions
+  were already host-side and are unchanged; unknown host state fails closed to
+  vanilla. New read-only `/dupc_state` diagnostic. New modules
+  `_gt_duplicate_careers_parity.lua` + `_gt_dupc_policy.lua`; runtime check
+  `issue1150_dupc_host_authority`; offline `test_gt_dupc_policy.lua`.
+- Localization copyedit pass (RainReligion rev2): Title Case across bot and
+  lobby settings, tightened tooltips. Corrected against code while porting:
+  the wounded heal-allies threshold reads permanent (green) health, and the
+  Bot Takeover tooltip now describes the temporary bot, reserved player slot,
+  and free-or-yielded-slot requirement accurately. Text-only, no behavior
+  change.
+
 ## 0.2.266-dev (2026-08-13) -- Godmode blocks authored fly control loss (#548) [verify-fix]
 
 - The remaining fly-swarm failure did not use the HP-damage, disabler-state,

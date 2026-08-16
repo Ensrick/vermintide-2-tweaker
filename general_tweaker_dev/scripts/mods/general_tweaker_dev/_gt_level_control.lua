@@ -37,8 +37,10 @@ local mod = get_mod("gt_dev")
 --   * Every callable a VMF keybind binds (gt_win_level / gt_fail_level /
 --     gt_restart_level / gt_kill_bots / gt_die / gt_fix_sound / gt_bot_toggle)
 --     stays a PUBLIC `mod.` field so function_name resolution works at invoke
---     time. allow_duplicate_careers is read directly inside the hooks (no
---     apply-fn / dispatch), so nothing in on_setting_changed needs to change.
+--     time. The Duplicate-Careers hooks resolve their gate at call time via
+--     mod._gt_dupc_effective_session / _for_lobby (#1150 host authority,
+--     exported by _gt_duplicate_careers_parity.lua - no apply-fn / dispatch),
+--     so nothing in on_setting_changed needs to change.
 --   * No file-locals are shared with the main chunk — the whole block was self-
 --     contained (its own _GT_LEVEL_RPC / _GT_RESPAWN_RPC / helper locals).
 --
@@ -556,22 +558,37 @@ end)
 -- ============================================================
 -- Duplicate Careers
 -- ============================================================
+-- #1150: the gates are HOST-authoritative, not local. All three hooks route
+-- through the effective-state resolvers exported by
+-- _gt_duplicate_careers_parity.lua (host: own setting; joined client: the
+-- host's gtw_dupc lobby-data flag; unknown: fall through to vanilla).
+-- try_reserve_profile_for_peer only ever executes on the host
+-- (profile_synchronizer.lua:457 fasserts is_server; clients route through
+-- rpc_request_profile, profile_requester.lua:53-57), where the session
+-- resolver returns the host's own setting - the shipped host behavior is
+-- unchanged. The `and`-guards make a missing parity module identical to
+-- vanilla (fail closed), never a crash; the resolvers are pure reads, and the
+-- try_reserve relaxation still calls vanilla FIRST so no reservation-state
+-- mutation is skipped when vanilla succeeds on its own.
+mod._GT_1150_DUPC_HOST_AUTHORITY_MARKER = "gt-1150-dupc-host-authority-v1"
 
 mod:hook("ProfileSynchronizer", "get_profile_index_reservation", function(func, self, party_id, profile_index)
-    if mod:get("allow_duplicate_careers") then return nil, nil end
+    if mod._gt_dupc_effective_session and mod._gt_dupc_effective_session() then return nil, nil end
     return func(self, party_id, profile_index)
 end)
 
 mod:hook("ProfileSynchronizer", "try_reserve_profile_for_peer", function(func, self, party_id, peer_id, profile_index, career_index)
     local result = func(self, party_id, peer_id, profile_index, career_index)
     if result then return true end
-    if mod:get("allow_duplicate_careers") then return true end
+    if mod._gt_dupc_effective_session and mod._gt_dupc_effective_session() then return true end
     return false
 end)
 
 -- CLARIFY: `is_free_in_lobby` is a STATIC function (no `self` arg — see
 -- profile_synchronizer.lua:860). Hook signature intentionally omits self.
+-- lobby_data may belong to ANOTHER host's lobby (browser / join checks), so
+-- this gate resolves per-lobby, not per-session.
 mod:hook("ProfileSynchronizer", "is_free_in_lobby", function(func, profile_index, lobby_data, optional_party_id)
-    if mod:get("allow_duplicate_careers") then return true end
+    if mod._gt_dupc_effective_for_lobby and mod._gt_dupc_effective_for_lobby(lobby_data) then return true end
     return func(profile_index, lobby_data, optional_party_id)
 end)
