@@ -120,6 +120,13 @@ mod:hook("MutatorHandler", "_activate_mutator", function(func, self, name, ...)
     _maybe_preload_curse_package(name)
     local a, b = func(self, name, ...)
     if _CURSE_TO_GOD[name] then _refresh_active_curse_god() end
+    -- Issue 1309: _activate_mutator is the single path both peers run, and VMF
+    -- drops a second hook on a (class, method) pair -- so the Tzeentch Twins
+    -- co-op diagnostic arms from inside this wrapper instead of its own hook.
+    -- Runs AFTER vanilla so the host's data.seed is already populated.
+    if ET.issue1309_on_mutator_activated then
+        ET.issue1309_on_mutator_activated(name, self._is_server)
+    end
     -- Log EVERY mutator the handler activates (ours OR vanilla/Fatshark), so
     -- the log shows the full active set. Cross-reference with the
     -- [event-inject] line: a name here that also appears there is
@@ -181,6 +188,9 @@ mod:hook_safe("StateIngame", "on_exit", function(self)
     end
     _active_curse_god = nil
     if ET.set_curse_session_active then ET.set_curse_session_active(false) end
+    -- Issue 1309: the one end-of-mission summary this peer emits. Same
+    -- shared-hook reason as the activation call above.
+    if ET.issue1309_flush_summary then ET.issue1309_flush_summary() end
 end)
 
 -- Per-god multiplicative sky/atmosphere tints (copied verbatim from

@@ -12,8 +12,32 @@ M.ACT_KEY = "act_celebrate"
 M.EVENT_ICON = "level_image_dlc_dwarf_fest"
 local PARENT_FIELDS = { "parent", "_parent" }
 
+-- Presentation order stamped on a projected descriptor whose source level has
+-- none. LevelSettings.prologue ships no act_presentation_order
+-- (level_settings.lua:1379-1417) while both celebrate levels do
+-- (level_settings_celebrate.lua:5), and the native list comparator dereferences
+-- the field unconditionally (start_game_window_mission_selection.lua:10-15).
+-- Vanilla sorts each act BEFORE this adapter swaps the celebrate list, so no
+-- live sort sees the gap today; stamping it keeps a third-party re-sort of
+-- _levels_by_act from turning a nil compare into a menu crash, and sorts the
+-- projection last among the audited event levels.
+M.PROJECTED_PRESENTATION_ORDER = 99
+
 -- Deliberately closed. A future event level must be source-audited and added
 -- here before Event Tweaker will expose it; sharing act_celebrate is not enough.
+--
+-- `projected` entries (issue 941) are levels that do NOT live in act_celebrate
+-- and must never be moved there. The Prologue is the first: LevelSettings.prologue
+-- is act "prologue" + game_mode "tutorial" (level_settings.lua:1380-1387) and the
+-- engine rejects multiplayer prologue sessions outright -- PeerStates.Connecting
+-- disconnects every remote peer with `host_plays_prologue`
+-- (peer_states.lua:67-71), MatchmakingManager.lobby_match refuses a prologue
+-- lobby as a match candidate (matchmaking_manager.lua:1621-1625), and
+-- StateLoading force-clears the lobby's matchmaking flag
+-- (state_loading.lua:2589-2592). So the entry is `solo_only` and the adapter
+-- shows a view-only COPY under Events: the canonical descriptor keeps its own
+-- act, and the campaign tables (UnlockableLevels / GameActs / MapPresentationActs)
+-- are never touched for it.
 M.ALLOWLIST = {
     {
         id = "dlc_dwarf_fest",
@@ -23,6 +47,14 @@ M.ALLOWLIST = {
         id = "dlc_celebrate_crawl",
         setting_id = "mission_dlc_celebrate_crawl",
     },
+    {
+        id = "prologue",
+        setting_id = "mission_prologue",
+        projected = true,
+        source_act = "prologue",
+        source_game_mode = "tutorial",
+        solo_only = true,
+    },
 }
 
 local function _contains(list, value)
@@ -31,6 +63,19 @@ local function _contains(list, value)
         if list[i] == value then return true end
     end
     return false
+end
+
+function M.entry_for(level_id)
+    for i = 1, #M.ALLOWLIST do
+        if M.ALLOWLIST[i].id == level_id then return M.ALLOWLIST[i] end
+    end
+end
+
+-- True only for an allowlisted mission the engine refuses to run with other
+-- peers present. Callers use it to harden the launch, never to hide the tile.
+function M.is_solo_only(level_id)
+    local entry = M.entry_for(level_id)
+    return entry ~= nil and entry.solo_only == true
 end
 
 function M.any_enabled(get)
@@ -119,12 +164,34 @@ end
 -- Returns true when a LevelSettings entry is complete enough to advertise and
 -- register: keyed to itself, in the celebrate act, with a non-empty package
 -- list for LevelTransitionHandler to load (level_transition_handler.lua:518-572).
+-- A projected entry is deliberately rejected here: it is never registered into
+-- the campaign tables, so the only gate it has to clear is the contract below.
 local function _level_ok(level, id)
     return type(level) == "table"
         and level.level_id == id
         and level.act == M.ACT_KEY
         and type(level.packages) == "table"
         and #level.packages > 0
+end
+
+-- Build the view-only descriptor the mission menu renders for an allowlisted
+-- level. A native entry is passed through by identity (the menu has always read
+-- the live LevelSettings table). A projected entry gets a shallow COPY re-keyed
+-- into act_celebrate so vanilla's per-act layout places it under Events; the
+-- source table -- LevelSettings.prologue and its level_id, packages, game_mode,
+-- mechanism -- is never written to, so the tutorial keeps its canonical
+-- identity everywhere else in the game and the launch still resolves the real
+-- level through mission_id.
+function M.project_level(level, entry)
+    if type(level) ~= "table" then return nil end
+    if type(entry) ~= "table" or entry.projected ~= true then return level end
+
+    local projected = _shallow_copy(level)
+    projected.act = M.ACT_KEY
+    if type(projected.act_presentation_order) ~= "number" then
+        projected.act_presentation_order = M.PROJECTED_PRESENTATION_ORDER
+    end
+    return projected
 end
 
 -- Visibility gate (issue 626 fix): fail closed before advertising a mission,
@@ -157,7 +224,13 @@ function M.validate_contract(level_settings, area_settings, act_settings)
     end
 
     for i = 1, #M.ALLOWLIST do
-        local id = M.ALLOWLIST[i].id
+        local entry = M.ALLOWLIST[i]
+        local id = entry.id
+        -- A projected entry must still live in ITS OWN act and game mode. That
+        -- is the falsifier for "the descriptor was left alone": the moment
+        -- LevelSettings.prologue reads act_celebrate, something mutated the
+        -- canonical table and the adapter fails closed instead of advertising.
+        local expected_act = entry.projected and entry.source_act or M.ACT_KEY
         local level = type(level_settings) == "table" and rawget(level_settings, id)
         if type(level) ~= "table" then
             problems[#problems + 1] = "LevelSettings." .. id .. " missing"
@@ -165,8 +238,11 @@ function M.validate_contract(level_settings, area_settings, act_settings)
             if level.level_id ~= id then
                 problems[#problems + 1] = "LevelSettings." .. id .. ".level_id mismatch"
             end
-            if level.act ~= M.ACT_KEY then
+            if level.act ~= expected_act then
                 problems[#problems + 1] = "LevelSettings." .. id .. ".act mismatch"
+            end
+            if entry.source_game_mode and level.game_mode ~= entry.source_game_mode then
+                problems[#problems + 1] = "LevelSettings." .. id .. ".game_mode mismatch"
             end
             if type(level.packages) ~= "table" or #level.packages == 0 then
                 problems[#problems + 1] = "LevelSettings." .. id .. ".packages empty"
@@ -192,11 +268,16 @@ end
 function M.ensure_campaign_registration(level_settings, unlockable_levels, game_acts, map_presentation_acts)
     local appended = {}
     for i = 1, #M.ALLOWLIST do
-        local id = M.ALLOWLIST[i].id
+        local entry = M.ALLOWLIST[i]
+        local id = entry.id
         local level = type(level_settings) == "table" and rawget(level_settings, id)
         -- Only a well-formed stock definition may be registered; a missing or
         -- malformed LevelSettings entry stays fail-closed at the visibility gate.
-        if _level_ok(level, id) then
+        -- A projected entry is skipped outright: vanilla already registered the
+        -- Prologue under its own act (level_unlock_settings.lua:101-136), and
+        -- appending it to GameActs.act_celebrate would move a base-game level
+        -- into the event act for every system that reads those tables.
+        if not entry.projected and _level_ok(level, id) then
             if type(unlockable_levels) == "table" and not _contains(unlockable_levels, id) then
                 unlockable_levels[#unlockable_levels + 1] = id
                 appended[#appended + 1] = "UnlockableLevels+" .. id
@@ -233,7 +314,8 @@ function M.filter_levels_by_act(levels_by_act, level_settings, get)
         local entry = M.ALLOWLIST[i]
         if get(entry.setting_id) == true then
             local level = type(level_settings) == "table" and rawget(level_settings, entry.id)
-            if type(level) == "table" then selected[#selected + 1] = level end
+            local descriptor = M.project_level(level, entry)
+            if type(descriptor) == "table" then selected[#selected + 1] = descriptor end
         end
     end
     filtered[M.ACT_KEY] = selected
@@ -401,6 +483,104 @@ function M.apply_levels_for_area(view, area_name, level_settings, get)
     view._levels_by_act = filtered
     local assigned = view._levels_by_act
     return true, assigned == filtered, assigned
+end
+
+-- ============================================================
+-- Issue 941: mission presentation for a projected level
+-- ============================================================
+-- Backend-localization id this adapter registers for the projected mission's
+-- description. It must be a GAME string id, not a mod loc key: both presentation
+-- windows call the engine's Localize on level_settings.description_text
+-- (start_game_window_mission_selection.lua:391,396 and the console twin at
+-- :279,296), which reads the game's localizers, and LocalizationManager consults
+-- the backend table first (localization_manager.lua:50-55).
+M.PROJECTED_DESCRIPTION_KEY = "evt_level_description_prologue"
+
+-- LevelSettings.prologue ships display_name but NO description_text
+-- (level_settings.lua:1379-1417), so selecting the tile would hand the engine
+-- localizer a nil id. Run vanilla's presentation with a transient description id
+-- in place and restore the exact prior value -- nil included -- even when the
+-- native call raises, the same shape run_area_setup uses for AreaSettings.
+-- Returns applied/restored so the caller can prove the transaction closed.
+function M.run_presentation_info(func, view, level_id, level_settings, description_id)
+    local entry = M.entry_for(level_id)
+    local level = type(level_settings) == "table" and rawget(level_settings, level_id)
+    if type(entry) ~= "table" or entry.projected ~= true
+            or type(level) ~= "table"
+            or level.description_text ~= nil
+            or type(description_id) ~= "string" then
+        func(view, level_id)
+        return false, false
+    end
+
+    level.description_text = description_id
+    local call_ok, call_error = pcall(func, view, level_id)
+    level.description_text = nil
+
+    local restored = rawget(level, "description_text") == nil
+    if not call_ok then error(call_error) end
+    return true, restored
+end
+
+-- ============================================================
+-- Issue 941: solo-only launch policy for projected missions
+-- ============================================================
+-- The two vote types that actually consume the mission-selection level id
+-- (start_game_state_settings_overview.lua:998 "adventure_mode" and :1049
+-- "custom"). Quickplay / weave / deed builds ignore _specific_level_id, so a
+-- stale Prologue selection must not be allowed to block them.
+local SPECIFIC_LEVEL_VOTE_TYPES = {
+    adventure_mode = true,
+    custom = true,
+}
+
+function M.consumes_selected_level(vote_type)
+    return SPECIFIC_LEVEL_VOTE_TYPES[vote_type] == true
+end
+
+-- Decide whether a launch may proceed. Returns one of:
+--   "not_managed"      - not an allowlisted solo-only mission; never interfere.
+--   "allow"            - solo-only mission and the lobby is provably one member.
+--   "allow_unverified" - solo-only mission, member count unreadable. Vanilla's
+--                        own prologue guards still apply, so allow and say so
+--                        rather than fail the feature closed on a shape change.
+--   "blocked_not_solo" - solo-only mission with other members present. Refusing
+--                        here is strictly kinder than launching: the engine
+--                        would disconnect every one of them mid-load with
+--                        `host_plays_prologue` (peer_states.lua:67-71).
+function M.solo_launch_verdict(vote_type, level_id, member_count)
+    if not M.consumes_selected_level(vote_type) then return "not_managed" end
+    if not M.is_solo_only(level_id) then return "not_managed" end
+    if type(member_count) ~= "number" then return "allow_unverified" end
+    if member_count > 1 then return "blocked_not_solo" end
+    return "allow"
+end
+
+-- Force the matchmaking search for a solo-only mission onto the host path
+-- before MatchmakingManager.find_game clones it into its state context
+-- (matchmaking_manager.lua:1013). private_game + always_host select
+-- MatchmakingStateHostGame (matchmaking_manager.lua:1049-1066), so the session
+-- is never advertised and never searches for a peer lobby. Mutates in place --
+-- vanilla's own clone must see the hardened values.
+function M.harden_search_config(search_config)
+    if type(search_config) ~= "table" then return false, "no search config" end
+    if not M.is_solo_only(search_config.mission_id) then
+        return false, "not a solo-only mission"
+    end
+
+    search_config.private_game = true
+    search_config.always_host = true
+    search_config.quick_game = false
+    search_config.strict_matchmaking = false
+    search_config.dedicated_server = false
+    search_config.join_method = "solo"
+
+    return true, string.format(
+        "mission=%s private_game=%s always_host=%s quick_game=%s strict=%s dedicated=%s join_method=%s",
+        tostring(search_config.mission_id), tostring(search_config.private_game),
+        tostring(search_config.always_host), tostring(search_config.quick_game),
+        tostring(search_config.strict_matchmaking),
+        tostring(search_config.dedicated_server), tostring(search_config.join_method))
 end
 
 return M

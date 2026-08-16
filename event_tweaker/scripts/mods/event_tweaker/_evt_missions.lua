@@ -21,6 +21,18 @@ local mod = get_mod("event_tweaker")
 -- VMF automatically disables these four hooks with the mod, so reload,
 -- disable/re-enable, controller/desktop re-entry, and other mods' area state do
 -- not need persistent snapshots or cleanup callbacks.
+--
+-- Issue 941 adds the Prologue as a PROJECTED entry. It is the only allowlisted
+-- level that does not live in act_celebrate, so the catalog hands the menu a
+-- view-only copy (Missions.project_level) and leaves LevelSettings.prologue,
+-- UnlockableLevels, GameActs, and MapPresentationActs exactly as vanilla built
+-- them. Because vanilla refuses multiplayer prologue sessions outright -- remote
+-- peers are disconnected with `host_plays_prologue` (peer_states.lua:67-71) --
+-- this adapter also owns two launch-side hooks that keep the feature solo:
+-- StartGameStateSettingsOverview.play refuses a launch while other lobby members
+-- are present, and MatchmakingManager.find_game forces the search onto the
+-- private always-host path before vanilla clones it. Co-op is not a missing
+-- feature here; it is an engine ruling, so the mod never offers it.
 
 local ET = mod._evt
 local Missions = require("scripts/mods/event_tweaker/event_tweaker_missions")
@@ -190,6 +202,130 @@ mod:hook("StartGameWindowMissionSelectionConsole", "_setup_level_acts", function
     return _replace_celebrate_levels(func, self, "controller", ...)
 end)
 
+-- ============================================================
+-- Issue 941: projected-mission description
+-- ============================================================
+-- Resolve ONCE the game string id vanilla should localize for the projected
+-- mission's description panel. The mod's own loc table is invisible to the
+-- engine's Localize, so the mod string is published into the localization
+-- manager's backend table (localization_manager.lua:69-75) under a mod-prefixed
+-- id. If that manager is unavailable the level's own display_name id is used:
+-- a duplicated title is a far better outcome than handing the engine localizer
+-- a nil id, which is exactly what this transaction exists to prevent.
+local _description_id_resolved = false
+local _description_id
+
+local function _projected_description_id()
+    if _description_id_resolved then return _description_id end
+    _description_id_resolved = true
+
+    local localizer = rawget(_G, "Managers") and Managers.localizer
+    if localizer and localizer.append_backend_localizations then
+        local ok = pcall(localizer.append_backend_localizations, localizer, {
+            [Missions.PROJECTED_DESCRIPTION_KEY] = mod:localize("mission_prologue_description"),
+        })
+        if ok then
+            _description_id = Missions.PROJECTED_DESCRIPTION_KEY
+            return _description_id
+        end
+    end
+
+    local level_settings = rawget(_G, "LevelSettings")
+    local level = type(level_settings) == "table" and rawget(level_settings, "prologue")
+    _description_id = type(level) == "table" and level.display_name or nil
+    return _description_id
+end
+
+local _presentation_signatures = {}
+
+local function _present_projected_mission(func, self, surface, level_id)
+    -- Resolve the description id only for a projected selection. The window
+    -- also calls this with no level on entry, and the resolver memoizes, so an
+    -- eager call could freeze the fallback in before the localizer is up.
+    local entry = Missions.entry_for(level_id)
+    local description_id = entry and entry.projected and _projected_description_id() or nil
+    local applied, restored = Missions.run_presentation_info(
+        func, self, level_id, rawget(_G, "LevelSettings"), description_id)
+    if not applied then return end
+
+    local signature = table.concat({ tostring(level_id), tostring(restored) }, "|")
+    if Missions.should_emit_for_surface(_presentation_signatures, surface, signature) then
+        pcall(printf,
+            "[event-missions:941] projected description: surface=%s mission=%s id=%s restored=%s",
+            tostring(surface), tostring(level_id), tostring(_description_id), tostring(restored))
+    end
+end
+
+-- Source pre-flight: no other Event Tweaker module hooks either mission
+-- presentation method.
+mod:hook("StartGameWindowMissionSelection", "_set_presentation_info", function(func, self, level_id)
+    return _present_projected_mission(func, self, "desktop", level_id)
+end)
+
+mod:hook("StartGameWindowMissionSelectionConsole", "_set_presentation_info", function(func, self, level_id)
+    return _present_projected_mission(func, self, "controller", level_id)
+end)
+
+-- ============================================================
+-- Issue 941: solo-only launch enforcement
+-- ============================================================
+-- Hook pre-flight (2026-08-16): event_tweaker had no hook on either
+-- StartGameStateSettingsOverview.play or MatchmakingManager.find_game before
+-- issue 941, so these are the mod's first and only wrappers on those pairs.
+
+local _solo_blocked_calls = 0
+local _solo_hardened_calls = 0
+local _last_solo_proof = "not-called"
+
+local function _lobby_member_count(view)
+    -- Vanilla reads the same chain to compute its own is_alone flag
+    -- (start_game_state_settings_overview.lua:1034-1040). An unreadable shape
+    -- returns nil, which the policy reports as allow_unverified rather than
+    -- turning a menu-shape change into a refusal to launch anything.
+    local ok, count = pcall(function()
+        return view._network_lobby:members():get_member_count()
+    end)
+    if ok and type(count) == "number" then return count end
+end
+
+mod:hook("StartGameStateSettingsOverview", "play", function(func, self, t, vote_type, ...)
+    local level_ok, level_id = pcall(function() return self._specific_level_id end)
+    local members = _lobby_member_count(self)
+    local verdict = Missions.solo_launch_verdict(
+        vote_type, level_ok and level_id or nil, members)
+
+    if verdict == "not_managed" then
+        return func(self, t, vote_type, ...)
+    end
+
+    _last_solo_proof = string.format("vote_type=%s mission=%s members=%s verdict=%s",
+        tostring(vote_type), tostring(level_ok and level_id or nil),
+        tostring(members), verdict)
+
+    if verdict == "blocked_not_solo" then
+        _solo_blocked_calls = _solo_blocked_calls + 1
+        mod:echo(mod:localize("event_mission_solo_only_blocked"))
+        pcall(printf, "[event-missions:941] launch refused: %s", _last_solo_proof)
+        return
+    end
+
+    pcall(printf, "[event-missions:941] solo launch allowed: %s", _last_solo_proof)
+    return func(self, t, vote_type, ...)
+end)
+
+mod:hook("MatchmakingManager", "find_game", function(func, self, search_config, ...)
+    -- Harden BEFORE the original runs: find_game clones search_config into its
+    -- state context on the first lines (matchmaking_manager.lua:1013), so a
+    -- post-hook edit would never reach the host state.
+    local hardened, proof = Missions.harden_search_config(search_config)
+    if hardened then
+        _solo_hardened_calls = _solo_hardened_calls + 1
+        _last_solo_proof = proof
+        pcall(printf, "[event-missions:941] solo search hardened: %s", proof)
+    end
+    return func(self, search_config, ...)
+end)
+
 mod:command("event_mission_probe", "Inspect the issue-626 event-mission availability contract", function()
     local ok, problems = _contract()
     local ids = Missions.enabled_ids(_get)
@@ -200,29 +336,109 @@ mod:command("event_mission_probe", "Inspect the issue-626 event-mission availabi
         "[event-missions:626] probe selected=[%s] contract=%s campaign=%s area_hooks=%d mission_hooks=%d last_area={%s} last_mission={%s}",
         table.concat(ids, ","), detail, _campaign_status(), _area_hook_calls, _mission_hook_calls,
         _last_area_proof, _last_mission_proof)
+    pcall(printf,
+        "[event-missions:941] probe solo_blocked=%d solo_hardened=%d last_solo={%s}",
+        _solo_blocked_calls, _solo_hardened_calls, _last_solo_proof)
 end)
 
 ET.rt_register("issue626_event_mission_allowlist_contract", function()
-    if #Missions.ALLOWLIST ~= 2 then return "allowlist must contain exactly two audited missions" end
+    if #Missions.ALLOWLIST ~= 3 then return "allowlist must contain exactly three audited missions" end
     if Missions.ALLOWLIST[1].id ~= "dlc_dwarf_fest"
-       or Missions.ALLOWLIST[2].id ~= "dlc_celebrate_crawl" then
+       or Missions.ALLOWLIST[2].id ~= "dlc_celebrate_crawl"
+       or Missions.ALLOWLIST[3].id ~= "prologue" then
         return "allowlist contents/order drifted"
     end
     local ok, problems = _contract()
     if not ok then return table.concat(problems, "; ") end
-    -- Post-fallback invariant: both allowlisted levels must sit in the local
-    -- campaign tables (vanilla-registered or appended at load).
+    -- Post-fallback invariant: every NATIVE allowlisted level must sit in the
+    -- local campaign tables (vanilla-registered or appended at load), and no
+    -- projected level may have been pushed into the event act.
     local unlockable = rawget(_G, "UnlockableLevels")
     local game_acts = rawget(_G, "GameActs")
+    local act_levels = type(game_acts) == "table" and game_acts[Missions.ACT_KEY]
     for i = 1, #Missions.ALLOWLIST do
-        local id = Missions.ALLOWLIST[i].id
-        if type(unlockable) ~= "table" or not table.find(unlockable, id) then
-            return "UnlockableLevels lacks " .. id
+        local entry = Missions.ALLOWLIST[i]
+        local id = entry.id
+        if entry.projected then
+            if type(act_levels) == "table" and table.find(act_levels, id) then
+                return "GameActs." .. Missions.ACT_KEY .. " absorbed projected " .. id
+            end
+        else
+            if type(unlockable) ~= "table" or not table.find(unlockable, id) then
+                return "UnlockableLevels lacks " .. id
+            end
+            if type(act_levels) ~= "table" or not table.find(act_levels, id) then
+                return "GameActs." .. Missions.ACT_KEY .. " lacks " .. id
+            end
         end
-        local act_levels = type(game_acts) == "table" and game_acts[Missions.ACT_KEY]
-        if type(act_levels) ~= "table" or not table.find(act_levels, id) then
-            return "GameActs." .. Missions.ACT_KEY .. " lacks " .. id
-        end
+    end
+end)
+
+ET.rt_register("issue941_prologue_solo_only_projection", function()
+    local entry = Missions.entry_for("prologue")
+    if not entry or not entry.projected or not entry.solo_only then
+        return "prologue is not registered as a projected solo-only mission"
+    end
+
+    -- The canonical descriptor must still be the tutorial, in its own act, with
+    -- a package list the transition handler can load. Read the LIVE globals: a
+    -- passing check is evidence the adapter left them alone this session.
+    local level_settings = rawget(_G, "LevelSettings")
+    local live = type(level_settings) == "table" and rawget(level_settings, "prologue")
+    if type(live) ~= "table" then return "LevelSettings.prologue missing" end
+    if live.act ~= entry.source_act then
+        return "LevelSettings.prologue.act was moved to " .. tostring(live.act)
+    end
+    if live.game_mode ~= entry.source_game_mode then
+        return "LevelSettings.prologue.game_mode is " .. tostring(live.game_mode)
+    end
+    if type(live.packages) ~= "table" or #live.packages == 0 then
+        return "LevelSettings.prologue has no packages to load"
+    end
+
+    local projected = Missions.project_level(live, entry)
+    if projected == live then return "projection returned the canonical descriptor" end
+    if projected.act ~= Missions.ACT_KEY then return "projection was not re-keyed into the event act" end
+    if projected.level_id ~= "prologue" then return "projection lost the launch identity" end
+    if type(projected.act_presentation_order) ~= "number" then
+        return "projection left act_presentation_order unsortable"
+    end
+    if live.act ~= entry.source_act or live.act_presentation_order ~= nil then
+        return "projecting mutated LevelSettings.prologue"
+    end
+
+    -- The presentation transaction must supply a description id and hand the
+    -- canonical table back exactly as it found it. Without it both mission
+    -- windows localize a nil id the moment the tile is selected.
+    if type(_projected_description_id()) ~= "string" then
+        return "no description id resolved for the projected mission"
+    end
+    local seen
+    local applied, restored = Missions.run_presentation_info(
+        function(_, id) seen = live.description_text; return id end,
+        nil, "prologue", level_settings, _projected_description_id())
+    if not applied then return "presentation transaction did not engage" end
+    if type(seen) ~= "string" then return "vanilla would have localized a nil description" end
+    if not restored or live.description_text ~= nil then
+        return "presentation transaction left description_text behind"
+    end
+
+    -- Launch policy: other members refuse, solo proceeds, and the search config
+    -- is forced onto the private always-host path.
+    if Missions.solo_launch_verdict("custom", "prologue", 2) ~= "blocked_not_solo" then
+        return "a multi-member lobby was allowed to launch the tutorial"
+    end
+    if Missions.solo_launch_verdict("custom", "prologue", 1) ~= "allow" then
+        return "a solo lobby was refused"
+    end
+    if Missions.solo_launch_verdict("adventure", "prologue", 4) ~= "not_managed" then
+        return "quickplay was blocked by a stale mission selection"
+    end
+    local config = { mission_id = "prologue", private_game = false, always_host = false, quick_game = true }
+    local hardened = Missions.harden_search_config(config)
+    if not hardened or config.private_game ~= true or config.always_host ~= true
+            or config.quick_game ~= false then
+        return "solo-only search config was not hardened"
     end
 end)
 
