@@ -1,5 +1,24 @@
 # Character Dialogue Changelog
 
+## 0.1.10-dev (2026-08-16) -- automatic audio isolation during previews (#998) [verify-fix]
+
+- New "Isolate Audio During Playback" ON/OFF control at the top of Mod
+  Tweaker's Dialogue tab (rendered by the custom tab renderer). While enabled,
+  playing a preview mutes the music and sound-effects buses automatically, and
+  every termination path restores them: stop, natural completion, replacement
+  teardown failures, collapse, view exit, world transition, disabling the
+  toggle, and mod disable/unload.
+- Isolation is owner-token based: the automatic preview owner composes with
+  the manual `/cd_isolate` owner. Volumes mute when the first owner acquires
+  and restore only when the last owner releases; pause/resume and line
+  replacement hold the token so swaps never flicker.
+- Natural-completion polling moved into the frame update, so a line finishing
+  with the tab closed still restores volumes; a restore attempted while no
+  audio world exists retries each frame until the engine accepts the write.
+- API v5: `get_auto_isolation`/`set_auto_isolation`/`auto_isolation_label`.
+  `/cd_stop` hardened against stray chat arguments; `/cd_regression_test`
+  additionally asserts the ownership arbitration and lifecycle edge tables.
+
 ## 0.1.9-dev (2026-07-20) - conversation grouping, transcript search, audio isolation (#605 #998) [untested]
 
 - Browser groups by CONVERSATION (the event stem) instead of by character, and orders each group's lines by their numeric ordinal so an exchange reads in the order the game plays it. Stems sort by topic first, so every hero's version of one conversation lands adjacent: searching `downed_three_times` returns the whole set rather than five scattered entries.

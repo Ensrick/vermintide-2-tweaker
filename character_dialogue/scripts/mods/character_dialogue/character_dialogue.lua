@@ -1,5 +1,5 @@
 local mod = get_mod("character_dialogue")
-local MOD_VERSION = "0.1.9-dev"
+local MOD_VERSION = "0.1.10-dev"
 -- Fatshark keeps DialogueQueries local to dialogue_system.lua; it is not a
 -- global like TagQueryDatabase.  Resolve the canonical module before asking
 -- VMF to install the hook, otherwise VMF receives nil and emits a startup

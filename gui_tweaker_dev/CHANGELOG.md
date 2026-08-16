@@ -1,5 +1,13 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.337-dev (2026-08-16) -- Dialogue tab isolation control row (#998) [verify-fix]
+
+- The Mod Tweaker Dialogue tab renders Character Dialogue's new automatic
+  audio-isolation control as a lead row (feature-detected from dialogue API
+  v5, so an older Character Dialogue renders the previous tab unchanged).
+  Mouse latch on the row or either arrow, controller confirm, refresh follows
+  external flips, and an empty search keeps the control visible. Refs #998.
+
 ## 0.2.336-dev (2026-08-15) -- DEFAULT refreshes the visible character; empty jewelry preserved (#1033, #375) [verify-fix]
 
 - Equipment DEFAULT now refreshes the visible character, not just the saved
