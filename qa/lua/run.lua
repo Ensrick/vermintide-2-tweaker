@@ -79,6 +79,8 @@ local suites = {
     "test_gut_cutscene_probe",
     "test_gut_cutscene_policy274",
     "test_gut_cutscene_skipwindow",
+    "test_gut_cutscenes_hookchain",
+    "test_gut_screen_particle_ledger",
     "test_et_settings_queue",
     "test_et_health_multiplier",
     "test_et_personal_handicap",
