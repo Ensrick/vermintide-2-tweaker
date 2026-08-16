@@ -419,6 +419,7 @@ local suites = {
     "test_gt_solo_qol_explosion_arity",
     "test_gt_client_ragdoll_retention",
     "test_gt_diagnostic_check_contract",
+    "test_gt_vmf_debug_gate",
     "test_regression_runner_verdicts",
     "test_cwv_marker_check_contract",
     "test_cwv_base_name_invariant",

@@ -193,7 +193,11 @@ end)
 -- Max Ragdolls: single always-on slider (enable toggle removed 2026-06-30). We pin
 -- BOTH the ragdoll cap and the prune floor to the slider value so the engine holds
 -- ~count corpses instead of sawtoothing down to vanilla's min of 10. Default 24
--- (vanilla cap), up to 300.
+-- (vanilla cap), up to 300. 0 is legal (#332 groundwork): with max=min=0 the
+-- vanilla prune (unit_spawner.lua:141-183) flags every death-watch corpse for
+-- removal on its next tick (units_to_remove = watch_n; the min-floor adjust at
+-- :155-157 is 0 > 0 = no-op), so 0 = no ragdolls at all, with no divide/negative
+-- hazard in the vanilla math.
 mod.gt_apply_corpse_count = function()
     if not RagdollSettings then return end
     local count = mod:get("gt_more_corpses_count") or 24
