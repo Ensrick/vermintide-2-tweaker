@@ -1,5 +1,11 @@
 # Weapon Tweaker Changelog
 
+## 0.12.309-dev (2026-08-16) -- mirror 0.12.308-beta (#108, #183, #169) [verify-fix]
+
+- Runtime-parity mirror of public 0.12.308-beta: named #108/#183 availability
+  contracts in the regression runner and the retired-key migration write
+  removed. See the public changelog for the full entry.
+
 ## 0.12.308-dev (2026-08-15) -- mirror 0.12.307-beta; live Hold-Pose HUD (#943, #1023) [verify-fix]
 
 - Runtime-parity mirror of public 0.12.307-beta (Fire Sword heavy attack
