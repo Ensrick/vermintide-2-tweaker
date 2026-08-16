@@ -262,7 +262,12 @@
                     Name = 'fade'
                     Surfaces = @{
                         owner_1p = @{ Disposition = 'not-applicable'; Reason = 'camera-proximity and invisibility fade target the third-person player presentation, not the first-person weapon rig' }
-                        owner_3p = @{ Disposition = 'covered'; Evidence = 'CWV and WOC submit complete inventory-plus-attachment snapshots after custom equipment creation and owner wield; Cosmetics does the same after owner attachment creation' }
+                        # #922 audit 2026-08-03: this cell previously claimed
+                        # 'covered' citing Cosmetics, but Cosmetics installs only
+                        # hat-gated fade edges and has no owner-side
+                        # equipment/wield enrollment, so it stays deferred until
+                        # that owner-wield edge lands.
+                        owner_3p = @{ Disposition = 'deferred'; Reason = 'partial, not complete: CWV and WOC submit complete inventory-plus-attachment snapshots after custom equipment creation and owner wield, and Cosmetics enrolls owner attachments only behind its exact hat-identity gate (owns_dynamic_hat in _cos_appearance_fade_runtime.lua); Cosmetics has no owner-side equipment/wield edge, so a Cosmetics-owned custom weapon mesh is never enrolled on the owner third-person body unless CWV also claims the item' }
                         bot = @{ Disposition = 'covered'; Evidence = 'the owner-equipment construction adapter receives bot bodies and enrolls their complete third-person snapshot without relying on a local player object' }
                         husk = @{ Disposition = 'covered'; Evidence = 'the consolidated CWV husk-wield edge, Cosmetics husk-attachment edge, and WOC husk spawn edge submit complete snapshots after custom render work' }
                         inventory_preview = @{ Disposition = 'not-applicable'; Reason = 'preview mannequins do not participate in gameplay camera-proximity or player invisibility FadeSystem state' }
