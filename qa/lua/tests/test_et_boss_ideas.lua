@@ -74,4 +74,38 @@ return function(H, repo_root)
         H.equal(source:find("mod:network_register", 1, true), nil)
         H.equal(source:find("spawn_network_unit", 1, true), nil)
     end)
+
+    H.test("ET #451 Chosen override policy builds the dictated prototype", function()
+        local spec = Core.CHOSEN
+        H.equal(spec.name, "et_chosen_greataxe")
+        H.equal(spec.source_breed, "chaos_warrior")
+        H.equal(spec.inventory_template, "warrior_axe")
+        local clone = {
+            name = "chaos_warrior",
+            display_name = "vanilla_key",
+            max_health = { 60, 90, 120, 150, 210, 210, 210, 210 },
+            default_inventory_template = "warrior_axe",
+            threat_value = 12,
+            race = "chaos",
+            armor_category = 3,
+        }
+        local out = Core.apply_chosen_overrides(clone, spec)
+        H.equal(out, clone, "must mutate and return the supplied clone")
+        H.equal(out.name, "et_chosen_greataxe")
+        H.equal(out.display_name, "et_chosen_greataxe_name")
+        H.equal(out.boss_staggers, true)
+        H.equal(#out.max_health, 8)
+        for i = 1, 8 do H.equal(out.max_health[i], 2000) end
+        H.equal(out.default_inventory_template, "warrior_axe")
+        -- Untouched fields survive: only the dictated overrides change.
+        H.equal(out.threat_value, 12)
+        H.equal(out.race, "chaos")
+        H.equal(out.armor_category, 3)
+    end)
+
+    H.test("ET #451 Chosen override policy fails closed without a clone", function()
+        local out, reason = Core.apply_chosen_overrides(nil, Core.CHOSEN)
+        H.equal(out, nil)
+        H.equal(reason, "breed_clone_missing")
+    end)
 end

@@ -122,12 +122,6 @@ local loc = {
     -- ============================================================
     enemy_spawns_group   = { en = "Enemy Spawns" },
 
-    personal_difficulty = { en = "Personal difficulty" },
-    personal_difficulty_auto = { en = "Auto (host difficulty)" },
-    personal_difficulty_tooltip = {
-        en = "Choose a difficulty above the host's to apply a personal combat handicap: enemies deal more damage to you and you deal less damage to enemies. The host must run the same Enemy Tweaker version. This does not change spawns, enemy health or AI, healing, wounds, environmental damage, or friendly fire. A choice at or below the host difficulty has no effect.",
-    },
-
     -- Difficulty Mimic — override the difficulty key used by
     -- patch_settings_with_difficulty for individual spawn-side subsystems.
     -- Player/enemy stats stay on the real difficulty; only spawn frequency,
@@ -218,6 +212,24 @@ local loc = {
     preset_beastmen_invasion = { en = "Faction: Beastmen Invasion" },
     preset_mixed_factions    = { en = "Faction: Mixed (all three)" },
     preset_all_elites        = { en = "Theme: All Elites" },
+
+    -- ============================================================
+    -- Personal Handicap (#61 UX rework)
+    -- ============================================================
+    -- personal_difficulty moved out of Enemy Spawns into this dedicated
+    -- category; the allow gate is HOST-side and default off.
+    personal_handicap_group = { en = "Personal Handicap" },
+
+    personal_handicap_allow = { en = "Allow personal handicaps" },
+    personal_handicap_allow_tooltip = {
+        en = "For hosts. When on, other players in your lobby who also run this mod may pick a Personal difficulty below to make the game harder for themselves only. When off, their requests are ignored and everyone plays at your lobby difficulty. This toggle never changes your own game, and your own Personal difficulty as host works whether it is on or off.",
+    },
+
+    personal_difficulty = { en = "Personal difficulty" },
+    personal_difficulty_auto = { en = "Auto (play at lobby difficulty)" },
+    personal_difficulty_tooltip = {
+        en = "Make the game harder for yourself only. Pick a difficulty above the lobby's and you take more damage from enemies and deal less damage to enemies, roughly as if you played at that harder difficulty; every other player is untouched. It never changes enemy numbers, enemy health, enemy behavior, healing, wounds, friendly fire, or falling damage. Auto or any pick at or below the lobby difficulty means no handicap. When you join someone else's lobby this works only if the host also runs this mod and has Allow personal handicaps turned on.",
+    },
 
     -- ============================================================
     -- Skaven Warlord Monster Pool

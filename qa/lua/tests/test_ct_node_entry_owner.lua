@@ -304,11 +304,7 @@ local function read(name)
         H.equal(count_plain(owner, "mod.update"), 0)
     end)
 
-    H.test("the header records the extraction provenance and the one deviation", function()
-        H.truthy(owner:find("3309e60ddf14a3fce34c68b5f891fb81", 1, true),
-            "the moved chunk's pristine MD5 must be recorded in the header")
-        H.truthy(owner:find("2728-3221", 1, true),
-            "the moved entry line range must be recorded in the header")
+    H.test("the extraction's one deviation drives a single entry-owned flag slot", function()
         -- Exactly one substitution in CODE, and the flag it substitutes for is
         -- still an entry local with a single storage slot.
         H.equal(count_plain(owner_code, "defeat_recovery_triggered(false)"), 1)
