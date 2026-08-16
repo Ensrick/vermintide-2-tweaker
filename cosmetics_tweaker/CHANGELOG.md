@@ -1,5 +1,17 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.214-dev (2026-08-16) -- LA pre-spawn lease + glow on preview and score (#696, #1147) [verify-fix]
+
+- Loremaster's Armoury spawn-time material closures pre-lease their exact
+  parent material packages before the four traced units spawn (message
+  board, back board, quest letter, Kruber shield), extending the #481 gate
+  recovery with bounded `[cos:696]` receipts; valid binds stay untouched.
+- Glow parity reaches the inventory previewer and score surfaces (#1147):
+  glow repaint routes through the census/descriptor consumers beyond the
+  husk-wield path, and the previewer paint predicate verifies painted mesh
+  identity instead of call completion. Census cells flip to covered only for
+  the surfaces the offline tests actually drive.
+
 ## 0.9.213-dev (2026-08-16) -- husk variant keys, pose regression net, Prologue mallet (#476, #485, #913) [verify-fix]
 
 - Imperial Sword and Shield picks now render on remote husks (#476). The

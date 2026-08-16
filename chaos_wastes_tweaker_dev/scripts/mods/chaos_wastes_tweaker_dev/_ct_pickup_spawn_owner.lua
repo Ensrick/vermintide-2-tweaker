@@ -296,6 +296,23 @@ mod:hook("PickupSystem", "_spawn_pickup", function(func, self, settings, pickup_
     -- to clients. The #294 guard's early `return` (nil,nil) matches vanilla's own early
     -- returns, so it stays correct.
     local spawned, go_id = func(self, settings, pickup_name, position, rotation, flag, spawn_type, ...)
+    -- #322 runtime needle (2026-08-16, issue-comment option 2): the 2026-08-04
+    -- co-op logs had ZERO [ct:322] runtime rows, so "seems to work" could not
+    -- be corroborated. One bounded row per spawn that returns the non-nil
+    -- go_id rpc_link_pickup consumes (pickup_system.lua:1441). ~10 rows per
+    -- mission; the counter resets with the per-level PickupSystem instance.
+    if spawned ~= nil and go_id ~= nil then
+        if mod._ct322_ps ~= self then
+            mod._ct322_ps, mod._ct322_rows = self, 0
+        end
+        if mod._ct322_rows < 10 then
+            mod._ct322_rows = mod._ct322_rows + 1
+            pcall(printf, "[ct:322] linked-pickup spawn pickup=%s go_id=%s role=%s type=%s (%d/10)",
+                tostring(pickup_name), tostring(go_id),
+                self.is_server and "host" or "client", tostring(spawn_type),
+                mod._ct322_rows)
+        end
+    end
     if mod._ct_tally_count then mod._ct_tally_count(pickup_name, spawned) end
     -- #143 (read-only): tag every CONFIRMED Morgrim's Bomb spawn with its source
     -- (world spread-pool vs level-baked vs bomb-boon drop) so a live run settles
