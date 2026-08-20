@@ -479,7 +479,7 @@
         }
         @{
             Marker='[wt:282]'; ModIds=@('wt','wt_dev')
-            ModTrees=@{wt='57d61b330683cb3951ed45985ddeb84490d5bf04';wt_dev='2e47870d6c59b1976ab0281bcd1d160c7786b1b8'}
+            ModTrees=@{wt='322fbab2f0f6ee326e76eed75aaf2fa6b830e547';wt_dev='a16d16d0d43d3d4f4c32140361911ef713abdc81'}
             SourcesByMod=@{
                 wt='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_deepwood_runtime.lua'
                 wt_dev='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_deepwood_runtime.lua'
@@ -494,7 +494,7 @@
         }
         @{
             Marker='[cwv:423]'; ModId='character_weapon_variants'
-            ModTrees=@{character_weapon_variants='984efa2a6abe04933370a3355afc043a90e53b52'}
+            ModTrees=@{character_weapon_variants='972b0292a63d91d93d8b3feae082f388954ee8c1'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_exact_wire_runtime.lua'}
             Signature='[cwv:423] exact damage catalog=%s rows=%d beacon=cwv_damage_profiles_exact_v1'
             Bound='one mutually exclusive catalog/parity result during exact-wire install'
@@ -503,7 +503,7 @@
         }
         @{
             Marker='[cwv:423]'; ModId='character_weapon_variants'
-            ModTrees=@{character_weapon_variants='984efa2a6abe04933370a3355afc043a90e53b52'}
+            ModTrees=@{character_weapon_variants='972b0292a63d91d93d8b3feae082f388954ee8c1'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_exact_wire_runtime.lua'}
             Signature='[cwv:423] WARN exact damage parity unavailable (%s); every cwv profile substitutes'
             Bound='one mutually exclusive parity-install failure receipt during exact-wire installation'
@@ -512,7 +512,7 @@
         }
         @{
             Marker='[cwv:423]'; ModId='character_weapon_variants'
-            ModTrees=@{character_weapon_variants='984efa2a6abe04933370a3355afc043a90e53b52'}
+            ModTrees=@{character_weapon_variants='972b0292a63d91d93d8b3feae082f388954ee8c1'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_exact_wire_runtime.lua'}
             Signature='[cwv:423] WARN exact damage catalog unavailable (%s); every cwv profile substitutes'
             Bound='one mutually exclusive catalog-capture failure receipt during exact-wire installation'
@@ -521,7 +521,7 @@
         }
         @{
             Marker='[cwv:423]'; ModId='character_weapon_variants'
-            ModTrees=@{character_weapon_variants='984efa2a6abe04933370a3355afc043a90e53b52'}
+            ModTrees=@{character_weapon_variants='972b0292a63d91d93d8b3feae082f388954ee8c1'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_exact_wire_runtime.lua'}
             Signature='[cwv:423] blocked unsafe hit: profile=%s(%s) exact catalog unconfirmed and no vanilla fallback resolved'
             Bound='at most one blocked-hit receipt per finite NetworkLookup damage-profile id'
@@ -533,7 +533,7 @@
         }
         @{
             Marker='[cwv:423]'; ModId='character_weapon_variants'
-            ModTrees=@{character_weapon_variants='984efa2a6abe04933370a3355afc043a90e53b52'}
+            ModTrees=@{character_weapon_variants='972b0292a63d91d93d8b3feae082f388954ee8c1'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_exact_wire_runtime.lua'}
             Signature='[cwv:423] wire dmg-profile sub: %s(%s) -> %s (exact catalog unconfirmed; base-weapon damage this hit)'
             Bound='at most one substitution receipt per finite NetworkLookup damage-profile id'
@@ -545,7 +545,7 @@
         }
         @{
             Marker='[ct:349]'; ModId='ct_dev'
-            ModTrees=@{ct_dev='0530c34ec5a5ca124d101561e310f3b3d48e3d4f'}
+            ModTrees=@{ct_dev='6155f77226950f51a4f23dc488cdc12701be5174'}
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_cursed_chest132.lua'}
             Signature='[ct:349] chest_count_audit level=%s mission_of_mercy=%s actual=%d cap=%s pickup_census=%s class=%s is_server=%s'
             Bound='Core.finalize returns no classification after the mission-generation finalized latch is set'
@@ -557,7 +557,7 @@
         }
         @{
             Marker='[ct:132]'; ModId='ct_dev'
-            ModTrees=@{ct_dev='0530c34ec5a5ca124d101561e310f3b3d48e3d4f'}
+            ModTrees=@{ct_dev='6155f77226950f51a4f23dc488cdc12701be5174'}
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_cursed_chest132.lua'}
             Signature='[ct:132] chest_of_trials #%d level=%s cap=%s census=%s is_server=%s%s'
             Bound='one receipt per actually constructed chest in the finite mission population'
@@ -569,7 +569,7 @@
         }
         @{
             Marker='[ct:132]'; ModId='ct_dev'
-            ModTrees=@{ct_dev='0530c34ec5a5ca124d101561e310f3b3d48e3d4f'}
+            ModTrees=@{ct_dev='6155f77226950f51a4f23dc488cdc12701be5174'}
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_cursed_chest132.lua'}
             Signature='[ct:132] reconcile level=%s alive=%d cap=%d over=%d pruned=%d unprunable=%d (issue 132 / issue 60 cross-path cap)'
             Bound='one over-cap reconciliation receipt from the mission-generation one-shot finalize path'
@@ -630,7 +630,7 @@
         }
         @{
             Marker='[gut:630]'; ModId='gut_dev'
-            ModTrees=@{gut_dev=@('1d3837ddaf33935e6d0202a8034a0035e8be67c3','3d84f977d8ce2d5b7d16090f752113f8825715dc')}
+            ModTrees=@{gut_dev=@('1c9c08c75a0a7985ba803d6279a65553b1c9acb6')}
             SourcesByMod=@{gut_dev='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_dx12_fence630.lua'}
             Signature='[gut:630] frame_evidence draw=%d visible_rows=%s resource_candidates=%s'
             Bound='focus/tab/Weapons-expansion edge evidence under one absolute 48-row probe budget'
@@ -712,7 +712,7 @@
             )
         }
         @{
-            Marker='[cwv:1107]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='984efa2a6abe04933370a3355afc043a90e53b52'}
+            Marker='[cwv:1107]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='972b0292a63d91d93d8b3feae082f388954ee8c1'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_musket_ammo_pool.lua'}
             Signature='[cwv:1107] melee-slot musket reload drained %d round(s): reserve %d -> %d'
             Bound='at most one drain receipt per completed melee-slot reload transaction'
@@ -720,7 +720,7 @@
             GuardAnchors=@(@{Tokens=@('if','drained','>','0','then')})
         }
         @{
-            Marker='[gut:938]';ModId='gut_dev';ModTrees=@{gut_dev=@('1d3837ddaf33935e6d0202a8034a0035e8be67c3','3d84f977d8ce2d5b7d16090f752113f8825715dc')}
+            Marker='[gut:938]';ModId='gut_dev';ModTrees=@{gut_dev=@('1c9c08c75a0a7985ba803d6279a65553b1c9acb6')}
             SourcesByMod=@{gut_dev='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_damage_numbers.lua'}
             Signature='[gut:938] rt skip: NetworkConstants.damage.max unavailable; policy checked against fallback %.2f'
             Bound='at most one fallback notice per explicit issue938 regression-check invocation'
@@ -728,7 +728,7 @@
             GuardAnchors=@(@{Tokens=@('if','type','(','max_damage',')','~=','String:number','or','max_damage','<=','0','then')})
         }
         @{
-            Marker='[ct:919]';ModId='ct_dev';ModTrees=@{ct_dev='0530c34ec5a5ca124d101561e310f3b3d48e3d4f'}
+            Marker='[ct:919]';ModId='ct_dev';ModTrees=@{ct_dev='6155f77226950f51a4f23dc488cdc12701be5174'}
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_profile_snapshot.lua'}
             Signature='[ct:919] seq=%d phase=%s role=%s profile=%d effective_source=%s coins_local=%s coins_effective=%s miasma_disabled_local=%s miasma_disabled_effective=%s selected_curse="%s" selected_conflict=%s boon_local_count=%d boon_local=%s boon_effective_count=%d boon_effective=%s local_truncated=%d effective_truncated=%d'
             Bound='one terminal formatted snapshot or snapshot_error per explicit profile-snapshot transaction'
@@ -739,14 +739,14 @@
             GuardAnchors=@(@{Tokens=@('function','mod','.','_ct919_log_profile_snapshot','(','phase',',','profile_override',')')})
         }
         @{
-            Marker='[ct:919]';ModId='ct_dev';ModTrees=@{ct_dev='0530c34ec5a5ca124d101561e310f3b3d48e3d4f'}
+            Marker='[ct:919]';ModId='ct_dev';ModTrees=@{ct_dev='6155f77226950f51a4f23dc488cdc12701be5174'}
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_profile_snapshot.lua'}
             Signature='[ct:919] seq=%d snapshot_error=%s';Bound='one mutually exclusive error receipt per profile-snapshot transaction'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[ct:919] seq=%d snapshot_error=%s')})
             GuardAnchors=@(@{Tokens=@('if','not','ok','then')})
         }
         @{
-            Marker='[cwv:786]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='984efa2a6abe04933370a3355afc043a90e53b52'}
+            Marker='[cwv:786]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='972b0292a63d91d93d8b3feae082f388954ee8c1'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_combat_styles.lua'}
             Signature='[cwv:786] verdict %s peer=%s slot=%s family=%s style=%s edge=%s attempt=%d/%d terminal=%s detail=%s'
             Bound='one verdict per retry transition under the eight-attempt per-style-edge ledger'
@@ -754,7 +754,7 @@
             GuardAnchors=@(@{Tokens=@('M','.','MAX_REMOTE_REFRESH_ATTEMPTS','=','8')})
         }
         @{
-            Marker='[cwv:786]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='984efa2a6abe04933370a3355afc043a90e53b52'}
+            Marker='[cwv:786]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='972b0292a63d91d93d8b3feae082f388954ee8c1'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_combat_styles.lua'}
             Signature='[cwv:786] rebuild queued peer=%s slot=%s family=%s style=%s edge=%s attempt=%d/%d'
             Bound='one queue receipt per retry transition under the eight-attempt per-style-edge ledger'
@@ -762,7 +762,7 @@
             GuardAnchors=@(@{Tokens=@('M','.','MAX_REMOTE_REFRESH_ATTEMPTS','=','8')})
         }
         @{
-            Marker='[cwv:786]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='984efa2a6abe04933370a3355afc043a90e53b52'}
+            Marker='[cwv:786]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='972b0292a63d91d93d8b3feae082f388954ee8c1'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_combat_styles.lua'}
             Signature='[cwv:786] style rx peer=%s slot=%s family=%s style=%s source=%s changed=%s'
             Bound='one receive receipt per explicit synchronized style edge'
@@ -770,7 +770,7 @@
             GuardAnchors=@(@{Tokens=@('function','runtime',':','accept_style_edge','(','peer_id',',','slot_name',',','family_id',',','style_id',',','source',')')})
         }
         @{
-            Marker='[cwv:786]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='984efa2a6abe04933370a3355afc043a90e53b52'}
+            Marker='[cwv:786]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='972b0292a63d91d93d8b3feae082f388954ee8c1'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_style_rewield.lua'}
             Signature='[cwv:786] style residency family=%s style=%s resource=%s resident=%s'
             Bound='signature-deduplicated residency evidence under an absolute 32-row cap'
@@ -781,7 +781,7 @@
             )
         }
         @{
-            Marker='[cwv:645]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='984efa2a6abe04933370a3355afc043a90e53b52'}
+            Marker='[cwv:645]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='972b0292a63d91d93d8b3feae082f388954ee8c1'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_combat_styles.lua'}
             Signature='[cwv:645] candidate=%s item=%s career=%s owner_event=%s sample=%d/%d reason=%s'
             Bound='signature-deduplicated candidate evidence under a 32-row per-candidate cap'
@@ -792,7 +792,7 @@
             )
         }
         @{
-            Marker='[ct:571-native]';ModId='ct_dev';ModTrees=@{ct_dev='0530c34ec5a5ca124d101561e310f3b3d48e3d4f'}
+            Marker='[ct:571-native]';ModId='ct_dev';ModTrees=@{ct_dev='6155f77226950f51a4f23dc488cdc12701be5174'}
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_tab_native533.lua'}
             Signature='[ct:571-native] %s';Bound='signature-deduplicated native layout census under an absolute 64-row cap'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[ct:571-native] %s',',','line',')')})
@@ -802,7 +802,7 @@
             )
         }
         @{
-            Marker='[event-inject:393]';ModId='event_tweaker';ModTrees=@{event_tweaker='15665a1d10b5cdbe7594da464b29ad964190cd85'}
+            Marker='[event-inject:393]';ModId='event_tweaker';ModTrees=@{event_tweaker='aecc40f6935dae8dd6ab47e102822fd1e8622d64'}
             SourcesByMod=@{event_tweaker='event_tweaker/scripts/mods/event_tweaker/_evt_diagnostics.lua'}
             Signature='[event-inject:393] settled verdict=%s evidence=%s | injected=[%s] max_intensity=%s decay_per_second=%s decay_delay=%s add_per_pct_dmg=%s delay_horde=%s delay_specials=%s delay_mini_patrol=%s cached_horde=%s cached_specials=%s cached_mini_patrol=%s'
             Bound='one settled receipt per weak-key Pacing instance'
@@ -813,7 +813,7 @@
             )
         }
         @{
-            Marker='[wt:388]';ModIds=@('wt','wt_dev');ModTrees=@{wt='57d61b330683cb3951ed45985ddeb84490d5bf04';wt_dev='2e47870d6c59b1976ab0281bcd1d160c7786b1b8'}
+            Marker='[wt:388]';ModIds=@('wt','wt_dev');ModTrees=@{wt='322fbab2f0f6ee326e76eed75aaf2fa6b830e547';wt_dev='a16d16d0d43d3d4f4c32140361911ef713abdc81'}
             SourcesByMod=@{wt='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_overcharge_presentation.lua';wt_dev='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_overcharge_presentation.lua'}
             Signature='[wt:388] Deepwood overcharge HUD hook installed';Bound='one HUD-hook installation receipt per module lifetime'
             EmitterAnchors=@(@{Tokens=@('printf','(','String:[wt:388] Deepwood overcharge HUD hook installed',')')})
@@ -823,7 +823,7 @@
             )
         }
         @{
-            Marker='[wt:388]';ModIds=@('wt','wt_dev');ModTrees=@{wt='57d61b330683cb3951ed45985ddeb84490d5bf04';wt_dev='2e47870d6c59b1976ab0281bcd1d160c7786b1b8'}
+            Marker='[wt:388]';ModIds=@('wt','wt_dev');ModTrees=@{wt='322fbab2f0f6ee326e76eed75aaf2fa6b830e547';wt_dev='a16d16d0d43d3d4f4c32140361911ef713abdc81'}
             SourcesByMod=@{wt='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_overcharge_presentation.lua';wt_dev='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_overcharge_presentation.lua'}
             Signature='[wt:388] Deepwood overcharge profile applied career=%s transport=owner-authoritative';Bound='one apply receipt per inactive-to-active extension transition'
             EmitterAnchors=@(@{Tokens=@('printf','(','String:[wt:388] Deepwood overcharge profile applied career=%s transport=owner-authoritative')})
@@ -833,7 +833,7 @@
             )
         }
         @{
-            Marker='[wt:388]';ModIds=@('wt','wt_dev');ModTrees=@{wt='57d61b330683cb3951ed45985ddeb84490d5bf04';wt_dev='2e47870d6c59b1976ab0281bcd1d160c7786b1b8'}
+            Marker='[wt:388]';ModIds=@('wt','wt_dev');ModTrees=@{wt='322fbab2f0f6ee326e76eed75aaf2fa6b830e547';wt_dev='a16d16d0d43d3d4f4c32140361911ef713abdc81'}
             SourcesByMod=@{wt='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_overcharge_presentation.lua';wt_dev='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_overcharge_presentation.lua'}
             Signature='[wt:388] Deepwood overcharge profile restored';Bound='one restore receipt per active-to-inactive extension transition'
             EmitterAnchors=@(@{Tokens=@('printf','(','String:[wt:388] Deepwood overcharge profile restored',')')})
@@ -843,42 +843,42 @@
             )
         }
         @{
-            Marker='[cwv:317]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='984efa2a6abe04933370a3355afc043a90e53b52'}
+            Marker='[cwv:317]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='972b0292a63d91d93d8b3feae082f388954ee8c1'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/cwv_dev_anim_picker.lua'}
             Signature='[cwv:317] ==== CWV 3P animation picker ====';Bound='one header per explicit finite dump command invocation'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[cwv:317] ==== CWV 3P animation picker ====')})
             GuardAnchors=@(@{Tokens=@('mod',':','command','(','String:cwv_dump_anim_picks',',','String:Dump saved CWV third-person animation picks',',','M','.','dump',')')})
         }
         @{
-            Marker='[cwv:317]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='984efa2a6abe04933370a3355afc043a90e53b52'}
+            Marker='[cwv:317]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='972b0292a63d91d93d8b3feae082f388954ee8c1'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/cwv_dev_anim_picker.lua'}
             Signature='[cwv:317] %s';Bound='one label per finite authored animation-picker entry per explicit dump invocation'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[cwv:317] %s',',','entry','.','label',')')})
             GuardAnchors=@(@{Tokens=@('for','_',',','entry','in','ipairs','(','_ENTRIES',')','do')})
         }
         @{
-            Marker='[cwv:317]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='984efa2a6abe04933370a3355afc043a90e53b52'}
+            Marker='[cwv:317]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='972b0292a63d91d93d8b3feae082f388954ee8c1'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/cwv_dev_anim_picker.lua'}
             Signature='[cwv:317]   %s = %q,';Bound='one row per finite authored source event with a changed value per explicit dump invocation'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[cwv:317]   %s = %q,',',','source_event',',','value',')')})
             GuardAnchors=@(@{Tokens=@('for','_',',','source_event','in','ipairs','(','_SOURCE_EVENTS',')','do')})
         }
         @{
-            Marker='[cwv:317]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='984efa2a6abe04933370a3355afc043a90e53b52'}
+            Marker='[cwv:317]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='972b0292a63d91d93d8b3feae082f388954ee8c1'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/cwv_dev_anim_picker.lua'}
             Signature='[cwv:317] ==== end ====';Bound='one terminal row per explicit finite dump command invocation'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[cwv:317] ==== end ====',')')})
             GuardAnchors=@(@{Tokens=@('function','M','.','dump','(',')')})
         }
         @{
-            Marker='[ct:288]';ModId='ct_dev';ModTrees=@{ct_dev='0530c34ec5a5ca124d101561e310f3b3d48e3d4f'}
+            Marker='[ct:288]';ModId='ct_dev';ModTrees=@{ct_dev='6155f77226950f51a4f23dc488cdc12701be5174'}
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_balance.lua'}
             Signature='[ct:288] %s';Bound='finite authored template/active-state census per explicit verify command invocation'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[ct:288] %s')})
             GuardAnchors=@(@{Tokens=@('mod',':','command','(','String:ct_verify_anath_raema')})
         }
         @{
-            Marker='[ct:288]';ModId='ct_dev';ModTrees=@{ct_dev='0530c34ec5a5ca124d101561e310f3b3d48e3d4f'}
+            Marker='[ct:288]';ModId='ct_dev';ModTrees=@{ct_dev='6155f77226950f51a4f23dc488cdc12701be5174'}
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_meta_trait_boons.lua'}
             Signature='[ct:288] add parent=%s child=%s stat=%s mult=%s event=%s n=%d';Bound='absolute eight-row add-boundary diagnostic cap'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[ct:288] add parent=%s child=%s stat=%s mult=%s event=%s n=%d')})
@@ -888,7 +888,7 @@
             )
         }
         @{
-            Marker='[gut:250]';ModId='gut_dev';ModTrees=@{gut_dev=@('1d3837ddaf33935e6d0202a8034a0035e8be67c3','3d84f977d8ce2d5b7d16090f752113f8825715dc')}
+            Marker='[gut:250]';ModId='gut_dev';ModTrees=@{gut_dev=@('1c9c08c75a0a7985ba803d6279a65553b1c9acb6')}
             SourcesByMod=@{gut_dev='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_tab_talent_refresh.lua'}
             Signature='[gut:250] career=%s active=%s tiers=%s duplicates=%d unmapped=%d repair=%d/%d';Bound='signature-deduplicated talent repairs under the policy absolute log cap'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[gut:250] career=%s active=%s tiers=%s duplicates=%d unmapped=%d repair=%d/%d')})
@@ -898,7 +898,7 @@
             )
         }
         @{
-            Marker='[ct:141]';ModId='ct_dev';ModTrees=@{ct_dev='0530c34ec5a5ca124d101561e310f3b3d48e3d4f'}
+            Marker='[ct:141]';ModId='ct_dev';ModTrees=@{ct_dev='6155f77226950f51a4f23dc488cdc12701be5174'}
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_resume_audit.lua'}
             Signature='[ct:141] audit=%d/%d reason=%s controller=%s run_state=%s server=%s config=%d/%d values=%d progress=%d/%d values=%d shared=%s full_sync=%s player_read=%s/%s/%s player_write=%s/%s/%s config_missing=%s progress_missing=%s mutation=false';Bound='absolute six-row session budget with two manual slots reserved'
             EmitterAnchors=@(@{Tokens=@('printf','(','String:[ct:141] audit=%d/%d reason=%s controller=%s run_state=%s server=%s config=%d/%d values=%d progress=%d/%d values=%d shared=%s full_sync=%s player_read=%s/%s/%s player_write=%s/%s/%s config_missing=%s progress_missing=%s mutation=false')})
@@ -908,7 +908,7 @@
             )
         }
         @{
-            Marker='[gut:257]';ModId='gut_dev';ModTrees=@{gut_dev=@('1d3837ddaf33935e6d0202a8034a0035e8be67c3','3d84f977d8ce2d5b7d16090f752113f8825715dc')}
+            Marker='[gut:257]';ModId='gut_dev';ModTrees=@{gut_dev=@('1c9c08c75a0a7985ba803d6279a65553b1c9acb6')}
             SourcesByMod=@{gut_dev='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_cutscenes.lua'}
             Signature='[gut:257] seq=%s phase=%s level=%s disposition=%s skip_next=%s guard=%s active_camera=%s on_activate=%s on_skip=%s hud=%s letterbox=%s fade_in=%s hold=%s fade_out=%s auto=%s capped=%s';Bound='absolute 32-event cap plus one terminal cap row per cutscene-system generation'
             EmitterAnchors=@(@{Tokens=@('_printf','(','String:[gut:257] seq=%s phase=%s level=%s disposition=%s skip_next=%s guard=%s active_camera=%s on_activate=%s on_skip=%s hud=%s letterbox=%s fade_in=%s hold=%s fade_out=%s auto=%s capped=%s')})
@@ -918,7 +918,7 @@
             )
         }
         @{
-            Marker='[gut:245]';ModId='gut_dev';ModTrees=@{gut_dev=@('1d3837ddaf33935e6d0202a8034a0035e8be67c3','3d84f977d8ce2d5b7d16090f752113f8825715dc')}
+            Marker='[gut:245]';ModId='gut_dev';ModTrees=@{gut_dev=@('1c9c08c75a0a7985ba803d6279a65553b1c9acb6')}
             SourcesByMod=@{gut_dev='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_tab_property_refresh.lua'}
             Signature='[gut:245] slot=%s backend_id=%s properties=%s refresh=%d/%d';Bound='shared absolute live-loadout refresh log cap'
             EmitterAnchors=@(@{Tokens=@('_printf','(','String:[gut:245] slot=%s backend_id=%s properties=%s refresh=%d/%d')})
@@ -928,14 +928,14 @@
             )
         }
         @{
-            Marker='[ct:919]';ModId='ct_dev';ModTrees=@{ct_dev='0530c34ec5a5ca124d101561e310f3b3d48e3d4f'}
+            Marker='[ct:919]';ModId='ct_dev';ModTrees=@{ct_dev='6155f77226950f51a4f23dc488cdc12701be5174'}
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_dev_mission.lua'}
             Signature='[ct:919] registered profile diagnostic with Mod Tweaker';Bound='one registration receipt from the once-per-load on_all_mods_loaded callback'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[ct:919] registered profile diagnostic with Mod Tweaker',')')})
             GuardAnchors=@(@{Tokens=@('mod','.','on_all_mods_loaded','=','function','(',')')})
         }
         @{
-            Marker='[ct:288]';ModId='ct_dev';ModTrees=@{ct_dev='0530c34ec5a5ca124d101561e310f3b3d48e3d4f'}
+            Marker='[ct:288]';ModId='ct_dev';ModTrees=@{ct_dev='6155f77226950f51a4f23dc488cdc12701be5174'}
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_balance.lua'}
             Signature='[ct:288] setting=%s template_child=%s stat=%s multiplier=%s event=%s';Bound='one template-setting census row per explicit verify command invocation'
             EmitterAnchors=@(
@@ -945,7 +945,7 @@
             GuardAnchors=@(@{Tokens=@('mod',':','command','(','String:ct_verify_anath_raema')})
         }
         @{
-            Marker='[ct:288]';ModId='ct_dev';ModTrees=@{ct_dev='0530c34ec5a5ca124d101561e310f3b3d48e3d4f'}
+            Marker='[ct:288]';ModId='ct_dev';ModTrees=@{ct_dev='6155f77226950f51a4f23dc488cdc12701be5174'}
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_balance.lua'}
             Signature='[ct:288] active[%d] child=%s stat=%s multiplier=%s event=%s';Bound='one row per finite active matching buff in an explicit verify command census'
             EmitterAnchors=@(
@@ -955,7 +955,7 @@
             GuardAnchors=@(@{Tokens=@('for','_',',','buff','in','pairs','(','be','.','_buffs','or','{','}',')','do')})
         }
         @{
-            Marker='[ct:288]';ModId='ct_dev';ModTrees=@{ct_dev='0530c34ec5a5ca124d101561e310f3b3d48e3d4f'}
+            Marker='[ct:288]';ModId='ct_dev';ModTrees=@{ct_dev='6155f77226950f51a4f23dc488cdc12701be5174'}
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_balance.lua'}
             Signature='[ct:288] active_count=%d total_reload_time_scale=%s expected_trait_scale=0.5';Bound='one terminal active-count row per explicit verify command invocation'
             EmitterAnchors=@(
@@ -965,7 +965,7 @@
             GuardAnchors=@(@{Tokens=@('mod',':','command','(','String:ct_verify_anath_raema')})
         }
         @{
-            Marker='[ct:288]';ModId='ct_dev';ModTrees=@{ct_dev='0530c34ec5a5ca124d101561e310f3b3d48e3d4f'}
+            Marker='[ct:288]';ModId='ct_dev';ModTrees=@{ct_dev='6155f77226950f51a4f23dc488cdc12701be5174'}
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_balance.lua'}
             Signature='[ct:288] active=unavailable (enter the keep/mission and wield the trait weapon)';Bound='one mutually exclusive early terminal row per explicit verify command invocation'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[ct:288] active=unavailable (enter the keep/mission and wield the trait weapon)',')')})
@@ -1019,7 +1019,7 @@
     # siblings.
     ReceiptRouteOverrides = @(
         @{
-            ModId='gut_dev'; ModTrees=@('1d3837ddaf33935e6d0202a8034a0035e8be67c3','3d84f977d8ce2d5b7d16090f752113f8825715dc')
+            ModId='gut_dev'; ModTrees=@('1c9c08c75a0a7985ba803d6279a65553b1c9acb6')
             Source='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_ba_compendium_tabs.lua'
             Marker='[gut:217]'
             Signature='[gut:217] compendium tabs injected into HeroWindowPanelConsole definitions (Armory, Bestiary)'
@@ -1033,7 +1033,7 @@
             )
         }
         @{
-            ModId='gut_dev'; ModTrees=@('1d3837ddaf33935e6d0202a8034a0035e8be67c3','3d84f977d8ce2d5b7d16090f752113f8825715dc')
+            ModId='gut_dev'; ModTrees=@('1c9c08c75a0a7985ba803d6279a65553b1c9acb6')
             Source='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_native_loadouts.lua'
             Marker='[gut_dev:NATIVE_LOADOUTS]'
             Signature='[gut_dev:NATIVE_LOADOUTS] #375 selected-read career=%s caller=%s requested=%s resolved=%s selected=%s row=[melee=%s ranged=%s] canonical=[melee=%s ranged=%s] served=[slot=%s value=%s source=%s]'
@@ -1047,7 +1047,7 @@
             )
         }
         @{
-            ModId='wt_dev'; ModTree='2e47870d6c59b1976ab0281bcd1d160c7786b1b8'
+            ModId='wt_dev'; ModTree='a16d16d0d43d3d4f4c32140361911ef713abdc81'
             Source='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_weapon_action_lifecycle.lua'
             Marker='[wt:661]'
             Signature='[wt:661] wield-boundary item=%s career=%s template=%s result=%s trace=%d/%d'
@@ -1062,7 +1062,7 @@
             )
         }
         @{
-            ModId='cosmetics_tweaker'; ModTrees=@('89231f5d5277f259959882d2f226095433174aa4')
+            ModId='cosmetics_tweaker'; ModTrees=@('756b7d9e0a6c98cf372bdca83b9e172de6db1be0')
             Source='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_la_bridge.lua'
             Marker='[cos:373]'; AddRoute=$true
             Signature='[cos:373] receiver coverage OK: no magic/runed shield family gaps'
@@ -1077,7 +1077,7 @@
             )
         }
         @{
-            ModId='cosmetics_tweaker'; ModTrees=@('89231f5d5277f259959882d2f226095433174aa4')
+            ModId='cosmetics_tweaker'; ModTrees=@('756b7d9e0a6c98cf372bdca83b9e172de6db1be0')
             Source='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_la_bridge.lua'
             Marker='[cos:373]'; AddRoute=$true
             Signature='[cos:373] RECEIVER-GAP skin=%s family=%s unit=%s (magic/runed shield has no paint receiver row - LA heraldry will dead-end)'
@@ -1091,7 +1091,7 @@
             )
         }
         @{
-            ModId='cosmetics_tweaker'; ModTrees=@('89231f5d5277f259959882d2f226095433174aa4')
+            ModId='cosmetics_tweaker'; ModTrees=@('756b7d9e0a6c98cf372bdca83b9e172de6db1be0')
             Source='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_la_bridge.lua'
             Marker='[cos:373]'; AddRoute=$true
             Signature='[cos:373] RECEIVER-GAP +%d more (capped at %d)'
@@ -1105,7 +1105,7 @@
             )
         }
         @{
-            ModId='cosmetics_tweaker'; ModTrees=@('89231f5d5277f259959882d2f226095433174aa4')
+            ModId='cosmetics_tweaker'; ModTrees=@('756b7d9e0a6c98cf372bdca83b9e172de6db1be0')
             Source='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_diagnostics.lua'
             Marker='[cos:704]'; AddRoute=$true
             Signature='[cos:704] summary inspected=%d suspects=%d emitted=%d truncated=%s signature_truncated=%s signature_bytes=%d'
@@ -1121,7 +1121,7 @@
             )
         }
         @{
-            ModId='character_weapon_variants'; ModTree='984efa2a6abe04933370a3355afc043a90e53b52'
+            ModId='character_weapon_variants'; ModTree='972b0292a63d91d93d8b3feae082f388954ee8c1'
             Source='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_smoke_bomb_probe.lua'
             Marker='[cwv:343]'; AddRoute=$true
             Signature='[cwv:343] status=%s base=%s area=%s pool=%d/%.6f healthy=%s exact_z_scale=%s registration_quarantined=%s'
@@ -1152,7 +1152,7 @@
             )
         }
         @{
-            ModId='cim_dev'; ModTree='da4ae6a780712652e0fe542c3d219827b00e5035'
+            ModId='cim_dev'; ModTree='423fb8953d4e52c674435e6d37c035eee0c7442e'
             Source='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_loadout_wire_owner.lua'
             Marker='[cim:921]'; AddRoute=$true
             Signature='[cim:921] dropped invalid rarity metadata source=%s peer=%s slot=%s value=%s count=%d/%d'
@@ -1167,7 +1167,7 @@
             )
         }
         @{
-            ModId='cim_dev'; ModTree='da4ae6a780712652e0fe542c3d219827b00e5035'
+            ModId='cim_dev'; ModTree='423fb8953d4e52c674435e6d37c035eee0c7442e'
             Source='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_loadout_wire_owner.lua'
             Marker='[cim:921]'; AddRoute=$true
             Signature='[cim:921] rarity metadata source=%s peer=%s slot=%s prior=%s current=%s stored=%s->%s count=%d/%d'
@@ -1182,7 +1182,7 @@
             )
         }
         @{
-            ModId='cim_dev'; ModTree='da4ae6a780712652e0fe542c3d219827b00e5035'
+            ModId='cim_dev'; ModTree='423fb8953d4e52c674435e6d37c035eee0c7442e'
             Source='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_cw_trait_residency.lua'
             Marker='[cim:947]'; AddRoute=$true
             Signature='[cim:947] package=%s ref=%s state=%s detail=%s requests=%d'
@@ -1197,7 +1197,7 @@
             )
         }
         @{
-            ModId='ct_dev'; ModTree='75173a24c5243552af505d95777f57ef9cd74beb'
+            ModId='ct_dev'; ModTree='6155f77226950f51a4f23dc488cdc12701be5174'
             Source='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_skull52.lua'
             Marker='[ct:skull52]'; AddRoute=$true
             Signature='[ct:skull52] %s'
@@ -1261,7 +1261,7 @@
             )
         }
         @{
-            ModId='cosmetics_tweaker'; ModTree='89231f5d5277f259959882d2f226095433174aa4'
+            ModId='cosmetics_tweaker'; ModTree='756b7d9e0a6c98cf372bdca83b9e172de6db1be0'
             Source='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_reikland_griffin.lua'
             Marker='[cos:656]'; AddRoute=$true
             Signature='[cos:656] registered skin=%s donor=%s vanilla_geometry=true enabled=%s'
@@ -1276,7 +1276,7 @@
             )
         }
         @{
-            ModId='character_weapon_variants'; ModTree='984efa2a6abe04933370a3355afc043a90e53b52'
+            ModId='character_weapon_variants'; ModTree='972b0292a63d91d93d8b3feae082f388954ee8c1'
             Source='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_outrider_animation.lua'
             Marker='[cwv:760]'; AddRoute=$true
             Signature='[cwv:760] surface=%s career=%s event=%s result=%s source=%s evidence=%d/%d visual=unverified'
@@ -1294,7 +1294,7 @@
             )
         }
         @{
-            ModId='ct_dev'; ModTree='75173a24c5243552af505d95777f57ef9cd74beb'
+            ModId='ct_dev'; ModTree='6155f77226950f51a4f23dc488cdc12701be5174'
             Source='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_altar_reuse_owner.lua'
             Marker='[ct:xchar105]'
             Signature='[ct:xchar105] upgrade-altar slot=%s career=%s rarity=%s pre_key=%s post_key=%s %s'
@@ -1309,7 +1309,7 @@
             )
         }
         @{
-            ModId='enemy_tweaker'; ModTree='8394c31fe2436bb2d85ea7f76d5497832bc99409'
+            ModId='enemy_tweaker'; ModTree='86f2677612ffb4772100a42101a19dacf602191c'
             Source='enemy_tweaker/scripts/mods/enemy_tweaker/_et_enemy_modifiers.lua'
             Marker='[et:453]'; AddRoute=$true
             Signature='[et:453] modifier-audit reason=%s modifiers=%d template_missing=%d wire_missing=%d enhancement_missing=%d child_missing=%d child_wire_missing=%d function_missing=%d special=%d boss=%d elite=%d lord=%d behavior_changes=0'
@@ -1324,7 +1324,7 @@
             )
         }
         @{
-            ModId='enemy_tweaker'; ModTree='8394c31fe2436bb2d85ea7f76d5497832bc99409'
+            ModId='enemy_tweaker'; ModTree='86f2677612ffb4772100a42101a19dacf602191c'
             Source='enemy_tweaker/scripts/mods/enemy_tweaker/_et_enemy_modifiers.lua'
             Marker='[et:453]'; AddRoute=$true
             Signature='[et:453] %s family=%s enhancement=%s buff=%s template=%s wire=%s enhancement_contains=%s chain_templates=%d chain_functions=%d chain_gaps=%d capped=%s'
@@ -1340,7 +1340,7 @@
             )
         }
         @{
-            ModId='enemy_tweaker'; ModTree='8394c31fe2436bb2d85ea7f76d5497832bc99409'
+            ModId='enemy_tweaker'; ModTree='86f2677612ffb4772100a42101a19dacf602191c'
             Source='enemy_tweaker/scripts/mods/enemy_tweaker/_et_enemy_modifiers.lua'
             Marker='[et:453]'; AddRoute=$true
             Signature='[et:453] live category=%s breed=%s sample=%d/%d eligible=%d eligible_sample=%s rejected_banned=%d rejected_buff=%d rejected_prereq=%d buff=%s health=%s blackboard=%s nav=%s position=%s side=%s race=%s go_id=%s existing_enhancements=%d mutation=0'
@@ -1356,7 +1356,7 @@
             )
         }
         @{
-            ModId='enemy_tweaker'; ModTree='8394c31fe2436bb2d85ea7f76d5497832bc99409'
+            ModId='enemy_tweaker'; ModTree='86f2677612ffb4772100a42101a19dacf602191c'
             Source='enemy_tweaker/scripts/mods/enemy_tweaker/_et_enemy_modifiers.lua'
             Marker='[et:453]'; AddRoute=$true
             Signature='[et:453] modifier-audit ready modifiers=%d gaps=%d command=/et_modifier_audit behavior_changes=0'
@@ -1371,7 +1371,7 @@
             )
         }
         @{
-            ModId='cosmetics_tweaker'; ModTree='89231f5d5277f259959882d2f226095433174aa4'
+            ModId='cosmetics_tweaker'; ModTree='756b7d9e0a6c98cf372bdca83b9e172de6db1be0'
             Source='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_518_probe.lua'
             Marker='[cos:518]'; AddRoute=$true
             Signature='[cos:518] OWNER-WIELD slot=%s item=%s skin=%s deus_yield=%s'
@@ -1388,7 +1388,7 @@
             )
         }
         @{
-            ModId='cosmetics_tweaker'; ModTree='89231f5d5277f259959882d2f226095433174aa4'
+            ModId='cosmetics_tweaker'; ModTree='756b7d9e0a6c98cf372bdca83b9e172de6db1be0'
             Source='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_518_probe.lua'
             Marker='[cos:518]'; AddRoute=$true
             Signature='[cos:518] PAINT-SKIP ctx=ingame bid=%s (deus run: CW upgrade cosmetics win)'
@@ -1405,7 +1405,7 @@
             )
         }
         @{
-            ModId='cosmetics_tweaker'; ModTree='89231f5d5277f259959882d2f226095433174aa4'
+            ModId='cosmetics_tweaker'; ModTree='756b7d9e0a6c98cf372bdca83b9e172de6db1be0'
             Source='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_518_probe.lua'
             Marker='[cos:518]'; AddRoute=$true
             Signature='[cos:518] HUSK-MISS authored variant %s unavailable (wearer=%s template=%s)'
