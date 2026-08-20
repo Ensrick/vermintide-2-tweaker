@@ -83,6 +83,19 @@ load order should read the entry file directly.
   `_cwv_musket_ammo_hud.lua`, installed from `_cwv_musket_runtime.lua` after the
   pool exists. A HUD fix must never create a second ammo authority.
 
+### Native HUD presentation ownership
+
+The primary-slot Musket counter is an override of retained engine UI, not a
+fire-and-forget draw. Once `_cwv_musket_ammo_hud.lua` changes a HUD instance it
+owns that presentation until it has either restored the current native ranged
+item and wield focus or explicitly defocused/hidden its own stale result. Log a
+release only after that restoration succeeds. Native state that cannot be read
+must fail closed to the bounded hide path; it must not leave Musket text visible
+or clear ownership prematurely. Never mutate a HUD instance the adapter did not
+engage. This is especially important for `GamePadEquipmentUI`, whose native
+equipment cache can return before refreshing ammo while the post-sync callback
+still executes.
+
 ## Registration and acquisition contract
 
 CWV owns weapon definitions (`ItemMasterList` rows, templates, skins, packages,

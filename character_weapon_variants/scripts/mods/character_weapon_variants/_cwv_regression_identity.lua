@@ -1256,6 +1256,55 @@ _rt_register("issue1108_primary_slot_musket_ammo_hud_contract", function()
 	if policy.select(controller, owner, equipment, function() return {} end) ~= nil then
 		return "HUD selector accepted a template without ammunition"
 	end
+
+	-- Prove the state-ownership half of the contract, not only selection. A
+	-- GamePad native sync may return early from its equipment cache while the
+	-- post-hook still runs, so the adapter itself must replace its Musket-owned
+	-- presentation with the current native ranged state before releasing.
+	local ranged_item = { name = "es_crossbow", backend_id = "native-ranged" }
+	local ranged_slot = { item_data = ranged_item, right_unit_1p = {} }
+	equipment.slots.slot_ranged = ranged_slot
+	equipment.wielded_slot = "slot_melee"
+	equipment.wielded = item_data
+	local inventory = { equipment = function() return equipment end }
+	local calls = {}
+	local probe = policy.new(controller, {
+		get_item_template = template,
+		get_inventory = function(queried_owner)
+			if queried_owner == owner then return inventory end
+		end,
+		is_alive = function(queried_owner) return queried_owner == owner end,
+	})
+	local ui = {
+		player = { player_unit = owner },
+		_update_ammo_count = function(_, probed_item)
+			calls[#calls + 1] = { kind = "update", item = probed_item }
+		end,
+		_set_ammo_text_focus = function(_, focused)
+			calls[#calls + 1] = { kind = "focus", focused = focused }
+		end,
+	}
+	if probe:refresh(ui) ~= true or not probe:is_active(ui) then
+		return "HUD restoration probe did not engage the primary-slot Musket"
+	end
+	equipment.wielded_slot = "slot_ranged"
+	equipment.wielded = ranged_item
+	if probe:refresh(ui) ~= false then
+		return "HUD restoration probe remained engaged after a ranged-slot switch"
+	end
+	local restored_item = calls[3]
+	local restored_focus = calls[4]
+	if not restored_item or restored_item.kind ~= "update"
+			or restored_item.item ~= ranged_item then
+		return "HUD restoration probe did not restore the native ranged item"
+	end
+	if not restored_focus or restored_focus.kind ~= "focus"
+			or restored_focus.focused ~= true then
+		return "HUD restoration probe did not restore native ranged focus"
+	end
+	if probe:is_active(ui) then
+		return "HUD restoration probe released before clearing adapter ownership"
+	end
 end)
 
 _rt_register("issue273_cwv_deus_identity_is_exact", function()
