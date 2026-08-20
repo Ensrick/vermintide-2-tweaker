@@ -142,9 +142,13 @@ return function(H, repo_root)
         local source = file:read("*a")
         file:close()
         local gate_use = source:find(
-            "if Policy.capture_slot_durable(slot_name, _slot_owned_by_items(slot_name)) then",
+            "capture_slot_durable = Policy.capture_slot_durable",
             1, true)
         H.truthy(gate_use, "equip capture does not consult the durable-owner gate")
+        H.truthy(source:find("slot_owned_by_items = _slot_owned_by_items", gate_use, true),
+            "equip capture does not supply the exact durable owner resolver")
+        H.truthy(source:find("LoadoutLifecycle.capture_equip({", 1, true),
+            "equip capture does not execute the shared transaction owner")
         local owner_def = source:find("local function _slot_owned_by_items(slot_name)", 1, true)
         H.truthy(owner_def, "shared slot-owner resolver missing")
         H.truthy(owner_def < gate_use,
@@ -152,7 +156,9 @@ return function(H, repo_root)
         H.truthy(source:find(
             "return ok and ExitSnapshotCore.slot_owned_by_items(slot_interface, items_interface)",
             1, true), "owner resolver no longer uses true-table-identity semantics")
-        H.truthy(source:find("reason=foreign-loadout-interface", 1, true),
+        H.truthy(source:find('result == "foreign-owner"', 1, true),
+            "foreign-owner result is not handled")
+        H.truthy(source:find("BU gear capture SKIP", 1, true),
             "foreign-owner skip evidence missing")
     end)
 
@@ -692,10 +698,12 @@ return function(H, repo_root)
         local file = assert(io.open(runtime_path, "rb"))
         local source = file:read("*a")
         file:close()
-        H.truthy(source:find("local value, source = _bu_canonical_value(backend_id, slot_name)", 1, true),
-            "BackendUtils hook does not invoke canonical resolver")
-        H.truthy(source:find("_capture_bu_equip(mode, mirror, career_name, slot_name, value, source)", 1, true),
-            "resolved equip does not enter store/overlay capture")
+        H.truthy(source:find("canonical_value = _bu_canonical_value", 1, true),
+            "BackendUtils hook does not supply the canonical resolver")
+        H.truthy(source:find("write = _capture_bu_equip", 1, true),
+            "resolved equip does not supply the store/overlay writer")
+        H.truthy(source:find("LoadoutLifecycle.capture_equip({", 1, true),
+            "BackendUtils hook does not execute the shared transaction owner")
         H.truthy(source:find("local is_loadout_slot = _is_loadout_slot(slot_name)", 1, true),
             "outer hook is not gated to the complete loadout-slot partition")
     end)

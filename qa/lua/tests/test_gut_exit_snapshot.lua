@@ -187,8 +187,13 @@ return function(H, repo_root)
         local ef = assert(io.open(entry_path, "rb"))
         local esrc = ef:read("*a")
         ef:close()
-        H.truthy(esrc:find('_snap("ingame_exit")', 1, true), "StateIngame-exit edge not wired")
-        H.truthy(esrc:find('_snap("title_enter")', 1, true), "StateTitleScreen-enter edge not wired")
-        H.truthy(esrc:find('_snap("unload")', 1, true), "on_unload edge not wired")
+        H.truthy(esrc:find("loadout_lifecycle_owner.bind_snapshot_edges", 1, true),
+            "entry point does not install the executable lifecycle owner")
+        H.truthy(esrc:find("snapshot = _gut_native_loadouts.exit_snapshot", 1, true),
+            "entry point does not supply the production snapshot transaction")
+        H.truthy(esrc:find("previous_state = mod.on_game_state_changed", 1, true),
+            "StateIngame/StateTitleScreen lifecycle chain not preserved")
+        H.truthy(esrc:find("previous_unload = mod.on_unload", 1, true),
+            "on_unload lifecycle chain not preserved")
     end)
 end
