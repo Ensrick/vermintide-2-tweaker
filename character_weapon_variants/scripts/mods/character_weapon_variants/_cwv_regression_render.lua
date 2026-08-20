@@ -508,21 +508,22 @@ _rt_register("cwv_husk_nonresident_spawn_deferred", function()
     if _om._husk_unit_spawnable("units/weapons/player/__cwv_rt_nonresident_478__/__cwv_rt_nonresident_478__") ~= false then
         return "_husk_unit_spawnable returned true for a non-existent unit -- crash-floor would let a non-resident spawn through (#478)"
     end
-    -- Predicate (#474 fail-closed): a cwv mod-bundled custom mesh is UNIT-resident
-    -- while loaded, but spawnable only when its vanilla DONOR MATERIAL is also
-    -- resident on this peer (the MeshObject AV killer). Assert the donor is
-    -- declared and that the spawnable answer equals the donor gate -- never the
-    -- old unconditional accept.
+    -- Predicate (#1155): Old Musket is now a self-contained unit/material/texture
+    -- closure in CWV's resident master bundle. It must not retain the historical
+    -- Handgun donor-material gate; future explicitly borrowed meshes still use
+    -- the generic gate and are covered by the offline adversarial fixture.
     if type(_om._husk_material_donor_ready) ~= "function" then
         return "_om._husk_material_donor_ready missing -- #474 donor-material gate lost"
     end
     local _custom_mesh = "units/cwv_es_musket_custom/cwv_es_musket_custom"
     local _donors = _om._husk_custom_unit_material_donors
-    if type(_donors) ~= "table" or not _donors[_custom_mesh .. "_3p"] then
-        return "Old Musket custom mesh has no declared 3P material donor -- #474 gate cannot protect it"
+    if type(_donors) ~= "table" or _donors[_custom_mesh]
+            or _donors[_custom_mesh .. "_3p"] then
+        return "Old Musket still declares a foreign donor despite its authored material closure"
     end
-    if _om._husk_unit_spawnable(_custom_mesh) ~= _om._husk_material_donor_ready(_custom_mesh) then
-        return "_husk_unit_spawnable disagrees with the donor-material gate for the Old Musket custom mesh (#474 fail-closed contract)"
+    if _om._husk_material_donor_ready(_custom_mesh) ~= true
+            or _om._husk_unit_spawnable(_custom_mesh) ~= true then
+        return "Old Musket self-contained mesh is not admitted by the husk spawn floor"
     end
     -- End-to-end SUPPRESS: the Outrider (base dr_deus_01) resolved by its wire
     -- skin, carrying ONLY a guaranteed-non-resident left-mount leftover, must
@@ -1060,9 +1061,211 @@ _rt_register("musket_old_force_registered", function()
     end
 end)
 
+_rt_register("issue1155_old_musket_descriptor_reconciler", function()
+	local pilot, descriptor_lib = _om.old_musket_appearance, _om.appearance_descriptor
+	if type(pilot) ~= "table" or type(descriptor_lib) ~= "table" then
+		return "Phase-3 Old Musket pilot modules are unavailable"
+	end
+	local descriptor, errors = pilot.resolve({
+		backend_id = "cwv_es_musket_old_001", cwv_key = "cwv_es_musket_old",
+	}, "ranged", "inventory_preview", {
+		attachment_profile = "held_3p_rifle_character",
+	})
+	if not descriptor then return "descriptor rejected: " .. tostring(errors and errors[1]) end
+	local descriptor_data = descriptor_lib.raw(descriptor)
+	if type(descriptor_data) ~= "table"
+			or descriptor_data.attachment_profile ~= "held_3p_rifle_character"
+			or type(descriptor_data.transform_profiles) ~= "table"
+			or type(descriptor_data.transform_profiles.held_3p_rifle_character) ~= "table"
+			or type(descriptor_data.transform_profiles.held_3p_rifle_character.rotation) ~= "table"
+			or #descriptor_data.transform_profiles.held_3p_rifle_character.rotation ~= 4
+			or type(descriptor_data.transform_profiles.display_3p_rifle) ~= "table" then
+		return "descriptor lost a canonical pose channel"
+	end
+	local policy = _om.old_musket_preview
+	if type(policy) ~= "table" or type(policy.MATERIAL) ~= "string"
+			or type(descriptor_data.materials) ~= "table"
+			or descriptor_data.materials.authored ~= policy.MATERIAL
+			or descriptor_data.materials.preview ~= policy.MATERIAL then
+		return "descriptor lost the self-contained authored material"
+	end
+	local can_get = Application and Application.can_get
+	if type(can_get) ~= "function" then
+		return "Application.can_get is unavailable for Old Musket residency proof"
+	end
+	local texture_ready, texture_reason = policy.texture_resources_ready(can_get)
+	if texture_ready ~= true then
+		return "authored texture closure is not resident: " .. tostring(texture_reason)
+	end
+	local material_ok, material_ready = pcall(can_get, "material", policy.MATERIAL)
+	if not material_ok or material_ready ~= true then
+		return "authored Old Musket material is not resident"
+	end
+	local preview_surface = _om._cwv_loot_preview_surface
+	if type(preview_surface) ~= "function" then
+		return "Athanor preview classifier is unavailable"
+	end
+	local valid_context = {
+		contract = "cim_preview_context_v1", surface = "cim_preview",
+		provider = "cim_dev", constructor = "weapons", generation = 1155,
+		backend_id = "cwv-1155-runtime-preview", exact_backend_identity = true,
+	}
+	local valid_previewer = { _cim_preview_context = valid_context,
+		_item = { backend_id = valid_context.backend_id } }
+	if preview_surface(valid_previewer) ~= "cim_preview"
+			or preview_surface({}) ~= "illusion_browser"
+			or preview_surface({ _cim_preview_context = {
+				contract = "cim_preview_context_v1", surface = "cim_preview",
+				provider = "foreign", constructor = "weapons", generation = 1155,
+				backend_id = "foreign", exact_backend_identity = true,
+			}, _item = { backend_id = "foreign" } }) ~= "cim_preview" then
+		return "CIM exact-context consumer does not preserve the generic browser boundary"
+	end
+	local accepted_context = _om._cwv_cim_preview_context
+		and _om._cwv_cim_preview_context(valid_previewer)
+	if type(accepted_context) ~= "table"
+			or accepted_context.backend_id ~= valid_context.backend_id then
+		return "CIM exact-context consumer rejected a matching provider/item identity"
+	end
+	if not (pilot.implemented_cells.cim_preview
+			and pilot.implemented_cells.cim_preview.instance_load == true
+			and pilot.implemented_cells.cim_preview.preview_open == true) then
+		return "Old Musket CIM construction/stable adapter cells are not implemented"
+	end
+	local rejected = pilot.reconciler.reconcile(descriptor, "not_a_surface", "equip", {})
+	if rejected.reason ~= "unknown-surface" then
+		return "reconciler does not reject a foreign surface"
+	end
+	local live = pilot.live_status()
+	if type(live) ~= "table" or type(live.surfaces) ~= "table" then
+		return "Old Musket live retained-state evidence is unavailable"
+	end
+	local expected_identity = live.identity
+	if type(expected_identity) ~= "table" or expected_identity.kind ~= "backend_id"
+			or type(expected_identity.value) ~= "string" or expected_identity.value == "" then
+		return "Old Musket live gate has no exact equipped-item identity; equip one Old Musket after opening the Athanor"
+	end
+	local cim_identity = live.cim_identity
+	if type(cim_identity) ~= "table" or cim_identity.kind ~= "backend_id"
+			or type(cim_identity.value) ~= "string" or cim_identity.value == "" then
+		return "Old Musket live gate has no exact Athanor preview identity"
+	end
+	if type(live.epoch) ~= "number" or type(live.generation) ~= "number"
+			or type(live.cim_generation) ~= "number" or live.cim_generation <= 0 then
+		return "Old Musket live gate has no bounded epoch/generation evidence"
+	end
+	-- Stored evidence is not enough: the prior units can remain in the bounded
+	-- ledger after a player swaps away. Bind PASS to the exact item and live 1P/
+	-- 3P unit objects currently wielded by the local player.
+	if type(pilot.live_target_matches) ~= "function" then
+		return "Old Musket live target verifier is unavailable"
+	end
+	local ok_player, player = pcall(function()
+		return Managers.player:local_player(1)
+	end)
+	local player_unit = ok_player and player and player.player_unit
+	if not player_unit or not Unit.alive(player_unit) then
+		return "Old Musket live gate requires a living local player"
+	end
+	local ok_inventory, inventory = pcall(
+		ScriptUnit.extension, player_unit, "inventory_system")
+	local equipment = ok_inventory and inventory and inventory._equipment
+	local wielded_slot = equipment and equipment.wielded_slot
+	local slot = wielded_slot and equipment.slots and equipment.slots[wielded_slot]
+	local item_data = slot and slot.item_data
+	local mod_data = type(item_data) == "table" and item_data.mod_data or nil
+	local current_backend_id = type(item_data) == "table"
+		and (item_data.backend_id or (mod_data and mod_data.backend_id)) or nil
+	local key_ok, current_key = pcall(
+		_om._cwv_key_for_item, current_backend_id, item_data)
+	if not key_ok or current_key ~= policy.ITEM_KEY
+			or current_backend_id ~= expected_identity.value then
+		return "Old Musket live gate item is no longer the exact equipped instance"
+	end
+	local current_mode = mod_data and mod_data.cwv_musket_stance == "melee"
+		and "melee" or "ranged"
+	local current_1p = equipment.right_hand_wielded_unit
+	local current_3p = equipment.right_hand_wielded_unit_3p
+	if not current_1p or not Unit.alive(current_1p)
+			or not current_3p or not Unit.alive(current_3p)
+			or not pilot.live_target_matches(
+				"owner_1p", current_mode, current_1p, expected_identity)
+			or not pilot.live_target_matches(
+				"owner_3p", current_mode, current_3p, expected_identity) then
+		return "Old Musket live gate current wielded units do not match retained evidence"
+	end
+	local required = {
+		owner_1p = { edge = "equip", modes = { "ranged", "melee" } },
+		owner_3p = { edge = "equip", modes = { "ranged", "melee" } },
+		inventory_preview = { edge = "preview_open", modes = { "ranged", "melee" } },
+		illusion_browser = { edge = "preview_open", modes = { "ranged", "melee" } },
+	}
+	local profiles = _om.old_musket_attachment_profiles
+	local function validate_cell(surface, mode, expected_edge, identity)
+		local modes = live.surfaces[surface]
+		local row = type(modes) == "table" and modes[mode] or nil
+			local expected_profile
+			if surface == "illusion_browser" or surface == "cim_preview" then
+				expected_profile = profiles.display_3p_rifle
+			else
+				local perspective = surface == "owner_1p" and "1p" or "3p"
+				expected_profile = _om._old_musket_attachment_profile(
+					perspective, mode, "character")
+			end
+			if type(row) ~= "table" then
+				return string.format("live Old Musket cell was not exercised: %s/%s",
+					surface, mode)
+			end
+			local expected_descriptor, expected_errors = pilot.resolve({
+				backend_id = identity.value, cwv_key = "cwv_es_musket_old",
+			}, mode, surface, { attachment_profile = expected_profile })
+			if not expected_descriptor then
+				return string.format("live Old Musket expected descriptor failed: %s/%s %s",
+					surface, mode, tostring(expected_errors and expected_errors[1]))
+			end
+			local expected_fingerprint = descriptor_lib.fingerprint(expected_descriptor)
+			if row.retained ~= true or row.fallback == true
+					or row.edge ~= expected_edge or row.attempts ~= 1
+					or row.profile ~= expected_profile
+					or row.epoch ~= live.epoch or row.generation ~= live.generation
+					or type(row.identity) ~= "table"
+					or row.identity.kind ~= identity.kind
+					or row.identity.value ~= identity.value
+					or row.fingerprint ~= expected_fingerprint then
+				return string.format(
+					"live Old Musket cell failed: %s/%s edge=%s retained=%s fallback=%s attempts=%s reason=%s epoch=%s/%s generation=%s/%s identity=%s/%s fingerprint=%s/%s",
+					surface, mode, tostring(row.edge), tostring(row.retained),
+					tostring(row.fallback), tostring(row.attempts), tostring(row.reason),
+					tostring(row.epoch), tostring(live.epoch), tostring(row.generation),
+					tostring(live.generation), tostring(row.identity and row.identity.value),
+					tostring(identity.value), tostring(row.fingerprint),
+					tostring(expected_fingerprint))
+			end
+		return nil
+	end
+	for surface, contract in pairs(required) do
+		for _, mode in ipairs(contract.modes) do
+			local failure = validate_cell(
+				surface, mode, contract.edge, expected_identity)
+			if failure then return failure end
+		end
+	end
+	-- The Athanor is an item-key/archetype picker and can resolve either of the
+	-- two owned Old Musket instances. It has no stance control. Require one
+	-- fresh, exact provider-qualified preview cell in this epoch, but do not
+	-- falsely claim that its hidden instance is the equipped one above.
+	local cim_modes = live.surfaces.cim_preview
+	local cim_mode = type(cim_modes) == "table"
+		and (cim_modes.ranged and "ranged" or (cim_modes.melee and "melee")) or nil
+	if not cim_mode then return "live Old Musket cell was not exercised: cim_preview" end
+	local cim_failure = validate_cell(
+		"cim_preview", cim_mode, "preview_open", cim_identity)
+	if cim_failure then return cim_failure end
+end)
+
 _rt_register("issue617_old_musket_preview_texture_consumer", function()
-	if type(_om._apply_old_musket_textures) ~= "function" then
-		return "Old Musket per-unit texture helper missing"
+	if type(_om._apply_old_musket_appearance) ~= "function" then
+		return "Old Musket authored-material helper missing"
 	end
 	local resources_ready = _om._old_musket_texture_resources_ready
 	if type(resources_ready) ~= "function" then
@@ -1078,9 +1281,23 @@ _rt_register("issue617_old_musket_preview_texture_consumer", function()
 		if kind ~= "texture" then return "resource preflight queried a non-texture" end
 		seen_count = seen_count + 1
 	end
-	if not ready or detail ~= nil or seen_count ~= 3 then
-		return "resource preflight must prove all three authored textures"
+	if not ready or detail ~= nil or seen_count ~= 5 then
+		return "resource preflight must prove all five authored textures"
 	end
+	local expected = {
+		color_map = "textures/cwv_es_musket_custom/cwv_es_musket_custom_albedo",
+		normal_map = "textures/cwv_es_musket_custom/cwv_es_musket_custom_normal",
+		roughness_map = "textures/cwv_es_musket_custom/cwv_es_musket_custom_roughness",
+		metallic_map = "textures/cwv_es_musket_custom/cwv_es_musket_custom_metallic",
+		ao_map = "textures/cwv_es_musket_custom/cwv_es_musket_custom_ao",
+	}
+	for _, binding in ipairs(_om.old_musket_preview.TEXTURES or {}) do
+		if expected[binding.slot] ~= binding.texture then
+			return "authored texture slot/path drifted: " .. tostring(binding.slot)
+		end
+		expected[binding.slot] = nil
+	end
+	if next(expected) ~= nil then return "authored texture closure is incomplete" end
 	local denied, missing = resources_ready(function(_, path)
 		return not path:find("_albedo", 1, true)
 	end)
@@ -1118,12 +1335,35 @@ _rt_register("issue617_old_musket_preview_texture_consumer", function()
 	if #plan(nil, { custom_3p }, { { unit_name = def.right_hand_unit.unit_3p } }) ~= 0 then
 		return "preview target planner accepted a missing/non-Old-Musket descriptor"
 	end
+	local bound_material
+	local meshes = { { "#ID[11551155]" } }
+	local applied, count = _om._apply_old_musket_appearance({}, false, {
+		application = { can_get = function(kind, path)
+			return kind == "material" and path == _om.old_musket_preview.MATERIAL
+				or kind == "texture"
+		end },
+		unit = {
+			alive = function() return true end,
+			set_all_materials = function(_, material) bound_material = material end,
+			num_meshes = function() return #meshes end,
+			mesh = function(_, index) return meshes[index + 1] end,
+		},
+		mesh = {
+			num_materials = function(mesh) return #mesh end,
+			material = function(mesh, index) return mesh[index + 1] end,
+		},
+	})
+	if not applied or count ~= 5
+			or bound_material ~= _om.old_musket_preview.MATERIAL then
+		return "authored material did not bind through the production helper"
+	end
 end)
 
 _rt_register("issue742_old_musket_texture_material_preflight", function()
 	local policy = _om.old_musket_preview
 	local census = policy and policy.unit_materials_ready
-	if type(census) ~= "function" then
+	local apply = policy and policy.apply_material
+	if type(census) ~= "function" or type(apply) ~= "function" then
 		return "Old Musket unit-material preflight policy missing"
 	end
 	local meshes = {
@@ -1131,6 +1371,8 @@ _rt_register("issue742_old_musket_texture_material_preflight", function()
 		{ "#ID[abcdef01]" },
 	}
 	local unit_api = {
+		alive = function() return true end,
+		set_all_materials = function() end,
 		num_meshes = function() return #meshes end,
 		mesh = function(_, index) return meshes[index + 1] end,
 	}
@@ -1146,6 +1388,33 @@ _rt_register("issue742_old_musket_texture_material_preflight", function()
 	local denied, reason = census({}, unit_api, mesh_api)
 	if denied or reason ~= "material-null-1-0" then
 		return "material preflight must reject a null binding on any mesh"
+	end
+	local binds = 0
+	unit_api.set_all_materials = function(_, material)
+		if material == policy.MATERIAL then binds = binds + 1 end
+	end
+	local application = { can_get = function(kind, path)
+		return kind == "texture"
+			or (kind == "material" and path == policy.MATERIAL)
+	end }
+	local applied, texture_count = apply({}, false, {
+		application = application, unit = unit_api, mesh = mesh_api,
+		suppress_diagnostics = true,
+	})
+	if applied or texture_count ~= 0 or binds ~= 1 then
+		return "production material adapter retained a post-bind null mesh"
+	end
+	meshes[2][1] = "#ID[abcdef01]"
+	binds = 0
+	local missing_material = { can_get = function(kind)
+		return kind == "texture"
+	end }
+	applied, texture_count = apply({}, false, {
+		application = missing_material, unit = unit_api, mesh = mesh_api,
+		suppress_diagnostics = true,
+	})
+	if applied or texture_count ~= 0 or binds ~= 0 then
+		return "production material adapter wrote before authored-material residency"
 	end
 end)
 

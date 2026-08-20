@@ -74,6 +74,38 @@ return function(H, repo_root)
         H.equal(legacy[1].unit_name, "base_right_3p")
     end)
 
+	H.test("CWV #597 resource fallback rows cannot be re-admitted by either preview adapter", function()
+		local descriptor = assert(Policy.resolve_spawn_descriptor({
+			variant = {
+				item_key = "cwv_fallback_guard", right_hand_unit = "variant_right",
+				no_ammo_unit = true,
+			},
+			base = { right_hand_unit = "base_right" },
+		}))
+		for _, adapter in ipairs({ "hand_flags", "base_identity" }) do
+			local row = {
+				right_hand = adapter == "hand_flags" or nil,
+				is_ammo_unit = true,
+				unit_name = "base_right_3p",
+				[Policy.PREVIEW_FALLBACK_MARKER] = "base_right_3p",
+			}
+			H.equal(Policy.apply_spawn_descriptor(descriptor, { row },
+				function(unit) return unit .. "_3p" end, adapter), 0, adapter)
+			H.equal(row.unit_name, "base_right_3p", adapter)
+			H.equal(row.is_ammo_unit, true,
+				"fallback lock must preserve the exact vanilla row shape: " .. adapter)
+		end
+
+		local stale_marker = {
+			right_hand = true, unit_name = "base_right_3p",
+			[Policy.PREVIEW_FALLBACK_MARKER] = "another_generation_3p",
+		}
+		H.equal(Policy.apply_spawn_descriptor(descriptor, { stale_marker },
+			function(unit) return unit .. "_3p" end, "hand_flags"), 1)
+		H.equal(stale_marker.unit_name, "variant_right_3p",
+			"only an exact current-row fallback marker may suppress a later generation")
+	end)
+
     H.test("CWV #237/#419 preview gate: sentinel/non-resident degrade, packaged families resolve", function()
         local gate = Policy.resolve_preview_3p
         local yes = function() return true end

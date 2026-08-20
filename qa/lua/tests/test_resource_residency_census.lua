@@ -40,6 +40,42 @@ return function(H, repo_root)
         H.truthy(manifest:find("deferred-legacy", 1, true))
     end)
 
+    H.test("CWV #1155 authored material proves texture material and post-bind handle closure", function()
+        local manifest = read("qa/native_resource_contracts.psd1")
+        local path = "character_weapon_variants/scripts/mods/"
+            .. "character_weapon_variants/_cwv_old_musket_preview.lua"
+        local source = read(path)
+        local material = "units/cwv_es_musket_custom/cwv_es_musket_custom"
+
+        H.truthy(manifest:find("File='" .. path
+            .. "'; Kind='material_bind'; Count=1; Policy='shared-v2-strict'", 1, true),
+            "Old Musket must census its one authored material bind")
+        H.truthy(manifest:find("File='" .. path
+            .. "'; Kind='residency_proof'; Count=3; Policy='shared-v2-strict'", 1, true),
+            "Old Musket must census all three closure proofs")
+        H.equal(manifest:find("File='" .. path .. "'; Kind='texture';", 1, true), nil,
+            "the authored-material path must expose no secondary native writer")
+
+        H.truthy(source:find('M.MATERIAL = "' .. material .. '"', 1, true))
+        H.truthy(source:find("RESIDENCY.texture_set_resident(", 1, true),
+            "all five authored texture resources must be resident before bind")
+        H.truthy(source:find("RESIDENCY.material_resident(", 1, true),
+            "the authored material must be resident before Unit.set_all_materials")
+        H.truthy(source:find("pcall(unit_api.set_all_materials, unit, M.MATERIAL)", 1, true),
+            "the live unit must bind the one authored material")
+        H.truthy(source:find("RESIDENCY.unit_materials_resident(", 1, true),
+            "the bound unit must expose real material handles before retention")
+        H.equal(source:find("unit_api.set_texture_for_materials", 1, true), nil)
+        H.equal(source:find("Material.set_texture", 1, true), nil)
+
+        local texture_at = assert(source:find("RESIDENCY.texture_set_resident(", 1, true))
+        local bind_at = assert(source:find(
+            "pcall(unit_api.set_all_materials, unit, M.MATERIAL)", 1, true))
+        local handles_at = assert(source:find("RESIDENCY.unit_materials_resident(", 1, true))
+        H.truthy(texture_at < bind_at and bind_at < handles_at,
+            "closure order must be texture resources -> material bind -> live handles")
+    end)
+
     H.test("#1125 particle census pins the exact Moonfire native owner packages", function()
         local manifest = read("qa/native_resource_contracts.psd1")
         local checker = read("qa/check_native_resource_contracts.ps1")

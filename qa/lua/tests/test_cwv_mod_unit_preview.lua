@@ -1,6 +1,8 @@
 return function(H, repo_root)
 	local bridge = dofile(repo_root
 		.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_mod_unit_preview.lua")
+	local appearance = dofile(repo_root
+		.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_exact_appearance.lua")
 	local custom_a = "units/cwv_crowbill/imperial_01/imperial_01_3p"
 	local custom_b = "units/cwv_crowbill/imperial_02/imperial_02_3p"
 	local alias = "units/weapons/player/wpn_brw_crowbill_01/wpn_brw_crowbill_01_3p"
@@ -113,6 +115,14 @@ return function(H, repo_root)
 		H.equal(bridge.claim_teardown(previewer), false)
 	end)
 
+	H.test("CWV #597 loot fallback marks the exact vanilla row for downstream containment", function()
+		local previewer = { _cwv_preview_unit_fallbacks = { [custom_a] = alias } }
+		local rows = { { unit_name = custom_a } }
+		bridge.apply_loot_fallbacks(previewer, rows)
+		H.equal(rows[1].unit_name, alias)
+		H.equal(rows[1][bridge.FALLBACK_MARKER], alias)
+	end)
+
 	H.test("CWV #604 production hooks balance bypass shared alias async and repeat lifecycle", function()
 		local saved = {
 			get_mod = get_mod, WeaponUtils = WeaponUtils, Application = Application,
@@ -148,8 +158,10 @@ return function(H, repo_root)
 
 		get_mod = function() return mod end
 		WeaponUtils = { get_weapon_packages = function() return {} end }
+		local units_resident = true
+		local closure_ready = true
 		Application = { can_get = function(kind, name)
-			if kind == "unit" then return alias_for(name) ~= nil end
+			if kind == "unit" then return units_resident and alias_for(name) ~= nil end
 			return false
 		end }
 		Managers = { package = pm }
@@ -161,6 +173,10 @@ return function(H, repo_root)
 				{ right_hand_unit = custom_b:gsub("_3p$", "") },
 			},
 			preview_package_alias = alias_for,
+			preview_resource_ready = function(name)
+				return closure_ready and units_resident and alias_for(name) ~= nil,
+					closure_ready and "ready" or "material_missing"
+			end,
 			alias_collected_packages = function(values) return values end,
 		})
 		local load_hook = assert(hooks["LootItemUnitPreviewer.load_package"])
@@ -190,15 +206,27 @@ return function(H, repo_root)
 			local package_names = { custom_a }
 			local previewer = {
 				_item_info_by_slot = {
-					melee = { spawn_data = { { unit_name = custom_a } } },
+					melee = { spawn_data = { { right_hand = true, unit_name = custom_a } } },
 				},
 			}
 			local downstream
 			wrapper(function(_, names) downstream = names[1] end, previewer, package_names)
-			return downstream, previewer._item_info_by_slot.melee.spawn_data[1].unit_name
+			return downstream, previewer._item_info_by_slot.melee.spawn_data[1]
 		end
-		local hero_package, hero_spawn = exercise_character_preview(hero_load_hook)
-		local menu_package, menu_spawn = exercise_character_preview(menu_load_hook)
+		local hero_package, hero_row = exercise_character_preview(hero_load_hook)
+		local menu_package, menu_row = exercise_character_preview(menu_load_hook)
+		closure_ready = false
+		local partial_package, partial_row = exercise_character_preview(menu_load_hook)
+		closure_ready = true
+		units_resident = false
+		local missing_package, missing_row = exercise_character_preview(menu_load_hook)
+		local fallback_descriptor = assert(appearance.resolve_spawn_descriptor({
+			variant = { item_key = "cwv_missing", right_hand_unit = custom_a:gsub("_3p$", "") },
+			base = { right_hand_unit = alias:gsub("_3p$", "") },
+		}))
+		local fallback_rewrites = appearance.apply_spawn_descriptor(
+			fallback_descriptor, { missing_row }, function(unit) return unit .. "_3p" end,
+			"hand_flags")
 
 		local bypassed = new_previewer()
 		bypassed._loaded_packages[custom_a] = true
@@ -229,8 +257,13 @@ return function(H, repo_root)
 			shared_a_loaded = shared_a_loaded, shared_b_loaded = shared_b_loaded,
 			async_custom_loaded = rawget(async._loaded_packages, custom_a),
 			remaining_alias_refs = pm.refs[alias],
-			hero_package = hero_package, hero_spawn = hero_spawn,
-			menu_package = menu_package, menu_spawn = menu_spawn,
+			hero_package = hero_package, hero_spawn = hero_row.unit_name,
+			menu_package = menu_package, menu_spawn = menu_row.unit_name,
+			partial_package = partial_package, partial_spawn = partial_row.unit_name,
+			partial_marker = partial_row[bridge.FALLBACK_MARKER],
+			missing_package = missing_package, missing_spawn = missing_row.unit_name,
+			missing_marker = missing_row[bridge.FALLBACK_MARKER],
+			fallback_rewrites = fallback_rewrites,
 		}
 
 		get_mod, WeaponUtils, Application = saved.get_mod, saved.WeaponUtils, saved.Application
@@ -249,5 +282,14 @@ return function(H, repo_root)
 		H.equal(results.hero_spawn, custom_a)
 		H.equal(results.menu_package, alias)
 		H.equal(results.menu_spawn, custom_a)
+		H.equal(results.partial_package, alias)
+		H.equal(results.partial_spawn, alias,
+			"a resident custom unit with an incomplete material closure must fall back")
+		H.equal(results.partial_marker, alias)
+		H.equal(results.missing_package, alias)
+		H.equal(results.missing_spawn, alias)
+		H.equal(results.missing_marker, alias)
+		H.equal(results.fallback_rewrites, 0,
+			"MenuWorld fallback row must survive the later safe mesh-swap pass")
 	end)
 end

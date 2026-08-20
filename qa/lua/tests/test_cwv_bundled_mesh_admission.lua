@@ -12,8 +12,10 @@
 -- Two halves, both driven on shipped code:
 --   1. each family answers for its OWN authored catalog, and every model it
 --      claims is actually shipped in the master package manifest;
---   2. the husk residency floor and mesh re-key admit a claimed mesh, and still
---      fail closed for a borrowed-material mesh whose donor is absent.
+--   2. the husk residency floor and mesh re-key admit a claimed mesh; the Old
+--      Musket is self-contained and needs no foreign donor lease; and a
+--      synthetic borrowed-material mesh still fails closed when its donor is
+--      absent.
 return function(H, repo_root)
     local mod_root = repo_root
         .. "/character_weapon_variants/scripts/mods/character_weapon_variants/"
@@ -78,7 +80,8 @@ return function(H, repo_root)
     -- composed exactly as production composes it (each family answering for its
     -- own catalog) and a borrowed-material mesh alongside, to prove the two
     -- kinds of custom mesh take different admission paths.
-    local BORROWED = "units/cwv_es_musket_custom/cwv_es_musket_custom"
+    local OLD_MUSKET = "units/cwv_es_musket_custom/cwv_es_musket_custom"
+    local BORROWED = "units/cwv_test_borrowed/cwv_test_borrowed"
     local DONOR_3P = "units/weapons/player/wpn_empire_handgun_t1/wpn_empire_handgun_t1_3p"
     local BUNDLED = Crowbill.usable_models()[1].right_hand_unit
     local BASE_UNIT = Crowbill.PLACEHOLDER_UNIT
@@ -87,7 +90,9 @@ return function(H, repo_root)
         { item_key = "cwv_fix_crowbill", base_weapon = "fix_crowbill_base",
           careers = { "es_fix" }, right_hand_unit = BUNDLED, item_type = "cwv_fix_crowbill" },
         { item_key = "cwv_fix_musket", base_weapon = "fix_gun",
-          careers = { "es_fix" }, right_hand_unit = BORROWED, item_type = "cwv_fix_musket" },
+          careers = { "es_fix" }, right_hand_unit = OLD_MUSKET, item_type = "cwv_fix_musket" },
+        { item_key = "cwv_fix_borrowed", base_weapon = "fix_gun",
+          careers = { "es_fix" }, right_hand_unit = BORROWED, item_type = "cwv_fix_borrowed" },
     }
     local function find_def(key)
         for _, def in ipairs(DEFS) do
@@ -125,16 +130,18 @@ return function(H, repo_root)
             apply_cwv_hand_transform = function() return true end,
             triplet_text = function() return "t" end,
         })
-        -- Production composition: the Old Musket bridge pair, then each family's
-        -- own catalog answer.
+        -- Production composition: the self-contained Old Musket and each
+        -- family's own catalog answer. BORROWED is a test-only custom-bundle
+        -- mesh that preserves coverage for the optional donor-material gate.
         om._husk_custom_bundle_unit = function(unit)
-            if unit == BORROWED then return true end
+            if unit == OLD_MUSKET or unit == BORROWED then return true end
             for _, family in ipairs(FAMILIES) do
                 if family.policy.is_bundled_unit(unit) then return true end
             end
             return false
         end
-        om._husk_material_donor_ready = om._husk_material_donor_ready
+        om._husk_custom_unit_material_donors[BORROWED] = DONOR_3P
+        om._husk_custom_unit_material_donors[BORROWED .. "_3p"] = DONOR_3P
         return om, lines, leases, env
     end
 
@@ -214,10 +221,41 @@ return function(H, repo_root)
             "a one-handed exact descriptor atomically removes the inherited offhand")
     end)
 
-    H.test("#719 a borrowed-material mesh still gates on its donor", function()
-        -- The two custom-mesh kinds must not collapse into one rule: the Old
-        -- Musket borrows a vanilla material, and spawning it while that package
-        -- is absent is the #474 MeshObject access violation.
+    H.test("#1155 Old Musket is self-contained and never leases a foreign donor", function()
+        local om, _, leases, env = fixture()
+        env.Application = { can_get = function(kind)
+            -- A missing vanilla material must be irrelevant: the Old Musket
+            -- binds its own CWV-authored material in both unit descriptors.
+            return kind ~= "material"
+        end }
+        om._husk_identity_descriptor = function()
+            return { variant_key = "cwv_fix_musket", right_hand_unit = OLD_MUSKET,
+                fingerprint = "fp:musket" }, "exact"
+        end
+        local item_units = {
+            right_hand_unit = "units/weapons/player/wpn_fix_gun/wpn_fix_gun",
+        }
+        with_env(env, function()
+            H.equal(om._husk_material_donor_ready(OLD_MUSKET), true,
+                "Old Musket must declare no foreign material donor")
+            H.equal(om._husk_unit_spawnable(OLD_MUSKET), true,
+                "Old Musket must be admitted from CWV's own loaded bundle")
+            H.equal(om._husk_rekey_units("right", { name = "fix_gun" },
+                item_units, {}, "slot_ranged"), nil)
+        end)
+        H.equal(item_units.right_hand_unit, OLD_MUSKET,
+            "the remote husk must receive the authored Old Musket mesh")
+        H.equal(om._husk_custom_unit_material_donors[OLD_MUSKET], nil)
+        H.equal(om._husk_custom_unit_material_donors[OLD_MUSKET .. "_3p"], nil)
+        H.equal(#leases, 0,
+            "self-contained Old Musket admission must not lease Handgun packages")
+    end)
+
+    H.test("#474 a synthetic borrowed-material mesh still gates on its donor", function()
+        -- The two custom-mesh kinds must not collapse into one rule. Keep the
+        -- generic #474 safety contract with a synthetic mesh that explicitly
+        -- declares a vanilla material donor; the real Old Musket is no longer
+        -- part of this path.
         local om, lines, leases, env = fixture()
         env.Application = { can_get = function(kind) return kind ~= "material" end }
         with_env(env, function()

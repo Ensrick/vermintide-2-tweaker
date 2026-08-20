@@ -80,11 +80,18 @@ local _om = ctx.om
 		if wielded_slot ~= slot_name or not equipment then return false end
 		local unit = equipment.right_hand_wielded_unit_3p
 		if not unit or not Unit.alive(unit) then return false end
+		local observed_unit_name, observed_mode, attachment_profile
+		if _om._husk_observed_unit_evidence then
+			observed_unit_name, observed_mode, attachment_profile =
+				_om._husk_observed_unit_evidence(unit, owner_unit, slot_name, "right")
+		end
+		if observed_mode ~= mode or type(attachment_profile) ~= "string" then return false end
 		local result = _om.old_musket_appearance.reconcile(unit, "husk", "peer_ready", {
 			cwv_key = "cwv_es_musket_old", skin = "cwv_es_musket_old_skin",
 		}, mode, {
 			peer_id = tostring(owner_unit), slot_name = slot_name,
-			unit_name = _om.old_musket_preview.UNIT_3P,
+			unit_name = observed_unit_name,
+			attachment_profile = attachment_profile,
 		})
 		local pos, _, scale = _om._old_musket_transform_components("3p", mode)
 		diag_once("apply:" .. tostring(owner_unit) .. ":" .. slot_name .. ":" .. mode .. ":" .. surface,
@@ -103,9 +110,17 @@ local _om = ctx.om
 		return nok and peer_id or nil
 	end
 
-	_om._old_musket_mode_for_owner = function(owner_unit, slot_name)
+	_om._old_musket_mode_for_peer = function(peer_id, slot_name)
+		local slots = type(peer_id) == "string" and modes_by_peer[peer_id]
+		local mode = slots and slots[slot_name]
+		return mode == "melee" and "melee" or "ranged"
+	end
+
+	_om._old_musket_mode_for_owner = function(owner_unit, slot_name, hinted_player)
 		local slots = owner_unit and modes_by_owner[owner_unit]
-		if not slots then slots = modes_by_peer[peer_for_owner(owner_unit)] end
+		local hinted_peer = hinted_player and _om.peer_resolver
+			and _om.peer_resolver.player_peer_id(hinted_player)
+		if not slots then slots = modes_by_peer[hinted_peer or peer_for_owner(owner_unit)] end
 		if not slots then return "ranged" end
 		if not slot_name then slot_name = owner_slot(owner_unit) end
 		return slots[slot_name] or "ranged"
@@ -214,6 +229,7 @@ local _om = ctx.om
 			return false
 		end
 		local peer_slots = modes_by_peer[sender_peer_id] or {}
+		local previous_mode = peer_slots[slot_name]
 		modes_by_peer[sender_peer_id], peer_slots[slot_name] = peer_slots, mode
 		if bid and valid_bid(bid) then modes_by_backend[bid] = mode end
 		local pm = Managers and Managers.player
@@ -222,7 +238,20 @@ local _om = ctx.om
 		if owner_unit then
 			local slots = modes_by_owner[owner_unit] or {}
 			modes_by_owner[owner_unit], slots[slot_name] = slots, mode
-			apply_owner(owner_unit, slot_name, mode, "remote_event:" .. tostring(source))
+			local parent_changed = previous_mode ~= nil and previous_mode ~= mode
+				or previous_mode == nil and mode == "melee"
+			local applied = false
+			if not parent_changed then
+				applied = apply_owner(owner_unit, slot_name, mode,
+					"remote_event:" .. tostring(source))
+			end
+			if (parent_changed or not applied) and mod._cwv_rewield
+					and type(mod._cwv_rewield.request_peer_rewield) == "function" then
+				mod._cwv_rewield.request_peer_rewield(sender_peer_id, slot_name, {
+					tag = (parent_changed and "old-musket-parent:" or "old-musket-reconcile:")
+						.. tostring(mode),
+				})
+			end
 		end
 		diag_once("rx:" .. tostring(sender_peer_id) .. ":" .. slot_name .. ":" .. mode .. ":" .. tostring(source),
 			"state rx peer=%s owner=%s slot=%s mode=%s source=%s",

@@ -5,6 +5,16 @@ return function(H, repo_root)
         .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_forge_preview_policy.lua")
     local Bridge = dofile(repo_root
         .. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_package_bridge.lua")
+    local Residency = dofile(repo_root
+        .. "/character_weapon_variants/scripts/mods/character_weapon_variants/_lib_resource_residency.lua")
+    Musket.set_resource_residency(Residency)
+
+    local function read(path)
+        local file = assert(io.open(path, "rb"))
+        local source = file:read("*a")
+        file:close()
+        return source
+    end
 
     local function registry(overrides)
         local ready = {
@@ -33,7 +43,10 @@ return function(H, repo_root)
             fallback = { right_hand_unit = {
                 unit_3p = Musket.PREVIEW_PACKAGE_ALIAS,
             } },
-            materials = { preview = Musket.PREVIEW_MATERIAL },
+            materials = {
+                authored = Musket.MATERIAL,
+                preview = Musket.PREVIEW_MATERIAL,
+            },
             textures = Musket.TEXTURES,
         }
     end
@@ -46,13 +59,15 @@ return function(H, repo_root)
         H.equal(descriptor.item_key, Musket.ITEM_KEY)
         H.equal(descriptor.right_hand_unit.unit_3p, Musket.UNIT_3P)
         H.equal(descriptor.right_hand_unit.package, Musket.PREVIEW_PACKAGE_ALIAS)
+        H.equal(descriptor.materials.authored, Musket.MATERIAL)
         H.equal(descriptor.materials.preview, Musket.PREVIEW_MATERIAL)
-        H.equal(#descriptor.textures, 3)
+        H.equal(Musket.PREVIEW_MATERIAL, Musket.MATERIAL)
+        H.equal(#descriptor.textures, 5)
         H.equal(Musket.resource_mode(descriptor, registry()), "custom")
         H.equal(Cim.authored_mode(descriptor, Musket.resource_mode, registry()), "custom")
     end)
 
-    H.test("CWV #474 bridges custom package lifecycle to the material owner", function()
+    H.test("CWV #474 bridges custom package lifecycle to a balanced lifetime anchor", function()
         local bridge = Bridge.new(Musket)
         local calls = {}
         local callback = function() calls.callback = true end
@@ -91,6 +106,153 @@ return function(H, repo_root)
         H.equal(calls.package_name, Musket.NETWORK_PACKAGE_ALIAS_3P)
         H.equal(calls.reference_name, "HeroPreviewer")
         H.equal(bridge.has_pair(Musket.UNIT), true)
+    end)
+
+    H.test("CWV #1155 ships one self-contained Old Musket material closure", function()
+        local root = repo_root .. "/character_weapon_variants/"
+        local expected = {
+            { "color_map", "textures/cwv_es_musket_custom/cwv_es_musket_custom_albedo" },
+            { "normal_map", "textures/cwv_es_musket_custom/cwv_es_musket_custom_normal" },
+            { "roughness_map", "textures/cwv_es_musket_custom/cwv_es_musket_custom_roughness" },
+            { "metallic_map", "textures/cwv_es_musket_custom/cwv_es_musket_custom_metallic" },
+            { "ao_map", "textures/cwv_es_musket_custom/cwv_es_musket_custom_ao" },
+        }
+        H.equal(#Musket.TEXTURES, #expected)
+        for index, row in ipairs(expected) do
+            H.equal(Musket.TEXTURES[index].slot, row[1])
+            H.equal(Musket.TEXTURES[index].texture, row[2])
+        end
+
+        for _, name in ipairs({
+            "cwv_es_musket_custom.unit",
+            "cwv_es_musket_custom_3p.unit",
+        }) do
+            local unit = read(root .. "units/cwv_es_musket_custom/" .. name)
+            H.truthy(unit:find('rifle_mat = "' .. Musket.MATERIAL .. '"', 1, true))
+            H.equal(unit:find("mat_to_use", 1, true), nil)
+        end
+        for _, name in ipairs({
+            "cwv_es_musket_custom.fbx",
+            "cwv_es_musket_custom_3p.fbx",
+        }) do
+            local fbx = read(root .. "units/cwv_es_musket_custom/" .. name)
+            H.truthy(fbx:find("rifle_mat", 1, true),
+                name .. " does not expose the rifle_mat renderer slot")
+        end
+
+        local material = read(root .. "units/cwv_es_musket_custom/cwv_es_musket_custom.material")
+        for _, binding in ipairs(Musket.TEXTURES) do
+            H.truthy(material:find(binding.slot .. ' = "' .. binding.texture .. '"', 1, true),
+                "material does not bind " .. binding.slot)
+        end
+        H.equal(material:find("textures/cwv_es_greataxe/", 1, true), nil,
+            "copied material retained a Greataxe texture")
+        H.equal(material:find("units/weapons/player/wpn_empire_handgun", 1, true), nil,
+            "authored material still borrows a vanilla Handgun material")
+        for _, binding in ipairs(Musket.TEXTURES) do
+            local descriptor = root .. binding.texture .. ".texture"
+            H.truthy(read(descriptor):find('filename = "' .. binding.texture .. '"', 1, true),
+                "missing or malformed texture descriptor " .. binding.texture)
+        end
+
+        local package = read(root
+            .. "resource_packages/character_weapon_variants/character_weapon_variants.package")
+        H.truthy(package:find('"' .. Musket.MATERIAL .. '"', 1, true),
+            "master package omits the authored material")
+        H.truthy(package:find('"units/cwv_es_musket_custom/*"', 1, true),
+            "master package omits the Old Musket units")
+        H.truthy(package:find('"textures/cwv_es_musket_custom/*"', 1, true),
+            "master package omits the Old Musket textures")
+    end)
+
+    H.test("CWV #1155 binds the authored material only after full residency proof", function()
+        local bound = {}
+        local meshes = { { "#ID[11551155]" }, { "#ID[22552255]" } }
+        local unit_api = {
+            alive = function() return true end,
+            set_all_materials = function(_, material)
+                bound[#bound + 1] = material
+            end,
+            num_meshes = function() return #meshes end,
+            mesh = function(_, index) return meshes[index + 1] end,
+        }
+        local mesh_api = {
+            num_materials = function(mesh) return #mesh end,
+            material = function(mesh, index) return mesh[index + 1] end,
+        }
+        local application = { can_get = function(kind, path)
+            if kind == "material" then return path == Musket.MATERIAL end
+            if kind == "texture" then return true end
+            return false
+        end }
+        local ok, count = Musket.apply_material({}, false, {
+            application = application, unit = unit_api, mesh = mesh_api,
+        })
+        H.equal(ok, true)
+        H.equal(count, 5)
+        H.equal(#bound, 1)
+        H.equal(bound[1], Musket.MATERIAL)
+
+        bound = {}
+        local missing = { can_get = function(kind)
+            return kind == "texture"
+        end }
+        ok, count = Musket.apply_material({}, false, {
+            application = missing, unit = unit_api, mesh = mesh_api,
+        })
+        H.equal(ok, false)
+        H.equal(count, 0)
+        H.equal(#bound, 0, "missing material must prevent the native bind")
+
+        bound = {}
+        meshes[2][1] = "#ID[00000000]"
+        ok, count = Musket.apply_material({}, false, {
+            application = application, unit = unit_api, mesh = mesh_api,
+        })
+        H.equal(ok, false)
+        H.equal(count, 0)
+        H.equal(#bound, 1,
+            "post-bind census must observe exactly the attempted authored bind")
+    end)
+
+    H.test("CWV #1155 synthetic material probes do not consume live diagnostics", function()
+        local fresh = dofile(repo_root
+            .. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_preview.lua")
+        fresh.set_resource_residency(Residency)
+        local prior_printf = rawget(_G, "printf")
+        local logs = {}
+        rawset(_G, "printf", function(fmt, ...)
+            logs[#logs + 1] = string.format(fmt, ...)
+        end)
+        local ok, err = xpcall(function()
+            local unit_api = {
+                alive = function() return true end,
+                set_all_materials = function() end,
+                num_meshes = function() return 1 end,
+                mesh = function() return {} end,
+            }
+            local mesh_api = {
+                num_materials = function() return 1 end,
+                material = function() return "#ID[00000000]" end,
+            }
+            local application = { can_get = function(kind)
+                return kind == "texture" or kind == "material"
+            end }
+            local deps = {
+                application = application, unit = unit_api, mesh = mesh_api,
+                suppress_diagnostics = true,
+            }
+            H.equal(fresh.apply_material({}, false, deps), false)
+            H.equal(#logs, 0)
+            deps.suppress_diagnostics = false
+            H.equal(fresh.apply_material({}, false, deps), false)
+            H.equal(#logs, 1,
+                "the first real failure must remain visible after a synthetic probe")
+            H.equal(fresh.apply_material({}, false, deps), false)
+            H.equal(#logs, 1, "the real diagnostic remains one-shot")
+        end, debug.traceback)
+        rawset(_G, "printf", prior_printf)
+        if not ok then error(err, 0) end
     end)
 
     H.test("CWV #474 package bridge leaves unrelated packages byte-for-byte unchanged", function()
@@ -149,6 +311,24 @@ return function(H, repo_root)
         H.equal(mode, "fallback")
         H.equal(reason, "custom_unit_missing")
         H.equal(Cim.authored_mode(descriptor, Musket.resource_mode, can_get), "fallback")
+    end)
+
+    H.test("CWV #1155 pre-spawn admission rejects a partial custom material closure", function()
+        local can_get = registry({ ["material:" .. Musket.MATERIAL] = false })
+        local ready, reason = Musket.preview_resource_ready(Musket.UNIT_3P, can_get)
+        H.equal(ready, false)
+        H.equal(reason, "material_missing")
+        H.equal(Musket.resource_mode(descriptor_for({ key = Musket.ITEM_KEY }, "ranged"),
+            can_get), "fallback")
+        H.equal(Musket.preview_resource_ready(Musket.UNIT_3P, registry()), true)
+		local no_fallback = registry({
+			["material:" .. Musket.MATERIAL] = false,
+			["unit:" .. Musket.PREVIEW_PACKAGE_ALIAS] = false,
+			["package:" .. Musket.PREVIEW_PACKAGE_ALIAS] = false,
+		})
+		H.equal(Musket.resource_mode(
+			descriptor_for({ key = Musket.ITEM_KEY }, "ranged"), no_fallback), nil,
+			"a partial custom closure must not claim an unavailable fallback")
     end)
 
     H.test("CWV #474 fails closed when neither custom nor fallback resources exist", function()
@@ -447,14 +627,24 @@ return function(H, repo_root)
                 hooks[class_name] = callback
             end,
         }
-        local events = {}
+        local events, applied_record, apply_calls = {}, nil, 0
+        local musket_unit_3p =
+            "units/cwv_es_musket_custom/cwv_es_musket_custom_3p"
+        local rifle_linking = { wielded = {}, unwielded = {} }
         local previous_unit = rawget(_G, "Unit")
         rawset(_G, "Unit", {
             alive = function(value) return value ~= nil end,
             animation_event = function(_, event) events[#events + 1] = event end,
         })
         local ok, err = pcall(function()
-            Pose.install(fake_mod, nil, function() end, nil)
+            Pose.install(fake_mod, function(unit, perspective, stance, record)
+                apply_calls = apply_calls + 1
+                H.equal(unit, "weapon-unit")
+                H.equal(perspective, "3p")
+                H.equal(stance, "ranged")
+                applied_record = record
+                return { retained = true }
+            end, function() end, nil)
             H.truthy(hooks.HeroPreviewer, "HeroPreviewer registration missing")
             H.truthy(hooks.MenuWorldPreviewer,
                 "MenuWorldPreviewer registration missing (base-class hook trap, #474)")
@@ -463,9 +653,23 @@ return function(H, repo_root)
                 character_unit = { "character" },
                 _wielded_slot_type = "ranged",
                 _item_info_by_slot = {
-                    ranged = { name = "cwv_es_musket_old", backend_id = "bid-1" },
+                    ranged = {
+                        name = "cwv_es_musket_old", backend_id = "bid-1",
+                        spawn_data = {
+                            {
+                                left_hand = true, item_slot_type = "ranged",
+                                slot_index = 2,
+                                unit_name = "units/vanilla/left_decoy_3p",
+                            },
+                            {
+                                right_hand = true, item_slot_type = "ranged",
+                                slot_index = 2, unit_name = musket_unit_3p,
+                                unit_attachment_node_linking = rifle_linking,
+                            },
+                        },
+                    },
                 },
-                _equipment_units = {},
+                _equipment_units = { [2] = { right = "weapon-unit" } },
                 _loading_done = false,
             }
             H.truthy(Pose.arm(previewer, {
@@ -475,6 +679,9 @@ return function(H, repo_root)
                 slot_type = "ranged",
                 slot_index = 2,
                 stance = "ranged",
+                attachment_profile = "held_3p_rifle_character",
+                attachment_node_linking = rifle_linking,
+                unit_name = musket_unit_3p,
                 wield_event = "wield_test_event",
             }))
             -- Simulate the keep previewer's real call shape: the derived
@@ -488,8 +695,54 @@ return function(H, repo_root)
             end, previewer, 0.016)
             H.equal(#events, 1, "pose must fire exactly once across the double delivery")
             H.equal(events[1], "wield_test_event")
+            H.truthy(applied_record,
+                "the stable callback must receive the retained spawn identity")
+            H.equal(applied_record.unit_name, musket_unit_3p)
+            H.equal(applied_record.attachment_profile,
+                "held_3p_rifle_character")
+            H.equal(apply_calls, 1)
             H.equal(previewer._cwv_old_musket_pose_pending, nil,
                 "the pending record must be consumed")
+
+            local stale = {
+                character_unit = { "stale-character" },
+                _wielded_slot_type = "ranged",
+                _item_info_by_slot = {
+                    ranged = {
+                        name = "cwv_es_musket_old", backend_id = "bid-stale",
+                        spawn_data = { {
+                            right_hand = true, item_slot_type = "ranged",
+                            slot_index = 2, unit_name = musket_unit_3p,
+                            unit_attachment_node_linking = rifle_linking,
+                        } },
+                    },
+                },
+                _equipment_units = { [2] = { right = "stale-weapon-unit" } },
+                _loading_done = false,
+            }
+            H.truthy(Pose.arm(stale, {
+                character_unit = stale.character_unit,
+                item_name = "cwv_es_musket_old",
+                backend_id = "bid-stale",
+                slot_type = "ranged",
+                slot_index = 2,
+                stance = "ranged",
+                attachment_profile = "held_3p_rifle_character",
+                attachment_node_linking = rifle_linking,
+                unit_name = musket_unit_3p,
+                wield_event = "must_not_dispatch",
+            }))
+            stale._item_info_by_slot.ranged.spawn_data[1].unit_name =
+                "units/weapons/player/wpn_empire_handgun_01/wpn_empire_handgun_01_3p"
+            hooks.MenuWorldPreviewer(function(self)
+                self._loading_done = true
+            end, stale, 0.016)
+            H.equal(#events, 1,
+                "a stale unit path must not dispatch the armed pose")
+            H.equal(apply_calls, 1,
+                "a stale unit path must not reach the stable appearance callback")
+            H.equal(stale._cwv_old_musket_pose_pending, nil,
+                "a stale generation is terminal and cannot replay")
         end)
         rawset(_G, "Unit", previous_unit)
         if not ok then error(err, 0) end

@@ -240,6 +240,30 @@ function M.validate(spec)
 	validate_hand(spec.left_hand_unit, "left_hand_unit", errors)
 	validate_transform(spec.transform_1p, "transform_1p", errors)
 	validate_transform(spec.transform_3p, "transform_3p", errors)
+	local profiles = spec.transform_profiles
+	if profiles ~= nil then
+		if type(profiles) ~= "table" then
+			errors[#errors + 1] = "transform_profiles must be a table when present"
+		else
+			local count = 0
+			for profile, transform in pairs(profiles) do
+				count = count + 1
+				if type(profile) ~= "string" or #profile == 0 then
+					errors[#errors + 1] = "transform_profiles keys must be non-empty strings"
+				else
+					validate_transform(transform, "transform_profiles." .. profile, errors)
+				end
+			end
+			if count == 0 then errors[#errors + 1] = "transform_profiles cannot be empty" end
+		end
+	end
+	if spec.attachment_profile ~= nil then
+		if type(spec.attachment_profile) ~= "string" or #spec.attachment_profile == 0 then
+			errors[#errors + 1] = "attachment_profile must be a non-empty string when present"
+		elseif type(profiles) ~= "table" or profiles[spec.attachment_profile] == nil then
+			errors[#errors + 1] = "attachment_profile must select a declared transform_profiles row"
+		end
+	end
 	if spec.requires_mod ~= nil and type(spec.requires_mod) ~= "string" then
 		errors[#errors + 1] = "requires_mod must be a string when present"
 	end
@@ -304,19 +328,30 @@ function M.fingerprint(descriptor)
 	return string.format("%08x", hash)
 end
 
-local RAW = {}
+local BUILT_DATA = setmetatable({}, { __mode = "k" })
 
--- Freeze: the built descriptor is a read-only proxy. Adapters cannot
--- mutate shared appearance state (the two-writers race #660 bans);
--- reconciler internals reach the plain table via M.raw().
-function M.build(spec)
-	local ok, errors = M.validate(spec)
-	if not ok then return nil, errors end
-	local data = {}
-	for k, v in pairs(spec) do data[k] = v end
-	data.generation = spec.generation or 0
-	local proxy = setmetatable({ [RAW] = data }, {
-		__index = data,
+local function deep_copy(value, seen)
+	if type(value) ~= "table" then return value end
+	seen = seen or {}
+	if seen[value] then return seen[value] end
+	local copy = {}
+	seen[value] = copy
+	for key, child in pairs(value) do
+		copy[deep_copy(key, seen)] = deep_copy(child, seen)
+	end
+	return copy
+end
+
+local function readonly_view(data)
+	local proxy = {}
+	setmetatable(proxy, {
+		-- Lua 5.1 cannot make nested table proxies transparent to pairs/ipairs/#.
+		-- Return a detached plain-table snapshot for nested data instead: readers
+		-- retain normal 5.1 semantics, while mutations cannot reach canonical state.
+		__index = function(_, key)
+			local value = data[key]
+			return type(value) == "table" and deep_copy(value) or value
+		end,
 		__newindex = function()
 			error("appearance descriptor is immutable - build a new one", 2)
 		end,
@@ -325,18 +360,35 @@ function M.build(spec)
 	return proxy
 end
 
+local function built_data(descriptor)
+	return type(descriptor) == "table" and BUILT_DATA[descriptor] or nil
+end
+
+-- Freeze every nested descriptor table, not only its top-level keys. Build also
+-- detaches the descriptor from caller-owned tables so a later menu/runtime edit
+-- cannot silently change its fingerprint without advancing generation.
+function M.build(spec)
+	local ok, errors = M.validate(spec)
+	if not ok then return nil, errors end
+	local data = deep_copy(spec)
+	data.generation = spec.generation or 0
+	local proxy = readonly_view(data)
+	BUILT_DATA[proxy] = data
+	return proxy
+end
+
 function M.raw(descriptor)
-	return type(descriptor) == "table" and rawget(descriptor, RAW) or nil
+	local data = built_data(descriptor)
+	return data and deep_copy(data) or nil
 end
 
 -- Lifecycle regeneration: a customization/style change produces a NEW
 -- descriptor with generation+1; stale applies are detected by comparing
 -- (fingerprint, generation) rather than re-reading menu state.
 function M.next_generation(descriptor)
-	local data = M.raw(descriptor)
+	local data = built_data(descriptor)
 	if not data then return nil, { "not a built descriptor" } end
-	local copy = {}
-	for k, v in pairs(data) do copy[k] = v end
+	local copy = deep_copy(data)
 	copy.generation = (data.generation or 0) + 1
 	return M.build(copy)
 end
@@ -383,7 +435,13 @@ function M.new_reconciler(options)
 
 		local target_records = records[target]
 		if not target_records then target_records = {}; records[target] = target_records end
-		local record = target_records[token]
+		-- One latest token per source-qualified lifecycle axis. A new descriptor
+		-- fingerprint/generation supersedes the old record for that surface+edge;
+		-- otherwise live dev tuning would retain an unbounded token history on a
+		-- long-lived unit until world teardown.
+		local axis = surface .. "|" .. edge
+		local record = target_records[axis]
+		if record and record.token ~= token then record = nil end
 		if record and (record.completed or record.retained or record.attempts >= max_attempts) then
 			return {
 				ok = record.retained == true or record.fallback == true,
@@ -395,9 +453,9 @@ function M.new_reconciler(options)
 				token = token,
 			}
 		end
-		record = record or { attempts = 0, retained = false }
+		record = record or { attempts = 0, retained = false, token = token }
 		record.attempts = record.attempts + 1
-		target_records[token] = record
+		target_records[axis] = record
 
 		if type(apply) ~= "function" then
 			record.reason = "adapter-missing"
@@ -460,8 +518,15 @@ function M.new_reconciler(options)
 
 	function R.attempts(target, descriptor, surface, edge)
 		local token = target and token_for(descriptor, surface, edge)
-		local record = token and records[target] and records[target][token]
-		return record and record.attempts or 0
+		local axis = surface and edge and (surface .. "|" .. edge)
+		local record = token and axis and records[target] and records[target][axis]
+		return record and record.token == token and record.attempts or 0
+	end
+
+	function R.record_count(target)
+		local count = 0
+		for _ in pairs(target and records[target] or {}) do count = count + 1 end
+		return count
 	end
 
 	return R

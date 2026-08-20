@@ -5,6 +5,7 @@ lua = [
 
 material = [
 	"materials/character_weapon_variants/*"
+	"units/cwv_es_musket_custom/cwv_es_musket_custom"
 	"units/cwv_es_greataxe/axe_01/axe_01"
 	"units/cwv_es_greataxe/axe_02/axe_02"
 	"units/cwv_es_greataxe/axe_03/axe_03"

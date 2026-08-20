@@ -4,7 +4,7 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-08-13.
+Last updated: 2026-08-20.
 
 ## #1204 Deus identity uses committed parity
 
@@ -14,13 +14,51 @@ Last updated: 2026-08-13.
 - [ ] `/cwv_regression_test` passes both `issue1204_deus_identity_uses_committed_parity` and `issue273_cwv_deus_identity_is_exact`.
 - [ ] `[cwv:273] deus_identity` remains bounded and reports `exact=true` only after committed parity.
 
-## #1155 Old Musket exact Athanor preview surface
+## #1155 Old Musket material and attachment-profile pilot
 
-- [ ] With CWV 0.1.513-dev and CIM Dev loaded, open the Athanor properties pane and select Old Musket in ranged mode, then melee mode.
-- [ ] The authored mesh, textures, scale, position, and rotation remain visible after the preview finishes loading; no checkerboard, invisible unit, or vanilla Handgun replacement appears.
-- [ ] The log contains a bounded `[cwv:1155] family=old_musket surface=cim_preview edge=preview_open ... retained=true` receipt for the Athanor target.
-- [ ] Open the ordinary illusion browser as a control. Its receipt remains `surface=illusion_browser`; it is never relabeled as CIM.
-- [ ] `/cwv_regression_test` passes `issue1155_old_musket_descriptor_reconciler`, and offline `test_cwv_old_musket_presentation.lua`, `test_cwv_old_musket_appearance.lua`, and `test_appearance_census.lua` pass.
+- [ ] Confirm CWV `0.1.524-dev` from `[cwv:LOAD]` and the exact deployed CIM Dev
+  version from `[cim:LOAD]` before scoring the run.
+- [ ] In the Crafting in Modded Athanor, select **Old Musket** once and wait for
+  its preview to finish loading. The Athanor selects the weapon archetype (it is
+  not an instance picker and has no stance control), so this proves one
+  provider-qualified CIM preview mode independently of the equipped-item checks.
+  The authored model and textures remain visible.
+- [ ] Close the Athanor. Equip one specific **Old Musket** from inventory, remove
+  any second Old Musket from the other weapon slot, and keep this one instance
+  equipped for the rest of the gate. Do not edit its illusion or use the pose
+  tuner during this run.
+- [ ] In gameplay, use weapon special to exercise rifle and melee/bayonet modes.
+  Inspect first person and local third person in both modes. The rifle and
+  polearm attachment profiles each retain their own pose; neither becomes
+  invisible, pink, checkerboard, or a vanilla Handgun.
+- [ ] After each gameplay mode, reopen the inventory-screen character and the
+  ordinary illusion browser for that equipped instance. The browser remains
+  `surface=illusion_browser`, never `cim_preview`, and uses the independent
+  display profile. Its candidate numeric pose (position `{0, 0, 0}`, Euler
+  `{-90, -90, 0}`, scale `{1, 1.1, 1.1}`) is report-only: record whether it is
+  high, low, or misoriented. A preview-pose receipt must report
+  `dispatched=true`. Do not reopen the Athanor after these equipped-item checks,
+  because a new constructor generation intentionally starts a new evidence run.
+- [ ] **While still in the Keep**, run `/cwv_regression_test` and retain that
+  log. `issue1155_old_musket_descriptor_reconciler`,
+  `issue617_old_musket_preview_texture_consumer`, and
+  `issue742_old_musket_texture_material_preflight` pass.
+- [ ] After the Keep gate passes, swap away and back, enter an Adventure mission,
+  and repeat the first-person, local-third-person, and mode checks. Treat this as
+  a separate transition/log phase: state exit deliberately invalidates Keep-only
+  Athanor/browser evidence, so do not require the all-surface named gate to pass
+  inside the mission.
+- [ ] The log contains bounded retained receipts for Athanor
+  `surface=cim_preview edge=preview_open`, the ordinary browser
+  `surface=illusion_browser edge=preview_open`, and both stances. No
+  `#ID[b6d0945a]`, `texture-resource-missing`,
+  `authored-material-unbound`, `unit-material-unready`,
+  `retained-postcondition-failed`, or Old Musket material lookup failure occurs.
+
+Offline source, manifest, resource-closure, and behavioral tests can prove that
+the authored material and five textures are complete. They cannot prove visual
+pose quality or renderer retention; the checklist above is the solo gate before
+any remote-husk or bot verification.
 
 ## #1273 Phased-bootstrap dependency transfer
 
@@ -81,14 +119,14 @@ Last updated: 2026-08-13.
 
 ---
 
-## #742 Old Musket remote material-binding crash guard
+## #742 Old Musket authored-material crash guard
 
 | Field | Check |
 |---|---|
-| Fix version(s) | CWV v0.1.451-dev candidate |
+| Fix version(s) | CWV v0.1.524-dev candidate; live verification pending |
 | Repro | Two-player lobby. Equip Old Musket before the other player joins, hot join in both directions, swap away/back, and cross a Keep-to-mission transition. Repeat with both peers on CWV and one observer without CWV. |
-| Expected post-fix | The same-mod remote husk receives the authored Old Musket texture when its spawned unit has real material bindings. Texture residency alone never authorizes the native write. A missing mesh/material or `#ID[00000000]` binding fails closed for the whole unit, retains the donor appearance, emits one bounded diagnostic, and never access-violates. #491's mixed-peer vanilla package/identity fallback remains unchanged. |
-| Detection | Offline `test_cwv_texture_residency.lua` covers bound, missing, empty, null, multi-mesh, and throwing cases; `Old Musket texture C-call fails closed` proves ordering before `Unit.set_texture_for_materials`; `/cwv_regression_test` passes `issue742_old_musket_texture_material_preflight`. Paired logs must contain no `[MeshObject] Failed looking up material` followed by the Old Musket texture path and no address-`0x8` access violation. A skip, if any, is one `[cwv:742] Old Musket paint SKIP reason=unit-material-unready ...` row. |
+| Expected post-fix | The same-mod remote husk receives the self-contained Old Musket material only after the exact material and five textures are resident. The adapter performs one whole-material bind and reads every live mesh handle back. Missing, empty, null, or throwing state fails closed for the whole unit, emits one bounded diagnostic, and never access-violates. #491's mixed-peer vanilla identity fallback remains unchanged. |
+| Detection | Offline `test_cwv_texture_residency.lua` covers material/texture preflight plus bound, missing, empty, null, multi-mesh, and throwing postconditions; no Old Musket path calls `Unit.set_texture_for_materials`. `/cwv_regression_test` passes `issue742_old_musket_texture_material_preflight`. Paired logs contain no `[MeshObject] Failed looking up material`, `#ID[b6d0945a]`, or address-`0x8` access violation. A rejection is one bounded retained-failure receipt, never setter-success evidence. |
 
 ---
 
@@ -181,14 +219,14 @@ Last updated: 2026-08-13.
 
 ---
 
-## #617 Old Musket Athanor paint safety
+## #617 Old Musket Athanor authored-material safety
 
 | Field | Check |
 |---|---|
-| Fix version(s) | CWV v0.1.421-dev |
+| Fix version(s) | CWV v0.1.524-dev candidate; live verification pending |
 | Repro | Open CIM's Athanor and click its item-selector icon while Old Musket is the first/default item. Switch to another rifle and back. |
-| Expected post-fix | The selector stays open, Old Musket has its authored textures, the comparison rifle keeps its own textures, and no texture/material access violation occurs. Preview parent binding is followed by the same real-material census used by world/husk consumers (#742). |
-| Detection | `/cwv_regression_test` passes `issue617_old_musket_preview_texture_consumer` and `issue742_old_musket_texture_material_preflight`; offline `Old Musket texture C-call fails closed` passes; the live log records `targets=1 applied=1` and no `Old Musket paint SKIP`. |
+| Expected post-fix | The selector stays open, Old Musket has its authored five-map material, the comparison rifle keeps its own material, and no texture/material access violation occurs. The stable `visible=true` edge performs the same resource preflight, whole-material bind, and live-handle readback as world/husk consumers (#742). |
+| Detection | `/cwv_regression_test` passes `issue617_old_musket_preview_texture_consumer` and `issue742_old_musket_texture_material_preflight`; offline resource and presentation tests pass; the live log records `surface=cim_preview edge=preview_open ... retained=true` and no null-material or retained-postcondition failure. |
 
 ---
 
@@ -763,34 +801,34 @@ Last updated: 2026-08-13.
 
 ---
 
-### cwv-custom-mesh-material — Three sharp edges shipping a custom FBX
+### cwv-custom-mesh-material — Custom FBX material closure must be self-contained
 
 | Field | Value |
 |-------|-------|
 | Symptom | (a) Material name truncated → crash. (b) SDK compile error `material could not be found`. (c) Engine error `Resource '#ID[hash]' not found`. |
-| Root cause | FBX exporter truncates material slot names ~60 chars. Vanilla material paths unavailable at SDK compile time. `Application.resource_package` is global only; mod-shipped paths must use vanilla resource paths via overlay pattern. Also: `<unit>.package` and `<unit>_3p.package` sibling files required. |
+| Root cause | FBX exporters can truncate long material slot names, and a compiled custom unit still renders without a material when no real consumer binds the stored metadata. The historical v0.1.272 recipe treated a vanilla `data.mat_to_use` path plus sibling packages as an overlay; the #1155 `.523` log proved that ordinary GearUtils and preview spawns do not interpret that metadata, even with both donor packages resident. |
 | Mod(s) | character_weapon_variants |
-| Fix version(s) | CWV v0.1.272 (and follow-ups) |
+| Fix version(s) | Historical safeguards v0.1.272 and follow-ups; self-contained Old Musket candidate v0.1.524-dev |
 | Category | INTEGRATION |
 | Repro | 1. Author a new mod with a custom FBX. 2. Skip any of the three rules. 3. Watch SDK compile fail / equip crash. |
-| Expected post-fix | Short FBX material name + long path in `.unit` materials block. Author own `.material` referencing mod-relative path. `_3p.fbx`/`_3p.unit` siblings shipped. `_3p.package` sibling shipped + listed in master `.package`. |
-| Detection | Build mod with `vmblauncher build`. Equip + walk in-game. Mesh has correct PBR textures (not pink, not flat-gray, not invisible). |
+| Expected post-fix | Use a short FBX slot, bind it in each `.unit` top-level `materials` table to a mod-owned `.material`, and list the material plus every exact texture in the explicit master package root. Ship matching 1P/3P units. Runtime proves the whole resource set before one whole-material bind and reads live material handles back; metadata or a sibling package alone is never closure evidence. |
+| Detection | Source/manifest/native-resource tests prove the complete graph; compiled-root reachability proves the custom units are in the loaded root; engine-free tests reject absent/null bindings. In-game owner and preview checks still prove actual PBR appearance (not pink, flat-gray, or invisible). |
 
 
 ---
 
-### vt2-no-custom-package-paths — Custom-mesh weapons must piggyback vanilla paths
+### vt2-custom-package-discovery — Custom units need a resident-root preview bridge
 
 | Field | Value |
 |-------|-------|
 | Symptom | Engine error `Resource '#ID[<hash>]' not found!` where `<hash>` is the murmur64 of a mod-defined unit path. |
-| Root cause | `Application.resource_package(path)` is global registry; `Mod.resource_package` is mod-scoped. Vanilla code (previewer / GearUtils) uses the global. Mod-defined paths never resolve there. |
+| Root cause | `Application.resource_package(path)` cannot discover a Workshop-defined package from a custom unit path. The historical v0.1.276 rule therefore required every `right_hand_unit` to remain vanilla and overlaid the custom mesh through LA-style `mat_to_use` metadata. Issue #597 established a stronger path: an explicit loaded master root can make the custom unit resident while preview bookkeeping borrows a discoverable vanilla package. Issue #1155 then proved that package bridging does not itself bind a material. |
 | Mod(s) | character_weapon_variants |
-| Fix version(s) | CWV v0.1.276 (after burning 4 versions on this) |
+| Fix version(s) | Historical fallback v0.1.276; explicit-root/preview-bridge pattern from #597; Old Musket material-closure candidate v0.1.524-dev |
 | Category | STATIC |
 | Repro | 1. Set `right_hand_unit = "units/cwv_*/cwv_*"` (custom path). 2. Open inventory preview. 3. Watch crash. |
-| Expected post-fix | `right_hand_unit` always points at a vanilla unit path; custom mesh is overlaid via the LA pattern (`mat_to_use` + PackageManager hooks + master `.package` unit glob). |
-| Detection | Audit each CWV variant's `right_hand_unit`; should always be a vanilla `units/weapons/...` path. |
+| Expected post-fix | A custom `right_hand_unit` is valid only when its 1P/3P resources are directly reachable from the loaded master root, `Application.can_get("unit", path)` proves residency, preview package collection substitutes a known vanilla bookkeeping package without replacing `spawn_data.unit_name`, and forward-only inventory-package aliases preserve a vanilla reverse fallback. The custom `.unit` independently binds its own material; `mat_to_use` is not a renderer contract. Missing evidence fails closed to the vanilla unit before spawn. |
+| Detection | Audit custom unit paths against the explicit root, compiled reachability, both preview-package adapters, forward-only lookup aliases, and missing-residency fallback. Do not require all `right_hand_unit` rows to be vanilla. In-game inventory/Athanor/browser checks remain required because source residency does not prove render retention. |
 
 
 ---
@@ -933,18 +971,18 @@ Last updated: 2026-08-13.
 
 ---
 
-### issue617-old-musket-loot-textures — Shared previewer spawns custom mesh without its texture consumer
+### issue617-old-musket-loot-textures — Shared previewer requires authored-material closure
 
 | Field | Value |
 |-------|-------|
 | Symptom | Old Musket has the correct custom shape but appears white/untextured in CIM's Athanor craft preview. |
-| Root cause | CIM and the illusion browser use `LootItemUnitPreviewer`; CWV's hook applied the Old Musket transform there but never called its bespoke texture helper. Owner equipment and `HeroPreviewer` therefore worked while this independent render consumer did not. |
+| Root cause | CIM and the illusion browser use `LootItemUnitPreviewer`. The prior bespoke texture helper could prove texture residency but not a real material binding; the `.523` log showed a null `rifle_mat` even after both Handgun donor packages loaded. |
 | Mod(s) | character_weapon_variants, crafting_in_modded_dev (consumer only) |
-| Fix version(s) | CWV v0.1.418-dev |
+| Fix version(s) | CWV v0.1.524-dev candidate; live verification pending |
 | Category | STATIC + MANUAL |
 | Repro | Open CIM's Athanor, select Old Musket, switch to another rifle, then return. |
-| Expected post-fix | The custom unit is painted after every preview spawn; a vanilla missing-resource fallback remains untouched. Texture writes use per-unit `Unit.set_texture_for_materials`, never shared `Material.set_texture`. |
-| Detection | Offline `test_cwv_old_musket_presentation.lua`; runtime `issue617_old_musket_preview_texture_consumer`; log `[cwv:617] ... targets=1 applied=1`; visual Athanor check. |
+| Expected post-fix | The custom unit's `rifle_mat` is backed by the CWV-owned material after the stable preview-open edge; a vanilla missing-resource fallback remains untouched. Runtime performs one whole-material bind and no per-texture paint. |
+| Detection | Offline `test_cwv_old_musket_presentation.lua` and resource-closure contracts; runtime `issue617_old_musket_preview_texture_consumer`; bounded `surface=cim_preview edge=preview_open ... retained=true`; visual Athanor check. |
 
 
 ---

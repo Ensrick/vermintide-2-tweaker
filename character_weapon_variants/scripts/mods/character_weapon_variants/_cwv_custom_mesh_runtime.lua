@@ -7,10 +7,10 @@
 -- NetworkLookup.inventory_packages table, no skeleton for the vanilla template's
 -- attachment links, and no flow graph for the weapon FX its actions fire. Each
 -- of those gaps used to be patched by a separate inline block in the entry file;
--- all of them moved here verbatim:
+-- they were consolidated here, and this owner now carries their later fixes:
 --   * the Old Musket package bridge plus the PackageManager `load` / `unload` /
 --     `has_loaded` hooks that map its master-bundled unit paths onto the exact
---     vanilla Handgun packages owning their borrowed materials - and the #474
+--     vanilla Handgun packages as balanced lifetime aliases - and the #474
 --     `_om._husk_custom_bundle_unit` predicate that lets the husk mesh re-key
 --     accept those same two paths (the vanilla-prefix residency gate from issue
 --     418 deliberately rejects them);
@@ -19,9 +19,9 @@
 --     Greataxe and #604 Crowbill alias installs delegated to their family
 --     modules. Forward direction only - the index -> vanilla-name mapping is
 --     never overwritten, so no vanilla equip event is hijacked;
---   * the eight Old Musket transform constants (1P/3P x ranged/melee position,
---     boxed rotation and scale) and the single `_om._old_musket_transform_components`
---     reader every render surface resolves through;
+--   * four held Old Musket transform profiles (1P/3P x ranged/melee) plus the
+--     distinct Loot display-carrier profile, and the canonical attachment
+--     profile selector/source every render adapter resolves through;
 --   * the #617/#742 texture-policy re-exports and the #1155 Phase 3 appearance
 --     pilot `_om.old_musket_appearance`, with the `_om._old_musket_preview_descriptor`
 --     / `_om._old_musket_preview_texture_targets` seams and the
@@ -37,19 +37,17 @@
 --     named rig targets our FBX has no node for (an unfiltered `Unit.node` call
 --     on a missing node is an engine-level fatal that pcall cannot catch).
 --
--- Extracted verbatim from the entry file; behavior is unchanged. The move is a
--- single CONTIGUOUS byte-identical block, so no statement changed neighbours and
--- no registration changed relative order. The whole entry was reconstructed from
--- the new entry plus this block and hash-compared against the pristine file to
--- prove it.
+-- The original extraction was one contiguous byte-identical move, preserving
+-- registration order. Subsequent fixes stay inside this owner so the entry file
+-- cannot regain a second custom-mesh decision path.
 --
 -- BOUNDARY - this owner covers the mesh, not the weapon. It deliberately does
 -- NOT hold:
 --   * the Old Musket's item, template, stance-swap and ammo behavior, which stay
 --     in `_cwv_musket_runtime.lua` and the entry's consolidated
 --     `BackendUtils.get_item_template` hook;
---   * the texture preflight and native paint calls themselves, which stay in
---     `_cwv_old_musket_preview.lua` (this file only re-exports its four entry
+--   * the texture/material preflight and single authored-material bind, which
+--     stay in `_cwv_old_musket_preview.lua` (this file only re-exports its entry
 --     points onto `_om`, exactly as the entry did);
 --   * the bayonet child-unit lifecycle and its visibility hooks, which remain in
 --     the entry - the bayonet is a second VANILLA unit linked to the rifle, not
@@ -116,18 +114,16 @@ local _dbg_alert = ctx.dbg_alert
 -- mesh gets the engine's first-person rendering pipeline for free (no
 -- shadow in FP, correct depth, draws under the FP hand model).
 --
--- The .unit file references a VANILLA material via `data.mat_to_use`,
--- so the spawned mesh uses an existing vanilla 1P/3P material that has
--- the FP rendering shader baked in. See LA's utils/hooks.lua for the
--- prior art that informed this pattern.
+-- The .unit files bind one CWV-owned PBR material from the mod's resident
+-- master package. First-person rendering comes from the normal inventory-unit
+-- spawn path and the 1P unit's render settings, not from a borrowed material.
 --
 -- The three hooks below intercept the engine's package_manager.load /
 -- unload / has_loaded calls. The custom unit data is already in CWV's master
--- bundle, but its .unit borrows a VANILLA material. Map the nonexistent custom
--- unit package onto the exact Handgun package that owns that material while
--- preserving PackageManager's caller reference and completion callback. That
--- makes CIM/hero previews wait for real material readiness and keeps unloads
--- balanced instead of reporting a false-success state (#474/#742).
+-- bundle. Map its nonexistent globally discoverable package name onto the
+-- exact Handgun package only as a balanced PackageManager lifetime anchor,
+-- preserving the caller reference and completion callback. The authored mesh,
+-- PBR material and textures remain self-contained in CWV (#474/#742/#1155).
 --
 -- v0.1.271-276 had this same crash; the early "fix" attempts (sibling
 -- packages, .mod packages list, etc.) all failed because the engine's
@@ -280,28 +276,71 @@ _om._CWV_OLD_MUSKET_POS_3P_MELEE   = { 0, 0.045, 0.1 }
 _om._CWV_OLD_MUSKET_ROT_3P_MELEE   = QuaternionBox(Quaternion.axis_angle(Vector3(0, 1, 0), -math.pi / 2))
 _om._CWV_OLD_MUSKET_SCALE_3P_MELEE = { 1, 1.1, 1.1 }
 
--- #617/#742: the dedicated policy owns every preflight and native texture write.
+-- #1155: LootItemUnitPreviewer links weapons to a camera-world display carrier,
+-- not a character skeleton. Rain's 0.1.523 live run falsified the old assumption
+-- that the held-rifle pose could be copied into that parent frame: the Musket
+-- hovered high. Zero translation plus the imported rotation/scale is an explicit
+-- diagnostic candidate, not a numerically verified final pose. Keeping it in a
+-- distinct profile lets the live readback falsify or tune it without changing
+-- any character-held surface and without creating one recipe per UI.
+_om._CWV_OLD_MUSKET_POS_DISPLAY_3P   = { 0, 0, 0 }
+_om._CWV_OLD_MUSKET_ROT_DISPLAY_3P   = QuaternionBox(Quaternion.from_euler_angles_xyz(-90, -90, 0))
+_om._CWV_OLD_MUSKET_SCALE_DISPLAY_3P = { 1, 1.1, 1.1 }
+
+_om.old_musket_attachment_profiles = {
+	held_1p_rifle = "held_1p_rifle",
+	held_1p_polearm = "held_1p_polearm",
+	held_3p_rifle_character = "held_3p_rifle_character",
+	held_3p_polearm_character = "held_3p_polearm_character",
+	display_3p_rifle = "display_3p_rifle",
+}
+
+-- #617/#742/#1155: the dedicated policy owns material/texture preflight and
+-- the single authored-material bind. There are no runtime texture C writes.
 _om._old_musket_texture_resources_ready = _om.old_musket_preview.texture_resources_ready
+_om._bind_old_musket_authored_material = _om.old_musket_preview.bind_authored_material
 _om._prepare_old_musket_preview_material = _om.old_musket_preview.prepare_preview_material
 _om._old_musket_unit_materials_ready = _om.old_musket_preview.unit_materials_ready
+_om._apply_old_musket_appearance = _om.old_musket_preview.apply_material
 _om._apply_old_musket_textures = _om.old_musket_preview.apply_textures
 
-_om._old_musket_transform_components = function(perspective, mode)
-	local pos, rot, scale
+_om._old_musket_attachment_profile = function(perspective, mode, carrier)
+	local profiles = _om.old_musket_attachment_profiles
+	if carrier == "display" then return profiles.display_3p_rifle end
 	if perspective == "1p" then
-		if mode == "melee" then
-			pos, rot, scale = _om._CWV_OLD_MUSKET_POS_1P_MELEE, _om._CWV_OLD_MUSKET_ROT_1P_MELEE, _om._CWV_OLD_MUSKET_SCALE_1P_MELEE
-		else
-			pos, rot, scale = _om._CWV_OLD_MUSKET_POS_1P_RANGED, _om._CWV_OLD_MUSKET_ROT_1P_RANGED, _om._CWV_OLD_MUSKET_SCALE_1P_RANGED
-		end
-	else
-		if mode == "melee" then
-			pos, rot, scale = _om._CWV_OLD_MUSKET_POS_3P_MELEE, _om._CWV_OLD_MUSKET_ROT_3P_MELEE, _om._CWV_OLD_MUSKET_SCALE_3P_MELEE
-		else
-			pos, rot, scale = _om._CWV_OLD_MUSKET_POS_3P_RANGED, _om._CWV_OLD_MUSKET_ROT_3P_RANGED, _om._CWV_OLD_MUSKET_SCALE_3P_RANGED
-		end
+		return mode == "melee" and profiles.held_1p_polearm or profiles.held_1p_rifle
 	end
-	return pos, rot, scale
+	return mode == "melee" and profiles.held_3p_polearm_character
+		or profiles.held_3p_rifle_character
+end
+
+_om._old_musket_held_profile = function(item_template, perspective, mode)
+	return _om.old_musket_preview_pose.resolve_held_attachment_profile(
+		item_template, perspective, mode, rawget(_G, "Weapons"),
+		_om.old_musket_attachment_profiles)
+end
+
+_om._old_musket_transform_profile_components = function(profile)
+	local profiles = _om.old_musket_attachment_profiles
+	if profile == profiles.held_1p_rifle then
+		return _om._CWV_OLD_MUSKET_POS_1P_RANGED, _om._CWV_OLD_MUSKET_ROT_1P_RANGED, _om._CWV_OLD_MUSKET_SCALE_1P_RANGED
+	elseif profile == profiles.held_1p_polearm then
+		return _om._CWV_OLD_MUSKET_POS_1P_MELEE, _om._CWV_OLD_MUSKET_ROT_1P_MELEE, _om._CWV_OLD_MUSKET_SCALE_1P_MELEE
+	elseif profile == profiles.held_3p_rifle_character then
+		return _om._CWV_OLD_MUSKET_POS_3P_RANGED, _om._CWV_OLD_MUSKET_ROT_3P_RANGED, _om._CWV_OLD_MUSKET_SCALE_3P_RANGED
+	elseif profile == profiles.held_3p_polearm_character then
+		return _om._CWV_OLD_MUSKET_POS_3P_MELEE, _om._CWV_OLD_MUSKET_ROT_3P_MELEE, _om._CWV_OLD_MUSKET_SCALE_3P_MELEE
+	elseif profile == profiles.display_3p_rifle then
+		return _om._CWV_OLD_MUSKET_POS_DISPLAY_3P, _om._CWV_OLD_MUSKET_ROT_DISPLAY_3P, _om._CWV_OLD_MUSKET_SCALE_DISPLAY_3P
+	end
+	return nil, nil, nil
+end
+
+-- Compatibility seam for tuning commands and older diagnostics. New appearance
+-- adapters choose by exact attachment profile instead of perspective alone.
+_om._old_musket_transform_components = function(perspective, mode)
+	return _om._old_musket_transform_profile_components(
+		_om._old_musket_attachment_profile(perspective, mode, "character"))
 end
 
 -- #1155 Phase 3: one canonical immutable descriptor + one bounded lifecycle
@@ -316,7 +355,8 @@ _om.old_musket_appearance = _om.old_musket_appearance_policy.new({
 	-- Retail Quaternion is a callable table; the pilot needs both construction
 	-- from descriptor x/y/z/w data and independent `to_elements` readback.
 	quaternion = Quaternion,
-	transform_source = _om._old_musket_transform_components,
+	transform_profile_source = _om._old_musket_transform_profile_components,
+	attachment_profiles = _om.old_musket_attachment_profiles,
 	canonical_key = function(item)
 		local data = item and item.data
 		local bid = item and (item.backend_id or item.ItemInstanceId
@@ -330,7 +370,9 @@ _om._old_musket_preview_descriptor = function(item)
 		or (item.data and (item.data.backend_id or item.data.ItemInstanceId)))
 	local mode = bid and _om._old_musket_modes_by_backend
 		and _om._old_musket_modes_by_backend[bid] or nil
-	return _om.old_musket_appearance.resolve(item, mode, "illusion_browser")
+	return _om.old_musket_appearance.resolve(item, mode, "illusion_browser", {
+		attachment_profile = _om.old_musket_attachment_profiles.display_3p_rifle,
+	})
 end
 _om._old_musket_preview_texture_targets = function(descriptor, units, spawn_data)
 	return _om.old_musket_appearance.preview_targets(descriptor, units, spawn_data)

@@ -109,6 +109,16 @@ rotation, and scale in 1P, local 3P, and preview. Bake accepted values into the
 canonical per-weapon appearance definition. Never leave release behavior
 dependent on a developer's live tuner store.
 
+Do not treat `1p`, `3p`, or a shared node name as a complete transform key.
+Select a closed-vocabulary attachment profile from the actual parent frame and
+store every profile in the same appearance descriptor. The Old Musket
+`0.1.524-dev` candidate separates held rifle and held polearm frames for owner
+1P/character 3P from the camera-world display carrier used by loot, Athanor, and
+illusion previews. Its display position `{0, 0, 0}`, Euler rotation
+`{-90, -90, 0}`, and scale `{1, 1.1, 1.1}` are deliberately isolated for live
+tuning. Offline tests can prove that the correct profile reaches each consumer;
+they cannot prove those numbers look correct in the renderer.
+
 ## 5. Mesh, material, and texture resources
 
 Each visual model needs at least:
@@ -153,13 +163,23 @@ texture dependencies compiled into the loaded root.
 
 ### 5.2 Vanilla-material/LA-style binding
 
-Use this when a vanilla material is appropriate or correct first-person render
-behavior is more important than retaining source PBR. Store the vanilla
-material reference in unit data (`mat_to_use`, material slot, sampler fields)
-and apply textures through the canonical spawn/appearance layer if required.
-Do not place an unavailable vanilla material in a compile-validated unit block.
-Old Musket is the precedent for intercepting package checks around an already
-resident mod unit.
+Use this only when a named, tested runtime consumer actually reads the metadata
+and binds the foreign material. Stingray's ordinary `GearUtils` and loot/hero
+preview spawn paths do **not** interpret arbitrary `data.mat_to_use`; storing a
+vanilla material reference there does not create a renderer binding. The August
+20 #1155 Old Musket log proved both Handgun packages resident before the custom
+unit still resolved `rifle_mat` to `#ID[00000000]`.
+
+The default and preferred pattern is therefore section 5.1: bind the FBX slot in
+the `.unit` top-level `materials` table to a mod-owned `.material`, include that
+material and every texture dependency in the loaded master package, prove all
+resources before any native call, and census the material handles after binding.
+Old Musket `0.1.524-dev` is the self-contained reference candidate: source,
+manifest, native-resource, and engine-free checks prove the authored closure,
+but in-game material retention is still pending the #1155 solo matrix. A
+foreign/LA binding must document its real consumer, its renderer-local residency
+proof, and an actual fallback; package interception alone is only balanced
+lifetime bookkeeping and never evidence that the foreign material attached.
 
 Do not solve first-person depth/shadow problems by spawning a generic child
 overlay unless the feature is genuinely an attachment. The Old Musket overlay

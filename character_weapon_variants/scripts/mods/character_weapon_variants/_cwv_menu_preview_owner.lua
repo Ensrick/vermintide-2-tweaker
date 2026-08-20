@@ -22,16 +22,18 @@
 --   * the two preview teardown edges (`HeroPreviewer._destroy_item_units_by_slot`
 --     and `LootItemUnitPreviewer._destroy_units`) that forget Crowbill transform
 --     state at the source-backed destruction point rather than by weak-key luck;
---   * `HeroWindowWeaveProperties._create_item_previewer`, which marks ONLY the
---     returned Athanor previewer so the shared LootItemUnitPreviewer consumer
---     can distinguish CIM from an ordinary illusion browser;
+--   * CIM's public `cim_preview_context_v1` marker, which identifies the exact
+--     returned Athanor previewer across Weapons, Properties and Overview so the
+--     shared LootItemUnitPreviewer consumer can distinguish it from an ordinary
+--     illusion browser;
 --   * the illusion browser / Athanor craft pane (`LootItemUnitPreviewer.spawn_units`):
 --     the #597 mod-unit fallback pre-pass, the issue 419 browser mesh-swap
 --     pre-pass, the def ladder, the unit transforms and the #617 Old Musket
---     texture rebind.
--- Extracted verbatim from the entry file; behavior is unchanged. The move is a
--- CONTIGUOUS byte-identical block, so no statement changed neighbours and no
--- registration changed relative order.
+--     authored-material bind.
+-- Originally extracted from the entry file. This owner now also contains the
+-- hardened #1155 exact preview identity, attachment-recipe, fallback, and
+-- stable-edge behavior; hook ownership and relative registration order remain
+-- unchanged.
 --
 -- BOUNDARY - this owner is the MENU third of CWV's three presentation surfaces:
 --   * WORLD/BOT equipment stays in the entry's `GearUtils.create_equipment`
@@ -54,8 +56,8 @@
 -- (Class, method) pair: TeamPreviewer._spawn_hero,
 -- HeroWindowItemCustomization._setup_illusions, HeroPreviewer._spawn_item,
 -- MenuWorldPreviewer._spawn_item, HeroPreviewer._destroy_item_units_by_slot,
--- HeroWindowWeaveProperties._create_item_previewer,
--- LootItemUnitPreviewer._destroy_units and LootItemUnitPreviewer.spawn_units.
+-- LootItemUnitPreviewer._destroy_units, LootItemUnitPreviewer.spawn_units and
+-- LootItemUnitPreviewer._enable_item_units_visibility.
 -- VMF silently DROPS a duplicate registration on a pair, so re-adding any of
 -- these to the entry would shadow this owner rather than chain with it.
 -- `_om.old_musket_preview_pose.install(...)` below is a CALL into a module the
@@ -97,17 +99,59 @@ local _transform_unit = ctx.transform_unit
 local _apply_cwv_hand_transform = ctx.apply_cwv_hand_transform
 local _skin_transform_map = ctx.skin_transform_map
 local _crowbill_transform_by_unit = ctx.crowbill_transform_by_unit
+local _get_mod = ctx.get_mod or get_mod
 local _transform_consumers = assert(_om._cwv_transform_consumers,
 	"cwv menu preview owner requires transform consumer contract")
 
 -- #1155: LootItemUnitPreviewer is shared by ordinary illusion browsers and
--- CIM's Athanor. HeroWindowWeaveProperties is the exact construction boundary
--- for the latter, so a strict instance marker is stronger than guessing from
--- item identity, packages, or whichever other mods happen to be installed.
--- Generic previewers deliberately resolve to illusion_browser.
+-- CIM's Athanor. Consume CIM's public exact-instance contract rather than
+-- maintaining a second constructor hook that covered only Properties and went
+-- stale when the failing screen was ForgeWeapons. Generic previewers deliberately
+-- resolve to illusion_browser; malformed/foreign context fails closed.
+local function _preview_backend_id(item)
+	local data = type(item) == "table" and item.data or nil
+	local bid = type(item) == "table" and (item.backend_id or item.ItemInstanceId
+		or (data and (data.backend_id or data.ItemInstanceId))) or nil
+	return type(bid) == "string" and bid ~= "" and #bid <= 128 and bid or nil
+end
+
+local function _cwv_cim_preview_context(previewer)
+	if type(previewer) ~= "table" or type(_get_mod) ~= "function" then
+		return nil, "absent"
+	end
+	local has_marker = rawget(previewer, "_cim_preview_context") ~= nil
+	local ok_mod, provider = pcall(_get_mod, "cim_dev")
+	local accessor = ok_mod and provider and provider._cim_preview_context_for
+	if type(accessor) ~= "function" then
+		return nil, has_marker and "provider_unavailable" or "absent"
+	end
+	local ok_context, context = pcall(accessor, previewer)
+	if not ok_context or type(context) ~= "table"
+			or context.contract ~= "cim_preview_context_v1"
+			or context.surface ~= "cim_preview"
+			or context.provider ~= "cim_dev"
+			or type(context.generation) ~= "number" or context.generation <= 0
+			or context.generation ~= context.generation
+			or context.generation == math.huge
+			or context.generation % 1 ~= 0
+			or context.exact_backend_identity ~= true
+			or type(context.backend_id) ~= "string" or context.backend_id == ""
+			or #context.backend_id > 128
+			or (context.constructor ~= "overview"
+				and context.constructor ~= "weapons"
+				and context.constructor ~= "properties") then
+		return nil, has_marker and "context_invalid" or "absent"
+	end
+	local item_bid = _preview_backend_id(previewer._item)
+	if item_bid == nil or item_bid ~= context.backend_id then
+		return nil, "identity_mismatch"
+	end
+	return context, "ready"
+end
+_om._cwv_cim_preview_context = _cwv_cim_preview_context
 local function _cwv_loot_preview_surface(previewer)
-	return previewer and previewer._cwv_cim_preview == true
-		and "cim_preview" or "illusion_browser"
+	local context, reason = _cwv_cim_preview_context(previewer)
+	return (context or reason ~= "absent") and "cim_preview" or "illusion_browser"
 end
 _om._cwv_loot_preview_surface = _cwv_loot_preview_surface
 
@@ -143,6 +187,101 @@ local function _resolve_preview_def(self, item_name, spawn_data)
 end
 _om._cwv_preview_transform_decision = _resolve_preview_def
 
+local function _old_musket_preview_stance(info)
+	local team_mode = info and info.cwv_team_musket_mode
+	if team_mode == "melee" or team_mode == "ranged" then return team_mode end
+	local item_data = info and info.item_data
+	if item_data and item_data.mod_data
+			and item_data.mod_data.cwv_musket_stance == "melee" then
+		return "melee"
+	end
+	local cached = info and info.backend_id and _om._old_musket_modes_by_backend
+		and _om._old_musket_modes_by_backend[info.backend_id]
+	return cached == "melee" and "melee" or "ranged"
+end
+
+local function _old_musket_attachment_recipes()
+	local rifle_template = Weapons and Weapons.old_musket_template
+	local polearm_template = Weapons and Weapons.old_musket_template_melee
+	local rifle = rifle_template and rifle_template.right_hand_attachment_node_linking
+		and rifle_template.right_hand_attachment_node_linking.third_person
+	local polearm = polearm_template and polearm_template.right_hand_attachment_node_linking
+		and polearm_template.right_hand_attachment_node_linking.third_person
+	return rifle, polearm
+end
+
+local function _old_musket_character_profile(row, stance)
+	local rifle, polearm = _old_musket_attachment_recipes()
+	return _om.old_musket_preview_pose.resolve_character_attachment_profile(
+		row, stance, rifle, polearm, _om.old_musket_attachment_profiles)
+end
+
+-- HeroPreviewer._spawn_item reads each row's attachment recipe before it links
+-- the unit (world_hero_previewer.lua:895-914). The item name still resolves the
+-- inherited handgun template, so a cached melee stance otherwise spawns the
+-- custom Musket on the rifle parent and no later transform can repair that
+-- frame mismatch. Rewrite only the exact custom right-hand row, before vanilla
+-- consumes it, to the immutable registered stance template's 3P recipe.
+local function _prepare_old_musket_character_attachment(self, item_name, spawn_data)
+	-- TeamPreviewer-backed lobby/score surfaces are deliberately outside this
+	-- pilot. They do not carry a source-qualified Old Musket slot/stance, so a
+	-- custom mesh here would be an unposed, unverified reconstruction. Convert
+	-- only exact authored Old Musket rows back to the resident vanilla Handgun
+	-- and stamp the shared terminal fallback marker before vanilla reads them.
+	if self and self._cwv_team_preview then
+		local marker = _om.mod_unit_preview and _om.mod_unit_preview.FALLBACK_MARKER
+			or "_cwv_mod_unit_preview_fallback_v1"
+		local replaced = false
+		for _, row in ipairs(spawn_data or {}) do
+			if type(row) == "table" then
+				local fallback
+				if row.unit_name == _om.old_musket_preview.UNIT_3P then
+					fallback = _om.old_musket_preview.NETWORK_PACKAGE_ALIAS_3P
+				elseif row.unit_name == _om.old_musket_preview.UNIT then
+					fallback = _om.old_musket_preview.NETWORK_PACKAGE_ALIAS_1P
+				end
+				if type(fallback) == "string" and fallback ~= "" then
+					row.unit_name = fallback
+					row[marker] = fallback
+					replaced = true
+				end
+			end
+		end
+		return not replaced
+	end
+	local def, info, slot_type = _om._cwv_preview_transform_decision(
+		self, item_name, spawn_data)
+	if not def or def.item_key ~= "cwv_es_musket_old" then return true end
+	local row, reason = _om.old_musket_preview_pose.resolve_right_hand_spawn_row(
+		info, slot_type, _om.old_musket_preview.UNIT_3P)
+	if not row then
+		_dbg_alert("[cwv:1155] Old Musket attachment prepare rejected reason=%s",
+			tostring(reason))
+		return false
+	end
+	local stance = _old_musket_preview_stance(info)
+	local rifle, polearm = _old_musket_attachment_recipes()
+	local desired = stance == "melee" and polearm or rifle
+	if type(desired) ~= "table" then
+		_dbg_alert("[cwv:1155] Old Musket attachment prepare rejected reason=attachment_recipe_missing stance=%s",
+			tostring(stance))
+		return false
+	end
+	-- Validate the immutable registered recipe and profile vocabulary before
+	-- touching the live spawn row. HeroPreviewer consumes this table inside the
+	-- vanilla call below, so a rejected preparation must leave its exact raw
+	-- shape intact rather than feeding vanilla a half-accepted CWV parent frame.
+	local candidate = { unit_attachment_node_linking = desired }
+	local profile, profile_reason = _old_musket_character_profile(candidate, stance)
+	if not profile then
+		_dbg_alert("[cwv:1155] Old Musket attachment prepare rejected reason=%s stance=%s",
+			tostring(profile_reason), tostring(stance))
+		return false
+	end
+	row.unit_attachment_node_linking = desired
+	return true
+end
+
 local function _cwv_spawn_item_post(self, item_name, spawn_data)
 	local def, info, slot_type = _om._cwv_preview_transform_decision(
 		self, item_name, spawn_data)
@@ -172,13 +311,43 @@ local function _cwv_spawn_item_post(self, item_name, spawn_data)
 	-- fixed (and cosmetics_tweaker fixed in 0.7.88, see its CHANGELOG).
 	-- Vanilla `equip_item` writes the numeric `slot_index` onto each
 	-- `spawn_data[i]` (lines 704 / 728 of world_hero_previewer.lua), so
-	-- read it from there to bridge the two keying conventions.
+	-- read it from there to bridge the two keying conventions. Old Musket is the
+	-- strict exception below: it selects the exact custom right-hand row because
+	-- dual-hand spawn data is authored left-then-right.
 	-- The previous implementation had a "fall back: match by item_name"
 	-- loop that iterated `self._item_info_by_slot` and stored the iterator
 	-- key — that key is the STRING slot_type, which is exactly the wrong
 	-- thing to look up `equip_units` with. Don't reintroduce.
-	local slot_index = info and info.spawn_data and info.spawn_data[1]
-			and info.spawn_data[1].slot_index
+	-- #1155: retain the exact custom right-hand unit that this generation
+	-- spawned. A base-handgun path, missing/malformed row, duplicate right-hand
+	-- row, or slot mismatch is terminal; none may reach material/pose replay.
+	local old_musket_spawn_row, old_musket_attachment_profile
+	if def.item_key == "cwv_es_musket_old" then
+		local row, reason = _om.old_musket_preview_pose.resolve_right_hand_spawn_row(
+			info, slot_type, _om.old_musket_preview.UNIT_3P)
+		if not row then
+			_dbg_alert("[cwv:1155] Old Musket preview spawn rejected reason=%s",
+				tostring(reason))
+			return
+		end
+		old_musket_spawn_row = row
+		local stance = _old_musket_preview_stance(info)
+		if slot_type ~= self._wielded_slot_type then
+			_dbg("[cwv:1155] Old Musket preview attachment skipped reason=not_wielded slot=%s active=%s",
+				tostring(slot_type), tostring(self._wielded_slot_type))
+			return
+		end
+		local profile, profile_reason = _old_musket_character_profile(row, stance)
+		if not profile then
+			_dbg_alert("[cwv:1155] Old Musket preview attachment rejected reason=%s stance=%s",
+				tostring(profile_reason), tostring(stance))
+			return
+		end
+		old_musket_attachment_profile = profile
+	end
+	local slot_index = old_musket_spawn_row and old_musket_spawn_row.slot_index
+		or (info and info.spawn_data and info.spawn_data[1]
+			and info.spawn_data[1].slot_index)
 	if not slot_index then return end
 
 	local slot = equip_units[slot_index]
@@ -265,31 +434,26 @@ local function _cwv_spawn_item_post(self, item_name, spawn_data)
 	-- routes this preview through the same resource-gated per-unit painter as
 	-- every other surface; direct shared Material writes are forbidden.
 	if def.item_key == "cwv_es_musket_old" and slot.right and _is_unit(slot.right) then
-		local _stance = "ranged"
+		local _stance = _old_musket_preview_stance(info)
 		local item_data = info and info.item_data
-		if item_data and item_data.mod_data and item_data.mod_data.cwv_musket_stance == "melee" then
-			_stance = "melee"
-		elseif info and info.backend_id and _om._old_musket_modes_by_backend then
-			-- HeroPreviewer retains backend_id but normally drops item_data, which
-			-- made the old branch permanently choose ranged. The transition cache
-			-- is the durable bridge between gameplay and preview reconstruction.
-			_stance = _om._old_musket_modes_by_backend[info.backend_id] or "ranged"
-		end
 		_dbg("[cwv preview] firing for cwv_es_musket_old: unit=%s stance=%s", tostring(slot.right), _stance)
-		-- Preview worlds can spawn the custom mesh before its inherited material
-		-- is instantiated. Bind the known vanilla 3P parent, then use the single
-		-- resource-gated painter (#617 crash regression).
+		-- Preview construction owns the first bounded authored-material bind. The
+		-- loading_done transition below is the separate stable retry edge.
 		local unit = slot.right
+		local observed_unit_name = old_musket_spawn_row.unit_name
 		local musket_surface = "inventory_preview"
 		if self._cwv_team_preview then
 			musket_surface = self._cwv_team_peer_source == "score_snapshot"
 				and "score_team" or "lobby"
 		end
 		local appearance = _om.old_musket_appearance.reconcile(unit,
-			musket_surface, "preview_open", item_data or {
+			musket_surface, "instance_load", item_data or {
 				backend_id = info and info.backend_id,
 				cwv_key = "cwv_es_musket_old",
-			}, _stance, { unit_name = _om.old_musket_preview.UNIT_3P })
+			}, _stance, {
+				unit_name = observed_unit_name,
+				attachment_profile = old_musket_attachment_profile,
+			})
 		_dbg("[cwv preview] descriptor retained=%s reason=%s",
 			tostring(appearance and appearance.retained == true),
 			tostring(appearance and appearance.reason))
@@ -312,6 +476,9 @@ local function _cwv_spawn_item_post(self, item_name, spawn_data)
 				slot_index = slot_index,
 				stance = _stance,
 				surface = musket_surface,
+				attachment_profile = old_musket_attachment_profile,
+				attachment_node_linking = old_musket_spawn_row.unit_attachment_node_linking,
+				unit_name = observed_unit_name,
 				wield_event = wield_event,
 			})
 		end
@@ -328,20 +495,11 @@ _om.old_musket_preview_pose.install(mod, function(unit, _, mode, record)
 		record and record.surface or "inventory_preview", "preview_open", {
 		backend_id = record and record.backend_id,
 		cwv_key = "cwv_es_musket_old", skin = "cwv_es_musket_old_skin",
-	}, mode, { unit_name = _om.old_musket_preview.UNIT_3P })
+	}, mode, {
+		unit_name = record and record.unit_name,
+		attachment_profile = record and record.attachment_profile,
+	})
 end, printf, _dbg)
-
--- #1155 consolidated Athanor preview marker. Vanilla constructs and returns
--- the LootItemUnitPreviewer here, then drives its package/spawn work later from
--- post_update. A full wrapper can therefore mark the exact returned instance
--- before LootItemUnitPreviewer.spawn_units fires. Never mark the class or infer
--- CIM from a generic previewer's item.
-mod:hook("HeroWindowWeaveProperties", "_create_item_previewer",
-		function(func, self, viewport_widget, item, ...)
-	local previewer = func(self, viewport_widget, item, ...)
-	if previewer then previewer._cwv_cim_preview = true end
-	return previewer
-end)
 
 -- #604 TeamPreviewer identity bridge. Score rows preserve the peer in
 -- context.players_session_score even though LevelEndView._get_hero_from_score
@@ -463,18 +621,20 @@ end)
 -- item_name (which could be "es_handgun" inherited from base, not
 -- "cwv_es_musket"). Need to see every call to figure out what's happening.
 mod:hook("HeroPreviewer", "_spawn_item", function(func, self, item_name, spawn_data)
+	local prepared = _prepare_old_musket_character_attachment(self, item_name, spawn_data)
 	local result = func(self, item_name, spawn_data)
 	_dbg("[cwv preview hook] HeroPreviewer._spawn_item fired item_name=%s self=%s",
 		tostring(item_name), tostring(self))
-	_cwv_spawn_item_post(self, item_name, spawn_data)
+	if prepared then _cwv_spawn_item_post(self, item_name, spawn_data) end
 	return result
 end)
 
 mod:hook("MenuWorldPreviewer", "_spawn_item", function(func, self, item_name, spawn_data)
+	local prepared = _prepare_old_musket_character_attachment(self, item_name, spawn_data)
 	local result = func(self, item_name, spawn_data)
 	_dbg("[cwv preview hook] MenuWorldPreviewer._spawn_item fired item_name=%s self=%s",
 		tostring(item_name), tostring(self))
-	_cwv_spawn_item_post(self, item_name, spawn_data)
+	if prepared then _cwv_spawn_item_post(self, item_name, spawn_data) end
 	return result
 end)
 
@@ -537,6 +697,58 @@ _om._cwv_browser_transform_decision = function(item, spawn_data)
 	return def, cwv_key, preview_unit_name, weapon_key
 end
 
+local function _reconcile_old_musket_loot(self, units, spawn_data, edge)
+	local item = self and self._item
+	local descriptor = item and _om._old_musket_preview_descriptor(item)
+	if not descriptor then return 0, 0 end
+	local cim_context, cim_reason = _cwv_cim_preview_context(self)
+	local surface = _cwv_loot_preview_surface(self)
+	if surface == "cim_preview" then
+		if not cim_context then
+			_dbg_alert("[cwv:1155] CIM preview rejected reason=%s",
+				tostring(cim_reason))
+			return 0, 0
+		end
+		local latest = tonumber(_om._cwv_cim_latest_generation) or 0
+		if cim_context.generation < latest then
+			_dbg_alert("[cwv:1155] CIM preview rejected reason=stale_generation current=%s observed=%s",
+				tostring(latest), tostring(cim_context.generation))
+			return 0, 0
+		end
+		if cim_context.generation > latest then
+			_om._cwv_cim_latest_generation = cim_context.generation
+		end
+	end
+	local targets = _om._old_musket_preview_texture_targets(
+		descriptor, units, spawn_data)
+	local mode = descriptor.mode or "ranged"
+	local unit_paths = {}
+	for index, unit in ipairs(units or {}) do
+		unit_paths[unit] = spawn_data and spawn_data[index]
+			and spawn_data[index].unit_name or nil
+	end
+	local retained = 0
+	for _, unit in ipairs(targets) do
+		if _is_unit(unit) then
+			local result = _om.old_musket_appearance.reconcile(unit,
+				surface, edge, item, mode, {
+					unit_name = unit_paths[unit],
+					attachment_profile = _om.old_musket_attachment_profiles.display_3p_rifle,
+					cim_generation = cim_context and cim_context.generation or nil,
+				})
+			if result and result.retained then retained = retained + 1 end
+		end
+	end
+	if #targets > 0 then
+		pcall(printf,
+			"[cwv:617/1155] Old Musket preview material retained: surface=%s edge=%s item=%s mode=%s targets=%d retained=%d descriptor=true",
+			tostring(surface), tostring(edge), tostring(descriptor.item_key),
+			tostring(mode), #targets, retained)
+	end
+	return retained, #targets
+end
+_om._cwv_reconcile_old_musket_loot = _reconcile_old_musket_loot
+
 _om._cwv_browser_spawn_units = function(func, self, spawn_data)
 	-- #597: when the mod-scoped custom resource is unexpectedly absent, the
 	-- package bridge records a vanilla fallback rather than letting this
@@ -561,7 +773,7 @@ _om._cwv_browser_spawn_units = function(func, self, spawn_data)
 	-- from the backend_id (pattern documented in feedback_cwv_backend_id_lookup.md).
 	-- The cwv-keyed transform map then takes precedence over the base-key map so
 	-- variant-specific scales/offsets apply correctly.
-	local def, cwv_key, preview_unit_name, weapon_key =
+	local def, _, preview_unit_name, weapon_key =
 		_om._cwv_browser_transform_decision(item, spawn_data)
 	if not weapon_key then return units end
 	local preview_descriptor = _om._old_musket_preview_descriptor(item)
@@ -596,30 +808,9 @@ _om._cwv_browser_spawn_units = function(func, self, spawn_data)
 		end
 	end
 
-	-- #617/#1155: this shared previewer is CIM's Athanor craft-screen consumer
-	-- as well as the illusion browser. The exact instance marker above keeps
-	-- those surfaces distinct. The custom .unit intentionally carries a
-	-- vanilla material shell, so its three authored textures must be rebound
-	-- after every spawn just as they are for owner equipment and HeroPreviewer.
-	-- The target planner rejects vanilla resource fallbacks before any write.
-	local musket_targets = _om._old_musket_preview_texture_targets(
-		preview_descriptor, units, spawn_data)
-	local preview_mode = preview_descriptor and preview_descriptor.mode or "ranged"
-	local preview_surface = _cwv_loot_preview_surface(self)
-	local applied = 0
-	for _, unit in ipairs(musket_targets) do
-		if _is_unit(unit) then
-			local result = _om.old_musket_appearance.reconcile(unit,
-				preview_surface, "preview_open", item, preview_mode,
-				{ unit_name = _om.old_musket_preview.UNIT_3P })
-			if result and result.retained then applied = applied + 1 end
-		end
-	end
-	if #musket_targets > 0 then
-		pcall(printf, "[cwv:617] Old Musket preview textures applied: item=%s mode=%s targets=%d applied=%d descriptor=true",
-			tostring(cwv_key or weapon_key), tostring(preview_mode),
-			#musket_targets, applied)
-	end
+	-- #617/#1155: record the exact construction edge now; the source-backed
+	-- visibility/mip-stable hook below owns the one later preview_open retry.
+	_reconcile_old_musket_loot(self, units, spawn_data, "instance_load")
 
 	return units
 end
@@ -627,6 +818,17 @@ mod._cwv_browser_spawn_units = _om._cwv_browser_spawn_units  -- #419 delivery-co
 
 mod:hook("LootItemUnitPreviewer", "spawn_units", function(func, self, spawn_data)
 	return _om._cwv_browser_spawn_units(func, self, spawn_data)
+end)
+
+-- `present_item` calls this only after packages are loaded and any requested
+-- mip streaming has completed. It is the stable final-writer edge for both the
+-- ordinary illusion browser and all three CIM Athanor constructors.
+mod:hook_safe("LootItemUnitPreviewer", "_enable_item_units_visibility",
+		function(self, _, _, visible)
+	if visible == true then
+		_reconcile_old_musket_loot(self, self._spawned_units,
+			self._units_to_spawn, "preview_open")
+	end
 end)
 
 end

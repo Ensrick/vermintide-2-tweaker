@@ -13,25 +13,58 @@ local function install(mod, ctx)
 
 	local _crowbill_transform_miss_seen = {}
 	local _crowbill_transform_miss_total = 0
+	local _post_native_error_seen = {}
+	local _post_native_error_count = 0
+	local function _run_post_native(stage, callback)
+		local ok, first, second, third = pcall(callback)
+		if not ok then
+			local token = tostring(stage) .. ":" .. tostring(first)
+			if not _post_native_error_seen[token] and _post_native_error_count < 16 then
+				_post_native_error_seen[token] = true
+				_post_native_error_count = _post_native_error_count + 1
+				pcall(printf,
+					"[cwv:1155] post-native auxiliary failed surface=create_equipment stage=%s error=%s native_result_preserved=true count=%d/16 chat=false",
+					tostring(stage), tostring(first), _post_native_error_count)
+			end
+		end
+		return ok, first, second, third
+	end
 	_om._appearance_world_seen = setmetatable({}, { __mode = "k" })
 	mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_data, unit_1p, unit_3p, is_bot, unit_template, extra_extension_data, ammo_percent, override_item_template, override_item_units, career_name)
 		local result = func(world, slot_name, item_data, unit_1p, unit_3p, is_bot, unit_template, extra_extension_data, ammo_percent, override_item_template, override_item_units, career_name)
 		if not result then return result end
 
-		local backend_id = item_data and (item_data.backend_id
-			or (item_data.mod_data and item_data.mod_data.backend_id))
-		local cwv_key = _om._cwv_key_for_item(backend_id, item_data)
+		local item_mod_data = type(item_data) == "table"
+			and type(item_data.mod_data) == "table" and item_data.mod_data or nil
+		local backend_id = type(item_data) == "table"
+			and (item_data.backend_id or (item_mod_data and item_mod_data.backend_id))
+		local key_ok, cwv_key = _run_post_native("key", function()
+			return _om._cwv_key_for_item(backend_id, item_data)
+		end)
+		if not key_ok then return result end
 		local descriptor
 		if cwv_key then
 			local reason
-			descriptor, _, reason = _om._cwv_resolve_world_descriptor(item_data,
-				result.skin, result.right_hand_unit_name, cwv_key, backend_id)
+			local descriptor_ok, _
+			descriptor_ok, descriptor, _, reason = _run_post_native("descriptor", function()
+				return _om._cwv_resolve_world_descriptor(item_data,
+					result.skin, result.right_hand_unit_name, cwv_key, backend_id)
+			end)
+			if not descriptor_ok then
+				_run_post_native("fade_after_descriptor_error", function()
+					return _om.appearance_fade.created(unit_3p, result, is_bot)
+				end)
+				return result
+			end
 			if not descriptor then
 				pcall(printf,
 					"[cwv:660] lifecycle=world_spawn adapter=%s descriptor=DECLINED key=%s skin=%s reason=%s",
 					is_bot and "bot" or "owner", tostring(cwv_key),
 					tostring(result.skin), tostring(reason))
-				_om.appearance_fade.created(unit_3p, result, is_bot); return result
+				_run_post_native("fade_after_descriptor_declined", function()
+					return _om.appearance_fade.created(unit_3p, result, is_bot)
+				end)
+				return result
 			end
 			local observed_unit = result.right_unit_3p or result.left_unit_3p
 			if observed_unit and not _om._appearance_world_seen[observed_unit] then
@@ -43,19 +76,61 @@ local function install(mod, ctx)
 					tostring(descriptor.left_hand_unit))
 			end
 		end
+		-- #1155: Old Musket's descriptor is the sole model/material/pose writer.
+		-- Construction owns `instance_load`; post-wield supplies the distinct
+		-- stable `equip` edge. Bypass the generic transform writer entirely.
 		if cwv_key == "cwv_es_musket_old" then
-			local musket_mode = item_data and item_data.mod_data
-				and item_data.mod_data.cwv_musket_stance or "ranged"
-			if not is_bot then
-				_om.old_musket_appearance.reconcile(result.right_unit_1p,
-					"owner_1p", "equip", item_data, musket_mode,
-					{ unit_name = result.right_hand_unit_name })
+			local musket_mode = item_mod_data
+				and item_mod_data.cwv_musket_stance or "ranged"
+			local profile_1p_ok, profile_1p, reason_1p = _run_post_native(
+				"profile_owner_1p", function()
+					return _om._old_musket_held_profile(
+						result.item_template, "1p", musket_mode)
+				end)
+			if not profile_1p_ok then
+				profile_1p, reason_1p = nil, "auxiliary_error"
 			end
-			_om.old_musket_appearance.reconcile(result.right_unit_3p,
-				is_bot and "bot" or "owner_3p", "equip", item_data, musket_mode,
-				{ unit_name = _om.old_musket_preview.UNIT_3P })
+			local profile_3p_ok, profile_3p, reason_3p = _run_post_native(
+				is_bot and "profile_bot" or "profile_owner_3p", function()
+					return _om._old_musket_held_profile(
+						result.item_template, "3p", musket_mode)
+				end)
+			if not profile_3p_ok then
+				profile_3p, reason_3p = nil, "auxiliary_error"
+			end
+			local observed_3p_name = result.right_hand_unit_name
+			if type(observed_3p_name) == "string"
+					and observed_3p_name:sub(-3) ~= "_3p" then
+				observed_3p_name = observed_3p_name .. "_3p"
+			end
+			if not is_bot and profile_1p then
+				_run_post_native("reconcile_owner_1p", function()
+					return _om.old_musket_appearance.reconcile(result.right_unit_1p,
+						"owner_1p", "instance_load", item_data, musket_mode,
+						{ unit_name = result.right_hand_unit_name,
+							attachment_profile = profile_1p })
+				end)
+			end
+			if profile_3p then
+				_run_post_native(is_bot and "reconcile_bot" or "reconcile_owner_3p",
+					function()
+						return _om.old_musket_appearance.reconcile(result.right_unit_3p,
+							is_bot and "bot" or "owner_3p", "instance_load",
+							item_data, musket_mode, { unit_name = observed_3p_name,
+								attachment_profile = profile_3p })
+					end)
+			end
+			if (not is_bot and not profile_1p) or not profile_3p then
+				pcall(printf,
+					"[cwv:1155] held attachment rejected edge=instance_load bot=%s mode=%s reason_1p=%s reason_3p=%s chat=false",
+					tostring(is_bot == true), tostring(musket_mode),
+					tostring(reason_1p), tostring(reason_3p))
+			end
+			_run_post_native("fade", function()
+				return _om.appearance_fade.created(unit_3p, result, is_bot)
+			end)
+			return result
 		end
-
 		local def = _om._cwv_world_transform_decision(
 			item_data, result.skin, result.right_hand_unit_name)
 		if not def then
@@ -132,7 +207,12 @@ local function install(mod, ctx)
 				is_bot and "bot" or "owner_3p", right_rot_3p)
 		end
 
-		if cwv_key then _om.appearance_fade.created(unit_3p, result, is_bot) end; return result
+		if cwv_key then
+			_run_post_native("fade", function()
+				return _om.appearance_fade.created(unit_3p, result, is_bot)
+			end)
+		end
+		return result
 	end)
 end
 

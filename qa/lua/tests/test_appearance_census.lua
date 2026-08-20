@@ -216,16 +216,43 @@ return function(H, repo_root)
 			"the unsupported bench row must preserve its exact source boundary")
 	end)
 
-	H.test("CWV Old Musket census implements only CIM preview-open", function()
+	H.test("CWV #1155 Old Musket census pins the authored-material lifecycle matrix", function()
 		local census = dofile(repo_root .. "/character_weapon_variants/scripts/mods/"
 			.. "character_weapon_variants/_cwv_appearance_census.lua")
 		local matrix, errors = D.expand_matrix(census.families.old_musket.matrix,
 			"character_weapon_variants.old_musket.matrix")
 		H.equal(#errors, 0, table.concat(errors, "\n"))
-		for _, edge in ipairs(D.EDGES) do
-			local expected = edge == "preview_open" and "implemented" or "unsupported"
-			H.equal(matrix.cim_preview[edge].state, expected,
-				"old_musket.cim_preview." .. edge)
+
+		-- These are the only event-driven edges that have a real Old Musket
+		-- consumer. Every other pair must remain an explicit vanilla fallback;
+		-- classifying a likely reconstruction edge as implemented recreates the
+		-- false-positive runtime diagnosis that #1155 is closing.
+		local implemented = {
+			owner_1p = { instance_load = true, equip = true, customize = true },
+			owner_3p = { instance_load = true, equip = true, customize = true },
+			bot = { instance_load = true, equip = true },
+			husk = { instance_load = true, equip = true, peer_ready = true },
+			inventory_preview = { instance_load = true, preview_open = true },
+			illusion_browser = { instance_load = true, preview_open = true },
+			cim_preview = { instance_load = true, preview_open = true },
+		}
+		local implemented_count = 0
+		for _, surface in ipairs(D.CELLS) do
+			for _, edge in ipairs(D.EDGES) do
+				local expected = implemented[surface] and implemented[surface][edge]
+					and "implemented" or "unsupported"
+				H.equal(matrix[surface][edge].state, expected,
+					"old_musket." .. surface .. "." .. edge)
+				if expected == "implemented" then implemented_count = implemented_count + 1 end
+			end
 		end
+		H.equal(implemented_count, 17,
+			"Old Musket must expose only its 17 source-backed surface/edge pairs")
+		H.truthy(matrix.inventory_preview.instance_load.note:find(
+			"authored material", 1, true) ~= nil,
+			"preview construction must describe the authored-material bind")
+		H.truthy(matrix.illusion_browser.preview_open.note:find(
+			"visible/mip-stable", 1, true) ~= nil,
+			"Loot preview retry must stay on its source-backed stable edge")
 	end)
 end

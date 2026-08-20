@@ -91,6 +91,23 @@ local _om                  = ctx.om
 local _dbg                 = ctx.dbg
 local _variant_definitions = ctx.variant_definitions
 
+local _post_native_error_seen = {}
+local _post_native_error_count = 0
+local function _run_post_native(stage, callback)
+	local ok, first, second, third = pcall(callback)
+	if not ok then
+		local token = tostring(stage) .. ":" .. tostring(first)
+		if not _post_native_error_seen[token] and _post_native_error_count < 16 then
+			_post_native_error_seen[token] = true
+			_post_native_error_count = _post_native_error_count + 1
+			pcall(printf,
+				"[cwv:1155] post-native auxiliary failed surface=wield_slot stage=%s error=%s native_result_preserved=true count=%d/16 chat=false",
+				tostring(stage), tostring(first), _post_native_error_count)
+		end
+	end
+	return ok, first, second, third
+end
+
 -- ============================================================
 -- Cross-slot inventory: musket items appear in BOTH ranged AND melee
 -- inventory grids
@@ -642,9 +659,10 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 	-- exactly a hand vanilla never spawned. The template override feeds ONLY the
 	-- vanilla call below; owner-path gates further down keep reading the
 	-- caller's item_template.
-	local husk_spawn_template
+	local husk_spawn_template, husk_spawn_evidence
 	if not owner_unit_1p and _om._husk_adapter_pre then
-		local suppress, husk_tpl = _om._husk_adapter_pre(hand, item_template, item_units, slot_name, item_data, owner_unit_3p)
+		local suppress, husk_tpl, spawn_evidence = _om._husk_adapter_pre(
+			hand, item_template, item_units, slot_name, item_data, owner_unit_3p)
 		if suppress then
 			if _om._probe_279_spawn then
 				_om._probe_279_spawn(hand, item_data, item_units, owner_unit_1p, owner_unit_3p, nil, "deferred_478")
@@ -652,6 +670,7 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 			return nil, nil, nil, nil
 		end
 		husk_spawn_template = husk_tpl
+		husk_spawn_evidence = spawn_evidence
 	end
 	local v_w3p, v_a3p, v_w1p, v_a1p =
 		func(world, hand, husk_spawn_template or item_template, item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p, unit_template, extra_extension_data, ammo_percent, material_settings_name)
@@ -677,7 +696,8 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 	-- (397/394/604), and the #579 per-hand compare probe. Helpers live on `_om`
 	-- (populated at load time; entry locals are not visible from the module).
 	if not owner_unit_1p and _om._husk_adapter_post then
-		if _om._husk_adapter_post(hand, item_data, item_units, slot_name, owner_unit_3p, v_w3p, v_a3p) then
+		if _om._husk_adapter_post(hand, item_data, item_units, slot_name,
+				owner_unit_3p, v_w3p, v_a3p, husk_spawn_evidence) then
 			v_a3p = nil
 		end
 	end
@@ -715,18 +735,11 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 		_om._cwv_musket_unregister_slot(owner_unit_3p, slot_name)
 	end
 
-	-- Old Musket exact identity enters the Phase-3 appearance reconciler for
-	-- both render perspectives, then keeps the established hidden vanilla rifle
-	-- proxy solely for FX emission. All work is gated on the canonical backend id.
+	-- Old Musket appearance is reconciled once at GearUtils.create_equipment's
+	-- stable postcondition. This nested spawn seam only keeps the established
+	-- hidden vanilla rifle proxy for FX emission. Applying here too spent both
+	-- historical retries in one call stack before the slot was complete (#1155).
 	if _spawn_is_old_musket then
-		-- v0.1.295: distinguish ranged vs melee mode for 1P transform tuning.
-		-- The user wants different pos/rot/scale per stance.
-		local _mode = (item_template == Weapons.musket_template_melee
-		               or item_template == Weapons.old_musket_template_melee) and "melee" or "ranged"
-		_om.old_musket_appearance.reconcile(v_w1p, "owner_1p", "equip",
-			item_data, _mode, { unit_name = _om.old_musket_preview.UNIT })
-		_om.old_musket_appearance.reconcile(v_w3p, "owner_3p", "equip",
-			item_data, _mode, { unit_name = _om.old_musket_preview.UNIT_3P })
 		_om._spawn_old_musket_fx_proxy(world, v_w1p, "units/weapons/player/wpn_empire_handgun_t1/wpn_empire_handgun_t1",     owner_unit_1p, "j_rightweaponattach")
 		_om._spawn_old_musket_fx_proxy(world, v_w3p, "units/weapons/player/wpn_empire_handgun_t1/wpn_empire_handgun_t1_3p", owner_unit_3p, "j_rightweaponattach")
 
@@ -776,8 +789,8 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 	-- v0.1.286: cwv_es_musket_old overlay system DELETED. The variant now uses
 	-- our custom mesh path as right_hand_unit and the vanilla GearUtils pipeline
 	-- spawns it directly. See PackageManager hooks at top of file for the
-	-- "Resource not found" workaround, and the .unit files for the
-	-- `data.mat_to_use` vanilla-material reference that gives FP rendering.
+	-- "Resource not found" workaround. The .unit files now bind CWV's authored
+	-- material directly; the package bridge is only a balanced lifetime alias.
 
 	-- v0.1.220: in melee mode (musket_template_melee), the polearm
 	-- attachment_node_linking holds the rifle perpendicular to its
@@ -992,7 +1005,73 @@ mod:hook("SimpleInventoryExtension", "_wield_slot", function(orig, self, equipme
 		if slot_data.right_ammo_unit_3p and Unit.alive(slot_data.right_ammo_unit_3p) then
 			pcall(Unit.set_unit_visibility, slot_data.right_ammo_unit_3p, false)
 		end
-	end; local incoming_cwv_key = _om._cwv_key_for_item(incoming_bid, incoming_item_data); if incoming_cwv_key then _om.appearance_fade.owner_wield(self, equipment) end -- #922 owner 3P
+	end
+
+	-- #1155: create_equipment owns the construction-time `instance_load` attempt;
+	-- vanilla `_wield_slot` is the first source-backed edge after the slot has been
+	-- assigned, made visible and sent its wield event. Retry here as `equip`, once
+	-- per exact lifecycle token, rather than spending two attempts in the nested
+	-- GearUtils spawn stack.
+	local key_ok, incoming_cwv_key = _run_post_native("key", function()
+		return _om._cwv_key_for_item(incoming_bid, incoming_item_data)
+	end)
+	if not key_ok then return result end
+	if incoming_cwv_key == "cwv_es_musket_old" then
+		local base_unit_name = slot_data and slot_data.right_hand_unit_name
+		local unit_3p_name = base_unit_name
+		if type(unit_3p_name) == "string" and unit_3p_name:sub(-3) ~= "_3p" then
+			unit_3p_name = unit_3p_name .. "_3p"
+		end
+		local mod_data = type(incoming_item_data) == "table"
+			and type(incoming_item_data.mod_data) == "table"
+			and incoming_item_data.mod_data or nil
+		local mode = mod_data and mod_data.cwv_musket_stance or "ranged"
+		local profile_1p_ok, profile_1p, reason_1p = _run_post_native(
+			"profile_owner_1p", function()
+				return _om._old_musket_held_profile(
+					slot_data and slot_data.item_template, "1p", mode)
+			end)
+		if not profile_1p_ok then
+			profile_1p, reason_1p = nil, "auxiliary_error"
+		end
+		local profile_3p_ok, profile_3p, reason_3p = _run_post_native(
+			self.is_bot and "profile_bot" or "profile_owner_3p", function()
+				return _om._old_musket_held_profile(
+					slot_data and slot_data.item_template, "3p", mode)
+			end)
+		if not profile_3p_ok then
+			profile_3p, reason_3p = nil, "auxiliary_error"
+		end
+		if not self.is_bot and profile_1p then
+			_run_post_native("reconcile_owner_1p", function()
+				return _om.old_musket_appearance.reconcile(
+					slot_data and slot_data.right_unit_1p, "owner_1p", "equip",
+					incoming_item_data, mode, { unit_name = base_unit_name,
+						attachment_profile = profile_1p })
+			end)
+		end
+		if profile_3p then
+			_run_post_native(self.is_bot and "reconcile_bot" or "reconcile_owner_3p",
+				function()
+					return _om.old_musket_appearance.reconcile(
+						slot_data and slot_data.right_unit_3p,
+						self.is_bot and "bot" or "owner_3p", "equip",
+						incoming_item_data, mode, { unit_name = unit_3p_name,
+							attachment_profile = profile_3p })
+				end)
+		end
+		if (not self.is_bot and not profile_1p) or not profile_3p then
+			pcall(printf,
+				"[cwv:1155] held attachment rejected edge=equip bot=%s mode=%s reason_1p=%s reason_3p=%s chat=false",
+				tostring(self.is_bot == true), tostring(mode),
+				tostring(reason_1p), tostring(reason_3p))
+		end
+	end
+	if incoming_cwv_key then
+		_run_post_native("fade", function()
+			return _om.appearance_fade.owner_wield(self, equipment)
+		end)
+	end -- #922 owner 3P
 
 	return result
 end)

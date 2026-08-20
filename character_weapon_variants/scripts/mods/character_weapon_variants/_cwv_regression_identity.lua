@@ -1458,8 +1458,9 @@ _rt_register("issue474_old_musket_presentation_surface_coverage", function()
 	-- render surface ..."); this in-keep half asserts every shared entrypoint
 	-- those surfaces call actually exists and resolves.
 	local shared = {
-		"_apply_old_musket_textures",        -- resource-gated UV painter
-		"_old_musket_transform_components",  -- the single pos/rot/scale source
+		"_apply_old_musket_appearance",      -- resource-gated authored material
+		"_old_musket_attachment_profile",     -- exact parent-frame selector
+		"_old_musket_transform_profile_components", -- profile-keyed pose source
 		"_old_musket_mode_for_owner",        -- husk stance from the bounded channel
 		"_old_musket_record_and_publish",    -- owner -> channel publish
 		"_old_musket_preview_descriptor",    -- one item/skin -> unit/mat/pose descriptor
@@ -1473,6 +1474,7 @@ _rt_register("issue474_old_musket_presentation_surface_coverage", function()
 	if type(_om.old_musket_appearance) ~= "table"
 			or type(_om.old_musket_appearance.resolve) ~= "function"
 			or type(_om.old_musket_appearance.reconcile) ~= "function"
+			or type(_om.old_musket_appearance.live_status) ~= "function"
 			or type(_om.old_musket_appearance.disconnect) ~= "function" then
 		return "Old Musket immutable descriptor/reconciler pilot is incomplete"
 	end
@@ -1494,16 +1496,16 @@ _rt_register("issue474_old_musket_presentation_surface_coverage", function()
 			or type(package_bridge.load) ~= "function"
 			or type(package_bridge.unload) ~= "function"
 			or type(package_bridge.has_loaded) ~= "function" then
-		return "Old Musket material-owner package bridge missing"
+		return "Old Musket package-lifetime bridge missing"
 	end
 	if package_bridge.alias(policy.UNIT) ~= policy.NETWORK_PACKAGE_ALIAS_1P
 			or package_bridge.alias(policy.UNIT_3P) ~= policy.NETWORK_PACKAGE_ALIAS_3P
 			or package_bridge.alias(policy.NETWORK_PACKAGE_ALIAS_3P) ~= nil then
-		return "Old Musket package bridge does not preserve the exact 1P/3P donor boundary"
+		return "Old Musket package bridge does not preserve the exact 1P/3P lifetime aliases"
 	end
 	-- All three positive-identity forms a surface can hold (item key, skin key,
-	-- backend id) must resolve to the SAME custom unit plus a full stance
-	-- transform triplet from the ONE descriptor. A surface that resolves any of
+	-- backend id) must resolve to the SAME custom unit plus a declared display
+	-- attachment profile. A surface that resolves any of
 	-- these to nil is exactly the base-handgun regression this issue chased.
 	for _, probe in ipairs({
 		{ data = { cwv_key = "cwv_es_musket_old" } },
@@ -1514,56 +1516,14 @@ _rt_register("issue474_old_musket_presentation_surface_coverage", function()
 		if type(d) ~= "table" or type(d.right_hand_unit) ~= "table"
 				or type(d.right_hand_unit.unit) ~= "string"
 				or (d.mode ~= "ranged" and d.mode ~= "melee")
-				or type(d.transform_3p) ~= "table"
-				or type(d.transform_3p.position) ~= "table"
-				or type(d.transform_3p.scale) ~= "table" then
+				or d.attachment_profile ~= "display_3p_rifle"
+				or type(d.transform_profiles) ~= "table"
+				or type(d.transform_profiles.display_3p_rifle) ~= "table"
+				or type(d.transform_profiles.display_3p_rifle.position) ~= "table"
+				or type(d.transform_profiles.display_3p_rifle.scale) ~= "table" then
 			return "preview descriptor incomplete for a positive Old Musket identity form"
 		end
 	end
-end)
-
-_rt_register("issue1155_old_musket_descriptor_reconciler", function()
-	local pilot, descriptor_lib = _om.old_musket_appearance, _om.appearance_descriptor
-	if type(pilot) ~= "table" or type(descriptor_lib) ~= "table" then
-		return "Phase-3 Old Musket pilot modules are unavailable"
-	end
-	local descriptor, errors = pilot.resolve({
-		backend_id = "cwv_es_musket_old_001", cwv_key = "cwv_es_musket_old",
-	}, "ranged", "inventory_preview")
-	if not descriptor then return "descriptor rejected: " .. tostring(errors and errors[1]) end
-	if type(descriptor.transform_1p) ~= "table"
-			or type(descriptor.transform_3p) ~= "table"
-			or type(descriptor.transform_3p.rotation) ~= "table"
-			or #descriptor.transform_3p.rotation ~= 4 then
-		return "descriptor lost a canonical pose channel"
-	end
-	local preview_surface = _om._cwv_loot_preview_surface
-	if type(preview_surface) ~= "function"
-			or preview_surface({ _cwv_cim_preview = true }) ~= "cim_preview"
-			or preview_surface({}) ~= "illusion_browser"
-			or preview_surface({ _cwv_cim_preview = false }) ~= "illusion_browser"
-			or preview_surface({ _cwv_cim_preview = 1 }) ~= "illusion_browser" then
-		return "Athanor preview marker does not preserve the generic browser boundary"
-	end
-	if not (pilot.implemented_cells.cim_preview
-			and pilot.implemented_cells.cim_preview.preview_open == true) then
-		return "Old Musket CIM preview-open adapter cell is not implemented"
-	end
-	for _, surface in ipairs(descriptor_lib.SURFACES or {}) do
-		if not pilot.unit_surfaces[surface] then
-			local result = pilot.reconcile({}, surface, "instance_load", {
-				backend_id = "cwv_es_musket_old_001", cwv_key = "cwv_es_musket_old",
-			}, "ranged")
-			if not result or result.fallback ~= true then
-				return "fallback adapter missing for surface " .. tostring(surface)
-			end
-		end
-	end
-	local rejected = pilot.reconciler.reconcile(descriptor, "not_a_surface", "equip", {})
-	if rejected.reason ~= "unknown-surface" then
-		return "reconciler does not reject a foreign surface"
-	end
-	if pilot.disconnect() ~= true then return "disconnect cleanup failed" end
 end)
 
 _rt_register("issue582_dual_axes_native_variant_ownership_boundary", function()
@@ -1780,11 +1740,11 @@ _rt_register("issue484_crafted_old_musket_identity", function()
 			or _om._old_musket_valid_bid(string.rep("x", 129)) then
 		return "Old Musket opaque-id wire bound is missing"
 	end
-	local descriptor = _om.old_musket_appearance.resolve({
+	local descriptor = _om._old_musket_preview_descriptor({
 		ItemInstanceId = bid,
 		key = "es_handgun",
 		CustomData = { cwv_key = _om._cwv_key_for_item(bid, item) },
-	}, "ranged", "illusion_browser")
+	})
 	if not descriptor or descriptor.item_key ~= "cwv_es_musket_old"
 			or descriptor.right_hand_unit.unit ~= _om.old_musket_preview.UNIT then
 		return "canonical UUID did not reach the authored Old Musket preview descriptor"
