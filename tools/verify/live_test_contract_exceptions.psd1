@@ -494,7 +494,7 @@
         }
         @{
             Marker='[cwv:423]'; ModId='character_weapon_variants'
-            ModTrees=@{character_weapon_variants='a91550865ed56838f378f723b8d604daecc48917'}
+            ModTrees=@{character_weapon_variants='a16811f45a1b67ed22b0d21203d465675019e5fa'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_exact_wire_runtime.lua'}
             Signature='[cwv:423] exact damage catalog=%s rows=%d beacon=cwv_damage_profiles_exact_v1'
             Bound='one mutually exclusive catalog/parity result during exact-wire install'
@@ -503,7 +503,7 @@
         }
         @{
             Marker='[cwv:423]'; ModId='character_weapon_variants'
-            ModTrees=@{character_weapon_variants='a91550865ed56838f378f723b8d604daecc48917'}
+            ModTrees=@{character_weapon_variants='a16811f45a1b67ed22b0d21203d465675019e5fa'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_exact_wire_runtime.lua'}
             Signature='[cwv:423] WARN exact damage parity unavailable (%s); every cwv profile substitutes'
             Bound='one mutually exclusive parity-install failure receipt during exact-wire installation'
@@ -512,7 +512,7 @@
         }
         @{
             Marker='[cwv:423]'; ModId='character_weapon_variants'
-            ModTrees=@{character_weapon_variants='a91550865ed56838f378f723b8d604daecc48917'}
+            ModTrees=@{character_weapon_variants='a16811f45a1b67ed22b0d21203d465675019e5fa'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_exact_wire_runtime.lua'}
             Signature='[cwv:423] WARN exact damage catalog unavailable (%s); every cwv profile substitutes'
             Bound='one mutually exclusive catalog-capture failure receipt during exact-wire installation'
@@ -521,7 +521,7 @@
         }
         @{
             Marker='[cwv:423]'; ModId='character_weapon_variants'
-            ModTrees=@{character_weapon_variants='a91550865ed56838f378f723b8d604daecc48917'}
+            ModTrees=@{character_weapon_variants='a16811f45a1b67ed22b0d21203d465675019e5fa'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_exact_wire_runtime.lua'}
             Signature='[cwv:423] blocked unsafe hit: profile=%s(%s) exact catalog unconfirmed and no vanilla fallback resolved'
             Bound='at most one blocked-hit receipt per finite NetworkLookup damage-profile id'
@@ -533,7 +533,7 @@
         }
         @{
             Marker='[cwv:423]'; ModId='character_weapon_variants'
-            ModTrees=@{character_weapon_variants='a91550865ed56838f378f723b8d604daecc48917'}
+            ModTrees=@{character_weapon_variants='a16811f45a1b67ed22b0d21203d465675019e5fa'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_exact_wire_runtime.lua'}
             Signature='[cwv:423] wire dmg-profile sub: %s(%s) -> %s (exact catalog unconfirmed; base-weapon damage this hit)'
             Bound='at most one substitution receipt per finite NetworkLookup damage-profile id'
@@ -712,7 +712,7 @@
             )
         }
         @{
-            Marker='[cwv:1107]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='a91550865ed56838f378f723b8d604daecc48917'}
+            Marker='[cwv:1107]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='a16811f45a1b67ed22b0d21203d465675019e5fa'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_musket_ammo_pool.lua'}
             Signature='[cwv:1107] melee-slot musket reload drained %d round(s): reserve %d -> %d'
             Bound='at most one drain receipt per completed melee-slot reload transaction'
@@ -746,7 +746,7 @@
             GuardAnchors=@(@{Tokens=@('if','not','ok','then')})
         }
         @{
-            Marker='[cwv:786]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='a91550865ed56838f378f723b8d604daecc48917'}
+            Marker='[cwv:786]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='a16811f45a1b67ed22b0d21203d465675019e5fa'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_combat_styles.lua'}
             Signature='[cwv:786] verdict %s peer=%s slot=%s family=%s style=%s edge=%s attempt=%d/%d terminal=%s detail=%s'
             Bound='one verdict per retry transition under the eight-attempt per-style-edge ledger'
@@ -754,7 +754,7 @@
             GuardAnchors=@(@{Tokens=@('M','.','MAX_REMOTE_REFRESH_ATTEMPTS','=','8')})
         }
         @{
-            Marker='[cwv:786]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='a91550865ed56838f378f723b8d604daecc48917'}
+            Marker='[cwv:786]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='a16811f45a1b67ed22b0d21203d465675019e5fa'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_combat_styles.lua'}
             Signature='[cwv:786] rebuild queued peer=%s slot=%s family=%s style=%s edge=%s attempt=%d/%d'
             Bound='one queue receipt per retry transition under the eight-attempt per-style-edge ledger'
@@ -762,7 +762,7 @@
             GuardAnchors=@(@{Tokens=@('M','.','MAX_REMOTE_REFRESH_ATTEMPTS','=','8')})
         }
         @{
-            Marker='[cwv:786]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='a91550865ed56838f378f723b8d604daecc48917'}
+            Marker='[cwv:786]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='a16811f45a1b67ed22b0d21203d465675019e5fa'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_combat_styles.lua'}
             Signature='[cwv:786] style rx peer=%s slot=%s family=%s style=%s source=%s changed=%s'
             Bound='one receive receipt per explicit synchronized style edge'
@@ -770,7 +770,7 @@
             GuardAnchors=@(@{Tokens=@('function','runtime',':','accept_style_edge','(','peer_id',',','slot_name',',','family_id',',','style_id',',','source',')')})
         }
         @{
-            Marker='[cwv:786]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='a91550865ed56838f378f723b8d604daecc48917'}
+            Marker='[cwv:786]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='a16811f45a1b67ed22b0d21203d465675019e5fa'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_style_rewield.lua'}
             Signature='[cwv:786] style residency family=%s style=%s resource=%s resident=%s'
             Bound='signature-deduplicated residency evidence under an absolute 32-row cap'
@@ -781,7 +781,7 @@
             )
         }
         @{
-            Marker='[cwv:645]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='a91550865ed56838f378f723b8d604daecc48917'}
+            Marker='[cwv:645]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='a16811f45a1b67ed22b0d21203d465675019e5fa'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_combat_styles.lua'}
             Signature='[cwv:645] candidate=%s item=%s career=%s owner_event=%s sample=%d/%d reason=%s'
             Bound='signature-deduplicated candidate evidence under a 32-row per-candidate cap'
@@ -843,28 +843,28 @@
             )
         }
         @{
-            Marker='[cwv:317]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='a91550865ed56838f378f723b8d604daecc48917'}
+            Marker='[cwv:317]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='a16811f45a1b67ed22b0d21203d465675019e5fa'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/cwv_dev_anim_picker.lua'}
             Signature='[cwv:317] ==== CWV 3P animation picker ====';Bound='one header per explicit finite dump command invocation'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[cwv:317] ==== CWV 3P animation picker ====')})
             GuardAnchors=@(@{Tokens=@('mod',':','command','(','String:cwv_dump_anim_picks',',','String:Dump saved CWV third-person animation picks',',','M','.','dump',')')})
         }
         @{
-            Marker='[cwv:317]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='a91550865ed56838f378f723b8d604daecc48917'}
+            Marker='[cwv:317]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='a16811f45a1b67ed22b0d21203d465675019e5fa'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/cwv_dev_anim_picker.lua'}
             Signature='[cwv:317] %s';Bound='one label per finite authored animation-picker entry per explicit dump invocation'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[cwv:317] %s',',','entry','.','label',')')})
             GuardAnchors=@(@{Tokens=@('for','_',',','entry','in','ipairs','(','_ENTRIES',')','do')})
         }
         @{
-            Marker='[cwv:317]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='a91550865ed56838f378f723b8d604daecc48917'}
+            Marker='[cwv:317]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='a16811f45a1b67ed22b0d21203d465675019e5fa'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/cwv_dev_anim_picker.lua'}
             Signature='[cwv:317]   %s = %q,';Bound='one row per finite authored source event with a changed value per explicit dump invocation'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[cwv:317]   %s = %q,',',','source_event',',','value',')')})
             GuardAnchors=@(@{Tokens=@('for','_',',','source_event','in','ipairs','(','_SOURCE_EVENTS',')','do')})
         }
         @{
-            Marker='[cwv:317]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='a91550865ed56838f378f723b8d604daecc48917'}
+            Marker='[cwv:317]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='a16811f45a1b67ed22b0d21203d465675019e5fa'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/cwv_dev_anim_picker.lua'}
             Signature='[cwv:317] ==== end ====';Bound='one terminal row per explicit finite dump command invocation'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[cwv:317] ==== end ====',')')})
@@ -1121,7 +1121,7 @@
             )
         }
         @{
-            ModId='character_weapon_variants'; ModTree='a91550865ed56838f378f723b8d604daecc48917'
+            ModId='character_weapon_variants'; ModTree='a16811f45a1b67ed22b0d21203d465675019e5fa'
             Source='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_smoke_bomb_probe.lua'
             Marker='[cwv:343]'; AddRoute=$true
             Signature='[cwv:343] status=%s base=%s area=%s pool=%d/%.6f healthy=%s exact_z_scale=%s registration_quarantined=%s'
@@ -1152,7 +1152,7 @@
             )
         }
         @{
-            ModId='cim_dev'; ModTree='423fb8953d4e52c674435e6d37c035eee0c7442e'
+            ModId='cim_dev'; ModTree='9332d5b99cbaf173c35074d2032d95e5e2fe94e9'
             Source='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_loadout_wire_owner.lua'
             Marker='[cim:921]'; AddRoute=$true
             Signature='[cim:921] dropped invalid rarity metadata source=%s peer=%s slot=%s value=%s count=%d/%d'
@@ -1167,7 +1167,7 @@
             )
         }
         @{
-            ModId='cim_dev'; ModTree='423fb8953d4e52c674435e6d37c035eee0c7442e'
+            ModId='cim_dev'; ModTree='9332d5b99cbaf173c35074d2032d95e5e2fe94e9'
             Source='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_loadout_wire_owner.lua'
             Marker='[cim:921]'; AddRoute=$true
             Signature='[cim:921] rarity metadata source=%s peer=%s slot=%s prior=%s current=%s stored=%s->%s count=%d/%d'
@@ -1182,7 +1182,7 @@
             )
         }
         @{
-            ModId='cim_dev'; ModTree='423fb8953d4e52c674435e6d37c035eee0c7442e'
+            ModId='cim_dev'; ModTree='9332d5b99cbaf173c35074d2032d95e5e2fe94e9'
             Source='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_cw_trait_residency.lua'
             Marker='[cim:947]'; AddRoute=$true
             Signature='[cim:947] package=%s ref=%s state=%s detail=%s requests=%d'
@@ -1276,7 +1276,7 @@
             )
         }
         @{
-            ModId='character_weapon_variants'; ModTree='a91550865ed56838f378f723b8d604daecc48917'
+            ModId='character_weapon_variants'; ModTree='a16811f45a1b67ed22b0d21203d465675019e5fa'
             Source='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_outrider_animation.lua'
             Marker='[cwv:760]'; AddRoute=$true
             Signature='[cwv:760] surface=%s career=%s event=%s result=%s source=%s evidence=%d/%d visual=unverified'
@@ -1285,7 +1285,7 @@
                 @{Tokens=@('pcall','(','logger',',','String:[cwv:760] surface=%s career=%s event=%s result=%s source=%s evidence=%d/%d visual=unverified')}
                 @{Source='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_core_templates.lua';Tokens=@('_om','.','outrider_animation','.','emit_evidence','(','printf')}
                 @{Source='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_menu_preview_owner.lua';Tokens=@('_om','.','outrider_animation','.','emit_evidence','(','printf')}
-                @{Source='character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua';Tokens=@('_om','.','outrider_animation','.','emit_evidence','(','printf')}
+                @{Source='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_husk_path.lua';Tokens=@('_om','.','outrider_animation','.','emit_evidence','(','printf')}
             )
             GuardAnchors=@(
                 @{Tokens=@('evidence_seen','[','key',']','or','evidence_count','>=','M','.','EVIDENCE_LIMIT')}
