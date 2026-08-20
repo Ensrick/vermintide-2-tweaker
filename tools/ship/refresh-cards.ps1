@@ -1,7 +1,8 @@
 # tools/ship/refresh-cards.ps1
 #
-# Post-ship refresh of pinned "## CURRENT LIVE TEST" card VERSION SURFACES
-# (issue #1102). The 2026-08-02 audit found all 31 sampled pinned cards naming
+# Post-ship refresh and corrective reconciliation of pinned
+# "## CURRENT LIVE TEST" card VERSION SURFACES (issues #1102 and #1343). The
+# 2026-08-02 audit found all 31 sampled pinned cards naming
 # superseded builds (5-18 patches behind), so a tester following a card fails
 # the [id:LOAD] confirmation on a perfectly correct build. This script walks
 # the open live-test queue and mechanically advances ONLY the just-shipped
@@ -42,6 +43,7 @@
 #
 # Manual verification recipe (read-only; writes nothing):
 #   pwsh -File tools\ship\refresh-cards.ps1 -SelfTest
+#   pwsh -File tools\ship\refresh-cards.ps1 -ReconcileAllStreams -DryRun
 #   pwsh -File tools\ship\refresh-cards.ps1 -DryRun `
 #       -PublishedId 3716869446 -NewVersion 0.1.485-dev -LoadTag cwv `
 #       -ModDirectory character_weapon_variants `
@@ -69,7 +71,8 @@ param(
     [string]$NewManifest,
     [string]$Repository = 'Ensrick/vermintide-2-tweaker',
     [string]$DeploymentManifestPath,
-    [int]$MaxIssues = 100,
+    [int]$MaxIssues = 1000,
+    [switch]$ReconcileAllStreams,
     [switch]$DryRun,
     [switch]$SelfTest
 )
@@ -539,6 +542,189 @@ function Get-VtRefreshedCardAuthorityDecision {
         -Authority $Authority -EnforceAuthority
 }
 
+# Issue #1343: a sequence of otherwise-correct single-stream rewrites cannot
+# repair a cross-mod card because every intermediate body still names at least
+# one stale sibling build and therefore fails deployed-source authority. This
+# planner rewrites every exact anchored build in one candidate, then the caller
+# validates that whole candidate once before any GitHub mutation.
+function Get-VtAllStreamReconcilePlan {
+    param([string]$Body, [object[]]$Streams)
+
+    $result = [pscustomobject]@{
+        Status = 'not-applicable'
+        Reason = $null
+        NewBody = $null
+        Changes = @()
+    }
+    if (-not (Test-VtCurrentLiveTestCard $Body)) { return $result }
+
+    $streamsByTag = @{}
+    $streamsByItem = @{}
+    foreach ($stream in @($Streams)) {
+        $tagKey = ([string]$stream.LoadTag).ToLowerInvariant()
+        if (-not $streamsByTag.ContainsKey($tagKey)) { $streamsByTag[$tagKey] = @() }
+        $streamsByTag[$tagKey] = @($streamsByTag[$tagKey]) + @($stream)
+        $streamsByItem[[string]$stream.PublishedId] = $stream
+    }
+
+    $lineEnding = if ($Body.Contains("`r`n")) { "`r`n" } else { "`n" }
+    $lines = @($Body -split "`r?`n")
+    $changes = New-Object System.Collections.Generic.List[string]
+    $recognized = $false
+    $seenPairs = @{}
+    for ($lineIndex = 0; $lineIndex -lt $lines.Count; $lineIndex++) {
+        $line = [string]$lines[$lineIndex]
+        $edits = New-Object System.Collections.Generic.List[object]
+
+        foreach ($tagKey in @($streamsByTag.Keys | Sort-Object)) {
+            $tagStreams = @($streamsByTag[$tagKey])
+            $tagEsc = [regex]::Escape([string]$tagStreams[0].LoadTag)
+            $patterns = @(
+                ('(?i)\[' + $tagEsc + ':LOAD\]`?[ \t]*`?v(?<version>' + $script:VtSemverPattern + ')'),
+                ('(?i)v(?<version>' + $script:VtSemverPattern + ')`?[ \t]*`?\[' + $tagEsc + ':LOAD\]'),
+                ('(?i)\[' + $tagEsc + '\][ \t]+v(?<version>' + $script:VtSemverPattern + ')[ \t]+loaded')
+            )
+            foreach ($pattern in $patterns) {
+                foreach ($match in @([regex]::Matches($line, $pattern))) {
+                    $recognized = $true
+                    $versionGroup = $match.Groups['version']
+                    $oldVersion = [string]$versionGroup.Value
+                    $candidates = @($tagStreams)
+                    if ($candidates.Count -gt 1) {
+                        $byItem = @($candidates | Where-Object {
+                            $line -match ('(?<!\d)' + [regex]::Escape([string]$_.PublishedId) + '(?!\d)')
+                        })
+                        if ($byItem.Count -eq 1) {
+                            $candidates = $byItem
+                        }
+                        else {
+                            $byIdentity = @($candidates | Where-Object {
+                                Test-VtStreamIdentityPresent -Body $line -Identity ([string]$_.Identity)
+                            })
+                            if ($byIdentity.Count -eq 1) {
+                                $candidates = $byIdentity
+                            }
+                            else {
+                                $byCurrentVersion = @($candidates | Where-Object {
+                                    ([string]$_.Version).Equals($oldVersion, [System.StringComparison]::OrdinalIgnoreCase)
+                                })
+                                if ($byCurrentVersion.Count -eq 1) { $candidates = $byCurrentVersion }
+                            }
+                        }
+                    }
+                    if ($candidates.Count -ne 1) {
+                        $result.Status = 'unparseable'
+                        $result.Reason = "shared load tag '$($tagStreams[0].LoadTag)' on line $($lineIndex + 1) has no unique stream attribution"
+                        return $result
+                    }
+                    $stream = $candidates[0]
+                    $newVersion = ([string]$stream.Version).TrimStart('v', 'V')
+                    if (-not $oldVersion.Equals($newVersion, [System.StringComparison]::OrdinalIgnoreCase)) {
+                        $edits.Add([pscustomobject]@{
+                            Index = [int]$versionGroup.Index
+                            Length = [int]$versionGroup.Length
+                            Replacement = $newVersion
+                        })
+                        $changes.Add("line $($lineIndex + 1): $($stream.ModId) v$oldVersion -> v$newVersion")
+                    }
+                }
+            }
+        }
+
+        # Apply right-to-left so match offsets remain valid.
+        foreach ($edit in @($edits | Sort-Object Index -Descending)) {
+            $line = $line.Substring(0, $edit.Index) + $edit.Replacement +
+                $line.Substring($edit.Index + $edit.Length)
+        }
+
+        # Workshop coordinates are optional. If a card supplies them they must
+        # be complete and unique; when no Steam-authoritative manifest is
+        # available to this corrective lane, remove only incomplete duplicates
+        # instead of inventing or copying a ManifestID.
+        $pairPattern = '(?i)(?:Workshop[ \t]+)?item[ \t]+`?(?<item>\d+)`?[ \t]*,[ \t]*(?:ManifestID|manifest)[ \t]+`?(?<manifest>\d+)`?'
+        $pairMatches = @([regex]::Matches($line, $pairPattern))
+        if ($pairMatches.Count -gt 0) { $recognized = $true }
+        $pairEdits = New-Object System.Collections.Generic.List[object]
+        foreach ($pair in $pairMatches) {
+            $key = $pair.Groups['item'].Value + '=' + $pair.Groups['manifest'].Value
+            if ($seenPairs.ContainsKey($key)) {
+                # Remove the whole duplicate clause so a friendly-name prefix
+                # is not stranded as "Tweaker: Cosmetics ;". Delimiters are
+                # deliberately excluded from edit ranges: adjacent duplicate
+                # clauses then cannot overlap, and punctuation is normalized
+                # once after every right-to-left edit is applied.
+                $deleteStart = [int]$pair.Index
+                $deleteEnd = [int]($pair.Index + $pair.Length)
+                $beforePair = $line.Substring(0, $pair.Index)
+                $previousSemicolon = $beforePair.LastIndexOf(';')
+                if ($previousSemicolon -ge 0) {
+                    $deleteStart = $previousSemicolon + 1
+                }
+                else {
+                    $heading = [regex]::Match($line, '^[ \t]*(?:[-*][ \t]+)?\*\*[^*]+:\*\*[ \t]*')
+                    if ($heading.Success) { $deleteStart = $heading.Length }
+                    else { $deleteStart = 0 }
+                }
+                $afterPair = $line.Substring($deleteEnd)
+                $nextSemicolon = $afterPair.IndexOf(';')
+                if ($nextSemicolon -ge 0) { $deleteEnd += $nextSemicolon }
+                else { $deleteEnd = $line.Length }
+                $pairEdits.Add([pscustomobject]@{
+                    Index=$deleteStart; Length=($deleteEnd - $deleteStart); Replacement=''
+                })
+                $changes.Add("line $($lineIndex + 1): removed duplicate Workshop pair $key")
+            }
+            else { $seenPairs[$key] = $true }
+        }
+        foreach ($edit in @($pairEdits | Sort-Object Index -Descending)) {
+            $line = $line.Substring(0, $edit.Index) + $edit.Replacement +
+                $line.Substring($edit.Index + $edit.Length)
+        }
+
+        $completeRanges = @([regex]::Matches($line, $pairPattern))
+        $incompletePattern = '(?i)(?:Workshop[ \t]+)?item[ \t]+`?(?<item>\d+)`?'
+        $incompleteEdits = New-Object System.Collections.Generic.List[object]
+        foreach ($itemMatch in @([regex]::Matches($line, $incompletePattern))) {
+            $insidePair = $false
+            foreach ($pair in $completeRanges) {
+                if ($itemMatch.Index -ge $pair.Index -and
+                    ($itemMatch.Index + $itemMatch.Length) -le ($pair.Index + $pair.Length)) {
+                    $insidePair = $true
+                    break
+                }
+            }
+            if (-not $insidePair -and $streamsByItem.ContainsKey($itemMatch.Groups['item'].Value)) {
+                $incompleteEdits.Add([pscustomobject]@{ Index=$itemMatch.Index; Length=$itemMatch.Length; Replacement='' })
+                $changes.Add("line $($lineIndex + 1): removed incomplete Workshop item $($itemMatch.Groups['item'].Value)")
+            }
+        }
+        foreach ($edit in @($incompleteEdits | Sort-Object Index -Descending)) {
+            $line = $line.Substring(0, $edit.Index) + $edit.Replacement +
+                $line.Substring($edit.Index + $edit.Length)
+        }
+        $line = $line -replace '[ \t]+,', ',' -replace ',[ \t]*,', ',' -replace ';[ \t]*;', ';'
+        $line = $line -replace '(:\*\*)[ \t]*;[ \t]*', '$1 ' -replace '[ \t]*;[ \t]*$', ''
+        $lines[$lineIndex] = $line
+    }
+
+    if (-not $recognized) { return $result }
+    if ($changes.Count -eq 0) {
+        $result.Status = 'current'
+        $result.NewBody = $Body
+        return $result
+    }
+    $newBody = $lines -join $lineEnding
+    if ($newBody -ceq $Body) {
+        $result.Status = 'current'
+        $result.NewBody = $Body
+        return $result
+    }
+    $result.Status = 'refresh'
+    $result.NewBody = $newBody
+    $result.Changes = @($changes.ToArray())
+    return $result
+}
+
 function Test-VtRefreshManifestInputAllowed {
     param([string]$Path, [bool]$IsDryRun)
     # A local manifest is useful for offline/read-only rehearsal, but its bytes
@@ -978,6 +1164,111 @@ function Invoke-RefreshCardsSelfTest {
     Assert ($plan.Status -eq 'refresh') 'CRLF card body parses and refreshes'
     Assert ($plan.NewBody -match "`r`n") 'CRLF line endings preserved'
 
+    $allStreams = @(
+        [pscustomobject]@{ ModId='career_weapon_variants'; Directory='character_weapon_variants'; PublishedId='3716869446'; LoadTag='cwv'; Identity='Career Weapon Variants'; Version='0.1.521-dev' },
+        [pscustomobject]@{ ModId='tweaker_cosmetics'; Directory='tweaker_cosmetics'; PublishedId='3715714222'; LoadTag='cosmetics'; Identity='Tweaker: Cosmetics'; Version='0.9.215-dev' },
+        [pscustomobject]@{ ModId='tweaker_weapons'; Directory='tweaker_weapons'; PublishedId='3712896117'; LoadTag='wt'; Identity='Tweaker: Weapons'; Version='0.13.2-beta' },
+        [pscustomobject]@{ ModId='tweaker_weapons_dev'; Directory='tweaker_weapons_dev'; PublishedId='3748824853'; LoadTag='wt'; Identity='Tweaker: Weapons Dev'; Version='0.12.268-dev' }
+    )
+    $crossModCard = @'
+## CURRENT LIVE TEST
+
+**Build/banner:** Career Weapon Variants `[cwv:LOAD] v0.1.518-dev`; Tweaker: Cosmetics `[cosmetics:LOAD] v0.9.211-dev`; Workshop item `3716869446`
+**Topology:** Solo
+
+1. Test the feature.
+
+**Expected:** Works.
+'@
+    $plan = Get-VtAllStreamReconcilePlan -Body $crossModCard -Streams $allStreams
+    Assert ($plan.Status -eq 'refresh') 'all-stream reconciliation plans one atomic cross-mod candidate'
+    Assert ($plan.NewBody -match '\[cwv:LOAD\] v0\.1\.521-dev' -and
+        $plan.NewBody -match '\[cosmetics:LOAD\] v0\.9\.215-dev') `
+        'all recognized cross-mod anchors advance together'
+    Assert ($plan.NewBody -notmatch 'Workshop item `3716869446`') `
+        'known incomplete Workshop coordinates are removed rather than fabricated'
+
+    $sharedTagCard = @'
+## CURRENT LIVE TEST
+
+**Build/banner:** Tweaker: Weapons Dev `[wt:LOAD] v0.12.267-dev`; Workshop item `3748824853`, ManifestID `111`
+**Topology:** Solo
+
+1. Test the feature.
+
+**Expected:** Works.
+'@
+    $plan = Get-VtAllStreamReconcilePlan -Body $sharedTagCard -Streams $allStreams
+    Assert ($plan.Status -eq 'refresh' -and $plan.NewBody -match '\[wt:LOAD\] v0\.12\.268-dev') `
+        'shared LOAD tag resolves through exact stream identity and Workshop item'
+    Assert ($plan.NewBody -notmatch '0\.13\.2-beta') 'shared LOAD tag never crosses into the public sibling'
+
+    $ambiguousAllStreamCard = @'
+## CURRENT LIVE TEST
+
+**Build/banner:** confirm `[wt:LOAD] v0.12.111-dev`
+**Topology:** Solo
+
+1. Test the feature.
+
+**Expected:** Works.
+'@
+    $plan = Get-VtAllStreamReconcilePlan -Body $ambiguousAllStreamCard -Streams $allStreams
+    Assert ($plan.Status -eq 'unparseable' -and $plan.Reason -match 'no unique stream attribution') `
+        'all-stream reconciliation fails closed on an unattributed shared LOAD tag'
+
+    $duplicatePairCard = @'
+## CURRENT LIVE TEST
+
+**Build/banner:** Career Weapon Variants `[cwv:LOAD] v0.1.521-dev`; Workshop item `3716869446`, ManifestID `222`
+**Receipt:** Workshop item `3716869446`, ManifestID `222`
+**Topology:** Solo
+
+1. Test the feature.
+
+**Expected:** Works.
+'@
+    $plan = Get-VtAllStreamReconcilePlan -Body $duplicatePairCard -Streams $allStreams
+    Assert ($plan.Status -eq 'refresh' -and
+        ([regex]::Matches($plan.NewBody, '3716869446')).Count -eq 1) `
+        'duplicate complete Workshop coordinates are normalized across card lines'
+
+    $namedDuplicateCard = @'
+## CURRENT LIVE TEST
+
+**Build/banner:** Tweaker: Cosmetics `[cosmetics:LOAD] v0.9.211-dev`; Tweaker: Weapons Dev `[wt:LOAD] v0.12.268-dev`; Cosmetics Workshop item `3715714222`, manifest `333`; Tweaker: Weapons Dev item `3748824853`, ManifestID `555`
+**Workshop receipts:** Tweaker: Cosmetics item `3715714222`, ManifestID `333`; Career Weapon Variants item `3716869446`, ManifestID `444`; Tweaker: Weapons Dev item `3748824853`, ManifestID `555`
+**Topology:** Solo
+
+1. Test the feature.
+
+**Expected:** Works.
+'@
+    $plan = Get-VtAllStreamReconcilePlan -Body $namedDuplicateCard -Streams $allStreams
+    Assert ($plan.Status -eq 'refresh' -and $plan.NewBody -match
+        '\*\*Workshop receipts:\*\* Career Weapon Variants item `3716869446`, ManifestID `444`(?:\r?\n|$)') `
+        'duplicate first and last receipt clauses leave the unique middle clause intact'
+    Assert ($plan.NewBody -notmatch 'Tweaker: Cosmetics[ \t]+;') `
+        'duplicate coordinate cleanup leaves no dangling friendly-name clause'
+
+    $noKnownSurfaceCard = @'
+## CURRENT LIVE TEST
+
+**Build/banner:** tester records the visible version manually.
+**Topology:** Solo
+
+1. Test the feature.
+
+**Expected:** Works.
+'@
+    $plan = Get-VtAllStreamReconcilePlan -Body $noKnownSurfaceCard -Streams $allStreams
+    Assert ($plan.Status -eq 'not-applicable') 'card without a recognized deployed surface is untouched'
+
+    $currentCrlfAllStreamCard = ($sharedTagCard -replace '0\.12\.267-dev', '0.12.268-dev') -replace "`n", "`r`n"
+    $plan = Get-VtAllStreamReconcilePlan -Body $currentCrlfAllStreamCard -Streams $allStreams
+    Assert ($plan.Status -eq 'current' -and $plan.NewBody -ceq $currentCrlfAllStreamCard) `
+        'all-stream reconciliation preserves a current CRLF card byte-for-byte'
+
     Write-Host ''
     if ($script:__rcpass) {
         Write-Host '[refresh-cards -SelfTest] OK' -ForegroundColor Green
@@ -996,10 +1287,16 @@ if ($SelfTest) { Invoke-RefreshCardsSelfTest }
 # a ready lifecycle label -- the only issues doctrine allows pinned cards on.
 # ---------------------------------------------------------------------------
 
-if ([string]::IsNullOrWhiteSpace($PublishedId) -or [string]::IsNullOrWhiteSpace($NewVersion) -or
-    [string]::IsNullOrWhiteSpace($LoadTag) -or [string]::IsNullOrWhiteSpace($ModDirectory) -or
-    [string]::IsNullOrWhiteSpace($StreamIdentity)) {
+if (-not $ReconcileAllStreams -and
+    ([string]::IsNullOrWhiteSpace($PublishedId) -or [string]::IsNullOrWhiteSpace($NewVersion) -or
+     [string]::IsNullOrWhiteSpace($LoadTag) -or [string]::IsNullOrWhiteSpace($ModDirectory) -or
+     [string]::IsNullOrWhiteSpace($StreamIdentity))) {
     Write-Host 'refresh-cards: -PublishedId, -NewVersion, -LoadTag, -ModDirectory, and -StreamIdentity are required (or use -SelfTest).' -ForegroundColor Red
+    exit 2
+}
+if ($ReconcileAllStreams -and ($PublishedId -or $NewVersion -or $LoadTag -or $ModDirectory -or
+    $StreamIdentity -or $NewManifest)) {
+    Write-Host 'refresh-cards: -ReconcileAllStreams cannot be combined with single-stream coordinates.' -ForegroundColor Red
     exit 2
 }
 if (-not (Test-VtRefreshManifestInputAllowed -Path $DeploymentManifestPath -IsDryRun ([bool]$DryRun))) {
@@ -1012,7 +1309,7 @@ if ($Repository -notmatch '^([^/]+)/([^/]+)$') {
 }
 $repoOwner = $Matches[1]
 $repoName = $Matches[2]
-$displayVersion = 'v' + $NewVersion.TrimStart('v', 'V')
+$displayVersion = if ($ReconcileAllStreams) { $null } else { 'v' + $NewVersion.TrimStart('v', 'V') }
 
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 try {
@@ -1025,27 +1322,65 @@ catch {
     exit 2
 }
 $streamInventory = @(Get-VtStreamInventory -RepoRoot $repoRoot)
-$currentStreams = @($streamInventory | Where-Object { $_.Directory -eq $ModDirectory })
-if ($currentStreams.Count -ne 1) {
-    Write-Host "refresh-cards: exact mod directory '$ModDirectory' did not resolve to one stream." -ForegroundColor Red
-    exit 2
+$reconcileStreams = @()
+if ($ReconcileAllStreams) {
+    try {
+        foreach ($inventoryStream in $streamInventory) {
+            $authorityRows = @($sourceAuthority.Records | Where-Object {
+                [string]$_.WorkshopId -eq [string]$inventoryStream.PublishedId
+            })
+            if ($authorityRows.Count -ne 1) {
+                throw "Workshop item '$($inventoryStream.PublishedId)' did not resolve to exactly one deployed-source record."
+            }
+            $authorityRow = $authorityRows[0]
+            if (-not ([string]$authorityRow.Dir).Equals([string]$inventoryStream.Directory,
+                [System.StringComparison]::Ordinal)) {
+                throw "directory drift for Workshop item '$($inventoryStream.PublishedId)': inventory=$($inventoryStream.Directory), deployed=$($authorityRow.Dir)."
+            }
+            if ([string]::IsNullOrWhiteSpace([string]$inventoryStream.Identity)) {
+                throw "stream '$($inventoryStream.Directory)' has no exact display identity."
+            }
+            $reconcileStreams += [pscustomobject]@{
+                ModId = [string]$authorityRow.ModId
+                Directory = [string]$inventoryStream.Directory
+                PublishedId = [string]$inventoryStream.PublishedId
+                LoadTag = [string]$inventoryStream.LoadTag
+                Identity = [string]$inventoryStream.Identity
+                Version = ([string]$authorityRow.Version).TrimStart('v', 'V')
+            }
+        }
+        if ($reconcileStreams.Count -ne @($sourceAuthority.Records).Count) {
+            throw "stream inventory/deployed-source cardinality drift: inventory=$($reconcileStreams.Count), deployed=$(@($sourceAuthority.Records).Count)."
+        }
+    }
+    catch {
+        Write-Host ("refresh-cards: all-stream inventory unavailable -- {0}" -f $_.Exception.Message) -ForegroundColor Red
+        exit 2
+    }
 }
-$currentStream = $currentStreams[0]
-if ([string]$currentStream.PublishedId -ne $PublishedId -or
-    -not ([string]$currentStream.LoadTag).Equals($LoadTag, [System.StringComparison]::OrdinalIgnoreCase) -or
-    -not ([string]$currentStream.Identity).Equals($StreamIdentity, [System.StringComparison]::OrdinalIgnoreCase)) {
-    Write-Host ("refresh-cards: stream identity mismatch for {0}: expected item={1}, tag={2}, identity={3}; got item={4}, tag={5}, identity={6}." -f `
-        $ModDirectory, $currentStream.PublishedId, $currentStream.LoadTag, $currentStream.Identity,
-        $PublishedId, $LoadTag, $StreamIdentity) -ForegroundColor Red
-    exit 2
+else {
+    $currentStreams = @($streamInventory | Where-Object { $_.Directory -eq $ModDirectory })
+    if ($currentStreams.Count -ne 1) {
+        Write-Host "refresh-cards: exact mod directory '$ModDirectory' did not resolve to one stream." -ForegroundColor Red
+        exit 2
+    }
+    $currentStream = $currentStreams[0]
+    if ([string]$currentStream.PublishedId -ne $PublishedId -or
+        -not ([string]$currentStream.LoadTag).Equals($LoadTag, [System.StringComparison]::OrdinalIgnoreCase) -or
+        -not ([string]$currentStream.Identity).Equals($StreamIdentity, [System.StringComparison]::OrdinalIgnoreCase)) {
+        Write-Host ("refresh-cards: stream identity mismatch for {0}: expected item={1}, tag={2}, identity={3}; got item={4}, tag={5}, identity={6}." -f `
+            $ModDirectory, $currentStream.PublishedId, $currentStream.LoadTag, $currentStream.Identity,
+            $PublishedId, $LoadTag, $StreamIdentity) -ForegroundColor Red
+        exit 2
+    }
+    $siblingStreams = @($streamInventory | Where-Object {
+        $_.Directory -ne $ModDirectory -and
+        ([string]$_.LoadTag).Equals($LoadTag, [System.StringComparison]::OrdinalIgnoreCase)
+    })
+    $sharedLoadTag = $siblingStreams.Count -gt 0
+    $siblingPublishedIds = @($siblingStreams | ForEach-Object { [string]$_.PublishedId })
+    $siblingStreamIdentities = @($siblingStreams | ForEach-Object { [string]$_.Identity })
 }
-$siblingStreams = @($streamInventory | Where-Object {
-    $_.Directory -ne $ModDirectory -and
-    ([string]$_.LoadTag).Equals($LoadTag, [System.StringComparison]::OrdinalIgnoreCase)
-})
-$sharedLoadTag = $siblingStreams.Count -gt 0
-$siblingPublishedIds = @($siblingStreams | ForEach-Object { [string]$_.PublishedId })
-$siblingStreamIdentities = @($siblingStreams | ForEach-Object { [string]$_.Identity })
 
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
     Write-Host 'refresh-cards: GitHub CLI (gh) is required.' -ForegroundColor Red
@@ -1184,8 +1519,14 @@ function Write-VtCardLineDiff {
 }
 
 $modeLabel = if ($DryRun) { 'DRY RUN (no comment is written)' } else { 'live' }
-Write-Host ("refresh-cards: {0} ({1}, item {2}) -> {3}{4} [{5}]" -f $StreamIdentity, $ModDirectory, $PublishedId, $displayVersion,
-    $(if ($NewManifest) { ", manifest $NewManifest" } else { ', manifest unchanged' }), $modeLabel)
+if ($ReconcileAllStreams) {
+    Write-Host ("refresh-cards: reconcile all {0} deployed streams atomically [{1}]" -f `
+        $reconcileStreams.Count, $modeLabel)
+}
+else {
+    Write-Host ("refresh-cards: {0} ({1}, item {2}) -> {3}{4} [{5}]" -f $StreamIdentity, $ModDirectory, $PublishedId, $displayVersion,
+        $(if ($NewManifest) { ", manifest $NewManifest" } else { ', manifest unchanged' }), $modeLabel)
+}
 
 $summary = @{ refreshed = 0; current = 0; 'skipped-unparseable' = 0; 'skipped-closed' = 0; failed = 0 }
 $cardsSeen = 0
@@ -1213,10 +1554,15 @@ try {
         if ($pinnedCards.Count -eq 0) { continue }
 
         foreach ($card in $pinnedCards) {
-            $plan = Get-VtCardRefreshPlan -Body ([string]$card.body) -PublishedId $PublishedId `
-                -NewVersion $NewVersion -LoadTag $LoadTag -NewManifest $NewManifest `
-                -SharedLoadTag $sharedLoadTag -StreamIdentity $StreamIdentity `
-                -SiblingPublishedIds $siblingPublishedIds -SiblingStreamIdentities $siblingStreamIdentities
+            if ($ReconcileAllStreams) {
+                $plan = Get-VtAllStreamReconcilePlan -Body ([string]$card.body) -Streams $reconcileStreams
+            }
+            else {
+                $plan = Get-VtCardRefreshPlan -Body ([string]$card.body) -PublishedId $PublishedId `
+                    -NewVersion $NewVersion -LoadTag $LoadTag -NewManifest $NewManifest `
+                    -SharedLoadTag $sharedLoadTag -StreamIdentity $StreamIdentity `
+                    -SiblingPublishedIds $siblingPublishedIds -SiblingStreamIdentities $siblingStreamIdentities
+            }
             if ($plan.Status -eq 'not-applicable') { continue }
             $cardsSeen++
             $cardRef = "#$issueNumber comment $($card.databaseId)"
@@ -1233,7 +1579,20 @@ try {
                     $exitCode = 1
                 }
                 'current' {
-                    Write-Host ("  = {0}: current (already names {1})" -f $cardRef, $displayVersion) -ForegroundColor DarkGray
+                    if ($ReconcileAllStreams) {
+                        $authorityDecision = Get-VtRefreshedCardAuthorityDecision -Body ([string]$card.body) -Authority $liveTestAuthority
+                        if (-not $authorityDecision.Valid) {
+                            Write-Host ("  ! {0}: skipped-unparseable -- current card fails deployed-source authority: {1}" -f `
+                                $cardRef, (@($authorityDecision.Errors) -join ', ')) -ForegroundColor Yellow
+                            $summary['skipped-unparseable']++
+                            $exitCode = 1
+                            continue
+                        }
+                        Write-Host ("  = {0}: current (all recognized surfaces pass authority)" -f $cardRef) -ForegroundColor DarkGray
+                    }
+                    else {
+                        Write-Host ("  = {0}: current (already names {1})" -f $cardRef, $displayVersion) -ForegroundColor DarkGray
+                    }
                     $summary['current']++
                 }
                 'refresh' {
@@ -1245,7 +1604,8 @@ try {
                         $exitCode = 1
                         continue
                     }
-                    Write-Host ("  + {0}: refreshed [{1}] -- {2}" -f $cardRef, $plan.MatchedBy, ($plan.Changes -join '; ')) -ForegroundColor Green
+                    $matchedBy = if ($ReconcileAllStreams) { 'all-streams' } else { $plan.MatchedBy }
+                    Write-Host ("  + {0}: refreshed [{1}] -- {2}" -f $cardRef, $matchedBy, ($plan.Changes -join '; ')) -ForegroundColor Green
                     Write-VtCardLineDiff -OldBody ([string]$card.body) -NewBody $plan.NewBody
                     if (-not $DryRun) {
                         try {
