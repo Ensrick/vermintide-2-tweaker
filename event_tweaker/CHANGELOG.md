@@ -1,5 +1,12 @@
 # Tweaker: Events — Changelog
 
+## 0.4.49-dev (2026-08-20) -- publication reconciliation
+
+- Rebuilds and publishes the already-reviewed 0.4.48-dev Prologue and
+  Tzeentch diagnostic work after its original release transaction was
+  interrupted.
+- No gameplay behavior changed from 0.4.48-dev.
+
 ## 0.4.48-dev (2026-08-16) -- solo Prologue mission + Tzeentch client diagnostic (#941, #1309) [verify-fix]
 
 - The Prologue joins the event missions menu as a solo-only row (#941): a

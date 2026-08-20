@@ -1,5 +1,11 @@
 # Weapon Tweaker Changelog
 
+## 0.12.309-beta (2026-08-20) -- publication reconciliation
+
+- Rebuilds and publishes the already-reviewed 0.12.308-beta availability
+  contracts after its original release transaction was interrupted.
+- No gameplay behavior changed from 0.12.308-beta.
+
 ## 0.12.308-beta (2026-08-16) -- named availability contracts; retired-key cleanup (#108, #183, #169) [verify-fix]
 
 - `/wt_regression_test` gains `issue108_dev_port_metadata_contract` (redirect

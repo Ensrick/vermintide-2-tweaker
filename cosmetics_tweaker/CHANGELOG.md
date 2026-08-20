@@ -1,5 +1,11 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.215-dev (2026-08-20) -- publication reconciliation
+
+- Rebuilds and publishes the already-reviewed 0.9.214-dev LA pre-spawn lease
+  and glow-surface work after its original release transaction was interrupted.
+- No gameplay behavior changed from 0.9.214-dev.
+
 ## 0.9.214-dev (2026-08-16) -- LA pre-spawn lease + glow on preview and score (#696, #1147) [verify-fix]
 
 - Loremaster's Armoury spawn-time material closures pre-lease their exact
