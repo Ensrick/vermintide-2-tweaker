@@ -1149,6 +1149,20 @@ shipped item's manifest may advance; the sibling version remains byte-exact.
 This is the #1102 boundary that prevents one stream's ship from rewriting the
 other stream's test queue.
 
+**Backlog card reconciliation is one atomic all-stream candidate.** A stale
+cross-mod card cannot be repaired safely by a sequence of single-stream edits:
+every intermediate body still names at least one superseded sibling and must
+fail deployed-source authority. Use `refresh-cards.ps1 -ReconcileAllStreams`
+for the corrective lane. It inventories every deployed stream from the hosted
+latest-release manifest, resolves shared LOAD tags only through an exact item,
+stream identity, or unique already-current version, rewrites all attributable
+anchors in memory, normalizes only complete duplicate or known incomplete
+optional Workshop coordinates, and validates the whole candidate once before
+mutation. Ambiguous tags, unknown coordinate shapes, unsupported diagnostics,
+or any final authority error remain untouched and must leave the issue outside
+the ready queue until repaired. Run `-DryRun` first; the operation is
+idempotent and preserves no-op card bytes exactly (issue #1343).
+
 **Atomic source/root-bundle gate (issue #724).** A PR that changes an active
 mod's runtime source, `itemV2.cfg`, or newest CHANGELOG release identity must
 also change that mod's exact root `.mod_bundle`, identified by the canonical
