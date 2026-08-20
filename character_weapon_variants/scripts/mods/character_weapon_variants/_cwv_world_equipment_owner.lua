@@ -3,10 +3,13 @@ local function install(mod, ctx)
 	local _dbg = assert(ctx.dbg, "cwv world equipment owner requires dbg")
 	local _resolve_field = assert(ctx.resolve_field,
 		"cwv world equipment owner requires resolve_field")
-	local _resolve_cwv_def = assert(ctx.resolve_cwv_def,
-		"cwv world equipment owner requires resolve_cwv_def")
 	local _apply_cwv_hand_transform = assert(ctx.apply_cwv_hand_transform,
 		"cwv world equipment owner requires apply_cwv_hand_transform")
+	local _transform_consumers = assert(_om._cwv_transform_consumers,
+		"cwv world equipment owner requires transform consumer contract")
+	_om._cwv_world_transform_decision = function(item_data, skin, resolved_unit_name)
+		return _transform_consumers.world(item_data, skin, resolved_unit_name)
+	end
 
 	local _crowbill_transform_miss_seen = {}
 	local _crowbill_transform_miss_total = 0
@@ -53,7 +56,8 @@ local function install(mod, ctx)
 				{ unit_name = _om.old_musket_preview.UNIT_3P })
 		end
 
-		local def = _resolve_cwv_def(item_data, result.skin, result.right_hand_unit_name)
+		local def = _om._cwv_world_transform_decision(
+			item_data, result.skin, result.right_hand_unit_name)
 		if not def then
 			local base_name = item_data and item_data.name
 			local unit_name = result.right_hand_unit_name

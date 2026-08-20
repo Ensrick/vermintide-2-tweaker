@@ -398,7 +398,7 @@ return function(H, repo_root)
                 :gmatch('_rt_register%("([^"]+)"') do
             names[#names + 1] = name
         end
-        H.equal(#names, 89)
+		H.equal(#names, 90)
         H.equal(names[1], "cwv_variant_flag_present")
         -- #916 registered its style contract directly after the issue620 combat
         -- style check it extends, shifting the later identity slots by one.
@@ -420,7 +420,8 @@ return function(H, repo_root)
         H.equal(names[44], "issue1186_outrider_projectile_reads_cloned_tunes")
         H.equal(names[45], "issue1188_wt_native_trollhammer_keeps_ammo")
         H.equal(names[46], "issue1320_outrider_projectile_unit_and_wire")
-        H.equal(names[47], "cwv_unit_bearing_variants_registered")
+		H.equal(names[47], "cwv_unit_bearing_variants_registered")
+		H.equal(names[48], "issue482_crafted_uuid_transform_consumers")
         H.equal(names[#names - 2], "issue567_skin_reverse_index_valid")
         H.equal(names[#names - 1], "issue704_canonical_skin_owner_and_sword_mace_sources")
         H.equal(names[#names], "issue915_maul_illusion_vanilla_provenance")
@@ -720,7 +721,7 @@ return function(H, repo_root)
         -- variant bootstrap. The menu owner must absorb neither.
         local world_only = {
             'mod:hook("GearUtils", "create_equipment"',
-            "local def = _resolve_cwv_def(item_data, result.skin",
+			"local def = _om._cwv_world_transform_decision(",
             "_crowbill_transform_miss_total = _crowbill_transform_miss_total + 1",
         }
         for _, marker in ipairs(world_only) do

@@ -10,7 +10,8 @@
 --     MenuWorldPreviewer `_spawn_item`: the #482 bid ladder rung the previewer
 --     needs (its info table carries no item_data), the string-slot_type ->
 --     numeric-slot_index KEY BRIDGE, the #760 Outrider stance replay, the
---     per-hand transforms, the #604 Crowbill presentation with its
+--     per-hand transforms selected through the shared #482 consumer contract,
+--     the #604 Crowbill presentation with its
 --     TeamPreviewer identity diagnostic, and the #474/#617/#792 Old Musket
 --     stance + texture + armed-pose branch;
 --   * the #604 TeamPreviewer identity bridge `_om._crowbill_team_peer` and the
@@ -42,8 +43,9 @@
 --   * `_resolve_cwv_def`, `_find_def` and the transform maps themselves are
 --     shared producers, not menu surface, so none of them moved here. `_find_def`
 --     stays in the entry; the resolver and the maps were subsequently gathered
---     into _cwv_weapon_transform_owner.lua by the #1159 weapon-transform slice,
---     and this owner still receives them by ctx exactly as before.
+--     into _cwv_weapon_transform_owner.lua by the #1159 weapon-transform slice.
+--     That owner now publishes the #482 transform-consumer contract used here;
+--     menu surfaces no longer maintain private identity/transform ladders.
 -- The five moved file-scope helpers each had ZERO references outside the moved
 -- range before the move (proved with the block-depth scope probe over the
 -- pristine entry), so nothing in the entry can reach in here any more.
@@ -67,11 +69,10 @@
 -- ctx bindings are all BY VALUE, which is sound because every one of them is
 -- declared once at entry file scope, before this load point, and never
 -- rebound - verified with the same scope probe, so no late-binding accessor is
--- needed. The three maps are mutated in place after this point; passing the
+-- needed. The two maps are mutated in place after this point; passing the
 -- table reference preserves that, as it did when the block was inline:
 --   om, dbg, dbg_alert                      entry lines 55 / 269 / 273
---   resolve_field, transform_map,
---   skin_transform_map                      entry lines 4357 / 4363 / 4364
+--   resolve_field, skin_transform_map        entry lines 4357 / 4364
 --   crowbill_transform_by_unit, is_unit     entry lines 4452 / 4556
 --   transform_unit, apply_cwv_hand_transform  entry lines 4662 / 4700
 --
@@ -94,9 +95,10 @@ local _resolve_field = ctx.resolve_field
 local _is_unit = ctx.is_unit
 local _transform_unit = ctx.transform_unit
 local _apply_cwv_hand_transform = ctx.apply_cwv_hand_transform
-local _transform_map = ctx.transform_map
 local _skin_transform_map = ctx.skin_transform_map
 local _crowbill_transform_by_unit = ctx.crowbill_transform_by_unit
+local _transform_consumers = assert(_om._cwv_transform_consumers,
+	"cwv menu preview owner requires transform consumer contract")
 
 -- #1155: LootItemUnitPreviewer is shared by ordinary illusion browsers and
 -- CIM's Athanor. HeroWindowWeaveProperties is the exact construction boundary
@@ -136,37 +138,14 @@ end
 
 local function _resolve_preview_def(self, item_name, spawn_data)
 	local slot_type, info = _find_preview_slot_info(self, item_name, spawn_data)
-	if _om.combat_styles and _om.combat_styles.transform_decision then
-		local decision = _om.combat_styles:transform_decision({ name = item_name },
-			info and info.backend_id)
-		if decision ~= nil then return decision or nil, info, slot_type end
-	end
-	local skin = info and info.skin_name
-	if skin and _skin_transform_map[skin] then return _skin_transform_map[skin], info, slot_type end
 	local model_def = info and _crowbill_def_from_spawn_data(info.spawn_data)
-	if model_def then return model_def, info, slot_type end
-
-	if info and info.backend_id then
-		-- v0.1.316: match ANY instance suffix (_001, _002, _003, ...). The
-		-- earlier "^(cwv_.-)_001$" regex only matched instance 1, so for
-		-- variants with `instances = 2` (e.g. cwv_es_musket_old) the second
-		-- instance never resolved — `_cwv_spawn_item_post` returned early
-		-- and the previewer-side texture binding never fired. Result: rifle
-		-- appeared in the keep inventory previewer without textures.
-		-- #482: shared ladder. The previewer's info table carries only the
-		-- bid (no item_data), so a crafted instance's UUID bid resolves via
-		-- the ladder's backend-lookup rung to the stamped cwv_key.
-		local matched = _om._cwv_key_for_item(info.backend_id, nil)
-		if matched and _transform_map[matched] then
-			return _transform_map[matched], info, slot_type
-		end
-	end
-	if _transform_map[item_name] then return _transform_map[item_name], info, slot_type end
-	return nil, info, slot_type
+	return _transform_consumers.preview(item_name, info, model_def), info, slot_type
 end
+_om._cwv_preview_transform_decision = _resolve_preview_def
 
 local function _cwv_spawn_item_post(self, item_name, spawn_data)
-	local def, info, slot_type = _resolve_preview_def(self, item_name, spawn_data)
+	local def, info, slot_type = _om._cwv_preview_transform_decision(
+		self, item_name, spawn_data)
 	if not def then
 		-- v0.1.326: log when the resolver fails for a musket-shaped item_name
 		-- so we can tell whether the regex / lookup is broken vs the hook
@@ -547,6 +526,17 @@ end)
 -- World.spawn_unit. Naming the body makes the delivery contract executable:
 -- deleting the pre-pass call below makes the spy observe base units and the
 -- check fails, which the pure descriptor/adapter checks could not detect.
+_om._cwv_browser_transform_decision = function(item, spawn_data)
+	local item_data = item and item.data
+	local weapon_key = (item_data and item_data.key) or (item and item.key)
+	if not weapon_key then return nil, nil, nil, nil end
+	local explicit_skin_def = _skin_transform_map[weapon_key]
+	local model_def, preview_unit_name = _crowbill_def_from_spawn_data(spawn_data)
+	local def, cwv_key = _transform_consumers.browser(
+		item, weapon_key, model_def, explicit_skin_def)
+	return def, cwv_key, preview_unit_name, weapon_key
+end
+
 _om._cwv_browser_spawn_units = function(func, self, spawn_data)
 	-- #597: when the mod-scoped custom resource is unexpectedly absent, the
 	-- package bridge records a vanilla fallback rather than letting this
@@ -565,29 +555,15 @@ _om._cwv_browser_spawn_units = function(func, self, spawn_data)
 	local item = self._item
 	if not item or not units then return units end
 	local item_data = item.data
-	local weapon_key = (item_data and item_data.key) or item.key
-	if not weapon_key then return units end
 
 	-- For cwv_* items, item_data.key returns the BASE weapon key (e.g.
 	-- "es_bastard_sword"), NOT "cwv_es_longsword". Always resolve the cwv key
 	-- from the backend_id (pattern documented in feedback_cwv_backend_id_lookup.md).
 	-- The cwv-keyed transform map then takes precedence over the base-key map so
 	-- variant-specific scales/offsets apply correctly.
-	local explicit_skin_def = _skin_transform_map[weapon_key]
-	local model_def, preview_unit_name = _crowbill_def_from_spawn_data(spawn_data)
-	local def = model_def or explicit_skin_def or _transform_map[weapon_key]
-	-- #482 ladder: bid pattern (CWV's own _001/_002 instances AND cim
-	-- standard-forge copies, issue 390) -> item.data.cwv_key stamp (Athanor
-	-- crafts with UUID bids) so the cosmetic-preview scale applies to every
-	-- crafted variant instance too.
-	local cwv_key = _om._cwv_key_for_item(item.backend_id, item_data)
-	if cwv_key and not model_def and not explicit_skin_def then
-		def = _transform_map[cwv_key] or _skin_transform_map[cwv_key] or def
-	end
-	if _om.combat_styles and _om.combat_styles.transform_decision then
-		local decision = _om.combat_styles:transform_decision(item_data, item.backend_id)
-		if decision ~= nil then def = decision or nil end
-	end
+	local def, cwv_key, preview_unit_name, weapon_key =
+		_om._cwv_browser_transform_decision(item, spawn_data)
+	if not weapon_key then return units end
 	local preview_descriptor = _om._old_musket_preview_descriptor(item)
 	if not def and not preview_descriptor then return units end
 

@@ -1,5 +1,19 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.523-dev (2026-08-20) -- crafted UUID transform consumers (#482) [verify-fix]
+
+- World equipment, inventory/hero preview, the illusion/Athanor browser, and
+  remote husks now select transform definitions through one engine-free
+  consumer contract. Crafted UUID items use the canonical stamped/backend
+  identity ladder instead of each surface maintaining a private fallback path.
+- Owner and husk application now share one per-hand transform planner, keeping
+  scale, rotation, offset, and multiplier precedence identical across render
+  surfaces without changing native items.
+- The named in-game regression carries an Imperial Longsword and Shield UUID
+  through the actual published consumer seams, compares the canonical 1P/3P
+  tuples, and includes an unchanged native sword control. Offline coverage also
+  locks the stronger style, skin, and model precedence rules.
+
 ## 0.1.522-dev (2026-08-20) -- native ammo HUD restoration (#1108) [verify-fix]
 
 - The primary-slot Old Musket HUD adapter now treats its counter override as a

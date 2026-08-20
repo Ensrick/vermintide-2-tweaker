@@ -173,6 +173,16 @@ crash below was so hard to isolate). A selected illusion is already recorded in
 `info.skin_name`; that stored value outranks a nil post-hook argument and prevents
 the default variant mesh correction from clobbering vanilla's selected spawn data.
 
+Issue #482 routes the world equipment hook, both keep previewers, the shared
+illusion/Athanor browser, and the remote-husk policy through
+`_cwv_transform_consumer_contract.lua`. A crafted UUID is resolved once through
+the canonical stamped/backend identity ladder; consumers may not infer a CWV
+variant from the inherited vanilla item name. `_plan_cwv_hand_transform` is the
+single per-hand tuple planner for owner and husk application. The named runtime
+check drives the published production seams with an actual UUID-shaped Imperial
+Longsword and Shield identity and a native sword control, so a newly added render
+surface cannot silently grow a private transform ladder.
+
 ### Packages / residency (owner: `docs/engine/05`)
 
 Cross-character variants can also resolve a first-person state machine absent

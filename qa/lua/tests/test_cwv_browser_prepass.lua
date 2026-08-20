@@ -30,6 +30,10 @@ return function(H, repo_root)
                 resolve_spawn_slot = function() return nil end,
             },
             mod_unit_preview = { apply_loot_fallbacks = function(_, sd) return sd end },
+			_cwv_transform_consumers = {
+				preview = function() return nil end,
+				browser = function() return nil, nil end,
+			},
         }
         local mod = {
             hook = function(_, class, method)

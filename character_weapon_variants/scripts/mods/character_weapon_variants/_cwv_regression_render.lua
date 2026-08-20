@@ -43,6 +43,118 @@ _rt_register("cwv_unit_bearing_variants_registered", function()
     end
 end)
 
+_rt_register("issue482_crafted_uuid_transform_consumers", function()
+	local key = "cwv_es_longsword_shield"
+	local target = _find_def(key)
+	local expected = _transform_map and _transform_map[key]
+	local plan_transform = _om.weapon_transform
+		and _om.weapon_transform.plan_cwv_hand_transform
+	if not target or not expected or target ~= expected or not _registered_keys[key] then
+		return "#482 Imperial Longsword and Shield transform registration missing"
+	end
+	if type(plan_transform) ~= "function"
+			or type(_om._cwv_world_transform_decision) ~= "function"
+			or type(_om._cwv_preview_transform_decision) ~= "function"
+			or type(_om._cwv_browser_transform_decision) ~= "function"
+			or type(_om._cwv_select_husk_transform_def) ~= "function"
+			or type(_om._cwv_husk_transform_apply_plan) ~= "function" then
+		return "#482 production transform consumer seam missing"
+	end
+
+	local function same_triplet(actual, wanted)
+		if actual == nil or wanted == nil then return actual == wanted end
+		return type(actual) == "table" and type(wanted) == "table"
+			and actual[1] == wanted[1] and actual[2] == wanted[2]
+			and actual[3] == wanted[3]
+	end
+	local function same_plan(actual, wanted)
+		return type(actual) == "table"
+			and same_triplet(actual.scale, wanted.scale)
+			and same_triplet(actual.scale_multiplier, wanted.scale_multiplier)
+			and same_triplet(actual.offset, wanted.offset)
+			and same_triplet(actual.rotation, wanted.rotation)
+			and actual.should_apply == wanted.should_apply
+	end
+
+	-- This UUID shape cannot satisfy CWV's patterned-backend-id rung. The world
+	-- decision must therefore consume the exact canonical stamp and prime the
+	-- positively validated cache used by preview records that carry only the id.
+	local uuid = "48200000-0000-4000-8000-000000000482"
+	local stamped = {
+		backend_id = uuid,
+		cwv_key = key,
+		name = target.base_weapon,
+		key = target.base_weapon,
+	}
+	local world_def = _om._cwv_world_transform_decision(stamped, nil,
+		target.right_hand_unit)
+	local preview_self = {
+		_item_info_by_slot = {
+			melee = {
+				name = target.base_weapon,
+				backend_id = uuid,
+				spawn_data = { { slot_index = 1 } },
+			},
+		},
+	}
+	local preview_def = _om._cwv_preview_transform_decision(
+		preview_self, target.base_weapon, nil)
+	local browser_def, browser_key = _om._cwv_browser_transform_decision({
+		backend_id = uuid,
+		data = { key = target.base_weapon, name = target.base_weapon },
+	}, {})
+	local husk_def, husk_source = _om._cwv_select_husk_transform_def("right", {
+		variant_key = key,
+		right_hand_unit = target.right_hand_unit,
+	}, { name = target.base_weapon }, nil, target.right_hand_unit, nil)
+	if world_def ~= expected or preview_def ~= expected or browser_def ~= expected
+			or browser_key ~= key or husk_def ~= expected
+			or husk_source ~= "exact_variant" then
+		return "#482 crafted UUID did not select one canonical def on every consumer"
+	end
+
+	local expected_1p = plan_transform(expected, "right", "1p")
+	local expected_3p = plan_transform(expected, "right", "3p")
+	if not same_triplet(expected_1p.scale, { 1.0, 0.8, 0.9 })
+			or not same_triplet(expected_3p.scale, { 0.9, 0.7, 0.8 })
+			or not same_triplet(expected_1p.offset, { 0, 0, -0.065 })
+			or not same_triplet(expected_3p.offset, { 0, 0, -0.065 })
+			or expected_1p.rotation ~= nil or expected_3p.rotation ~= nil then
+		return "#482 canonical Imperial Longsword and Shield tuple drifted"
+	end
+	for _, def in ipairs({ world_def, preview_def, browser_def }) do
+		if not same_plan(plan_transform(def, "right", "3p"), expected_3p) then
+			return "#482 owner or menu consumer lost the canonical 3P tuple"
+		end
+	end
+	local husk_plan = _om._cwv_husk_transform_apply_plan("right", husk_def, husk_source)
+	if not same_plan(husk_plan, expected_3p) then
+		return "#482 husk consumer lost the canonical 3P tuple"
+	end
+
+	local native = {
+		backend_id = "482-native-control",
+		name = "es_1h_sword",
+		key = "es_1h_sword",
+	}
+	local native_preview = {
+		_item_info_by_slot = {
+			melee = { name = native.name, backend_id = native.backend_id,
+				spawn_data = { { slot_index = 1 } } },
+		},
+	}
+	local native_husk, native_source = _om._cwv_select_husk_transform_def(
+		"right", nil, native, nil, nil, nil)
+	if _om._cwv_world_transform_decision(native, nil, nil) ~= nil
+			or _om._cwv_preview_transform_decision(native_preview, native.name, nil) ~= nil
+			or _om._cwv_browser_transform_decision({
+				backend_id = native.backend_id, data = native,
+			}, {}) ~= nil
+			or native_husk ~= nil or native_source ~= "miss" then
+		return "#482 native control acquired a CWV transform"
+	end
+end)
+
 _rt_register("issue597_greataxe_replaces_poleaxe", function()
 	local greataxe = _om.greataxe
 	if type(_skin_transform_map) ~= "table" then
