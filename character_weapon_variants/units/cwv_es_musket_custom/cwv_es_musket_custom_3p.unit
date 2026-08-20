@@ -1,11 +1,5 @@
-data = {
-	mat_slots = {
-		slot1 = "rifle_mat"
-	}
-	mat_to_use = "units/weapons/player/wpn_empire_handgun_t1/wpn_empire_handgun_t1_3p"
-	color_slot = "texture_map_c0ba2942"
-	norm_slot  = "texture_map_59cd86b9"
-	MAB_slot   = "texture_map_0205ba86"
+materials = {
+	rifle_mat = "units/cwv_es_musket_custom/cwv_es_musket_custom"
 }
 
 renderables = {

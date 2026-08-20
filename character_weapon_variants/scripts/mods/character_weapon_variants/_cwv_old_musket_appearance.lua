@@ -2,27 +2,25 @@
 --
 -- One immutable descriptor is resolved before an engine adapter runs.  Every
 -- surface enters through `reconcile`; no surface owns a model/material/pose
--- recipe.  The shared reconciler applies at most twice per exact lifecycle
--- token and commits only after this module reads retained state back from the
+-- recipe.  The shared reconciler applies once per exact lifecycle token and
+-- commits only after this module reads retained state back from the
 -- live unit.  Unsupported renderers explicitly retain vanilla presentation.
 local M = {}
 
 local UNIT_SURFACES = {
-	owner_1p = "1p", owner_3p = "3p", bot = "3p", husk = "3p",
-	inventory_preview = "3p", illusion_browser = "3p", cim_preview = "3p",
-	lobby = "3p", score_team = "3p",
+	owner_1p = true, owner_3p = true, bot = true, husk = true,
+	inventory_preview = true, illusion_browser = true, cim_preview = true,
+	lobby = true, score_team = true,
 }
 
 local IMPLEMENTED_CELLS = {
-	owner_1p = { equip = true, customize = true },
-	owner_3p = { equip = true, customize = true },
-	bot = { equip = true },
-	husk = { equip = true, peer_ready = true },
-	inventory_preview = { preview_open = true },
-	illusion_browser = { preview_open = true },
-	cim_preview = { preview_open = true },
-	lobby = { preview_open = true },
-	score_team = { preview_open = true },
+	owner_1p = { instance_load = true, equip = true, customize = true },
+	owner_3p = { instance_load = true, equip = true, customize = true },
+	bot = { instance_load = true, equip = true },
+	husk = { instance_load = true, equip = true, peer_ready = true },
+	inventory_preview = { instance_load = true, preview_open = true },
+	illusion_browser = { instance_load = true, preview_open = true },
+	cim_preview = { instance_load = true, preview_open = true },
 }
 
 local function item_backend_id(item)
@@ -88,16 +86,34 @@ function M.new(args)
 	local unit_api = args.unit
 	local vector_api = args.vector
 	local quaternion_api = args.quaternion
-	local transform_source = args.transform_source
+	local transform_profile_source = args.transform_profile_source
+	local attachment_profiles = args.attachment_profiles
 	local canonical_key = args.canonical_key
 	local printf_fn = args.printf or function() end
 	assert(type(D) == "table" and type(D.build) == "function", "descriptor contract required")
 	assert(type(WA) == "table" and type(WA.apply_report) == "function", "appearance writer required")
 	assert(type(policy) == "table", "Old Musket resource policy required")
+	assert(type(transform_profile_source) == "function", "attachment transform source required")
+	assert(type(attachment_profiles) == "table", "attachment profile vocabulary required")
 
 	local tracked = setmetatable({}, { __mode = "k" })
+	-- Bounded session evidence. One latest result per canonical surface+stance prevents
+	-- `/cwv_regression_test` from reporting PASS before any live renderer was
+	-- exercised, while a later retained stable edge supersedes an earlier
+	-- construction-time miss. Only CIM's exact preview selection arms the tested
+	-- item identity; other equipped slots/bots cannot steal that bounded epoch.
+	-- This is one fixed key per canonical surface+stance, never a unit history.
+	local evidence = {}
+	local evidence_targets = {}
+	local evidence_epoch = 0
+	local cim_identity
+	local held_identity
+	local cim_generation = 0
 	local generation = 0
 	local C = {}
+	local function descriptor_data(descriptor)
+		return D.raw(descriptor) or descriptor
+	end
 
 	local function mode_for(item, explicit)
 		if explicit == "melee" then return "melee" end
@@ -107,8 +123,98 @@ function M.new(args)
 		return md and md.cwv_musket_stance == "melee" and "melee" or "ranged"
 	end
 
-	local function recipe(perspective, mode)
-		local position, rotation, scale = transform_source(perspective, mode)
+	local function copy_identity(identity)
+		return type(identity) == "table" and {
+			kind = identity.kind, value = identity.value,
+		} or nil
+	end
+
+	local function same_identity(a, b)
+		return type(a) == "table" and type(b) == "table"
+			and a.kind == b.kind and a.value == b.value
+	end
+
+	local function clear_non_cim_evidence()
+		for key, row in pairs(evidence) do
+			if row.surface ~= "cim_preview" then
+				evidence[key] = nil
+				evidence_targets[key] = nil
+			end
+		end
+	end
+
+	local function arm_cim_identity(surface, identity, provider_generation)
+		if surface ~= "cim_preview" then return false, "not_cim" end
+		if type(identity) ~= "table" or identity.kind ~= "backend_id"
+				or type(identity.value) ~= "string" or identity.value == ""
+				or #identity.value > 128 then
+			return false, "identity_invalid"
+		end
+		if type(provider_generation) ~= "number" or provider_generation <= 0
+				or provider_generation ~= provider_generation
+				or provider_generation == math.huge
+				or provider_generation % 1 ~= 0 then
+			return false, "generation_invalid"
+		end
+		if provider_generation < cim_generation then
+			return false, "generation_stale"
+		end
+		if provider_generation == cim_generation then
+			return same_identity(cim_identity, identity),
+				same_identity(cim_identity, identity) and "ready" or "generation_identity_mismatch"
+		end
+		if provider_generation > cim_generation then
+			cim_generation = provider_generation
+			cim_identity = copy_identity(identity)
+			held_identity = nil
+			evidence = {}
+			evidence_targets = {}
+			evidence_epoch = evidence_epoch + 1
+		end
+		return true, "ready"
+	end
+
+	local function evidence_identity(surface, candidate)
+		local exact_backend = type(candidate) == "table"
+			and candidate.kind == "backend_id"
+			and type(candidate.value) == "string"
+			and candidate.value ~= "" and #candidate.value <= 128
+		if surface == "cim_preview" then
+			return exact_backend and same_identity(cim_identity, candidate)
+				and cim_identity or nil
+		end
+		if surface == "owner_1p" or surface == "owner_3p" then
+			if not exact_backend then return nil end
+			if not same_identity(held_identity, candidate) then
+				held_identity = copy_identity(candidate)
+				clear_non_cim_evidence()
+			end
+			return held_identity
+		end
+		if surface == "inventory_preview" or surface == "illusion_browser" then
+			return same_identity(held_identity, candidate) and held_identity or nil
+		end
+		return nil
+	end
+
+	local function evidence_row(surface, mode, edge, identity, values, target)
+		if not (IMPLEMENTED_CELLS[surface] and IMPLEMENTED_CELLS[surface][edge]) then
+			return
+		end
+		local row = {
+			surface = surface, mode = mode, edge = edge,
+			identity = copy_identity(identity),
+			generation = generation, epoch = evidence_epoch,
+		}
+		for key, value in pairs(values or {}) do row[key] = value end
+		local key = surface .. ":" .. mode
+		evidence[key] = row
+		evidence_targets[key] = target
+	end
+
+	local function recipe(profile)
+		local position, rotation, scale = transform_profile_source(profile)
+		if position == nil or rotation == nil or scale == nil then return nil end
 		local unboxed = rotation
 		if rotation ~= nil then
 			local ok, value = pcall(function()
@@ -127,8 +233,15 @@ function M.new(args)
 		local key = canonical_key(item)
 		if key ~= policy.ITEM_KEY and not policy.matches_item(item, key) then return nil end
 		local mode = mode_for(item, explicit_mode)
-		local one_p = recipe("1p", mode)
-		local three_p = recipe("3p", mode)
+		local selected_profile = context and context.attachment_profile
+		local transform_profiles = {}
+		for _, profile in pairs(attachment_profiles) do
+			transform_profiles[profile] = recipe(profile)
+		end
+		if type(selected_profile) ~= "string"
+				or transform_profiles[selected_profile] == nil then
+			return nil, { "exact attachment_profile required for " .. tostring(surface) }
+		end
 		local descriptor, errors = D.build({
 			item_key = policy.ITEM_KEY,
 			skin_key = policy.SKIN_KEY,
@@ -138,9 +251,10 @@ function M.new(args)
 			right_hand_unit = { unit = policy.UNIT, unit_3p = policy.UNIT_3P,
 				package = policy.PREVIEW_PACKAGE_ALIAS },
 			textures = policy.TEXTURES,
-			materials = { preview = policy.PREVIEW_MATERIAL },
-			transform_1p = one_p,
-			transform_3p = three_p,
+			materials = { authored = policy.MATERIAL,
+				preview = policy.PREVIEW_MATERIAL },
+			attachment_profile = selected_profile,
+			transform_profiles = transform_profiles,
 			fallback = {
 				right_hand_unit = { unit = policy.NETWORK_PACKAGE_ALIAS_1P,
 					unit_3p = policy.NETWORK_PACKAGE_ALIAS_3P,
@@ -154,12 +268,12 @@ function M.new(args)
 	end
 
 	local function target_is_custom(descriptor, surface, context)
-		if context and context.unit_name then
-			local expected = surface == "owner_1p" and descriptor.right_hand_unit.unit
-				or descriptor.right_hand_unit.unit_3p
-			return context.unit_name == expected
-		end
-		return not (context and context.custom_unit == false)
+		descriptor = descriptor_data(descriptor)
+		local observed = context and context.unit_name
+		if type(observed) ~= "string" or observed == "" then return false end
+		local expected = surface == "owner_1p" and descriptor.right_hand_unit.unit
+			or descriptor.right_hand_unit.unit_3p
+		return observed == expected and context.attachment_profile == descriptor.attachment_profile
 	end
 
 	local function engine_rotation(value)
@@ -170,8 +284,8 @@ function M.new(args)
 	end
 
 	local function apply(descriptor, surface, edge, target, context)
-		local perspective = UNIT_SURFACES[surface]
-		if not perspective or not (IMPLEMENTED_CELLS[surface]
+		descriptor = descriptor_data(descriptor)
+		if not UNIT_SURFACES[surface] or not (IMPLEMENTED_CELLS[surface]
 				and IMPLEMENTED_CELLS[surface][edge]) then
 			return { fallback = true, reason = "surface-retains-vanilla-presentation" }
 		end
@@ -180,11 +294,15 @@ function M.new(args)
 		end
 		local preview = surface == "inventory_preview" or surface == "illusion_browser"
 			or surface == "cim_preview" or surface == "lobby" or surface == "score_team"
-		local painted, texture_count = policy.apply_textures(target, preview)
+		local apply_visual = policy.apply_material or policy.apply_textures
+		if type(apply_visual) ~= "function" then
+			return { ok = false, reason = "material-adapter-missing" }
+		end
+		local painted, texture_count = apply_visual(target, preview)
 		context = context or {}
 		context._appearance_required_paint = painted == true
 			and (texture_count or 0) >= #(descriptor.textures or {})
-		local spec = perspective == "1p" and descriptor.transform_1p or descriptor.transform_3p
+		local spec = descriptor.transform_profiles[descriptor.attachment_profile]
 		local resolved_rotation = engine_rotation(spec.rotation)
 		local report = WA.apply_report(target, {
 			position = spec.position, scale = spec.scale,
@@ -199,14 +317,14 @@ function M.new(args)
 	end
 
 	local function observe(descriptor, surface, _, target, context)
+		descriptor = descriptor_data(descriptor)
 		if not target_is_custom(descriptor, surface, context) then
 			return { retained = false, reason = "unit-identity-mismatch" }
 		end
 		local alive_ok, alive = pcall(unit_api.alive, target)
 		if not alive_ok or alive ~= true then return { retained = false, reason = "unit-dead" } end
-		local perspective = UNIT_SURFACES[surface]
-		if not perspective then return { retained = true, reason = "vanilla-fallback" } end
-		local spec = perspective == "1p" and descriptor.transform_1p or descriptor.transform_3p
+		if not UNIT_SURFACES[surface] then return { retained = true, reason = "vanilla-fallback" } end
+		local spec = descriptor.transform_profiles[descriptor.attachment_profile]
 		local ok_p, position = pcall(unit_api.local_position, target, 0)
 		local ok_s, scale = pcall(unit_api.local_scale, target, 0)
 		local ok_r, rotation = pcall(unit_api.local_rotation, target, 0)
@@ -229,23 +347,108 @@ function M.new(args)
 		}
 	end
 
-	local reconciler = D.new_reconciler({ apply = apply, observe = observe, max_attempts = 2 })
+	-- A duplicate wrapper in the same call stack must never consume a retry.
+	-- Recovery belongs to a distinct, source-backed lifecycle edge (for example
+	-- preview construction -> loading_done), so one attempt per exact token is
+	-- sufficient and deterministic.
+	local reconciler = D.new_reconciler({ apply = apply, observe = observe, max_attempts = 1 })
 
 	function C.reconcile(target, surface, edge, item, explicit_mode, context)
 		context = context or {}; context.item = item
+		local key = canonical_key(item)
+		local is_old_musket = key == policy.ITEM_KEY or policy.matches_item(item, key)
+		local candidate_mode = mode_for(item, explicit_mode)
+		local candidate_identity = identity_evidence(item, surface, context)
+		local cim_armed = true
+		if is_old_musket then
+			if surface == "cim_preview" then
+				cim_armed = arm_cim_identity(
+					surface, candidate_identity, context.cim_generation)
+			end
+		end
+		if not cim_armed then
+			return { ok = false, reason = "identity-unresolved",
+				errors = { "CIM evidence epoch rejected" } }
+		end
+		local selected_evidence_identity = evidence_epoch > 0 and is_old_musket
+			and evidence_identity(surface, candidate_identity) or nil
+		local records_active_identity = selected_evidence_identity ~= nil
+		if records_active_identity then
+			evidence_row(surface, candidate_mode, edge, candidate_identity, {
+				retained = false, fallback = false, reason = "identity-unresolved",
+				attempts = 0,
+			}, target)
+		end
 		local descriptor, errors = C.resolve(item, explicit_mode, surface, context)
 		if not descriptor then return { ok = false, reason = "identity-unresolved", errors = errors } end
 		local result = reconciler.reconcile(descriptor, surface, edge, target, context)
+		local data = descriptor_data(descriptor)
+		local descriptor_identity = data.identity_evidence or candidate_identity
+		if selected_evidence_identity
+				and same_identity(selected_evidence_identity, descriptor_identity) then
+			evidence_row(surface, descriptor.mode, edge, descriptor_identity, {
+				retained = result.retained == true,
+				fallback = result.fallback == true,
+				reason = result.reason,
+				attempts = result.attempts or 0,
+				fingerprint = D.fingerprint(descriptor),
+				profile = descriptor.attachment_profile,
+				generation = descriptor.generation,
+			}, target)
+		end
 		pcall(printf_fn,
-			"[cwv:1155] family=old_musket surface=%s edge=%s fingerprint=%s retained=%s fallback=%s reason=%s attempts=%s chat=false",
-			tostring(surface), tostring(edge), D.fingerprint(descriptor),
+			"[cwv:1155] family=old_musket surface=%s edge=%s profile=%s fingerprint=%s retained=%s fallback=%s reason=%s attempts=%s chat=false",
+			tostring(surface), tostring(edge), tostring(descriptor.attachment_profile),
+			D.fingerprint(descriptor),
 			tostring(result.retained == true), tostring(result.fallback == true),
 			tostring(result.reason), tostring(result.attempts or 0))
 		return result, descriptor
 	end
 
 	function C.forget(target) return reconciler.forget(target) end
-	function C.disconnect() tracked = setmetatable({}, { __mode = "k" }); return reconciler.disconnect() end
+	function C.disconnect()
+		tracked = setmetatable({}, { __mode = "k" })
+		evidence = {}
+		evidence_targets = {}
+		cim_identity = nil
+		held_identity = nil
+		cim_generation = 0
+		evidence_epoch = evidence_epoch + 1
+		return reconciler.disconnect()
+	end
+
+	-- Live regression gates compare the currently wielded 1P/3P units against
+	-- the exact targets that produced the retained evidence. This prevents a
+	-- prior Old Musket from passing after the player swaps to another item.
+	function C.live_target_matches(surface, mode, target, identity)
+		local key = tostring(surface) .. ":" .. tostring(mode)
+		local row = evidence[key]
+		return type(row) == "table" and row.retained == true
+			and target ~= nil and evidence_targets[key] == target
+			and same_identity(row.identity, identity)
+	end
+
+	function C.live_status()
+		local status = { exercised = 0, retained = 0, failed = 0,
+			fallback = 0, surfaces = {}, cells = {}, generation = generation,
+			epoch = evidence_epoch, identity = copy_identity(held_identity),
+			cim_identity = copy_identity(cim_identity),
+			cim_generation = cim_generation }
+		for evidence_key, row in pairs(evidence) do
+			local copy = {}
+			for key, value in pairs(row) do
+				copy[key] = key == "identity" and copy_identity(value) or value
+			end
+			status.cells[evidence_key] = copy
+			status.surfaces[row.surface] = status.surfaces[row.surface] or {}
+			status.surfaces[row.surface][row.mode] = copy
+			status.exercised = status.exercised + 1
+			if row.retained then status.retained = status.retained + 1
+			elseif row.fallback then status.fallback = status.fallback + 1
+			else status.failed = status.failed + 1 end
+		end
+		return status
+	end
 
 	-- Dev tuning is an explicit generation edge, never an update-loop owner.
 	function C.reapply_tracked()
@@ -256,7 +459,7 @@ function M.new(args)
 			if alive_ok and alive then
 				local result = C.reconcile(target, record.surface, "customize",
 					record.item, record.mode, record.context)
-				if result and result.ok then applied = applied + 1 end
+				if result and result.retained == true then applied = applied + 1 end
 			else tracked[target] = nil end
 		end
 		return applied
@@ -265,6 +468,7 @@ function M.new(args)
 	function C.preview_targets(descriptor, units, spawn_data)
 		local targets = {}
 		if not descriptor or type(units) ~= "table" or type(spawn_data) ~= "table" then return targets end
+		descriptor = descriptor_data(descriptor)
 		for index, unit in ipairs(units) do
 			local path = spawn_data[index] and spawn_data[index].unit_name
 			if path == descriptor.right_hand_unit.unit or path == descriptor.right_hand_unit.unit_3p then

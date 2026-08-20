@@ -31,6 +31,7 @@ return function(H, repo_root)
     local menu_preview = read("_cwv_menu_preview_owner.lua")
     local weapon_transform = read("_cwv_weapon_transform_owner.lua")
     local custom_mesh = read("_cwv_custom_mesh_runtime.lua")
+    local old_musket_preview = read("_cwv_old_musket_preview.lua")
     local equip_surface = read("_cwv_musket_equip_surface.lua")
     local musket_runtime = read("_cwv_musket_runtime.lua")
     local musket_ammo_hud = read("_cwv_musket_ammo_hud.lua")
@@ -406,8 +407,8 @@ return function(H, repo_root)
         H.equal(names[5], "issue914_peer_ready_identity_lifecycle")
         H.equal(names[17], "issue1108_primary_slot_musket_ammo_hud_contract")
         H.equal(names[18], "issue273_cwv_deus_identity_is_exact")
-        H.equal(names[40], "cwv_husk_transform_coverage")
-        H.equal(names[41], "cwv_husk_stale_unit_and_postcondition")
+        H.equal(names[39], "cwv_husk_transform_coverage")
+        H.equal(names[40], "cwv_husk_stale_unit_and_postcondition")
         -- issue 399 appended the husk ammo-adapter drive as an identity check;
         -- #914 and #1108 each added one earlier identity check. The 1186/1188
         -- slots moved OUT of the identity owner into _cwv_regression_husk_ammo
@@ -415,13 +416,16 @@ return function(H, repo_root)
         -- dofiles it between its two siblings the relative sequence is the
         -- split's proof as well as the boundary's. #1320 registers third in the
         -- husk/ammo/projectile owner.
-        H.equal(names[42], "issue399_outrider_husk_ammo_adapter")
-        H.equal(names[43], "issue1204_deus_identity_uses_committed_parity")
-        H.equal(names[44], "issue1186_outrider_projectile_reads_cloned_tunes")
-        H.equal(names[45], "issue1188_wt_native_trollhammer_keeps_ammo")
-        H.equal(names[46], "issue1320_outrider_projectile_unit_and_wire")
-		H.equal(names[47], "cwv_unit_bearing_variants_registered")
-		H.equal(names[48], "issue482_crafted_uuid_transform_consumers")
+        H.equal(names[41], "issue399_outrider_husk_ammo_adapter")
+        H.equal(names[42], "issue1204_deus_identity_uses_committed_parity")
+        H.equal(names[43], "issue1186_outrider_projectile_reads_cloned_tunes")
+        H.equal(names[44], "issue1188_wt_native_trollhammer_keeps_ammo")
+        H.equal(names[45], "issue1320_outrider_projectile_unit_and_wire")
+		H.equal(names[46], "cwv_unit_bearing_variants_registered")
+		H.equal(names[47], "issue482_crafted_uuid_transform_consumers")
+        -- #1155 is a renderer/material/lifecycle check. Keep it in the render
+        -- regression owner so identity remains below the hard file-size ceiling.
+        H.equal(names[72], "issue1155_old_musket_descriptor_reconciler")
         H.equal(names[#names - 2], "issue567_skin_reverse_index_valid")
         H.equal(names[#names - 1], "issue704_canonical_skin_owner_and_sword_mace_sources")
         H.equal(names[#names], "issue915_maul_illusion_vanilla_provenance")
@@ -474,8 +478,8 @@ return function(H, repo_root)
         -- equip-surface owner (the bayonet attach and the melee-stance transform
         -- are inline in that same hook body), so the calls are asserted there.
         -- The get_item_units seam stayed in the entry.
-        H.truthy(equip_surface:find("_om._husk_adapter_pre(hand, item_template", 1, true))
-        H.truthy(equip_surface:find("_om._husk_adapter_post(hand, item_data", 1, true))
+		H.truthy(equip_surface:find("_om._husk_adapter_pre(", 1, true))
+		H.truthy(equip_surface:find("_om._husk_adapter_post(", 1, true))
         H.truthy(entry:find("_om._husk_preselect_units(result, item_data", 1, true))
         H.truthy(husk:find("_om._husk_rekey_units(hand, item_data", 1, true))
         H.truthy(husk:find("_om._husk_apply_cwv_transform(hand, item_data", 1, true))
@@ -540,18 +544,20 @@ return function(H, repo_root)
 
         -- BOUNDARY: the two husk owners must not overlap. Residency owns the
         -- boot force-loads; husk_path owns the per-spawn display adapters. The
-        -- husk wield diagnostic stays in the entry because it dispatches the
-        -- exact-identity / combat-style / fade channels, not residency.
+		-- The executable husk wield owner lives with the spawn ledger it consumes;
+		-- the entry retains only the one installer call.
         H.equal(count_plain(husk_residency, "_om._husk_adapter_pre"), 0,
             "residency owner must not reach into husk-path spawn adapters")
         H.equal(count_plain(husk_residency, "_om._husk_rekey_units"), 0,
             "residency owner must not reach into husk-path mesh re-key")
         H.equal(count_plain(husk, "_force_load_husk_override_units"), 0,
             "husk-path module must not duplicate the residency pass")
-        H.equal(count_plain(husk_residency, 'mod:hook("SimpleHuskInventoryExtension", "_wield_slot"'), 0,
-            "husk wield diagnostic stays in the entry")
-        H.equal(count_plain(entry, 'mod:hook("SimpleHuskInventoryExtension", "_wield_slot"'), 1,
-            "entry keeps exactly one husk _wield_slot hook")
+		H.equal(count_plain(husk_residency, 'mod:hook("SimpleHuskInventoryExtension", "_wield_slot"'), 0)
+		H.equal(count_plain(entry, 'mod:hook("SimpleHuskInventoryExtension", "_wield_slot"'), 0)
+		H.equal(count_plain(husk,
+			'hook_mod:hook("SimpleHuskInventoryExtension", "_wield_slot"'), 1,
+			"husk path owns exactly one executable _wield_slot hook")
+		H.equal(count_plain(entry, "_om._install_husk_wield_hook(mod)"), 1)
 
         -- Hook cardinality: VMF silently drops a duplicate registration on the
         -- same (Class, method), so each husk-extension pair must appear once
@@ -559,7 +565,8 @@ return function(H, repo_root)
         local fade = read("_cwv_appearance_fade.lua")
         local combined = entry .. husk .. husk_residency .. fade
         H.equal(count_plain(combined, 'mod:hook("SimpleHuskInventoryExtension", "start_weapon_fx"'), 1)
-        H.equal(count_plain(combined, 'mod:hook("SimpleHuskInventoryExtension", "_wield_slot"'), 1)
+		H.equal(count_plain(combined,
+			'hook_mod:hook("SimpleHuskInventoryExtension", "_wield_slot"'), 1)
         H.equal(count_plain(combined, 'mod:hook("SimpleHuskInventoryExtension", "_reapply_fade"'), 1)
     end)
 
@@ -679,7 +686,9 @@ return function(H, repo_root)
             "local function _crowbill_def_from_spawn_data(spawn_data)",
             "local function _resolve_preview_def(self, item_name, spawn_data)",
             "local function _cwv_spawn_item_post(self, item_name, spawn_data)",
+			"local function _cwv_cim_preview_context(previewer)",
 			"local function _cwv_loot_preview_surface(previewer)",
+            "local function _reconcile_old_musket_loot(self, units, spawn_data, edge)",
             "local function _is_cwv_item(item)",
             "_om._crowbill_team_peer = function(profile_index, career_index, context)",
             "_om.old_musket_preview_pose.install(mod, function(unit, _, mode, record)",
@@ -700,9 +709,9 @@ return function(H, repo_root)
             'mod:hook("HeroPreviewer", "_spawn_item"',
             'mod:hook("MenuWorldPreviewer", "_spawn_item"',
             'mod:hook("HeroPreviewer", "_destroy_item_units_by_slot"',
-			'mod:hook("HeroWindowWeaveProperties", "_create_item_previewer"',
             'mod:hook("LootItemUnitPreviewer", "_destroy_units"',
             'mod:hook("LootItemUnitPreviewer", "spawn_units"',
+			'mod:hook_safe("LootItemUnitPreviewer", "_enable_item_units_visibility"',
         }
         for _, hook in ipairs(hooks) do
             H.equal(count_plain(menu_preview, hook), 1, "menu preview owner registers " .. hook)
@@ -714,6 +723,14 @@ return function(H, repo_root)
         H.equal(count_plain(entry,
             'mod:dofile("scripts/mods/character_weapon_variants/_cwv_menu_preview_owner")(mod, {'), 1,
             "entry installs the menu preview owner exactly once")
+		H.equal(count_plain(entry, "get_mod = get_mod,"), 1,
+			"entry injects the exact CIM provider resolver once")
+		H.truthy(menu_preview:find('pcall(_get_mod, "cim_dev")', 1, true))
+		H.truthy(menu_preview:find("provider._cim_preview_context_for", 1, true))
+		H.truthy(menu_preview:find('context.contract ~= "cim_preview_context_v1"', 1, true))
+		H.equal(count_plain(menu_preview,
+			'mod:hook("HeroWindowWeaveProperties", "_create_item_previewer"'), 0,
+			"CWV consumes CIM's public context instead of competing for its constructor")
 
         -- BOUNDARY. CWV has three presentation surfaces and this owner is only
         -- the MENU one. The WORLD/BOT equipment hook and transform-miss evidence
@@ -754,7 +771,7 @@ return function(H, repo_root)
         -- survived the move byte-identical.
         local markers = {
             "[cwv:604] TEAM-PREVIEW identity unresolved profile=%s career=%s family=%s evidence=%d/16 chat=false",
-            "[cwv:617] Old Musket preview textures applied: item=%s mode=%s targets=%d applied=%d descriptor=true",
+            "[cwv:617/1155] Old Musket preview material retained: surface=%s edge=%s item=%s mode=%s targets=%d retained=%d descriptor=true",
             "[cwv preview] _resolve_preview_def returned nil for item_name=%s (info bid=%s)",
             "[cwv preview hook] HeroPreviewer._spawn_item fired item_name=%s self=%s",
             "[cwv preview hook] MenuWorldPreviewer._spawn_item fired item_name=%s self=%s",
@@ -771,10 +788,13 @@ return function(H, repo_root)
         -- template's attachment links and no flow graph for weapon FX. The four
         -- inline blocks that patched those gaps moved out of the entry as ONE
         -- contiguous block. Each producer lives exactly ONCE, in the owner. The
-        -- former false-success package table is now a material-owner bridge.
+        -- package bridge is only a balanced vanilla lifetime alias; the custom
+        -- unit and its authored PBR material are self-contained in CWV.
         local owned = {
             "local _old_musket_package_bridge = mod:dofile(",
             "_om._husk_custom_bundle_unit = function(base_unit)",
+            "_om._bind_old_musket_authored_material = _om.old_musket_preview.bind_authored_material",
+            "_om._apply_old_musket_appearance = _om.old_musket_preview.apply_material",
             "_om._old_musket_transform_components = function(perspective, mode)",
             "_om.old_musket_appearance = _om.old_musket_appearance_policy.new({",
             "mod._cwv_resolve_preview_descriptor = _om._old_musket_preview_descriptor",
@@ -823,7 +843,7 @@ return function(H, repo_root)
             "custom-mesh owner performs exactly two bounded nested loads")
         H.equal(count_plain(custom_mesh,
             '"scripts/mods/character_weapon_variants/_cwv_old_musket_package_bridge")'), 1,
-            "the package hooks consume the #474 material-owner bridge")
+            "the package hooks consume the #474 balanced lifetime bridge")
         H.equal(count_plain(custom_mesh,
             'mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_wire")(mod, { om = _om })'), 1,
             "the nested load is the #474 Old Musket stance channel")
@@ -875,11 +895,21 @@ return function(H, repo_root)
         H.equal(count_plain(custom_mesh, "local vanilla_1p_idx = rawget(nl_inventory,"), 1)
         H.equal(count_plain(custom_mesh, "local vanilla_3p_idx = rawget(nl_inventory,"), 1)
 
-        -- v0.1.298: a raw Stingray Quaternion is a per-frame temporary, so all
-        -- four authored rotations must be stored BOXED or the pose turns to
-        -- garbage a frame after equip.
-        H.equal(count_plain(custom_mesh, "= QuaternionBox(Quaternion."), 4,
-            "all four authored rotations stay boxed for long-term storage")
+        -- #1155: material ownership lives in the authored asset/policy, not in
+        -- this decomposition owner or a surface-specific mutation path.
+        H.truthy(old_musket_preview:find(
+            'pcall(unit_api.set_all_materials, unit, M.MATERIAL)', 1, true))
+        H.truthy(old_musket_preview:find(
+            'RESIDENCY.unit_materials_resident(', 1, true))
+        H.equal(old_musket_preview:find(
+            'unit_api.set_texture_for_materials', 1, true), nil)
+        H.equal(custom_mesh:find('Unit.set_texture_for_materials(', 1, true), nil)
+
+		-- v0.1.298: a raw Stingray Quaternion is a per-frame temporary, so the
+		-- four held rotations plus #1155's distinct display-carrier candidate
+		-- must stay BOXED or their poses turn to garbage a frame after equip.
+		H.equal(count_plain(custom_mesh, "= QuaternionBox(Quaternion."), 5,
+			"all held and display-profile rotations stay boxed for long-term storage")
 
         -- v0.1.290/291: Stingray's Unit.node throws an engine-level fatal that
         -- pcall cannot catch, so the attachment filter must test existence with
@@ -974,14 +1004,17 @@ return function(H, repo_root)
         local phase_two = assert(entry:find("_install_musket_spawn_surface()", phase_one, true),
             "phase-two call must come after the load")
         H.truthy(phase_one < phase_two)
-        -- Phase two must still land AFTER the husk-residency owner load and the
-        -- husk wield diagnostic, or the hook registration order changes.
-        local residency = assert(entry:find("_cwv_husk_residency_owner\")(mod, {", 1, true))
-        local husk_diag = assert(entry:find(
-            'mod:hook("SimpleHuskInventoryExtension", "_wield_slot"', 1, true))
-        H.truthy(phase_one < residency)
-        H.truthy(residency < husk_diag)
-        H.truthy(husk_diag < phase_two)
+		-- Phase two must still land AFTER the husk-residency owner load and the
+		-- husk wield diagnostic. The installer itself must be published by the
+		-- husk-path dofile before the entry calls it; clean VMF loads have no stale
+		-- `_om` field to mask an early call.
+		local residency = assert(entry:find("_cwv_husk_residency_owner\")(mod, {", 1, true))
+		local husk_owner = assert(entry:find("_cwv_husk_path\")(mod, {", 1, true))
+		local husk_diag = assert(entry:find("_om._install_husk_wield_hook(mod)", 1, true))
+		H.truthy(phase_one < residency)
+		H.truthy(residency < husk_owner)
+		H.truthy(husk_owner < husk_diag)
+		H.truthy(husk_diag < phase_two)
 
         -- PUBLICATIONS other files read back off `_om`. The relocated
         -- cwv_slot_extension_scoped regression check (#1148) calls the collector

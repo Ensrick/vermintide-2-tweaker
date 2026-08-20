@@ -62,46 +62,61 @@ explicit rather than inferred:
 |---|---|---|---|
 | W0 | **Adapter/lifecycle census + CI gate**: machine-readable registry of every registered custom appearance family x SURFACE x EDGE pair (implemented / declared-unsupported-with-fallback); the gate is `qa/lua/tests/test_appearance_census.lua` (in the Lua suite) plus the `qa/check_appearance_census_gaps.ps1` drift check - a `check_appearance_census.ps1` script never existed. Retroactive census of every existing family = the true backlog, currently 3,624 unsupported pairs of 4,624 (`docs/generated/APPEARANCE_CENSUS_GAPS.generated.md`). | census gates green with every existing gap DECLARED (not fixed) | DONE 2026-08-13 (#1157: surface-x-edge schema and six new surfaces; #1198: distinct crafting preview; #1197: all 17 surfaces required by contracts; wt_dev validated as a parity mirror) |
 | W1 | **Descriptor library + contract tests**: `_lib_appearance_descriptor.lua` (pure build/validate/fingerprint) + engine-free tests in `qa/lua/tests/`; CWV owns the first synchronized runtime copy. | 966+ suite green | DONE 2026-08-06 (#1155 pilot prerequisite) |
-| W2 | **Reconciler skeleton + pilot family**: lifecycle-edge reconciler in the shared lib; migrate ONE worst-record family (CWV Old Musket, #474 controls) across all cells; delete its legacy paths. | pilot family passes the co-op matrix in-game | source complete in CWV 0.1.513-dev with exact Athanor preview identity; Workshop deployment, solo proof, then co-op runtime proof pending |
+| W2 | **Reconciler skeleton + pilot family**: lifecycle-edge reconciler in the shared lib; migrate ONE worst-record family (CWV Old Musket, #474 controls) across all cells; delete its legacy paths. | pilot family passes the co-op matrix in-game | live-failed on CWV 0.1.523-dev; 0.1.524-dev material/lifecycle repair candidate requires solo proof before co-op |
 | W3 | **Extraction-420 cutover completion**: shared transform ownership is source-complete across CWV, Cosmetics, both WT streams, and WOC; the remaining Cosmetics material/texture fallback belongs to the broader #660 migration. | per-step four-render-path regression + in-game verify | Cosmetics source candidate pending release/no-drift verification; material fallback pending under #660 |
 | W4 | **Remaining families**, one per change, closing their symptom issues as they migrate; #660's issue index burns down. | each family's cells green | pending |
 | W5 | **OOP completion**: ct_dev + cwv decomposition (last two god files), #727 logging sweep, doc reconciliation. | full QA green, per-mod module contracts documented | DONE 2026-08-12 (#1159: all 10 decomposition contracts complete; final CT Dev entry 1,498 nonblank lines, CWV entry 1,490) |
 
-### W2 exact readiness (updated 2026-08-13)
+### W2 exact readiness (updated 2026-08-20)
 
-The `0.1.513-dev` Old Musket pilot declares all 136 surface-x-edge
-cells under one descriptor/reconciler contract. Twelve cells have runtime
-delivery/adapters that apply and read back the authored custom presentation:
-owner 1P equip/customize, owner 3P equip/customize, bot equip, remote husk
-equip/peer-ready, and preview-open for inventory, illusion browser, CIM
-Athanor, lobby, and score/team. The other 124 cells are census declarations
-with vanilla-safe fallbacks; many have no runtime call site and are enumerated,
-not fixed.
+The Old Musket pilot declares all 136 surface-x-edge cells under one
+descriptor/reconciler contract. Seventeen cells now have source-backed runtime
+delivery/adapters: owner 1P/3P `instance_load`, `equip`, and `customize`; bot
+`instance_load` and `equip`; remote husk `instance_load`, `equip`, and
+`peer_ready`; plus `instance_load` and stable `preview_open` for inventory,
+illusion browser and CIM Athanor. Lobby and score/team lack an exact selected-
+slot identity producer and therefore remain explicit vanilla-safe fallbacks;
+the remaining cells are
+explicit fallback declarations, not claims that those lifecycle paths ran.
 
-CIM shares `LootItemUnitPreviewer` with the illusion browser, but CWV now marks
-only the exact previewer returned by
-`HeroWindowWeaveProperties._create_item_previewer`. The shared spawn owner
-therefore classifies that instance as `cim_preview` while every unmarked generic
-previewer remains `illusion_browser`; `cim_preview/preview_open` is the twelfth
-implemented cell. Mission-transition and respawn cells remain unsupported until
-directly observed, even when equipment recreation may route through the
-implemented equip edge.
+CIM shares `LootItemUnitPreviewer` with the illusion browser. CWV consumes CIM
+Dev's public `cim_preview_context_v1` exact-instance provider across Weapons,
+Properties, and Overview. A genuinely absent marker remains
+`illusion_browser`; a present but invalid, foreign, stale, or identity-mismatched
+marker stays CIM-classified and is terminally rejected so it cannot mutate an
+Athanor row through the ordinary-browser fallback. Loot construction owns `instance_load`, while
+`_enable_item_units_visibility(visible=true)` is the separate package/mip-stable
+`preview_open` edge. Mission-transition and respawn cells remain unsupported
+until directly observed, even when equipment recreation routes through an
+implemented construction/equip edge.
 
-Phase 3 merged in PR #1165 and remains an ancestor of the current deployed
-source. PR #1275 repaired a package-lifecycle defect exposed by the live pilot:
-the custom Old Musket units are carried by CWV's master bundle but borrow the
-vanilla Handgun's first- and third-person materials. The old package shim
-reported the custom paths loaded without loading those donor packages, allowing
-preview and world spawns before their materials existed. CWV `0.1.512-dev` now
-bridges each custom path through the matching reference-counted donor-package
-lifecycle while preserving callbacks and caller reference names. Exact merged-
-master QA passed at `9d09865e18e8bccf941a73bf454d2f1f8fdf6ea5`, and Workshop
-item `3716869446` accepted manifest `4902287303108476249`. This strengthens the
-deployed pilot. The 0.1.513-dev source adds the exact Athanor marker and retained
-`[cwv:1155] surface=cim_preview` receipt, but the new build still requires
-deployment and does not satisfy the live gate by source inspection: the pinned
-solo owner-and-preview test on #1155/#474 must pass first, followed by the
-remote-husk and bot co-op matrix.
+The 2026-08-20 CWV `0.1.523-dev` live run falsified the earlier donor-package
+theory. Both Handgun packages completed before the first spawn, yet each custom
+unit's FBX `rifle_mat` still resolved to `#ID[b6d0945a]`/null. Engine source shows
+ordinary GearUtils and preview spawns never interpret arbitrary
+`data.mat_to_use`; package residency was not material attachment. The same run
+also exhausted both historical retries synchronously and let the synthetic
+#1155 regression pass while every real renderer reported `retained=false`.
+
+The `0.1.524-dev` candidate restores the proven self-contained asset pattern:
+both `.unit` files bind `rifle_mat` to a CWV-owned `.material`, the root package
+owns that material and all five textures, and runtime proves the exact closure,
+performs one authored-material bind, then reads every mesh handle back. A token
+now has one attempt; only a distinct source-backed edge may retry. The named
+regression requires real stable-edge retained evidence for both stances and can
+no longer pass from descriptor shape alone. This is still a candidate until the
+pinned solo owner/preview card passes; remote husk, bot, role reversal, and hot
+join remain the later co-op gate.
+
+The repair also makes attachment-parent identity part of the descriptor. Held
+rifle and held polearm recipes are distinct in owner 1P and character 3P, while
+the camera-world preview carrier selects a separate display profile. This is not
+surface-local pose duplication: consumers select one closed-vocabulary profile,
+and the descriptor owns every profile's transform. The initial display tuple -
+position `{0, 0, 0}`, Euler `{-90, -90, 0}`, scale `{1, 1.1, 1.1}` - preserves
+the import rotation/scale while letting the display carrier own centering. It is
+an explicitly unproven live-tuning candidate, not evidence that inventory or
+illusion-browser pose is fixed.
 
 ## 3a. Single-vocabulary rule (#1158, 2026-08-08)
 

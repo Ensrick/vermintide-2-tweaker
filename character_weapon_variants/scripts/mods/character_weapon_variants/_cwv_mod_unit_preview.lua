@@ -10,6 +10,12 @@
 -- data falls back to that vanilla unit instead of reaching World.spawn_unit.
 local M = {}
 
+-- Transient spawn-row lock shared with `_cwv_exact_appearance`. Its value is
+-- the exact resident vanilla path selected after a custom-resource miss.
+-- Downstream mesh-swap owners may inspect the row, but must not re-admit the
+-- rejected custom path during the same preview generation.
+M.FALLBACK_MARKER = "_cwv_mod_unit_preview_fallback_v1"
+
 M._stats = {
 	alias_leases = 0,
 	bypassed_leases_repaired = 0,
@@ -122,13 +128,17 @@ function M.install(policy)
 		return package_names
 	end)
 
-	local function alias_for(name)
+	local function policy_for(name)
 		for _, one_policy in ipairs(policies) do
 			local alias = one_policy and one_policy.preview_package_alias
 				and one_policy.preview_package_alias(name) or nil
-			if alias then return alias end
+			if alias then return one_policy, alias end
 		end
-		return nil
+		return nil, nil
+	end
+	local function alias_for(name)
+		local _, alias = policy_for(name)
+		return alias
 	end
 
 	local custom_path_count = 0
@@ -141,6 +151,16 @@ function M.install(policy)
 	local function unit_resident(name)
 		local ok, resident = pcall(Application.can_get, "unit", name)
 		return ok and resident == true
+	end
+
+	local function custom_preview_ready(name)
+		local one_policy = policy_for(name)
+		if one_policy and type(one_policy.preview_resource_ready) == "function" then
+			local ok, ready, reason = pcall(one_policy.preview_resource_ready,
+				name, Application.can_get)
+			return ok and ready == true, ok and reason or "resource_check_error"
+		end
+		return unit_resident(name), "unit_only"
 	end
 
 	local warned = {}
@@ -160,12 +180,14 @@ function M.install(policy)
 			local alias = alias_for(package_name)
 			if alias then
 				package_names[index] = alias
-				if not unit_resident(package_name) then
+				local ready = custom_preview_ready(package_name)
+				if not ready then
 					warn_once(package_name, alias)
 					for _, slot_data in pairs(self._item_info_by_slot or {}) do
 						for _, spawn in ipairs(slot_data.spawn_data or {}) do
 							if spawn.unit_name == package_name then
 								spawn.unit_name = alias
+								spawn[M.FALLBACK_MARKER] = alias
 							end
 						end
 					end
@@ -194,7 +216,8 @@ function M.install(policy)
 		self._packages_to_load[package_name] = true
 		self._cwv_preview_package_aliases = self._cwv_preview_package_aliases or {}
 		self._cwv_preview_package_aliases[package_name] = alias
-		if not unit_resident(package_name) then
+		local ready = custom_preview_ready(package_name)
+		if not ready then
 			self._cwv_preview_unit_fallbacks = self._cwv_preview_unit_fallbacks or {}
 			self._cwv_preview_unit_fallbacks[package_name] = alias
 			warn_once(package_name, alias)
@@ -289,7 +312,10 @@ function M.apply_loot_fallbacks(previewer, spawn_data)
 	if not fallbacks then return spawn_data end
 	for _, spawn in ipairs(spawn_data or {}) do
 		local fallback = fallbacks[spawn.unit_name]
-		if fallback then spawn.unit_name = fallback end
+		if fallback then
+			spawn.unit_name = fallback
+			spawn[M.FALLBACK_MARKER] = fallback
+		end
 	end
 	return spawn_data
 end

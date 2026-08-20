@@ -165,18 +165,18 @@
                 @{
                     Name = 'material'
                     Surfaces = @{
-                        owner_1p = @{ Disposition='covered'; Evidence='CWV Old Musket and WOC owned binds use strict texture and post-bind unit-material closure' }
-                        owner_3p = @{ Disposition='covered'; Evidence='LA/CWV/WOC gameplay units use the same strict spawned-unit proof before native texture writes' }
+                        owner_1p = @{ Disposition='covered'; Evidence='CWV Old Musket proves all authored resources, binds its authored material, and proves post-bind handles; WOC retains its strict owned bind contract' }
+                        owner_3p = @{ Disposition='covered'; Evidence='LA and WOC native texture writers plus the CWV authored-material binder prove the exact spawned gameplay unit before mutation' }
                         bot = @{ Disposition='covered'; Evidence='bot weapon units enter the same CWV/WOC gameplay apply owners' }
                         husk = @{ Disposition='covered'; Evidence='LA/CWV/WOC husk units prove their own material handles rather than inheriting owner or preview proof' }
                         inventory_preview = @{ Disposition='covered'; Evidence='custom hats and supported weapon previews prove the spawned preview unit before native writes' }
-                        illusion_browser = @{ Disposition='covered'; Evidence='LA and Old Musket LootItemUnitPreviewer consumers prove parent bind, real handles, and textures atomically' }
+                        illusion_browser = @{ Disposition='covered'; Evidence='LA and Old Musket LootItemUnitPreviewer consumers prove resource closure, the exact material bind, and real live-unit handles atomically' }
                         cim_preview = @{ Disposition='covered'; Evidence='CIM proves the exact live Gui material and the shared Old Musket/WOC preview unit contract' }
                         crafting_preview = @{ Disposition='deferred'; Reason='ordinary crafting preview boundaries remain in the full-tree legacy census without a migrated V2 consumer' }
                         lobby = @{ Disposition='deferred'; Reason='generic lobby preview native material ownership has not been migrated or empirically verified' }
                         score_team = @{ Disposition='deferred'; Reason='generic score preview native material ownership has not been migrated or empirically verified' }
                         hold_tab = @{ Disposition='deferred'; Reason='Hold-Tab icon/material closure is tracked separately and has no migrated #749 exact-Gui consumer' }
-                        specials = @{ Disposition='deferred'; Reason='borrowed-resource closure at a weapon-special presentation seam has no migrated #749 exact consumer' }
+                        specials = @{ Disposition='deferred'; Reason='optional material-resource closure at a weapon-special presentation seam has no migrated #749 exact consumer' }
                         remote_audio = @{ Disposition='not-applicable'; Reason='the #749 contract proves unit and Gui material handles, not Wwise or remote-audio resources' }
                         hud_panels = @{ Disposition='deferred'; Reason='career-HUD Gui renderer and material closure is not fully migrated into the #749 exact-consumer set' }
                         portraits = @{ Disposition='deferred'; Reason='portrait renderer and atlas closure is owned by its portrait pipeline and is not a migrated #749 exact consumer' }
@@ -200,7 +200,7 @@
                         preview_open = @{ Disposition='covered'; Evidence='each supported preview constructs/proves the exact unit or Gui it will consume' }
                         preview_reopen = @{ Disposition='covered'; Evidence='a replacement preview never inherits another Gui or unit proof' }
                         lobby_score_create = @{ Disposition='deferred'; Reason='lobby and score preview owners remain outside the migrated V2 set' }
-                        mod_disable_restore = @{ Disposition='not-applicable'; Reason='the proof creates no persistent mutation owner; skipped optional work retains donor/vanilla state' }
+                        mod_disable_restore = @{ Disposition='not-applicable'; Reason='the proof creates no persistent mutation owner; skipped optional work retains the prior native state' }
                     }
                     Tests = @(
                         @{
@@ -234,6 +234,134 @@
                             )
                             Surfaces=@('owner_1p','owner_3p','husk','inventory_preview','illusion_browser')
                             ReplayEdges=@('initial_spawn','equip','customize','mission_transition','respawn','hot_join','rejoin','preview_open','preview_reopen')
+                        }
+                    )
+                }
+            )
+        }
+        @{
+            Id = 'cwv.issue1155.old-musket-authored-material'
+            Issue = 1155
+            Claim = 'structural-only'
+            Owners = @(
+                'character_weapon_variants/units/cwv_es_musket_custom/cwv_es_musket_custom.unit'
+                'character_weapon_variants/units/cwv_es_musket_custom/cwv_es_musket_custom_3p.unit'
+                'character_weapon_variants/units/cwv_es_musket_custom/cwv_es_musket_custom.material'
+                'character_weapon_variants/resource_packages/character_weapon_variants/character_weapon_variants.package'
+                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_preview.lua'
+                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_appearance.lua'
+                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_custom_mesh_runtime.lua'
+                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_world_equipment_owner.lua'
+                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_musket_equip_surface.lua'
+                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_husk_path.lua'
+                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_wire.lua'
+                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_menu_preview_owner.lua'
+                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_preview_pose.lua'
+                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_mod_unit_preview.lua'
+                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_exact_appearance.lua'
+                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_appearance_census.lua'
+            )
+            Concerns = @(
+                @{
+                    Name = 'material'
+                    Surfaces = @{
+                        owner_1p = @{ Disposition='covered'; Evidence='the outer GearUtils equipment result binds the one CWV-authored material to the exact retained first-person unit and verifies its live material handles' }
+                        owner_3p = @{ Disposition='covered'; Evidence='the same stable equipment-result owner binds and verifies the exact retained third-person unit through one shared material policy' }
+                        bot = @{ Disposition='covered'; Evidence='bot equipment uses the same stable third-person result adapter and authored-material postcondition' }
+                        husk = @{ Disposition='covered'; Evidence='exact husk equip and peer-ready consumers bind the same resident CWV material to the locally rendered custom unit and verify its handles' }
+                        inventory_preview = @{ Disposition='covered'; Evidence='the character preview records construction and retries once at loading_done while consuming the same authored material descriptor' }
+                        illusion_browser = @{ Disposition='covered'; Evidence='the ordinary LootItemUnitPreviewer binds at construction and retries once when the exact preview becomes visible and mip-stable' }
+                        cim_preview = @{ Disposition='covered'; Evidence='the exact public CIM preview-context provider classifies all three Athanor constructors before the shared LootItemUnitPreviewer material consumer runs' }
+                        crafting_preview = @{ Disposition='deferred'; Reason='the ordinary crafting bench remains a distinct surface with no Old Musket preview adapter' }
+                        lobby = @{ Disposition='deferred'; Reason='no TeamPreviewer producer supplies an exact selected Old Musket identity for lobby/parading views' }
+                        score_team = @{ Disposition='deferred'; Reason='score sync carries vanilla es_handgun identity and has no exact local/remote selected-slot bridge' }
+                        hold_tab = @{ Disposition='not-applicable'; Reason='Hold-Tab renders a 2D item card and has no live Old Musket unit material' }
+                        specials = @{ Disposition='deferred'; Reason='material retention across every stance-special transition has no independent runtime observation in this issue slice' }
+                        remote_audio = @{ Disposition='not-applicable'; Reason='the authored-material contract does not own the separate Old Musket audio channel' }
+                        hud_panels = @{ Disposition='not-applicable'; Reason='HUD panels do not render the Old Musket unit material' }
+                        portraits = @{ Disposition='not-applicable'; Reason='portrait renderers do not render the Old Musket unit material' }
+                        item_card_2d = @{ Disposition='not-applicable'; Reason='2D item cards consume authored icons rather than live unit materials' }
+                        inventory_tooltip = @{ Disposition='not-applicable'; Reason='inventory tooltips consume text and icons rather than live unit materials' }
+                    }
+                    ReplayEdges = @{
+                        instance_load = @{ Disposition='covered'; Evidence='stable GearUtils results, exact husk spawns, and each supported preview record one construction attempt without consuming their later stable edges' }
+                        initial_spawn = @{ Disposition='deferred'; Reason='the census uses the narrower instance_load edge for exact gameplay and preview construction and does not independently claim generic initial_spawn' }
+                        equip = @{ Disposition='covered'; Evidence='owner bot and husk stable equipment adapters bind only after vanilla returns the exact custom unit identity' }
+                        wield = @{ Disposition='deferred'; Reason='the material adapter has no separate generic wield claim beyond the exact husk equip consumer' }
+                        customize = @{ Disposition='covered'; Evidence='an explicit local generation replays the immutable descriptor through the same bounded material adapter' }
+                        style_change = @{ Disposition='deferred'; Reason='ranged and melee share the authored material but complete style-transition retention remains a separate live observation' }
+                        career_change = @{ Disposition='deferred'; Reason='career reconstruction is expected to create replacement equipment but is not claimed without its own source-backed observation' }
+                        mission_transition = @{ Disposition='deferred'; Reason='replacement mission equipment is not relabeled as covered until that exact transition is observed' }
+                        respawn = @{ Disposition='deferred'; Reason='replacement respawn equipment is not relabeled as covered until that exact edge is observed' }
+                        hot_join = @{ Disposition='deferred'; Reason='remote hot-join convergence remains a separate cooperative verification gate' }
+                        peer_ready = @{ Disposition='covered'; Evidence='the installed state-channel consumer admits only the exact observed husk parent, applies an unchanged mode once, and requests one bounded re-wield instead of painting a stale changed parent' }
+                        parity_ready = @{ Disposition='not-applicable'; Reason='the custom unit uses semantic identity plus a resident local bundle and publishes no custom numeric resource id' }
+                        rejoin = @{ Disposition='deferred'; Reason='disconnect-generation teardown and a recreated remote unit require separate cooperative observation' }
+                        preview_open = @{ Disposition='covered'; Evidence='character previews retry at loading_done and Loot previews retry only at the source-backed visible and mip-stable callback' }
+                        preview_reopen = @{ Disposition='deferred'; Reason='a replacement preview will repeat construction but reopening remains unclaimed until independently observed' }
+                        lobby_score_create = @{ Disposition='deferred'; Reason='lobby and score have no exact selected-instance producer; Old Musket custom rows are terminally downgraded to the vanilla Handgun before either unsupported preview can spawn' }
+                        mod_disable_restore = @{ Disposition='deferred'; Reason='live restoration of already-bound units on mod disable has no implemented owner' }
+                    }
+                    Tests = @(
+                        @{
+                            Path='qa/lua/tests/test_cwv_old_musket_preview.lua'
+                            Names=@(
+                                'CWV #1155 ships one self-contained Old Musket material closure'
+                                'CWV #1155 binds the authored material only after full residency proof'
+                                'CWV #1155 pre-spawn admission rejects a partial custom material closure'
+                            )
+                            # These are shared-policy/resource-closure tests. They do
+                            # not by themselves prove that any engine adapter ran.
+                            Surfaces=@()
+                            ReplayEdges=@()
+                        }
+                        @{
+                            Path='qa/lua/tests/test_cwv_old_musket_appearance.lua'
+                            Names=@(
+                                'CWV #1155 Old Musket adapter requires retained pose and material postconditions'
+                                'CWV #1155 explicit generation repairs retained state on the same live unit'
+                                'CWV #1155 duplicate construction failures coalesce and stable edge retries once'
+                                'CWV #1155 CIM preview-open is a retained implemented adapter cell'
+                            )
+                            Surfaces=@('owner_3p','cim_preview')
+                            ReplayEdges=@('instance_load','equip','customize','preview_open')
+                        }
+                        @{
+                            Path='qa/lua/tests/test_cwv_old_musket_presentation.lua'
+                            Names=@(
+                                'Old Musket installed GearUtils owner and bot adapters consume the returned exact template'
+                                'Old Musket installed SimpleInventory equip adapter admits only the exact returned stance template'
+                                'Old Musket HeroPreviewer rewrites and preserves the exact melee attachment profile'
+                                'Old Musket consumes CIM''s exact public preview-context provider'
+                                'Old Musket Loot preview retries only on the visible stable edge'
+                                'Old Musket preview pose waits for and consumes one stable edge'
+                            )
+                            Surfaces=@('owner_1p','owner_3p','bot','inventory_preview','illusion_browser','cim_preview')
+                            ReplayEdges=@('instance_load','equip','preview_open')
+                        }
+                        @{
+                            Path='qa/lua/tests/test_cwv_husk_adapter.lua'
+                            Names=@(
+                                '#1155 stable husk equip accepts only the exact custom spawn observation'
+                                '#1155 installed husk wield callback spawns rifle and polearm parents before stable apply'
+                                '#1155 installed husk wrapper restores exact contexts across auxiliary failures'
+                                '#1155 installed husk callback uses the extension player before owner mapping exists'
+                                '#1155 peer-ready wire consumes the exact observed husk parent before applying'
+                            )
+                            Surfaces=@('husk')
+                            ReplayEdges=@('instance_load','equip','peer_ready')
+                        }
+                        @{
+                            Path='qa/lua/tests/test_resource_residency_census.lua'
+                            Names=@('CWV #1155 authored material proves texture material and post-bind handle closure')
+                            Surfaces=@()
+                            ReplayEdges=@()
+                        }
+                        @{
+                            Path='qa/lua/tests/test_appearance_census.lua'
+                            Names=@('CWV #1155 Old Musket census pins the authored-material lifecycle matrix')
+                            Surfaces=@()
+                            ReplayEdges=@()
                         }
                     )
                 }

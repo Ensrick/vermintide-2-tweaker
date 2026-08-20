@@ -7,7 +7,8 @@
 -- postcondition log. All logic is assigned onto the shared `mod._om` namespace as
 -- `_om._husk_*` fields; the husk-reaching hooks reach these helpers through the
 -- `_om` upvalue at call time. GearUtils.spawn_inventory_unit and
--- SimpleHuskInventoryExtension._wield_slot stay in the entry;
+-- SimpleHuskInventoryExtension._wield_slot is installed here through one
+-- executable owner; the entry contains only the installer call.
 -- SimpleHuskInventoryExtension.start_weapon_fx moved to
 -- _cwv_husk_residency_owner with the #280 force-loads it backs up (#1159), and
 -- reaches nothing here. Pure structural
@@ -37,6 +38,26 @@ return function(mod, ctx)
 -- (declared near the top of the file), whose fields are populated at load
 -- time before any in-mission spawn. See the husk block in that hook.
 do
+	-- Exact post-spawn renderer identity. A descriptor says what SHOULD spawn;
+	-- this weak ledger records what GearUtils actually returned after hand
+	-- preselection/re-key/fallback. Stable husk/peer-ready adapters must consume
+	-- this observation instead of fabricating the expected custom path (#1155).
+	_om._husk_spawned_unit_names = setmetatable({}, { __mode = "k" })
+	_om._husk_observed_unit_evidence = function(unit, owner_unit_3p, slot_name, hand)
+		local row = unit and _om._husk_spawned_unit_names[unit] or nil
+		if type(row) ~= "table"
+				or (owner_unit_3p ~= nil and row.owner_unit_3p ~= owner_unit_3p)
+				or (slot_name ~= nil and row.slot_name ~= slot_name)
+				or (hand ~= nil and row.hand ~= hand) then
+			return nil
+		end
+		return row.unit_name, row.mode, row.attachment_profile, row.template_name,
+			row.template_ref
+	end
+	_om._husk_observed_unit_name = function(unit, owner_unit_3p, slot_name, hand)
+		return _om._husk_observed_unit_evidence(unit, owner_unit_3p, slot_name, hand)
+	end
+
 	-- issue 399 lookup: base_weapon -> career-set for every no_ammo_unit
 	-- variant. On the husk the item resolves to the BASE item_data (name =
 	-- base weapon), so backend_id/skin/cwv markers are unreliable. But the
@@ -256,9 +277,9 @@ do
 	-- unit here cannot be repaired by the later re-key guard: the crash-floor
 	-- sees the already-written custom path and suppresses that hand, leaving the
 	-- whole weapon invisible. Admit every authored hand as one transaction or
-	-- preserve the untouched vanilla table for this wield. The spawnability
-	-- predicate also queues the Old Musket's donor-material lease; ordinary
-	-- vanilla overrides additionally use the bounded override lease.
+	-- preserve the untouched vanilla table for this wield. A future explicitly
+	-- borrowed-material mesh may queue its donor lease; Old Musket is now
+	-- self-contained. Ordinary vanilla overrides use the bounded override lease.
 	local function _husk_preselection_ready(candidate, source)
 		for _, field in ipairs({ "right_hand_unit", "left_hand_unit" }) do
 			local unit_name = candidate and candidate[field]
@@ -371,22 +392,12 @@ do
 	end
 	_om._husk_resource_ready = _resource_ready   -- exposed for tests/regression
 
-	-- (#474 crash killer) Custom-bundle meshes reference a VANILLA material via
-	-- the .unit's `data.mat_to_use` (LA-pattern block in the entry). The unit
-	-- data is mod-resident, but the DONOR material lives in the vanilla weapon
-	-- package -- spawning the custom mesh while that package is absent on this
-	-- peer is the console-2026-07-18-03.56.47 AV: `[MeshObject] Failed looking
-	-- up material #ID[b6d0945a]` inside GearUtils.spawn_inventory_unit. Gate
-	-- every custom-mesh husk write on donor-material residency; on a miss KEEP
-	-- the base identity (wrong-but-stable, never crash) and package-lease the
-	-- donor (weapons_of_chaos Managers.package:load lease recipe,
-	-- _woc_mod_unit_preview.lua:100) so a later wield of this slot resolves.
-	local _CUSTOM_UNIT_MATERIAL_DONORS = {
-		["units/cwv_es_musket_custom/cwv_es_musket_custom"] =
-			"units/weapons/player/wpn_empire_handgun_t1/wpn_empire_handgun_t1",
-		["units/cwv_es_musket_custom/cwv_es_musket_custom_3p"] =
-			"units/weapons/player/wpn_empire_handgun_t1/wpn_empire_handgun_t1_3p",
-	}
+	-- Optional donor-material gate for future borrowed-material custom meshes.
+	-- Old Musket was removed from this table by #1155: its .unit now binds the
+	-- same CWV-owned material as every other self-contained imported family.
+	-- Keeping a donor declaration would make remote husks depend on an unrelated
+	-- vanilla Handgun package and would recreate the renderer-scope race.
+	local _CUSTOM_UNIT_MATERIAL_DONORS = {}
 	_om._husk_custom_unit_material_donors = _CUSTOM_UNIT_MATERIAL_DONORS
 	local _donor_lease_attempted = {}
 	_om._husk_material_donor_ready = function(base_unit)
@@ -443,9 +454,8 @@ do
 	-- ANY reference -- a naturally game-loaded base mesh counts (has_loaded with no
 	-- reference_name returns the plain loaded flag, package_manager.lua:286-293).
 	-- A cwv custom-bundle mesh (units/cwv_*) is unit-resident while the mod is
-	-- loaded, but #474 fail-closed: its vanilla donor MATERIAL must also be
-	-- resident, else spawning it is the MeshObject AV -- so it routes through the
-	-- donor gate instead of an unconditional accept. Used by the husk re-key to
+	-- loaded. Self-contained families pass immediately; any future mesh that
+	-- explicitly borrows a foreign material routes through the donor gate. Used by the husk re-key to
 	-- suppress a spawn that would otherwise error at gear_utils.lua:189
 	-- (weapon_unit_name .. "_3p" over a missing package).
 	_om._husk_unit_spawnable = function(base_unit)
@@ -456,9 +466,9 @@ do
 			-- package, which VMF loads with the mod, so this code cannot run while
 			-- they are absent -- and asking the global resource system about a
 			-- Workshop bundle path is exactly the lookup that does not answer
-			-- reliably. A mesh that borrows a VANILLA material (the Old Musket)
-			-- still fails closed on that material; a self-contained one (Greataxe /
-			-- Crowbill: own .material + textures) declares no donor and passes.
+			-- reliably. A mesh that borrows a foreign material still fails closed
+			-- on that material; self-contained Old Musket/Greataxe/Crowbill units
+			-- declare no donor and pass.
 			return _om._husk_material_donor_ready(base_unit)
 		end
 		local ready = _resource_ready("unit", base_unit .. "_3p")
@@ -477,9 +487,9 @@ do
 	-- into a blind `base .. "_3p"` spawn target, silently voiding the documented
 	-- degrade-to-base contract (entry :8900-:8907). This predicate keeps the husk
 	-- resolver's answer when it speaks (co-op unchanged) and otherwise applies the
-	-- #478 crash floor above (_om._husk_unit_spawnable, incl. the #474
-	-- donor-material gate for units/cwv_* custom meshes -- the Old Musket's
-	-- MeshObject-AV class can no longer reach World.spawn_unit unguarded through
+	-- #478 crash floor above (_om._husk_unit_spawnable, incl. the optional #474
+	-- donor-material gate for explicitly borrowed custom meshes). Old Musket's
+	-- self-contained material closure can no longer reach World.spawn_unit with an unresolved donor through
 	-- a preview). Decision shape is pure and shared with the offline lock:
 	-- exact_appearance.resolve_preview_3p. _om fields are read at CALL time so
 	-- entry-load order stays irrelevant.
@@ -500,7 +510,7 @@ do
 	--     (e.g. a Nordland-shield pairing) and the def default would stomp it.
 	--   * Residency (issue 403 crash-floor): a vanilla override must be
 	--     force-loaded resident (shared _om._resident_override_3p, issue 418);
-	--     a mod-bundled custom mesh (the Old Musket) is accepted via
+	--     a mod-bundled custom mesh (including the Old Musket) is accepted via
 	--     _om._husk_custom_bundle_unit instead (always resident in cwv's own
 	--     bundle, and deliberately REJECTED by the vanilla-prefix resident
 	--     guard -- force-loading it is the issue 403 boot fatal).
@@ -567,8 +577,8 @@ do
 		if type(override) == "string" and override ~= "" and item_units[field] ~= override then
 			-- Residency admissibility (FAIL-CLOSED, #474/#403/#418): we write the
 			-- BASE-form path, vanilla spawn_inventory_unit appends "_3p".
-			--   * custom-bundle mesh: unit data is mod-resident, but its vanilla
-			--     donor MATERIAL must be resident too (#474 MeshObject AV killer);
+			--   * custom-bundle mesh: unit data/materials are mod-resident; an
+			--     optional explicitly declared donor must also be resident;
 			--   * force-loaded vanilla override (HUSK_OVERRIDE_REF, issue 418):
 			--     admissible unless the engine positively denies the resource;
 			--   * any other vanilla override (pairing-skin / crafted exact units
@@ -577,8 +587,8 @@ do
 			--     base identity this wield and queue a bounded lease.
 			local admissible
 			if _om._husk_custom_bundle_unit and _om._husk_custom_bundle_unit(override) then
-				-- (#719) donor-material gate for a borrowed-material mesh (Old
-				-- Musket); a self-contained bundle mesh declares no donor and is
+				-- (#719) donor-material gate for any future borrowed-material mesh;
+				-- a self-contained bundle mesh (including Old Musket) declares no donor and is
 				-- resident with the mod, so it is admitted outright. See the same
 				-- argument at the crash-floor predicate above.
 				admissible = _om._husk_material_donor_ready(override)
@@ -1070,9 +1080,9 @@ do
 			_om._apply_crowbill_presentation(weapon_unit_3p, def, identity,
 				"remote_husk", rotation)
 		end
-		-- (#474) Old Musket husk display parity. Its look is NOT generic def
-		-- fields: custom mesh + bespoke ABSOLUTE 3P pose + runtime-bound
-		-- textures, which the owner path gates on backend_id + musket template
+		-- (#474/#1155) Old Musket husk display parity. Its look is NOT generic def
+		-- fields: custom mesh + bespoke ABSOLUTE 3P pose + an authored material
+		-- closure, which the owner path gates on backend_id + musket template
 		-- -- both absent on the husk (wire item is the base es_handgun), so the
 		-- owner block at the spawn hook never fires here. Apply only when the
 		-- def positively identifies the Old Musket AND the custom mesh actually
@@ -1100,14 +1110,25 @@ do
 				local eq = ok_inv and inv and inv.equipment and inv:equipment()
 				wielded_slot = eq and eq.wielded_slot
 			end
-			local mode = _om._old_musket_mode_for_owner
-				and _om._old_musket_mode_for_owner(owner_unit_3p, slot_name) or "ranged"
+			local observed_name, mode, attachment_profile =
+				_om._husk_observed_unit_evidence(
+					weapon_unit_3p, owner_unit_3p, slot_name, hand)
+			if observed_name ~= rendered_unit_name
+					or (mode ~= "ranged" and mode ~= "melee")
+					or type(attachment_profile) ~= "string" then
+				_husk_log_once("1155_parent_evidence:" .. tostring(owner_unit_3p)
+						.. ":" .. tostring(slot_name),
+					"[cwv:1155] husk Old Musket presentation skipped: exact spawned template/profile evidence unavailable slot=%s hand=%s",
+					tostring(slot_name), tostring(hand))
+				return
+			end
 			local presentation = _om.old_musket_appearance and _om.old_musket_appearance.reconcile
-				and _om.old_musket_appearance.reconcile(weapon_unit_3p, "husk", "equip", {
+				and _om.old_musket_appearance.reconcile(weapon_unit_3p, "husk", "instance_load", {
 					cwv_key = "cwv_es_musket_old", skin = skin,
 				}, mode, {
 					peer_id = tostring(owner_unit_3p), slot_name = slot_name,
 					unit_name = rendered_unit_name,
+					attachment_profile = attachment_profile,
 				})
 			pcall(printf, "[cwv:474] husk old-musket descriptor presentation: mode=%s retained=%s reason=%s (slot=%s wielded=%s hand=%s skin=%s)",
 				tostring(mode), tostring(presentation and presentation.retained == true),
@@ -1219,8 +1240,35 @@ do
 			def = _om._husk_resolve_display_def(base_name, _husk_career_name(owner_unit_3p), skin)
 		end
 		if not (def and type(def.template) == "string") then return nil end
+		local template_name = def.template
+		local old_musket_evidence
+		if def.item_key == "cwv_es_musket_old" then
+			local wield_ctx = _om._appearance_husk_wield_context
+			local hinted_player = wield_ctx
+				and wield_ctx.owner_unit_3p == owner_unit_3p
+				and wield_ctx.slot_name == slot_name and wield_ctx.player or nil
+			local mode = _om._old_musket_mode_for_owner
+				and _om._old_musket_mode_for_owner(
+					owner_unit_3p, slot_name, hinted_player) or "ranged"
+			if mode ~= "ranged" and mode ~= "melee" then return nil end
+			template_name = mode == "melee" and "old_musket_template_melee"
+				or "old_musket_template"
+			local declared = false
+			for _, row in ipairs(def.effective_templates or {}) do
+				if type(row) == "table" and row.name == template_name then
+					declared = true
+					break
+				end
+			end
+			local profile = _om._old_musket_attachment_profile
+				and _om._old_musket_attachment_profile("3p", mode, "character")
+			if not declared or type(profile) ~= "string" or profile == "" then return nil end
+			old_musket_evidence = {
+				mode = mode, attachment_profile = profile, template_name = template_name,
+			}
+		end
 		local weapons = rawget(_G, "Weapons")
-		local ctpl = weapons and rawget(weapons, def.template)
+		local ctpl = weapons and rawget(weapons, template_name)
 		if type(ctpl) ~= "table" or ctpl == item_template then return nil end
 		local link = ctpl[hand .. "_hand_attachment_node_linking"]
 		if not (type(link) == "table" and type(link.third_person) == "table"
@@ -1232,10 +1280,12 @@ do
 				and not ad.ammo_unit_attachment_node_linking then
 			return nil
 		end
-		_husk_log_once("398_template:" .. tostring(base_name) .. ":" .. tostring(def.item_key) .. ":" .. hand,
+		if old_musket_evidence then old_musket_evidence.template_ref = ctpl end
+		_husk_log_once("398_template:" .. tostring(base_name) .. ":" .. tostring(def.item_key)
+				.. ":" .. hand .. ":" .. tostring(template_name),
 			"[cwv:398] husk template identity: base=%s def=%s hand=%s -> template=%s (clone audio/FX metadata now reaches the husk spawn)",
-			tostring(base_name), tostring(def.item_key), tostring(hand), tostring(def.template))
-		return ctpl, def
+			tostring(base_name), tostring(def.item_key), tostring(hand), tostring(template_name))
+		return ctpl, def, old_musket_evidence
 	end
 
 	-- (#579) Per-hand ID compare, the evidence the 2026-07-18 log sweep found
@@ -1319,19 +1369,49 @@ do
 		if _om._husk_ammo_nil_item_units then
 			_om._husk_ammo_nil_item_units(item_data, item_units, owner_unit_3p, slot_name)
 		end
-		local husk_tpl
+		local husk_tpl, spawn_evidence
 		if not suppress and _om._husk_template_for_spawn then
-			husk_tpl = _om._husk_template_for_spawn(hand, item_template, item_units, slot_name, item_data, owner_unit_3p)
+			husk_tpl, _, spawn_evidence = _om._husk_template_for_spawn(
+				hand, item_template, item_units, slot_name, item_data, owner_unit_3p)
 		end
-		return suppress == true, husk_tpl
+		return suppress == true, husk_tpl, spawn_evidence
 	end
 
 	-- POST-SPAWN half. Returns true when the caller must nil its captured
 	-- ammo_unit_3p return (the #399 strip fired). All four spawn returns are
 	-- captured by the entry hook (gear_utils.lua multi-return: weapon_3p,
 	-- ammo_3p, weapon_1p, ammo_1p) -- only the 3P pair exists for husks.
-	_om._husk_adapter_post = function(hand, item_data, item_units, slot_name, owner_unit_3p, v_w3p, v_a3p)
+	_om._husk_adapter_post = function(hand, item_data, item_units, slot_name, owner_unit_3p, v_w3p, v_a3p, spawn_evidence)
 		local stripped = false
+		if v_w3p then
+			local field = hand == "right" and "right_hand_unit" or "left_hand_unit"
+			local observed = item_units and item_units[field]
+			if type(observed) == "string" and observed ~= "" then
+				if observed:sub(-3) ~= "_3p" then observed = observed .. "_3p" end
+				local row = {
+					unit_name = observed, owner_unit_3p = owner_unit_3p,
+					slot_name = slot_name, hand = hand,
+				}
+				if type(spawn_evidence) == "table"
+						and (spawn_evidence.mode == "ranged" or spawn_evidence.mode == "melee")
+						and type(spawn_evidence.attachment_profile) == "string"
+						and type(spawn_evidence.template_name) == "string" then
+					local weapons = rawget(_G, "Weapons")
+					local current = weapons and rawget(weapons, spawn_evidence.template_name)
+					local expected_profile = _om._old_musket_attachment_profile
+						and _om._old_musket_attachment_profile(
+							"3p", spawn_evidence.mode, "character")
+					if current == spawn_evidence.template_ref
+							and expected_profile == spawn_evidence.attachment_profile then
+						row.mode = spawn_evidence.mode
+						row.attachment_profile = spawn_evidence.attachment_profile
+						row.template_name = spawn_evidence.template_name
+						row.template_ref = current
+					end
+				end
+				_om._husk_spawned_unit_names[v_w3p] = row
+			end
+		end
 		if _om._husk_strip_cwv_ammo and _om._husk_strip_cwv_ammo(item_data, owner_unit_3p, v_a3p, slot_name, item_units) then
 			stripped = true
 		end
@@ -1342,6 +1422,180 @@ do
 			_om._probe_579_hand_compare(hand, item_data, item_units, slot_name, owner_unit_3p, v_w3p)
 		end
 		return stripped
+	end
+
+	-- Stable post-wield Old Musket reconciliation. This lives with the husk
+	-- spawn ledger so the entry wrapper cannot reconstruct expected identity and
+	-- accidentally paint a vanilla Handgun fallback.
+	_om._old_musket_husk_wield = function(self, equipment, slot_name, slot, descriptor)
+		local musket_def = descriptor and _find_def(descriptor.variant_key)
+		if not musket_def and slot and _om._husk_skin_def then
+			musket_def = _om._husk_skin_def(slot.skin)
+		end
+		if not musket_def or musket_def.item_key ~= "cwv_es_musket_old" then return nil end
+		local owner_unit_3p = self and self._unit
+		local rendered_unit = equipment and equipment.right_hand_wielded_unit_3p
+		local rendered_unit_name, mode, attachment_profile, template_name,
+			template_ref =
+			_om._husk_observed_unit_evidence(
+				rendered_unit, owner_unit_3p, slot_name, "right")
+		if (mode ~= "ranged" and mode ~= "melee")
+				or type(attachment_profile) ~= "string"
+				or type(template_name) ~= "string" then return nil end
+		local weapons = rawget(_G, "Weapons")
+		local template = weapons and rawget(weapons, template_name)
+		if type(template) ~= "table" or template ~= template_ref then return nil end
+		-- Vanilla still resolves its body animation from base `es_handgun` after
+		-- GearUtils has spawned the exact clone parent. Replay the exact validated
+		-- clone template's career-aware 3P event once at this post-wield edge so a
+		-- polearm parent can never be paired with the Handgun body pose. This is
+		-- independent of material/transform retention: a temporary appearance miss
+		-- must not leave an exact polearm parent in the Handgun body state.
+		local pose = _om.old_musket_preview_pose
+		local event = pose and pose.resolve_husk_wield_event
+			and pose.resolve_husk_wield_event(template, self and self._career_name)
+		if type(event) == "string" then
+			local dispatched, dispatch_reason = _om.outrider_animation.dispatch_event(
+				owner_unit_3p, event, Unit)
+			pcall(printf,
+				"[cwv:1155] husk body attachment replay mode=%s template=%s event=%s dispatched=%s reason=%s chat=false",
+				tostring(mode), tostring(template_name), tostring(event),
+				tostring(dispatched == true), tostring(dispatch_reason))
+		end
+		local result = _om.old_musket_appearance.reconcile(rendered_unit, "husk", "equip", {
+			cwv_key = "cwv_es_musket_old", skin = slot and slot.skin,
+		}, mode, {
+			peer_id = tostring(owner_unit_3p), slot_name = slot_name,
+			unit_name = rendered_unit_name,
+			attachment_profile = attachment_profile,
+		})
+		return result
+	end
+
+	-- Sole installed SimpleHuskInventoryExtension._wield_slot owner. Keeping the
+	-- full callback behind an installer makes the real vanilla->spawn->stable
+	-- lifecycle executable in Lua 5.1 tests instead of blessing helper-only
+	-- simulations (#1155). The entry owns only the single install call.
+	_om._install_husk_wield_hook = function(hook_mod)
+		_om._husk_wield_hook_diag_seen = _om._husk_wield_hook_diag_seen or {}
+		local function context_diag(stage, err)
+			local token = tostring(stage) .. ":" .. tostring(err)
+			if _om._husk_wield_hook_diag_seen[token] then return end
+			_om._husk_wield_hook_diag_seen[token] = true
+			pcall(printf,
+				"[cwv:1155] husk wield auxiliary context failed stage=%s error=%s native_continues=true chat=false",
+				tostring(stage), tostring(err))
+		end
+		hook_mod:hook("SimpleHuskInventoryExtension", "_wield_slot",
+			function(func, self, world, equipment, slot_name, unit_1p, unit_3p)
+				local prior_appearance_context = rawget(
+					_om, "_appearance_husk_wield_context")
+				local combat_styles = _om.combat_styles
+				local prior_style_context = type(combat_styles) == "table"
+					and rawget(combat_styles, "husk_context") or nil
+				rawset(_om, "_appearance_husk_wield_context", {
+					owner_unit_3p = self and self._unit, player = self and self._player,
+					slot_name = slot_name,
+				})
+				local begin_ok, begin_error = true, nil
+				if combat_styles and combat_styles.begin_husk_wield then
+					begin_ok, begin_error = pcall(
+						combat_styles.begin_husk_wield, combat_styles, self, slot_name)
+				end
+				if not begin_ok and type(combat_styles) == "table" then
+					rawset(combat_styles, "husk_context", prior_style_context)
+					context_diag("begin", begin_error)
+				end
+				-- Combat-style context is auxiliary. Even if its setup failed,
+				-- vanilla wield must still run exactly once; only the affected CWV
+				-- style falls back for this reconstruction.
+				local vanilla_ok, vanilla_result = pcall(
+					func, self, world, equipment, slot_name, unit_1p, unit_3p)
+				local end_ok, end_error = true, nil
+				if begin_ok and combat_styles and combat_styles.end_husk_wield then
+					end_ok, end_error = pcall(
+						combat_styles.end_husk_wield, combat_styles)
+				end
+				-- Restore both context owners by exact raw table shape before any
+				-- error escapes. This keeps nested wield reconstruction isolated and
+				-- ensures a failed hook cannot poison the next remote owner/slot.
+				rawset(_om, "_appearance_husk_wield_context", prior_appearance_context)
+				if type(combat_styles) == "table" then
+					rawset(combat_styles, "husk_context", prior_style_context)
+				end
+				if not vanilla_ok then error(vanilla_result, 0) end
+				if not end_ok then context_diag("end", end_error) end
+				local slot = equipment and equipment.slots and equipment.slots[slot_name]
+				local item_data = slot and slot.item_data
+				local descriptor
+				local identity_ok, identity_error = pcall(function()
+					descriptor = _om._husk_identity_descriptor
+						and _om._husk_identity_descriptor(self and self._unit, slot_name,
+							item_data and item_data.name, self and self._player)
+				end)
+				if not identity_ok then context_diag("identity_post", identity_error) end
+				if _om._old_musket_husk_wield then
+					local musket_ok, musket_error = pcall(
+						_om._old_musket_husk_wield,
+						self, equipment, slot_name, slot, descriptor)
+					if not musket_ok then context_diag("old_musket_post", musket_error) end
+				end
+				local outrider_ok, outrider_error = pcall(function()
+					local husk_wield, husk_reason = _om.outrider_animation.husk_event(
+						descriptor, self and self._career_name,
+						NetworkLookup and NetworkLookup.anims)
+					if husk_wield then
+						local _, result = _om.outrider_animation.dispatch_event(
+							unit_3p, husk_wield, Unit)
+						_om.outrider_animation.emit_evidence(printf, "remote_husk_3p",
+							self and self._career_name, husk_wield, result, "exact_identity")
+					elseif husk_reason then
+						_om.outrider_animation.emit_evidence(printf, "remote_husk_3p",
+							self and self._career_name,
+							_om.outrider_animation.SALTZPYRE_WIELD_3P,
+							"skip_" .. tostring(husk_reason), "exact_identity")
+					end
+				end)
+				if not outrider_ok then context_diag("outrider_post", outrider_error) end
+				pcall(function()
+					local item_template = slot and slot.item_template
+					local function live(u)
+						return (u and Unit.alive(u)) and tostring(u) or "nil"
+					end
+					printf("[cwv husk-wield] slot=%s item_name=%s backend_id=%s skin=%s template=%s | wielded r3p=%s l3p=%s (issues 395/398 diag)",
+						tostring(slot_name), tostring(item_data and item_data.name),
+						tostring(item_data and item_data.backend_id),
+						tostring(slot and slot.skin),
+						tostring(item_template and item_template.name),
+						live(equipment and equipment.right_hand_wielded_unit_3p),
+						live(equipment and equipment.left_hand_wielded_unit_3p))
+				end)
+				local function auxiliary(stage, callback)
+					local ok, err = pcall(callback)
+					if not ok then context_diag(stage, err) end
+				end
+				if _om._exact_pair_on_husk_wield then
+					auxiliary("exact_pair_post", function()
+						_om._exact_pair_on_husk_wield(self, slot_name)
+					end)
+				end
+				if _om.crowbill_runtime and _om.crowbill_runtime.on_husk_wield then
+					auxiliary("crowbill_post", function()
+						_om.crowbill_runtime.on_husk_wield(self, slot_name)
+					end)
+				end
+				if _om.combat_styles and _om.combat_styles.on_husk_wield then
+					auxiliary("combat_style_post", function()
+						_om.combat_styles:on_husk_wield(self, slot_name)
+					end)
+				end
+				if descriptor then
+					auxiliary("appearance_fade_post", function()
+						_om.appearance_fade.husk_wield(self, equipment)
+					end)
+				end
+				return vanilla_result
+			end)
 	end
 end
 

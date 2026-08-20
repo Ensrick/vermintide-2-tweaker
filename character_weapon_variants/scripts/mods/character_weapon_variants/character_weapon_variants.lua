@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.523-dev"
+local MOD_VERSION = "0.1.524-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
 mod._cwv_dev_anim_picker = mod:dofile("scripts/mods/character_weapon_variants/cwv_dev_anim_picker")
@@ -854,79 +854,9 @@ mod:dofile("scripts/mods/character_weapon_variants/_cwv_husk_residency_owner")(m
 --     3P weapon units still live on `equipment` AFTER the swap completed, so a
 --     rapier unit that survived `GearUtils.destroy_equipment` (or a swap whose
 --     item-id resync never reached the husk) is visible in the trace.
--- #620 upgraded the single post-observation hook to one full wrapper so a
--- strictly synchronous remote owner+slot style context exists while vanilla
--- resolves BackendUtils.get_item_template. The context is always cleared even
--- if vanilla errors; every prior post-wield observer remains consolidated here.
--- Pre-flight (CLAUDE.md #8): CWV's only other
--- SimpleHuskInventoryExtension hook is on `start_weapon_fx` (above) — this is
--- the sole hook on (SimpleHuskInventoryExtension, _wield_slot) in CWV.
-mod:hook("SimpleHuskInventoryExtension", "_wield_slot", function(func, self, world, equipment, slot_name, unit_1p, unit_3p)
-	-- #660: BackendUtils.get_item_units runs synchronously inside vanilla wield,
-	-- before the per-hand spawn hooks know which peer/slot they belong to. Keep a
-	-- strictly scoped context so the upstream hand-selection adapter can consume
-	-- the same exact remote descriptor as the later mesh/transform adapters.
-	_om._appearance_husk_wield_context = {
-		owner_unit_3p = self and self._unit, player = self and self._player,
-		slot_name = slot_name,
-	}
-	if _om.combat_styles and _om.combat_styles.begin_husk_wield then
-		_om.combat_styles:begin_husk_wield(self, slot_name)
-	end
-	local ok, err = pcall(func, self, world, equipment, slot_name, unit_1p, unit_3p)
-	_om._appearance_husk_wield_context = nil
-	if _om.combat_styles and _om.combat_styles.end_husk_wield then
-		_om.combat_styles:end_husk_wield()
-	end
-	if not ok then error(err) end
-	-- #760: a remote husk receives the vanilla Trollhammer item shape for wire
-	-- safety, so its local item-template lookup cannot see the Outrider's
-	-- Saltzpyre career map. The semantic identity channel is the positive
-	-- variant proof. Re-apply the same vanilla Repeater Pistol stance once at
-	-- the existing husk-wield reconstruction edge; no custom animation id or
-	-- extra RPC is sent. A late identity delivery already re-wields this slot.
-	local slot = equipment and equipment.slots and equipment.slots[slot_name]
-	local item_data = slot and slot.item_data
-	local descriptor = _om._husk_identity_descriptor
-		and _om._husk_identity_descriptor(self and self._unit, slot_name, item_data and item_data.name, self and self._player)
-	local husk_wield, husk_reason = _om.outrider_animation.husk_event(
-		descriptor, self and self._career_name,
-		NetworkLookup and NetworkLookup.anims)
-	if husk_wield then
-		local _, result = _om.outrider_animation.dispatch_event(
-			unit_3p, husk_wield, Unit)
-		_om.outrider_animation.emit_evidence(printf, "remote_husk_3p",
-			self and self._career_name, husk_wield, result, "exact_identity")
-	elseif husk_reason then
-		_om.outrider_animation.emit_evidence(printf, "remote_husk_3p",
-			self and self._career_name,
-			_om.outrider_animation.SALTZPYRE_WIELD_3P,
-			"skip_" .. tostring(husk_reason), "exact_identity")
-	end
-	pcall(function()
-		local item_template = slot and slot.item_template
-		local function _live(u) return (u and Unit.alive(u)) and tostring(u) or "nil" end
-		printf("[cwv husk-wield] slot=%s item_name=%s backend_id=%s skin=%s template=%s | wielded r3p=%s l3p=%s (issues 395/398 diag)",
-			tostring(slot_name),
-			tostring(item_data and item_data.name),
-			tostring(item_data and item_data.backend_id),
-			tostring(slot and slot.skin),
-			tostring(item_template and item_template.name),
-			_live(equipment and equipment.right_hand_wielded_unit_3p),
-			_live(equipment and equipment.left_hand_wielded_unit_3p))
-	end)
-	if _om._exact_pair_on_husk_wield then
-		_om._exact_pair_on_husk_wield(self, slot_name)
-	end
-	if _om.crowbill_runtime and _om.crowbill_runtime.on_husk_wield then
-		_om.crowbill_runtime.on_husk_wield(self, slot_name)
-	end
-	if _om.combat_styles and _om.combat_styles.on_husk_wield then
-		_om.combat_styles:on_husk_wield(self, slot_name)
-	end; if descriptor then _om.appearance_fade.husk_wield(self, equipment) end -- #922 complete post-adapter snapshot
-end)
--- #922 post-_reapply_fade forced re-enroll lives in _cwv_appearance_fade.lua.
-_cwv_husk_wield_diag_installed = true
+-- The executable hook is installed immediately after the husk-path owner
+-- publishes its installer below. Calling it here would depend on a stale
+-- hot-reload `_om` field and abort a clean VMF load.
 
 -- ============================================================
 -- Musket equip-surface owner, phase 2 (#1159)
@@ -935,25 +865,25 @@ _cwv_husk_wield_diag_installed = true
 -- helpers and the GearUtils.spawn_inventory_unit, SimpleInventoryExtension
 -- _wield_slot / show_first_person_inventory / show_third_person_inventory and
 -- GearUtils.destroy_wielded registrations. Called HERE so those five hooks
--- register in the same order relative to every other cwv hook as before.
-_install_musket_spawn_surface()
+-- register in the same order relative to every other cwv hook as before. The
+-- actual call follows the husk-path install below so the husk hook still lands
+-- first without reading an unpublished helper.
 
 -- ============================================================
 -- Custom-mesh runtime owner (#1159)
 -- ============================================================
 -- Everything that makes a CWV MOD-BUNDLED custom weapon mesh behave like a
--- vanilla weapon unit moved verbatim into one owner: the LA-pattern
+-- vanilla weapon unit is consolidated in one owner: the balanced
 -- PackageManager load/unload/has_loaded shims with the #474 husk bundle-unit
 -- predicate, the forward-only NetworkLookup.inventory_packages aliases (Old
 -- Musket plus the #597 Greataxe and #604 Crowbill installs), the Old Musket
--- transform constants and their single `_om._old_musket_transform_components`
--- reader, the #617/#742 texture re-exports and the #1155 Phase 3 appearance
+-- attachment-profile poses and canonical selector/source, the #617/#742
+-- authored-material re-exports and the #1155 Phase 3 appearance
 -- pilot with its preview descriptor seams, the #474 stance-channel dofile, the
 -- v0.1.293 FX-proxy lifecycle with its four Unit node/flow redirect hooks, and
 -- the v0.1.290 attachment-node filter.
 --
--- The Old Musket's item/template/stance behavior stays in _cwv_musket_runtime,
--- its native texture writes stay in _cwv_old_musket_preview, and the bayonet
+-- Old Musket item/template/stance behavior stays in _cwv_musket_runtime; authored-material binding stays in _cwv_old_musket_preview, and the bayonet
 -- child-unit lifecycle stays in this entry directly above - a bayonet is a
 -- second vanilla unit linked to the rifle, not a custom-mesh gap.
 --
@@ -1390,6 +1320,18 @@ mod:dofile("scripts/mods/character_weapon_variants/_cwv_husk_path")(mod, {
 	triplet_text = _triplet_text,
 })
 
+-- #620 upgraded the single post-observation hook to one full wrapper so a
+-- strictly synchronous remote owner+slot style context exists while vanilla
+-- resolves BackendUtils.get_item_template. Install only after the owner above
+-- has published `_install_husk_wield_hook`; this ordering is clean-load safe.
+_om._install_husk_wield_hook(mod)
+-- #922 post-_reapply_fade forced re-enroll lives in _cwv_appearance_fade.lua.
+_cwv_husk_wield_diag_installed = true
+
+-- Preserve the historical hook order: the husk wield hook precedes the five
+-- owner/bot musket spawn-surface registrations.
+_install_musket_spawn_surface()
+
 -- ============================================================
 -- BackendUtils.get_item_units override
 -- ============================================================
@@ -1516,7 +1458,7 @@ mod:dofile("scripts/mods/character_weapon_variants/_cwv_world_equipment_owner")(
 -- the cosmetic picker's cwv-only illusion filter, the two preview teardown
 -- edges, and the illusion browser / Athanor craft pane
 -- (LootItemUnitPreviewer.spawn_units) with its #597 fallback, issue 419
--- mesh-swap pre-pass and #617 Old Musket texture rebind.
+-- mesh-swap pre-pass and #617/#1155 Old Musket authored-material closure.
 --
 -- The other two presentation surfaces stay put: WORLD/BOT equipment is the
 -- `GearUtils.create_equipment` hook directly above (it owns the transform-miss
@@ -1537,6 +1479,7 @@ mod:dofile("scripts/mods/character_weapon_variants/_cwv_menu_preview_owner")(mod
 	apply_cwv_hand_transform = _apply_cwv_hand_transform,
 	skin_transform_map = _skin_transform_map,
 	crowbill_transform_by_unit = _crowbill_transform_by_unit,
+	get_mod = get_mod,
 })
 
 -- Install commands and final callbacks only after every gameplay/render hook above.

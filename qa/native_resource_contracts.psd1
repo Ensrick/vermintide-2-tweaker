@@ -15,7 +15,6 @@
         @{ File='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_curse_lighting_owner.lua'; Kind='shading'; Count=2; Policy='owned-world-existing'; Evidence='qa/lua/tests/test_resource_residency_census.lua' }
         @{ File='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua'; Kind='shading'; Count=2; Policy='owned-world-existing'; Evidence='qa/lua/tests/test_resource_residency_census.lua' }
         @{ File='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_preview.lua'; Kind='material_bind'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_cwv_texture_residency.lua' }
-        @{ File='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_preview.lua'; Kind='texture'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_cwv_texture_residency.lua' }
         @{ File='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_preview.lua'; Kind='residency_proof'; Count=3; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_cwv_texture_residency.lua' }
         @{ File='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_appearance.lua'; Kind='texture_descriptor'; Count=2; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_cwv_old_musket_appearance.lua' }
         @{ File='character_weapon_variants/scripts/mods/character_weapon_variants/_lib_weapon_appearance.lua'; Kind='texture'; Count=1; Policy='deferred-legacy'; Evidence='issue:#749' }

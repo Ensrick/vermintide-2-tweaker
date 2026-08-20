@@ -252,9 +252,9 @@ return function(H, repo_root)
         H.truthy(gate_source:find("lifecycle.clear_peer", 1, true)
                 and gate_source:find("_appearance_lifecycle", 1, true),
             "appearance lifecycle clear_peer is not wired to peer teardown (#914)")
-		local main_source = read(repo_root
-			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua")
-		H.truthy(main_source:find("player = self and self._player", 1, true),
+		local husk_source = read(repo_root
+			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_husk_path.lua")
+		H.truthy(husk_source:find("player = self and self._player", 1, true),
 			"husk wield context must carry SimpleHuskInventoryExtension._player")
     end)
 end

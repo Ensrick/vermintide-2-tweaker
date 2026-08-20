@@ -506,6 +506,7 @@ _om._dual_axes_fp_game_state_retry_installed = true
 mod.on_game_state_changed = function(status, state_name)
 	if status == "exit" and _om.old_musket_appearance then
 		_om.old_musket_appearance.disconnect()
+		_om._cwv_cim_latest_generation = nil
 	end
     -- #586: chunk-load normally acquires the leases, but PackageManager can be
     -- cold during unusual load ordering. Every gameplay-state enter is a safe
@@ -589,6 +590,7 @@ end
 
 mod.on_disabled = function()
 	if _om.old_musket_appearance then _om.old_musket_appearance.disconnect() end
+	_om._cwv_cim_latest_generation = nil
 	if _om.crowbill_runtime and _om.crowbill_runtime.set_enabled then
 		_om.crowbill_runtime.set_enabled(false)
 	end
@@ -598,6 +600,7 @@ end
 
 mod.on_unload = function()
 	if _om.old_musket_appearance then _om.old_musket_appearance.disconnect() end
+	_om._cwv_cim_latest_generation = nil
 	if _om.crowbill_runtime and _om.crowbill_runtime.set_enabled then
 		_om.crowbill_runtime.set_enabled(false)
 	end

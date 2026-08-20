@@ -15,6 +15,8 @@ return function(H, repo_root)
     local mod_root = repo_root
         .. "/character_weapon_variants/scripts/mods/character_weapon_variants/"
     local install = assert(loadfile(mod_root .. "_cwv_menu_preview_owner.lua"))()
+	local PreviewBridge = assert(loadfile(mod_root .. "_cwv_mod_unit_preview.lua"))()
+	local Appearance = assert(loadfile(mod_root .. "_cwv_exact_appearance.lua"))()
 
     local BASE_3P = "units/weapons/player/wpn_qa419_base/wpn_qa419_base_3p"
     local VARIANT_3P = "units/weapons/player/wpn_qa419_variant/wpn_qa419_variant_3p"
@@ -138,19 +140,36 @@ return function(H, repo_root)
         H.equal(seen.unit_name, BASE_3P)
     end)
 
-    H.test("#419 the #597 mod-unit fallback still runs ahead of the swap", function()
-        -- Ordering between the two pre-passes is load-bearing: the fallback
-        -- rewrites a non-resident custom unit to its vanilla stand-in, and the
-        -- mesh swap must see that already-corrected recipe.
+    H.test("#419 the #597 resource fallback survives the downstream mesh swap", function()
+		-- Missing-resource fallback is a terminal decision for this exact preview
+		-- generation. The later base-identity pass must not recognize the vanilla
+		-- stand-in and re-admit the custom unit that just failed residency.
         local om = fixture()
         local order = {}
-        om.mod_unit_preview = {
-            apply_loot_fallbacks = function(_, sd) order[#order + 1] = "fallback"; return sd end,
-        }
-        om._cwv_browser_meshswap_apply = function() order[#order + 1] = "meshswap" end
-        local _, vanilla = spy()
-        om._cwv_browser_spawn_units(vanilla, { _item = crafted_item() },
-            { { unit_name = BASE_3P } })
-        H.deep_equal(order, { "fallback", "meshswap" })
+		om.mod_unit_preview = PreviewBridge
+		local descriptor = assert(Appearance.resolve_spawn_descriptor({
+			variant = { item_key = "cwv_qa419", right_hand_unit = VARIANT_3P:gsub("_3p$", "") },
+			base = { right_hand_unit = BASE_3P:gsub("_3p$", "") },
+		}))
+		local original_fallback = om.mod_unit_preview.apply_loot_fallbacks
+		om.mod_unit_preview.apply_loot_fallbacks = function(previewer, rows)
+			order[#order + 1] = "fallback"
+			return original_fallback(previewer, rows)
+		end
+		om._cwv_browser_meshswap_apply = function(_, rows)
+			order[#order + 1] = "meshswap"
+			Appearance.apply_spawn_descriptor(descriptor, rows,
+				function(unit) return unit .. "_3p" end, "base_identity")
+		end
+		local seen, vanilla = spy()
+		local spawn_data = { { unit_name = VARIANT_3P } }
+		om._cwv_browser_spawn_units(vanilla, {
+			_item = crafted_item(),
+			_cwv_preview_unit_fallbacks = { [VARIANT_3P] = BASE_3P },
+		}, spawn_data)
+		H.deep_equal(order, { "fallback", "meshswap" })
+		H.equal(seen.unit_name, BASE_3P)
+		H.equal(spawn_data[1][PreviewBridge.FALLBACK_MARKER], BASE_3P)
+		H.equal(PreviewBridge.FALLBACK_MARKER, Appearance.PREVIEW_FALLBACK_MARKER)
     end)
 end

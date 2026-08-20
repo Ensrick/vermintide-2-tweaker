@@ -408,15 +408,11 @@ local _variant_definitions = {
 	},
 	]]
 	{
-		-- "Old Musket" — second cwv musket variant. v0.1.286 LA-pattern rewrite:
-		-- right_hand_unit IS our custom mesh path. The .unit file uses LA's
-		-- `data = { mat_to_use = "<vanilla>" }` pattern which references a
-		-- vanilla 1P/3P weapon material at runtime — that's how we get proper
-		-- FP rendering (no shadow in FP, correct depth, no overlay drawn on
-		-- top of hands). The PackageManager.load/unload/has_loaded hooks below
-		-- (search "_LA_PATTERN_CUSTOM_PACKAGES") intercept the engine's
-		-- attempts to package-load our custom path and silently no-op, so
-		-- there's no "Resource not found" crash.
+		-- "Old Musket" — second cwv musket variant. right_hand_unit is the
+		-- custom mesh path, whose 1P/3P units bind one CWV-owned PBR material.
+		-- The PackageManager bridge maps the mod-only path to a vanilla Handgun
+		-- package solely as a discoverable lifetime anchor; it does not supply
+		-- the mesh material (#1155).
 		-- v0.1.277-285 history: ran an overlay (World.spawn_unit + link_unit
 		-- against a vanilla rifle) — got the mesh on screen but with wrong
 		-- render layer (cast shadow in FP, always-on-top depth bug). Replaced

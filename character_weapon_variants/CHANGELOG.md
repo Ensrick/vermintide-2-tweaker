@@ -1,5 +1,51 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.524-dev (2026-08-20) -- authored Old Musket material closure and attachment profiles (#1155)
+
+- Rain's CWV `0.1.523-dev` run disproved the donor-package theory: both
+  Handgun packages were resident, but the custom units still exposed a null
+  `rifle_mat`, leaving the Athanor preview pink and the owner 1P/3P models
+  invisible. The 1P and 3P `.unit` files now bind that slot to one CWV-owned
+  material, and the root package directly owns the material plus its exact
+  albedo, normal, roughness, metallic, and AO textures.
+- The appearance transaction proves that complete authored resource set before
+  its single `Unit.set_all_materials` call, then independently reads every live
+  mesh material handle back. Runtime texture painting and donor-material
+  assumptions are removed. Source, manifest, native-resource, and engine-free
+  checks prove this closure offline; visual retention remains an in-game
+  candidate until the #1155 solo card passes.
+- Preview admission now proves the custom unit, authored material, and all five
+  textures before vanilla can spawn the row. A partial closure is terminally
+  rewritten to the resident vanilla Handgun, so a resident mesh can no longer
+  re-admit itself after the fallback. Team/lobby and score producers also take
+  that vanilla fallback because they do not expose an exact selected-instance
+  identity; those surfaces are deliberately not claimed by this pilot.
+- Transform selection now names the actual attachment parent: held rifle and
+  held polearm profiles are separate in 1P and character 3P, while camera-world
+  previews use an independent display profile. The display tuple of position
+  `{0, 0, 0}`, Euler rotation `{-90, -90, 0}`, and scale `{1, 1.1, 1.1}` is an
+  isolated live-tuning candidate, not a verified pose.
+- Owner, bot, inventory, and husk adapters derive that profile from the exact
+  template and attachment recipe vanilla actually returned. Remote melee uses
+  the polearm clone for both the linked weapon parent and the replayed body-wield
+  event; a pre-ready extension player may establish its peer identity without
+  guessing through `PlayerManager:owner`.
+- One lifecycle token permits one attempt. Only a later source-backed edge such
+  as `equip` or stable `preview_open` can retry, and the named regression now
+  requires retained material and pose evidence for both Old Musket stances
+  instead of passing from descriptor shape alone.
+- Evidence is bounded by surface and stance, detached from callers, qualified by
+  descriptor generation and exact current live units, and invalidated when the
+  equipped item changes. CIM markers require an exact item identity and a finite
+  monotonic constructor generation. Clean-load hook order, nested husk context
+  restoration, and post-vanilla auxiliary failures are behaviorally covered so
+  an adapter failure cannot discard a successful native wield.
+
+**DoD:** Re-walked G-RANGED, G-STANCE, G-MESH-FAMILY, and G-APPEARANCE offline
+closure. Deferral: owner/Athanor/browser pose and material retention require the
+#1155 solo card; remote husk, bot, hot-join, and role reversal follow only after
+solo passes.
+
 ## 0.1.523-dev (2026-08-20) -- crafted UUID transform consumers (#482) [verify-fix]
 
 - World equipment, inventory/hero preview, the illusion/Athanor browser, and

@@ -7,6 +7,8 @@
 -- grow a family-specific reconstruction rule.
 local M = {}
 
+M.PREVIEW_FALLBACK_MARKER = "_cwv_mod_unit_preview_fallback_v1"
+
 M.SURFACES = {
     owner_3p = "item_units",
     remote_husk = "item_units",
@@ -248,6 +250,10 @@ function M.apply_spawn_descriptor(descriptor, spawn_data, resolve_3p, adapter)
     local changed = 0
     for index = 1, #spawn_data do
         local entry = spawn_data[index]
+		local fallback_path = type(entry) == "table"
+			and entry[M.PREVIEW_FALLBACK_MARKER] or nil
+		local fallback_locked = type(fallback_path) == "string"
+			and fallback_path ~= "" and entry.unit_name == fallback_path
         -- #279: vanilla stamps `is_ammo_unit = item_units.ammo_unit ~= nil`
         -- onto the LEFT/RIGHT WEAPON rows themselves
         -- (world_hero_previewer.lua:707/731) -- the flag records ammo-unit
@@ -256,11 +262,12 @@ function M.apply_spawn_descriptor(descriptor, spawn_data, resolve_3p, adapter)
         -- inherited ammo identity and lets the row fall through to the exact
         -- hand-unit rewrite below; deleting flagged rows would delete the
         -- weapon row itself and vanish the weapon from the preview.
-        if type(entry) == "table" and entry.is_ammo_unit and descriptor.no_ammo_unit then
+        if type(entry) == "table" and not fallback_locked
+				and entry.is_ammo_unit and descriptor.no_ammo_unit then
             entry.is_ammo_unit = nil
             changed = changed + 1
         end
-        if type(entry) == "table" and not entry.is_ammo_unit then
+        if type(entry) == "table" and not fallback_locked and not entry.is_ammo_unit then
             local hand
             if adapter == "hand_flags" then
                 hand = entry.right_hand and "right" or (entry.left_hand and "left")

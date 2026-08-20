@@ -14,6 +14,7 @@ return function(H, repo_root)
     local mod_root = repo_root
         .. "/character_weapon_variants/scripts/mods/character_weapon_variants/"
     local policy_path = mod_root .. "_cwv_husk_transform_policy.lua"
+	local husk_path = mod_root .. "_cwv_husk_path.lua"
     local main_path = mod_root .. "character_weapon_variants.lua"
     local Policy = assert(loadfile(policy_path))()
 
@@ -172,12 +173,21 @@ return function(H, repo_root)
         H.equal(count(source, 'mod:hook("GearUtils", "spawn_inventory_unit"'), 0,
             "entry must not re-register GearUtils.spawn_inventory_unit")
         -- Both husk adapter halves must still be dispatched from that hook body.
-        H.truthy(equip_surface:find("_om._husk_adapter_pre(hand, item_template", 1, true),
+		H.truthy(equip_surface:find("_om._husk_adapter_pre(", 1, true),
             "spawn chokepoint still calls the pre-spawn husk adapter")
-        H.truthy(equip_surface:find("_om._husk_adapter_post(hand, item_data", 1, true),
+		H.truthy(equip_surface:find("_om._husk_adapter_post(", 1, true),
             "spawn chokepoint still calls the post-spawn husk adapter")
-        H.equal(count(source, 'mod:hook("SimpleHuskInventoryExtension", "_wield_slot"'), 1,
+		local husk_source = read(husk_path)
+		H.equal(count(source, 'mod:hook("SimpleHuskInventoryExtension", "_wield_slot"'), 0,
+			"entry must not duplicate the executable husk hook owner")
+		H.equal(count(husk_source, 'hook_mod:hook("SimpleHuskInventoryExtension", "_wield_slot"'), 1,
             "SimpleHuskInventoryExtension._wield_slot must be hooked exactly once")
+		H.equal(count(source, "_om._install_husk_wield_hook(mod)"), 1,
+			"entry must install the sole executable husk hook owner")
+		local owner_load = assert(source:find("_cwv_husk_path\")(mod, {", 1, true))
+		local owner_install = assert(source:find("_om._install_husk_wield_hook(mod)", 1, true))
+		H.truthy(owner_load < owner_install,
+			"a clean load must publish the husk hook installer before calling it")
         -- #1159: start_weapon_fx moved to the husk-residency owner, beside the
         -- #280 force-loads it is the crash floor for. Still exactly one site,
         -- and the entry must hold no shadowing registration (VMF drops dupes).

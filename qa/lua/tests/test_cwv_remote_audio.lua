@@ -252,4 +252,89 @@ return function(H, repo_root)
         H.truthy(source:find("remote fire audio resolved a world Wwise never registered", 1, true))
         H.truthy(source:find("remote fire acceptor must fail closed on an unresolvable peer", 1, true))
     end)
+
+	H.test("#1155 remote Old Musket stance rebuilds the husk parent before applying its profile", function()
+		local saved = {
+			Managers = rawget(_G, "Managers"), Unit = rawget(_G, "Unit"),
+			ScriptUnit = rawget(_G, "ScriptUnit"), printf = rawget(_G, "printf"),
+		}
+		local owner, weapon_unit = {}, {}
+		local equipment = {
+			wielded_slot = "slot_ranged",
+			right_hand_wielded_unit_3p = weapon_unit,
+		}
+		local inventory = { equipment = function() return equipment end }
+		_G.Unit = { alive = function() return true end }
+		_G.ScriptUnit = { extension = function() return inventory end }
+		_G.Managers = { player = {} }
+		_G.printf = function() end
+		local spawned_mode = "ranged"
+		local reconciles, rewields = {}, {}
+		local om = {
+			peer_resolver = {
+				peer_player = function(_, peer_id)
+					if peer_id == "peer-rain" then return { player_unit = owner } end
+				end,
+			},
+			old_musket_appearance = {
+				reconcile = function(_, surface, edge, _, mode, context)
+					reconciles[#reconciles + 1] = {
+						surface = surface, edge = edge, mode = mode,
+						profile = context.attachment_profile,
+					}
+					return { ok = true }
+				end,
+			},
+			_husk_observed_unit_evidence = function()
+				return "units/cwv_es_musket_custom/cwv_es_musket_custom_3p",
+					spawned_mode, "held_3p_" .. spawned_mode
+			end,
+			_old_musket_transform_components = function()
+				return { 0, 0, 0 }, { 0, 0, 0, 1 }, { 1, 1, 1 }
+			end,
+		}
+		local mod = {
+			network_register = function() end,
+			_cwv_rewield = {
+				request_peer_rewield = function(peer_id, slot_name, deps)
+					rewields[#rewields + 1] = {
+						peer = peer_id, slot = slot_name, tag = deps and deps.tag,
+					}
+					return false, "queued"
+				end,
+			},
+		}
+		local ok, err = pcall(function()
+			install_wire(mod, { om = om })
+			H.equal(om._old_musket_accept_mode(
+				"peer-rain", "slot_ranged", "ranged", nil, "identity"), true)
+			H.equal(#reconciles, 1)
+			H.equal(reconciles[1].profile, "held_3p_ranged")
+			H.equal(#rewields, 0)
+
+			H.equal(om._old_musket_accept_mode(
+				"peer-rain", "slot_ranged", "melee", nil, "identity"), true)
+			H.equal(#rewields, 1,
+				"a rifle-to-polearm parent transition must queue exactly one re-wield")
+			H.equal(rewields[1].peer, "peer-rain")
+			H.equal(rewields[1].slot, "slot_ranged")
+			H.equal(rewields[1].tag, "old-musket-parent:melee")
+			H.equal(#reconciles, 1,
+				"the polearm profile must not be painted onto the still-rifle-linked unit")
+
+			spawned_mode = "melee"
+			H.equal(om._old_musket_accept_mode(
+				"peer-rain", "slot_ranged", "melee", nil, "mode_channel"), true)
+			H.equal(#rewields, 1, "duplicate mode delivery must not re-wield again")
+			H.equal(#reconciles, 2)
+			H.equal(reconciles[2].edge, "peer_ready")
+			H.equal(reconciles[2].mode, "melee")
+			H.equal(reconciles[2].profile, "held_3p_melee")
+		end)
+		rawset(_G, "Managers", saved.Managers)
+		rawset(_G, "Unit", saved.Unit)
+		rawset(_G, "ScriptUnit", saved.ScriptUnit)
+		rawset(_G, "printf", saved.printf)
+		if not ok then error(err, 0) end
+	end)
 end

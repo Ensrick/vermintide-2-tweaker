@@ -1744,16 +1744,22 @@ for shipped examples.
 
 ---
 
-## Custom-mesh add-on — LA-style pattern (recommended)
+## Custom-mesh add-on — historical LA-style pattern (not the default)
 
 > **2026-07-14 canonical update:** use
 > [`../docs/CUSTOM_WEAPON_MODEL_PIPELINE.md`](../docs/CUSTOM_WEAPON_MODEL_PIPELINE.md)
 > for new assets. The older recipes below preserve historical Old Musket
 > context, but any advice that treats sibling/forwarding packages as proof of
 > runtime residency is superseded by issue #597's explicit-master-root,
-> preview-alias, and forward-only wire-alias requirements.
+> preview-alias, and forward-only wire-alias requirements. **#1155 further
+> supersedes the `data.mat_to_use` recipe below:** ordinary GearUtils and preview
+> spawns do not interpret that metadata. The Old Musket `0.1.524-dev` candidate
+> binds its bundled `rifle_mat` through a top-level `.unit materials` table and
+> one CWV-owned five-map `.material`. That closure is offline-proven; renderer
+> retention still requires the #1155 solo card. Keep the older text only as
+> failure-history evidence.
 
-**Canon:** `cwv_es_musket` v0.1.286+ (LA pattern after the
+**Historical implementation:** `cwv_es_musket` v0.1.286+ (LA pattern after the
 World.spawn_unit overlay in v0.1.277–285 had un-fixable FP-rendering
 issues — shadow in FP, draws on top of hand).
 

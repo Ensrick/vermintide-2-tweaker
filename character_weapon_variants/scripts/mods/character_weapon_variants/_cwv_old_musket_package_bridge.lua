@@ -1,14 +1,11 @@
 -- Package-lifecycle bridge for the Old Musket's mod-bundled mesh.
 --
--- The custom unit data is resident in CWV's master bundle, so its unit path
--- has no standalone package for PackageManager to load.  The .unit borrows a
--- material from the vanilla Empire Handgun, however, and that material is not
--- owned by CWV's bundle.  A request for the custom unit package must therefore
--- participate in the donor package's real lifecycle: preserve the caller's
--- reference name, callback, async mode and priority, but substitute the donor
--- package path.  Reporting the custom path as loaded without doing this lets
--- preview/world code spawn the mesh before its material exists, producing the
--- invisible / missing-material regression tracked by #474.
+-- The custom unit, material and textures are resident in CWV's master bundle,
+-- so the unit path has no standalone package for PackageManager to load. A
+-- request for that path must still participate in a real balanced lifecycle:
+-- preserve the caller's reference name, callback, async mode and priority, but
+-- substitute the corresponding vanilla Handgun package as a discoverable
+-- lifetime anchor. The alias is not the Old Musket's material owner (#1155).
 local M = {}
 
 function M.new(policy)
