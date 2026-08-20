@@ -44,6 +44,8 @@
 # Manual verification recipe (read-only; writes nothing):
 #   pwsh -File tools\ship\refresh-cards.ps1 -SelfTest
 #   pwsh -File tools\ship\refresh-cards.ps1 -ReconcileAllStreams -DryRun
+# Corrective live pass (only after the complete dry run is reviewed):
+#   pwsh -File tools\ship\refresh-cards.ps1 -ReconcileAllStreams
 #   pwsh -File tools\ship\refresh-cards.ps1 -DryRun `
 #       -PublishedId 3716869446 -NewVersion 0.1.485-dev -LoadTag cwv `
 #       -ModDirectory character_weapon_variants `
