@@ -22,14 +22,17 @@
 --     `_cwv_crowbill_apply_remote_mode` / `_cwv_crowbill_apply_presentation`
 --     seams, and the durable / relative-scale / evidence / transform-runtime
 --     library wiring behind them;
---   * the single per-hand applier `_apply_cwv_hand_transform` with its bounded
---     64-shot `[cwv:604] transform scheduled` evidence and `_triplet_text`;
+--   * the single per-hand planner/applier pair `_plan_cwv_hand_transform` and
+--     `_apply_cwv_hand_transform`, with bounded 64-shot `[cwv:604] transform
+--     scheduled` evidence and `_triplet_text`;
 --   * the resolvers the surfaces call - `_resolve_cwv_def` (combat-style decision,
 --     skin, exact Crowbill unit, #482 backend-id ladder, vanilla-key fallback and
 --     the toggled `es_dual_wield_hammer_sword` mace+sword tweak def),
 --     `_om._cwv_resolve_crowbill_transform`, and the #604 husk transform-policy
 --     bind that exports `_om._cwv_select_husk_transform_def` /
---     `_om._cwv_husk_transform_apply_plan`.
+--     `_om._cwv_husk_transform_apply_plan`;
+--   * the engine-free #482 consumer contract that makes world, menu preview,
+--     browser and husk surfaces select the same canonical transform record.
 --
 -- Extracted verbatim from the entry file; behavior is unchanged. Three moved
 -- ranges, each an unbroken byte-identical block, and the entry was reconstructed
@@ -46,7 +49,7 @@
 --
 -- BOUNDARY - this owner is a PRODUCER, not a surface. It registers no hook, no
 -- network channel and no command; the four presentation surfaces stay exactly
--- where they were and keep calling in:
+-- where they were and call the contract published here:
 --   * WORLD / BOT equipment      - the entry's `GearUtils.create_equipment` hook,
 --     which keeps its own transform-miss evidence counters (nothing here reads
 --     them);
@@ -93,6 +96,8 @@ local _variant_definitions = ctx.variant_definitions
 local _find_def = ctx.find_def
 local _custom_illusions = ctx.custom_illusions
 local _custom_skin_keys = ctx.custom_skin_keys
+local _CONSUMER_CONTRACT = mod:dofile(
+	"scripts/mods/character_weapon_variants/_cwv_transform_consumer_contract")
 
 -- ============================================================
 -- Model scaling and grip offsets
@@ -544,8 +549,8 @@ local function _triplet_text(value)
 	if type(value) ~= "table" then return "nil" end
 	return string.format("%.3f,%.3f,%.3f", value[1] or 0, value[2] or 0, value[3] or 0)
 end
-local function _apply_cwv_hand_transform(unit, def, hand, perspective, surface, unit_name, skin)
-	if not def then return false end
+local function _plan_cwv_hand_transform(def, hand, perspective)
+	if not def then return nil end
 	local prefix = hand == "left" and "left_hand_" or "right_hand_"
 	local scale = _resolve_field(def, prefix .. "scale_" .. perspective)
 		or _resolve_field(def, prefix .. "scale")
@@ -555,6 +560,19 @@ local function _apply_cwv_hand_transform(unit, def, hand, perspective, surface, 
 		or _resolve_field(def, prefix .. "offset")
 	local rotation = _resolve_field(def, prefix .. "rotation_" .. perspective)
 		or _resolve_field(def, prefix .. "rotation")
+	return {
+		scale = scale,
+		scale_multiplier = scale_multiplier,
+		offset = offset,
+		rotation = rotation,
+		should_apply = (scale or scale_multiplier or offset or rotation) and true or false,
+	}
+end
+local function _apply_cwv_hand_transform(unit, def, hand, perspective, surface, unit_name, skin)
+	if not def then return false end
+	local plan = _plan_cwv_hand_transform(def, hand, perspective)
+	local scale, scale_multiplier = plan.scale, plan.scale_multiplier
+	local offset, rotation = plan.offset, plan.rotation
 	local applied = _transform_unit(unit, scale, offset, rotation)
 	local generation
 	if def.crowbill_model_key and (scale or scale_multiplier or offset or rotation)
@@ -684,10 +702,29 @@ end
 -- #604 schema-2 exact identity must select the reconstructed model definition,
 -- not its transform-free base variant. Production and regression share this policy.
 _om._cwv_husk_transform_policy = _om.husk_transform_policy.bind({ find_def = _find_def,
-	resolve_def = _resolve_cwv_def, resolve_field = _resolve_field,
+	resolve_def = _resolve_cwv_def,
+	plan_transform = _plan_cwv_hand_transform,
 	model_by_unit = _crowbill_transform_by_unit })
 _om._cwv_select_husk_transform_def = _om._cwv_husk_transform_policy.select
 _om._cwv_husk_transform_apply_plan = _om._cwv_husk_transform_policy.plan
+
+local function _style_transform_decision(item_data, backend_id)
+	if _om.combat_styles and _om.combat_styles.transform_decision then
+		local decision = _om.combat_styles:transform_decision(item_data, backend_id)
+		if decision ~= nil then return true, decision or nil end
+	end
+	return false, nil
+end
+
+_om._cwv_transform_consumers = _CONSUMER_CONTRACT.bind({
+	resolve_def = _resolve_cwv_def,
+	resolve_key = function(backend_id, item_data)
+		return _om._cwv_key_for_item(backend_id, item_data)
+	end,
+	transform_map = _transform_map,
+	skin_transform_map = _skin_transform_map,
+	style_decision = _style_transform_decision,
+})
 
 -- Published under one namespace so the entry can re-bind the producers its
 -- remaining surfaces call without adding ten `_om` top-level keys. Every value
@@ -701,6 +738,7 @@ _om.weapon_transform = {
 	is_unit                    = _is_unit,
 	transform_unit             = _transform_unit,
 	triplet_text               = _triplet_text,
+	plan_cwv_hand_transform    = _plan_cwv_hand_transform,
 	apply_cwv_hand_transform   = _apply_cwv_hand_transform,
 	resolve_cwv_def            = _resolve_cwv_def,
 }

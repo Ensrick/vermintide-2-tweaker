@@ -40,6 +40,18 @@ return function(H, repo_root)
             find_def = function(key) return key and { item_key = key } or nil end,
             resolve_def = function() return nil end,
             resolve_field = function(def, field) return def[field] end,
+			plan_transform = function(def, hand, perspective)
+				local prefix = hand == "left" and "left_hand_" or "right_hand_"
+				local function field(name)
+					return def[prefix .. name .. "_" .. perspective]
+						or def[prefix .. name]
+				end
+				local scale, scale_multiplier = field("scale"), field("scale_multiplier")
+				local offset, rotation = field("offset"), field("rotation")
+				return { scale = scale, scale_multiplier = scale_multiplier,
+					offset = offset, rotation = rotation,
+					should_apply = (scale or scale_multiplier or offset or rotation) and true or false }
+			end,
             model_by_unit = model_by_unit or {},
         })
     end

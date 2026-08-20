@@ -167,7 +167,7 @@ return function(H, repo_root)
         local world_only = {
             -- WORLD / BOT equipment, with its own transform-miss counters.
             'mod:hook("GearUtils", "create_equipment"',
-            "local def = _resolve_cwv_def(item_data, result.skin",
+			"local def = _om._cwv_world_transform_decision(",
             "_crowbill_transform_miss_total = _crowbill_transform_miss_total + 1",
             "_apply_cwv_hand_transform(result.right_unit_3p, def, \"right\", \"3p\",",
         }
@@ -206,7 +206,7 @@ return function(H, repo_root)
         -- The MENU and REMOTE surfaces keep consuming through their ctx tables,
         -- which the entry now fills from the re-bound producers.
         for _, field in ipairs({ "resolve_field", "is_unit", "transform_unit",
-                "apply_cwv_hand_transform", "transform_map", "skin_transform_map",
+                "apply_cwv_hand_transform", "skin_transform_map",
                 "crowbill_transform_by_unit", "triplet_text" }) do
             H.truthy(entry:find(field .. " = _" .. field .. ",", 1, true),
                 "entry still injects " .. field .. " into a consumer ctx")

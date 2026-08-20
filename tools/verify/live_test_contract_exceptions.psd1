@@ -630,7 +630,7 @@
         }
         @{
             Marker='[gut:630]'; ModId='gut_dev'
-            ModTrees=@{gut_dev=@('1c9c08c75a0a7985ba803d6279a65553b1c9acb6')}
+            ModTrees=@{gut_dev=@('ae9edd97f10e9cac12cf68dc31cbc510e59e35bc')}
             SourcesByMod=@{gut_dev='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_dx12_fence630.lua'}
             Signature='[gut:630] frame_evidence draw=%d visible_rows=%s resource_candidates=%s'
             Bound='focus/tab/Weapons-expansion edge evidence under one absolute 48-row probe budget'
@@ -720,7 +720,7 @@
             GuardAnchors=@(@{Tokens=@('if','drained','>','0','then')})
         }
         @{
-            Marker='[gut:938]';ModId='gut_dev';ModTrees=@{gut_dev=@('1c9c08c75a0a7985ba803d6279a65553b1c9acb6')}
+            Marker='[gut:938]';ModId='gut_dev';ModTrees=@{gut_dev=@('ae9edd97f10e9cac12cf68dc31cbc510e59e35bc')}
             SourcesByMod=@{gut_dev='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_damage_numbers.lua'}
             Signature='[gut:938] rt skip: NetworkConstants.damage.max unavailable; policy checked against fallback %.2f'
             Bound='at most one fallback notice per explicit issue938 regression-check invocation'
@@ -888,7 +888,7 @@
             )
         }
         @{
-            Marker='[gut:250]';ModId='gut_dev';ModTrees=@{gut_dev=@('1c9c08c75a0a7985ba803d6279a65553b1c9acb6')}
+            Marker='[gut:250]';ModId='gut_dev';ModTrees=@{gut_dev=@('ae9edd97f10e9cac12cf68dc31cbc510e59e35bc')}
             SourcesByMod=@{gut_dev='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_tab_talent_refresh.lua'}
             Signature='[gut:250] career=%s active=%s tiers=%s duplicates=%d unmapped=%d repair=%d/%d';Bound='signature-deduplicated talent repairs under the policy absolute log cap'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[gut:250] career=%s active=%s tiers=%s duplicates=%d unmapped=%d repair=%d/%d')})
@@ -908,7 +908,7 @@
             )
         }
         @{
-            Marker='[gut:257]';ModId='gut_dev';ModTrees=@{gut_dev=@('1c9c08c75a0a7985ba803d6279a65553b1c9acb6')}
+            Marker='[gut:257]';ModId='gut_dev';ModTrees=@{gut_dev=@('ae9edd97f10e9cac12cf68dc31cbc510e59e35bc')}
             SourcesByMod=@{gut_dev='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_cutscenes.lua'}
             Signature='[gut:257] seq=%s phase=%s level=%s disposition=%s skip_next=%s guard=%s active_camera=%s on_activate=%s on_skip=%s hud=%s letterbox=%s fade_in=%s hold=%s fade_out=%s auto=%s capped=%s';Bound='absolute 32-event cap plus one terminal cap row per cutscene-system generation'
             EmitterAnchors=@(@{Tokens=@('_printf','(','String:[gut:257] seq=%s phase=%s level=%s disposition=%s skip_next=%s guard=%s active_camera=%s on_activate=%s on_skip=%s hud=%s letterbox=%s fade_in=%s hold=%s fade_out=%s auto=%s capped=%s')})
@@ -918,7 +918,7 @@
             )
         }
         @{
-            Marker='[gut:245]';ModId='gut_dev';ModTrees=@{gut_dev=@('1c9c08c75a0a7985ba803d6279a65553b1c9acb6')}
+            Marker='[gut:245]';ModId='gut_dev';ModTrees=@{gut_dev=@('ae9edd97f10e9cac12cf68dc31cbc510e59e35bc')}
             SourcesByMod=@{gut_dev='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_tab_property_refresh.lua'}
             Signature='[gut:245] slot=%s backend_id=%s properties=%s refresh=%d/%d';Bound='shared absolute live-loadout refresh log cap'
             EmitterAnchors=@(@{Tokens=@('_printf','(','String:[gut:245] slot=%s backend_id=%s properties=%s refresh=%d/%d')})
@@ -1019,7 +1019,7 @@
     # siblings.
     ReceiptRouteOverrides = @(
         @{
-            ModId='gut_dev'; ModTrees=@('1c9c08c75a0a7985ba803d6279a65553b1c9acb6')
+            ModId='gut_dev'; ModTrees=@('ae9edd97f10e9cac12cf68dc31cbc510e59e35bc')
             Source='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_ba_compendium_tabs.lua'
             Marker='[gut:217]'
             Signature='[gut:217] compendium tabs injected into HeroWindowPanelConsole definitions (Armory, Bestiary)'
@@ -1033,7 +1033,7 @@
             )
         }
         @{
-            ModId='gut_dev'; ModTrees=@('1c9c08c75a0a7985ba803d6279a65553b1c9acb6')
+            ModId='gut_dev'; ModTrees=@('ae9edd97f10e9cac12cf68dc31cbc510e59e35bc')
             Source='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_native_loadouts.lua'
             Marker='[gut_dev:NATIVE_LOADOUTS]'
             Signature='[gut_dev:NATIVE_LOADOUTS] #375 selected-read career=%s caller=%s requested=%s resolved=%s selected=%s row=[melee=%s ranged=%s] canonical=[melee=%s ranged=%s] served=[slot=%s value=%s source=%s]'

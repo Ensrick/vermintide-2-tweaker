@@ -14,6 +14,10 @@ return function(H, repo_root)
 			old_musket_preview_pose = {
 				install = function() end,
 			},
+			_cwv_transform_consumers = {
+				preview = function() return nil end,
+				browser = function() return nil, nil end,
+			},
 		}
 		local mod = {
 			hook = function(_, class_name, method_name, callback)

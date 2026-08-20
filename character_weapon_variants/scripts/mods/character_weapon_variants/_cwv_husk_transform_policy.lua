@@ -8,7 +8,7 @@ function M.bind(deps)
 	assert(type(deps) == "table", "husk transform dependencies are required")
 	assert(type(deps.find_def) == "function", "find_def dependency is required")
 	assert(type(deps.resolve_def) == "function", "resolve_def dependency is required")
-	assert(type(deps.resolve_field) == "function", "resolve_field dependency is required")
+	assert(type(deps.plan_transform) == "function", "plan_transform dependency is required")
 	assert(type(deps.model_by_unit) == "table", "model_by_unit dependency is required")
 
 	local function select(hand, exact, item_data, skin, resolved_unit_name, style_decision)
@@ -27,25 +27,16 @@ function M.bind(deps)
 
 	local function plan(hand, def, source)
 		if not def then return nil end
-		local prefix = hand == "left" and "left_hand_" or "right_hand_"
-		local scale = deps.resolve_field(def, prefix .. "scale_3p")
-			or deps.resolve_field(def, prefix .. "scale")
-		local scale_multiplier = deps.resolve_field(def, prefix .. "scale_multiplier_3p")
-			or deps.resolve_field(def, prefix .. "scale_multiplier")
-		local offset = deps.resolve_field(def, prefix .. "offset_3p")
-			or deps.resolve_field(def, prefix .. "offset")
-		local rotation = deps.resolve_field(def, prefix .. "rotation_3p")
-			or deps.resolve_field(def, prefix .. "rotation")
-		local should_apply = (scale or scale_multiplier or offset or rotation) and true or false
+		local resolved = deps.plan_transform(def, hand, "3p")
 		return {
 			def = def,
 			source = source,
-			scale = scale,
-			scale_multiplier = scale_multiplier,
-			offset = offset,
-			rotation = rotation,
-			should_apply = should_apply,
-			durable = should_apply and def.crowbill_model_key ~= nil or false,
+			scale = resolved.scale,
+			scale_multiplier = resolved.scale_multiplier,
+			offset = resolved.offset,
+			rotation = resolved.rotation,
+			should_apply = resolved.should_apply,
+			durable = resolved.should_apply and def.crowbill_model_key ~= nil or false,
 		}
 	end
 

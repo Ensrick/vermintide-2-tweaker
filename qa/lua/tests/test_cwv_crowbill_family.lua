@@ -156,7 +156,7 @@ return function(H, repo_root)
         H.truthy(main:find('def_source == "exact_unit_mismatch"', 1, true))
         H.truthy(main:find("Dawi remote transform leaked into the untuned Imperial control", 1, true))
         H.truthy(main:find("TRANSFORM MISS surface=create_equipment", 1, true))
-        H.truthy(main:find("_resolve_cwv_def(item_data, result.skin, result.right_hand_unit_name)", 1, true))
+		H.truthy(main:find("_om._cwv_world_transform_decision(", 1, true))
         for _, surface in ipairs({ "owner_1p", "owner_3p", "remote_husk",
                 "inventory_preview", "item_browser" }) do
             H.truthy(main:find('"' .. surface .. '"', 1, true),
@@ -181,6 +181,18 @@ return function(H, repo_root)
             find_def = function(key) return by_variant[key] end,
             resolve_def = function() return nil end,
             resolve_field = function(def, field) return def[field] end,
+			plan_transform = function(def, hand, perspective)
+				local prefix = hand == "left" and "left_hand_" or "right_hand_"
+				local function field(name)
+					return def[prefix .. name .. "_" .. perspective]
+						or def[prefix .. name]
+				end
+				local scale, scale_multiplier = field("scale"), field("scale_multiplier")
+				local offset, rotation = field("offset"), field("rotation")
+				return { scale = scale, scale_multiplier = scale_multiplier,
+					offset = offset, rotation = rotation,
+					should_apply = (scale or scale_multiplier or offset or rotation) and true or false }
+			end,
             model_by_unit = by_unit,
         })
         local dawi = row_for(family.MODELS, "cwv_dr_dawi_crowbill_skin")
