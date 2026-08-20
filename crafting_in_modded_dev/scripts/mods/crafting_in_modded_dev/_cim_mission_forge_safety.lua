@@ -137,9 +137,8 @@ mod:hook("HeroWindowWeaveForgeOverview", "_create_viewport_definition", function
     -- #882: retain the native viewport role before the mission-safe environment
     -- substitution erases the only visual distinction between primary and
     -- secondary. UIWidget.init preserves definition.content on widget.content.
-    if type(definition) == "table" and type(definition.content) == "table" then
-        definition.content._cim882_mirrored_viewport = invert_rendering == true
-    end
+    mod._cim_forge_preview_policy.mark_overview_viewport_role(
+        definition, invert_rendering)
     return _swap_forge_env(definition)
 end)
 
@@ -152,11 +151,9 @@ end)
 mod:hook("HeroWindowWeaveForgeOverview", "_create_item_previewer",
     function(func, self, viewport_widget, item, x_offset, invert_start_rotation)
         local data = item and item.data
-        local content = viewport_widget and viewport_widget.content
-        local mirrored_viewport = content
-            and content._cim882_mirrored_viewport == true
-        local adjusted_x = mod._cim_forge_preview_policy.overview_preview_x(
-            mirrored_viewport, x_offset, _is_in_keep())
+        local adjusted_x, mirrored_viewport =
+            mod._cim_forge_preview_policy.overview_preview_x_from_widget(
+                viewport_widget, x_offset, _is_in_keep())
         if adjusted_x ~= x_offset and printf then
             printf("[cim:882] mission overview secondary preview mirrored key=%s native_x=%.3f target_x=%.3f",
                 tostring((data and data.key) or (item and item.key) or "<?>"),

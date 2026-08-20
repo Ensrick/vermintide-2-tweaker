@@ -1,5 +1,14 @@
 # Crafting in Modded Changelog
 
+## 0.8.127-dev (2026-08-20) -- semantic Athanor placement check (#882) [verify-fix]
+
+- The existing in-mission Athanor placement repair now routes the native
+  primary/secondary viewport marker and its previewer read through callable
+  production helpers. `issue882_athanor_preview_placement` drives that exact
+  producer-to-consumer handoff with secondary, primary, Keep, and malformed
+  controls; disconnecting either live hook can no longer leave a passing pure
+  coordinate check while Grail Knight's two melee previews overlap.
+
 ## 0.8.126-dev (2026-08-16) -- crafted favorites survive restarts (#1001) [verify-fix]
 
 - Crafted weapons keep their favorite state across restarts (#1001): the

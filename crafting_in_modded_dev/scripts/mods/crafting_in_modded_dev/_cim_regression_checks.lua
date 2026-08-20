@@ -111,14 +111,45 @@ _rt_register("issue882_athanor_preview_placement", function()
     if fn("melee", native) ~= nil then
         return "#404 preview policy must leave melee on the vanilla path"
     end
-    if policy.overview_preview_x(true, -0.8, false) ~= 0.8 then
-        return "#882 mission overview no longer separates secondary from primary"
+    if type(policy.mark_overview_viewport_role) ~= "function"
+            or type(policy.overview_preview_x_from_widget) ~= "function" then
+        return "#882 production viewport-role handoff helpers are missing"
     end
-    if policy.overview_preview_x(false, -0.8, false) ~= -0.8 then
-        return "#882 mission overview changed the primary viewport"
+
+    -- Drive the exact callable producer/consumer helpers used by the two live
+    -- hooks.  A pure coordinate assertion could pass after the production
+    -- marker handoff was removed, recreating the Grail Knight overlap.
+    local secondary_definition = { content = {} }
+    if policy.mark_overview_viewport_role(
+            secondary_definition, true) ~= secondary_definition then
+        return "#882 viewport producer replaced its caller-owned definition"
     end
-    if policy.overview_preview_x(true, -0.8, true) ~= -0.8 then
-        return "#882 overview policy changed the native keep layout"
+    local secondary_x, secondary_role = policy.overview_preview_x_from_widget(
+        { content = secondary_definition.content }, -0.8, false)
+    if secondary_x ~= 0.8 or secondary_role ~= true then
+        return "#882 mission secondary role no longer reaches the previewer consumer"
+    end
+
+    local primary_definition = { content = {} }
+    policy.mark_overview_viewport_role(primary_definition, false)
+    local primary_x, primary_role = policy.overview_preview_x_from_widget(
+        { content = primary_definition.content }, -0.8, false)
+    if primary_x ~= -0.8 or primary_role ~= false then
+        return "#882 mission primary viewport was misclassified or repositioned"
+    end
+
+    local keep_x = policy.overview_preview_x_from_widget(
+        { content = secondary_definition.content }, -0.8, true)
+    if keep_x ~= -0.8 then
+        return "#882 overview handoff changed the native keep layout"
+    end
+
+    local malformed = { sentinel = true }
+    if policy.mark_overview_viewport_role(malformed, true) ~= malformed
+            or policy.overview_preview_x_from_widget(nil, -0.8, false) ~= -0.8
+            or policy.overview_preview_x_from_widget(
+                { content = {} }, nil, false) ~= nil then
+        return "#882 malformed viewport controls did not fail closed"
     end
     if mod._cim404_preview_install_ok ~= true then
         return "#404 properties preview runtime hook did not install"
