@@ -21,7 +21,7 @@ end
 -- exposure is needed. Matches modded_progression.lua:27.
 local _MEM_PROBE_T0_DCP = collectgarbage("count")
 
-local MOD_VERSION = "0.1.28-dev"
+local MOD_VERSION = "0.1.29-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([dcp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -626,10 +626,31 @@ local function _scope_evidence(surface, player, portrait, custom)
     end
 end
 
-local function _restore_portrait_settings()
+local function _capture_portrait_settings(career)
+    if not career then return false end
+    if not _original_portrait_image then
+        _original_portrait_image = career.portrait_image
+        _original_picking_image = career.picking_image
+    end
+    return _original_portrait_image ~= nil
+end
+
+local function _apply_portrait_settings(career, portraits)
+    if not career or type(portraits) ~= "table" then return false end
+    if not _capture_portrait_settings(career) then return false end
+    career.portrait_image = portraits.hud
+    career.picking_image = portraits.medium
+    _portrait_settings_active = true
+    return true
+end
+
+local function _restore_portrait_settings(career_override)
     if not _portrait_settings_active then return end
-    if not SPProfiles then return end
-    local career = SPProfiles[5] and SPProfiles[5].careers and SPProfiles[5].careers[1]
+    local career = career_override
+    if not career then
+        if not SPProfiles then return end
+        career = SPProfiles[5] and SPProfiles[5].careers and SPProfiles[5].careers[1]
+    end
     if career and _original_portrait_image then
         career.portrait_image = _original_portrait_image
         career.picking_image = _original_picking_image
@@ -643,10 +664,7 @@ local function _sync_portrait_settings()
     local career = SPProfiles[5] and SPProfiles[5].careers and SPProfiles[5].careers[1]
     if not career then return end
 
-    if not _original_portrait_image then
-        _original_portrait_image = career.portrait_image
-        _original_picking_image = career.picking_image
-    end
+    _capture_portrait_settings(career)
 
     -- Portrait swapping is always on: the `dynamic_portraits` VMF toggle was
     -- removed 2026-06-22 (this mod has no settings page). It simply does what
@@ -664,12 +682,10 @@ local function _sync_portrait_settings()
         portraits = hat_key and _hat_portrait_map[hat_key]
     end
     if portraits then
-        career.portrait_image = portraits.hud
-        career.picking_image = portraits.medium
-        if not _portrait_settings_active then
+        local was_active = _portrait_settings_active
+        if _apply_portrait_settings(career, portraits) and not was_active then
             mod:info("[portrait] swapped career_settings to '%s'", portraits.hud)
         end
-        _portrait_settings_active = true
     else
         _restore_portrait_settings()
     end
@@ -796,28 +812,46 @@ _rt_register("career_settings_swap_saves_and_restores", function()
     -- career_settings swap scope (issue 509 row-of-concern): dcp mutates ONLY
     -- SPProfiles[5].careers[1] (Kruber mercenary) portrait_image/picking_image,
     -- capturing the vanilla originals before the first swap and restoring them on
-    -- unload. If originals are not captured, or on_unload stops restoring, the
-    -- swapped portrait leaks into a non-dcp session. Runtime: the restore path +
-    -- unload hook exist. Source-pattern (split needles) confirms save-before-swap
-    -- and restore-writes-original; no-op when source is unreadable.
-    if type(_restore_portrait_settings) ~= "function" then
-        return "_restore_portrait_settings missing -- a swapped career_settings can never be reverted"
-    end
+    -- unload. Drive the SAME transaction helpers used by production with an
+    -- isolated career row, then restore every file-local bit before verdict.
+    local saved_image, saved_picking = _original_portrait_image, _original_picking_image
+    local saved_active = _portrait_settings_active
+    local fake = { portrait_image = "rt_vanilla_hud", picking_image = "rt_vanilla_medium" }
+    local custom_a, custom_b = "rt_custom_" .. "hud", "rt_custom_" .. "medium"
+    local custom_a2, custom_b2 = custom_a .. "_2", custom_b .. "_2"
+    _original_portrait_image, _original_picking_image = nil, nil
+    _portrait_settings_active = false
+
+    local ok, err = pcall(function()
+        if not _apply_portrait_settings(fake, { hud = custom_a, medium = custom_b }) then
+            error("production swap transaction rejected a valid portrait set", 0)
+        end
+        if fake.portrait_image ~= custom_a or fake.picking_image ~= custom_b then
+            error("production swap transaction did not write both custom portrait fields", 0)
+        end
+        if _original_portrait_image ~= "rt_vanilla_hud"
+                or _original_picking_image ~= "rt_vanilla_medium" then
+            error("production swap transaction did not capture both vanilla fields", 0)
+        end
+        _apply_portrait_settings(fake, { hud = custom_a2, medium = custom_b2 })
+        if _original_portrait_image ~= "rt_vanilla_hud"
+                or _original_picking_image ~= "rt_vanilla_medium" then
+            error("a repeated sync overwrote the saved vanilla originals", 0)
+        end
+        _restore_portrait_settings(fake)
+        if fake.portrait_image ~= "rt_vanilla_hud" or fake.picking_image ~= "rt_vanilla_medium" then
+            error("production restore transaction did not restore both vanilla fields", 0)
+        end
+        if _portrait_settings_active then
+            error("production restore transaction left the swap marked active", 0)
+        end
+    end)
+
+    _original_portrait_image, _original_picking_image = saved_image, saved_picking
+    _portrait_settings_active = saved_active
+    if not ok then return tostring(err) end
     if type(mod.on_unload) ~= "function" then
         return "mod.on_unload missing -- swapped career_settings will not restore on unload"
-    end
-    local ok, info = pcall(debug.getinfo, _rt_register, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
-    if not txt then return end
-    local save_needle    = "_original_portrait_image = career." .. "portrait_image"
-    local restore_needle = "career.portrait_image = _original_" .. "portrait_image"
-    if not txt:find(save_needle, 1, true) then
-        return "save-before-swap missing: _sync_portrait_settings must capture the vanilla portrait_image before overwriting it"
-    end
-    if not txt:find(restore_needle, 1, true) then
-        return "restore missing: _restore_portrait_settings must write the saved original back to career.portrait_image"
     end
 end)
 

@@ -1,5 +1,20 @@
 # Changelog — Dynamic Cosmetic Portraits
 
+## 0.1.29-dev (2026-08-03) — #509 semantic career-settings harness [verify-fix]
+
+- Extracted the existing save/apply/restore portrait mutation into the same
+  callable transaction helpers used by live synchronization and unload.
+- Replaced the retail existence-only `career_settings_swap_saves_and_restores`
+  check with a semantic test that drives both portrait fields, proves repeated
+  sync cannot overwrite the vanilla originals, restores them through the real
+  production path, and restores all test-local state before returning.
+- No portrait selection, assets, materials, or player-facing behavior changed.
+
+**Test:** Run `/dcp_regression_test` and require
+`career_settings_swap_saves_and_restores` plus the full suite to pass with zero
+failures. Equip a tracked hat or outfit, then unload/restart DCP and confirm the
+career portrait returns to vanilla when no tracked cosmetic is active.
+
 ## 0.1.28-dev (2026-07-22) — #526/#925 portrait atlas and live invalidation [not-started]
 
 - DCP now consumes the shared local presentation generation emitted by
