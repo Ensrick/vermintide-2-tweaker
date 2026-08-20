@@ -1,5 +1,12 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.521-dev (2026-08-20) -- publication reconciliation
+
+- Rebuilds and publishes the already-reviewed 0.1.520-dev Half-Swording,
+  Outrider wire, and durable Crowbill work after its original release
+  transaction was interrupted.
+- No gameplay behavior changed from 0.1.520-dev.
+
 ## 0.1.520-dev (2026-08-16) -- Half-Swording style, Outrider projectile wire, durable crowbill transforms (#916, #1320, #747) [verify-fix]
 
 - Half-Swording combat style for two-handed swords (#916): the greatsword

@@ -1,5 +1,11 @@
 # Weapon Tweaker Changelog
 
+## 0.12.310-dev (2026-08-20) -- publication reconciliation
+
+- Rebuilds and publishes the already-reviewed 0.12.309-dev availability
+  mirror after its original release transaction was interrupted.
+- No gameplay behavior changed from 0.12.309-dev.
+
 ## 0.12.309-dev (2026-08-16) -- mirror 0.12.308-beta (#108, #183, #169) [verify-fix]
 
 - Runtime-parity mirror of public 0.12.308-beta: named #108/#183 availability

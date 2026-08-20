@@ -1,5 +1,11 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.344-dev (2026-08-20) -- publication reconciliation
+
+- Rebuilds and publishes the already-reviewed 0.7.343-dev stack re-broadcast
+  and receipt work after its original release transaction was interrupted.
+- No gameplay behavior changed from 0.7.343-dev.
+
 ## 0.7.343-dev (2026-08-16) -- parity-restore stack re-broadcast + receipts (#249, #322, #727) [verify-fix]
 
 - Clients receive their meta ammo-stack buffs again after a parity
