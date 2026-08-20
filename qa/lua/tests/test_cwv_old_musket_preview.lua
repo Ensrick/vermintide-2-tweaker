@@ -203,6 +203,21 @@ return function(H, repo_root)
         H.equal(Cim.overview_preview_x(false, -0.8, false), -0.8)
         H.equal(Cim.overview_preview_x(nil, -0.8, false), -0.8)
         H.equal(Cim.overview_preview_x(true, nil, false), nil)
+
+        local secondary = { content = {} }
+        H.equal(Cim.mark_overview_viewport_role(secondary, true), secondary)
+        local x, role = Cim.overview_preview_x_from_widget(
+            { content = secondary.content }, -0.8, false)
+        H.equal(x, 0.8)
+        H.equal(role, true)
+
+        local primary = { content = {} }
+        Cim.mark_overview_viewport_role(primary, false)
+        x, role = Cim.overview_preview_x_from_widget(
+            { content = primary.content }, -0.8, false)
+        H.equal(x, -0.8)
+        H.equal(role, false)
+        H.equal(Cim.overview_preview_x_from_widget(nil, -0.8, false), -0.8)
     end)
 
     H.test("CIM #882 runtime installs one active-only zoom-durable correction", function()
@@ -408,10 +423,9 @@ return function(H, repo_root)
         local file = assert(io.open(path, "rb"))
         local source = file:read("*a")
         file:close()
-        H.truthy(source:find("definition.content._cim882_mirrored_viewport = invert_rendering == true", 1, true))
-        H.truthy(source:find("content._cim882_mirrored_viewport == true", 1, true))
-        H.truthy(source:find("overview_preview_x(\n            mirrored_viewport", 1, true))
-        H.equal(source:find("overview_preview_x(\n            data and data.slot_type", 1, true), nil)
+        H.truthy(source:find("mark_overview_viewport_role(\n        definition, invert_rendering)", 1, true))
+        H.truthy(source:find("overview_preview_x_from_widget(\n                viewport_widget", 1, true))
+        H.equal(source:find("data and data.slot_type", 1, true), nil)
         H.truthy(source:find("[cim:882] mission overview secondary preview mirrored", 1, true))
     end)
 

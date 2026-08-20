@@ -1,6 +1,8 @@
 -- Engine-free resource policy for CIM's LootItemUnitPreviewer/Athanor gate.
 local M = {}
 
+local OVERVIEW_ROLE_MARKER = "_cim882_mirrored_viewport"
+
 local function available(can_get, kind, path)
     if type(can_get) ~= "function" or type(path) ~= "string" or path == "" then
         return false
@@ -61,6 +63,26 @@ function M.overview_preview_x(mirrored_viewport, native_x, in_keep)
         return native_x
     end
     return -native_x
+end
+
+-- #882 production handoff.  Keep the native viewport role and its later
+-- previewer consumer in callable, engine-free helpers so the runtime check can
+-- exercise the same producer -> widget content -> consumer path as the hooks.
+-- UIWidget.init preserves definition.content on widget.content; callers which
+-- do not present that exact table shape remain on the native placement path.
+function M.mark_overview_viewport_role(definition, invert_rendering)
+    if type(definition) == "table" and type(definition.content) == "table" then
+        definition.content[OVERVIEW_ROLE_MARKER] = invert_rendering == true
+    end
+    return definition
+end
+
+function M.overview_preview_x_from_widget(viewport_widget, native_x, in_keep)
+    local content = type(viewport_widget) == "table" and viewport_widget.content
+    local mirrored_viewport = type(content) == "table"
+        and content[OVERVIEW_ROLE_MARKER] == true
+    return M.overview_preview_x(mirrored_viewport, native_x, in_keep),
+        mirrored_viewport
 end
 
 return M
