@@ -55,6 +55,7 @@ local WTTraceCore = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_wt_loadout_tra
 local SelectedLoadoutTraceCore = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_selected_loadout_trace_core")
 local BackendCommit = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_backend_commit")
 local ExitSnapshotCore = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_exit_snapshot_core")
+local LoadoutLifecycle = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_loadout_lifecycle_owner")
 local BootGuard = mod._gut_official_loadout_boot_guard or
     mod:dofile("scripts/mods/gui_tweaker_dev/_gut_official_loadout_boot_guard")
 
@@ -108,7 +109,7 @@ end
 -- We scope the whole feature to the Adventure mirror; Versus stays vanilla.
 local ADVENTURE_DATA_KEY = "characters_data"
 
-local M = { MARKER = MARKER }
+local M = { MARKER = MARKER, loadout_lifecycle_owner = LoadoutLifecycle }
 
 -- Issue #354: an enabled WT cross-character weapon was reported to disappear from
 -- the active modded loadout intermittently across a process restart. There is no
@@ -643,6 +644,7 @@ end
 local _bu_capture_installed = false
 local _bu_unresolved_seen = {}
 local _bu_foreign_seen = {}
+local _bu_write_error_seen = {}
 
 local function _bu_canonical_value(backend_id, slot_name)
     if not Policy.is_cosmetic_slot(slot_name) then
@@ -698,39 +700,45 @@ local function _install_bu_capture()
         -- 3-arg entry point, always the SELECTED loadout (no index arg by design).
         local mode = _adventure_mode()
         local is_loadout_slot = _is_loadout_slot(slot_name)
-        if mode ~= MODE_OFF and career_name and backend_id and is_loadout_slot then
-            -- Issue #273 capture side: vanilla's DeusChestExtension._equip_weapon routes every
-            -- CW weapon chest/shrine swap through this SAME 3-arg seam with a Deus RUN-LOCAL
-            -- backend id (deus_chest_extension.lua:597). Gear capture targets the durable
-            -- Adventure store, so it additionally requires the durable items interface to own
-            -- the slot RIGHT NOW -- the same fail-closed table-identity owner gate the
-            -- exit-path read uses. Cosmetic slots keep current behavior (unconditionally
-            -- eligible): Deus maps skin/hat/frame/pose to "items"
-            -- (backend_interface_deus_base.lua:7-14), so they legitimately persist.
-            if Policy.capture_slot_durable(slot_name, _slot_owned_by_items(slot_name)) then
-                local ok_m, mirror = pcall(function() return Managers.backend:get_interface("items")._backend_mirror end)
-                local value, source = _bu_canonical_value(backend_id, slot_name)
-                if ok_m and mirror and value ~= nil then
-                    _capture_bu_equip(mode, mirror, career_name, slot_name, value, source)
-                elseif COSMETIC_SLOT_SET[slot_name] then
-                    -- Bounded evidence for an unexpected LA/item-registry timing miss. Never
-                    -- persist the transient backend id into a cosmetic slot as a guess.
-                    local token = tostring(slot_name) .. "\0" .. tostring(backend_id) .. "\0" .. tostring(source)
-                    if not _bu_unresolved_seen[token] then
-                        _bu_unresolved_seen[token] = true
-                        printf("[gut_dev:NATIVE_LOADOUTS] BU cosmetic capture SKIP career=%s slot=%s bid=%s reason=%s mirror=%s",
-                            tostring(career_name), tostring(slot_name), tostring(backend_id), tostring(source), tostring(ok_m and mirror ~= nil))
-                    end
-                end
-            else
-                -- Bounded evidence: a gear equip arrived while a mechanism interface (Deus)
-                -- owned the slot. The run-local id is dropped, never stored (class-73).
-                local token = tostring(career_name) .. "\0" .. tostring(slot_name)
-                if not _bu_foreign_seen[token] then
-                    _bu_foreign_seen[token] = true
-                    printf("[gut_dev:NATIVE_LOADOUTS] BU gear capture SKIP career=%s slot=%s bid=%s reason=foreign-loadout-interface",
-                        tostring(career_name), tostring(slot_name), tostring(backend_id))
-                end
+        local result, reason = LoadoutLifecycle.capture_equip({
+            mode = mode,
+            mode_off = MODE_OFF,
+            career_name = career_name,
+            backend_id = backend_id,
+            slot_name = slot_name,
+            is_loadout_slot = is_loadout_slot,
+            capture_slot_durable = Policy.capture_slot_durable,
+            slot_owned_by_items = _slot_owned_by_items,
+            get_mirror = function()
+                return Managers.backend:get_interface("items")._backend_mirror
+            end,
+            canonical_value = _bu_canonical_value,
+            write = _capture_bu_equip,
+        })
+        if result == "unresolved" and COSMETIC_SLOT_SET[slot_name] then
+            -- Bounded evidence for an unexpected LA/item-registry timing miss. Never
+            -- persist the transient backend id into a cosmetic slot as a guess.
+            local token = tostring(slot_name) .. "\0" .. tostring(backend_id) .. "\0" .. tostring(reason)
+            if not _bu_unresolved_seen[token] then
+                _bu_unresolved_seen[token] = true
+                printf("[gut_dev:NATIVE_LOADOUTS] BU cosmetic capture SKIP career=%s slot=%s bid=%s reason=%s",
+                    tostring(career_name), tostring(slot_name), tostring(backend_id), tostring(reason))
+            end
+        elseif result == "foreign-owner" then
+            -- Bounded evidence: a gear equip arrived while a mechanism interface (Deus)
+            -- owned the slot. The run-local id is dropped, never stored (class-73).
+            local token = tostring(career_name) .. "\0" .. tostring(slot_name)
+            if not _bu_foreign_seen[token] then
+                _bu_foreign_seen[token] = true
+                printf("[gut_dev:NATIVE_LOADOUTS] BU gear capture SKIP career=%s slot=%s bid=%s reason=%s",
+                    tostring(career_name), tostring(slot_name), tostring(backend_id), tostring(reason))
+            end
+        elseif result == "write-error" then
+            local token = tostring(career_name) .. "\0" .. tostring(slot_name) .. "\0" .. tostring(reason)
+            if not _bu_write_error_seen[token] then
+                _bu_write_error_seen[token] = true
+                printf("[gut_dev:NATIVE_LOADOUTS] BU capture ERROR career=%s slot=%s bid=%s reason=%s",
+                    tostring(career_name), tostring(slot_name), tostring(backend_id), tostring(reason))
             end
         end
         return func(backend_id, career_name, slot_name)
@@ -1726,11 +1734,12 @@ M.rt_checks = {
         end
         if M.readonly_slot_editable("talents") then return "talents editable in readonly" end
     end },
-    { name = "native_loadouts_la_cosmetic_outer_capture", fn = function()
-        -- issue #353: LA-cloned dispatch can miss the concrete mirror hook. The stable
-        -- BackendUtils seam must canonicalize all visual slots before store/overlay capture.
-        if type(_bu_canonical_value) ~= "function" or type(_capture_bu_equip) ~= "function" then
-            return "LA outer capture helpers missing"
+    { name = "issue353_outer_capture_transaction", fn = function()
+        -- Issue #353: execute the same owner called by the live BackendUtils hook. This
+        -- deliberately tests the whole decision/canonicalization/write transaction rather
+        -- than merely calling the serializer that the hook is expected to use.
+        if type(LoadoutLifecycle) ~= "table" or type(LoadoutLifecycle.capture_equip) ~= "function" then
+            return "outer capture transaction owner missing"
         end
         local cases = {
             { "slot_skin", "skin_override", { override_id = "skin_override", ItemId = "skin_item" } },
@@ -1738,12 +1747,51 @@ M.rt_checks = {
             { "slot_frame", "frame_item", { ItemId = "frame_item" } },
             { "slot_pose", "pose_item", { ItemId = "pose_item" } },
         }
-        for _, c in ipairs(cases) do
-            local value = Policy.canonical_equip_value(c[1], "transient_bid", c[3])
-            if value ~= c[2] then return c[1] .. " canonicalized to " .. tostring(value) end
+        local writes = {}
+        local function run(mode, slot, item)
+            return LoadoutLifecycle.capture_equip({
+                mode = mode, mode_off = MODE_OFF, career_name = "es_mercenary",
+                backend_id = "transient_bid", slot_name = slot, is_loadout_slot = true,
+                capture_slot_durable = Policy.capture_slot_durable,
+                slot_owned_by_items = function() return true end,
+                get_mirror = function() return {} end,
+                canonical_value = function(backend_id, slot_name)
+                    return Policy.canonical_equip_value(slot_name, backend_id, item)
+                end,
+                write = function(write_mode, _, career, slot_name, value, source)
+                    writes[#writes + 1] = { write_mode, career, slot_name, value, source }
+                end,
+            })
         end
-        local value = Policy.canonical_equip_value("slot_hat", "transient_bid", nil)
-        if value ~= nil then return "unresolved cosmetic retained transient backend id" end
+        for _, mode in ipairs({ MODE_STORE, MODE_READONLY }) do
+            for _, c in ipairs(cases) do
+                local result, source = run(mode, c[1], c[3])
+                local write = writes[#writes]
+                if result ~= "captured" then return c[1] .. " transaction: " .. tostring(result) end
+                if not write or write[1] ~= mode or write[2] ~= "es_mercenary"
+                    or write[3] ~= c[1] or write[4] ~= c[2] then
+                    return c[1] .. " transaction wrote the wrong canonical identity"
+                end
+                if source == nil then return c[1] .. " transaction lost canonical source" end
+            end
+        end
+        local before = #writes
+        local unresolved = run(MODE_STORE, "slot_hat", nil)
+        if unresolved ~= "unresolved" or #writes ~= before then
+            return "unresolved cosmetic did not fail closed"
+        end
+        local foreign = LoadoutLifecycle.capture_equip({
+            mode = MODE_STORE, mode_off = MODE_OFF, career_name = "es_mercenary",
+            backend_id = "deus_run_local", slot_name = "slot_melee", is_loadout_slot = true,
+            capture_slot_durable = Policy.capture_slot_durable,
+            slot_owned_by_items = function() return false end,
+            get_mirror = function() return {} end,
+            canonical_value = function(id) return id, "backend_id" end,
+            write = function() writes[#writes + 1] = {} end,
+        })
+        if foreign ~= "foreign-owner" or #writes ~= before then
+            return "foreign gear identity did not fail closed"
+        end
     end },
     { name = "issue1033_default_official_reseed_wired", fn = function()
         if type(M.reset_modded_loadouts) ~= "function" then return "reset owner missing" end
@@ -2016,7 +2064,7 @@ M.rt_checks = {
             return "gear slot resolved through cosmetic ItemMasterList fallback"
         end
     end },
-    { name = "native_loadouts_exit_snapshot_backstop", fn = function()
+    { name = "issue354_exit_snapshot_lifecycle_edges", fn = function()
         -- issues #354/#353/#287/#175: the exit-time backstop must be wired, must reuse the pure
         -- core, and must be non-destructive + idempotent (a nil live value never clears a stored
         -- slot; a clean state diverges 0). The recursion/isolation safety is structural (exit
@@ -2044,6 +2092,37 @@ M.rt_checks = {
         -- clean state diverges 0 and returns no merged row (idempotent, no write).
         local m2, d2 = ExitSnapshotCore.diff_row({ slot_melee = "live_melee" }, merged, slots)
         if d2 ~= 0 or m2 ~= nil then return "clean diff not idempotent" end
+        -- Execute the same callback owner installed by gui_tweaker_dev.lua. All three
+        -- persistence edges must fire once, unrelated transitions never fire, previous
+        -- callbacks remain chained, and a failing snapshot must be contained/reported.
+        if type(LoadoutLifecycle.bind_snapshot_edges) ~= "function" then
+            return "snapshot lifecycle owner missing"
+        end
+        local edges, previous, errors = {}, 0, {}
+        local on_state, on_unload = LoadoutLifecycle.bind_snapshot_edges({
+            snapshot = function(edge) edges[#edges + 1] = edge end,
+            previous_state = function() previous = previous + 1 end,
+            previous_unload = function() previous = previous + 1 end,
+            report_error = function(edge) errors[#errors + 1] = edge end,
+        })
+        on_state("enter", "StateIngame")
+        on_state("exit", "StateIngame")
+        on_state("enter", "StateTitleScreen")
+        on_unload()
+        if table.concat(edges, ",") ~= "ingame_exit,title_enter,unload" then
+            return "snapshot lifecycle edges wrong: " .. table.concat(edges, ",")
+        end
+        if previous ~= 4 then return "previous lifecycle callbacks not chained" end
+        if #errors ~= 0 then return "healthy lifecycle reported an error" end
+        local reported
+        local failing = LoadoutLifecycle.bind_snapshot_edges({
+            snapshot = function() error("snapshot-failure") end,
+            report_error = function(edge) reported = edge end,
+        })
+        local ok = pcall(failing, "exit", "StateIngame")
+        if not ok or reported ~= "ingame_exit" then
+            return "snapshot failure was not contained and reported"
+        end
     end },
 }
 

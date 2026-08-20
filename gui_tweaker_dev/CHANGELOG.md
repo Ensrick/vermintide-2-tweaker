@@ -1,5 +1,15 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.339-dev (2026-08-20) -- executable loadout capture lifecycle (#353, #354) [verify-fix]
+
+- The stable outer equipment capture and the three exit persistence edges now run
+  through one dependency-injected production owner. The live hook and VMF lifecycle
+  callbacks consume that owner directly, while named runtime and offline checks execute
+  the same full transactions rather than testing only their serializers or diff helpers.
+- Unresolved cosmetics and Chaos Wastes run-local gear still fail closed; capture write,
+  registry, mirror, prior-callback, and snapshot errors are contained and reported without
+  replacing a durable loadout identity or preventing the underlying vanilla equip call.
+
 ## 0.2.338-dev (2026-08-16) -- production-path harnesses + screen-particle instrumentation (#232, #274, #209) [verify-fix]
 
 - Bot victory-pose coverage now exercises the production hook chain (#232):
