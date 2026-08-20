@@ -1,5 +1,20 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.522-dev (2026-08-20) -- native ammo HUD restoration (#1108) [verify-fix]
+
+- The primary-slot Old Musket HUD adapter now treats its counter override as a
+  reversible presentation transaction. When the Musket is no longer the exact
+  live registered primary weapon, it restores the current native ranged item
+  and the focus appropriate to the wielded slot before releasing ownership.
+- If player, inventory, equipment, or ranged-slot state cannot be read after
+  engagement, the adapter explicitly defocuses/hides only the presentation it
+  owned. A HUD instance that was never engaged remains untouched. This also
+  closes the controller path where vanilla's equipment cache can return early
+  while the installed post-sync callback still runs.
+- The named in-game regression now performs an engage-to-native-restoration
+  transition. Offline coverage adds dead, unregistered, replaced, unit-mismatch,
+  stance-exit, throwing-reader, desktop, and exact GamePad callback cases.
+
 ## 0.1.521-dev (2026-08-20) -- publication reconciliation
 
 - Rebuilds and publishes the already-reviewed 0.1.520-dev Half-Swording,
