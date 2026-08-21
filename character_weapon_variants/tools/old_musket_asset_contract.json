@@ -11,7 +11,7 @@
   ],
   "source_root": [
     -0.5173783898353577,
-    -0.1024550125002861,
+    -0.02272941917181015,
     0.01740901917219162
   ],
   "trigger_anchor": [
@@ -19,20 +19,25 @@
     -0.06259221583604813,
     0.01740901917219162
   ],
+  "trigger_tail_anchor": [
+    -0.4975546598434448,
+    -0.10970599204301834,
+    0.015542463399469852
+  ],
   "native_handgun_j_trigger": [
     0.0,
     -0.0037636400666087866,
     0.039862796664237976
   ],
   "output_bounds_min": [
-    -0.043055012822151184,
+    -0.00823698379099369,
     -0.48262161016464233,
-    -0.017014987766742706
+    -0.14236842095851898
   ],
   "output_bounds_max": [
-    0.00823698379099369,
+    0.043055012822151184,
     1.517378330230713,
-    0.22209401428699493
+    0.09674058109521866
   ],
   "output_dimensions": [
     0.051291994750499725,
@@ -44,15 +49,43 @@
     -0.0037636160850524902,
     0.039862796664237976
   ],
-  "contract": "cwv_old_musket_native_frame_v1",
+  "output_trigger_tail_anchor": [
+    0.0018665557727217674,
+    0.019823729991912842,
+    0.08697657287120819
+  ],
+  "output_trigger_roll_vector": [
+    0.0018665557727217674,
+    0.023587346076965332,
+    0.047113776206970215
+  ],
+  "output_geometry_sha256": "060C46AE6FFD2CB5753C02AF72459DB0E4382A9FA3680CBC774685D418C2CB9A",
+  "contract": "cwv_old_musket_native_frame_v3",
   "source_sha256": "A20C6161C9B6302FF424BFC801D036BEE2C8D793D3A027BE309140C04B791550",
   "source_component_signature": "B9F7DBB4EFCAC3C09F44B136C5AAAC03FA172F9060EE67ACF9544B133C6835B6",
   "source_vertex_count": 10014,
   "source_polygon_count": 16483,
   "basis": {
-    "source": "+X forward/+Y up/+Z side",
-    "output": "+Y forward/+Z up/+X side"
+    "source": "+X forward/-Y accepted Handgun up/-Z accepted Handgun side",
+    "output": "+Y forward/+Z accepted Handgun up/+X accepted Handgun side",
+    "matrix": [
+      [
+        0.0,
+        0.0,
+        -1.0
+      ],
+      [
+        1.0,
+        0.0,
+        0.0
+      ],
+      [
+        0.0,
+        -1.0,
+        0.0
+      ]
+    ]
   },
-  "output_1p_sha256": "F8EC6568A435D35FD51CC1EB416A0D7B015735ECAA42674EDBBCE9A21E7B5FEE",
-  "output_3p_sha256": "F8EC6568A435D35FD51CC1EB416A0D7B015735ECAA42674EDBBCE9A21E7B5FEE"
+  "output_1p_sha256": "2DD3683905F867207939318D80242ED291F1361A04AF73B39EAC57925C5D2187",
+  "output_3p_sha256": "2DD3683905F867207939318D80242ED291F1361A04AF73B39EAC57925C5D2187"
 }

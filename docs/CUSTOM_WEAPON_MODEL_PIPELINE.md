@@ -96,14 +96,18 @@ Choose and prove one engine-native donor frame before any in-game tuning:
 
 1. extract a first-party weapon of the same attachment family for read-only
    measurement;
-2. record its identity root, forward/up/side axes, scale, and a semantic grip
-   landmark such as `j_trigger`, handle, or haft;
+2. record its identity root, the complete signed right-handed forward/up/side
+   basis, scale, and a semantic grip landmark such as `j_trigger`, handle, or
+   haft; a dominant/principal-axis absolute dot product is insufficient because
+   it accepts the 180-degree roll antipode;
 3. pin the licensed source by SHA-256, topology, UV/material slots, and a
    reviewed semantic landmark;
 4. bake the source geometry into the donor frame around that landmark;
 5. apply object location/rotation/scale and export an identity-root FBX;
-6. reimport the FBX and assert axes, bounds, topology, names, material slots,
-   semantic-root displacement, and the exact 1P/3P output hashes.
+6. reimport the FBX and assert all three signed basis directions, signed bounds,
+   topology, names, material slots, semantic-root displacement, at least one
+   second signed landmark away from the long axis, and the exact 1P/3P output
+   hashes.
 
 Do not infer a firearm grip from an AABB centre, longest dimension, or nearest
 surface. A simple axe/hammer converter may use a handle-butt heuristic only when
@@ -114,7 +118,17 @@ precedent: its rig is already authored in a canonical +Y weapon frame with
 Blender axes. The Old Musket follows the same principle without copying the
 donor rig: its reviewed trigger-pivot is aligned to the compiled Empire
 Handgun's `j_trigger`, while the existing hidden native proxy continues to own
-named component and muzzle effects.
+named component and muzzle effects. CWV 0.1.525 is the negative precedent: it
+matched +Y forward and the trigger pivot but was rolled 180 degrees on every
+live surface. A trigger-tail landmark and the donor's signed X/Z distribution
+now make that class of export fail offline.
+
+Keep serialized rotations as finite four-number descriptors or `QuaternionBox`
+values. A raw Stingray Quaternion is an opaque, single-frame temporary; do not
+store it or probe it as a Lua table. Reconstruct a descriptor quartet with the
+game's `Quaternion.from_elements(x, y, z, w)` pattern immediately inside the
+engine write boundary, then prove the retained pose by reading all four
+components back. Quaternion comparisons must accept both `q` and `-q`.
 
 Short material-slot names remain mandatory. FBX exporters can truncate long
 material paths, leaving a compiled `.unit` that references a nonexistent hash.

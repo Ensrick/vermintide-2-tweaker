@@ -230,9 +230,10 @@ end
 -- feedback_lua_forward_reference.md.
 
 -- Mutable transform constants. Edit via `cwv_om_pos_*` / `om_rot_*` /
--- `om_scale_*` commands. The v0.1.525 asset pipeline moves the malformed
+-- `om_scale_*` commands. The v0.1.526 asset pipeline moves the malformed
 -- Sketchfab +X / AABB-centre frame into the first-party Handgun convention:
--- identity root, +Y forward, +Z up, +X lock side, with a topology-pinned
+-- identity root, +Y forward and the donor's complete signed transverse frame,
+-- with a topology-pinned
 -- trigger pivot at the native j_trigger displacement. Rifle and display
 -- carriers therefore consume the authored frame at identity. Tuskgor/polearm
 -- carriers are independently proven +Z-forward, so bayonet mode owns exactly

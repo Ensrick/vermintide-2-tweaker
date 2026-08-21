@@ -9,25 +9,63 @@ return function(H, repo_root)
 		local alive = setmetatable({}, { __mode = "k" })
 		local vector = { to_elements = function(v) return v.x, v.y, v.z end }
 		local vector_new = function(x, y, z) return { x = x, y = y, z = z } end
+		local raw_quaternion_kinds = setmetatable({}, { __mode = "k" })
 		local quaternion_methods = {
-			to_elements = function(q) return q.x, q.y, q.z, q.w end,
+			to_elements = function(q)
+				local kind = raw_quaternion_kinds[q]
+				if kind == "valid" then return 0, 0, 0, 1 end
+				if kind == "invalid" then return 0 / 0, 0, 0, 1 end
+				if type(q) == "table" and rawget(q, "raw_kind") == "valid" then
+					return 0, 0, 0, 1
+				end
+				if type(q) == "table" and rawget(q, "raw_kind") == "invalid" then
+					return 0 / 0, 0, 0, 1
+				end
+				return q.x, q.y, q.z, q.w
+			end,
 			from_euler_angles_xyz = function(x, y, z)
 				return { x = x, y = y, z = z, w = 1 }
 			end,
 		}
-		local quaternion_mt = options.noncallable_quaternion and {} or { __call = function(_, x, y, z, w)
-			return { x = x, y = y, z = z, w = w,
-				unbox = function(self) return self end }
-		end }
-		local quaternion = setmetatable(quaternion_methods, quaternion_mt)
+		if not options.noncallable_quaternion then
+			quaternion_methods.from_elements = function(x, y, z, w)
+				if options.throw_constructor then error("constructor rejected quartet") end
+				if options.nil_constructor then return nil end
+				if options.raw_quaternion or options.invalid_raw_quaternion then
+					local kind = options.invalid_raw_quaternion and "invalid" or "valid"
+					if type(newproxy) == "function" then
+						local raw = newproxy(true)
+						getmetatable(raw).__index = function()
+							error("opaque raw Quaternion")
+						end
+						raw_quaternion_kinds[raw] = kind
+						return raw
+					end
+					return setmetatable({ raw_kind = kind }, {
+						__index = function() error("opaque raw Quaternion") end,
+					})
+				end
+				return { x = x, y = y, z = z, w = w,
+					unbox = function(self) return self end }
+			end
+		end
+		local quaternion = setmetatable(quaternion_methods, {
+			__call = function() error("legacy callable Quaternion constructor used") end,
+		})
 		local unit_api = {}
 		function unit_api.alive(unit) return alive[unit] == true end
 		function unit_api.local_position(unit) return unit.position end
 		function unit_api.local_scale(unit) return unit.scale end
 		function unit_api.local_rotation(unit) return unit.rotation end
 		function unit_api.set_local_pose(unit, _, pose)
-			if not options.reject_pose then
-				unit.position, unit.scale, unit.rotation = pose.position, pose.scale, pose.rotation
+			if options.reject_pose then error("linked root rejected pose") end
+			if options.atomic_noop then return end
+			unit.position, unit.scale = pose.position, pose.scale
+			if options.antipode_pose then
+				local x, y, z, w = quaternion_methods.to_elements(pose.rotation)
+				unit.rotation = { x = -x, y = -y, z = -z, w = -w }
+			else
+				unit.rotation = pose.rotation
 			end
 		end
 		local WA = WA_LIB.new({
@@ -116,6 +154,75 @@ return function(H, repo_root)
 		H.truthy(#D.fingerprint(descriptor) == 8)
 	end)
 
+	H.test("CWV #1155 constructs an opaque raw Quaternion only at the atomic write", function()
+		local item = {
+			backend_id = "cwv_es_musket_old_001", cwv_key = "cwv_es_musket_old",
+		}
+		local context = {
+			unit_name = "units/cwv_es_musket_custom/cwv_es_musket_custom_3p",
+			attachment_profile = "held_3p_rifle_character",
+		}
+		local raw, raw_unit = fixture({ raw_quaternion = true })
+		local retained = raw.reconcile(raw_unit, "owner_3p", "equip",
+			item, "ranged", context)
+		H.equal(retained.retained, true)
+		H.equal(retained.observation.rotation_constructed, true)
+		H.equal(retained.observation.rotation_write, true)
+		H.equal(retained.observation.transform_mode, "atomic-local-pose")
+		H.equal(retained.observation.transform_error, nil)
+
+		local invalid, invalid_unit = fixture({
+			invalid_raw_quaternion = true,
+		})
+		local rejected = invalid.reconcile(invalid_unit, "owner_3p", "equip",
+			item, "ranged", context)
+		H.equal(rejected.retained, false)
+		H.equal(rejected.observation.rotation_constructed, false)
+		H.equal(rejected.observation.transform_error, "invalid-rotation")
+		H.equal(rejected.observation.rotation_write, false)
+
+		for _, options in ipairs({
+			{ throw_constructor = true }, { nil_constructor = true },
+		}) do
+			local failed, failed_unit = fixture(options)
+			local result = failed.reconcile(failed_unit, "owner_3p", "equip",
+				item, "ranged", context)
+			H.equal(result.retained, false)
+			H.equal(result.observation.rotation_constructed, false)
+			H.equal(result.observation.transform_error, "invalid-rotation")
+		end
+	end)
+
+	H.test("CWV #1155 atomic rejection or no-op cannot claim retained pose", function()
+		local item = {
+			backend_id = "cwv_es_musket_old_001", cwv_key = "cwv_es_musket_old",
+		}
+		local context = {
+			unit_name = "units/cwv_es_musket_custom/cwv_es_musket_custom_3p",
+			attachment_profile = "held_3p_rifle_character",
+		}
+		local rejected, rejected_unit = fixture({ reject_pose = true })
+		local rejected_result = rejected.reconcile(rejected_unit, "owner_3p", "equip",
+			item, "ranged", context)
+		H.equal(rejected_result.retained, false)
+		H.equal(rejected_result.observation.apply, false)
+		H.equal(rejected_result.observation.transform_mode, "atomic-local-pose")
+		H.truthy(type(rejected_result.observation.transform_error) == "string")
+		H.equal(rejected_result.observation.rotation_constructed, true)
+		H.equal(rejected_result.observation.position_write, false)
+		H.equal(rejected_result.observation.scale_write, false)
+		H.equal(rejected_result.observation.rotation_write, false)
+
+		local noop, noop_unit = fixture({ atomic_noop = true })
+		local noop_result = noop.reconcile(noop_unit, "owner_3p", "equip",
+			item, "ranged", context)
+		H.equal(noop_result.retained, false)
+		H.equal(noop_result.observation.apply, true)
+		H.equal(noop_result.observation.rotation_constructed, true)
+		H.equal(noop_result.observation.position, false)
+		H.equal(noop_result.observation.scale, false)
+	end)
+
 	H.test("CWV #1155 Old Musket adapter requires retained pose and material postconditions", function()
 		local pilot, unit = fixture()
 		local result = pilot.reconcile(unit, "owner_3p", "equip", {
@@ -133,7 +240,20 @@ return function(H, repo_root)
 		}, "ranged", { unit_name = "units/cwv_es_musket_custom/cwv_es_musket_custom_3p",
 			attachment_profile = "held_3p_rifle_character" })
 		H.equal(failed.retained, false)
-		H.equal(failed.reason, "retained-postcondition-failed")
+		H.equal(failed.observation.transform_mode, "atomic-local-pose")
+		H.truthy(type(failed.observation.transform_error) == "string")
+		H.equal(failed.observation.position_write, false)
+		H.equal(failed.observation.scale_write, false)
+		H.equal(failed.observation.rotation_write, false)
+
+		local antipode, antipode_unit = fixture({ antipode_pose = true })
+		local antipode_result = antipode.reconcile(antipode_unit, "owner_3p", "equip", {
+			backend_id = "cwv_es_musket_old_001", cwv_key = "cwv_es_musket_old",
+		}, "ranged", { unit_name = "units/cwv_es_musket_custom/cwv_es_musket_custom_3p",
+			attachment_profile = "held_3p_rifle_character" })
+		H.equal(antipode_result.retained, true,
+			"q and -q must compare as the same retained rotation")
+		H.deep_equal(antipode_result.observation.actual_rotation, { 0, 0, 0, -1 })
 
 		local unpainted, unpainted_unit = fixture({ reject_textures = true })
 		local paint_failed = unpainted.reconcile(unpainted_unit, "owner_3p", "equip", {
@@ -151,12 +271,12 @@ return function(H, repo_root)
 				attachment_profile = "held_3p_rifle_character" })
 		H.equal(constructor_failed.retained, false)
 		H.equal(constructor_failed.observation.apply, false)
+		H.equal(constructor_failed.observation.rotation_constructed, false)
 	end)
 
 	H.test("CWV #1155 evidence exposes bounded per-channel actual and expected pose truth", function()
 		local logs = {}
 		local pilot, unit = fixture({
-			reject_pose = true,
 			printf = function(fmt, ...)
 				logs[#logs + 1] = string.format(fmt, ...)
 			end,
@@ -170,13 +290,13 @@ return function(H, repo_root)
 				attachment_profile = "display_3p_rifle",
 				cim_generation = 1,
 			})
-		H.equal(cim.retained, false)
+		H.equal(cim.retained, true)
 		local failed = pilot.reconcile(unit, "owner_3p", "equip", item,
 			"ranged", {
 				unit_name = "units/cwv_es_musket_custom/cwv_es_musket_custom_3p",
 				attachment_profile = "held_3p_rifle_character",
 			})
-		H.equal(failed.retained, false)
+		H.equal(failed.retained, true)
 		local before_duplicate = #logs
 		local duplicate = pilot.reconcile(unit, "owner_3p", "equip", item,
 			"ranged", {
@@ -191,22 +311,30 @@ return function(H, repo_root)
 		H.equal(row.paint, true)
 		H.equal(row.apply, true)
 		H.equal(row.materials, true)
-		H.equal(row.position, false)
-		H.equal(row.scale, false)
+		H.equal(row.position, true)
+		H.equal(row.scale, true)
 		H.equal(row.rotation, true)
-		H.deep_equal(row.actual_position, { 0, 0, 0 })
+		H.equal(row.transform_mode, "atomic-local-pose")
+		H.equal(row.transform_error, nil)
+		H.equal(row.rotation_constructed, true)
+		H.equal(row.position_write, true)
+		H.equal(row.scale_write, true)
+		H.equal(row.rotation_write, true)
+		H.deep_equal(row.actual_position, { 4, 5, 6 })
 		H.deep_equal(row.expected_position, { 4, 5, 6 })
-		H.deep_equal(row.actual_scale, { 1, 1, 1 })
+		H.deep_equal(row.actual_scale, { 0.9, 1.1, 1.2 })
 		H.deep_equal(row.expected_scale, { 0.9, 1.1, 1.2 })
 		H.deep_equal(row.actual_rotation, { 0, 0, 0, 1 })
 		H.deep_equal(row.expected_rotation, { 0, 0, 0, 1 })
 		H.truthy(logs[#logs]:find("paint=true apply=true materials=true", 1, true))
 		H.truthy(logs[#logs]:find(
-			"actual_position=[0.00000,0.00000,0.00000] expected_position=[4.00000,5.00000,6.00000]",
+			"transform_mode=atomic-local-pose", 1, true))
+		H.truthy(logs[#logs]:find(
+			"actual_position=[4.00000,5.00000,6.00000] expected_position=[4.00000,5.00000,6.00000]",
 			1, true))
 
 		row.actual_position[1] = 1155
-		H.equal(pilot.live_status().surfaces.owner_3p.ranged.actual_position[1], 0,
+		H.equal(pilot.live_status().surfaces.owner_3p.ranged.actual_position[1], 4,
 			"callers must not be able to mutate retained evidence tuples")
 	end)
 

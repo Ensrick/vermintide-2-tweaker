@@ -57,7 +57,13 @@ end
 local function quaternion_elements(api, value)
 	if not value or not api or type(api.to_elements) ~= "function" then return nil end
 	local ok, x, y, z, w = pcall(api.to_elements, value)
-	return ok and { x, y, z, w } or nil
+	if not ok then return nil end
+	local function finite(element)
+		return type(element) == "number" and element == element
+			and element ~= math.huge and element ~= -math.huge
+	end
+	if not finite(x) or not finite(y) or not finite(z) or not finite(w) then return nil end
+	return { x, y, z, w }
 end
 
 local function near3(actual, expected, epsilon)
@@ -303,11 +309,33 @@ function M.new(args)
 		return observed == expected and context.attachment_profile == descriptor.attachment_profile
 	end
 
-	local function engine_rotation(value)
-		if type(value) ~= "table" or #value ~= 4 then return nil end
-		local ok, rotation = pcall(quaternion_api,
-			value[1], value[2], value[3], value[4])
-		return ok and rotation or nil
+	local function engine_rotation_box(value)
+		local state = { constructed = false }
+		if type(value) ~= "table" or #value ~= 4 then return nil, state end
+		for index = 1, 4 do
+			local element = value[index]
+			if type(element) ~= "number" or element ~= element
+					or element == math.huge or element == -math.huge then return nil, state end
+		end
+		if type(quaternion_api) ~= "table"
+				or type(quaternion_api.from_elements) ~= "function" then return nil, state end
+		-- Never retain or expose Stingray's stack-temporary Quaternion. This
+		-- descriptor-scoped box constructs a fresh raw value exactly when the
+		-- shared atomic writer unboxes it in the same frame. VT2's native quartet
+		-- reconstruction path is Quaternion.from_elements, not field access.
+		return { unbox = function()
+			state.constructed = false
+			local fresh_ok, fresh = pcall(quaternion_api.from_elements,
+				value[1], value[2], value[3], value[4])
+			if not fresh_ok or fresh == nil then
+				error("Quaternion.from_elements rejected descriptor quartet")
+			end
+			if quaternion_elements(quaternion_api, fresh) == nil then
+				error("Quaternion.from_elements returned invalid values")
+			end
+			state.constructed = true
+			return fresh
+		end }, state
 	end
 
 	local function apply(descriptor, surface, edge, target, context)
@@ -330,12 +358,22 @@ function M.new(args)
 		context._appearance_required_paint = painted == true
 			and (texture_count or 0) >= #(descriptor.textures or {})
 		local spec = descriptor.transform_profiles[descriptor.attachment_profile]
-		local resolved_rotation = engine_rotation(spec.rotation)
+		local resolved_rotation, rotation_state = engine_rotation_box(spec.rotation)
 		local report = WA.apply_report(target, {
 			position = spec.position, scale = spec.scale,
 			rotation = resolved_rotation,
 		})
 		context._appearance_required_apply = resolved_rotation ~= nil and report.ok == true
+		context._appearance_transform_report = {
+			mode = report.transform_mode,
+			node = report.transform_node,
+			error = report.transform_error,
+			rotation_constructed = rotation_state
+				and rotation_state.constructed == true or false,
+			position = report.channels and report.channels.position,
+			scale = report.channels and report.channels.scale,
+			rotation = report.channels and report.channels.rotation,
+		}
 		report.painted = painted == true
 		report.texture_writes = texture_count or 0
 		tracked[target] = { item = context and context.item, mode = descriptor.mode,
@@ -368,6 +406,7 @@ function M.new(args)
 			and context._appearance_required_apply == true
 			and retained_position and retained_scale and retained_rotation
 			and materials_ready == true
+		local transform = context and context._appearance_transform_report or {}
 		return {
 			retained = retained,
 			reason = retained and "retained" or "retained-postcondition-failed",
@@ -381,6 +420,13 @@ function M.new(args)
 			expected_scale = copy_evidence_value(spec.scale),
 			actual_rotation = actual_rotation,
 			expected_rotation = copy_evidence_value(spec.rotation),
+			transform_mode = transform.mode,
+			transform_node = transform.node,
+			transform_error = transform.error,
+			rotation_constructed = transform.rotation_constructed,
+			position_write = transform.position,
+			scale_write = transform.scale,
+			rotation_write = transform.rotation,
 		}
 	end
 
@@ -449,6 +495,13 @@ function M.new(args)
 				expected_scale = observation.expected_scale,
 				actual_rotation = observation.actual_rotation,
 				expected_rotation = observation.expected_rotation,
+				transform_mode = observation.transform_mode,
+				transform_node = observation.transform_node,
+				transform_error = observation.transform_error,
+				rotation_constructed = observation.rotation_constructed,
+				position_write = observation.position_write,
+				scale_write = observation.scale_write,
+				rotation_write = observation.rotation_write,
 			}, target)
 		end
 		-- One structured receipt per exact reconciler token. Duplicate wrappers can
@@ -456,7 +509,7 @@ function M.new(args)
 		-- overwrite the first observation nor produce log spam.
 		if result.coalesced ~= true then
 			pcall(printf_fn,
-				"[cwv:1155] family=old_musket surface=%s edge=%s profile=%s fingerprint=%s retained=%s fallback=%s reason=%s attempts=%s paint=%s apply=%s materials=%s position=%s scale=%s rotation=%s actual_position=[%s] expected_position=[%s] actual_scale=[%s] expected_scale=[%s] actual_rotation=[%s] expected_rotation=[%s] chat=false",
+				"[cwv:1155] family=old_musket surface=%s edge=%s profile=%s fingerprint=%s retained=%s fallback=%s reason=%s attempts=%s paint=%s apply=%s materials=%s position=%s scale=%s rotation=%s transform_mode=%s transform_node=%s transform_error=%s rotation_constructed=%s position_write=%s scale_write=%s rotation_write=%s actual_position=[%s] expected_position=[%s] actual_scale=[%s] expected_scale=[%s] actual_rotation=[%s] expected_rotation=[%s] chat=false",
 				tostring(surface), tostring(edge), tostring(descriptor.attachment_profile),
 				fingerprint, tostring(result.retained == true),
 				tostring(result.fallback == true), tostring(result.reason),
@@ -464,6 +517,13 @@ function M.new(args)
 				tostring(observation.apply), tostring(observation.materials),
 				tostring(observation.position), tostring(observation.scale),
 				tostring(observation.rotation),
+				tostring(observation.transform_mode),
+				tostring(observation.transform_node),
+				tostring(observation.transform_error or "none"),
+				tostring(observation.rotation_constructed),
+				tostring(observation.position_write),
+				tostring(observation.scale_write),
+				tostring(observation.rotation_write),
 				tuple_text(observation.actual_position, 3),
 				tuple_text(observation.expected_position, 3),
 				tuple_text(observation.actual_scale, 3),
