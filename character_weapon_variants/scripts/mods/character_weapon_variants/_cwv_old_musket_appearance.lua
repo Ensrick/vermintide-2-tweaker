@@ -80,6 +80,26 @@ local function quaternion_near(actual, expected, epsilon)
 	return math.abs(math.abs(dot) - 1) <= epsilon
 end
 
+local function copy_evidence_value(value)
+	if type(value) ~= "table" then return value end
+	local copy = {}
+	for key, child in pairs(value) do
+		copy[key] = copy_evidence_value(child)
+	end
+	return copy
+end
+
+local function tuple_text(value, count)
+	if type(value) ~= "table" then return "unavailable" end
+	local parts = {}
+	for index = 1, count do
+		local element = value[index]
+		parts[index] = type(element) == "number"
+			and string.format("%.5f", element) or "unavailable"
+	end
+	return table.concat(parts, ",")
+end
+
 function M.new(args)
 	args = args or {}
 	local D, WA, policy = args.descriptor, args.weapon_appearance, args.policy
@@ -110,6 +130,7 @@ function M.new(args)
 	local held_identity
 	local cim_generation = 0
 	local generation = 0
+	local reconciler
 	local C = {}
 	local function descriptor_data(descriptor)
 		return D.raw(descriptor) or descriptor
@@ -169,6 +190,10 @@ function M.new(args)
 			held_identity = nil
 			evidence = {}
 			evidence_targets = {}
+			-- The evidence epoch must not inherit a completed/coalesced token from
+			-- a pre-arm renderer call. Clear only the bounded reconciler ledger; the
+			-- next real lifecycle edge will apply and observe fresh live state.
+			if reconciler then reconciler.disconnect() end
 			evidence_epoch = evidence_epoch + 1
 		end
 		return true, "ready"
@@ -206,7 +231,9 @@ function M.new(args)
 			identity = copy_identity(identity),
 			generation = generation, epoch = evidence_epoch,
 		}
-		for key, value in pairs(values or {}) do row[key] = value end
+		for key, value in pairs(values or {}) do
+			row[key] = copy_evidence_value(value)
+		end
 		local key = surface .. ":" .. mode
 		evidence[key] = row
 		evidence_targets[key] = target
@@ -328,10 +355,14 @@ function M.new(args)
 		local ok_p, position = pcall(unit_api.local_position, target, 0)
 		local ok_s, scale = pcall(unit_api.local_scale, target, 0)
 		local ok_r, rotation = pcall(unit_api.local_rotation, target, 0)
-		local retained_position = ok_p and near3(vector_elements(vector_api, position), spec.position, 0.002)
-		local retained_scale = ok_s and near3(vector_elements(vector_api, scale), spec.scale, 0.002)
+		local actual_position = ok_p and vector_elements(vector_api, position) or nil
+		local actual_scale = ok_s and vector_elements(vector_api, scale) or nil
+		local actual_rotation = ok_r
+			and quaternion_elements(quaternion_api, rotation) or nil
+		local retained_position = near3(actual_position, spec.position, 0.002)
+		local retained_scale = near3(actual_scale, spec.scale, 0.002)
 		local retained_rotation = ok_r and quaternion_near(
-			quaternion_elements(quaternion_api, rotation), spec.rotation, 0.003)
+			actual_rotation, spec.rotation, 0.003)
 		local materials_ready = policy.unit_materials_ready(target)
 		local retained = context and context._appearance_required_paint == true
 			and context._appearance_required_apply == true
@@ -344,6 +375,12 @@ function M.new(args)
 			rotation = retained_rotation, materials = materials_ready == true,
 			paint = context and context._appearance_required_paint == true,
 			apply = context and context._appearance_required_apply == true,
+			actual_position = actual_position,
+			expected_position = copy_evidence_value(spec.position),
+			actual_scale = actual_scale,
+			expected_scale = copy_evidence_value(spec.scale),
+			actual_rotation = actual_rotation,
+			expected_rotation = copy_evidence_value(spec.rotation),
 		}
 	end
 
@@ -351,7 +388,7 @@ function M.new(args)
 	-- Recovery belongs to a distinct, source-backed lifecycle edge (for example
 	-- preview construction -> loading_done), so one attempt per exact token is
 	-- sufficient and deterministic.
-	local reconciler = D.new_reconciler({ apply = apply, observe = observe, max_attempts = 1 })
+	reconciler = D.new_reconciler({ apply = apply, observe = observe, max_attempts = 1 })
 
 	function C.reconcile(target, surface, edge, item, explicit_mode, context)
 		context = context or {}; context.item = item
@@ -373,35 +410,67 @@ function M.new(args)
 		local selected_evidence_identity = evidence_epoch > 0 and is_old_musket
 			and evidence_identity(surface, candidate_identity) or nil
 		local records_active_identity = selected_evidence_identity ~= nil
-		if records_active_identity then
-			evidence_row(surface, candidate_mode, edge, candidate_identity, {
-				retained = false, fallback = false, reason = "identity-unresolved",
-				attempts = 0,
-			}, target)
-		end
 		local descriptor, errors = C.resolve(item, explicit_mode, surface, context)
-		if not descriptor then return { ok = false, reason = "identity-unresolved", errors = errors } end
+		if not descriptor then
+			if records_active_identity then
+				evidence_row(surface, candidate_mode, edge, candidate_identity, {
+					retained = false, fallback = false, reason = "identity-unresolved",
+					attempts = 0,
+				}, target)
+			end
+			return { ok = false, reason = "identity-unresolved", errors = errors }
+		end
 		local result = reconciler.reconcile(descriptor, surface, edge, target, context)
 		local data = descriptor_data(descriptor)
 		local descriptor_identity = data.identity_evidence or candidate_identity
+		local observation = type(result.observation) == "table"
+			and result.observation or {}
+		local fingerprint = D.fingerprint(descriptor)
 		if selected_evidence_identity
-				and same_identity(selected_evidence_identity, descriptor_identity) then
+				and same_identity(selected_evidence_identity, descriptor_identity)
+				and result.coalesced ~= true then
 			evidence_row(surface, descriptor.mode, edge, descriptor_identity, {
 				retained = result.retained == true,
 				fallback = result.fallback == true,
 				reason = result.reason,
 				attempts = result.attempts or 0,
-				fingerprint = D.fingerprint(descriptor),
+				fingerprint = fingerprint,
 				profile = descriptor.attachment_profile,
 				generation = descriptor.generation,
+				paint = observation.paint,
+				apply = observation.apply,
+				materials = observation.materials,
+				position = observation.position,
+				scale = observation.scale,
+				rotation = observation.rotation,
+				actual_position = observation.actual_position,
+				expected_position = observation.expected_position,
+				actual_scale = observation.actual_scale,
+				expected_scale = observation.expected_scale,
+				actual_rotation = observation.actual_rotation,
+				expected_rotation = observation.expected_rotation,
 			}, target)
 		end
-		pcall(printf_fn,
-			"[cwv:1155] family=old_musket surface=%s edge=%s profile=%s fingerprint=%s retained=%s fallback=%s reason=%s attempts=%s chat=false",
-			tostring(surface), tostring(edge), tostring(descriptor.attachment_profile),
-			D.fingerprint(descriptor),
-			tostring(result.retained == true), tostring(result.fallback == true),
-			tostring(result.reason), tostring(result.attempts or 0))
+		-- One structured receipt per exact reconciler token. Duplicate wrappers can
+		-- revisit this function in the same lifecycle stack, but they must neither
+		-- overwrite the first observation nor produce log spam.
+		if result.coalesced ~= true then
+			pcall(printf_fn,
+				"[cwv:1155] family=old_musket surface=%s edge=%s profile=%s fingerprint=%s retained=%s fallback=%s reason=%s attempts=%s paint=%s apply=%s materials=%s position=%s scale=%s rotation=%s actual_position=[%s] expected_position=[%s] actual_scale=[%s] expected_scale=[%s] actual_rotation=[%s] expected_rotation=[%s] chat=false",
+				tostring(surface), tostring(edge), tostring(descriptor.attachment_profile),
+				fingerprint, tostring(result.retained == true),
+				tostring(result.fallback == true), tostring(result.reason),
+				tostring(result.attempts or 0), tostring(observation.paint),
+				tostring(observation.apply), tostring(observation.materials),
+				tostring(observation.position), tostring(observation.scale),
+				tostring(observation.rotation),
+				tuple_text(observation.actual_position, 3),
+				tuple_text(observation.expected_position, 3),
+				tuple_text(observation.actual_scale, 3),
+				tuple_text(observation.expected_scale, 3),
+				tuple_text(observation.actual_rotation, 4),
+				tuple_text(observation.expected_rotation, 4))
+		end
 		return result, descriptor
 	end
 
@@ -437,7 +506,8 @@ function M.new(args)
 		for evidence_key, row in pairs(evidence) do
 			local copy = {}
 			for key, value in pairs(row) do
-				copy[key] = key == "identity" and copy_identity(value) or value
+				copy[key] = key == "identity" and copy_identity(value)
+					or copy_evidence_value(value)
 			end
 			status.cells[evidence_key] = copy
 			status.surfaces[row.surface] = status.surfaces[row.surface] or {}

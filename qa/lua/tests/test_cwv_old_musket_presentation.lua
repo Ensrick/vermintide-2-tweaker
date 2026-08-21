@@ -1,5 +1,10 @@
 return function(H, repo_root)
     local source = require("cwv_source").combined(repo_root)
+	local mesh_runtime_path = repo_root
+		.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_custom_mesh_runtime.lua"
+	local mesh_runtime_file = assert(io.open(mesh_runtime_path, "rb"))
+	local mesh_runtime_source = mesh_runtime_file:read("*a")
+	mesh_runtime_file:close()
 	local policy_path = repo_root
 		.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_preview.lua"
 	local policy_file = assert(io.open(policy_path, "rb"))
@@ -147,6 +152,32 @@ return function(H, repo_root)
 		H.equal(source:find('quaternion = { to_elements = Quaternion.to_elements }', 1, true), nil)
 		H.truthy(source:find('_om.old_musket_appearance.reapply_tracked()', 1, true))
 		H.equal(source:find('Unit.set_local_position, unit, 0, Vector3(pos[1], pos[2], pos[3])', 1, true), nil)
+		H.truthy(mesh_runtime_source:find(
+			'_om._CWV_OLD_MUSKET_ROT_1P_RANGED   = QuaternionBox(Quaternion.identity())',
+			1, true), "normalized Handgun-frame rifle profile must start at identity")
+		H.truthy(mesh_runtime_source:find(
+			'_om._CWV_OLD_MUSKET_ROT_3P_RANGED   = QuaternionBox(Quaternion.identity())',
+			1, true))
+		H.truthy(mesh_runtime_source:find(
+			'_om._CWV_OLD_MUSKET_ROT_DISPLAY_3P   = QuaternionBox(Quaternion.identity())',
+			1, true), "display remains independently named but starts from the normalized asset frame")
+		local polearm_adapter =
+			'Quaternion.axis_angle(Vector3(1, 0, 0), math.pi / 2)'
+		local first_adapter = mesh_runtime_source:find(polearm_adapter, 1, true)
+		local second_adapter = first_adapter
+			and mesh_runtime_source:find(polearm_adapter,
+				first_adapter + #polearm_adapter, true)
+		local third_adapter = second_adapter
+			and mesh_runtime_source:find(polearm_adapter,
+				second_adapter + #polearm_adapter, true)
+		H.truthy(first_adapter and second_adapter and not third_adapter,
+			"1P and 3P polearm parents must own exactly one +90-degree X adapter")
+		H.equal(mesh_runtime_source:find(
+			'Vector3(0, 1, 0), -math.pi / 2', 1, true), nil,
+			"the malformed +X source-frame Y correction must not survive normalization")
+		H.equal(mesh_runtime_source:find(
+			'Quaternion.from_euler_angles_xyz(-90, -90, 0)', 1, true), nil,
+			"historical raw-asset Euler compensation must not double-transform the normalized FBX")
     end)
 
 	H.test("Old Musket held profile admits only the exact registered stance template and recipe", function()
@@ -861,8 +892,20 @@ return function(H, repo_root)
 			equipment.wielded_slot = "slot_melee"
 			local verdict = captured()
 			H.equal(type(verdict), "string")
-			H.truthy(verdict:find("no longer the exact equipped instance", 1, true))
+			H.truthy(verdict:find(
+				"found the exact tested instance in the ranged slot", 1, true))
+			H.truthy(verdict:find(
+				"not currently wielded; wield Old Musket and rerun /cwv_regression_test",
+				1, true))
 			equipment.wielded_slot = "slot_ranged"
+
+			equipment.slots.slot_ranged = {
+				item_data = { backend_id = "different-instance" },
+			}
+			verdict = captured()
+			H.equal(type(verdict), "string")
+			H.truthy(verdict:find("no longer the exact equipped instance", 1, true))
+			equipment.slots.slot_ranged = old_slot
 
 			equipment.right_hand_wielded_unit = {}
 			verdict = captured()
@@ -1768,7 +1811,12 @@ return function(H, repo_root)
 		H.truthy(texture_at < bind_at and bind_at < census_at)
 		H.truthy(source:find('issue742_old_musket_texture_material_preflight', 1, true))
 		H.truthy(source:find('issue617_old_musket_preview_texture_consumer', 1, true))
-		H.truthy(source:find('resource preflight must fail closed on one missing texture', 1, true))
+		H.truthy(source:find(
+			'resource preflight must fail closed with canonical not_resident and the exact denied albedo path',
+			1, true))
+		H.truthy(source:find('missing ~= "not_resident"', 1, true))
+		H.truthy(source:find('color_map = denied_texture_path', 1, true))
+		H.truthy(source:find('denied_path ~= denied_texture_path', 1, true))
 		H.truthy(source:find('suppress_diagnostics = true', 1, true),
 			"synthetic failures must not consume later live one-shot diagnostics")
 	end)

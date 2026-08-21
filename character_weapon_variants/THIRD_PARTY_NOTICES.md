@@ -35,8 +35,12 @@ To embed the model in the Vermintide 2 Stingray engine, the following purely
 technical conversions were applied. No artistic changes were made.
 
 - Geometry converted from Collada `.dae` to Autodesk `.fbx` via Blender 4.4.
+- The source geometry was translated and cyclically reoriented into the
+  first-party Empire Handgun's identity-root coordinate convention. A reviewed,
+  topology-pinned trigger-pivot landmark was aligned to the native `j_trigger`
+  displacement; no character skeleton or native game geometry is redistributed.
 - All material slots renamed to a single short name (`rifle_mat`) so the
-  Stingray `.unit` file can bind the engine's vanilla rifle material.
+  Stingray `.unit` file can bind the mod-owned rifle material.
 - A duplicate of the mesh was exported as `_3p.fbx` for use as the third-person
   variant alongside `_1p`.
 - Source PBR textures (`01 - Default_albedo.jpg`, etc.) converted to PNG and

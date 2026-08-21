@@ -3579,3 +3579,57 @@ VMB, Stingray, upload tools, or grandchildren can outlive it.
 - #1180 owns the machine transaction, process-tree recovery, settings boundary,
   and crash-safe ACL journal. #647/#683 own exact worktree/dependency identity;
   #724 owns reviewed publication provenance.
+
+## 88. Imported asset basis is mistaken for an attachment-pose defect
+
+**First confirmed:** 2026-08-21 (Old Musket issue #1155).
+**Lives in:** custom FBX/DAE/glTF weapon imports whose geometry has no authored
+engine root/grip, especially weapons reused under more than one attachment
+family.
+
+### Symptoms
+- The custom model and material survive every renderer and transition, yet the
+  weapon floats, flips, or rotates differently in 1P, 3P, and inventory.
+- Fixes accumulate unrelated absolute Euler values and offsets per surface.
+- One preview looks plausible by accident while all character-held surfaces
+  fail their retained transform postcondition.
+- Re-exporting with different Blender FBX axis flags moves the defect but does
+  not establish a stable grip/root.
+
+### Diagnosis pattern
+1. Separate resource truth from pose truth. A resident authored material and
+   visible mesh rule out package closure; independent position/scale/quaternion
+   readbacks identify the transform boundary.
+2. Inspect source geometry before runtime code. Record object transform,
+   longitudinal/up/side axes, origin, skeleton/nodes, topology, and bounds.
+3. Extract a first-party weapon from the same attachment family for read-only
+   measurement. Compare its identity root, axes, and semantic grip nodes.
+4. Inspect every second parent family independently. The Empire Handgun is
+   +Y-forward while the Tuskgor Spear is +Z-forward; one identity asset cannot
+   be identity under both recipes.
+5. Treat a successful mod such as Doomrocket as an authoring precedent, not an
+   auto-correction API. Doomrocket has a canonical rig and semantic nodes and
+   performs no runtime `Unit.set_local_*` axis repair.
+
+### Fix template
+- Pin the licensed source hash, topology/UV/material contract, and a manually
+  reviewed semantic grip landmark. Do not use an AABB centre or generic nearest
+  surface as a firearm grip.
+- Bake the geometry into one proven native donor frame, reimport it, and gate
+  identity transform, bounds, forward/up axes, landmark displacement, and exact
+  1P/3P output hashes.
+- Keep parent-frame adapters explicit and minimal. A normalized +Y Handgun mesh
+  uses identity for rifle parents; a +Z polearm parent owns the one +90-degree X
+  conversion. Surface-specific tuning may add small grip offsets but must not
+  re-encode the source basis.
+- Invalidate every historical runtime pose calibrated against the malformed
+  asset. Shipping a normalized FBX with those old rotations double-transforms
+  it.
+- Verify solo across 1P, local 3P, inventory, and display before asking for
+  remote-husk co-op evidence.
+
+### Related issues / evidence
+- #1155 is the canonical implementation. The Old Musket conversion contract is
+  `character_weapon_variants/tools/OLD_MUSKET_ASSET_PIPELINE.md`.
+- Adjacent classes: 57 (animation overwrites a transform), 58 (partial setter
+  success), and 85 (a regression instrument reports the wrong state).

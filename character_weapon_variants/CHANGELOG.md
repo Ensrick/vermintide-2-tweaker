@@ -1,5 +1,47 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.525-dev (2026-08-21) -- native-frame Old Musket and truthful pose evidence (#1155)
+
+- Rain's `0.1.524-dev` run proved the authored model/material closure survives
+  Athanor, owner 1P/3P, inventory, illusion preview, and a Keep-to-mission
+  transition. It also falsified the remaining pose: every #1155 receipt failed
+  its transform postcondition and the raw imported mesh floated or flipped in
+  both rifle and bayonet modes.
+- Doomrocket provides an asset-authoring precedent, not a runtime axis fixer.
+  Its rig already uses a semantic root/handle/barrel in the engine's weapon
+  frame. The Old Musket source had no rig or grip node, pointed along +X, and
+  was rooted halfway down its barrel; FBX exporter settings never corrected
+  those facts.
+- A deterministic Blender 4.4 pipeline now pins the licensed DAE hash,
+  10,014-vertex topology, all 110 disconnected components, and the reviewed
+  trigger-lever pivot. It bakes the geometry into the compiled Empire Handgun's
+  identity-root frame (+Y forward, +Z up) by aligning that pivot with native
+  `j_trigger`, then reimports and verifies byte-identical 1P/3P FBXs.
+- Rifle and display attachment profiles now start at identity against the
+  normalized asset. The independently +Z-forward Tuskgor/polearm parent owns
+  one explicit +90-degree X adapter. Historical offsets and rotations tuned
+  against the malformed source basis are removed rather than double-applied.
+- Quick/full QA now hard-pins the generated FBX hashes, axes, bounds, semantic
+  root, topology, renderer/material identifiers, and 1P/3P parity without
+  requiring Blender or the external source DAE. The asset-specific pipeline,
+  licensing notice, engine surface, shared import standard, and recurring bug
+  class document the same boundary.
+- Each non-coalesced lifecycle receipt now exposes independent paint, apply,
+  material, position, scale, and rotation verdicts with detached actual and
+  expected pose tuples. CIM starts a fresh bounded evidence epoch, duplicate
+  wrappers cannot overwrite the first observation, and the named gate explains
+  when the exact Musket remains equipped but is not currently wielded. The #617
+  check separately proves its canonical `not_resident` reason and exact denied
+  albedo path.
+
+**DoD:** 3,039/3,039 Lua tests and the 950-file Lua parse gate pass. The source
+asset contract passes under PowerShell 7 and 5.1. A clean VMB build preserved
+the +Y-forward frame in both compiled units: their geometry is identical,
+contains exactly 16,483 triangles, resolves `rifle_mat` to the authored
+material, and differs from the pinned bounds by at most 0.000109 m. The pinned
+solo live card remains required before this candidate can advance to
+remote-husk verification.
+
 ## 0.1.524-dev (2026-08-20) -- authored Old Musket material closure and attachment profiles (#1155)
 
 - Rain's CWV `0.1.523-dev` run disproved the donor-package theory: both

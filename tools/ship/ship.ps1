@@ -1447,6 +1447,8 @@ function Invoke-ShipSelfTest {
     Assert ($selfTxt.IndexOf("promotion-status.ps1'", $mainDispatchPos) -ge 0) "every split-stream ship invokes the stranded-fix promotion report"
     Assert ($selfTxt.IndexOf('& $promotionStatus -Mod $Mod', $mainDispatchPos) -ge 0) "stranded-fix report is scoped to the exact ship target"
     Assert ($selfTxt.IndexOf('qa\check_custom_unit_bundle_reachability.ps1') -ge 0) "build-only runs custom-unit reachability after generation"
+    Assert ($selfTxt.IndexOf('qa\check_cwv_old_musket_compiled_contract.ps1') -ge 0) "build-only carries the CWV Old Musket post-compiler gate"
+    Assert ($selfTxt.IndexOf("if (`$Mod -eq 'character_weapon_variants')") -ge 0) "Old Musket post-compiler gate is scoped to CWV"
     Assert ($selfTxt.IndexOf("@('build', `$Mod, '--clean')") -ge 0) "build-only invokes VMBLauncher's clean build action"
     Assert ($selfTxt.IndexOf("'build-output-normalization.ps1'") -ge 0) "ship sources the shared build-output normalizer"
     Assert ($selfTxt.IndexOf("'build-receipt.ps1'") -ge 0) "ship sources the exact dirty-source receipt policy"
@@ -1472,6 +1474,9 @@ function Invoke-ShipSelfTest {
     $receiptWritePos = $selfTxt.IndexOf('Write-VtBuildReceipt', $buildNormalizationPos)
     $remoteExclusionGuardPos = $selfTxt.IndexOf('VMBLauncher remote deploy currently copies and verifies expected files', $buildNormalizationPos)
     $buildOnlyPostGatePos = $selfTxt.IndexOf("receiptGate = Join-Path `$repoRoot 'qa\check_build_receipts.ps1'", $buildNormalizationPos)
+    $unitReachabilityPos = $selfTxt.IndexOf("unitReachabilityGate = Join-Path `$repoRoot 'qa\check_custom_unit_bundle_reachability.ps1'", $buildOnlyPostGatePos)
+    $oldMusketCompiledPos = $selfTxt.IndexOf("oldMusketCompiledGate = Join-Path `$repoRoot 'qa\check_cwv_old_musket_compiled_contract.ps1'", $buildOnlyPostGatePos)
+    $buildOnlyCompletePos = $selfTxt.IndexOf('BUILD-ONLY COMPLETE', $buildOnlyPostGatePos)
     $bundleParityPos = $selfTxt.IndexOf('bundleParity = Test-TrackedBundleParity', $mainDispatchPos)
     $deployActionPos = $selfTxt.IndexOf("deployArgs = @('deploy', `$Mod)", $mainDispatchPos)
     $finalAuthorizationPos = $selfTxt.LastIndexOf('publicationAuthorization = Get-LivePublicationAuthorization')
@@ -1482,6 +1487,7 @@ function Invoke-ShipSelfTest {
     Assert ($sourceBeforePos -ge 0 -and $sourceBeforePos -lt $cleanBuildPos -and $cleanBuildPos -lt $sourceAfterPos) "BuildOnly fingerprints runtime source immediately before and after the clean build"
     Assert ($sourceAfterPos -lt $receiptWritePos -and $receiptWritePos -lt $buildOnlyPostGatePos) "BuildOnly writes the deterministic source/root receipt before post-build QA"
     Assert ($cleanBuildPos -lt $buildNormalizationPos -and $buildNormalizationPos -lt $buildOnlyPostGatePos -and $buildNormalizationPos -lt $bundleParityPos) "exact-hash normalization runs after clean build and before BuildOnly QA or final parity"
+    Assert ($unitReachabilityPos -gt $buildOnlyPostGatePos -and $unitReachabilityPos -lt $oldMusketCompiledPos -and $oldMusketCompiledPos -lt $buildOnlyCompletePos) "BuildOnly runs CWV compiled geometry/material validation after custom-unit reachability and before success"
     Assert ($buildNormalizationPos -lt $remoteExclusionGuardPos -and $remoteExclusionGuardPos -lt $buildOnlyPostGatePos -and $selfTxt.IndexOf('Re-run with -NoRemote', $remoteExclusionGuardPos) -ge 0) "artifact-exclusion publications require -NoRemote before any deploy"
     Assert ($cleanBuildPos -lt $bundleParityPos -and $bundleParityPos -lt $deployActionPos) "clean build parity is proven before deploy"
     Assert ($deployActionPos -lt $finalAuthorizationPos -and $finalAuthorizationPos -lt $uploadActionPos) "authorization is revalidated immediately before Workshop upload"
@@ -2067,8 +2073,18 @@ if ($BuildOnly) {
     if ($LASTEXITCODE -ne 0) {
         Fail "Build completed, but one or more custom unit resources are still absent from the compiled bundle. No deploy or upload was attempted."
     }
+    if ($Mod -eq 'character_weapon_variants') {
+        $oldMusketCompiledGate = Join-Path $repoRoot 'qa\check_cwv_old_musket_compiled_contract.ps1'
+        if (-not (Test-Path -LiteralPath $oldMusketCompiledGate -PathType Leaf)) {
+            Fail "Post-build Old Musket compiled-contract gate not found: $oldMusketCompiledGate"
+        }
+        & $oldMusketCompiledGate -Quiet
+        if ($LASTEXITCODE -ne 0) {
+            Fail "Build completed, but the compiled Old Musket geometry/material contract failed. No deploy or upload was attempted."
+        }
+    }
     Write-Host ""
-    Write-Host "BUILD-ONLY COMPLETE -- bundle and exact source/root receipt generated; receipt, atomicity, and custom-unit reachability verified; no deploy, upload, GitHub release, or lifecycle edit was attempted." -ForegroundColor Green
+    Write-Host "BUILD-ONLY COMPLETE -- bundle and exact source/root receipt generated; receipt, atomicity, custom-unit reachability, and applicable compiled contracts verified; no deploy, upload, GitHub release, or lifecycle edit was attempted." -ForegroundColor Green
     exit 0
 }
 

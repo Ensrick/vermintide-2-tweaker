@@ -165,6 +165,37 @@ return function(H, repo_root)
             "master package omits the Old Musket textures")
     end)
 
+	H.test("CWV #617 missing-texture proof preserves canonical reason and exact path", function()
+		local albedo =
+			"textures/cwv_es_musket_custom/cwv_es_musket_custom_albedo"
+		local denied_path
+		local ready, reason = Musket.texture_resources_ready(function(kind, path)
+			H.equal(kind, "texture")
+			if path == albedo then
+				denied_path = path
+				return false
+			end
+			return true
+		end)
+		H.equal(ready, false)
+		H.equal(reason, "not_resident")
+		H.equal(denied_path, albedo)
+
+		local foreign_denied
+		ready, reason = Musket.texture_resources_ready(function(_, path)
+			if path:find("_normal", 1, true) then
+				foreign_denied = path
+				return false
+			end
+			return true
+		end)
+		H.equal(ready, false)
+		H.equal(reason, "not_resident")
+		H.truthy(foreign_denied and foreign_denied:find("_normal", 1, true))
+		H.truthy(foreign_denied ~= albedo,
+			"a canonical reason alone cannot prove which texture was denied")
+	end)
+
     H.test("CWV #1155 binds the authored material only after full residency proof", function()
         local bound = {}
         local meshes = { { "#ID[11551155]" }, { "#ID[22552255]" } }

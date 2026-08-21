@@ -260,6 +260,15 @@ Run-Check "check_shared_lib_drift"            { & (Join-Path $here "check_shared
 Run-Check "check_wt_stream_parity"            { & (Join-Path $here "check_wt_stream_parity.ps1")            -Quiet:$Quiet }
 Run-Check "check_dofile_package_coverage"      { & (Join-Path $here "check_dofile_package_coverage.ps1")      -Quiet:$Quiet }
 Run-Check "check_dcp_portrait_atlas"           { & (Join-Path $here "check_dcp_portrait_atlas.ps1")           -Quiet:$Quiet }
+Run-Check "check_cwv_old_musket_asset_contract" { & (Join-Path $here "check_cwv_old_musket_asset_contract.ps1") -Quiet:$Quiet }
+if (-not $SkipCustomUnitBundleReachability) {
+    Run-Check "check_cwv_old_musket_compiled_contract" { & (Join-Path $here "check_cwv_old_musket_compiled_contract.ps1") -Quiet:$Quiet }
+}
+elseif (-not $Quiet) {
+    Write-Host "===== check_cwv_old_musket_compiled_contract =====" -ForegroundColor Cyan
+    Write-Host "[check_cwv_old_musket_compiled_contract] SKIP - build-only pipeline compiles the Old Musket units, then runs this gate." -ForegroundColor DarkYellow
+    Write-Host ""
+}
 Run-Check "check_woc_skarrik_asset_sources"    { & (Join-Path $here "check_woc_skarrik_asset_sources.ps1")    -Quiet:$Quiet }
 Run-Check "check_woc_skarrik_halberd_sources" { & (Join-Path $here "check_woc_skarrik_halberd_sources.ps1") -Quiet:$Quiet }
 if (-not $SkipCustomUnitBundleReachability) {

@@ -4,7 +4,7 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-08-20.
+Last updated: 2026-08-21.
 
 ## #1204 Deus identity uses committed parity
 
@@ -14,9 +14,9 @@ Last updated: 2026-08-20.
 - [ ] `/cwv_regression_test` passes both `issue1204_deus_identity_uses_committed_parity` and `issue273_cwv_deus_identity_is_exact`.
 - [ ] `[cwv:273] deus_identity` remains bounded and reports `exact=true` only after committed parity.
 
-## #1155 Old Musket material and attachment-profile pilot
+## #1155 Old Musket native-frame and attachment-profile pilot
 
-- [ ] Confirm CWV `0.1.524-dev` from `[cwv:LOAD]` and the exact deployed CIM Dev
+- [ ] Confirm CWV `0.1.525-dev` from `[cwv:LOAD]` and the exact deployed CIM Dev
   version from `[cim:LOAD]` before scoring the run.
 - [ ] In the Crafting in Modded Athanor, select **Old Musket** once and wait for
   its preview to finish loading. The Athanor selects the weapon archetype (it is
@@ -29,18 +29,19 @@ Last updated: 2026-08-20.
   tuner during this run.
 - [ ] In gameplay, use weapon special to exercise rifle and melee/bayonet modes.
   Inspect first person and local third person in both modes. The rifle and
-  polearm attachment profiles each retain their own pose; neither becomes
-  invisible, pink, checkerboard, or a vanilla Handgun.
+  display profiles begin in the normalized native Handgun frame; the polearm
+  profiles own one +90-degree X parent adapter. Each retains its own pose and
+  neither becomes invisible, pink, checkerboard, or a vanilla Handgun.
 - [ ] After each gameplay mode, reopen the inventory-screen character and the
   ordinary illusion browser for that equipped instance. The browser remains
   `surface=illusion_browser`, never `cim_preview`, and uses the independent
-  display profile. Its candidate numeric pose (position `{0, 0, 0}`, Euler
-  `{-90, -90, 0}`, scale `{1, 1.1, 1.1}`) is report-only: record whether it is
-  high, low, or misoriented. A preview-pose receipt must report
+  display profile. Its identity pose is report-only: record whether it is high,
+  low, or misoriented. A preview-pose receipt must report
   `dispatched=true`. Do not reopen the Athanor after these equipped-item checks,
   because a new constructor generation intentionally starts a new evidence run.
-- [ ] **While still in the Keep**, run `/cwv_regression_test` and retain that
-  log. `issue1155_old_musket_descriptor_reconciler`,
+- [ ] **While still in the Keep, and with that exact Old Musket currently
+  wielded**, run `/cwv_regression_test` and retain that log.
+  `issue1155_old_musket_descriptor_reconciler`,
   `issue617_old_musket_preview_texture_consumer`, and
   `issue742_old_musket_texture_material_preflight` pass.
 - [ ] After the Keep gate passes, swap away and back, enter an Adventure mission,
@@ -50,7 +51,9 @@ Last updated: 2026-08-20.
   inside the mission.
 - [ ] The log contains bounded retained receipts for Athanor
   `surface=cim_preview edge=preview_open`, the ordinary browser
-  `surface=illusion_browser edge=preview_open`, and both stances. No
+  `surface=illusion_browser edge=preview_open`, and both stances. Every receipt
+  exposes `paint`, `apply`, `materials`, `position`, `scale`, and `rotation`
+  booleans plus actual/expected pose tuples. No
   `#ID[b6d0945a]`, `texture-resource-missing`,
   `authored-material-unbound`, `unit-material-unready`,
   `retained-postcondition-failed`, or Old Musket material lookup failure occurs.

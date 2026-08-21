@@ -27,6 +27,9 @@ LICENSE        text eol=lf
 *.psd1      text eol=crlf
 *.ini       text eol=crlf
 
+# Deterministic Blender source consumed by the Old Musket build receipt.
+character_weapon_variants/tools/prepare_old_musket_fbx.py text eol=lf
+
 # Compiled bundles and source assets must never be line-ending normalized.
 *.mod_bundle binary
 *.png        binary
