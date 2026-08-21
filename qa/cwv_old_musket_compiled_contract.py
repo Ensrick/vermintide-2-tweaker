@@ -42,6 +42,12 @@ Matrix4 = tuple[
     tuple[float, float, float, float],
     tuple[float, float, float, float],
 ]
+EXPECTED_RENDERER_WORLD: Matrix4 = (
+    (100.0, 0.0, 0.0, 0.0),
+    (0.0, 100.0, 0.0, 0.0),
+    (0.0, 0.0, 100.0, 0.0),
+    (0.0, 0.0, 0.0, 1.0),
+)
 
 
 class ContractFailure(RuntimeError):
@@ -421,6 +427,15 @@ def compiled_rifle_geometry(
     )
     geometry = structure.geometries[mesh.geometry_index - 1]
     world = structure.nodes[mesh.node_index].world_transform
+    for row in range(4):
+        for column in range(4):
+            require(
+                abs(world[row][column] - EXPECTED_RENDERER_WORLD[row][column])
+                <= 0.000001,
+                f"compiled {label} renderer world matrix drifted at "
+                f"[{row},{column}]: expected={EXPECTED_RENDERER_WORLD[row][column]} "
+                f"actual={world[row][column]}",
+            )
     return tuple(transform_point(world, point) for point in geometry.positions), geometry.triangles
 
 
@@ -495,7 +510,7 @@ def validate(bundle_path: Path, contract_path: Path) -> dict[str, object]:
     except (OSError, UnicodeError, json.JSONDecodeError) as error:
         raise ContractFailure(f"Old Musket asset contract is unreadable: {error}") from error
     require(
-        contract.get("contract") == "cwv_old_musket_native_frame_v1",
+        contract.get("contract") == "cwv_old_musket_native_frame_v3",
         "Old Musket asset contract identity drifted",
     )
     require(
@@ -539,6 +554,18 @@ def validate(bundle_path: Path, contract_path: Path) -> dict[str, object]:
     require(
         actual_bounds[1][1] > abs(actual_bounds[0][1]),
         "compiled rifle's signed longitudinal extent does not point predominantly +Y",
+    )
+    # A long-axis test cannot distinguish a 180-degree roll around +Y.  The
+    # known-good Empire Handgun has the same signed transverse distribution:
+    # more +X than -X and more -Z than +Z.  CWV 0.1.525 had both inequalities
+    # reversed and rendered upside down on every live surface.
+    require(
+        actual_bounds[1][0] > abs(actual_bounds[0][0]),
+        "compiled rifle is rolled onto the wrong signed Handgun X half-space",
+    )
+    require(
+        abs(actual_bounds[0][2]) > actual_bounds[1][2],
+        "compiled rifle is rolled onto the wrong signed Handgun Z half-space",
     )
 
     expected_pair = {(idstring32(MATERIAL_SLOT), murmur64a(AUTHORED_MATERIAL.encode()))}

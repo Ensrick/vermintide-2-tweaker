@@ -187,6 +187,7 @@ return function(H, repo_root)
             to_elements = function(value)
                 return value[1], value[2], value[3], value[4]
             end,
+			from_elements = function(x, y, z, w) return { x, y, z, w } end,
         }, {
             __call = function(_, x, y, z, w) return { x, y, z, w } end,
         })
@@ -200,9 +201,14 @@ return function(H, repo_root)
             descriptor = Descriptor,
             weapon_appearance = {
                 apply_report = function(unit, spec)
+					local rotation = spec.rotation
+					if type(rotation) == "table"
+							and type(rotation.unbox) == "function" then
+						rotation = rotation:unbox()
+					end
                     unit.position, unit.scale, unit.rotation =
-                        spec.position, spec.scale, spec.rotation
-                    return { ok = true }
+						spec.position, spec.scale, rotation
+					return { ok = rotation ~= nil }
                 end,
             },
             policy = {

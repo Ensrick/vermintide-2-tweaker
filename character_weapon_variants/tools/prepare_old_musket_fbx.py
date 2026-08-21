@@ -3,8 +3,9 @@
 Run with Blender 4.4 through ``convert_old_musket_assets.ps1``.  The source
 Sketchfab DAE is a single unparented mesh whose object origin is halfway down
 the barrel and whose longitudinal axis is +X.  VT2's compiled Empire Handgun
-uses an identity root, +Y forward, +Z up, and +X across the lock.  This helper
-bakes that exact cyclic basis into the geometry and moves a reviewed,
+uses an identity root and +Y forward.  CWV 0.1.525 proved that matching only
+that longitudinal axis leaves an ambiguous 180-degree roll.  This helper bakes
+the full right-handed Handgun basis into the geometry and moves a reviewed,
 topology-pinned trigger-pivot landmark onto the native handgun root convention.
 
 The result deliberately contains no character-hand inverse and no
@@ -19,6 +20,7 @@ import hashlib
 import json
 import math
 import shutil
+import struct
 import sys
 from pathlib import Path
 
@@ -50,19 +52,50 @@ TRIGGER_CAP_VERTEX_COUNT = 42
 EXPECTED_TRIGGER_ANCHOR = Vector(
     (-0.5211421251, -0.0625922084, 0.0174090192)
 )
+# The opposite end of the same trigger lever is a signed roll landmark.  A
+# dominant-axis/AABB check cannot distinguish it from its 180-degree antipode;
+# this source-pinned centroid can.  In the accepted Handgun frame it must lie
+# on +Z from the pivot.  The known-bad 0.1.525 export put it on -Z.
+TRIGGER_TAIL_CAP_THICKNESS = 0.002
+TRIGGER_TAIL_CAP_VERTEX_COUNT = 45
+EXPECTED_TRIGGER_TAIL_ANCHOR = Vector(
+    (-0.4975546598, -0.1097059920, 0.0155424634)
+)
 NATIVE_HANDGUN_J_TRIGGER = Vector(
     (0.0, -0.0037636400666087866, 0.039862796664237976)
 )
 
-# Source coordinates are +X forward, +Y up, +Z across the lock.  Native
-# handgun coordinates are +Y forward, +Z up, +X across the lock.
+# Source +X is the muzzle direction.  RainReligion's 0.1.525 live run proved
+# that source +Y -> Handgun +Z / source +Z -> Handgun +X is rolled upside down.
+# Keep +X -> +Y, then rotate that known-bad frame exactly 180 degrees about +Y:
+# source -Y -> Handgun +Z and source -Z -> Handgun +X.  Flipping both transverse
+# axes preserves determinant +1; this is a rotation, never a mirrored mesh.
 SOURCE_TO_HANDGUN = Matrix(
     (
-        (0.0, 0.0, 1.0),
+        (0.0, 0.0, -1.0),
         (1.0, 0.0, 0.0),
-        (0.0, 1.0, 0.0),
+        (0.0, -1.0, 0.0),
     )
 )
+
+
+def require_signed_basis() -> None:
+    identity = SOURCE_TO_HANDGUN.transposed() @ SOURCE_TO_HANDGUN
+    for row in range(3):
+        for column in range(3):
+            expected = 1.0 if row == column else 0.0
+            if abs(identity[row][column] - expected) > 0.000001:
+                raise RuntimeError("Old Musket basis is not orthonormal")
+    if abs(SOURCE_TO_HANDGUN.determinant() - 1.0) > 0.000001:
+        raise RuntimeError("Old Musket basis must be a determinant-1 rotation")
+    mappings = (
+        (Vector((1, 0, 0)), Vector((0, 1, 0)), "source +X -> Handgun +Y"),
+        (Vector((0, 1, 0)), Vector((0, 0, -1)), "source +Y -> Handgun -Z"),
+        (Vector((0, 0, 1)), Vector((-1, 0, 0)), "source +Z -> Handgun -X"),
+    )
+    for source, expected, label in mappings:
+        if not near_vector(SOURCE_TO_HANDGUN @ source, expected):
+            raise RuntimeError(f"Old Musket signed basis mapping changed: {label}")
 
 
 def arguments() -> argparse.Namespace:
@@ -131,6 +164,20 @@ def bounds(mesh: bpy.types.Mesh) -> tuple[Vector, Vector]:
         Vector(tuple(min(vertex.co[axis] for vertex in mesh.vertices) for axis in range(3))),
         Vector(tuple(max(vertex.co[axis] for vertex in mesh.vertices) for axis in range(3))),
     )
+
+
+def ordered_geometry_digest(obj: bpy.types.Object) -> str:
+    digest = hashlib.sha256()
+    digest.update(b"cwv-old-musket-ordered-geometry-v1\0")
+    mesh = obj.data
+    for vertex in mesh.vertices:
+        point = obj.matrix_world @ vertex.co
+        digest.update(struct.pack("<3f", point.x, point.y, point.z))
+    for polygon in mesh.polygons:
+        digest.update(struct.pack("<I", len(polygon.vertices)))
+        for index in polygon.vertices:
+            digest.update(struct.pack("<I", index))
+    return digest.hexdigest().upper()
 
 
 def near_vector(actual: Vector, expected: Vector, tolerance: float = 0.000001) -> bool:
@@ -206,10 +253,26 @@ def require_source(path: Path) -> bpy.types.Object:
             f"count={len(cap)} actual={tuple(trigger_anchor)} "
             f"expected={tuple(EXPECTED_TRIGGER_ANCHOR)}"
         )
+    tail_cap = [
+        index
+        for index in trigger_groups[0]
+        if mesh.vertices[index].co.y
+        <= trigger_minimum.y + TRIGGER_TAIL_CAP_THICKNESS
+    ]
+    trigger_tail_anchor = centroid(mesh, tail_cap)
+    if len(tail_cap) != TRIGGER_TAIL_CAP_VERTEX_COUNT or not near_vector(
+        trigger_tail_anchor, EXPECTED_TRIGGER_TAIL_ANCHOR
+    ):
+        raise RuntimeError(
+            "Old Musket signed trigger-tail landmark moved: "
+            f"count={len(tail_cap)} actual={tuple(trigger_tail_anchor)} "
+            f"expected={tuple(EXPECTED_TRIGGER_TAIL_ANCHOR)}"
+        )
     return obj
 
 
 def normalize(obj: bpy.types.Object) -> dict[str, object]:
+    require_signed_basis()
     mesh = obj.data
     source_minimum, source_maximum = bounds(mesh)
     groups = connected_components(mesh)
@@ -224,12 +287,16 @@ def normalize(obj: bpy.types.Object) -> dict[str, object]:
         >= trigger_maximum_y - TRIGGER_CAP_THICKNESS
     ]
     trigger_anchor = centroid(mesh, trigger_cap)
-    native_trigger_in_source_basis = Vector(
-        (
-            NATIVE_HANDGUN_J_TRIGGER.y,
-            NATIVE_HANDGUN_J_TRIGGER.z,
-            NATIVE_HANDGUN_J_TRIGGER.x,
-        )
+    trigger_minimum_y = min(mesh.vertices[index].co.y for index in trigger_group)
+    trigger_tail_cap = [
+        index
+        for index in trigger_group
+        if mesh.vertices[index].co.y
+        <= trigger_minimum_y + TRIGGER_TAIL_CAP_THICKNESS
+    ]
+    trigger_tail_anchor = centroid(mesh, trigger_tail_cap)
+    native_trigger_in_source_basis = (
+        SOURCE_TO_HANDGUN.inverted() @ NATIVE_HANDGUN_J_TRIGGER
     )
     source_root = trigger_anchor - native_trigger_in_source_basis
     if not all(math.isfinite(value) for value in source_root):
@@ -257,6 +324,13 @@ def normalize(obj: bpy.types.Object) -> dict[str, object]:
             f"actual={tuple(output_trigger)} "
             f"expected={tuple(NATIVE_HANDGUN_J_TRIGGER)}"
         )
+    output_trigger_tail = SOURCE_TO_HANDGUN @ (trigger_tail_anchor - source_root)
+    roll_vector = output_trigger_tail - output_trigger
+    if roll_vector.z <= 0.04 or roll_vector.y <= 0.02:
+        raise RuntimeError(
+            "Old Musket full-basis roll landmark is not in the accepted "
+            f"Handgun half-space: vector={tuple(roll_vector)}"
+        )
     dimensions = output_maximum - output_minimum
     if dimensions.y <= dimensions.z * 5 or dimensions.y <= dimensions.x * 20:
         raise RuntimeError(f"Old Musket no longer points along native +Y: {tuple(dimensions)}")
@@ -267,11 +341,15 @@ def normalize(obj: bpy.types.Object) -> dict[str, object]:
         "source_bounds_max": list(source_maximum),
         "source_root": list(source_root),
         "trigger_anchor": list(trigger_anchor),
+        "trigger_tail_anchor": list(trigger_tail_anchor),
         "native_handgun_j_trigger": list(NATIVE_HANDGUN_J_TRIGGER),
         "output_bounds_min": list(output_minimum),
         "output_bounds_max": list(output_maximum),
         "output_dimensions": list(dimensions),
         "output_trigger_anchor": list(output_trigger),
+        "output_trigger_tail_anchor": list(output_trigger_tail),
+        "output_trigger_roll_vector": list(roll_vector),
+        "output_geometry_sha256": ordered_geometry_digest(obj),
     }
 
 
@@ -327,6 +405,12 @@ def verify_reimport(path: Path, expected: dict[str, object]) -> None:
             f"{path.name}: FBX round trip changed canonical bounds "
             f"min={tuple(minimum)} max={tuple(maximum)}"
         )
+    actual_digest = ordered_geometry_digest(obj)
+    if actual_digest != expected["output_geometry_sha256"]:
+        raise RuntimeError(
+            f"{path.name}: ordered geometry/winding digest changed "
+            f"actual={actual_digest} expected={expected['output_geometry_sha256']}"
+        )
 
 
 def main() -> None:
@@ -343,19 +427,28 @@ def main() -> None:
     verify_reimport(output_3p, report)
     report.update(
         {
-            "contract": "cwv_old_musket_native_frame_v1",
+            "contract": "cwv_old_musket_native_frame_v3",
             "source_sha256": SOURCE_SHA256,
             "source_component_signature": SOURCE_COMPONENT_SIGNATURE,
             "source_vertex_count": SOURCE_VERTEX_COUNT,
             "source_polygon_count": SOURCE_POLYGON_COUNT,
-            "basis": {"source": "+X forward/+Y up/+Z side", "output": "+Y forward/+Z up/+X side"},
+            "basis": {
+                "source": "+X forward/-Y accepted Handgun up/-Z accepted Handgun side",
+                "output": "+Y forward/+Z accepted Handgun up/+X accepted Handgun side",
+                "matrix": [
+                    [float(SOURCE_TO_HANDGUN[row][column]) for column in range(3)]
+                    for row in range(3)
+                ],
+            },
             "output_1p_sha256": sha256(output_1p),
             "output_3p_sha256": sha256(output_3p),
         }
     )
     report_path = args.report.resolve()
     report_path.parent.mkdir(parents=True, exist_ok=True)
-    report_path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
+    report_path.write_text(
+        json.dumps(report, indent=2) + "\n", encoding="utf-8", newline="\n"
+    )
     print(
         "[old-musket-export] "
         f"source={SOURCE_SHA256} root={tuple(report['source_root'])} "

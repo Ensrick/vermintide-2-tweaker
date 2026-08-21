@@ -1,5 +1,41 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.526-dev (2026-08-21) -- full-basis Old Musket roll and safe pose reconstruction (#1155/#474)
+
+- Rain's `0.1.525-dev` run proved resource closure but falsified the asset basis:
+  the exact authored and textured model was upside down in Athanor, owner 1P,
+  owner 3P, inventory character, illusion browser, Keep, and Righteous Stand.
+  All 133 structured receipts reported `apply=false`; the rifle/display roots
+  stayed at identity and every requested bayonet `+90° X` pose read back as
+  identity.
+- The converter now applies the missing 180-degree roll around the normalized
+  +Y barrel axis while preserving the pinned native `j_trigger` pivot. This is
+  a determinant-1 rotation, not a mirror. Its signed X/Z bounds now agree with
+  the extracted Empire Handgun donor instead of merely matching its unsigned
+  long axis.
+- The opposite cap of the same topology-pinned trigger component is now a
+  second signed roll landmark. Source QA, FBX round-trip QA, and the compiled
+  bundle parser reject the exact transverse half-spaces that allowed the
+  upside-down `.525` asset to pass.
+- The `.525` adapter converted each stable four-number descriptor into a raw
+  Stingray Quaternion and then passed that opaque, single-frame value through a
+  path that probes `.unbox`. That fails before `Unit.set_local_pose` runs and
+  exactly explains the identity readback. The pilot now keeps the quartet as
+  data and reconstructs it once with VT2's native `Quaternion.from_elements`
+  pattern at the atomic write boundary. No speculative per-channel fallback or
+  partial pose mutation was added.
+- Every #1155 receipt now includes bounded `transform_mode`, `transform_node`,
+  `transform_error`, quaternion-construction state, and individual write
+  verdicts. Opaque engine quaternions, q/-q equivalence, atomic rejection/no-op,
+  missing constructors, and malformed/non-finite results are covered
+  adversarially.
+
+**DoD:** 3,041/3,041 Lua tests pass. The v3 source asset contract pins a stable
+ordered geometry/winding digest independently of Blender's variable FBX export
+metadata, and the checked-in 1P/3P FBXs are byte-identical. Canonical BuildOnly,
+the compiled-bundle contract, and full repository QA pass. The solo live card
+remains required before any visual-resolution or remote-husk verification claim.
+
 ## 0.1.525-dev (2026-08-21) -- native-frame Old Musket and truthful pose evidence (#1155)
 
 - Rain's `0.1.524-dev` run proved the authored model/material closure survives
