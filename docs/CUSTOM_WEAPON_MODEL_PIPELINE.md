@@ -84,40 +84,57 @@ Pin Blender and image-tool versions in the asset-specific guide. Conversion
 must be scriptable and repeatable; hand-edited exports without a recorded
 recipe are not a stable source of truth.
 
-## 4. Normalize mesh space before game tuning
+## 4. Normalize asset space before attachment tuning
 
-The current Greataxe reference helper performs these technical changes:
+FBX exporter axis flags describe file interchange; they do **not** discover a
+weapon's forward axis, grip, or semantic root. The old Old Musket exporter
+changed Blender/FBX settings but left a +X-forward mesh rooted at its AABB
+centre. Lua then accumulated different absolute rotations and offsets for each
+renderer. That was an asset-frame defect wearing several attachment-pose skins.
 
-1. remove non-mesh scene objects and detach inherited parents;
-2. join all weapon mesh objects;
-3. apply object location, rotation, and scale;
-4. collapse to one short material slot such as `axe_mat`;
-5. normalize the longest dimension to two Blender units;
-6. put the inferred handle butt at the origin;
-7. point the handle from the origin along positive X;
-8. export FBX with `axis_forward=-Z`, `axis_up=Y`, applied unit scale, and no
-   leaf bones.
+Choose and prove one engine-native donor frame before any in-game tuning:
 
-Short material-slot names are mandatory. FBX exporters can truncate long
+1. extract a first-party weapon of the same attachment family for read-only
+   measurement;
+2. record its identity root, forward/up/side axes, scale, and a semantic grip
+   landmark such as `j_trigger`, handle, or haft;
+3. pin the licensed source by SHA-256, topology, UV/material slots, and a
+   reviewed semantic landmark;
+4. bake the source geometry into the donor frame around that landmark;
+5. apply object location/rotation/scale and export an identity-root FBX;
+6. reimport the FBX and assert axes, bounds, topology, names, material slots,
+   semantic-root displacement, and the exact 1P/3P output hashes.
+
+Do not infer a firearm grip from an AABB centre, longest dimension, or nearest
+surface. A simple axe/hammer converter may use a handle-butt heuristic only when
+the exact source shape and heuristic are pinned and reviewed. A firearm or
+multi-mode weapon needs a semantic landmark. Doomrocket is the positive
+precedent: its rig is already authored in a canonical +Y weapon frame with
+`root_point`, `handle`, and `a_barrel`; its runtime code does not auto-correct
+Blender axes. The Old Musket follows the same principle without copying the
+donor rig: its reviewed trigger-pivot is aligned to the compiled Empire
+Handgun's `j_trigger`, while the existing hidden native proxy continues to own
+named component and muzzle effects.
+
+Short material-slot names remain mandatory. FBX exporters can truncate long
 material paths, leaving a compiled `.unit` that references a nonexistent hash.
 Bind a short slot to the full material resource in the `.unit` file.
 
-Normalization creates a predictable starting point; it does not replace
-in-game tuning. Perspective, character skeleton, attachment node, and animation
-pose can all change the apparent orientation. Tune position, Euler/quaternion
-rotation, and scale in 1P, local 3P, and preview. Bake accepted values into the
-canonical per-weapon appearance definition. Never leave release behavior
-dependent on a developer's live tuner store.
+Keep asset-space and attachment-space transforms separate. Once an asset is in
+the native Handgun frame (+Y forward, +Z up), rifle parents begin at identity.
+The Tuskgor/polearm parent is independently +Z-forward, so Old Musket bayonet
+mode owns one explicit +90-degree X adapter. Character 1P, character 3P, and
+camera-world display carriers may still need small, bounded grip corrections;
+those corrections belong to closed-vocabulary attachment profiles and must not
+re-encode the imported asset basis. Historical values calibrated against an
+unnormalized asset are invalid after the basis is baked.
 
-Do not treat `1p`, `3p`, or a shared node name as a complete transform key.
-Select a closed-vocabulary attachment profile from the actual parent frame and
-store every profile in the same appearance descriptor. The Old Musket
-`0.1.524-dev` candidate separates held rifle and held polearm frames for owner
-1P/character 3P from the camera-world display carrier used by loot, Athanor, and
-illusion previews. Its display position `{0, 0, 0}`, Euler rotation
-`{-90, -90, 0}`, and scale `{1, 1.1, 1.1}` are deliberately isolated for live
-tuning. Offline tests can prove that the correct profile reaches each consumer;
-they cannot prove those numbers look correct in the renderer.
+Normalization creates a predictable starting point; it does not prove visual
+composition. Tune position, quaternion rotation, and scale on every applicable
+parent only after offline asset gates pass, then bake accepted values into the
+canonical per-weapon appearance definition. Never leave release behavior
+dependent on a developer's live tuner store. Offline tests can prove the right
+profile reaches each consumer; only in-game testing can prove it looks correct.
 
 ## 5. Mesh, material, and texture resources
 

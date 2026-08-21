@@ -1171,16 +1171,39 @@ _rt_register("issue1155_old_musket_descriptor_reconciler", function()
 		ScriptUnit.extension, player_unit, "inventory_system")
 	local equipment = ok_inventory and inventory and inventory._equipment
 	local wielded_slot = equipment and equipment.wielded_slot
-	local slot = wielded_slot and equipment.slots and equipment.slots[wielded_slot]
-	local item_data = slot and slot.item_data
-	local mod_data = type(item_data) == "table" and item_data.mod_data or nil
-	local current_backend_id = type(item_data) == "table"
-		and (item_data.backend_id or (mod_data and mod_data.backend_id)) or nil
-	local key_ok, current_key = pcall(
-		_om._cwv_key_for_item, current_backend_id, item_data)
-	if not key_ok or current_key ~= policy.ITEM_KEY
-			or current_backend_id ~= expected_identity.value then
+	local exact_slot_name, item_data, mod_data
+	local equipment_slots = equipment and type(equipment.slots) == "table"
+		and equipment.slots or {}
+	for slot_name, candidate_slot in pairs(equipment_slots) do
+		local candidate = type(candidate_slot) == "table"
+			and candidate_slot.item_data or nil
+		local data = type(candidate) == "table" and candidate.data or nil
+		local candidate_mod_data = type(candidate) == "table"
+			and (candidate.mod_data or (data and data.mod_data)) or nil
+		local candidate_backend_id = type(candidate) == "table"
+			and (candidate.backend_id or candidate.ItemInstanceId
+				or (data and (data.backend_id or data.ItemInstanceId))
+				or (candidate_mod_data and candidate_mod_data.backend_id)) or nil
+		local key_ok, candidate_key = pcall(
+			_om._cwv_key_for_item, candidate_backend_id, candidate)
+		if key_ok and candidate_key == policy.ITEM_KEY
+				and candidate_backend_id == expected_identity.value then
+			exact_slot_name = slot_name
+			item_data = candidate
+			mod_data = candidate_mod_data
+			break
+		end
+	end
+	if exact_slot_name == nil then
 		return "Old Musket live gate item is no longer the exact equipped instance"
+	end
+	if wielded_slot ~= exact_slot_name then
+		local slot_label = exact_slot_name == "slot_ranged" and "ranged slot"
+			or exact_slot_name == "slot_melee" and "melee slot"
+			or tostring(exact_slot_name)
+		return "Old Musket live gate found the exact tested instance in the "
+			.. slot_label .. ", but it is not currently wielded; wield Old Musket "
+			.. "and rerun /cwv_regression_test"
 	end
 	local current_mode = mod_data and mod_data.cwv_musket_stance == "melee"
 		and "melee" or "ranged"
@@ -1284,8 +1307,10 @@ _rt_register("issue617_old_musket_preview_texture_consumer", function()
 	if not ready or detail ~= nil or seen_count ~= 5 then
 		return "resource preflight must prove all five authored textures"
 	end
+	local denied_texture_path =
+		"textures/cwv_es_musket_custom/cwv_es_musket_custom_albedo"
 	local expected = {
-		color_map = "textures/cwv_es_musket_custom/cwv_es_musket_custom_albedo",
+		color_map = denied_texture_path,
 		normal_map = "textures/cwv_es_musket_custom/cwv_es_musket_custom_normal",
 		roughness_map = "textures/cwv_es_musket_custom/cwv_es_musket_custom_roughness",
 		metallic_map = "textures/cwv_es_musket_custom/cwv_es_musket_custom_metallic",
@@ -1298,11 +1323,17 @@ _rt_register("issue617_old_musket_preview_texture_consumer", function()
 		expected[binding.slot] = nil
 	end
 	if next(expected) ~= nil then return "authored texture closure is incomplete" end
+	local denied_path
 	local denied, missing = resources_ready(function(_, path)
-		return not path:find("_albedo", 1, true)
+		if path == denied_texture_path then
+			denied_path = path
+			return false
+		end
+		return true
 	end)
-	if denied or not missing or not missing:find("_albedo", 1, true) then
-		return "resource preflight must fail closed on one missing texture"
+	if denied or missing ~= "not_resident"
+			or denied_path ~= denied_texture_path then
+		return "resource preflight must fail closed with canonical not_resident and the exact denied albedo path"
 	end
 	local plan = _om._old_musket_preview_texture_targets
 	if type(plan) ~= "function" then

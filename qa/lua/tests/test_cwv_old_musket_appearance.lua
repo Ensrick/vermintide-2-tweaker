@@ -85,7 +85,7 @@ return function(H, repo_root)
 			end,
 			attachment_profiles = profiles,
 			canonical_key = function(item) return item.cwv_key end,
-			printf = function() end,
+			printf = options.printf or function() end,
 		})
 		local unit = { position = vector_new(0, 0, 0), scale = vector_new(1, 1, 1),
 			rotation = { x = 0, y = 0, z = 0, w = 1 } }
@@ -151,6 +151,63 @@ return function(H, repo_root)
 				attachment_profile = "held_3p_rifle_character" })
 		H.equal(constructor_failed.retained, false)
 		H.equal(constructor_failed.observation.apply, false)
+	end)
+
+	H.test("CWV #1155 evidence exposes bounded per-channel actual and expected pose truth", function()
+		local logs = {}
+		local pilot, unit = fixture({
+			reject_pose = true,
+			printf = function(fmt, ...)
+				logs[#logs + 1] = string.format(fmt, ...)
+			end,
+		})
+		local item = {
+			backend_id = "cwv_es_musket_old_001", cwv_key = "cwv_es_musket_old",
+		}
+		local cim = pilot.reconcile(unit, "cim_preview", "preview_open", item,
+			"ranged", {
+				unit_name = "units/cwv_es_musket_custom/cwv_es_musket_custom_3p",
+				attachment_profile = "display_3p_rifle",
+				cim_generation = 1,
+			})
+		H.equal(cim.retained, false)
+		local failed = pilot.reconcile(unit, "owner_3p", "equip", item,
+			"ranged", {
+				unit_name = "units/cwv_es_musket_custom/cwv_es_musket_custom_3p",
+				attachment_profile = "held_3p_rifle_character",
+			})
+		H.equal(failed.retained, false)
+		local before_duplicate = #logs
+		local duplicate = pilot.reconcile(unit, "owner_3p", "equip", item,
+			"ranged", {
+				unit_name = "units/cwv_es_musket_custom/cwv_es_musket_custom_3p",
+				attachment_profile = "held_3p_rifle_character",
+			})
+		H.equal(duplicate.coalesced, true)
+		H.equal(#logs, before_duplicate,
+			"a duplicate lifecycle wrapper must not emit another structured receipt")
+
+		local row = pilot.live_status().surfaces.owner_3p.ranged
+		H.equal(row.paint, true)
+		H.equal(row.apply, true)
+		H.equal(row.materials, true)
+		H.equal(row.position, false)
+		H.equal(row.scale, false)
+		H.equal(row.rotation, true)
+		H.deep_equal(row.actual_position, { 0, 0, 0 })
+		H.deep_equal(row.expected_position, { 4, 5, 6 })
+		H.deep_equal(row.actual_scale, { 1, 1, 1 })
+		H.deep_equal(row.expected_scale, { 0.9, 1.1, 1.2 })
+		H.deep_equal(row.actual_rotation, { 0, 0, 0, 1 })
+		H.deep_equal(row.expected_rotation, { 0, 0, 0, 1 })
+		H.truthy(logs[#logs]:find("paint=true apply=true materials=true", 1, true))
+		H.truthy(logs[#logs]:find(
+			"actual_position=[0.00000,0.00000,0.00000] expected_position=[4.00000,5.00000,6.00000]",
+			1, true))
+
+		row.actual_position[1] = 1155
+		H.equal(pilot.live_status().surfaces.owner_3p.ranged.actual_position[1], 0,
+			"callers must not be able to mutate retained evidence tuples")
 	end)
 
 	H.test("CWV #1155 explicit generation repairs retained state on the same live unit", function()

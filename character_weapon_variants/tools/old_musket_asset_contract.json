@@ -1,0 +1,58 @@
+{
+  "source_bounds_min": [
+    -1.0,
+    -0.11947000026702881,
+    -0.025645995512604713
+  ],
+  "source_bounds_max": [
+    1.0,
+    0.11963900178670883,
+    0.02564600296318531
+  ],
+  "source_root": [
+    -0.5173783898353577,
+    -0.1024550125002861,
+    0.01740901917219162
+  ],
+  "trigger_anchor": [
+    -0.5211420059204102,
+    -0.06259221583604813,
+    0.01740901917219162
+  ],
+  "native_handgun_j_trigger": [
+    0.0,
+    -0.0037636400666087866,
+    0.039862796664237976
+  ],
+  "output_bounds_min": [
+    -0.043055012822151184,
+    -0.48262161016464233,
+    -0.017014987766742706
+  ],
+  "output_bounds_max": [
+    0.00823698379099369,
+    1.517378330230713,
+    0.22209401428699493
+  ],
+  "output_dimensions": [
+    0.051291994750499725,
+    2.0,
+    0.23910900950431824
+  ],
+  "output_trigger_anchor": [
+    0.0,
+    -0.0037636160850524902,
+    0.039862796664237976
+  ],
+  "contract": "cwv_old_musket_native_frame_v1",
+  "source_sha256": "A20C6161C9B6302FF424BFC801D036BEE2C8D793D3A027BE309140C04B791550",
+  "source_component_signature": "B9F7DBB4EFCAC3C09F44B136C5AAAC03FA172F9060EE67ACF9544B133C6835B6",
+  "source_vertex_count": 10014,
+  "source_polygon_count": 16483,
+  "basis": {
+    "source": "+X forward/+Y up/+Z side",
+    "output": "+Y forward/+Z up/+X side"
+  },
+  "output_1p_sha256": "F8EC6568A435D35FD51CC1EB416A0D7B015735ECAA42674EDBBCE9A21E7B5FEE",
+  "output_3p_sha256": "F8EC6568A435D35FD51CC1EB416A0D7B015735ECAA42674EDBBCE9A21E7B5FEE"
+}

@@ -284,11 +284,14 @@ character 3P distinguishes rifle (`j_leftweaponattach`) from melee/polearm
 loot/Athanor/illusion previews has its own `display_3p_rifle` profile. A context
 must select one descriptor-declared
 profile or fail closed; no consumer may reuse a generic "3P" tuple merely
-because the node name or model path matches. The current display tuple - position
-`{0, 0, 0}`, Euler `{-90, -90, 0}`, scale `{1, 1.1, 1.1}` - is an isolated
-live-tuning candidate chosen after `.523` rendered the shared held transform too
-high. Offline checks prove profile selection and containment, not the numeric
-pose's visual correctness.
+because the node name or model path matches. The checked-in FBX is normalized
+to the compiled Empire Handgun's identity-root frame (+Y forward, +Z up) around
+a topology-pinned trigger pivot. Rifle and display profiles therefore start at
+identity; polearm profiles own one +90-degree X adapter to the native Spear's
++Z-forward frame. These are isolated live-verification candidates, not a claim
+that character and camera carriers require no final grip correction. Offline
+checks prove asset basis, profile selection, and containment; only retained
+readback plus visual inspection proves final composition.
 
 ## Doc maintenance
 

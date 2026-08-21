@@ -230,12 +230,15 @@ end
 -- feedback_lua_forward_reference.md.
 
 -- Mutable transform constants. Edit via `cwv_om_pos_*` / `om_rot_*` /
--- `om_scale_*` commands. Split into three buckets:
---   1P RANGED — musket_template (rifle stance)
---   1P MELEE  — musket_template_melee (polearm stance) [TBD]
---   3P        — both modes share (works at identity per v0.1.295 user feedback)
--- v0.1.295 defaults for 1P ranged from user tune: pos (0, 0.62, 0),
--- rot axis (1,1,-1) @ -90°, scale (1, 1.2, 1.4).
+-- `om_scale_*` commands. The v0.1.525 asset pipeline moves the malformed
+-- Sketchfab +X / AABB-centre frame into the first-party Handgun convention:
+-- identity root, +Y forward, +Z up, +X lock side, with a topology-pinned
+-- trigger pivot at the native j_trigger displacement. Rifle and display
+-- carriers therefore consume the authored frame at identity. Tuskgor/polearm
+-- carriers are independently proven +Z-forward, so bayonet mode owns exactly
+-- one +90-degree X adapter (+Y -> +Z). Historical .295/.299/.320 poses were
+-- calibrated against the malformed source frame and must not be composed with
+-- the normalized asset.
 -- v0.1.297: rotation state is now a QuaternionBox (or nil for identity). The
 -- previous `{ax, ay, az, radians}` axis-angle table couldn't represent
 -- composed rotations (e.g., diagonal axis-angle + an additional barrel-roll).
@@ -251,41 +254,30 @@ end
 -- pattern (e.g., `bt_attack_action.lua:99`): `QuaternionBox(rotation)` to
 -- box for long-term storage, `:unbox()` to get a fresh raw Quaternion when
 -- you need to pass it to an API that wants a raw value.
--- Defaults for 1P-RANGED match v0.1.295 user-tuned values.
-_om._CWV_OLD_MUSKET_POS_1P_RANGED   = { 0, 0.62, 0 }
-_om._CWV_OLD_MUSKET_ROT_1P_RANGED   = QuaternionBox(Quaternion.axis_angle(Vector3(1, 1, -1), -math.pi / 2))
-_om._CWV_OLD_MUSKET_SCALE_1P_RANGED = { 1, 1.2, 1.4 }
+_om._CWV_OLD_MUSKET_POS_1P_RANGED   = { 0, 0, 0 }
+_om._CWV_OLD_MUSKET_ROT_1P_RANGED   = QuaternionBox(Quaternion.identity())
+_om._CWV_OLD_MUSKET_SCALE_1P_RANGED = { 1, 1, 1 }
 
--- v0.1.299 1P MELEE defaults from user live-tune: pos (0, 0.06, 0),
--- rot axis (0, 1, 0) @ -90° (pure Y-axis rotation), scale identity.
-_om._CWV_OLD_MUSKET_POS_1P_MELEE   = { 0, 0.06, 0 }
-_om._CWV_OLD_MUSKET_ROT_1P_MELEE   = QuaternionBox(Quaternion.axis_angle(Vector3(0, 1, 0), -math.pi / 2))
+_om._CWV_OLD_MUSKET_POS_1P_MELEE   = { 0, 0, 0 }
+_om._CWV_OLD_MUSKET_ROT_1P_MELEE   = QuaternionBox(Quaternion.axis_angle(Vector3(1, 0, 0), math.pi / 2))
 _om._CWV_OLD_MUSKET_SCALE_1P_MELEE = { 1, 1, 1 }
 
--- v0.1.318: 3P split into _RANGED / _MELEE.
--- v0.1.320: final tuned values from user live-tune:
---   3P-RANGED — pos (0, 0.64, -0.01), rot Euler XYZ (-90, -90, 0), scale (1, 1.1, 1.1)
---   3P-MELEE  — pos (0, 0.045, 0.1) (unchanged from v0.1.318), rot (0, 1, 0) @ -90°
---               (unchanged), scale (1, 1.1, 1.1) (matched to 3P-RANGED per user
---               "do the same scaling for melee as well")
-_om._CWV_OLD_MUSKET_POS_3P_RANGED   = { 0, 0.64, -0.01 }
-_om._CWV_OLD_MUSKET_ROT_3P_RANGED   = QuaternionBox(Quaternion.from_euler_angles_xyz(-90, -90, 0))
-_om._CWV_OLD_MUSKET_SCALE_3P_RANGED = { 1, 1.1, 1.1 }
+_om._CWV_OLD_MUSKET_POS_3P_RANGED   = { 0, 0, 0 }
+_om._CWV_OLD_MUSKET_ROT_3P_RANGED   = QuaternionBox(Quaternion.identity())
+_om._CWV_OLD_MUSKET_SCALE_3P_RANGED = { 1, 1, 1 }
 
-_om._CWV_OLD_MUSKET_POS_3P_MELEE   = { 0, 0.045, 0.1 }
-_om._CWV_OLD_MUSKET_ROT_3P_MELEE   = QuaternionBox(Quaternion.axis_angle(Vector3(0, 1, 0), -math.pi / 2))
-_om._CWV_OLD_MUSKET_SCALE_3P_MELEE = { 1, 1.1, 1.1 }
+_om._CWV_OLD_MUSKET_POS_3P_MELEE   = { 0, 0, 0 }
+_om._CWV_OLD_MUSKET_ROT_3P_MELEE   = QuaternionBox(Quaternion.axis_angle(Vector3(1, 0, 0), math.pi / 2))
+_om._CWV_OLD_MUSKET_SCALE_3P_MELEE = { 1, 1, 1 }
 
--- #1155: LootItemUnitPreviewer links weapons to a camera-world display carrier,
--- not a character skeleton. Rain's 0.1.523 live run falsified the old assumption
--- that the held-rifle pose could be copied into that parent frame: the Musket
--- hovered high. Zero translation plus the imported rotation/scale is an explicit
--- diagnostic candidate, not a numerically verified final pose. Keeping it in a
--- distinct profile lets the live readback falsify or tune it without changing
--- any character-held surface and without creating one recipe per UI.
+-- Loot/CIM remains a distinct evidence profile because its display carrier is
+-- not a character skeleton. It still consumes the same native Handgun asset
+-- frame at identity; keeping the profile separate preserves an independent
+-- postcondition and permits bounded display-only calibration if live evidence
+-- later falsifies the parent equivalence.
 _om._CWV_OLD_MUSKET_POS_DISPLAY_3P   = { 0, 0, 0 }
-_om._CWV_OLD_MUSKET_ROT_DISPLAY_3P   = QuaternionBox(Quaternion.from_euler_angles_xyz(-90, -90, 0))
-_om._CWV_OLD_MUSKET_SCALE_DISPLAY_3P = { 1, 1.1, 1.1 }
+_om._CWV_OLD_MUSKET_ROT_DISPLAY_3P   = QuaternionBox(Quaternion.identity())
+_om._CWV_OLD_MUSKET_SCALE_DISPLAY_3P = { 1, 1, 1 }
 
 _om.old_musket_attachment_profiles = {
 	held_1p_rifle = "held_1p_rifle",
