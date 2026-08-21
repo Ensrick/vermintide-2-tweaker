@@ -33,6 +33,17 @@ local function item_backend_id(item)
 end
 
 local function identity_evidence(item, surface, context)
+	-- HeroWindow reconstructs LootItemUnitPreviewer when the player selects an
+	-- illusion.  Each previewer's `_item` is stable, but the new preview item is
+	-- not necessarily the equipped backend instance that opened the browser.
+	-- Its source-backed identity is the exact previewer+item token supplied by
+	-- the adapter, not the owner's held backend id (#1156).
+	local preview_identity = surface == "illusion_browser" and context
+		and context.preview_identity or nil
+	if type(preview_identity) == "string" and preview_identity ~= ""
+			and #preview_identity <= 128 then
+		return { kind = "preview_slot", value = preview_identity }
+	end
 	local bid = item_backend_id(item)
 	if type(bid) == "string" and #bid > 0 then
 		return { kind = "backend_id", value = bid }
@@ -135,6 +146,7 @@ function M.new(args)
 	local cim_identity
 	local held_identity
 	local cim_generation = 0
+	local preview_lifecycles = {}
 	local generation = 0
 	local reconciler
 	local C = {}
@@ -168,6 +180,7 @@ function M.new(args)
 				evidence_targets[key] = nil
 			end
 		end
+		preview_lifecycles = {}
 	end
 
 	local function arm_cim_identity(surface, identity, provider_generation)
@@ -196,6 +209,7 @@ function M.new(args)
 			held_identity = nil
 			evidence = {}
 			evidence_targets = {}
+			preview_lifecycles = {}
 			-- The evidence epoch must not inherit a completed/coalesced token from
 			-- a pre-arm renderer call. Clear only the bounded reconciler ledger; the
 			-- next real lifecycle edge will apply and observe fresh live state.
@@ -223,9 +237,66 @@ function M.new(args)
 			return held_identity
 		end
 		if surface == "inventory_preview" or surface == "illusion_browser" then
+			if surface == "illusion_browser" and type(candidate) == "table"
+					and candidate.kind == "preview_slot"
+					and type(candidate.value) == "string" and candidate.value ~= "" then
+				return candidate
+			end
 			return same_identity(held_identity, candidate) and held_identity or nil
 		end
 		return nil
+	end
+
+	local function finite_positive_integer(value)
+		return type(value) == "number" and value > 0 and value == value
+			and value ~= math.huge and value % 1 == 0
+	end
+
+	-- Vanilla owns two useful browser edges: spawn_units constructs the exact
+	-- units, then `_enable_item_units_visibility(..., true)` makes those same
+	-- units visible after mip streaming.  Keep one bounded lifecycle record for
+	-- the latest browser generation.  A stale/mismatched final edge is evidence
+	-- failure only; it must never interfere with the renderer itself.
+	local function preview_lifecycle_evidence(surface, edge, identity, context)
+		if surface ~= "illusion_browser" then return true, nil end
+		local preview_generation = context and context.preview_generation
+		if not finite_positive_integer(preview_generation)
+				or type(identity) ~= "table" or identity.kind ~= "preview_slot" then
+			return false, "preview-lifecycle-invalid"
+		end
+		local current = preview_lifecycles[surface]
+		if edge == "instance_load" then
+			if current and preview_generation < current.generation then
+				-- An older previewer can finish after its replacement became visible.
+				-- Reject that delivery, but preserve the newer authoritative row so a
+				-- harmless late callback cannot turn a visible success into a false
+				-- regression failure (#1156).
+				return false, "preview-generation-stale", true
+			end
+			if current and preview_generation == current.generation
+					and not same_identity(current.identity, identity) then
+				return false, "preview-identity-mismatch"
+			end
+			preview_lifecycles[surface] = {
+				generation = preview_generation,
+				identity = copy_identity(identity),
+			}
+			return true, nil
+		end
+		if edge == "preview_open" then
+			if not current then return false, "preview-construction-missing" end
+			if preview_generation ~= current.generation then
+				if preview_generation < current.generation then
+					return false, "preview-generation-stale", true
+				end
+				return false, "preview-construction-missing"
+			end
+			if not same_identity(current.identity, identity) then
+				return false, "preview-identity-mismatch"
+			end
+			return true, nil
+		end
+		return false, "preview-edge-invalid"
 	end
 
 	local function evidence_row(surface, mode, edge, identity, values, target)
@@ -240,7 +311,11 @@ function M.new(args)
 		for key, value in pairs(values or {}) do
 			row[key] = copy_evidence_value(value)
 		end
-		local key = surface .. ":" .. mode
+		-- The ordinary illusion browser has no rifle/bayonet stance control.
+		-- Its one latest visible preview lifecycle is the evidence unit; inventing
+		-- two mode cells produced #1156's false FAIL.
+		local key = surface == "illusion_browser"
+			and surface .. ":visible" or surface .. ":" .. mode
 		evidence[key] = row
 		evidence_targets[key] = target
 	end
@@ -442,6 +517,13 @@ function M.new(args)
 		local is_old_musket = key == policy.ITEM_KEY or policy.matches_item(item, key)
 		local candidate_mode = mode_for(item, explicit_mode)
 		local candidate_identity = identity_evidence(item, surface, context)
+		local preview_evidence_ok, preview_evidence_reason,
+			preserve_preview_evidence = true, nil, false
+		if is_old_musket then
+			preview_evidence_ok, preview_evidence_reason,
+				preserve_preview_evidence =
+				preview_lifecycle_evidence(surface, edge, candidate_identity, context)
+		end
 		local cim_armed = true
 		if is_old_musket then
 			if surface == "cim_preview" then
@@ -454,6 +536,7 @@ function M.new(args)
 				errors = { "CIM evidence epoch rejected" } }
 		end
 		local selected_evidence_identity = evidence_epoch > 0 and is_old_musket
+			and preview_evidence_ok
 			and evidence_identity(surface, candidate_identity) or nil
 		local records_active_identity = selected_evidence_identity ~= nil
 		local descriptor, errors = C.resolve(item, explicit_mode, surface, context)
@@ -472,7 +555,14 @@ function M.new(args)
 		local observation = type(result.observation) == "table"
 			and result.observation or {}
 		local fingerprint = D.fingerprint(descriptor)
-		if selected_evidence_identity
+		if evidence_epoch > 0 and is_old_musket and surface == "illusion_browser"
+				and not preview_evidence_ok and not preserve_preview_evidence then
+			evidence_row(surface, candidate_mode, edge, candidate_identity, {
+				retained = false, fallback = false,
+				reason = preview_evidence_reason, attempts = 0,
+				preview_generation = context.preview_generation,
+			}, target)
+		elseif selected_evidence_identity
 				and same_identity(selected_evidence_identity, descriptor_identity)
 				and result.coalesced ~= true then
 			evidence_row(surface, descriptor.mode, edge, descriptor_identity, {
@@ -502,6 +592,7 @@ function M.new(args)
 				position_write = observation.position_write,
 				scale_write = observation.scale_write,
 				rotation_write = observation.rotation_write,
+				preview_generation = context.preview_generation,
 			}, target)
 		end
 		-- One structured receipt per exact reconciler token. Duplicate wrappers can
@@ -542,6 +633,7 @@ function M.new(args)
 		cim_identity = nil
 		held_identity = nil
 		cim_generation = 0
+		preview_lifecycles = {}
 		evidence_epoch = evidence_epoch + 1
 		return reconciler.disconnect()
 	end
@@ -562,7 +654,13 @@ function M.new(args)
 			fallback = 0, surfaces = {}, cells = {}, generation = generation,
 			epoch = evidence_epoch, identity = copy_identity(held_identity),
 			cim_identity = copy_identity(cim_identity),
-			cim_generation = cim_generation }
+			cim_generation = cim_generation, preview_lifecycles = {} }
+		for surface, lifecycle in pairs(preview_lifecycles) do
+			status.preview_lifecycles[surface] = {
+				generation = lifecycle.generation,
+				identity = copy_identity(lifecycle.identity),
+			}
+		end
 		for evidence_key, row in pairs(evidence) do
 			local copy = {}
 			for key, value in pairs(row) do

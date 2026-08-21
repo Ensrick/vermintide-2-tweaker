@@ -18,6 +18,25 @@ return function(H, repo_root)
 	local HELD_RIFLE_PROFILE = "held_3p_rifle_character"
 	local HELD_POLEARM_PROFILE = "held_3p_polearm_character"
 	local DISPLAY_PROFILE = "display_3p_rifle"
+	local function snapshot_globals(names)
+		local saved = {}
+		for _, name in ipairs(names) do
+			saved[name] = {
+				present = rawget(_G, name) ~= nil,
+				value = rawget(_G, name),
+			}
+		end
+		return saved
+	end
+	local function restore_globals(saved)
+		for name, state in pairs(saved) do
+			if state.present then
+				rawset(_G, name, state.value)
+			else
+				rawset(_G, name, nil)
+			end
+		end
+	end
 	local function attachment_recipe()
 		return { wielded = {}, unwielded = {} }
 	end
@@ -487,9 +506,7 @@ return function(H, repo_root)
 			H.equal(fade_calls, 4,
 				"the unrelated fade owner must still observe each successfully returned wield")
 		end)
-		for name, state in pairs(saved) do
-			rawset(_G, name, state.present and state.value or nil)
-		end
+		restore_globals(saved)
 		if not ok then error(err) end
 	end)
 
@@ -698,9 +715,7 @@ return function(H, repo_root)
 				end
 			end
 		end)
-		for name, state in pairs(saved) do
-			rawset(_G, name, state.present and state.value or nil)
-		end
+		restore_globals(saved)
 		if not ok_matrix then error(matrix_error) end
 	end)
 
@@ -737,7 +752,8 @@ return function(H, repo_root)
 		end
 		local function resolve(item, mode, surface, context)
 			local profile = context and context.attachment_profile
-			local bid = item and item.backend_id or "missing"
+			local bid = item and item.backend_id
+				or (context and context.preview_identity) or "missing"
 			return {
 				attachment_profile = profile,
 				transform_profiles = {
@@ -753,7 +769,7 @@ return function(H, repo_root)
 			epoch = 4, generation = 7, cim_generation = 3,
 			identity = { kind = "backend_id", value = expected_bid },
 			cim_identity = { kind = "backend_id", value = cim_bid },
-			surfaces = {},
+			surfaces = {}, preview_lifecycles = {},
 		}
 		local function add_row(surface, mode, edge, identity)
 			local profile = profile_for(surface, mode)
@@ -765,16 +781,30 @@ return function(H, repo_root)
 				profile = profile, epoch = live.epoch, generation = live.generation,
 				identity = { kind = identity.kind, value = identity.value },
 				fingerprint = descriptor.fingerprint,
+				paint = true, apply = true, materials = true,
+				position = true, scale = true, rotation = true,
+				transform_mode = "atomic-local-pose", transform_error = nil,
+				rotation_constructed = true, position_write = true,
+				scale_write = true, rotation_write = true,
 			}
 		end
 		for _, surface in ipairs({
-			"owner_1p", "owner_3p", "inventory_preview", "illusion_browser",
+			"owner_1p", "owner_3p", "inventory_preview",
 		}) do
 			local edge = (surface == "owner_1p" or surface == "owner_3p")
 				and "equip" or "preview_open"
 			add_row(surface, "ranged", edge, live.identity)
 			add_row(surface, "melee", edge, live.identity)
 		end
+		local browser_identity = {
+			kind = "preview_slot", value = "browser:visible-musket-skin",
+		}
+		add_row("illusion_browser", "ranged", "preview_open", browser_identity)
+		live.surfaces.illusion_browser.ranged.preview_generation = 12
+		live.preview_lifecycles.illusion_browser = {
+			generation = 12,
+			identity = { kind = browser_identity.kind, value = browser_identity.value },
+		}
 		add_row("cim_preview", "ranged", "preview_open", live.cim_identity)
 
 		local evidence_targets = {
@@ -917,10 +947,70 @@ return function(H, repo_root)
 			verdict = captured()
 			H.equal(type(verdict), "string")
 			H.truthy(verdict:find("current wielded units do not match", 1, true))
+			equipment.right_hand_wielded_unit_3p = retained_3p
+
+			local browser = live.surfaces.illusion_browser.ranged
+			browser.edge = "instance_load"
+			verdict = captured()
+			H.truthy(verdict:find("illusion_browser/ranged", 1, true),
+				"missing final visibility edge must fail")
+			browser.edge = "preview_open"
+
+			local fingerprint = browser.fingerprint
+			browser.fingerprint = "foreign"
+			verdict = captured()
+			H.truthy(verdict:find("fingerprint=foreign", 1, true),
+				"wrong visible descriptor fingerprint must fail")
+			browser.fingerprint = fingerprint
+
+			live.preview_lifecycles.illusion_browser.generation = 13
+			verdict = captured()
+			H.truthy(verdict:find("identity/generation evidence is inconsistent", 1, true),
+				"stale browser generation must fail")
+			live.preview_lifecycles.illusion_browser.generation = 12
+
+			local postcondition_faults = {
+				{ key = "paint", value = false, label = "paint readback" },
+				{ key = "apply", value = false, label = "apply verdict" },
+				{ key = "materials", value = false, label = "material readback" },
+				{ key = "position", value = false, label = "position readback" },
+				{ key = "scale", value = false, label = "scale readback" },
+				{ key = "rotation", value = false, label = "rotation readback" },
+				{ key = "transform_mode", value = "partial-pose",
+					label = "atomic pose adapter" },
+				{ key = "rotation_constructed", value = false,
+					label = "rotation construction" },
+				{ key = "position_write", value = false, label = "position write" },
+				{ key = "scale_write", value = false, label = "scale write" },
+				{ key = "rotation_write", value = false, label = "rotation write" },
+				{ key = "transform_error", value = "pose-write-rejected",
+					label = "transform error channel" },
+			}
+			for _, fault in ipairs(postcondition_faults) do
+				local original = browser[fault.key]
+				browser[fault.key] = fault.value
+				verdict = captured()
+				H.equal(type(verdict), "string",
+					"a failed browser " .. fault.label .. " must fail the named gate")
+				browser[fault.key] = original
+			end
 		end)
-		for name, state in pairs(saved) do
-			rawset(_G, name, state.present and state.value or nil)
-		end
+		restore_globals(saved)
+		if not ok then error(err) end
+	end)
+
+	H.test("#1156 global restoration preserves an existing false raw value", function()
+		local name = "__cwv_issue1156_false_global"
+		local original = snapshot_globals({ name })
+		local ok, err = pcall(function()
+			rawset(_G, name, false)
+			local saved_false = snapshot_globals({ name })
+			rawset(_G, name, { changed = true })
+			restore_globals(saved_false)
+			H.equal(rawget(_G, name), false,
+				"false is a present raw value and must not be restored as nil")
+		end)
+		restore_globals(original)
 		if not ok then error(err) end
 	end)
 
@@ -1388,6 +1478,24 @@ return function(H, repo_root)
 		H.equal(calls[3].surface, "illusion_browser")
 		H.equal(calls[3].edge, "instance_load")
 		H.equal(calls[3].context.attachment_profile, DISPLAY_PROFILE)
+		H.equal(calls[3].context.preview_generation, 1)
+		H.truthy(type(calls[3].context.preview_identity) == "string")
+		ordinary._spawned_units = units
+		ordinary._units_to_spawn = spawn_data
+		visibility(ordinary, "world", "unit", true)
+		H.equal(calls[4].edge, "preview_open")
+		H.equal(calls[4].context.preview_generation,
+			calls[3].context.preview_generation)
+		H.equal(calls[4].context.preview_identity,
+			calls[3].context.preview_identity)
+
+		local next_ordinary = { _item = item }
+		om._cwv_reconcile_old_musket_loot(next_ordinary, units, spawn_data,
+			"instance_load")
+		H.equal(calls[5].context.preview_generation, 2)
+		H.truthy(calls[5].context.preview_identity
+			~= calls[3].context.preview_identity,
+			"a replacement previewer must own a distinct exact identity")
 	end)
 
 	H.test("Old Musket CIM evidence rejects late provider generations", function()

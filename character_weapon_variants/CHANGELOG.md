@@ -1,5 +1,28 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.527-dev (2026-08-21) -- truthful Old Musket browser lifecycle (#1156)
+
+- Rain's verified `0.1.526-dev` run exposed a false failure in
+  `issue1155_old_musket_descriptor_reconciler`: the visible illusion preview
+  retained its authored material and pose, but the check demanded separate
+  rifle and bayonet cells from a browser that has no stance control.
+- The illusion browser now records one bounded construction-to-visible
+  lifecycle using the exact previewer/item token and a monotonic generation.
+  Selecting an illusion reconstructs the previewer around a new stable preview
+  item without losing the visible `preview_open` postcondition; stale
+  generations and mismatched
+  preview identities fail the evidence gate without changing rendering.
+- The named check still requires both owner stances and both inventory-preview
+  stances. Its one browser cell now independently proves the exact descriptor
+  fingerprint plus retained material, position, scale, rotation, atomic pose,
+  and write postconditions.
+
+**DoD:** 3,042/3,042 Lua tests pass. Adversarial coverage rejects a missing
+visible edge, stale generation, foreign preview identity/fingerprint, and a
+genuine material/postcondition failure. Vanilla source confirms
+`LootItemUnitPreviewer.spawn_units` constructs the units and
+`_enable_item_units_visibility(..., true)` is their stable visible edge.
+
 ## 0.1.526-dev (2026-08-21) -- full-basis Old Musket roll and safe pose reconstruction (#1155/#474)
 
 - Rain's `0.1.525-dev` run proved resource closure but falsified the asset basis:

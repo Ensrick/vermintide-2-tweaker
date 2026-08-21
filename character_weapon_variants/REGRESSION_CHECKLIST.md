@@ -16,7 +16,7 @@ Last updated: 2026-08-21.
 
 ## #1155 Old Musket native-frame and attachment-profile pilot
 
-- [ ] Confirm CWV `0.1.526-dev` from `[cwv:LOAD]` and the exact deployed CIM Dev
+- [ ] Confirm CWV `0.1.527-dev` from `[cwv:LOAD]` and the exact deployed CIM Dev
   version from `[cim:LOAD]` before scoring the run.
 - [ ] In the Crafting in Modded Athanor, select **Old Musket** once and wait for
   its preview to finish loading. The Athanor selects the weapon archetype (it is
@@ -32,13 +32,16 @@ Last updated: 2026-08-21.
   display profiles begin in the normalized native Handgun frame; the polearm
   profiles own one +90-degree X parent adapter. Each retains its own pose and
   neither becomes invisible, pink, checkerboard, or a vanilla Handgun.
-- [ ] After each gameplay mode, reopen the inventory-screen character and the
-  ordinary illusion browser for that equipped instance. The browser remains
-  `surface=illusion_browser`, never `cim_preview`, and uses the independent
-  display profile. Its identity pose is report-only: record whether it is high,
-  low, or misoriented. A preview-pose receipt must report
-  `dispatched=true`. Do not reopen the Athanor after these equipped-item checks,
-  because a new constructor generation intentionally starts a new evidence run.
+- [ ] After each gameplay mode, reopen the inventory-screen character to prove
+  both equipped-item stances. Open the ordinary illusion browser once and select
+  the Old Musket illusion. The browser remains `surface=illusion_browser`, never
+  `cim_preview`, and uses one previewer-owned construction-to-visible lifecycle:
+  it has no rifle/bayonet stance control and its selected preview identity may
+  differ from the equipped backend instance. Its display-profile pose is
+  report-only: record whether it is high, low, or misoriented. A preview-pose
+  receipt must report `dispatched=true`. Do not reopen the Athanor after these
+  equipped-item checks, because a new constructor generation intentionally
+  starts a new evidence run.
 - [ ] **While still in the Keep, and with that exact Old Musket currently
   wielded**, run `/cwv_regression_test` and retain that log.
   `issue1155_old_musket_descriptor_reconciler`,
@@ -50,8 +53,9 @@ Last updated: 2026-08-21.
   Athanor/browser evidence, so do not require the all-surface named gate to pass
   inside the mission.
 - [ ] The log contains bounded retained receipts for Athanor
-  `surface=cim_preview edge=preview_open`, the ordinary browser
-  `surface=illusion_browser edge=preview_open`, and both stances. Every receipt
+  `surface=cim_preview edge=preview_open`; one latest ordinary-browser
+  `surface=illusion_browser edge=preview_open` generation; and both stances on
+  the owner and inventory-character surfaces. Every receipt
   exposes `paint`, `apply`, `materials`, `position`, `scale`, and `rotation`
   booleans; `transform_mode`, `transform_node`, bounded `transform_error`, and
   per-channel write verdicts; plus actual/expected pose tuples. No
