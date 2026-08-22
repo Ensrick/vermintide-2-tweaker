@@ -425,7 +425,7 @@ return function(H, repo_root)
 		H.equal(status.surfaces.cim_preview.ranged.retained, true)
 	end)
 
-	H.test("CWV #1155 evidence is bounded by surface and stance and clears on disconnect", function()
+	H.test("CWV #1155 evidence is bounded by renderer-owned cells and clears on disconnect", function()
 		local pilot, unit = fixture()
 		local cim_item = {
 			backend_id = "cwv_es_musket_old_001", cwv_key = "cwv_es_musket_old",
@@ -463,13 +463,20 @@ return function(H, repo_root)
 			"swapping to another live unit must invalidate the stored-target proof")
 		H.equal(pilot.live_target_matches("owner_3p", "ranged", unit,
 			{ kind = "backend_id", value = "another-instance" }), false)
-		for _, mode in ipairs({ "ranged", "melee" }) do
-			local result = pilot.reconcile(unit, "illusion_browser", "preview_open",
-				equipped_item, mode, context)
-			H.equal(result.retained, true)
-		end
+		local browser_context = {
+			unit_name = context.unit_name,
+			attachment_profile = "display_3p_rifle",
+			preview_identity = "browser:old-musket-skin",
+			preview_generation = 1,
+		}
+		local constructed = pilot.reconcile(unit, "illusion_browser", "instance_load",
+			equipped_item, "ranged", browser_context)
+		H.equal(constructed.retained, true)
+		local visible = pilot.reconcile(unit, "illusion_browser", "preview_open",
+			equipped_item, "ranged", browser_context)
+		H.equal(visible.retained, true)
 		local status = pilot.live_status()
-		H.equal(status.exercised, 4)
+		H.equal(status.exercised, 3)
 		H.equal(status.generation, 0)
 		H.equal(status.epoch, 1)
 		H.deep_equal(status.identity,
@@ -478,17 +485,118 @@ return function(H, repo_root)
 			{ kind = "backend_id", value = "cwv_es_musket_old_001" })
 		H.equal(status.cim_generation, 1)
 		H.equal(status.surfaces.illusion_browser.ranged.mode, "ranged")
-		H.equal(status.surfaces.illusion_browser.melee.mode, "melee")
+		H.equal(status.surfaces.illusion_browser.ranged.edge, "preview_open")
+		H.equal(status.surfaces.illusion_browser.ranged.preview_generation, 1)
+		H.deep_equal(status.surfaces.illusion_browser.ranged.identity, {
+			kind = "preview_slot", value = "browser:old-musket-skin",
+		})
+		H.deep_equal(status.preview_lifecycles.illusion_browser, {
+			generation = 1,
+			identity = { kind = "preview_slot", value = "browser:old-musket-skin" },
+		})
 		status.identity.value = "mutated"
 		status.cim_identity.value = "mutated"
 		status.surfaces.illusion_browser.ranged.identity.value = "mutated"
+		status.preview_lifecycles.illusion_browser.identity.value = "mutated"
 		local detached = pilot.live_status()
 		H.equal(detached.identity.value, "cwv_es_musket_old_002")
 		H.equal(detached.cim_identity.value, "cwv_es_musket_old_001")
 		H.equal(detached.surfaces.illusion_browser.ranged.identity.value,
-			"cwv_es_musket_old_002")
+			"browser:old-musket-skin")
+		H.equal(detached.preview_lifecycles.illusion_browser.identity.value,
+			"browser:old-musket-skin")
 		H.equal(pilot.disconnect(), true)
 		H.equal(pilot.live_status().exercised, 0)
+	end)
+
+	H.test("CWV #1156 browser evidence rejects missing, stale, foreign, and failed visible edges", function()
+		local pilot, unit, policy = fixture()
+		local cim_item = {
+			backend_id = "cwv_es_musket_old_001", cwv_key = "cwv_es_musket_old",
+		}
+		local held_item = {
+			backend_id = "cwv_es_musket_old_002", cwv_key = "cwv_es_musket_old",
+		}
+		local base = {
+			unit_name = "units/cwv_es_musket_custom/cwv_es_musket_custom_3p",
+			attachment_profile = "display_3p_rifle",
+		}
+		pilot.reconcile(unit, "cim_preview", "preview_open", cim_item,
+			"ranged", {
+				unit_name = base.unit_name,
+				attachment_profile = base.attachment_profile,
+				cim_generation = 1,
+			})
+		pilot.reconcile(unit, "owner_3p", "equip", held_item, "ranged", {
+			unit_name = base.unit_name,
+			attachment_profile = "held_3p_rifle_character",
+		})
+		local function browser(edge, identity, generation)
+			return pilot.reconcile(unit, "illusion_browser", edge, {
+				cwv_key = "cwv_es_musket_old", skin = "cwv_es_musket_old_skin",
+			}, "ranged", {
+				unit_name = base.unit_name,
+				attachment_profile = base.attachment_profile,
+				preview_identity = identity,
+				preview_generation = generation,
+			})
+		end
+
+		browser("instance_load", "browser:first", 1)
+		local row = pilot.live_status().surfaces.illusion_browser.ranged
+		H.equal(row.edge, "instance_load",
+			"construction without the source visibility edge must remain visibly incomplete")
+
+		browser("preview_open", "browser:foreign", 1)
+		row = pilot.live_status().surfaces.illusion_browser.ranged
+		H.equal(row.retained, false)
+		H.equal(row.reason, "preview-identity-mismatch")
+
+		browser("instance_load", "browser:second", 2)
+		browser("preview_open", "browser:first", 1)
+		row = pilot.live_status().surfaces.illusion_browser.ranged
+		H.equal(row.retained, true)
+		H.equal(row.edge, "instance_load")
+		H.equal(row.preview_generation, 2,
+			"a stale delivery must preserve the newer construction evidence")
+
+		browser("preview_open", "browser:second", 2)
+		row = pilot.live_status().surfaces.illusion_browser.ranged
+		H.equal(row.retained, true)
+		H.equal(row.edge, "preview_open")
+		H.equal(row.preview_generation, 2)
+		local current_fingerprint = row.fingerprint
+
+		browser("instance_load", "browser:first", 1)
+		browser("preview_open", "browser:first", 1)
+		row = pilot.live_status().surfaces.illusion_browser.ranged
+		H.equal(row.retained, true)
+		H.equal(row.edge, "preview_open")
+		H.equal(row.preview_generation, 2)
+		H.equal(row.fingerprint, current_fingerprint,
+			"late stale callbacks must not overwrite the latest visible success")
+		H.deep_equal(pilot.live_status().preview_lifecycles.illusion_browser, {
+			generation = 2,
+			identity = { kind = "preview_slot", value = "browser:second" },
+		})
+
+		policy.set_paint_ready(false)
+		browser("instance_load", "browser:third", 3)
+		browser("preview_open", "browser:third", 3)
+		row = pilot.live_status().surfaces.illusion_browser.ranged
+		H.equal(row.retained, false)
+		H.equal(row.paint, false,
+			"a genuinely failed visible material postcondition must remain a failure")
+
+		pilot.reconcile(unit, "cim_preview", "preview_open", {
+			backend_id = "cwv_es_musket_old_003", cwv_key = "cwv_es_musket_old",
+		}, "ranged", {
+			unit_name = base.unit_name,
+			attachment_profile = base.attachment_profile,
+			cim_generation = 2,
+		})
+		H.equal(next(pilot.live_status().preview_lifecycles), nil,
+			"a new exact evidence epoch must not inherit an older browser lifecycle")
 	end)
 
 	H.test("CWV #1155 live evidence rejects stale generations and prior item instances", function()

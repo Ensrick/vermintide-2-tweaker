@@ -703,6 +703,30 @@ local function _reconcile_old_musket_loot(self, units, spawn_data, edge)
 	if not descriptor then return 0, 0 end
 	local cim_context, cim_reason = _cwv_cim_preview_context(self)
 	local surface = _cwv_loot_preview_surface(self)
+	local preview_identity, preview_generation
+	if surface == "illusion_browser" then
+		-- LootItemUnitPreviewer owns one construction -> visible lifecycle per
+		-- spawned preview.  Selecting an illusion reconstructs the previewer with
+		-- a new stable preview item, so neither the equipped backend id nor a
+		-- synthetic rifle/bayonet stance identifies this visible row. Bind both
+		-- edges to the exact previewer+item token and a monotonically increasing
+		-- session generation (#1156).
+		if edge == "instance_load" then
+			local next_generation = math.floor(tonumber(
+				_om._cwv_old_musket_browser_generation) or 0) + 1
+			_om._cwv_old_musket_browser_generation = next_generation
+			self._cwv_old_musket_preview_generation = next_generation
+		end
+		preview_generation = self._cwv_old_musket_preview_generation
+		local data = type(item.data) == "table" and item.data or nil
+		local item_token = _preview_backend_id(item)
+			or item.skin or (data and data.skin)
+			or item.key or (data and data.key)
+		local viewer_token = self._unique_id or tostring(self)
+		local candidate = string.format("%s:%s", tostring(viewer_token),
+			tostring(item_token or "unknown"))
+		if #candidate <= 128 then preview_identity = candidate end
+	end
 	if surface == "cim_preview" then
 		if not cim_context then
 			_dbg_alert("[cwv:1155] CIM preview rejected reason=%s",
@@ -735,6 +759,8 @@ local function _reconcile_old_musket_loot(self, units, spawn_data, edge)
 					unit_name = unit_paths[unit],
 					attachment_profile = _om.old_musket_attachment_profiles.display_3p_rifle,
 					cim_generation = cim_context and cim_context.generation or nil,
+					preview_identity = preview_identity,
+					preview_generation = preview_generation,
 				})
 			if result and result.retained then retained = retained + 1 end
 		end

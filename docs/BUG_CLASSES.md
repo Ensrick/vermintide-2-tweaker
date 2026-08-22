@@ -3325,7 +3325,7 @@ cosmetics `_mh_package_lifecycle.lua`).
 **Lives in:** any `_rt_register` check, `/verify_<feature>` command, or offline
 QA gate whose verdict is used to decide whether a fix landed.
 
-The bug is in the INSTRUMENT, not the code it measures. Five sub-patterns have
+The bug is in the INSTRUMENT, not the code it measures. Six sub-patterns have
 bitten this repo:
 
 **(a) Setter-success or self-derived expectation.** The check asserts that a
@@ -3368,6 +3368,18 @@ absence as a pass. Restored to the exact card text in `0.9.187-dev` (#1156).
 The card's evidence line and the emission are one contract: rewording either
 side alone converts the card into a false-PASS generator.
 
+**(f) Invented acceptance cells.** The checker requires state combinations the
+real renderer cannot produce, or keys a final lifecycle edge to an identity
+that the source-backed UI legitimately reconstructs. #1156 recurred after
+the Old Musket rendered correctly in `0.1.526-dev`: its illusion browser has
+one visible item and no rifle/bayonet stance control, but the check demanded
+two stance cells and retained only the equipped backend identity. Vanilla
+`LootItemUnitPreviewer.spawn_units` constructs one preview, then
+`_enable_item_units_visibility(..., true)` exposes that exact preview after
+mip streaming. The repaired evidence unit is therefore one bounded
+previewer/item identity plus generation and final visible edge; owner and
+inventory surfaces retain their real two-stance requirements.
+
 ### Symptoms
 - An offline suite is green (or a `/verify_*` prints PASS) while the user
   reproduces the defect in a live session, or the inverse: a permanent FAIL on
@@ -3398,6 +3410,10 @@ side alone converts the card into a false-PASS generator.
 5. For a needle that never appears: confirm it is engine `printf` and not
    `mod:debug` / `_dbg`-gated. The user plays with mod logging OFF, so a gated
    needle is invisible and its card can false-PASS on absence (#154).
+6. Derive every required cell from the actual source-owned UI/gameplay
+   lifecycle. If the player cannot select the asserted mode on that surface,
+   the cell is invented; require the exact visible lifecycle the adapter owns
+   and keep mode coverage on the surfaces that genuinely expose it.
 
 ### Fix template
 - Rewrite the check per `PROJECT_STANDARDS.md` §5.1d "Postcondition-first

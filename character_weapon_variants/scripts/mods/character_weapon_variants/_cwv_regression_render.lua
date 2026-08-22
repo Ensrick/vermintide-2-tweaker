@@ -1221,49 +1221,66 @@ _rt_register("issue1155_old_musket_descriptor_reconciler", function()
 		owner_1p = { edge = "equip", modes = { "ranged", "melee" } },
 		owner_3p = { edge = "equip", modes = { "ranged", "melee" } },
 		inventory_preview = { edge = "preview_open", modes = { "ranged", "melee" } },
-		illusion_browser = { edge = "preview_open", modes = { "ranged", "melee" } },
 	}
 	local profiles = _om.old_musket_attachment_profiles
 	local function validate_cell(surface, mode, expected_edge, identity)
 		local modes = live.surfaces[surface]
 		local row = type(modes) == "table" and modes[mode] or nil
-			local expected_profile
-			if surface == "illusion_browser" or surface == "cim_preview" then
-				expected_profile = profiles.display_3p_rifle
-			else
-				local perspective = surface == "owner_1p" and "1p" or "3p"
-				expected_profile = _om._old_musket_attachment_profile(
-					perspective, mode, "character")
-			end
-			if type(row) ~= "table" then
-				return string.format("live Old Musket cell was not exercised: %s/%s",
-					surface, mode)
-			end
-			local expected_descriptor, expected_errors = pilot.resolve({
-				backend_id = identity.value, cwv_key = "cwv_es_musket_old",
-			}, mode, surface, { attachment_profile = expected_profile })
-			if not expected_descriptor then
-				return string.format("live Old Musket expected descriptor failed: %s/%s %s",
-					surface, mode, tostring(expected_errors and expected_errors[1]))
-			end
-			local expected_fingerprint = descriptor_lib.fingerprint(expected_descriptor)
-			if row.retained ~= true or row.fallback == true
-					or row.edge ~= expected_edge or row.attempts ~= 1
-					or row.profile ~= expected_profile
-					or row.epoch ~= live.epoch or row.generation ~= live.generation
-					or type(row.identity) ~= "table"
-					or row.identity.kind ~= identity.kind
-					or row.identity.value ~= identity.value
-					or row.fingerprint ~= expected_fingerprint then
-				return string.format(
-					"live Old Musket cell failed: %s/%s edge=%s retained=%s fallback=%s attempts=%s reason=%s epoch=%s/%s generation=%s/%s identity=%s/%s fingerprint=%s/%s",
-					surface, mode, tostring(row.edge), tostring(row.retained),
-					tostring(row.fallback), tostring(row.attempts), tostring(row.reason),
-					tostring(row.epoch), tostring(live.epoch), tostring(row.generation),
-					tostring(live.generation), tostring(row.identity and row.identity.value),
-					tostring(identity.value), tostring(row.fingerprint),
-					tostring(expected_fingerprint))
-			end
+		local expected_profile
+		if surface == "illusion_browser" or surface == "cim_preview" then
+			expected_profile = profiles.display_3p_rifle
+		else
+			local perspective = surface == "owner_1p" and "1p" or "3p"
+			expected_profile = _om._old_musket_attachment_profile(
+				perspective, mode, "character")
+		end
+		if type(row) ~= "table" then
+			return string.format("live Old Musket cell was not exercised: %s/%s",
+				surface, mode)
+		end
+		local expected_item = { cwv_key = "cwv_es_musket_old" }
+		local expected_context = { attachment_profile = expected_profile }
+		if identity.kind == "backend_id" then
+			expected_item.backend_id = identity.value
+		elseif surface == "illusion_browser" and identity.kind == "preview_slot" then
+			expected_context.preview_identity = identity.value
+		else
+			return string.format("live Old Musket identity kind is invalid: %s/%s %s",
+				surface, mode, tostring(identity.kind))
+		end
+		local expected_descriptor, expected_errors = pilot.resolve(
+			expected_item, mode, surface, expected_context)
+		if not expected_descriptor then
+			return string.format("live Old Musket expected descriptor failed: %s/%s %s",
+				surface, mode, tostring(expected_errors and expected_errors[1]))
+		end
+		local expected_fingerprint = descriptor_lib.fingerprint(expected_descriptor)
+		if row.retained ~= true or row.fallback == true
+				or row.edge ~= expected_edge or row.attempts ~= 1
+				or row.profile ~= expected_profile
+				or row.epoch ~= live.epoch or row.generation ~= live.generation
+				or type(row.identity) ~= "table"
+				or row.identity.kind ~= identity.kind
+				or row.identity.value ~= identity.value
+				or row.fingerprint ~= expected_fingerprint
+				or row.paint ~= true or row.apply ~= true or row.materials ~= true
+				or row.position ~= true or row.scale ~= true or row.rotation ~= true
+				or row.transform_mode ~= "atomic-local-pose"
+				or row.rotation_constructed ~= true
+				or row.position_write ~= true or row.scale_write ~= true
+				or row.rotation_write ~= true or row.transform_error ~= nil then
+			return string.format(
+				"live Old Musket cell failed: %s/%s edge=%s retained=%s fallback=%s attempts=%s reason=%s epoch=%s/%s generation=%s/%s identity=%s/%s fingerprint=%s/%s paint=%s apply=%s materials=%s position=%s scale=%s rotation=%s transform=%s error=%s",
+				surface, mode, tostring(row.edge), tostring(row.retained),
+				tostring(row.fallback), tostring(row.attempts), tostring(row.reason),
+				tostring(row.epoch), tostring(live.epoch), tostring(row.generation),
+				tostring(live.generation), tostring(row.identity and row.identity.value),
+				tostring(identity.value), tostring(row.fingerprint),
+				tostring(expected_fingerprint), tostring(row.paint), tostring(row.apply),
+				tostring(row.materials), tostring(row.position), tostring(row.scale),
+				tostring(row.rotation), tostring(row.transform_mode),
+				tostring(row.transform_error))
+		end
 		return nil
 	end
 	for surface, contract in pairs(required) do
@@ -1273,6 +1290,36 @@ _rt_register("issue1155_old_musket_descriptor_reconciler", function()
 			if failure then return failure end
 		end
 	end
+	-- LootItemUnitPreviewer exposes no rifle/bayonet stance control.  Require
+	-- exactly one latest construction->visible browser lifecycle, keyed by the
+	-- adapter's exact preview identity and generation, rather than two invented
+	-- mode cells (#1156).
+	local browser_modes = live.surfaces.illusion_browser
+	local browser_mode, browser_row, browser_count
+	browser_count = 0
+	for mode, row in pairs(type(browser_modes) == "table" and browser_modes or {}) do
+		browser_count = browser_count + 1
+		browser_mode, browser_row = mode, row
+	end
+	if browser_count ~= 1 or type(browser_row) ~= "table" then
+		return "live Old Musket illusion browser requires one exact visible preview lifecycle"
+	end
+	local browser_lifecycle = type(live.preview_lifecycles) == "table"
+		and live.preview_lifecycles.illusion_browser or nil
+	if type(browser_lifecycle) ~= "table"
+			or type(browser_lifecycle.generation) ~= "number"
+			or browser_lifecycle.generation <= 0
+			or browser_row.preview_generation ~= browser_lifecycle.generation
+			or type(browser_row.identity) ~= "table"
+			or browser_row.identity.kind ~= "preview_slot"
+			or type(browser_lifecycle.identity) ~= "table"
+			or browser_lifecycle.identity.kind ~= browser_row.identity.kind
+			or browser_lifecycle.identity.value ~= browser_row.identity.value then
+		return "live Old Musket illusion browser identity/generation evidence is inconsistent"
+	end
+	local browser_failure = validate_cell("illusion_browser", browser_mode,
+		"preview_open", browser_row.identity)
+	if browser_failure then return browser_failure end
 	-- The Athanor is an item-key/archetype picker and can resolve either of the
 	-- two owned Old Musket instances. It has no stance control. Require one
 	-- fresh, exact provider-qualified preview cell in this epoch, but do not
