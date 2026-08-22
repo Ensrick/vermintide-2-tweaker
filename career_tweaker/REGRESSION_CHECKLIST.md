@@ -6,7 +6,7 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 > **Suite location:** `/crt_regression_test` lives in `scripts/mods/career_tweaker/_crt_regression.lua`. It locks the casting/transposition and #440 probe exclusion boundaries while requiring the read-only #221 census.
 
-Last updated: 2026-07-22.
+Last updated: 2026-08-21.
 
 ---
 ## Foot Knight feature suite (#619)
@@ -94,6 +94,17 @@ Last updated: 2026-07-22.
 | Source boundary | Vanilla's proc receives only attacker, amount, and damage type (`player_unit_health_extension.lua:702-703`), so Ratling identity must be captured from the full `add_damage` call's `damage_source_name`. |
 | Expected | Default exemption preserves Focused Spirit through the named chip classes. Opt-in rework starts at zero, gains one 5% stack per ten seconds up to five, and loses one stack per ordinary hit. |
 | Detection | Run the four `test_crt_damage_classification.lua` cases and `/crt_regression_test` check `issue472_focused_spirit_contract`, then inspect bounded `[crt:472]` receipts for the exact damage source/type, classification, proc action, and retained stack/cooldown before/after state. Perform the solo in-game walk in CHANGELOG 0.3.65-dev only against the exact deployed build. |
+
+---
+## Handmaiden Dance of Blades pair stacks (#473)
+
+| Field | Value |
+|-------|-------|
+| Stack ownership | The outgoing and incoming halves have distinct local sub-buff names because `BuffExtension` enforces `max_stacks` by `sub_buff_template.name`. Both remain children of the unchanged network-visible top-level stack template. |
+| Authority | The `on_hit` proc is `authority="server"`. Client-local hit processing writes zero stacks; the forwarded server path writes one. Host-local and bot hits each write one. Closed peer parity writes zero. |
+| Lifetime | Each top-level application gives both halves the same start/end time. `refresh_durations=false` on both halves; later hits cannot move an older pair's expiry. Hits one through fifteen add a complete pair and hit sixteen adds neither. |
+| Wire stability | The top-level dodge/proc/stack names and alphabetical registration order are unchanged. The local outgoing/incoming names never enter `NetworkLookup`; no RPC, hook, or update loop was added. |
+| Detection | Offline `test_crt_dance_of_blades.lua` models the exact engine bucket/expiry and authority predicates with planted old-defect controls. Runtime `/crt_regression_test` check `issue473_dance_of_blades_contract` validates the installed live templates, including exact distinct names, incoming `stacking_name`, and server authority. |
 
 ---
 ## Multiplayer / Network Sync
