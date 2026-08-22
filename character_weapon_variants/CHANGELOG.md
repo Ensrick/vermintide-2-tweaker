@@ -1,5 +1,26 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.528-dev (2026-08-21) -- executable mission style interruption proof (#774/#944) [untested]
+
+- The #940 mission capture already proved GUI Tweaker's Equipment view reached
+  CWV's shared Combat Style transaction. Commit `197494aa`/#944 repaired the
+  resulting ordinary-active-action rejection, but the in-game suite never
+  executed that repaired boundary under a named #774 check.
+- `/cwv_regression_test` now runs
+  `issue774_mission_combat_style_interruption` against an isolated instance of
+  the actual Combat Style runtime and its production interruption helper. It
+  proves that an ordinary action receives exactly one canonical `interrupted`
+  stop before one persist/rebuild, a career action stops nothing and fails
+  closed, and a throwing stop cannot persist, destroy, add, or wield.
+- Two dependency overrides exist only to give this regression detached
+  inventory and weapon-extension objects. Normal runtime lookup and #786's
+  identity-rider/coalesced remote re-wield networking are unchanged.
+
+**DoD:** 3,044/3,044 Lua tests pass. The host suite extracts and executes the
+shipped named check, then disconnects the real interruption helper as a negative
+control and proves the check turns red; source provenance remains VT2
+`WeaponUnitExtension:stop_action` at `weapon_unit_extension.lua:661-740`.
+
 ## 0.1.527-dev (2026-08-21) -- truthful Old Musket browser lifecycle (#1156)
 
 - Rain's verified `0.1.526-dev` run exposed a false failure in

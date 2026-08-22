@@ -1061,6 +1061,50 @@ return function(H, repo_root)
 		if not ok then error(err) end
 	end)
 
+	H.test("CWV #774 runtime regression executes the actual interruption transaction", function()
+		local path = repo_root
+			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_combat_style.lua"
+		local file = assert(io.open(path, "rb"))
+		local source = file:read("*a")
+		file:close()
+		local name = "issue774_mission_combat_style_interruption"
+		local marker = '_rt_register("' .. name .. '", function()'
+		local from = assert(source:find(marker, 1, true))
+		local line_start = source:sub(1, from):match("()[^\n]*$")
+		local block_end = assert(source:find("\nend)\n", from, true))
+		local block = source:sub(line_start, block_end + 5)
+		local chunk, compile_err = loadstring(
+			"local _rt_register, _om = ...\n" .. block, "@" .. name)
+		H.truthy(chunk, compile_err)
+
+		local function run_check()
+			local captured
+			chunk(function(registered_name, check)
+				H.equal(registered_name, name)
+				captured = check
+			end, { combat_style_policy = policy })
+			H.equal(type(captured), "function")
+			local ok, verdict = pcall(captured)
+			H.truthy(ok, verdict)
+			return verdict
+		end
+
+		H.equal(run_check(), nil)
+		local original = policy.interrupt_equipment_actions
+		local ok, err = pcall(function()
+			-- Negative control: disconnect the actual helper. A textual presence
+			-- assertion would stay green; the executable check must turn red.
+			policy.interrupt_equipment_actions = function()
+				return false, "planted interruption disconnect"
+			end
+			local verdict = run_check()
+			H.equal(type(verdict), "string")
+			H.truthy(verdict:find("ordinary action", 1, true))
+		end)
+		policy.interrupt_equipment_actions = original
+		if not ok then error(err) end
+	end)
+
 	H.test("CWV #645 diagnostics are deduplicated, capped, and never expose candidate styles", function()
 		local old_printf = _G.printf
 		local logs = {}
@@ -1119,6 +1163,7 @@ return function(H, repo_root)
 		local main = require("cwv_source").combined(repo_root)
 		local module = read("character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_combat_styles.lua")
 		H.truthy(main:find('_rt_register("issue620_per_instance_combat_styles"', 1, true))
+		H.truthy(main:find('_rt_register("issue774_mission_combat_style_interruption"', 1, true))
 		H.truthy(main:find("_om.combat_styles:resolve_template(item_data, backend_id)", 1, true))
 		H.truthy(main:find("_om.combat_styles:on_local_wield(self, slot_name, item_data)", 1, true))
 		H.truthy(main:find("remote_transform(owner_unit_3p, slot_name, item_data)", 1, true))

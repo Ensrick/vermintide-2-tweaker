@@ -77,6 +77,10 @@ back before a best-effort repair. Career actions fail closed and are never
 cancelled by the style control. An asynchronously loaded style performs this
 interrupt only after its resource is resident and the exact instance is still
 wielded, so a failed or stale load does not cancel the player's attack.
+The named `issue774_mission_combat_style_interruption` runtime check instantiates
+this same transaction over detached inventory and weapon-extension objects. It
+executes ordinary success, career fail-closed, and throwing-stop/no-commit arms
+without mutating live equipment or registering another network path.
 
 CWV also publishes the narrow dot-call contract
 `get_effective_combat_style_template_name(item, backend_id, owner_unit, slot_name)`.

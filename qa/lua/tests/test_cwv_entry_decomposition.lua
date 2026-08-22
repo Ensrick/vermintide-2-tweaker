@@ -37,9 +37,10 @@ return function(H, repo_root)
     local musket_ammo_hud = read("_cwv_musket_ammo_hud.lua")
     local lifecycle = read("_cwv_commands_lifecycle.lua")
     local identity = read("_cwv_regression_identity.lua")
+	local combat_style = read("_cwv_regression_combat_style.lua")
     -- #1188/#1186 split out of the identity owner when it crossed the section 2.1
-    -- hard limit; it dofiles BETWEEN identity and render, so its checks keep the
-    -- registration slots they already held.
+	-- hard limit. #774 now has its own executable Combat Style owner between
+	-- identity and husk/ammo, and all three preserve entry dofile order.
     local husk_ammo = read("_cwv_regression_husk_ammo.lua")
     local render = read("_cwv_regression_render.lua")
     local javelin_runtime = read("_cwv_javelin_runtime_owner.lua")
@@ -108,6 +109,7 @@ return function(H, repo_root)
             "_cwv_menu_preview_owner",
             "_cwv_commands_lifecycle",
             "_cwv_regression_identity",
+			"_cwv_regression_combat_style",
             "_cwv_regression_render",
         }
         for _, module_name in ipairs(modules) do
@@ -131,6 +133,7 @@ return function(H, repo_root)
         local menu_preview_at = assert(entry:find("_cwv_menu_preview_owner", 1, true))
         local lifecycle_at = assert(entry:find("_cwv_commands_lifecycle", 1, true))
         local identity_at = assert(entry:find("_cwv_regression_identity", 1, true))
+		local combat_style_at = assert(entry:find("_cwv_regression_combat_style", 1, true))
         local husk_ammo_at = assert(entry:find("_cwv_regression_husk_ammo", 1, true))
         local render_at = assert(entry:find("_cwv_regression_render", 1, true))
         H.truthy(cross_at < core_at)
@@ -175,10 +178,11 @@ return function(H, repo_root)
         H.truthy(menu_preview_at < lifecycle_at)
         H.truthy(husk_at < lifecycle_at)
         H.truthy(lifecycle_at < identity_at)
-        -- The husk-ammo owner sits BETWEEN its two siblings: _rt_register appends
-        -- to one ordered runner list, so that position is what preserves the
-        -- registration slots its checks held before the split.
-        H.truthy(identity_at < husk_ammo_at)
+		-- Each regression owner appends to one ordered runner list. The #774
+		-- transaction drive must run after identity checks and before the existing
+		-- husk/ammo split, without moving either owner's code boundary.
+		H.truthy(identity_at < combat_style_at)
+		H.truthy(combat_style_at < husk_ammo_at)
         H.truthy(husk_ammo_at < render_at)
     end)
 
@@ -395,20 +399,18 @@ return function(H, repo_root)
         -- Concatenated in ENTRY DOFILE ORDER, so the index pins below describe the
         -- order the runner actually registers in, not the order files happen to
         -- be read here.
-        for name in (identity .. "\n" .. husk_ammo .. "\n" .. render)
+		for name in (identity .. "\n" .. combat_style .. "\n" .. husk_ammo .. "\n" .. render)
                 :gmatch('_rt_register%("([^"]+)"') do
             names[#names + 1] = name
         end
-		H.equal(#names, 90)
+		H.equal(#names, 91)
         H.equal(names[1], "cwv_variant_flag_present")
-        -- #916 registered its style contract directly after the issue620 combat
-        -- style check it extends, shifting the later identity slots by one.
-        H.equal(names[3], "issue916_half_swording_combat_style_contract")
-        H.equal(names[5], "issue914_peer_ready_identity_lifecycle")
-        H.equal(names[17], "issue1108_primary_slot_musket_ammo_hud_contract")
-        H.equal(names[18], "issue273_cwv_deus_identity_is_exact")
-        H.equal(names[39], "cwv_husk_transform_coverage")
-        H.equal(names[40], "cwv_husk_stale_unit_and_postcondition")
+		H.equal(names[3], "issue916_half_swording_combat_style_contract")
+		H.equal(names[5], "issue914_peer_ready_identity_lifecycle")
+		H.equal(names[17], "issue1108_primary_slot_musket_ammo_hud_contract")
+		H.equal(names[18], "issue273_cwv_deus_identity_is_exact")
+		H.equal(names[39], "cwv_husk_transform_coverage")
+		H.equal(names[40], "cwv_husk_stale_unit_and_postcondition")
         -- issue 399 appended the husk ammo-adapter drive as an identity check;
         -- #914 and #1108 each added one earlier identity check. The 1186/1188
         -- slots moved OUT of the identity owner into _cwv_regression_husk_ammo
@@ -416,16 +418,17 @@ return function(H, repo_root)
         -- dofiles it between its two siblings the relative sequence is the
         -- split's proof as well as the boundary's. #1320 registers third in the
         -- husk/ammo/projectile owner.
-        H.equal(names[41], "issue399_outrider_husk_ammo_adapter")
-        H.equal(names[42], "issue1204_deus_identity_uses_committed_parity")
-        H.equal(names[43], "issue1186_outrider_projectile_reads_cloned_tunes")
-        H.equal(names[44], "issue1188_wt_native_trollhammer_keeps_ammo")
-        H.equal(names[45], "issue1320_outrider_projectile_unit_and_wire")
-		H.equal(names[46], "cwv_unit_bearing_variants_registered")
-		H.equal(names[47], "issue482_crafted_uuid_transform_consumers")
+		H.equal(names[41], "issue399_outrider_husk_ammo_adapter")
+		H.equal(names[42], "issue1204_deus_identity_uses_committed_parity")
+		H.equal(names[43], "issue774_mission_combat_style_interruption")
+		H.equal(names[44], "issue1186_outrider_projectile_reads_cloned_tunes")
+		H.equal(names[45], "issue1188_wt_native_trollhammer_keeps_ammo")
+		H.equal(names[46], "issue1320_outrider_projectile_unit_and_wire")
+		H.equal(names[47], "cwv_unit_bearing_variants_registered")
+		H.equal(names[48], "issue482_crafted_uuid_transform_consumers")
         -- #1155 is a renderer/material/lifecycle check. Keep it in the render
         -- regression owner so identity remains below the hard file-size ceiling.
-        H.equal(names[72], "issue1155_old_musket_descriptor_reconciler")
+		H.equal(names[73], "issue1155_old_musket_descriptor_reconciler")
         H.equal(names[#names - 2], "issue567_skin_reverse_index_valid")
         H.equal(names[#names - 1], "issue704_canonical_skin_owner_and_sword_mace_sources")
         H.equal(names[#names], "issue915_maul_illusion_vanilla_provenance")
