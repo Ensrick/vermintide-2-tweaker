@@ -1576,6 +1576,12 @@ function M.install(mod, deps)
 	end
 
 	local function local_equipment()
+		-- The override is used only by the named #774/#944 runtime regression.
+		-- It lets that check drive the exact production transaction with detached
+		-- inventory/weapon objects instead of interrupting the player's live item.
+		if type(deps.local_equipment) == "function" then
+			return deps.local_equipment()
+		end
 		local pm = rawget(_G, "Managers") and Managers.player
 		local player = pm and pm.local_player and pm:local_player(1)
 		local unit = player and player.player_unit
@@ -1585,6 +1591,9 @@ function M.install(mod, deps)
 	end
 
 	local function weapon_extension(unit)
+		if type(deps.weapon_extension) == "function" then
+			return deps.weapon_extension(unit)
+		end
 		if not unit or not Unit.alive(unit)
 				or not ScriptUnit.has_extension(unit, "weapon_system") then return nil end
 		local ok, extension = pcall(ScriptUnit.extension, unit, "weapon_system")
