@@ -126,8 +126,17 @@ NETWORKED buff path must additionally route through a `crt_wire_safe_*` wrapper 
 next note). #473 Dance of Blades replaces the talent's buff-name list with one
 blocking-dodge driver and one enemy-hit driver; the latter grants a paired
 `damage_dealt`/`damage_taken` stack through the existing wire-safe add wrapper.
-Its two-second stacks set `refresh_durations=false`, so every hit retains its own
-expiry rather than refreshing the full stack group. #367 is another reversible
+`BuffExtension` keys stack limits by each sub-buff `name` [src:
+`buff_extension.lua:184-197,274-275,330-345,520-567`], so the pair uses two
+distinct local names while preserving the one network-visible top-level stack
+name. The talent is buffered on both peers [src:
+`talent_settings_kerillian.lua:1968-1985`]; its hit driver therefore uses
+`authority="server"`, matching the proc filter at
+`buff_extension.lua:1297-1332` and leaving one writer after the native client
+hit is forwarded through `rpc_buff_on_attack` [src:
+`damage_utils.lua:2079,2092-2103`; `buff_system.lua:541-555`]. Its two-second
+stacks set `refresh_durations=false`, so every hit retains its own expiry rather
+than refreshing the full stack group. #367 is another reversible
 table mutation: the Ranger ale's stock action authors `total_time=1.9` [src:
 `scripts/settings/equipment/weapon_templates/bardin_survival_ale.lua:5-23`], and
 crt sets only `anim_time_scale=1.9/0.75`. `WeaponUnitExtension` divides both action

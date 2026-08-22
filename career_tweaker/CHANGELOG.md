@@ -1,5 +1,29 @@
 # Career Tweaker Changelog
 
+## 0.4.23-beta (2026-08-21) - Dance of Blades pair stacks and server authority (#473)
+
+- Repaired the Dance of Blades stack shape to use two distinct local
+  `BuffExtension` bucket identities. One hostile hit can now add one outgoing
+  damage stack and one incoming-damage stack through hit fifteen; hit sixteen
+  adds neither. The cap is the requested `+30% damage dealt / +30% damage
+  taken`, rather than the prior shared-name ceiling of `+16% / +14%`.
+- Made the `on_hit` proc server-authoritative. A client-owned Handmaiden no
+  longer writes once on the owning client and again when the host receives
+  `rpc_buff_on_attack`; host, forwarded-client, and bot hits each have one
+  authoritative writer, and the existing peer-parity wrapper remains the final
+  custom-buff send gate.
+- Preserved the exact three network-visible top-level buff names and their
+  registration order. The two new semantic sub-buff names stay local and add no
+  `NetworkLookup` row, RPC, hook, or update loop. The native blocking-dodge
+  branch and its dodge-distance/speed buffs are unchanged.
+- Strengthened `issue473_dance_of_blades_contract` against the installed live
+  templates. Lua 5.1 coverage now models the engine's name-keyed cap, staggered
+  pair expiry, host/client/bot authority topologies, parity closure, and planted
+  versions of both deployed defects.
+
+Runtime success is not claimed by this code/build record. Verification follows
+the exact published release card after canonical publication.
+
 ## 0.4.22-beta (2026-08-09) -- peer-parity install becomes a committed transaction (#371, #1158) [untested]
 
 - The shared peer-parity library installs as an atomic transaction: receiver
@@ -57,7 +81,7 @@
 - Updates the live talent description and adds offline/runtime regression
   coverage for the authored patch and the active five-second buff shape.
 
-## 0.4.17-beta (2026-08-02) - #472/#473/#699 live-test readiness
+## 0.4.17-beta (2026-08-02) - #472/#699 readiness and #473 hit-trigger change
 
 ### Focused Spirit retained-state diagnostics and talent text (#472)
 
@@ -95,8 +119,10 @@
   matching the verified player-requested behavior while retaining independent
   two-second stack lifetimes, the 15-stack cap, and the blocking-dodge branch.
 - Updated the setting and live talent descriptions so they no longer claim that
-  a killing blow is required. The existing peer-parity wire-safe grant remains
-  the sole stack writer.
+  a killing blow is required. Later exact-source review found that this version
+  was not a valid #473 verification candidate: its two effects shared one
+  name-keyed cap and its no-authority proc ran on both client and server. Both
+  defects are repaired in 0.4.23-beta.
 
 ## 0.4.16-beta (2026-07-26) - #936 split Tourney balance controls [verify-fix]
 
@@ -297,7 +323,7 @@ be active and the corresponding boolean settings must persist correctly.
 - Registered the hook-owned toggle in the native rework catalog so #445's Ensrick family control includes it. Declared the anticipated `zealot_thp_conversions` mutex cluster: Flagellation and the Holy Fervour green-to-THP rework are alternative conversion models and cannot be enabled together.
 - Reused Career Tweaker's consolidated Localize hook for the Flagellation title/description. Added no buff, RPC, or `NetworkLookup` entry. Added pure policy/structure tests, runtime check `issue447_flagellation_contract`, `FLAGELLATION_REWORK.md`, and engine-surface documentation.
 
-## 0.3.71-dev - 2026-07-14 - #473 Dance of Blades rework [verify-fix-coop; not deployed]
+## 0.3.71-dev - 2026-07-14 - #473 Dance of Blades rework (historical pre-release implementation; superseded)
 
 - Added an opt-in Handmaiden rework for the vanilla `kerillian_maidenguard_versatile_dodge` talent: each kill grants 2% damage dealt and 2% increased damage taken for two seconds, up to 15 stacks (30%/30%).
 - Every stack uses its own non-refreshing two-second lifetime. Rapid kills build the requested window; a later kill cannot extend an older stack.
@@ -305,6 +331,10 @@ be active and the corresponding boolean settings must persist correctly.
 - Used `damage_dealt` instead of generic power so the benefit does not inflate stagger. The vulnerability uses one `damage_taken` stacking bucket, producing a linear 30% at cap rather than compounding 1.02 fifteen times.
 - Registered three custom buff names unconditionally in canonical alphabetical order. The kill add routes through the existing live peer-parity wrapper, the entire rework degrades to vanilla when any peer lacks Career Tweaker, and no new RPC was introduced.
 - Added reversible talent/template lifecycle, live talent text, pure policy tests, runtime check `issue473_dance_of_blades_contract`, and `DANCE_OF_BLADES_REWORK.md` with co-op verification.
+
+**Historical correction:** the declared 30%/30% cap and verification readiness
+were false. Both sub-buffs used the same engine stack-bucket name, and the proc
+had two writers for a client-owned Handmaiden. See 0.4.23-beta.
 
 ## 0.3.70-dev - 2026-07-14 - #433 remove dead Big Rebalance implementation [not deployed]
 

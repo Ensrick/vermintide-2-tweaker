@@ -164,7 +164,11 @@ as of 2026-07-18; re-verify after a game patch. Anything not verified is tagged
    into `BuffTemplates`, `chaos_wastes_tweaker_dev.lua:10301-10306`).
 2. Per sub-buff: `apply_condition` (:187-191), `variable_value` / `external_optional_*`
    param overrides (:206-251 - the engine's sanctioned per-application override channel),
-   `duration_modifier_func` (:253-255), stacking gate `_add_stacking_buff` (:274),
+   `duration_modifier_func` (:253-255), stacking gate `_add_stacking_buff` (:274).
+   The gate reads and stores `_stacking_buffs[sub_buff_template.name]`
+   (:330-345,520-522), so sibling sub-buffs sharing a `name` also share one
+   `max_stacks` budget; distinct effects that each need the full cap require
+   distinct sub-buff names.
    buff-area unit spawn (:364-383), `apply_buff_func` via
    `BuffFunctionTemplates.functions` (:389-401), stat-buff registration (:412-416),
    event-buff registration for procs (:418-433), VFX/SFX (:441-477). Returns
@@ -174,8 +178,11 @@ as of 2026-07-18; re-verify after a game patch. Anything not verified is tagged
    (additive multipliers), `stacking_multiplier_multiplicative` (`damage_taken` :50),
    `stacking_bonus`, `proc`, `min` (`max_damage_taken` :103).
 4. Procs: `trigger_procs(event, ...)` (:1303) filters by `buff.template.authority`
-   (`has_authority` :1297-1301: default = fires on server for AI-owned, on owner for
-   players), PRD proc chance (:1284-1291), `proc_cooldown` (:1331-1332), sorts by
+   (`has_authority` :1297-1301). An absent authority admits every process that
+   reaches the event; `"server"` admits only an extension with `is_server`, and
+   `"client"` admits only one with `is_local`. Event topology must therefore be
+   included when choosing authority. Then it applies PRD proc chance (:1284-1291),
+   `proc_cooldown` (:1331-1332), sorts by
    `proc_weight` (:1344), resolves the function from the FLAT global `ProcFunctions`
    (:1351) - NOT `BuffFunctionTemplates.functions` - and removes `remove_on_proc` buffs
    (:1354-1364). ct burned on the two-registry split (v0.7.64 note,

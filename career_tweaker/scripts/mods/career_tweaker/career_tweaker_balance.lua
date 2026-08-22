@@ -303,8 +303,9 @@ local function _crt_ensure_wire_safe_funcs()
     end
     if fns and fns.crt_maidenguard_dance_blocking_dodge == nil then
         -- Dance of Blades (#473): retain only vanilla's blocking-dodge branch.
-        -- The replacement kill proc is a separate wire-gated talent buff, so a
-        -- non-blocking dodge deliberately grants no power and sends no RPC.
+        -- The replacement hostile-hit proc is a separate server-authoritative,
+        -- wire-gated talent buff, so a non-blocking dodge deliberately grants no
+        -- power and sends no RPC.
         fns.crt_maidenguard_dance_blocking_dodge = function(owner_unit, buff)
             if not (owner_unit and Unit.alive(owner_unit)) then return end
             local status = ScriptUnit.has_extension(owner_unit, "status_system")

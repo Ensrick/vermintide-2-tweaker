@@ -244,10 +244,11 @@ local BALANCE_MODS = {
     },
     -- Dance of Blades (#473): vanilla `kerillian_maidenguard_versatile_dodge`
     -- grants its power reward on a non-blocking dodge. Replace that branch with
-    -- one +2% damage / +2% damage-taken pair per kill, up to 15 independently
+    -- one +2% damage / +2% damage-taken pair per hostile hit, up to 15 independently
     -- expiring two-second stacks, while preserving the native blocking-dodge
-    -- distance/speed buffs. The stack add uses rpc_add_buff, so peer parity is
-    -- mandatory and the live proc wrapper remains the final send gate.
+    -- distance/speed buffs. The server-authoritative stack add uses rpc_add_buff,
+    -- so peer parity is mandatory and the live proc wrapper remains the final
+    -- send gate.
     rework_we_maidenguard_dance_of_blades = {
         character = "kerillian",
         career = "we_maidenguard",
@@ -277,7 +278,7 @@ local BALANCE_MODS = {
                 end
                 talent.buffs = { policy.dodge_buff, policy.proc_buff }
             end
-            pcall(printf, "[crt:473] Dance of Blades applied: damage=2%% vulnerability=2%% stacks=15 duration=2s independent=true")
+            pcall(printf, "[crt:473] Dance of Blades applied: damage=2%% vulnerability=2%% stacks=15 duration=2s independent=true writer=server buckets=damage/damage_taken")
         end,
         custom_restore = function(saved)
             local policy = mod._crt.dance_of_blades

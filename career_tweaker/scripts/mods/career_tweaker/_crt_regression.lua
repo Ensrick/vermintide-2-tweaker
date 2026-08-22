@@ -926,7 +926,7 @@ _rt_register("issue473_dance_of_blades_contract", function()
         return "Dance of Blades policy missing"
     end
     if not policy.validate(policy.templates()) then
-        return "Dance of Blades pure stack contract drifted"
+        return "Dance of Blades pure authority/stack contract drifted"
     end
     local defs = balance and balance.BALANCE_MODS
     local rework = defs and defs.rework_we_maidenguard_dance_of_blades
@@ -947,7 +947,7 @@ _rt_register("issue473_dance_of_blades_contract", function()
             [policy.proc_buff] = BuffTemplates[policy.proc_buff],
             [policy.stack_buff] = stack,
         }) then
-            return "enabled Dance of Blades templates do not match policy"
+            return "enabled Dance of Blades live authority/stack templates do not match policy"
         end
     end
 end)

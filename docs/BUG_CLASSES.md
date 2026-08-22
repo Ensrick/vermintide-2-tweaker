@@ -3649,3 +3649,57 @@ family.
   `character_weapon_variants/tools/OLD_MUSKET_ASSET_PIPELINE.md`.
 - Adjacent classes: 57 (animation overwrites a transform), 58 (partial setter
   success), and 85 (a regression instrument reports the wrong state).
+
+## 89. Paired buff effects share one stack name and an unset proc authority
+
+**First confirmed:** 2026-08-21 (Career Tweaker Dance of Blades issue #473).
+**Lives in:** multi-subbuff templates whose effects each need a full cap, and
+talent proc drivers buffered on both client and server.
+
+### Symptoms
+- Two effects each declare `max_stacks = N`, but their combined live count caps
+  at N instead of each effect reaching N.
+- One half of a pair can occupy the final shared slot, producing an asymmetric
+  N/2 split such as eight outgoing and seven incoming entries.
+- A client-owned player gains stacks about twice as fast as a host-owned player.
+- Static tests multiply each template's declared multiplier by `max_stacks` and
+  pass even though the engine can never instantiate those counts.
+
+### Diagnosis pattern
+1. Inspect every child under the top-level `BuffTemplates` row. The engine calls
+   `_add_stacking_buff` for each child, but reads and stores the cap through
+   `_stacking_buffs[sub_buff_template.name]` (`buff_extension.lua:184-197,
+   274-275,330-345,520-567`). A shared child `name` means a shared cap.
+2. Inspect the talent's `buffer` and the proc child's `authority`. An absent
+   authority passes `has_authority` on every process that reaches the event
+   (`buff_extension.lua:1297-1332`). A `buffer="both"` attack can run locally,
+   then run again when `rpc_buff_on_attack` reaches the server
+   (`damage_utils.lua:2079,2092-2103`; `buff_system.lua:541-555`).
+3. Trace the proc delegate. `ProcFunctions.add_buff` on a client requests
+   `rpc_add_buff`; on the server it adds and broadcasts (`buff_templates.lua:
+   1956-1973`). Two proc writers therefore become two top-level applications.
+4. Reject tests that only inspect declared fields. Reproduce the name-keyed
+   bucket, cap-before-add behavior, refresh ordering, and event topology.
+
+### Fix template
+- Preserve the network-visible top-level buff name and lookup order. Give each
+  independently capped child one distinct semantic local `name`; only register
+  those local names if the names themselves cross a real wire boundary.
+- Keep a multiplicative stat's `stacking_name` explicit and equal to its own
+  semantic bucket when the requested result is linear within that effect.
+- Choose authority from the actual event topology. For a buffered player attack
+  that is forwarded to the host, use `authority="server"` so client-local
+  processing writes zero and host/forwarded-client/bot processing writes one.
+- Validate the installed live templates, not only a newly generated policy
+  table. Require exact child names, distinctness, stacking name, authority,
+  duration, refresh mode, multiplier, and cap.
+- Test sixteen applications for a fifteen-pair feature: one complete pair for
+  hits 1-15, none for hit 16, equal counts at every staggered expiry. Plant the
+  old shared-name and no-authority shapes and require the tests to reproduce the
+  historical 8/7 cap and two client writers.
+
+### Related issues / evidence
+- #473 is the canonical defect and repair. Closed #366 provides the vanilla ale
+  analogue with distinct `ale_defence` and `ale_attack_speed` child names.
+- #371/#425 own peer catalog/parity safety. Do not weaken that transport floor
+  to repair local stack semantics or proc authority.
