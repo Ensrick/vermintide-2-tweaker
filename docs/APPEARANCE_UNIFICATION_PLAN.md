@@ -64,7 +64,7 @@ explicit rather than inferred:
 | W1 | **Descriptor library + contract tests**: `_lib_appearance_descriptor.lua` (pure build/validate/fingerprint) + engine-free tests in `qa/lua/tests/`; CWV owns the first synchronized runtime copy. | 966+ suite green | DONE 2026-08-06 (#1155 pilot prerequisite) |
 | W2 | **Reconciler skeleton + pilot family**: lifecycle-edge reconciler in the shared lib; migrate ONE worst-record family (CWV Old Musket, #474 controls); enumerate unsupported cells with fail-closed fallbacks instead of inventing coverage. | exact applicable owner/preview/transition postconditions pass in game; unsupported cells stay explicit | DONE 2026-08-21 (#1155 verified on CWV 0.1.526-dev; #1156 false-negative oracle repaired and closed 2026-08-22) |
 | W3 | **Extraction-420 cutover completion**: shared transform ownership is source-complete across CWV, Cosmetics, both WT streams, and WOC; the remaining Cosmetics material/texture fallback belongs to the broader #660 migration. | per-step four-render-path regression + in-game verify | Cosmetics source candidate pending release/no-drift verification; material fallback pending under #660 |
-| W4 | **Remaining families**, one per change, closing their symptom issues as they migrate; #660's issue index burns down. | each family's implemented cells retain the descriptor postconditions in game; unsupported cells remain explicit and safe | ACTIVE 2026-08-22 (#1155 cleared the pilot blocker; #660 owns family selection and migration) |
+| W4 | **Remaining families**, one per change, closing their symptom issues as they migrate; #660's issue index burns down. | each family's implemented cells retain the descriptor postconditions in game; unsupported cells remain explicit and safe | ACTIVE 2026-08-22 (Greatsword/Imperial Longsword Combat Style source candidate is the first family; release and live evidence pending) |
 | W5 | **OOP completion**: ct_dev + cwv decomposition (last two god files), #727 logging sweep, doc reconciliation. | full QA green, per-mod module contracts documented | DONE 2026-08-12 (#1159: all 10 decomposition contracts complete; final CT Dev entry 1,498 nonblank lines, CWV entry 1,490) |
 
 ### W2 verified outcome and W4 boundary (updated 2026-08-22)
@@ -131,6 +131,17 @@ change, and verify the affected leaf issues at their actual topology. Remote
 husk, bot, role-reversal, hot-join, dual/offhand, lobby, score/team, Hold-Tab,
 and other provider-specific gaps remain work until their exact census cells and
 leaf acceptance criteria have direct evidence.
+
+The first W4 source candidate is the Greatsword/Imperial Longsword Combat Style
+family. Its exact loadout snapshot builds one immutable descriptor containing
+skin, complete hand paths and fallbacks, effective template, remap, transform,
+style, and generation. The same descriptor now crosses the existing exact
+identity lifecycle, reconstructs locally on the observer, owns the husk
+postcondition, and drives local/remote transform selection. Arrival order,
+same-style/new-fingerprint transitions, tampering, unavailable local state, and
+targeted peer teardown have executable host coverage. This is not yet live
+evidence and does not promote any census cell until a released build passes the
+localized solo card and then the remaining co-op topology.
 
 ## 3a. Single-vocabulary rule (#1158, 2026-08-08)
 

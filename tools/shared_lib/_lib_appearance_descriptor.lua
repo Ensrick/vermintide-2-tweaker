@@ -214,6 +214,9 @@ local function validate_hand(h, path, errors)
 	if h.package ~= nil and type(h.package) ~= "string" then
 		errors[#errors + 1] = path .. ".package must be a string when present"
 	end
+	if h.unit_3p ~= nil and (type(h.unit_3p) ~= "string" or #h.unit_3p == 0) then
+		errors[#errors + 1] = path .. ".unit_3p must be a non-empty string when present"
+	end
 end
 
 -- Every OPTIONAL visual field demands a vanilla-safe fallback twin so a
@@ -227,6 +230,9 @@ local FALLBACK_REQUIRED = {
 function M.validate(spec)
 	local errors = {}
 	if type(spec) ~= "table" then return false, { "spec must be a table" } end
+	if spec.fingerprint ~= nil then
+		errors[#errors + 1] = "fingerprint is computed by build and must not be supplied"
+	end
 	if type(spec.item_key) ~= "string" or #spec.item_key == 0 then
 		errors[#errors + 1] = "item_key required"
 	end
@@ -342,13 +348,14 @@ local function deep_copy(value, seen)
 	return copy
 end
 
-local function readonly_view(data)
+local function readonly_view(data, fingerprint)
 	local proxy = {}
 	setmetatable(proxy, {
 		-- Lua 5.1 cannot make nested table proxies transparent to pairs/ipairs/#.
 		-- Return a detached plain-table snapshot for nested data instead: readers
 		-- retain normal 5.1 semantics, while mutations cannot reach canonical state.
 		__index = function(_, key)
+			if key == "fingerprint" then return fingerprint end
 			local value = data[key]
 			return type(value) == "table" and deep_copy(value) or value
 		end,
@@ -372,7 +379,8 @@ function M.build(spec)
 	if not ok then return nil, errors end
 	local data = deep_copy(spec)
 	data.generation = spec.generation or 0
-	local proxy = readonly_view(data)
+	local fingerprint = M.fingerprint(data)
+	local proxy = readonly_view(data, fingerprint)
 	BUILT_DATA[proxy] = data
 	return proxy
 end

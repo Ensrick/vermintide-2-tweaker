@@ -1,5 +1,34 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.529-dev (2026-08-22) -- first #660 W4 family descriptor adoption [untested]
+
+- Greatsword, Bretonnian Longsword, Saltzpyre Greatsword, and migrated
+  Imperial/Black Guard Combat Style instances now build one immutable semantic
+  appearance descriptor. It owns the exact skin, 1P/3P hand paths and vanilla
+  fallbacks, effective style template, animation remap, presentation transform,
+  style rider, generation, and computed fingerprint.
+- The existing bounded exact-identity transport carries the closed style rider.
+  Observers reconstruct the descriptor from their local registered data and
+  reject missing, foreign, tampered, or fingerprint-mismatched state. Both
+  style-first and identity-first arrival orders converge on one descriptor and
+  one guarded husk re-wield; a late style duplicate cannot erase stronger state.
+- Local template/transform selection, remote template/transform selection, and
+  the husk re-wield postcondition consume that descriptor. The postcondition
+  reads the existing spawned-unit evidence and requires the exact 3P model path,
+  so a live vanilla hand can no longer produce a false success.
+- A live style transition prepares the new descriptor before destroying the
+  slot and rolls back cleanly if planning fails. The consolidated client peer
+  removal hook now clears only that peer's style descriptor, retry, fallback,
+  and active husk context alongside exact identity. Other Combat Style families
+  retain the bounded legacy catalogue until migrated separately.
+
+**DoD:** 3,058 Lua tests exercise sender-to-receiver reconstruction, style and
+transform fingerprint changes, both delivery orders, dedupe, tamper, wrong-model
+readback, targeted peer teardown, mixed-provider fallback, and legacy hand
+compatibility. Quick repository QA, Lua parse, shared-library parity,
+decomposition/census gates, and strict CWV lint pass. Live solo and co-op
+evidence remain required before #660 gains a verification label.
+
 ## 0.1.528-dev (2026-08-21) -- executable mission style interruption proof (#774/#944) [untested]
 
 - The #940 mission capture already proved GUI Tweaker's Equipment view reached

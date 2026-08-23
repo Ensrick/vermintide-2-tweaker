@@ -10,7 +10,7 @@
 local M = {}
 
 function M.install(mod, lifecycle, player_manager_class, peer_resolver, print_fn,
-		current_peer_id)
+		current_peer_id, clear_peer_dependents)
 	if type(player_manager_class) ~= "table"
 			or type(peer_resolver) ~= "table"
 			or type(peer_resolver.peer_player) ~= "function"
@@ -42,6 +42,13 @@ function M.install(mod, lifecycle, player_manager_class, peer_resolver, print_fn
 		local r1, r2, r3, r4 = func(self, peer_id, local_player_id)
 		if player then
 			lifecycle:clear_peer(peer_id)
+			-- The appearance lifecycle owns transport identity, while optional
+			-- presentation controllers can retain their own bounded state for the
+			-- same peer. Reuse this ONE client-visible removal hook so those ledgers
+			-- cannot outlive the identity that authenticated them (#660/#914).
+			if type(clear_peer_dependents) == "function" then
+				pcall(clear_peer_dependents, peer_id)
+			end
 			pcall(print_fn,
 				"[cwv:914] lifecycle=peer_remove adapter=client_player_manager peer=%s human=true cleared=true",
 				tostring(peer_id))

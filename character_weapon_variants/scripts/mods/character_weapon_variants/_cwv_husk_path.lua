@@ -38,6 +38,13 @@ return function(mod, ctx)
 -- (declared near the top of the file), whose fields are populated at load
 -- time before any in-mission spawn. See the husk block in that hook.
 do
+	local function _descriptor_hand_unit(descriptor, hand)
+		local owner = _om.combat_style_appearance
+		if owner and type(owner.hand_unit) == "function" then
+			return owner.hand_unit(descriptor, hand)
+		end
+		return descriptor and descriptor[hand .. "_hand_unit"] or nil
+	end
 	-- Exact post-spawn renderer identity. A descriptor says what SHOULD spawn;
 	-- this weak ledger records what GearUtils actually returned after hand
 	-- preselection/re-key/fallback. Stable husk/peer-ready adapters must consume
@@ -281,8 +288,9 @@ do
 	-- borrowed-material mesh may queue its donor lease; Old Musket is now
 	-- self-contained. Ordinary vanilla overrides use the bounded override lease.
 	local function _husk_preselection_ready(candidate, source)
-		for _, field in ipairs({ "right_hand_unit", "left_hand_unit" }) do
-			local unit_name = candidate and candidate[field]
+		for _, hand in ipairs({ "right", "left" }) do
+			local field = hand .. "_hand_unit"
+			local unit_name = _descriptor_hand_unit(candidate, hand)
 			if type(unit_name) == "string" and unit_name ~= ""
 					and (not _om._husk_unit_spawnable
 						or not _om._husk_unit_spawnable(unit_name)) then
@@ -334,18 +342,20 @@ do
 			if not _husk_preselection_ready(exact, exact.fingerprint or exact.variant_key) then
 				return false
 			end
-			if type(exact.right_hand_unit) == "string" then
-				result.right_hand_unit = exact.right_hand_unit
+			local exact_right = _descriptor_hand_unit(exact, "right")
+			local exact_left = _descriptor_hand_unit(exact, "left")
+			if exact_right then
+				result.right_hand_unit = exact_right
 			end
-			if type(exact.left_hand_unit) == "string" then
-				result.left_hand_unit = exact.left_hand_unit
+			if exact_left then
+				result.left_hand_unit = exact_left
 			else
 				result.left_hand_unit = nil
 			end
 			_husk_log_once("660_preselect:" .. tostring(exact.fingerprint),
 				"[cwv:660] lifecycle=husk_wield adapter=hand_selection descriptor=%s right=%s left=%s",
-				tostring(exact.fingerprint), tostring(exact.right_hand_unit),
-				tostring(exact.left_hand_unit))
+				tostring(exact.fingerprint), tostring(exact_right),
+				tostring(exact_left))
 			return true, _find_def(exact.variant_key), exact
 		elseif exact_state and exact_state ~= "none" then
 			-- Explicit native, unavailable-provider, or stale-slot evidence is
@@ -567,7 +577,7 @@ do
 		local field = (hand == "right") and "right_hand_unit" or "left_hand_unit"
 		local override
 		if reason == "identity" and exact then
-			override = exact[field]
+			override = _descriptor_hand_unit(exact, hand)
 		elseif reason == "skin" and WeaponSkins and WeaponSkins.skins then
 			local skin_tmpl = rawget(WeaponSkins.skins, skin)
 			local skin_unit = skin_tmpl and skin_tmpl[field]
@@ -1305,7 +1315,7 @@ do
 				exact, state = _om._husk_identity_descriptor(owner_unit_3p, slot_name, base_name)
 			end
 			local field = (hand == "right") and "right_hand_unit" or "left_hand_unit"
-			local expected = exact and exact[field]
+			local expected = _descriptor_hand_unit(exact, hand)
 			local actual = item_units and item_units[field]
 			local match = (expected == nil) and "n/a" or tostring(expected == actual)
 			local skin = (exact and exact.skin) or (item_units and item_units.skin)

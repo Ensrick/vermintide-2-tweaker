@@ -962,6 +962,38 @@ return function(H, repo_root)
                 H.equal(network_sends, 0)
         end)
 
+	H.test("CWV #660 peer teardown clears descriptor, retry and fallback state together", function()
+		local rebuilds = 0
+		local owners = { owner_a = "peer-a", owner_b = "peer-b" }
+		local runtime = policy.install({
+			get = function() end,
+			set = function() end,
+		}, {
+			peer_for_owner = function(owner) return owners[owner] end,
+			rebuild_remote = function()
+				rebuilds = rebuilds + 1
+				return false, "player unavailable"
+			end,
+		})
+		runtime:accept_style_edge("peer-a", "slot_melee", "greatsword",
+			"bretonnian", "identity")
+		runtime:accept_style_edge("peer-b", "slot_melee", "greatsword",
+			"kerillian", "style_channel")
+		H.equal(runtime:pending_remote_refresh_count(), 1)
+		H.equal(runtime:begin_husk_wield({ _unit = "owner_a" }, "slot_melee"), true)
+		H.truthy(runtime:clear_peer("peer-a") >= 2)
+		H.equal(runtime:pending_remote_refresh_count(), 0)
+		H.equal(runtime.husk_context, nil)
+		H.equal(runtime:begin_husk_wield({ _unit = "owner_a" }, "slot_melee"), false)
+		-- The other peer remains until its own targeted teardown.
+		H.equal(runtime:begin_husk_wield({ _unit = "owner_b" }, "slot_melee"), true)
+		H.truthy(runtime:clear_peer("peer-b") >= 2)
+		runtime:step(policy.STYLE_IDENTITY_GRACE)
+		H.equal(rebuilds, 1,
+			"disconnect teardown must not revive a removed fallback or retry")
+		H.equal(runtime:clear_peer(nil), 0)
+	end)
+
         H.test("CWV owner style transition performs one bounded slot rebuild", function()
 		local old_managers, old_unit, old_script_unit = _G.Managers, _G.Unit, _G.ScriptUnit
 		local ok, err = pcall(function()
@@ -1004,6 +1036,7 @@ return function(H, repo_root)
 
 			local runtime = policy.install({ get = function() end, set = function() end }, {
 				acquire_style_resource = function(_, complete) complete(true); return true end,
+				prepare_style_descriptor = function() return true end,
 			})
 			local accepted = runtime:cycle_item(item, nil, "test-owner-rebuild", true)
 			H.equal(accepted, true)

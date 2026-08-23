@@ -10,11 +10,14 @@ function M.bind(deps)
 	assert(type(deps.resolve_def) == "function", "resolve_def dependency is required")
 	assert(type(deps.plan_transform) == "function", "plan_transform dependency is required")
 	assert(type(deps.model_by_unit) == "table", "model_by_unit dependency is required")
+	local hand_unit = type(deps.hand_unit) == "function" and deps.hand_unit
+		or function(descriptor, hand)
+			return descriptor and descriptor[hand .. "_hand_unit"]
+		end
 
 	local function select(hand, exact, item_data, skin, resolved_unit_name, style_decision)
 		if style_decision then return style_decision, "style" end
-		local field = hand == "left" and "left_hand_unit" or "right_hand_unit"
-		local exact_unit = exact and exact[field]
+		local exact_unit = exact and hand_unit(exact, hand)
 		if exact_unit then
 			if resolved_unit_name ~= exact_unit then return nil, "exact_unit_mismatch" end
 			local model_def = deps.model_by_unit[exact_unit]

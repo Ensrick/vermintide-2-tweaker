@@ -61,6 +61,7 @@ function M.new(opts)
                 base_item_key = base_item_key,
                 skin_key = nonempty(descriptor.skin) or "",
                 offhand_skin_key = nonempty(descriptor.offhand_skin) or "",
+                style = nonempty(descriptor.style_rider) or "",
                 fingerprint = descriptor.fingerprint,
             }
         end
@@ -73,6 +74,7 @@ function M.new(opts)
             base_item_key = base_item_key or "",
             skin_key = "",
             offhand_skin_key = "",
+            style = "",
             fingerprint = "",
         }
     end
@@ -101,7 +103,8 @@ function M.new(opts)
             if payload then
                 local signature = table.concat({
                     payload.provider, payload.item_key, payload.base_item_key,
-                    payload.skin_key, payload.offhand_skin_key, payload.fingerprint,
+                    payload.skin_key, payload.offhand_skin_key, payload.style,
+                    payload.fingerprint,
                 }, "|")
                 local route = tostring(recipient) .. "|" .. slot_name
                 if force or self._sent[route] ~= signature then
@@ -290,7 +293,14 @@ function M.new(opts)
                     and (descriptor.provider or "cwv") == payload.provider
                     and (descriptor.skin or "") == payload.skin_key
                     and (descriptor.offhand_skin or "")
-                        == (payload.offhand_skin_key or "") then
+                        == (payload.offhand_skin_key or "")
+                    -- Migrated providers own style inside the reconstructed
+                    -- descriptor. Legacy providers may still carry the older
+                    -- compatibility rider, whose fingerprint intentionally
+                    -- predates this axis.
+                    and (descriptor.provider ~= "cwv_style"
+                        or (descriptor.style_rider or "")
+                            == (payload.style or "")) then
                 next_state = {
                     kind = "exact",
                     base_item_key = descriptor.base_item_key,

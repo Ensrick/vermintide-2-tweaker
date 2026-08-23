@@ -59,6 +59,7 @@ _rt_register("issue774_mission_combat_style_interruption", function()
 		}
 		local isolated = policy.install(probe_mod, {
 			local_equipment = function() return inventory, "issue774_probe_owner" end,
+			prepare_style_descriptor = function() return true end,
 			weapon_extension = function(unit)
 				return unit == weapon_unit and weapon or nil
 			end,
@@ -95,6 +96,70 @@ _rt_register("issue774_mission_combat_style_interruption", function()
 			or failed.counts.destroy ~= 0 or failed.counts.add ~= 0
 			or failed.counts.wield ~= 0 or failed.style ~= "greatsword" then
 		return "#774 failed interruption persisted or rebuilt a rejected style"
+	end
+end)
+
+_rt_register("issue660_greatsword_style_appearance_transaction", function()
+	local appearance = _om.combat_style_appearance
+	local descriptor_api = _om.appearance_descriptor
+	local lifecycle_policy = _om.appearance_lifecycle_policy
+	local style_policy = _om.combat_style_policy
+	if type(appearance) ~= "table" or type(descriptor_api) ~= "table"
+			or type(lifecycle_policy) ~= "table" or type(style_policy) ~= "table" then
+		return "#660 Greatsword appearance transaction modules are unavailable"
+	end
+	local function build(style_id)
+		local package = style_policy.package("es_2h_sword", style_id)
+		return appearance.build({ descriptor = descriptor_api,
+			encode_style_rider = style_policy.encode_style_rider }, {
+			slot_name = "slot_melee",
+			row = { item_key = "es_2h_sword", family_id = "greatsword",
+				style_id = style_id, package = package },
+			world = { base_item_key = "es_2h_sword", source = "runtime_check",
+				right_hand_unit = "units/cwv_rt/greatsword" },
+			base = { key = "es_2h_sword",
+				right_hand_unit = "units/cwv_rt/greatsword_base" },
+			presentation = style_id == "bretonnian" and {
+				right_hand_scale_3p = { 1, 0.8, 0.9 },
+				right_hand_offset_3p = { -0.1, 0, 0 },
+			} or nil,
+		})
+	end
+	local current = build("bretonnian")
+	if not current or current.style_rider ~= "greatsword:bretonnian"
+			or current.effective_template ~= "bastard_sword_template" then
+		return "#660 Greatsword descriptor did not retain style/template"
+	end
+	local lifecycle = lifecycle_policy.new({
+		resolve_local = function(_, slot_name)
+			return slot_name == "slot_melee" and current or nil,
+				slot_name == "slot_melee" and "es_2h_sword" or "es_longbow"
+		end,
+		resolve_remote = function(payload)
+			local _, style_id = style_policy.decode_style_rider(payload.style)
+			return style_id and build(style_id) or nil
+		end,
+		send = function() return true end,
+	})
+	local payload = lifecycle:payload_for("slot_melee", {})
+	local changed, remote, reason = lifecycle:accept(
+		"issue660-runtime-peer", lifecycle_policy.SCHEMA, payload)
+	if changed ~= true or reason ~= "exact" or not remote
+			or remote.fingerprint ~= current.fingerprint then
+		return "#660 Greatsword receiver did not reconstruct the sender descriptor"
+	end
+	local old_fingerprint = current.fingerprint
+	current = build("greatsword")
+	if not current or current.fingerprint == old_fingerprint then
+		return "#660 Greatsword style switch did not advance appearance fingerprint"
+	end
+	local tampered = {}
+	for key, value in pairs(payload) do tampered[key] = value end
+	tampered.style = "greatsword:greatsword"
+	local _, rejected = lifecycle:accept(
+		"issue660-runtime-tamper", lifecycle_policy.SCHEMA, tampered)
+	if rejected ~= nil then
+		return "#660 Greatsword receiver accepted a tampered style/fingerprint pair"
 	end
 end)
 

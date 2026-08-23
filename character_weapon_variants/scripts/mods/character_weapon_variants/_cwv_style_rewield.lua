@@ -112,8 +112,18 @@ function M.observe(deps, unit, inventory, slot_name)
     observed.wielded = wielded_slot == slot_name
     local slot = equipment.slots[slot_name]
     local item_data = type(slot) == "table" and slot.item_data or nil
-    observed.right_live = alive(deps.unit_api, equipment.right_hand_wielded_unit_3p)
-    observed.left_live = alive(deps.unit_api, equipment.left_hand_wielded_unit_3p)
+    local right_unit = equipment.right_hand_wielded_unit_3p
+    local left_unit = equipment.left_hand_wielded_unit_3p
+    observed.right_live = alive(deps.unit_api, right_unit)
+    observed.left_live = alive(deps.unit_api, left_unit)
+	if type(deps.observed_unit_name) == "function" then
+		local rok, right_name = pcall(deps.observed_unit_name,
+			right_unit, unit, slot_name, "right")
+		local lok, left_name = pcall(deps.observed_unit_name,
+			left_unit, unit, slot_name, "left")
+		observed.right_unit = rok and right_name or nil
+		observed.left_unit = lok and left_name or nil
+	end
     if item_data == nil then return observed end
     if type(deps.item_key) == "function" then
         local ok, key = pcall(deps.item_key, item_data)
@@ -155,6 +165,19 @@ function M.verdict(expected, observed)
     if #missing > 0 then
         return M.PARTIAL, "missing=" .. table.concat(missing, "+") .. " " .. hands
     end
+	local wrong_units = {}
+	if expected.right_unit and observed.right_unit ~= expected.right_unit then
+		wrong_units[#wrong_units + 1] = "right"
+	end
+	if expected.left_unit and observed.left_unit ~= expected.left_unit then
+		wrong_units[#wrong_units + 1] = "left"
+	end
+	if #wrong_units > 0 then
+		return M.PARTIAL, string.format("wrong-unit=%s expected=%s/%s observed=%s/%s %s",
+			table.concat(wrong_units, "+"), tostring(expected.right_unit),
+			tostring(expected.left_unit), tostring(observed.right_unit),
+			tostring(observed.left_unit), hands)
+	end
     return M.OK, string.format("template=%s %s", tostring(expected.template), hands)
 end
 
@@ -250,21 +273,36 @@ end
 --
 -- A coalescer DROP (mid-destroy husk) never calls back at all; the caller's
 -- ledger must time the pending verdict out rather than wait forever.
-function M.queue_rebuild(deps, peer_id, slot_name, family_id, style_id, on_verdict)
+function M.queue_rebuild(deps, peer_id, slot_name, family_id, style_id, on_verdict,
+		descriptor)
     local coalescer = deps.coalescer
     if type(coalescer) ~= "table"
             or type(coalescer.request_peer_rewield) ~= "function" then
         return false, "coalescer unavailable"
     end
-    local wearer, reason = M.resolve_wearer(deps, peer_id, slot_name)
-    if not wearer then return false, reason end
-    local item_key = M.slot_item_key(deps, wearer.inventory, slot_name)
-    local expectation, expect_err = M.expectation(deps.policy, family_id, style_id, item_key)
-    if not expectation then return false, expect_err end
+	local wearer, reason = M.resolve_wearer(deps, peer_id, slot_name)
+	if not wearer then return false, reason end
+	local item_key = M.slot_item_key(deps, wearer.inventory, slot_name)
+	local expectation, expect_err
+	if descriptor ~= nil and type(deps.descriptor_expectation) == "function" then
+		local ok
+		ok, expectation, expect_err = pcall(deps.descriptor_expectation, descriptor)
+		if not ok then expectation, expect_err = nil, tostring(expectation) end
+		if expectation and (expectation.family_id ~= family_id
+				or expectation.style_id ~= style_id
+				or expectation.item_key ~= item_key) then
+			expectation, expect_err = nil, "descriptor expectation mismatch"
+		end
+	else
+		expectation, expect_err = M.expectation(
+			deps.policy, family_id, style_id, item_key)
+	end
+	if not expectation then return false, expect_err end
     M.probe_residency(deps, deps.probe_state, family_id, style_id)
     local settled = false
     local _, why = coalescer.request_peer_rewield(peer_id, slot_name, {
-        tag = "cwv-style:" .. tostring(family_id) .. ":" .. tostring(style_id),
+		tag = "cwv-style:" .. tostring(family_id) .. ":" .. tostring(style_id)
+			.. ":" .. tostring(expectation.fingerprint or "legacy"),
         managers = deps.managers, unit_api = deps.unit_api,
         script_unit = deps.script_unit,
         on_verify = function(unit, inventory, _, wield_error)

@@ -82,6 +82,28 @@ this same transaction over detached inventory and weapon-extension objects. It
 executes ordinary success, career fail-closed, and throwing-stop/no-commit arms
 without mutating live equipment or registering another network path.
 
+The Greatsword family is the first post-pilot #660 adopter. Its owner planner
+builds one immutable, fingerprinted appearance descriptor from the exact
+loadout snapshot. That descriptor owns the base item, selected skin, complete
+1P/3P hand-unit paths and fallbacks, effective style template, animation remap,
+presentation transform, and generation. A style transition must prepare the
+new descriptor before destroying the live slot; failure rolls the style back
+without rebuilding. The exact identity payload carries a closed-vocabulary
+style rider, and the receiver reconstructs the descriptor from its local
+catalogue before accepting the fingerprint. The remote style ledger, template
+selector, husk re-wield postcondition, and transform adapter consume that same
+descriptor. The older authored catalogue remains a fail-safe compatibility
+path for style families not yet migrated under W4.
+
+The descriptor is semantic rather than backend-id based, so owner and observer
+produce the same fingerprint from the same visible state. A missing, foreign,
+tampered, or locally unavailable style/template/skin fails closed. Style-channel
+and identity-channel arrival order converge on one state: identity owns the
+descriptor and one bounded rebuild, while a late duplicate style message cannot
+erase it. Client peer removal clears identity, descriptor, retry, fallback, and
+active husk context through the existing single removal hook. There is no
+per-frame transport or second teardown hook.
+
 CWV also publishes the narrow dot-call contract
 `get_effective_combat_style_template_name(item, backend_id, owner_unit, slot_name)`.
 It returns only the active donor template name for a proven local exact instance

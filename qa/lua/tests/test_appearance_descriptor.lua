@@ -29,8 +29,12 @@ return function(H, repo_root)
 		H.equal(d.item_key, "cwv_musket")
 		H.equal(d.generation, 0)
 		local fingerprint = D.fingerprint(d)
+		H.equal(d.fingerprint, fingerprint,
+			"built descriptors expose their computed immutable fingerprint")
+		H.equal(#d.fingerprint, 8)
 		local mutated = pcall(function() d.item_key = "hacked" end)
 		H.equal(mutated, false)
+		H.equal(pcall(function() d.fingerprint = "00000000" end), false)
 		H.equal(pcall(function()
 			d.transform_profiles.display_3p_rifle.scale[1] = 99
 		end), true, "nested reads must remain ordinary Lua 5.1 tables")
@@ -121,6 +125,15 @@ return function(H, repo_root)
 		H.truthy(table.concat(errors, " "):find("transform_profiles.display_3p_rifle", 1, true))
 	end)
 
+	H.test("descriptor rejects a malformed optional third-person hand path", function()
+		local malformed = musket_spec()
+		malformed.right_hand_unit.unit_3p = ""
+		local descriptor, errors = D.build(malformed)
+		H.equal(descriptor, nil)
+		H.truthy(table.concat(errors, "|"):find(
+			"right_hand_unit.unit_3p must be a non-empty string", 1, true))
+	end)
+
 	H.test("fingerprint is stable, order-independent, and generation-sensitive", function()
 		local a = D.build(musket_spec())
 		local b = D.build(musket_spec())
@@ -142,6 +155,28 @@ return function(H, repo_root)
 		H.equal(g1.generation, 1)
 		H.truthy(D.fingerprint(a) ~= D.fingerprint(g1))
 		H.equal(g1.item_key, a.item_key)
+	end)
+
+	H.test("fingerprint is computed, source-qualified, and cannot be supplied", function()
+		local forged = musket_spec()
+		forged.fingerprint = "caller-controlled"
+		local descriptor, errors = D.build(forged)
+		H.equal(descriptor, nil)
+		H.truthy(table.concat(errors, " "):find(
+			"fingerprint is computed", 1, true))
+
+		local base = assert(D.build(musket_spec()))
+		for _, mutation in ipairs({
+			function(spec) spec.style_id = "bretonnian" end,
+			function(spec) spec.effective_template = "bastard_sword_template" end,
+			function(spec) spec.transform_3p.offset = { 0.1, 0, 0 } end,
+		}) do
+			local changed = musket_spec()
+			mutation(changed)
+			local next_descriptor = assert(D.build(changed))
+			H.truthy(next_descriptor.fingerprint ~= base.fingerprint,
+				"every descriptor-owned appearance axis must change the fingerprint")
+		end
 	end)
 
 	H.test("fingerprint rejects non-data descriptors", function()
