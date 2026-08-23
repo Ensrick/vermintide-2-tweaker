@@ -27,7 +27,7 @@ mod._cim959_accessory_property_policy = mod:dofile(
 local _BULK_ACCESSORY_CRAFT = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_bulk_accessory_craft")
 _MEM_PROBE_T0_CIMD = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.8.127-dev"
+local MOD_VERSION = "0.8.128-dev"
 local _bootstrap = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_bootstrap_runtime")({
         mod = mod,
@@ -149,6 +149,53 @@ if not _ok_acp then
     mod:error("Failed to load _accessory_craft_panel: %s", tostring(_AccessoryPanel))
     _AccessoryPanel = nil
 end
+
+-- #1360: Ranald's Gift browser. Keep these on the mod namespace instead of
+-- adding entry-chunk locals (Lua 5.1's 200-local ceiling is already close).
+-- The browser owns no hook; _cim_forge_ui_owner drives its draw pass from the
+-- existing single HeroViewStateWeaveForge.update seam.
+mod._cim_ranalds_catalog = mod:dofile(
+    "scripts/mods/crafting_in_modded_dev/_cim_ranalds_catalog")
+mod._cim_ranalds_firestore = mod:dofile(
+    "scripts/mods/crafting_in_modded_dev/_cim_ranalds_firestore")
+mod._cim_ranalds_fetcher = mod._cim_ranalds_firestore.new({
+        catalog = mod._cim_ranalds_catalog,
+        get_curl = function() return Managers and Managers.curl end,
+        get_json = function() return rawget(_G, "cjson") end,
+    })
+mod._cim_ranalds_browser = mod:dofile(
+    "scripts/mods/crafting_in_modded_dev/_cim_ranalds_browser")
+mod._cim_ranalds_browser.configure({
+    catalog = mod._cim_ranalds_catalog,
+    fetcher = mod._cim_ranalds_fetcher,
+    current_career_id = function()
+        local player = Managers.player and Managers.player:local_player()
+        local profile_index = player and player:profile_index()
+        local career_index = player and player:career_index()
+        local profile = SPProfiles and profile_index and SPProfiles[profile_index]
+        local career_name = profile and profile.careers and career_index
+            and profile.careers[career_index] and profile.careers[career_index].name
+        for id, name in pairs(mod._cim_ranalds_catalog.CAREERS) do
+            if name == career_name then return id end
+        end
+        return 1
+    end,
+    career_label = function(career_id)
+        local career_name = mod._cim_ranalds_catalog.CAREERS[career_id]
+        local settings = career_name and CareerSettings and CareerSettings[career_name]
+        local display_name = settings and settings.display_name
+        if display_name and type(Localize) == "function" then
+            local ok, label = pcall(Localize, display_name)
+            if ok and type(label) == "string" then return label end
+        end
+        return tostring(career_name or "Unknown career")
+    end,
+    import_build = function(build)
+        local importer = mod._cim_ranalds_import
+        if not importer then return false, "importer not ready" end
+        return importer.apply(build)
+    end,
+})
 
 -- Debug autodumps. Sub-module exposes `mod._cim_autodump_*` helpers; every one
 -- is a fast no-op when the `debug_mode` setting is OFF. Hooks below call into
@@ -519,6 +566,7 @@ end)
 
 
 mod:hook_safe("HeroViewStateWeaveForge", "on_exit", function(self)
+    if mod._cim_ranalds_browser then mod._cim_ranalds_browser.close() end
     _custom_forge_active = false
     _forge_loadout = {}
     _forge_item_props = {}
@@ -591,11 +639,13 @@ mod._cim_forge_ui_owner = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_forge_ui_owner")({
     mod = mod,
     accessory_panel = _AccessoryPanel,
+    ranalds_browser = mod._cim_ranalds_browser,
     is_active = function() return _custom_forge_active end,
     get_bg_colored = function() return _forge_bg_colored end,
     set_bg_colored = function(value) _forge_bg_colored = value and true or false end,
     get_managers = function() return Managers end,
     get_profiles = function() return SPProfiles end,
+    print_line = function(fmt, ...) printf(fmt, ...) end,
 })
 
 -- --- Backend safety hooks (prevent crashes for non-weave items) ---
@@ -1058,6 +1108,53 @@ local function _athanor_inject_item(weapon_data, backend_id)
     end
     return backend_id
 end
+
+-- Install the atomic community-build importer only after the canonical mirror
+-- injection function exists. Every dependency is late-bound or owner-provided;
+-- the browser can load earlier but cannot commit until this seam is ready.
+mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_ranalds_import").install({
+    mod = mod,
+    catalog = mod._cim_ranalds_catalog,
+    contract = mod._cim_synthetic_item_contract,
+    inject_item = _athanor_inject_item,
+    guid = function() return Application.guid() end,
+    get_managers = function() return Managers end,
+    get_globals = function()
+        return {
+            ItemMasterList = ItemMasterList,
+            CareerSettings = CareerSettings,
+            WeaponProperties = WeaponProperties,
+            WeaponTraits = WeaponTraits,
+        }
+    end,
+})
+
+_rt_register("issue1360_ranalds_build_import", function()
+    local catalog = mod._cim_ranalds_catalog
+    local fetcher = mod._cim_ranalds_fetcher
+    local importer = mod._cim_ranalds_import
+    if type(catalog) ~= "table" or type(fetcher) ~= "table"
+            or type(importer) ~= "table" then
+        return "Ranald browser services are not installed"
+    end
+    local career_count, weapon_count = 0, 0
+    for _ in pairs(catalog.CAREERS or {}) do career_count = career_count + 1 end
+    for _ in pairs(catalog.WEAPONS or {}) do weapon_count = weapon_count + 1 end
+    if career_count ~= 20 or weapon_count ~= 83 then
+        return string.format("catalog drift careers=%d weapons=%d", career_count, weapon_count)
+    end
+    for _, field in ipairs({
+        "_cim_register_crafts_batch", "_cim_unregister_crafts_batch",
+        "_cim_snapshot_exact_loadout", "_cim_write_exact_loadout_item",
+        "_cim_finalize_exact_loadout",
+    }) do
+        if type(mod[field]) ~= "function" then return "missing transaction API " .. field end
+    end
+    if type(fetcher.fetch) ~= "function" or type(fetcher.cancel) ~= "function"
+            or type(importer.preflight) ~= "function" or type(importer.apply) ~= "function" then
+        return "Ranald fetch/import API incomplete"
+    end
+end)
 
 -- Re-add every saved mirror-path craft (Athanor + standard forge) to the live
 -- backend mirror after PlayFab finishes its sync. Items flagged `via_mirror = false`

@@ -62,9 +62,10 @@ return function(context)
         return false
     end
 
-    local function save()
+    local function save(source)
+        source = source or forged_weapons
         local save_data = {}
-        for backend_id, weapon in pairs(forged_weapons) do
+        for backend_id, weapon in pairs(source) do
             save_data[backend_id] = {
                 schema_version = weapon.schema_version,
                 owner = weapon.owner,
@@ -169,6 +170,58 @@ return function(context)
             forged_weapons[backend_id] = nil
             save()
         end
+    end
+    -- #1360: fixed-size multi-item imports must not persist five half-builds one
+    -- at a time. Validate the complete set first, then publish it to the owner
+    -- store and flush exactly once. The mirror rows are created separately and
+    -- are removed by the caller if this all-or-nothing registration rejects.
+    mod._cim_register_crafts_batch = function(entries)
+        if type(entries) ~= "table" then return false, "entries" end
+        local contract = mod._cim_synthetic_item_contract
+        local item_master_list = get_item_master_list()
+        local normalized = {}
+        local count = 0
+        for backend_id, weapon_data in pairs(entries) do
+            if forged_weapons[backend_id] then return false, "backend_id_exists" end
+            local item_key = type(weapon_data) == "table" and weapon_data.item_key
+            local master = item_key and item_master_list
+                and rawget(item_master_list, item_key)
+            local entry, err = contract.gate_record("mirror_injection", backend_id,
+                weapon_data, master)
+            if not entry then return false, tostring(backend_id) .. ":" .. tostring(err) end
+            entry.external_traits = weapon_data.external_traits
+            partition_external_traits(entry)
+            normalized[backend_id] = entry
+            count = count + 1
+        end
+        if count == 0 then return false, "empty" end
+        local candidate = {}
+        for backend_id, entry in pairs(forged_weapons) do candidate[backend_id] = entry end
+        for backend_id, entry in pairs(normalized) do candidate[backend_id] = entry end
+        local saved, save_err = pcall(save, candidate)
+        if not saved then return false, "save:" .. tostring(save_err) end
+        forged_weapons = candidate
+        return true, normalized
+    end
+
+    mod._cim_unregister_crafts_batch = function(backend_ids)
+        if type(backend_ids) ~= "table" then return false end
+        local changed = false
+        local candidate = {}
+        for backend_id, entry in pairs(forged_weapons) do candidate[backend_id] = entry end
+        for i = 1, #backend_ids do
+            local backend_id = backend_ids[i]
+            if candidate[backend_id] then
+                candidate[backend_id] = nil
+                changed = true
+            end
+        end
+        if changed then
+            local saved, save_err = pcall(save, candidate)
+            if not saved then return false, "save:" .. tostring(save_err) end
+            forged_weapons = candidate
+        end
+        return true
     end
     mod._cim_get_craft = function(backend_id) return forged_weapons[backend_id] end
     mod._cim_persist_crafts = save

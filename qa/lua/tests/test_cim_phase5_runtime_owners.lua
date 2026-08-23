@@ -84,8 +84,13 @@ return function(H, repo_root)
             settings = { forged_weapons = saved },
             infos = {},
         }
+        local set_calls, fail_set = 0, false
         function mod:get(key) return self.settings[key] end
-        function mod:set(key, value) self.settings[key] = value end
+        function mod:set(key, value)
+            set_calls = set_calls + 1
+            if fail_set then error("forced settings failure") end
+            self.settings[key] = value
+        end
         function mod:info(fmt, ...)
             self.infos[#self.infos + 1] = string.format(fmt, ...)
         end
@@ -140,6 +145,49 @@ return function(H, repo_root)
         hooks._create_interfaces()
         H.equal(athanor_calls, 1)
         H.equal(restore_calls, 1)
+
+        -- #1360's five-item import uses one candidate-state persistence
+        -- boundary. A rejected settings write must publish neither a partial
+        -- in-memory registry nor a partial persisted registry.
+        set_calls = 0
+        local registered, normalized = mod._cim_register_crafts_batch({
+            build_melee = { item_key = "es_1h_sword", slot_type = "melee" },
+            build_ranged = { item_key = "es_handgun", slot_type = "ranged" },
+        })
+        H.equal(registered, true)
+        H.equal(type(normalized.build_melee), "table")
+        H.equal(set_calls, 1)
+        H.equal(owner.get_forged_weapons().build_melee.item_key, "es_1h_sword")
+        H.equal(mod.settings.forged_weapons.build_ranged.item_key, "es_handgun")
+
+        fail_set = true
+        registered, normalized = mod._cim_register_crafts_batch({
+            rejected_a = { item_key = "es_1h_sword", slot_type = "melee" },
+            rejected_b = { item_key = "es_handgun", slot_type = "ranged" },
+        })
+        H.equal(registered, false)
+        H.truthy(normalized:find("save:", 1, true))
+        H.equal(owner.get_forged_weapons().rejected_a, nil)
+        H.equal(owner.get_forged_weapons().rejected_b, nil)
+        H.equal(mod.settings.forged_weapons.rejected_a, nil)
+        H.equal(mod.settings.forged_weapons.rejected_b, nil)
+
+        -- Removal is transactional too: a failed persistence write retains
+        -- the complete prior registry instead of creating a restart-only
+        -- resurrection mismatch.
+        local removed, remove_err = mod._cim_unregister_crafts_batch({
+            "build_melee", "build_ranged",
+        })
+        H.equal(removed, false)
+        H.truthy(remove_err:find("save:", 1, true))
+        H.truthy(owner.get_forged_weapons().build_melee)
+        H.truthy(mod.settings.forged_weapons.build_melee)
+
+        fail_set = false
+        removed = mod._cim_unregister_crafts_batch({ "build_melee", "build_ranged" })
+        H.equal(removed, true)
+        H.equal(owner.get_forged_weapons().build_melee, nil)
+        H.equal(mod.settings.forged_weapons.build_ranged, nil)
     end)
 
     H.test("CIM loadout wire owner substitutes only on wire and fails unknown ids closed", function()

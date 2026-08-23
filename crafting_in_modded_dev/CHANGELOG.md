@@ -1,5 +1,24 @@
 # Crafting in Modded Changelog
 
+## 0.8.128-dev (2026-08-23) -- browse and import Ranald's Gift builds (#1360)
+
+- Added **Community Builds** to the Athanor overview. It reads the public
+  Ranald's Gift catalogue for the selected career, supports Likes/Recent sort,
+  career switching, and bounded five-row pages, and cancels stale asynchronous
+  requests when the browser closes or changes career.
+- Import is one explicit local transaction: validate the live career, DLC,
+  weapon/provider, property, trait, talent, and selected-loadout state before
+  mutation; create five fresh Modded items; persist once; write and read back
+  all five exact slots and six talents; refresh the live weapons once. Any
+  failed boundary restores the prior loadout/talents and removes every new row.
+- External data is bounded and untrusted: 16-field Firestore mask, cursor pages,
+  800-result and byte caps, sanitized labels, current 20-career/83-weapon source
+  vocabulary, then mandatory validation against live VT2 tables.
+- Corrected Ranald property/trait translation to VT2's `crit_boost` and live
+  accessory table names. Added the named runtime check
+  `issue1360_ranalds_build_import` plus behavioral success, rejection,
+  pagination, cancellation, exception, compensation, and modal-input tests.
+
 ## 0.8.127-dev (2026-08-20) -- semantic Athanor placement check (#882) [verify-fix]
 
 - The existing in-mission Athanor placement repair now routes the native

@@ -578,6 +578,106 @@ local function install(ctx)
     mod._cim_auto_equip_crafted_weapon = _auto_equip_crafted_weapon
     mod._cim_auto_equip_slot_type = _auto_equip_slot_type
 
+    -- #1360: exact five-slot community-build transaction primitives. These are
+    -- deliberately separate from the default-on craft convenience above:
+    -- importing a selected build is an explicit user action and must equip all
+    -- five exact backend ids regardless of the auto-equip-new-weapons setting.
+    -- The importer snapshots first, writes with readback, and calls finalize only
+    -- after talents and every slot have committed, so no half-build is presented.
+    local _EXACT_LOADOUT_SLOTS = {
+        slot_melee = true, slot_ranged = true, slot_necklace = true,
+        slot_ring = true, slot_trinket_1 = true,
+    }
+    local _EXACT_ACCESSORY_TYPES = {
+        slot_necklace = "necklace", slot_ring = "ring",
+        slot_trinket_1 = "trinket",
+    }
+
+    local function _snapshot_exact_loadout(career_name, slot_names)
+        if type(career_name) ~= "string" or type(slot_names) ~= "table" then
+            return nil, "arguments"
+        end
+        local items = Managers.backend and Managers.backend:get_interface("items")
+        local mirror = items and items._backend_mirror
+        if not items or not mirror or type(mirror.get_character_data) ~= "function" then
+            return nil, "items backend not ready"
+        end
+        local index = _resolve_selected_index(career_name, 1)
+        local snapshot = {}
+        for i = 1, #slot_names do
+            local slot_name = slot_names[i]
+            if not _EXACT_LOADOUT_SLOTS[slot_name] then return nil, "slot:" .. tostring(slot_name) end
+            local ok, bid = pcall(mirror.get_character_data, mirror,
+                career_name, slot_name, index)
+            if not ok or type(bid) ~= "string" or not items:get_item_from_id(bid) then
+                return nil, "missing current item:" .. tostring(slot_name)
+            end
+            snapshot[slot_name] = bid
+        end
+        return { index = index, slots = snapshot }, nil
+    end
+
+    local function _write_exact_loadout_item(career_name, slot_name, backend_id, index)
+        if not _EXACT_LOADOUT_SLOTS[slot_name] then return false, "slot" end
+        local items = Managers.backend and Managers.backend:get_interface("items")
+        local item = items and items:get_item_from_id(backend_id)
+        local data = item and item.data
+        if not items or not data then return false, "item" end
+        local accessory_type = _EXACT_ACCESSORY_TYPES[slot_name]
+        if accessory_type then
+            if data.slot_type ~= accessory_type then return false, "slot_type" end
+        elseif data.slot_type ~= "melee" and data.slot_type ~= "ranged" then
+            return false, "slot_type"
+        end
+        local ok, result = pcall(items.set_loadout_item, items, backend_id,
+            career_name, slot_name, index)
+        if not ok or result == false then return false, "write:" .. tostring(result) end
+        local mirror = items._backend_mirror
+        if not mirror or type(mirror.get_character_data) ~= "function" then
+            return false, "mirror"
+        end
+        local ok_read, readback = pcall(mirror.get_character_data, mirror,
+            career_name, slot_name, index)
+        if not ok_read or readback ~= backend_id then
+            return false, "readback:" .. tostring(readback)
+        end
+        return true
+    end
+
+    local function _finalize_exact_loadout(career_name, assignments)
+        if type(assignments) ~= "table" then return false, "assignments" end
+        local player = Managers.player and Managers.player:local_player()
+        local unit = player and player.player_unit
+        local profile_index = player and player:profile_index()
+        local career_index = player and player:career_index()
+        local profile = SPProfiles and profile_index and SPProfiles[profile_index]
+        local current_career = profile and profile.careers and career_index
+            and profile.careers[career_index] and profile.careers[career_index].name
+        if current_career == career_name and unit and Unit.alive(unit) then
+            local inventory = ScriptUnit.has_extension(unit, "inventory_system")
+            if inventory and inventory.create_equipment_in_slot then
+                for _, slot_name in ipairs({ "slot_melee", "slot_ranged" }) do
+                    local backend_id = assignments[slot_name]
+                    if backend_id then
+                        local ok, err = pcall(inventory.create_equipment_in_slot,
+                            inventory, slot_name, backend_id)
+                        if not ok then return false, "live:" .. slot_name .. ":" .. tostring(err) end
+                        _reequipped[career_name .. "/" .. slot_name] = backend_id
+                    end
+                end
+            end
+        end
+        local event = Managers.state and Managers.state.event
+        if event and event.trigger then
+            pcall(event.trigger, event, "event_set_loadout_items")
+        end
+        return true
+    end
+
+    mod._cim_snapshot_exact_loadout = _snapshot_exact_loadout
+    mod._cim_write_exact_loadout_item = _write_exact_loadout_item
+    mod._cim_finalize_exact_loadout = _finalize_exact_loadout
+
     _restore_modded_loadout = function()
         -- v0.8.15-dev MASTER gate: when loadout persistence is OFF (default), cim
         -- does NOT touch loadouts at all — no flat->indexed migration, no stale

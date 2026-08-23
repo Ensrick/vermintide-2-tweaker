@@ -10,7 +10,7 @@ the named `crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/*.lua`
 module. `§N` = a `docs/BUG_CLASSES.md` class; `#N` / "issue N" = a GitHub issue.
 
 **Dev/stable relationship.** This documents `crafting_in_modded_dev` (`cim_dev`,
-MOD_VERSION `0.8.127-dev`, friends-only Workshop 3733366851), the ACTIVE working
+MOD_VERSION `0.8.128-dev`, friends-only Workshop 3733366851), the ACTIVE working
 stream. `crafting_in_modded/` (`cim`, public Workshop 3721038774) is its read-only
 public twin; per repo `CLAUDE.md` all in-flight work happens in the dev dir and
 promotion is a separate user-triggered action (`tools/promote/promote.ps1`), so
@@ -19,8 +19,8 @@ so any cross-mod consumer resolving `get_mod("cim")` will NOT see the dev clone.
 cim's own render-rescue for CWV crafts, by contrast, keys on the `cwv_` backend_id
 prefix, which is stream-agnostic.
 
-**Verification split (honest).** Re-verified against the 2026-08-11 `cim_dev`
-module source: every hook signature (grep-confirmed, **87 `mod:hook`, 34
+**Verification split (honest).** Re-verified against the 2026-08-23 `cim_dev`
+module source: every hook signature (grep-confirmed, **87 `mod:hook`, 35
 `mod:hook_safe`, and 1 `mod:network_register`**), the full body of `standard_forge.lua`,
 `illusion_swap.lua`, `modded_rarities.lua`, the forged-item state owner
 (`_cim_forge_state_owner.lua`), the wire-safety owner
@@ -261,6 +261,15 @@ IDs clear this separate vanilla map because their craft record is authoritative.
 | Hook / table touched | Vanilla behavior | cim substitution | Guard / trap |
 |---|---|---|---|
 | `IngamePlayerListUI._update_dynamic_widget_information` [safe] `_cim_tab_preview.lua` | Hold-Tab renders `Managers.player:player_loadouts()` and calls `UIUtils.get_ui_information_from_item(item)`; remote items were reconstructed by `rpc_sync_loadout_slot`, whose payload has no skin id [src: `ingame_player_list_ui_v2.lua:1444-1539`, `loadout_utils.lua:4-42,72-91`] | After vanilla refresh, copy only melee/ranged skin identity and icon from the same player's live `inventory_system:equipment().slots[slot]`; `rpc_add_equipment` already synchronized the exact `weapon_skin_id` into `slot.skin`. Resolve rarity from the exact local boolean state and repair `slot_name .. "_rarity_texture"` in the same post-hook cycle (#598) [src: `simple_inventory_extension.lua:252-266`, `simple_husk_inventory_extension.lua:181-221`] | No custom resource identity is networked. Missing equipment/slot/skin registry fails closed; unknown exact skin logs once per key. The loadout item receives `skin` so vanilla's existing hover tooltip resolves the same illusion (#246). Rarity changes only when an exact boolean is known; absent state preserves vanilla. |
+
+### Surface 7 - Ranald's Gift read and local build import (owner: `docs/engine/09`, `/11`; `_cim_ranalds_*.lua`)
+
+| Engine/API contact | Vanilla behavior | cim use | Guard / invariant |
+|---|---|---|---|
+| `Managers.curl:post` (direct API, no hook) | `CurlManager.post` forwards the URL, body, headers, callback, userdata, and options into one asynchronous `POST` request [src: `scripts/managers/curl/curl_manager.lua:104-151`] | Read the public Ranald's Gift Firestore `builds` collection with a career filter and 16-field mask | Read-only external request; 100-document cursor pages, 800 accepted-build cap, 512 KiB per response, 4 MiB aggregate, generation cancellation, and no callback mutation. Every returned id is untrusted until live-table preflight. |
+| `HeroViewStateWeaveForge.update` [hook] `_cim_forge_ui_owner.lua` | Vanilla obtains `window_input_service()` and updates/draws forge windows; `_input_blocked` selects `FAKE_INPUT_SERVICE` [src: `scripts/ui/views/hero_view/states/hero_view_state_weave_forge.lua:313-314,613-649`] | Drive the hook-free community-build scenegraph from the existing single update seam | While the modal is open only, vanilla child windows receive blocked input and the modal receives the real input service. Exact prior `_input_blocked` state is restored before return or rethrow; no second `(Class,method)` hook exists. |
+| `BackendInterfaceItemPlayfab.set_loadout_item` + mirror `get_character_data` (direct local calls) | Vanilla writes an exact item id to a career slot/loadout index and the mirror exposes indexed character data [src: `scripts/managers/backend_playfab/backend_interface_item_playfab.lua:635-669`, `scripts/managers/backend_playfab/playfab_mirror_base.lua:1909-1925`] | Commit five newly synthesized CIM ids to the selected loadout and read each slot back | Complete preflight precedes mutation. The forged-item owner persists one candidate registry before publication; every slot write is checked. Any failure restores the prior five slots and deletes the exact new rows. No PlayFab craft request or new RPC is introduced. |
+| `BackendInterfaceTalentsPlayfab.get_talent_tree/get_talents/set_talents` (direct local calls) | The backend interface exposes the six-row career tree and stores talent picks for an optional loadout index [src: `scripts/managers/backend_playfab/backend_interface_talents_playfab.lua:309-349`] | Validate six picks against live rows, snapshot prior picks, write the imported picks, and verify readback | Invalid/missing rows reject before mutation. A throw or mismatched readback restores the old six picks and the complete old equipment snapshot. One final live equipment refresh occurs only after all persisted writes succeed. |
 
 ## Subsystem notes (how the vanilla flow runs end-to-end, for cim's cases)
 
