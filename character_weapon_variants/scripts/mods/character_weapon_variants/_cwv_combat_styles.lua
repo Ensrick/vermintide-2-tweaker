@@ -1195,7 +1195,7 @@ function M.install(mod, deps)
 				if self.pending_remote[key] ~= pending then return end
 				pending.verdict = status or "failed"
 				pending.verdict_detail = detail
-			end)
+			end, pending.descriptor)
 		if not ok then queued, reason = false, tostring(queued) end
 		if queued ~= true then
 			reason = tostring(reason or "not queued")
@@ -1235,6 +1235,7 @@ function M.install(mod, deps)
 			family_id = state.family_id,
 			style_id = state.style_id,
 			token = state.token,
+			descriptor = state.descriptor,
 			edge = edge or "state",
 			attempts = 1,
 			elapsed = 0,
@@ -1324,12 +1325,50 @@ function M.install(mod, deps)
 		return count
 	end
 
+	-- Called by the consolidated PlayerManager.remove_player owner. Style
+	-- descriptors are authenticated by the exact identity lifecycle, so their
+	-- per-peer state and every deferred retry/fallback must end in the same
+	-- teardown transaction. No global clear: other peers keep their accepted
+	-- state and bounded ledgers.
+	function runtime:clear_peer(peer_id)
+		if type(peer_id) ~= "string" or peer_id == "" then return 0 end
+		local removed = self.remote[peer_id] and 1 or 0
+		self.remote[peer_id] = nil
+		local prefix = peer_id .. "|"
+		for key in pairs(self.pending_remote) do
+			if key:sub(1, #prefix) == prefix then
+				self.pending_remote[key] = nil
+				removed = removed + 1
+			end
+		end
+		for key in pairs(self.fallback_remote) do
+			if key:sub(1, #prefix) == prefix then
+				self.fallback_remote[key] = nil
+				removed = removed + 1
+			end
+		end
+		if self.husk_context and self.husk_context.peer_id == peer_id then
+			self.husk_context = nil
+			removed = removed + 1
+		end
+		return removed
+	end
+
 	-- ONE writer for both style channels (#786 B3/B4). `source` is
 	-- "style_channel" (cwv_combat_style_v1) or "identity" (the compact style
 	-- rider on the delivering cwv_item_identity payload). Both converge on the
 	-- same per-peer/slot state, and only ONE of them starts the rebuild ledger.
-	function runtime:accept_style_edge(peer_id, slot_name, family_id, style_id, source)
+	function runtime:accept_style_edge(peer_id, slot_name, family_id, style_id, source,
+			descriptor)
 		if not M.valid_wire(M.SCHEMA, "state", slot_name, family_id, style_id) then
+			return false, nil
+		end
+		if descriptor ~= nil and (type(descriptor) ~= "table"
+				or descriptor.provider ~= "cwv_style"
+				or descriptor.style_family ~= family_id
+				or descriptor.style_id ~= style_id
+				or type(descriptor.fingerprint) ~= "string"
+				or descriptor.fingerprint == "") then
 			return false, nil
 		end
 		local by_slot = remote[peer_id] or {}
@@ -1337,13 +1376,16 @@ function M.install(mod, deps)
 		local token = family_id .. ":" .. style_id
 		local previous = by_slot[slot_name]
 		local changed = not previous or previous.token ~= token
-		by_slot[slot_name] = { family_id = family_id, style_id = style_id,
-			token = token, owner = source }
 		local key = remote_refresh_key(peer_id, slot_name)
 		pcall(printf, "[cwv:786] style rx peer=%s slot=%s family=%s style=%s source=%s changed=%s",
 			tostring(peer_id), tostring(slot_name), family_id, style_id,
 			tostring(source), tostring(changed))
 		if source == "identity" then
+			local descriptor_changed = descriptor ~= nil and (not previous
+				or not previous.descriptor
+				or previous.descriptor.fingerprint ~= descriptor.fingerprint)
+			by_slot[slot_name] = { family_id = family_id, style_id = style_id,
+				token = token, owner = source, descriptor = descriptor }
 			-- The identity path is the guarded authority: it carries the item
 			-- identity the husk must rebuild against, so it cancels the style
 			-- channel's fallback for this exact edge and owns the rebuild --
@@ -1351,13 +1393,22 @@ function M.install(mod, deps)
 			local armed = self.fallback_remote[key]
 			local owned = armed ~= nil and armed.token == token
 			self.fallback_remote[key] = nil
-			if changed or owned then
+			if changed or owned or descriptor_changed
+					or not previous or previous.owner ~= "identity" then
 				self:refresh_remote(peer_id, slot_name,
 					changed and "identity" or "identity_after_style")
 				return true, token
 			end
 			return false, token
 		end
+		-- Once the identity transaction owns this exact edge, a later duplicate
+		-- style-channel message cannot erase its descriptor or arm a weaker
+		-- catalogue-derived rebuild.
+		if previous and previous.owner == "identity" and not changed then
+			return false, token
+		end
+		by_slot[slot_name] = { family_id = family_id, style_id = style_id,
+			token = token, owner = source }
 		if not changed then return false, token end
 		-- Style-channel arrival. Do NOT rebuild inline: the sender republishes
 		-- identity for the same edge in the same tick and that payload is what
@@ -1427,7 +1478,15 @@ function M.install(mod, deps)
 	function runtime:resolve_template(item, backend_id)
 		local row = self:describe(item, backend_id)
 		local weapons = rawget(_G, "Weapons")
-		if row then return weapons and weapons[row.package.template] or nil end
+		if row then
+			local descriptor = type(deps.local_style_descriptor) == "function"
+				and deps.local_style_descriptor(row.identity) or nil
+			local template_name = descriptor
+				and descriptor.style_family == row.family_id
+				and descriptor.style_id == row.style_id
+				and descriptor.effective_template or row.package.template
+			return weapons and weapons[template_name] or nil
+		end
 		-- Remote husk items intentionally have no backend id. The consolidated
 		-- husk-wield wrapper supplies a strictly synchronous owner+slot context so
 		-- the same BackendUtils seam can select that peer's received style without
@@ -1436,6 +1495,11 @@ function M.install(mod, deps)
 		local key = context and item_key(item, backend_id)
 		local family_id = key and M.member(key)
 		if not (context and family_id == context.family_id) then return nil end
+		if context.descriptor
+				and context.descriptor.base_item_key == key
+				and type(context.descriptor.effective_template) == "string" then
+			return weapons and weapons[context.descriptor.effective_template] or nil
+		end
 		local package = M.package(key, context.style_id)
 		return package and weapons and weapons[package.template] or nil
 	end
@@ -1455,19 +1519,31 @@ function M.install(mod, deps)
 			local key = remote_row and item_key(item, backend_id)
 			local family_id = key and M.member(key)
 			if remote_row and family_id == remote_row.family_id then
+				if remote_row.descriptor
+						and remote_row.descriptor.base_item_key == key then
+					return remote_row.descriptor.effective_template
+				end
 				local package = M.package(key, remote_row.style_id)
 				if package then return package.template end
 			end
 		end
 		local row = self:describe(item, backend_id)
-		return row and row.package.template or nil
+		if not row then return nil end
+		local descriptor = type(deps.local_style_descriptor) == "function"
+			and deps.local_style_descriptor(row.identity) or nil
+		if descriptor and descriptor.style_family == row.family_id
+				and descriptor.style_id == row.style_id then
+			return descriptor.effective_template
+		end
+		return row.package.template
 	end
 
 	function runtime:begin_husk_wield(inventory, slot_name)
 		local owner = inventory and (inventory._unit or inventory.owner_unit)
 		local peer_id = type(deps.peer_for_owner) == "function" and deps.peer_for_owner(owner) or nil
 		local row = peer_id and remote[peer_id] and remote[peer_id][slot_name]
-		self.husk_context = row and { family_id = row.family_id, style_id = row.style_id } or nil
+		self.husk_context = row and { peer_id = peer_id, family_id = row.family_id,
+			style_id = row.style_id, descriptor = row.descriptor } or nil
 		return self.husk_context ~= nil
 	end
 
@@ -1480,6 +1556,14 @@ function M.install(mod, deps)
 	function runtime:transform_decision(item, backend_id)
 		local row = self:describe(item, backend_id)
 		if not row then return nil end
+		if type(deps.local_style_descriptor) == "function"
+				and type(deps.style_descriptor_transform) == "function" then
+			local descriptor = deps.local_style_descriptor(row.identity)
+			if descriptor and descriptor.style_family == row.family_id
+					and descriptor.style_id == row.style_id then
+				return deps.style_descriptor_transform(descriptor)
+			end
+		end
 		local key = row.package.presentation and row.package.presentation.transform_key
 		if key then return presentations[key] or false end
 		return false
@@ -1530,6 +1614,9 @@ function M.install(mod, deps)
 		local peer_id = deps.peer_for_owner(owner_unit)
 		local row = peer_id and remote[peer_id] and remote[peer_id][slot_name]
 		if not row then return nil end
+		if row.descriptor and type(deps.style_descriptor_transform) == "function" then
+			return deps.style_descriptor_transform(row.descriptor, "3p")
+		end
 		local presentation
 		if item ~= nil then
 			local key = item_key(item)
@@ -1656,6 +1743,25 @@ function M.install(mod, deps)
 		if not changed then return false, err or "unchanged" end
 		row.item_data.mod_data = row.item_data.mod_data or {}
 		row.item_data.mod_data.cwv_combat_style = desired
+		local live_row = live_item and self:describe(live_item)
+		local rebuilding_live_item = live_row and live_row.identity == row.identity
+		if rebuild and rebuilding_live_item and row.family_id == "greatsword" then
+			local prepared = false
+			if type(deps.prepare_style_descriptor) == "function"
+					and equipment and equipment.slots then
+				local ok, value = pcall(deps.prepare_style_descriptor,
+					equipment.slots, row.identity, desired)
+				prepared = ok and value == true
+			end
+			if not prepared then
+				M.set(store, row.identity, row.item_key, row.style_id)
+				row.item_data.mod_data.cwv_combat_style = row.style_id
+				pcall(printf,
+					"[cwv:660] style transaction rejected item=%s family=%s style=%s reason=descriptor_prepare",
+					tostring(row.identity), tostring(row.family_id), tostring(desired))
+				return false, "appearance descriptor unavailable"
+			end
+		end
 		if rebuild then
 			local live = live_item and self:describe(live_item)
 			if live and live.identity == row.identity then

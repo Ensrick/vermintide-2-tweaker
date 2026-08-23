@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.528-dev"
+local MOD_VERSION = "0.1.529-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
 mod._cwv_dev_anim_picker = mod:dofile("scripts/mods/character_weapon_variants/cwv_dev_anim_picker")
@@ -90,6 +90,8 @@ _om.deus_identity = mod:dofile("scripts/mods/character_weapon_variants/_cwv_deus
 _om.mod_unit_preview = mod:dofile("scripts/mods/character_weapon_variants/_cwv_mod_unit_preview")
 _om.resource_residency = mod:dofile("scripts/mods/character_weapon_variants/_lib_resource_residency")
 _om.appearance_descriptor = mod:dofile("scripts/mods/character_weapon_variants/_lib_appearance_descriptor")
+_om.combat_style_appearance = mod:dofile(
+	"scripts/mods/character_weapon_variants/_cwv_combat_style_appearance")
 _om.weapon_appearance = mod:dofile("scripts/mods/character_weapon_variants/_lib_weapon_appearance").new()
 _om.old_musket_appearance_policy = mod:dofile(
 	"scripts/mods/character_weapon_variants/_cwv_old_musket_appearance")
@@ -1109,9 +1111,14 @@ do
 			Managers and Managers.player, peer_id, 1) end,
 		item_key = function(item_data) return _om.combat_styles
 			and _om.combat_styles:member_key(item_data) end,
+		observed_unit_name = function(unit, owner, slot_name, hand)
+			return _om._husk_observed_unit_name
+				and _om._husk_observed_unit_name(unit, owner, slot_name, hand) or nil
+		end,
 		effective_template = function(item_data, unit, slot_name)
 			return _om.combat_styles and _om.combat_styles:effective_template_name(
 				item_data, nil, unit, slot_name) end,
+		descriptor_expectation = _om.combat_style_appearance.expectation,
 	}
 
 	_om.combat_styles = policy.install(mod, {
@@ -1142,6 +1149,20 @@ do
 				right_hand_offset = inverse_bretonnian_offset,
 			},
 		},
+		style_descriptor_transform = _om.combat_style_appearance.transform_decision,
+		local_style_descriptor = function(identity)
+			return _om._cwv_local_style_descriptor
+				and _om._cwv_local_style_descriptor(identity) or nil
+		end,
+		prepare_style_descriptor = function(slots, identity, style_id)
+			if not (_om._cwv_identity_payloads and _om._cwv_local_style_descriptor) then
+				return false
+			end
+			_om._cwv_identity_payloads(slots)
+			local descriptor = _om._cwv_local_style_descriptor(identity)
+			return descriptor ~= nil and descriptor.style_id == style_id
+				and descriptor.provider == _om.combat_style_appearance.PROVIDER
+		end,
 		owns_dlc = function(dlc_name)
 			local unlock = Managers and Managers.unlock
 			if not unlock or type(unlock.is_dlc_unlocked) ~= "function" then return false end
@@ -1167,9 +1188,10 @@ do
 		-- #786 A1/A2: the husk re-wield DEFERS into the #1145 coalescer and the
 		-- verdict is AND-semantics against the authored catalogue; both live in
 		-- _cwv_style_rewield. Returns (queued, reason), never a sync success.
-		rebuild_remote = function(peer_id, slot_name, family_id, style_id, on_verdict)
+		rebuild_remote = function(peer_id, slot_name, family_id, style_id, on_verdict,
+				descriptor)
 			return _om.style_rewield.queue_rebuild(_style_rewield_deps, peer_id,
-				slot_name, family_id, style_id, on_verdict) end,
+				slot_name, family_id, style_id, on_verdict, descriptor) end,
 	})
 	mod.cycle_combat_style = function()
 		return _om.combat_styles and _om.combat_styles:cycle_wielded()

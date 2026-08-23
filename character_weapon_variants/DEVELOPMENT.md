@@ -1343,6 +1343,17 @@ Husk mesh re-key AND transform fallback route through ONE decision point,
    hot join. Same-mod presence is **not** numeric lookup parity: another
    skin-appending mod can shift indexes, so no roster gate may restore a CWV
    skin to vanilla `rpc_add_equipment` (#741 / BUG_CLASSES 31, 64).
+
+   The Greatsword Combat Style family is the first W4 extension of this rule.
+   Its `cwv_style` provider reconstructs an immutable appearance descriptor
+   from the observer's local vanilla/CWV catalogue and authenticates the exact
+   style rider through the existing fingerprinted lifecycle. Template,
+   per-perspective transform, hand units, and husk re-wield expectations read
+   that descriptor instead of independently re-deriving the style. Keep the
+   legacy catalogue path only for style families not yet migrated. New family
+   migrations must cover both channel arrival orders, tamper/unavailable
+   failure, same-style/new-fingerprint replacement, and the consolidated peer
+   teardown before they can claim a live cell.
 2. **A present NON-cwv skin NEVER re-keys** (#475 Invariant 1). A native item
    virtually always carries a vanilla/LA skin on the wire; mis-applying a
    variant to it (the falsified "can never mis-apply" claim of the boot-time

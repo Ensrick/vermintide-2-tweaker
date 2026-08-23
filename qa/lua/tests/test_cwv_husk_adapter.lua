@@ -1325,7 +1325,20 @@ return function(H, repo_root)
                 if opts.observed_template ~= nil then return opts.observed_template end
                 return husk.equipment.slots[husk.slot].item_data.observed_template
             end,
+			observed_unit_name = function(unit, owner, slot_name, hand)
+				if owner ~= husk.unit or slot_name ~= husk.slot then return nil end
+				if hand == "right"
+						and unit == husk.equipment.right_hand_wielded_unit_3p then
+					return opts.observed_right_unit
+				end
+				if hand == "left"
+						and unit == husk.equipment.left_hand_wielded_unit_3p then
+					return opts.observed_left_unit
+				end
+				return nil
+			end,
             style_resource_resident = opts.style_resource_resident,
+			descriptor_expectation = opts.descriptor_expectation,
         }
         local mod = {
             get = function(_, key) return settings[key] end,
@@ -1337,9 +1350,10 @@ return function(H, repo_root)
         }
         local runtime = Policy.install(mod, {
             rewield = Rewield,
-            rebuild_remote = function(peer_id, slot_name, family_id, style_id, on_verdict)
+            rebuild_remote = function(peer_id, slot_name, family_id, style_id, on_verdict,
+					descriptor)
                 return Rewield.queue_rebuild(deps, peer_id, slot_name,
-                    family_id, style_id, on_verdict)
+					family_id, style_id, on_verdict, descriptor)
             end,
         })
         local saved_printf = _G.printf
@@ -1538,6 +1552,85 @@ return function(H, repo_root)
         end)
     end)
 
+	H.test("#660 migrated style identity retains descriptor across both arrival orders", function()
+		local function descriptor(fingerprint)
+			return {
+				provider = "cwv_style", style_family = "greatsword",
+				style_id = "bretonnian", fingerprint = fingerprint,
+				base_item_key = "es_2h_sword",
+				effective_template = "descriptor_bretonnian_template",
+			}
+		end
+		local function expected(value)
+			return {
+				family_id = value.style_family, style_id = value.style_id,
+				item_key = value.base_item_key,
+				template = value.effective_template,
+				right = true, left = false, fingerprint = value.fingerprint,
+				right_unit = "units/weapons/player/greatsword_02_3p",
+			}
+		end
+
+		-- We deliberately use a template name absent from the policy catalogue.
+		-- A green verdict therefore proves the descriptor, not a re-derived row,
+		-- supplied the independent postcondition.
+		with_fixture({ item_key = "es_2h_sword", left = false,
+				observed_template = "descriptor_bretonnian_template",
+				observed_right_unit = "units/weapons/player/greatsword_02_3p",
+				descriptor_expectation = expected }, function(fx)
+			fx.runtime:accept_style_edge("peerA", "slot_melee", "greatsword",
+				"bretonnian", "style_channel")
+			local first = descriptor("fp-one")
+			H.equal(fx.runtime:accept_style_edge("peerA", "slot_melee", "greatsword",
+				"bretonnian", "identity", first), true)
+			H.equal(fx.runtime.remote.peerA.slot_melee.descriptor, first)
+			H.equal(fx.runtime:accept_style_edge("peerA", "slot_melee", "greatsword",
+				"bretonnian", "style_channel"), false)
+			H.equal(fx.runtime.remote.peerA.slot_melee.descriptor, first,
+				"a late style channel cannot erase identity-owned appearance")
+			H.equal(fx.coalescer.depth(), 1)
+			fx.drain()
+			local completed = fx.runtime:step(0)
+			H.equal(completed, 1)
+
+			local second = descriptor("fp-two")
+			H.equal(fx.runtime:accept_style_edge("peerA", "slot_melee", "greatsword",
+				"bretonnian", "identity", second), true,
+				"same style with a new appearance fingerprint is a real edge")
+			H.equal(fx.runtime.remote.peerA.slot_melee.descriptor, second)
+			H.equal(fx.coalescer.depth(), 1)
+		end)
+
+		with_fixture({ item_key = "es_2h_sword", left = false,
+				observed_template = "descriptor_bretonnian_template",
+				observed_right_unit = "units/weapons/player/greatsword_02_3p",
+				descriptor_expectation = expected }, function(fx)
+			local valid = descriptor("fp-valid")
+			H.equal(fx.runtime:accept_style_edge("peerA", "slot_melee", "greatsword",
+				"bretonnian", "identity", valid), true)
+			local foreign = descriptor("fp-foreign")
+			foreign.style_family = "greathammer"
+			H.equal(fx.runtime:accept_style_edge("peerA", "slot_melee", "greatsword",
+				"bretonnian", "identity", foreign), false)
+			H.equal(fx.runtime.remote.peerA.slot_melee.descriptor, valid,
+				"tampered descriptor input must not replace accepted state")
+		end)
+
+		with_fixture({ item_key = "es_2h_sword", left = false,
+				observed_template = "descriptor_bretonnian_template",
+				observed_right_unit = "units/weapons/player/greatsword_01_3p",
+				descriptor_expectation = expected }, function(fx)
+			H.equal(fx.runtime:accept_style_edge("peerA", "slot_melee", "greatsword",
+				"bretonnian", "identity", descriptor("fp-wrong-unit")), true)
+			fx.drain()
+			local completed = fx.runtime:step(0)
+			H.equal(completed, 0,
+				"a live vanilla hand cannot satisfy the exact descriptor")
+			H.equal(fx.runtime:pending_remote_refresh_count(), 1)
+			H.truthy(table.concat(fx.lines, "\n"):find("wrong-unit=right", 1, true))
+		end)
+	end)
+
     H.test("#786 B4 a style-only peer still recovers through the bounded fallback", function()
         with_fixture({ item_key = "es_deus_01", left = true,
                 observed_template = Policy.ELVEN_SPEAR_SHIELD_TEMPLATE }, function(fx)
@@ -1617,7 +1710,8 @@ return function(H, repo_root)
             "if ok_style and rider then payload.style = rider end",
             -- B3: applied BEFORE the changed-dedupe gate.
             "_om.combat_style_policy.decode_style_rider(payload.style)",
-            "sender_peer_id, payload.slot, fam, sid, \"identity\") == true end",
+            "sender_peer_id, payload.slot, fam, sid, \"identity\",",
+            "== _om.combat_style_appearance.PROVIDER and descriptor or nil)",
             "if not style_owned then",
         }) do
             H.truthy(main:find(marker, 1, true), "missing entry #786 anchor: " .. marker)
@@ -1628,7 +1722,8 @@ return function(H, repo_root)
         H.truthy(identity_at < gate,
             "the style axis must be applied BEFORE the changed-dedupe gate (#474 precedent)")
         for _, marker in ipairs({
-            "function runtime:accept_style_edge(peer_id, slot_name, family_id, style_id, source)",
+            "function runtime:accept_style_edge(peer_id, slot_name, family_id, style_id, source,",
+			"descriptor = state.descriptor",
             "pcall(deps.send_identity_slots, equipment.slots, \"combat_style\", true)",
             "off_hand = true,",
             "M.STYLE_IDENTITY_GRACE",

@@ -55,6 +55,59 @@ return function(H, repo_root)
         H.equal(#d.fingerprint, 19)
     end)
 
+	H.test("CWV #660 style is fingerprinted through payload dedupe and receiver equality", function()
+		local sent = {}
+		local current = {
+			provider = "cwv_style", variant_key = "es_2h_sword",
+			base_item_key = "es_2h_sword", skin = nil, offhand_skin = nil,
+			style_rider = "greatsword:greatsword", fingerprint = "style-greatsword",
+		}
+		local lifecycle = Policy.new({
+			resolve_local = function(_, slot_name)
+				if slot_name == "slot_melee" then return current, "es_2h_sword" end
+				return nil, "es_longbow"
+			end,
+			resolve_remote = function(payload)
+				return {
+					provider = payload.provider, variant_key = payload.item_key,
+					base_item_key = payload.base_item_key,
+					skin = nil, offhand_skin = nil,
+					style_rider = current.style_rider,
+					fingerprint = current.fingerprint,
+				}
+			end,
+			send = function(_, _, payload)
+				sent[#sent + 1] = payload
+				return true
+			end,
+		})
+		H.equal(lifecycle:publish({ slot_melee = {} }, "equip"), 2)
+		H.equal(sent[1].style, "greatsword:greatsword")
+		H.equal(lifecycle:publish({ slot_melee = {} }, "duplicate"), 0)
+
+		current = {
+			provider = "cwv_style", variant_key = "es_2h_sword",
+			base_item_key = "es_2h_sword", skin = nil, offhand_skin = nil,
+			style_rider = "greatsword:bretonnian", fingerprint = "style-bretonnian",
+		}
+		H.equal(lifecycle:publish({ slot_melee = {} }, "style_switch"), 1,
+			"a style-only change must not be swallowed by the sent ledger")
+		local payload = lifecycle:payload_for("slot_melee", {})
+		local changed, descriptor_value, reason = lifecycle:accept(
+			"peer-style", Policy.SCHEMA, payload)
+		H.equal(changed, true)
+		H.equal(reason, "exact")
+		H.equal(descriptor_value.style_rider, "greatsword:bretonnian")
+
+		local tampered = {}
+		for key, value in pairs(payload) do tampered[key] = value end
+		tampered.style = "greatsword:greatsword"
+		local _, rejected, rejected_reason = lifecycle:accept(
+			"peer-style-tamper", Policy.SCHEMA, tampered)
+		H.equal(rejected, nil)
+		H.equal(rejected_reason, "fingerprint_mismatch")
+	end)
+
     H.test("CWV #579 transports distinct semantic hand skins and reconstructs locally", function()
         local sent = {}
         local owner = assert(Exact.resolve_spawn_descriptor({

@@ -196,8 +196,11 @@ return function(H, repo_root)
 			clear_peer = function(_, peer_id) cleared[#cleared + 1] = peer_id end,
 		}
 		local player_class = {}
+		local dependent_clears = {}
 		H.equal(Cleanup.install(mod, lifecycle, player_class, Resolver,
-			function() end, function() return "local-peer" end), true)
+			function() end, function() return "local-peer" end, function(peer_id)
+				dependent_clears[#dependent_clears + 1] = peer_id
+			end), true)
 		H.truthy(hook)
 		local human = {
 			peer_id = "remote-peer",
@@ -228,11 +231,14 @@ return function(H, repo_root)
 		local r1, r2, r3, r4 = hook(vanilla, manager, "remote-peer", 1)
 		H.equal(table.concat({ r1, r2, r3, r4 }, "|"), "r1|r2|r3|r4")
 		H.equal(cleared[1], "remote-peer")
+		H.equal(dependent_clears[1], "remote-peer")
 		hook(vanilla, manager, "remote-peer", 2)
 		hook(vanilla, manager, "local-peer", 1)
 		manager.is_server = true
 		hook(vanilla, manager, "remote-peer", 1)
 		H.equal(#cleared, 1, "bot/local/server removals must not clear client identity")
+		H.equal(#dependent_clears, 1,
+			"bot/local/server removals must not clear dependent ledgers")
 		H.equal(vanilla_calls, 4, "cleanup must never suppress vanilla removal")
 	end)
 

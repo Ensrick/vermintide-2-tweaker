@@ -704,7 +704,8 @@ end
 _om._cwv_husk_transform_policy = _om.husk_transform_policy.bind({ find_def = _find_def,
 	resolve_def = _resolve_cwv_def,
 	plan_transform = _plan_cwv_hand_transform,
-	model_by_unit = _crowbill_transform_by_unit })
+	model_by_unit = _crowbill_transform_by_unit,
+	hand_unit = _om.combat_style_appearance.hand_unit })
 _om._cwv_select_husk_transform_def = _om._cwv_husk_transform_policy.select
 _om._cwv_husk_transform_apply_plan = _om._cwv_husk_transform_policy.plan
 
