@@ -5,7 +5,7 @@
   "metric": "PowerShell Measure-Object -Line physical lines",
   "generated": "2026-08-23",
   "files": {
-    "career_tweaker/scripts/mods/career_tweaker/_crt_balance_catalog_early.lua": 1668,
+    "career_tweaker/scripts/mods/career_tweaker/_crt_balance_catalog_early.lua": 1622,
     "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_meta_trait_boons.lua": 1658,
     "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_regression.lua": 1721,
     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_combat_styles.lua": 2151,
@@ -19,7 +19,6 @@
     "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/standard_forge.lua": 1744,
     "crafting_in_modded/scripts/mods/crafting_in_modded/_cim_regression_checks.lua": 2234,
     "crafting_in_modded/scripts/mods/crafting_in_modded/standard_forge.lua": 1691,
-    "general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua": 2483,
     "general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_creature_spawner.lua": 1552,
     "general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_regression_checks.lua": 2236,
     "general_tweaker_dev/scripts/mods/general_tweaker_dev/general_tweaker_dev_data.lua": 1553,

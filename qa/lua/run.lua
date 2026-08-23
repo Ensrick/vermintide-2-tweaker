@@ -424,6 +424,7 @@ local suites = {
     "test_gt_host_lag_comp",
     "test_gt_bot_hazard_resistance",
     "test_gt_ai_takeover",
+    "test_gt_bot_aid_owner",
     "test_gt_bot_aid_pin_policy",
     "test_gt_solo_qol_explosion_arity",
     "test_gt_client_ragdoll_retention",

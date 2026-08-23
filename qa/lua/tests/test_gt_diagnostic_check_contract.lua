@@ -25,6 +25,7 @@ return function(H, repo_root)
         "Managers", "Unit", "Actor", "ScriptUnit", "NetworkUnit", "InteractionDefinitions",
         "InteractionResult", "World", "Vector3", "Quaternion", "BotConstants", "AiUtils",
         "LevelHelper", "PLAYER_UNITS", "Breeds", "DamageUtils", "ConflictDirector",
+        "POSITION_LOOKUP", "HEALTH_ALIVE", "ALIVE",
     }
 
     local function load_gt_module(file)

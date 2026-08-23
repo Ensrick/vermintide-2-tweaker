@@ -1177,7 +1177,7 @@ end
 - **#492 composition is intentionally behavior-changing.** The unreachable-aid watchdog steps the veto aside. A teleport with `bailout=true` is not evidence that the full aid predicate failed; it is evidence to audit the watchdog decision and regroup target separately.
 
 ### Reference fix
-gt_dev `_gt_bot_fixes.lua` blanket veto in `BTConditions.should_teleport` (v0.2.185), broadened `side:player_units()` predicate (v0.2.212, #384), and `_gt_bot_teleport_lab.lua` correlated `[gt:139:chain]` trace (v0.2.243). Runtime checks: `gt_bot139_*`, `gt_bot384_needs_aid_or_rescue_predicate`, `issue139_aid_trace_correlation`; offline `test_gt_teleport_loop_policy.lua`. Related: class 21 (`POSITION_LOOKUP` dead/stale outside its owning system phase).
+gt_dev `_gt_bot_fixes.lua` blanket veto in `BTConditions.should_teleport` (v0.2.185), `_gt_bot_aid_owner.lua` broadened `side:player_units()` predicate (v0.2.212, #384), and `_gt_bot_teleport_lab.lua` correlated `[gt:139:chain]` trace (v0.2.243). Runtime checks: `gt_bot139_*`, `gt_bot384_needs_aid_or_rescue_predicate`, `issue139_aid_trace_correlation`; offline `test_gt_teleport_loop_policy.lua`. Related: class 21 (`POSITION_LOOKUP` dead/stale outside its owning system phase).
 
 ---
 

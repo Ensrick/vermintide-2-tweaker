@@ -64,10 +64,11 @@ return function(H, repo_root)
         end
 
         local bot_source = read(root .. "_gt_bot_fixes.lua")
+        local aid_source = read(root .. "_gt_bot_aid_owner.lua")
         local spawner_source = read(root .. "_gt_creature_spawner.lua")
         H.truthy(bot_source:find('mod:hook(Utility, "get_action_utility"', 1, true))
         H.truthy(bot_source:find("return 0", 1, true))
-        H.truthy(bot_source:find("return nil, math.huge, nil, nil", 1, true))
+        H.truthy(aid_source:find("return nil, math.huge, nil, nil", 1, true))
         H.equal(spawner_source:find('mod:hook(Utility, "get_action_utility"', 1, true), nil)
     end)
 end

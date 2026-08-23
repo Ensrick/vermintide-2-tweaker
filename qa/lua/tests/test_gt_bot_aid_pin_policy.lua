@@ -95,30 +95,33 @@ return function(H, repo_root)
         local fixes_path = repo_root
             .. "/general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua"
         local f = assert(io.open(fixes_path, "rb")); local fixes = f:read("*a"); f:close()
+        local owner_path = repo_root
+            .. "/general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_aid_owner.lua"
+        local o = assert(io.open(owner_path, "rb")); local owner = o:read("*a"); o:close()
 
         -- #384 pin: marker + armed at all three aid-pick return sites + held
         -- before the FIX 13 heal injection.
-        H.truthy(fixes:find("GT_BOT384_AID_ERRAND_PIN_MARKER_v0_2_250", 1, true))
-        H.truthy(fixes:find("_gt384_arm_pin(blackboard, ally, need_type)", 1, true))
-        H.truthy(fixes:find('_gt384_arm_pin(blackboard, best_unit, "knocked_down")', 1, true))
-        H.truthy(fixes:find("_gt384_arm_pin(blackboard, _fr_unit, _fr_need)", 1, true))
-        H.truthy(fixes:find("_gt384_hold_pin(blackboard, self_pos, _gt_rescue_awaiting_active)", 1, true))
+        H.truthy(owner:find("GT_BOT384_AID_ERRAND_PIN_MARKER_v0_2_250", 1, true))
+        H.truthy(owner:find("_gt384_arm_pin(blackboard, ally, need_type)", 1, true))
+        H.truthy(owner:find('_gt384_arm_pin(blackboard, best_unit, "knocked_down")', 1, true))
+        H.truthy(owner:find("_gt384_arm_pin(blackboard, _fr_unit, _fr_need)", 1, true))
+        H.truthy(owner:find("_gt384_hold_pin(blackboard, self_pos, _gt_rescue_awaiting_active)", 1, true))
 
         -- #492 bail reason is stamped and both teleport vetoes discriminate on
         -- it (no-path releases; no-progress holds while the pin is live).
-        H.truthy(fixes:find("blackboard._gt492_bailout_reason = reason", 1, true))
+        H.truthy(owner:find("blackboard._gt492_bailout_reason = reason", 1, true))
         H.truthy(fixes:find('blackboard._gt492_bailout_reason ~= "no-progress"', 1, true))
         H.truthy(fixes:find("not _gt384_pin_live(blackboard)", 1, true))
 
         -- #384 veto scan stays side-scoped with the FULL predicate: roster from
         -- side:player_units() (bots + awaiting included; PLAYER_UNITS is
         -- human-only and drops awaiting units, side_manager.lua:338-340).
-        H.truthy(fixes:find("local punits = side and side.player_units and side:player_units()", 1, true))
-        local pred_from = fixes:find("local function _gt_status_needs_aid_or_rescue(st)", 1, true)
+        H.truthy(owner:find("local punits = side and side.player_units and side:player_units()", 1, true))
+        local pred_from = owner:find("local function _gt_status_needs_aid_or_rescue(st)", 1, true)
         H.truthy(pred_from)
-        local pred_to = fixes:find("end", pred_from, true)
+        local pred_to = owner:find("end", pred_from, true)
         H.truthy(pred_to)
-        local pred_body = fixes:sub(pred_from, pred_to)
+        local pred_body = owner:sub(pred_from, pred_to)
         for _, clause in ipairs({
             "is_knocked_down", "is_hanging_from_hook", "get_is_ledge_hanging",
             "is_pulled_up", "is_pounced_down", "is_grabbed_by_pack_master",

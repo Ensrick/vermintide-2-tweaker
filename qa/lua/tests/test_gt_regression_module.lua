@@ -55,4 +55,23 @@ return function(H, repo_root)
             H.truthy(update:find(consumer, 1, true), consumer .. " dispatcher route missing")
         end
     end)
+
+    H.test("GT bot aid extraction preserves its ordered owner boundary", function()
+        local bot_main = read("_gt_bot_fixes.lua")
+        local owner = read("_gt_bot_aid_owner.lua")
+        local load_at = assert(bot_main:find(
+            'mod:dofile("scripts/mods/general_tweaker_dev/_gt_bot_aid_owner")', 1, true))
+        local melee_enter_at = assert(bot_main:find(
+            'mod:hook("BTBotMeleeAction", "enter"', 1, true))
+        local teleport_at = assert(bot_main:find(
+            'mod:hook("BTConditions", "should_teleport"', 1, true))
+        H.truthy(melee_enter_at < load_at)
+        H.truthy(load_at < teleport_at)
+        H.equal(select(2, bot_main:gsub(
+            'mod:dofile%("scripts/mods/general_tweaker_dev/_gt_bot_aid_owner"%)', '')), 1)
+        H.equal(select(2, bot_main:gsub('mod:hook%("BTConditions", "can_activate_ability"', '')), 0)
+        H.equal(select(2, bot_main:gsub('mod:hook%("PlayerBotBase", "_select_ally_by_utility"', '')), 0)
+        H.equal(select(2, owner:gsub('mod:hook%("BTConditions", "can_activate_ability"', '')), 1)
+        H.equal(select(2, owner:gsub('mod:hook%("PlayerBotBase", "_select_ally_by_utility"', '')), 1)
+    end)
 end

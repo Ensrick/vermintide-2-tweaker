@@ -1,5 +1,22 @@
 # General Tweaker Changelog
 
+## 0.2.270-dev (2026-08-23) -- bot-aid owner decomposition (#2) [not-started]
+
+- Behavior-neutral structural split: the existing Ironbreaker aid yield,
+  human-heal/rescue selector, aid-errand pin, and stalled-pursuit lifecycle move
+  verbatim from `_gt_bot_fixes.lua` into the explicit
+  `_gt_bot_aid_owner.lua` installer at their historical load position.
+- `_gt_bot_fixes.lua` falls from 2,483 to 1,485 measured lines; the new owner
+  begins at 1,087. The target-tier debt row is retired and a downward-only
+  decomposition contract now retains the parent ceiling and both ordered child
+  owners.
+- Offline contracts prove the exact two-hook order/cardinality, one installer
+  call before teleport decisions, returned predicate identity, missing-context
+  rejection before hooks, second-load rejection, registration-error
+  propagation, moved textual invariants, and existing bot policy behavior.
+  No gameplay setting, default, hook body, RPC, or runtime behavior changes.
+  The repository-only #2 umbrella remains open for later oversized modules.
+
 ## 0.2.269-dev (2026-08-16) -- agent bridge Phase 1: live telemetry + clipboard probe (#1338) [untested]
 
 - New dev-only module `_gt_agent_bridge.lua` (never promoted): gives an
