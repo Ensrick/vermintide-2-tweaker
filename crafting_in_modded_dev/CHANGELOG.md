@@ -1,5 +1,17 @@
 # Crafting in Modded Changelog
 
+## 0.8.129-dev (2026-08-23) -- release Ranald's Gift browser for live verification (#1360) [verify-fix]
+
+- Reissued the already reviewed Community Builds implementation with its
+  explicit live-verification lifecycle marker after the first successful
+  unsubscribed-author publication proved issue #1376. Runtime behavior is
+  unchanged from 0.8.128-dev; the new version makes the exact running build and
+  its verification authority unambiguous.
+- Verify from the Athanor overview: open **Community Builds**, exercise career,
+  Likes/Recent, and page controls, import one build for the currently selected
+  career, confirm all five equipped item slots and six talents, then run
+  `/cim_regression_test` and check `issue1360_ranalds_build_import`.
+
 ## 0.8.128-dev (2026-08-23) -- browse and import Ranald's Gift builds (#1360)
 
 - Added **Community Builds** to the Athanor overview. It reads the public
