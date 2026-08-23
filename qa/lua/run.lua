@@ -157,6 +157,7 @@ local suites = {
     "test_cwv_remote_identity",
     "test_cwv_husk_path",
     "test_cwv_husk_adapter",
+    "test_cwv_style_rewield",
     "test_cwv_husk_ammo_native_pair",
     "test_cwv_bundled_mesh_admission",
     "test_cwv_browser_prepass",
