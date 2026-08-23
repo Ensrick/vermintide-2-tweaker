@@ -1,5 +1,15 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.345-dev (2026-08-23) -- meta-boon owner decomposition (#2)
+
+- Moves the complete scaling-boon and meta-ammo runtime into the explicit
+  `_ct_meta_boon_owner.lua` installer without changing its registration order,
+  hook bodies, commands, or runtime behavior.
+- Shrinks `_ct_meta_trait_boons.lua` from 2,492 to 1,658 measured lines; the new
+  owner starts at 864 lines. Both are guarded by downward-only size contracts,
+  exactly-once installation tests, dependency/error-propagation checks, Lua 5.1
+  parsing, and the existing boon/ammo behavioral suite.
+
 ## 0.7.344-dev (2026-08-20) -- publication reconciliation
 
 - Rebuilds and publishes the already-reviewed 0.7.343-dev stack re-broadcast
