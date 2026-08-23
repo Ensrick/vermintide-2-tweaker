@@ -15,6 +15,8 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path -Parent (Split-Path -Parent $PSScriptRoot)
 . (Join-Path $repoRoot 'tools/verify/lifecycle_method_policy.ps1')
+. (Join-Path $repoRoot 'tools/diagnostics/diagnostic_ownership_policy.ps1')
+$diagnosticOwnershipManifestPath = Join-Path $repoRoot 'qa/diagnostic_ownership.psd1'
 
 # One decision pass serves both the blocking verdict and the report-only
 # authority findings. Evaluating each issue twice doubled the card-policy
@@ -119,6 +121,15 @@ function Get-VtGraphQlRetryDelaySeconds([int]$FailedAttempt) {
 
 function Invoke-SelfTest {
     Invoke-VtDeployedSourceContractSelfTest
+    $diagnosticFixture = @{
+        Entries = @(@{ Path='demo/_demo_diag_9.lua'; Classification='active_issue'; Issues=@(9) })
+    }
+    if (@(Test-VtDiagnosticIssueStates -Manifest $diagnosticFixture -OpenIssues @([pscustomobject]@{number=9})).Count -ne 0) {
+        throw 'open diagnostic-owner issue was rejected'
+    }
+    if (@(Test-VtDiagnosticIssueStates -Manifest $diagnosticFixture -OpenIssues @()).Count -ne 1) {
+        throw 'closed diagnostic-owner issue was not rejected'
+    }
     $validSolo = New-TestCard
     $validExactBanner = "## CURRENT LIVE TEST`n`n**Build/banner:** exact banner: [WOC] v0.1.42-dev loaded`n**Topology:** Solo`n`n1. Equip the Blightreaper in the Keep.`n`n**Expected:** The Blightreaper remains visible."
     $unlabeledExactBanner = "## CURRENT LIVE TEST`n`n**Build/banner:** [WOC] v0.1.42-dev loaded`n**Topology:** Solo`n`n1. Equip the Blightreaper in the Keep.`n`n**Expected:** The Blightreaper remains visible."
@@ -541,6 +552,8 @@ $phaseTimer.Restart()
 $decisionReport = Get-LifecycleDecisionReport -Issues $issues -RequirePinnedCard -Authority $authority -EnforceAuthority:$EnforceAuthority
 $violations = @($decisionReport.Violations)
 $authorityFindings = @($decisionReport.AuthorityFindings)
+$diagnosticManifest = Import-PowerShellDataFile -LiteralPath $diagnosticOwnershipManifestPath
+$diagnosticFailures = @(Test-VtDiagnosticIssueStates -Manifest $diagnosticManifest -OpenIssues $issues)
 $policySeconds = [int][math]::Round($phaseTimer.Elapsed.TotalSeconds)
 Write-Host "[check-lifecycle-cardinality] timing: open-issues=${openIssueSeconds}s release-manifest=${manifestSeconds}s deployed-contract=${contractSeconds}s card-policy=${policySeconds}s total=$([int][math]::Round($totalTimer.Elapsed.TotalSeconds))s"
 if($authorityFindings.Count -gt 0){
@@ -550,17 +563,21 @@ if($authorityFindings.Count -gt 0){
         Write-Host "  - issue #$($finding.number) - $($finding.advisories -join ', ') - '$($finding.title)'"
     }
 }
-if ($violations.Count -eq 0) {
+if ($violations.Count -eq 0 -and $diagnosticFailures.Count -eq 0) {
     $suffix=if(-not$EnforceAuthority -and ($authorityFindings.Count -gt 0 -or $authorityLoadError)){' Strict deployed-source findings are report-only during the documented rollout.'}else{''}
     Write-Host "[check-lifecycle-cardinality] OK: all $($issues.Count) open issues satisfy blocking lifecycle and live-test queue doctrine.$suffix"
     exit 0
 }
 
-Write-Host "[check-lifecycle-cardinality] FAIL: $($violations.Count) open issue(s) violate tracker doctrine:"
+Write-Host "[check-lifecycle-cardinality] FAIL: $($violations.Count) lifecycle violation(s), $($diagnosticFailures.Count) diagnostic-owner issue-state violation(s):"
 foreach ($violation in $violations) {
     $message = "issue #$($violation.number) [$($violation.labels -join ', ')] - $($violation.errors -join ', ') - '$($violation.title)'"
     if ($env:GITHUB_ACTIONS -eq 'true') { Write-Host "::error::$message" }
     Write-Host "  - $message"
+}
+foreach ($failure in $diagnosticFailures) {
+    if ($env:GITHUB_ACTIONS -eq 'true') { Write-Host "::error::$failure" }
+    Write-Host "  - $failure"
 }
 Write-Host '[check-lifecycle-cardinality] Required: exactly one of not-started/diagnostics-armed/verify-fix. Ready states require exactly one pinned exact CURRENT LIVE TEST card, and it must be the newest exact card. Fixed and verify-fix-coop are invalid while open. Pass -EnforceAuthority only after the report-only backlog is repaired.'
 exit 1
