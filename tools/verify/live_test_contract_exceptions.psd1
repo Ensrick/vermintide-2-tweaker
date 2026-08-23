@@ -67,6 +67,9 @@
     # Static analysis deliberately recognizes only simple local caps/guards.
     # These receipts have finite control-flow bounds that require a small
     # cross-function audit.  Sources is the complete set of direct emitters.
+    # Superseded snapshots are deliberately pruned after an exact consumed
+    # route override replaces them; Git retains their history while this
+    # Windows PowerShell 5.1 data file stays below its safe AST limit.
     LegacyMarkerFamilyAudits = @(
         @{
             Marker = '[ct:456]'
@@ -194,130 +197,6 @@
                 'career_tweaker/scripts/mods/career_tweaker/_crt_career_unlock.lua'
             )
             Bound = 'Finite catalog summaries are digest-deduplicated; UI refresh emits once per explicit relevant setting change.'
-        }
-        @{
-            Marker = '[gt:1008]'
-            ModId = 'gt_dev'
-            Sources = @(
-                'general_tweaker_dev/scripts/mods/general_tweaker_dev/general_tweaker_dev.lua'
-            )
-            Bound = 'Armor-pierce receipts share an absolute eight-row cap.'
-        }
-        @{
-            Marker = '[gt:1009]'
-            ModId = 'gt_dev'
-            Sources = @(
-                'general_tweaker_dev/scripts/mods/general_tweaker_dev/general_tweaker_dev.lua'
-            )
-            Bound = 'A weak-key affected-unit latch permits at most one receipt per unit lifetime.'
-        }
-        @{
-            Marker = '[cd:881]'
-            ModId = 'character_dialogue'
-            Sources = @(
-                'character_dialogue/scripts/mods/character_dialogue/character_dialogue.lua'
-            )
-            Bound = 'Each finite request/residency transition emits one decision or terminal row; pending polls remain silent.'
-        }
-        @{
-            Marker = '[character_dialogue:preview]'
-            ModId = 'character_dialogue'
-            Sources = @(
-                'character_dialogue/scripts/mods/character_dialogue/character_dialogue.lua'
-            )
-            Bound = 'Each explicit preview request takes one terminal branch and a live playback adds at most one ended row.'
-        }
-        @{
-            Marker = '[cwv:774]'
-            ModId = 'character_weapon_variants'
-            Sources = @(
-                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_combat_styles.lua'
-            )
-            Bound = 'Mission UI diagnostics are fingerprint-deduplicated under an absolute twenty-four-row cap.'
-        }
-        @{
-            Marker = '[gut:954]'
-            ModIds = @('gut', 'gut_dev')
-            Sources = @(
-                'gui_tweaker/scripts/mods/gui_tweaker/_gut_bot_loadout_snapshot.lua'
-                'gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_bot_loadout_snapshot.lua'
-            )
-            Bound = 'Stable migration is once per persisted career; dev receipts emit only on a finite import, cache replacement, actual drift repair, or error-detail transition.'
-        }
-        @{
-            Marker = '[gut:354]'
-            ModId = 'gut_dev'
-            Sources = @(
-                'gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_native_loadouts.lua'
-            )
-            Bound = 'Native-loadout tracing is signature-deduplicated under an absolute twenty-four-row cap.'
-        }
-        @{
-            Marker = '[wt:282]'
-            ModIds = @('wt', 'wt_dev')
-            Sources = @(
-                'weapon_tweaker/scripts/mods/weapon_tweaker/_wt_deepwood_runtime.lua'
-                'weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_deepwood_runtime.lua'
-            )
-            Bound = 'The package lease emits once per last_reason state transition; unchanged ensure/update calls are silent.'
-        }
-        @{
-            Marker = '[wt:408]'
-            ModIds = @('wt', 'wt_dev')
-            Sources = @(
-                'weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_data.lua'
-                'weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/weapon_tweaker_dev_data.lua'
-            )
-            Bound = 'Each mod data tree has a lifetime latch and emits its availability-sort receipt once.'
-        }
-        @{
-            Marker = '[wt:948]'
-            ModId = 'wt_dev'
-            Sources = @(
-                'weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_diagnostics.lua'
-                'weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/weapon_tweaker_dev_data.lua'
-            )
-            Bound = 'The data receipt is lifetime-latched; explicit audit commands visit finite receiver groups per invocation.'
-        }
-        @{
-            Marker = '[cwv:273]'
-            ModId = 'character_weapon_variants'
-            Sources = @(
-                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_item_registration_owner.lua'
-            )
-            Bound = 'The finite install/parity report is fingerprint-deduplicated; unchanged gameplay-enter and setup calls are silent.'
-        }
-        @{
-            Marker = '[cos:1145]'
-            ModId = 'cosmetics_tweaker'
-            Sources = @(
-                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_rewield_coalescer.lua'
-            )
-            Bound = 'A lifetime budget permits at most two hundred regular rows plus one terminal cap row.'
-        }
-        @{
-            Marker = '[cwv:1145]'
-            ModId = 'character_weapon_variants'
-            Sources = @(
-                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_rewield_coalescer.lua'
-            )
-            Bound = 'A lifetime budget permits at most two hundred regular rows plus one terminal cap row.'
-        }
-        @{
-            Marker = '[cwv:482]'
-            ModId = 'character_weapon_variants'
-            Sources = @(
-                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_item_registration_owner.lua'
-            )
-            Bound = 'Backend identities are deduplicated under an absolute sixteen-receipt cap.'
-        }
-        @{
-            Marker = '[cwv:423]'
-            ModId = 'character_weapon_variants'
-            Sources = @(
-                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_exact_wire_runtime.lua'
-            )
-            Bound = 'Install emits one catalog/parity result and hit diagnostics are deduplicated once per finite damage-profile identifier.'
         }
         @{
             Marker = '[ct:349]'
@@ -1510,6 +1389,36 @@
             GuardAnchors=@(
                 @{Tokens=@('if','diagnostics','[','key',']','then','return','end')}
                 @{Tokens=@('diagnostics','[','key',']','=','true')}
+            )
+        }
+        @{
+            ModId='enemy_tweaker'; ModTree='86f2677612ffb4772100a42101a19dacf602191c'
+            Source='enemy_tweaker/scripts/mods/enemy_tweaker/_et_skaven_warlord_breed.lua'
+            Marker='[et:324]'; AddRoute=$true
+            Signature='[et:324] spawn#%d t=+%ss %s'
+            Bound='at most four Warlords times three fixed snapshots, one cap row, and one fallback per attempted row'
+            EmitterAnchors=@(
+                @{Tokens=@('pcall','(','printf',',','String:[et:324] ','..','fmt',',','...',')')}
+            )
+            GuardAnchors=@(
+                @{Tokens=@('local','DIAG_OFFSETS','=','{','5',',','15','}','local','DIAG_MAX_UNITS','=','4')}
+                @{Tokens=@('entry','.','next','=','entry','.','next','+','1','if','not','ok','or','keep','==','false','or','entry','.','next','>','#','DIAG_OFFSETS','then','table','.','remove','(','_tracked',',','i',')')}
+            )
+        }
+        @{
+            ModId='event_tweaker'; ModTree='aecc40f6935dae8dd6ab47e102822fd1e8622d64'
+            Source='event_tweaker/scripts/mods/event_tweaker/_evt_issue1309_probe.lua'
+            Marker='[et:1149t]'; AddRoute=$true
+            Signature='[et:1149t] %s'
+            Bound='one activation, at most ten per-kill rows, and one summary per peer per mission'
+            EmitterAnchors=@(
+                @{Tokens=@('M','.','PREFIX','=','String:[et:1149t]')}
+                @{Source='event_tweaker/scripts/mods/event_tweaker/_evt_diagnostics.lua';Tokens=@('if','line','then','pcall','(','printf',',','String:%s',',','line',')','end')}
+            )
+            GuardAnchors=@(
+                @{Tokens=@('M','.','RECEIPT_CAP','=','10')}
+                @{Tokens=@('if','state','.','seed_reported','then','return','nil','end','state','.','seed_reported','=','true')}
+                @{Tokens=@('if','state','.','summary_emitted','then','return','nil','end','state','.','summary_emitted','=','true')}
             )
         }
     )
