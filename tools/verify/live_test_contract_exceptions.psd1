@@ -81,22 +81,6 @@
             Bound = 'One finite census per mission population plus at most two fallthrough receipts per book spawner (leftover, then empty on casket failure).'
         }
         @{
-            Marker = '[ct:533]'
-            ModId = 'ct_dev'
-            Sources = @(
-                'chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_tab_collectibles_layout.lua'
-            )
-            Bound = 'The built/failed guards permit one terminal construction receipt per _setup_mission_data generation between resets.'
-        }
-        @{
-            Marker = '[ct:571]'
-            ModId = 'ct_dev'
-            Sources = @(
-                'chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_tab_collectibles_layout.lua'
-            )
-            Bound = 'The layout_signature guard permits one layout receipt per constructed collectible pane and _setup_mission_data generation.'
-        }
-        @{
             Marker = '[gut:persist]'
             ModId = 'gut_dev'
             Sources = @(
@@ -116,22 +100,6 @@
             Bound = 'Boot failures emit once; explicit diagnostics visit four records with finite fields; live evidence has an absolute eight-row cap.'
         }
         @{
-            Marker = '[gut:281]'
-            ModId = 'gut_dev'
-            Sources = @(
-                'gui_tweaker_dev/scripts/mods/gui_tweaker_dev/gui_tweaker_dev.lua'
-            )
-            Bound = 'The dependency receipt is emitted once during top-level module evaluation.'
-        }
-        @{
-            Marker = '[gut:310]'
-            ModId = 'gut_dev'
-            Sources = @(
-                'gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_hud_customizer.lua'
-            )
-            Bound = 'Each edit-mode edge emits one state row and, on entry, one fixed ten-widget census plus summary; unchanged frames are silent.'
-        }
-        @{
             Marker = '[gut:1151]'
             ModId = 'gut_dev'
             Sources = @(
@@ -147,31 +115,6 @@
                 'gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_official_loadout_boot_guard.lua'
             )
             Bound = 'Each guarded Modded-Adventure boot hook emits at most one branch receipt per invocation; snapshot import visits a finite career set.'
-        }
-        @{
-            Marker = '[cos:25]'
-            ModId = 'cosmetics_tweaker'
-            Sources = @(
-                'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_runtime_checks.lua'
-            )
-            Bound = 'The registered regression check emits at most one seeded row and one PASS row per explicit command invocation.'
-        }
-        @{
-            Marker = '[cwv:567]'
-            ModId = 'character_weapon_variants'
-            Sources = @(
-                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_exact_pair_state.lua'
-                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_item_registration_owner.lua'
-            )
-            Bound = 'Pair-state receipts are deduplicated under an absolute forty-row cap; item registration runs once per session over a finite skin-key set.'
-        }
-        @{
-            Marker = '[cwv:1211]'
-            ModId = 'character_weapon_variants'
-            Sources = @(
-                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_wire.lua'
-            )
-            Bound = 'The unregistered_reported session latch permits at most one receipt.'
         }
         @{
             Marker = '[cim:882]'
@@ -938,6 +881,20 @@
                 @{Tokens=@('emitted','>=','MAX_DIAGNOSTICS')}
                 @{Tokens=@('seen','[','signature',']','=','true')}
                 @{Tokens=@('emitted','=','emitted','+','1')}
+            )
+        }
+        @{
+            ModId='character_weapon_variants'; ModTree='cd2b93109f6f0c79fe4a75f40fb00ae23539af91'
+            Source='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_item_registration_owner.lua'
+            Marker='[cwv:567]'; AddRoute=$true
+            Signature='[cwv:567] cache_invalidated=%s rebuild=%s skin=%s association=%s owner=%s combination=%s rarity=%s cache_item=%s'
+            Bound='exactly one receipt for each of the three finite authored issue-567 skin keys after deferred owner registration'
+            EmitterAnchors=@(
+                @{Tokens=@('pcall','(','printf',',','String:[cwv:567] cache_invalidated=%s rebuild=%s skin=%s association=%s owner=%s combination=%s rarity=%s cache_item=%s')}
+            )
+            GuardAnchors=@(
+                @{Tokens=@('mod','.', '_cwv567_skin_keys','=','{','String:cwv_es_sword_and_mace_wpn_emp_sword_02_t1_wpn_emp_mace_03_t1',',','String:cwv_es_dual_maces_es_1h_mace_skin_02_runed_01',',','String:cwv_es_axe_shield_wpn_emp_shield_03__axe_02_t2',',','}')}
+                @{Tokens=@('for','_',',','skin_key','in','ipairs','(','mod','.', '_cwv567_skin_keys',')','do')}
             )
         }
         @{
