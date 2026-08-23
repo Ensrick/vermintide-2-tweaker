@@ -1,5 +1,15 @@
 # Changelog — Dynamic Cosmetic Portraits
 
+## 0.1.29-dev (2026-08-23) — retire consumed portrait-scope telemetry (#499) [not-started]
+
+- Removed the automatic `[dcp:435]` HUD/Tab/score telemetry and its closed-issue
+  deduplication helper. The player-scoped fix and named runtime regression check
+  remain intact.
+- Consolidated live-player and score-record cosmetic selection behind one pure,
+  skin-first portrait resolver with malformed-input and production-wiring tests.
+- Removed the retired owner from the #499 diagnostic registry. No portrait
+  assets, hooks, RPCs, settings, or player-visible selection behavior changed.
+
 ## 0.1.28-dev (2026-07-22) — #526/#925 portrait atlas and live invalidation [not-started]
 
 - DCP now consumes the shared local presentation generation emitted by

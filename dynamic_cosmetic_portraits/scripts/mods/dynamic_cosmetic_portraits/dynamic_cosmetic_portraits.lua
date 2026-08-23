@@ -21,7 +21,7 @@ end
 -- exposure is needed. Matches modded_progression.lua:27.
 local _MEM_PROBE_T0_DCP = collectgarbage("count")
 
-local MOD_VERSION = "0.1.28-dev"
+local MOD_VERSION = "0.1.29-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([dcp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -582,6 +582,9 @@ end
 -- loaded yet (a custom texture before readiness is a "Material not found in
 -- Gui" crash). Callers must fall back to _original_portrait_image (vanilla),
 -- NEVER to the possibly-swapped global value.
+local _portrait_resolver = mod:dofile(
+    "scripts/mods/dynamic_cosmetic_portraits/_dcp_portrait_resolver")
+
 local function _resolve_portrait_set_for_player(player)
     if not player then return nil end
     if _player_career_name(player) ~= "es_mercenary" then return nil end
@@ -590,40 +593,16 @@ local function _resolve_portrait_set_for_player(player)
     -- Skin overrides hat -- same priority as _sync_portrait_settings.
     local ok_skin, skin_data = pcall(CosmeticUtils.get_cosmetic_slot, player, "slot_skin")
     if ok_skin and skin_data and skin_data.item_name then
-        local set = _skin_portrait_map[skin_data.item_name]
+        local set = _portrait_resolver.resolve_keys(
+            skin_data.item_name, nil, _skin_portrait_map, _hat_portrait_map)
         if set then return set end
     end
     local ok_hat, hat_data = pcall(CosmeticUtils.get_cosmetic_slot, player, "slot_hat")
     if ok_hat and hat_data and hat_data.item_name then
-        return _hat_portrait_map[hat_data.item_name]
+        return _portrait_resolver.resolve_keys(
+            nil, hat_data.item_name, _skin_portrait_map, _hat_portrait_map)
     end
     return nil
-end
-
--- #435 verification is normally co-op and visual. Emit one bounded record per
--- unique surface/subject/result so an ordinary session proves which per-player
--- branch rendered without chat spam or a manual command.
-local _scope_probe = mod:dofile("scripts/mods/dynamic_cosmetic_portraits/_dcp_player_scope_probe")
-local _scope_probe_state = _scope_probe.new(24)
-local _score_record = mod:dofile("scripts/mods/dynamic_cosmetic_portraits/_dcp_score_record")
-local function _scope_subject(player)
-    -- Score rows resolve from their own record rather than a Player object;
-    -- callers pass the already-bounded record subject string here (#435).
-    if type(player) == "string" then return player end
-    if not player then return "unknown" end
-    local kind = player.local_player and "local" or (player.bot_player and "bot" or "remote")
-    local local_id = nil
-    pcall(function() local_id = player:local_player_id() end)
-    return kind .. ":" .. tostring(local_id or "?")
-end
-local function _scope_evidence(surface, player, portrait, custom)
-    local subject = _scope_subject(player)
-    local resolution = custom and "custom" or "vanilla"
-    if _scope_probe.accept(_scope_probe_state, surface, subject, portrait, resolution) then
-        mod:info("[dcp:435] surface=%s subject=%s resolution=%s portrait=%s record=%d/%d",
-            tostring(surface), subject, resolution, tostring(portrait),
-            _scope_probe_state.count, _scope_probe_state.cap)
-    end
 end
 
 local function _restore_portrait_settings()
@@ -1217,7 +1196,6 @@ mod:hook("UnitFramesHandler", "_sync_player_stats", function(func, self, unit_fr
     end
     local set = _resolve_portrait_set_for_player(player)
     local resolved = (set and set.hud) or _original_portrait_image or career.portrait_image
-    _scope_evidence("hud", player, resolved, set ~= nil)
     local saved = career.portrait_image
     career.portrait_image = resolved
     func(self, unit_frame, ...)
@@ -1243,7 +1221,6 @@ mod:hook_safe("IngamePlayerListUI", "_update_player_information", function(self,
                 and _player_career_name(player) == "es_mercenary" then
             local set = _resolve_portrait_set_for_player(player)
             local resolved = (set and set.hud) or _original_portrait_image
-            _scope_evidence("tab", player, resolved, set ~= nil)
             if resolved and widget.content.portrait ~= resolved then
                 widget.content.portrait = resolved
             end
@@ -1280,10 +1257,9 @@ mod:hook_safe("EndViewStateScore", "_setup_player_scores", function(self, player
         if content and rec and rec.profile_index == 5 and rec.career_index == 1 then
             local is_local_human = rec.is_player_controlled and rec.peer_id == my_peer_id
             if not is_local_human then
-                local set = _score_record.resolve_portrait_set(
+                local set = _portrait_resolver.resolve_score_record(
                     rec, _skin_portrait_map, _hat_portrait_map)
                 local resolved = (set and set.hud) or _original_portrait_image
-                _scope_evidence("score", _score_record.subject(rec), resolved, set ~= nil)
                 if content.portrait ~= resolved then
                     content.portrait = resolved
                 end
@@ -1317,7 +1293,7 @@ _rt_register("portrait_override_player_scoped", function()
           "end-of-round score per-player seam hook missing (leak on score screen)" },
         { '_local_player_safe(' .. 'pm)',
           "local override detection must key off the LOCAL player, not a players() scan" },
-        { '_score_record.resolve_' .. 'portrait_set(',
+        { '_portrait_resolver.resolve_' .. 'score_record(',
           "score rows must resolve from their own hero_skin/hat record" },
     }
     for _, n in ipairs(needles) do
