@@ -39,6 +39,13 @@
 #
 #  * `published_id` lives in `<mod>\itemV2.cfg` as `published_id = <N>L;`.
 #
+#  * Existing Workshop items do not require a local subscription to publish.
+#    When the real content folder is absent, ship enters a receipt-gated
+#    publication-only lane: no local/remote deploy is attempted, VMBLauncher
+#    still proves the exact commit/bundle/staging bytes, and workshop_log must
+#    report either Uploaded new content or No content change for the exact id.
+#    Never create the missing real Workshop folder by hand (issue #1376).
+#
 #  * Step 3 releases ONLY the shipped mod to GitHub (issues #436/#493):
 #    `publish-release.ps1 -Mods <mod> -SkipBuild`. Sibling zips and manifest
 #    entries carry over from the existing release, so a sibling's mid-edit WIP
@@ -200,6 +207,72 @@ function Compare-BundleBlobMaps {
         }
     }
     return @{ Ok = ($problems.Count -eq 0); Problems = $problems }
+}
+
+function Get-ShipDeploymentPolicy {
+    param(
+        [Parameter(Mandatory = $true)][string]$PublishedId,
+        [Parameter(Mandatory = $true)][bool]$DeployDirectoryExists,
+        [switch]$NoRemote
+    )
+
+    if ($PublishedId -notmatch '^\d+$') {
+        throw "Invalid Workshop published_id '$PublishedId'."
+    }
+    if ($PublishedId -eq '0') {
+        return [pscustomobject]@{
+            Mode = 'bootstrap'
+            ShouldDeploy = $false
+            RemoteDeploy = $false
+            Reason = 'Steam has not assigned the first Workshop identity'
+        }
+    }
+    if (-not $DeployDirectoryExists) {
+        return [pscustomobject]@{
+            Mode = 'publication-only'
+            ShouldDeploy = $false
+            RemoteDeploy = $false
+            Reason = 'author is not locally subscribed to the existing Workshop item'
+        }
+    }
+    return [pscustomobject]@{
+        Mode = 'subscribed'
+        ShouldDeploy = $true
+        RemoteDeploy = (-not [bool]$NoRemote)
+        Reason = 'local Workshop subscription is present'
+    }
+}
+
+function Test-ShipUploadEvidencePolicy {
+    param(
+        [Parameter(Mandatory = $true)][string]$UploadStatus,
+        [Parameter(Mandatory = $true)][string]$DeploymentMode,
+        [Parameter(Mandatory = $true)][bool]$DeployVerified,
+        [Parameter(Mandatory = $true)][bool]$PublicationReceiptAccepted
+    )
+
+    $problems = @()
+    if (-not $PublicationReceiptAccepted) {
+        $problems += 'VMBLauncher did not accept the exact publication receipt and staged bytes'
+    }
+    switch ($UploadStatus.ToUpperInvariant()) {
+        'UPLOADED' { }
+        'NOCHANGE' {
+            if ($DeploymentMode -eq 'subscribed' -and -not $DeployVerified) {
+                $problems += 'subscribed no-content-change requires a byte-verified local deploy'
+            }
+            elseif ($DeploymentMode -eq 'bootstrap') {
+                $problems += 'first-upload bootstrap cannot be proven by no-content-change'
+            }
+            elseif ($DeploymentMode -notin @('subscribed', 'publication-only')) {
+                $problems += "unsupported deployment mode '$DeploymentMode'"
+            }
+        }
+        default {
+            $problems += "no accepted fresh Workshop result ('$UploadStatus')"
+        }
+    }
+    return [pscustomobject]@{ Ok = ($problems.Count -eq 0); Problems = $problems }
 }
 
 function Test-TrackedBundleParity {
@@ -1014,6 +1087,30 @@ function Invoke-ShipSelfTest {
     Assert (-not (Compare-BundleBlobMaps -Tracked @{ 'fixture.mod_bundle' = 'abc' } -Built @{ 'fixture.mod_bundle' = 'changed' }).Ok) "changed built bytes are rejected"
     Assert (-not (Compare-BundleBlobMaps -Tracked @{ 'fixture.mod_bundle' = 'abc' } -Built @{ 'fixture.mod_bundle' = 'abc'; 'extra.bin' = 'x' }).Ok) "untracked built artifact is rejected"
 
+    # Issue #1376: an existing Workshop identity remains publishable when the
+    # author is not subscribed. The lane must never invent Steam-managed
+    # content directories or claim a deploy that did not happen.
+    $subscribedPolicy = Get-ShipDeploymentPolicy -PublishedId '3733366851' -DeployDirectoryExists $true
+    Assert ($subscribedPolicy.Mode -eq 'subscribed' -and $subscribedPolicy.ShouldDeploy -and $subscribedPolicy.RemoteDeploy) "subscribed Workshop item keeps local and remote deploy"
+    $subscribedLocalOnlyPolicy = Get-ShipDeploymentPolicy -PublishedId '3733366851' -DeployDirectoryExists $true -NoRemote
+    Assert ($subscribedLocalOnlyPolicy.Mode -eq 'subscribed' -and $subscribedLocalOnlyPolicy.ShouldDeploy -and -not $subscribedLocalOnlyPolicy.RemoteDeploy) "-NoRemote preserves subscribed local deploy while skipping remote"
+    $unsubscribedPolicy = Get-ShipDeploymentPolicy -PublishedId '3733366851' -DeployDirectoryExists $false
+    Assert ($unsubscribedPolicy.Mode -eq 'publication-only' -and -not $unsubscribedPolicy.ShouldDeploy -and -not $unsubscribedPolicy.RemoteDeploy) "unsubscribed existing item selects publication-only with no deploy target"
+    $bootstrapPolicy = Get-ShipDeploymentPolicy -PublishedId '0' -DeployDirectoryExists $false
+    Assert ($bootstrapPolicy.Mode -eq 'bootstrap' -and -not $bootstrapPolicy.ShouldDeploy -and -not $bootstrapPolicy.RemoteDeploy) "first upload remains a separate no-deploy bootstrap"
+    $invalidPublishedIdRejected = $false
+    try { Get-ShipDeploymentPolicy -PublishedId 'not-an-id' -DeployDirectoryExists $false | Out-Null }
+    catch { $invalidPublishedIdRejected = ($_.Exception.Message -match 'Invalid Workshop published_id') }
+    Assert $invalidPublishedIdRejected "invalid Workshop identity fails closed before publication"
+
+    Assert (Test-ShipUploadEvidencePolicy -UploadStatus UPLOADED -DeploymentMode publication-only -DeployVerified $false -PublicationReceiptAccepted $true).Ok "publication-only accepts a fresh uploaded-content receipt"
+    Assert (Test-ShipUploadEvidencePolicy -UploadStatus NOCHANGE -DeploymentMode publication-only -DeployVerified $false -PublicationReceiptAccepted $true).Ok "publication-only accepts receipt-bound server no-change evidence"
+    Assert (Test-ShipUploadEvidencePolicy -UploadStatus NOCHANGE -DeploymentMode subscribed -DeployVerified $true -PublicationReceiptAccepted $true).Ok "subscribed no-change requires and accepts byte-verified deploy"
+    Assert (-not (Test-ShipUploadEvidencePolicy -UploadStatus NOCHANGE -DeploymentMode subscribed -DeployVerified $false -PublicationReceiptAccepted $true).Ok) "subscribed no-change without deploy verification fails closed"
+    Assert (-not (Test-ShipUploadEvidencePolicy -UploadStatus NOCHANGE -DeploymentMode publication-only -DeployVerified $false -PublicationReceiptAccepted $false).Ok) "publication-only no-change without accepted receipt fails closed"
+    Assert (-not (Test-ShipUploadEvidencePolicy -UploadStatus NOCHANGE -DeploymentMode bootstrap -DeployVerified $false -PublicationReceiptAccepted $true).Ok) "bootstrap cannot claim success from no-content-change"
+    Assert (-not (Test-ShipUploadEvidencePolicy -UploadStatus NONE -DeploymentMode publication-only -DeployVerified $false -PublicationReceiptAccepted $true).Ok) "publication-only still requires a fresh Workshop result"
+
     $cl = @(
         '# Changelog',
         '',
@@ -1510,7 +1607,13 @@ function Invoke-ShipSelfTest {
     Assert ($publisherZipBindingPos -ge 0 -and $publisherZipBindingPos -lt $publisherMutationPos) "publisher binds immutable zip entries to commit-derived bundle hashes before release mutation"
     Assert ($launcherCapabilityPos -ge 0 -and $launcherCapabilityPos -lt $authorizationRecordPos) "ship probes launcher minimum/capabilities before any GitHub release mutation"
     Assert ($selfTxt.IndexOf('$isFirstUploadBootstrap = ($publishedId -eq ''0'')', $mainDispatchPos) -ge 0) "ship recognizes the explicit published_id=0 bootstrap lane"
-    Assert ($selfTxt.IndexOf('if (-not $isFirstUploadBootstrap) {', $deployActionPos - 100) -ge 0) "first-upload bootstrap skips impossible pre-ID deploy"
+    Assert ($selfTxt.IndexOf('if ($deploymentPolicy.ShouldDeploy) {', $deployActionPos - 100) -ge 0) "deployment policy gates subscribed deploy and skips bootstrap/publication-only targets"
+    $deploymentPolicyPos = $selfTxt.IndexOf('$deploymentPolicy = Get-ShipDeploymentPolicy', $mainDispatchPos)
+    $quickMainPos = $selfTxt.IndexOf($quickInvocation, $mainDispatchPos)
+    Assert ($deploymentPolicyPos -ge 0 -and $quickMainPos -ge 0 -and $deploymentPolicyPos -lt $quickMainPos) "subscription state selects publication mode before expensive QA or launcher work"
+    Assert ($selfTxt.IndexOf("Mode = 'publication-only'", $mainDispatchPos) -lt 0) "publication-only mode is produced only by the tested deployment-policy helper"
+    Assert ($selfTxt.IndexOf('New-Item', $deploymentPolicyPos) -lt 0) "canonical ship never creates a Steam-managed Workshop content directory"
+    Assert ($selfTxt.IndexOf('Test-ShipUploadEvidencePolicy', $uploadActionPos) -gt $uploadActionPos) "upload result is checked through the receipt-aware evidence policy"
     Assert ($selfTxt.IndexOf('constrained bootstrap did not write one nonzero published_id', $uploadActionPos) -ge 0) "first-upload bootstrap requires a nonzero ID-only write-back after ugc_tool"
     Assert ($publisherSource.IndexOf('published_id=0 is accepted only for a one-mod canonical first-upload receipt handoff') -ge 0) "publisher constrains zero-ID release mutation to the exact receipt handoff"
     Assert ($selfTxt.IndexOf('BOOTSTRAP COMPLETE - NOT TEST READY', $uploadActionPos) -ge 0) "first-upload bootstrap stops before live-test labeling and readiness output"
@@ -1634,6 +1737,16 @@ if ($cfgTxt -notmatch 'published_id\s*=\s*(\d+)L') {
 }
 $publishedId = $matches[1]
 $isFirstUploadBootstrap = ($publishedId -eq '0')
+$workshopRoot = 'C:\Program Files (x86)\Steam\steamapps\workshop\content\552500'
+$deployDir = if ($isFirstUploadBootstrap) { $null } else { Join-Path $workshopRoot $publishedId }
+$workshopLog = 'C:\Program Files (x86)\Steam\logs\workshop_log.txt'
+$deploymentPolicy = Get-ShipDeploymentPolicy `
+    -PublishedId $publishedId `
+    -DeployDirectoryExists ([bool]($deployDir -and (Test-Path -LiteralPath $deployDir -PathType Container))) `
+    -NoRemote:$NoRemote
+if ($deploymentPolicy.Mode -eq 'publication-only') {
+    Write-Host ("  NOTICE -- Workshop item {0} is not locally subscribed; exact receipt-gated publication-only mode will skip every deploy target (issue #1376)." -f $publishedId) -ForegroundColor Yellow
+}
 
 # ---------------------------------------------------------------------------
 # Preflight (issue #344): refuse to ship while ANY itemV2.cfg carries a wrong or
@@ -1886,20 +1999,19 @@ if ($modLintExit -eq 1) {
     Write-Host "Target-mod lint reported advisory warnings; shipping may continue." -ForegroundColor Yellow
 }
 
-$workshopRoot = 'C:\Program Files (x86)\Steam\steamapps\workshop\content\552500'
-$deployDir    = if ($isFirstUploadBootstrap) { $null } else { Join-Path $workshopRoot $publishedId }
-$workshopLog  = 'C:\Program Files (x86)\Steam\logs\workshop_log.txt'
-
 Write-Host ""
 $operationLabel = if ($BuildOnly) { 'Building bundle for' } else { 'Shipping' }
 Write-Host "==> $operationLabel $Mod  (v$modVersion, published_id $publishedId)" -ForegroundColor Cyan
 if ($isFirstUploadBootstrap -and -not $BuildOnly) {
     Write-Host "    mode: constrained first-upload bootstrap (exact hosted receipt; ID-only write-back)" -ForegroundColor Yellow
 }
+elseif ($deploymentPolicy.Mode -eq 'publication-only' -and -not $BuildOnly) {
+    Write-Host "    mode: existing-item publication-only (exact receipt; no deploy claim)" -ForegroundColor Yellow
+}
 Write-Host "    repo root : $repoRoot"
 Write-Host "    launcher  : $launcher ($($launcherResolution.Source))"
 Write-Host "    .vmbrc    : $($vmbRcResolution.Path) ($($vmbRcResolution.Source))"
-Write-Host "    deploy dir: $(if ($deployDir) { $deployDir } else { '(not assigned until Steam creates the item)' })"
+Write-Host "    deploy dir: $(if ($deploymentPolicy.Mode -eq 'publication-only') { '(absent; publication-only upload)' } elseif ($deployDir) { $deployDir } else { '(not assigned until Steam creates the item)' })"
 if ($AllowPublic) { Write-Host "    --allow-public : ON (public Workshop item)" -ForegroundColor Yellow }
 if ($NoRemote)    { Write-Host "    --no-remote    : ON (skipping PC-B push)" }
 
@@ -2042,7 +2154,7 @@ catch {
 # VMBLauncher remote deploy currently copies and verifies expected files but
 # cannot remove or reject stale extras. Never claim PC-B was reconciled for a
 # mod whose canonical output intentionally excludes a previously emitted file.
-if (-not $BuildOnly -and -not $NoRemote -and
+if (-not $BuildOnly -and $deploymentPolicy.RemoteDeploy -and
     (($buildNormalization.Removed + $buildNormalization.Absent) -gt 0)) {
     Fail ("$Mod has a build-output exclusion, but VMBLauncher remote deploy cannot reconcile stale extra files. " +
         "Re-run with -NoRemote. Local deploy and Workshop publication remain exact; PC-B stays intentionally unrefreshed until remote exact-set reconciliation is supported.")
@@ -2101,7 +2213,7 @@ if ($postBuildClean.ExitCode -ne 0 -or $postBuildClean.Lines.Count -gt 0) {
 Write-Host "  OK -- clean build exactly reproduces the tracked HEAD bundle." -ForegroundColor Green
 
 $deployOk = $false
-if (-not $isFirstUploadBootstrap) {
+if ($deploymentPolicy.ShouldDeploy) {
     $deployArgs = @('deploy', $Mod)
     if ($NoRemote) { $deployArgs += '--no-remote' }
     $deployArgs += @('--config', $launcherSettings)
@@ -2119,9 +2231,13 @@ if (-not $isFirstUploadBootstrap) {
         Fail $_.Exception.Message
     }
 }
-else {
+elseif ($deploymentPolicy.Mode -eq 'bootstrap') {
     Write-Host ""
     Write-Host "==> Skipping deploy verification until Steam assigns the first Workshop ID." -ForegroundColor DarkGray
+}
+else {
+    Write-Host ""
+    Write-Host "==> Skipping local and remote deploy: author subscription is absent; publication will be proven by exact receipt + Workshop result." -ForegroundColor Yellow
 }
 
 # ---------------------------------------------------------------------------
@@ -2143,7 +2259,7 @@ if ($cfgTxtAfter -match 'published_id\s*=\s*(\d+)L' -and $matches[1] -ne $publis
 # ---------------------------------------------------------------------------
 $bundleDir = Join-Path $modDir 'bundleV2'
 if (-not (Test-Path $bundleDir)) { Fail "bundleV2 missing at $bundleDir (build did not produce output)" }
-if (-not $isFirstUploadBootstrap) {
+if ($deploymentPolicy.ShouldDeploy) {
     Write-Host ""
     Write-Host "==> Verifying deploy (SHA256 bundleV2 vs Workshop content folder)" -ForegroundColor Cyan
     if (-not (Test-Path $deployDir)) {
@@ -2260,13 +2376,16 @@ $uploadArgs += @('--publication-receipt', $receiptPath, '--config', $launcherSet
 Write-Host ""
 Write-Host "==> VMBLauncher $($uploadArgs -join ' ')" -ForegroundColor Cyan
 $uploadFailure = $null
+$publicationReceiptAccepted = $false
 try {
-    Invoke-WithShipVmbRc -RepoRoot $repoRoot -Resolution $vmbRcResolution -Action {
+    $receiptAcceptance = Invoke-WithShipVmbRc -RepoRoot $repoRoot -Resolution $vmbRcResolution -Action {
         $uploadRun = Invoke-ShipLauncherNoWindow -FilePath $launcher -ArgumentList $uploadArgs -ReplayOutput
         if ($uploadRun.ExitCode -ne 0) {
             throw "VMBLauncher 'upload $Mod' exited $($uploadRun.ExitCode) (see output above)."
         }
+        return [pscustomobject]@{ Accepted = $true }
     }
+    $publicationReceiptAccepted = [bool]$receiptAcceptance.Accepted
 }
 catch {
     $uploadFailure = $_.Exception.Message
@@ -2315,18 +2434,27 @@ foreach ($line in $tail) {
     }
 }
 
+$uploadEvidence = Test-ShipUploadEvidencePolicy `
+    -UploadStatus $uploadStatus `
+    -DeploymentMode $deploymentPolicy.Mode `
+    -DeployVerified $deployOk `
+    -PublicationReceiptAccepted $publicationReceiptAccepted
+if (-not $uploadEvidence.Ok) {
+    Fail ($uploadEvidence.Problems -join '; ')
+}
+
 switch ($uploadStatus) {
     'UPLOADED' {
         Write-Host "  OK -- new content pushed to Workshop." -ForegroundColor Green
         Write-Host "    $matchedLine"
     }
     'NOCHANGE' {
-        # Acceptable ONLY because step 4 already proved the deploy hashes match the
-        # server bundle (step 4 hard-fails otherwise, so we can't reach here stale).
-        if (-not $deployOk) {
-            Fail "workshop_log shows 'No content change' but deploy hashes did NOT match -- bundle is stale/divergent."
+        if ($deploymentPolicy.Mode -eq 'publication-only') {
+            Write-Host "  OK -- server already had the exact receipt-gated staged bundle (publication-only no-op upload)." -ForegroundColor Green
         }
-        Write-Host "  OK -- server already had this exact bundle (no-op upload; deploy hashes matched)." -ForegroundColor Green
+        else {
+            Write-Host "  OK -- server already had this exact bundle (no-op upload; deploy hashes matched)." -ForegroundColor Green
+        }
         Write-Host "    $matchedLine"
     }
     default {
@@ -2689,7 +2817,12 @@ Write-Host "==================== SHIP SUCCESS ====================" -ForegroundC
 Write-Host ("  Mod          : {0}" -f $Mod)
 Write-Host ("  Version      : v{0}" -f $modVersion)
 Write-Host ("  Published ID : {0}" -f $publishedId)
-Write-Host ("  Deploy hash  : OK ({0} file(s) verified; {1} normalized descriptor(s))" -f $checked, $normalizedDescriptors)
+$deployHuman = if ($deploymentPolicy.Mode -eq 'publication-only') {
+    'SKIPPED (author unsubscribed; exact receipt-gated publication)'
+} else {
+    "OK ($checked file(s) verified; $normalizedDescriptors normalized descriptor(s))"
+}
+Write-Host ("  Deploy hash  : {0}" -f $deployHuman)
 Write-Host ("  Upload       : {0}" -f $uploadHuman)
 Write-Host ("  GitHub       : {0}" -f $githubStatus)
 $labelsHuman = if ($labelSummary.Count -gt 0) { $labelSummary -join '; ' } else { 'none' }
@@ -2706,9 +2839,16 @@ Write-Host ""
 Write-Host $bar -ForegroundColor Yellow
 Write-Host "  TEST BUILD READY" -ForegroundColor Yellow
 Write-Host $bar -ForegroundColor Yellow
-Write-Host "  Author/PC-A: test the hash-verified local deploy; no Steam restart" -ForegroundColor Yellow
-Write-Host "  is required. Volunteer testers: unsubscribe/resubscribe through" -ForegroundColor Yellow
-Write-Host "  the dev collection to refresh the Workshop build." -ForegroundColor Yellow
+if ($deploymentPolicy.Mode -eq 'publication-only') {
+    Write-Host "  Author/PC-A: this item was not locally subscribed, so no local deploy" -ForegroundColor Yellow
+    Write-Host "  was claimed. Subscribe/refresh the Workshop item before testing." -ForegroundColor Yellow
+    Write-Host "  Volunteer testers: unsubscribe/resubscribe through the dev collection." -ForegroundColor Yellow
+}
+else {
+    Write-Host "  Author/PC-A: test the hash-verified local deploy; no Steam restart" -ForegroundColor Yellow
+    Write-Host "  is required. Volunteer testers: unsubscribe/resubscribe through" -ForegroundColor Yellow
+    Write-Host "  the dev collection to refresh the Workshop build." -ForegroundColor Yellow
+}
 Write-Host "" -ForegroundColor Yellow
 Write-Host "    Confirm the running build via the NEWEST log under" -ForegroundColor Yellow
 Write-Host "       %APPDATA%\Fatshark\Vermintide 2\console_logs\" -ForegroundColor Yellow

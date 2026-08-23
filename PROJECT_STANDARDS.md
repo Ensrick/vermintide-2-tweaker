@@ -1256,8 +1256,19 @@ deliberate public beta) ships the full pipeline with no ask. Never infer,
 says `public`. There is no suffix-vs-visibility contradiction to tie-break.
 
 **Post-ship checks (both streams):**
-- Confirm `Uploaded new content` in `workshop_log.txt`. `ugc_tool` prints
-  "Upload finished" even when nothing transferred.
+- Confirm one fresh item-specific result in `workshop_log.txt`. Normally this is
+  `Uploaded new content`. A receipt-gated `No content change` is also valid when
+  canonical `ship.ps1` proved the exact reviewed staged bytes; the launcher's
+  generic "Upload finished" text is never evidence by itself.
+- **Existing Workshop item while the author is unsubscribed (#1376):** when the
+  real Steam-managed content directory is absent, canonical `ship.ps1`
+  automatically enters `publication-only` mode. It must not create or write the
+  missing Workshop directory, attempt local/remote deploy, or claim a deploy
+  hash. Clean exact-default-head authorization, tracked-bundle parity, the
+  GitHub-hosted publication receipt, VMB staging validation, and the fresh
+  Workshop result remain mandatory. To test afterward, the author must
+  subscribe/refresh the item first; volunteers use the normal dev-collection
+  unsubscribe/resubscribe refresh.
 - Deploy verification is byte-exact for compiled `.mod_bundle` files and all
   non-descriptor artifacts. For textual `.mod` descriptors only, LF and CRLF
   line endings compare as equivalent because Steam may normalize them after a
@@ -1272,10 +1283,12 @@ says `public`. There is no suffix-vs-visibility contradiction to tie-break.
   tracked in issue #1085.
 - A real deploy-verify mismatch after a CONFIRMED upload is a Steam reconcile
   race, not a ship failure: do one local re-deploy, then continue.
-- Test refresh (user ruling 2026-07-13): the author on PC-A uses the
-  hash-verified local deploy without restarting Steam. Volunteer testers
-  unsubscribe/resubscribe through the dev collection. Confirm every tester's
-  loaded version from the newest console log.
+- Test refresh (user ruling 2026-07-13): after a subscribed ship, the author on
+  PC-A uses the hash-verified local deploy without restarting Steam. After a
+  publication-only ship, the author first subscribes/refreshes because no local
+  deploy was claimed. Volunteer testers unsubscribe/resubscribe through the dev
+  collection. Confirm every tester's loaded version from the newest console
+  log.
 
 ---
 
