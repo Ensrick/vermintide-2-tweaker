@@ -1,5 +1,16 @@
 # Career Tweaker Changelog
 
+## 0.4.24-beta (2026-08-22) - canonical publication reconciliation
+
+- Publishes the already-reviewed `0.4.23-beta` Dance of Blades authority fix
+  and the preceding peer-parity transaction work through the canonical
+  claim/build/review/release pipeline. `0.4.23-beta` was prepared in source but
+  never received an authoritative Workshop/GitHub release receipt.
+- Restores an exact deployed source record for the `[crt:LOAD]` stream so
+  pinned live-test cards can name bytes that testers can actually obtain.
+- No gameplay behavior changed relative to the reviewed `0.4.23-beta` source.
+  Career talent/ability casting and transposition remain disabled in this beta.
+
 ## 0.4.23-beta (2026-08-21) - Dance of Blades pair stacks and server authority (#473)
 
 - Repaired the Dance of Blades stack shape to use two distinct local
