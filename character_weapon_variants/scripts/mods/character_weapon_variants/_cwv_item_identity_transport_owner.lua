@@ -588,8 +588,8 @@ local function install(mod, ctx)
 			local r1, r2, r3, r4 = _wire_null_skins(slots, function()
 				return func(peer_id, unit, equipment, additional_items)
 			end, "hot_join_sync")
-			if _om._exact_pair_publish_local then
-				_om._exact_pair_publish_local("hot_join_sync")
+			if _om._exact_pair_on_hot_join_sync then
+				_om._exact_pair_on_hot_join_sync(peer_id)
 			end
 			return r1, r2, r3, r4
 		end)

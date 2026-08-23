@@ -2206,6 +2206,12 @@ _rt_register("issue567_skin_reverse_index_valid", function()
     end
 end)
 
+_rt_register("issue567_exact_pair_transition_live", function()
+    local verdict = _om._exact_pair_live_verdict
+    if type(verdict) ~= "function" then return "#567 live exact-pair verdict missing" end
+    return verdict()
+end, { known_defect = 567 })
+
 _rt_register("issue704_canonical_skin_owner_and_sword_mace_sources", function()
 	local function require_owner(keys, label)
 		for skin_key in pairs(keys or {}) do

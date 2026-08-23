@@ -751,9 +751,8 @@ mod:hook_safe("StateInGameRunning", "on_enter", function()
 	-- Keep/mission after the install-time VMF query ran without a network backend.
 	-- Query every CWV owner, then publish our own current state. Both are bounded
 	-- one-shot messages on gameplay entry, never update-loop traffic.
-	if _om._exact_pair_query then _om._exact_pair_query("gameplay_enter") end
-	if _om._exact_pair_publish_local then
-		_om._exact_pair_publish_local("gameplay_enter")
+	if _om._exact_pair_on_gameplay_enter then
+		_om._exact_pair_on_gameplay_enter()
 	end
 	if _om._migrate_legacy_style_items then
 		_om._migrate_legacy_style_items()

@@ -403,7 +403,7 @@ return function(H, repo_root)
                 :gmatch('_rt_register%("([^"]+)"') do
             names[#names + 1] = name
         end
-		H.equal(#names, 92)
+		H.equal(#names, 93)
         H.equal(names[1], "cwv_variant_flag_present")
 		H.equal(names[3], "issue916_half_swording_combat_style_contract")
 		H.equal(names[5], "issue914_peer_ready_identity_lifecycle")
@@ -430,7 +430,8 @@ return function(H, repo_root)
         -- #1155 is a renderer/material/lifecycle check. Keep it in the render
         -- regression owner so identity remains below the hard file-size ceiling.
 		H.equal(names[74], "issue1155_old_musket_descriptor_reconciler")
-        H.equal(names[#names - 2], "issue567_skin_reverse_index_valid")
+        H.equal(names[#names - 3], "issue567_skin_reverse_index_valid")
+        H.equal(names[#names - 2], "issue567_exact_pair_transition_live")
         H.equal(names[#names - 1], "issue704_canonical_skin_owner_and_sword_mace_sources")
         H.equal(names[#names], "issue915_maul_illusion_vanilla_provenance")
         H.truthy(entry:find("mod_version = MOD_VERSION", 1, true))
