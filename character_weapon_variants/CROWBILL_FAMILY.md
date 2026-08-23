@@ -1,13 +1,12 @@
 # Crowbill family
 
-The Crowbill family is registration-first. It exposes two stable CWV item
-identities while replacement art remains blocked on provenance and licence
-review:
+The Crowbill family exposes two stable CWV item identities backed by the
+approved, attributed custom models that ship in CWV's master bundle:
 
 | Item | Authored defaults | Current model | Gameplay source |
 |---|---|---|---|
-| `cwv_es_imperial_crowbill` | All Kruber and Saltzpyre careers | Resident vanilla Crowbill placeholder | `bw_1h_crowbill` / `one_handed_crowbill` |
-| `cwv_dr_dawi_crowbill` | All Bardin careers | Resident vanilla Crowbill placeholder | `bw_1h_crowbill` / `one_handed_crowbill` |
+| `cwv_es_imperial_crowbill` | All Kruber and Saltzpyre careers | Parelaxel Medieval War Hammer (`imperial_01`) | `bw_1h_crowbill` / private non-burning clone |
+| `cwv_dr_dawi_crowbill` | All Bardin careers | soidev War Hammer (`dawi_01`) | `bw_1h_crowbill` / private non-burning clone |
 
 CWV registers definitions only. CIM owns crafting and persistence; these items
 must never be automatically granted. WT exposes independent controls for all 20
@@ -51,10 +50,11 @@ contract as the current resident placeholder.
 
 ## Asset gate
 
-No downloaded or custom mesh path may enter the registration module, master
-package, or preview alias map until the asset audit records author, source URL,
-licence, redistribution/modification permission, archive hash, and attribution.
-Until then every surface must use the resident vanilla placeholder.
+No additional downloaded or custom mesh path may enter the registration
+module, master package, or preview alias map until the asset audit records
+author, source URL, licence, redistribution/modification permission, archive
+hash, and attribution. The six currently shipped models passed that gate; the
+excluded Italian candidate did not and must remain absent.
 
 ### Candidate audit — 2026-07-14
 

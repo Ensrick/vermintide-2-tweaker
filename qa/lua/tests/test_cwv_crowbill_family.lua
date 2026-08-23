@@ -340,6 +340,8 @@ return function(H, repo_root)
         }) do
             H.truthy(doc:find(surface, 1, true), "missing Crowbill surface: " .. surface)
         end
-        H.truthy(doc:find("No downloaded or custom mesh path", 1, true))
+        H.truthy(doc:find("No additional downloaded or custom mesh path", 1, true))
+        H.truthy(doc:find("six currently shipped models passed that gate", 1, true))
+        H.truthy(doc:find("excluded Italian candidate", 1, true))
     end)
 end

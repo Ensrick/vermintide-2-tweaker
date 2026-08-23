@@ -285,11 +285,18 @@ function M.install(mod, om)
 
 	function M.resolve_template(item_data, backend_id)
 		if not enabled then return nil end
-		local _, identity = classify(item_data, backend_id)
+		local family_key, identity = classify(item_data, backend_id)
 		if not identity then return nil end
 		if restoring_source then return weapons[policy.SOURCE_TEMPLATE_KEY] end
-		return item_mode(item_data, identity) == policy.MODE_HAMMER
-			and weapons[policy.HAMMER_TEMPLATE_KEY] or weapons[M.PICK_TEMPLATE_KEY]
+		if item_mode(item_data, identity) == policy.MODE_HAMMER then
+			return weapons[policy.HAMMER_TEMPLATE_KEY]
+		end
+		-- The native Sienna Crowbill participates in the shared face toggle, but
+		-- its normal face must remain the unmodified donor. Routing it through the
+		-- CWV pick clone strips the burning thrust that distinguishes the native
+		-- weapon. Only authored Imperial/Dawi identities use the non-burning pick.
+		return family_key == family.SOURCE_ITEM
+			and weapons[policy.SOURCE_TEMPLATE_KEY] or weapons[M.PICK_TEMPLATE_KEY]
 	end
 
 	function M.on_local_wield(inventory, slot_name, item_data)

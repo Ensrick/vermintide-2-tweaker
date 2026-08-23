@@ -1,5 +1,24 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.531-dev (2026-08-23) -- preserve Sienna's native Crowbill normal face (#604)
+
+- Fixed the shared Crowbill mode resolver reclassifying Sienna's native
+  Crowbill onto the Imperial/Dawi non-burning pick template whenever CWV was
+  enabled. Its normal face now resolves to the untouched vanilla template, so
+  the native burning thrust remains distinct; only the authored Imperial and
+  Dawi Crowbills use CWV's non-burning, increased-impact pick template.
+- Sienna's Crowbill remains enrolled in the same Weapon Special controller:
+  switching to Hammer mode still selects the shared hammer template, and
+  switching back restores her native template rather than the CWV pick clone.
+- Regression coverage exercises native, Imperial, and Dawi normal faces plus
+  all three hammer-face routes against the live resolver boundary.
+
+**Solo check:** Equip Sienna's **Crowbill** and confirm its normal light thrust
+still applies its native burning damage. Switch to Hammer mode and back, then
+confirm the burning thrust returns. As controls, repeat with Kruber's
+**Imperial Crowbill** and Bardin's **Dawi Crowbill**; neither CWV weapon should
+apply the native burning effect in normal or Hammer mode.
+
 ## 0.1.530-dev (2026-08-23) -- executable Sword+Mace transition evidence (#567) [untested]
 
 - Replaced textual-only gameplay-entry and hot-join assertions with callable
