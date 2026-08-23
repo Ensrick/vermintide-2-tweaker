@@ -17,6 +17,13 @@ return function(H, repo_root)
     local base = repo_root
         .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/"
 
+    local function read(path)
+        local file = assert(io.open(path, "rb"))
+        local source = file:read("*a")
+        file:close()
+        return source
+    end
+
     -- _adventure_pool.lua only touches get_mod at module scope; stub it with a no-op.
     local old_get_mod = get_mod
     get_mod = function()
@@ -52,5 +59,16 @@ return function(H, repo_root)
         H.equal(cpf(4), "duplicate")
         H.equal(cpf(thr - 1), "duplicate")  -- one short of the floor still duplicates
         H.equal(cpf(thr), "ok")             -- exactly the floor is satisfied
+    end)
+
+    H.test("CT #487 root fix survives retirement of automatic freeze telemetry", function()
+        local entry = read(base .. "chaos_wastes_tweaker_dev.lua")
+        local run_owner = read(base .. "_ct_run_creation_owner.lua")
+        local update_owner = read(base .. "_ct_host_state_transport_owner.lua")
+        H.equal(entry:find("_ct_diag_freeze487", 1, true), nil)
+        H.equal(entry:find("mod._ct_freeze487", 1, true), nil)
+        H.equal(run_owner:find("mod._ct_freeze487", 1, true), nil)
+        H.equal(update_owner:find("mod._ct_freeze487", 1, true), nil)
+        H.equal(pool.POOL_SAFETY_THRESHOLD >= MAX_BAKED_TRAVEL_LABEL, true)
     end)
 end

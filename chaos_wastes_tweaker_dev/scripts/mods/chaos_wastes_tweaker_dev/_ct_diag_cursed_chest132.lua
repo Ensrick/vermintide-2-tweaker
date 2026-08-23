@@ -45,9 +45,9 @@ PUBLIC SURFACE (mod._ct_chest132)
         also makes a healthy zero-chest mission auditable.
     .finalize(level_id, cap, census, is_server) - settled one-shot audit.
 
-MANIFEST POSITION: dofile'd alongside _ct_diag_freeze487 (both are CW-run
-    diagnostics); callers are the existing populate/census lifecycle and the
-    DeusCursedChestExtension.extensions_ready hook in the entry file.
+MANIFEST POSITION: dofile'd after the adventure-pool owner with the other
+    CW-run diagnostics; callers are the existing populate/census lifecycle and
+    the DeusCursedChestExtension.extensions_ready hook in the entry file.
 ]]
 
 local mod = get_mod("ct_dev")
