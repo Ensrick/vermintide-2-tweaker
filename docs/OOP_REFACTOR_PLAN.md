@@ -1,11 +1,12 @@
 # OOP Refactor Plan
 
-> **Status: ACTIVE** (created 2026-07-07). This is the living execution plan from the
+> **Status: COMPLETE** (created 2026-07-07; completed 2026-08-22). This is the execution record from the
 > 2026-07-07 whole-repo OOP/professionalism audit: 14 active mods + the docs/standards/QA
 > machinery, each audited against a fixed 10-dimension rubric with mandatory file:line
 > evidence. Full per-mod reports + rubric: `_archive/audits/2026-07-07_oop_audit/`
 > (external backup: `..\_vt2-tweaker-archive\2026-07-07\oop-audit\`).
-> Update the workstream tables here as items land; close via the referenced issues.
+> The six-workstream professionalization program (#1154-#1160) is closed. Continuing
+> architecture debt remains owned by the referenced follow-up issues.
 
 ## Baseline scoreboard (2026-07-07; 1 = worst, 5 = best)
 
@@ -43,6 +44,57 @@ gate on protected `master`. The original frozen-debt statement is also historica
 the size baseline now retains only the two canonical entries that still exceed the
 2,500-line hard limit. Completed entries leave that frozen set and remain protected
 by their lower machine-contract ceilings.
+
+## Program-close baseline (whole-repository re-score)
+
+The required second audit was executed on 2026-08-09 against `origin/master`
+`14c16160`. It re-scored all 140 mod-by-dimension cells using the archived rubric
+and original 14 reports as the comparison baseline. Its comparison ref was
+`33927fb4`, the original audit-plan commit. The aggregate
+checkpoint was preserved on
+[#1154](https://github.com/Ensrick/vermintide-2-tweaker/issues/1154#issuecomment-5230487286);
+the complete score table is recorded below now that the final structural phase
+closed on 2026-08-22. The July
+table above remains immutable; this table is the new scored baseline. Later work is
+described by the execution inventory and its machine-owned contracts rather than
+being silently folded into these scores. The re-score was a read-only static audit;
+it did not rerun QA, and it conservatively retained qualitative error-handling and
+dead-code scores unless a specifically named baseline driver could be reverified.
+
+| Mod | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10 | Total |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| chaos_wastes_tweaker_dev | 2 | 4 | 4 | 5 | 5 | 4 | 3 | 5 | 5 | 5 | 42 |
+| character_weapon_variants | 2 | 4 | 5 | 5 | 4 | 4 | 3 | 5 | 5 | 5 | 42 |
+| cosmetics_tweaker | 3 | 4 | 4 | 5 | 4 | 4 | 4 | 4 | 5 | 5 | 42 |
+| crafting_in_modded_dev | 3 | 4 | 4 | 5 | 4 | 4 | 4 | 4 | 5 | 5 | 42 |
+| enemy_tweaker | 5 | 5 | 3 | 5 | 3 | 5 | 4 | 4 | 5 | 5 | 44 |
+| weapon_tweaker | 3 | 4 | 4 | 5 | 4 | 4 | 4 | 5 | 5 | 5 | 43 |
+| career_tweaker | 4 | 4 | 4 | 5 | 4 | 4 | 4 | 5 | 4 | 5 | 43 |
+| gui_tweaker_dev | 3 | 4 | 4 | 5 | 4 | 4 | 4 | 4 | 5 | 5 | 42 |
+| dynamic_cosmetic_portraits | 4 | 4 | 3 | 5 | 3 | 4 | 3 | 3 | 4 | 5 | 38 |
+| event_tweaker | 5 | 5 | 5 | 5 | 5 | 4 | 4 | 5 | 5 | 5 | 48 |
+| general_tweaker_dev | 4 | 4 | 4 | 5 | 3 | 4 | 4 | 4 | 5 | 5 | 42 |
+| modded_progression | 4 | 4 | 3 | 4 | 4 | 4 | 3 | 4 | 4 | 5 | 39 |
+| verminious_dreams_lighting_dev | 5 | 4 | 4 | 5 | 5 | 3 | 4 | 5 | 4 | 5 | 44 |
+| weapons_of_chaos | 3 | 5 | 4 | 5 | 5 | 4 | 4 | 4 | 4 | 5 | 43 |
+| **Dimension mean** | **3.57** | **4.21** | **3.93** | **4.93** | **4.07** | **4.00** | **3.71** | **4.36** | **4.64** | **5.00** | **4.24** |
+
+The aggregate moved from **522/700 (3.73)** to **594/700 (4.24)**. Doctrine
+compliance reached 5.00 across all 14 mods. Regression testing moved from 3.71 to
+4.64 after the offline harness grew from no tests to 2,212 cases / 13,558
+assertions, and wire/shared-state safety moved from 3.50 to 4.07 after every WS1
+axis gained a named policy owner and offline coverage. The weakest remaining
+dimensions at this snapshot were decomposition (3.57), dead code (3.71), and
+duplication (3.93). Related continuing architecture work is tracked under #2,
+#428, and #660 and does not reopen the completed #1154 program.
+
+All six #1154 structural phases are closed. The final #1155 Old Musket pilot was
+verified in game on CWV `0.1.526-dev`: Rain observed the authored model visible and
+distinct across the Athanor, owner first person, owner third person, inventory
+character, illusion browser, weapon swap, and Keep-to-mission transition. The log's
+115 bounded receipts retained application, materials, position, scale, and rotation.
+Remaining numerical grip and preview-framing calibration is deliberately owned by
+#474, not by the completed descriptor pilot.
 
 ## Current execution inventory (2026-08-12)
 
