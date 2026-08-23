@@ -27,7 +27,7 @@ mod._cim959_accessory_property_policy = mod:dofile(
 local _BULK_ACCESSORY_CRAFT = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_bulk_accessory_craft")
 _MEM_PROBE_T0_CIMD = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.8.129-dev"
+local MOD_VERSION = "0.8.130-dev"
 local _bootstrap = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_bootstrap_runtime")({
         mod = mod,
@@ -94,12 +94,6 @@ end
 mod._cim244_property_value_policy = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_property_value_policy")
 mod.CIM244_PROPERTY_VALUE_POLICY_MARKER_v0_8_74 = true
-
--- #524 render-seam diagnostic (issue-keyed, tier c). Dumps the FINAL native
--- Craft Item picker list at the inject seam so a single log proves which rows the
--- user actually sees and where each came from. Loaded before standard_forge,
--- which calls it from mod._cim_inject_templates. Always-on in dev, engine printf.
-mod._cim_diag_524 = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_diag_524")
 
 -- Standard Keep crafting — same Athanor pattern: mutations are session-only because
 -- we block PlayFab commits while the forge is open. v0.2.0 crashed because we left

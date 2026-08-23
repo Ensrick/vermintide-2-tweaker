@@ -188,7 +188,7 @@ Last updated: 2026-08-23.
 | Category | SOLO |
 | Repro | Open the standard Craft Item page directly and inspect Dual Axes, Crowbill, Greataxe, and native Tuskgor Spear; craft Imperial Longsword twice, then leave and reopen the grid. |
 | Expected post-fix | Every ordinary weapon family has one deterministic selector; every authored CWV key remains distinct, including veteran/stat variants; Modded-rarity crafts appear only in ordinary inventory. |
-| Detection | Offline `test_cim_cwv_template_selector.lua`, `test_cim_cwv_template_catalog.lua`, and `test_cim_synthetic_item_contract.lua` pass; `/cim_regression_test` passes every `issue524_*` check. `[cim:524]` reports the bounded final rendered list and any remaining hard/soft duplicate identities. |
+| Detection | Offline `test_cim_cwv_template_selector.lua`, `test_cim_cwv_template_catalog.lua`, and `test_cim_synthetic_item_contract.lua` pass; `/cim_regression_test` passes the retained selector-policy `issue524_*` checks. The consumed automatic rendered-list telemetry is retired. |
 
 ---
 

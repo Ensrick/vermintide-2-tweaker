@@ -1359,17 +1359,6 @@ local function _build_template_cache()
         suppressed = report.suppressed,
         career = career_name,
     }
-    printf("[cim:524] acquisition_templates eligible=%d families=%d suppressed=%d cwv=%d career=%s",
-        report.eligible, report.total, report.suppressed, report.cwv, tostring(career_name))
-    local collision_limit = math.min(#report.collisions, 12)
-    for i = 1, collision_limit do
-        local collision = report.collisions[i]
-        printf("[cim:524] dedupe family=%s keep=%s drop=%s",
-            tostring(collision.family), tostring(collision.kept), tostring(collision.dropped))
-    end
-    if #report.collisions > collision_limit then
-        printf("[cim:524] dedupe_more count=%d", #report.collisions - collision_limit)
-    end
     local rejected_limit = math.min(#report.rejected_providers, 24)
     for i = 1, rejected_limit do
         local rejected = report.rejected_providers[i]
@@ -1433,10 +1422,6 @@ mod._cim390_inject_key_keyed = true
 -- The selector policy below prefers that default-rarity row and suppresses its
 -- synthetic twin; CIM continues to own every additional crafted instance.
 mod._cim592_cwv_bounded_seed = true
--- #524: the render-seam probe is wired into the inject seam below. The armed
--- regression check asserts both this flag and the diag module stay present, so
--- the rendered-list evidence can't be silently stripped while #524 is open.
-mod._cim524_render_probe_wired = true
 mod._cim_inject_templates = function(items, filter)
     if not _is_active() then return items end
     if type(filter) ~= "string" or not filter:find("can_craft_with", 1, true) then
@@ -1444,22 +1429,9 @@ mod._cim_inject_templates = function(items, filter)
     end
     if not next(_template_cache) then _build_template_cache() end
 
-    local pre_inject = type(items) == "table" and #items or 0
     local result = template_selector.inject(items, _template_cache, {
         allowed_slots = _single_slot_filter(filter),
     })
-    -- #524 render-seam probe: dump the FINAL rendered list (what the user sees),
-    -- classified per row + grouped for hard/soft duplicates. The catalog probe
-    -- above ([cim:524] acquisition_templates) only sees CIM's synthetic list, not
-    -- this injected result. Bounded + throttled inside the module; pcall so a
-    -- diagnostic can never break the picker.
-    if mod._cim_diag_524 then
-        pcall(mod._cim_diag_524.dump, result, {
-            career = _local_career_name(),
-            pre_inject = pre_inject,
-            picker = "native_craft_item",
-        })
-    end
     return result
 end
 
