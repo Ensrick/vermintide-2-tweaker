@@ -1,5 +1,28 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.530-dev (2026-08-23) -- executable Sword+Mace transition evidence (#567) [untested]
+
+- Replaced textual-only gameplay-entry and hot-join assertions with callable
+  lifecycle seams used by production and an in-memory two-peer VMF bus test.
+  The test executes exact-skin publish, receive while the remote unit is absent,
+  later husk-wield application, targeted hot-join replay, and clear.
+- Added a bounded session evidence ledger for exact Sword+Mace state. It records
+  only the fixed internal publish reasons and boolean receive/apply/clear
+  postconditions; no peer-keyed or per-frame history can grow without bound.
+- An apply is now accepted only when the inventory retains the requested exact
+  skin after `add_equipment`. A non-throwing setter that leaves the vanilla skin
+  in place can no longer produce a false-positive receipt or trigger a re-wield.
+- `/cwv_regression_test` now exposes
+  `issue567_exact_pair_transition_live` as an open-defect evidence check. It
+  remains XFAIL until one peer has both sent and observed the complete
+  gameplay-entry, wield, hot-join, apply, and clear lifecycle; role reversal
+  supplies that evidence on both players without adding network traffic.
+
+**DoD:** 3,062 Lua tests cover sender/receiver transport, absent-unit caching,
+late husk reconstruction, targeted hot join, clear, foreign schema/skin input,
+failed retained-state application, an already-retained no-op, transport failure,
+and exact global-state restoration. Live co-op evidence remains required.
+
 ## 0.1.529-dev (2026-08-22) -- first #660 W4 family descriptor adoption [untested]
 
 - Greatsword, Bretonnian Longsword, Saltzpyre Greatsword, and migrated
