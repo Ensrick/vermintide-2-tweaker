@@ -30,6 +30,8 @@ return function(ctx)
     state.get_managers = ctx.get_managers
     state.get_profiles = ctx.get_profiles
     state.accessory_panel = ctx.accessory_panel
+    state.ranalds_browser = ctx.ranalds_browser
+    state.print_line = ctx.print_line or function() end
 
     -- The panel module can be replaced by a dev reload while this owner's hooks
     -- remain installed. Publish one stable callback onto every current panel
@@ -791,10 +793,42 @@ return function(ctx)
         end
     end
 
-    mod:hook_safe("HeroViewStateWeaveForge", "update", function(self, dt, t)
+    -- Full-form hook: while the community-build modal is open, vanilla child
+    -- windows receive FAKE_INPUT_SERVICE for this frame, while the modal draws
+    -- afterward with the real parent service. This prevents click-through into
+    -- weapon viewports without registering a second hook on the same method.
+    mod:hook("HeroViewStateWeaveForge", "update", function(func, self, dt, t)
+        local browser = state.ranalds_browser
+        local browser_open = browser and browser.is_open and browser.is_open()
+        local input_was_blocked = self._input_blocked
+        if browser_open then self._input_blocked = true end
+        local ok, result = pcall(func, self, dt, t)
+        self._input_blocked = input_was_blocked
+        if not ok then error(result, 0) end
         if state.is_active() then
             _forge_apply_ui_polish(self)
+            if browser and browser.draw then
+                local overview
+                for _, window in pairs(self._active_windows or {}) do
+                    if window.NAME == "HeroWindowWeaveForgeOverview" then
+                        overview = window
+                        break
+                    end
+                end
+                local renderer = self.get_ui_top_renderer
+                    and self:get_ui_top_renderer() or self.ui_top_renderer
+                local input_service = self.input_service and self:input_service()
+                local draw_ok, draw_err = pcall(browser.draw, self, overview,
+                    renderer, input_service, dt)
+                if not draw_ok then
+                    pcall(state.print_line,
+                        "[cim:1360] community browser failed safely: %s",
+                        tostring(draw_err))
+                    if browser.close then pcall(browser.close) end
+                end
+            end
         end
+        return result
     end)
 
     state.exports.apply_ui_polish = _forge_apply_ui_polish

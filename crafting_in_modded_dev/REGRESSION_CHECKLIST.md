@@ -4,7 +4,19 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-08-13.
+Last updated: 2026-08-23.
+
+### issue1360-ranalds-build-import - external builds commit atomically
+
+| Field | Value |
+|---|---|
+| Symptom | Community builds cannot be browsed in-game, and a partial import could otherwise leave some new items, slots, or talents committed after a later failure. |
+| Root cause | Ranald's Gift stores compact external integer ids while CIM previously had no bounded reader, live-table translation boundary, five-item persistence transaction, or exact selected-loadout commit/compensation coordinator. |
+| Fix version(s) | cim_dev 0.8.128-dev (#1360) |
+| Category | SOLO / UI / TRANSACTION / EXTERNAL DATA |
+| Repro | In the Keep, open CIM's Athanor, choose **Community Builds**, switch career and Likes/Recent order, select one compatible build, and choose **Import Selected Build**. Restart and inspect the same career/loadout. |
+| Expected post-fix | The browser remains responsive and bounded. A compatible build creates exactly five Modded items and equips its five slots plus six talents on the selected loadout; the result persists. An unavailable DLC, illegal roll, malformed response, network failure, or failed mutation is rejected without changing any prior slot, talent, or persistent crafted row. |
+| Detection | `test_cim_ranalds_catalog.lua`, `test_cim_ranalds_import.lua`, `test_cim_ranalds_browser.lua`, and the forge-owner transaction case cover vocabulary, bounds, cursor paging, cancellation, live legality, all mutation exceptions, rollback, and modal input restoration. `/cim_regression_test` runs `issue1360_ranalds_build_import` against the installed services. |
 
 ### issue1117-bulk-accessory-button-layout - long label does not share the upgrade arrow
 
@@ -632,6 +644,7 @@ Last updated: 2026-08-13.
 
 ## Slugs
 
+- issue1360-ranalds-build-import
 - issue618-modded-salvage-autofill
 
 - feedback-deploy-vs-upload-distinction

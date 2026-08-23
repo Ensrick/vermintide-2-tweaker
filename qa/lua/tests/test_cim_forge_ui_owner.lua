@@ -38,16 +38,16 @@ return function(H, repo_root)
         H.equal(count_plain(entry,
             'mod:hook_safe("HeroWindowWeaveProperties", "_draw"'), 0)
         H.equal(count_plain(entry,
-            'mod:hook_safe("HeroViewStateWeaveForge", "update"'), 0)
+            'mod:hook("HeroViewStateWeaveForge", "update"'), 0)
         H.equal(count_plain(owner,
             'mod:hook_safe("HeroWindowWeaveProperties", "_draw"'), 1)
         H.equal(count_plain(owner,
-            'mod:hook_safe("HeroViewStateWeaveForge", "update"'), 1)
+            'mod:hook("HeroViewStateWeaveForge", "update"'), 1)
 
         local draw_at = assert(owner:find(
             'mod:hook_safe("HeroWindowWeaveProperties", "_draw"', 1, true))
         local update_at = assert(owner:find(
-            'mod:hook_safe("HeroViewStateWeaveForge", "update"', 1, true))
+            'mod:hook("HeroViewStateWeaveForge", "update"', 1, true))
         H.truthy(draw_at < update_at)
     end)
 
@@ -70,6 +70,13 @@ return function(H, repo_root)
         local hooks = {}
         local mod = {
             hook_safe = function(_, class_name, method_name, callback)
+                hooks[#hooks + 1] = {
+                    class_name = class_name,
+                    method_name = method_name,
+                    callback = callback,
+                }
+            end,
+            hook = function(_, class_name, method_name, callback)
                 hooks[#hooks + 1] = {
                     class_name = class_name,
                     method_name = method_name,
@@ -104,9 +111,19 @@ return function(H, repo_root)
                 return old_profiles
             end,
         })
+        local browser_draws, browser_input, browser_closes = 0, nil, 0
+        local browser = {
+            is_open = function() return true end,
+            draw = function(forge_state, overview, renderer, input_service)
+                browser_draws = browser_draws + 1
+                browser_input = input_service
+            end,
+            close = function() browser_closes = browser_closes + 1 end,
+        }
         local second, second_installed = install({
             mod = mod,
             accessory_panel = new_panel,
+            ranalds_browser = browser,
             is_active = function() return true end,
             get_bg_colored = function() return new_bg end,
             set_bg_colored = function(value) new_bg = value end,
@@ -118,6 +135,7 @@ return function(H, repo_root)
                 new_profile_reads = new_profile_reads + 1
                 return new_profiles
             end,
+            print_line = function() end,
         })
 
         H.equal(first_installed, true)
@@ -162,23 +180,57 @@ return function(H, repo_root)
         H.equal(crafted[2], 2)
         H.equal(crafted[3], "slot_necklace")
 
-        hooks[2].callback({
+        local base_saw_blocked = false
+        local forge_state = {
             _active_windows = {
                 { NAME = "HeroWindowWeaveForgeBackground", _widgets_by_name = {} },
+                { NAME = "HeroWindowWeaveForgeOverview" },
             },
-        }, 0, 0)
+            input_service = function() return "raw-input" end,
+            ui_top_renderer = "top-renderer",
+        }
+        local result = hooks[2].callback(function(self)
+            base_saw_blocked = self._input_blocked == true
+            return "base-result"
+        end, forge_state, 0, 0)
+        H.equal(result, "base-result")
+        H.equal(base_saw_blocked, true, "open modal did not block vanilla input")
+        H.equal(forge_state._input_blocked, nil, "modal did not restore raw input state")
+        H.equal(browser_draws, 1)
+        H.equal(browser_input, "raw-input")
         H.equal(old_bg, false, "registered callback retained stale setter")
         H.equal(new_bg, true, "registered callback did not consume refreshed setter")
         H.equal(old_manager_reads, 0, "registered callback retained stale Managers accessor")
         H.equal(old_profile_reads, 0, "registered callback retained stale profiles accessor")
         H.equal(new_manager_reads, 1, "registered callback missed fresh Managers accessor")
         H.equal(new_profile_reads, 1, "registered callback missed fresh profiles accessor")
+
+        browser.draw = function() error("browser draw failure") end
+        local browser_error_ok = pcall(hooks[2].callback, function()
+            return "base-after-browser-error"
+        end, forge_state, 0, 0)
+        H.equal(browser_error_ok, true,
+            "optional browser failure escaped the forge update")
+        H.equal(browser_closes, 1)
+        H.equal(forge_state._input_blocked, nil)
+
+        local error_state = {
+            _input_blocked = false,
+            input_service = function() return "raw-input" end,
+        }
+        local ok = pcall(hooks[2].callback, function()
+            error("base update failure")
+        end, error_state, 0, 0)
+        H.equal(ok, false)
+        H.equal(error_state._input_blocked, false,
+            "base update error leaked the modal input override")
     end)
 
     H.test("CIM forge UI owner receives mutable state through explicit accessors", function()
         for _, dependency in ipairs({
             "is_active", "get_bg_colored", "set_bg_colored",
             "get_managers", "get_profiles", "accessory_panel",
+            "ranalds_browser", "print_line",
         }) do
             H.truthy(entry:find(dependency .. " =", 1, true),
                 "entry does not inject " .. dependency)
@@ -195,6 +247,13 @@ return function(H, repo_root)
         local hooks = {}
         local mod = {
             hook_safe = function(_, class_name, method_name, callback)
+                hooks[#hooks + 1] = {
+                    class_name = class_name,
+                    method_name = method_name,
+                    callback = callback,
+                }
+            end,
+            hook = function(_, class_name, method_name, callback)
                 hooks[#hooks + 1] = {
                     class_name = class_name,
                     method_name = method_name,
