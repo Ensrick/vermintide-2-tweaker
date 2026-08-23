@@ -3,6 +3,13 @@ return function(H, repo_root)
         .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_scoreboard_policy.lua"
     local Policy = assert(loadfile(policy_path))()
 
+    local function read(path)
+        local file = assert(io.open(path, "rb"))
+        local source = file:read("*a")
+        file:close()
+        return source
+    end
+
     H.test("GUT scoreboard inventory resolves scalar and composite topics", function()
         local topics = {
             { name = "kills", display_text = "kills_loc", stat_type = "kills_total" },
@@ -160,9 +167,7 @@ return function(H, repo_root)
     H.test("GUT #272 native pages own bounded draw seams and no transport", function()
         local live_path = repo_root
             .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_scoreboard_live.lua"
-        local f = assert(io.open(live_path, "rb"))
-        local live = f:read("*a")
-        f:close()
+        local live = read(live_path)
         local _, tab_hooks = live:gsub('mod:hook_safe%("IngamePlayerListUI", "_draw"', "")
         local _, end_hooks = live:gsub('mod:hook_safe%("EndViewStateScore", "draw"', "")
         H.equal(tab_hooks, 1)
@@ -175,5 +180,25 @@ return function(H, repo_root)
         H.equal(live:find('table.concat(lines, "\\n")', 1, true), nil)
         H.equal(live:find("network_register", 1, true), nil)
         H.equal(live:find("rpc_", 1, true), nil)
+    end)
+
+    H.test("GUT #272 stable and dev scoreboard presenters stay semantically identical", function()
+        local stable = read(repo_root
+            .. "/gui_tweaker/scripts/mods/gui_tweaker/_gut_scoreboard_live.lua")
+        local dev = read(repo_root
+            .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_scoreboard_live.lua")
+        dev = dev:gsub("gui_tweaker_dev", "gui_tweaker")
+            :gsub('get_mod%("gut_dev"%)', 'get_mod("gut")')
+        H.equal(stable, dev,
+            "public and dev scoreboard behavior may differ only by stream identity")
+
+        local stable_loc = assert(loadfile(repo_root
+            .. "/gui_tweaker/scripts/mods/gui_tweaker/gui_tweaker_localization.lua"))()
+        local dev_loc = assert(loadfile(repo_root
+            .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/gui_tweaker_dev_localization.lua"))()
+        for _, key in ipairs({ "gut_scoreboard_live_title", "gut_scoreboard_live_statistic" }) do
+            H.equal(stable_loc[key].en, dev_loc[key].en,
+                "scoreboard chrome localization drifted for " .. key)
+        end
     end)
 end
