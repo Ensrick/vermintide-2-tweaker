@@ -3,7 +3,7 @@ local mod = get_mod("crt")
 -- concern module and this entry's lifecycle callbacks read/write it.
 mod._crt = mod._crt or {}
 
-local MOD_VERSION = "0.4.23-beta"
+local MOD_VERSION = "0.4.24-beta"
 mod._crt.MOD_VERSION = MOD_VERSION
 
 -- VMF mod-to-mod RPC schema (VMF_RECIPES section 10). Issue #776 appends the
@@ -95,6 +95,11 @@ end
 -- Pure damage-category policy must load before the armor/overcharge consumer.
 -- It contains no hooks or engine reads and is shared through mod._crt.
 mod._crt.damage_classification = mod:dofile("scripts/mods/career_tweaker/_crt_damage_classification")
+-- Focused Spirit (#472) owns its description matrix, buffer="both" authority
+-- policy, and bounded setting-consensus transport in one engine-light module.
+-- Load it before the balance catalog so that catalog availability closures and
+-- the armor/overcharge runtime consume the exact same decisions.
+mod._crt.focused_spirit = mod:dofile("scripts/mods/career_tweaker/_crt_focused_spirit")
 -- Pure issue-776 wire contract. The balance catalog consumes its timed-buff
 -- constants; the beacon and receiver floor consume its exact catalog policy.
 mod._crt.wire_policy = mod:dofile("scripts/mods/career_tweaker/_crt_wire_policy")
@@ -241,6 +246,17 @@ local function _apply_rework_master(family, enabled)
         _reconcile_rework_engines,
         function() foot_knight.apply_settings() end)
     if not applied then return end
+    for i = 1, #changes do
+        if changes[i].id == "rework_we_maidenguard_focused_spirit_stacks" then
+            if mod._crt_focused_spirit_reset then mod._crt_focused_spirit_reset() end
+            local consensus = mod._crt.focused_spirit_consensus
+            if type(consensus) == "table"
+                    and type(consensus.set_local_changed) == "function" then
+                consensus:set_local_changed()
+            end
+            break
+        end
+    end
     pcall(printf, "[crt:445] family=%s enabled=%s writes=%d ensrick=%d tourney=%d",
         tostring(family), tostring(enabled), #changes,
         #(rework_master_policy.ensrick_ids or {}), #(rework_master_policy.tourney_ids or {}))
@@ -304,11 +320,13 @@ mod._crt.rework_master_module = rework_master_module
 mod._crt.tourney = tourney
 
 -- One exact presentation catalog for issue #776. Keep both gameplay owners in
--- the list: eight native balance rows plus the Tourney Warrior Priest aura.
+-- the list: nine native balance rows, the Tourney Warrior Priest aura, and the
+-- hook-owned Focused Spirit chip exemption. All eleven affect replicated state.
 -- This table is read-only metadata; neither collection nor the optional GUT
 -- bridge writes a saved setting.
 do
-    local ids, seen = {}, {}
+    local ids = { "maidenguard_focused_spirit_ignore_chip_damage" }
+    local seen = { maidenguard_focused_spirit_ignore_chip_damage = true }
     for _, owner in ipairs({ balance, tourney }) do
         local owned = type(owner) == "table" and owner.network_unsafe_ids or nil
         if type(owned) == "table" then
@@ -675,7 +693,20 @@ mod.on_setting_changed = function(setting_id)
     -- bounded to one level.
     mutex.enforce(setting_id)
 
-    if setting_id:find("^rework_") then
+    -- #472 configuration consensus is edge-driven, not polled. Publish the new
+    -- two setting bits before rebuilding the balance tables, so a local change
+    -- immediately fails closed until every peer reports the same value.
+    local focused_setting_changed = setting_id == "rework_we_maidenguard_focused_spirit_stacks"
+        or setting_id == "maidenguard_focused_spirit_ignore_chip_damage"
+    if focused_setting_changed then
+        if mod._crt_focused_spirit_reset then mod._crt_focused_spirit_reset() end
+        local consensus = mod._crt.focused_spirit_consensus
+        if type(consensus) == "table" and type(consensus.set_local_changed) == "function" then
+            consensus:set_local_changed()
+        end
+    end
+
+    if focused_setting_changed or setting_id:find("^rework_") then
         -- Restore Tourney before rebuilding the higher-priority Ensrick owner.
         -- Otherwise an old overlapping Tourney snapshot can restore vanilla
         -- over the Ensrick value selected by this change.
@@ -710,6 +741,7 @@ mod.on_disabled = function()
     if balance and balance.restore then balance.restore() end
     if tourney and tourney.restore then tourney.restore() end
     foot_knight.restore()
+    if mod._crt_focused_spirit_reset then mod._crt_focused_spirit_reset() end
     -- Drop the OE cooldown-reduction managed bonus cleanly (the tick also self-
     -- clears once mod:get returns nil, but do it eagerly so the live OE reverts to
     -- exact vanilla recharge the instant the mod is disabled).
@@ -880,16 +912,18 @@ do
             else
                 mod._crt_peer_parity = inst
                 mod._crt_wire_transport_identity = wire_identity
+                local focused_consensus
                 -- A real network departure retires the exact process epoch. Level
                 -- transitions do not call remove_peer, so bounded transition
                 -- retention remains intact without allowing peer-id replay.
                 mod:hook_safe("GameNetworkManager", "remove_peer", function(_, peer_id)
                     inst:forget_peer(peer_id)
+                    if focused_consensus then focused_consensus:forget_peer(peer_id) end
                 end)
                 mod._crt_wire_disconnect_guard = true
                 pcall(printf, "[crt:425] peer-parity beacon installed (channel=crt_peer_parity_present schema=%d exact_identity=%s)",
                     CRT_RPC_SCHEMA, wire_identity)
-                -- ONE gated feature covering every networked_unsafe entry (eight
+                -- ONE gated feature covering every networked_unsafe entry (nine
                 -- balance reworks + the trn_wh_priest tourney port). On a parity
                 -- transition the beacon fires these callbacks; each just re-runs the
                 -- two apply engines, which read the beacon's settled state directly
@@ -912,9 +946,55 @@ do
                     end,
                 })
 
+                -- #472 adds one bounded, edge-driven settings-consensus axis on
+                -- top of exact catalog parity. The stacking rework can mutate
+                -- the same buffer="both" talent on owner and server only after
+                -- every CRT peer reports both Focused Spirit setting bits. No update loop is
+                -- added: announce on exact-parity enable, local setting change,
+                -- or one direct reply. A mismatch restores vanilla through the
+                -- ordinary balance reconciler.
+                local focused_policy = mod._crt.focused_spirit
+                if type(focused_policy) == "table"
+                        and type(focused_policy.new_consensus) == "function" then
+                    focused_consensus = focused_policy.new_consensus(mod, inst, {
+                        config = function()
+                            return {
+                                stacking = mod:get("rework_we_maidenguard_focused_spirit_stacks") == true,
+                                ignore_chip = mod:get("maidenguard_focused_spirit_ignore_chip_damage") == true,
+                            }
+                        end,
+                        on_remote_change = function()
+                            if mod._crt_focused_spirit_reset then
+                                mod._crt_focused_spirit_reset()
+                            end
+                            pcall(_reconcile_rework_engines)
+                        end,
+                    })
+                    local ok_focus, focus_installed = pcall(
+                        focused_consensus.install, focused_consensus)
+                    if ok_focus and focus_installed == true then
+                        mod._crt.focused_spirit_consensus = focused_consensus
+                        inst:register_gated_feature("crt_focused_spirit_config", {
+                            label = "Focused Spirit configuration",
+                            on_enable = function()
+                                focused_consensus:announce()
+                            end,
+                            on_disable = function()
+                                focused_consensus:invalidate()
+                            end,
+                        })
+                        pcall(printf,
+                            "[crt:472] applied: authority=owner-human-or-server-bot consensus_channel=%s schema=%d",
+                            tostring(focused_policy.CHANNEL), tonumber(focused_policy.SCHEMA) or -1)
+                    else
+                        pcall(printf,
+                            "[crt:472] WARNING setting consensus did not install; Focused Spirit modifications stay vanilla")
+                    end
+                end
+
                 -- Optional Mod Tweaker presentation bridge. Runtime/network safety
                 -- above remains authoritative when GUT is absent; this bridge only
-                -- makes all nine affected saved rows read-only/grey while exact
+                -- makes all eleven affected saved rows read-only/grey while exact
                 -- parity is unavailable. Retry because mod load order is not a
                 -- dependency contract, and preserve the existing update owner.
                 local runtime_mod_id = "crt"

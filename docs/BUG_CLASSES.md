@@ -3703,3 +3703,54 @@ talent proc drivers buffered on both client and server.
   analogue with distinct `ale_defence` and `ale_attack_speed` child names.
 - #371/#425 own peer catalog/parity safety. Do not weaken that transport floor
   to repair local stack semantics or proc authority.
+
+## 90. A `buffer="both"` state machine has two writers and no settings consensus
+
+**First confirmed:** 2026-08-23 (Career Tweaker Focused Spirit issue #472).
+**Lives in:** talent effects installed on both a remote human's owning client and
+the server, especially chained cooldowns whose expiry creates the next stack.
+
+### Symptoms
+- A timed stack can grow twice per intended interval, or one peer can remove a
+  different number of stacks from the other.
+- A server and owner with different saved filtering settings disagree about
+  whether one damage event resets the effect.
+- Solo and static template tests pass because they instantiate only one copy and
+  never model the mirrored lifecycle.
+- A failed wrapped event can still leave a cooldown scheduled if mutation occurs
+  before the enclosing engine call commits.
+
+### Diagnosis pattern
+1. Read the talent's `buffer` and both Talent/HuskTalent installation gates.
+   `buffer="both"` creates an owner copy and server copy for a remote human; it
+   does not choose a transition writer.
+2. Trace cooldown creation and expiry in addition to the damage proc. If both
+   copies schedule the next cooldown, each expiry can create and rearm a stack.
+3. Classify host human, remote owner, remote server mirror, observer, and server
+   bot separately. Do not collapse `is_server` and `local_player` into one test.
+4. Treat every setting that changes the transition decision as replicated
+   configuration. Exact mod/catalog parity does not prove equal saved values.
+5. Model five or more full intervals and damage at zero and nonzero stack counts;
+   source-shape tests cannot prove a single global writer.
+
+### Fix template
+- Choose one decision owner: local owning client for a human, server for a bot.
+  The remote-human server copy may mirror the exact stack removal but must not
+  create a second cooldown.
+- Reuse a native authority-aware RPC path when one exists. Send once from the
+  writer and let the native route mirror the resulting cooldown; never add a
+  per-frame synchronization loop.
+- Add a bounded, edge-driven consensus covering every behavior-changing bit.
+  Missing, mismatched, stale, contradictory, foreign-epoch, or unproven peer
+  state fails closed to vanilla.
+- Defer irreversible follow-up work until the enclosing engine call succeeds,
+  and clear pending state on setting, disable, death/talent-loss, and error edges.
+- Test owner/server copies together, including one request and two mirrored
+  results, plus peer departure and reconnect epochs.
+
+### Related issues / evidence
+- #472 is the canonical repair. #334 owns its unchanged damage classifier.
+- #473/class 89 is adjacent but distinct: it concerns shared child stack names
+  and a server-forwarded attack proc, not a chained `buffer="both"` state machine.
+- #371/#425/#1158 provide exact transport/catalog floors; they do not establish
+  saved-setting equality and therefore cannot replace configuration consensus.

@@ -455,10 +455,12 @@ local _CRT_NETWORK_UNSAFE_EXPECTED = {
     "rework_es_mercenary_enhanced_training_tiered",
     "rework_es_questingknight_virtue_of_impetuous_buffed",
     "rework_we_maidenguard_dance_of_blades",
+    "rework_we_maidenguard_focused_spirit_stacks",
     "rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr",
 }
 
 local _CRT_NETWORK_UNSAFE_ALL_EXPECTED = {
+    "maidenguard_focused_spirit_ignore_chip_damage",
     "rework_bw_unchained_abandon_innate_flame_unending",
     "rework_bw_unchained_natural_talent_ranged",
     "rework_bw_unchained_numb_to_pain_4x_burn_kill_lose_on_hit",
@@ -466,6 +468,7 @@ local _CRT_NETWORK_UNSAFE_ALL_EXPECTED = {
     "rework_es_mercenary_enhanced_training_tiered",
     "rework_es_questingknight_virtue_of_impetuous_buffed",
     "rework_we_maidenguard_dance_of_blades",
+    "rework_we_maidenguard_focused_spirit_stacks",
     "rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr",
     "trn_wh_priest_prayer_movement_speed",
 }
@@ -781,20 +784,30 @@ _rt_register("issue405_heal_network_is_server_gated", function()
 end)
 
 _rt_register("issue472_focused_spirit_contract", function()
-    local policy = mod._crt and mod._crt.damage_classification
-    if type(policy) ~= "table" or type(policy.focused_spirit_ignores) ~= "function" then
+    local damage_policy = mod._crt and mod._crt.damage_classification
+    local focused_policy = mod._crt and mod._crt.focused_spirit
+    if type(damage_policy) ~= "table"
+            or type(damage_policy.focused_spirit_ignores) ~= "function" then
         return "shared damage-classification policy missing"
     end
+    if type(focused_policy) ~= "table"
+            or type(focused_policy.transition_role) ~= "function"
+            or type(focused_policy.growth_action) ~= "function"
+            or type(focused_policy.damage_action) ~= "function"
+            or type(focused_policy.zero_stack_action) ~= "function" then
+        return "Focused Spirit shared authority policy missing"
+    end
     local unit = {}
-    if not policy.focused_spirit_ignores(unit, unit, nil, "wounded_dot")
-       or not policy.focused_spirit_ignores({}, unit, "skaven_ratling_gunner", "shot_machinegun")
-       or policy.focused_spirit_ignores({}, unit, "skaven_storm_vermin", "light_attack") then
+    if not damage_policy.focused_spirit_ignores(unit, unit, nil, "wounded_dot")
+       or not damage_policy.focused_spirit_ignores({}, unit, "skaven_ratling_gunner", "shot_machinegun")
+       or damage_policy.focused_spirit_ignores({}, unit, "skaven_storm_vermin", "light_attack") then
         return "Focused Spirit ignore policy boundary drifted"
     end
 
     local defs = balance and balance.BALANCE_MODS
     local rework = defs and defs.rework_we_maidenguard_focused_spirit_stacks
-    if type(rework) ~= "table" or #rework.patches ~= 4 then
+    if type(rework) ~= "table" or #rework.patches ~= 4
+            or rework.network_unsafe ~= true or type(rework.available) ~= "function" then
         return "Focused Spirit stacking rework patches missing"
     end
 
@@ -817,6 +830,24 @@ _rt_register("issue472_focused_spirit_contract", function()
     end
     if rework.custom_apply == nil or rework.custom_restore == nil then
         return "Focused Spirit dynamic talent description lifecycle missing"
+    end
+    local consensus = mod._crt and mod._crt.focused_spirit_consensus
+    if type(consensus) ~= "table" or type(consensus.all_match) ~= "function"
+            or type(consensus.is_installed) ~= "function"
+            or consensus:is_installed() ~= true then
+        return "Focused Spirit two-setting consensus transport missing"
+    end
+    if mod._crt.focused_spirit_localize_installed ~= true then
+        return "Focused Spirit authored global localization override missing"
+    end
+    local stacking = mod:get("rework_we_maidenguard_focused_spirit_stacks") == true
+    local ignore_chip = mod:get("maidenguard_focused_spirit_ignore_chip_damage") == true
+    local expected = focused_policy.description(stacking, ignore_chip)
+    if expected ~= nil then
+        local ok, actual = pcall(Localize, focused_policy.VANILLA_DESCRIPTION_KEY)
+        if not ok or actual ~= expected then
+            return "Focused Spirit live global description does not match both settings"
+        end
     end
 end)
 
