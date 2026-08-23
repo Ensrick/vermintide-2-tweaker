@@ -60,35 +60,35 @@ explicit rather than inferred:
 
 | Wave | Deliverable | Gate | State |
 |---|---|---|---|
-| W0 | **Adapter/lifecycle census + CI gate**: machine-readable registry of every registered custom appearance family x SURFACE x EDGE pair (implemented / declared-unsupported-with-fallback); the gate is `qa/lua/tests/test_appearance_census.lua` (in the Lua suite) plus the `qa/check_appearance_census_gaps.ps1` drift check - a `check_appearance_census.ps1` script never existed. Retroactive census of every existing family = the true backlog, currently 3,624 unsupported pairs of 4,624 (`docs/generated/APPEARANCE_CENSUS_GAPS.generated.md`). | census gates green with every existing gap DECLARED (not fixed) | DONE 2026-08-13 (#1157: surface-x-edge schema and six new surfaces; #1198: distinct crafting preview; #1197: all 17 surfaces required by contracts; wt_dev validated as a parity mirror) |
+| W0 | **Adapter/lifecycle census + CI gate**: machine-readable registry of every registered custom appearance family x SURFACE x EDGE pair (implemented / declared-unsupported-with-fallback); the gate is `qa/lua/tests/test_appearance_census.lua` (in the Lua suite) plus the `qa/check_appearance_census_gaps.ps1` drift check - a `check_appearance_census.ps1` script never existed. Retroactive census of every existing family = the true backlog, currently 3,613 unsupported pairs of 4,624 (`docs/generated/APPEARANCE_CENSUS_GAPS.generated.md`). | census gates green with every existing gap DECLARED (not fixed) | DONE 2026-08-13 (#1157: surface-x-edge schema and six new surfaces; #1198: distinct crafting preview; #1197: all 17 surfaces required by contracts; wt_dev validated as a parity mirror) |
 | W1 | **Descriptor library + contract tests**: `_lib_appearance_descriptor.lua` (pure build/validate/fingerprint) + engine-free tests in `qa/lua/tests/`; CWV owns the first synchronized runtime copy. | 966+ suite green | DONE 2026-08-06 (#1155 pilot prerequisite) |
-| W2 | **Reconciler skeleton + pilot family**: lifecycle-edge reconciler in the shared lib; migrate ONE worst-record family (CWV Old Musket, #474 controls) across all cells; delete its legacy paths. | pilot family passes the co-op matrix in-game | live-failed on CWV 0.1.523-dev; 0.1.524-dev material/lifecycle repair candidate requires solo proof before co-op |
+| W2 | **Reconciler skeleton + pilot family**: lifecycle-edge reconciler in the shared lib; migrate ONE worst-record family (CWV Old Musket, #474 controls); enumerate unsupported cells with fail-closed fallbacks instead of inventing coverage. | exact applicable owner/preview/transition postconditions pass in game; unsupported cells stay explicit | DONE 2026-08-21 (#1155 verified on CWV 0.1.526-dev; #1156 false-negative oracle repaired and closed 2026-08-22) |
 | W3 | **Extraction-420 cutover completion**: shared transform ownership is source-complete across CWV, Cosmetics, both WT streams, and WOC; the remaining Cosmetics material/texture fallback belongs to the broader #660 migration. | per-step four-render-path regression + in-game verify | Cosmetics source candidate pending release/no-drift verification; material fallback pending under #660 |
-| W4 | **Remaining families**, one per change, closing their symptom issues as they migrate; #660's issue index burns down. | each family's cells green | pending |
+| W4 | **Remaining families**, one per change, closing their symptom issues as they migrate; #660's issue index burns down. | each family's implemented cells retain the descriptor postconditions in game; unsupported cells remain explicit and safe | ACTIVE 2026-08-22 (#1155 cleared the pilot blocker; #660 owns family selection and migration) |
 | W5 | **OOP completion**: ct_dev + cwv decomposition (last two god files), #727 logging sweep, doc reconciliation. | full QA green, per-mod module contracts documented | DONE 2026-08-12 (#1159: all 10 decomposition contracts complete; final CT Dev entry 1,498 nonblank lines, CWV entry 1,490) |
 
-### W2 exact readiness (updated 2026-08-20)
+### W2 verified outcome and W4 boundary (updated 2026-08-22)
 
 The Old Musket pilot declares all 136 surface-x-edge cells under one
-descriptor/reconciler contract. Seventeen cells now have source-backed runtime
+descriptor/reconciler contract. Seventeen cells have source-backed runtime
 delivery/adapters: owner 1P/3P `instance_load`, `equip`, and `customize`; bot
 `instance_load` and `equip`; remote husk `instance_load`, `equip`, and
 `peer_ready`; plus `instance_load` and stable `preview_open` for inventory,
 illusion browser and CIM Athanor. Lobby and score/team lack an exact selected-
-slot identity producer and therefore remain explicit vanilla-safe fallbacks;
-the remaining cells are
-explicit fallback declarations, not claims that those lifecycle paths ran.
+slot identity producer and therefore remain explicit vanilla-safe fallbacks.
+All other cells are explicit fallback declarations, not claims that those
+lifecycle paths ran.
 
 CIM shares `LootItemUnitPreviewer` with the illusion browser. CWV consumes CIM
 Dev's public `cim_preview_context_v1` exact-instance provider across Weapons,
 Properties, and Overview. A genuinely absent marker remains
 `illusion_browser`; a present but invalid, foreign, stale, or identity-mismatched
 marker stays CIM-classified and is terminally rejected so it cannot mutate an
-Athanor row through the ordinary-browser fallback. Loot construction owns `instance_load`, while
-`_enable_item_units_visibility(visible=true)` is the separate package/mip-stable
-`preview_open` edge. Mission-transition and respawn cells remain unsupported
-until directly observed, even when equipment recreation routes through an
-implemented construction/equip edge.
+Athanor row through the ordinary-browser fallback. Loot construction owns
+`instance_load`, while `_enable_item_units_visibility(visible=true)` is the
+separate package/mip-stable `preview_open` edge. Unsupported mission-transition
+and respawn census cells do not become supported merely because equipment
+recreation happens to route through an implemented construction/equip edge.
 
 The 2026-08-20 CWV `0.1.523-dev` live run falsified the earlier donor-package
 theory. Both Handgun packages completed before the first spawn, yet each custom
@@ -98,25 +98,39 @@ ordinary GearUtils and preview spawns never interpret arbitrary
 also exhausted both historical retries synchronously and let the synthetic
 #1155 regression pass while every real renderer reported `retained=false`.
 
-The `0.1.524-dev` candidate restores the proven self-contained asset pattern:
+The final `0.1.526-dev` pilot preserves the proven self-contained asset pattern:
 both `.unit` files bind `rifle_mat` to a CWV-owned `.material`, the root package
 owns that material and all five textures, and runtime proves the exact closure,
 performs one authored-material bind, then reads every mesh handle back. A token
-now has one attempt; only a distinct source-backed edge may retry. The named
-regression requires real stable-edge retained evidence for both stances and can
-no longer pass from descriptor shape alone. This is still a candidate until the
-pinned solo owner/preview card passes; remote husk, bot, role reversal, and hot
-join remain the later co-op gate.
+has one attempt; only a distinct source-backed edge may retry. Rain's pinned
+solo run verified the authored model as visible, textured, upright, and distinct
+from the vanilla Handgun in the Athanor, owner first person, owner third person,
+inventory character, illusion browser, after weapon swapping, and after the
+Keep-to-Righteous-Stand transition. Its log contains 115 bounded retention
+receipts; every receipt retained application, materials, position, scale, and
+rotation through `atomic-local-pose`, with no transform error.
 
 The repair also makes attachment-parent identity part of the descriptor. Held
 rifle and held polearm recipes are distinct in owner 1P and character 3P, while
 the camera-world preview carrier selects a separate display profile. This is not
 surface-local pose duplication: consumers select one closed-vocabulary profile,
-and the descriptor owns every profile's transform. The initial display tuple -
-position `{0, 0, 0}`, Euler `{-90, -90, 0}`, scale `{1, 1.1, 1.1}` - preserves
-the import rotation/scale while letting the display carrier own centering. It is
-an explicitly unproven live-tuning candidate, not evidence that inventory or
-illusion-browser pose is fixed.
+and the descriptor owns every profile's transform. The remaining small grip,
+aim, and preview-framing adjustments are numerical presentation calibration
+under #474, not descriptor, resource, lifecycle, or orientation failures.
+
+The aggregate `/cwv_regression_test` in the successful live run was not clean:
+its #1155 oracle incorrectly demanded two stance rows from an illusion browser
+that has no stance control. #1156 repaired that false-negative instrument under
+PR #1356 and closed only after exact-master QA. W2 therefore closes on observed
+retained state plus a corrected oracle, not on the earlier aggregate count.
+
+W2 is a structural pilot, not a claim that every family or peer surface is now
+fixed. W4 must migrate one registered family at a time, reuse the descriptor and
+bounded reconciler, delete the superseded family-specific writers in the same
+change, and verify the affected leaf issues at their actual topology. Remote
+husk, bot, role-reversal, hot-join, dual/offhand, lobby, score/team, Hold-Tab,
+and other provider-specific gaps remain work until their exact census cells and
+leaf acceptance criteria have direct evidence.
 
 ## 3a. Single-vocabulary rule (#1158, 2026-08-08)
 
