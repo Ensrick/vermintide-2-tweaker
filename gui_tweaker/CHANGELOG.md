@@ -1,5 +1,19 @@
 # Tweaker: GUI — Changelog
 
+## 0.2.283 (2026-08-23) -- stable scoreboard presentation parity (#272) [not-started]
+
+- Replaces the public stream's flattened multiline scoreboard overlay with the
+  reviewed explicit-root, fixed-cell 11-statistic by 4-player grid already used
+  by GUI Tweaker Dev. Hold Tab and the Adventure end screen still consume the
+  same detached native snapshot.
+- Adds the missing title/header localization and makes a loaded but disabled
+  standalone Tab Scoreboard yield the surface to GUI Tweaker. An enabled or
+  unreadable external scoreboard remains the sole owner to avoid double draw.
+- Adds a semantic stable/dev parity assertion, preserving the existing bounded
+  four-Hz refresh, eight-receipt evidence cap, and zero custom-stat transport.
+  This repairs the public regression but does not complete #272's paging,
+  visibility, or host-authoritative custom-stat phases.
+
 ## 0.2.281 (2026-07-22) -- detached bot loadout snapshots (#954) [not-started]
 
 - Assigning a saved loadout to a bot now persists a dedicated copy of that
