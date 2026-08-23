@@ -1,5 +1,15 @@
 # Crafting in Modded Changelog
 
+## 0.8.130-dev (2026-08-23) -- retire consumed Craft Item telemetry (#499) [not-started]
+
+- Removes the automatic catalog and final-rendered-list logging left behind by
+  the previously resolved duplicate-selector investigation.
+- Retains the canonical acquisition-family policy, exact CWV selector identity,
+  crafted-instance exclusion, and all behavioral regression checks.
+- Adds an explicit retirement assertion so the issue-specific loader, render
+  callback, log prefix, and diagnostic-only runtime check cannot return.
+  Crafting behavior, hooks, settings, RPCs, and item persistence are unchanged.
+
 ## 0.8.129-dev (2026-08-23) -- release Ranald's Gift browser for live verification (#1360) [verify-fix]
 
 - Reissued the already reviewed Community Builds implementation with its

@@ -706,27 +706,6 @@ _rt_register("issue524_native_craft_families_deduplicated", function()
     end
 end)
 
-_rt_register("issue524_render_diagnostics_armed", function()
-    -- The three checks above exercise catalog.build / inject with synthetic
-    -- inputs. None observes the list vanilla actually renders at menu-open, which
-    -- is precisely the blind spot behind ten failed #524 ships. This check fails
-    -- if the render-seam probe (_cim_diag_524 + its inject-seam call) is stripped
-    -- while #524 is open, so the rendered-list evidence stays armed.
-    local diag = mod._cim_diag_524
-    if type(diag) ~= "table" or type(diag.dump) ~= "function" then
-        return "#524 render-seam diagnostic (_cim_diag_524.dump) not loaded"
-    end
-    if mod._cim524_render_probe_wired ~= true then
-        return "#524 render-seam probe not wired into the inject seam"
-    end
-    -- The probe classifies rows via the selector's canonical_family; that shared
-    -- helper must stay exposed or the dump would mislabel every family.
-    local selector = mod._cim_template_selector
-    if type(selector) ~= "table" or type(selector.canonical_family) ~= "function" then
-        return "#524 render probe lost its canonical_family classifier"
-    end
-end)
-
 _rt_register("issue682_provider_gate_routing", function()
     -- issue 682 (confirmed boundary: Athanor craft on the immutable WOC relic
     -- rejected with `reason=nil`) + issue 628 (registered provider gate).

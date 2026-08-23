@@ -225,15 +225,24 @@ return function(H, repo_root)
         H.truthy(source:find("_cim_template_catalog", 1, true))
         H.truthy(catalog_source:find("cim_acquisition_template = true", 1, true))
         -- The pure policy call must stay wired with the template-cache identity and
-        -- its result must be what production renders. v0.8.84-dev (issue 524) wraps
-        -- the former one-liner: the inject result is captured as `result`, handed to
-        -- the render-seam probe (observation-only, pcall'd), then returned unchanged,
-        -- so the rendered-list identity is still exactly the selector's output.
+        -- its result must be what production renders. The consumed rendered-list
+        -- telemetry is retired; production returns the selector result directly.
         H.truthy(source:find("_single_slot_filter(filter)", 1, true))
         H.truthy(source:find("local result = template_selector.inject(items, _template_cache, {", 1, true))
         H.truthy(source:find("return result", 1, true))
+		H.equal(source:find("_cim_diag_524", 1, true), nil)
+		H.equal(source:find("[cim:524]", 1, true), nil)
 		H.truthy(source:find("mod._cim592_cwv_bounded_seed = true", 1, true))
 		H.equal(source:find("mod._cim592_cwv_registration_only", 1, true), nil)
+
+		local entry_file = assert(io.open(root .. "crafting_in_modded_dev.lua", "rb"))
+		local entry_source = entry_file:read("*a")
+		entry_file:close()
+		local regression_file = assert(io.open(root .. "_cim_regression_checks.lua", "rb"))
+		local regression_source = regression_file:read("*a")
+		regression_file:close()
+		H.equal(entry_source:find("_cim_diag_524", 1, true), nil)
+		H.equal(regression_source:find("issue524_render_diagnostics_armed", 1, true), nil)
 
 		local stable_path = repo_root
 			.. "/crafting_in_modded/scripts/mods/crafting_in_modded/standard_forge.lua"

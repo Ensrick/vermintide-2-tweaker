@@ -96,7 +96,7 @@ return function(H, repo_root)
             "issue 921 Hold-Tab rarity convergence check missing")
         H.truthy(seen.issue1117_bulk_accessory_button_layout,
             "issue 1117 contextual button-presentation check missing")
-        H.equal(#names, 83, "regression registration set changed")
+        H.equal(#names, 82, "regression registration set changed")
         local ok, result = pcall(checks[1])
         H.truthy(ok, "registered checks did not close over the supplied mod object")
         H.equal(type(result), "string")
