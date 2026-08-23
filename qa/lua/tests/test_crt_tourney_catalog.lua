@@ -113,6 +113,8 @@ return function(H, repo_root)
         }
         local settings = {}
         local mock = {
+            _crt = { network_lookup = assert(loadfile(repo_root
+                .. "/tools/shared_lib/_lib_network_lookup.lua"))() },
             _crt_peer_parity = { applied_state = function() return "enabled" end },
             get = function(_, id) return settings[id] end,
             dofile = function(_, path) return assert(loadfile(repo_root .. "/career_tweaker/" .. path .. ".lua"))() end,
@@ -262,6 +264,8 @@ return function(H, repo_root)
         }
         local settings = {}
         local mock = {
+            _crt = { network_lookup = assert(loadfile(repo_root
+                .. "/tools/shared_lib/_lib_network_lookup.lua"))() },
             _crt_peer_parity = { applied_state = function() return "enabled" end },
             get = function(_, id) return settings[id] end,
             dofile = function(_, path) return assert(loadfile(repo_root .. "/career_tweaker/" .. path .. ".lua"))() end,

@@ -3,7 +3,7 @@ local mod = get_mod("crt")
 -- concern module and this entry's lifecycle callbacks read/write it.
 mod._crt = mod._crt or {}
 
-local MOD_VERSION = "0.4.24-beta"
+local MOD_VERSION = "0.4.25-beta"
 mod._crt.MOD_VERSION = MOD_VERSION
 
 -- VMF mod-to-mod RPC schema (VMF_RECIPES section 10). Issue #776 appends the
@@ -104,6 +104,23 @@ mod._crt.focused_spirit = mod:dofile("scripts/mods/career_tweaker/_crt_focused_s
 -- constants; the beacon and receiver floor consume its exact catalog policy.
 mod._crt.wire_policy = mod:dofile("scripts/mods/career_tweaker/_crt_wire_policy")
 mod._crt.wire_catalog = mod:dofile("scripts/mods/career_tweaker/_lib_wire_catalog")
+-- #428: one canonical pair-registration owner serves both the 34-name balance
+-- catalog and the two-name Tourney catalog. If the standalone copy cannot load,
+-- retain stub creation but reject every registration; the exact wire-catalog
+-- identity assembled below then keeps network-visible reworks at vanilla.
+local ok_network_lookup, network_lookup = pcall(mod.dofile, mod,
+    "scripts/mods/career_tweaker/_lib_network_lookup")
+if not ok_network_lookup or type(network_lookup) ~= "table"
+        or type(network_lookup.register) ~= "function" then
+    pcall(printf, "[crt:428] canonical NetworkLookup helper unavailable (%s); networked reworks stay vanilla (fail-safe)",
+        tostring(network_lookup))
+    network_lookup = {
+        register = function()
+            return nil, false, "helper_unavailable"
+        end,
+    }
+end
+mod._crt.network_lookup = network_lookup
 
 -- Safe-stub fallback (CHANGELOG 0.2.2): if dofile fails we substitute no-op
 -- functions so on_game_state_changed / on_setting_changed / on_disabled
