@@ -11,15 +11,14 @@ Last updated: 2026-07-18.
 - [ ] Hat and skin resolution call the shared `local_player_safe` gate, never bare `local_player()`.
 - [ ] Title/teardown state returns nil without querying `Network.peer_id()`; last-known/backend portrait fallback remains available.
 - [ ] A live in-game state still resolves the local Mercenary and applies the selected portrait.
-- [ ] `/dcp_regression_test` passes `local_player_safe_network_lifecycle_609`; offline `test_dcp_player_scope_probe.lua` passes.
+- [ ] `/dcp_regression_test` passes `local_player_safe_network_lifecycle_609`; offline `test_dcp_player_scope.lua` passes.
 
 ## Player-scoped portrait resolution (#435)
 
 - [ ] Remote Mercenary HUD and Tab portraits resolve from that player's synced cosmetic, never the local loadout.
 - [ ] Score rows resolve skin first, then hat, from their own recorded cosmetics; bot rows no longer inherit the human owner's identity or force vanilla.
 - [ ] A missing/untracked score-record cosmetic falls back to the saved vanilla portrait, and a not-ready Gui material prevents custom assignment.
-- [ ] `[dcp:435]` emits once per unique surface/subject/result and never exceeds 24 records per session.
-- [ ] `/dcp_regression_test` passes `portrait_override_player_scoped`; offline `test_dcp_score_record` and `test_dcp_player_scope_probe` pass.
+- [ ] `/dcp_regression_test` passes `portrait_override_player_scoped`; offline `test_dcp_score_record` and `test_dcp_player_scope` pass.
 
 ---
 ## Multiplayer / Network Sync

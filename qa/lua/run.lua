@@ -259,7 +259,7 @@ local suites = {
 	"test_woc_phase5_runtime_owners",
 	"test_woc_load_banner",
     "test_dcp_portrait_materials",
-    "test_dcp_player_scope_probe",
+    "test_dcp_player_scope",
     "test_dcp_score_record",
     "test_cos_score_identity",
     "test_cos_husk_identity",

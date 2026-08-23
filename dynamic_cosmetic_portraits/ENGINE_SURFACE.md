@@ -141,9 +141,10 @@ these.
 - **Issue 435 player scope.** The local source swap still writes the shared
   `career_settings` entry, but other-player HUD, Tab, and score consumers resolve
   at their per-player draw/build seams from synced cosmetics, falling back to
-  vanilla rather than the local override. Automatic `[dcp:435]` evidence is
-  exact-result deduplicated and capped at 24 records per session. Secondary
-  transient surfaces remain enumerated beside the hook implementation.
+  vanilla rather than the local override. Live Player and score-record adapters
+  consume one pure skin-first resolver; the closed-issue automatic telemetry was
+  retired under #499. Secondary transient surfaces remain enumerated beside the
+  hook implementation.
 
 ## Doc maintenance
 
