@@ -280,6 +280,11 @@ shipping. Agent publication is headless and opens no interactive window.
   JSON, `-SkipGitHub`, and claim-only publication are not supported.
   Add `-AllowPublic` whenever `itemV2.cfg` visibility is public. Add
   `-NoRemote` only to skip an otherwise-enabled remote target and identify it.
+  If an existing item's real Steam content directory is absent because the
+  author is unsubscribed, the wrapper automatically selects receipt-gated
+  `publication-only` mode (#1376): no local/remote deploy and no deploy claim,
+  but all exact-source, hosted-QA, bundle-parity, VMB staging, receipt, and
+  Workshop-log gates still apply. Never create the Steam-managed directory.
 - [ ] **APPROVAL RULE:**
   - **`-dev` / `-alpha` / `-beta`-versioned mods: ship with NO asking, every
     update.** This is how the user tests. Includes single-stream public mods
@@ -289,9 +294,12 @@ shipping. Agent publication is headless and opens no interactive window.
     signal from the user naming the version.** "Ship it" earlier does not carry
     forward. Default for these is `build` + `deploy`, never `upload`. Treat a
     stable public upload like `git push --force`.
-- [ ] **Verify the upload landed.** Confirm `Uploaded new content` for this item
-  in `C:\Program Files (x86)\Steam\logs\workshop_log.txt`. `ugc_tool` prints
-  "Upload finished" even when nothing transferred.
+- [ ] **Verify the upload landed.** Confirm a fresh item-specific
+  `Uploaded new content` result in
+  `C:\Program Files (x86)\Steam\logs\workshop_log.txt`. Canonical
+  publication-only may instead accept `No content change` only after VMB has
+  accepted the exact hosted receipt and staged bytes. `ugc_tool`'s generic
+  "Upload finished" text is never sufficient evidence.
 - [ ] **Deploy-verify hash mismatch after a confirmed upload:** re-run
   `& $env:VT2_SHIP_VMB_LAUNCHER deploy <mod> --no-remote` once, then continue.
   Do not loop on it. (The launcher is out-of-repo; see `docs/PORTABLE_SETUP.md`

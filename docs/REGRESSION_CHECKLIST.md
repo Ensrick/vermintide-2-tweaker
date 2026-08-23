@@ -1164,9 +1164,9 @@ Last updated: 2026-05-22. Source: CHANGELOG.md files + ~/.claude memory.
 | Mod(s) | all |
 | Fix version(s) | canonical reviewed ship workflow |
 | Category | MANUAL |
-| Repro | Historical direct-publication path: upload without the reviewed tracked bundle/deploy transaction, then observe the author still loading the old version. The current receipt gate blocks this path. |
-| Expected post-fix | Claim; run `ship.ps1 -BuildOnly`; commit/push/PR/qa-gate/merge; then run canonical ship from clean live default HEAD. |
-| Detection | PC-A uses the hash-verified local deploy without restarting Steam; volunteer testers unsubscribe/resubscribe through the dev collection. Confirm the newest console log's `[<id>:LOAD]` version. |
+| Repro | Historical direct-publication path: upload without the reviewed tracked bundle/deploy transaction, then observe the author still loading the old version. For #1376, unsubscribe the author from an existing item so its real Steam-managed content directory is absent, then run canonical ship. |
+| Expected post-fix | Claim; run `ship.ps1 -BuildOnly`; commit/push/PR/qa-gate/merge; then run canonical ship from clean live default HEAD. A subscribed item gets byte-verified deploy. An existing unsubscribed item automatically uses receipt-gated publication-only mode: it never creates the Workshop directory or claims deploy, but still proves exact staged bytes and a fresh item-specific Workshop result. |
+| Detection | Subscribed PC-A uses the hash-verified local deploy without restarting Steam. Publication-only PC-A must subscribe/refresh before testing. Volunteer testers unsubscribe/resubscribe through the dev collection. Confirm the newest console log's `[<id>:LOAD]` version. `ship.ps1 -SelfTest` covers subscribed, `-NoRemote`, unsubscribed, bootstrap, uploaded, no-change, missing-receipt, and missing-deploy cases. |
 
 ### buildonly-source-receipt - Dirty source and root must match (#1278)
 
