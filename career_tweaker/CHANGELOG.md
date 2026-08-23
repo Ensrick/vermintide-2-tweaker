@@ -1,5 +1,40 @@
 # Career Tweaker Changelog
 
+## 0.4.24-beta (2026-08-23) - Focused Spirit single-writer lifecycle (#472) [verify-fix]
+
+- Repaired Focused Spirit's `buffer="both"` topology. A human player's owning
+  client now makes the transition decision, the server copy mirrors exactly one
+  stack removal, and a bot has one server writer. Only the writer uses the
+  vanilla authority-aware cooldown route, so one ten-second interval produces
+  one mirrored stack rather than owner/server double growth.
+- Added an edge-driven two-setting consensus over both **Focused Spirit
+  stacking rework** and **Focused Spirit ignores chip damage**. Exact CRT peers
+  announce only on parity establishment, a local setting change, or one direct
+  reply. Missing, mismatched, stale, contradictory, foreign-epoch, or malformed
+  state holds the modification at vanilla; there is no polling or per-frame RPC.
+- Kept the authored global talent-description key and moved all four setting
+  combinations into CRT's single global `Localize` owner. Chip-only mode retains
+  vanilla formatting values and escaped percents; stacking modes clear those
+  values and return literal percents, preventing both raw internal keys and
+  `<INVALID STRING FORMAT>`.
+- Deferred every cooldown request until the enclosing damage call succeeds,
+  clears pending transition state on setting changes and disable, and exposes
+  bounded role/action/stack/cooldown receipts plus the read-only
+  `/crt_verify_focused_spirit` command.
+- Isolated the Focused Spirit definition in its own hook-neutral catalogue
+  fragment, keeping the generic early catalogue below its frozen size while
+  the composer continues to reject duplicate setting ownership.
+- Lua 5.1 coverage models five complete growth intervals, hits at zero/one/
+  three/five stacks, every preservation boundary, host/remote/observer/bot
+  roles, both setting bits, peer departure, stale and contradictory generations,
+  foreign epochs, malformed payloads, and throwing readers/transports. The
+  unchanged #334 classifier suite remains part of the full gate.
+
+Runtime success is not claimed by this code/build record. Use the exact
+published solo card first. Changing either Focused Spirit setting requires a
+talent reapply or mission reload; reversed-role co-op follows only after solo
+behavior and all four descriptions pass.
+
 ## 0.4.23-beta (2026-08-21) - Dance of Blades pair stacks and server authority (#473)
 
 - Repaired the Dance of Blades stack shape to use two distinct local

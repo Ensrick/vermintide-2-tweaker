@@ -874,7 +874,9 @@ local function apply_balance_mods()
 
     for setting_id, def in pairs(BALANCE_MODS) do
         if mod:get(setting_id) then
-            if def.network_unsafe and not parity_ok then
+            local ok_available, available = true, true
+            if type(def.available) == "function" then ok_available, available = pcall(def.available) end
+            if (def.network_unsafe and not parity_ok) or not (ok_available and available == true) then
                 parity_skipped = parity_skipped or {}
                 parity_skipped[#parity_skipped + 1] = setting_id
             else
@@ -903,7 +905,7 @@ local function apply_balance_mods()
 
     if parity_skipped then
         table.sort(parity_skipped)
-        pcall(printf, "[crt:425] parity gate: %d networked rework(s) held at vanilla (a lobby peer lacks crt): %s",
+        pcall(printf, "[crt:425] parity gate: %d networked rework(s) held at vanilla (peer identity or configuration unavailable): %s",
             #parity_skipped, table.concat(parity_skipped, ", "))
     end
 end

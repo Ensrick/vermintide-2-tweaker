@@ -3,6 +3,7 @@ local Source = {}
 local CATALOG_MODULES_IN_LOAD_ORDER = {
     "_crt_balance_catalog.lua",
     "_crt_balance_catalog_early.lua",
+    "_crt_balance_catalog_focused_spirit.lua",
     "_crt_balance_catalog_late.lua",
 }
 

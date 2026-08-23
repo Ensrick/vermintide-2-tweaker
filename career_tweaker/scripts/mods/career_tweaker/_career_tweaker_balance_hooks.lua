@@ -7,6 +7,23 @@ local mod = get_mod("crt")
 -- its own copy via mod:dofile (same pattern as _crt_foot_knight.lua).
 local foot_knight_policy = mod:dofile("scripts/mods/career_tweaker/_crt_foot_knight_policy")
 local wire_policy = mod._crt.wire_policy
+local focused_policy = assert(mod._crt.focused_spirit,
+    "crt Focused Spirit presentation policy required")
+
+local function _focused_live_description()
+    if type(mod._crt_wire_safe) ~= "function" or mod._crt_wire_safe() ~= true then
+        return nil
+    end
+    local consensus = mod._crt.focused_spirit_consensus
+    if type(consensus) ~= "table" or type(consensus.all_match) ~= "function" then
+        return nil
+    end
+    local ok, matches = pcall(consensus.all_match, consensus)
+    if not ok or matches ~= true then return nil end
+    return focused_policy.description(
+        mod:get("rework_we_maidenguard_focused_spirit_stacks") == true,
+        mod:get("maidenguard_focused_spirit_ignore_chip_damage") == true)
+end
 
 local _HELLBORGS_CRIT_PENALTY = 0.10
 
@@ -225,6 +242,17 @@ local CRT_DESC_OVERRIDES = {
         setting = "rework_we_waywatcher_kurnous_reward_5pct",
         text = "Killing a Special or Elite with the Career Skill restores 5%% of maximum ammunition.",
     },
+    -- #472: preserve the talent's authored global key and compose all four
+    -- setting combinations here. Mod-local localization is intentionally not
+    -- used: Talent UI resolves `talent.description` through _G.Localize().
+    [focused_policy.VANILLA_DESCRIPTION_KEY] = {
+        enabled = function()
+            return _focused_live_description() ~= nil
+        end,
+        text = function()
+            return _focused_live_description()
+        end,
+    },
     ["kerillian_maidenguard_versatile_dodge_desc"] = {
         setting = "rework_we_maidenguard_dance_of_blades",
         text = "Striking an enemy grants 2%% damage and increases damage taken by 2%% for 2 seconds, stacking up to 15 times. Each stack expires independently; dodging while blocking increases dodge distance by 20%%.",
@@ -441,6 +469,7 @@ mod:hook(_G, "Localize", function(func, key, ...)
     end
     return func(key, ...)
 end)
+mod._crt.focused_spirit_localize_installed = true
 
 -- ============================================================
 -- Issue 776: rpc_add_buff receiver floor (UNCONDITIONAL)

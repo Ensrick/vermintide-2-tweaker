@@ -6,7 +6,7 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 > **Suite location:** `/crt_regression_test` lives in `scripts/mods/career_tweaker/_crt_regression.lua`. It locks the casting/transposition and #440 probe exclusion boundaries while requiring the read-only #221 census.
 
-Last updated: 2026-08-21.
+Last updated: 2026-08-23.
 
 ---
 ## Foot Knight feature suite (#619)
@@ -90,10 +90,13 @@ Last updated: 2026-08-21.
 
 | Field | Value |
 |-------|-------|
-| Symptom | Damage-over-time, gas, Warpfire Throwers, and Ratling Gunners reset Focused Spirit; the requested stacking variant does not exist. |
-| Source boundary | Vanilla's proc receives only attacker, amount, and damage type (`player_unit_health_extension.lua:702-703`), so Ratling identity must be captured from the full `add_damage` call's `damage_source_name`. |
-| Expected | Default exemption preserves Focused Spirit through the named chip classes. Opt-in rework starts at zero, gains one 5% stack per ten seconds up to five, and loses one stack per ordinary hit. |
-| Detection | Run the four `test_crt_damage_classification.lua` cases and `/crt_regression_test` check `issue472_focused_spirit_contract`, then inspect bounded `[crt:472]` receipts for the exact damage source/type, classification, proc action, and retained stack/cooldown before/after state. Perform the solo in-game walk in CHANGELOG 0.3.65-dev only against the exact deployed build. |
+| Symptom | The partial stacking rework can grow or rearm on both copies of a `buffer="both"` talent, while the tooltip routes a mod-local key through the engine-global localizer. Mixed chip-exemption settings can also diverge owner/server stack state. |
+| Source boundary | Vanilla's proc receives only attacker, amount, and damage type (`player_unit_health_extension.lua:702-703`), so Ratling identity is captured synchronously from the full `add_damage` call. A remote human owns one client talent copy and the server owns its mirror; the owner decides, the server removes the corresponding mirror stack, and bots use one server writer. |
+| Configuration | The edge-driven `crt_focused_spirit_config` channel carries both boolean settings only after exact CRT catalog parity. Missing/mismatched/stale/contradictory/foreign state fails closed to vanilla. It announces on parity, setting change, or one reply and never polls. |
+| Expected | Starting from zero, exactly one mirrored 5% stack appears per complete ten-second interval through five. One ordinary hit removes one stack from each mirrored copy and creates one cooldown. Configured chip/DoT preserves both stack count and deadline. |
+| Localization | Keep `kerillian_maidenguard_power_level_on_unharmed_desc`. The one global `Localize` hook composes all four setting combinations. Chip-only text remains printf-escaped because vanilla values remain; stacking text uses literal percents because the rework clears `description_values`. |
+| Lifecycle | Pending rearms and synchronous damage context clear on either setting change and mod disable. A setting change requires talent reapply or mission reload; do not infer live reseeding. Death, talent loss, and a failed wrapped damage call cannot schedule a deferred cooldown. |
+| Detection | Offline `test_crt_damage_classification.lua` plus `test_crt_focused_spirit.lua`; runtime `/crt_regression_test` check `issue472_focused_spirit_contract`; read-only `/crt_verify_focused_spirit`; bounded `[crt:472]` rows include role, action, source/type, stack/cooldown before/after, and wrapped success. Run the exact solo card before reversed-role co-op. |
 
 ---
 ## Handmaiden Dance of Blades pair stacks (#473)

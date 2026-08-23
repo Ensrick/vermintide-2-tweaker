@@ -34,7 +34,7 @@ local localization = {
     unchained_no_overcharge_from_self_dot           = { en = "Unchained: no overcharge from self-inflicted damage-over-time" },
     unchained_no_overcharge_from_self_dot_tooltip   = { en = "Self-inflicted damage-over-time, such as the Chaos Wastes curse Unquenchable Thirst and Nurgle's Rot, no longer builds overcharge through Sienna Unchained's Blood Magic passive." },
     maidenguard_focused_spirit_ignore_chip_damage         = { en = "Handmaiden: Focused Spirit ignores chip damage" },
-    maidenguard_focused_spirit_ignore_chip_damage_tooltip = { en = "Focused Spirit is not reset by damage-over-time, poison gas, Warpfire Throwers, Ratling Gunners, Unquenchable Thirst, or Nurgle's Rot. Ordinary enemy hits still reset it. Enabled by default." },
+    maidenguard_focused_spirit_ignore_chip_damage_tooltip = { en = "Focused Spirit is not reset by damage-over-time, poison gas, Warpfire Throwers, Ratling Gunners, Unquenchable Thirst, or Nurgle's Rot. Ordinary enemy hits still reset it. Reapply the talent or enter a new mission after changing this option. Enabled by default." },
     oe_benefit_from_cooldown_reduction              = { en = "Outcast Engineer: benefit from Cooldown Reduction gear" },
     oe_benefit_from_cooldown_reduction_tooltip      = { en = "Makes Cooldown Reduction trinkets and charms actually speed up the Outcast Engineer's Crank Gun, which normally gets no benefit from them. A 10%% Cooldown Reduction charm makes his ability recharge about 10%% faster, and it only affects your own Outcast Engineer." },
 
@@ -207,8 +207,7 @@ local localization = {
     rework_we_maidenguard_crit_chance_5_to_10              = { en = "Handmaiden: +5%% Crit Chance talent to +10%%" },
     rework_we_maidenguard_crit_chance_5_to_10_description  = { en = "Doubles Handmaiden's flat critical hit chance talent from +5%% to +10%%." },
     rework_we_maidenguard_focused_spirit_stacks             = { en = "Handmaiden: Focused Spirit stacking rework" },
-    rework_we_maidenguard_focused_spirit_stacks_description = { en = "Focused Spirit starts empty and gains 5%% power every 10 seconds without an ordinary hit, up to five stacks. An ordinary hit removes one stack and restarts the ten-second timer; the separate chip-damage option controls which damage is ignored." },
-    crt_kerillian_maidenguard_focused_spirit_stacks_desc     = { en = "Focused Spirit starts with no stacks. Every 10 seconds without taking an ordinary hit grants 5%% power, up to 5 stacks (25%%). An ordinary hit removes one stack and restarts the timer. Damage ignored by the separate Focused Spirit chip-damage option does not remove stacks or restart the timer." },
+    rework_we_maidenguard_focused_spirit_stacks_description = { en = "Focused Spirit starts empty and gains 5%% power every 10 seconds without an ordinary hit, up to five stacks. An ordinary hit removes one stack and restarts the ten-second timer; the separate chip-damage option controls which damage is ignored. Reapply the talent or enter a new mission after changing either option." },
     rework_we_maidenguard_dance_of_blades                    = { en = "Handmaiden: Dance of Blades hit-stack rework" },
     rework_we_maidenguard_dance_of_blades_description        = { en = "Striking an enemy grants 2%% damage and 2%% increased damage taken for 2 seconds, up to 15 independently expiring stacks. Dodging while blocking retains the native 20%% dodge-distance benefit." },
     rework_we_shade_group                                  = { en = "Shade" },

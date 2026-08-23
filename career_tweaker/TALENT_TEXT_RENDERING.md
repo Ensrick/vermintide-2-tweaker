@@ -95,6 +95,21 @@ same hook. Note the established convention: **hardcode the numbers in the text**
 (The `<mod>_localization.lua` keys are then optional/redundant for the tooltip —
 the hook is authoritative — but harmless to keep as documentation.)
 
+### Dynamic descriptions must follow the live `description_values` path (#472)
+
+Focused Spirit exposes two independent settings through one authored global
+description key. When only the chip exemption is enabled, the talent retains
+vanilla `description_values`; `UIUtils` therefore runs `string.format` after the
+global override, so literal percents in that raw override must be `%%`. When the
+stacking rework is enabled, its reversible apply clears `description_values`;
+`UIUtils` returns the `Localize` result directly, so that override must contain
+single literal `%` characters. Do not use one raw string for both paths.
+
+For any dynamic override, test the final render route for every settings
+combination—not merely the string returned by the policy. A passing localization
+lookup can still produce `<INVALID STRING FORMAT>` or visible double percents one
+step later.
+
 ## Key file references
 - `hero_window_talents.lua:328` — title = `Localize(display_name or name)`.
 - `ui_utils.lua:34-78` — `format_localized_description` / `get_talent_description`; line 69 is the `string.format` call; lines 36-38 the empty-values early-out.

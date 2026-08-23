@@ -1,5 +1,6 @@
 local mod = get_mod("crt")
 local DamageClass = mod._crt and mod._crt.damage_classification
+local FocusedSpirit = mod._crt and mod._crt.focused_spirit
 
 -- ============================================================
 -- Armor & Overcharge toggles (hook-based)  [crt v0.3.52-dev]
@@ -128,7 +129,7 @@ local function _focused_diag(event, data)
     local signature = table.concat({
         tostring(event), tostring(data.source), tostring(data.damage_type),
         tostring(data.attacker_self), tostring(data.has_talent),
-        tostring(data.ignored), tostring(data.action),
+        tostring(data.ignored), tostring(data.role), tostring(data.action),
         tostring(data.stacks_before), tostring(data.stacks_after),
         tostring(data.cooldown_before), tostring(data.cooldown_after),
         tostring(data.ok),
@@ -137,10 +138,10 @@ local function _focused_diag(event, data)
     _focused_diag_seen[signature] = true
     _focused_diag_count = _focused_diag_count + 1
     pcall(printf,
-        "[crt:472] event=%s source=%s damage_type=%s attacker_self=%s has_talent=%s ignored=%s action=%s stacks=%s->%s cooldown=%s->%s wrapped_ok=%s receipt=%d/%d",
+        "[crt:472] event=%s source=%s damage_type=%s attacker_self=%s has_talent=%s ignored=%s role=%s action=%s stacks=%s->%s cooldown=%s->%s wrapped_ok=%s receipt=%d/%d",
         tostring(event), tostring(data.source), tostring(data.damage_type),
         tostring(data.attacker_self), tostring(data.has_talent),
-        tostring(data.ignored), tostring(data.action),
+        tostring(data.ignored), tostring(data.role), tostring(data.action),
         tostring(data.stacks_before), tostring(data.stacks_after),
         tostring(data.cooldown_before), tostring(data.cooldown_after),
         tostring(data.ok), _focused_diag_count, FOCUSED_DIAG_CAP)
@@ -382,6 +383,37 @@ local function _focused_is_handmaiden(unit)
     return ce and ce._career_name == "we_maidenguard"
 end
 
+local function _focused_role(unit)
+    local managers = rawget(_G, "Managers")
+    local pm = managers and managers.player
+    local player
+    if pm and type(pm.owner) == "function" then
+        local ok, result = pcall(pm.owner, pm, unit)
+        if ok then player = result end
+    end
+    return FocusedSpirit and FocusedSpirit.transition_role(player,
+        pm and pm.is_server == true) or "none"
+end
+
+local function _focused_config_live()
+    if not (FocusedSpirit
+            and type(mod._crt_wire_safe) == "function"
+            and mod._crt_wire_safe() == true) then
+        return false
+    end
+    local consensus = mod._crt and mod._crt.focused_spirit_consensus
+    if type(consensus) ~= "table" or type(consensus.all_match) ~= "function" then
+        return false
+    end
+    local ok, value = pcall(consensus.all_match, consensus)
+    return ok and value == true
+end
+
+local function _focused_rework_live()
+    return mod:get("rework_we_maidenguard_focused_spirit_stacks") == true
+        and _focused_config_live()
+end
+
 local _focused_rearm = setmetatable({}, { __mode = "k" })
 
 local function _focused_stack_count(be)
@@ -389,19 +421,22 @@ local function _focused_stack_count(be)
     return stacks and #stacks or 0
 end
 
-local function _focused_add_local_cooldown(unit, be)
-    if not (unit and be and be.add_buff) then return end
-    be:add_buff(FOCUSED_COOLDOWN, { attacker_unit = unit })
-end
-
 local function _focused_request_cooldown(unit, attacker_unit, damage_amount)
+    -- The vanilla function is the exact mirrored owner/server route. A remote
+    -- human owner sends rpc_add_buff(..., send_to_sender=true), so server and
+    -- owner receive one cooldown. Host humans and bots add once on the server.
+    if type(mod._crt_wire_live) ~= "function" or mod._crt_wire_live() ~= true then
+        return false
+    end
     local PF = rawget(_G, "ProcFunctions")
     local vanilla = PF and PF.maidenguard_reset_unharmed_buff
     if vanilla then
         -- The vanilla proc does not inspect `buff`; it uses these params to
         -- choose server-local add_buff vs client rpc_add_buff.
-        vanilla(unit, nil, { attacker_unit, damage_amount })
+        local ok, applied = pcall(vanilla, unit, nil, { attacker_unit, damage_amount })
+        return ok and applied == true
     end
+    return false
 end
 
 local function _crt_install_focused_spirit_wrapper()
@@ -415,13 +450,19 @@ local function _crt_install_focused_spirit_wrapper()
     -- stack from inside remove_buff, before the expiring cooldown is physically
     -- removed, so re-arm on the next frame rather than refreshing a dying buff.
     fns[CRT_FOCUSED_GROW_FUNC] = function(owner_unit)
-        if not mod:get("rework_we_maidenguard_focused_spirit_stacks") then return end
         local be = ScriptUnit.has_extension(owner_unit, "buff_system")
         local stacks = _focused_stack_count(be)
-        if be and stacks < 5 then
+        local role = _focused_role(owner_unit)
+        local action = FocusedSpirit.growth_action(role, _focused_rework_live(), stacks)
+        if be and action == "rearm" then
             _focused_rearm[owner_unit] = true
             _focused_diag("growth", {
-                has_talent = true, action = "rearm_next_frame",
+                has_talent = true, role = role, action = "rearm_next_frame",
+                stacks_before = math.max(0, stacks - 1), stacks_after = stacks,
+            })
+        elseif action ~= "preserve" then
+            _focused_diag("growth", {
+                has_talent = true, role = role, action = action,
                 stacks_before = math.max(0, stacks - 1), stacks_after = stacks,
             })
         end
@@ -430,40 +471,34 @@ local function _crt_install_focused_spirit_wrapper()
     PF[CRT_FOCUSED_PROC_FUNC] = function(owner_unit, buff, params, world, proc_event_params)
         local vanilla = PF.maidenguard_reset_unharmed_buff
         local ctx = mod._crt_focused_spirit_damage_context
-        if ctx and ctx.unit == owner_unit and ctx.ignored then
-            ctx.action = "ignored_preserve"
-            return false
-        end
-        if not mod:get("rework_we_maidenguard_focused_spirit_stacks") then
-            if ctx and ctx.unit == owner_unit then ctx.action = "delegate_vanilla" end
+        if not ctx or ctx.unit ~= owner_unit then
             return vanilla and vanilla(owner_unit, buff, params, world, proc_event_params)
         end
-
-        -- Preserve vanilla's real-hit boundary: self damage and zero-damage
-        -- notifications neither consume a stack nor restart its growth timer.
-        local attacker_unit = params and params[1]
-        local damage_amount = params and params[2]
-        if attacker_unit == owner_unit or damage_amount == 0 then
-            if ctx and ctx.unit == owner_unit then ctx.action = "self_or_zero_preserve" end
-            return false
+        local action = FocusedSpirit.damage_action({
+            ignored = ctx.ignored,
+            rework_live = ctx.rework_live,
+            attacker_self = ctx.attacker_self,
+            damage_amount = ctx.damage_amount,
+            handled = ctx.handled,
+            role = ctx.role,
+        })
+        ctx.action = action
+        if action == "delegate_vanilla" then
+            return vanilla and vanilla(owner_unit, buff, params, world, proc_event_params)
         end
-
-        if not ctx or ctx.unit ~= owner_unit or ctx.handled then
-            if ctx and ctx.unit == owner_unit then ctx.action = "duplicate_proc_preserve" end
-            return false
+        if action == "remove_one_restart" or action == "remove_one_mirror" then
+            ctx.handled = true
+            local be = ScriptUnit.has_extension(owner_unit, "buff_system")
+            if be and buff and buff.id then
+                be:remove_buff(buff.id)
+            end
+            if action == "remove_one_restart" then
+                ctx.restart_requested = true
+            end
         end
-        ctx.handled = true
-        ctx.action = "remove_one_restart"
-
-        local be = ScriptUnit.has_extension(owner_unit, "buff_system")
-        if be and buff and buff.id then
-            be:remove_buff(buff.id)
-        end
-        -- Reuse vanilla's authority-aware cooldown add / RPC path. Returning
-        -- false prevents BuffExtension.trigger_procs from removing more stacks.
-        if vanilla then
-            vanilla(owner_unit, buff, params, world, proc_event_params)
-        end
+        -- Returning false prevents BuffExtension.trigger_procs from applying
+        -- remove_on_proc to any additional stack. The writer schedules one
+        -- cooldown only after the enclosing add_damage call succeeds.
         return false
     end
 
@@ -483,13 +518,18 @@ mod._crt_focused_spirit_tick = function()
     local alive = rawget(_G, "ALIVE")
     for unit in pairs(_focused_rearm) do
         _focused_rearm[unit] = nil
-        if mod:get("rework_we_maidenguard_focused_spirit_stacks")
-           and alive and alive[unit] then
+        if alive and alive[unit] and _focused_rework_live()
+                and _focused_role(unit) == "writer"
+                and _focused_spirit_has_talent(unit) then
             local be = ScriptUnit.has_extension(unit, "buff_system")
             if be and _focused_stack_count(be) < 5 then
-                _focused_add_local_cooldown(unit, be)
+                -- Growth is not a damage event. Pass no attacker so vanilla's
+                -- self-damage guard permits the cooldown; its network branch
+                -- still authors owner_unit as the replicated attacker.
+                local requested = _focused_request_cooldown(unit, nil, 1)
                 _focused_diag("rearm", {
-                    has_talent = true, action = "cooldown_added",
+                    has_talent = true, role = "writer",
+                    action = requested and "cooldown_requested" or "cooldown_request_failed",
                     stacks_after = _focused_stack_count(be),
                     cooldown_after = be.has_buff_type
                         and be:has_buff_type(FOCUSED_COOLDOWN) or false,
@@ -498,6 +538,35 @@ mod._crt_focused_spirit_tick = function()
         end
     end
 end
+
+mod._crt_focused_spirit_reset = function()
+    for unit in pairs(_focused_rearm) do _focused_rearm[unit] = nil end
+    mod._crt_focused_spirit_damage_context = nil
+end
+
+mod:command("crt_verify_focused_spirit",
+    "Report the local Handmaiden Focused Spirit authority and retained state", function()
+    local ok, snapshot = pcall(function()
+        local pm = Managers and Managers.player
+        local player = pm and pm:local_player()
+        local unit = player and player.player_unit
+        local be = unit and ScriptUnit.has_extension(unit, "buff_system")
+        local stacking = mod:get("rework_we_maidenguard_focused_spirit_stacks") == true
+        local ignore_chip = mod:get("maidenguard_focused_spirit_ignore_chip_damage") == true
+        local description_mode = stacking and (ignore_chip and "stacking+ignore" or "stacking")
+            or (ignore_chip and "ignore" or "vanilla")
+        return string.format(
+            "[crt:472] verify role=%s config_live=%s rework_live=%s stacking=%s ignore_chip=%s talent=%s stacks=%d cooldown=%s description=%s",
+            tostring(_focused_role(unit)), tostring(_focused_config_live()),
+            tostring(_focused_rework_live()), tostring(stacking), tostring(ignore_chip),
+            tostring(_focused_spirit_has_talent(unit)), _focused_stack_count(be),
+            tostring(be and be.has_buff_type and be:has_buff_type(FOCUSED_COOLDOWN) or false),
+            description_mode)
+    end)
+    local line = ok and snapshot or "[crt:472] verify unavailable error=" .. tostring(snapshot)
+    pcall(printf, "%s", line)
+    mod:echo(line)
+end)
 
 -- ── Hook #2: PlayerUnitHealthExtension.add_damage (Necromancer Cursed Armor, #1)
 -- The on_damage_taken proc that consumes a Cursed Armor counter fires from
@@ -533,8 +602,11 @@ mod:hook(PlayerUnitHealthExtension, "add_damage", function(func, self, attacker_
     -- Focused Spirit's vanilla proc lacks damage_source_name, so carry the full
     -- add_damage context across the synchronous trigger_procs call. Temporary
     -- health degeneration never fires on_damage_taken and is excluded here too.
-    local focused_ignore_on = mod:get("maidenguard_focused_spirit_ignore_chip_damage")
-    local focused_rework_on = mod:get("rework_we_maidenguard_focused_spirit_stacks")
+    local focused_config_live = _focused_config_live()
+    local focused_ignore_on = focused_config_live
+        and mod:get("maidenguard_focused_spirit_ignore_chip_damage") == true
+    local focused_rework_on = focused_config_live
+        and mod:get("rework_we_maidenguard_focused_spirit_stacks") == true
     local focused_has_talent = (focused_ignore_on or focused_rework_on)
         and _focused_spirit_has_talent(unit) or false
     if (focused_ignore_on or focused_rework_on)
@@ -547,27 +619,37 @@ mod:hook(PlayerUnitHealthExtension, "add_damage", function(func, self, attacker_
         local cooldown_before = be and be.has_buff_type
             and be:has_buff_type(FOCUSED_COOLDOWN) or false
         prev_focused_context = mod._crt_focused_spirit_damage_context
+        local role = _focused_role(unit)
         mod._crt_focused_spirit_damage_context = {
             unit = unit,
             ignored = ignored,
             handled = false,
+            restart_requested = false,
             action = ignored and "await_ignored_proc" or "await_real_hit_proc",
             source = damage_source_name,
             damage_type = damage_type,
             attacker_self = attacker_unit == unit,
+            damage_amount = damage_amount,
+            role = role,
+            rework_live = focused_rework_on,
             stacks_before = stacks_before,
             cooldown_before = cooldown_before,
         }
         set_focused_context = true
 
-        -- At zero stacks there is no event buff to run the proc wrapper. A real
-        -- hit still restarts the ten-second no-damage window; ignored chip does
-        -- not touch the timer. Route through vanilla so its server/RPC authority
-        -- split refreshes the max_stacks=1 cooldown.
-        if focused_rework_on and not ignored and attacker_unit ~= unit
-           and be and _focused_stack_count(be) == 0 then
-            _focused_request_cooldown(unit, attacker_unit, damage_amount)
-            mod._crt_focused_spirit_damage_context.action = "zero_stack_restart_requested"
+        -- At zero stacks there is no event buff to run the proc wrapper. Record
+        -- the writer intent now, but do not mutate until add_damage succeeds.
+        local zero_action = FocusedSpirit.zero_stack_action({
+            rework_live = focused_rework_on,
+            role = role,
+            ignored = ignored,
+            attacker_self = attacker_unit == unit,
+            damage_amount = damage_amount,
+            stack_count = stacks_before,
+        })
+        if zero_action == "restart" then
+            mod._crt_focused_spirit_damage_context.restart_requested = true
+            mod._crt_focused_spirit_damage_context.action = "zero_stack_restart_pending"
         end
     elseif (focused_ignore_on or focused_rework_on)
        and damage_amount and damage_amount > 0
@@ -591,10 +673,17 @@ mod:hook(PlayerUnitHealthExtension, "add_damage", function(func, self, attacker_
     if set_exempt then mod._crt_cursed_armor_exempt_unit = prev_exempt end
     if set_focused_context then
         local ctx = mod._crt_focused_spirit_damage_context
+        if ok and ctx.restart_requested then
+            local requested = _focused_request_cooldown(unit, attacker_unit, damage_amount)
+            ctx.action = requested
+                and (ctx.action == "zero_stack_restart_pending"
+                    and "zero_stack_restart_requested" or "remove_one_restart")
+                or "cooldown_request_failed"
+        end
         _focused_diag("damage", {
             source = ctx.source, damage_type = ctx.damage_type,
             attacker_self = ctx.attacker_self, has_talent = true,
-            ignored = ctx.ignored, action = ctx.action,
+            ignored = ctx.ignored, role = ctx.role, action = ctx.action,
             stacks_before = ctx.stacks_before,
             stacks_after = _focused_stack_count(be),
             cooldown_before = ctx.cooldown_before,

@@ -10,13 +10,18 @@ local function build(ctx)
     assert(ctx.ensure_wire_safe_funcs, "crt balance catalog wire helper required")
     assert(ctx.min_thp_on_kill, "crt balance catalog THP floor required")
 
-    local build_early = mod:dofile("scripts/mods/career_tweaker/_crt_balance_catalog_early")
-    local build_late = mod:dofile("scripts/mods/career_tweaker/_crt_balance_catalog_late")
-    local result = build_early(ctx)
+    local builders = {
+        mod:dofile("scripts/mods/career_tweaker/_crt_balance_catalog_early"),
+        mod:dofile("scripts/mods/career_tweaker/_crt_balance_catalog_focused_spirit"),
+        mod:dofile("scripts/mods/career_tweaker/_crt_balance_catalog_late"),
+    }
+    local result = {}
 
-    for setting_id, definition in pairs(build_late(ctx)) do
-        assert(result[setting_id] == nil, "duplicate CRT balance definition: " .. tostring(setting_id))
-        result[setting_id] = definition
+    for i = 1, #builders do
+        for setting_id, definition in pairs(builders[i](ctx)) do
+            assert(result[setting_id] == nil, "duplicate CRT balance definition: " .. tostring(setting_id))
+            result[setting_id] = definition
+        end
     end
 
     return result

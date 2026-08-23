@@ -268,7 +268,7 @@ local function register(H, repo_root)
             "per-send guard must see the un-acked peer before the settled state does")
     end)
 
-    H.test("CRT #776 runtime gate pins all nine network-unsafe setting rows", function()
+    H.test("CRT #776 runtime gate pins all eleven network-unsafe setting rows", function()
         local regression = read(
             "career_tweaker/scripts/mods/career_tweaker/_crt_regression.lua")
         local begin_at = assert(regression:find(
@@ -280,6 +280,7 @@ local function register(H, repo_root)
             actual[#actual + 1] = setting_id
         end
         H.deep_equal(actual, {
+            "maidenguard_focused_spirit_ignore_chip_damage",
             "rework_bw_unchained_abandon_innate_flame_unending",
             "rework_bw_unchained_natural_talent_ranged",
             "rework_bw_unchained_numb_to_pain_4x_burn_kill_lose_on_hit",
@@ -287,6 +288,7 @@ local function register(H, repo_root)
             "rework_es_mercenary_enhanced_training_tiered",
             "rework_es_questingknight_virtue_of_impetuous_buffed",
             "rework_we_maidenguard_dance_of_blades",
+            "rework_we_maidenguard_focused_spirit_stacks",
             "rework_wh_bountyhunter_job_well_done_passive_and_special_kill_dr",
             "trn_wh_priest_prayer_movement_speed",
         })
