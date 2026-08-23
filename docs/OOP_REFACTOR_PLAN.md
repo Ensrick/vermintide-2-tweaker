@@ -96,7 +96,7 @@ character, illusion browser, weapon swap, and Keep-to-mission transition. The lo
 Remaining numerical grip and preview-framing calibration is deliberately owned by
 #474, not by the completed descriptor pilot.
 
-## Current execution inventory (2026-08-12)
+## Current execution inventory (2026-08-23)
 
 Measured through CT Dev Wave 26 on its isolated branch, based on
 `origin/master` `723abaa5`, with the same
@@ -111,6 +111,7 @@ explains the contracts; it is not a second hand-maintained numeric authority.
 |---|---|---|---|
 | Event Tweaker | Structural phase complete | 62-line entry manifest; `_evt_*` owners retained by contract | #504 |
 | Enemy Tweaker | Structural phase complete | 97-line entry manifest; `_et_*` owners retained by contract | #504 |
+| General Tweaker Dev bot fixes | Target-tier helper complete | `_gt_bot_fixes.lua` reduced from 2,483 to 1,485 measured lines; ordered update and aid owners retained by contract | #2 |
 | Cosmetics | Structural phase complete | Thirty-seven required owners retain the exact-instance offhand state/apply, diagnostics, Deus precedence, and prior render/wire/lifecycle boundaries; current entry ceiling 1,494 nonblank lines meets the 1,500 completion target | #504 / #2 / #1159 |
 | Weapon Tweaker | Structural phase complete | Ten required animation, availability, transform, cross-character safety/template, local/preview presentation, Moonfire AOE, regression, and balance owners retained per stream; stable/dev entry ceilings 1,328/1,487 nonblank lines meet the 1,500 completion target | #504 / #2 / #1159 |
 | Career Tweaker | Structural phase complete | 907-line balance orchestrator under its 910-line ceiling; bounded catalog, hook, and Foot Knight owners retained by contract | #504 / #2 / #1159 |
@@ -247,6 +248,16 @@ tested responsibilities have explicit owners, not that every in-game feature is
 verified. Rule: every WS1/WS4 change that touches a completed entry preserves or
 lowers its ceiling and extends an existing natural owner (or adds a bounded new
 one) without mixing behavior changes into a structural move.
+
+**2026-08-23 GT Dev bot-aid slice:** the contiguous Ironbreaker aid yield,
+human-heal/rescue selection, errand pin, and stalled-pursuit cluster moved
+verbatim from `_gt_bot_fixes.lua` into `_gt_bot_aid_owner.lua`. The parent fell
+from 2,483 to 1,485 measured lines and the new owner begins at 1,087. Its
+machine contract retains both ordered child owners, while focused tests pin the
+historical install position, two-hook order/cardinality, returned API identity,
+dependency rejection, second-load rejection, and registration-error behavior.
+This advances #2's target-tier program; it does not complete the remaining file
+debt or assert a new in-game behavior.
 
 **2026-08-12 CT wave 26:** host settings and graph transport, run/backend
 orchestration, adventure-map presentation, starting-boon/grudge runtime, and

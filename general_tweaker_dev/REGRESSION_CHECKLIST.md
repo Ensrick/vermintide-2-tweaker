@@ -35,13 +35,31 @@ Last updated: 2026-08-13.
   helpers its closures require, and registers checks in their historical
   order. Keep checks lazy: engine globals assigned by later-loaded modules
   must be resolved when a check runs, not while it is registered.
-- `_gt_bot_fixes.lua` owns hook installation and bot-fix state;
+- `_gt_bot_fixes.lua` owns the remaining bot-fix hook installation and shared
+  teleport/follow state. `_gt_bot_aid_owner.lua` owns the ordered Ironbreaker
+  aid-yield and ally-selection hooks plus the heal/rescue/pursuit predicates it
+  returns to `_gt_bot_fixes.lua`; load it exactly once after
+  `_gt_bot_update_fixes.lua` and before the first teleport-decision hook.
   `_gt_bot_update_fixes.lua` owns the FIX1 per-frame update policies and the
   single `PlayerBotBase.update` dispatcher. Do not install a second update
   hook when adding a policy; route it through that dispatcher.
 - Detection: offline `test_gt_regression_module.lua` protects registry order,
-  dependency injection, and singleton bot-update ownership; the focused bot
-  tests concatenate the owning module when checking moved runtime signatures.
+  dependency injection, bot-aid hook position, and singleton bot-update
+  ownership; `test_gt_bot_aid_owner.lua` protects exact hook cardinality/order,
+  returned API identity, missing dependencies, second load, and error
+  propagation. The focused bot tests read the owning module when checking moved
+  runtime signatures.
+
+### Where new bot-aid code goes
+
+- Put ally classification, heal/rescue selection, errand pins, and bounded aid
+  pursuit state in `_gt_bot_aid_owner.lua`.
+- Put teleport decisions and action-time consumption of the returned aid API in
+  `_gt_bot_fixes.lua`; do not re-read or duplicate the owner's private state.
+- Put per-frame policies only in `_gt_bot_update_fixes.lua` and dispatch them
+  through its single `PlayerBotBase.update` hook.
+- A new dependency crosses this boundary through the install context or returned
+  API. Do not add a bare global or a second `mod:dofile` consumer.
 
 ## Startup-safe infinite ammo (#662)
 

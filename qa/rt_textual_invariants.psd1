@@ -49,23 +49,23 @@
     #    (bot behavior improvements) + sub (aid priority) toggles.
     @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'; needle='_gt_aid_priority_on() and _gt_any_side_teammate_needs_aid'; literal=$true; polarity='present'; issueRef='#139'; note='the aid-veto conjunction must stay contiguous (all bots converge on a downed ally).' }
     @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'; needle='gt_bot_behavior_improvements'; literal=$true; polarity='present'; issueRef='#139'; note='master toggle that gates the aid-priority behavior.' }
-    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'; needle='gt_bot_aid_priority'; literal=$true; polarity='present'; issueRef='#139'; note='sub toggle for the aid-priority behavior.' }
+    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_aid_owner.lua'; needle='gt_bot_aid_priority'; literal=$true; polarity='present'; issueRef='#139'; note='the bot-aid owner retains the sub toggle for aid-priority behavior.' }
 
     # -- item 3: the aid scan is SIDE-scoped (reads side:player_units()), not
     #    follow-scoped (the #139 root cause). The "no follow" half was body-scoped
     #    in-game and cannot be expressed at file scope; adapted to the distinctive
     #    side-scoped read that proves the scoping.
-    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'; needle='local punits = side and side.player_units and side:player_units()'; literal=$true; polarity='present'; issueRef='#139'; note='aid scan iterates the unfiltered side player roster (side-scoped), not the bot follow target.' }
+    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_aid_owner.lua'; needle='local punits = side and side.player_units and side:player_units()'; literal=$true; polarity='present'; issueRef='#139'; note='the bot-aid owner scans the unfiltered side player roster (side-scoped), not the bot follow target.' }
 
     # -- item 4: #492 picker/veto wiring - suppress-pick flag + bailout veto.
     #    v0.2.250-dev (#384): the veto no longer reads the bare latch; it computes
     #    bail_release from the latch + the stamped bail REASON + the errand pin, so
     #    a no-path bail releases while a no-progress bail holds a live errand.
-    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'; needle='mod._gt492_should_suppress_pick'; literal=$true; polarity='present'; issueRef='#492'; note='aid-pursuit picker suppression hook must stay wired.' }
+    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_aid_owner.lua'; needle='mod._gt492_should_suppress_pick'; literal=$true; polarity='present'; issueRef='#492'; note='the bot-aid owner retains the aid-pursuit picker suppression hook.' }
     @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'; needle='bail_release = blackboard._gt492_bailout'; literal=$true; polarity='present'; issueRef='#492'; note='aid veto must still consume the #492 bailout latch (now via the bail_release discrimination).' }
     @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'; needle='blackboard._gt492_bailout_reason ~= "no-progress"'; literal=$true; polarity='present'; issueRef='#384'; note='bail release must discriminate no-path (release) from no-progress (hold while the errand pin is live).' }
     @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'; needle='not _gt384_pin_live(blackboard)'; literal=$true; polarity='present'; issueRef='#384'; note='a no-progress bail may release the veto only when no errand pin is live.' }
-    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'; needle='blackboard._gt492_bailout_reason = reason'; literal=$true; polarity='present'; issueRef='#384'; note='the #492 watchdog must stamp WHICH signal bailed (no-path vs no-progress).' }
+    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_aid_owner.lua'; needle='blackboard._gt492_bailout_reason = reason'; literal=$true; polarity='present'; issueRef='#384'; note='the bot-aid watchdog must stamp WHICH signal bailed (no-path vs no-progress).' }
 
     # -- item 5: #383 split-branch follow_position writes still guard hold_position.
     @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'; needle='_gt_fan_points_for_unit(self, nav_world, human'; literal=$true; polarity='present'; issueRef='#383'; note='FIX 9 fan-point follow spread must stay wired.' }
@@ -132,8 +132,8 @@
     #    in the newest log), so mod:debug evidence never lands in the console
     #    log the pinned card reads. Runtime twin: the io-nil note inside
     #    issue300_rescue_awaiting_range_policy (_gt_regression_checks.lua).
-    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'; needle='pcall(printf, "[gt:bot-rescue]'; literal=$true; polarity='present'; minCount=4; issueRef='#300'; note='all four bot-rescue evidence lines route through pcall(printf, ...) (visible with mod logging OFF).' }
-    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'; needle='mod:debug("[gt:bot-rescue]'; literal=$true; polarity='absent'; issueRef='#300'; note='no bot-rescue evidence line may regress to the invisible mod:debug channel.' }
+    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_aid_owner.lua'; needle='pcall(printf, "[gt:bot-rescue]'; literal=$true; polarity='present'; minCount=4; issueRef='#300'; note='all four bot-rescue evidence lines in the bot-aid owner route through pcall(printf, ...) (visible with mod logging OFF).' }
+    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_aid_owner.lua'; needle='mod:debug("[gt:bot-rescue]'; literal=$true; polarity='absent'; issueRef='#300'; note='no bot-rescue evidence line may regress to the invisible mod:debug channel.' }
 
     # ============================ wt ============================
     # #218: the CW trait widget groups were removed in a7012f3. Keep the stale

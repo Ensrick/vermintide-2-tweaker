@@ -26,13 +26,19 @@ return function(H, repo_root)
     end)
 
     H.test("gt bot heal runtime retains native heal-other path", function()
-        local runtime = repo_root .. "/general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua"
-        local file = assert(io.open(runtime, "rb"))
+        local root = repo_root .. "/general_tweaker_dev/scripts/mods/general_tweaker_dev/"
+        local file = assert(io.open(root .. "_gt_bot_aid_owner.lua", "rb"))
         local source = file:read("*a")
         file:close()
         H.truthy(source:find('return heal_unit, heal_dist, "in_need_of_heal", false', 1, true))
         H.truthy(source:find('if _gt_heal_allies_active and need_type == "in_need_of_heal"', 1, true))
         H.equal(source:find('mod:hook("BTConditions", "can_heal_player"', 1, true), nil)
         H.equal(source:find('DamageUtils.heal_network(', 1, true), nil)
+
+        local wrapper = assert(io.open(root .. "_gt_bot_fixes.lua", "rb"))
+        local wrapper_source = wrapper:read("*a")
+        wrapper:close()
+        H.truthy(wrapper_source:find(
+            'mod:dofile("scripts/mods/general_tweaker_dev/_gt_bot_aid_owner")', 1, true))
     end)
 end

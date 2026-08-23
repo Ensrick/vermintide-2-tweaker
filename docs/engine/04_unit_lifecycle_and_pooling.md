@@ -141,7 +141,7 @@ Despawn nils `POSITION_LOOKUP[unit]` (entity_manager2.lua:334; unit_spawner.lua:
 
 ### 4.3 `ALIVE` does not mean alive
 
-`ALIVE = POSITION_LOOKUP` (global_utils.lua:15). Corpses on the death watch pass `ALIVE[u]`; frozen pooled units and mid-delete units fail it. For "can I fight it" use `HEALTH_ALIVE[u]` (our bot code does: `_gt_bot_fixes.lua:271`). For "can I touch the unit at all" use `Unit.alive(unit)` + `ALIVE[unit]`.
+`ALIVE = POSITION_LOOKUP` (global_utils.lua:15). Corpses on the death watch pass `ALIVE[u]`; frozen pooled units and mid-delete units fail it. For "can I fight it" use `HEALTH_ALIVE[u]` (the aid selector does this in `_gt_bot_aid_owner.lua`). For "can I touch the unit at all" use `Unit.alive(unit)` + `ALIVE[unit]`.
 
 ### 4.4 Pooled units are recycled userdata
 

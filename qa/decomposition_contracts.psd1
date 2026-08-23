@@ -16,6 +16,16 @@
             RequiredModules = @('_et_lifecycle.lua', '_et_regression.lua')
         }
         @{
+            # Target-tier helper decomposition under #2. The parent bot-fix
+            # owner retains teleport/follow behavior while the ordered aid
+            # selection and pursuit cluster lives behind one explicit owner.
+            Name = 'general_tweaker_dev_bot_fixes'
+            State = 'complete'
+            Entry = 'general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua'
+            CeilingLines = 1485
+            RequiredModules = @('_gt_bot_update_fixes.lua', '_gt_bot_aid_owner.lua')
+        }
+        @{
             # Structural phase completed at 0.9.207-dev (#1159): the entry is
             # at or below the 1500-line target and every extracted owner is
             # retained by this machine-readable contract.
