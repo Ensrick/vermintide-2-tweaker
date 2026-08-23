@@ -723,7 +723,7 @@ local function read(name)
             "_ct_command_owner", "_ct_cot_cost", "_ct_cot_cost_policy",
             "_ct_cot_early_reward", "_ct_cot_early_reward_core",
             "_ct_cot_placement_policy", "_ct_curse_lighting_owner", "_ct_dev_mission",
-            "_ct_dev_mission_catalog", "_ct_diag_cursed_chest132", "_ct_diag_freeze487",
+            "_ct_dev_mission_catalog", "_ct_diag_cursed_chest132",
             "_ct_diag_skull52", "_ct_diag_tab_native533", "_ct_dup_vote_chips",
             "_ct_journey_difficulty_guard", "_ct_level_load_owner",
             "_ct_mechanic_tweaks", "_ct_meta_trait_boons", "_ct_miasma",

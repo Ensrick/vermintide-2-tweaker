@@ -224,10 +224,6 @@ mod.update = function(dt)
     -- disarmed. Resolved via mod._ since the census `do` block is defined LATER in
     -- this file; the field is assigned at load, before any update tick fires.
     if mod._ct_tally_tick then mod._ct_tally_tick(dt) end
-    -- #487 freeze watchdog: reports any single frame whose dt exceeds the stall
-    -- threshold (a recoverable game-loop stall), naming the last-open diagnostic
-    -- region. Cheap field read + numeric compare; no-op on the common path.
-    if mod._ct_freeze487 then mod._ct_freeze487.tick(dt) end
     -- #299: deferred host-side pass that teleports a chest-revived player back to a
     -- teammate once they become controllable (they otherwise stand up alone at a
     -- distant respawn beacon). Cheap no-op when nothing is armed. Resolved via mod._

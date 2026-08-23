@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.345-dev"
+local MOD_VERSION = "0.7.346-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -432,13 +432,6 @@ _install_deus_loot_amount_fallback()
 local AdventurePool = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_adventure_pool")
 mod._ct_starting_coins_policy = mod:dofile(
     "scripts/mods/chaos_wastes_tweaker_dev/_ct_starting_coins_policy")
-
--- #487 freeze diagnostics. Stored on mod._ (not a new top-level local) to stay
--- under Lua 5.1's 200-local chunk ceiling. Loaded here (after _adventure_pool,
--- before mod.update and the DeusRunController.setup_run hook - its only callers)
--- so the pool-snapshot helper can read the LIVE LEVEL_AVAILABILITY the deus
--- solver consumes. Instrumentation only; see _ct_diag_freeze487.lua header.
-mod._ct_freeze487 = mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_freeze487")
 
 -- #132 Chest-of-Trials over-spawn diagnostic. Stored on mod._ (not a new top-
 -- level local) to stay under Lua 5.1's 200-local chunk ceiling. Its only caller

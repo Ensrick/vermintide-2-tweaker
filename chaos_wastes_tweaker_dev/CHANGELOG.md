@@ -1,5 +1,16 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.346-dev (2026-08-23) -- retire consumed graph-freeze telemetry (#499) [not-started]
+
+- Removes the always-on `[ct:487]` graph-solve timing and frame-stall overlay
+  after #487's empty/short mission-pool cause was proven and fixed.
+- Retains the actual fail-safe in `_adventure_pool.lua`: zero-enabled pools
+  fall back to vanilla, short enabled pools duplicate the user's selected maps,
+  and the six-key floor still covers the largest baked journey label.
+- Adds an explicit retirement regression proving that the closed-issue module,
+  setup-run brackets, and per-frame tick cannot be reintroduced accidentally.
+  No graph generation, mission selection, hooks, RPCs, or settings changed.
+
 ## 0.7.345-dev (2026-08-23) -- meta-boon owner decomposition (#2)
 
 - Moves the complete scaling-boon and meta-ammo runtime into the explicit

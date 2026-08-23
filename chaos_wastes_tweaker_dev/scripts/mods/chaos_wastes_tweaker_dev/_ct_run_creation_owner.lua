@@ -32,12 +32,11 @@ that setup_run alone establishes:
     the boon-altar no-repeat taken set, the replacement-compensation caches, and
     the bot-economy init/log state.
 
-  * WHAT THE RUN REPORTS. The #487 freeze breadcrumbs bracketing vanilla's
-    deus_generate_graph -> deus_populate_graph solve, the #467 one-shot boon price
-    census, the #53 post-populate arena-node graph dump, the host-authoritative
-    settings dump, and the host's own peer manifest baseline. The transports those
-    last two ride (settings-sync, graph-snapshot, peer-manifest) stay entry
-    file-locals; this owner only CALLS them.
+  * WHAT THE RUN REPORTS. The #467 one-shot boon price census, the #53
+    post-populate arena-node graph dump, the host-authoritative settings dump,
+    and the host's own peer manifest baseline. The transports those last two
+    ride (settings-sync, graph-snapshot, peer-manifest) stay entry file-locals;
+    this owner only CALLS them.
 
   * WHICH BOONS THE ROLL CAN OFFER. DeusPowerUpUtils.generate_random_power_ups is
     here because the boon-altar no-repeat set it filters against is a per-run
@@ -322,17 +321,6 @@ mod:hook("DeusRunController", "setup_run", function(func, self, ...)
             tostring(vanilla_initial))
     end
 
-    -- #487 freeze diagnostics: bracket the vanilla setup_run call, which runs
-    -- deus_generate_graph -> deus_populate_graph (the backtracking map solver, the
-    -- prime freeze suspect). The BEGIN breadcrumb is flushed synchronously with the
-    -- live pool sizes, so if the solver hard-hangs this is the last console line and
-    -- it explains why; FINISH reports elapsed + whether the graph came back nil.
-    -- Runs on BOTH peers (client also solves locally from the synced seed).
-    if mod._ct_freeze487 then
-        local is_server_d = Managers and Managers.player and Managers.player.is_server
-        mod._ct_freeze487.begin_generate(args[3], is_server_d)
-    end
-
     local ret_a, ret_b = func(self, unpack(args, 1, n))
 
     -- #467 requires no command: after vanilla has materialized the live rarity
@@ -342,10 +330,6 @@ mod:hook("DeusRunController", "setup_run", function(func, self, ...)
     if self and self._run_state and self._run_state:is_server()
         and mod._ct_bot_economy_active() then
         mod._ct_bot_economy_seed_all(self._run_state)
-    end
-
-    if mod._ct_freeze487 then
-        mod._ct_freeze487.finish_generate(args[3], self._path_graph)
     end
 
     -- v0.7.121-dev Issue #53 diagnostic — dump post-populate graph state on
