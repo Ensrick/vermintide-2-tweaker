@@ -256,7 +256,7 @@
     ReceiptFamilyOverrides = @(
         @{
             Marker='[crt:728]'; ModId='crt'
-            ModTrees=@{crt='a7bdd5d2fcebc4b2545a9b9d4cefc663f4f905e5'}
+            ModTrees=@{crt='ef70973b3747026f129c8920d420ab69477244b1'}
             SourcesByMod=@{crt='career_tweaker/scripts/mods/career_tweaker/_crt_career_unlock.lua'}
             Signature='[crt:728] installed setting=%s scope=local_level_gate occupancy=vanilla'
             Bound='one terminal install receipt per module evaluation'
@@ -265,7 +265,7 @@
         }
         @{
             Marker='[crt:728]'; ModId='crt'
-            ModTrees=@{crt='a7bdd5d2fcebc4b2545a9b9d4cefc663f4f905e5'}
+            ModTrees=@{crt='ef70973b3747026f129c8920d420ab69477244b1'}
             SourcesByMod=@{crt='career_tweaker/scripts/mods/career_tweaker/_crt_career_unlock.lua'}
             Signature='[crt:728] level_gate setting=%s unlock=%s profile=%s level=%s result=%s reason=%s'
             Bound='unlock decisions are signature-deduplicated for the finite unlock catalogue'
@@ -277,7 +277,7 @@
         }
         @{
             Marker='[crt:728]'; ModId='crt'
-            ModTrees=@{crt='a7bdd5d2fcebc4b2545a9b9d4cefc663f4f905e5'}
+            ModTrees=@{crt='ef70973b3747026f129c8920d420ab69477244b1'}
             SourcesByMod=@{crt='career_tweaker/scripts/mods/career_tweaker/_crt_career_unlock.lua'}
             Signature='[crt:728] character_select setting=%s kruber_profile=%s party=%s available=%s reserved_by=%s careers=[%s]'
             Bound='character-selection summaries are digest-deduplicated over a finite widget catalogue'
@@ -289,7 +289,7 @@
         }
         @{
             Marker='[crt:728]'; ModId='crt'
-            ModTrees=@{crt='a7bdd5d2fcebc4b2545a9b9d4cefc663f4f905e5'}
+            ModTrees=@{crt='ef70973b3747026f129c8920d420ab69477244b1'}
             SourcesByMod=@{crt='career_tweaker/scripts/mods/career_tweaker/_crt_career_unlock.lua'}
             Signature='[crt:728] ui_refresh setting=%s hero_summary=%s character_select=%s'
             Bound='one UI-refresh receipt per explicit unlock-all or level-override setting transition'
@@ -972,7 +972,7 @@
             )
         }
         @{
-            ModId='crt'; ModTree='a7bdd5d2fcebc4b2545a9b9d4cefc663f4f905e5'
+            ModId='crt'; ModTree='ef70973b3747026f129c8920d420ab69477244b1'
             Source='career_tweaker/scripts/mods/career_tweaker/_crt_diagnostics.lua'
             Marker='[crt:699]'; AddRoute=$true
             Signature='[crt:699] icon active=true subject=%s buff=%s role=%s template=%s expected=%s icon=%s atlas=%s atlas_id=%s widget=%s widget_icon=%s semantic_match=%s numb_collision=%s hud_widgets=%d hud_capacity=%d hidebuffs=%s hidden=%s priority=%s'

@@ -259,6 +259,10 @@ Run-Check "check_pusfume_compatibility"       { & (Join-Path $here "check_pusfum
 Run-Check "check_shared_lib_drift"            { & (Join-Path $here "check_shared_lib_drift.ps1")            -Quiet:$Quiet }
 Run-Check "check_wt_stream_parity"            { & (Join-Path $here "check_wt_stream_parity.ps1")            -Quiet:$Quiet }
 Run-Check "check_dofile_package_coverage"      { & (Join-Path $here "check_dofile_package_coverage.ps1")      -Quiet:$Quiet }
+# Issue #499: every production *probe* / _diag_* root must have a reviewed
+# owner, arming mode, receipt identity, and finite evidence bound. The offline
+# registry is also consumed by the hosted lifecycle guard for issue liveness.
+Run-Check "check_diagnostic_ownership"         { & (Join-Path $here "check_diagnostic_ownership.ps1")         -Quiet:$Quiet }
 Run-Check "check_dcp_portrait_atlas"           { & (Join-Path $here "check_dcp_portrait_atlas.ps1")           -Quiet:$Quiet }
 Run-Check "check_cwv_old_musket_asset_contract" { & (Join-Path $here "check_cwv_old_musket_asset_contract.ps1") -Quiet:$Quiet }
 if (-not $SkipCustomUnitBundleReachability) {

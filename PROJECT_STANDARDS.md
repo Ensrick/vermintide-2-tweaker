@@ -205,16 +205,38 @@ ASSERTS that a CLOSED one stays fixed.
    is a self-contained cluster, lives as `_<ns>_diag_<topic>.lua`. Surviving
    root-level `_*_probe.lua` / `_diag_probe.lua` files are the #499 migration
    backlog, not the pattern to copy.
-2. **Probes are always-on in dev streams, inert-or-absent in stable.** A dev
-   build carries its open-issue probes armed by default with no toggle (the user
-   never types a command; §3.7 probe-first doctrine, memory
-   `feedback_diagnostics_never_toggles`). A clean-versioned stable/public build
-   carries none: the probe either retired with its issue before promotion, or is
-   stripped at promotion (§6.5). Never gate a probe on a menu toggle.
+2. **Probes are automatic in dev streams unless their finite budget or topology
+   requires an explicit command; they are inert-or-absent in clean stable.** A
+   dev build normally captures the open issue without a menu toggle or setup
+   command (§3.7 probe-first doctrine). A reviewed command-armed diagnostic is
+   required when boot arming would consume its one-shot budget before the tester
+   reaches the reproduction (canonical: #347's closed-chest pickup trace) or
+   would capture the wrong host/client role. The registry records that arming
+   mode. A clean-versioned stable/public build carries no issue-specific
+   diagnostic: it retires before promotion or is stripped at promotion (§6.5).
+   Existing public exceptions are explicit shrinking #499 debt, not precedent.
+   Never gate a probe on a menu toggle.
 3. **The probe's issue number is in its `printf` prefix** (`[<ns>:<issue>]`). No
    prefix, no traceability.
 
-**Current reality (2026-07-12; TARGET convention above, honest exceptions here):**
+**Enforcement (2026-08-23).** `qa/diagnostic_ownership.psd1` is the authoritative
+production census for every `*probe*.lua` and `_diag_*` root. Each row is exactly
+one of `standing`, `active_issue`, `permanent_policy`, or
+`temporary_exception`. Active rows bind the open issue, stream, exact receipt
+prefix (including a documented alias such as #1309's legacy `[et:1149t]`), load
+owner, arming mode, and finite-bound anchors. `qa/check_diagnostic_ownership.ps1`
+blocks an unregistered root, missing metadata, a new standalone probe, or an
+unreviewed public issue diagnostic in both Quick/full QA. Its fixtures are
+offline. The hosted issue-lifecycle guard reuses its already-fetched issue set
+and fails when an `active_issue` row no longer names an open issue. Closing an
+issue therefore cannot silently leave armed instrumentation behind.
+
+The only filenames containing `probe` permitted as permanent standing owners
+are the exact stable/dev General Tweaker `_gt_debug_probes.lua` paths. All other
+probe-named rows carry a shrinking `RemovalIssue = 499` exception. Do not widen
+that list; rename or retire one owning mod transaction at a time.
+
+**Current reality (2026-08-23; TARGET convention above, honest exceptions here):**
 
 - Every active mod ships a `/<mod>_regression_test` command backed by an
   `_rt_register` suite - full tier-(b) coverage.
@@ -230,12 +252,10 @@ ASSERTS that a CLOSED one stays fixed.
   uses `gut_regression_test`. Align dev to `gut_regression_test` on the next
   gut_dev touch (bare `regression_test` is the collision the gt prefix rule in
   `docs/COMMANDS.md` was written to avoid).
-- Dedicated diagnostics modules exist for cosmetics (`_cos_diagnostics.lua`),
-  wt (`_wt_diagnostics.lua`), crt (`_crt_diagnostics.lua`), event
-  (`_evt_diagnostics.lua`), gt (`_gt_debug_probes.lua`), and ct_dev
-  (`_ct_diag_freeze487.lua`). Surviving root-level probes pending #499
-  consolidation: cosmetics `_diag_probe.lua`, gut `_gut_options_probe.lua`, and
-  the stable-only stray `general_tweaker/_gt_probe_dummy_hits.lua` (#198).
+- The checked-in census currently records 28 production owners: 16 active issue
+  diagnostics, two exact standing owners, two permanent-policy owners, and eight
+  temporary retirement rows. The manifest is authoritative; prose inventories
+  must not duplicate its paths and drift again.
 
 Cross-ref: §3.5 (diagnostic dump commands), §3.6 (printf vs VMF logging), §3.7
 (probe-first data harness), §5.1a (verify before shipping), §5.3 (pre-ship
