@@ -1,6 +1,6 @@
 -- Cluster B regression (issues 249 / 256 / 289): drives the pure ammo
 -- grant/clamp kernel (_ct_ammo_guard_core.lua) and pins the live wiring in
--- _ct_meta_trait_boons.lua textually - the server-authoritative stack grant
+-- _ct_meta_boon_owner.lua textually - the server-authoritative stack grant
 -- (host adds via BuffSystem server-controlled path, replicated to clients per
 -- buff_system.lua:277-311; clients defer), the issue 426 parity gate, and the
 -- issue 256 [0, max] consumption-side clamp that never touches _max_ammo.
@@ -119,7 +119,7 @@ return function(H, repo_root)
 
     local meta_path = repo_root
         .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/"
-        .. "_ct_meta_trait_boons.lua"
+        .. "_ct_meta_boon_owner.lua"
     local file = assert(io.open(meta_path, "rb"))
     local meta_src = file:read("*a")
     file:close()

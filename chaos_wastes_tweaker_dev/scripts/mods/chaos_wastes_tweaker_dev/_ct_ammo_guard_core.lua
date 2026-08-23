@@ -1,5 +1,5 @@
 -- Engine-free core for the ct_meta_ammo grant/clamp policy (issues 249 / 256 /
--- 289 evidence). Loaded via mod:dofile from _ct_meta_trait_boons.lua and via
+-- 289 evidence). Loaded via mod:dofile from _ct_meta_boon_owner.lua and via
 -- loadfile from qa/lua/tests (no get_mod, no engine globals).
 --
 -- issue 249 / [ct:289] evidence: the meta-ammo stack buff was added through the
