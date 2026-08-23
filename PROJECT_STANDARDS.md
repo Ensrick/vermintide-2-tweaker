@@ -61,9 +61,14 @@ Cross-reference: `CLAUDE.md` (technical) describes HOW things work. This doc
 - **Hard limit**: 2500 lines. When approaching, split before adding more.
 - **Exemption**: pure data files (`_cosmetic_unlocks.lua`, etc.) can be larger.
 - **Current violations**: tracked under GitHub Issue #2. Run
-  `.\qa\check_file_sizes.ps1` for the live list. Splits happen opportunistically
-  when a natural feature boundary surfaces — not Claude's job per-session unless
-  asked.
+  `.\qa\check_file_sizes.ps1` for the live list. The canonical metric is
+  PowerShell `Measure-Object -Line` (physical lines). Files above the hard
+  limit are frozen in `qa/baselines/file_sizes.json`; every current file
+  between the target and hard limit has an independent exact ceiling in
+  `qa/baselines/file_sizes_target.json`. A frozen file may shrink but may not
+  grow, and a new file crossing either threshold blocks QA. Baseline refreshes
+  are explicit reviewed operations; they are never an ordinary way to bless
+  growth. Splits happen one coherent owner boundary at a time.
 
 ### 2.2 Module layout per mod
 Every mod should have:
