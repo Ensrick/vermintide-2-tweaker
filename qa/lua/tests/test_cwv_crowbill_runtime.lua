@@ -253,6 +253,39 @@ return function(H, repo_root)
 		H.equal(_G.Weapons.cwv_crowbill_hammer_template.actions.action_three.default.lookup_data.item_template_name,
 			"cwv_crowbill_hammer_template")
 		H.equal(registered.channel, policy.CHANNEL)
+		local pick_cases = {
+			{
+				label = "Sienna native Crowbill normal face keeps burning donor",
+				item = {
+					name = family.SOURCE_ITEM,
+					template = family.SOURCE_TEMPLATE,
+					backend_id = "native-pick-test-001",
+					mod_data = { cwv_crowbill_mode = "crowbill" },
+				},
+				expected = _G.Weapons.one_handed_crowbill,
+			},
+			{
+				label = "Imperial Crowbill normal face uses non-burning pick clone",
+				item = {
+					cwv_key = "cwv_es_imperial_crowbill",
+					backend_id = "imperial-pick-test-001",
+					mod_data = { cwv_crowbill_mode = "crowbill" },
+				},
+				expected = _G.Weapons.cwv_crowbill_pick_template,
+			},
+			{
+				label = "Dawi Crowbill normal face uses non-burning pick clone",
+				item = {
+					cwv_key = "cwv_dr_dawi_crowbill",
+					backend_id = "dawi-pick-test-001",
+					mod_data = { cwv_crowbill_mode = "crowbill" },
+				},
+				expected = _G.Weapons.cwv_crowbill_pick_template,
+			},
+		}
+		for _, case in ipairs(pick_cases) do
+			H.equal(runtime.resolve_template(case.item), case.expected, case.label)
+		end
 		local hammer_cases = {
 			{
 				label = "Sienna Crowbill direct",

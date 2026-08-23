@@ -163,4 +163,45 @@ _rt_register("issue660_greatsword_style_appearance_transaction", function()
 	end
 end)
 
+_rt_register("issue604_crowbill_template_ownership", function()
+	local runtime = mod._cwv_crowbill_runtime
+	local policy = mod._cwv_crowbill_hammer_mode
+	local weapons = rawget(_G, "Weapons")
+	if type(runtime) ~= "table" or runtime._installed ~= true
+			or type(runtime.resolve_template) ~= "function"
+			or type(policy) ~= "table" or type(weapons) ~= "table" then
+		return "#604 Crowbill template-ownership dependencies missing"
+	end
+	local source = weapons[policy.SOURCE_TEMPLATE_KEY]
+	local pick = weapons[runtime.PICK_TEMPLATE_KEY]
+	local hammer = weapons[policy.HAMMER_TEMPLATE_KEY]
+	if type(source) ~= "table" or type(pick) ~= "table" or type(hammer) ~= "table" then
+		return "#604 Crowbill source/pick/hammer templates not all registered"
+	end
+	local native_pick = runtime.resolve_template({
+		name = "bw_1h_crowbill", template = policy.SOURCE_TEMPLATE_KEY,
+		backend_id = "cwv-regression-native-crowbill",
+		mod_data = { cwv_crowbill_mode = policy.MODE_PICK },
+	})
+	local imperial_pick = runtime.resolve_template({
+		cwv_key = "cwv_es_imperial_crowbill",
+		backend_id = "cwv-regression-imperial-crowbill",
+		mod_data = { cwv_crowbill_mode = policy.MODE_PICK },
+	})
+	local native_hammer = runtime.resolve_template({
+		name = "bw_1h_crowbill", template = policy.SOURCE_TEMPLATE_KEY,
+		backend_id = "cwv-regression-native-hammer",
+		mod_data = { cwv_crowbill_mode = policy.MODE_HAMMER },
+	})
+	if native_pick ~= source then
+		return "native Sienna Crowbill normal face lost its burning donor"
+	end
+	if imperial_pick ~= pick then
+		return "Imperial Crowbill normal face lost its non-burning pick template"
+	end
+	if native_hammer ~= hammer then
+		return "native Sienna Crowbill Hammer face lost the shared hammer template"
+	end
+end)
+
 end

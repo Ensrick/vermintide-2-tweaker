@@ -10,8 +10,8 @@ source manifest, conversion script, package root, and shipped notices.
 
 | Output | Original model | Sketchfab UID | Selected source | Archive SHA-256 |
 |---|---|---|---|---|
-| `dawi_01` | Medieval War Hammer by Parelaxel | `665734b41cce4a49abeb757c3bda7705` | `WarHammerSF.fbx` plus the `WarHammer_Hammer_*` PBR maps | `A90B5FB669AAB55C3FC0C46A21815FC6A4FC573706EFF1B49B144F6B32C107CA` |
-| `imperial_01` | War Hammer by soidev | `97ffc67970b54bebb35aa08f4723753e` | `Hammer.fbx` plus the `Hammer_HammerHead_*` and `Hammer_HammerHandle_*` PBR maps | `A02A997C3E04822C1830597AC3C2457EA5D97AFDBD445F6C30BFDD5EDF565B87` |
+| `imperial_01` | Medieval War Hammer by Parelaxel | `665734b41cce4a49abeb757c3bda7705` | `WarHammerSF.fbx` plus the `WarHammer_Hammer_*` PBR maps | `A90B5FB669AAB55C3FC0C46A21815FC6A4FC573706EFF1B49B144F6B32C107CA` |
+| `dawi_01` | War Hammer by soidev | `97ffc67970b54bebb35aa08f4723753e` | `Hammer.fbx` plus the `Hammer_HammerHead_*` and `Hammer_HammerHandle_*` PBR maps | `A02A997C3E04822C1830597AC3C2457EA5D97AFDBD445F6C30BFDD5EDF565B87` |
 | `imperial_02` | war_hammer by Loqual | `cf9ad0c7fa8e4cecb323ecfadc787bea` | `model.dae` (`45643E59FF6B49FFF24A6984BB36B31BB8A8A258DD6141B3DC2DB67CDA7ECACA`) plus the `initialShadingGroup_*` PBR maps | `5741795455E8552114938C1B7B7BAC7BABBF03B2E71076DA1662E06BB53B9C2F` |
 | `imperial_03` | Medieval Steel Warhammer by Peter Nox | `85caa1dc806c46fb9d256572fcd5854a` | `model.dae` (`F695D1582CE66FD1CD5E60EC4021770B461A3654A68F49120585E55DE602A382`) plus the `Material.001.01_*` PBR maps | `6B3E6E217936F3E6EBFCA5640F5330047872AF2C28684822D188EBAA5DEB4E38` |
 | `imperial_04` | Warhammer - [ Diablo II ] by Ole Gunnar Isager | `6d9963339387410c9127811b72307e8f` | `Warhammer_low.fbx` (`4B844461ED3BC92F44568712E9C0A2BB7441195A668AD601937DD5070EE26421`) plus the `lambert1_*` PBR maps | `BDE2DF7A400A16529C83D9474B0ECBD158FB3DBC52B479FEAF4D10777CA0F819` |
