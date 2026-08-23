@@ -1,5 +1,12 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.340-dev (2026-08-23) -- retire consumed loadout-capacity census (#499)
+
+- Removed the automatic #231 boot/window census and `/gut_loadout_capacity_probe`; its six-row/six-widget result was already consumed, and repeated window entry could emit without a session cap.
+- Retained `_gut_loadout_capacity_policy.lua` and strengthened its engine-free coverage for the 30-slot target, paging requirement, duplicate detection, sparse persisted extent, and direct-cutover boundary.
+- Removed the retired runtime owner from the diagnostic registry, shrinking the explicit #499 temporary-debt count from eight to seven.
+- No loadout data, selector behavior, hooks, RPCs, or player-facing settings changed. #231 remains a separate unimplemented paging feature.
+
 ## 0.2.339-dev (2026-08-20) -- executable loadout capture lifecycle (#353, #354) [verify-fix]
 
 - The stable outer equipment capture and the three exit persistence edges now run

@@ -40,7 +40,7 @@ end
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.339-dev"
+local MOD_VERSION = "0.2.340-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -2115,22 +2115,6 @@ if type(_gut_native_loadouts) == "table" and type(_gut_native_loadouts.exit_snap
                 printf("[gut:persist] edge=%s error=%s", tostring(edge), tostring(err))
             end,
         })
-end
-
--- Native-loadout 30-slot capacity census (#231). The six-button window has
--- direct logical-index coupling across selection/context/delete/bot paths, so
--- this phase records the data, frozen-widget and asset boundaries without
--- mutating the realm-shared InventorySettings table.
-do
-    local ok, api = pcall(mod.dofile, mod,
-        "scripts/mods/gui_tweaker_dev/_gut_loadout_capacity_probe")
-    if ok and type(api) == "table" then
-        for _, check in ipairs(api.rt_checks or {}) do
-            _rt_register(check.name, check.fn)
-        end
-    else
-        _dbg_alert("[gut:231] capacity probe failed: %s", tostring(api))
-    end
 end
 
 -- Bot designated-loadout victory pose (#232). PlayerBot.spawn passes is_bot for

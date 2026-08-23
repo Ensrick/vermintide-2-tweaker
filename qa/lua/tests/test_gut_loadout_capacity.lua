@@ -46,13 +46,22 @@ return function(H, repo_root)
         H.equal(result.data_ready, false)
     end)
 
-    H.test("GUT #231 production census measures sparse persisted rows", function()
-        local runtime_path = repo_root
-            .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_loadout_capacity_probe.lua"
-        local file = assert(io.open(runtime_path, "rb"))
+    H.test("GUT #231 pure policy preserves sparse persisted extent", function()
+        local result = Policy.inspect(vanilla_rows(), 6, 6,
+            function(i) return i <= 6 end,
+            function(i) return i <= 6 end, 30)
+        H.equal(result.store_max, 30)
+        H.equal(result.custom_count, 6)
+        H.equal(result.cutover_ready, false)
+    end)
+
+    H.test("GUT #231 consumed automatic census stays retired", function()
+        local entry_path = repo_root
+            .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/gui_tweaker_dev.lua"
+        local file = assert(io.open(entry_path, "rb"))
         local source = file:read("*a")
         file:close()
-        H.truthy(source:find("for index, row in pairs(rows)", 1, true) ~= nil)
-        H.equal(source:find("#rows > max_rows", 1, true), nil)
+        H.equal(source:find("_gut_loadout_capacity_probe", 1, true), nil)
+        H.equal(source:find("gut_loadout_capacity_probe", 1, true), nil)
     end)
 end

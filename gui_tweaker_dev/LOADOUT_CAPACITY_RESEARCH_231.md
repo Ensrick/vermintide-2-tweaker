@@ -4,8 +4,10 @@
 
 GUT's modded-only native store is already capacity-agnostic and its separate chat
 commands accept slots 1–30. The native hero-view pipeline is not yet safe to raise
-to 30. This pass adds automatic, bounded diagnostics rather than mutating the
-global inventory schema before the UI and asset boundaries are ready.
+to 30. The original pass added an automatic census rather than mutating the
+global inventory schema before the UI and asset boundaries were ready. That
+census has now been consumed and retired; the pure capacity policy and its host
+tests remain as the implementation boundary.
 
 Vanilla derives `InventorySettings.MAX_NUM_CUSTOM_LOADOUTS` from six custom rows
 in `inventory_settings.lua`. The loadout-selection definitions then create one
@@ -36,10 +38,12 @@ The asset choice remains explicit: either package VII–XXX materials through
 numerals without requesting absent atlas textures. The latter avoids 24 new
 materials but still requires the complete paging owner above.
 
-## Diagnostics
+## Retired census evidence
 
-`/gut_loadout_capacity_probe` writes exactly two summary lines. It reports the
-data-row count, declared cap, instantiated widget count, greatest persisted row,
-duplicate indices, missing icon/title ranges, and readiness flags. Opening the
-native loadout window captures the actual frozen widget count and emits the same
-two-line census. No store, inventory setting, widget, or backend value is changed.
+The former `/gut_loadout_capacity_probe` established six custom rows, a declared
+cap of six, six instantiated widgets, and absent icon/title assets for slots
+7–30. Repeating that automatic window-entry census cannot change the design
+boundary and produced unbounded session logging, so #499 retired it. The
+engine-free `_gut_loadout_capacity_policy.lua` tests retain the 30-slot target,
+duplicate detection, sparse persisted extent, paging requirement, and direct
+cutover conditions without loading a runtime probe.
