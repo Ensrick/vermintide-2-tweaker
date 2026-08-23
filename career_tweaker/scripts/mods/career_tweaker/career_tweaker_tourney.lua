@@ -4,6 +4,7 @@ local mod = get_mod("crt")
 -- career-wide mutations into independently reversible leaves. The old setting
 -- IDs are retained by _crt_tourney_catalog.lua solely as per-career presets.
 local catalog = mod:dofile("scripts/mods/career_tweaker/_crt_tourney_catalog")
+local network_lookup = mod._crt.network_lookup
 
 local function _crt_make_stub()
     return { buffs = {}, _crt_pending = true }
@@ -15,14 +16,10 @@ local _TRN_BUFF_NAMES = {
     "victor_bountyhunter_blessed_melee_attack_speed_buff",
     "victor_priest_5_2_speed_buff",
 }
-if BuffTemplates and NetworkLookup and NetworkLookup.buff_templates then
+if BuffTemplates and NetworkLookup and rawget(NetworkLookup, "buff_templates") then
     for _, name in ipairs(_TRN_BUFF_NAMES) do
         if BuffTemplates[name] == nil then BuffTemplates[name] = _crt_make_stub() end
-        if not rawget(NetworkLookup.buff_templates, name) then
-            local idx = #NetworkLookup.buff_templates + 1
-            NetworkLookup.buff_templates[idx] = name
-            NetworkLookup.buff_templates[name] = idx
-        end
+        network_lookup.register(rawget(NetworkLookup, "buff_templates"), name)
     end
 end
 

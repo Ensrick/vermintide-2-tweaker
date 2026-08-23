@@ -1,5 +1,26 @@
 # Career Tweaker Changelog
 
+## 0.4.25-beta (2026-08-23) - canonical NetworkLookup registration (#428) [not-started]
+
+- Replaced Career Tweaker's two duplicate `NetworkLookup.buff_templates`
+  append loops with one manifested, byte-identical copy of the repository's
+  canonical bidirectional registration helper. The helper loads once before
+  both the balance and Tourney owners.
+- Preserved all 34 balance names followed by the two Tourney names in their
+  existing order, along with unconditional stub creation, the permanent
+  registered-name catalog, and every feature/parity decision.
+- Malformed, asymmetric, missing, or non-numeric lookup state now rejects the
+  pair rather than guessing an index. The existing exact wire-catalog identity
+  consequently remains unavailable and keeps network-visible reworks at
+  vanilla, preserving the fail-safe boundary.
+- Added a reference-algorithm comparison across all 36 live names, every
+  reachable helper rejection, exact-copy/manifest/load-order assertions, and
+  an adversarial proof that a rejected row reaches the exact-catalog floor.
+  No hook, RPC, setting, buff name, or network ordering changed.
+
+This is one autonomous shared-library migration slice. It does not complete
+the repository-wide #428 umbrella and does not create an in-game test card.
+
 ## 0.4.24-beta (2026-08-23) - Focused Spirit single-writer lifecycle (#472) [verify-fix]
 
 - Repaired Focused Spirit's `buffer="both"` topology. A human player's owning

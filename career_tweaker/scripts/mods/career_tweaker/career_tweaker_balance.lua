@@ -3,6 +3,7 @@ mod._crt.dance_of_blades = mod:dofile("scripts/mods/career_tweaker/_crt_dance_of
 local foot_knight_policy = mod:dofile("scripts/mods/career_tweaker/_crt_foot_knight_policy")
 local wire_policy = mod._crt.wire_policy
 local wire_runtime = mod:dofile("scripts/mods/career_tweaker/_crt_wire_runtime")
+local network_lookup = mod._crt.network_lookup
 
 -- ============================================================
 -- crt_* buff name pre-registration (UNCONDITIONAL)
@@ -93,10 +94,9 @@ local function _crt_pre_register_buffs()
         if rawget(BuffTemplates, name) == nil then
             BuffTemplates[name] = _crt_make_stub()
         end
-        if NL and NL.buff_templates and not rawget(NL.buff_templates, name) then
-            local idx = #NL.buff_templates + 1
-            NL.buff_templates[idx]  = name
-            NL.buff_templates[name] = idx
+        if NL and rawget(NL, "buff_templates") then
+            -- #428: rejection remains visible to the exact-catalog fail-safe.
+            network_lookup.register(rawget(NL, "buff_templates"), name)
         end
     end
 end
