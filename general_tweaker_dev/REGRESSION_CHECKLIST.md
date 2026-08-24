@@ -292,7 +292,7 @@ Last updated: 2026-08-13.
 - [ ] Each sample reports career, item/template/style, action/sub-action/profile, reconciled values, exact factors, exact stage/source identity, and unsupported reasons without calling `apply_buffs_to_value`.
 - [ ] Death, respawn, career/equipment transitions, or a missing extension produce a bounded `skip=` row rather than an error or retained engine handle.
 - [ ] `/gt_regression_test` passes `issue797_player_stat_diagnostics_armed`.
-- Detection: offline `test_gt_player_stat_probe.lua`; runtime commands `/gt_stat_probe` and `/gt_stat_trace`; `/gt_regression_test` checks `issue797_player_stat_diagnostics_armed` and `issue797_player_stat_hud`; source owner `docs/engine/10_damage_buffs_and_talents.md`.
+- Detection: offline `test_gt_player_stat_snapshot_policy.lua`; runtime commands `/gt_stat_probe` and `/gt_stat_trace`; `/gt_regression_test` checks `issue797_player_stat_diagnostics_armed` and `issue797_player_stat_hud`; source owner `docs/engine/10_damage_buffs_and_talents.md`.
 
 ---
 

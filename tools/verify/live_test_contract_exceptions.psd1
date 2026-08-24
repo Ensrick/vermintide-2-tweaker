@@ -898,7 +898,7 @@
             )
         }
         @{
-            ModId='cosmetics_tweaker'; ModTrees=@('ce5181e248d9f98ac41c484ac86fb244fe475add')
+            ModId='cosmetics_tweaker'; ModTrees=@('e44f7693290133ab59abcd8effd071fa485dd68c')
             Source='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_la_bridge.lua'
             Marker='[cos:373]'; AddRoute=$true
             Signature='[cos:373] receiver coverage OK: no magic/runed shield family gaps'
@@ -913,7 +913,7 @@
             )
         }
         @{
-            ModId='cosmetics_tweaker'; ModTrees=@('ce5181e248d9f98ac41c484ac86fb244fe475add')
+            ModId='cosmetics_tweaker'; ModTrees=@('e44f7693290133ab59abcd8effd071fa485dd68c')
             Source='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_la_bridge.lua'
             Marker='[cos:373]'; AddRoute=$true
             Signature='[cos:373] RECEIVER-GAP skin=%s family=%s unit=%s (magic/runed shield has no paint receiver row - LA heraldry will dead-end)'
@@ -927,7 +927,7 @@
             )
         }
         @{
-            ModId='cosmetics_tweaker'; ModTrees=@('ce5181e248d9f98ac41c484ac86fb244fe475add')
+            ModId='cosmetics_tweaker'; ModTrees=@('e44f7693290133ab59abcd8effd071fa485dd68c')
             Source='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_la_bridge.lua'
             Marker='[cos:373]'; AddRoute=$true
             Signature='[cos:373] RECEIVER-GAP +%d more (capped at %d)'
@@ -941,7 +941,7 @@
             )
         }
         @{
-            ModId='cosmetics_tweaker'; ModTrees=@('ce5181e248d9f98ac41c484ac86fb244fe475add')
+            ModId='cosmetics_tweaker'; ModTrees=@('e44f7693290133ab59abcd8effd071fa485dd68c')
             Source='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_diagnostics.lua'
             Marker='[cos:704]'; AddRoute=$true
             Signature='[cos:704] summary inspected=%d suspects=%d emitted=%d truncated=%s signature_truncated=%s signature_bytes=%d'
@@ -1097,7 +1097,7 @@
             )
         }
         @{
-            ModId='cosmetics_tweaker'; ModTree='ce5181e248d9f98ac41c484ac86fb244fe475add'
+            ModId='cosmetics_tweaker'; ModTree='e44f7693290133ab59abcd8effd071fa485dd68c'
             Source='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_reikland_griffin.lua'
             Marker='[cos:656]'; AddRoute=$true
             Signature='[cos:656] registered skin=%s donor=%s vanilla_geometry=true enabled=%s'
@@ -1207,7 +1207,7 @@
             )
         }
         @{
-            ModId='cosmetics_tweaker'; ModTree='ce5181e248d9f98ac41c484ac86fb244fe475add'
+            ModId='cosmetics_tweaker'; ModTree='e44f7693290133ab59abcd8effd071fa485dd68c'
             Source='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_518_probe.lua'
             Marker='[cos:518]'; AddRoute=$true
             Signature='[cos:518] OWNER-WIELD slot=%s item=%s skin=%s deus_yield=%s'
@@ -1224,7 +1224,7 @@
             )
         }
         @{
-            ModId='cosmetics_tweaker'; ModTree='ce5181e248d9f98ac41c484ac86fb244fe475add'
+            ModId='cosmetics_tweaker'; ModTree='e44f7693290133ab59abcd8effd071fa485dd68c'
             Source='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_518_probe.lua'
             Marker='[cos:518]'; AddRoute=$true
             Signature='[cos:518] PAINT-SKIP ctx=ingame bid=%s (deus run: CW upgrade cosmetics win)'
@@ -1241,7 +1241,7 @@
             )
         }
         @{
-            ModId='cosmetics_tweaker'; ModTree='ce5181e248d9f98ac41c484ac86fb244fe475add'
+            ModId='cosmetics_tweaker'; ModTree='e44f7693290133ab59abcd8effd071fa485dd68c'
             Source='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_518_probe.lua'
             Marker='[cos:518]'; AddRoute=$true
             Signature='[cos:518] HUSK-MISS authored variant %s unavailable (wearer=%s template=%s)'

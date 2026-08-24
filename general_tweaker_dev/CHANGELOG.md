@@ -1,5 +1,18 @@
 # General Tweaker Changelog
 
+## 0.2.271-dev (2026-08-24) -- name permanent stat policy by role (#499) [not-started]
+
+- Renamed the engine-free player-stat snapshot core and its offline suite from
+  one-issue `probe` terminology to `_gt_player_stat_snapshot_policy.lua` and
+  `test_gt_player_stat_snapshot_policy.lua`.
+- The active #797 diagnostic owner, commands, bounded update registration,
+  receipt prefix, limits, HUD behavior, and runtime checks are unchanged.
+- `/gt_regression_test` continues to cover
+  `issue797_player_stat_diagnostics_armed` and `issue797_player_stat_hud`.
+- The role-named core leaves the diagnostic census entirely; the active #797
+  registry row still binds its exact limits in that policy file. #499 remains
+  open for the remaining serialized legacy owners and stable-stream retirements.
+
 ## 0.2.270-dev (2026-08-23) -- bot-aid owner decomposition (#2) [not-started]
 
 - Behavior-neutral structural split: the existing Ironbreaker aid yield,

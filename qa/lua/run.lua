@@ -286,7 +286,7 @@ local suites = {
     "test_gut_loadout_lifecycle_owner",
     "test_gut_exit_snapshot",
     "test_gt_dummy_collision_policy",
-    "test_gt_player_stat_probe",
+    "test_gt_player_stat_snapshot_policy",
     "test_gut_simple_ui_bounds",
     "test_gut_hud_drag_geometry",
     "test_gut_respawn_anchor",
