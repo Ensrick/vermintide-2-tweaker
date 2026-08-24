@@ -1,11 +1,11 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.531-dev"
+local MOD_VERSION = "0.1.532-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
 mod._cwv_dev_anim_picker = mod:dofile("scripts/mods/character_weapon_variants/cwv_dev_anim_picker")
-mod._cwv_smoke_bomb_probe = mod:dofile("scripts/mods/character_weapon_variants/_cwv_smoke_bomb_probe")
+mod._cwv_smoke_bomb_probe = mod:dofile("scripts/mods/character_weapon_variants/_cwv_diag_smoke_bomb")
 mod._cwv_smoke_bomb_probe.install(mod)
 -- #915: vanilla-ownership provenance for every illusion-source registry scan.
 mod._cwv_illusion_provenance = mod:dofile("scripts/mods/character_weapon_variants/_cwv_illusion_provenance")

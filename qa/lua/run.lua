@@ -204,7 +204,7 @@ local suites = {
     "test_cwv_crowbill_family",
     "test_cwv_axe_balance",
     "test_cwv_item_text",
-    "test_cwv_smoke_bomb_probe",
+    "test_cwv_smoke_bomb_diagnostic",
     "test_cwv_combat_styles",
     "test_cwv_peer_resolver",
     "test_cwv_rapier_contract",

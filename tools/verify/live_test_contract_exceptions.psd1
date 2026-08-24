@@ -624,7 +624,7 @@
             )
         }
         @{
-            Marker='[event-inject:393]';ModId='event_tweaker';ModTrees=@{event_tweaker='aecc40f6935dae8dd6ab47e102822fd1e8622d64'}
+            Marker='[event-inject:393]';ModId='event_tweaker';ModTrees=@{event_tweaker='4f160ee4338da1077c74a1189ce546852c37d415'}
             SourcesByMod=@{event_tweaker='event_tweaker/scripts/mods/event_tweaker/_evt_diagnostics.lua'}
             Signature='[event-inject:393] settled verdict=%s evidence=%s | injected=[%s] max_intensity=%s decay_per_second=%s decay_delay=%s add_per_pct_dmg=%s delay_horde=%s delay_specials=%s delay_mini_patrol=%s cached_horde=%s cached_specials=%s cached_mini_patrol=%s'
             Bound='one settled receipt per weak-key Pacing instance'
@@ -958,7 +958,7 @@
         }
         @{
             ModId='character_weapon_variants'; ModTree='fc363b4babf93a33330e34d5eeb545e7e9acc502'
-            Source='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_smoke_bomb_probe.lua'
+            Source='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_diag_smoke_bomb.lua'
             Marker='[cwv:343]'; AddRoute=$true
             Signature='[cwv:343] status=%s base=%s area=%s pool=%d/%.6f healthy=%s exact_z_scale=%s registration_quarantined=%s'
             Bound='absolute three-run probe cap'
@@ -1363,7 +1363,7 @@
             )
         }
         @{
-            ModId='event_tweaker'; ModTree='aecc40f6935dae8dd6ab47e102822fd1e8622d64'
+            ModId='event_tweaker'; ModTree='4f160ee4338da1077c74a1189ce546852c37d415'
             Source='event_tweaker/scripts/mods/event_tweaker/_evt_issue1309_probe.lua'
             Marker='[et:1149t]'; AddRoute=$true
             Signature='[et:1149t] %s'
