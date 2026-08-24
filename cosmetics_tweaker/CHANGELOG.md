@@ -1,5 +1,15 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.216-dev (2026-08-24) -- normalize the permanent glow diagnostic owner (#499) [not-started]
+
+- Renames the former `_cos_glow_probe.lua` issue-era owner to
+  `_cos_diag_glow.lua` now that its six manual commands are a permanent,
+  generic material-inspection surface. Command names, registration order,
+  bounded scan ticks, and the wielded-unit helper remain unchanged.
+- Reclassifies the owner from a temporary #499 exception to a documented,
+  finite permanent diagnostic policy; no appearance or gameplay behavior
+  changes.
+
 ## 0.9.215-dev (2026-08-20) -- publication reconciliation
 
 - Rebuilds and publishes the already-reviewed 0.9.214-dev LA pre-spawn lease

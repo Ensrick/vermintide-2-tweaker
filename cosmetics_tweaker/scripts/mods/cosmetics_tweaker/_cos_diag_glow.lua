@@ -1,4 +1,4 @@
--- cosmetics_tweaker glow-probe commands and bounded scan owner.
+-- cosmetics_tweaker glow diagnostic commands and bounded scan owner.
 -- Installed once at the historical registration point; no hooks or wire state.
 local M = {}
 

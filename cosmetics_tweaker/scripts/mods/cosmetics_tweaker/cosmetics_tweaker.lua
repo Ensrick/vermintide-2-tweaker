@@ -107,7 +107,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.215-dev"
+local MOD_VERSION = "0.9.216-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -1476,11 +1476,11 @@ mod._cos_update_scheduler_owner = mod:dofile(
     set_la_pending_apply = function(t) _la_pending_apply = t end,
 })
 
-local _cos_glow_probe = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_probe")
-_cos_glow_probe.install(mod, {
+local _cos_diag_glow = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_glow")
+_cos_diag_glow.install(mod, {
     local_player_safe = _local_player_safe, is_unit = _is_unit, flush_log = _flush_log,
 })
-local _wielded_units_for_probe = _cos_glow_probe.wielded_units_for_probe
+local _wielded_units_for_probe = _cos_diag_glow.wielded_units_for_probe
 -- ============================================================
 -- Attachment / preview spawn boundary -> _cos_spawn_boundary.lua (#1159)
 -- ============================================================

@@ -21,7 +21,7 @@ return function(H, repo_root)
     local entry = read("cosmetics_tweaker.lua")
     local runtime_source = read("_cos_runtime_checks.lua")
     local command_source = read("_cos_command_owner.lua")
-    local glow_source = read("_cos_glow_probe.lua")
+    local glow_source = read("_cos_diag_glow.lua")
     local la_source = read("_cos_la_commands.lua")
 
     local function command_mod()
@@ -39,7 +39,7 @@ return function(H, repo_root)
 
     H.test("Cosmetics entry installs each extracted runtime owner once", function()
         for _, name in ipairs({
-            "_cos_glow_probe", "_cos_la_commands", "_cos_runtime_checks", "_cos_command_owner",
+            "_cos_diag_glow", "_cos_la_commands", "_cos_runtime_checks", "_cos_command_owner",
             "_cos_modded_illusion_swap", "_cos_glow_editor_button",
         }) do
             local call = 'mod:dofile("scripts/mods/cosmetics_tweaker/' .. name .. '")'
@@ -54,7 +54,7 @@ return function(H, repo_root)
                 '"scripts/mods/cosmetics_tweaker/' .. name .. '"'), 1,
                 name .. " path count")
         end
-        H.equal(count_plain(entry, "_cos_glow_probe.install(mod"), 1)
+        H.equal(count_plain(entry, "_cos_diag_glow.install(mod"), 1)
         H.equal(count_plain(entry, "_cos_la_commands.install(mod"), 1)
         H.equal(count_plain(entry, "_cos_runtime_checks.install(mod, _rt_register"), 1)
         H.equal(count_plain(entry, "_cos_command_owner\").install(mod"), 1)
@@ -63,7 +63,7 @@ return function(H, repo_root)
             '"scripts/mods/cosmetics_tweaker/_cos_offhand_catalog").install(mod'), 1)
         H.equal(count_plain(entry,
             '"scripts/mods/cosmetics_tweaker/_cos_offhand_picker").install(mod'), 1)
-        H.equal(count_plain(entry, "local _wielded_units_for_probe = _cos_glow_probe.wielded_units_for_probe"), 1)
+        H.equal(count_plain(entry, "local _wielded_units_for_probe = _cos_diag_glow.wielded_units_for_probe"), 1)
     end)
 
     H.test("Cosmetics command owner preserves registry and maintenance surfaces", function()
@@ -193,7 +193,7 @@ return function(H, repo_root)
 
     H.test("Cosmetics extracted command modules retain their exact surfaces", function()
         local mod, glow_commands = command_mod()
-        local glow = assert(loadfile(base .. "_cos_glow_probe.lua"))()
+        local glow = assert(loadfile(base .. "_cos_diag_glow.lua"))()
         glow.install(mod, {
             local_player_safe = function() end,
             is_unit = function() return false end,
