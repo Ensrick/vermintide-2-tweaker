@@ -326,7 +326,7 @@ any remote-husk or bot verification.
 - [ ] `base=true` proves the vanilla frag-grenade projectile, Ranger career template/item, and Ranger smoke explosion effect+sound are loaded.
 - [ ] `area=true` proves the Ranger buff retains its 8 m shared `buff_area` and source-backed landing-position contract; `pool=<count>/1.000000 healthy=true` proves the current grenade sampler remains normalized before any new member is considered.
 - [ ] The probe never registers an item/lookup, changes pickup weighting, spawns a unit, adds a buff, or throws a projectile. It stops after three explicit runs.
-- [ ] `/cwv_regression_test` passes `issue343_smoke_bomb_diagnostics`; offline `test_cwv_smoke_bomb_probe.lua` passes.
+- [ ] `/cwv_regression_test` passes `issue343_smoke_bomb_diagnostics`; offline `test_cwv_smoke_bomb_diagnostic.lua` passes.
 
 ---
 

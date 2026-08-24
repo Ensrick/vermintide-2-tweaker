@@ -1,5 +1,18 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.532-dev (2026-08-24) -- name active diagnostics by role (#499) [not-started]
+
+- Renamed the active Smoke Bomb diagnostic source to
+  `_cwv_diag_smoke_bomb.lua` without changing its executable bytes, runtime
+  field, public command, receipt, automatic/manual cadence, finite cap, or
+  regression identifier.
+- Updated the diagnostic ownership registry, loader, offline suite, engine
+  surface, regression checklist, and deployed-source authority path. New
+  coverage rejects the retired filename and requires exactly one loader,
+  installer, automatic runner, runtime check, receipt, and command owner.
+- The diagnostic remains observation-only and quarantines item, lookup,
+  pickup-pool, projectile, buff, and unit mutations.
+
 ## 0.1.531-dev (2026-08-23) -- preserve Sienna's native Crowbill normal face (#604)
 
 - Fixed the shared Crowbill mode resolver reclassifying Sienna's native
