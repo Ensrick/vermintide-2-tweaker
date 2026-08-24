@@ -4,7 +4,7 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-> **Suite location:** `/crt_regression_test` lives in `scripts/mods/career_tweaker/_crt_regression.lua`. It locks the casting/transposition and #440 probe exclusion boundaries while requiring the read-only #221 census.
+> **Suite location:** `/crt_regression_test` lives in `scripts/mods/career_tweaker/_crt_regression.lua`. It locks the casting/transposition and retired #440 probe exclusion boundaries while requiring the read-only #221 census.
 
 Last updated: 2026-08-23.
 
@@ -72,9 +72,9 @@ Last updated: 2026-08-23.
 |-------|-------|
 | Symptom | Bardin is anecdotally less consistent at dodging Packmasters, Lifeleeches, or Gutter Runners. |
 | Source boundary | All profiles clone one dodge table. Packmaster/Lifeleech use common dodge status; Gutter uses root+0.2 trajectory, 1m trigger overlap, and `j_neck` tracking. Compiled player trigger geometry remains unverified. |
-| Fix version(s) | 0.3.68-dev diagnostic source; excluded from 0.4.0-beta |
+| Fix version(s) | 0.3.68-dev diagnostic source; excluded from 0.4.0-beta; retired from production in 0.4.26-beta |
 | Expected | The public beta installs no disabler/dodge hooks and emits no `[crt:440]` rows. |
-| Detection | `/crt_regression_test` must report `PASS: public_beta_issue_probes_disabled`; the name is retained for output stability and now covers the gameplay-affecting #440 probe only. Re-arm that dormant source only in a future co-op diagnostic build. |
+| Detection | Offline `test_crt_bardin_disabler_source_contract.lua` preserves the engine-source findings and proves the probe file/tick are absent. `/crt_regression_test` must report `PASS: public_beta_issue_probes_disabled`; the name is retained for output stability. Any future co-op investigation requires a newly reviewed bounded diagnostic owner. |
 
 ---
 ## No-op talent-menu close preserves live buffs (#283)

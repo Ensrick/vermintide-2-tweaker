@@ -64,17 +64,22 @@ not inspect dodge status at all: a successful dodge is purely spatial. Different
 compiled trigger or neck geometry could therefore influence a marginal pounce even
 though the Lua algorithm is profile-neutral.
 
-## Armed evidence
+## Historical diagnostic evidence
 
-`_crt_bardin_disabler_probe.lua` automatically logs `[crt:440]` rows. It emits one
+Career Tweaker 0.3.68-dev briefly packaged `_crt_bardin_disabler_probe.lua`,
+which automatically logged `[crt:440]` rows. It emitted one
 profile summary per hero encountered, at most 16 completed local dodge rows when a
 disabler is within 25 metres, then at most 16 resolution rows for each disabler
 type. Rows include profile, outcome, whether the common dodge status was
 active, elapsed dodge time, displacement, remaining dodge distance, attacker
 distance, root-to-neck height, actor count, and the disabler-specific tracking gate.
-No chat command is required and no gameplay value is written. In co-op, the client
+No chat command was required and no gameplay value was written. In co-op, the client
 log owns exact local dodge timing while the host log owns authoritative AI outcome;
-their timestamps provide the comparison without new RPC traffic.
+their timestamps provided the comparison without new RPC traffic. The dormant
+module was removed from production in 0.4.26-beta after its source findings were
+preserved in `test_crt_bardin_disabler_source_contract.lua`. A future live
+comparison requires a new bounded diagnostic owner; these instructions are not
+an active test card.
 
 Useful verification needs Bardin and at least one non-Bardin control under comparable
 latency, weapon and dodge direction. Repeated Packmaster, Lifeleech, and Gutter Runner
