@@ -258,7 +258,13 @@ Issue 386 scalar-pacing sanitizer: `hook_safe` on
 
 **`_evt_diagnostics.lua` — manifest position 12.**
 Read-only surfaces: `/event_probe`, `/event_active`, `/event_clear`, and the issue
-393 diagnostics-armed first-`Pacing.update` settled snapshot. No exports.
+393 diagnostics-armed first-`Pacing.update` settled snapshot. It also owns the
+bounded issue 1309 Tzeentch Twins host/client kill and replicated-spawn receipts,
+using the pure `_evt_diag_tzeentch_twins.lua` session policy. It exports
+`mod._evt.issue1309_on_mutator_activated` and
+`mod._evt.issue1309_flush_summary`; `_evt_cursed_adventure.lua` calls those from
+its existing activation and mission-exit hooks so diagnostics never compete for
+the same VMF hook seam.
 
 **`_evt_apply.lua` — manifest position 13.**
 Mid-game preset application (level reload plumbing), `/event_apply`, and

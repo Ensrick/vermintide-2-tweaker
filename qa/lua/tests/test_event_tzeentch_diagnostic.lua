@@ -1,6 +1,42 @@
 return function(H, repo_root)
-    local Probe = dofile(repo_root
-        .. "/event_tweaker/scripts/mods/event_tweaker/_evt_issue1309_probe.lua")
+    local mod_root = repo_root .. "/event_tweaker/scripts/mods/event_tweaker"
+    local path = mod_root .. "/_evt_diag_tzeentch_twins.lua"
+    local old_path = mod_root .. "/_evt_issue1309_probe.lua"
+    local owner_path = mod_root .. "/_evt_diagnostics.lua"
+    local Probe = dofile(path)
+
+    local function read(source_path)
+        local file = assert(io.open(source_path, "rb"))
+        local source = file:read("*a")
+        file:close()
+        return source
+    end
+
+    local function count_literal(source, needle)
+        local count = 0
+        local cursor = 1
+        while true do
+            local found = source:find(needle, cursor, true)
+            if not found then return count end
+            count = count + 1
+            cursor = found + #needle
+        end
+    end
+
+    H.test("Tzeentch diagnostic has one role-owned runtime consumer", function()
+        local old = io.open(old_path, "rb")
+        if old then old:close() end
+        H.equal(old, nil, "legacy probe path must stay absent")
+
+        local owner = read(owner_path)
+        H.equal(count_literal(owner,
+            'require("scripts/mods/event_tweaker/_evt_diag_tzeentch_twins")'), 1)
+        H.equal(count_literal(owner, 'ET.rt_register("issue1309_tzeentch_diag_armed"'), 1)
+
+        local diagnostic = read(path)
+        H.equal(count_literal(diagnostic, 'M.PREFIX = "[et:1149t]"'), 1)
+        H.equal(count_literal(diagnostic, "M.RECEIPT_CAP = 10"), 1)
+    end)
 
     H.test("Tzeentch diagnostic keeps the receipt prefix issue 1309 names", function()
         H.equal(Probe.PREFIX, "[et:1149t]")

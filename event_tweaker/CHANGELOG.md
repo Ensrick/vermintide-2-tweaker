@@ -1,5 +1,16 @@
 # Tweaker: Events — Changelog
 
+## 0.4.51-dev (2026-08-24) -- name Tzeentch Twins diagnostic by role (#499) [not-started]
+
+- Renames the active Tzeentch Twins session classifier to
+  `_evt_diag_tzeentch_twins.lua` so its filename describes the diagnostic role
+  rather than carrying an issue-numbered probe suffix.
+- Preserves the historical `[et:1149t]` receipt, existing issue ownership, ten-row
+  per-kill cap, one activation and summary per peer per mission, host/client
+  counters, hook topology, runtime exports, and regression identifier.
+- Removes one active `LegacyProbe` exception and adds exact coverage for the
+  retired path plus singleton loader, regression, prefix, and cap ownership.
+
 ## 0.4.50-dev (2026-08-24) -- name high-intensity diagnostic by role (#499) [not-started]
 
 - Renames the active high-intensity classifier to `_evt_diag_high_intensity.lua`

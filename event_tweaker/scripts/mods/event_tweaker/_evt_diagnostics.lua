@@ -25,7 +25,7 @@ local MUTATOR_CATALOG = Catalog.CATEGORIES
 local Curses          = require("scripts/mods/event_tweaker/event_tweaker_curses")
 local MANAGED_CURSES  = Curses.MANAGED_CURSES
 local Issue393        = require("scripts/mods/event_tweaker/_evt_diag_high_intensity")
-local Issue1309       = require("scripts/mods/event_tweaker/_evt_issue1309_probe")
+local Issue1309       = require("scripts/mods/event_tweaker/_evt_diag_tzeentch_twins")
 
 local gather_mutators                = ET.gather_mutators
 local suppress_live_event            = ET.suppress_live_event
