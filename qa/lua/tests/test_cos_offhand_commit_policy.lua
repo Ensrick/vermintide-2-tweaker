@@ -38,6 +38,53 @@ return function(H, repo_root)
         H.equal(mod._la_self_rebroadcast_pending, true)
     end)
 
+    H.test("Apply completion commits only the exact backend item without peer delivery", function()
+        local committed = {}
+        local persistence = {
+            commit_offhand_entry = function(entry)
+                committed[#committed + 1] = {
+                    backend_id = entry.backend_id,
+                    hand_field = entry.hand_field,
+                    skin_key = entry.skin_key,
+                }
+                return true, "saved-mesh"
+            end,
+        }
+        local count = Policy.commit_for_backend({
+            ["item_a|left_hand_unit"] = {
+                backend_id = "item_a",
+                hand_field = "left_hand_unit",
+                skin_key = "axe_blue_skin",
+                offhand_unit = "units/axe_blue",
+            },
+            ["item_b|left_hand_unit"] = {
+                backend_id = "item_b",
+                hand_field = "left_hand_unit",
+                skin_key = "axe_red_skin",
+                offhand_unit = "units/axe_red",
+            },
+        }, persistence, "item_a")
+        H.equal(count, 1)
+        H.equal(#committed, 1)
+        H.equal(committed[1].backend_id, "item_a")
+        H.equal(committed[1].hand_field, "left_hand_unit")
+        H.equal(committed[1].skin_key, "axe_blue_skin")
+    end)
+
+    H.test("Apply completion rejects a missing exact backend identity", function()
+        local calls = 0
+        local count = Policy.commit_for_backend({{
+            backend_id = "item_a",
+            hand_field = "left_hand_unit",
+            offhand_unit = "units/axe_blue",
+        }}, { commit_offhand_entry = function()
+            calls = calls + 1
+            return true
+        end }, nil)
+        H.equal(count, 0)
+        H.equal(calls, 0)
+    end)
+
     H.test("live offhand peer delivery emits both item namespaces once", function()
         local mod = new_mod()
         local persistence = {

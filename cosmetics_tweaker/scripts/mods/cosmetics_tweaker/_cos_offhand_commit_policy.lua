@@ -5,6 +5,36 @@
 -- existing bounded self-rebroadcast path converges after equipment exists.
 local M = {}
 
+local function _commit_entry(persistence, entry)
+    if persistence and type(persistence.commit_offhand_entry) == "function" then
+        return persistence.commit_offhand_entry(entry)
+    end
+    return false, "persistence-unavailable"
+end
+
+-- Apply completion is the durable transaction boundary. Do not defer the
+-- first persistence write to screen exit: the process can terminate or
+-- another mod can rebuild the view after Apply succeeds. This path is exact
+-- backend-item only and intentionally performs no peer delivery or re-wield;
+-- drain() retains ownership of those bounded exit-time effects.
+function M.commit_for_backend(pending, persistence, backend_id)
+    if type(backend_id) ~= "string" or backend_id == "" then return 0 end
+
+    local committed_count = 0
+    for _, entry in pairs(pending or {}) do
+        if type(entry) == "table" and entry.backend_id == backend_id then
+            local committed, action = _commit_entry(persistence, entry)
+            if committed then committed_count = committed_count + 1 end
+            if printf then
+                printf("[cos:702] OFFHAND-APPLY-COMMIT bid=%s hand=%s action=%s persisted=%s",
+                    tostring(entry.backend_id), tostring(entry.hand_field),
+                    tostring(action), tostring(committed))
+            end
+        end
+    end
+    return committed_count
+end
+
 local function _emit_for_key(send, entry, key, kind)
     if not key then return end
     if kind == "mesh" then
@@ -47,10 +77,7 @@ function M.drain(mod, pending, persistence, send_apply, is_alive)
 
     for _, entry in pairs(pending or {}) do
         if entry then
-            local committed, action = false, "persistence-unavailable"
-            if persistence and type(persistence.commit_offhand_entry) == "function" then
-                committed, action = persistence.commit_offhand_entry(entry)
-            end
+            local committed, action = _commit_entry(persistence, entry)
             local emitted = _emit_peer(mod, entry, send_apply,
                 entry.player_unit and is_alive(entry.player_unit))
             if committed then committed_count = committed_count + 1 end

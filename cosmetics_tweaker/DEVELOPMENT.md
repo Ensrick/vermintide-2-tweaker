@@ -372,6 +372,12 @@ bounded direct-mesh payload. Run
 instructions and the key schema are in `OFFHAND_ILLUSION_NAMES.md`.
 
 Committed direct meshes persist as `offhands[backend_id][left_hand_unit].unit_path`.
+The successful `_apply_weapon_skin_craft_complete` callback is the durable commit
+edge for both vanilla row 1 and Cosmetics' independent row 2. `on_exit` may emit
+and re-wield, but must not be the first durable write: closing the process or a
+cross-mod view rebuild can bypass that later callback. The row-2 commit filters
+the pending queue by exact backend ID and retains the component skin key so two
+instances cannot collapse into a template-wide choice.
 Restore and remote husk application accept the path only when it remains in the
 current item type's compatible left-hand pool. A salvaged item, removed variant,
 wrong hand, missing package, or mismatched family yields to the normal paired

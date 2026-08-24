@@ -6,6 +6,7 @@ return function(H, repo_root)
     local function fixture()
         local registrations = {}
         local installed_mods = {}
+        local apply_commits = {}
         local mod = {
             hook = function(_, class, method, callback)
                 registrations[#registrations + 1] = {
@@ -31,10 +32,21 @@ return function(H, repo_root)
                 close = function() end,
             },
             refresh_glow_editor_button = function() end,
+            offhand_commit = {
+                commit_for_backend = function(pending, persistence, backend_id)
+                    apply_commits[#apply_commits + 1] = {
+                        pending = pending,
+                        persistence = persistence,
+                        backend_id = backend_id,
+                    }
+                    return 1
+                end,
+            },
+            la_persist = { identity = "exact-persistence-owner" },
             debug = function() end,
             trace = function() end,
         })
-        return mod, owner, registrations, installed_mods
+        return mod, owner, registrations, installed_mods, apply_commits
     end
 
     H.test("Cosmetics #504 illusion owner registers its exact hook surface once", function()
@@ -83,5 +95,21 @@ return function(H, repo_root)
         H.equal(select(1, callback(function() return nil end, {}, "vanilla_unknown")), nil)
 
         ItemMasterList, script_data = old_iml, old_script
+    end)
+
+    H.test("Cosmetics #702 Apply completion commits the exact pending offhand", function()
+        local mod, _, hooks, _, commits = fixture()
+        mod._pending_la_emit_on_exit = {
+            ["item_a|left_hand_unit"] = {
+                backend_id = "item_a",
+                hand_field = "left_hand_unit",
+            },
+        }
+        hooks[8].callback({ _item_backend_id = "item_a" }, { ok = true })
+        H.equal(#commits, 1)
+        H.equal(commits[1].pending, mod._pending_la_emit_on_exit)
+        H.equal(commits[1].persistence.identity, "exact-persistence-owner")
+        H.equal(commits[1].backend_id, "item_a")
+        H.equal(mod._offhand_committed.item_a, true)
     end)
 end

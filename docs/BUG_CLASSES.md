@@ -1703,8 +1703,11 @@ illusions; assuming one spawn callback reaches every surface leaves previews,
 husks, swaps, or hot joins at vanilla state.
 
 Use an explicit transaction: clone committed state into preview state, mark dirty
-on edits, persist and emit only on Apply, make repeated Apply a no-op, and restore
-the committed snapshot on close. Persist owner state by exact backend item plus
+on edits, persist at the successful Apply completion edge, emit only after Apply,
+make repeated Apply a no-op, and restore the committed snapshot on close. A later
+screen-exit callback is not the Apply transaction: the view or process can end
+before it runs, and another mod can rebuild the view after completion. Persist
+owner state by exact backend item plus
 illusion. The wire payload must omit owner-local backend IDs and instead carry a
 wearer, active slot, illusion context, and validated glow components. Receivers
 cache by wearer and fail closed unless the spawned unit matches that context.
