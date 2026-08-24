@@ -297,6 +297,20 @@ return function(H, repo_root)
         H.equal(persist.get_saved_offhands_for("dual_instance_b").left_hand_unit.unit_path,
             "units/axe_red")
 
+        -- Simulate a full process restart by loading a fresh module instance
+        -- from the serialized setting captured by mod:set. The exact item
+        -- identities and component skin keys must remain distinct.
+        local reloaded = dofile(repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_la_persistence.lua")
+        H.equal(reloaded.get_saved_offhands_for("dual_instance_a").left_hand_unit.unit_path,
+            "units/axe_blue")
+        H.equal(reloaded.get_saved_offhands_for("dual_instance_a").left_hand_unit.vanilla_key,
+            "axe_blue_skin")
+        H.equal(reloaded.get_saved_offhands_for("dual_instance_b").left_hand_unit.unit_path,
+            "units/axe_red")
+        H.equal(reloaded.get_saved_offhands_for("dual_instance_b").left_hand_unit.vanilla_key,
+            "axe_red_skin")
+
         H.equal(persist.commit_offhand_entry({
             hand_field = "left_hand_unit", offhand_unit = "units/wrong",
         }), false)
@@ -346,6 +360,9 @@ return function(H, repo_root)
         main = main .. f:read("*a"); f:close()
         f = assert(io.open(persist_path, "rb")); local persist = f:read("*a"); f:close()
         f = assert(io.open(commit_path, "rb")); local commit = f:read("*a"); f:close()
+        f = assert(io.open(repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_modded_illusion_swap.lua", "rb"))
+        local illusion_swap = f:read("*a"); f:close()
         H.truthy(main:find('mod:hook(UIUtils, "get_ui_information_from_item"', 1, true))
         H.truthy(main:find('shield_icon_owner_item_types[item_type]', 1, true))
         H.truthy(main:find('inventory_icon = selected_inventory_icon', 1, true))
@@ -355,6 +372,8 @@ return function(H, repo_root)
         H.truthy(main:find("INSTANCE-PRUNE", 1, true))
         H.truthy(persist:find("M.commit_offhand_entry = function(entry)", 1, true))
         H.truthy(commit:find("persistence.commit_offhand_entry(entry)", 1, true))
+        H.truthy(commit:find("function M.commit_for_backend", 1, true))
+        H.truthy(illusion_swap:find("OFFHAND_COMMIT.commit_for_backend", 1, true))
         H.truthy(view_lifecycle:find("OFFHAND_COMMIT.drain", 1, true))
         H.equal(entry_only:find("OFFHAND_COMMIT.drain", 1, true), nil)
         H.equal(main:find("if entry and entry.player_unit and Unit.alive(entry.player_unit) then", 1, true), nil)

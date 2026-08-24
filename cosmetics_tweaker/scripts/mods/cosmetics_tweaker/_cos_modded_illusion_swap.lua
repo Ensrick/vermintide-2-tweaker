@@ -18,6 +18,8 @@ function M.install(mod, deps)
     local _custom_skin_keys = assert(deps.custom_skin_keys)
     local GlowPicker = assert(deps.glow_picker)
     local _refresh_glow_editor_button = assert(deps.refresh_glow_editor_button)
+    local OFFHAND_COMMIT = assert(deps.offhand_commit)
+    local LA_PERSIST = assert(deps.la_persist)
     local _dbg = assert(deps.debug)
     local _trace = assert(deps.trace)
     local _fake_skin_backend_ids = {}
@@ -234,6 +236,8 @@ function M.install(mod, deps)
         if self and self._item_backend_id then
             mod._offhand_committed = mod._offhand_committed or {}
             mod._offhand_committed[self._item_backend_id] = true
+            OFFHAND_COMMIT.commit_for_backend(
+                mod._pending_la_emit_on_exit, LA_PERSIST, self._item_backend_id)
             _trace("CRAFT apply_weapon_skin_craft_complete committed offhand bid=%s",
                 tostring(self._item_backend_id))
             if mod._cos925_publish_and_refresh then

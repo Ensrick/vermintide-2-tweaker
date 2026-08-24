@@ -26,6 +26,8 @@ return function(H, repo_root)
     local entry_only = read(cos_path)
     local view_lifecycle = read(repo_root
         .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_customization_view_lifecycle.lua")
+    local illusion_swap = read(repo_root
+        .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_modded_illusion_swap.lua")
     -- #1159: the exit-time OFFHAND_COMMIT.drain moved out of the entry into the
     -- view lifecycle owner, so it joins the offhand-family source this test reads.
     -- #1159: the husk vanilla-offhand mesh swap and the live-body selection
@@ -94,6 +96,8 @@ return function(H, repo_root)
         H.truthy(cos:find('if hand_field ~= "left_hand_unit" then return false end', 1, true))
         H.truthy(persist:find("M.commit_offhand_entry = function(entry)", 1, true))
         H.truthy(commit:find("persistence.commit_offhand_entry(entry)", 1, true))
+        H.truthy(commit:find("function M.commit_for_backend", 1, true))
+        H.truthy(illusion_swap:find("OFFHAND_COMMIT.commit_for_backend", 1, true))
         H.truthy(view_lifecycle:find("OFFHAND_COMMIT.drain", 1, true))
         H.equal(entry_only:find("OFFHAND_COMMIT.drain", 1, true), nil)
         H.truthy(cos:find("mod._la_offhand_restore_done = deferred == 0", 1, true))

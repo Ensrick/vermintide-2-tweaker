@@ -1,5 +1,16 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.217-dev (2026-08-24) -- persist dual-weapon offhands at Apply (#702) [verify-fix]
+
+- Makes successful **Apply** the durable persistence boundary for the exact
+  item's independent offhand illusion instead of waiting for the customization
+  screen to close. A process exit or cross-mod view rebuild can no longer save
+  the primary illusion while dropping the offhand.
+- Preserves the existing bounded exit-time peer emission and re-wield path; the
+  new Apply-time write adds no RPC, renderer, package load, or network traffic.
+- Adds exact-backend filtering, two-instance restart coverage, and an actual
+  completion-hook test so unrelated pending items cannot be committed together.
+
 ## 0.9.216-dev (2026-08-24) -- normalize the permanent glow diagnostic owner (#499) [not-started]
 
 - Renames the former `_cos_glow_probe.lua` issue-era owner to

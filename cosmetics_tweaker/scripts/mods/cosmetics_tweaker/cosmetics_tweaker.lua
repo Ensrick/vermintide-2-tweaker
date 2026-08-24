@@ -103,11 +103,10 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- Passive diagnostic emitter (printf, default-on, rate-limited). Drives the
 -- [cos:sync] grep channel in the user's post-playtest log (LA husk/shield sync
 -- divergence decisions, issues #149 #154 #200 #203 #204). See _cos_diag_lasync.lua.
--- (The [174:loadout] channel was retired with issue #174's fix; #500. File renamed
--- _diag_probe -> _cos_diag_lasync per PROJECT_STANDARDS §2.2b; #499.)
+-- ([174:loadout] retired with #174/#500; _diag_probe renamed per §2.2b/#499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.216-dev"
+local MOD_VERSION = "0.9.217-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -540,6 +539,7 @@ mod._cos_modded_illusion_swap_owner = MODDED_ILLUSION_SWAP.install(mod, {
     custom_skin_keys = _custom_skin_keys,
     glow_picker = GlowPicker,
     refresh_glow_editor_button = _refresh_glow_editor_button,
+    offhand_commit = OFFHAND_COMMIT, la_persist = LA_PERSIST,
     debug = _dbg,
     trace = _trace,
 })
