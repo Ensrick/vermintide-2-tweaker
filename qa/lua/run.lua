@@ -50,7 +50,7 @@ local suites = {
     "test_crt_ale_decay",
     "test_crt_feel_nothing",
     "test_crt_ale_animation",
-    "test_crt_bardin_disabler_probe",
+    "test_crt_bardin_disabler_source_contract",
     "test_crt_damage_classification",
     "test_crt_focused_spirit",
     "test_crt_rework_master_policy",

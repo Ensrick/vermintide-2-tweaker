@@ -1,5 +1,16 @@
 # Career Tweaker Changelog
 
+## 0.4.26-beta (2026-08-23) - retire dormant Bardin probe (#499, #440)
+
+- Removed the dormant, unloaded five-hook Bardin/disabler comparison probe and
+  its dead per-frame tick branch from the public beta package.
+- Preserved the empirical source contract as engine-free QA: all heroes still
+  clone the shared movement table, Packmaster and Lifeleech consume the common
+  dodge state, and Gutter Runner remains the distinct spatial/neck-node seam.
+- Strengthened the public-beta gate to reject the retired file itself, while
+  retaining the stable runtime check name `public_beta_issue_probes_disabled`.
+  No gameplay value, hook, setting, RPC, or player-visible behavior changed.
+
 ## 0.4.25-beta (2026-08-23) - canonical NetworkLookup registration (#428) [not-started]
 
 - Replaced Career Tweaker's two duplicate `NetworkLookup.buff_templates`

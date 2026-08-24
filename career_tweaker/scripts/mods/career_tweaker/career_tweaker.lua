@@ -3,7 +3,7 @@ local mod = get_mod("crt")
 -- concern module and this entry's lifecycle callbacks read/write it.
 mod._crt = mod._crt or {}
 
-local MOD_VERSION = "0.4.25-beta"
+local MOD_VERSION = "0.4.26-beta"
 mod._crt.MOD_VERSION = MOD_VERSION
 
 -- VMF mod-to-mod RPC schema (VMF_RECIPES section 10). Issue #776 appends the
@@ -439,9 +439,9 @@ if not ok_tmg then mod:error("Failed to load talent-menu no-op guard: %s", tostr
 local ok_dg, _dg = pcall(mod.dofile, mod, "scripts/mods/career_tweaker/_crt_diagnostics")
 if not ok_dg then mod:error("Failed to load diagnostics module: %s", tostring(_dg)) end
 
--- Public-beta boundary: the #440 co-op investigation probe is intentionally
--- inert. Its source remains available for a later diagnostic build, but no
--- gameplay/AI hooks are installed in this public beta.
+-- Public-beta boundary: the retired #440 co-op investigation never installs
+-- gameplay/AI hooks. The source audit and engine-free regression remain in QA;
+-- a future investigation must add a newly reviewed, bounded diagnostic owner.
 mod._crt.PUBLIC_BETA_BARDIN_PROBE_DISABLED = true
 
 -- Live #445/#446 group. Unlike the old BH example, both members are active and
@@ -810,8 +810,6 @@ mod.update = function(dt)
     if mod._crt_focused_spirit_tick then mod._crt_focused_spirit_tick(dt) end
     -- Auto-dump retry pump for reworked careers (no-op unless armed at StateIngame).
     if mod._crt_dump_retry_tick then mod._crt_dump_retry_tick(dt) end
-    -- #440 automatic profile summaries; self-throttled to once per second.
-    if mod._crt_bardin_disabler_tick then pcall(mod._crt_bardin_disabler_tick, dt) end
     foot_knight.tick(dt)
     -- #699 bounded HUD census. It records only Foot Knight icon-state
     -- transitions and is otherwise a read-only, self-throttled no-op.

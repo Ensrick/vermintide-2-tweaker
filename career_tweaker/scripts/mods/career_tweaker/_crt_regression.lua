@@ -946,7 +946,7 @@ _rt_register("public_beta_issue_probes_disabled", function()
     end
     if mod._crt.bardin_disabler_probe ~= nil
         or mod._crt_bardin_disabler_tick ~= nil then
-        return "the co-op Bardin investigation probe is active in the public beta"
+        return "the retired Bardin investigation probe is active in the public beta"
     end
 end)
 

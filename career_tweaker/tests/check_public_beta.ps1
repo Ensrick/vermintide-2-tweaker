@@ -22,6 +22,7 @@ Require (-not ($data -match 'setting_id\s*=\s*"career_swapping_group"')) 'castin
 Require (-not ($data -match 'setting_id\s*=\s*"talent_swap_')) 'casting/transposition setting is exposed'
 Require (-not ($entry -match 'pcall\s*\(\s*mod\.dofile[^\r\n]*_crt_talent_swap')) 'talent-swap module is loaded'
 Require (-not ($entry -match 'pcall\s*\(\s*mod\.dofile[\s\S]{0,120}_crt_bardin_disabler_probe')) 'Bardin probe is loaded'
+Require (-not (Test-Path -LiteralPath (Join-Path $sourceRoot '_crt_bardin_disabler_probe.lua') -PathType Leaf)) 'retired Bardin probe is still packaged'
 Require ($entry -match 'pcall\s*\(\s*mod\.dofile[\s\S]{0,120}_crt_umbrella_audit_policy') 'umbrella audit policy is not loaded'
 Require ($entry -match 'mod:command\s*\(\s*"crt_umbrella_audit"') 'umbrella audit command is not registered'
 Require (-not ($entry -match '(?m)^\s*apply_talent_swaps\s*\(')) 'talent swaps are applied'
@@ -36,5 +37,5 @@ if ($failures.Count -gt 0) {
     exit 1
 }
 
-Write-Host '[career beta contract] PASS - casting/transposition and Bardin probe are fail-closed; #221 census is armed.' -ForegroundColor Green
+Write-Host '[career beta contract] PASS - casting/transposition is fail-closed, the Bardin probe is retired, and #221 census is armed.' -ForegroundColor Green
 exit 0

@@ -20,11 +20,10 @@ the beta line: its widget group is absent and its module is never loaded.
 
 ## Hook table
 
-37 authored registrations (`tools/mod-lint/lint-mod.ps1 -Mod career_tweaker`
-PASS = one hook per (Class, method) mod-wide). The five hooks in the dormant
-#440 probe remain source for later diagnostics but do not execute; the public
-beta contract, rather than a hand-maintained count, proves the retired casting/
-transposition owner remains unloaded.
+32 authored registrations (`tools/mod-lint/lint-mod.ps1 -Mod career_tweaker`
+PASS = one hook per (Class, method) mod-wide). The former five-hook #440
+instrumentation is no longer packaged; the public-beta contract proves it stays
+absent while the source-only QA contract preserves the audited engine findings.
 `[hook]` = full wrapper (`mod:hook`, can rewrite args/returns); `[safe]` =
 `mod:hook_safe` (post-callback, no override); `[tbl]` = table-form hook
 (class/helper table passed by reference, immediate resolution, nil-guarded). The
@@ -85,8 +84,9 @@ issue-425 peer-parity beacon (`_lib_peer_parity.lua`) adds NO hooks - it POLLS
 
 | Class.method (kind) | Vanilla behavior | Why crt hooks it | Trap / invariant |
 |---|---|---|---|
-| `PlayerCharacterStateDodging.on_enter` / `.on_exit` [dormant source] `_crt_bardin_disabler_probe.lua` | Starts/ends the shared per-unit dodge state and networked `dodging` flag [src: `player_character_state_dodging.lua:38-93`] | No beta hook. | Probe source remains available for a later diagnostic build. |
-| `BTPackMasterAttackAction.attack_success` / `BTCorruptorGrabAction.grab_player` / `BTCrazyJumpAction.leave` [dormant source] `_crt_bardin_disabler_probe.lua` | Native disabler resolution seams. | No beta hook. | `/crt_regression_test` asserts the probe surface and tick are absent. |
+The retired #440 probe no longer contributes an engine surface. Its direct
+source assertions live in `test_crt_bardin_disabler_source_contract.lua`; a
+future runtime investigation must introduce a newly reviewed bounded owner.
 
 ## Subsystem notes (how the vanilla flow runs end-to-end, for crt's cases)
 
