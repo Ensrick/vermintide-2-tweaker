@@ -1,4 +1,4 @@
--- _evt_issue1309_probe.lua — pure session state for the Tzeentch Twins co-op diagnostic
+-- _evt_diag_tzeentch_twins.lua — pure session state for the Tzeentch Twins co-op diagnostic
 --
 -- Issue 1309 (owner report #1149): the Chaos Wastes curse curse_change_of_tzeentch
 -- reportedly does nothing for client peers while the weekly-modifier version of the
@@ -19,7 +19,7 @@
 -- value the curse compared against SPLIT_CHANCE without consuming the stream.
 --
 -- Owned by: event_tweaker.lua entry point. Consumed via:
--- require("scripts/mods/event_tweaker/_evt_issue1309_probe") from _evt_diagnostics.lua
+-- require("scripts/mods/event_tweaker/_evt_diag_tzeentch_twins") from _evt_diagnostics.lua
 
 local M = {}
 
