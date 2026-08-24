@@ -90,7 +90,7 @@ local suites = {
     "test_et_boss_ideas",
     "test_et_pacing_tick_guard",
     "test_rt_harness_context_absent",
-    "test_event_high_intensity_probe",
+    "test_event_high_intensity_diagnostic",
     "test_event_mission_allowlist",
     "test_event_curse_join_policy",
     "test_event_exact_curse_wire",

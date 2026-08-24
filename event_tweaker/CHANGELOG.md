@@ -1,5 +1,14 @@
 # Tweaker: Events — Changelog
 
+## 0.4.50-dev (2026-08-24) -- name high-intensity diagnostic by role (#499) [not-started]
+
+- Renames the active high-intensity classifier to `_evt_diag_high_intensity.lua`
+  so its filename describes its diagnostic role rather than carrying a legacy
+  probe suffix. The settled receipt, weak-key one-mission bound, runtime check,
+  hook, classifier behavior, and live high-intensity test contract are unchanged.
+- Removes one active `LegacyProbe` exception from the authoritative diagnostic
+  ownership registry and removes a stale hard-coded census from doctrine.
+
 ## 0.4.49-dev (2026-08-20) -- publication reconciliation
 
 - Rebuilds and publishes the already-reviewed 0.4.48-dev Prologue and
