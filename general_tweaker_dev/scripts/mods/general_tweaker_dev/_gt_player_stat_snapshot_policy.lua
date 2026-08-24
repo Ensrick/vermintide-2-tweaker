@@ -1,4 +1,4 @@
--- _gt_player_stat_probe_core.lua -- pure bounded issue #797 stat policy.
+-- _gt_player_stat_snapshot_policy.lua -- pure bounded player-stat policy.
 --
 -- BuffExtension does not retain an independently addressable contribution for
 -- every talent/property. It retains application stages keyed by 0, by a

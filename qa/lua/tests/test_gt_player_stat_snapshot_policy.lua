@@ -1,6 +1,6 @@
 return function(H, repo_root)
     local core = dofile(repo_root
-        .. "/general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_player_stat_probe_core.lua")
+        .. "/general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_player_stat_snapshot_policy.lua")
     local hud = dofile(repo_root
         .. "/general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_player_stat_hud_policy.lua")
     local function read(path)
@@ -427,6 +427,7 @@ return function(H, repo_root)
         local source = read(repo_root
             .. "/general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_diag_player_stats.lua")
         for _, marker in ipairs({
+            'mod:dofile("scripts/mods/general_tweaker_dev/_gt_player_stat_snapshot_policy")',
             'mod._gt_register_update("gt797_player_stat_probe", _update)',
             'mod:command("gt_stat_probe"',
             'mod:command("gt_stat_trace"',
@@ -455,6 +456,7 @@ return function(H, repo_root)
         H.equal(source:find("mod:network_", 1, true), nil)
         H.equal(source:find("mod:hook", 1, true), nil)
         H.equal(source:find("mod:echo", 1, true), nil)
+        H.equal(source:find("_gt_player_stat_probe_core", 1, true), nil)
         H.equal(source:find("buff:apply_buffs_to_value", 1, true), nil)
         H.equal(source:find("UIRenderer.draw_rect", 1, true), nil)
 

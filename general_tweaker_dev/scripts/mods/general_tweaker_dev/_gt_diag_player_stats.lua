@@ -9,7 +9,7 @@
 -- luacheck: globals MeleeBuffTypes RangedBuffTypes DamageProfileTemplates
 
 local mod = get_mod("gt_dev")
-local core = mod:dofile("scripts/mods/general_tweaker_dev/_gt_player_stat_probe_core")
+local core = mod:dofile("scripts/mods/general_tweaker_dev/_gt_player_stat_snapshot_policy")
 local hud = mod:dofile("scripts/mods/general_tweaker_dev/_gt_player_stat_hud_policy")
 local clock, next_poll, trace = 0, 0, nil
 local cache = core.new_cache()
