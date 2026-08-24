@@ -404,7 +404,7 @@
         }
         @{
             Marker='[gt:753]'; ModId='gt_dev'
-            ModTrees=@{gt_dev='1e8c7a9e56a3c360a89f920a2372366cc121ae9e'}
+            ModTrees=@{gt_dev='386402c8860469e5cae77dd48056be73a4df531e'}
             SourcesByMod=@{gt_dev='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_diag_disconnect_failure.lua'}
             Signature='[gt:753] edge=steam_check steam_connected=%s backend_disconnected=%s observed=%s'
             Bound='one receipt per observed Steam connection-state edge; unchanged title-network checks are silent'
@@ -416,7 +416,7 @@
         }
         @{
             Marker='[gt:753]'; ModId='gt_dev'
-            ModTrees=@{gt_dev='1e8c7a9e56a3c360a89f920a2372366cc121ae9e'}
+            ModTrees=@{gt_dev='386402c8860469e5cae77dd48056be73a4df531e'}
             SourcesByMod=@{gt_dev='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_diag_disconnect_failure.lua'}
             Signature='[gt:753] edge=playfab_disconnect steam_connected=%s backend_disconnected=%s last_reason=%s observed=%s'
             Bound='one receipt per observed backend false-to-true disconnected edge'
@@ -428,7 +428,7 @@
         }
         @{
             Marker='[gt:753]'; ModId='gt_dev'
-            ModTrees=@{gt_dev='1e8c7a9e56a3c360a89f920a2372366cc121ae9e'}
+            ModTrees=@{gt_dev='386402c8860469e5cae77dd48056be73a4df531e'}
             SourcesByMod=@{gt_dev='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_diag_disconnect_failure.lua'}
             Signature='[gt:753] edge=network_client reason=%s channel_before=%s channel_after=%s steam_connected=%s backend_disconnected=%s observed=%s'
             Bound='one receipt per observed network-client failure edge; unchanged update frames are silent'
@@ -440,7 +440,7 @@
         }
         @{
             Marker='[gt:753]'; ModId='gt_dev'
-            ModTrees=@{gt_dev='1e8c7a9e56a3c360a89f920a2372366cc121ae9e'}
+            ModTrees=@{gt_dev='386402c8860469e5cae77dd48056be73a4df531e'}
             SourcesByMod=@{gt_dev='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_diag_disconnect_failure.lua'}
             Signature='[gt:753] armed: steam_check=1 playfab_disconnect=1 network_client=1 transition_only=yes'
             Bound='one terminal armed receipt during module evaluation'
@@ -470,7 +470,7 @@
         }
         @{
             Marker='[gt:347]'; ModId='gt_dev'
-            ModTrees=@{gt_dev='1e8c7a9e56a3c360a89f920a2372366cc121ae9e'}
+            ModTrees=@{gt_dev='386402c8860469e5cae77dd48056be73a4df531e'}
             SourcesByMod=@{gt_dev='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_pickups.lua'}
             Signature='[gt:347] phase=%s '
             Bound='one signature-deduplicated phase row under the explicit probe 16-record cap'
@@ -482,7 +482,7 @@
         }
         @{
             Marker='[gt:347]'; ModId='gt_dev'
-            ModTrees=@{gt_dev='1e8c7a9e56a3c360a89f920a2372366cc121ae9e'}
+            ModTrees=@{gt_dev='386402c8860469e5cae77dd48056be73a4df531e'}
             SourcesByMod=@{gt_dev='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_pickups.lua'}
             Signature='[gt:347] trace complete records=%d classifications=%d'
             Bound='one terminal cap row when the explicit probe reaches its 16-record budget'
@@ -494,7 +494,7 @@
         }
         @{
             Marker='[gt:347]'; ModId='gt_dev'
-            ModTrees=@{gt_dev='1e8c7a9e56a3c360a89f920a2372366cc121ae9e'}
+            ModTrees=@{gt_dev='386402c8860469e5cae77dd48056be73a4df531e'}
             SourcesByMod=@{gt_dev='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_pickups.lua'}
             Signature='[gt:347] ARMED max_records=%d max_classifications=%d instant_pickup=%s greedy_pickup=%s'
             Bound='one armed receipt per explicit /gt_chest_pickup_probe invocation'
@@ -506,7 +506,7 @@
         }
         @{
             Marker='[gt:1143]'; ModId='gt_dev'
-            ModTrees=@{gt_dev='1e8c7a9e56a3c360a89f920a2372366cc121ae9e'}
+            ModTrees=@{gt_dev='386402c8860469e5cae77dd48056be73a4df531e'}
             SourcesByMod=@{gt_dev='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_dev_heal.lua'}
             Signature='[gt:1143] heal result=%s route=%s before=%s after=%s max=%s wounded_before=%s wounded_after=%s elapsed=%.3f reason=%s record=%d'
             Bound='one terminal success, rejection, timeout, or lifecycle-cancel receipt per explicit /heal request transaction'
@@ -1050,7 +1050,7 @@
             )
         }
         @{
-            ModId='gt_dev'; ModTree='1e8c7a9e56a3c360a89f920a2372366cc121ae9e'
+            ModId='gt_dev'; ModTree='386402c8860469e5cae77dd48056be73a4df531e'
             Source='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_hazard_resistance.lua'
             Marker='[gt:488]'; AddRoute=$true
             Signature='[gt:488] bot-hazard type=%s milestone=%s active_before=%d active_after=%d damage_in=%.3f damage_out=%.3f record=%d/%d'
@@ -1066,7 +1066,7 @@
             )
         }
         @{
-            ModId='gt_dev'; ModTree='1e8c7a9e56a3c360a89f920a2372366cc121ae9e'
+            ModId='gt_dev'; ModTree='386402c8860469e5cae77dd48056be73a4df531e'
             Source='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_improved_bot_combat.lua'
             Marker='[gt:488]'; AddRoute=$true
             Signature='[gt:488] ratling-shield state=%d/%d wielded=%s wielded_template=%s wielded_shield=%s melee_template=%s melee_shield=%s blocking=%s projectile_hit=%s victim_self=%s taking_cover=%s input=%s mutation=0'

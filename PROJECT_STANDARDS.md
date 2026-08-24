@@ -252,10 +252,9 @@ that list; rename or retire one owning mod transaction at a time.
   uses `gut_regression_test`. Align dev to `gut_regression_test` on the next
   gut_dev touch (bare `regression_test` is the collision the gt prefix rule in
   `docs/COMMANDS.md` was written to avoid).
-- The checked-in census currently records 28 production owners: 16 active issue
-  diagnostics, two exact standing owners, two permanent-policy owners, and eight
-  temporary retirement rows. The manifest is authoritative; prose inventories
-  must not duplicate its paths and drift again.
+- `qa/diagnostic_ownership.psd1` is the authoritative production-owner census.
+  Do not duplicate its changing counts or paths in prose; every migration must
+  update the manifest and its self-tests in the same change.
 
 Cross-ref: §3.5 (diagnostic dump commands), §3.6 (printf vs VMF logging), §3.7
 (probe-first data harness), §5.1a (verify before shipping), §5.3 (pre-ship
