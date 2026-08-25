@@ -1174,7 +1174,7 @@ function Get-VtExceptionSourcePaths {
         $default=([string]$group.Default -replace '\\','/').Trim()
         if($default){$null=$paths.Add($default)}
         foreach($anchor in @($group.Override.EmitterAnchors)+@($group.Override.GuardAnchors)){
-            $source=if($anchor.Source){([string]$anchor.Source -replace '\\','/').Trim()}else{$default}
+            $source=Get-VtReceiptAnchorSource -Anchor $anchor -DefaultSource $default
             if($source){$null=$paths.Add($source)}
         }
     }
@@ -1215,9 +1215,31 @@ function Set-VtStructuralReceiptBounds {
     }
 }
 
+function Get-VtReceiptAnchorTokens {
+    param($Anchor)
+    if($Anchor -is [Collections.IDictionary]){return @($Anchor['Tokens'])}
+    if($Anchor -is [string]){
+        return @(Get-VtLuaTokens -Content ([string]$Anchor) | ForEach-Object {
+            if([string]$_.Kind -ceq 'String'){'String:'+ [string]$_.Value}else{[string]$_.Text}
+        })
+    }
+    if($Anchor -is [Array]){return @($Anchor)}
+    return @()
+}
+
+function Get-VtReceiptAnchorSource {
+    param($Anchor,[string]$DefaultSource)
+    if($Anchor -is [Collections.IDictionary] -and $Anchor.Contains('Source')){
+        $source=([string]$Anchor['Source'] -replace '\\','/').Trim()
+        if($source){return $source}
+    }
+    return ([string]$DefaultSource -replace '\\','/').Trim()
+}
+
 function Test-VtTokenAnchor {
     param($Tokens,$Anchor)
-    $specs=@($Anchor.Tokens)
+    $specs=@(Get-VtReceiptAnchorTokens -Anchor $Anchor)
+    if($specs.Count -eq 0){return $false}
     return [VtLiveCardLuaLexerV2]::ContainsAnchor(
         [VtLiveCardLuaTokenV2[]]@($Tokens),[string[]]$specs)
 }
@@ -1260,13 +1282,13 @@ function Set-VtReceiptOverrideBounds {
             throw "Malformed receipt-route override for '$ModId' '$source' '$signature'."
         }
         foreach($anchor in @($override.EmitterAnchors)){
-            $anchorSource=if($anchor.Source){([string]$anchor.Source -replace '\\','/').Trim()}else{$source}
+            $anchorSource=Get-VtReceiptAnchorSource -Anchor $anchor -DefaultSource $source
             if(-not$byPath.ContainsKey($anchorSource) -or -not(Test-VtTokenAnchor -Tokens @($byPath[$anchorSource].Tokens) -Anchor $anchor)){
                 throw "Receipt-route override emitter anchor drift for '$ModId' '$source' '$signature'."
             }
         }
         foreach($anchor in @($override.GuardAnchors)){
-            $anchorSource=if($anchor.Source){([string]$anchor.Source -replace '\\','/').Trim()}else{$source}
+            $anchorSource=Get-VtReceiptAnchorSource -Anchor $anchor -DefaultSource $source
             if(-not$byPath.ContainsKey($anchorSource) -or -not(Test-VtTokenAnchor -Tokens @($byPath[$anchorSource].Tokens) -Anchor $anchor)){
                 throw "Receipt-route override guard anchor drift for '$ModId' '$source' '$signature'."
             }
@@ -1301,7 +1323,7 @@ function Test-VtReceiptOverrideDefinition {
 function Test-VtDocumentAnchors {
     param($ByPath,$Override,[string]$DefaultSource,[string]$Context)
     foreach($anchor in @($Override.EmitterAnchors)+@($Override.GuardAnchors)){
-        $anchorSource=if($anchor.Source){([string]$anchor.Source -replace '\\','/').Trim()}else{$DefaultSource}
+        $anchorSource=Get-VtReceiptAnchorSource -Anchor $anchor -DefaultSource $DefaultSource
         if(-not$ByPath.ContainsKey($anchorSource) -or -not(Test-VtTokenAnchor -Tokens @($ByPath[$anchorSource].Tokens) -Anchor $anchor)){
             throw "$Context anchor drift for '$($Override.Marker)' '$DefaultSource' '$($Override.Signature)'."
         }
@@ -1364,7 +1386,7 @@ function Set-VtReceiptDiscoveryOverrides {
         $documents=@($DocumentsByMod[$modId]);$byPath=@{};foreach($document in $documents){$byPath[[string]$document.RelativePath]=$document}
         if(-not$byPath.ContainsKey($source)){throw "Receipt discovery source missing for '$modId': $source."}
         foreach($anchor in @($override.EmitterAnchors)){
-            $anchorSource=if($anchor.Source){([string]$anchor.Source -replace '\\','/').Trim()}else{$source}
+            $anchorSource=Get-VtReceiptAnchorSource -Anchor $anchor -DefaultSource $source
             if(-not$byPath.ContainsKey($anchorSource) -or -not(Test-VtTokenAnchor @($byPath[$anchorSource].Tokens) $anchor)){
                 throw "Receipt discovery emitter anchor drift for '$modId' '$signature'."
             }

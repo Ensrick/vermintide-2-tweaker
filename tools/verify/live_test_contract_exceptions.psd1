@@ -134,30 +134,6 @@
             Bound = 'Boot/catalog work is finite, parity emits on applied-state edges, and selection emits at most once per gather_mutators transaction.'
         }
         @{
-            Marker = '[crt:728]'
-            ModId = 'crt'
-            Sources = @(
-                'career_tweaker/scripts/mods/career_tweaker/_crt_career_unlock.lua'
-            )
-            Bound = 'Finite catalog summaries are digest-deduplicated; UI refresh emits once per explicit relevant setting change.'
-        }
-        @{
-            Marker = '[ct:349]'
-            ModId = 'ct_dev'
-            Sources = @(
-                'chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_cursed_chest132.lua'
-            )
-            Bound = 'The finalized guard permits one settled audit receipt per mission generation.'
-        }
-        @{
-            Marker = '[ct:132]'
-            ModId = 'ct_dev'
-            Sources = @(
-                'chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_cursed_chest132.lua'
-            )
-            Bound = 'The finite mission population emits once per spawned chest plus at most one over-cap reconciliation row during one-shot finalization.'
-        }
-        @{
             Marker = '[ct:vaul]'
             ModId = 'ct_dev'
             Sources = @(
@@ -207,36 +183,12 @@
             Bound = 'The catalog mutation emits at most once per balance-reconciliation transaction.'
         }
         @{
-            Marker = '[mp:577]'
-            ModId = 'mp'
-            Sources = @(
-                'modded_progression/scripts/mods/modded_progression/modded_progression.lua'
-            )
-            Bound = 'Exactly one terminal committed-or-rejected receipt is emitted per explicit purchase attempt.'
-        }
-        @{
-            Marker = '[mp:607]'
-            ModId = 'mp'
-            Sources = @(
-                'modded_progression/scripts/mods/modded_progression/_mp_loot_diag_runtime.lua'
-            )
-            Bound = 'Each one-mission diagnostic run crosses a finite set of native seams; every hook invocation emits at most one event or observer-error row and the persisted ledger retains at most twelve records.'
-        }
-        @{
             Marker = '[gut:717]'
             ModId = 'gut_dev'
             Sources = @(
                 'gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_mod_tweaker_contracts.lua'
             )
             Bound = 'The receipt is emitted at most once per explicit /gut_regression_test invocation.'
-        }
-        @{
-            Marker = '[gt:753]'
-            ModId = 'gt_dev'
-            Sources = @(
-                'general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_diag_disconnect_failure.lua'
-            )
-            Bound = 'One armed receipt at load and one receipt per guarded connection-state transition.'
         }
         @{
             Marker = '[et:1123]'
@@ -254,6 +206,44 @@
     # and ModTrees make multi-artifact families explicit rather than pooling
     # evidence across builds.
     ReceiptFamilyOverrides = @(
+        # #577: exchange_chips terminates through one of two exact receipt
+        # families. Both rejection callsites return before the transaction can
+        # reach another terminal route; commit follows successful validation,
+        # local purchase, and overlay synchronization only.
+        @{
+            Marker='[mp:577]'; ModId='mp'
+            ModTrees=@{mp='9d00a1b341cb445fcb937c4ce128383021b16abb'}
+            SourcesByMod=@{mp='modded_progression/scripts/mods/modded_progression/modded_progression.lua'}
+            Signature='[mp:577] purchase_rejected item=%s reason=%s backend=none'
+            Bound='at most one rejection receipt per explicit modded-realm Silver Shilling exchange attempt; both failure branches return before subsequent terminal routes'
+            EmitterAnchors=@(
+                'if not plan then pcall(printf, "[mp:577] purchase_rejected item=%s reason=%s backend=none"'
+                'if not granted then pcall(printf, "[mp:577] purchase_rejected item=%s reason=%s backend=none"'
+            )
+            GuardAnchors=@(
+                'mod:hook("BackendInterfacePeddlerPlayFab", "exchange_chips"'
+                'if _is_mp_realm() and chip_type == Dailies.REWARD_KIND then'
+                'tostring(reason)) if callback_fn then callback_fn(false) end return end'
+                'tostring(balance_or_reason)) if callback_fn then callback_fn(false) end return end'
+            )
+        }
+        @{
+            Marker='[mp:577]'; ModId='mp'
+            ModTrees=@{mp='9d00a1b341cb445fcb937c4ce128383021b16abb'}
+            SourcesByMod=@{mp='modded_progression/scripts/mods/modded_progression/modded_progression.lua'}
+            Signature='[mp:577] purchase_committed item=%s price=%d balance=%d overlay=%s backend=none'
+            Bound='at most one commit receipt per explicit modded-realm Silver Shilling exchange attempt after successful validation and purchase'
+            EmitterAnchors=@(
+                'pcall(printf, "[mp:577] purchase_committed item=%s price=%d balance=%d overlay=%s backend=none"'
+            )
+            GuardAnchors=@(
+                'mod:hook("BackendInterfacePeddlerPlayFab", "exchange_chips"'
+                'if _is_mp_realm() and chip_type == Dailies.REWARD_KIND then'
+                'local granted, balance_or_reason = Dailies.purchase(plan)'
+                'local overlaid, overlay_reason = _mp577_sync_overlay(self)'
+                'if callback_fn then callback_fn(true, { granted }) end return end return func(self, item_id, chip_type, price, callback_fn, ...)'
+            )
+        }
         @{
             Marker='[crt:728]'; ModId='crt'
             ModTrees=@{crt='f5c6119664b8fd02d82737af76c7c21bb08ed87c'}
@@ -1145,7 +1135,7 @@
             )
         }
         @{
-            ModId='enemy_tweaker'; ModTree='5ab0ce5169660a18d97b9419857077bf4a2403e3'
+            ModId='enemy_tweaker'; ModTree='b991f0c9e7c738179e4b06727e24fe3ddfa6751c'
             Source='enemy_tweaker/scripts/mods/enemy_tweaker/_et_enemy_modifiers.lua'
             Marker='[et:453]'; AddRoute=$true
             Signature='[et:453] modifier-audit reason=%s modifiers=%d template_missing=%d wire_missing=%d enhancement_missing=%d child_missing=%d child_wire_missing=%d function_missing=%d special=%d boss=%d elite=%d lord=%d behavior_changes=0'
@@ -1160,7 +1150,7 @@
             )
         }
         @{
-            ModId='enemy_tweaker'; ModTree='5ab0ce5169660a18d97b9419857077bf4a2403e3'
+            ModId='enemy_tweaker'; ModTree='b991f0c9e7c738179e4b06727e24fe3ddfa6751c'
             Source='enemy_tweaker/scripts/mods/enemy_tweaker/_et_enemy_modifiers.lua'
             Marker='[et:453]'; AddRoute=$true
             Signature='[et:453] %s family=%s enhancement=%s buff=%s template=%s wire=%s enhancement_contains=%s chain_templates=%d chain_functions=%d chain_gaps=%d capped=%s'
@@ -1176,7 +1166,7 @@
             )
         }
         @{
-            ModId='enemy_tweaker'; ModTree='5ab0ce5169660a18d97b9419857077bf4a2403e3'
+            ModId='enemy_tweaker'; ModTree='b991f0c9e7c738179e4b06727e24fe3ddfa6751c'
             Source='enemy_tweaker/scripts/mods/enemy_tweaker/_et_enemy_modifiers.lua'
             Marker='[et:453]'; AddRoute=$true
             Signature='[et:453] live category=%s breed=%s sample=%d/%d eligible=%d eligible_sample=%s rejected_banned=%d rejected_buff=%d rejected_prereq=%d buff=%s health=%s blackboard=%s nav=%s position=%s side=%s race=%s go_id=%s existing_enhancements=%d mutation=0'
@@ -1192,7 +1182,7 @@
             )
         }
         @{
-            ModId='enemy_tweaker'; ModTree='5ab0ce5169660a18d97b9419857077bf4a2403e3'
+            ModId='enemy_tweaker'; ModTree='b991f0c9e7c738179e4b06727e24fe3ddfa6751c'
             Source='enemy_tweaker/scripts/mods/enemy_tweaker/_et_enemy_modifiers.lua'
             Marker='[et:453]'; AddRoute=$true
             Signature='[et:453] modifier-audit ready modifiers=%d gaps=%d command=/et_modifier_audit behavior_changes=0'
@@ -1349,7 +1339,7 @@
             )
         }
         @{
-            ModId='enemy_tweaker'; ModTree='5ab0ce5169660a18d97b9419857077bf4a2403e3'
+            ModId='enemy_tweaker'; ModTree='b991f0c9e7c738179e4b06727e24fe3ddfa6751c'
             Source='enemy_tweaker/scripts/mods/enemy_tweaker/_et_skaven_warlord_breed.lua'
             Marker='[et:324]'; AddRoute=$true
             Signature='[et:324] spawn#%d t=+%ss %s'

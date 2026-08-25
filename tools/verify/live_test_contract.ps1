@@ -245,6 +245,148 @@ end)
         Assert-VtContractFixture (@($routes.Signature) -contains '[fx:alias-ok] status=%s') 'One-hop raw printf injection was not recovered.'
         Assert-VtContractFixture (@($routes.Signature) -contains '[fx:pcall-reachable] status=loaded') 'Literal pcall(mod.dofile, mod, path) reachability was not recovered.'
 
+        # #577: a marker family with two terminal signatures is admitted only
+        # route-by-route. The rejection signature has two distinct emitters,
+        # and both early returns are part of its finite-output proof.
+        $familyTree = 'c' * 40
+        $familyPath = 'fixture_mod/scripts/mods/fixture_mod/_family577.lua'
+        $familySource = @'
+mod:hook("BackendInterfacePeddlerPlayFab", "exchange_chips", function(func, self, item_id, chip_type, price, callback_fn, ...)
+    if _is_mp_realm() and chip_type == Dailies.REWARD_KIND then
+        local plan, reason = validate(item_id)
+        if not plan then
+            pcall(printf, "[fx:577] purchase_rejected item=%s reason=%s backend=none",
+                tostring(item_id), tostring(reason))
+            if callback_fn then callback_fn(false) end
+            return
+        end
+        local granted, balance_or_reason = purchase(plan)
+        if not granted then
+            pcall(printf, "[fx:577] purchase_rejected item=%s reason=%s backend=none",
+                tostring(item_id), tostring(balance_or_reason))
+            if callback_fn then callback_fn(false) end
+            return
+        end
+        local overlaid, overlay_reason = sync_overlay(self)
+        pcall(printf, "[fx:577] purchase_committed item=%s price=%d balance=%d overlay=%s backend=none",
+            tostring(item_id), plan.price, balance_or_reason, tostring(overlaid or overlay_reason))
+        if callback_fn then callback_fn(true, { granted }) end
+        return
+    end
+    return func(self, item_id, chip_type, price, callback_fn, ...)
+end)
+
+function mod.update()
+    printf("[fx:577] purchase_committed item=%s price=%d balance=%d overlay=%s backend=none forged")
+end
+'@
+        $familyOverrides = @(
+            @{
+                Marker='[fx:577]';ModId='fixture';ModTrees=@{fixture=$familyTree}
+                SourcesByMod=@{fixture=$familyPath}
+                Signature='[fx:577] purchase_rejected item=%s reason=%s backend=none'
+                Bound='two failure branches terminate before any later terminal route'
+                EmitterAnchors=@(
+                    'if not plan then pcall(printf, "[fx:577] purchase_rejected item=%s reason=%s backend=none"'
+                    'if not granted then pcall(printf, "[fx:577] purchase_rejected item=%s reason=%s backend=none"'
+                )
+                GuardAnchors=@(
+                    'mod:hook("BackendInterfacePeddlerPlayFab", "exchange_chips"'
+                    'if _is_mp_realm() and chip_type == Dailies.REWARD_KIND then'
+                    'tostring(reason)) if callback_fn then callback_fn(false) end return end'
+                    'tostring(balance_or_reason)) if callback_fn then callback_fn(false) end return end'
+                )
+            }
+            @{
+                Marker='[fx:577]';ModId='fixture';ModTrees=@{fixture=$familyTree}
+                SourcesByMod=@{fixture=$familyPath}
+                Signature='[fx:577] purchase_committed item=%s price=%d balance=%d overlay=%s backend=none'
+                Bound='one commit after successful validation and purchase'
+                EmitterAnchors=@(
+                    'pcall(printf, "[fx:577] purchase_committed item=%s price=%d balance=%d overlay=%s backend=none"'
+                )
+                GuardAnchors=@(
+                    'mod:hook("BackendInterfacePeddlerPlayFab", "exchange_chips"'
+                    'if _is_mp_realm() and chip_type == Dailies.REWARD_KIND then'
+                    'local granted, balance_or_reason = purchase(plan)'
+                    'local overlaid, overlay_reason = sync_overlay(self)'
+                    'if callback_fn then callback_fn(true, { granted }) end return end return func(self, item_id, chip_type, price, callback_fn, ...)'
+                )
+            }
+        )
+        $invokeFamily577 = {
+            param([string]$Source, [string]$RecordTree, $Overrides, [string]$SourcePath = $familyPath)
+            $document = [pscustomobject]@{
+                RelativePath=$SourcePath
+                Content=$Source
+                Tokens=@(Get-VtLuaTokens -Content $Source)
+            }
+            $scan = Get-VtDirectLuaCallRoutes -Document $document
+            $record = [pscustomobject]@{
+                ModId='fixture'
+                ModTree=$RecordTree
+                ReceiptRoutes=@($scan.ReceiptRoutes)
+            }
+            Set-VtReceiptFamilyOverrides -Records @($record) -DocumentsByMod @{fixture=@($document)} `
+                -Exceptions @{ReceiptFamilyOverrides=@($Overrides)}
+            return $record
+        }
+        $familyRecord = & $invokeFamily577 $familySource $familyTree $familyOverrides
+        $familyReject = @($familyRecord.ReceiptRoutes | Where-Object {
+            [string]$_.Signature -ceq '[fx:577] purchase_rejected item=%s reason=%s backend=none'
+        })
+        $familyCommit = @($familyRecord.ReceiptRoutes | Where-Object {
+            [string]$_.Signature -ceq '[fx:577] purchase_committed item=%s price=%d balance=%d overlay=%s backend=none'
+        })
+        Assert-VtContractFixture ($familyReject.Count -eq 2 -and @($familyReject | Where-Object { -not $_.Bound }).Count -eq 0) 'Both rejection callsites were not independently bounded.'
+        Assert-VtContractFixture ($familyCommit.Count -eq 1 -and $familyCommit[0].Bound) 'Committed terminal route was not independently bounded.'
+        Assert-VtContractFixture (@($familyRecord.ReceiptRoutes | Where-Object {
+            [string]$_.Signature -like '[[]fx:577[]]*forged' -and $_.Bound
+        }).Count -eq 0) 'A forged marker-family suffix borrowed the committed-route bound.'
+
+        $assertFamily577Rejected = {
+            param([string]$MutatedSource, [string]$ExpectedError, [string]$Message)
+            $rejected = $false
+            try { & $invokeFamily577 $MutatedSource $familyTree $familyOverrides | Out-Null }
+            catch { $rejected = [string]$_.Exception.Message -match $ExpectedError }
+            Assert-VtContractFixture $rejected $Message
+        }
+        $noFirstReturn = $familySource.Replace(@'
+                tostring(item_id), tostring(reason))
+            if callback_fn then callback_fn(false) end
+            return
+'@, @'
+                tostring(item_id), tostring(reason))
+            if callback_fn then callback_fn(false) end
+'@)
+        & $assertFamily577Rejected $noFirstReturn 'anchor drift' 'Removing the first rejection return did not fail closed.'
+        $noSecondReturn = $familySource.Replace(@'
+                tostring(item_id), tostring(balance_or_reason))
+            if callback_fn then callback_fn(false) end
+            return
+'@, @'
+                tostring(item_id), tostring(balance_or_reason))
+            if callback_fn then callback_fn(false) end
+'@)
+        & $assertFamily577Rejected $noSecondReturn 'anchor drift' 'Removing the second rejection return did not fail closed.'
+        & $assertFamily577Rejected ($familySource.Replace('"exchange_chips"', '"exchange_tokens"')) 'anchor drift' 'Changing the owning hook did not fail closed.'
+        & $assertFamily577Rejected ($familySource.Replace('if _is_mp_realm() and chip_type == Dailies.REWARD_KIND then', 'if _is_mp_realm() or chip_type == Dailies.REWARD_KIND then')) 'anchor drift' 'Changing the realm/currency gate did not fail closed.'
+        & $assertFamily577Rejected ($familySource.Replace('[fx:577] purchase_rejected item=%s reason=%s backend=none', '[fx:577] purchase_rejected item=%s reason=%s backend=local')) 'anchor drift' 'Changing the rejection format string did not fail closed.'
+        & $assertFamily577Rejected ($familySource.Replace('[fx:577] purchase_committed item=%s price=%d balance=%d overlay=%s backend=none', '[fx:577] purchase_committed item=%s price=%d balance=%d overlay=%s backend=local')) 'anchor drift' 'Changing the committed format string did not fail closed.'
+        $rejected = $false
+        try { & $invokeFamily577 $familySource ('d' * 40) $familyOverrides | Out-Null }
+        catch { $rejected = [string]$_.Exception.Message -match 'immutable-tree drift' }
+        Assert-VtContractFixture $rejected 'Changing the deployed source tree did not fail closed.'
+        $savedFamilySource = $familyOverrides[0].SourcesByMod.fixture
+        try {
+            $familyOverrides[0].SourcesByMod.fixture = 'fixture_mod/scripts/mods/fixture_mod/_missing.lua'
+            $rejected = $false
+            try { & $invokeFamily577 $familySource $familyTree $familyOverrides | Out-Null }
+            catch { $rejected = [string]$_.Exception.Message -match 'source missing' }
+            Assert-VtContractFixture $rejected 'Changing the audited source path did not fail closed.'
+        }
+        finally { $familyOverrides[0].SourcesByMod.fixture = $savedFamilySource }
+
         $mutationCases=@(
             '_G.printf = mod.debug',
             '_G["printf"] = mod.debug',
@@ -311,6 +453,18 @@ rawset(_G, "printf", mod.debug)
         Assert-VtContractFixture $rejected 'Duplicate release mod_id was accepted.'
 
         $exceptions = Import-PowerShellDataFile (Join-Path $PSScriptRoot 'live_test_contract_exceptions.psd1')
+        $legacy577 = @($exceptions.LegacyMarkerFamilyAudits | Where-Object { [string]$_.Marker -ceq '[mp:577]' })
+        Assert-VtContractFixture ($legacy577.Count -eq 0) '#577 still relies on the non-consumed legacy marker audit.'
+        $mp577Routes = @($exceptions.ReceiptFamilyOverrides | Where-Object { [string]$_.Marker -ceq '[mp:577]' })
+        Assert-VtContractFixture ($mp577Routes.Count -eq 2) '#577 must expose exactly the rejection and committed family routes.'
+        $mp577Reject = @($mp577Routes | Where-Object { [string]$_.Signature -ceq '[mp:577] purchase_rejected item=%s reason=%s backend=none' })
+        $mp577Commit = @($mp577Routes | Where-Object { [string]$_.Signature -ceq '[mp:577] purchase_committed item=%s price=%d balance=%d overlay=%s backend=none' })
+        Assert-VtContractFixture ($mp577Reject.Count -eq 1 -and @($mp577Reject[0].EmitterAnchors).Count -eq 2 -and @($mp577Reject[0].GuardAnchors).Count -eq 4) '#577 rejection authority no longer binds both failure callsites and returns.'
+        Assert-VtContractFixture ($mp577Commit.Count -eq 1 -and @($mp577Commit[0].EmitterAnchors).Count -eq 1 -and @($mp577Commit[0].GuardAnchors).Count -eq 5) '#577 committed authority no longer binds the successful transaction tail.'
+        foreach($mp577Route in $mp577Routes){
+            Assert-VtContractFixture ([string]$mp577Route.ModTrees.mp -ceq '9d00a1b341cb445fcb937c4ce128383021b16abb') '#577 immutable MP tree pin drifted unexpectedly.'
+            Assert-VtContractFixture ([string]$mp577Route.SourcesByMod.mp -ceq 'modded_progression/scripts/mods/modded_progression/modded_progression.lua') '#577 audited source path drifted unexpectedly.'
+        }
         $requiredRoutes = @(
             # Seven exact routes the superseding audit proved were legitimate
             # false rejects in the merged marker-wide scanner.
