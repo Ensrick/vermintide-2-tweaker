@@ -23,12 +23,17 @@ function Invoke-SelfTest {
     try {
         [System.IO.File]::WriteAllBytes((Join-Path $modStage 'aaaaaaaaaaaaaaaa.mod_bundle'), [byte[]](1, 2, 3, 4))
         [System.IO.File]::WriteAllText((Join-Path $modStage 'example.mod'), 'descriptor')
-        $bundleFiles = New-BundleFileRecords -BundleDirectory $modStage
+        $bundleFiles = New-BundleFileRecords `
+            -BundleDirectory $modStage `
+            -ExpectedDescriptorName 'example.mod' `
+            -ExpectedRootBundle 'aaaaaaaaaaaaaaaa.mod_bundle'
         $entry = [ordered]@{
             mod_id = 'example'; friendly_name = 'Example'; workshop_id = '1234567890'
             version = '1.2.3-dev'; asset_filename = 'example.zip'; sha256 = ('a' * 64)
             visibility = 'friends_only'; source_commit = ('b' * 40); source_state = 'clean'
             builder = [ordered]@{ name = 'VMBLauncher'; version = '1.2.3' }
+            root_bundle = 'aaaaaaaaaaaaaaaa.mod_bundle'
+            descriptor_name = 'example.mod'
             bundle_files = $bundleFiles
             publication_authorization = [ordered]@{
                 mode = 'hosted_qa'; source_commit = ('b' * 40)
@@ -83,16 +88,42 @@ function Invoke-SelfTest {
         Assert $valid.Valid 'accepts complete source-to-bundle provenance'
         Assert ($valid.Warnings.Count -eq 0) 'complete provenance emits no warnings'
 
+        $immutableOutput = Get-VtBundleOutputSet `
+            -BundleDirectory $modStage `
+            -ExpectedDescriptorName 'example.mod' `
+            -ExpectedRootBundle 'aaaaaaaaaaaaaaaa.mod_bundle'
+        $immutableProofs = @($immutableOutput.Files | ForEach-Object {
+            [pscustomobject]@{
+                Path = [string]$_.Name
+                Length = [long]$_.Length
+                Sha256 = [string]$_.Sha256
+                Bytes = [System.IO.File]::ReadAllBytes((Join-Path $modStage $_.Name))
+            }
+        })
+        $exactZipBytes = New-ReleaseZipBytesFromImmutableOutput `
+            -OutputSet $immutableOutput `
+            -BundleFiles $immutableProofs `
+            -Version "$($entry.version)"
+        $exactZip = Join-Path $temp 'exact.zip'
+        [System.IO.File]::WriteAllBytes($exactZip, [byte[]]$exactZipBytes)
+        $exactZipVerdict = Test-ReleaseZipSnapshot `
+            -ZipBytes $exactZipBytes `
+            -ManifestEntry $entry
+        Assert $exactZipVerdict.Valid 'immutable zip snapshot contains only exact manifest bundle bytes and updater version'
+        [System.IO.File]::WriteAllText((Join-Path $modStage 'example.mod'), 'mutated-after-proof')
+        $afterStageMutation = New-ReleaseZipBytesFromImmutableOutput `
+            -OutputSet $immutableOutput `
+            -BundleFiles $immutableProofs `
+            -Version "$($entry.version)"
+        Assert (
+            [System.BitConverter]::ToString($afterStageMutation) -ceq
+                [System.BitConverter]::ToString($exactZipBytes)
+        ) 'mutable staging replacement cannot alter an immutable commit-byte zip'
+        [System.IO.File]::WriteAllText((Join-Path $modStage 'example.mod'), 'descriptor')
         [System.IO.File]::WriteAllText(
             (Join-Path $modStage 'vt2updater_version.txt'),
             "$($entry.version)",
             [System.Text.Encoding]::ASCII)
-        $exactZip = Join-Path $temp 'exact.zip'
-        Compress-Archive -Path (Join-Path $modStage '*') -DestinationPath $exactZip -Force
-        $exactZipVerdict = Test-ReleaseZipSnapshot `
-            -ZipBytes ([System.IO.File]::ReadAllBytes($exactZip)) `
-            -ManifestEntry $entry
-        Assert $exactZipVerdict.Valid 'immutable zip snapshot contains only exact manifest bundle bytes and updater version'
         Assert (
             (Get-ReleaseZipSnapshotBindingMode -ManifestEntry $entry -IsStaged $true -IsCarried $false) -eq
                 'exact_bundle_files'
@@ -136,6 +167,14 @@ function Invoke-SelfTest {
         $dirtySource = Test-ReleaseManifest -Manifest $manifest -RequiredModIds @('example') -StageRoot $temp
         Assert (-not $dirtySource.Valid) 'rejects dirty source provenance'
         $entry.source_state = 'clean'
+
+        $savedBundleFiles = $entry.bundle_files
+        $entry.bundle_files = @($savedBundleFiles) + @(
+            [ordered]@{ filename = 'other.mod'; sha256 = ('2' * 64) }
+        )
+        $extraDescriptor = Test-ReleaseManifest -Manifest $manifest -RequiredModIds @('example')
+        Assert (-not $extraDescriptor.Valid) 'shared output-set contract rejects an additional descriptor in manifest records'
+        $entry.bundle_files = $savedBundleFiles
 
         $entry.publication_authorization.mode = 'emergency_override'
         $emergency = Test-ReleaseManifest -Manifest $manifest -RequiredModIds @('example') -StageRoot $temp

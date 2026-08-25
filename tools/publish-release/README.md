@@ -37,13 +37,14 @@ Publication requires VMBLauncher 0.6.0 or newer with
 `constrained-first-upload-bootstrap-v1`, `machine-transaction-lease-v1`, and
 `crash-safe-upload-acl-journal-v1`. The launcher release must land and be
 installed before this monorepo guard lands. Both `ship.ps1` and this publisher
-probe the version and all six capabilities before any GitHub release mutation;
-VMBLauncher 0.5.9 cannot pass this boundary. Release zip,
-receipt, and manifest inputs are captured once as immutable bytes; new releases
-remain drafts until those bytes are uploaded, with the manifest last. Before
-mutation, every entry inside each immutable ZIP snapshot is independently
-hashed against the commit-derived manifest bundle records; a staged-file swap
-during compression cannot be hidden by restoring the path afterward.
+  probe the version and all six capabilities before any GitHub release mutation;
+  VMBLauncher 0.5.9 cannot pass this boundary. Release zip, receipt, and manifest
+  inputs are captured once as immutable bytes; new releases remain drafts until
+  those bytes are uploaded, with the manifest last. Before mutation, every entry
+  inside each immutable ZIP snapshot is independently hashed against the
+  commit-derived manifest bundle records. Each ZIP is assembled in memory
+  directly from the held source-commit blob snapshot, so a staged-file swap
+  cannot alter the hosted bytes or be hidden by restoring the path afterward.
 The sole transition exception is an unchanged carried entry whose historical
 manifest predates `bundle_files`: its downloaded ZIP must still match the
 carried whole-asset SHA-256 and is captured in the same immutable byte
@@ -71,7 +72,8 @@ Requires:
   VMBLauncher's configured `ProjectRoot`, the primary git worktree, or the
   explicit `VT2_SHIP_VMB_LAUNCHER` operator override. A set but invalid override
   fails instead of silently falling back.
-- PowerShell 7+ (so `Compress-Archive` and `ConvertTo-Json` behave).
+- Windows PowerShell 5.1 or PowerShell 7. The blocking host matrices exercise
+  the shared output, receipt, launcher-lease, and publication contracts on both.
 
 Clean linked worktrees do not need the ignored launcher binary copied into
 their own tree. Standalone publishing uses the same resolver as `ship.ps1` and
@@ -84,10 +86,12 @@ both Windows PowerShell 5.1 and PowerShell 7:
 
 ## Two modes (issues #436 / #493)
 
-**FULL (no `-Mods`)** — lint the whole repo, build every inventory mod as a
-reproducibility gate, stage exact source-commit bundle blobs, and write a fresh
+**FULL (no `-Mods`)** — lint the whole repo, run a build-health gate for every
+inventory mod, stage exact source-commit bundle blobs, and write a fresh
 manifest. It publishes the selected commit bytes, not whatever a mutable path
-contains at check time; any mod's broken build still fails the entire run.
+contains at check time; any mod's broken build still fails the entire run. The
+separate `qa/check_release_reproducibility.ps1` fresh-checkout proof owns
+byte-for-byte rebuild reproducibility.
 
 **FILTERED (`-Mods <names>`)** — what `ship.ps1` passes. Only the named mods are linted, built,
 staged, and uploaded; sibling mods are never rebuilt, restaged, or re-uploaded:
@@ -202,9 +206,11 @@ fields continue to work. If a consumer starts depending on these fields, mirror
 them in `vt2-mod-updater`'s `Models/ReleaseManifest.cs` and retain compatibility
 with older releases.
 
-`source_commit` is the repository `HEAD` used as the build baseline.
-`source_state` must be `clean`; dirty provenance is rejected. The publisher
-also checks whole-worktree cleanliness independently before mutation.
+`source_commit` is the exact authorized default-branch commit used as the build
+baseline. `source_state` must be `clean`; dirty provenance is rejected. The
+publisher deliberately reconstructs inventory, descriptor, bundle, ZIP, and
+receipt bytes from that commit rather than treating mutable worktree status as
+publication authority. Canonical `ship.ps1` owns the earlier clean-source gate.
 
 `builder.name` is fixed to `VMBLauncher`, preserving it as the only sanctioned
 builder. `builder.version` comes from the launcher's Windows ProductVersion or
@@ -221,10 +227,13 @@ The mutation-boundary correlation canonicalizes the QA completion timestamp to
 UTC because PowerShell 7 deserializes ISO JSON dates as `DateTime` while Windows
 PowerShell 5.1 retains strings; a genuinely different instant still fails.
 
-Before any GitHub mutation, `publish-release.ps1` validates every newly staged
-entry against the copied bytes in `.release-stage`. A filtered publish carries
-older sibling entries and their SHA-256-verified assets verbatim. Historical
-carried entries may predate provenance entirely, predate
+Before any GitHub mutation, `publish-release.ps1` creates a unique direct-child
+`.release-stage-<guid>` directory and validates every newly staged entry against
+an auditable copy of the exact source-commit bytes. The release ZIP does not read
+that mutable copy: it is assembled deterministically in memory from the same
+immutable commit snapshot and complete canonical output set, then written once.
+A filtered publish carries older sibling entries and their SHA-256-verified
+assets verbatim. Historical carried entries may predate provenance entirely, predate
 `publication_authorization`, or record the historical dirty `source_state`;
 those immutable transition fields warn instead of blocking a later unrelated
 mod. Any provenance or authorization metadata that is present must still be
@@ -235,7 +244,9 @@ Offline validator self-test and manual validation:
 
 ```powershell
 .\qa\check_release_manifest.ps1 -SelfTest
-.\qa\check_release_manifest.ps1 -ManifestPath .release-stage\manifest.json -StageRoot .release-stage
+.\qa\check_release_manifest.ps1 `
+  -ManifestPath <printed-.release-stage-guid-path>\manifest.json `
+  -StageRoot <printed-.release-stage-guid-path>
 .\qa\check_release_reproducibility.ps1 -SelfTest
 ```
 
@@ -243,8 +254,10 @@ Offline validator self-test and manual validation:
 
 Each `mods[]` entry carries an `sha256` field — the SHA-256 digest of the corresponding
 `<mod_id>.zip` asset, encoded as lowercase hex (64 characters, `[0-9a-f]`). The hash is
-computed over the raw zip bytes (the asset uploaded to the release), produced by
-`Get-FileHash -Algorithm SHA256` immediately after `Compress-Archive`.
+computed over the exact in-memory ZIP byte snapshot that is written once and
+uploaded to the release. ZIP entries are emitted in canonical ordinal order with
+fixed metadata from the immutable output set; production publishing does not use
+`Compress-Archive` or reread staged bundle paths.
 
 `vt2-mod-updater` hashes each downloaded zip and compares against this field before
 extracting. Mismatch refuses the bundle, retries once, then surfaces a user-visible
@@ -283,7 +296,8 @@ outputs only after all of these are complete:
 The canonical transaction requires a clean, reviewed default-branch source
 commit before build, proves the build reproduces tracked artifacts, records
 authorized release provenance, and only then uploads to Workshop. The publisher
-independently rejects dirty source as defense in depth. For a read-only audit:
+independently reconstructs and verifies the authorized commit bytes as defense
+in depth; mutable worktree status is not its release authority. For a read-only audit:
 
 ```powershell
 .\qa\check_release_reproducibility.ps1 -Mod <folder-or-mod-id> -AuditOnly

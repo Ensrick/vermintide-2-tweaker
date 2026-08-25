@@ -1,15 +1,20 @@
-# build-receipt.ps1 - deterministic BuildOnly source/root binding for issue #1278.
+# build-receipt.ps1 - deterministic BuildOnly provenance binding (#1278, #1400).
 #
 # BuildOnly is allowed to consume a dirty development tree. The receipt records
-# both the exact working bytes Stingray consumed and the Git blobs that `git add`
-# will commit for every runtime-relevant mod input, plus the generated canonical
-# root bundle blob and SHA-256. It contains no timestamp or commit id, so the
-# same source/root pair produces identical bytes.
+# the exact source bytes Stingray consumed, the complete normalized bundleV2
+# output identity, the VMBLauncher version, and the exact normalization policy.
+# It contains no timestamp or commit id, so the same build proof is deterministic.
 #
 # This file is dot-sourced by ship.ps1 and qa/check_build_receipts.ps1. Keep it
 # ASCII-only and compatible with Windows PowerShell 5.1.
 
 $script:VtBuildReceiptFileName = '.build-receipt.json'
+$script:VtBuildReceiptBuilderName = 'VMBLauncher'
+$script:VtBuildReceiptOutputHelperPath = Join-Path $PSScriptRoot 'bundle-output-set.ps1'
+if (-not (Test-Path -LiteralPath $script:VtBuildReceiptOutputHelperPath -PathType Leaf)) {
+    throw "Build receipt output-set helpers are missing: $script:VtBuildReceiptOutputHelperPath"
+}
+. $script:VtBuildReceiptOutputHelperPath
 
 function Invoke-VtBuildGitCapture {
     param(
@@ -66,6 +71,23 @@ function Invoke-VtBuildGitCapture {
     return ,([string[]]$lines)
 }
 
+function Assert-VtBuildReceiptInventoryEntry {
+    param(
+        [Parameter(Mandatory = $true)]$Entry,
+        [Parameter(Mandatory = $true)][string]$Mod
+    )
+
+    if ([string]$Entry.Dir -cne $Mod) {
+        throw "Build receipt inventory entry '$($Entry.Dir)' is not '$Mod'."
+    }
+    if ([string]$Entry.BundleAuthority -cne 'tracked') {
+        throw "Build receipt inventory BundleAuthority for '$Mod' must be exactly 'tracked'."
+    }
+    if ([string]$Entry.RootBundle -cnotmatch '^[0-9a-f]{16}\.mod_bundle$') {
+        throw "Build receipt inventory has an invalid RootBundle for '$Mod': $($Entry.RootBundle)"
+    }
+}
+
 function Get-VtBuildReceiptInventoryEntry {
     param(
         [Parameter(Mandatory = $true)][string]$RepoRoot,
@@ -82,9 +104,7 @@ function Get-VtBuildReceiptInventoryEntry {
         throw "Build receipt could not resolve exactly one inventory entry for '$Mod'."
     }
     $entry = $matches[0]
-    if ([string]$entry.RootBundle -cnotmatch '^[0-9a-f]{16}\.mod_bundle$') {
-        throw "Build receipt inventory has an invalid RootBundle for '$Mod': $($entry.RootBundle)"
-    }
+    Assert-VtBuildReceiptInventoryEntry -Entry $entry -Mod $Mod
     return $entry
 }
 
@@ -112,7 +132,11 @@ function Test-VtBuildReceiptRelevantPath {
 }
 
 function Get-VtBuildSha256Hex {
-    param([Parameter(Mandatory = $true)][byte[]]$Bytes)
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
+        [byte[]]$Bytes
+    )
 
     $sha = [System.Security.Cryptography.SHA256]::Create()
     try {
@@ -244,23 +268,17 @@ function Get-VtBuildWorkingSourceMap {
         '--exclude-standard', '--', $Mod)
     $paths = @($paths) + @($ignoredPaths)
     $entries = @()
-    $objectsPathOutput = Invoke-VtBuildGitCapture -RepoRoot $RepoRoot `
-        -Arguments @('rev-parse', '--git-path', 'objects')
-    if ($objectsPathOutput.Count -ne 1) { throw 'Cannot resolve the repository Git object directory.' }
-    $objectsPath = $objectsPathOutput[0].Trim()
-    if (-not [System.IO.Path]::IsPathRooted($objectsPath)) {
-        $objectsPath = Join-Path $RepoRoot $objectsPath
-    }
-    $repositoryObjects = [System.IO.Path]::GetFullPath($objectsPath)
-    if (-not (Test-Path -LiteralPath $repositoryObjects -PathType Container)) {
-        throw "Repository Git object directory is missing: $repositoryObjects"
-    }
     $temporaryObjects = Join-Path ([System.IO.Path]::GetTempPath()) `
         ("vt2-build-receipt-objects-" + [guid]::NewGuid().ToString('N'))
     [System.IO.Directory]::CreateDirectory($temporaryObjects) | Out-Null
+    # Never expose the repository object store as an alternate. Git may
+    # "freshen" an already-present loose object in an alternate when
+    # `hash-object -w` sees the same OID, which makes a nominally read-only
+    # provenance check mutate repository metadata. The temporary store owns
+    # every addressable clean-filtered blob needed by `cat-file --filters`.
     $objectEnvironment = @{
         GIT_OBJECT_DIRECTORY = $temporaryObjects
-        GIT_ALTERNATE_OBJECT_DIRECTORIES = $repositoryObjects
+        GIT_ALTERNATE_OBJECT_DIRECTORIES = ''
     }
     try {
       foreach ($rawPath in @($paths | Sort-Object -Unique)) {
@@ -288,7 +306,8 @@ function Get-VtBuildWorkingSourceMap {
         $rawShaBefore = Get-VtBuildFileSha256 -Path $fullPath
         # Write only into an isolated temporary object store: `cat-file
         # --filters` needs an addressable blob, while read-only QA must not add
-        # loose objects to the repository merely by validating provenance.
+        # or freshen loose objects in the repository merely by validating
+        # provenance.
         $hash = Invoke-VtBuildGitCapture -RepoRoot $RepoRoot -Environment $objectEnvironment `
             -Arguments @('hash-object', '-w', "--path=$repoPath", '--', $fullPath)
         if ($hash.Count -ne 1) { throw "Cannot hash runtime input '$repoPath'." }
@@ -609,6 +628,22 @@ function Get-VtBuildGitBlobSha256 {
         -Arguments @('cat-file', 'blob', $GitBlob) -Description "Git blob $GitBlob"
 }
 
+function Get-VtBuildGitBlobLength {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][string]$GitBlob
+    )
+
+    if ($GitBlob -cnotmatch '^[0-9a-f]{40,64}$') { throw "Invalid Git blob id: $GitBlob" }
+    $lines = Invoke-VtBuildGitCapture -RepoRoot $RepoRoot `
+        -Arguments @('cat-file', '-s', $GitBlob)
+    if ($lines.Count -ne 1 -or [string]$lines[0] -cnotmatch '^\d+$') {
+        throw "Cannot resolve Git blob length: $GitBlob"
+    }
+    try { return [System.Convert]::ToInt64($lines[0]) }
+    catch { throw "Git blob length is outside Int64 range: $GitBlob ($($lines[0]))" }
+}
+
 function Get-VtBuildCheckoutSha256 {
     param(
         [Parameter(Mandatory = $true)][string]$RepoRoot,
@@ -712,29 +747,328 @@ function Get-VtBuildCommitRootProof {
     }
 }
 
+function Get-VtBuildDescriptorSourceProof {
+    param(
+        [Parameter(Mandatory = $true)]$SourceMap,
+        [Parameter(Mandatory = $true)][string]$Mod
+    )
+
+    $sourcePath = "$Mod.mod"
+    $matches = @($SourceMap.Files | Where-Object { [string]$_.Path -ceq $sourcePath })
+    if ($matches.Count -ne 1) {
+        throw "Build receipt source map must contain exactly one descriptor source '$sourcePath'."
+    }
+    $sha256 = ([string]$matches[0].BuildSha256).ToLowerInvariant()
+    if ($sha256 -cnotmatch '^[0-9a-f]{64}$') {
+        throw "Build receipt descriptor source has an invalid build SHA-256: $sourcePath"
+    }
+    return [pscustomobject]@{ Path = $sourcePath; Sha256 = $sha256 }
+}
+
+function Get-VtBuildWorkingOutputSet {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][string]$Mod,
+        [Parameter(Mandatory = $true)]$SourceMap,
+        $InventoryEntry
+    )
+
+    if ($null -eq $InventoryEntry) {
+        $InventoryEntry = Get-VtBuildReceiptInventoryEntry -RepoRoot $RepoRoot -Mod $Mod
+    }
+    Assert-VtBuildReceiptInventoryEntry -Entry $InventoryEntry -Mod $Mod
+    $descriptor = Get-VtBuildDescriptorSourceProof -SourceMap $SourceMap -Mod $Mod
+    $bundleDirectory = Join-Path (Join-Path $RepoRoot $Mod) 'bundleV2'
+    return Get-VtBundleOutputSet -BundleDirectory $bundleDirectory `
+        -ExpectedDescriptorName "$Mod.mod" `
+        -ExpectedRootBundle ([string]$InventoryEntry.RootBundle) `
+        -ExpectedDescriptorSha256 $descriptor.Sha256
+}
+
+function Get-VtBuildIndexOutputSet {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][string]$Mod,
+        [Parameter(Mandatory = $true)]$SourceMap,
+        $InventoryEntry
+    )
+
+    if ($null -eq $InventoryEntry) {
+        $InventoryEntry = Get-VtBuildReceiptInventoryEntry -RepoRoot $RepoRoot -Mod $Mod
+    }
+    Assert-VtBuildReceiptInventoryEntry -Entry $InventoryEntry -Mod $Mod
+    $descriptor = Get-VtBuildDescriptorSourceProof -SourceMap $SourceMap -Mod $Mod
+    $prefix = "$Mod/bundleV2/"
+    $lines = Invoke-VtBuildGitCapture -RepoRoot $RepoRoot -Arguments @(
+        '-c', 'core.quotepath=false', 'ls-files', '--stage', '--', "$Mod/bundleV2")
+    $records = @()
+    foreach ($line in $lines) {
+        if ($line -notmatch '^(?<mode>\d+) (?<blob>[0-9a-fA-F]{40,64}) (?<stage>\d+)\t(?<path>.+)$') {
+            throw "Cannot parse staged BuildOnly output entry: $line"
+        }
+        if ($matches['stage'] -ne '0') {
+            throw "Build receipt refuses unmerged staged output: $($matches['path']) (stage $($matches['stage']))."
+        }
+        if ($matches['mode'] -notin @('100644', '100755')) {
+            throw "Build receipt refuses non-regular staged output: $($matches['path']) (mode $($matches['mode']))."
+        }
+        $repoPath = $matches['path'].Replace('\', '/')
+        if (-not $repoPath.StartsWith($prefix, [System.StringComparison]::Ordinal)) {
+            throw "Cannot parse staged BuildOnly output path: $repoPath"
+        }
+        $name = $repoPath.Substring($prefix.Length)
+        if ([string]::IsNullOrWhiteSpace($name) -or $name.Contains('/')) {
+            throw "Build receipt output must be a direct bundleV2 file: $repoPath"
+        }
+        $blob = $matches['blob'].ToLowerInvariant()
+        $records += [pscustomobject]@{
+            Name = $name
+            Length = Get-VtBuildGitBlobLength -RepoRoot $RepoRoot -GitBlob $blob
+            Sha256 = Get-VtBuildGitBlobSha256 -RepoRoot $RepoRoot -GitBlob $blob
+        }
+    }
+    return New-VtBundleOutputSet -Records $records `
+        -ExpectedDescriptorName "$Mod.mod" `
+        -ExpectedRootBundle ([string]$InventoryEntry.RootBundle) `
+        -ExpectedDescriptorSha256 $descriptor.Sha256
+}
+
+function Get-VtBuildCommitOutputSet {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][string]$Mod,
+        [Parameter(Mandatory = $true)][string]$Commit,
+        [Parameter(Mandatory = $true)]$SourceMap,
+        $InventoryEntry
+    )
+
+    if ($null -eq $InventoryEntry) {
+        $InventoryEntry = Get-VtBuildReceiptInventoryEntry -RepoRoot $RepoRoot -Mod $Mod
+    }
+    Assert-VtBuildReceiptInventoryEntry -Entry $InventoryEntry -Mod $Mod
+    $descriptor = Get-VtBuildDescriptorSourceProof -SourceMap $SourceMap -Mod $Mod
+    $prefix = "$Mod/bundleV2/"
+    $lines = Invoke-VtBuildGitCapture -RepoRoot $RepoRoot -Arguments @(
+        '-c', 'core.quotepath=false', 'ls-tree', '-r', $Commit, '--', "$Mod/bundleV2")
+    $records = @()
+    foreach ($line in $lines) {
+        if ($line -notmatch '^(?<mode>\d+) (?<type>\S+) (?<blob>[0-9a-fA-F]{40,64})\t(?<path>.+)$') {
+            throw "Cannot parse committed BuildOnly output entry: $line"
+        }
+        if ($matches['type'] -cne 'blob' -or $matches['mode'] -notin @('100644', '100755')) {
+            throw "Build receipt refuses non-regular committed output: $($matches['path']) (mode $($matches['mode']) type $($matches['type']))."
+        }
+        $repoPath = $matches['path'].Replace('\', '/')
+        if (-not $repoPath.StartsWith($prefix, [System.StringComparison]::Ordinal)) {
+            throw "Cannot parse committed BuildOnly output path: $repoPath"
+        }
+        $name = $repoPath.Substring($prefix.Length)
+        if ([string]::IsNullOrWhiteSpace($name) -or $name.Contains('/')) {
+            throw "Build receipt output must be a direct bundleV2 file: $repoPath"
+        }
+        $blob = $matches['blob'].ToLowerInvariant()
+        $records += [pscustomobject]@{
+            Name = $name
+            Length = Get-VtBuildGitBlobLength -RepoRoot $RepoRoot -GitBlob $blob
+            Sha256 = Get-VtBuildGitBlobSha256 -RepoRoot $RepoRoot -GitBlob $blob
+        }
+    }
+    return New-VtBundleOutputSet -Records $records `
+        -ExpectedDescriptorName "$Mod.mod" `
+        -ExpectedRootBundle ([string]$InventoryEntry.RootBundle) `
+        -ExpectedDescriptorSha256 $descriptor.Sha256
+}
+
+function Get-VtBuildNormalizationPolicyFingerprint {
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
+        [object[]]$ExcludedOutputs
+    )
+
+    $builder = New-Object System.Text.StringBuilder
+    foreach ($entry in @($ExcludedOutputs)) {
+        [void]$builder.Append([string]$entry.filename)
+        [void]$builder.Append([char]0)
+        [void]$builder.Append([string]$entry.sha256)
+        [void]$builder.Append("`n")
+    }
+    return Get-VtBuildSha256Hex -Bytes ([System.Text.Encoding]::UTF8.GetBytes($builder.ToString()))
+}
+
+function ConvertTo-VtBuildNormalizationPolicyRecord {
+    param(
+        [Parameter(Mandatory = $true)]$Policy,
+        [switch]$Serialized
+    )
+
+    if ($Serialized) {
+        $algorithm = [string]$Policy.algorithm
+        $fingerprint = [string]$Policy.fingerprint_sha256
+        $excluded = @($Policy.excluded_outputs)
+    }
+    else {
+        foreach ($required in @('Algorithm', 'FingerprintSha256', 'ExcludedOutputs')) {
+            if ($null -eq $Policy.PSObject.Properties[$required]) {
+                throw "Build receipt normalization policy lacks canonical '$required'."
+            }
+        }
+        $algorithm = [string]$Policy.Algorithm
+        $fingerprint = [string]$Policy.FingerprintSha256
+        $excluded = @($Policy.ExcludedOutputs)
+    }
+    if ($algorithm -cne 'exact-build-artifact-exclusions-sha256-v1') {
+        throw "Build receipt normalization policy has an unsupported algorithm: '$algorithm'."
+    }
+    if ($fingerprint -cnotmatch '^[0-9a-f]{64}$') {
+        throw 'Build receipt normalization policy fingerprint is not lowercase SHA-256.'
+    }
+
+    $seen = @{}
+    $byName = @{}
+    foreach ($entry in $excluded) {
+        $name = if ($Serialized) { [string]$entry.filename } else { [string]$entry.Filename }
+        $sha256 = if ($Serialized) { [string]$entry.sha256 } else { [string]$entry.Sha256 }
+        if ([string]::IsNullOrWhiteSpace($name) -or
+                [System.IO.Path]::GetFileName($name) -cne $name) {
+            throw "Build receipt normalization policy has an invalid excluded output: '$name'."
+        }
+        if ($sha256 -cnotmatch '^[0-9a-f]{64}$') {
+            throw "Build receipt normalization policy has an invalid SHA-256 for '$name'."
+        }
+        if ($seen.ContainsKey($name)) {
+            throw "Build receipt normalization policy has duplicate excluded output '$name'."
+        }
+        $seen[$name] = $true
+        $byName[$name] = $sha256
+    }
+    $names = [string[]]@($byName.Keys)
+    [System.Array]::Sort($names, [System.StringComparer]::Ordinal)
+    $normalized = @($names | ForEach-Object {
+        [pscustomobject][ordered]@{ filename = $_; sha256 = $byName[$_] }
+    })
+    $computedFingerprint = Get-VtBuildNormalizationPolicyFingerprint -ExcludedOutputs $normalized
+    if ($fingerprint -cne $computedFingerprint) {
+        throw 'Build receipt normalization policy fingerprint does not match excluded outputs.'
+    }
+    return [pscustomobject][ordered]@{
+        algorithm = $algorithm
+        fingerprint_sha256 = $fingerprint
+        excluded_outputs = @($normalized)
+    }
+}
+
+function Get-VtBuildNormalizationOutputProblems {
+    param(
+        [Parameter(Mandatory = $true)]$OutputSet,
+        [Parameter(Mandatory = $true)]$PolicyRecord,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+
+    $outputNames = [System.Collections.Generic.HashSet[string]]::new(
+        [System.StringComparer]::Ordinal)
+    foreach ($file in @($OutputSet.Files)) {
+        $name = if ($null -ne $file.PSObject.Properties['Name']) {
+            [string]$file.Name
+        }
+        else {
+            [string]$file.filename
+        }
+        [void]$outputNames.Add($name)
+    }
+
+    $problems = @()
+    foreach ($excluded in @($PolicyRecord.excluded_outputs)) {
+        $name = [string]$excluded.filename
+        if ($outputNames.Contains($name)) {
+            $problems += "$Label normalization policy excluded output remains in the complete output set: $name"
+        }
+    }
+    return @($problems)
+}
+
 function New-VtBuildReceipt {
     param(
         [Parameter(Mandatory = $true)][string]$Mod,
         [Parameter(Mandatory = $true)]$SourceMap,
-        [Parameter(Mandatory = $true)]$RootProof
+        [Parameter(Mandatory = $true)]$OutputSet,
+        [Parameter(Mandatory = $true)][string]$BuilderVersion,
+        [Parameter(Mandatory = $true)]$NormalizationPolicy
     )
 
-    $sourceFiles = @($SourceMap.Files | ForEach-Object {
+    if ([string]::IsNullOrWhiteSpace($BuilderVersion) -or $BuilderVersion -cne $BuilderVersion.Trim()) {
+        throw 'Build receipt builder version must be a non-empty exact string.'
+    }
+    $canonicalSourceMap = New-VtBuildSourceMap -Entries @($SourceMap.Files)
+    if ([string]$SourceMap.Fingerprint -cne [string]$canonicalSourceMap.Fingerprint) {
+        throw 'Build receipt source fingerprint does not match its source files.'
+    }
+    $descriptorSource = Get-VtBuildDescriptorSourceProof -SourceMap $canonicalSourceMap -Mod $Mod
+    if ([string]$OutputSet.Descriptor.Name -cne "$Mod.mod") {
+        throw "Build receipt output descriptor '$($OutputSet.Descriptor.Name)' is not '$Mod.mod'."
+    }
+    if ([string]$OutputSet.Descriptor.Sha256 -cne $descriptorSource.Sha256) {
+        throw "Build receipt output descriptor differs from source descriptor: $($descriptorSource.Path)"
+    }
+    if ([string]$OutputSet.Algorithm -cnotmatch '^[a-z0-9][a-z0-9._-]*$' -or
+            [string]$OutputSet.Fingerprint -cnotmatch '^[0-9a-f]{64}$') {
+        throw 'Build receipt output set has an invalid algorithm or fingerprint.'
+    }
+    $canonicalOutputSet = New-VtBundleOutputSet -Records @($OutputSet.Files) `
+        -ExpectedDescriptorName "$Mod.mod" `
+        -ExpectedRootBundle ([string]$OutputSet.Root.Name) `
+        -ExpectedDescriptorSha256 $descriptorSource.Sha256
+    if ([string]$OutputSet.Algorithm -cne [string]$canonicalOutputSet.Algorithm -or
+            [string]$OutputSet.Fingerprint -cne [string]$canonicalOutputSet.Fingerprint -or
+            [string]$OutputSet.Root.Sha256 -cne [string]$canonicalOutputSet.Root.Sha256 -or
+            [string]$OutputSet.Descriptor.Sha256 -cne [string]$canonicalOutputSet.Descriptor.Sha256) {
+        throw 'Build receipt output-set identity does not match its files.'
+    }
+
+    $normalization = ConvertTo-VtBuildNormalizationPolicyRecord -Policy $NormalizationPolicy
+    $normalizationProblems = @(Get-VtBuildNormalizationOutputProblems `
+        -OutputSet $canonicalOutputSet `
+        -PolicyRecord $normalization `
+        -Label 'Build receipt')
+    if ($normalizationProblems.Count -gt 0) {
+        throw ($normalizationProblems -join '; ')
+    }
+
+    $sourceFiles = @($canonicalSourceMap.Files | ForEach-Object {
         [pscustomobject][ordered]@{
             path = [string]$_.Path
             git_blob = ([string]$_.GitBlob).ToLowerInvariant()
             build_sha256 = ([string]$_.BuildSha256).ToLowerInvariant()
         }
     })
+    $outputFiles = @($canonicalOutputSet.Files | ForEach-Object {
+        [pscustomobject][ordered]@{
+            filename = [string]$_.Name
+            length = [long]$_.Length
+            sha256 = ([string]$_.Sha256).ToLowerInvariant()
+        }
+    })
     return [pscustomobject][ordered]@{
-        schema = 2
+        schema = 3
         mod = $Mod
         source_algorithm = 'git-blob-build-byte-map-sha256-v2'
-        source_fingerprint_sha256 = ([string]$SourceMap.Fingerprint).ToLowerInvariant()
+        source_fingerprint_sha256 = ([string]$canonicalSourceMap.Fingerprint).ToLowerInvariant()
         source_files = $sourceFiles
-        root_bundle = [string]$RootProof.Name
-        root_bundle_git_blob = ([string]$RootProof.GitBlob).ToLowerInvariant()
-        root_bundle_sha256 = ([string]$RootProof.Sha256).ToLowerInvariant()
+        output_algorithm = [string]$canonicalOutputSet.Algorithm
+        output_fingerprint_sha256 = ([string]$canonicalOutputSet.Fingerprint).ToLowerInvariant()
+        output_files = @($outputFiles)
+        root_bundle = [string]$canonicalOutputSet.Root.Name
+        root_bundle_sha256 = ([string]$canonicalOutputSet.Root.Sha256).ToLowerInvariant()
+        descriptor = [pscustomobject][ordered]@{
+            filename = [string]$canonicalOutputSet.Descriptor.Name
+            source_path = [string]$descriptorSource.Path
+            sha256 = ([string]$canonicalOutputSet.Descriptor.Sha256).ToLowerInvariant()
+        }
+        builder = [pscustomobject][ordered]@{
+            name = $script:VtBuildReceiptBuilderName
+            version = $BuilderVersion
+        }
+        normalization_policy = $normalization
     }
 }
 
@@ -742,7 +1076,7 @@ function ConvertTo-VtBuildReceiptJson {
     param([Parameter(Mandatory = $true)]$Receipt)
     # Pretty-print indentation differs between Windows PowerShell 5.1 and
     # PowerShell 7. Compressed ordered JSON is byte-identical on both hosts.
-    $json = $Receipt | ConvertTo-Json -Depth 6 -Compress
+    $json = $Receipt | ConvertTo-Json -Depth 12 -Compress
     return (($json -replace "`r`n", "`n").TrimEnd([char[]]@("`r", "`n")) + "`n")
 }
 
@@ -769,42 +1103,103 @@ function ConvertFrom-VtBuildReceiptJson {
     }
 }
 
+function Get-VtBuildReceiptPropertyProblems {
+    param(
+        $Value,
+        [Parameter(Mandatory = $true)][string[]]$Allowed,
+        [Parameter(Mandatory = $true)][string]$Label,
+        [switch]$RequireAll
+    )
+
+    if ($null -eq $Value) { return @("$Label is missing") }
+    $present = @($Value.PSObject.Properties | ForEach-Object { [string]$_.Name })
+    $problems = @()
+    foreach ($name in $present) {
+        if ($Allowed -cnotcontains $name) { $problems += "$Label has unknown property '$name'" }
+    }
+    if ($RequireAll) {
+        foreach ($name in $Allowed) {
+            if ($present -cnotcontains $name) { $problems += "$Label lacks required property '$name'" }
+        }
+    }
+    return @($problems)
+}
+
+function Compare-VtBuildNormalizationPolicyRecords {
+    param(
+        [Parameter(Mandatory = $true)]$Expected,
+        [Parameter(Mandatory = $true)]$Actual
+    )
+
+    $problems = @()
+    if ([string]$Expected.algorithm -cne [string]$Actual.algorithm) {
+        $problems += "normalization policy algorithm differs from receipt: $($Actual.algorithm)"
+    }
+    if ([string]$Expected.fingerprint_sha256 -cne [string]$Actual.fingerprint_sha256) {
+        $problems += 'normalization policy fingerprint differs from receipt'
+    }
+    $expectedRows = @($Expected.excluded_outputs)
+    $actualRows = @($Actual.excluded_outputs)
+    if ($expectedRows.Count -ne $actualRows.Count) {
+        $problems += "normalization policy excluded-output count differs from receipt: expected $($expectedRows.Count), got $($actualRows.Count)"
+    }
+    $count = [Math]::Min($expectedRows.Count, $actualRows.Count)
+    for ($index = 0; $index -lt $count; $index++) {
+        if ([string]$expectedRows[$index].filename -cne [string]$actualRows[$index].filename -or
+                [string]$expectedRows[$index].sha256 -cne [string]$actualRows[$index].sha256) {
+            $problems += "normalization policy excluded output differs from receipt at index $index"
+        }
+    }
+    return [pscustomobject]@{ Ok = ($problems.Count -eq 0); Problems = @($problems) }
+}
+
+function Test-VtBuildReceiptJsonInteger {
+    param($Value, [switch]$NonNegative)
+
+    if ($null -eq $Value) { return $false }
+    $integerTypes = @(
+        'System.Byte', 'System.SByte', 'System.Int16', 'System.UInt16',
+        'System.Int32', 'System.UInt32', 'System.Int64')
+    if ($integerTypes -cnotcontains $Value.GetType().FullName) { return $false }
+    try { $converted = [System.Convert]::ToInt64($Value) }
+    catch { return $false }
+    if ($NonNegative -and $converted -lt 0) { return $false }
+    return $true
+}
+
 function Test-VtBuildReceiptProof {
     param(
         [Parameter(Mandatory = $true)]$Receipt,
         [Parameter(Mandatory = $true)][string]$ExpectedMod,
         [Parameter(Mandatory = $true)]$SourceMap,
-        [Parameter(Mandatory = $true)]$RootProof
+        $RootProof,
+        $OutputSet,
+        $NormalizationPolicy,
+        [string]$ExpectedBuilderVersion,
+        [ValidateSet(2, 3)][int]$MinimumSchema = 2
     )
 
     $problems = @()
     $schema = $null
-    try { $schema = [System.Convert]::ToInt32($Receipt.schema) } catch { }
+    if (Test-VtBuildReceiptJsonInteger -Value $Receipt.schema -NonNegative) {
+        try { $schema = [System.Convert]::ToInt32($Receipt.schema) } catch { }
+    }
+    else {
+        $problems += 'receipt schema must be a JSON integer'
+    }
     if ($schema -eq 1) {
         $problems += 'legacy receipt schema 1 lacks exact raw build-byte proof; rerun BuildOnly'
     }
-    elseif ($schema -ne 2) { $problems += "unsupported receipt schema '$($Receipt.schema)'" }
+    elseif ($schema -notin @(2, 3)) { $problems += "unsupported receipt schema '$($Receipt.schema)'" }
+    if ($null -ne $schema -and $schema -lt $MinimumSchema) {
+        $problems += "receipt schema $schema is below required minimum schema $MinimumSchema; rerun BuildOnly"
+    }
     if ([string]$Receipt.mod -cne $ExpectedMod) { $problems += "receipt mod '$($Receipt.mod)' is not '$ExpectedMod'" }
     if ([string]$Receipt.source_algorithm -cne 'git-blob-build-byte-map-sha256-v2') {
         $problems += "unsupported source algorithm '$($Receipt.source_algorithm)'"
     }
     if ([string]$Receipt.source_fingerprint_sha256 -cnotmatch '^[0-9a-f]{64}$') {
         $problems += 'receipt source fingerprint is not lowercase SHA-256'
-    }
-    if ([string]$Receipt.root_bundle -cne [string]$RootProof.Name) {
-        $problems += "receipt root '$($Receipt.root_bundle)' is not canonical root '$($RootProof.Name)'"
-    }
-    if ([string]$Receipt.root_bundle_git_blob -cnotmatch '^[0-9a-f]{40,64}$') {
-        $problems += 'receipt root Git blob is invalid'
-    }
-    elseif ([string]$Receipt.root_bundle_git_blob -cne [string]$RootProof.GitBlob) {
-        $problems += "root bundle Git blob differs from receipt: $($RootProof.Name)"
-    }
-    if ([string]$Receipt.root_bundle_sha256 -cnotmatch '^[0-9a-f]{64}$') {
-        $problems += 'receipt root SHA-256 is invalid'
-    }
-    elseif ([string]$Receipt.root_bundle_sha256 -cne [string]$RootProof.Sha256) {
-        $problems += "root bundle SHA-256 differs from receipt: $($RootProof.Name)"
     }
 
     try {
@@ -831,6 +1226,198 @@ function Test-VtBuildReceiptProof {
     }
     catch {
         $problems += $_.Exception.Message
+    }
+
+    if ($schema -eq 2) {
+        if ($null -eq $RootProof) {
+            $problems += 'schema 2 validation requires a canonical root proof'
+        }
+        else {
+            if ([string]$Receipt.root_bundle -cne [string]$RootProof.Name) {
+                $problems += "receipt root '$($Receipt.root_bundle)' is not canonical root '$($RootProof.Name)'"
+            }
+            if ([string]$Receipt.root_bundle_git_blob -cnotmatch '^[0-9a-f]{40,64}$') {
+                $problems += 'receipt root Git blob is invalid'
+            }
+            elseif ([string]$Receipt.root_bundle_git_blob -cne [string]$RootProof.GitBlob) {
+                $problems += "root bundle Git blob differs from receipt: $($RootProof.Name)"
+            }
+            if ([string]$Receipt.root_bundle_sha256 -cnotmatch '^[0-9a-f]{64}$') {
+                $problems += 'receipt root SHA-256 is invalid'
+            }
+            elseif ([string]$Receipt.root_bundle_sha256 -cne [string]$RootProof.Sha256) {
+                $problems += "root bundle SHA-256 differs from receipt: $($RootProof.Name)"
+            }
+        }
+    }
+    elseif ($schema -eq 3) {
+        $problems += @(Get-VtBuildReceiptPropertyProblems -Value $Receipt -Label 'schema 3 receipt' `
+            -RequireAll -Allowed @(
+                'schema', 'mod', 'source_algorithm', 'source_fingerprint_sha256', 'source_files',
+                'output_algorithm', 'output_fingerprint_sha256', 'output_files', 'root_bundle',
+                'root_bundle_sha256', 'descriptor', 'builder', 'normalization_policy'))
+        foreach ($sourceFile in @($Receipt.source_files)) {
+            $problems += @(Get-VtBuildReceiptPropertyProblems -Value $sourceFile `
+                -Label 'schema 3 source file' -RequireAll `
+                -Allowed @('path', 'git_blob', 'build_sha256'))
+            if ([string]$sourceFile.git_blob -cnotmatch '^[0-9a-f]{40,64}$') {
+                $problems += "schema 3 source file Git blob is invalid: $($sourceFile.path)"
+            }
+            if ([string]$sourceFile.build_sha256 -cnotmatch '^[0-9a-f]{64}$') {
+                $problems += "schema 3 source file build SHA-256 is invalid: $($sourceFile.path)"
+            }
+        }
+        if ([string]$Receipt.output_algorithm -cnotmatch '^[a-z0-9][a-z0-9._-]*$') {
+            $problems += "receipt output algorithm is invalid: '$($Receipt.output_algorithm)'"
+        }
+        if ([string]$Receipt.output_fingerprint_sha256 -cnotmatch '^[0-9a-f]{64}$') {
+            $problems += 'receipt output fingerprint is not lowercase SHA-256'
+        }
+        if ([string]$Receipt.root_bundle_sha256 -cnotmatch '^[0-9a-f]{64}$') {
+            $problems += 'receipt root SHA-256 is invalid'
+        }
+
+        try {
+            if ($null -ne $receiptMap) {
+                $receiptSourcePaths = @($Receipt.source_files | ForEach-Object { [string]$_.path })
+                $canonicalSourcePaths = @($receiptMap.Files | ForEach-Object { [string]$_.Path })
+                if (($receiptSourcePaths -join [char]0) -cne ($canonicalSourcePaths -join [char]0)) {
+                    $problems += 'receipt source_files are not in canonical ordinal order'
+                }
+            }
+            $problems += @(Get-VtBuildReceiptPropertyProblems -Value $Receipt.descriptor `
+                -Label 'schema 3 descriptor' -RequireAll -Allowed @('filename', 'source_path', 'sha256'))
+            $problems += @(Get-VtBuildReceiptPropertyProblems -Value $Receipt.builder `
+                -Label 'schema 3 builder' -RequireAll -Allowed @('name', 'version'))
+            $problems += @(Get-VtBuildReceiptPropertyProblems -Value $Receipt.normalization_policy `
+                -Label 'schema 3 normalization policy' -RequireAll `
+                -Allowed @('algorithm', 'fingerprint_sha256', 'excluded_outputs'))
+            foreach ($excluded in @($Receipt.normalization_policy.excluded_outputs)) {
+                $problems += @(Get-VtBuildReceiptPropertyProblems -Value $excluded `
+                    -Label 'schema 3 excluded output' -RequireAll -Allowed @('filename', 'sha256'))
+            }
+            if ([string]$Receipt.descriptor.filename -cne "$ExpectedMod.mod") {
+                $problems += "receipt descriptor '$($Receipt.descriptor.filename)' is not '$ExpectedMod.mod'"
+            }
+            if ([string]$Receipt.descriptor.source_path -cne "$ExpectedMod.mod") {
+                $problems += "receipt descriptor source '$($Receipt.descriptor.source_path)' is not '$ExpectedMod.mod'"
+            }
+            if ([string]$Receipt.descriptor.sha256 -cnotmatch '^[0-9a-f]{64}$') {
+                $problems += 'receipt descriptor SHA-256 is invalid'
+            }
+            $descriptorSource = Get-VtBuildDescriptorSourceProof -SourceMap $SourceMap -Mod $ExpectedMod
+            if ([string]$Receipt.descriptor.sha256 -cne $descriptorSource.Sha256) {
+                $problems += "receipt descriptor differs from source descriptor: $($descriptorSource.Path)"
+            }
+
+            $receiptOutputRecords = @()
+            foreach ($entry in @($Receipt.output_files)) {
+                $problems += @(Get-VtBuildReceiptPropertyProblems -Value $entry `
+                    -Label 'schema 3 output file' -RequireAll -Allowed @('filename', 'length', 'sha256'))
+                if (-not (Test-VtBuildReceiptJsonInteger -Value $entry.length -NonNegative)) {
+                    throw "Build receipt output length must be a non-negative JSON integer for '$($entry.filename)'."
+                }
+                $length = [System.Convert]::ToInt64($entry.length)
+                if ([string]$entry.sha256 -cnotmatch '^[0-9a-f]{64}$') {
+                    throw "Build receipt output SHA-256 is invalid for '$($entry.filename)'."
+                }
+                $receiptOutputRecords += [pscustomobject]@{
+                    Name = [string]$entry.filename
+                    Length = $length
+                    Sha256 = [string]$entry.sha256
+                }
+            }
+            if ($null -eq $Receipt.output_files -or $receiptOutputRecords.Count -eq 0) {
+                throw 'Build receipt output_files map is missing or empty.'
+            }
+            $receiptOutput = New-VtBundleOutputSet -Records $receiptOutputRecords `
+                -ExpectedDescriptorName ([string]$Receipt.descriptor.filename) `
+                -ExpectedRootBundle ([string]$Receipt.root_bundle) `
+                -ExpectedDescriptorSha256 ([string]$Receipt.descriptor.sha256)
+            if ([string]$Receipt.output_algorithm -cne [string]$receiptOutput.Algorithm) {
+                $problems += 'receipt output algorithm does not match its output_files map'
+            }
+            if ([string]$Receipt.output_fingerprint_sha256 -cne [string]$receiptOutput.Fingerprint) {
+                $problems += 'receipt output fingerprint does not match its output_files map'
+            }
+            if ([string]$Receipt.root_bundle_sha256 -cne [string]$receiptOutput.Root.Sha256) {
+                $problems += "receipt root SHA-256 does not match its output_files map: $($Receipt.root_bundle)"
+            }
+            $receiptOutputNames = @($Receipt.output_files | ForEach-Object { [string]$_.filename })
+            $canonicalOutputNames = @($receiptOutput.Files | ForEach-Object { [string]$_.Name })
+            if (($receiptOutputNames -join [char]0) -cne ($canonicalOutputNames -join [char]0)) {
+                $problems += 'receipt output_files are not in canonical ordinal order'
+            }
+            if ($null -eq $OutputSet) {
+                $problems += 'schema 3 validation requires a complete output set'
+            }
+            else {
+                if ([string]$OutputSet.Algorithm -cne [string]$receiptOutput.Algorithm) {
+                    $problems += 'current output algorithm differs from receipt'
+                }
+                if ([string]$OutputSet.Fingerprint -cne [string]$receiptOutput.Fingerprint) {
+                    $problems += 'current output fingerprint differs from receipt'
+                }
+                if ([string]$OutputSet.Root.Name -cne [string]$receiptOutput.Root.Name -or
+                        [string]$OutputSet.Root.Sha256 -cne [string]$receiptOutput.Root.Sha256) {
+                    $problems += 'current root bundle identity differs from receipt'
+                }
+                if ([string]$OutputSet.Descriptor.Name -cne [string]$receiptOutput.Descriptor.Name -or
+                        [string]$OutputSet.Descriptor.Sha256 -cne [string]$receiptOutput.Descriptor.Sha256) {
+                    $problems += 'current descriptor identity differs from receipt'
+                }
+                $comparisonProblems = @(Compare-VtBundleOutputSets -Expected $receiptOutput -Actual $OutputSet `
+                    -ExpectedLabel 'receipt output' -ActualLabel 'current output' -RequireLength $true
+                )
+                if ($comparisonProblems.Count -gt 0) { $problems += @($comparisonProblems) }
+            }
+
+            if ([string]$Receipt.builder.name -cne $script:VtBuildReceiptBuilderName) {
+                $problems += "receipt builder '$($Receipt.builder.name)' is not '$script:VtBuildReceiptBuilderName'"
+            }
+            $builderVersion = [string]$Receipt.builder.version
+            if ([string]::IsNullOrWhiteSpace($builderVersion) -or $builderVersion -cne $builderVersion.Trim()) {
+                $problems += 'receipt builder version is empty or non-canonical'
+            }
+            elseif (-not [string]::IsNullOrWhiteSpace($ExpectedBuilderVersion) -and
+                    $builderVersion -cne $ExpectedBuilderVersion) {
+                $problems += "receipt builder version '$builderVersion' is not expected version '$ExpectedBuilderVersion'"
+            }
+
+            $receiptPolicy = ConvertTo-VtBuildNormalizationPolicyRecord `
+                -Policy $Receipt.normalization_policy -Serialized
+            $problems += @(Get-VtBuildNormalizationOutputProblems `
+                -OutputSet $receiptOutput `
+                -PolicyRecord $receiptPolicy `
+                -Label 'Receipt')
+            $receiptPolicyNames = @($Receipt.normalization_policy.excluded_outputs | ForEach-Object {
+                [string]$_.filename
+            })
+            $normalizedPolicyNames = @($receiptPolicy.excluded_outputs | ForEach-Object {
+                [string]$_.filename
+            })
+            if (($receiptPolicyNames -join [char]0) -cne ($normalizedPolicyNames -join [char]0)) {
+                $problems += 'receipt normalization policy exclusions are not in canonical ordinal order'
+            }
+            if ($null -eq $NormalizationPolicy) {
+                $problems += 'schema 3 validation requires the current normalization policy proof'
+            }
+            else {
+                $currentPolicy = ConvertTo-VtBuildNormalizationPolicyRecord -Policy $NormalizationPolicy
+                if ($null -ne $OutputSet) {
+                    $problems += @(Get-VtBuildNormalizationOutputProblems `
+                        -OutputSet $OutputSet `
+                        -PolicyRecord $currentPolicy `
+                        -Label 'Current')
+                }
+                $policyComparison = Compare-VtBuildNormalizationPolicyRecords `
+                    -Expected $receiptPolicy -Actual $currentPolicy
+                if (-not $policyComparison.Ok) { $problems += @($policyComparison.Problems) }
+            }
+        }
+        catch {
+            $problems += $_.Exception.Message
+        }
     }
     return [pscustomobject]@{ Ok = ($problems.Count -eq 0); Problems = @($problems) }
 }

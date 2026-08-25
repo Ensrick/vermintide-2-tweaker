@@ -31,30 +31,6 @@ if (-not (Test-Path -LiteralPath $buildOutputNormalizationHelpers -PathType Leaf
 . $buildOutputNormalizationHelpers
 . (Join-Path $repoRoot 'tools\ship\transaction-lease.ps1')
 
-function Compare-BundleRecordSets {
-    param(
-        [Parameter(Mandatory = $true)]$Expected,
-        [Parameter(Mandatory = $true)]$Actual
-    )
-
-    $errors = [System.Collections.Generic.List[string]]::new()
-    $expectedByName = @{}
-    $actualByName = @{}
-    foreach ($record in @($Expected)) { $expectedByName["$($record.filename)"] = "$($record.sha256)" }
-    foreach ($record in @($Actual)) { $actualByName["$($record.filename)"] = "$($record.sha256)" }
-    foreach ($name in @($expectedByName.Keys | Sort-Object)) {
-        if (-not $actualByName.ContainsKey($name)) {
-            $errors.Add("fresh build is missing $name")
-        } elseif ($actualByName[$name] -ne $expectedByName[$name]) {
-            $errors.Add("$name hash mismatch: manifest $($expectedByName[$name]), fresh build $($actualByName[$name])")
-        }
-    }
-    foreach ($name in @($actualByName.Keys | Sort-Object)) {
-        if (-not $expectedByName.ContainsKey($name)) { $errors.Add("fresh build produced unrecorded file $name") }
-    }
-    return @($errors)
-}
-
 function Remove-LeafTree {
     param([Parameter(Mandatory = $true)][string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) { return }
@@ -94,9 +70,9 @@ function Invoke-SelfTest {
         $same = @([ordered]@{ filename = 'a.mod'; sha256 = ('a' * 64) })
         $changed = @([ordered]@{ filename = 'a.mod'; sha256 = ('b' * 64) })
         $extra = @($same + [ordered]@{ filename = 'b.mod_bundle'; sha256 = ('c' * 64) })
-        Assert ((Compare-BundleRecordSets -Expected $expected -Actual $same).Count -eq 0) 'accepts byte-identical file records'
-        Assert ((Compare-BundleRecordSets -Expected $expected -Actual $changed).Count -eq 1) 'rejects a changed raw bundle hash'
-        Assert ((Compare-BundleRecordSets -Expected $expected -Actual $extra).Count -eq 1) 'rejects an unrecorded fresh-build output'
+        Assert ((Compare-VtBundleOutputSets -Expected $expected -Actual $same -RequireLength:$false).Count -eq 0) 'accepts byte-identical file records'
+        Assert ((Compare-VtBundleOutputSets -Expected $expected -Actual $changed -RequireLength:$false).Count -eq 1) 'rejects a changed raw bundle hash'
+        Assert ((Compare-VtBundleOutputSets -Expected $expected -Actual $extra -RequireLength:$false).Count -eq 1) 'rejects an unrecorded fresh-build output'
 
         if ($failures.Count -gt 0) {
             Write-Host "[check_release_reproducibility] SELF-TEST FAILED -- $($failures.Count) case(s)" -ForegroundColor Red
@@ -132,8 +108,13 @@ if ($matches.Count -ne 1) {
     Write-Host "[check_release_reproducibility] ERROR -- '$Mod' does not resolve uniquely in tools/mod-inventory.psd1." -ForegroundColor Red
     exit 2
 }
-$modFolder = "$($matches[0].Dir)"
-$modId = "$($matches[0].ModId)"
+$inventoryEntry = $matches[0]
+$modFolder = "$($inventoryEntry.Dir)"
+$modId = "$($inventoryEntry.ModId)"
+if ("$($inventoryEntry.BundleAuthority)" -cne 'tracked') {
+    Write-Host "[check_release_reproducibility] ERROR -- unsupported BundleAuthority '$($inventoryEntry.BundleAuthority)' for $modFolder." -ForegroundColor Red
+    exit 2
+}
 $sourceCommit = Get-ReleaseSourceCommit -RepoRoot $CheckoutRoot
 $sourceChanges = @(Get-ModSourceChanges -RepoRoot $CheckoutRoot -ModFolder $modFolder)
 
@@ -191,12 +172,6 @@ if (-not (Test-Path -LiteralPath $LauncherPath -PathType Leaf)) {
     Write-Host "[check_release_reproducibility] ERROR -- VMBLauncher not found: $LauncherPath" -ForegroundColor Red
     exit 2
 }
-$launcherVersion = Get-VmbLauncherVersion -LauncherPath $LauncherPath
-if ($launcherVersion -ne "$($entry.builder.version)") {
-    Write-Host "[check_release_reproducibility] ERROR -- launcher version $launcherVersion does not match manifest builder version $($entry.builder.version)." -ForegroundColor Red
-    exit 2
-}
-
 $vmbrc = Join-Path $CheckoutRoot '.vmbrc'
 if (-not (Test-Path -LiteralPath $vmbrc -PathType Leaf)) {
     Write-Host "[check_release_reproducibility] ERROR -- fresh checkout needs ignored .vmbrc setup; copy .vmbrc.example and adjust only machine-local paths." -ForegroundColor Red
@@ -209,11 +184,22 @@ if (-not (Test-Path -LiteralPath $LauncherSettingsPath -PathType Leaf)) {
 }
 
 $tempSettings = Join-Path ([System.IO.Path]::GetTempPath()) ("vt2-vmb-settings-" + [guid]::NewGuid().ToString('N') + '.json')
-$rebuildTransactionLease = Enter-VmbMachineTransactionLease `
-    -Action 'reproducibility-build' `
-    -Mod $modFolder `
-    -ProjectRoot $CheckoutRoot
+$launcherLease = $null
+$rebuildTransactionLease = $null
 try {
+    $launcherLease = Enter-VmbLauncherExecutableLease `
+        -LauncherPath $LauncherPath -RequireDirectPath
+    $launcherVersion = [string](Assert-VmbLauncherExecutableLease `
+        -Lease $launcherLease -VerifyContent).version
+    if ($launcherVersion -ne "$($entry.builder.version)") {
+        Write-Host "[check_release_reproducibility] ERROR -- launcher version $launcherVersion does not match manifest builder version $($entry.builder.version)." -ForegroundColor Red
+        exit 2
+    }
+    $rebuildTransactionLease = Enter-VmbMachineTransactionLease `
+        -Action 'reproducibility-build' `
+        -Mod $modFolder `
+        -ProjectRoot $CheckoutRoot
+
     $settings = [System.IO.File]::ReadAllText($LauncherSettingsPath, [System.Text.Encoding]::UTF8) | ConvertFrom-Json
     $settings.ProjectRoot = $CheckoutRoot
     $json = $settings | ConvertTo-Json -Depth 20
@@ -221,9 +207,13 @@ try {
 
     Write-Host "  builder : VMBLauncher $launcherVersion" -ForegroundColor Cyan
     Write-Host "  action  : clean rebuild only (no deploy/upload)" -ForegroundColor Cyan
-    & $LauncherPath --config $tempSettings --no-banner build $modFolder --clean
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "[check_release_reproducibility] ERROR -- VMBLauncher build exited $LASTEXITCODE." -ForegroundColor Red
+    $buildRun = Invoke-VmbLauncherProcess `
+        -Lease $launcherLease `
+        -ArgumentList @('--config', $tempSettings, '--no-banner', 'build', $modFolder, '--clean') `
+        -WorkingDirectory $CheckoutRoot `
+        -ReplayOutput
+    if ($buildRun.ExitCode -ne 0) {
+        Write-Host "[check_release_reproducibility] ERROR -- VMBLauncher build exited $($buildRun.ExitCode)." -ForegroundColor Red
         exit 2
     }
 
@@ -235,15 +225,38 @@ try {
     }
 
     $bundleDir = Join-Path (Join-Path $CheckoutRoot $modFolder) 'bundleV2'
-    $actual = @(New-BundleFileRecords -BundleDirectory $bundleDir)
-    $errors = @(Compare-BundleRecordSets -Expected @($entry.bundle_files) -Actual $actual)
+    $actual = Get-VtBundleOutputSet `
+        -BundleDirectory $bundleDir `
+        -ExpectedDescriptorName "$modFolder.mod" `
+        -ExpectedRootBundle "$($inventoryEntry.RootBundle)"
+    $errors = @(Compare-VtBundleOutputSets `
+        -Expected @($entry.bundle_files) `
+        -Actual $actual `
+        -ExpectedLabel 'release manifest' `
+        -ActualLabel 'fresh build' `
+        -RequireLength:$false)
     if ($errors.Count -gt 0) {
         foreach ($error in $errors) { Write-Host "[check_release_reproducibility] ERROR -- $error" -ForegroundColor Red }
         exit 2
     }
-    Write-Host "[check_release_reproducibility] PASS -- $($actual.Count) canonical post-policy file(s) rebuilt byte-identically from $sourceCommit." -ForegroundColor Green
+    Write-Host "[check_release_reproducibility] PASS -- $(@($actual.Files).Count) canonical post-policy file(s) rebuilt byte-identically from $sourceCommit." -ForegroundColor Green
     exit 0
 } finally {
-    if (Test-Path -LiteralPath $tempSettings) { Remove-Item -LiteralPath $tempSettings -Force }
-    Exit-VmbMachineTransactionLease -Lease $rebuildTransactionLease
+    try {
+        try {
+            if (Test-Path -LiteralPath $tempSettings) {
+                Remove-Item -LiteralPath $tempSettings -Force
+            }
+        }
+        finally {
+            if ($null -ne $launcherLease) {
+                Exit-VmbLauncherExecutableLease -Lease $launcherLease
+            }
+        }
+    }
+    finally {
+        if ($null -ne $rebuildTransactionLease) {
+            Exit-VmbMachineTransactionLease -Lease $rebuildTransactionLease
+        }
+    }
 }

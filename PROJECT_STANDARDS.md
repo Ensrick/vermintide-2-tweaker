@@ -1202,26 +1202,41 @@ exempts a runtime source delta.
 This closes the PR #759/#765/#766/#767/#769 class where
 source/version/config merged first and its compiled artifact followed later.
 
-**Exact dirty-source BuildOnly receipt (issue #1278).** Every newly generated
-canonical root also carries `<mod>/.build-receipt.json`. Immediately before and
-after the clean BuildOnly compile, `ship.ps1` fingerprints the complete
-runtime-relevant input map as both the raw SHA-256 bytes Stingray consumes and
-the Git-clean blobs that a later `git add` will commit. The raw bytes must match
-the checkout bytes Git can materialize from those blobs; an EOL/filter-only
-difference therefore fails instead of producing an unrepeatable receipt. Any
-in-build source change aborts. Dot-prefixed and ignored compiler-visible inputs
-belong to the map because VMB passes the whole mod directory as Stingray's
-source directory. Only the exact bookkeeping file `.build-receipt.json` is
-excluded from its own map. The deterministic receipt binds that dual map to the
-canonical root bundle's Git blob and SHA-256; it has no timestamp or dirty
-commit id. Pre-commit validates the exact staged index, hosted QA validates the
-committed PR tree, and final ship validates the reviewed receipt against the
-fresh clean build before the existing tracked-bundle parity gate. A source edit
-after BuildOnly therefore requires another BuildOnly run. Root `.gitattributes`
-changes revalidate every receipt-bearing active mod because they can change
-checkout materialization globally. `bundleV2` contents, including optional
-exact-normalized SDK sidecars, are not source-map inputs; their separate
-count/normalization and final parity policies remain unchanged.
+**Exact dirty-source and complete-output BuildOnly receipt (issues #1278/#1400).**
+Every newly generated canonical root also carries `<mod>/.build-receipt.json`.
+Immediately before and after the clean BuildOnly compile, `ship.ps1` fingerprints
+the complete runtime-relevant input map as both the raw SHA-256 bytes Stingray
+consumes and the Git-clean blobs that a later `git add` will commit. The raw
+bytes must match the checkout bytes Git can materialize from those blobs; an
+EOL/filter-only difference therefore fails instead of producing an unrepeatable
+receipt. Clean-filter probes write any temporary addressable blobs only to an
+isolated object store with no repository alternate; read-only receipt checks
+must not add or freshen objects in the real Git database. Any in-build source
+change aborts. Dot-prefixed and ignored
+compiler-visible inputs belong to the map because VMB passes the whole mod
+directory as Stingray's source directory. Only the exact bookkeeping file
+`.build-receipt.json` is excluded from its own map.
+
+Schema 3 binds that dual source map to one canonical ordinal inventory of the
+complete normalized `bundleV2` output: every exact filename, byte length,
+SHA-256, canonical root, source-qualified descriptor, aggregate fingerprint,
+VMBLauncher version, and normalization-policy fingerprint. It has no timestamp
+or dirty commit id. Every inventory row explicitly remains
+`BundleAuthority = 'tracked'`; schema 3 shadows and strengthens existing tracked
+parity rather than replacing it, while untouched schema-2 receipts remain
+admissible during migration. Pre-commit validates the exact staged index,
+hosted QA validates the committed PR tree, and final ship compares the same
+freshly normalized complete output set before the tracked-bundle parity gate.
+An extra, missing, renamed, changed, nested, reparse, case-colliding,
+wrong-descriptor, wrong-root, builder-drifted, or policy-drifted output fails
+closed. A source edit after BuildOnly therefore requires another BuildOnly run.
+Root `.gitattributes` changes revalidate every receipt-bearing active mod
+because they can change checkout materialization globally. `bundleV2` contents
+are not source-map inputs because schema 3 binds them as the separate complete
+output map. Exact inventoried SDK sidecars are removed through a handle-locked
+name+SHA policy before enumeration; changed bytes remain for inspection.
+Release-manifest and reproducibility checks consume the same output contract
+rather than defining weaker competing file sets.
 
 Two exact `itemV2.cfg` non-promotion metadata exceptions exist because VMB
 BuildOnly proves that Workshop config is not compiled into `bundleV2`. For a
@@ -2568,7 +2583,7 @@ BEFORE shipping:
   - CHANGELOG entry written against that exact version
   - .mod descriptors are LF, root + bundleV2 (CRLF breaks the publication receipt)
   - Every changed mod BuildOnly'd before the commit (#724 atomicity)
-  - Each changed mod's .build-receipt.json matches staged source + root (#1278)
+  - Each changed mod's schema-3 .build-receipt.json matches staged source + the complete normalized output set (#1278/#1400)
   - Source and bundle committed together, pushed, reviewed, hosted QA passed, and merged
   - Final ship runs from a clean checkout at the exact live default-branch HEAD
   - No forward-ref bugs (visually verify; future: luacheck)

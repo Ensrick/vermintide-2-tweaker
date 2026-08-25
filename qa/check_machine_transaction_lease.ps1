@@ -86,15 +86,27 @@ function Invoke-MachineTransactionLeaseSelfTest {
         $publisherText = [System.IO.File]::ReadAllText((Join-Path $repoRoot 'tools\publish-release\publish-release.ps1'), [System.Text.Encoding]::UTF8)
         $reproText = [System.IO.File]::ReadAllText((Join-Path $repoRoot 'qa\check_release_reproducibility.ps1'), [System.Text.Encoding]::UTF8)
         $shipEnter = $shipText.LastIndexOf('Enter-VmbMachineTransactionLease')
-        $shipLauncher = $shipText.LastIndexOf('Invoke-ShipLauncherNoWindow -FilePath $launcher')
+        $shipLauncher = $shipText.LastIndexOf('Invoke-ShipLauncherNoWindow -LauncherExecutableLease $launcherExecutableLease')
         $shipExit = $shipText.LastIndexOf('Exit-VmbMachineTransactionLease -Lease $transactionLease')
         $shipClaimRelease = $shipText.LastIndexOf('& $claimScript -Mod $Mod -Release -Quiet')
         Assert-Fixture ($shipEnter -ge 0 -and $shipEnter -lt $shipLauncher -and $shipExit -gt $shipClaimRelease) 'ship owns one continuous lease across launcher actions, parity, release, upload proof, cards, and claim finalization'
         $publisherEnter = $publisherText.IndexOf('Enter-VmbMachineTransactionLease')
         $publisherReleaseMutex = $publisherText.IndexOf("'Global\VT2_GitHubReleaseMutation'")
-        $publisherBuild = $publisherText.IndexOf('& $launcher build $m.Folder')
+        $publisherBuild = $publisherText.IndexOf('$buildRun = Invoke-VmbLauncherProcess')
         Assert-Fixture ($publisherEnter -ge 0 -and $publisherEnter -lt $publisherReleaseMutex -and $publisherEnter -lt $publisherBuild) 'standalone publisher takes transaction before release mutex and optional launcher build'
-        Assert-Fixture ($reproText.IndexOf('Enter-VmbMachineTransactionLease') -lt $reproText.IndexOf('& $LauncherPath --config')) 'reproducibility caller takes transaction before direct launcher build'
+        Assert-Fixture ($reproText.IndexOf('Enter-VmbMachineTransactionLease') -lt $reproText.IndexOf('$buildRun = Invoke-VmbLauncherProcess')) 'reproducibility caller takes transaction before leased launcher build'
+        $publisherStageCleanup = $publisherText.LastIndexOf('Remove-PublicationStageDirectory -Path $stage')
+        $publisherLauncherExit = $publisherText.LastIndexOf('Exit-VmbLauncherExecutableLease -Lease $effectiveLauncherLease')
+        $publisherTransactionExit = $publisherText.LastIndexOf('Exit-VmbMachineTransactionLease -Lease $releaseTransactionLease')
+        Assert-Fixture ($publisherStageCleanup -ge 0 -and
+            $publisherLauncherExit -gt $publisherStageCleanup -and
+            $publisherTransactionExit -gt $publisherLauncherExit) 'standalone publisher cleans its stage and releases its owned executable before the machine transaction'
+        $reproTempCleanup = $reproText.LastIndexOf('Remove-Item -LiteralPath $tempSettings -Force')
+        $reproLauncherExit = $reproText.LastIndexOf('Exit-VmbLauncherExecutableLease -Lease $launcherLease')
+        $reproTransactionExit = $reproText.LastIndexOf('Exit-VmbMachineTransactionLease -Lease $rebuildTransactionLease')
+        Assert-Fixture ($reproTempCleanup -ge 0 -and
+            $reproLauncherExit -gt $reproTempCleanup -and
+            $reproTransactionExit -gt $reproLauncherExit) 'reproducibility caller cleans temporary state and releases its executable before the machine transaction'
 
         # A normally emptied Job has ActiveProcesses=0 but no end-of-job time
         # limit and therefore is not a signalled synchronization object. Keep a

@@ -12,10 +12,9 @@
 #                                               # exact approved dependency handoff from ship.ps1
 #
 # Two modes (issues #436/#493):
-#   * FULL (no -Mods)  - legacy behavior, unchanged: build + stage every inventory mod, write a
-#     fresh manifest from live source, `gh release create`. Run it only when the whole working
-#     tree is release-clean: it publishes whatever every mod's source builds to RIGHT NOW.
-#   * FILTERED (-Mods) - build/stage/upload only the named mods. Sibling manifest entries are
+#   * FULL (no -Mods)  - build-gate every source-commit inventory mod, then stage exact
+#     source-commit blobs and write one complete manifest.
+#   * FILTERED (-Mods) - build-gate/stage/upload only the named mods. Sibling manifest entries are
 #     carried VERBATIM from the release's existing manifest (version + sha256 of what was
 #     ACTUALLY published - a mid-edit sibling can neither fail this publish nor get a mislabeled
 #     asset). If the tag's release doesn't exist yet, sibling ZIPS are carried forward from the
@@ -37,7 +36,8 @@ param(
     [string]$PublicationReceiptOutputPath,
     [string]$LauncherPath,
     [string]$LauncherSource,
-    [string]$LauncherApprovalAnchor
+    [string]$LauncherApprovalAnchor,
+    [object]$LauncherExecutableLease
 )
 
 $ErrorActionPreference = 'Stop'
@@ -84,6 +84,30 @@ $launcherResolution = Resolve-ApprovedVmbLauncherPath `
     -PrimaryWorktreeRoot $primaryWorktreeRoot `
     -EnvironmentPath $env:VT2_SHIP_VMB_LAUNCHER
 $launcher = $launcherResolution.Path
+$effectiveLauncherLease = $null
+$ownsLauncherExecutableLease = $false
+$stage = $null
+$releaseTransactionLease = $null
+try {
+if ($null -ne $LauncherExecutableLease) {
+    $builderProof = Assert-VmbLauncherExecutableLease `
+        -Lease $LauncherExecutableLease `
+        -ExpectedRequestedPath $launcherResolution.Path `
+        -VerifyContent
+    $effectiveLauncherLease = $LauncherExecutableLease
+}
+else {
+    if ($SkipBuild) {
+        throw '-SkipBuild requires the live VMBLauncher executable lease from canonical ship.ps1.'
+    }
+    $effectiveLauncherLease = Enter-VmbLauncherExecutableLease `
+        -LauncherPath $launcherResolution.Path -RequireDirectPath
+    $ownsLauncherExecutableLease = $true
+    $builderProof = Assert-VmbLauncherExecutableLease `
+        -Lease $effectiveLauncherLease `
+        -ExpectedRequestedPath $launcherResolution.Path `
+        -VerifyContent
+}
 $sourceCommit = Get-ReleaseSourceCommit -RepoRoot $repoRoot
 $ghRepo = 'Ensrick/vermintide-2-tweaker'
 
@@ -110,8 +134,10 @@ else {
 
 }
 $publicationAuthorization = $callerAuthorization
-$builderVersion = Get-VmbLauncherVersion -LauncherPath $launcher
-$launcherCapability = Assert-VmbLauncherPublicationCapability -LauncherPath $launcher
+$builderVersion = [string]$builderProof.version
+$launcherCapability = Assert-VmbLauncherPublicationCapability `
+    -LauncherExecutableLease $effectiveLauncherLease `
+    -WorkingDirectory $repoRoot
 Write-Host "VMBLauncher dependency: $launcher ($($launcherResolution.Source), version $builderVersion)" -ForegroundColor DarkGray
 Write-Host "VMBLauncher publication boundary: schema 3, exact commit blobs, locked upload snapshot - PASS" -ForegroundColor DarkGray
 
@@ -127,7 +153,6 @@ $releaseTransactionLease = Enter-VmbMachineTransactionLease `
     -Action 'publish-release' `
     -Mod $releaseTransactionMod `
     -ProjectRoot $repoRoot
-try {
 $releaseMutationMutex = $null
 $releaseMutationLockHeld = $false
 try {
@@ -146,21 +171,31 @@ try {
     }
     Write-Host 'GitHub release mutation lock: acquired' -ForegroundColor DarkGray
 
-# Mod inventory: single source of truth at tools/mod-inventory.psd1 (shared with
-# tools/mod-lint/lint-mod.ps1 + qa/check_cfg.ps1). Each entry maps to this
-# script's expected { Folder, Id, Name } shape. Unpublished mods (no WorkshopId)
-# are still listed; the per-mod loop below skips them on the published_id check.
-$inventoryPath = Join-Path $repoRoot 'tools\mod-inventory.psd1'
-if (-not (Test-Path $inventoryPath)) {
-    throw "Mod inventory not found at $inventoryPath. It is the single source of truth for the release set."
-}
-$inventory = Import-PowerShellDataFile -Path $inventoryPath
+# The release set is source-commit data. A mutable worktree inventory must not
+# select another root bundle or weaken authority while the release continues to
+# claim source_commit.
+$inventory = Get-PublicationCommitInventory `
+    -RepoRoot $repoRoot `
+    -SourceCommit $sourceCommit
 # NOTE: this variable must NOT be named $mods -- PowerShell variable names are
 # CASE-INSENSITIVE, so $mods would silently OVERWRITE the $Mods parameter (it
 # did, on 2026-07-13: every ship's -Mods filter saw 19 inventory hashtables
 # instead of the one mod name and the release step aborted).
 $releaseSet = @($inventory.Mods | ForEach-Object {
-    @{ Folder = $_.Dir; Id = $_.ModId; Name = $_.Name }
+    if ([string]$_.BundleAuthority -cne 'tracked') {
+        throw "Source-commit inventory BundleAuthority for '$($_.Dir)' must be exactly 'tracked'."
+    }
+    if ([string]$_.RootBundle -cnotmatch '^[0-9a-f]{16}\.mod_bundle$') {
+        throw "Source-commit inventory RootBundle for '$($_.Dir)' is invalid: '$($_.RootBundle)'."
+    }
+    [ordered]@{
+        Folder = $_.Dir
+        Id = $_.ModId
+        Name = $_.Name
+        RootBundle = $_.RootBundle
+        DescriptorName = "$($_.Dir).mod"
+        BundleAuthority = $_.BundleAuthority
+    }
 })
 
 # ---- Per-mod filter (issues #493 / #436) ----
@@ -242,41 +277,69 @@ if (Test-Path $linter) {
     Write-Warning "Linter not found at $linter - skipping pre-release lint gate."
 }
 
-$stage = Join-Path $repoRoot '.release-stage'
-if (Test-Path $stage) { Get-ChildItem $stage -Recurse | Remove-Item -Recurse -Force }
-New-Item -ItemType Directory -Force -Path $stage | Out-Null
+function Assert-PublicationStagePath {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$RepoRoot
+    )
+
+    $root = [System.IO.Path]::GetFullPath($RepoRoot).TrimEnd('\', '/')
+    $full = [System.IO.Path]::GetFullPath($Path).TrimEnd('\', '/')
+    $prefix = $root + [System.IO.Path]::DirectorySeparatorChar
+    if (-not $full.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase) -or
+        [System.IO.Path]::GetDirectoryName($full) -cne $root -or
+        [System.IO.Path]::GetFileName($full) -cnotmatch '^\.release-stage-[0-9a-f]{32}$') {
+        throw "Publication stage path is not a unique direct child of RepoRoot: $full"
+    }
+    foreach ($candidate in @($root, $full)) {
+        if (Test-Path -LiteralPath $candidate) {
+            $item = Get-Item -LiteralPath $candidate -Force
+            if (($item.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+                throw "Publication refuses a reparse-point stage ancestor: $candidate"
+            }
+        }
+    }
+    return $full
+}
+
+function Remove-PublicationStageDirectory {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$RepoRoot
+    )
+
+    $full = Assert-PublicationStagePath -Path $Path -RepoRoot $RepoRoot
+    if (-not (Test-Path -LiteralPath $full)) { return }
+    $rootItem = Get-Item -LiteralPath $full -Force
+    if (($rootItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "Refusing to clean a reparse-point publication stage: $full"
+    }
+    $entries = @(Get-ChildItem -LiteralPath $full -Recurse -Force)
+    if (@($entries | Where-Object {
+            ($_.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0
+        }).Count -gt 0) {
+        throw "Refusing to clean a publication stage containing a reparse point: $full"
+    }
+    foreach ($file in @($entries | Where-Object { -not $_.PSIsContainer })) {
+        $file.Attributes = [System.IO.FileAttributes]::Normal
+        $file.Delete()
+    }
+    foreach ($directory in @($entries | Where-Object { $_.PSIsContainer } |
+            Sort-Object { $_.FullName.Length } -Descending)) {
+        $directory.Delete()
+    }
+    $rootItem.Delete()
+}
+
+$stage = Join-Path $repoRoot ('.release-stage-' + [guid]::NewGuid().ToString('N'))
+$stage = Assert-PublicationStagePath -Path $stage -RepoRoot $repoRoot
+if (Test-Path -LiteralPath $stage) {
+    throw "Unique publication stage unexpectedly already exists: $stage"
+}
+[System.IO.Directory]::CreateDirectory($stage) | Out-Null
+$stage = Assert-PublicationStagePath -Path $stage -RepoRoot $repoRoot
 
 if (-not $Tag) { $Tag = "mods-$(Get-Date -Format yyyy-MM-dd)" }
-
-function Read-ModVersion {
-    param([string]$ModFolderPath, [string]$FolderName, [string]$ModId)
-    # ModFolderPath = absolute path to the mod directory.
-    # FolderName    = bare folder name (e.g. "cosmetics_tweaker"); also matches the lua filename.
-    $luaPath = Join-Path $ModFolderPath "scripts\mods\$FolderName\$FolderName.lua"
-    if (Test-Path $luaPath) {
-        $txt = [System.IO.File]::ReadAllText($luaPath, [System.Text.Encoding]::UTF8)
-        if ($txt -match 'MOD_VERSION\s*=\s*"([^"]+)"') { return $matches[1] }
-    }
-    return ''
-}
-
-function Read-WorkshopId {
-    param([string]$ModFolder)
-    $cfg = Join-Path $ModFolder 'itemV2.cfg'
-    if (-not (Test-Path $cfg)) { return '' }
-    $txt = [System.IO.File]::ReadAllText($cfg, [System.Text.Encoding]::UTF8)
-    if ($txt -match 'published_id\s*=\s*(\d+)L') { return $matches[1] }
-    return ''
-}
-
-function Read-Visibility {
-    param([string]$ModFolder)
-    $cfg = Join-Path $ModFolder 'itemV2.cfg'
-    if (-not (Test-Path $cfg)) { return '' }
-    $txt = [System.IO.File]::ReadAllText($cfg, [System.Text.Encoding]::UTF8)
-    if ($txt -match 'visibility\s*=\s*"([^"]+)"') { return $matches[1] }
-    return ''
-}
 
 function Get-ByteSha256 {
     param([byte[]]$Bytes)
@@ -359,14 +422,20 @@ $stagedIds    = @()
 $receiptInputs = @()
 
 foreach ($m in $releaseSet) {
-    $modPath  = Join-Path $repoRoot $m.Folder
-    if (-not (Test-Path $modPath)) {
-        Write-Warning "Skipping $($m.Folder): folder missing"
-        continue
-    }
-
     $commitSnapshot = Get-PublicationCommitSnapshot `
         -RepoRoot $repoRoot -SourceCommit $sourceCommit -Mod $m.Folder
+    $commitOutputRecords = @($commitSnapshot.BundleFiles | ForEach-Object {
+        [pscustomobject][ordered]@{
+            Name = [string]$_.Path
+            Length = [long]$_.Length
+            Sha256 = [string]$_.Sha256
+        }
+    })
+    $commitOutputSet = New-VtBundleOutputSet `
+        -Records $commitOutputRecords `
+        -ExpectedDescriptorName $m.DescriptorName `
+        -ExpectedRootBundle $m.RootBundle `
+        -ExpectedDescriptorSha256 ([string]$commitSnapshot.SourceDescriptor.Sha256)
     $version = "$($commitSnapshot.Version)"
     $workshopId = "$($commitSnapshot.PublishedId)"
     $visibility = "$($commitSnapshot.Visibility)"
@@ -389,12 +458,18 @@ foreach ($m in $releaseSet) {
     if (-not $SkipBuild) {
         Write-Host ""
         Write-Host "==> Building $($m.Folder)" -ForegroundColor Cyan
-        & $launcher build $m.Folder
-        if ($LASTEXITCODE -ne 0) { throw "Build failed for $($m.Folder) (exit $LASTEXITCODE)" }
+        $buildRun = Invoke-VmbLauncherProcess `
+            -Lease $effectiveLauncherLease `
+            -ArgumentList @('build', $m.Folder) `
+            -WorkingDirectory $repoRoot `
+            -ReplayOutput
+        if ($buildRun.ExitCode -ne 0) {
+            throw "Build failed for $($m.Folder) (exit $($buildRun.ExitCode))"
+        }
     }
 
     # Stage immutable source-commit blobs, never mutable working-tree paths.
-    # Build remains a reproducibility gate, but its path output is not a release
+    # Build remains a build-health gate, but its path output is not a release
     # input and cannot be swapped into the hosted bytes.
     $modStage = Join-Path $stage $m.Id
     New-Item -ItemType Directory -Force -Path $modStage | Out-Null
@@ -408,18 +483,37 @@ foreach ($m in $releaseSet) {
         [System.IO.Directory]::CreateDirectory([System.IO.Path]::GetDirectoryName($destination)) | Out-Null
         [System.IO.File]::WriteAllBytes($destination, [byte[]]$bundle.Bytes)
     }
-    Set-Content -Path (Join-Path $modStage 'vt2updater_version.txt') -Value $version -Encoding ascii -NoNewline
-
     # Provenance hashes describe VMBLauncher's canonical post-policy output,
-    # before the updater sidecar is added. Hash the copied staging files so the
-    # manifest verifies the exact bytes that will enter the release zip.
-    $bundleFiles = @(New-BundleFileRecords -BundleDirectory $modStage | Where-Object {
-        $_.filename -ne 'vt2updater_version.txt'
-    })
+    # before the updater sidecar is added. Enumerate and validate that exact
+    # normalized set first; the updater sidecar is release metadata, not a VMB
+    # output, and must never be filtered out of a looser filesystem scan.
+    if ("$($m.BundleAuthority)" -cne 'tracked') {
+        throw "Release publisher refuses unsupported BundleAuthority '$($m.BundleAuthority)' for $($m.Folder)."
+    }
+    $stagedOutputSet = Get-VtBundleOutputSet `
+        -BundleDirectory $modStage `
+        -ExpectedDescriptorName $m.DescriptorName `
+        -ExpectedRootBundle $m.RootBundle `
+        -ExpectedDescriptorSha256 ([string]$commitSnapshot.SourceDescriptor.Sha256)
+    $stagedComparison = @(Compare-VtBundleOutputSets `
+        -Expected $commitOutputSet `
+        -Actual $stagedOutputSet `
+        -ExpectedLabel 'source-commit output' `
+        -ActualLabel 'staged output' `
+        -RequireLength $true)
+    if ($stagedComparison.Count -gt 0) {
+        throw "Release staging differs from immutable source-commit output: $($stagedComparison -join '; ')"
+    }
+    $bundleFiles = @(ConvertTo-VtBundleManifestRecords -OutputSet $commitOutputSet)
+    Set-Content -Path (Join-Path $modStage 'vt2updater_version.txt') -Value $version -Encoding ascii -NoNewline
 
     $zipPath = Join-Path $stage "$($m.Id).zip"
     if (Test-Path $zipPath) { Remove-Item $zipPath -Force }
-    Compress-Archive -Path (Join-Path $modStage '*') -DestinationPath $zipPath -Force
+    $zipBytes = New-ReleaseZipBytesFromImmutableOutput `
+        -OutputSet $commitOutputSet `
+        -BundleFiles @($commitSnapshot.BundleFiles) `
+        -Version $version
+    [System.IO.File]::WriteAllBytes($zipPath, [byte[]]$zipBytes)
     $assetPaths += $zipPath
 
     # Bundle integrity: lowercase-hex SHA256 of the zip bytes. vt2-mod-updater compares
@@ -443,6 +537,8 @@ foreach ($m in $releaseSet) {
             name    = 'VMBLauncher'
             version = $builderVersion
         }
+        root_bundle     = $m.RootBundle
+        descriptor_name = $m.DescriptorName
         bundle_files    = $bundleFiles
     }
     $manifestEntry['publication_authorization'] = $publicationAuthorization
@@ -704,5 +800,22 @@ finally {
 }
 }
 finally {
-    Exit-VmbMachineTransactionLease -Lease $releaseTransactionLease
+    try {
+        try {
+            if ($stage -and -not $DryRun -and (Test-Path -LiteralPath $stage)) {
+                try { Remove-PublicationStageDirectory -Path $stage -RepoRoot $repoRoot }
+                catch { Write-Warning "Could not safely clean unique publication stage '$stage': $($_.Exception.Message)" }
+            }
+        }
+        finally {
+            if ($ownsLauncherExecutableLease -and $null -ne $effectiveLauncherLease) {
+                Exit-VmbLauncherExecutableLease -Lease $effectiveLauncherLease
+            }
+        }
+    }
+    finally {
+        if ($null -ne $releaseTransactionLease) {
+            Exit-VmbMachineTransactionLease -Lease $releaseTransactionLease
+        }
+    }
 }

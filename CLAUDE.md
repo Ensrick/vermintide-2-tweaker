@@ -324,12 +324,17 @@ Claim BEFORE bumping: the broker owns the number and it can exceed master+1
 number"). If the change touches TWO mods, `-BuildOnly` BOTH before committing -
 `qa/check_release_bundle_atomicity.ps1` (issue #724) requires each mod's source
 change and its own root `.mod_bundle` in the same commit.
-BuildOnly also writes `<mod>/.build-receipt.json` (issue #1278), binding the
-canonical root SHA/blob to both the exact raw runtime bytes Stingray consumed
-and the Git-clean blobs staging must preserve. Raw bytes that the staged blobs
-cannot reproduce on checkout fail closed. Editing relevant source after
-BuildOnly invalidates the receipt; rerun BuildOnly instead of committing a stale
-source/root pair.
+BuildOnly also writes `<mod>/.build-receipt.json` (issues #1278/#1400). Schema 3
+binds both the exact raw runtime bytes Stingray consumed and the Git-clean blobs
+staging must preserve to the complete normalized `bundleV2` output set: every
+filename, length, SHA-256, canonical root, source-qualified descriptor, builder
+version, aggregate fingerprint, and normalization-policy identity. Raw bytes
+that Git cannot reproduce, a source edit after BuildOnly, an extra/missing or
+changed output, descriptor drift, builder drift, or policy drift all fail
+closed. All inventory rows remain explicitly `BundleAuthority = 'tracked'`, so
+the complete receipt proof augments rather than weakens tracked parity. Untouched
+schema-2 receipts remain valid during the shadow transition; rerun BuildOnly for
+any changed mod instead of committing stale source/output evidence.
 
 The publishing invocation fails closed unless HEAD is the live default-branch commit, an associated PR merged that exact commit, hosted `qa-gate` completed successfully on it, the machine-global mod/version claim matches, and a clean build exactly reproduces every tracked `bundleV2` blob. It then runs separate deploy and upload actions and records authorization evidence in the GitHub release manifest. Add `-AllowPublic` when the mod's `itemV2.cfg` has `visibility = public`. Add `-NoRemote` only when intentionally skipping an otherwise-enabled remote target, and say which target was skipped. If no remote target is enabled, no override is needed; report that the deploy was local-only.
 

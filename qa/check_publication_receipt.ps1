@@ -77,14 +77,21 @@ try {
     $modRoot = Join-Path $temp $mod
     $bundleRoot = Join-Path $modRoot 'bundleV2'
     $luaRoot = Join-Path $modRoot 'scripts\mods\modx'
+    $toolsRoot = Join-Path $temp 'tools'
     [System.IO.Directory]::CreateDirectory($bundleRoot) | Out-Null
     [System.IO.Directory]::CreateDirectory($luaRoot) | Out-Null
+    [System.IO.Directory]::CreateDirectory($toolsRoot) | Out-Null
+    $inventoryPath = Join-Path $toolsRoot 'mod-inventory.psd1'
+    $inventoryText = "@{ Mods = @( @{ Dir = 'modx'; ModId = 'modx'; Name = 'Mod X'; BundleAuthority = 'tracked'; RootBundle = 'root.mod_bundle' } ) }`n"
+    [System.IO.File]::WriteAllText(
+        $inventoryPath, $inventoryText, [System.Text.UTF8Encoding]::new($false))
     [System.IO.File]::WriteAllText(
         (Join-Path $modRoot 'itemV2.cfg'),
         "title = `"Mod X v1.2.3-dev`";`npreview = `"preview.jpg`";`nvisibility = `"private`";`npublished_id = 123L;`n")
     [System.IO.File]::WriteAllBytes(
         (Join-Path $modRoot 'preview.jpg'),
         [System.Text.Encoding]::UTF8.GetBytes('preview-v1'))
+    [System.IO.File]::WriteAllText((Join-Path $modRoot 'modx.mod'), 'descriptor')
     [System.IO.File]::WriteAllText((Join-Path $bundleRoot 'modx.mod'), 'descriptor')
     [System.IO.File]::WriteAllText((Join-Path $bundleRoot 'root.mod_bundle'), 'bundle')
     [System.IO.File]::WriteAllText((Join-Path $luaRoot 'modx.lua'), 'local MOD_VERSION = "1.2.3-dev"')
@@ -96,6 +103,26 @@ try {
     & git -C $temp commit -q -m 'commit-a'
     if ($LASTEXITCODE -ne 0) { throw 'Could not create publication commit fixture A.' }
     $commitA = (& git -C $temp rev-parse HEAD).Trim()
+
+    $commitInventory = Get-PublicationCommitInventory `
+        -RepoRoot $temp -SourceCommit $commitA
+    Assert-PublicationFixture (
+        @($commitInventory.Mods).Count -eq 1 -and
+        [string]$commitInventory.Mods[0].BundleAuthority -ceq 'tracked' -and
+        [string]$commitInventory.Mods[0].RootBundle -ceq 'root.mod_bundle'
+    ) 'source-commit inventory is parsed as constant immutable data'
+    [System.IO.File]::WriteAllText(
+        $inventoryPath,
+        "@{ Mods = @( @{ Dir = 'modx'; ModId = 'modx'; Name = 'Dirty'; BundleAuthority = 'receipt'; RootBundle = 'evil.mod_bundle' } ) }`n",
+        [System.Text.UTF8Encoding]::new($false))
+    $commitInventoryAfterDirtyEdit = Get-PublicationCommitInventory `
+        -RepoRoot $temp -SourceCommit $commitA
+    Assert-PublicationFixture (
+        [string]$commitInventoryAfterDirtyEdit.Mods[0].BundleAuthority -ceq 'tracked' -and
+        [string]$commitInventoryAfterDirtyEdit.Mods[0].RootBundle -ceq 'root.mod_bundle'
+    ) 'dirty worktree inventory cannot alter source-commit publication authority'
+    [System.IO.File]::WriteAllText(
+        $inventoryPath, $inventoryText, [System.Text.UTF8Encoding]::new($false))
 
     $authorization = [pscustomobject]@{ mode = 'hosted_qa' }
     $receipt = New-WorkshopPublicationReceipt `
