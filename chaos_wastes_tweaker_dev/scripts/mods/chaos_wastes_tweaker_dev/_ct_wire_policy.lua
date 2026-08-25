@@ -17,7 +17,7 @@
 --   is ct's copy of that contract.
 --
 -- Kept pure so qa/lua drives the exact shipped decisions with no engine
--- globals, no hooks, and no mod handle. Owned by: _ct_meta_trait_boons.lua
+-- globals, no hooks, and no mod handle. Owned by: _ct_peer_parity_owner.lua
 -- (identity/integrity/gate) and _ct_boon_registry.lua (reservation).
 
 local M = {}
@@ -50,7 +50,7 @@ local POWER_UPS = {
 -- ABSENT - the first is a sub-buff `name` field inside the stack template's
 -- `buffs` array and the second a BuffFunctionTemplates key; neither is a
 -- top-level BuffTemplates entry and neither is registered into the lookup
--- (_ct_meta_trait_boons.lua:895-910 registers only the stack name).
+-- (`_ct_meta_boon_owner.lua` registers only the stack name).
 local BUFFS = {
     power_up_ct_meta_stagger_exotic = true,
     power_up_ct_meta_crit_exotic = true,

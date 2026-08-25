@@ -8,7 +8,7 @@
 -- boon_effective_count=17, stacks=0; same signature as issue 289) while the
 -- host's buff extension sits at target - which zeroes every later grant_plan
 -- delta, so the client can NEVER converge organically. The restore callback in
--- _ct_meta_trait_boons.lua only re-injects pools. This owner registers a
+-- _ct_peer_parity_owner.lua only re-injects pools. This owner registers a
 -- SECOND gated feature on the same peer-parity beacon: on every enable
 -- transition the HOST reconciles each player unit via the pure
 -- _ct_ammo_guard_core.restore_plan kernel - remove the host-only stacks, then
@@ -21,7 +21,7 @@
 --
 -- Owned by: chaos_wastes_tweaker_dev.lua entry point. Consumed via: one
 -- mod:dofile from _ct_settings_lifecycle_owner.lua, directly after
--- _ct_meta_trait_boons.lua installs the beacon (load order is load-bearing:
+-- _ct_meta_trait_boons.lua synchronously installs the beacon owner (load order is load-bearing:
 -- mod._ct_peer_parity and mod._ct_ammo_guard_core must already exist).
 return function(mod, ctx)
     local _rt_register = ctx.rt_register

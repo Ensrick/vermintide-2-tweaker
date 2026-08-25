@@ -6,7 +6,6 @@
   "generated": "2026-08-23",
   "files": {
     "career_tweaker/scripts/mods/career_tweaker/_crt_balance_catalog_early.lua": 1622,
-    "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_meta_trait_boons.lua": 1658,
     "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_regression.lua": 1721,
     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_combat_styles.lua": 2151,
     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_husk_path.lua": 1575,
