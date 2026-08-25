@@ -26,7 +26,9 @@ function Test-InventoryModel {
     )
     $errors = @()
     $seenDir = @{}; $seenId = @{}; $seenWorkshop = @{}
-    $required = @('Dir', 'ModId', 'WorkshopId', 'Visibility', 'Stream', 'Public', 'Name', 'RootBundle')
+    $required = @(
+        'Dir', 'ModId', 'WorkshopId', 'Visibility', 'Stream', 'Public',
+        'Name', 'RootBundle', 'BundleAuthority')
 
     foreach ($mod in @($Mods)) {
         foreach ($field in $required) {
@@ -42,7 +44,7 @@ function Test-InventoryModel {
         if ($mod.Visibility -notin @('public', 'friends_only', 'private')) { $errors += "invalid visibility for ${dir}: $($mod.Visibility)" }
         if ($mod.Stream -notin @('single', 'stable', 'dev')) { $errors += "invalid stream for ${dir}: $($mod.Stream)" }
         if ([bool]$mod.Public -ne ($mod.Visibility -eq 'public')) { $errors += "Public flag disagrees with visibility for $dir" }
-        $errors += @(Get-BuildArtifactExclusionErrors -ModEntry $mod)
+        $errors += @(Get-BuildOutputPolicyErrors -ModEntry $mod)
 
         if (-not $CfgByDir.ContainsKey($dir)) {
             $errors += "inventory directory missing live itemV2.cfg: $dir"
@@ -67,14 +69,14 @@ function Test-InventoryModel {
 }
 
 function Invoke-SelfTest {
-    $mods = @(@{ Dir='alpha'; ModId='a'; WorkshopId='123'; Visibility='public'; Stream='single'; Public=$true; Name='Alpha'; RootBundle='aaaaaaaaaaaaaaaa.mod_bundle' })
+    $mods = @(@{ Dir='alpha'; ModId='a'; WorkshopId='123'; Visibility='public'; Stream='single'; Public=$true; Name='Alpha'; RootBundle='aaaaaaaaaaaaaaaa.mod_bundle'; BundleAuthority='tracked' })
     $cfg = @{ alpha = @{ WorkshopId='123'; Visibility='public'; ModId='a' } }
     $readme = '| [`alpha`](./alpha/) |'
     $good = @(Test-InventoryModel $mods @('alpha', 'stale') $cfg $readme @{ stale=$true })
     if ($good.Count -ne 0) { throw "valid inventory rejected: $($good -join '; ')" }
     $withExclusion = @(@{
         Dir='alpha'; ModId='a'; WorkshopId='123'; Visibility='public'; Stream='single'; Public=$true;
-        Name='Alpha'; RootBundle='aaaaaaaaaaaaaaaa.mod_bundle';
+        Name='Alpha'; RootBundle='aaaaaaaaaaaaaaaa.mod_bundle'; BundleAuthority='tracked';
         BuildArtifactExclusions=@(@{
             Name='cccccccccccccccc.mod_bundle'; Sha256=('d' * 64); Reason='fixture SDK tool-only output'
         })
@@ -83,18 +85,27 @@ function Invoke-SelfTest {
     if ($goodExclusion.Count -ne 0) { throw "valid build exclusion rejected: $($goodExclusion -join '; ')" }
 
     $badMods = @(
-        @{ Dir='alpha'; ModId='a'; WorkshopId='123'; Visibility='public'; Stream='single'; Public=$false; Name='Alpha'; RootBundle='aaaaaaaaaaaaaaaa.mod_bundle' },
-        @{ Dir='alpha'; ModId='a'; WorkshopId='123'; Visibility='friends_only'; Stream='wrong'; Public=$false; Name='Duplicate'; RootBundle='bbbbbbbbbbbbbbbb.mod_bundle' }
+        @{ Dir='alpha'; ModId='a'; WorkshopId='123'; Visibility='public'; Stream='single'; Public=$false; Name='Alpha'; RootBundle='aaaaaaaaaaaaaaaa.mod_bundle'; BundleAuthority='tracked' },
+        @{ Dir='alpha'; ModId='a'; WorkshopId='123'; Visibility='friends_only'; Stream='wrong'; Public=$false; Name='Duplicate'; RootBundle='bbbbbbbbbbbbbbbb.mod_bundle'; BundleAuthority='tracked' }
     )
     $bad = @(Test-InventoryModel $badMods @('alpha', 'beta') $cfg '' @{})
     foreach ($needle in @('duplicate inventory directory', 'duplicate VMF mod id', 'duplicate Workshop id', 'active root mod', 'README', 'Public flag', 'invalid stream')) {
         if (-not ($bad -match $needle)) { throw "planted inventory failure not detected: $needle" }
     }
-    $missingRoot = @(Test-InventoryModel @(@{ Dir='alpha'; ModId='a'; WorkshopId='123'; Visibility='public'; Stream='single'; Public=$true; Name='Alpha' }) @('alpha') $cfg $readme @{})
+    $missingRoot = @(Test-InventoryModel @(@{ Dir='alpha'; ModId='a'; WorkshopId='123'; Visibility='public'; Stream='single'; Public=$true; Name='Alpha'; BundleAuthority='tracked' }) @('alpha') $cfg $readme @{})
     if (-not ($missingRoot -match 'missing RootBundle')) { throw 'planted RootBundle omission not detected' }
+    $missingAuthority = @(Test-InventoryModel @(@{ Dir='alpha'; ModId='a'; WorkshopId='123'; Visibility='public'; Stream='single'; Public=$true; Name='Alpha'; RootBundle='aaaaaaaaaaaaaaaa.mod_bundle' }) @('alpha') $cfg $readme @{})
+    if (-not ($missingAuthority -match 'missing BundleAuthority') -or
+        -not ($missingAuthority -match 'invalid BundleAuthority')) {
+        throw 'planted BundleAuthority omission not detected by required-field and policy gates'
+    }
+    $wrongAuthority = @(@{ Dir='alpha'; ModId='a'; WorkshopId='123'; Visibility='public'; Stream='single'; Public=$true; Name='Alpha'; RootBundle='aaaaaaaaaaaaaaaa.mod_bundle'; BundleAuthority='generated' })
+    if (-not (@(Test-InventoryModel $wrongAuthority @('alpha') $cfg $readme @{}) -match 'invalid BundleAuthority')) {
+        throw 'planted non-tracked BundleAuthority was accepted'
+    }
     $badExclusion = @(@{
         Dir='alpha'; ModId='a'; WorkshopId='123'; Visibility='public'; Stream='single'; Public=$true;
-        Name='Alpha'; RootBundle='aaaaaaaaaaaaaaaa.mod_bundle';
+        Name='Alpha'; RootBundle='aaaaaaaaaaaaaaaa.mod_bundle'; BundleAuthority='tracked';
         BuildArtifactExclusions=@(
             @{ Name='..\escape.mod_bundle'; Sha256='wrong'; Reason='' },
             @{ Name='bbbbbbbbbbbbbbbb.mod_bundle'; Sha256='wrong'; Reason='' },

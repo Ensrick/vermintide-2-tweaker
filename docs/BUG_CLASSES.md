@@ -2084,17 +2084,25 @@ worktrees share `%APPDATA%\VMBLauncher\settings.json`.
 - Preserve machine-global settings byte-exactly because canonical ship never
   writes them. Clean the private file in `finally`; recover only exact stale
   PID/start filename records under the authenticated machine transaction.
-- Resolve launcher bytes once through a shared approved-candidate policy, pass
-  the exact path, provenance source, and approval anchor into every later
-  phase, and revalidate that immutable snapshot before reading version
-  metadata. Do not reread mutable global settings during the handoff. A direct
-  sub-tool may perform the same bounded fallback, but an explicit unapproved
-  path or source mismatch must fail closed.
+- Resolve launcher bytes once through a shared approved-candidate policy and
+  reject every reparse component in the selected executable path. Open one live
+  read/delete-denying lease before capability probing; bind canonical path,
+  stable file ID, Int64 length, SHA-256, and version to that held handle. Every
+  capability/build/deploy/upload child starts through the same hidden process
+  boundary, which rechecks identity/content before `Start()` and after
+  `WaitForExit()`. Pass the live same-runspace lease plus the exact path,
+  provenance source, and approval anchor into the publisher. Hold it through
+  upload and dispose it before the machine transaction. Do not reread mutable
+  global settings or record builder version from a free path during handoff. A
+  direct sub-tool may perform the same bounded fallback, but an explicit
+  unapproved path, reparse escape, source mismatch, or replaced executable must
+  fail closed.
 - Test two distinct worktree roots, every identity field, action failure,
   byte-exact shared-settings preservation, stale/live private-file cleanup,
-  clean external dependency handoff, invalid
-  explicit paths, and provenance mismatch. Issues #647 and #683 own the wrapper
-  and cross-phase gates.
+  clean external dependency handoff, write/delete/rename/replacement attempts,
+  same-version altered bytes, junction escape/retarget, disposed/forged leases,
+  invalid explicit paths, and provenance mismatch. Issues #647, #683, and #1400
+  own the wrapper and cross-phase gates.
 
 ## 54. Late registry extension misses boot-time derived definitions
 

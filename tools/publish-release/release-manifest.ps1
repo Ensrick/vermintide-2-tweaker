@@ -4,6 +4,18 @@
 # canonical builder remains VMBLauncher; these helpers only describe and verify
 # the files that VMBLauncher produced.
 
+$launcherPathHelpers = Join-Path $PSScriptRoot '..\vmb-launcher-path.ps1'
+if (-not (Test-Path -LiteralPath $launcherPathHelpers -PathType Leaf)) {
+    throw "Shared VMBLauncher helpers not found: $launcherPathHelpers"
+}
+. $launcherPathHelpers
+
+$bundleOutputSetHelpers = Join-Path $PSScriptRoot '..\ship\bundle-output-set.ps1'
+if (-not (Test-Path -LiteralPath $bundleOutputSetHelpers -PathType Leaf)) {
+    throw "Shared bundle-output set helpers not found: $bundleOutputSetHelpers"
+}
+. $bundleOutputSetHelpers
+
 function Get-ReleaseSourceCommit {
     param([Parameter(Mandatory = $true)][string]$RepoRoot)
 
@@ -42,39 +54,24 @@ function Get-ModSourceState {
     return 'dirty'
 }
 
-function Get-VmbLauncherVersion {
-    param([Parameter(Mandatory = $true)][string]$LauncherPath)
-
-    if (-not (Test-Path -LiteralPath $LauncherPath -PathType Leaf)) {
-        throw "VMBLauncher not found at $LauncherPath."
-    }
-    $info = [System.Diagnostics.FileVersionInfo]::GetVersionInfo($LauncherPath)
-    $version = "$($info.ProductVersion)".Trim()
-    if (-not $version) { $version = "$($info.FileVersion)".Trim() }
-    if (-not $version) {
-        throw "VMBLauncher at $LauncherPath has no ProductVersion or FileVersion metadata."
-    }
-    return $version
-}
-
 function New-BundleFileRecords {
-    param([Parameter(Mandatory = $true)][string]$BundleDirectory)
+    param(
+        [Parameter(Mandatory = $true)][string]$BundleDirectory,
+        [Parameter(Mandatory = $true)][string]$ExpectedDescriptorName,
+        [Parameter(Mandatory = $true)][string]$ExpectedRootBundle,
+        [string]$ExpectedDescriptorSha256
+    )
 
-    if (-not (Test-Path -LiteralPath $BundleDirectory -PathType Container)) {
-        throw "Bundle directory not found: $BundleDirectory"
+    $arguments = @{
+        BundleDirectory = $BundleDirectory
+        ExpectedDescriptorName = $ExpectedDescriptorName
+        ExpectedRootBundle = $ExpectedRootBundle
     }
-    $directories = @(Get-ChildItem -LiteralPath $BundleDirectory -Directory)
-    if ($directories.Count -gt 0) {
-        throw "Bundle directory contains nested directories that cannot be represented by leaf filenames: $BundleDirectory"
+    if ($PSBoundParameters.ContainsKey('ExpectedDescriptorSha256')) {
+        $arguments.ExpectedDescriptorSha256 = $ExpectedDescriptorSha256
     }
-    $files = @(Get-ChildItem -LiteralPath $BundleDirectory -File | Sort-Object Name)
-    if ($files.Count -eq 0) { throw "Bundle directory is empty: $BundleDirectory" }
-    return @($files | ForEach-Object {
-        [ordered]@{
-            filename = $_.Name
-            sha256   = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-        }
-    })
+    $outputSet = Get-VtBundleOutputSet @arguments
+    return @(ConvertTo-VtBundleManifestRecords -OutputSet $outputSet)
 }
 
 function Get-ReleaseManifestBundleFileRecords {
@@ -98,6 +95,104 @@ function Get-ReleaseZipSnapshotBindingMode {
     if ($records.Count -gt 0) { return 'exact_bundle_files' }
     if ($IsCarried -and -not $IsStaged) { return 'legacy_carried_whole_zip' }
     return 'invalid_missing_bundle_files'
+}
+
+function New-ReleaseZipBytesFromImmutableOutput {
+    param(
+        [Parameter(Mandatory = $true)]$OutputSet,
+        [Parameter(Mandatory = $true)][object[]]$BundleFiles,
+        [Parameter(Mandatory = $true)][string]$Version
+    )
+
+    if ([string]::IsNullOrWhiteSpace($Version) -or
+            $Version -cne $Version.Trim() -or
+            [System.Text.Encoding]::ASCII.GetByteCount($Version) -gt 128) {
+        throw 'Release updater version is empty, non-canonical, or exceeds 128 ASCII bytes.'
+    }
+
+    $proofs = New-Object 'System.Collections.Generic.Dictionary[string,object]' `
+        ([System.StringComparer]::Ordinal)
+    foreach ($bundle in @($BundleFiles)) {
+        $name = [string]$bundle.Path
+        if (-not $name -or [System.IO.Path]::GetFileName($name) -cne $name) {
+            throw "Immutable release bundle path is not one exact leaf: $name"
+        }
+        if ($proofs.ContainsKey($name)) {
+            throw "Immutable release bundle proof is duplicated: $name"
+        }
+        $bytes = [byte[]]$bundle.Bytes
+        if ($null -eq $bytes -or [long]$bytes.Length -ne [long]$bundle.Length) {
+            throw "Immutable release bundle byte length differs from its proof: $name"
+        }
+        $sha = [System.Security.Cryptography.SHA256]::Create()
+        try {
+            $actualHash = [System.BitConverter]::ToString(
+                $sha.ComputeHash($bytes)).Replace('-', '').ToLowerInvariant()
+        }
+        finally { $sha.Dispose() }
+        if ($actualHash -cne [string]$bundle.Sha256) {
+            throw "Immutable release bundle bytes differ from their SHA-256 proof: $name"
+        }
+        $proofs.Add($name, $bundle)
+    }
+
+    $outputFiles = @($OutputSet.Files)
+    if ($outputFiles.Count -ne $proofs.Count) {
+        throw 'Immutable release bundle proof count differs from the canonical output set.'
+    }
+    foreach ($record in $outputFiles) {
+        $name = [string]$record.Name
+        if (-not $proofs.ContainsKey($name)) {
+            throw "Canonical output is missing immutable release bytes: $name"
+        }
+        $proof = $proofs[$name]
+        if ([long]$proof.Length -ne [long]$record.Length -or
+                [string]$proof.Sha256 -cne [string]$record.Sha256) {
+            throw "Immutable release proof differs from the canonical output record: $name"
+        }
+    }
+
+    Add-Type -AssemblyName System.IO.Compression -ErrorAction Stop
+    $memory = New-Object System.IO.MemoryStream
+    $archive = $null
+    try {
+        $archive = New-Object System.IO.Compression.ZipArchive(
+            $memory,
+            [System.IO.Compression.ZipArchiveMode]::Create,
+            $true
+        )
+        $fixedTimestamp = [System.DateTimeOffset]::new(
+            1980, 1, 1, 0, 0, 0, [System.TimeSpan]::Zero)
+        foreach ($record in $outputFiles) {
+            $name = [string]$record.Name
+            $entry = $archive.CreateEntry(
+                $name, [System.IO.Compression.CompressionLevel]::Optimal)
+            $entry.LastWriteTime = $fixedTimestamp
+            $stream = $entry.Open()
+            try {
+                $bytes = [byte[]]$proofs[$name].Bytes
+                $stream.Write($bytes, 0, $bytes.Length)
+            }
+            finally { $stream.Dispose() }
+        }
+        $versionEntry = $archive.CreateEntry(
+            'vt2updater_version.txt',
+            [System.IO.Compression.CompressionLevel]::Optimal)
+        $versionEntry.LastWriteTime = $fixedTimestamp
+        $versionStream = $versionEntry.Open()
+        try {
+            $versionBytes = [System.Text.Encoding]::ASCII.GetBytes($Version)
+            $versionStream.Write($versionBytes, 0, $versionBytes.Length)
+        }
+        finally { $versionStream.Dispose() }
+        $archive.Dispose()
+        $archive = $null
+        return [byte[]]$memory.ToArray()
+    }
+    finally {
+        if ($archive) { $archive.Dispose() }
+        $memory.Dispose()
+    }
 }
 
 function Test-ReleaseManifest {
@@ -184,17 +279,19 @@ function Test-ReleaseManifest {
         $bundleFiles = @(Get-ReleaseManifestBundleFileRecords -ManifestEntry $entry)
         if ($bundleFiles.Count -eq 0) { $errors.Add("$prefix.bundle_files must not be empty"); continue }
         $seenNames = @{}
-        $hasModBundle = $false
-        $hasDescriptor = $false
+        $manifestOutputRecords = @()
         foreach ($bundle in $bundleFiles) {
             $name = "$($bundle.filename)"
             $bundlePrefix = "$prefix.bundle_files[$name]"
             if (-not $name -or [System.IO.Path]::GetFileName($name) -ne $name) { $errors.Add("$bundlePrefix.filename must be a leaf filename") }
             if ($seenNames.ContainsKey($name)) { $errors.Add("$prefix has duplicate bundle filename: $name") } else { $seenNames[$name] = $true }
-            if ($name -like '*.mod_bundle') { $hasModBundle = $true }
-            if ($name -like '*.mod') { $hasDescriptor = $true }
             $wantHash = "$($bundle.sha256)"
             if ($wantHash -notmatch '^[0-9a-f]{64}$') { $errors.Add("$bundlePrefix.sha256 must be lowercase SHA-256"); continue }
+            $manifestOutputRecords += [pscustomobject]@{
+                Name = $name
+                Length = 0L
+                Sha256 = $wantHash
+            }
             # A filtered publish stages only RequiredModIds. Carried siblings
             # keep their provenance records verbatim, but their bundle files
             # intentionally are not copied into StageRoot when the target
@@ -210,8 +307,48 @@ function Test-ReleaseManifest {
                 }
             }
         }
-        if (-not $hasModBundle) { $errors.Add("$prefix.bundle_files must include at least one .mod_bundle") }
-        if (-not $hasDescriptor) { $errors.Add("$prefix.bundle_files must include the .mod descriptor") }
+        $rootBundle = [string]$entry.root_bundle
+        $descriptorName = [string]$entry.descriptor_name
+        $hasExactCoordinates = -not [string]::IsNullOrWhiteSpace($rootBundle) -or
+            -not [string]::IsNullOrWhiteSpace($descriptorName)
+        if ($mustHaveProvenance -and -not $hasExactCoordinates) {
+            $errors.Add("$prefix must bind root_bundle and descriptor_name")
+        }
+        if ($hasExactCoordinates) {
+            if ([string]::IsNullOrWhiteSpace($rootBundle) -or
+                [string]::IsNullOrWhiteSpace($descriptorName)) {
+                $errors.Add("$prefix root_bundle and descriptor_name must be supplied together")
+            }
+            else {
+                try {
+                    $descriptorRows = @($manifestOutputRecords | Where-Object {
+                        [string]$_.Name -ceq $descriptorName
+                    })
+                    if ($descriptorRows.Count -ne 1) {
+                        throw "manifest does not contain exactly one declared descriptor '$descriptorName'"
+                    }
+                    $null = New-VtBundleOutputSet `
+                        -Records $manifestOutputRecords `
+                        -ExpectedDescriptorName $descriptorName `
+                        -ExpectedRootBundle $rootBundle `
+                        -ExpectedDescriptorSha256 ([string]$descriptorRows[0].Sha256)
+                }
+                catch {
+                    $errors.Add("$prefix bundle_files are not one canonical output set: $($_.Exception.Message)")
+                }
+            }
+        }
+        else {
+            # Historical carried entries predate exact root/descriptor
+            # coordinates. Preserve their transition allowance without defining
+            # a second, weaker classifier for newly staged outputs.
+            if (@($bundleFiles | Where-Object { "$($_.filename)" -like '*.mod_bundle' }).Count -eq 0) {
+                $errors.Add("$prefix.bundle_files must include at least one .mod_bundle")
+            }
+            if (@($bundleFiles | Where-Object { "$($_.filename)" -like '*.mod' }).Count -eq 0) {
+                $errors.Add("$prefix.bundle_files must include the .mod descriptor")
+            }
+        }
         if ($StageRoot -and $mustHaveProvenance) {
             $stagedDir = Join-Path $StageRoot $id
             if (Test-Path -LiteralPath $stagedDir -PathType Container) {

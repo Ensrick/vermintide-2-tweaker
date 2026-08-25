@@ -49,39 +49,26 @@ function Test-VmbLauncherPublicationCapabilityOutput {
 
 function Assert-VmbLauncherPublicationCapability {
     param(
-        [string]$LauncherPath,
+        [Parameter(Mandatory = $true)]$LauncherExecutableLease,
+        [Parameter(Mandatory = $true)][string]$WorkingDirectory,
         [version]$MinimumVersion = ([version]'0.6.0')
     )
 
-    if (-not (Test-Path -LiteralPath $LauncherPath -PathType Leaf)) {
-        throw "VMBLauncher publication capability probe cannot find $LauncherPath."
+    $run = Invoke-VmbLauncherProcess `
+        -Lease $LauncherExecutableLease `
+        -ArgumentList @('capabilities', '--no-banner') `
+        -WorkingDirectory $WorkingDirectory
+    if ($run.ExitCode -ne 0) {
+        throw "capability probe exited $($run.ExitCode): $($run.Lines -join ' | ')"
     }
-    $psi = New-Object System.Diagnostics.ProcessStartInfo
-    $psi.FileName = $LauncherPath
-    $psi.Arguments = 'capabilities --no-banner'
-    $psi.UseShellExecute = $false
-    $psi.RedirectStandardOutput = $true
-    $psi.RedirectStandardError = $true
-    $psi.CreateNoWindow = $true
-    $psi.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
-    $process = New-Object System.Diagnostics.Process
-    $process.StartInfo = $psi
-    try {
-        if (-not $process.Start()) { throw 'process did not start' }
-        $stdout = $process.StandardOutput.ReadToEnd()
-        $stderr = $process.StandardError.ReadToEnd()
-        $process.WaitForExit()
-        if ($process.ExitCode -ne 0) {
-            throw "capability probe exited $($process.ExitCode): $($stderr.Trim())"
-        }
-    }
-    finally { $process.Dispose() }
     $verdict = Test-VmbLauncherPublicationCapabilityOutput `
-        -Lines @($stdout -split "`r?`n") -MinimumVersion $MinimumVersion
+        -Lines @($run.Lines) -MinimumVersion $MinimumVersion
     if (-not $verdict.Ok) {
         throw "VMBLauncher publication capability probe failed: $($verdict.Problems -join '; '). " +
             'Land/install launcher 0.6.0 before the monorepo publication guard.'
     }
+    $verdict | Add-Member -MemberType NoteProperty `
+        -Name ExecutableProof -Value $run.ExecutableProof -Force
     return $verdict
 }
 
@@ -196,6 +183,94 @@ function Get-PublicationGitObjectId {
     finally { $sha1.Dispose() }
 }
 
+function Get-PublicationCommitBlobProof {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][string]$SourceCommit,
+        [Parameter(Mandatory = $true)][string]$RepoPath
+    )
+
+    if ($SourceCommit -cnotmatch '^[0-9a-f]{40}$') {
+        throw 'Publication commit blob proof requires a lowercase full source commit SHA.'
+    }
+    if ([string]::IsNullOrWhiteSpace($RepoPath) -or
+        $RepoPath.Contains('\') -or $RepoPath.StartsWith('/') -or
+        @($RepoPath.Split('/')) -contains '..') {
+        throw "Publication commit blob path is not canonical: '$RepoPath'."
+    }
+
+    $root = [System.IO.Path]::GetFullPath($RepoRoot).TrimEnd('\', '/')
+    $treeBytes = Invoke-PublicationGitBytes -RepoRoot $root -ArgumentList @(
+        'ls-tree', '-z', '--full-tree', $SourceCommit, '--', $RepoPath)
+    $records = @([System.Text.Encoding]::UTF8.GetString([byte[]]$treeBytes).Split(
+        [char[]]@([char]0),
+        [System.StringSplitOptions]::RemoveEmptyEntries))
+    if ($records.Count -ne 1 -or
+        $records[0] -notmatch '^(100644|100755) blob ([0-9a-f]{40})\t(.+)$' -or
+        [string]$matches[3] -cne $RepoPath) {
+        throw "Source commit $SourceCommit does not bind exactly one regular blob at '$RepoPath'."
+    }
+    $blob = [string]$matches[2]
+    $bytes = Invoke-PublicationGitBytes -RepoRoot $root -ArgumentList @(
+        'cat-file', 'blob', $blob)
+    if ((Get-PublicationGitObjectId -Type 'blob' -Bytes ([byte[]]$bytes)) -cne $blob) {
+        throw "Git blob bytes do not match object id $blob."
+    }
+    return [pscustomobject][ordered]@{
+        Path = $RepoPath
+        GitBlob = $blob
+        Bytes = [byte[]]$bytes
+        Length = [long]([byte[]]$bytes).Length
+        Sha256 = Get-PublicationByteSha256 -Bytes ([byte[]]$bytes)
+    }
+}
+
+function Get-PublicationCommitInventory {
+    param(
+        [Parameter(Mandatory = $true)][string]$RepoRoot,
+        [Parameter(Mandatory = $true)][string]$SourceCommit
+    )
+
+    $proof = Get-PublicationCommitBlobProof `
+        -RepoRoot $RepoRoot `
+        -SourceCommit $SourceCommit `
+        -RepoPath 'tools/mod-inventory.psd1'
+    $text = [System.Text.Encoding]::UTF8.GetString([byte[]]$proof.Bytes)
+    $tokens = $null
+    $parseErrors = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseInput(
+        $text, [ref]$tokens, [ref]$parseErrors)
+    if (@($parseErrors).Count -gt 0) {
+        throw "Source-commit mod inventory is not valid PowerShell data: $($parseErrors[0].Message)"
+    }
+    $rootHash = $ast.Find({
+        param($node)
+        $node -is [System.Management.Automation.Language.HashtableAst]
+    }, $false)
+    if ($null -eq $rootHash) {
+        throw 'Source-commit mod inventory has no root hashtable.'
+    }
+    foreach ($token in @($tokens)) {
+        if ($token.Kind -in @(
+                [System.Management.Automation.Language.TokenKind]::NewLine,
+                [System.Management.Automation.Language.TokenKind]::Comment,
+                [System.Management.Automation.Language.TokenKind]::EndOfInput)) {
+            continue
+        }
+        if ($token.Extent.StartOffset -lt $rootHash.Extent.StartOffset -or
+            $token.Extent.EndOffset -gt $rootHash.Extent.EndOffset) {
+            throw 'Source-commit mod inventory contains executable content outside its root data hashtable.'
+        }
+    }
+    try { $inventory = $rootHash.SafeGetValue() }
+    catch { throw "Source-commit mod inventory is not a constant data file: $($_.Exception.Message)" }
+    if ($inventory -isnot [System.Collections.IDictionary] -or
+        -not $inventory.Contains('Mods')) {
+        throw 'Source-commit mod inventory lacks a Mods collection.'
+    }
+    return $inventory
+}
+
 function Get-PublicationCommitSnapshot {
     param(
         [string]$RepoRoot,
@@ -267,6 +342,7 @@ function Get-PublicationCommitSnapshot {
     $cfgPath = "$Mod/itemV2.cfg"
     $cfg = & $readBlob $cfgPath
     $cfgText = [System.Text.Encoding]::UTF8.GetString([byte[]]$cfg.Bytes)
+    $sourceDescriptor = & $readBlob "$Mod/$Mod.mod"
 
     $bundlePrefix = "$Mod/bundleV2/"
     $bundles = @()
@@ -357,6 +433,7 @@ function Get-PublicationCommitSnapshot {
         SourceCommit = $SourceCommit
         ItemCfg = $cfg
         ItemCfgText = $cfgText
+        SourceDescriptor = $sourceDescriptor
         BundleFiles = $bundles
         PreviewFile = $preview
         Version = $versionMatch.Groups[1].Value

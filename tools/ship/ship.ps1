@@ -315,78 +315,23 @@ function Test-TrackedBundleParity {
 # flags and redirected streams so `ship.ps1` remains genuinely unattended in
 # terminals, CI, and desktop automation. Output is replayed after exit; the
 # launcher's exit code remains authoritative.
-function ConvertTo-ShipWindowsArgument {
-    param([AllowEmptyString()][string]$Value)
-    if ($null -eq $Value -or $Value.Length -eq 0) { return '""' }
-    if ($Value -notmatch '[\s"]') { return $Value }
-
-    $builder = New-Object System.Text.StringBuilder
-    [void]$builder.Append('"')
-    $backslashes = 0
-    foreach ($character in $Value.ToCharArray()) {
-        if ($character -eq '\') {
-            $backslashes++
-            continue
-        }
-        if ($character -eq '"') {
-            [void]$builder.Append(('\' * (($backslashes * 2) + 1)))
-            [void]$builder.Append('"')
-            $backslashes = 0
-            continue
-        }
-        if ($backslashes -gt 0) {
-            [void]$builder.Append(('\' * $backslashes))
-            $backslashes = 0
-        }
-        [void]$builder.Append($character)
-    }
-    if ($backslashes -gt 0) {
-        [void]$builder.Append(('\' * ($backslashes * 2)))
-    }
-    [void]$builder.Append('"')
-    return $builder.ToString()
-}
-
 function Invoke-ShipLauncherNoWindow {
     param(
-        [Parameter(Mandatory = $true)][string]$FilePath,
+        [Parameter(Mandatory = $true)]$LauncherExecutableLease,
         [Parameter(Mandatory = $true)][string[]]$ArgumentList,
         [switch]$ReplayOutput
     )
 
-    $startInfo = New-Object System.Diagnostics.ProcessStartInfo
-    $startInfo.FileName = $FilePath
-    $startInfo.Arguments = (($ArgumentList | ForEach-Object { ConvertTo-ShipWindowsArgument ([string]$_) }) -join ' ')
     $workingRoot = if (-not [string]::IsNullOrWhiteSpace([string]$repoRoot)) {
         $repoRoot
     } else {
         (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
     }
-    $startInfo.WorkingDirectory = $workingRoot
-    $startInfo.UseShellExecute = $false
-    $startInfo.CreateNoWindow = $true
-    $startInfo.WindowStyle = [System.Diagnostics.ProcessWindowStyle]::Hidden
-    $startInfo.RedirectStandardOutput = $true
-    $startInfo.RedirectStandardError = $true
-
-    $process = New-Object System.Diagnostics.Process
-    $process.StartInfo = $startInfo
-    try {
-        if (-not $process.Start()) { throw "Failed to start headless launcher: $FilePath" }
-        $stdoutTask = $process.StandardOutput.ReadToEndAsync()
-        $stderrTask = $process.StandardError.ReadToEndAsync()
-        $process.WaitForExit()
-        $stdout = $stdoutTask.GetAwaiter().GetResult()
-        $stderr = $stderrTask.GetAwaiter().GetResult()
-        $lines = @()
-        if (-not [string]::IsNullOrEmpty($stdout)) { $lines += @($stdout -split "`r?`n" | Where-Object { $_ -ne '' }) }
-        if (-not [string]::IsNullOrEmpty($stderr)) { $lines += @($stderr -split "`r?`n" | Where-Object { $_ -ne '' }) }
-        if ($ReplayOutput) { $lines | ForEach-Object { Write-Host $_ } }
-        return [pscustomobject]@{ ExitCode = $process.ExitCode; Lines = $lines }
-    }
-    finally {
-        $process.Dispose()
-    }
+    return Invoke-VmbLauncherProcess `
+        -Lease $LauncherExecutableLease `
+        -ArgumentList $ArgumentList `
+        -WorkingDirectory $workingRoot `
+        -ReplayOutput:$ReplayOutput
 }
 
 function Test-ShipPathEqual {
@@ -1312,7 +1257,7 @@ function Invoke-ShipSelfTest {
     Assert ($pubTxt -match 'Resolve-GitHubReleaseByTag' -and $pubTxt -match 'Publish-GitHubReleaseAssetsById') "publish-release owns exact-tag fallback and release-id mutation (issue #651)"
     Assert ($pubTxt -match 'Global\\VT2_GitHubReleaseMutation' -and
         $pubTxt -match 'ReleaseMutex\(\)') "shared daily GitHub release lookup/manifest/mutation is serialized across different-mod ships"
-    $publisherCapabilityPos = $pubTxt.IndexOf('Assert-VmbLauncherPublicationCapability -LauncherPath $launcher')
+    $publisherCapabilityPos = $pubTxt.IndexOf('Assert-VmbLauncherPublicationCapability')
     $publisherLookupPos = $pubTxt.IndexOf('Resolve-GitHubReleaseByTag -Repo $ghRepo')
     $publisherAssetMutationPos = $pubTxt.IndexOf('Publish-GitHubReleaseAssetsById -Repo $ghRepo')
     Assert ($publisherCapabilityPos -ge 0 -and
@@ -1321,7 +1266,8 @@ function Invoke-ShipSelfTest {
     Assert ($pubTxt -match 'New-GitHubReleaseAssetSnapshots' -and
         $pubTxt -match '-AssetSnapshots \$assetSnapshots') "zip, manifest, and receipt uploads consume immutable byte snapshots"
     Assert ($pubTxt -match 'Get-PublicationCommitSnapshot' -and
-        $pubTxt -match '\[System\.IO\.File\]::WriteAllBytes\(\$destination, \[byte\[\]\]\$bundle\.Bytes\)') "new release zips are staged from exact source-commit blob bytes"
+        $pubTxt -match 'New-ReleaseZipBytesFromImmutableOutput' -and
+        $pubTxt -notmatch 'Compress-Archive') "new release zips are constructed only from exact source-commit blob bytes"
     Assert (-not ($pubTxt -match 'status --porcelain')) "publisher authorization never relies on a mutable worktree cleanliness check"
     Assert (-not ($pubTxt -match '(?m)^\s*gh\s+release\s+create\b')) "new releases use draft API plus immutable byte upload, not path-consuming gh release create"
     $shipSource = [System.IO.File]::ReadAllText($PSCommandPath, [System.Text.Encoding]::UTF8)
@@ -1329,16 +1275,23 @@ function Invoke-ShipSelfTest {
     $legacyTagUpload = 'gh release ' + 'upload $tag'
     Assert ($shipSource.IndexOf($legacyTagProbe, [System.StringComparison]::Ordinal) -lt 0) "ship wrapper has no duplicate release-by-tag existence probe (issue #651)"
     Assert ($shipSource.IndexOf($legacyTagUpload, [System.StringComparison]::Ordinal) -lt 0) "ship wrapper delegates existing-release mutation to release-id tooling (issue #651)"
-    Assert ($shipSource -match 'CreateNoWindow\s*=\s*\$true') "VMBLauncher process creation explicitly suppresses visible console windows"
-    Assert ($shipSource -match 'ProcessWindowStyle\]::Hidden') "VMBLauncher process window style is hidden"
-    Assert ($shipSource -match 'Invoke-ShipLauncherNoWindow -FilePath \$launcher') "identity and release calls use the no-window launcher boundary"
+    $launcherHelperSource = [System.IO.File]::ReadAllText(
+        (Join-Path $PSScriptRoot '..\vmb-launcher-path.ps1'),
+        [System.Text.Encoding]::UTF8)
+    Assert ($launcherHelperSource -match 'CreateNoWindow\s*=\s*\$true') "VMBLauncher process creation explicitly suppresses visible console windows"
+    Assert ($launcherHelperSource -match 'ProcessWindowStyle\]::Hidden') "VMBLauncher process window style is hidden"
+    Assert ($shipSource -match 'Invoke-ShipLauncherNoWindow -LauncherExecutableLease \$launcherExecutableLease') "identity and release calls use the leased no-window launcher boundary"
     $rawLauncherCall = '& $' + 'launcher @launcherArgs'
     Assert ($shipSource.IndexOf($rawLauncherCall, [System.StringComparison]::Ordinal) -lt 0) "release path never invokes VMBLauncher through the raw PowerShell call operator"
 
     $hostExe = (Get-Process -Id $PID).Path
-    $hiddenProbe = Invoke-ShipLauncherNoWindow -FilePath $hostExe -ArgumentList @(
-        '-NoProfile', '-Command', '[Console]::Out.Write("ship-hidden-probe")'
-    )
+    $hiddenProbeLease = Enter-VmbLauncherExecutableLease -LauncherPath $hostExe
+    try {
+        $hiddenProbe = Invoke-ShipLauncherNoWindow `
+            -LauncherExecutableLease $hiddenProbeLease `
+            -ArgumentList @('-NoProfile', '-Command', '[Console]::Out.Write("ship-hidden-probe")')
+    }
+    finally { Exit-VmbLauncherExecutableLease -Lease $hiddenProbeLease }
     Assert ($hiddenProbe.ExitCode -eq 0) "no-window process boundary preserves native exit code"
     Assert (($hiddenProbe.Lines -join '') -eq 'ship-hidden-probe') "no-window process boundary captures redirected output"
 
@@ -1513,7 +1466,7 @@ function Invoke-ShipSelfTest {
     $quickInvocation = '& $quickGate -Quick -SkipLua -SkipBundleAtomicity:$BuildOnly -SkipBuildReceipts:$BuildOnly -SkipCustomUnitBundleReachability:$BuildOnly -Quiet'
     $quickPos = $selfTxt.IndexOf($quickInvocation)
     $lintPos = $selfTxt.IndexOf('& $modLint $Mod -Quiet')
-    $launcherCallMarker = 'Invoke-ShipLauncherNoWindow -FilePath $' + 'launcher'
+    $launcherCallMarker = 'Invoke-ShipLauncherNoWindow -LauncherExecutableLease $' + 'launcherExecutableLease'
     $launcherPos = $selfTxt.LastIndexOf($launcherCallMarker)
     Assert ($quickPos -ge 0) "ship source invokes the fast headless QA gate (issue #591)"
     Assert ($lintPos -ge 0) "ship source invokes target-mod lint (issue #591)"
@@ -1568,6 +1521,9 @@ function Invoke-ShipSelfTest {
     $buildNormalizationPos = $selfTxt.IndexOf('buildNormalization = Invoke-BuildOutputNormalization', $mainDispatchPos)
     $sourceBeforePos = $selfTxt.IndexOf('buildSourceSnapshotBefore = Get-VtBuildWorkingSourceMap', $mainDispatchPos)
     $sourceAfterPos = $selfTxt.IndexOf('buildSourceSnapshotAfter = Get-VtBuildWorkingSourceMap', $buildNormalizationPos)
+    $outputSetPos = $selfTxt.IndexOf('buildOutputSet = Get-VtBuildWorkingOutputSet', $buildNormalizationPos)
+    $builderVersionPos = $selfTxt.IndexOf('buildBuilderVersion = [string]$buildLauncherInvocation.ExecutableProof.version', $buildNormalizationPos)
+    $receiptCreatePos = $selfTxt.IndexOf('buildReceipt = New-VtBuildReceipt', $buildNormalizationPos)
     $receiptWritePos = $selfTxt.IndexOf('Write-VtBuildReceipt', $buildNormalizationPos)
     $remoteExclusionGuardPos = $selfTxt.IndexOf('VMBLauncher remote deploy currently copies and verifies expected files', $buildNormalizationPos)
     $buildOnlyPostGatePos = $selfTxt.IndexOf("receiptGate = Join-Path `$repoRoot 'qa\check_build_receipts.ps1'", $buildNormalizationPos)
@@ -1582,7 +1538,9 @@ function Invoke-ShipSelfTest {
     $uploadActionPos = $selfTxt.IndexOf("uploadArgs = @('upload', `$Mod)", $mainDispatchPos)
     Assert ($initialAuthorizationPos -ge 0 -and $initialAuthorizationPos -lt $cleanBuildPos) "publication authorization runs before the first build mutation"
     Assert ($sourceBeforePos -ge 0 -and $sourceBeforePos -lt $cleanBuildPos -and $cleanBuildPos -lt $sourceAfterPos) "BuildOnly fingerprints runtime source immediately before and after the clean build"
-    Assert ($sourceAfterPos -lt $receiptWritePos -and $receiptWritePos -lt $buildOnlyPostGatePos) "BuildOnly writes the deterministic source/root receipt before post-build QA"
+    Assert ($sourceAfterPos -lt $outputSetPos -and $outputSetPos -lt $receiptCreatePos) "BuildOnly enumerates the complete normalized output set after source stability and before receipt construction"
+    Assert ($builderVersionPos -gt $buildNormalizationPos -and $builderVersionPos -lt $receiptCreatePos) "BuildOnly records the exact approved builder version before receipt construction"
+    Assert ($receiptCreatePos -lt $receiptWritePos -and $receiptWritePos -lt $buildOnlyPostGatePos) "BuildOnly writes the deterministic schema-3 source/output receipt before post-build QA"
     Assert ($cleanBuildPos -lt $buildNormalizationPos -and $buildNormalizationPos -lt $buildOnlyPostGatePos -and $buildNormalizationPos -lt $bundleParityPos) "exact-hash normalization runs after clean build and before BuildOnly QA or final parity"
     Assert ($unitReachabilityPos -gt $buildOnlyPostGatePos -and $unitReachabilityPos -lt $oldMusketCompiledPos -and $oldMusketCompiledPos -lt $buildOnlyCompletePos) "BuildOnly runs CWV compiled geometry/material validation after custom-unit reachability and before success"
     Assert ($buildNormalizationPos -lt $remoteExclusionGuardPos -and $remoteExclusionGuardPos -lt $buildOnlyPostGatePos -and $selfTxt.IndexOf('Re-run with -NoRemote', $remoteExclusionGuardPos) -ge 0) "artifact-exclusion publications require -NoRemote before any deploy"
@@ -1601,11 +1559,20 @@ function Invoke-ShipSelfTest {
     $publisherReceiptPos = $publisherSource.IndexOf('New-WorkshopPublicationReceipt')
     $publisherZipBindingPos = $publisherSource.IndexOf('Test-ReleaseZipSnapshot')
     $publisherMutationPos = $publisherSource.IndexOf('Publish-GitHubReleaseAssetsById')
-    $launcherCapabilityPos = $selfTxt.IndexOf('Assert-VmbLauncherPublicationCapability -LauncherPath $launcher', $mainDispatchPos)
+    $launcherLeasePos = $selfTxt.IndexOf('launcherExecutableLease = Enter-VmbLauncherExecutableLease', $mainDispatchPos)
+    $launcherCapabilityPos = $selfTxt.IndexOf('Assert-VmbLauncherPublicationCapability', $mainDispatchPos)
+    $launcherLeaseExitPos = $selfTxt.LastIndexOf('Exit-VmbLauncherExecutableLease -Lease $launcherExecutableLease')
+    $transactionLeaseExitPos = $selfTxt.LastIndexOf('Exit-VmbMachineTransactionLease -Lease $transactionLease')
     Assert ($callerJsonPos -ge 0 -and $callerJsonPos -lt $publisherLivePos -and $publisherLivePos -lt $publisherMatchPos) "publisher independently re-queries live authorization before accepting caller correlation JSON"
     Assert ($publisherPreparationPos -lt $publisherLivePos -and $publisherLivePos -lt $publisherReceiptPos -and $publisherReceiptPos -lt $publisherMutationPos) "publisher re-queries live authorization after preparation and immediately before receipt/release mutation"
     Assert ($publisherZipBindingPos -ge 0 -and $publisherZipBindingPos -lt $publisherMutationPos) "publisher binds immutable zip entries to commit-derived bundle hashes before release mutation"
-    Assert ($launcherCapabilityPos -ge 0 -and $launcherCapabilityPos -lt $authorizationRecordPos) "ship probes launcher minimum/capabilities before any GitHub release mutation"
+    Assert ($launcherLeasePos -ge 0 -and $launcherLeasePos -lt $launcherCapabilityPos -and
+        $launcherCapabilityPos -lt $authorizationRecordPos) "ship leases the exact launcher before probing capabilities or mutating a release"
+    Assert ($uploadActionPos -ge 0 -and $uploadActionPos -lt $launcherLeaseExitPos -and
+        $launcherLeaseExitPos -lt $transactionLeaseExitPos) "ship holds the executable lease through upload and releases it before the transaction lease"
+    Assert ($selfTxt.IndexOf('Get-VmbLauncherVersion -LauncherPath $launcher', $mainDispatchPos) -lt 0 -and
+        $selfTxt.IndexOf('& $launcher', $mainDispatchPos) -lt 0 -and
+        $selfTxt.IndexOf('-FilePath $launcher', $mainDispatchPos) -lt 0) "main ship path has no free-path launcher execution or post-build version lookup"
     Assert ($selfTxt.IndexOf('$isFirstUploadBootstrap = ($publishedId -eq ''0'')', $mainDispatchPos) -ge 0) "ship recognizes the explicit published_id=0 bootstrap lane"
     Assert ($selfTxt.IndexOf('if ($deploymentPolicy.ShouldDeploy) {', $deployActionPos - 100) -ge 0) "deployment policy gates subscribed deploy and skips bootstrap/publication-only targets"
     $deploymentPolicyPos = $selfTxt.IndexOf('$deploymentPolicy = Get-ShipDeploymentPolicy', $mainDispatchPos)
@@ -1722,6 +1689,7 @@ if (-not (Test-Path $modDir)) { Fail "Mod directory not found: $modDir" }
 
 $transactionLease = $null
 $privateLauncherSettings = $null
+$launcherExecutableLease = $null
 try {
     $transactionLease = Enter-VmbMachineTransactionLease `
         -Action $(if ($BuildOnly) { 'build-only' } else { 'ship' }) `
@@ -1954,7 +1922,11 @@ $privateLauncherSettings = New-ShipPrivateLauncherSettings `
 $launcherSettings = $privateLauncherSettings
 $launcher = $launcherResolution.Path
 try {
-    $launcherCapability = Assert-VmbLauncherPublicationCapability -LauncherPath $launcher
+    $launcherExecutableLease = Enter-VmbLauncherExecutableLease `
+        -LauncherPath $launcher -RequireDirectPath
+    $launcherCapability = Assert-VmbLauncherPublicationCapability `
+        -LauncherExecutableLease $launcherExecutableLease `
+        -WorkingDirectory $repoRoot
 }
 catch {
     Fail $_.Exception.Message
@@ -2046,11 +2018,11 @@ Write-Host "==> VMBLauncher $($launcherArgs -join ' ')" -ForegroundColor Cyan
 # clean exit. The wrapper stages validated machine-local tooling and the
 # ship-private config binds the exact ProjectRoot before source validation.
 try {
-    Invoke-WithShipVmbRc -RepoRoot $repoRoot -Resolution $vmbRcResolution -Action {
+    $buildLauncherInvocation = Invoke-WithShipVmbRc -RepoRoot $repoRoot -Resolution $vmbRcResolution -Action {
             # Ask the launcher which mod it resolved from the private config.
             # Abort before build (therefore before deploy/upload) if root,
             # version, source commit, or Workshop identity differs from Step 1.
-            $info = Invoke-ShipLauncherNoWindow -FilePath $launcher `
+            $info = Invoke-ShipLauncherNoWindow -LauncherExecutableLease $launcherExecutableLease `
                 -ArgumentList @('info', $Mod, '--no-banner', '--config', $launcherSettings)
             if ($info.ExitCode -ne 0) {
                 throw "VMBLauncher identity probe failed (exit $($info.ExitCode)): $($info.Lines -join ' | ')"
@@ -2088,12 +2060,13 @@ try {
             }
             Write-Host "  OK -- ProjectRoot, MOD_VERSION, source commit, and published_id match the invoking checkout." -ForegroundColor Green
 
-            $launcherRun = Invoke-ShipLauncherNoWindow -FilePath $launcher `
+            $launcherRun = Invoke-ShipLauncherNoWindow -LauncherExecutableLease $launcherExecutableLease `
                 -ArgumentList $launcherArgs -ReplayOutput
             $launcherExit = $launcherRun.ExitCode
             if ($launcherExit -ne 0) {
                 throw "VMBLauncher 'build $Mod' exited $launcherExit (see output above)."
             }
+            return $launcherRun
     }
 }
 catch {
@@ -2123,15 +2096,27 @@ try {
     if (-not $sourceReproducibilityAfter.Ok) {
         throw ($sourceReproducibilityAfter.Problems -join '; ')
     }
-    $buildRootProof = Get-VtBuildWorkingRootProof -RepoRoot $repoRoot -Mod $Mod
-    $buildReceipt = New-VtBuildReceipt -Mod $Mod `
-        -SourceMap $buildSourceSnapshotAfter -RootProof $buildRootProof
+    $buildOutputSet = Get-VtBuildWorkingOutputSet `
+        -RepoRoot $repoRoot -Mod $Mod -SourceMap $buildSourceSnapshotAfter
+    if ($null -eq $buildLauncherInvocation -or
+        $null -eq $buildLauncherInvocation.ExecutableProof) {
+        throw 'Clean build did not return a process-bound VMBLauncher executable proof.'
+    }
+    $buildBuilderVersion = [string]$buildLauncherInvocation.ExecutableProof.version
 
     if ($BuildOnly) {
+        $buildReceipt = New-VtBuildReceipt -Mod $Mod `
+            -SourceMap $buildSourceSnapshotAfter `
+            -OutputSet $buildOutputSet `
+            -BuilderVersion $buildBuilderVersion `
+            -NormalizationPolicy $buildNormalization.Policy
         $buildReceiptPath = Write-VtBuildReceipt -RepoRoot $repoRoot -Mod $Mod -Receipt $buildReceipt
-        Write-Host "  OK -- exact dirty-source receipt written: $buildReceiptPath" -ForegroundColor Green
+        Write-Host "  OK -- exact dirty-source/complete-output schema-3 receipt written: $buildReceiptPath" -ForegroundColor Green
     }
     else {
+        # Untouched schema-2 receipts remain admissible during shadow migration;
+        # their historical root Git-blob proof stays independently validated.
+        $buildRootProof = Get-VtBuildWorkingRootProof -RepoRoot $repoRoot -Mod $Mod
         $buildReceiptPath = Get-VtBuildReceiptPath -RepoRoot $repoRoot -Mod $Mod
         if (-not (Test-Path -LiteralPath $buildReceiptPath -PathType Leaf)) {
             throw "Reviewed BuildOnly receipt is missing: $buildReceiptPath"
@@ -2139,12 +2124,18 @@ try {
         $reviewedReceiptText = [System.IO.File]::ReadAllText($buildReceiptPath, [System.Text.Encoding]::UTF8)
         $reviewedReceipt = ConvertFrom-VtBuildReceiptJson -Json $reviewedReceiptText
         $receiptProof = Test-VtBuildReceiptProof -Receipt $reviewedReceipt `
-            -ExpectedMod $Mod -SourceMap $buildSourceSnapshotAfter -RootProof $buildRootProof
+            -ExpectedMod $Mod `
+            -SourceMap $buildSourceSnapshotAfter `
+            -RootProof $buildRootProof `
+            -OutputSet $buildOutputSet `
+            -NormalizationPolicy $buildNormalization.Policy `
+            -ExpectedBuilderVersion $buildBuilderVersion `
+            -MinimumSchema 2
         if (-not $receiptProof.Ok) {
             throw ("Reviewed BuildOnly receipt no longer matches the clean build: " +
                 ($receiptProof.Problems -join '; '))
         }
-        Write-Host "  OK -- reviewed BuildOnly receipt matches exact source and rebuilt root." -ForegroundColor Green
+        Write-Host "  OK -- reviewed BuildOnly receipt matches exact source and rebuilt normalized output." -ForegroundColor Green
     }
 }
 catch {
@@ -2167,7 +2158,7 @@ if ($BuildOnly) {
     }
     & $receiptGate -Mod $Mod -Quiet
     if ($LASTEXITCODE -ne 0) {
-        Fail "Build completed, but the generated receipt did not match the exact working source/root snapshot. No deploy or upload was attempted."
+        Fail "Build completed, but the generated receipt did not match the exact working source/normalized-output snapshot. No deploy or upload was attempted."
     }
     $bundleGate = Join-Path $repoRoot 'qa\check_release_bundle_atomicity.ps1'
     if (-not (Test-Path -LiteralPath $bundleGate -PathType Leaf)) {
@@ -2196,7 +2187,7 @@ if ($BuildOnly) {
         }
     }
     Write-Host ""
-    Write-Host "BUILD-ONLY COMPLETE -- bundle and exact source/root receipt generated; receipt, atomicity, custom-unit reachability, and applicable compiled contracts verified; no deploy, upload, GitHub release, or lifecycle edit was attempted." -ForegroundColor Green
+    Write-Host "BUILD-ONLY COMPLETE -- bundle and exact schema-3 source/output receipt generated; receipt, atomicity, custom-unit reachability, and applicable compiled contracts verified; no deploy, upload, GitHub release, or lifecycle edit was attempted." -ForegroundColor Green
     exit 0
 }
 
@@ -2221,7 +2212,7 @@ if ($deploymentPolicy.ShouldDeploy) {
     Write-Host "==> VMBLauncher $($deployArgs -join ' ')" -ForegroundColor Cyan
     try {
         Invoke-WithShipVmbRc -RepoRoot $repoRoot -Resolution $vmbRcResolution -Action {
-            $deployRun = Invoke-ShipLauncherNoWindow -FilePath $launcher -ArgumentList $deployArgs -ReplayOutput
+            $deployRun = Invoke-ShipLauncherNoWindow -LauncherExecutableLease $launcherExecutableLease -ArgumentList $deployArgs -ReplayOutput
             if ($deployRun.ExitCode -ne 0) {
                 throw "VMBLauncher 'deploy $Mod' exited $($deployRun.ExitCode) (see output above)."
             }
@@ -2335,7 +2326,8 @@ try {
         -PublicationReceiptOutputPath $receiptPath `
         -LauncherPath $launcherResolution.Path `
         -LauncherSource $launcherResolution.Source `
-        -LauncherApprovalAnchor $launcherResolution.ApprovalAnchor
+        -LauncherApprovalAnchor $launcherResolution.ApprovalAnchor `
+        -LauncherExecutableLease $launcherExecutableLease
 }
 catch {
     if (Test-Path -LiteralPath $receiptPath) {
@@ -2379,7 +2371,7 @@ $uploadFailure = $null
 $publicationReceiptAccepted = $false
 try {
     $receiptAcceptance = Invoke-WithShipVmbRc -RepoRoot $repoRoot -Resolution $vmbRcResolution -Action {
-        $uploadRun = Invoke-ShipLauncherNoWindow -FilePath $launcher -ArgumentList $uploadArgs -ReplayOutput
+        $uploadRun = Invoke-ShipLauncherNoWindow -LauncherExecutableLease $launcherExecutableLease -ArgumentList $uploadArgs -ReplayOutput
         if ($uploadRun.ExitCode -ne 0) {
             throw "VMBLauncher 'upload $Mod' exited $($uploadRun.ExitCode) (see output above)."
         }
@@ -2877,13 +2869,24 @@ if (-not $NoClaim) {
 exit 0
 }
 finally {
-    if ($privateLauncherSettings -and (Test-Path -LiteralPath $privateLauncherSettings)) {
-        Remove-Item -LiteralPath $privateLauncherSettings -Force -ErrorAction SilentlyContinue
-        if (Test-Path -LiteralPath $privateLauncherSettings) {
-            Write-Warning "Could not remove ship-private launcher settings: $privateLauncherSettings"
+    try {
+        try {
+            if ($privateLauncherSettings -and (Test-Path -LiteralPath $privateLauncherSettings)) {
+                Remove-Item -LiteralPath $privateLauncherSettings -Force -ErrorAction SilentlyContinue
+                if (Test-Path -LiteralPath $privateLauncherSettings) {
+                    Write-Warning "Could not remove ship-private launcher settings: $privateLauncherSettings"
+                }
+            }
+        }
+        finally {
+            if ($null -ne $launcherExecutableLease) {
+                Exit-VmbLauncherExecutableLease -Lease $launcherExecutableLease
+            }
         }
     }
-    if ($null -ne $transactionLease) {
-        Exit-VmbMachineTransactionLease -Lease $transactionLease
+    finally {
+        if ($null -ne $transactionLease) {
+            Exit-VmbMachineTransactionLease -Lease $transactionLease
+        }
     }
 }

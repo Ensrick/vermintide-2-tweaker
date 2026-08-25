@@ -332,6 +332,10 @@ Run-Check "run_selftests"      { & (Join-Path $here "run_selftests.ps1")      -Q
 # this dedicated blocking matrix makes both hosts mandatory in every full QA
 # run, including hosted CI. See CHECKS row 60g / issue #683.
 Run-Check "vmb_launcher_path_host_matrix" { & (Join-Path $here "run_vmb_launcher_path_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
+# Issue #1400: the complete generated-output fingerprint is a release boundary
+# shared by PowerShell 7 and Windows PowerShell 5.1. Keep its canonical ordinal
+# byte contract mandatory in every full local and hosted QA run.
+Run-Check "bundle_output_set_host_matrix" { & (Join-Path $here "run_bundle_output_set_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
 Run-Check "check_localization" { & (Join-Path $here "check_localization.ps1") -Quiet:$Quiet }
 # Player-facing lifecycle/issue metadata is forbidden in every active stream.
 # This is a blocking repository-wide gate; GitHub labels/changelogs remain the
