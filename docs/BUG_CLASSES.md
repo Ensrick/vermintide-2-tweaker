@@ -3757,3 +3757,51 @@ the server, especially chained cooldowns whose expiry creates the next stack.
   and a server-forwarded attack proc, not a chained `buffer="both"` state machine.
 - #371/#425/#1158 provide exact transport/catalog floors; they do not establish
   saved-setting equality and therefore cannot replace configuration consensus.
+
+## 91. One symmetric NetworkLookup pair hides a malformed numeric axis
+
+**First confirmed:** 2026-08-25 (shared-library issue #428).
+**Lives in:** runtime append helpers for Stingray's bidirectional
+`NetworkLookup.*` tables.
+
+### Symptoms
+- A requested name already maps back to itself, so registration reports success,
+  even though its numeric ID is zero, negative, fractional, infinite, or NaN.
+- A valid requested pair is trusted while an unrelated row is dangling,
+  asymmetric, or sparse.
+- `#lookup + 1` fills a hole or chooses an implementation-dependent boundary.
+- Missing-key reads throw through the engine's strict `__index`, or a rejected
+  registration partially changes the lookup.
+
+### Diagnosis pattern
+1. Inspect the raw table in both directions; checking only `lookup[name]` and
+   `lookup[id]` cannot prove the rest of the relation.
+2. Treat Lua's length operator as evidence only for a previously proven dense
+   array. It is undefined at a hole.
+3. Validate numeric keys and reverse values as finite positive integers before
+   using either as a raw lookup key or append boundary.
+4. Snapshot every raw key/value and the exact metatable around planted malformed
+   cases. A fail-closed result must be mutation-free and must not throw.
+5. Keep local table validity separate from peer parity and wire capacity; neither
+   follows from a well-formed local append.
+
+### Fix template
+- Use the manifested `tools/shared_lib/_lib_network_lookup.lua` copy loaded once
+  by the mod entry. Never copy a private `#table + 1` loop.
+- Preflight the complete table with `next`/`rawget`: numeric keys are exactly
+  dense `1..N`, every numeric row is a nonempty string, every string reverse is
+  a valid numeric index, and both halves agree exactly. Reject foreign key types.
+- Resolve all rejection reasons before either `rawset`. Existing exact pairs are
+  idempotent only after the global preflight passes; append only at proven `N+1`.
+- Test zero, negative, fractional, positive/negative infinity, NaN reverse
+  values, sparse `{1,3}` and `{2}` shapes, dangling aliases, strict metatables,
+  named-table propagation, and a valid target hidden inside malformed state.
+- Handle peer parity/capacity independently under their owning architecture;
+  structural hardening must not be misreported as cross-peer safety.
+
+### Related issues / evidence
+- #428 owns the canonical helper and bounded consumer migrations.
+- #371 owns peer numeric parity and mixed-mod containment; #451 owns atomic
+  multi-table custom-breed registration and capacity/dependency preflight.
+- Adjacent classes: 4 (strict lookup reads), 31 (cross-peer lookup wire safety),
+  64 (numeric parity), and 75 (keyed versus dense collection semantics).

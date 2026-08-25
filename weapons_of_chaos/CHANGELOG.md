@@ -1,5 +1,13 @@
 # Weapons of Chaos — Changelog
 
+## v0.1.56-dev (2026-08-25) - reject malformed NetworkLookup state (#428) [not-started]
+
+- Synchronized the canonical NetworkLookup registrar that proves dense numeric
+  state and exact forward/reverse pairs before idempotence or append.
+- Invalid, sparse, non-finite, non-positive, fractional, asymmetric, or foreign
+  lookup state now rejects without mutation. The valid Blightreaper item-name
+  registration and existing wire-safe fallback remain unchanged.
+
 ## v0.1.55-dev (2026-08-13) - declare the vanilla crafting-preview surface (#1198/#1197) [tooling]
 
 - Added the seventeenth `crafting_preview` surface to the Blightreaper census.

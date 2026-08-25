@@ -71,6 +71,8 @@ runs either way) before the host spawns this breed.
 
 local mod = get_mod("enemy_tweaker")
 local B = require("scripts/mods/enemy_tweaker/enemy_tweaker_breeds")
+local ET = mod._et
+local NLLib = ET.NetworkLookupLib
 
 local BREED_NAME   = B.ET_SKAVEN_WARLORD          -- "et_skaven_warlord"
 local SOURCE_BREED = "skaven_storm_vermin_champion"
@@ -83,10 +85,38 @@ local function _wl_log(fmt, ...)
     end
 end
 
+-- Validate (or append) both wire identities through the same strict helper on
+-- first load and hot reload.  A published breed is not proof that a newly
+-- created VMF mod object has revalidated the current NetworkLookup tables.
+local function _register_wire_identity()
+    local nl = rawget(_G, "NetworkLookup")
+    if type(nl) ~= "table" then
+        _wl_log("ALERT: NetworkLookup unavailable — breed NOT network-registered")
+        return false
+    end
+    local _, breeds_inserted, breeds_reason =
+        NLLib.register_named(nl, "breeds", BREED_NAME)
+    if not breeds_inserted and breeds_reason ~= "already_registered" then
+        _wl_log("ALERT: NetworkLookup.breeds registration failed (%s) — breed NOT registered",
+            tostring(breeds_reason))
+        return false
+    end
+    local _, damage_inserted, damage_reason =
+        NLLib.register_named(nl, "damage_sources", BREED_NAME)
+    if not damage_inserted and damage_reason ~= "already_registered" then
+        _wl_log("ALERT: NetworkLookup.damage_sources registration failed (%s) — breed NOT registered",
+            tostring(damage_reason))
+        return false
+    end
+    return true
+end
+
 -- ============================================================
 -- Registration (eager, idempotent, pcall-bracketed per step)
 -- ============================================================
 local function _register()
+    mod._et_warlord2_breed_name = nil
+    mod._et_warlord2_ready = false
     local Breeds_t = rawget(_G, "Breeds")
     local BreedActions_t = rawget(_G, "BreedActions")
     if type(Breeds_t) ~= "table" or type(BreedActions_t) ~= "table" then
@@ -94,7 +124,11 @@ local function _register()
         return false
     end
     if Breeds_t[BREED_NAME] then
-        return true  -- idempotent re-entry (hot-reload)
+        if not _register_wire_identity() then return false end
+        mod._et_warlord2_breed_name = BREED_NAME
+        mod._et_warlord2_ready = true
+        _wl_log("breed %s revalidated on hot reload", BREED_NAME)
+        return true
     end
     local src = Breeds_t[SOURCE_BREED]
     if type(src) ~= "table" then
@@ -222,30 +256,15 @@ local function _register()
     -- NetworkLookup.damage_sources: both are boot snapshots
     -- (network_lookup.lua:267 create_lookup from pairs(Breeds); :326
     -- table.append(damage_sources, NetworkLookup.breeds)) with a strict
-    -- __index metatable (:2360-2367) — use rawget for the existence check.
+    -- __index metatable (:2360-2367). The entry-owned shared helper performs a
+    -- complete raw dense/pair preflight before either idempotence or append.
     -- damage_sources matters because AI melee damage uses the breed NAME as
     -- damage_source (ai_utils.lua:266) and add_damage_network resolves
     -- NetworkLookup.damage_sources[damage_source] (damage_utils.lua:1839).
     -- [unverified] headroom of the damage_source_id network type above the
     -- vanilla count (network_constants.lua:62 asserts only at boot); one
     -- appended entry is assumed within budget.
-    local nl = rawget(_G, "NetworkLookup")
-    if nl then
-        local bl = nl.breeds
-        if type(bl) == "table" and rawget(bl, BREED_NAME) == nil then
-            local idx = #bl + 1
-            bl[idx] = BREED_NAME
-            bl[BREED_NAME] = idx
-        end
-        local ds = nl.damage_sources
-        if type(ds) == "table" and rawget(ds, BREED_NAME) == nil then
-            local idx = #ds + 1
-            ds[idx] = BREED_NAME
-            ds[BREED_NAME] = idx
-        end
-    else
-        _wl_log("ALERT: NetworkLookup unavailable — breed NOT network-registered")
-    end
+    if not _register_wire_identity() then return false end
 
     -- 7. EnemyPackageLoaderSettings alias: the vanilla mechanism for "breed X
     -- loads breed Y's package" (enemy_package_loader_settings.lua:188-199,
@@ -414,7 +433,6 @@ end
 -- three spawn paths (Creature Spawner, monster-pool swap, ct chest trial).
 -- The +5s/+15s samples ride the single mod.update owner in _et_lifecycle.lua
 -- via ET.warlord_diag_update.
-local ET = mod._et
 do
     local DIAG_OFFSETS = { 5, 15 }   -- seconds after the spawn-time sample
     local DIAG_MAX_UNITS = 4

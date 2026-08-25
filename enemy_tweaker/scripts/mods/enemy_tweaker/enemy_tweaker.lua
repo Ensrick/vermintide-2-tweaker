@@ -1,6 +1,6 @@
 local mod = get_mod("enemy_tweaker")
 
-local MOD_VERSION = "0.7.56-dev"
+local MOD_VERSION = "0.7.57-dev"
 -- RPC schema version (VMF_RECIPES.md section 10, GitHub Issue #42). Prepended as
 -- the FIRST positional arg of every mod:network_send this mod emits, and
 -- validated as the first arg of every mod:network_register callback; a peer on a
@@ -18,8 +18,7 @@ mod:info("Enemy Tweaker v%s loaded", MOD_VERSION)
 -- ============================================================
 -- Module manifest (v0.7.31-dev structural split, PROJECT_STANDARDS § 2.2a)
 -- ============================================================
--- This entry file owns MOD_VERSION (the launcher parses it from THIS file),
--- ET_RPC_SCHEMA, the load banner/LOAD/echo lines, and the dofile manifest.
+-- This entry owns MOD_VERSION (parsed here), ET_RPC_SCHEMA, load markers, and the dofile manifest.
 -- All logic lives in single-responsibility `_et_*` modules in this directory.
 --
 -- Cross-module contract: `mod._et` is the shared namespace. Each module is
@@ -63,7 +62,7 @@ mod._et.BossIdeasCore = mod:dofile("scripts/mods/enemy_tweaker/_et_boss_ideas_co
 mod._et.BossBehaviorCore = mod:dofile("scripts/mods/enemy_tweaker/_et_boss_behavior_core") -- #450 engine-free Halescourge threshold policy
 mod._et.PersonalHandicapPolicy = mod:dofile("scripts/mods/enemy_tweaker/_et_personal_handicap_policy") -- #61 engine-free bounds/policy
 mod._et.PersonalHandicapUnits = mod:dofile("scripts/mods/enemy_tweaker/_et_personal_handicap_units") -- #640 lifetime-safe Unit boundary
-
+mod._et.NetworkLookupLib = mod:dofile("scripts/mods/enemy_tweaker/_lib_network_lookup") -- #428 strict bidirectional registration owner
 -- Startup marker: unconditional mod:info (the "applied" log marker pattern).
 -- Prefix changed v0.5.14 from [et:br] -> [et] to match the universal convention
 -- (PROJECT_STANDARDS.md § 3.6). host_required=true retained as a per-mod addendum.

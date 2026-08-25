@@ -1,5 +1,12 @@
 # Career Tweaker Changelog
 
+## 0.4.27-beta (2026-08-25) - reject malformed NetworkLookup state (#428) [not-started]
+
+- Synchronized the canonical NetworkLookup registrar that validates the full
+  dense bidirectional table with raw access before idempotence or append.
+- Invalid and sparse lookup state now fails without mutation while preserving
+  the exact ordered output of all 36 existing balance and Tourney buff rows.
+
 ## 0.4.26-beta (2026-08-23) - retire dormant Bardin probe (#499, #440)
 
 - Removed the dormant, unloaded five-hook Bardin/disabler comparison probe and

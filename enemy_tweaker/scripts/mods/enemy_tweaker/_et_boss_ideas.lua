@@ -138,7 +138,7 @@ end)
 -- reports the chaos_warrior package already resident on this mission — we
 -- never trigger a dynamic per-breed package load whose bundle existence for
 -- an always-startup breed is [unverified].
-local NLLib = mod:dofile("scripts/mods/enemy_tweaker/_lib_network_lookup")
+local NLLib = ET.NetworkLookupLib
 local CHOSEN = Core.CHOSEN
 local CHOSEN_BREED = CHOSEN.name
 
@@ -148,14 +148,42 @@ local function _chosen_log(fmt, ...)
     end
 end
 
+-- A previously published breed survives VMF hot reload, while the mod object
+-- (including readiness fields) does not.  Re-run the strict lookup proof on
+-- every entry and only republish readiness after both identities pass.
+local function _register_chosen_wire_identity()
+    local nl = rawget(_G, "NetworkLookup")
+    if type(nl) ~= "table" then
+        _chosen_log("ALERT: NetworkLookup unavailable — Chosen NOT registered")
+        return false
+    end
+    local _, b_ins, b_reason = NLLib.register_named(nl, "breeds", CHOSEN_BREED)
+    if not b_ins and b_reason ~= "already_registered" then
+        _chosen_log("ALERT: NetworkLookup.breeds registration failed (%s) — Chosen NOT registered", tostring(b_reason))
+        return false
+    end
+    local _, d_ins, d_reason = NLLib.register_named(nl, "damage_sources", CHOSEN_BREED)
+    if not d_ins and d_reason ~= "already_registered" then
+        _chosen_log("ALERT: NetworkLookup.damage_sources registration failed (%s) — Chosen NOT registered", tostring(d_reason))
+        return false
+    end
+    return true
+end
+
 local function _register_chosen()
+    mod._et_chosen_ready = false
     local Breeds_t = rawget(_G, "Breeds")
     local BreedActions_t = rawget(_G, "BreedActions")
     if type(Breeds_t) ~= "table" or type(BreedActions_t) ~= "table" then
         _chosen_log("Breeds/BreedActions not loaded — Chosen registration skipped")
         return false
     end
-    if Breeds_t[CHOSEN_BREED] then return true end -- idempotent (hot-reload)
+    if Breeds_t[CHOSEN_BREED] then
+        if not _register_chosen_wire_identity() then return false end
+        mod._et_chosen_ready = true
+        _chosen_log("breed %s revalidated on hot reload", CHOSEN_BREED)
+        return true
+    end
     local src = Breeds_t[CHOSEN.source_breed]
     if type(src) ~= "table" then
         _chosen_log("source breed %s missing — Chosen registration skipped", CHOSEN.source_breed)
@@ -180,21 +208,7 @@ local function _register_chosen()
     -- spawnable-but-unwired breed can never exist. [unverified] headroom of
     -- the damage_source_id network type above the vanilla count — one
     -- appended entry assumed within budget, same as the Skaven Warlord.
-    local nl = rawget(_G, "NetworkLookup")
-    if not nl then
-        _chosen_log("ALERT: NetworkLookup unavailable — Chosen NOT registered")
-        return false
-    end
-    local _, b_ins, b_reason = NLLib.register_named(nl, "breeds", CHOSEN_BREED)
-    if not b_ins and b_reason ~= "already_registered" then
-        _chosen_log("ALERT: NetworkLookup.breeds registration failed (%s) — Chosen NOT registered", tostring(b_reason))
-        return false
-    end
-    local _, d_ins, d_reason = NLLib.register_named(nl, "damage_sources", CHOSEN_BREED)
-    if not d_ins and d_reason ~= "already_registered" then
-        _chosen_log("ALERT: NetworkLookup.damage_sources registration failed (%s) — Chosen NOT registered", tostring(d_reason))
-        return false
-    end
+    if not _register_chosen_wire_identity() then return false end
 
     -- 3. BreedActions clone (checklist step 5).
     if BreedActions_t[CHOSEN.source_breed] and not BreedActions_t[CHOSEN_BREED] then
