@@ -31,8 +31,6 @@ function M.install(mod, _rt_register, deps)
     -- WT_DEV_OVERLAY_BEGIN:runtime-check-dependencies
     local _wt_dev_anim_picker = deps.dev_anim_picker
     local _wt_dev_hold_pose = deps.dev_hold_pose
-    local _WT316_ZOOM_PROBE = deps.zoom_probe_module
-    local _wt316_zoom_probe = deps.zoom_probe
     -- WT_DEV_OVERLAY_END:runtime-check-dependencies
 
     -- ============================================================
@@ -1804,17 +1802,7 @@ function M.install(mod, _rt_register, deps)
             if remap ~= false then
                 return "non-Huntsman Kruber no longer preserves native draw_bow for " .. career
             end
-            -- WT_DEV_OVERLAY_BEGIN:zoom-probe-career-assertion
-            if not _WT316_ZOOM_PROBE.is_target("longbow_empire_template", career) then
-                return "zoom diagnostic target scope missing " .. career
-            end
-            -- WT_DEV_OVERLAY_END:zoom-probe-career-assertion
         end
-        -- WT_DEV_OVERLAY_BEGIN:zoom-probe-huntsman-assertion
-        if _WT316_ZOOM_PROBE.is_target("longbow_empire_template", "es_huntsman") then
-            return "native Huntsman incorrectly included in cross-career zoom probe"
-        end
-        -- WT_DEV_OVERLAY_END:zoom-probe-huntsman-assertion
         if scoped.es_huntsman ~= nil and scoped.es_huntsman ~= false then
             return "native Huntsman draw_bow is no longer exempt"
         end
@@ -1823,11 +1811,6 @@ function M.install(mod, _rt_register, deps)
                 or saltz.attack_shoot_fast ~= "attack_shoot" then
             return "Saltzpyre crossbow presentation remap drifted"
         end
-        -- WT_DEV_OVERLAY_BEGIN:zoom-probe-bound-assertion
-        if _wt316_zoom_probe.max_attempts ~= 3 then
-            return "zoom diagnostic is not capped at three attempts"
-        end
-        -- WT_DEV_OVERLAY_END:zoom-probe-bound-assertion
     end)
 
     _rt_register("issue316_empire_longbow_cross_career_variable_zoom", function()

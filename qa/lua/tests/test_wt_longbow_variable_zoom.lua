@@ -170,22 +170,6 @@ return function(H, repo_root)
         H.equal(observer, 1)
     end)
 
-    H.test("WT #316 resolves the dev observer after owner installation", function()
-        local hooks, observer = {}, 0
-        local aim = action()
-        local mod = {
-            hook_safe = function(_, _, _, callback)
-                hooks[#hooks + 1] = callback
-            end,
-        }
-        Policy.install(mod, { longbow_empire_template = template(aim) })
-        mod._wt316_post_update_observer = function()
-            observer = observer + 1
-        end
-        hooks[1]({ current_action = {} }, 0.01, 1)
-        H.equal(observer, 1)
-    end)
-
     H.test("WT #316 installed observer contains extension and diagnostic failures", function()
         local hooks = {}
         local aim = action()

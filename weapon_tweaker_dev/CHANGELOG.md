@@ -1,5 +1,19 @@
 # Weapon Tweaker Changelog
 
+## 0.12.311-dev (2026-08-25) -- retire consumed Longbow diagnostic (#499) [not-started]
+
+- Deletes the consumed `_wt_longbow_zoom_probe.lua` module, its two diagnostic
+  `ActionAim` hooks, weak record state, `[wt:316]` receipts, and self-referential
+  runtime assertions. No replacement diagnostic is loaded or registered.
+- The production Empire Longbow variable-zoom owner and both named #316
+  runtime checks remain byte-parity mirrored from the public beta. Explicit
+  observer injection stays available to offline tests without discovering a
+  late issue-global callback.
+- Regression coverage now rejects both the retired and proposed replacement
+  paths plus every former loader, state, hook, receipt, and dependency edge.
+  #499 remains open for the remaining serialized legacy owners and
+  stable-stream retirements.
+
 ## 0.12.310-dev (2026-08-20) -- publication reconciliation
 
 - Rebuilds and publishes the already-reviewed 0.12.309-dev availability
