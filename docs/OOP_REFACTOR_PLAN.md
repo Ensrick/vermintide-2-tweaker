@@ -217,10 +217,11 @@ sender-side substitution on it (BUG_CLASSES 31).
 
 ### WS4 - Shared-lib extraction (#428, respects the standalone invariant: copied `_lib_*.lua`, build-time sync, never `get_mod` deps)
 
-> **STATUS: PARTIAL 2026-08-06.** `tools/shared_lib/manifest.psd1` currently
-> enforces 12 canonical libraries across 37 consumer copies, including the
-> existing General Tweaker appearance-parity consumer. Remaining-consumer
-> migrations for `_lib_network_lookup`, wire substitution, DLC ownership, the
+> **STATUS: PARTIAL 2026-08-25.** `tools/shared_lib/manifest.psd1` currently
+> enforces 13 canonical libraries across 44 consumer copies. The canonical
+> `_lib_network_lookup` now has four strict, byte-identical consumers and Enemy's
+> Warlord/Chosen owners share one entry-loaded instance. Remaining-consumer
+> migrations for direct NetworkLookup owners, wire substitution, DLC ownership, the
 > regression harness, and MIL/build-entry consolidation remain roadmap items.
 > Canonical files that are not in the manifest are not migrated consumers and
 > do not count as completion.

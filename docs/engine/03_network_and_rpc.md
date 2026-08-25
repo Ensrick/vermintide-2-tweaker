@@ -124,7 +124,7 @@ mod's hook wraps OUTERMOST, so its early return silences yours (memory
 | **Sender helpers** (`LoadoutUtils.sync_loadout_slot`) | `LoadoutUtils` is a PLAIN table - table-form hook with an existence guard (`rawget(_G, "LoadoutUtils") and LoadoutUtils.sync_loadout_slot`), exactly as cwv does at `character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua:10381-10408`. Pattern: substitute a SHADOW copy of the item (or swap-and-restore one field, cim `crafting_in_modded_dev.lua:764-800`) so local state is untouched and only the wire sees the vanilla key. | Cross-mod: cwv, cim and cosmetics all hook this function from their own registrations - fine (VMF chains across mods), but each must tolerate already-substituted input. |
 | **Encode-site extension methods** (`SimpleInventoryExtension.game_object_initialized`) | Hook the method that gathers values INTO the RPC and null/swap the modded value around `func`, restoring after: cwv skin-null hook `character_weapon_variants.lua:10424-10447`. Capture ALL return values (r1..r4 pattern) - multi-return collapse is BUG_CLASSES 2. | Only covers THIS send site; other encoders of the same RPC exist (`interactions.lua:1244`, `inventory_system.lua:235/335`) - see section 5 candidate 3. |
 | **Networked control functions with trailing sync params** (`AnimationSystem.anim_event` :119, `anim_event_with_variable_float` :139 in `scripts/entity_system/systems/animation/animation_system.lua`) | Pattern: NAME every vanilla param including the trailing `skip_sync` and pass it through unchanged - wt's fixed hook `weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua:4585-4592`. | THE skip_sync trap (BUG_CLASSES 19): vanilla gates its re-broadcast on `if not skip_sync and Managers.state.network:game()` (:120, :140) and the RPC receiver replays with `skip_sync=true`; a hook that omits the param collapses it to nil, the husk replay re-broadcasts, and every peer's husks freeze in an RPC feedback loop. No error, no log; solo is immune. |
-| **NetworkLookup tables (injection)** | Writing is allowed - the metatable defines only `__index` (`network_lookup.lua:2361-2365`), no `__newindex`. Canonical recipe (all our injectors): guard with `rawget(tbl, key)`, `idx = #tbl + 1`, then set BOTH directions - `rawset(tbl, idx, key)` and `rawset(tbl, key, idx)`. Sites: cwv `character_weapon_variants.lua:7506-7522, 9392-9396`; WOC `weapons_of_chaos.lua:256-260`; MIL `cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_moreitemslibrary_embedded.lua:273-280` (also mirrors into `damage_sources` :279-280); crt `career_tweaker/scripts/mods/career_tweaker/career_tweaker_tourney.lua:31-42` (unconditional + alphabetical for same-mod determinism). | Injection makes the entry exist LOCALLY only. The moment its index rides a vanilla RPC, every peer without the identical append set is exposed (section 4, class 31). Read cold keys with `rawget` always (BUG_CLASSES 4). |
+| **NetworkLookup tables (injection)** | Writing is allowed - the metatable defines only `__index` (`network_lookup.lua:2361-2365`), no `__newindex`. Manifested consumers use `tools/shared_lib/_lib_network_lookup.lua`: it reads with `rawget`/`next`, proves the complete numeric side is dense `1..N`, proves every forward/reverse pair, rejects non-finite/non-positive/non-integral indices without mutation, and only then appends both directions with `rawset`. Current consumers are CWV, Career, Enemy, and WOC. | Injection makes the entry exist LOCALLY only. Local structural validity does not prove peer parity, wire capacity, or mod presence. The moment its index rides a vanilla RPC, every peer without the identical append set is exposed (section 4, class 31). Never restore the old `#tbl + 1` shortcut; read cold keys with `rawget` (BUG_CLASSES 4/91). |
 | **VMF mod-to-mod channel** (`mod:network_send` / `mod:network_register`) | Delivered only to peers running the SAME mod id with a matching handler - absence of reply proves absence of the mod. This is the transport for the peer-parity beacon (`tools/shared_lib/_lib_peer_parity.lua:26-33`) and for side-channels like cim's `cim_modded_slot` (`crafting_in_modded_dev.lua:714-720`): vanilla peers drop the packet silently, never crash. | `"server"` recipient is silently dropped (BUG_CLASSES 15); 500-char string cap; version your payload with a leading schema int and drop mismatches (BUG_CLASSES 9, VMF_RECIPES section 10, gt's `GT_LOBBY_RPC_SCHEMA` precedent). |
 | **NOT a seam: `NetworkTransmit.send_rpc*`** | Technically hookable but wrong altitude: it is the hot transport path, fasserts on unknown rpc names (:172, :188), and carries no domain context to decide substitutions. Hook the semantic encode site instead (rows above). | - |
 
@@ -155,21 +155,26 @@ mod's hook wraps OUTERMOST, so its early return silences yours (memory
 
 ### 5.1 The codified safe patterns (copy these, do not reinvent)
 
-**Injection recipe** - when registering a modded key into any NetworkLookup table:
+**Injection recipe** - when registering a modded key into a standard dense,
+bidirectional NetworkLookup table, load the manifested local copy once from the
+mod entry and pass it to every registration owner:
 
 ```lua
-if NetworkLookup and NetworkLookup.item_names and not rawget(NetworkLookup.item_names, key) then
-    local idx = #NetworkLookup.item_names + 1
-    rawset(NetworkLookup.item_names, idx, key)   -- index -> name
-    rawset(NetworkLookup.item_names, key, idx)   -- name -> index (BOTH, always)
+local index, inserted, reason = NetworkLookupLib.register_named(
+    NetworkLookup, "item_names", key)
+if not index then
+    -- Log the stable reason and leave the feature inert. No lookup byte changed.
+    return false, reason
 end
 ```
 
-Canonical sites: cwv `character_weapon_variants.lua:9392-9396` (items), `:7506-7522`
-(skins, mirrored into item_names too), WOC `weapons_of_chaos.lua:256-260`, MIL embedded
-`_moreitemslibrary_embedded.lua:273-280` (also mirrors `damage_sources`), crt
-`career_tweaker_tourney.lua:31-42` (unconditional + alphabetical so toggles cannot
-reorder indices between same-mod peers).
+`inserted=false, reason="already_registered"` is a successful idempotent result.
+All other non-index results fail closed. The helper validates the entire raw table
+before trusting even an exact target pair, because Lua 5.1's length operator cannot
+identify a safe append boundary in sparse state. Canonical consumers include Career's
+two ordered `buff_templates` catalogs, CWV's Outrider projectile lookup, WOC's relic
+item name, and Enemy's Warlord/Chosen `breeds` plus `damage_sources` pairs. Direct
+legacy append owners remain migration work under #428; do not copy their pattern.
 
 **Sender substitution (cosmetic axis)** - swap the modded key for a boot-stable vanilla
 key around the encode, restore after; local state untouched:
@@ -193,17 +198,18 @@ DISABLED and enable only on positive all-peers-acked evidence; any beacon error
 force-disables (fail-safe posture, :49-58). Use for any feature where substitution would
 change gameplay outcomes on the wire.
 
-**Enemy-side note:** breed injection (et) appends to `Breeds` before boot-lookup capture
-so `NetworkLookup.breeds` (`network_lookup.lua:267-271`) stays consistent - same parity
-rules apply to breed indices on spawn RPCs [unverified which RPCs carry breed ids at
-runtime; `go_types`/extractors carry breed NAME via blackboard, spawn requests carry
-template ids `unit_spawner.lua:416`].
+**Enemy-side note:** Enemy Tweaker's runtime Warlord and Chosen clones explicitly
+register their names in both `NetworkLookup.breeds` and `damage_sources` through the
+same helper before publishing the clone into `Breeds`. That proves local structural
+closure only. The same parity rules apply to breed indices on spawn RPCs [unverified
+which RPCs carry breed ids at runtime; `go_types`/extractors carry breed NAME via
+blackboard, spawn requests carry template ids `unit_spawner.lua:416`].
 
 ### 5.2 Improvement candidates
 
 | Pri | Mod | Our file:line | Current behavior -> engine-idiomatic alternative | Impact |
 |---|---|---|---|---|
-| P2 | all injectors | cwv `character_weapon_variants.lua:7507,9393`; WOC `weapons_of_chaos.lua:257`; crt `career_tweaker_tourney.lua:37`; MIL `_moreitemslibrary_embedded.lua:272` | Runtime appends never check the wire-type budget the engine fasserts at boot (`network_constants.lua:5-16, :50-63`). -> Add a shared bound check `idx <= Network.type_info("<wire_type>").max` (weapon_id for item_names, lookup for weapon_skins, buff_lookup for buff_templates) at inject time; refuse + printf ALERT on overflow. | Prevents an undefined-behavior bit-width overflow as mod content grows; NetworkConstants already caches the maxima. |
+| P2 | all injectors | `_lib_network_lookup` consumers plus remaining direct legacy owners | Runtime appends never check the wire-type budget the engine fasserts at boot (`network_constants.lua:5-16, :50-63`). -> Add an owner-supplied shared bound check `idx <= Network.type_info("<wire_type>").max` (weapon_id for item_names, lookup for weapon_skins, buff_lookup for buff_templates) at inject time; refuse + printf ALERT on overflow. | Prevents an undefined-behavior bit-width overflow as mod content grows; NetworkConstants already caches the maxima. |
 | P2 | crt | `career_tweaker_tourney.lua:31-42`, `career_tweaker_big_rebalance.lua:112-135` | Stub pre-registration gives SAME-mod index determinism, but nothing protects a NON-crt peer if a new-template buff id ever encodes onto a vanilla buff RPC (`NetworkLookup.buff_templates[...]` on rpc buff sync); crt has no parity gate and no substitution. -> Verify whether trn/BR stub buffs ride networked buff paths; if yes, gate their APPLICATION behind `_lib_peer_parity` (gameplay axis - substitution impossible); if provably local-only, document that invariant next to the registration. | Closes the last unaudited class-31 axis in the repo (issue 371 axis map). |
 | Resolved #741 | cwv | `character_weapon_variants.lua` wire-safety block + `_cwv_cosmetic_skin_wire.lua` | One exception-safe helper now unconditionally nulls every CWV skin around all three live-slot equipment senders (`game_object_initialized`, `_spawn_resynced_loadout`, `GearUtils.hot_join_sync`); profile sync separately uses the same predicate. Exact appearance travels only as string keys on `cwv_item_identity`; the old parity-gated numeric replay is removed. Interaction/pickup relays either originate from these safe records or relay already-decoded vanilla ids; keep sender-census tests when adding a new live-slot encoder. | Closes the residual class-31/64 surface without assuming same-mod numeric lookup parity. |
 | P3 | cim | `crafting_in_modded_dev.lua:878-882` | Unknown item id -> whole `rpc_sync_loadout_slot` dropped (stale panel slot). -> Optionally decode to the reserved `"n/a"` sentinel (index 1 by construction, `network_lookup.lua:250-252`) so the slot updates with a placeholder instead of going stale. | Cosmetic-only polish; current drop is safe. |

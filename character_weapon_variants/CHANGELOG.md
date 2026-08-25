@@ -1,5 +1,14 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.533-dev (2026-08-25) -- reject malformed NetworkLookup state (#428) [not-started]
+
+- Synchronized the canonical NetworkLookup registrar that now proves the
+  complete raw numeric side is dense and every forward/reverse pair is exact
+  before trusting an existing row or appending a new one.
+- Invalid, sparse, non-finite, non-positive, fractional, asymmetric, or foreign
+  table state now rejects without mutation. Valid Outrider projectile lookup
+  registration and its existing wire-containment policy are unchanged.
+
 ## 0.1.532-dev (2026-08-24) -- name active diagnostics by role (#499) [not-started]
 
 - Renamed the active Smoke Bomb diagnostic source to

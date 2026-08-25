@@ -1,5 +1,18 @@
 # Enemy Tweaker Changelog
 
+## 0.7.57-dev (2026-08-25): strict shared NetworkLookup registration (#428) [not-started]
+
+- Moved the canonical NetworkLookup helper to one entry-owned load before both
+  custom-breed owners and migrated the Skaven Warlord's two private append
+  loops to the same fail-closed registrar already used by the Chosen.
+- Registration now validates complete dense `breeds` and `damage_sources`
+  tables before any write. Malformed state leaves a fresh custom breed
+  unpublished and records the stable rejection reason instead of guessing an
+  index.
+- Hot reload now revalidates both existing wire pairs and restores readiness on
+  the new VMF mod object only after they pass; malformed reload state keeps the
+  Warlord swap and Chosen command inert.
+
 ## 0.7.56-dev (2026-08-16): #61 host handicap gate, #324 Warlord diagnostics, #451 Chosen prototype [verify-fix]
 
 - Personal Handicap category and host gate (#61): Personal difficulty moved
