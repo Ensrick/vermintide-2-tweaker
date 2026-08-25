@@ -476,8 +476,8 @@
             Bound='one signature-deduplicated phase row under the explicit probe 16-record cap'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[gt:347] phase=%s ','..','fmt')})
             GuardAnchors=@(
-                @{Source='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_chest_pickup_probe_core.lua';Tokens=@('M','.','MAX_RECORDS','=','16')}
-                @{Source='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_chest_pickup_probe_core.lua';Tokens=@('if','not','state','.','armed','or','state','.','count','>=','M','.','MAX_RECORDS','then')}
+                @{Source='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_diag_chest_pickup_state.lua';Tokens=@('M','.','MAX_RECORDS','=','16')}
+                @{Source='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_diag_chest_pickup_state.lua';Tokens=@('if','not','state','.','armed','or','state','.','count','>=','M','.','MAX_RECORDS','then')}
             )
         }
         @{
@@ -488,7 +488,7 @@
             Bound='one terminal cap row when the explicit probe reaches its 16-record budget'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[gt:347] trace complete records=%d classifications=%d')})
             GuardAnchors=@(
-                @{Source='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_chest_pickup_probe_core.lua';Tokens=@('if','capped','then','state','.','armed','=','false','end')}
+                @{Source='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_diag_chest_pickup_state.lua';Tokens=@('if','capped','then','state','.','armed','=','false','end')}
                 @{Tokens=@('if','capped','then')}
             )
         }

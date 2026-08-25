@@ -99,7 +99,7 @@ return function(H, repo_root)
         local check = resolve(registrations, "issue347_closed_chest_pickup_diagnostics")
         H.equal(check(), nil)
 
-        local core = loaded["_gt_chest_pickup_probe_core"]
+        local core = loaded["_gt_diag_chest_pickup_state"]
         H.equal(type(core), "table")
         local original = core.MAX_RECORDS
         core.MAX_RECORDS = original + 1

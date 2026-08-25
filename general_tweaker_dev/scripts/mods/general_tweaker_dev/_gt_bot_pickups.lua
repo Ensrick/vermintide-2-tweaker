@@ -1,5 +1,5 @@
 local mod = get_mod("gt_dev")
-local _gt347_core = mod:dofile("scripts/mods/general_tweaker_dev/_gt_chest_pickup_probe_core")
+local _gt347_core = mod:dofile("scripts/mods/general_tweaker_dev/_gt_diag_chest_pickup_state")
 local _gt365_policy = mod:dofile("scripts/mods/general_tweaker_dev/_gt_bot_ale_policy")
 local _gt347_state = _gt347_core.new()
 local _gt347_tracked = setmetatable({}, { __mode = "k" })

@@ -1,5 +1,18 @@
 # General Tweaker Changelog
 
+## 0.2.272-dev (2026-08-25) -- name chest-pickup diagnostic state by role (#499) [not-started]
+
+- Renamed the bounded closed-chest pickup state core to
+  `_gt_diag_chest_pickup_state.lua` without changing its bytes or runtime load
+  position.
+- The explicit `/gt_chest_pickup_probe` command, `[gt:347]` receipts,
+  16-record and 32-classification caps, host-only observation boundary, hook
+  topology, and `issue347_closed_chest_pickup_diagnostics` check are unchanged.
+- Regression coverage now retains the retired-path absence, singleton loader,
+  state owner, receipt family, command/arm path, hook cardinality, and load
+  order. #499 remains open for the remaining serialized legacy owners and
+  stable-stream retirements.
+
 ## 0.2.271-dev (2026-08-24) -- name permanent stat policy by role (#499) [not-started]
 
 - Renamed the engine-free player-stat snapshot core and its offline suite from
