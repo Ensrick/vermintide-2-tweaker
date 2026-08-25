@@ -1505,6 +1505,13 @@ function Invoke-ShipSelfTest {
     Assert ($selfTxt.IndexOf('BUILD-ONLY COMPLETE') -ge 0) "build-only exits before deploy/upload/release handling"
     $mainDispatchPos = $selfTxt.LastIndexOf('if ($SelfTest) { exit (Invoke-ShipSelfTest) }')
     $canonicalShipSource = $selfTxt.Substring($mainDispatchPos)
+    $bundleAuthorityPreflightPos = $selfTxt.IndexOf(
+        'bundleAuthorityPolicy = Assert-VtBundleAuthorityShipPreflight', $mainDispatchPos)
+    $transactionLeasePos = $selfTxt.IndexOf(
+        'transactionLease = Enter-VmbMachineTransactionLease', $mainDispatchPos)
+    Assert ($bundleAuthorityPreflightPos -ge 0 -and
+        $bundleAuthorityPreflightPos -lt $transactionLeasePos) "bundle authority fails closed before transaction lease or launcher mutation"
+    Assert ($canonicalShipSource.IndexOf('-BuildOnly:$BuildOnly', [System.StringComparison]::Ordinal) -ge 0) "ship permits receipt authority only through its nonpublishing BuildOnly lane"
     $loadTagResolvePos = $selfTxt.IndexOf('$loadTagResolution = Get-VtLoadTagResolution -MainLuaPath $luaPath', $mainDispatchPos)
     $statusLabelPos = $selfTxt.IndexOf('==> Status-labeling shipped issues', $mainDispatchPos)
     $refreshLoadTagPos = $selfTxt.IndexOf('LoadTag     = "$loadTag"', $mainDispatchPos)
@@ -1686,6 +1693,18 @@ if ($EmergencyPublicationReason) {
 $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $modDir   = Join-Path $repoRoot $Mod
 if (-not (Test-Path $modDir)) { Fail "Mod directory not found: $modDir" }
+
+# Issue #1412: select the build/publication lane from the exact inventory
+# contract before claims, launcher resolution, build, deploy, or upload. Receipt
+# authority may use BuildOnly, but all downstream mutation remains disabled.
+try {
+    $bundleAuthorityEntry = Get-VtBuildReceiptInventoryEntry -RepoRoot $repoRoot -Mod $Mod
+    $bundleAuthorityPolicy = Assert-VtBundleAuthorityShipPreflight `
+        -Entry $bundleAuthorityEntry -BuildOnly:$BuildOnly
+}
+catch {
+    Fail "Bundle-authority preflight failed: $($_.Exception.Message)"
+}
 
 $transactionLease = $null
 $privateLauncherSettings = $null

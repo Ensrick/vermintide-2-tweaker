@@ -10,6 +10,11 @@
 
 $script:VtBuildReceiptFileName = '.build-receipt.json'
 $script:VtBuildReceiptBuilderName = 'VMBLauncher'
+$script:VtBuildReceiptAuthorityHelperPath = Join-Path $PSScriptRoot 'bundle-authority.ps1'
+if (-not (Test-Path -LiteralPath $script:VtBuildReceiptAuthorityHelperPath -PathType Leaf)) {
+    throw "Build receipt authority helpers are missing: $script:VtBuildReceiptAuthorityHelperPath"
+}
+. $script:VtBuildReceiptAuthorityHelperPath
 $script:VtBuildReceiptOutputHelperPath = Join-Path $PSScriptRoot 'bundle-output-set.ps1'
 if (-not (Test-Path -LiteralPath $script:VtBuildReceiptOutputHelperPath -PathType Leaf)) {
     throw "Build receipt output-set helpers are missing: $script:VtBuildReceiptOutputHelperPath"
@@ -80,11 +85,9 @@ function Assert-VtBuildReceiptInventoryEntry {
     if ([string]$Entry.Dir -cne $Mod) {
         throw "Build receipt inventory entry '$($Entry.Dir)' is not '$Mod'."
     }
-    if ([string]$Entry.BundleAuthority -cne 'tracked') {
-        throw "Build receipt inventory BundleAuthority for '$Mod' must be exactly 'tracked'."
-    }
-    if ([string]$Entry.RootBundle -cnotmatch '^[0-9a-f]{16}\.mod_bundle$') {
-        throw "Build receipt inventory has an invalid RootBundle for '$Mod': $($Entry.RootBundle)"
+    $authorityErrors = @(Get-VtBundleAuthorityEntryErrors -Entry $Entry)
+    if ($authorityErrors.Count -gt 0) {
+        throw "Build receipt inventory entry for '$Mod' is invalid: $($authorityErrors -join '; ')"
     }
 }
 
@@ -1101,6 +1104,25 @@ function ConvertFrom-VtBuildReceiptJson {
     catch {
         throw "Build receipt is not valid JSON: $($_.Exception.Message)"
     }
+}
+
+function Get-VtBuildReceiptDeclaredOutputSet {
+    param(
+        [Parameter(Mandatory = $true)]$Receipt,
+        [Parameter(Mandatory = $true)][string]$ExpectedMod
+    )
+
+    $records = @($Receipt.output_files | ForEach-Object {
+        [pscustomobject]@{
+            Name = [string]$_.filename
+            Length = $_.length
+            Sha256 = [string]$_.sha256
+        }
+    })
+    return New-VtBundleOutputSet -Records $records `
+        -ExpectedDescriptorName "$ExpectedMod.mod" `
+        -ExpectedRootBundle ([string]$Receipt.root_bundle) `
+        -ExpectedDescriptorSha256 ([string]$Receipt.descriptor.sha256)
 }
 
 function Get-VtBuildReceiptPropertyProblems {

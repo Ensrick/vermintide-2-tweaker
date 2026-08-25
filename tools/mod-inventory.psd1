@@ -23,8 +23,9 @@
 #   Stream     - single | stable | dev
 #   Public     - $true only for visibility=public stable items (the --allow-public set)
 #   Name       - friendly name for the release manifest
-#   BundleAuthority - exact bundle authority mode; currently every active row
-#                is explicitly 'tracked' and unsupported/missing modes fail closed
+#   BundleAuthority - exact 'tracked' or 'receipt' authority mode. Every active
+#                row currently remains 'tracked'. See docs/BUNDLE_AUTHORITY.md;
+#                unsupported/missing modes fail closed.
 #   RootBundle - mod-specific compiled root package in bundleV2/; shared VMF
 #                bundles and optional asset sidecars never satisfy this identity
 #   BuildArtifactExclusions - optional exact-name + SHA-256 allowlist for known

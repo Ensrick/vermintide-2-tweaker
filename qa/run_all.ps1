@@ -234,6 +234,9 @@ elseif (-not $Quiet) {
     Write-Host "[check_build_receipts] SKIP - build-only pipeline fingerprints, generates, then validates the exact receipt." -ForegroundColor DarkYellow
     Write-Host ""
 }
+# Issue #1412: exact tracked/receipt inventory authority, zero-tracked-output
+# receipt state, and typed bidirectional transitions are a cheap blocking gate.
+Run-Check "check_bundle_authority"            { & (Join-Path $here "check_bundle_authority.ps1")              -Quiet:$Quiet }
 # Issue #724: runtime/version/config/newest-release deltas must carry the
 # owning mod's exact root bundle in the same diff. This is diff-scoped and
 # blocking; docs/tests-only and bundle-only reconciliation changes pass.

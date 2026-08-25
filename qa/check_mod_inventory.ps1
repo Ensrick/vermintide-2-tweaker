@@ -99,9 +99,13 @@ function Invoke-SelfTest {
         -not ($missingAuthority -match 'invalid BundleAuthority')) {
         throw 'planted BundleAuthority omission not detected by required-field and policy gates'
     }
+    $receiptAuthority = @(@{ Dir='alpha'; ModId='a'; WorkshopId='123'; Visibility='public'; Stream='single'; Public=$true; Name='Alpha'; RootBundle='aaaaaaaaaaaaaaaa.mod_bundle'; BundleAuthority='receipt' })
+    if (@(Test-InventoryModel $receiptAuthority @('alpha') $cfg $readme @{}).Count -ne 0) {
+        throw 'supported receipt BundleAuthority was rejected by inventory policy'
+    }
     $wrongAuthority = @(@{ Dir='alpha'; ModId='a'; WorkshopId='123'; Visibility='public'; Stream='single'; Public=$true; Name='Alpha'; RootBundle='aaaaaaaaaaaaaaaa.mod_bundle'; BundleAuthority='generated' })
     if (-not (@(Test-InventoryModel $wrongAuthority @('alpha') $cfg $readme @{}) -match 'invalid BundleAuthority')) {
-        throw 'planted non-tracked BundleAuthority was accepted'
+        throw 'planted unsupported BundleAuthority was accepted'
     }
     $badExclusion = @(@{
         Dir='alpha'; ModId='a'; WorkshopId='123'; Visibility='public'; Stream='single'; Public=$true;
@@ -136,6 +140,7 @@ try { $inventory = Import-PowerShellDataFile -Path $inventoryPath } catch {
 }
 
 foreach ($entry in @($inventory.Mods)) {
+    if ([string]$entry.BundleAuthority -cne 'tracked') { continue }
     $bundlePath = Join-Path $root "$($entry.Dir)\bundleV2\$($entry.RootBundle)"
     if (-not (Test-Path -LiteralPath $bundlePath -PathType Leaf)) {
         Write-Host "[check_mod_inventory] ERROR - RootBundle missing for $($entry.Dir): $($entry.RootBundle)" -ForegroundColor Red

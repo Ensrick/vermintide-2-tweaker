@@ -32,9 +32,11 @@ if (-not (Test-Path -LiteralPath $normalizationHelperPath -PathType Leaf)) {
 $script:VtBuildReceiptGlobalPolicyPaths = @(
     '.gitattributes',
     'tools/mod-inventory.psd1',
+    'tools/ship/bundle-authority.ps1',
     'tools/ship/build-output-normalization.ps1',
     'tools/ship/build-receipt.ps1',
     'tools/ship/bundle-output-set.ps1',
+    'qa/check_bundle_authority.ps1',
     'qa/check_build_receipts.ps1'
 )
 
@@ -316,9 +318,31 @@ function Test-VtBuildReceiptContext {
             # retains its historical root-only validation path.
             $inventoryEntry = Get-VtBuildReceiptContextInventoryEntry `
                 -Root $Root -Context $Context -ModName $ModName
+            $authority = Assert-VtBundleAuthorityEntry -Entry $inventoryEntry
+            if ($authority -ceq 'receipt' -and $MinimumSchema -lt 3) {
+                $proofArguments.MinimumSchema = 3
+            }
             $normalizationPolicy = Get-VtBuildReceiptNormalizationPolicyForEntry `
                 -InventoryEntry $inventoryEntry
-            if ($Context.Mode -eq 'worktree') {
+            if ($authority -ceq 'receipt') {
+                # A receipt-authority commit intentionally has no Git-tracked
+                # generated outputs. Validate the complete schema-3 map from
+                # the receipt itself, and compare a materialized local build
+                # whenever one is present in the working tree.
+                $outputSet = Get-VtBuildReceiptDeclaredOutputSet `
+                    -Receipt $receipt -ExpectedMod $ModName
+                if ($Context.Mode -eq 'worktree') {
+                    $bundleDirectory = Join-Path (Join-Path $Root $ModName) 'bundleV2'
+                    if (Test-Path -LiteralPath $bundleDirectory -PathType Container) {
+                        $materializedEntries = @(Get-ChildItem -LiteralPath $bundleDirectory -Force)
+                        if ($materializedEntries.Count -gt 0) {
+                            $outputSet = Get-VtBuildWorkingOutputSet -RepoRoot $Root -Mod $ModName `
+                                -SourceMap $sourceMap -InventoryEntry $inventoryEntry
+                        }
+                    }
+                }
+            }
+            elseif ($Context.Mode -eq 'worktree') {
                 $outputSet = Get-VtBuildWorkingOutputSet -RepoRoot $Root -Mod $ModName `
                     -SourceMap $sourceMap -InventoryEntry $inventoryEntry
             }
@@ -488,8 +512,8 @@ function Invoke-VtBuildReceiptSelfTest {
                     RootBundle = 'aaaaaaaaaaaaaaaa.mod_bundle'
                 } | Out-Null
         }
-        catch { $authorityRejected = ($_.Exception.Message -match "BundleAuthority.*'tracked'") }
-        if (-not $authorityRejected) { throw 'non-tracked bundle authority was accepted for a receipt proof' }
+        catch { $authorityRejected = ($_.Exception.Message -match "invalid BundleAuthority") }
+        if (-not $authorityRejected) { throw 'unsupported bundle authority was accepted for a receipt proof' }
         $cleanOutput = Get-VtBuildWorkingOutputSet -RepoRoot $tempRoot -Mod 'example_mod' `
             -SourceMap $cleanMap -InventoryEntry $inventoryEntry
         $cleanRoot = Get-VtBuildWorkingRootProof -RepoRoot $tempRoot -Mod 'example_mod'
@@ -1013,8 +1037,10 @@ function Invoke-VtBuildReceiptSelfTest {
         }
         foreach ($globalPath in @(
                 '.gitattributes', 'tools/mod-inventory.psd1',
+                'tools/ship/bundle-authority.ps1',
                 'tools/ship/build-output-normalization.ps1',
                 'tools/ship/build-receipt.ps1', 'tools/ship/bundle-output-set.ps1',
+                'qa/check_bundle_authority.ps1',
                 'qa/check_build_receipts.ps1')) {
             $globalTargets = @(Get-VtBuildReceiptTargets -Inventory $targetInventory `
                 -Changes @([pscustomobject]@{ Status = 'M'; Path = $globalPath }) `

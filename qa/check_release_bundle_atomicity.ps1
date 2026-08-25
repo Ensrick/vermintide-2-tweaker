@@ -32,6 +32,11 @@ param(
 
 $ErrorActionPreference = 'Stop'
 if (-not $RepoRoot) { $RepoRoot = Join-Path $PSScriptRoot '..' }
+$bundleAuthorityHelper = Join-Path $PSScriptRoot '..\tools\ship\bundle-authority.ps1'
+if (-not (Test-Path -LiteralPath $bundleAuthorityHelper -PathType Leaf)) {
+    throw "Bundle-authority helpers are missing: $bundleAuthorityHelper"
+}
+. $bundleAuthorityHelper
 
 function Normalize-RepoPath([string]$Path) {
     if ($null -eq $Path) { return '' }
@@ -150,6 +155,65 @@ function Read-ContextText([object]$Context, [string]$Path, [ValidateSet('Base','
     }
     $commit = if ($Side -eq 'Base') { $Context.Base } else { $Context.Head }
     return Read-GitObjectText "${commit}:$norm"
+}
+
+function ConvertFrom-ReleaseAtomicityDataText {
+    param([string]$Text, [string]$Label)
+    if ([string]::IsNullOrWhiteSpace($Text)) { throw "$Label is missing." }
+    $tokens = $null; $parseErrors = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseInput(
+        $Text, [ref]$tokens, [ref]$parseErrors)
+    if (@($parseErrors).Count -gt 0) {
+        throw "$Label is invalid PowerShell data: $(@($parseErrors | ForEach-Object { $_.Message }) -join '; ')"
+    }
+    $rootHash = $ast.Find({
+        param($node)
+        $node -is [System.Management.Automation.Language.HashtableAst]
+    }, $false)
+    if ($null -eq $rootHash) { throw "$Label has no root hashtable." }
+    try { return $rootHash.SafeGetValue() }
+    catch { throw "$Label is not constant PowerShell data: $($_.Exception.Message)" }
+}
+
+function Get-ReleaseAtomicityAuthorityTransitions {
+    param([object]$Context, [string]$Root)
+
+    $baseInventory = ConvertFrom-ReleaseAtomicityDataText `
+        -Text (Read-ContextText $Context 'tools/mod-inventory.psd1' Base $Root) `
+        -Label 'base mod inventory'
+    $headInventory = ConvertFrom-ReleaseAtomicityDataText `
+        -Text (Read-ContextText $Context 'tools/mod-inventory.psd1' Head $Root) `
+        -Label 'head mod inventory'
+    $transitions = @{}
+    foreach ($headEntry in @($headInventory.Mods)) {
+        $dir = [string]$headEntry.Dir
+        $baseEntries = @($baseInventory.Mods | Where-Object { [string]$_.Dir -ceq $dir })
+        if ($baseEntries.Count -ne 1) { continue }
+        $baseEntry = $baseEntries[0]
+        $baseAuthority = Assert-VtBundleAuthorityEntry -Entry $baseEntry
+        $headAuthority = Assert-VtBundleAuthorityEntry -Entry $headEntry
+        if ($baseAuthority -ceq 'tracked' -and $headAuthority -ceq 'receipt') {
+            $transitions[$dir] = 'tracked-to-receipt'
+        }
+        elseif ($baseAuthority -ceq 'receipt' -and $headAuthority -ceq 'tracked') {
+            $transitions[$dir] = 'receipt-to-tracked'
+        }
+    }
+    return $transitions
+}
+
+function Get-ReleaseAtomicityHeadReceiptDirs {
+    param([object]$Context, [string]$Root)
+
+    $headInventory = ConvertFrom-ReleaseAtomicityDataText `
+        -Text (Read-ContextText $Context 'tools/mod-inventory.psd1' Head $Root) `
+        -Label 'head mod inventory'
+    $receiptDirs = @{}
+    foreach ($entry in @($headInventory.Mods)) {
+        $authority = Assert-VtBundleAuthorityEntry -Entry $entry
+        if ($authority -ceq 'receipt') { $receiptDirs[[string]$entry.Dir] = $true }
+    }
+    return $receiptDirs
 }
 
 function Get-TopReleaseVersion([string]$Text) {
@@ -281,7 +345,9 @@ function Test-ReleaseBundleAtomicity {
         [hashtable]$TrustedPromotions,
         [hashtable]$TrustedTitleSyncs,
         [hashtable]$TrustedBootstrapIdSyncs,
-        [hashtable]$DeclaredBundleRetirements
+        [hashtable]$DeclaredBundleRetirements,
+        [hashtable]$AuthorityTransitions = @{},
+        [hashtable]$ReceiptAuthorityDirs = @{}
     )
     $errors = @()
     if ($null -eq $DeclaredBundleRetirements) { $DeclaredBundleRetirements = @{} }
@@ -303,6 +369,9 @@ function Test-ReleaseBundleAtomicity {
         $key = "$dir/$name".ToLowerInvariant()
         $active = @($Mods | Where-Object { [string]$_.Dir -ieq $dir }) | Select-Object -First 1
         $isActiveRoot = $active -and ([string]$active.RootBundle -ieq $name)
+        $isTrackedToReceipt = $AuthorityTransitions.ContainsKey($dir) -and
+            [string]$AuthorityTransitions[$dir] -ceq 'tracked-to-receipt'
+        if ($isTrackedToReceipt) { continue }
         if ($isActiveRoot) {
             $errors += "${dir}: active canonical root bundle cannot be deleted: $($change.Path)"
             $deletionErrors[$key] = $true
@@ -322,6 +391,18 @@ function Test-ReleaseBundleAtomicity {
         $prefix = "$dir/"
         $modChanges = @($Changes | Where-Object { $_.Path.StartsWith($prefix, [System.StringComparison]::OrdinalIgnoreCase) })
         if ($modChanges.Count -eq 0) { continue }
+        if ($AuthorityTransitions.ContainsKey($dir) -and
+                [string]$AuthorityTransitions[$dir] -ceq 'tracked-to-receipt') {
+            # The shared #1412 contract validates the exact all-output delete,
+            # scoped ignore, schema-3 receipt map, and atomic inventory flip.
+            # This is a typed authority transition, never ordinary retirement.
+            continue
+        }
+        if ($ReceiptAuthorityDirs.ContainsKey($dir)) {
+            # Receipt-authority runtime/output atomicity is validated against
+            # its schema-3 receipt by the shared #1412 gate.
+            continue
+        }
 
         $rootPath = "$dir/bundleV2/$rootBundle"
         $rootUpdated = @($modChanges | Where-Object {
@@ -438,6 +519,17 @@ function Invoke-SelfTest {
     if (Test-ExactCfgBootstrapPublishedIdSync $bootstrapBase $bootstrapHead '1.2.3-dev' '1.2.4-dev') {
         throw 'first-upload published_id sync with changed MOD_VERSION was trusted'
     }
+    $authorityTransitionErrors = @(Test-ReleaseBundleAtomicity -Mods $mods -Changes @(
+            [pscustomobject]@{ Status='M'; Path='tools/mod-inventory.psd1' },
+            [pscustomobject]@{ Status='M'; Path='.gitignore' },
+            [pscustomobject]@{ Status='M'; Path='example_mod/scripts/main.lua' },
+            [pscustomobject]@{ Status='D'; Path='example_mod/bundleV2/aaaaaaaaaaaaaaaa.mod_bundle' }
+        ) -TopReleaseChanged @{} -TrustedPromotions @{} -TrustedTitleSyncs @{} `
+        -TrustedBootstrapIdSyncs @{} -DeclaredBundleRetirements @{} `
+        -AuthorityTransitions @{ example_mod='tracked-to-receipt' })
+    if ($authorityTransitionErrors.Count -ne 0) {
+        throw "validated tracked-to-receipt transition was treated as ordinary retirement: $($authorityTransitionErrors -join '; ')"
+    }
     $emptyGit = Invoke-GitLines @('diff', 'HEAD', '--name-only', '--', '__release_atomicity_fixture_path_that_does_not_exist__')
     if ($null -eq $emptyGit -or $emptyGit.Count -ne 0) { throw 'successful empty git output collapsed into indeterminate state' }
     Write-Host "[check_release_bundle_atomicity -SelfTest] PASS $passed fixture cases" -ForegroundColor Green
@@ -458,6 +550,33 @@ try {
     if ($changes.Count -eq 0) {
         if (-not $Quiet) { Write-Host '[check_release_bundle_atomicity] OK - no changed files in scope.' -ForegroundColor Green }
         exit 0
+    }
+
+    $authorityTransitions = Get-ReleaseAtomicityAuthorityTransitions `
+        -Context $context -Root $root
+    $receiptAuthorityDirs = Get-ReleaseAtomicityHeadReceiptDirs `
+        -Context $context -Root $root
+    if ($authorityTransitions.Count -gt 0 -or $receiptAuthorityDirs.Count -gt 0) {
+        # Standalone atomicity runs must not trust a mode flip merely because
+        # it looks like one. Execute the complete shared authority gate in a
+        # child host so its script-level exit remains isolated.
+        $authorityGate = Join-Path $PSScriptRoot 'check_bundle_authority.ps1'
+        if (-not (Test-Path -LiteralPath $authorityGate -PathType Leaf)) {
+            throw "Bundle-authority gate is missing: $authorityGate"
+        }
+        $hostExecutable = [System.Diagnostics.Process]::GetCurrentProcess().MainModule.FileName
+        $authorityArguments = @('-NoLogo', '-NoProfile', '-NonInteractive')
+        if ([System.IO.Path]::GetFileName($hostExecutable) -ieq 'powershell.exe') {
+            $authorityArguments += @('-ExecutionPolicy', 'Bypass')
+        }
+        $authorityArguments += @('-File', $authorityGate, '-RepoRoot', $root, '-Quiet')
+        if ($Staged) { $authorityArguments += '-Staged' }
+        elseif ($Range) { $authorityArguments += @('-Range', $Range) }
+        & $hostExecutable @authorityArguments
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host '[check_release_bundle_atomicity] ERROR - typed bundle-authority transition failed its shared #1412 contract.' -ForegroundColor Red
+            exit 2
+        }
     }
 
     $inventoryPath = Join-Path $root 'tools\mod-inventory.psd1'
@@ -529,7 +648,9 @@ try {
         -TopReleaseChanged $topReleaseChanged -TrustedPromotions $trustedPromotions `
         -TrustedTitleSyncs $trustedTitleSyncs `
         -TrustedBootstrapIdSyncs $trustedBootstrapIdSyncs `
-        -DeclaredBundleRetirements $declaredBundleRetirements)
+        -DeclaredBundleRetirements $declaredBundleRetirements `
+        -AuthorityTransitions $authorityTransitions `
+        -ReceiptAuthorityDirs $receiptAuthorityDirs)
     if ($errors.Count -gt 0) {
         Write-Host '[check_release_bundle_atomicity] ERRORS - releasable mod changes and root bundles must land atomically (#724):' -ForegroundColor Red
         foreach ($message in $errors) { Write-Host "  X $message" -ForegroundColor Red }
