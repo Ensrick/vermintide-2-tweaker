@@ -40,7 +40,7 @@ end
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.341-dev"
+local MOD_VERSION = "0.2.342-dev"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -2412,9 +2412,9 @@ do
     end
 end
 
--- Native live Tab statistics page (#272 phase 2). This consumes only the
--- ScoreboardHelper snapshot inventoried above and draws through the existing
--- IngamePlayerListUI lifecycle; no competing Tab input or custom transport.
+-- Native paged statistics (#272 phase 3 / #1414). This keeps the fixed eleven
+-- ScoreboardHelper rows intact, adds two detached StatisticsDatabase scalars,
+-- and draws through the existing Tab/end lifecycles without custom transport.
 do
     local ok, live_page = pcall(mod.dofile, mod,
         "scripts/mods/gui_tweaker_dev/_gut_scoreboard_live")

@@ -17,6 +17,12 @@ catalog contains those same eleven names and computes
 `num_stats_per_player` from the group rows (`scoreboard_helper.lua:189-218`).
 `ScoreboardHelper.get_grouped_topic_statistics` resolves current players and
 reads the catalog from `StatisticsDatabase` (`scoreboard_helper.lua:344-436`).
+The session-score sender flattens that exact grouped row count, and the receiver
+rejects a host payload whose count differs from its local
+`ScoreboardHelper.num_stats_per_player`
+(`scripts/managers/game_mode/game_mechanism_manager.lua:244-264,1054-1073`).
+The GUT extension therefore never appends Aidings or Times Revived to the
+vanilla catalog or wire.
 
 The underlying definitions mark every existing scoreboard scalar as
 `sync_on_hot_join`, including melee/ranged kills, headshots, revives, aidings,
@@ -79,11 +85,39 @@ views cannot disagree.
 3. **Native end-screen page (implemented in v0.2.264-dev).** The same detached
    model renders from `context.players_session_score` after vanilla's
    `EndViewStateScore.draw`; it adds no replacement state or score transport.
-4. **Custom statistics.** Add one field family at a time with an authoritative
+4. **Native paging and visibility (implemented in source for #1414).** One
+   GUT-owned registry copies the eleven vanilla descriptors and appends
+   localized Aidings and Times Revived descriptors. The two extra scalar
+   values are read live for held Tab. Normal Adventure context construction
+   carries `players_session_score` but does not carry `statistics_db`
+   (`state_ingame_running.lua:274-344`); the score state merely assigns that
+   absent context field (`end_view_state_score.lua:23-29`). A chained
+   StateIngame-exit owner therefore captures only four players by two scalars
+   before database teardown, once per mission generation. `GameStateMachine`
+   supplies the old state object to mod callbacks before its native transition
+   (`game_state_machine.lua:14-21`), providing the still-live database and
+   profile synchronizer. The end presenter consumes that detached sidecar
+   without touching the native score table or wire. StateLoading carries an
+   active end-view wrapper into the next StateIngame through
+   `loading_context.level_end_view_wrappers` (`state_loading.lua:1671-1677`;
+   `state_ingame.lua:347-380`), so that exact enter preserves the sidecar while
+   always clearing the held-Tab cache. An ordinary no-wrapper StateIngame enter
+   clears it; nested state notifications remain neutral because
+   `StateInGameRunning` is constructed inside `StateIngame.on_enter` and can
+   notify before the outer callback (`state_ingame.lua:345-388`;
+   `game_state_machine.lua:21-27`). A backwards mission clock independently
+   forces a fresh snapshot. Eleven rows
+   fit on each of at most four pages; overflow, malformed, and duplicate topics
+   are explicit model verdicts. Page and per-topic visibility are persisted VMF
+   settings. A hidden saved sort falls back to Player Name without rewriting
+   the saved preference. The optional page keybind only advances the setting
+   and owns no Tab/update/input hook. Adventure reconnect retention now includes
+   both scalar paths within the existing 8-player / 64-path limits.
+5. **Custom statistics.** Add one field family at a time with an authoritative
    owner, bounded wire schema, hot-join state, and two-player regression matrix.
 
 The issue remains open after the native presentation slice. Friendly-fire
 damage, healing amount, and melee/ranged
 damage require separately specified host-authoritative accumulation before they
-may appear; boss damage still needs late-join parity. Per-stat visibility should
-be shared by the Tab and end-screen presenters rather than added to only one.
+may appear; boss damage still needs late-join parity. The shared page and
+visibility policy applies identically to the Tab and end-screen presenters.

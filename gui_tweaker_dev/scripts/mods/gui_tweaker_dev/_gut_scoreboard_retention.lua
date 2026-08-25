@@ -1,10 +1,11 @@
--- Adventure disconnect/rejoin scoreboard retention (#437).
+-- _gut_scoreboard_retention.lua - Adventure disconnect/rejoin score retention.
 --
 -- Vanilla unregisters (and deletes) the player's StatisticsDatabase row, then
 -- registers an empty row when the same peer returns. Deus repairs that boundary
 -- with save_persisted_score/restore_persisted_score; Adventure does not. This
 -- module applies the same shape to only ScoreboardHelper's leaf paths, on the
 -- Adventure host, for the lifetime of one StateIngame session.
+-- Owned by: gui_tweaker_dev.lua. Consumed via: mod:dofile from the entry point.
 local mod = get_mod("gut_dev")
 local Policy = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_scoreboard_policy")
 local M = { rt_checks = {} }
@@ -45,8 +46,9 @@ end
 
 local function _paths()
     local helper = rawget(_G, "ScoreboardHelper")
-    return Policy.collect_stat_paths(helper and helper.scoreboard_topic_stats,
-        MAX_PATHS)
+    local topics = Policy.build_topic_registry(
+        helper and helper.scoreboard_topic_stats or {})
+    return Policy.collect_stat_paths(topics, MAX_PATHS)
 end
 
 local function _capture(database, stats_id)
@@ -98,8 +100,8 @@ mod:hook_safe("StatisticsDatabase", "register", function(self, stats_id)
 end)
 
 local prev_state = mod.on_game_state_changed
-mod.on_game_state_changed = function(status, state_name)
-    if prev_state then prev_state(status, state_name) end
+mod.on_game_state_changed = function(status, state_name, ...)
+    if prev_state then prev_state(status, state_name, ...) end
     if state_name ~= "StateIngame" then return end
     if status == "enter" then
         _clear(nil)
@@ -135,6 +137,12 @@ M.rt_checks[#M.rt_checks + 1] = {
                 or type(Policy.capture_stat_values) ~= "function"
                 or type(Policy.restore_stat_values) ~= "function" then
             return "scoreboard retention policy incomplete"
+        end
+        local paths = Policy.collect_stat_paths(
+            Policy.build_topic_registry({}), MAX_PATHS)
+        if #paths ~= 2 or paths[1][1] ~= "aidings"
+                or paths[2][1] ~= "times_revived" then
+            return "supplemental scoreboard retention paths missing"
         end
     end,
 }

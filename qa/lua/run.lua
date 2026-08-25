@@ -443,6 +443,8 @@ local suites = {
     "test_gut_revive_scoreboard",
     "test_gut_damage_taken_scoreboard",
     "test_gut_scoreboard_diagnostics",
+    "test_gut_scoreboard_paging",
+    "test_gut_scoreboard_live_adapter",
     "test_gut_dev_printf_receipts",
     "test_gut_engine_ui_loc",
     "test_gut_hidden_passives",

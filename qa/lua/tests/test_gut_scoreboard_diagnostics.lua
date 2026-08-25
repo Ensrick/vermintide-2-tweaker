@@ -127,7 +127,12 @@ return function(H, repo_root)
                 { stat_name = "damage_taken", score = 60 - i * 10 },
             } } }
         end
-        local page = Policy.build_native_page(players, topics, "damage_dealt", 4)
+        local model = Policy.build_native_model(players, topics, {
+            sort_topic = "damage_dealt",
+            player_limit = 4,
+            selected_page = 1,
+        })
+        local page = model.selected
         H.equal(#page.players, 4)
         H.equal(page.players[1].name, "Alpha")
         H.equal(page.players[4].name, "Delta")
@@ -144,24 +149,37 @@ return function(H, repo_root)
             } } },
             c = { name = "Missing", group_scores = { offense = {} } },
         }
-        local page = Policy.build_native_page(source, {
+        local model = Policy.build_native_model(source, {
             { name = "damage_taken", display_text = "taken" },
-        }, "damage_taken", 4)
+        }, {
+            sort_topic = "damage_taken",
+            player_limit = 4,
+            selected_page = 1,
+        })
+        local page = model.selected
         H.equal(page.players[1].name, "Alpha")
         H.equal(page.players[3].name, "Missing")
         page.players[1].scores.damage_taken = 999
         H.equal(source.b.group_scores.offense[1].score, 10)
     end)
 
-    H.test("GUT #272 native topic model is unique and hard capped", function()
+    H.test("GUT #272 native topic model is unique and paged without loss", function()
         local topics = {}
         for i = 1, 15 do
             topics[#topics + 1] = { name = "stat_" .. i, display_text = "label_" .. i }
         end
         topics[#topics + 1] = { name = "stat_1", display_text = "duplicate" }
-        local page = Policy.build_native_page({}, topics, "player_name", 4)
-        H.equal(#page.topics, Policy.MAX_NATIVE_TOPICS)
-        H.equal(page.topics[1].display_text, "label_1")
+        local model = Policy.build_native_model({}, topics, {
+            sort_topic = "player_name",
+            player_limit = 4,
+            selected_page = 2,
+        })
+        H.equal(#model.topics, 15)
+        H.equal(model.page_count, 2)
+        H.equal(#model.pages[1].topics, Policy.ROWS_PER_PAGE)
+        H.equal(#model.pages[2].topics, 4)
+        H.equal(model.pages[1].topics[1].display_text, "label_1")
+        H.equal(model.duplicate_count, 1)
     end)
 
     H.test("GUT #272 native pages own bounded draw seams and no transport", function()
@@ -182,23 +200,26 @@ return function(H, repo_root)
         H.equal(live:find("rpc_", 1, true), nil)
     end)
 
-    H.test("GUT #272 stable and dev scoreboard presenters stay semantically identical", function()
+    H.test("GUT #272 stable and dev presenters preserve shared renderer invariants", function()
         local stable = read(repo_root
             .. "/gui_tweaker/scripts/mods/gui_tweaker/_gut_scoreboard_live.lua")
         local dev = read(repo_root
             .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_scoreboard_live.lua")
-        dev = dev:gsub("gui_tweaker_dev", "gui_tweaker")
-            :gsub('get_mod%("gut_dev"%)', 'get_mod("gut")')
-        H.equal(stable, dev,
-            "public and dev scoreboard behavior may differ only by stream identity")
-
-        local stable_loc = assert(loadfile(repo_root
-            .. "/gui_tweaker/scripts/mods/gui_tweaker/gui_tweaker_localization.lua"))()
-        local dev_loc = assert(loadfile(repo_root
-            .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/gui_tweaker_dev_localization.lua"))()
-        for _, key in ipairs({ "gut_scoreboard_live_title", "gut_scoreboard_live_statistic" }) do
-            H.equal(stable_loc[key].en, dev_loc[key].en,
-                "scoreboard chrome localization drifted for " .. key)
+        for _, entry in ipairs({ { name = "stable", source = stable },
+                                 { name = "dev", source = dev } }) do
+            H.truthy(entry.source:find("is_root = true", 1, true) ~= nil,
+                entry.name .. " presenter lost its explicit root")
+            H.truthy(entry.source:find(
+                '"player_" .. column .. "_row_" .. row', 1, true) ~= nil,
+                entry.name .. " presenter lost per-cell values")
+            H.equal(entry.source:find('table.concat(labels, "\\n")', 1, true), nil,
+                entry.name .. " presenter restored multiline labels")
+            H.equal(entry.source:find('table.concat(lines, "\\n")', 1, true), nil,
+                entry.name .. " presenter restored TSV rows")
+            H.truthy(entry.source:find("type(external.is_enabled) == \"function\"", 1, true) ~= nil,
+                entry.name .. " presenter lost enabled-aware external handoff")
+            H.truthy(entry.source:find("enabled == false", 1, true) ~= nil,
+                entry.name .. " presenter suppresses itself for a disabled external mod")
         end
     end)
 end
