@@ -162,6 +162,7 @@ local suites = {
     "test_cwv_bundled_mesh_admission",
     "test_cwv_browser_prepass",
     "test_cwv_projectile_tunes",
+    "test_cwv_old_musket_runtime_contracts",
     "test_cwv_old_musket_presentation",
 	"test_cwv_old_musket_appearance",
     "test_cwv_cross_slot_filter",

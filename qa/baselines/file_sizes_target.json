@@ -33,7 +33,6 @@
     "gui_tweaker/scripts/mods/gui_tweaker/_mod_tweaker_state.lua": 1767,
     "gui_tweaker/scripts/mods/gui_tweaker/_mod_tweaker_view.lua": 2387,
     "gui_tweaker/scripts/mods/gui_tweaker/gui_tweaker.lua": 1987,
-    "qa/lua/tests/test_cwv_old_musket_presentation.lua": 1847,
     "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_anim_remap_data.lua": 1959,
     "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_runtime_checks.lua": 2400,
     "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/weapon_tweaker_dev_data.lua": 1799,

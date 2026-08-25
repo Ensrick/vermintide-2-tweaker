@@ -327,17 +327,24 @@
                             ReplayEdges=@('instance_load','equip','customize','preview_open')
                         }
                         @{
-                            Path='qa/lua/tests/test_cwv_old_musket_presentation.lua'
+                            Path='qa/lua/tests/test_cwv_old_musket_runtime_contracts.lua'
                             Names=@(
                                 'Old Musket installed GearUtils owner and bot adapters consume the returned exact template'
                                 'Old Musket installed SimpleInventory equip adapter admits only the exact returned stance template'
+                            )
+                            Surfaces=@('owner_1p','owner_3p','bot')
+                            ReplayEdges=@('instance_load','equip')
+                        }
+                        @{
+                            Path='qa/lua/tests/test_cwv_old_musket_presentation.lua'
+                            Names=@(
                                 'Old Musket HeroPreviewer rewrites and preserves the exact melee attachment profile'
                                 'Old Musket consumes CIM''s exact public preview-context provider'
                                 'Old Musket Loot preview retries only on the visible stable edge'
                                 'Old Musket preview pose waits for and consumes one stable edge'
                             )
-                            Surfaces=@('owner_1p','owner_3p','bot','inventory_preview','illusion_browser','cim_preview')
-                            ReplayEdges=@('instance_load','equip','preview_open')
+                            Surfaces=@('inventory_preview','illusion_browser','cim_preview')
+                            ReplayEdges=@('instance_load','preview_open')
                         }
                         @{
                             Path='qa/lua/tests/test_cwv_husk_adapter.lua'
