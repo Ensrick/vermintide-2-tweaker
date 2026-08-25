@@ -4,7 +4,7 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-07-15.
+Last updated: 2026-08-25.
 
 ---
 ## Personal difficulty combat handicap (#61)
@@ -42,7 +42,24 @@ Last updated: 2026-07-15.
 | Optional mission census | Run `/et_boss_idea_audit` once in a representative mission. Compare boot/mission `model_resident`; the command adds only one chat summary and never spawns a boss. |
 | Offline | `test_et_boss_ideas` covers catalog bounds, complete structure, package residency separation, and absent-global failure. |
 | Runtime check | `/et_regression_test`: `issue451_boss_ideas_safely_decomposed` reports PASS with six complete source contracts and four arena-risk markers detected. |
-| Lifecycle | `diagnostics-armed`. Convert to `verify-fix-coop` only after one portable clone has an explicit spawn option and peer-safe asset/package coverage. |
+| Lifecycle | The six-candidate census remains `diagnostics-armed`. The separate greataxe Chosen prototype uses `/et_spawn_chosen`; custom-breed registration safety is owned by #1413 and peer parity remains #371. |
+
+---
+
+## Atomic custom-breed registration (#1413)
+
+| Field | Detail |
+|---|---|
+| Owners | `_et_custom_breed_registrar.lua` is the only registration mechanism. Warlord and Chosen modules contribute declarative policy/specs and preserve their existing spawn gates, commands, and combat diagnostics. |
+| Planning | Breed/actions, detached callback views, six statistics families, already-live performance state, package aliases, dismemberment, faction/elite membership, hit zones, presentation, and all three wire identities are completed off-table. `breeds`, `damage_sources`, and `statistics_path_names` run through `_lib_network_lookup` shadows. |
+| Capacity | A new damage-source index must fit `NetworkConstants.damage_source_id.max` or guarded `Network.type_info("damage_source_id").max`; a new statistics-path index must fit `Network.type_info("statistics_path_lookup").max`. Missing authority fails allocation closed. An exact same-name statistics segment is reusable global identity, and exact existing rows revalidate, without a capacity read. |
+| Commit | Threat seed first; reversible raw-table writes second; readiness remains rollback-covered; `Breeds[name]` is the final raw write. Reverse alias arrays are replaced from copies rather than edited in place. |
+| Opaque exception | `threat_values` is a hidden upvalue with no getter. A throwing setter produces a terminal `threat_state_indeterminate`, leaves structural state unpublished, and is not blindly retried. No production `debug.getupvalue` dependency. |
+| Reload | The schema-3 marker pins detached cycle/topology-safe breed/actions content, the donor declaration/duration graph, live identities, canonical threat/elite, all three numeric wire IDs, original dismemberment, and hit-zone identity/content. Only source-declared outputs written by `SET_BREED_DIFFICULTY` may vary. One detached expected graph preserves the current engine-baked source outputs' cycles, sharing, and separation; live actions must match it and remain disjoint from source/declarations. Donor declaration topology is pinned separately because Foundation cloning may split one shared donor declaration. Declarations, durations, custom topology, and other fields stay pinned. Performance alone is dynamic and must remain a finite nonnegative integer. Persistent drift fails before threat or readiness; only ephemeral presentation/readiness rows may republish. |
+| Presentation | Every table-valued declared presentation is copied into a graph disjoint from every declaration and every other selected presentation row. Detached authorities require primitive keys and nil metatables. Reload rejects in-place content mutation and root/nested/cross-row re-aliasing before any live write. |
+| Offline | `test_et_custom_breed_registrar` drives the real Warlord/Chosen specs through pre-bake registration and fresh registrar reloads after two engine-style difficulty passes; validates faithful Foundation no-seen clone behavior for the real three-action Chosen declaration topology, donor sharing/splitting drift, mutable table-key/metatable rejection, hot-join statistics path encode/decode, all three strict axes, both capacity boundaries, table-presentation graph separation, coherent breed/action/threat/elite/wire/dismemberment/hit-zone/marker tamper, topology drift, false/non-table residue, callback isolation, every planner failure, every raw-write rollback including false prior shapes, and opaque-setter terminal behavior. `test_shared_network_lookup` pins helper ownership/load order and byte identity. |
+| Integration | Source review is not a release. The serialized publisher must regenerate the exact root bundle and current receipt from the reviewed commit before build/deploy/publication evidence is claimed. |
+| Scope | #371 peer parity, #324 Warlord combat behavior, and #451 boss classification remain separate. |
 
 ---
 ## Premium-skin special variants (#452)
@@ -183,7 +200,7 @@ Last updated: 2026-07-15.
 | Fix version(s) | enemy_tweaker v0.3.5-dev |
 | Category | INTEGRATION |
 | Repro | 1. Have a mod register a custom breed at module load. 2. Disable the mod in VMF settings. 3. Start a mission. 4. Custom breed spawns (because its registration ran). |
-| Expected post-fix | Eager direct-table writes via `CD.set_threat_value(nil, name, value)` at registration site, NOT a hook. |
+| Expected post-fix | The eager #1413 registrar calls `CD.set_threat_value(nil, name, value)` after complete preflight and before structural publication, never from a hook. |
 | Detection | `/regression_test` (enemy_tweaker) verifies the eager write. |
 
 
@@ -199,7 +216,7 @@ Last updated: 2026-07-15.
 | Fix version(s) | enemy_tweaker v0.3.3 → v0.3.6 |
 | Category | INTEGRATION |
 | Repro | (Same as threat-values; the other two paths surface at first activate / first damage.) |
-| Expected post-fix | Eager direct-table writes to ALL three tables (`set_threat_value`, `_activated_per_breed` via init hook, `StatisticsDefinitions.player.*_per_breed[name] = { ..., name = breed_name }`). |
+| Expected post-fix | One eager #1413 transaction seeds threat, named statistics definitions, and any already-live performance table before publishing the breed; future `PerformanceManager.init` scans the published `Breeds` row. |
 | Detection | `/regression_test` in enemy_tweaker walks all three. |
 
 

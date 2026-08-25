@@ -62,7 +62,7 @@ return function(H, repo_root)
         H.equal(result.resident_models, 0)
     end)
 
-    H.test("ET #451 production remains bounded and observation-only", function()
+    H.test("ET #451 census and explicit prototype surfaces remain bounded", function()
         local path = repo_root
             .. "/enemy_tweaker/scripts/mods/enemy_tweaker/_et_boss_ideas.lua"
         local handle = assert(io.open(path, "rb"))

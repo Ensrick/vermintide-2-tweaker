@@ -12,7 +12,7 @@ roadmap), `SKELETON_HORDES.md` (skeleton-breed design), and
 
 Workshop ID: `3716780252`, internal ID: `enemy_tweaker`. VMB mod.
 
-Shipped features (as of v0.5.5-dev):
+Current core features:
 
 - **Horde presets** (`HORDE_PRESETS`): All Elites, Skaven Only, Chaos
   Only, Beastmen Invasion, Mixed Factions. Patches
@@ -35,7 +35,7 @@ Shipped features (as of v0.5.5-dev):
 - **Horde size multiplier** — scalar (25-300%) over all
   `HordeCompositionsPacing` entries' breed counts.
 
-## Module map (v0.7.31-dev OOP split)
+## Module map (post-v0.7.31 OOP split)
 
 `enemy_tweaker.lua` is a compact entry: MOD_VERSION, ET_RPC_SCHEMA, the load
 banner, and the dofile manifest. Every `_et_*` module is dofile'd EXACTLY ONCE,
@@ -56,7 +56,8 @@ the file - so modules never dofile each other; shared helpers publish into
 | `_et_swaps` | breed/faction substitution + HordeSpawner hooks |
 | `_et_mimic` | per-system difficulty mimic |
 | `_et_roaming` | roaming size (SIP + recycler guard + ambient density + clone shim) |
-| `_et_skaven_warlord_breed` | #324 mod-added breed (MUST precede `_et_champion_warlord`) + bounded `[et:324]` spawn diagnostics: AI/BT/target/nav/locomotion snapshot at spawn/+5s/+15s for up to 4 Warlord spawns per session, dispatched from the `_post_spawn_unit` seam and the lifecycle update owner |
+| `_et_custom_breed_registrar` | #1413 Enemy-local declarative transaction owner for every custom breed: off-table clone/side-surface plan, three strict wire axes planned on shadows through `_lib_network_lookup`, source-authoritative damage/statistics-path capacities, exact reload fingerprint with bounded engine-owned difficulty overlays, detached table presentations, reversible raw-table commit, `Breeds` publication last, and fail-closed terminal handling for the engine's opaque threat upvalue |
+| `_et_skaven_warlord_breed` | #324 Warlord policy/spec consumed by `_et_custom_breed_registrar` (MUST precede `_et_champion_warlord`) + bounded `[et:324]` spawn diagnostics: AI/BT/target/nav/locomotion snapshot at spawn/+5s/+15s for up to 4 Warlord spawns per session, dispatched from the `_post_spawn_unit` seam and the lifecycle update owner |
 | `_et_champion_warlord` | champion/warlord pools + consolidated spawn hook + crash guards |
 | `_et_director_hooks` | ConflictDirector init/refresh re-apply chain |
 | `_et_event_size` | terror-event horde size scaling |
@@ -71,8 +72,8 @@ the file - so modules never dofile each other; shared helpers publish into
 | `_et_boss_balance` | #450 reversible boss data toggles (health/armor/warp-lightning and Deathrattler's dual-gun rotation window; no hooks). Bodvarr is runtime breed `chaos_exalted_champion_warcamp`, never the unsuffixed source-family stem. |
 | `_et_boss_grudge` | #531 grudge-mark behavioral knobs (Skarrik Berserk / Bodvarr Crippling on Cata+ Adventure); single `hook_safe` on `ConflictDirector._post_spawn_unit`, applies vanilla CW grudge-mark buff templates host-side. Bodvarr maps to `chaos_exalted_champion_warcamp`; `_norsca` is the Skittergate champion. |
 | `_et_boss_behavior` | #450 runtime behavior adapter: Halescourge uses existing post-spawn/update owners for one package-aware Troll/Spawn; Skarrik composes the existing damage owner; one exact `BTStormfiendShootAction._fire_from_position_direction` hook halves Deathrattler-only ratling tracking. |
-| `_et_boss_ideas` | #451 feasibility audit + the greataxe Chosen prototype: eager `et_chosen_greataxe` registration (chaos_warrior clone, 2000 HP, `boss_staggers`, resident `warrior_axe` greataxe inventory) with the full breed-adding checklist and the residency-gated, host-only `/et_spawn_chosen` test command. Owns no spawn hook and never injects arena-coupled lord breeds. See `BOSS_IDEA_FEASIBILITY.md`. |
-| `_lib_network_lookup` | Byte-exact copy of `tools/shared_lib/_lib_network_lookup.lua` (#428 guard patterns); loaded exactly once by the entry before both `_et_skaven_warlord_breed` and `_et_boss_ideas`, then shared as `mod._et.NetworkLookupLib` for fail-closed NetworkLookup registration. Never edit here - edit the canonical copy and re-sync. |
+| `_et_boss_ideas` | #451 feasibility audit + greataxe Chosen policy/spec consumed by `_et_custom_breed_registrar` (`chaos_warrior` clone, 2000 HP, `boss_staggers`, resident `warrior_axe` greataxe inventory) + residency-gated, host-only `/et_spawn_chosen`. Owns no spawn hook and never injects arena-coupled lord breeds. See `BOSS_IDEA_FEASIBILITY.md`. |
+| `_lib_network_lookup` | Byte-exact copy of `tools/shared_lib/_lib_network_lookup.lua` (#428 guard patterns); loaded exactly once, then injected into `_et_custom_breed_registrar`. The registrar plans all three custom-breed lookup axes against shadows before any real write. Never edit here - edit the canonical copy and re-sync. |
 
 Where new code goes: the module whose "Owns" row it extends; a new subsystem gets a
 new `_et_<name>.lua` + one manifest line + a row here (same discipline as
@@ -114,8 +115,9 @@ modules - grep the whole mod dir before hooking.
 ## Breed-adding checklist
 
 This is the single most-burned-by class of crash in this mod (5+
-versions of boot-time / hit-time crashes from missing entries). Walk
-every step before shipping a mod that calls `Breeds[name] = ...`.
+versions of boot-time / hit-time crashes from missing entries). Enemy Tweaker
+code must not call `Breeds[name] = ...` directly. Add a declarative spec to
+`_et_custom_breed_registrar`; its transaction is the executable checklist.
 
 ### `pairs(Breeds)` is walked at file-load — mod-added breeds miss the snapshot
 
@@ -133,42 +135,57 @@ after game-boot miss all three snapshots. **Hooks alone don't fix it**
 — if the user has the mod toggled off in VMF settings, the script
 still loads and mutates `Breeds` but the hooks don't fire.
 
-### Pattern: eager direct-table writes at the breed-registration site
+### Pattern: one eager, declarative transaction
 
-For each table, find the file-level write path and call it directly
-(or write into the global table directly) immediately after adding to
-`Breeds`:
+`_et_custom_breed_registrar` performs every fallible operation before commit:
+it clones breed/actions, builds statistics definitions, copies the reverse
+package-alias array off-table, validates faction/elite/hit-zone/presentation
+surfaces, and runs the canonical strict lookup helper against shadow copies of
+`NetworkLookup.breeds`, `.damage_sources`, and `.statistics_path_names`. New
+damage-source and statistics-path rows are accepted only when their planned
+indices fit guarded runtime authorities:
+`NetworkConstants.damage_source_id.max`, falling back to
+`Network.type_info("damage_source_id").max`, and
+`Network.type_info("statistics_path_lookup").max`, respectively. No guessed
+capacity is allowed. The statistics-path row is mandatory because the emitted
+`sync_on_hot_join` leaf includes the custom breed name in its encoded path. A
+same-name statistics path segment already present as an exact symmetric pair is
+global reusable identity, not breed-owned residue; the registrar pins that
+index without allocating or reading capacity.
 
-```lua
--- threat_values: ConflictDirector.set_threat_value ignores `self`
-local CD = rawget(_G, "ConflictDirector")
-if CD and CD.set_threat_value then
-    CD.set_threat_value(nil, breed_name, breed.threat_value or 0)
-end
+After complete preflight, the exact `ConflictDirector.set_threat_value` setter
+runs first, followed only by raw table writes. Any structural failure restores
+the precise prior key values; the source alias array is never mutated in place.
+Readiness is staged while it is still rollback-covered, and `Breeds[name]` is
+the final raw write. Exact hot reload requires the registrar fingerprint and
+every mandatory side surface to agree; a partial or foreign row is rejected
+without repair-by-guessing.
 
--- StatisticsDefinitions: direct table write; _create_stat re-reads lazily
--- CRITICAL: every emitted entry MUST have a `name` field, even when the
--- source decompile shows vanilla without it. _init_backend_stat at
--- statistics_database.lua line 102 (live) uses `if definition.name`
--- as its leaf marker; without it, recursion walks into `database_name`
--- string children and crashes on pairs(string). The decompile in our repo
--- is stale on this; live vanilla entries DO include `name`.
-local sd = rawget(_G, "StatisticsDefinitions") and StatisticsDefinitions.player
-if sd and sd.damage_dealt_per_breed then
-    sd.damage_dealt_per_breed[breed_name] = { value = 0, name = breed_name }
-    sd.kills_per_breed_persistent[breed_name] = {
-        source = "player_data", value = 0, name = breed_name,
-        database_name = "kills_per_breed_persistent_" .. breed_name,
-    }
-    -- and the per-difficulty children: name = breed_name .. "_" .. difficulty
-    -- mirror the FULL vanilla loop: kills_per_breed{,_persistent,_difficulty},
-    -- kill_assists_per_breed{,_difficulty}, kills_per_race[breed.race]
-end
+`SET_BREED_DIFFICULTY` legitimately changes only declared action outputs. On
+reload, damage, blocked damage, diminishing damage, and bot-threat delay may
+differ from the detached marker only when the canonical action declares the
+matching difficulty table; the live value must equal the already engine-baked
+vanilla source action. Declarations, durations, topology, and all other fields
+remain immutable. All permitted outputs are copied into one detached expected
+graph before full topology comparison, preserving cross-output cycles, sharing,
+and separation while forbidding aliases into the donor or declarations.
+The donor declaration/duration graph has its own detached marker authority:
+this pins donor sharing independently because Foundation `table.clone` can
+legitimately split one shared vanilla declaration across multiple custom
+actions.
+Table-valued presentation declarations are copied into live graphs disjoint
+from every declaration and every other selected row, so mutation of a
+published table cannot mutate any validation authority or sibling
+presentation. Fresh action clones and reload donors likewise must remain fully
+graph-disjoint from the detached action marker. Every detached authority uses
+primitive keys and nil metatables; richer mutable identity shapes fail before
+the opaque threat setter or any structural write.
 
--- PerformanceManager._activated_per_breed: hook PerformanceManager.init
--- to seed our breeds when the manager is constructed (per-mission, so a
--- direct table write at mod load doesn't help — the table is replaced).
-```
+The threat table is a hidden file-local upvalue and has no getter. Therefore a
+setter that throws after mutating it cannot be rolled back honestly. That path
+leaves all structural state unpublished, records an indeterminate terminal
+failure for the current module load, and forbids blind retry. Production must
+not depend on `debug.getupvalue` to manufacture rollback authority.
 
 ### threat_values is an upvalue built ONCE at game-boot
 
@@ -202,8 +219,8 @@ skips all hook registrations. PerformanceManager later seeds
 `activated_per_breed` from the now-mutated `Breeds`, and
 `calculate_threat_value` crashes with no hook in sight.
 
-**The right pattern:** register threat values **directly via the
-static method** in the same place the breed is added to `Breeds`.
+**The right pattern:** let the eager registrar call the static setter as the
+first operation of its already-preflighted commit.
 `ConflictDirector.set_threat_value(self, name, value)` doesn't use
 `self`; it just writes to the file-local upvalue. Call it as:
 
@@ -214,8 +231,8 @@ if CD and CD.set_threat_value then
 end
 ```
 
-This runs at module load (alongside the breed registration) and is
-impervious to hook-disable.
+This runs at module load and is impervious to hook-disable; a failed seed keeps
+the breed and readiness unpublished.
 
 ### Lessons
 
@@ -230,27 +247,49 @@ impervious to hook-disable.
 - **`ConflictDirector.set_threat_value` is callable as a static method**
   (`CD.set_threat_value(nil, name, value)`). Same trick may work for
   other vanilla "method that doesn't use self" patches.
+- **A hidden upvalue is not transactionally readable.** Never claim exact
+  rollback after a throwing setter and never add a production debug-upvalue
+  dependency. Retire that breed for the module load with structural state
+  unpublished.
 
 ### Full checklist for any new breed-adding mod
 
-Before shipping a mod that calls `Breeds[name] = ...`:
+Before shipping any new Enemy Tweaker custom breed, its registrar spec and
+adversarial tests must cover:
 
-1. `ConflictDirector.set_threat_value(nil, name, threat_value)` —
-   threat_values upvalue.
-2. `StatisticsDefinitions.player.*_per_breed[name] = { ... }` (and
-   per-difficulty subtables) — vanilla loop is
-   statistics_definitions.lua:615.
-3. `PerformanceManager.init` hook to extend
-   `self._activated_per_breed[name] = 0` — table is rebuilt per
-   mission, so seed in init.
-4. `NetworkLookup.breeds` (forward + reverse, with `rawget` for the
-   existence check — strict `__index` metatable will crash on
-   missing-key GET).
-5. `BreedActions[name]` — usually a deep_copy of a similar breed's
-   actions.
+1. source breed and deep-cloned `BreedActions` without source mutation; all
+   fallible owner callbacks receive detached source/candidate views;
+2. the hidden threat value via the exact static setter, seeded only from the
+   canonical marker value rather than a presently live breed field;
+3. all six `StatisticsDefinitions.player.*_per_breed` families, including
+   named per-difficulty leaves;
+4. an already-live `PerformanceManager._activated_per_breed` row whose dynamic
+   value remains a finite, nonnegative integer (future managers see the breed
+   because `PerformanceManager.init` scans `Breeds`);
+5. all three strict, dense, bidirectional wire axes planned together on shadows and
+   their first committed numeric identities pinned for reload;
+6. the runtime-authoritative damage-source and statistics-path capacity
+   boundaries, with exact existing rows revalidated without inventing capacity;
+7. forward package alias and an off-table replacement reverse-alias array;
+8. canonical dismemberment identity/content, faction, elite/category, and
+   hit-zone identity/content;
+9. declared presentation rows (table values detached and graph-disjoint) and
+   public readiness;
+10. a schema-3 registrar marker with detached cycle/topology-safe breed/action
+    snapshots, a separate detached donor declaration/duration snapshot,
+    canonical threat/elite, all three wire identities, dismemberment, and
+    hit-zone state; owner specs add policy checks rather than duplicate it;
+11. readiness remains rollback-covered and `Breeds` is the final raw write,
+    with exact structural rollback at every injected failure and terminal
+    handling for opaque threat-setter failure.
 
-Then audit `grep -n 'pairs(Breeds)'` in the source decompile for any
-other file-load snapshots — there may be more not yet hit.
+Then re-audit `grep -n 'pairs(Breeds)'` in the current source decompile for any
+new file-load snapshots. New surfaces extend the single registrar; they do not
+create a second registration path.
+
+This source lane deliberately does not version, build, bundle, deploy, or
+publish. The serialized integration owner must regenerate the exact Enemy root
+bundle and current receipt from the reviewed commit before any release claim.
 
 ### Source incidents
 

@@ -31,10 +31,11 @@ tables our deep copy captured. A signature check below alerts if this
 ordering ever regresses.
 
 EAGER-REGISTRATION DOCTRINE (DEVELOPMENT.md "Lessons"): VMF-disabled mods
-still execute module-level code, so everything here is a direct table write
-that is safe (crash-free) even when et is disabled. The single mod:hook in
-this file (_G.Localize) is display-only; if et is disabled the hook doesn't
-fire and grudge names render as raw keys — degraded text, never a crash.
+still execute module-level code, so this module submits one declarative spec to
+the #1413 registrar at load. The registrar publishes nothing until every
+mandatory surface and both wire axes pass. The single mod:hook in this file
+(_G.Localize) is display-only; if et is disabled the hook doesn't fire and
+grudge names render as raw keys — degraded text, never a crash.
 
 Open-world / behaviour-tree safety (verified, no guards needed):
   * The champion behaviour tree (breed.behavior = "storm_vermin_champion",
@@ -72,7 +73,7 @@ runs either way) before the host spawns this breed.
 local mod = get_mod("enemy_tweaker")
 local B = require("scripts/mods/enemy_tweaker/enemy_tweaker_breeds")
 local ET = mod._et
-local NLLib = ET.NetworkLookupLib
+local Registrar = ET.CustomBreedRegistrar
 
 local BREED_NAME   = B.ET_SKAVEN_WARLORD          -- "et_skaven_warlord"
 local SOURCE_BREED = "skaven_storm_vermin_champion"
@@ -85,293 +86,68 @@ local function _wl_log(fmt, ...)
     end
 end
 
--- Validate (or append) both wire identities through the same strict helper on
--- first load and hot reload.  A published breed is not proof that a newly
--- created VMF mod object has revalidated the current NetworkLookup tables.
-local function _register_wire_identity()
-    local nl = rawget(_G, "NetworkLookup")
-    if type(nl) ~= "table" then
-        _wl_log("ALERT: NetworkLookup unavailable — breed NOT network-registered")
-        return false
-    end
-    local _, breeds_inserted, breeds_reason =
-        NLLib.register_named(nl, "breeds", BREED_NAME)
-    if not breeds_inserted and breeds_reason ~= "already_registered" then
-        _wl_log("ALERT: NetworkLookup.breeds registration failed (%s) — breed NOT registered",
-            tostring(breeds_reason))
-        return false
-    end
-    local _, damage_inserted, damage_reason =
-        NLLib.register_named(nl, "damage_sources", BREED_NAME)
-    if not damage_inserted and damage_reason ~= "already_registered" then
-        _wl_log("ALERT: NetworkLookup.damage_sources registration failed (%s) — breed NOT registered",
-            tostring(damage_reason))
-        return false
-    end
-    return true
-end
+-- Build empty mod-local presentation targets before registration. Every
+-- display/grudge string is then published by the transaction (new VMF mod
+-- objects need these ephemeral rows republished on hot reload).
+local STRINGS = {}
+mod._et_warlord2_loc_strings = STRINGS
 
--- ============================================================
--- Registration (eager, idempotent, pcall-bracketed per step)
--- ============================================================
-local function _register()
-    mod._et_warlord2_breed_name = nil
-    mod._et_warlord2_ready = false
-    local Breeds_t = rawget(_G, "Breeds")
-    local BreedActions_t = rawget(_G, "BreedActions")
-    if type(Breeds_t) ~= "table" or type(BreedActions_t) ~= "table" then
-        _wl_log("Breeds/BreedActions not loaded — registration skipped")
-        return false
-    end
-    if Breeds_t[BREED_NAME] then
-        if not _register_wire_identity() then return false end
-        mod._et_warlord2_breed_name = BREED_NAME
-        mod._et_warlord2_ready = true
-        _wl_log("breed %s revalidated on hot reload", BREED_NAME)
+local grudge_names = {}
+local presentation_rows = {
+    { target = STRINGS, key = B.ET_SKAVEN_WARLORD_NAME_KEY,
+        value = "Skaven Warlord", ephemeral = true },
+}
+for i = 1, #B.WARLORD_GRUDGE_NAMES do
+    local entry = B.WARLORD_GRUDGE_NAMES[i]
+    grudge_names[i] = entry.key
+    presentation_rows[#presentation_rows + 1] = {
+        target = STRINGS, key = entry.key, value = entry.en, ephemeral = true,
+    }
+end
+presentation_rows[#presentation_rows + 1] = {
+    target = rawget(rawget(_G, "UISettings") or {}, "breed_textures"),
+    key = BREED_NAME, value = "unit_frame_portrait_enemy_warlord",
+}
+presentation_rows[#presentation_rows + 1] = {
+    target = rawget(_G, "GrudgeMarkedNames"),
+    key = BREED_NAME, value = grudge_names,
+}
+
+mod._et_warlord2_breed_name = nil
+mod._et_warlord2_ready = false
+mod._et_warlord2_threat_seeded = false
+
+local registration_ok, registration_reason = Registrar.register({
+    owner = "enemy_tweaker.skaven_warlord",
+    name = BREED_NAME,
+    source_breed = SOURCE_BREED,
+    race = "skaven",
+    fingerprint = "et-custom-breed:v3:skaven-warlord:champion-pristine",
+    configure = function(breed)
+        breed.display_name = B.ET_SKAVEN_WARLORD_NAME_KEY
+    end,
+    validate_breed = function(breed)
+        if breed.display_name ~= B.ET_SKAVEN_WARLORD_NAME_KEY then
+            return nil, "display_name_mismatch"
+        end
+        if type(breed.max_health) ~= "table" or breed.max_health[8] ~= 800 then
+            return nil, "champion_source_signature_mismatch"
+        end
         return true
-    end
-    local src = Breeds_t[SOURCE_BREED]
-    if type(src) ~= "table" then
-        _wl_log("source breed %s missing — registration skipped", SOURCE_BREED)
-        return false
-    end
-
-    -- Pristine-source signature check (see LOAD ORDER CONTRACT above).
-    -- Vanilla champion max_health[8] == 800 (breed_skaven_storm_vermin_champion.lua:88-97);
-    -- the elite retune replaces the whole table with a 52..500 ramp.
-    if type(src.max_health) ~= "table" or src.max_health[8] ~= 800 then
-        _wl_log("ALERT: champion source looks retuned (max_health[8]=%s) — load-order regression; clone proceeds but stats may be non-vanilla",
-            tostring(type(src.max_health) == "table" and src.max_health[8]))
-    end
-
-    -- 1. Deep-copy the breed (foundation/scripts/util/table.lua:31-48
-    -- table.clone recurses subtables; functions — run_on_spawn/death/update,
-    -- infighting etc. — copy by reference, which is exactly what we want).
-    local ok, breed = pcall(table.clone, src)
-    if not ok or type(breed) ~= "table" then
-        _wl_log("ALERT: table.clone(%s) failed: %s — breed NOT registered", SOURCE_BREED, tostring(breed))
-        return false
-    end
-    -- Fields vanilla's boot post-processing stamps per-name (breeds.lua:305-307)
-    -- come out of the copy holding the CHAMPION's values — overwrite the name.
-    breed.name = BREED_NAME
-    -- BossHealthUI renders an unmarked boss as
-    -- Localize(breed.display_name or breed_name) (boss_health_ui.lua:303 + :174);
-    -- key served by the _G.Localize hook below.
-    breed.display_name = B.ET_SKAVEN_WARLORD_NAME_KEY
-    -- NOTE: Breeds[BREED_NAME] is assigned LAST (end of this function), after
-    -- every side-table seed succeeded — the breed's presence in Breeds is the
-    -- go/no-go signal both for et's own monster-pool swap and for ct_dev's
-    -- cursed-chest trial guard, so a partial registration must never leave a
-    -- spawnable-but-unseeded breed behind.
-
-    -- 2. BreedActions clone (DEVELOPMENT.md checklist step 5). The behaviour
-    -- tree itself bakes the CHAMPION's action tables at boot
-    -- (skaven_storm_vermin_champion_behavior.lua:3 `local ACTIONS =
-    -- BreedActions.skaven_storm_vermin_champion`), so combat runs on champion
-    -- data either way; this entry serves every generic
-    -- `BreedActions[breed.name]` reader, and SET_BREED_DIFFICULTY
-    -- (breeds.lua:194-226) walks pairs(BreedActions) at difficulty-set time
-    -- (post-mod-load), so the clone gets its difficulty bake too.
-    if BreedActions_t[SOURCE_BREED] and not BreedActions_t[BREED_NAME] then
-        local a_ok, actions = pcall(table.clone, BreedActions_t[SOURCE_BREED])
-        if a_ok and type(actions) == "table" then
-            BreedActions_t[BREED_NAME] = actions
-        else
-            _wl_log("ALERT: BreedActions clone failed: %s", tostring(actions))
-        end
-    end
-
-    -- 3. threat_values upvalue (checklist step 1). conflict_director.lua
-    -- builds `local threat_values` ONCE at game-boot from pairs(Breeds)
-    -- (~:2297); a missing entry crashes calculate_threat_value with
-    -- `nil * amount` (live line 2479). set_threat_value ignores `self` and
-    -- writes the file-local upvalue directly — callable statically.
-    local CD = rawget(_G, "ConflictDirector")
-    if CD and CD.set_threat_value then
-        CD.set_threat_value(nil, BREED_NAME, breed.threat_value or 0)
-        mod._et_warlord2_threat_seeded = true
-    else
-        _wl_log("ALERT: ConflictDirector.set_threat_value unavailable — threat value NOT seeded")
-    end
-
-    -- 4. StatisticsDefinitions per-breed seeds (checklist step 2). Vanilla
-    -- loop is statistics_definitions.lua:615-657 and runs at file load only.
-    -- Every emitted entry carries `name` (incl. persistent + per-difficulty
-    -- children) per DEVELOPMENT.md: _init_backend_stat's leaf marker is
-    -- `definition.name` (statistics_database.lua:102 live); the repo
-    -- decompile is stale on this.
-    -- NOT seeded (verified gated): weapon_kills_per_breed DLC snapshots
-    -- (statistics_definitions_lake.lua:21 / _cog.lua:79) — their only
-    -- increment sites are gated on fixed vanilla breed lists
-    -- (achievement_templates_lake.lua:103 table.contains(boss_breeds,...),
-    -- achievement_templates_cog.lua:1040 table.contains(elite_special_breeds,...)),
-    -- so our breed early-returns before the stat write.
-    local sd = rawget(_G, "StatisticsDefinitions")
-    local player = sd and sd.player
-    if player and player.kills_per_breed then
-        player.kills_per_breed[BREED_NAME] = {
-            sync_on_hot_join = true, value = 0, name = BREED_NAME,
-        }
-        player.kills_per_breed_persistent[BREED_NAME] = {
-            source = "player_data", value = 0, name = BREED_NAME,
-            database_name = "kills_per_breed_persistent_" .. BREED_NAME,
-        }
-        player.kill_assists_per_breed[BREED_NAME] = { value = 0, name = BREED_NAME }
-        player.damage_dealt_per_breed[BREED_NAME] = { value = 0, name = BREED_NAME }
-        -- kills_per_race: race "skaven" already seeded at boot
-        -- (statistics_definitions.lua:637-642 guard) — nothing to add.
-        player.kills_per_breed_difficulty[BREED_NAME] = {}
-        player.kill_assists_per_breed_difficulty[BREED_NAME] = {}
-        local diffs = rawget(_G, "DifficultySettings")
-        if diffs then
-            for difficulty_name in pairs(diffs) do
-                player.kills_per_breed_difficulty[BREED_NAME][difficulty_name] = {
-                    value = 0, name = BREED_NAME .. "_" .. difficulty_name,
-                }
-                player.kill_assists_per_breed_difficulty[BREED_NAME][difficulty_name] = {
-                    value = 0, name = BREED_NAME .. "_" .. difficulty_name,
-                }
-            end
-        end
-    else
-        _wl_log("ALERT: StatisticsDefinitions.player unavailable — per-breed stats NOT seeded")
-    end
-
-    -- 5. PerformanceManager (checklist step 3). VERIFIED: _activated_per_breed
-    -- is rebuilt from pairs(Breeds) inside PerformanceManager.init at LEVEL
-    -- START (performance_manager.lua:84-88), which always runs AFTER mod load
-    -- — so a breed registered here is picked up by every future mission's
-    -- rebuild with no hook at all (a VMF hook would also violate the
-    -- disabled-mod doctrine: DEVELOPMENT.md "Hooks are conditional, direct
-    -- method calls aren't"). Belt: seed any ALREADY-LIVE manager instance
-    -- (hot-reload / mid-mission registration edge).
-    local mgrs = rawget(_G, "Managers")
-    local perf = mgrs and mgrs.state and mgrs.state.performance
-    if perf and type(perf._activated_per_breed) == "table" then
-        perf._activated_per_breed[BREED_NAME] = perf._activated_per_breed[BREED_NAME] or 0
-    end
-
-    -- 6. NetworkLookup.breeds forward + reverse (checklist step 4) AND
-    -- NetworkLookup.damage_sources: both are boot snapshots
-    -- (network_lookup.lua:267 create_lookup from pairs(Breeds); :326
-    -- table.append(damage_sources, NetworkLookup.breeds)) with a strict
-    -- __index metatable (:2360-2367). The entry-owned shared helper performs a
-    -- complete raw dense/pair preflight before either idempotence or append.
-    -- damage_sources matters because AI melee damage uses the breed NAME as
-    -- damage_source (ai_utils.lua:266) and add_damage_network resolves
-    -- NetworkLookup.damage_sources[damage_source] (damage_utils.lua:1839).
-    -- [unverified] headroom of the damage_source_id network type above the
-    -- vanilla count (network_constants.lua:62 asserts only at boot); one
-    -- appended entry is assumed within budget.
-    if not _register_wire_identity() then return false end
-
-    -- 7. EnemyPackageLoaderSettings alias: the vanilla mechanism for "breed X
-    -- loads breed Y's package" (enemy_package_loader_settings.lua:188-199,
-    -- e.g. skaven_storm_vermin_commander -> skaven_storm_vermin).
-    -- request_breed / is_breed_processed / is_breed_loaded_on_all_peers all
-    -- resolve through ALIAS_TO_BREED first (enemy_package_loader.lua:189,
-    -- :263, :955) — the loader captures the TABLE as an upvalue at boot
-    -- (:11), so mutating its CONTENTS here is seen at call time. Result:
-    -- spawning et_skaven_warlord loads the champion's own package
-    -- (resource_packages/breeds/skaven_storm_vermin_champion — it is a
-    -- registered dynamically-loadable 'level_specific' breed,
-    -- enemy_package_loader_settings.lua:42) over the vanilla networked
-    -- loader, exactly like the old Skarrik swap. We never call
-    -- Managers.package:load ourselves.
-    local epls = rawget(_G, "EnemyPackageLoaderSettings")
-    if epls and type(epls.alias_to_breed) == "table" then
-        epls.alias_to_breed[BREED_NAME] = SOURCE_BREED
-        local bta = epls.breed_to_aliases
-        if type(bta) == "table" then
-            bta[SOURCE_BREED] = bta[SOURCE_BREED] or {}
-            local aliases = bta[SOURCE_BREED]
-            local present = false
-            for i = 1, #aliases do
-                if aliases[i] == BREED_NAME then present = true break end
-            end
-            if not present then aliases[#aliases + 1] = BREED_NAME end
-        end
-    else
-        _wl_log("ALERT: EnemyPackageLoaderSettings unavailable — package alias NOT registered")
-    end
-
-    -- 8. Dismemberments: boot loop hit_reactions_template_compiler.lua:174-189
-    -- seeds Dismemberments[breed_name]; the consumer indexes it UNGUARDED on
-    -- dismember (generic_hit_reaction_extension.lua:544-545
-    -- `Dismemberments[breed_data.name][hit_zone]`) — a missing entry is a
-    -- hit-time crash. Identical hit_zones -> share the champion's table.
-    local dis = rawget(_G, "Dismemberments")
-    if dis and dis[SOURCE_BREED] and not dis[BREED_NAME] then
-        dis[BREED_NAME] = dis[SOURCE_BREED]
-    end
-
-    -- 9. SKAVEN race set (breeds.lua:329-345 boot loop) — faction membership
-    -- checks read the global set.
-    local skaven_set = rawget(_G, "SKAVEN")
-    if type(skaven_set) == "table" then
-        skaven_set[BREED_NAME] = true
-    end
-
-    -- 10. BreedHitZonesLookup mirror (breeds.lua:24/112; runtime writer
-    -- damage_utils.lua:1725 keys it by breed name). The deep copy already
-    -- carries hit_zones_lookup baked at boot (breeds.lua:115); mirror the
-    -- global entry for parity with vanilla state.
-    local bhzl = rawget(_G, "BreedHitZonesLookup")
-    if type(bhzl) == "table" and not bhzl[BREED_NAME] and breed.hit_zones_lookup then
-        bhzl[BREED_NAME] = breed.hit_zones_lookup
-    end
-
-    -- 11. Boss health-bar portrait: UISettings.breed_textures (ui_settings.lua:291;
-    -- boss_health_ui.lua:6 captures the TABLE at boot, contents read per call
-    -- :162). Reuse Skarrik's warlord portrait (ui_settings.lua:358) — the
-    -- shipped Skarrik monster-pool swap has rendered it cross-level since
-    -- v0.7.12-dev.
-    local uis = rawget(_G, "UISettings")
-    if uis and type(uis.breed_textures) == "table" then
-        uis.breed_textures[BREED_NAME] = "unit_frame_portrait_enemy_warlord"
-    end
-
-    -- 12. Grudge-marked names (#324 Part 3). Consumer:
-    -- TerrorEventUtils.get_grudge_marked_name (terror_event_utils.lua:59-78)
-    -- reads GrudgeMarkedNames[breed_name] at CALL time (global field read,
-    -- no upvalue capture of the inner lists), so a mod-added key IS honoured;
-    -- without one it would fall back to GrudgeMarkedNames[breed.race]
-    -- ("skaven", grudge_mark_settings.lua:313). UNmarked spawns never touch
-    -- this table: boss_health_ui.lua:279 only calls the grudge path when the
-    -- ai-system attribute `grudge_marked` was set by
-    -- apply_breed_enhancements (terror_event_utils.lua:84); otherwise it
-    -- renders breed.display_name (:303).
-    local gmn = rawget(_G, "GrudgeMarkedNames")
-    if type(gmn) == "table" and not gmn[BREED_NAME] then
-        local list = {}
-        for i = 1, #B.WARLORD_GRUDGE_NAMES do
-            list[i] = B.WARLORD_GRUDGE_NAMES[i].key
-        end
-        gmn[BREED_NAME] = list
-    elseif type(gmn) ~= "table" then
-        _wl_log("ALERT: GrudgeMarkedNames unavailable — grudge names NOT registered")
-    end
-
-    -- FINAL step: publish the breed. Everything above succeeded (or logged
-    -- an ALERT for a degraded-but-safe gap); only now does the breed become
-    -- visible to spawn paths and to ct_dev's trial guard.
-    Breeds_t[BREED_NAME] = breed
-
-    mod._et_warlord2_breed_name = BREED_NAME
-    mod._et_warlord2_ready = true
-    _wl_log("breed %s registered (clone of %s; boss, race=skaven, 800 HP champion stat block)",
-        BREED_NAME, SOURCE_BREED)
-    return true
-end
-
--- pcall-bracketed: an unexpected mid-registration error must leave the game
--- clean (breed unpublished -> et swap and ct trial stay inert) instead of
--- failing the whole mod load. Side-table entries written before the error
--- (network indices, alias, stats) are inert without the breed.
-local _reg_ok, _reg_err = pcall(_register)
-if not _reg_ok then
-    _wl_log("ALERT: registration errored: %s — Skaven Warlord unavailable this session", tostring(_reg_err))
+    end,
+    presentations = presentation_rows,
+    readiness = {
+        { target = mod, key = "_et_warlord2_threat_seeded", value = true },
+        { target = mod, key = "_et_warlord2_breed_name", value = BREED_NAME },
+        { target = mod, key = "_et_warlord2_ready", value = true },
+    },
+})
+if registration_ok then
+    _wl_log("breed %s %s through atomic registrar (source=%s)",
+        BREED_NAME, tostring(registration_reason), SOURCE_BREED)
+else
+    _wl_log("ALERT: registration rejected (%s) — Skaven Warlord unavailable this session",
+        tostring(registration_reason))
 end
 
 -- ============================================================
@@ -384,15 +160,6 @@ end
 -- grudge names (terror_event_utils.lua:75 Localize(name_list[index])).
 -- Marker for /et_regression_test: _et_warlord2_localize_hooked.
 do
-    local STRINGS = {
-        [B.ET_SKAVEN_WARLORD_NAME_KEY] = "Skaven Warlord",
-    }
-    for i = 1, #B.WARLORD_GRUDGE_NAMES do
-        local entry = B.WARLORD_GRUDGE_NAMES[i]
-        STRINGS[entry.key] = entry.en
-    end
-    mod._et_warlord2_loc_strings = STRINGS
-
     mod:hook(_G, "Localize", function(func, key, ...)
         local s = STRINGS[key]
         if s then
