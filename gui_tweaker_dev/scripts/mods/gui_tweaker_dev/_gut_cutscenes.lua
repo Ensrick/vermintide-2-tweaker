@@ -132,7 +132,7 @@ local mod = get_mod("gut_dev")
 -- and on the deferred tick — NOT every frame.
 
 local _printf = rawget(_G, "printf") or function(fmt, ...) print(string.format(fmt, ...)) end
-local _probe257 = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_cutscene_probe257")
+local _probe257 = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_diag_cutscene257")
 local _probe257_state = _probe257.new()
 local _policy274 = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_cutscene_policy274")
 local _skipwindow = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_cutscene_skipwindow")

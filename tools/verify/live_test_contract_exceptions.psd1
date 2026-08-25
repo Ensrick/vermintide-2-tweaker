@@ -735,8 +735,8 @@
             Signature='[gut:257] seq=%s phase=%s level=%s disposition=%s skip_next=%s guard=%s active_camera=%s on_activate=%s on_skip=%s hud=%s letterbox=%s fade_in=%s hold=%s fade_out=%s auto=%s capped=%s';Bound='absolute 32-event cap plus one terminal cap row per cutscene-system generation'
             EmitterAnchors=@(@{Tokens=@('_printf','(','String:[gut:257] seq=%s phase=%s level=%s disposition=%s skip_next=%s guard=%s active_camera=%s on_activate=%s on_skip=%s hud=%s letterbox=%s fade_in=%s hold=%s fade_out=%s auto=%s capped=%s')})
             GuardAnchors=@(
-                @{Source='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_cutscene_probe257.lua';Tokens=@('max_events','=','32')}
-                @{Source='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_cutscene_probe257.lua';Tokens=@('if','state','.','count','>=','M','.','max_events','then')}
+                @{Source='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_diag_cutscene257.lua';Tokens=@('max_events','=','32')}
+                @{Source='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_diag_cutscene257.lua';Tokens=@('if','state','.','count','>=','M','.','max_events','then')}
             )
         }
         @{
