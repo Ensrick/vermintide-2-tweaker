@@ -61,7 +61,7 @@ return function(H, repo_root)
         local at_preview = entry:find(
             'mod:dofile("scripts/mods/cosmetics_tweaker/_cos_preview_runtime").install', 1, true)
         local at_probe = entry:find(
-            'mod:dofile("scripts/mods/cosmetics_tweaker/_cos_518_probe")', 1, true)
+            'mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_deus_yield")', 1, true)
         H.truthy(at_paint_owner and at_preview and at_probe)
         H.truthy(at_probe < at_owner)
         H.truthy(at_paint_owner < at_owner)

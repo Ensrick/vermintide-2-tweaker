@@ -106,7 +106,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- ([174:loadout] retired with #174/#500; _diag_probe renamed per §2.2b/#499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.217-dev"
+local MOD_VERSION = "0.9.218-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -843,7 +843,7 @@ mod:dofile("scripts/mods/cosmetics_tweaker/_cos_deus_yield_policy").install(mod,
     get_managers = function() return Managers end,
     printf = printf,
 })
-mod:dofile("scripts/mods/cosmetics_tweaker/_cos_518_probe") -- #518 bounded solo-visible probes: printf-only emitter + owner-wield / paint-skip helpers wired below, plus the husk-miss helper the equipment-assembly owner calls (#1159)
+mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_deus_yield") -- #518 bounded solo-visible diagnostics: printf-only emitter + owner-wield / paint-skip helpers wired below, plus the husk-miss helper the equipment-assembly owner calls (#1159)
 
 -- ============================================================
 -- Live equipment assembly seam
