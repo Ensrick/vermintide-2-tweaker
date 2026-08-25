@@ -1,5 +1,22 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.347-dev (2026-08-25) -- extract peer-parity owner (#2, #1416) [not-started]
+
+- Moves the complete peer-catalog parity, pool-filtering, shared-state,
+  hot-join, peer-removal, debounce, and diagnostics runtime into one explicit
+  synchronous owner without changing its channel, schema, catalog, hooks,
+  commands, settings, or public compatibility fields.
+- Preserves the prior update callback in both engine shapes and installs before
+  stack re-broadcast consumes the parity API. Installation is transactional:
+  missing or throwing dependencies and publication failures restore the exact
+  raw callback/metatable state and remain retry-safe.
+- Adds adversarial coverage for duplicate installation, inherited and raw
+  update callbacks, dependency failure, callback restoration, hot-join/remove
+  ownership, runtime-check ordering, and source decomposition. The wrapper and
+  extracted owner are each below the 1,500-line ceiling; target-tier structural
+  debt falls by one. This is a behavior-preserving repository refactor and
+  reuses the existing gameplay cards rather than creating a new live test.
+
 ## 0.7.346-dev (2026-08-23) -- retire consumed graph-freeze telemetry (#499) [not-started]
 
 - Removes the always-on `[ct:487]` graph-solve timing and frame-stall overlay

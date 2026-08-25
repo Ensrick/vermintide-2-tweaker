@@ -222,7 +222,7 @@ local function register(Harness, repo_root)
         -- ignore the extra exact fields on the old channel and ack anyway, so it
         -- must be structurally unable to answer the new one.
         local ct = read_source("chaos_wastes_tweaker_dev/scripts/mods/"
-            .. "chaos_wastes_tweaker_dev/_ct_meta_trait_boons.lua")
+            .. "chaos_wastes_tweaker_dev/_ct_peer_parity_owner.lua")
         Harness.truthy(ct:find("[^_%w]wire_identity%s*=%s*wire_identity") ~= nil,
             "CT must opt its boon catalog into exact mode")
         Harness.truthy(ct:find('"ct_boon_catalog_exact_v1"', 1, true) ~= nil,
@@ -470,7 +470,7 @@ local function register(Harness, repo_root)
     end)
 
     Harness.test("ct hot-join preflight precedes native sync and has bounded fallback", function()
-        local path = repo_root .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_meta_trait_boons.lua"
+        local path = repo_root .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_peer_parity_owner.lua"
         local file = assert(io.open(path, "rb"))
         local source = file:read("*a")
         file:close()
@@ -487,26 +487,27 @@ local function register(Harness, repo_root)
     end)
 
     Harness.test("ct issue 426 diagnostic separates gate catalog state and live coverage", function()
-        local path = repo_root .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_meta_trait_boons.lua"
+        local path = repo_root .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_peer_parity_owner.lua"
         local file = assert(io.open(path, "rb"))
         local source = file:read("*a")
         file:close()
         local census_at = assert(source:find("local function _ct_census_modded_content()", 1, true))
         local player_at = assert(source:find('_ct_each_server_state_row(run_state, "power_ups"', census_at, true))
         local persist_at = assert(source:find('_ct_each_server_state_row(run_state, "persistent_buffs"', player_at, true))
-        local command_at = assert(source:find('mod:command("ct_426_diag"', persist_at, true))
-        local summary_at = assert(source:find("[ct:426:diag] summary", command_at, true))
+        local callback_at = assert(source:find("local diagnostic_callback = function()", persist_at, true))
+        local summary_at = assert(source:find("[ct:426:diag] summary", callback_at, true))
+        local command_at = assert(source:find('mod:command("ct_426_diag"', summary_at, true))
         Harness.truthy(census_at < player_at and player_at < persist_at
-            and persist_at < command_at and command_at < summary_at)
+            and persist_at < callback_at and callback_at < summary_at and summary_at < command_at)
         for _, marker in ipairs({
             "installed=%s", "gate=%s", "catalog=%s", "state=%s",
             "live_custom=%s", "roster_known=%s", "missing=%d",
         }) do
             Harness.truthy(source:find(marker, summary_at, true), "missing #426 discriminator: " .. marker)
         end
-        Harness.truthy(source:find('audit_lookup("power_up"', command_at, true))
-        Harness.truthy(source:find('audit_lookup("buff"', command_at, true))
-        Harness.truthy(source:find("census.total == 0", command_at, true),
+        Harness.truthy(source:find('audit_lookup("power_up"', callback_at, true))
+        Harness.truthy(source:find('audit_lookup("buff"', callback_at, true))
+        Harness.truthy(source:find("census.total == 0", callback_at, true),
             "mixed parity must require zero surviving CT state")
     end)
 
@@ -675,13 +676,13 @@ local function register(Harness, repo_root)
 
     Harness.test("ct 426 presentation bridge never weakens the runtime gate", function()
         local path = repo_root
-            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_meta_trait_boons.lua"
+            .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_peer_parity_owner.lua"
         local file = assert(io.open(path, "rb"))
         local source = file:read("*a")
         file:close()
 
         -- The bridge must sit inside the beacon-installed branch and must not
-        -- introduce a second mod.update wrap or any new hook.
+        -- introduce a third staged update wrapper or any new hook.
         local bridge_at = assert(source:find("_ct_wire_policy", 1, true),
             "presentation bridge not wired")
         Harness.truthy(source:find("inst:applied_state() == \"enabled\"", bridge_at, true) ~= nil,
@@ -689,7 +690,7 @@ local function register(Harness, repo_root)
         -- Exactly one wrap per branch of the beacon if/else, never a third: the
         -- installed path reuses the strip ticker and the fail-safe path owns the
         -- only wrap it needs. A third would mean the bridge added its own.
-        local _, update_wraps = source:gsub("mod%.update%s*=%s*function", "")
+        local _, update_wraps = source:gsub("local owner_update%s*=%s*function", "")
         Harness.equal(update_wraps, 2,
             "bridge must reuse each branch's ticker, not add its own mod.update wrap")
         local beacon_else_at = assert(source:find("peer-parity beacon UNAVAILABLE", 1, true))
@@ -702,7 +703,7 @@ local function register(Harness, repo_root)
         Harness.equal(remove_peer_hooks, 1, "remove_peer must stay a single hook")
 
         -- The runtime gate must not consult GUT: safety is independent.
-        local wire_safe_at = assert(source:find("mod._ct_wire_safe = function()", 1, true))
+        local wire_safe_at = assert(source:find("local wire_safe = function()", 1, true))
         local wire_safe_body = source:sub(wire_safe_at, wire_safe_at + 400)
         Harness.equal(wire_safe_body:find("mod_tweaker", 1, true), nil,
             "wire safety must never depend on the Mod Tweaker bridge")

@@ -397,7 +397,7 @@ local function register(Harness, repo_root)
     Harness.test("peer parity commit boolean is consumed at every documented seam", function()
         local seams = {
             "career_tweaker/scripts/mods/career_tweaker/career_tweaker.lua",
-            "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_meta_trait_boons.lua",
+            "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_peer_parity_owner.lua",
             "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua",
             "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_exact_wire_runtime.lua",
             "event_tweaker/scripts/mods/event_tweaker/_evt_guard430_curse_parity.lua",

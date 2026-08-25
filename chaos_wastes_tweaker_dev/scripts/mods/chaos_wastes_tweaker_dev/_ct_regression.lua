@@ -94,7 +94,7 @@ end)
 -- by vanilla data it does not control.
 --
 -- ct_kill_heal is NOT in the disabled list: #406 re-enabled it in v0.7.240-dev and it registers
--- unconditionally (_ct_meta_trait_boons.lua:1262-1263, :1345). qa test `test_ct_boon_catalog`
+-- unconditionally (peer parity owns the exact gate; meta trait boons owns registration). qa test `test_ct_boon_catalog`
 -- asserts its PRESENCE, so listing it here made these two checks contradict that test outright.
 --
 -- v0.7.100-dev: inverted from v0.7.99 check. After the full purge the global table
@@ -115,7 +115,7 @@ _rt_register("dormant_boons_NOT_registered", function()
     local is_modded = mod._ct_is_modded_power_up
     if type(is_modded) ~= "function" then
         return "mod._ct_is_modded_power_up unresolved - the ct injection registry accessor is "
-            .. "missing, so this check cannot prove anything (see _ct_meta_trait_boons.lua)"
+            .. "missing, so this check cannot prove anything (see _ct_peer_parity_owner.lua)"
     end
     local global_bt = rawget(_G, "BuffTemplates")
     if not global_bt then
