@@ -20,6 +20,13 @@ local GUT_SCOREBOARD_SORT_OPTIONS = {
     { text = "gut_scoreboard_sort_kills", value = "kills_total" },
 }
 
+local GUT_SCOREBOARD_PAGE_OPTIONS = {
+    { text = "gut_scoreboard_page_1", value = 1 },
+    { text = "gut_scoreboard_page_2", value = 2 },
+    { text = "gut_scoreboard_page_3", value = 3 },
+    { text = "gut_scoreboard_page_4", value = 4 },
+}
+
 -- Inventory character-preview lighting (#522). The runtime module applies a
 -- world-local post-blend exposure multiplier without changing packages/levels.
 local GUT_INV_BACKDROP_OPTIONS = {
@@ -269,6 +276,42 @@ local options_data = {
                                 default_value = "player_name",
                                 options       = GUT_SCOREBOARD_SORT_OPTIONS,
                                 tooltip       = "gut_scoreboard_live_sort_tooltip",
+                            },
+                            {
+                                setting_id    = "gut_scoreboard_live_page",
+                                type          = "dropdown",
+                                default_value = 1,
+                                options       = GUT_SCOREBOARD_PAGE_OPTIONS,
+                                tooltip       = "gut_scoreboard_live_page_tooltip",
+                            },
+                            {
+                                setting_id      = "gut_scoreboard_next_page_hotkey",
+                                type            = "keybind",
+                                keybind_trigger = "pressed",
+                                keybind_type    = "function_call",
+                                function_name   = "gut_scoreboard_next_page",
+                                default_value   = {},
+                                tooltip         = "gut_scoreboard_next_page_hotkey_tooltip",
+                            },
+                            {
+                                setting_id  = "gut_scoreboard_topic_visibility_group",
+                                type        = "group",
+                                tooltip     = "gut_scoreboard_topic_visibility_group_tooltip",
+                                sub_widgets = {
+                                    { setting_id = "gut_scoreboard_topic_kills_elites_visible", type = "checkbox", default_value = true },
+                                    { setting_id = "gut_scoreboard_topic_kills_specials_visible", type = "checkbox", default_value = true },
+                                    { setting_id = "gut_scoreboard_topic_kills_total_visible", type = "checkbox", default_value = true },
+                                    { setting_id = "gut_scoreboard_topic_kills_melee_visible", type = "checkbox", default_value = true },
+                                    { setting_id = "gut_scoreboard_topic_kills_ranged_visible", type = "checkbox", default_value = true },
+                                    { setting_id = "gut_scoreboard_topic_damage_taken_visible", type = "checkbox", default_value = true },
+                                    { setting_id = "gut_scoreboard_topic_damage_dealt_visible", type = "checkbox", default_value = true },
+                                    { setting_id = "gut_scoreboard_topic_damage_dealt_bosses_visible", type = "checkbox", default_value = true },
+                                    { setting_id = "gut_scoreboard_topic_headshots_visible", type = "checkbox", default_value = true },
+                                    { setting_id = "gut_scoreboard_topic_saves_visible", type = "checkbox", default_value = true },
+                                    { setting_id = "gut_scoreboard_topic_revives_visible", type = "checkbox", default_value = true },
+                                    { setting_id = "gut_scoreboard_topic_aidings_visible", type = "checkbox", default_value = true },
+                                    { setting_id = "gut_scoreboard_topic_times_revived_visible", type = "checkbox", default_value = true },
+                                },
                             },
                         },
                     },

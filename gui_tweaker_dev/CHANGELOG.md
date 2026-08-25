@@ -1,5 +1,25 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.342-dev (2026-08-25) -- page native scoreboard rows (#1414) [verify-fix]
+
+- The expanded scoreboard now pages a detached 13-topic registry at eleven
+  rows per page: the untouched vanilla eleven-row snapshot plus Aidings and
+  Times Revived. Held Tab reads the live StatisticsDatabase; a bounded
+  StateIngame-exit sidecar preserves those two scalar rows for the end screen,
+  whose normal Adventure context does not retain the database. The sidecar
+  survives only the source-proven end-view-wrapper handoff into the next
+  StateIngame and clears on an ordinary no-wrapper StateIngame entry.
+- Adds persisted page selection, default-on per-topic visibility, safe
+  hidden-sort fallback, an explicit all-hidden state, and an optional unbound
+  Next Scoreboard Page keybind. The vanilla fixed-count score wire and the two
+  existing draw hooks are unchanged.
+- Adventure reconnect retention includes the two extra scalar paths within its
+  existing bounds. Runtime regression `issue272_native_live_scoreboard_page`
+  executes the synthetic 13-topic model and emits its page/fingerprint verdict;
+  Lua 5.1 coverage owns the complete 0/1/11/12/13/44/overflow matrix plus the
+  real draw/lifecycle adapters, deleted remote rows, cache-clock rollback,
+  once-only retention replay, and bounded evidence.
+
 ## 0.2.341-dev (2026-08-25) -- name the Well of Dreams diagnostic by role (#499) [not-started]
 
 - Renames the active #257 cutscene trace owner to

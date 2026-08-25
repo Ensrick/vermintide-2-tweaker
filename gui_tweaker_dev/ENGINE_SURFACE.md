@@ -16,7 +16,7 @@ line by line, as were `IngameUI.setup_views` / the DLC `ui_views` seam and
 grep-verified when written).
 
 **Dev/stable relationship.** This documents `gui_tweaker_dev` (`gut_dev`,
-MOD_VERSION `0.2.339-dev`, friends-only Workshop 3751024698), the ACTIVE working
+MOD_VERSION `0.2.341-dev`, friends-only Workshop 3751024698), the ACTIVE working
 stream. `gui_tweaker/` (`gut`, public-alpha Workshop 3732144878) is its read-only
 public twin; per repo `CLAUDE.md` all in-flight work happens in the dev dir and
 promotion is a separate user-triggered action, so this doc cites only `gut_dev`
@@ -257,16 +257,52 @@ advance [src: `scripts/ui/ui_passes.lua:1964-1990,2177-2181`; `scripts/ui/ui_ren
 Clicks choose the nearest measured insertion boundary rather than estimating by character count, so signs,
 decimal points, proportional digits, and UI scale share one contract. Two ESC-menu surfaces sit here: the button LABEL is supplied as backend-localization DATA (not a `Localize` hook - the global is rawset-replaced on init and the button localizes through the sibling `simple_lookup`), and the modern keep menu's button column (`HeroWindowIngameView._update_presentation` [src: `hero_window_ingame_view.lua:490-515`]) is compacted because gut's own Mod Tweaker button pushes it to overflow. The keep also hosts the injected Bestiary/Armory compendium via HeroView sub-states and the in-mission keep-inventory console windows (`docs/engine/06` owns the inventory/preview seams).
 
-#272's scoreboard inventory chains the existing VMF lifecycle callbacks (no
-engine hook), inventories `ScoreboardHelper.scoreboard_topic_stats`, and takes
-at most one delayed live snapshot after `StateIngame` becomes ready. The live
-presenter hooks `IngamePlayerListUI._draw`; the end presenter hooks
-`EndViewStateScore.draw`. Both consume the same detached model built from
-`get_grouped_topic_statistics` [src:
-`scripts/helpers/scoreboard_helper.lua:344-436`]. The renderer owns one explicit
-`is_root` scenegraph and a bounded 11-by-4 grid of individual text passes; it
-does not encode rows as multiline/TSV text, own Tab input, or add a network
-channel. Custom-stat ownership decisions remain in `SCOREBOARD_RESEARCH_272.md`.
+#272/#1414's scoreboard inventory chains the existing VMF lifecycle callbacks
+(no engine hook), inventories `ScoreboardHelper.scoreboard_topic_stats`, and
+takes at most one delayed live snapshot after `StateIngame` becomes ready. The
+live presenter hooks `IngamePlayerListUI._draw`; the end presenter hooks
+`EndViewStateScore.draw`. Both consume one detached 13-topic model: the eleven
+grouped rows from `get_grouped_topic_statistics` [src:
+`scripts/helpers/scoreboard_helper.lua:344-436`] plus Aidings and Times Revived.
+Held Tab reads those two scalar leaves from the live `StatisticsDatabase`.
+Normal Adventure construction puts `players_session_score` but no
+`statistics_db` in `level_end_view_context` [src:
+`scripts/game_state/state_ingame_running.lua:274-344`], even though
+`EndViewStateScore.on_enter` assigns the absent field [src:
+`scripts/ui/views/level_end/states/end_view_state_score.lua:23-29`]. The chained
+StateIngame-exit lifecycle therefore captures a detached, at-most-four-player
+by two-scalar sidecar while the database rows still live; the end presenter
+consumes only that sidecar and never rereads the database. It is captured once
+per mission generation. This edge is
+source-ordered: `GameStateMachine` passes the old state object to mod callbacks
+before running the native state change [src:
+`scripts/game_state/game_state_machine.lua:14-21`], so the adapter reads that
+object's database and profile synchronizer before falling back to managers. The same
+StateIngame-enter edge always clears the held-Tab model/time cache, while a
+backwards game clock also forces an immediate snapshot. The sidecar itself
+survives only when the new StateIngame's loading context carries the active
+`level_end_view_wrappers` array [src:
+`scripts/game_state/state_loading.lua:1671-1677`;
+`scripts/game_state/state_ingame.lua:347-380`]. This is required because the
+wrapper can continue updating, and the score state can draw, after that enter.
+An ordinary no-wrapper StateIngame enter clears the stale sidecar; nested state
+notifications are deliberately neutral because `StateInGameRunning` can enter
+before the outer callback [src: `scripts/game_state/state_ingame.lua:345-388`;
+`scripts/game_state/game_state_machine.lua:21-27`]. Those leaves are already hot-join synchronized [src:
+`scripts/managers/backend/statistics_definitions.lua:29-40`], but remain outside
+`ScoreboardHelper.scoreboard_topic_stats`, `num_stats_per_player`, and the fixed
+session-score RPC. This is required because the receiver rejects a grouped-row
+count mismatch [src:
+`scripts/managers/game_mode/game_mechanism_manager.lua:1054-1073`]. The pure
+policy returns every 11-row page up to four pages, explicit overflow and
+all-hidden verdicts, a clamped selected page, hidden-sort fallback, and a
+deterministic fingerprint. VMF persists page and per-topic visibility; the
+optional unbound page key only advances that setting. The renderer still owns
+one explicit `is_root` scenegraph and a bounded 11-by-4 grid of individual text
+passes; it does not encode rows as multiline/TSV text, own Tab input, or add a
+network channel. Page and sidecar evidence have independent eight-line session
+caps. Custom-stat ownership decisions remain in
+`SCOREBOARD_RESEARCH_272.md`.
 
 #437 adds the missing Adventure disconnect lifecycle without changing scoreboard
 rendering or transport. On the server only, `_gut_scoreboard_retention.lua` wraps
@@ -278,7 +314,9 @@ the empty row [src: `:150-162`]. This mirrors Deus' explicit
 `game_mode_deus.lua:50,205,216-219`; `deus_run_controller.lua:779-806`] but is
 gated to an active Adventure `StateIngame` host. Storage is mission-local, keyed
 by the same stable `stats_id`, capped at 8 players x 64 paths, cleared on exit,
-and adds no RPC; progression/backend statistics are never copied.
+and adds no RPC; progression/backend statistics are never copied. #1414 extends
+that exact path list with only Aidings and Times Revived so the two detached
+rows survive the same once-per-rejoin restore transaction.
 
 #1151 repairs vanilla's Damage Taken award at the accumulation seam.
 `EndViewStateScore._group_scores_by_player_and_topic` seeds `highscore` at zero,
