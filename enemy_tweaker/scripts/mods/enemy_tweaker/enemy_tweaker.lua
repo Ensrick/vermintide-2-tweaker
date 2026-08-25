@@ -1,6 +1,6 @@
 local mod = get_mod("enemy_tweaker")
 
-local MOD_VERSION = "0.7.57-dev"
+local MOD_VERSION = "0.7.58-dev"
 -- RPC schema version (VMF_RECIPES.md section 10, GitHub Issue #42). Prepended as
 -- the FIRST positional arg of every mod:network_send this mod emits, and
 -- validated as the first arg of every mod:network_register callback; a peer on a
@@ -63,11 +63,11 @@ mod._et.BossBehaviorCore = mod:dofile("scripts/mods/enemy_tweaker/_et_boss_behav
 mod._et.PersonalHandicapPolicy = mod:dofile("scripts/mods/enemy_tweaker/_et_personal_handicap_policy") -- #61 engine-free bounds/policy
 mod._et.PersonalHandicapUnits = mod:dofile("scripts/mods/enemy_tweaker/_et_personal_handicap_units") -- #640 lifetime-safe Unit boundary
 mod._et.NetworkLookupLib = mod:dofile("scripts/mods/enemy_tweaker/_lib_network_lookup") -- #428 strict bidirectional registration owner
+mod._et.CustomBreedRegistrar = mod:dofile("scripts/mods/enemy_tweaker/_et_custom_breed_registrar"); mod._et.CustomBreedRegistrar.lookup_lib = mod._et.NetworkLookupLib -- #1413 atomic Enemy-local breed owner
 -- Startup marker: unconditional mod:info (the "applied" log marker pattern).
 -- Prefix changed v0.5.14 from [et:br] -> [et] to match the universal convention
 -- (PROJECT_STANDARDS.md § 3.6). host_required=true retained as a per-mod addendum.
-mod:info("[et:LOAD] v%s enabled fp=%s host_required=true OK",
-    MOD_VERSION, mod._et.settings_fingerprint())
+mod:info("[et:LOAD] v%s enabled fp=%s host_required=true OK", MOD_VERSION, mod._et.settings_fingerprint())
 
 -- Per PROJECT_STANDARDS § 3.6 + § 14a: dev/alpha/beta/0.x versions print
 -- version to chat on load so the user can see what's active. Stable

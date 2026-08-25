@@ -74,52 +74,6 @@ local function expect_rejection(H, M, lookup, name, expected_reason, label)
 	assert_raw_unchanged(H, lookup, snapshot, label)
 end
 
-local function with_raw_globals(bindings, fn)
-	local saved = {}
-	for key, value in pairs(bindings) do
-		saved[key] = rawget(_G, key)
-		rawset(_G, key, value)
-	end
-	local ok, result = pcall(fn)
-	for key in pairs(bindings) do
-		rawset(_G, key, saved[key])
-	end
-	if not ok then error(result, 0) end
-	return result
-end
-
-local function exact_lookup(name)
-	local lookup = { name }
-	lookup[name] = 1
-	return lookup
-end
-
-local function tracked_network_lib(real)
-	local calls = {}
-	return {
-		register_named = function(network_lookup, table_name, name)
-			local index, inserted, reason =
-				real.register_named(network_lookup, table_name, name)
-			calls[#calls + 1] = {
-				table_name = table_name,
-				index = index,
-				inserted = inserted,
-				reason = reason,
-			}
-			return index, inserted, reason
-		end,
-	}, calls
-end
-
-local function with_loaded_module(name, value, fn)
-	local saved = rawget(package.loaded, name)
-	rawset(package.loaded, name, value)
-	local ok, result = pcall(fn)
-	rawset(package.loaded, name, saved)
-	if not ok then error(result, 0) end
-	return result
-end
-
 return function(H, repo_root)
 	local canonical_path = repo_root .. "/tools/shared_lib/_lib_network_lookup.lua"
 	local consumer_path = repo_root
@@ -456,188 +410,35 @@ return function(H, repo_root)
 			.. "/enemy_tweaker/scripts/mods/enemy_tweaker/_et_skaven_warlord_breed.lua")
 		local chosen = read(repo_root
 			.. "/enemy_tweaker/scripts/mods/enemy_tweaker/_et_boss_ideas.lua")
+		local registrar = read(repo_root
+			.. "/enemy_tweaker/scripts/mods/enemy_tweaker/_et_custom_breed_registrar.lua")
 		local helper_path = "scripts/mods/enemy_tweaker/_lib_network_lookup"
+		local registrar_path = "scripts/mods/enemy_tweaker/_et_custom_breed_registrar"
 		H.equal(count_plain(entry, helper_path), 1,
 			"Enemy entry must load the helper exactly once")
 		local helper_at = assert(entry:find(
 			'mod._et.NetworkLookupLib = mod:dofile("' .. helper_path .. '")', 1, true))
+		local registrar_at = assert(entry:find(
+			'mod._et.CustomBreedRegistrar = mod:dofile("' .. registrar_path .. '")', 1, true))
 		local warlord_at = assert(entry:find(
 			'mod:dofile("scripts/mods/enemy_tweaker/_et_skaven_warlord_breed")', 1, true))
 		local chosen_at = assert(entry:find(
 			'mod:dofile("scripts/mods/enemy_tweaker/_et_boss_ideas")', 1, true))
-		H.truthy(helper_at < warlord_at and helper_at < chosen_at,
-			"Enemy helper must load before both breed registration owners")
+		H.truthy(helper_at < registrar_at and registrar_at < warlord_at
+			and registrar_at < chosen_at,
+			"Enemy helper and registrar must load once before both breed owners")
 		H.equal(warlord:find(helper_path, 1, true), nil,
 			"Warlord privately reloads the shared helper")
 		H.equal(chosen:find(helper_path, 1, true), nil,
 			"Chosen privately reloads the shared helper")
-		H.truthy(warlord:find("local NLLib = ET.NetworkLookupLib", 1, true))
-		H.truthy(chosen:find("local NLLib = ET.NetworkLookupLib", 1, true))
-		H.equal(count_plain(warlord, "NLLib.register_named"), 2,
-			"Warlord must register exactly breeds and damage_sources")
-		H.equal(count_plain(chosen, "NLLib.register_named"), 2,
-			"Chosen registration count drifted")
+		H.truthy(warlord:find("local Registrar = ET.CustomBreedRegistrar", 1, true))
+		H.truthy(chosen:find("local Registrar = ET.CustomBreedRegistrar", 1, true))
+		H.equal(warlord:find("register_named", 1, true), nil)
+		H.equal(chosen:find("register_named", 1, true), nil)
+		H.truthy(registrar:find("runtime.lookup_lib.register_named", 1, true),
+			"Enemy-local registrar must plan through the canonical helper")
 		H.equal(warlord:find("local idx = #bl + 1", 1, true), nil)
 		H.equal(warlord:find("local idx = #ds + 1", 1, true), nil)
-	end)
-
-	H.test("Enemy Tweaker hot reload revalidates Warlord wire state before readiness", function()
-		local module_name = "scripts/mods/enemy_tweaker/enemy_tweaker_breeds"
-		local module_path = repo_root
-			.. "/enemy_tweaker/scripts/mods/enemy_tweaker/_et_skaven_warlord_breed.lua"
-		local breed_constants = {
-			ET_SKAVEN_WARLORD = "et_skaven_warlord",
-			ET_SKAVEN_WARLORD_NAME_KEY = "et_skaven_warlord_name",
-			WARLORD_GRUDGE_NAMES = {},
-		}
-
-		local function run(network_lookup)
-			local tracked, calls = tracked_network_lib(M)
-			local mod = {
-				_et = {
-					NetworkLookupLib = tracked,
-					rt_register = function() end,
-				},
-			}
-			function mod:hook() end
-			with_raw_globals({
-				get_mod = function(id)
-					H.equal(id, "enemy_tweaker")
-					return mod
-				end,
-				printf = function() end,
-				Breeds = { et_skaven_warlord = { name = "et_skaven_warlord" } },
-				BreedActions = {},
-				NetworkLookup = network_lookup,
-			}, function()
-				assert(loadfile(module_path))()
-			end)
-			return mod, calls
-		end
-
-		with_loaded_module(module_name, breed_constants, function()
-			local valid = {
-				breeds = exact_lookup("et_skaven_warlord"),
-				damage_sources = exact_lookup("et_skaven_warlord"),
-			}
-			local valid_breeds_snapshot = raw_snapshot(valid.breeds)
-			local valid_damage_snapshot = raw_snapshot(valid.damage_sources)
-			local valid_mod, valid_calls = run(valid)
-			H.equal(#valid_calls, 2)
-			H.equal(valid_calls[1].table_name, "breeds")
-			H.equal(valid_calls[1].reason, "already_registered")
-			H.equal(valid_calls[2].table_name, "damage_sources")
-			H.equal(valid_calls[2].reason, "already_registered")
-			H.equal(valid_mod._et_warlord2_ready, true)
-			H.equal(valid_mod._et_warlord2_breed_name, "et_skaven_warlord")
-			assert_raw_unchanged(H, valid.breeds, valid_breeds_snapshot,
-				"Warlord valid hot-reload breeds lookup")
-			assert_raw_unchanged(H, valid.damage_sources, valid_damage_snapshot,
-				"Warlord valid hot-reload damage lookup")
-
-			local malformed_damage = { "other" }
-			malformed_damage.other = 1
-			malformed_damage.et_skaven_warlord = 1
-			local invalid = {
-				breeds = exact_lookup("et_skaven_warlord"),
-				damage_sources = malformed_damage,
-			}
-			local invalid_breeds_snapshot = raw_snapshot(invalid.breeds)
-			local invalid_damage_snapshot = raw_snapshot(malformed_damage)
-			local invalid_mod, invalid_calls = run(invalid)
-			H.equal(#invalid_calls, 2)
-			H.equal(invalid_calls[1].reason, "already_registered")
-			H.equal(invalid_calls[2].reason, "pair_asymmetric")
-			H.equal(invalid_mod._et_warlord2_ready, false)
-			H.equal(invalid_mod._et_warlord2_breed_name, nil)
-			assert_raw_unchanged(H, invalid.breeds, invalid_breeds_snapshot,
-				"Warlord malformed hot-reload breeds lookup")
-			assert_raw_unchanged(H, malformed_damage, invalid_damage_snapshot,
-				"Warlord malformed hot-reload damage lookup")
-		end)
-	end)
-
-	H.test("Enemy Tweaker hot reload revalidates Chosen wire state before readiness", function()
-		local module_path = repo_root
-			.. "/enemy_tweaker/scripts/mods/enemy_tweaker/_et_boss_ideas.lua"
-		local function run(network_lookup)
-			local tracked, calls = tracked_network_lib(M)
-			local chosen = {
-				name = "et_chosen_greataxe",
-				source_breed = "chaos_warrior",
-				display_name_key = "et_chosen_name",
-				display_name_en = "Chosen",
-				inventory_template = "et_chosen_inventory",
-			}
-			local mod = {
-				_et = {
-					NetworkLookupLib = tracked,
-					BossIdeasCore = {
-						CHOSEN = chosen,
-						CANDIDATES = {},
-						inspect = function()
-							return {
-								rows = {}, missing_breeds = 0, structure_ready = 0,
-								resident_models = 0,
-							}
-						end,
-					},
-					rt_register = function() end,
-				},
-			}
-			function mod:command() end
-			function mod:echo() end
-			with_raw_globals({
-				get_mod = function(id)
-					H.equal(id, "enemy_tweaker")
-					return mod
-				end,
-				printf = function() end,
-				Breeds = { et_chosen_greataxe = { name = "et_chosen_greataxe" } },
-				BreedActions = {},
-				NetworkLookup = network_lookup,
-			}, function()
-				assert(loadfile(module_path))()
-			end)
-			return mod, calls
-		end
-
-		local valid = {
-			breeds = exact_lookup("et_chosen_greataxe"),
-			damage_sources = exact_lookup("et_chosen_greataxe"),
-		}
-		local valid_breeds_snapshot = raw_snapshot(valid.breeds)
-		local valid_damage_snapshot = raw_snapshot(valid.damage_sources)
-		local valid_mod, valid_calls = run(valid)
-		H.equal(#valid_calls, 2)
-		H.equal(valid_calls[1].table_name, "breeds")
-		H.equal(valid_calls[1].reason, "already_registered")
-		H.equal(valid_calls[2].table_name, "damage_sources")
-		H.equal(valid_calls[2].reason, "already_registered")
-		H.equal(valid_mod._et_chosen_ready, true)
-		assert_raw_unchanged(H, valid.breeds, valid_breeds_snapshot,
-			"Chosen valid hot-reload breeds lookup")
-		assert_raw_unchanged(H, valid.damage_sources, valid_damage_snapshot,
-			"Chosen valid hot-reload damage lookup")
-
-		local malformed_damage = { "other" }
-		malformed_damage.other = 1
-		malformed_damage.et_chosen_greataxe = 1
-		local invalid = {
-			breeds = exact_lookup("et_chosen_greataxe"),
-			damage_sources = malformed_damage,
-		}
-		local invalid_breeds_snapshot = raw_snapshot(invalid.breeds)
-		local invalid_damage_snapshot = raw_snapshot(malformed_damage)
-		local invalid_mod, invalid_calls = run(invalid)
-		H.equal(#invalid_calls, 2)
-		H.equal(invalid_calls[1].reason, "already_registered")
-		H.equal(invalid_calls[2].reason, "pair_asymmetric")
-		H.equal(invalid_mod._et_chosen_ready, false)
-		assert_raw_unchanged(H, invalid.breeds, invalid_breeds_snapshot,
-			"Chosen malformed hot-reload breeds lookup")
-		assert_raw_unchanged(H, malformed_damage, invalid_damage_snapshot,
-			"Chosen malformed hot-reload lookup")
 	end)
 
 	H.test("WOC owns and loads the exact canonical NetworkLookup helper", function()

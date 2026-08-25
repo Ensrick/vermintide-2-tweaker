@@ -9,15 +9,16 @@ skeleton-breed history) - it names each engine seam, cites the vanilla behavior,
 and links out. Decompile paths are relative to
 `C:\Users\danjo\source\repos\Vermintide-2-Source-Code`; `et` line numbers name
 their `_et_*` module. `§N` = a `docs/BUG_CLASSES.md` class; `#N` / "issue N" = a
-GitHub issue. Grep-verified 2026-07-12 against the decompile.
+GitHub issue. Breed-registration seams re-verified 2026-08-25 against the
+decompile; other hook rows retain their stated 2026-07-12 census.
 
 `et` rewrites the AI spawn pipeline in place: it patches the difficulty-scaled
 spawn/pacing/roaming/specials settings the ConflictDirector reads, substitutes
-breeds and factions in hordes, scales counts, and adds one wholly new breed (the
-Skaven Warlord, issue 324). Almost every seam it touches lives under
+breeds and factions in hordes, scales counts, and adds two custom breeds (the
+Skaven Warlord and greataxe Chosen). Almost every seam it touches lives under
 `docs/engine/07` (conflict director + mutators). It is a host-required mod - the
 spawn decisions are server-authoritative - with two exceptions that reach every
-peer: the mod-added breed (its NetworkLookup entries must exist on every peer) and
+peer: the mod-added breeds (their NetworkLookup entries must exist on every peer) and
 the global `table.clone` shim.
 
 ## Hook table
@@ -50,7 +51,7 @@ part of the count or table.
 | `ConflictDirector.horde_killed` [wrap] `_et_pacing.lua:117` | Recomputes the next horde schedule when a horde dies [src: `conflict_director.lua:1022`] | Same `horde_frequency` override here or the frequency slider has no effect after the first horde (`:117`) | Distinct method from `update_horde_pacing` - separate (Class, method) pair |
 | `ConflictDirector.update_mini_patrol` [wrap] `_et_pacing.lua:140` | Ambient mini-patrol spawn pass, gated on intensity + grunt cap [src: `conflict_director.lua:1377`] | Raise the intensity gate and grunt cap to infinity for the call when `ambients_ignore_threat` is on, then restore (`:140`) | Both gates must move together or the inner cap check still bails |
 | `ConflictDirector.handle_alone_player` [wrap] `_et_pacing.lua:202` | The rush intervention (rushing-special + ambush horde for a lone player); unlike hordes and speed-run specials it has NO freeze gate in its body [src: `conflict_director.lua:1250`] | VANILLA-BUG fix (issue 449): stand it down while `pacing:get_state() == "pacing_frozen"` so it can't spawn enemies during a frozen cutscene (e.g. The Enchanter's Lair), matching its two vanilla siblings (`:202`) | UNCONDITIONAL (vanilla-bug class, host-side spawn decision). Caller retries every ~1s, so the `[et:449]` line logs once per freeze episode. Writes the same `data.disabled` debug-reason field vanilla uses |
-| `ConflictDirector.calculate_threat_value` [safe,tbl] `_et_pacing.lua:170` | Writes `self.threat_value` from the per-breed `threat_values` upvalue built ONCE at file-load by walking `pairs(Breeds)`; the `delay_*_threat_value` thresholds gate spawns off it [src: `conflict_director.lua:2317`; upvalue `local threat_values = {}` `:2295`] | `hook_safe` multiply `threat_value` by `spawn_pace_multiplier` and recompute the delay flags so thresholds trip sooner/later (`:170`) | ROW OF CONCERN. Table-form (`ConflictDirector` by ref). The upvalue built at boot is the mod-added-breed crash class: a breed added after boot has no `threat_values` entry -> `nil * amount` fatal (§ breed threat_values; see dead ends) - which is why the Warlord registers its value via the static `set_threat_value` at breed-add, NOT here |
+| `ConflictDirector.calculate_threat_value` [safe,tbl] `_et_pacing.lua:170` | Writes `self.threat_value` from the per-breed `threat_values` upvalue built ONCE at file-load by walking `pairs(Breeds)`; the `delay_*_threat_value` thresholds gate spawns off it [src: `conflict_director.lua:2317`; upvalue `local threat_values = {}` `:2295`] | `hook_safe` multiply `threat_value` by `spawn_pace_multiplier` and recompute the delay flags so thresholds trip sooner/later (`:170`) | ROW OF CONCERN. Table-form (`ConflictDirector` by ref). The upvalue built at boot is the mod-added-breed crash class: a breed added after boot has no `threat_values` entry -> `nil * amount` fatal (§ breed threat_values; see dead ends) - which is why the #1413 registrar seeds each custom breed through the static `set_threat_value` before structural publication, NOT here |
 | `Pacing.update` [safe,tbl] `_et_pacing.lua:254` | Maintains per-player + total intensity that feeds spawn-rate decisions [src: `scripts/managers/conflict_director/pacing.lua:175`] | `hook_safe` scale `player_intensity[k]` and `total_intensity` by `spawn_pace_multiplier` after vanilla writes them (`:254`) | Per-frame row. Table-form (`Pacing` by ref); type-guard every field before multiplying |
 
 ### Horde composition + breed substitution (owner doc: `docs/engine/07`)
@@ -85,13 +86,13 @@ part of the count or table.
 | `SpawnZoneBaker.inject_special_packs` [wrap] `_et_roaming.lua:232` | Overrides zone pack types across a cycle; an unchecked inner loop `for k = zone_index, zone_index + period_length - 1` overruns `cycle_zones` on small Deus cycles [src: `spawn_zone_baker.lua:505`] | CRASH GUARD only: pcall vanilla inside the body so an overrun falls to log-and-skip (zones keep their level-bake defaults) instead of a level-load fatal (`:232`) | pcall vanilla HERE (not via the wrap fallback) so a throw doesn't re-invoke and re-crash. Hit on Deus + cataclysm-mimic small-cycle DLC levels |
 | `AIGroupSystem.create_formation_data` [wrap] `_et_patrol.lua:35` | Builds a patrol's formation rows; iterates `formation` as `for row, columns in ipairs(formation)` and places each along the spline [src: `scripts/entity_system/systems/ai/ai_group_system.lua:816`, iterate `:861`] | Replicate rows to scale patrol size by `patrol_size_multiplier`; suppress at mult 0 (`:35`) | Bind args BY POSITION: a prior version bound the 2nd positional as the group ext and replicated `spline_name` (a STRING), so patrol scaling silently never ran. HARD 14-row cap: rows past the spline/navmesh end get a nil `spawn_pos` -> malformed off-mesh member -> `POSITION_LOOKUP` crash in the patrol update (v0.7.13-dev) |
 
-### Mod-added breed (Skaven Warlord, issue 324) + banner (owner docs: `docs/engine/03`, `04`, `07`, `10`)
+### Mod-added breeds (issues 324/451/1413) + banner (owner docs: `docs/engine/03`, `04`, `07`, `10`)
 
 | Class.method (kind) | Vanilla behavior | Why et hooks it | Trap / invariant |
 |---|---|---|---|
 | `ConflictDirector.spawn_queued_unit` [wrap] `_et_champion_warlord.lua:176` | Server-authoritative breed spawn from the queue [src: `conflict_director.lua:1732`] | SINGLE consolidated hook for two disjoint substitutions: eligible monster -> Skaven Warlord, and roaming elite -> Champion (`:176`) | ROW OF CONCERN. Host-only substitution (`Managers.player.is_server`) so the breed replicates normally - but the mod-added breed's `NetworkLookup` entries only exist on et peers, so EVERY peer must run et (wire safety, `docs/engine/03`). Consolidated per the one-hook-per-pair rule. A bounded optional-data marker exempts #450's curated Troll/Spawn add from monster-pool substitution. |
 | `BTSpawnAllies.find_spawn_point` [wrap,tbl] `_et_champion_warlord.lua:308` | The Warlord's call-allies BT node resolves a spawner group and `_spawn` derefs `data.spawners` [src: `scripts/entity_system/systems/behaviour/nodes/bt_spawn_allies_action.lua:175`] | CRASH GUARD: off its home arena the spawner group is absent; nil `blackboard.spawning_allies` so the node returns "done" before `_spawn`'s `#spawners` modulo-crash, giving the Warlord a wind-up but no reinforcements (`:308`) | Table-form (`BTSpawnAllies` by ref). Only diverts when the group is genuinely absent AND no fallback-spawner escape exists; uses `POSITION_LOOKUP`/`Unit.world_position` with `Vector3Box` for the stored position |
-| `_G.Localize` [hook] `_et_skaven_warlord_breed.lua:377` | Global loc-key -> string lookup; the boss health-UI and the grudge-name list read it [src: `boss_health_ui.lua:174`, `terror_event_utils.lua:75`] | et's ONLY `_G.Localize` hook: supply the Warlord display name + 12 grudge names (`:377`) | One `_G.Localize` hook only - a second silently shadows (CLAUDE.md NON-NEGOTIABLE 8). VMF `_localization.lua` is not in global `Localize`, so vanilla-visible strings must come through here |
+| `_G.Localize` [hook] `_et_skaven_warlord_breed.lua` | Global loc-key -> string lookup; the boss health-UI and the grudge-name list read it [src: `boss_health_ui.lua:174`, `terror_event_utils.lua:75`] | et's ONLY `_G.Localize` hook: supply both custom-breed display names + 12 Warlord grudge names | One `_G.Localize` hook only - a second silently shadows (CLAUDE.md NON-NEGOTIABLE 8). VMF `_localization.lua` is not in global `Localize`, so vanilla-visible strings must come through here |
 | `BreedFreezer.try_mark_unit_for_freeze` [wrap] `_et_pacing.lua:305` | Queues a unit for deferred freeze; the actual freeze is deferred to `commit_freezes` [src: `scripts/managers/conflict_director/breed_freezer.lua:232`; vanilla error `:253`] | Issue 213 guard: with et's raised `max_grunts`, `deactivate_area -> destroy_unit` can re-mark the same unit same-frame, and vanilla prints "freeze unit twice" AND falls through to a conflicting `mark_for_deletion`. Replicate vanilla's own dup-check first and return true to suppress (`:305`) | ROW OF CONCERN (`docs/engine/04`). Reads vanilla's own `units_to_freeze[breed]` - the exact state vanilla checks, same lifecycle - so no frame/pool guesswork. Fail-open: any missing state falls through to vanilla |
 | `BeastmenStandardHealthExtension.add_damage` [wrap] `_et_banner.lua:128` | Beastmen banner health; `can_damage_banner` gate REJECTS ranged before reaching `super.add_damage` [src: `scripts/unit_extensions/health/beastmen_standard_health_extension.lua:38`] | "Banner breakable by ranged": when on, relay ranged attack types straight to `GenericHealthExtension.add_damage` (what vanilla does for accepted attacks) instead of vanilla's reject (`:128`) | Full 18-param signature verbatim. Off = pure passthrough (no behavior change); on, non-ranged still defers to vanilla to preserve the suicide path + whitelist |
 | `GenericHealthExtension.init` [wrap] `_et_health_multiplier.lua` | ConflictDirector has already selected rank-indexed breed health and any spawn modifier before health-extension init | #369 host scales the final hostile-AI health by the active difficulty slider, then tags the extension for bounded live rescaling | Host only; 1.0 is passthrough. Uses vanilla `set_max_health` / `set_server_damage_taken` replication. Includes bosses/lords; excludes pets, critters, and heroes. Shared breed arrays are untouched. |
@@ -117,21 +118,50 @@ terror-event hordes (the majority of visible adventure hordes) and is reached on
 through the `compose_blob` / `spawn_horde_from_terror_event_ids` count-scaling path,
 not the preset patcher (see the removed-skeletons dead end).
 
-### Mod-added breed = every table that snapshots `pairs(Breeds)` at boot (owner: `docs/engine/04`, `docs/engine/03`)
+### Mod-added breed = one atomic owner for every boot snapshot (owner: `docs/engine/04`, `docs/engine/03`)
 
 The single most-burned class in this mod. At least three systems iterate
 `pairs(Breeds)` at file-load and never re-scan: `ConflictDirector`'s `threat_values`
 upvalue [src: `conflict_director.lua:2295`], `PerformanceManager._activated_per_breed`,
-and `StatisticsDefinitions.player.*_per_breed`. A breed added after boot (the Skaven
-Warlord) is missing from all three, and each miss is a distinct crash
+and `StatisticsDefinitions.player.*_per_breed`. A breed added after boot is
+missing from all three, and each miss is a distinct crash
 (`nil * amount` in `calculate_threat_value`, `nil + 1` on first activate, a stats
 ferror on first kill). A defensive HOOK is NOT sufficient, because VMF still executes
 a disabled mod's module-level code (so `Breeds[name] = ...` sticks) but skips its hook
-registrations - so the fix must be UNCONDITIONAL direct writes at the breed-add site
-(`ConflictDirector.set_threat_value(nil, name, value)` is callable as a static
-method; direct `StatisticsDefinitions.player.*_per_breed` writes; a
-`PerformanceManager.init` hook to seed the per-mission table; forward+reverse
-`NetworkLookup.breeds`). The full checklist lives in `DEVELOPMENT.md`.
+registrations. `_et_custom_breed_registrar` therefore runs eagerly and plans
+breed/actions, statistics, already-live performance state, package aliases,
+dismemberment, faction/elite membership, hit zones, presentation, and all three
+wire axes before any real write. Those wire surfaces are
+`NetworkLookup.breeds`, `.damage_sources`, and `.statistics_path_names`; the
+last is what lets `StatisticsDatabase` encode and decode the custom breed name
+inside a hot-join statistics path [src:
+`scripts/managers/backend/statistics_database.lua:180-205,645-650`]. New rows
+must fit the engine's damage-source and statistics-path capacities [src:
+`scripts/network_lookup/network_constants.lua:121,133-139`]; a pre-existing
+exact same-name statistics segment is reused because this axis is one global set
+of path components [src: `scripts/network_lookup/network_lookup.lua:2263-2281`].
+Its schema-3 marker
+retains detached breed/action
+snapshots, all three original wire and side-surface identities, and canonical threat/elite
+values; live performance is the one dynamic counter and must remain a finite
+nonnegative integer. It seeds the hidden threat upvalue first, commits
+reversible raw writes with readiness still rollback-covered, and publishes
+`Breeds[name]` as the final raw write. Exact hot reload checks detached content
+plus identity for every mandatory surface. The only permitted action drift is
+the output set that `SET_BREED_DIFFICULTY` rewrites across both the custom clone
+and its vanilla source: declared damage, blocked damage, diminishing damage,
+and bot-threat delay [src: `scripts/settings/breeds.lua:145-225`]. Declarations,
+durations, topology, and every other field stay pinned; permitted live outputs
+must match one detached expected graph built from the current engine-baked
+source values, including cross-output cycles, sharing, and separation, and must
+remain disjoint from the source and declarations. A separate detached donor
+declaration/duration graph pins vanilla sharing without incorrectly requiring
+Foundation's custom clone to preserve it. Detached authority accepts only
+primitive keys and nil metatables. Table-valued presentation
+rows are published as graphs disjoint from every declaration and from one
+another. Only ephemeral presentation and readiness rows may be republished. The full
+transaction contract and the source-imposed opaque-threat exception live in
+`DEVELOPMENT.md`.
 
 ### Protective wrapper factories + the issue-479 tick discipline (owner: `docs/engine/07`)
 
@@ -152,9 +182,10 @@ Pulled from `DEVELOPMENT.md` and `docs/BUG_CLASSES.md` - do not re-discover thes
 - **A hook cannot make a mod-added breed safe, because a disabled mod still runs its
   module code but not its hooks.** The `Breeds[name] = ...` write sticks even when the
   user toggles et off in VMF, and the three boot-snapshot tables then crash with no hook
-  in sight. Breed registration side-effects (threat value, stats, NetworkLookup) MUST be
-  unconditional direct writes at the breed-add site, not hooks (v0.3.3->0.3.5 threat_values
-  crash, v0.3.6 stats crash; `DEVELOPMENT.md` breed-adding checklist).
+  in sight. Custom-breed registration MUST run through the eager Enemy-local
+  transaction owner, never hooks or independent owner writes (v0.3.3->0.3.5
+  threat-values crash, v0.3.6 stats crash, #1413 partial registration;
+  `DEVELOPMENT.md` breed-adding checklist).
 - **Horde presets only reach paced hordes, so mod-added breeds were rarely seen.** The
   skeleton-breed clones (v0.2.x-v0.3.8) were removed in v0.4.0 because presets patch only
   `HordeCompositionsPacing`; most adventure hordes are terror-event-driven
@@ -188,11 +219,14 @@ Pulled from `DEVELOPMENT.md` and `docs/BUG_CLASSES.md` - do not re-discover thes
 
 ## Doc maintenance
 
-#451 remains observation-only. `_et_boss_ideas_core.lua` classifies the six
-proposals without engine globals; `_et_boss_ideas.lua` reads `Breeds`,
+#451's six-candidate census remains observation-only, while its explicitly
+bounded greataxe Chosen prototype is a real custom breed registered through the
+#1413 owner. `_et_boss_ideas_core.lua` classifies the proposals without engine
+globals; `_et_boss_ideas.lua` reads `Breeds`,
 `BreedActions`, `BreedBehaviors`, `InventoryConfigurations`,
-`NetworkLookup.breeds`, and `Application.can_get("unit", ...)`. It adds one
-bounded command but no hook, breed, spawn, package load, or lookup write. Breed
+`NetworkLookup.breeds`, and `Application.can_get("unit", ...)`. It adds no hook
+or automatic pool injection; `/et_spawn_chosen` is host-only and package-
+residency-gated. Breed
 ids are serialized through `NetworkLookup.breeds` [src:
 `network_lookup.lua:267-270`; `game_object_initializers_extractors.lua:178-179`].
 The four lord sources remain `level_specific` package entries [src:

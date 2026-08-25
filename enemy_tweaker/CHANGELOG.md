@@ -1,5 +1,50 @@
 # Enemy Tweaker Changelog
 
+## 0.7.58-dev (2026-08-25): transactional custom-breed registrar (#1413) [not-started]
+
+- Registration now validates complete dense `breeds`, `damage_sources`, and
+  `statistics_path_names` tables before any write. The statistics-path identity
+  keeps each `sync_on_hot_join` per-breed statistic encodable. Malformed state
+  leaves a fresh custom breed unpublished instead of guessing an index.
+- Hot reload now revalidates all three existing wire pairs and restores readiness on
+  the new VMF mod object only after they pass; malformed reload state keeps the
+  Warlord swap and Chosen command inert.
+- Replaced the Warlord and Chosen's independent side-table writers with one
+  Enemy-local declarative registrar. It plans breed/actions, statistics,
+  already-live performance state, copied package aliases, dismemberment,
+  faction/elite membership, hit zones, presentation, and all three wire axes before
+  touching live structural state; `Breeds[name]` publishes last.
+- New damage-source and statistics-path rows require capacity proven by the live
+  `damage_source_id` and `statistics_path_lookup` network authorities. Exact
+  same-name statistics path segments already present in the global set are
+  reused and pinned without consuming capacity. Reload validates a schema-3
+  detached breed/actions snapshot, the original wire and side-surface
+  identities, canonical threat/elite values, and a finite nonnegative integral
+  performance counter. Coherent persistent tamper rejects without guessed
+  repair. Table-valued presentation rows publish mutually detached graphs,
+  disjoint from every declaration, and reload rejects in-place or re-aliased
+  presentation drift. Only ephemeral
+  presentation and readiness may republish.
+- Fresh reload accepts only the four engine-owned difficulty overlays that
+  `SET_BREED_DIFFICULTY` writes: damage, blocked damage, diminishing damage, and
+  source-declared bot-threat delay. Their declarations, durations, topology,
+  and every other action field remain pinned to the detached canonical marker;
+  allowed outputs must match one detached expected graph built from the current
+  engine-baked source action family. That preserves cycles, sharing, and
+  separation across allowed outputs and rejects aliases into the source or
+  declarations. A separate detached donor declaration/duration graph pins
+  vanilla sharing without requiring Foundation's clone to preserve it.
+- Detached canonical and presentation graphs accept only primitive keys and nil
+  metatables, rejecting mutable identity back doors before any live write.
+- Structural commit failures restore exact prior raw keys. The engine's hidden
+  threat upvalue has no getter, so an opaque setter throw is reported honestly
+  as terminal/indeterminate with the breed and readiness left unpublished.
+  Offline adversarial coverage drives both real owners through fresh hot reload,
+  coherent marker/content/identity tamper, callback isolation, false prior raw
+  shapes, and every raw-write failure while keeping the canonical shared lookup
+  helper byte-identical. The extraction is behavior-preserving, so existing
+  gameplay cards retain live verification responsibility.
+
 ## 0.7.57-dev (2026-08-25): strict shared NetworkLookup registration (#428) [not-started]
 
 - Moved the canonical NetworkLookup helper to one entry-owned load before both
