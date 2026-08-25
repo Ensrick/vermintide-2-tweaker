@@ -4,7 +4,7 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-08-13.
+Last updated: 2026-08-25.
 
 ---
 
@@ -57,7 +57,7 @@ Last updated: 2026-08-13.
 | Candidate version | WT Dev 0.12.307-dev (public mirror 0.12.306-beta). |
 | Automated | `/wt_regression_test`: require the candidate check `issue316_empire_longbow_cross_career_variable_zoom` PASS; `issue316_kruber_longbow_zoom_contract` retains the already-shipped draw/presentation boundary as a negative invariant. Offline `test_wt_longbow_variable_zoom.lua` proves the exact action identity, six-career allow-list, authored thresholds, exclusions, one hook owner, and public/Dev policy identity. |
 | Owner zoom | Equip the Empire Longbow on Mercenary and Bounty Hunter at minimum. Aim and press action special repeatedly; each cycles the authored zoom levels. Huntsman is the native control and an unrelated bow is the negative item control. |
-| Supplementary probe | The bounded `[wt:316]` lifecycle rows may establish owner-camera timing. Their historical `visible_draw=unverified` field is not part of this candidate's Solo acceptance. |
+| Retired diagnostic | The consumed `[wt:316]` base-zoom observer was removed under #499 because it did not exercise weapon-special cycling or Bounty Hunter. Current acceptance uses the two named runtime checks and the public Solo procedure only. |
 | Boundary | Owner camera state stays local and vanilla-owned. No shared action mutation, custom RPC, or new lookup row; topology is Solo. |
 
 ---

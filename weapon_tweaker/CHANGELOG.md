@@ -1,5 +1,13 @@
 # Weapon Tweaker Changelog
 
+## 0.12.310-beta (2026-08-25) -- paired Longbow diagnostic retirement baseline (#499) [not-started]
+
+- Removes the obsolete global fallback for the consumed friends-only Longbow
+  observer while preserving explicit observer injection, the production
+  variable-zoom owner, and both named #316 runtime checks.
+- This paired public baseline carries no gameplay change: no public diagnostic
+  is added, and #316's existing Solo verification behavior remains unchanged.
+
 ## 0.12.309-beta (2026-08-20) -- publication reconciliation
 
 - Rebuilds and publishes the already-reviewed 0.12.308-beta availability

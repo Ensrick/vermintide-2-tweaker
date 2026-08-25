@@ -177,17 +177,14 @@ return function(H, repo_root)
         end)
     end
 
-    H.test("dev keeps bounded #316 probe edges while both streams share the gameplay owner", function()
+    H.test("#499 retires #316 probe edges while both streams share the gameplay owner", function()
         local dev_entry = read(STREAMS[2].dir .. STREAMS[2].entry)
         local public_entry = read(STREAMS[1].dir .. STREAMS[1].entry)
-        -- The start/finish probe overlay stays in the dev entry. Its post-update
-        -- observation is passed into the byte-shared gameplay owner so that
-        -- VMF still sees only one registration on that method.
-        H.equal(count_plain(dev_entry, "-- WT_DEV_OVERLAY_BEGIN:longbow-live-probe-hooks"), 1)
-        H.equal(count_plain(dev_entry, "-- WT_DEV_OVERLAY_END:longbow-live-probe-hooks"), 1)
-        -- Start/finish remain diagnostic-only. The post-update pair moved to
-        -- the shared owner so VMF still sees exactly one registration there.
-        H.equal(count_plain(dev_entry, 'mod:hook_safe("ActionAim"'), 2)
+        -- #499 retired the consumed start/finish observation overlay. The
+        -- production variable-zoom owner remains the only ActionAim hook.
+        H.equal(count_plain(dev_entry, "longbow-live-probe-hooks"), 0)
+        H.equal(count_plain(dev_entry, 'mod:hook_safe("ActionAim"'), 0)
+        H.equal(count_plain(dev_entry, "[wt:316]"), 0)
         H.equal(count_plain(public_entry, "longbow-live-probe-hooks"), 0)
         H.equal(count_plain(public_entry, 'mod:hook_safe("ActionAim"'), 0)
         local dev_templates = read(STREAMS[2].dir .. OWNERS.templates)
@@ -208,12 +205,6 @@ return function(H, repo_root)
             H.equal(count_plain(read(STREAMS[2].dir .. owner), "[wt:316]"), 0,
                 owner .. " must not carry the dev probe telemetry")
         end
-        -- The probe still registers after the template patches it observes.
-        local dofile_at =
-            dev_entry:find('mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_cross_char_template_patches")', 1, true)
-        local probe_at = dev_entry:find("-- WT_DEV_OVERLAY_BEGIN:longbow-live-probe-hooks", 1, true)
-        H.truthy(dofile_at and probe_at)
-        H.truthy(dofile_at < probe_at, "probe must arm after the template patches are applied")
     end)
 
     H.test("public and dev owners are identical after stream normalization", function()

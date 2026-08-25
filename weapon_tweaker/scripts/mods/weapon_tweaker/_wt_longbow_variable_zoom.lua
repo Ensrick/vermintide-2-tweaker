@@ -124,9 +124,8 @@ function M.install(mod, weapons, post_update_observer)
     mod:hook_safe("ActionAim", "client_owner_post_update", function(self, dt, t)
         local ok, outcome = pcall(M.post_update, self)
         if not ok then outcome = "observer_error" end
-        local observer = post_update_observer or mod._wt316_post_update_observer
-        if observer then
-            pcall(observer, self, dt, t, outcome)
+        if post_update_observer then
+            pcall(post_update_observer, self, dt, t, outcome)
         end
     end)
     return M

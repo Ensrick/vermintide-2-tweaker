@@ -19,7 +19,6 @@ $ErrorActionPreference = 'Stop'
 if (-not $RepoRoot) { $RepoRoot = Join-Path $PSScriptRoot '..' }
 
 $WtDevOnlyFiles = @(
-    '_wt_longbow_zoom_probe.lua',
     'wt_universal_availability.lua',
     'wt_dev_anim_picker.lua',
     'wt_dev_hold_pose.lua',
@@ -133,7 +132,7 @@ function Test-WtPublicSurface {
         @{ Name = 'dev animation picker'; Pattern = '\bwt_dev_anim_picker\b|\benable_dev_anim_picker\b' },
         @{ Name = 'dev hold-pose tuner'; Pattern = '\bwt_dev_hold_pose\b|\bwt_dev_hp_[A-Za-z0-9_]+' },
         @{ Name = 'dev port-status owner'; Pattern = '\bwt_port_status\b' },
-        @{ Name = 'issue-specific live probe'; Pattern = '\b_wt290_diag\b|\[wt:290\]|\b_wt316_zoom_probe\b|\[wt:316\]|\b_wt_longbow_zoom_probe\b' },
+        @{ Name = 'dev-only issue-specific diagnostic'; Pattern = '\b_wt290_diag\b|\[wt:290\]|\b_wt316_zoom_probe\b|\[wt:316\]|\b_wt_diag_longbow_zoom\b|\b_wt_longbow_zoom_probe\b' },
         @{ Name = 'dev-only command'; Pattern = 'mod:command\(\s*"(?:animlog|force1p|force3p|wt_coverage|wt_audit_[^"]+)"' },
         @{ Name = 'dev menu label'; Pattern = 'Dev:\s' }
     )
