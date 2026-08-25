@@ -1,5 +1,14 @@
 # Tweaker: GUI — Changelog
 
+## 0.2.284 (2026-08-25) -- stable scoreboard release reconciliation (#272) [not-started]
+
+- Reissues the reviewed 0.2.283 stable scoreboard correction under the fresh
+  version reservation required after its original ship claim expired before
+  Workshop publication. The explicit-root 11-by-4 renderer, enabled-aware
+  external-scoreboard handoff, and zero-custom-transport boundary are unchanged.
+- This is an artifact/provenance reconciliation only. Paging, visibility, and
+  host-authoritative custom statistics remain owned by #272 and #1414.
+
 ## 0.2.283 (2026-08-23) -- stable scoreboard presentation parity (#272) [not-started]
 
 - Replaces the public stream's flattened multiline scoreboard overlay with the
