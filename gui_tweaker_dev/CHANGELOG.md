@@ -1,5 +1,15 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.341-dev (2026-08-25) -- name the Well of Dreams diagnostic by role (#499) [not-started]
+
+- Renames the active #257 cutscene trace owner to
+  `_gut_diag_cutscene257.lua`, replacing its legacy probe filename without
+  changing the target level, 32-event cap, fade classifier, runtime-check
+  identity, receipt format, hook topology, or live diagnostic procedure.
+- Removes one `LegacyProbe` exception from the authoritative diagnostic
+  ownership registry and adds a source contract that keeps the retired path
+  absent and the role-owned loader singular and in its historical position.
+
 ## 0.2.340-dev (2026-08-23) -- retire consumed loadout-capacity census (#499)
 
 - Removed the automatic #231 boot/window census and `/gut_loadout_capacity_probe`; its six-row/six-widget result was already consumed, and repeated window entry could emit without a session cap.
