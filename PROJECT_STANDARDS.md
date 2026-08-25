@@ -1224,7 +1224,10 @@ VMBLauncher version, and normalization-policy fingerprint. It has no timestamp
 or dirty commit id. Every inventory row explicitly remains
 `BundleAuthority = 'tracked'`; schema 3 shadows and strengthens existing tracked
 parity rather than replacing it, while untouched schema-2 receipts remain
-admissible during migration. Pre-commit validates the exact staged index,
+admissible during migration. Issue #1412 prepares the second exact mode,
+`receipt`, without switching any active row. Its contract, typed transitions,
+and deliberately disabled downstream lanes are documented in
+`docs/BUNDLE_AUTHORITY.md`. Pre-commit validates the exact staged index,
 hosted QA validates the committed PR tree, and final ship compares the same
 freshly normalized complete output set before the tracked-bundle parity gate.
 An extra, missing, renamed, changed, nested, reparse, case-colliding,

@@ -245,13 +245,19 @@ function Invoke-NormalizationSelfTest {
             Dir = 'missing-authority'; RootBundle = $rootName; BuildArtifactExclusions = @()
         }
         $wrongAuthority = @{
-            Dir = 'wrong-authority'; BundleAuthority = 'receipt'; RootBundle = $rootName;
+            Dir = 'wrong-authority'; BundleAuthority = 'generated'; RootBundle = $rootName;
+            BuildArtifactExclusions = @()
+        }
+        $receiptAuthority = @{
+            Dir = 'receipt_authority'; BundleAuthority = 'receipt'; RootBundle = $rootName;
             BuildArtifactExclusions = @()
         }
         Assert ((@(Get-BuildOutputPolicyErrors -ModEntry $missingAuthority) -match 'invalid BundleAuthority').Count -eq 1) `
             'missing BundleAuthority fails closed'
         Assert ((@(Get-BuildOutputPolicyErrors -ModEntry $wrongAuthority) -match 'invalid BundleAuthority').Count -eq 1) `
             'unsupported BundleAuthority fails closed'
+        Assert (@(Get-BuildOutputPolicyErrors -ModEntry $receiptAuthority).Count -eq 0) `
+            'receipt BundleAuthority reuses the exact normalization policy'
         $malformedAuthorityConstructorFailed = $false
         try { New-BuildOutputNormalizationPolicyProof -ModEntry $wrongAuthority | Out-Null }
         catch { $malformedAuthorityConstructorFailed = $_.Exception.Message -match 'invalid BundleAuthority' }

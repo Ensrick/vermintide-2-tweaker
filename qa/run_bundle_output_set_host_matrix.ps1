@@ -7,6 +7,7 @@ param([switch]$Quiet)
 $ErrorActionPreference = 'Stop'
 $checks = @(
     [pscustomobject]@{ Name = 'check_bundle_output_set'; Path = (Join-Path $PSScriptRoot 'check_bundle_output_set.ps1') }
+    [pscustomobject]@{ Name = 'check_bundle_authority'; Path = (Join-Path $PSScriptRoot 'check_bundle_authority.ps1') }
     [pscustomobject]@{ Name = 'check_build_output_normalization'; Path = (Join-Path $PSScriptRoot 'check_build_output_normalization.ps1') }
     [pscustomobject]@{ Name = 'check_build_receipts'; Path = (Join-Path $PSScriptRoot 'check_build_receipts.ps1') }
 )
@@ -68,5 +69,5 @@ if ($failed.Count -gt 0) {
     exit 2
 }
 
-Write-Host '[bundle-output-set-host-matrix] OK -- output-set, normalization, and receipt contracts pass in both PowerShell hosts.' -ForegroundColor Green
+Write-Host '[bundle-output-set-host-matrix] OK -- output-set, authority, normalization, and receipt contracts pass in both PowerShell hosts.' -ForegroundColor Green
 exit 0

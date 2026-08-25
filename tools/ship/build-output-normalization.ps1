@@ -1,6 +1,12 @@
 # Fail-closed normalization for explicitly inventoried, non-mod VMB build
 # artifacts. ASCII-only for Windows PowerShell 5.1 parsing.
 
+$script:VtBuildNormalizationAuthorityHelperPath = Join-Path $PSScriptRoot 'bundle-authority.ps1'
+if (-not (Test-Path -LiteralPath $script:VtBuildNormalizationAuthorityHelperPath -PathType Leaf)) {
+    throw "Bundle-authority helpers are missing: $script:VtBuildNormalizationAuthorityHelperPath"
+}
+. $script:VtBuildNormalizationAuthorityHelperPath
+
 function Initialize-BuildOutputNormalizationNativeMethods {
     if ('VtBuildNormalization.NativeMethods' -as [type]) { return }
 
@@ -215,10 +221,7 @@ function Get-BuildOutputPolicyErrors {
 
     $errors = @()
     $dir = [string]$ModEntry.Dir
-    $authority = [string]$ModEntry.BundleAuthority
-    if ($authority -cne 'tracked') {
-        $errors += "invalid BundleAuthority for ${dir}: '$authority' (expected 'tracked')"
-    }
+    $errors += @(Get-VtBundleAuthorityEntryErrors -Entry $ModEntry)
     $errors += @(Get-BuildArtifactExclusionErrors -ModEntry $ModEntry)
     return @($errors)
 }
