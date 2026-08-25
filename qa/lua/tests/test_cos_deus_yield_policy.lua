@@ -133,9 +133,25 @@ return function(H, repo_root)
     -- lock the bounded emitter semantics (printf-only, [cos:518] prefix,
     -- dedupe, 16-record per-channel cap) and the three emit sites (owner
     -- wield probe, local paint-skip, husk-side variant miss). The emitter and
-    -- probe helpers live in the _cos_518_probe.lua owner module (the entry
+    -- diagnostic helpers live in the _cos_diag_deus_yield.lua owner module (the entry
     -- file sits at its decomposition ceiling); the entry keeps the wiring.
-    local probe_module = read("_cos_518_probe.lua")
+    local probe_module = read("_cos_diag_deus_yield.lua")
+
+    H.test("Cos #518 diagnostic has one role-owned runtime consumer", function()
+        local old = io.open(root .. "_cos_518_probe.lua", "rb")
+        if old then old:close() end
+        H.equal(old, nil, "legacy probe path must stay absent")
+
+        local _, load_count = main:gsub(
+            'mod:dofile%("scripts/mods/cosmetics_tweaker/_cos_diag_deus_yield"%)', "")
+        H.equal(load_count, 1, "role-named diagnostic must have one singleton loader")
+        H.equal(main:find("_cos_518_probe", 1, true), nil,
+            "entry must not retain the retired issue-numbered path")
+        H.truthy(probe_module:find('"[cos:518] " .. fmt', 1, true),
+            "diagnostic must retain the live receipt prefix")
+        H.truthy(probe_module:find("ch.count >= 16", 1, true),
+            "diagnostic must retain its per-channel receipt cap")
+    end)
 
     local function extract_emitter()
         local body = probe_module:match(
@@ -213,8 +229,8 @@ return function(H, repo_root)
             'mod:hook_safe%("SimpleInventoryExtension", "_wield_slot"', "")
         H.equal(hook_count, 1,
             "expected exactly one SimpleInventoryExtension._wield_slot hook")
-        H.truthy(main:find('mod:dofile("scripts/mods/cosmetics_tweaker/_cos_518_probe")', 1, true),
-            "probe module not wired by the entry")
+        H.truthy(main:find('mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_deus_yield")', 1, true),
+            "role-named diagnostic module not wired by the entry")
         H.equal(main:find(
             'mod:hook_safe("SimpleInventoryExtension", "_wield_slot"', 1, true), nil,
             "entry must not retain the extracted local wield hook")

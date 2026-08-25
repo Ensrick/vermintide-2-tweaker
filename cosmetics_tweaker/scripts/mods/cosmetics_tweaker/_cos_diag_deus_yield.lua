@@ -1,11 +1,12 @@
--- _cos_518_probe.lua -- issue #518 bounded solo-visible diagnostics.
+-- _cos_diag_deus_yield.lua -- bounded solo-visible Chaos Wastes appearance-yield diagnostics.
 --
 -- The pinned #518 live-test falsifier is "the log records the wielded weapon
 -- with a non-empty skin= value", but no solo-visible skin= emitter existed in
 -- this mod (the only skin= printf repo-wide is CWV's husk-wield line,
 -- remote-only) and both #518 failure-path decisions logged via _dbg only
 -- (invisible with user mod-logging OFF). This module owns the bounded emitter
--- plus the three probe entry points the entry file calls:
+-- plus three diagnostic entry points consumed by the local-wield, offhand-
+-- apply, and equipment-assembly runtime owners:
 --   mod._cos518_owner_wield  - local player's wield in a Chaos Wastes run
 --                              (mechanism "deus"): item key + resolved skin +
 --                              deus-yield verdict; deduped per (item,skin).
@@ -16,7 +17,7 @@
 -- records per channel so a long run cannot flood the console log.
 --
 -- Owned by: cosmetics_tweaker.lua entry point. Consumed via: mod:dofile.
--- Shared state: reads mod._la_deus_weapon_yield (the entry's #518 gate) at
+-- Shared state: reads mod._la_deus_weapon_yield (the yield-policy owner's gate) at
 -- call time; keeps bounded dedupe state in mod._cos518_probe_state.
 
 local mod = get_mod("cosmetics_tweaker")

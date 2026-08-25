@@ -1,5 +1,16 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.218-dev (2026-08-24) -- name Chaos Wastes yield diagnostic by role (#499) [not-started]
+
+- Renames the active Chaos Wastes appearance-yield diagnostic to
+  `_cos_diag_deus_yield.lua` so its filename describes the observed boundary
+  rather than carrying an issue-numbered probe suffix.
+- Preserves the historical `[cos:518]` receipt, existing issue ownership,
+  sixteen-record per-channel cap, arming, runtime exports, consumer call order,
+  and all three owner-wield, paint-skip, and husk-miss decisions.
+- Removes one active `LegacyProbe` exception and adds exact coverage for the
+  retired path plus singleton loader, prefix, and cap ownership.
+
 ## 0.9.217-dev (2026-08-24) -- persist dual-weapon offhands at Apply (#702) [verify-fix]
 
 - Makes successful **Apply** the durable persistence boundary for the exact

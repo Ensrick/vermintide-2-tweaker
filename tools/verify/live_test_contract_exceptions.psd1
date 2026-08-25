@@ -624,7 +624,7 @@
             )
         }
         @{
-            Marker='[event-inject:393]';ModId='event_tweaker';ModTrees=@{event_tweaker='4f160ee4338da1077c74a1189ce546852c37d415'}
+            Marker='[event-inject:393]';ModId='event_tweaker';ModTrees=@{event_tweaker='4d509704323308c24e3ad00929159b1abeb7330c'}
             SourcesByMod=@{event_tweaker='event_tweaker/scripts/mods/event_tweaker/_evt_diagnostics.lua'}
             Signature='[event-inject:393] settled verdict=%s evidence=%s | injected=[%s] max_intensity=%s decay_per_second=%s decay_delay=%s add_per_pct_dmg=%s delay_horde=%s delay_specials=%s delay_mini_patrol=%s cached_horde=%s cached_specials=%s cached_mini_patrol=%s'
             Bound='one settled receipt per weak-key Pacing instance'
@@ -1208,7 +1208,7 @@
         }
         @{
             ModId='cosmetics_tweaker'; ModTree='e44f7693290133ab59abcd8effd071fa485dd68c'
-            Source='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_518_probe.lua'
+            Source='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_diag_deus_yield.lua'
             Marker='[cos:518]'; AddRoute=$true
             Signature='[cos:518] OWNER-WIELD slot=%s item=%s skin=%s deus_yield=%s'
             Bound='signature-deduplicated owner-wield evidence under a per-channel sixteen-row cap'
@@ -1225,7 +1225,7 @@
         }
         @{
             ModId='cosmetics_tweaker'; ModTree='e44f7693290133ab59abcd8effd071fa485dd68c'
-            Source='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_518_probe.lua'
+            Source='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_diag_deus_yield.lua'
             Marker='[cos:518]'; AddRoute=$true
             Signature='[cos:518] PAINT-SKIP ctx=ingame bid=%s (deus run: CW upgrade cosmetics win)'
             Bound='signature-deduplicated paint-skip evidence under a per-channel sixteen-row cap'
@@ -1242,7 +1242,7 @@
         }
         @{
             ModId='cosmetics_tweaker'; ModTree='e44f7693290133ab59abcd8effd071fa485dd68c'
-            Source='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_518_probe.lua'
+            Source='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_diag_deus_yield.lua'
             Marker='[cos:518]'; AddRoute=$true
             Signature='[cos:518] HUSK-MISS authored variant %s unavailable (wearer=%s template=%s)'
             Bound='signature-deduplicated authored-variant miss evidence under a per-channel sixteen-row cap'
@@ -1363,7 +1363,7 @@
             )
         }
         @{
-            ModId='event_tweaker'; ModTree='4f160ee4338da1077c74a1189ce546852c37d415'
+            ModId='event_tweaker'; ModTree='4d509704323308c24e3ad00929159b1abeb7330c'
             Source='event_tweaker/scripts/mods/event_tweaker/_evt_diag_tzeentch_twins.lua'
             Marker='[et:1149t]'; AddRoute=$true
             Signature='[et:1149t] %s'
