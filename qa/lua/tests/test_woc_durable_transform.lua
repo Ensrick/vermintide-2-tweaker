@@ -18,7 +18,26 @@ return function(H, repo_root)
 		}
 	end
 
-	local function fixture(surface, should_yield)
+	H.test("WOC #613 production tracking policy separates event previews from gameplay polling", function()
+		for _, surface in ipairs({
+			"owner-spawn", "husk-spawn", "character-preview", "item-preview",
+			"cim-preview", "lobby-preview", "score-preview",
+		}) do
+			H.equal(module.should_track_surface(surface), true, surface)
+		end
+		H.equal(module.should_track_surface("unknown-preview"), false)
+		H.equal(module.should_poll_record({ surface = "owner-spawn" }), true)
+		H.equal(module.should_poll_record({ surface = "husk-spawn" }), true)
+		for _, surface in ipairs({
+			"character-preview", "item-preview", "cim-preview",
+			"lobby-preview", "score-preview",
+		}) do
+			H.equal(module.should_poll_record({ surface = surface }), false, surface)
+		end
+		H.equal(module.should_poll_record(nil), false)
+	end)
+
+	local function fixture(surface, should_yield, track_preview)
 		local unit = {}
 		local live = true
 		local writes, events = 0, {}
@@ -59,6 +78,11 @@ return function(H, repo_root)
 			end,
 			should_track = function(value)
 				return value == "owner-spawn" or value == "husk-spawn"
+					or track_preview == true
+			end,
+			should_poll = function(record)
+				return record.surface == "owner-spawn"
+					or record.surface == "husk-spawn"
 			end,
 			should_yield = function() return should_yield == true end,
 			diagnostic = function(kind) events[#events + 1] = kind end,
@@ -178,7 +202,7 @@ return function(H, repo_root)
 		end
 	end)
 
-	H.test("WOC #613 tracks husks, prunes dead units, and leaves previews one-shot", function()
+	H.test("WOC #613 polls husks but retains preview targets for event replay", function()
 		local husk, unit, _, _, stomp, writes, _, kill = fixture("husk-spawn")
 		H.truthy(husk:apply(unit, transform_spec(), "3p", "husk-spawn"))
 		stomp()
@@ -190,13 +214,80 @@ return function(H, repo_root)
 		H.equal(husk:count(), 0)
 
 		local preview, preview_unit, _, _, preview_stomp, preview_writes =
-			fixture("character-preview")
+			fixture("character-preview", false, true)
 		H.truthy(preview:apply(preview_unit, transform_spec(), "3p", "character-preview"))
 		preview_stomp()
 		applied, tracked = preview:step()
 		H.equal(applied, 0)
-		H.equal(tracked, 0)
+		H.equal(tracked, 1)
 		H.equal(preview_writes(), 1)
+		local retained, reason = preview:reapply(
+			preview_unit, "preview-post-animation:trigger_pose_animation")
+		H.truthy(retained)
+		H.equal(reason, "retained")
+		H.equal(preview_writes(), 2)
+		H.equal(preview:forget(preview_unit), true)
+		H.equal(preview:count(), 0)
+		H.equal(preview:reapply(preview_unit, "late-edge"), false)
+	end)
+
+	H.test("WOC #613 event reapply contains rejected throwing and lying adapters", function()
+		local unit, mode, read_throws = {}, "retain", false
+		local state = {
+			position = { 1, 2, 3 }, scale = { 1, 1, 1 },
+			rotation = { 0, 0, 0, 1 },
+		}
+		local expected_rotation = { 0.5, -0.5, -0.5, 0.5 }
+		local function copy_state()
+			if read_throws then error("planted read failure") end
+			return {
+				position = copy(state.position), scale = copy(state.scale),
+				rotation = { state.rotation[1], state.rotation[2],
+					state.rotation[3], state.rotation[4] },
+			}
+		end
+		local owner = module.new({
+			alive = function(value) return value == unit end,
+			read = function() return copy_state() end,
+			rotation_components = function() return expected_rotation end,
+			apply = function(_, spec)
+				if mode == "throw" then error("planted apply failure") end
+				if mode == "reject" then return false, { ok = false } end
+				if mode == "retain" then
+					state.position = copy(spec.position)
+					state.scale = copy(spec.scale)
+					state.rotation = { expected_rotation[1], expected_rotation[2],
+						expected_rotation[3], expected_rotation[4] }
+				end
+				return true, { ok = true }
+			end,
+			should_track = function() return true end,
+			diagnostic = function() error("planted diagnostic failure") end,
+		})
+		H.truthy(owner:apply(unit, transform_spec(), "3p", "lobby-preview"))
+
+		state.position = { 9, 9, 9 }
+		mode = "reject"
+		local retained, reason = owner:reapply(unit, "rejected")
+		H.equal(retained, false)
+		H.equal(reason, "apply-rejected")
+
+		mode = "throw"
+		retained, reason = owner:reapply(unit, "throwing")
+		H.equal(retained, false)
+		H.equal(reason, "apply-error")
+
+		mode = "lie"
+		retained, reason = owner:reapply(unit, "lying-setter")
+		H.equal(retained, false)
+		H.equal(reason, "readback-mismatch")
+
+		mode, read_throws = "retain", true
+		retained, reason = owner:reapply(unit, "throwing-reader")
+		H.equal(retained, false)
+		H.equal(reason, "readback-unavailable")
+		H.equal(owner:count(), 1,
+			"contained adapter failures must not orphan the durable record")
 	end)
 
 	H.test("WOC #613 yields to an intentional live dev-tuner edit", function()
@@ -338,6 +429,11 @@ return function(H, repo_root)
 		local registration_file = assert(io.open(registration_path, "rb"))
 		local registration = registration_file:read("*a")
 		registration_file:close()
+		local preview_owner_path = repo_root
+			.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_issue613_preview_owner.lua"
+		local preview_owner_file = assert(io.open(preview_owner_path, "rb"))
+		local preview_owner = preview_owner_file:read("*a")
+		preview_owner_file:close()
 		H.truthy(source:find("_appearance_lib.new(_appearance.appearance_api(_G))", 1, true))
 		H.equal(source:find("_appearance_lib.new()", 1, true), nil)
 		H.truthy(source:find("expects_first_person_unit(owner_unit_1p)", 1, true))
@@ -347,7 +443,8 @@ return function(H, repo_root)
 		H.truthy(source:find('mod:command("woc_pose_audit"', 1, true))
 		H.truthy(source:find("if ok and value ~= nil then return value end", 1, true))
 		H.equal(source:find("return ok and value ~= nil and value or fallback", 1, true), nil)
-		H.truthy(source:find("transform.rotation[1] ~= -180", 1, true))
+		H.truthy(preview_owner:find("transform.rotation[1] ~= -180", 1, true))
+		H.truthy(preview_owner:find("transform_1p.scale[1] ~= 0.8", 1, true))
 		H.truthy(registration:find("_moveset.item_has_trait(live, _moveset.POISON_TRAIT)", 1, true))
 		H.truthy(registration:find("live.properties[_moveset.CRIT_PROPERTY] == 1", 1, true))
 		H.equal(registration:find("_moveset.item_has_trait(entry, _moveset.POISON_TRAIT)",

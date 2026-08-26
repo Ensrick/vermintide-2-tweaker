@@ -1,5 +1,6 @@
 @{
     SchemaVersion = 1
+    Includes = @('appearance_contracts.issue613.psd1')
 
     # Closed vocabulary. Canonical surface and edge NAMES are owned by
     # tools/shared_lib/_lib_appearance_descriptor.lua (M.CELLS / M.EDGES) and
@@ -1155,7 +1156,10 @@
                 'weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_appearance_policy.lua'
                 'weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_blightreaper_pulse.lua'
                 'weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_durable_transform.lua'
+                'weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_issue613_preview_owner.lua'
                 'weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_mod_unit_preview.lua'
+                'weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_shared_relic_runtime.lua'
+                'weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_team_preview_identity.lua'
                 'weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua'
             )
             Concerns = @(
@@ -1168,10 +1172,10 @@
                         husk = @{ Disposition = 'covered'; Evidence = 'husk GearUtils return adapter consumes the same descriptor without transform RPC' }
                         inventory_preview = @{ Disposition = 'covered'; Evidence = 'HeroPreviewer character-preview adapter consumes the same descriptor' }
                         illusion_browser = @{ Disposition = 'covered'; Evidence = 'LootItemUnitPreviewer item-preview adapter consumes the same descriptor' }
-                        cim_preview = @{ Disposition = 'covered'; Evidence = 'Athanor reuses the LootItemUnitPreviewer item-preview adapter' }
+                        cim_preview = @{ Disposition = 'covered'; Evidence = 'the exact HeroWindowWeaveProperties vararg factory marks only its returned LootItemUnitPreviewer before the transform adapter runs' }
                         crafting_preview = @{ Disposition = 'deferred'; Reason = 'the vanilla forge layout does not instantiate LootItemUnitPreviewer, so WOC has no proven bench-specific unit-transform adapter' }
-                        lobby = @{ Disposition = 'covered'; Evidence = 'MenuWorldPreviewer character-preview adapter consumes the same descriptor' }
-                        score_team = @{ Disposition = 'covered'; Evidence = 'score/end character preview reuses the HeroPreviewer/MenuWorldPreviewer adapter' }
+                        lobby = @{ Disposition = 'covered'; Evidence = 'exact live human TeamPreviewer identity selects the immutable item and the HeroPreviewer adapter retains its absolute transform target' }
+                        score_team = @{ Disposition = 'covered'; Evidence = 'exact player-controlled score identity selects the immutable item and the HeroPreviewer adapter retains its absolute transform target' }
                         hold_tab = @{ Disposition = 'not-applicable'; Reason = 'Hold-Tab renders item cards and icons, not a weapon unit transform' }
                         specials = @{ Disposition = 'deferred'; Reason = 'Blightreaper transform retention across weapon-special presentation has not been independently proven' }
                         remote_audio = @{ Disposition = 'not-applicable'; Reason = 'the Blightreaper unit transform contract does not own remote audio presentation' }
@@ -1187,15 +1191,15 @@
                         wield = @{ Disposition = 'covered'; Evidence = 'wielded owner and husk units are weak-tracked for measured pose drift' }
                         customize = @{ Disposition = 'not-applicable'; Reason = 'the immutable relic has no selectable cosmetic transform' }
                         style_change = @{ Disposition = 'not-applicable'; Reason = 'Blightreaper has no combat-style transform variants' }
-                        career_change = @{ Disposition = 'not-applicable'; Reason = 'the immutable relic transform is independent of the wearer career' }
-                        mission_transition = @{ Disposition = 'covered'; Evidence = 'replacement units consume the descriptor independently after transition' }
-                        respawn = @{ Disposition = 'covered'; Evidence = 'replacement GearUtils units consume the descriptor independently after respawn' }
-                        hot_join = @{ Disposition = 'covered'; Evidence = 'new remote husk spawn consumes the local render descriptor' }
-                        peer_ready = @{ Disposition = 'not-applicable'; Reason = 'the transform is local presentation with no peer-ready payload' }
+                        career_change = @{ Disposition = 'deferred'; Reason = 'the values are career-independent, but a career-driven preview/unit replacement has no composed transform-retention fixture' }
+                        mission_transition = @{ Disposition = 'deferred'; Reason = 'two isolated unit applications do not prove the real game-state transition and replacement hook chain' }
+                        respawn = @{ Disposition = 'deferred'; Reason = 'clear-before-respawn teardown is covered, but the complete replacement spawn-to-retained-transform chain is not' }
+                        hot_join = @{ Disposition = 'deferred'; Reason = 'authenticated identity query is covered separately; a hot-join husk spawn consuming and retaining this transform is not composed here' }
+                        peer_ready = @{ Disposition = 'deferred'; Reason = 'the authenticated snapshot re-equips the exact preview item, but the current fixture does not continue through asynchronous spawn into real transform retention' }
                         parity_ready = @{ Disposition = 'not-applicable'; Reason = 'the transform is local presentation with no parity payload' }
-                        rejoin = @{ Disposition = 'covered'; Evidence = 'a re-created husk consumes a new local render descriptor' }
+                        rejoin = @{ Disposition = 'deferred'; Reason = 'leave/rejoin identity retirement is covered separately, but a recreated husk retained-transform chain is not' }
                         preview_open = @{ Disposition = 'covered'; Evidence = 'each preview-spawn recipe resolves the named render node' }
-                        preview_reopen = @{ Disposition = 'covered'; Evidence = 'a replacement preview unit has an independent weak application guard' }
+                        preview_reopen = @{ Disposition = 'deferred'; Reason = 'deterministic teardown is covered, but close/reopen through a newly spawned retained unit is not composed' }
                         lobby_score_create = @{ Disposition = 'covered'; Evidence = 'character-preview creation resolves the named render node on each unit' }
                         mod_disable_restore = @{ Disposition = 'deferred'; Reason = 'live restoration of already-spawned imported units on mod disable is not proven' }
                     }
@@ -1208,20 +1212,30 @@
                             Surfaces = @(
                                 'owner_1p', 'owner_3p', 'bot', 'husk',
                                 'inventory_preview', 'illusion_browser', 'cim_preview',
-                                'crafting_preview', 'lobby', 'score_team'
+                                'lobby', 'score_team'
                             )
-                            ReplayEdges = @(
-                                'initial_spawn', 'equip', 'wield', 'hot_join', 'rejoin',
-                                'preview_open', 'preview_reopen', 'lobby_score_create'
-                            )
+                            ReplayEdges = @('initial_spawn', 'equip', 'wield', 'preview_open', 'lobby_score_create')
                         }
                         @{
-                            Path = 'qa/lua/tests/test_woc_blightreaper_pulse.lua'
+                            Path = 'qa/lua/tests/test_woc_durable_transform.lua'
                             Names = @(
-                                'WOC #712 replays transform for replacement units after mission transition'
+                                'WOC #613 polls husks but retains preview targets for event replay'
+                                'WOC #613 event reapply contains rejected throwing and lying adapters'
                             )
-                            Surfaces = @('owner_3p')
-                            ReplayEdges = @('mission_transition', 'respawn')
+                            Surfaces = @('inventory_preview', 'lobby', 'score_team')
+                            ReplayEdges = @('preview_open')
+                        }
+                        @{
+                            Path = 'qa/lua/tests/test_woc_mod_unit_preview.lua'
+                            Names = @(
+                                'WOC #613 package hooks borrow aliases and preserve only resident custom units'
+                                'WOC #613 delayed TeamPreviewer identity replays once and fails stale closed'
+                                'WOC #613 live lobby resolver stamps the exact human wearer'
+                                'WOC #613 preview animation edges coalesce to absolute reapply readback'
+                                'WOC #613 Athanor surface is marked only by the exact vararg factory'
+                            )
+                            Surfaces = @('inventory_preview', 'illusion_browser', 'cim_preview', 'lobby', 'score_team')
+                            ReplayEdges = @('preview_open', 'lobby_score_create')
                         }
                     )
                 }

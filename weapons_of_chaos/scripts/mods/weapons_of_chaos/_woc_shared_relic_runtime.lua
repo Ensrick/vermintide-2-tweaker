@@ -17,6 +17,7 @@ function M.new(context)
 		"shared relic runtime requires remote identity cache")
 	local _rt_register = assert(context.rt_register,
 		"shared relic runtime requires regression registrar")
+	local _identity_listener = context.identity_listener
 
 	-- Issue #934: one Blightreaper may be actively equipped in a WOC lobby.  The
 	-- host owns the lease and the exact render identity carried in its monotonic
@@ -113,6 +114,31 @@ function M.new(context)
 		return nm and nm.is_server == true
 	end
 
+	local function _lease_identity_snapshot(peer_id)
+		if not _relic_lease_state_active
+				or type(peer_id) ~= "string" or peer_id == ""
+				or type(_relic_lease_view.authority_peer) ~= "string"
+				or _relic_lease_view.authority_peer == ""
+				or type(_relic_lease_view.authority_epoch) ~= "number"
+				or _relic_lease_view.authority_epoch < 1 then return nil end
+		local holder = _relic_lease_view.holder == peer_id
+		return {
+			key = ITEM_KEY,
+			peer_id = peer_id,
+			authority_peer = _relic_lease_view.authority_peer,
+			authority_epoch = _relic_lease_view.authority_epoch,
+			generation = _relic_lease_view.generation,
+			slot_melee = holder and _relic_lease_view.holder_melee == true or false,
+			slot_ranged = holder and _relic_lease_view.holder_ranged == true or false,
+		}
+	end
+
+	local function _lease_notify_identity(peer_id, reason)
+		if type(_identity_listener) ~= "function" then return end
+		local snapshot = _lease_identity_snapshot(peer_id)
+		if snapshot then pcall(_identity_listener, peer_id, snapshot, reason) end
+	end
+
 	local function _lease_refresh_trophies(reason)
 		if _relic_trophy_refreshing then return end
 		_relic_trophy_refreshing = true
@@ -186,6 +212,7 @@ function M.new(context)
 		for peer_id in pairs(touched) do
 			_lease_rewield_remote_peer(peer_id)
 		end
+		return touched
 	end
 
 	local function _lease_begin_authority_epoch(reason)
@@ -254,6 +281,14 @@ function M.new(context)
 
 	local function _lease_apply_view(authority_peer_id, authority_epoch,
 			generation, holder, holder_melee, holder_ranged, reason)
+		local prior = {
+			authority_peer = _relic_lease_view.authority_peer,
+			authority_epoch = _relic_lease_view.authority_epoch,
+			generation = _relic_lease_view.generation,
+			holder = _relic_lease_view.holder,
+			holder_melee = _relic_lease_view.holder_melee,
+			holder_ranged = _relic_lease_view.holder_ranged,
+		}
 		local holder_present = type(holder) == "string" and holder ~= ""
 		if type(holder_melee) ~= "boolean" or type(holder_ranged) ~= "boolean"
 				or (not holder_present and (holder_melee or holder_ranged)) then
@@ -283,8 +318,27 @@ function M.new(context)
 		_relic_lease_view.holder_melee = holder_melee
 		_relic_lease_view.holder_ranged = holder_ranged
 		_relic_lease_query_complete = true
-		_lease_apply_authoritative_remote_identity(
+		local touched = _lease_apply_authoritative_remote_identity(
 			next_holder, holder_melee, holder_ranged)
+		-- TeamPreviewer consumers use the same accepted host snapshot as gameplay
+		-- husks. A new authority/generation remains a new consumer token even when
+		-- its slot bits equal the prior cache, so include the current holder in that
+		-- case. Equal complete replays produce neither another rewield nor another
+		-- preview request.
+		local identity_changed = prior.authority_peer ~= _relic_lease_view.authority_peer
+			or prior.authority_epoch ~= _relic_lease_view.authority_epoch
+			or prior.generation ~= next_generation
+			or prior.holder ~= next_holder
+			or prior.holder_melee ~= holder_melee
+			or prior.holder_ranged ~= holder_ranged
+		local notify = {}
+		for peer_id in pairs(touched) do notify[peer_id] = true end
+		if identity_changed and next_holder and (holder_melee or holder_ranged) then
+			notify[next_holder] = true
+		end
+		for peer_id in pairs(notify) do
+			_lease_notify_identity(peer_id, reason)
+		end
 		if changed then
 			_lease_diag("lease state reason=%s generation=%d holder=%s",
 				tostring(reason), next_generation, tostring(next_holder or "none"))
@@ -1186,6 +1240,10 @@ function M.new(context)
 			_lease_on_local_identity(slot_name, is_blightreaper)
 		end
 		return is_local_human
+	end
+
+	function runtime:identity_for_peer(peer_id)
+		return _lease_identity_snapshot(peer_id)
 	end
 
 	if context.test_api then

@@ -54,10 +54,11 @@ return function(H, repo_root)
 				calls.transform_specs[#calls.transform_specs + 1] = spec
 				calls.transform_perspectives[#calls.transform_perspectives + 1] = perspective
 				calls.transform_surfaces[#calls.transform_surfaces + 1] = surface
+				local expected = policy.transform_for(perspective)
 				return value == unit and spec.node == 2
-					and spec.scale == policy.TRANSFORM.scale
-					and spec.offset == policy.TRANSFORM.offset
-					and spec.rotation == policy.TRANSFORM.rotation
+					and spec.scale == expected.scale
+					and spec.offset == expected.offset
+					and spec.rotation == expected.rotation
 			end,
 		}
 		return pulse.new(policy, transform, api, contract), unit, calls
@@ -99,23 +100,26 @@ return function(H, repo_root)
 		H.equal(calls.transforms, 1)
 	end)
 
-	H.test("WOC #613 sends the exact canonical 0.9 multiplier transform through 1P and 3P pulse paths", function()
-		for _, perspective in ipairs({ "1p", "3p" }) do
+	H.test("WOC #613 sends exact per-perspective multipliers through both pulse paths", function()
+		for _, row in ipairs({ { "1p", 0.8 }, { "3p", 0.9 } }) do
+			local perspective, expected_scale = row[1], row[2]
 			local runtime, unit, calls = fixture()
 			local ok, reason = runtime.apply(
-				unit, policy.TRANSFORM, perspective, "perspective-contract")
+				unit, policy.transform_for(perspective), perspective,
+				"perspective-contract")
 			H.truthy(ok, perspective)
 			H.equal(reason, "applied")
 			H.equal(calls.transforms, 1)
 			H.equal(calls.transform_specs[1].node, 2)
 			H.equal(calls.transform_perspectives[1], perspective)
 			H.equal(calls.transform_surfaces[1], "perspective-contract")
-			H.deep_equal(calls.transform_specs[1].scale, { 0.9, 0.9, 0.9 })
+			H.deep_equal(calls.transform_specs[1].scale,
+				{ expected_scale, expected_scale, expected_scale })
 			H.deep_equal(calls.transform_specs[1].offset, { 0, 0, -0.3 })
 		end
 	end)
 
-	H.test("WOC #613 pulse forwards surface and perspective to durable owner", function()
+	H.test("WOC #613 pulse enrolls production preview tracking before event reapply", function()
 		local state = {
 			position = { 0, 0, 0 }, scale = { 1, 1, 1 },
 			rotation = { 0, 0, 0, 1 },
@@ -136,7 +140,8 @@ return function(H, repo_root)
 				state.rotation = { 0.5, -0.5, -0.5, 0.5 }
 				return true
 			end,
-			should_track = function(surface) return surface == "owner-spawn" end,
+			should_track = durable.should_track_surface,
+			should_poll = durable.should_poll_record,
 		})
 		local runtime = pulse.new(policy, owner, {
 			unit = {
@@ -152,10 +157,21 @@ return function(H, repo_root)
 			script_unit = { set_material_variable = function() end },
 		})
 		local ok, reason = runtime.apply(
-			owner_unit, policy.TRANSFORM, "1p", "owner-spawn")
+			owner_unit, policy.TRANSFORM, "3p", "lobby-preview")
 		H.equal(ok, true)
 		H.equal(reason, "applied")
 		H.equal(owner:count(), 1)
+		H.deep_equal(state.position, { 0, 0, -0.3 })
+		H.deep_equal(state.scale, { 0.9, 0.9, 0.9 })
+		state.position, state.scale, state.rotation =
+			{ 0, 0, 0 }, { 1, 1, 1 }, { 0, 0, 0, 1 }
+		local applied, tracked = owner:step()
+		H.equal(applied, 0, "preview records must not enter gameplay polling")
+		H.equal(tracked, 1)
+		local retained, replay_reason = owner:reapply(
+			owner_unit, "preview-post-animation:play_character_animation")
+		H.equal(retained, true)
+		H.equal(replay_reason, "retained")
 		H.deep_equal(state.position, { 0, 0, -0.3 })
 		H.deep_equal(state.scale, { 0.9, 0.9, 0.9 })
 	end)
@@ -189,9 +205,12 @@ return function(H, repo_root)
 			{ "3p", "husk-spawn" },
 			{ "3p", "character-preview" },
 			{ "1p", "item-preview" },
+			{ "1p", "cim-preview" },
+			{ "3p", "lobby-preview" },
+			{ "3p", "score-preview" },
 		}) do
 			local runtime, unit, calls = fixture()
-			H.truthy(runtime.apply(unit, policy.TRANSFORM, row[1], row[2]))
+			H.truthy(runtime.apply(unit, policy.transform_for(row[1]), row[1], row[2]))
 			H.equal(calls.transforms, 1)
 			H.equal(calls.transform_specs[1].node, 2)
 			H.equal(calls.transform_perspectives[1], row[1])
@@ -199,7 +218,7 @@ return function(H, repo_root)
 		end
 	end)
 
-	H.test("WOC #712 replays transform for replacement units after mission transition", function()
+	H.test("WOC #712 independent replacement units receive fresh transform state", function()
 		local before, first_unit, first_calls = fixture()
 		H.truthy(before.apply(first_unit, policy.TRANSFORM, "3p", "owner-spawn"))
 		local after, replacement_unit, replacement_calls = fixture()

@@ -455,19 +455,29 @@ spawned WOC unit, then replaces every texture and restores the trophy's exact
 gold/intensity/pulse values. Missing resources fail closed before Stingray C
 calls; there is no polling or RPC. Full hashes, bindings, source citations, and
 the rejected compiler paths live in `tools/BLIGHTREAPER_ASSET_PIPELINE.md`.
-The canonical held transform uses uniform XYZ baseline multiplier
-`{0.9, 0.9, 0.9}`, Euler XYZ rotation `{-180, -90, -90}`, and linked-position
-offset `{0, 0, -0.3}`. Live `0.1.33-dev` evidence measured the named render
-node's native scale as `{100,100,100}`; the durable owner must therefore resolve
-the multiplier to absolute `{90,90,90}` before invoking the shared appearance
-primitive. Static previews apply the resolved pose once. Animated 1P/3P gameplay
-units use `_woc_durable_transform.lua`: resolve the exact named `blightreaper`
+The canonical held transform uses XYZ baseline multiplier `{0.8, 0.8, 0.8}`
+for first person and `{0.9, 0.9, 0.9}` for third person, with shared Euler XYZ
+rotation `{-180, -90, -90}` and linked-position offset `{0, 0, -0.3}`. Live
+`0.1.33-dev` evidence measured the named render node's native scale as
+`{100,100,100}`; the durable owner must therefore resolve those multipliers to
+absolute `{80,80,80}` and `{90,90,90}` respectively before invoking the shared
+appearance primitive. Animated 1P/3P gameplay units use `_woc_durable_transform.lua`:
+resolve the exact named `blightreaper`
 render node, capture its baseline, compare retained numeric state, and reapply
 the same resolved absolute pose only after animation drift. This weak owner
 prunes dead units, emits no RPC, and yields to an intentional non-identity WT
 development-tuner edit. A successful spawn-time `pcall` is not retention proof
 (issue #613, v0.1.24-dev), and a retained setter state is not visual success if
 its scale semantics changed with the target node (issue #712, v0.1.33-dev).
+
+Hero/Menu preview units retain the same resolved absolute target in weak records
+without entering that gameplay polling loop. Concrete character/pose animation
+methods queue one coalesced next-`post_update` reapply and immediate readback;
+slot destruction and `clear_units` forget unit records before vanilla teardown,
+while preview exit retires the remaining identity/event maps. Loot/Athanor previews retain
+weak records too, but only the Hero/Menu classes currently expose a
+source-proven animation edge to drain. These structural checks deliberately do
+not claim that the result has passed in-game visual inspection.
 
 `/woc_pose_audit` is the non-mutating diagnostic boundary for this owner. It
 logs at most eight tracked units with surface, perspective, final readback,
@@ -485,6 +495,20 @@ replacing, the atomic durable transform above: the canonical producer selects
 the authored unit, then the returned unit receives the retained named-render-node pose.
 Do not add a surface-local normal-Sword correction. Bounded unit debug-name,
 hash, and mesh-node diagnostics provide mission-transition evidence.
+
+Remote lobby and end-score rows cannot use that local backend identity: their
+`preview_items` are intentionally vanilla/net-safe. `_woc_team_preview_identity`
+therefore resolves only an exact non-bot live profile+career+local-player-1 row
+or an exact player-controlled local-player-1 score snapshot row. The lease is
+peer-keyed and accepts only local player 1, so every other or unreadable local
+player id fails closed instead of aliasing onto that peer. `_woc_mod_unit_preview` then consults the
+read-only semantic view of the accepted host lease snapshot for that peer and
+slot. It retains the original vanilla row so an authoritative release restores
+it. If a new snapshot arrives after the row exists, one generation/key/session-
+bound request is drained on `post_update`; identical replay dedupes and stale or
+destroyed consumers do nothing. Athanor identity is unrelated to wearer
+identity and is marked only on the previewer returned by
+`HeroWindowWeaveProperties._create_item_previewer`'s vararg hook.
 
 Every future visual feature must extend the appearance matrix and its
 offline/live transition checks in the same change. Keep-only success without a
@@ -597,6 +621,13 @@ the receiver rejects a reply retained from a closed client session. The
 ordinary loadout RPC remains the vanilla `es_1h_sword`
 shadow required by issues #422/#654, so a peer without WOC never decodes a WOC
 item, rarity, trait, trophy, or channel payload.
+
+The same accepted semantic snapshot is the only remote-wearer source for
+TeamPreviewer. Each changed peer cache entry first triggers the existing exact
+gameplay re-wield and then one listener notification for any already-created
+preview consumer. Equal semantic snapshots have no touched peer and therefore
+produce neither another re-wield nor another preview request. The listener
+never polls and never creates a second identity channel.
 
 `HeroViewStateOverview._set_loadout_item` is the first fail-closed UI boundary:
 vanilla ignores `BackendUtils.set_loadout_item`'s return and otherwise queues
