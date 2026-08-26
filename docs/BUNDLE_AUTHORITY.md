@@ -30,14 +30,14 @@ plane does not itself migrate a real mod.
 
 ## Immutable publication snapshots
 
-Issue #1422 adds one authority-neutral byte snapshot boundary without enabling
-any receipt downstream lane. `Get-VtPublicationSnapshot` derives inventory,
+Issue #1422 adds one authority-neutral byte snapshot boundary.
+`Get-VtPublicationSnapshot` derives inventory,
 root, mode, metadata, and source inputs from one exact commit. In `tracked`
 mode it returns the same Git blob bytes and complete output-set identity the
 publisher already consumed.
 
-The receipt path exists for offline fixtures and future reviewed phases only.
-It requires the exact committed schema-3 receipt, exact scoped ignore rule,
+The receipt path requires the exact committed schema-3 receipt, exact scoped
+ignore rule,
 zero committed `bundleV2` outputs, commit-qualified source and normalization
 proof, the expected builder version, and a byte-identical materialized output
 set. Every materialized file is opened with restrictive handles; its bytes,
@@ -45,7 +45,8 @@ length, hash, file identity, directory identity, and the complete directory
 snapshot are reconciled before the handles are released. Returned byte arrays
 are detached from disk and from one another.
 
-This snapshot proves bytes; it does not grant authority to publish them.
+This snapshot proves bytes; the separate Phase D gates below decide whether a
+consumer may publish them.
 
 ## Typed transitions
 
@@ -70,18 +71,21 @@ validation. `qa/check_release_bundle_atomicity.ps1` delegates typed transition
 and receipt-mode runtime atomicity to that contract instead of weakening its
 ordinary tracked-bundle retirement rule.
 
-## Deliberately disabled downstream lanes
+## Receipt-authority publication boundary
 
-Receipt authority currently supports normalization, BuildOnly output
-generation, receipt validation, and the offline immutable snapshot fixture
-only. Workshop publication, local/remote deployment, updater consumption, and
-recovery consumption remain disabled.
-`tools/ship/ship.ps1` rejects receipt authority before acquiring the machine
-transaction lease unless `-BuildOnly` was selected. Publisher and
-Workshop-receipt boundaries continue to fail closed on non-tracked authority.
-Both publisher tracked gates remain in place even though the shared snapshot
-can prove receipt bytes.
+Issue #1426 enables only Workshop/GitHub publication for receipt authority.
+Canonical ship still requires the clean live default-branch commit, merged PR,
+hosted QA, machine claim, transaction and executable leases, and an approved
+launcher advertising `receipt-authority-publication-v1`. A receipt-authority
+publisher clean-builds and normalizes before capture, validates the committed
+schema-3 receipt and complete source/output/policy/builder proof, freezes those
+bytes into the ZIP and hosted receipt, and gives the launcher that exact hosted
+receipt. The launcher independently reconstructs the committed proof and
+compares the complete locked SDK-staging set immediately before `ugc_tool`.
 
-Do not add an updater, release, deploy, or recovery consumer by bypassing this
-gate. Each downstream lane requires its own reviewed immutable-byte contract
-and adversarial coverage before the policy can be enabled.
+Tracked publication keeps its established pre-build Git-blob selection and
+Git-blob receipt route. Receipt authority cannot bootstrap a new Workshop ID;
+first upload remains tracked-only. Receipt authority also keeps local/remote
+deployment, updater consumption, and recovery consumption disabled. Do not
+bypass those policy fields: each later consumer needs its own reviewed
+immutable-byte contract and adversarial coverage.

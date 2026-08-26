@@ -13,7 +13,7 @@
 #
 # Two modes (issues #436/#493):
 #   * FULL (no -Mods)  - build-gate every source-commit inventory mod, then stage exact
-#     source-commit blobs and write one complete manifest.
+#     authority-selected bytes and write one complete manifest.
 #   * FILTERED (-Mods) - build-gate/stage/upload only the named mods. Sibling manifest entries are
 #     carried VERBATIM from the release's existing manifest (version + sha256 of what was
 #     ACTUALLY published - a mid-edit sibling can neither fail this publish nor get a mislabeled
@@ -144,7 +144,7 @@ $launcherCapability = Assert-VmbLauncherPublicationCapability `
     -LauncherExecutableLease $effectiveLauncherLease `
     -WorkingDirectory $repoRoot
 Write-Host "VMBLauncher dependency: $launcher ($($launcherResolution.Source), version $builderVersion)" -ForegroundColor DarkGray
-Write-Host "VMBLauncher publication boundary: schema 3, exact commit blobs, locked upload snapshot - PASS" -ForegroundColor DarkGray
+Write-Host "VMBLauncher publication boundary: schema 3, exact authority proof, locked upload snapshot - PASS" -ForegroundColor DarkGray
 
 # Every filtered ship updates the same daily release and its shared manifest.
 # Per-mod claims do not serialize two DIFFERENT mods, so without this machine-
@@ -187,9 +187,7 @@ $inventory = Get-PublicationCommitInventory `
 # did, on 2026-07-13: every ship's -Mods filter saw 19 inventory hashtables
 # instead of the one mod name and the release step aborted).
 $releaseSet = @($inventory.Mods | ForEach-Object {
-    if ([string]$_.BundleAuthority -cne 'tracked') {
-        throw "Source-commit inventory BundleAuthority for '$($_.Dir)' must be exactly 'tracked'."
-    }
+    $entryAuthority = Assert-VtBundleAuthorityEntry -Entry $_
     if ([string]$_.RootBundle -cnotmatch '^[0-9a-f]{16}\.mod_bundle$') {
         throw "Source-commit inventory RootBundle for '$($_.Dir)' is invalid: '$($_.RootBundle)'."
     }
@@ -199,7 +197,7 @@ $releaseSet = @($inventory.Mods | ForEach-Object {
         Name = $_.Name
         RootBundle = $_.RootBundle
         DescriptorName = "$($_.Dir).mod"
-        BundleAuthority = $_.BundleAuthority
+        BundleAuthority = $entryAuthority
     }
 })
 
@@ -224,6 +222,10 @@ if ($filterActive) {
 }
 if ($PublicationReceiptOutputPath -and @($releaseSet).Count -ne 1) {
     throw '-PublicationReceiptOutputPath requires an exact one-mod filtered publication.'
+}
+if (@($releaseSet | Where-Object { [string]$_.BundleAuthority -ceq 'receipt' }).Count -gt 0 -and
+    @($launcherCapability.Capabilities) -notcontains 'receipt-authority-publication-v1') {
+    throw 'VMBLauncher lacks receipt-authority-publication-v1; no release lookup or mutation is permitted.'
 }
 
 # ---- Static-analysis lint gate ----
@@ -427,17 +429,57 @@ $stagedIds    = @()
 $receiptInputs = @()
 
 foreach ($m in $releaseSet) {
-    $commitSnapshot = Get-VtPublicationSnapshot `
-        -RepoRoot $repoRoot `
-        -SourceCommit $sourceCommit `
-        -Mod $m.Folder `
-        -ExpectedBuilderVersion $builderVersion
-    if ([string]$commitSnapshot.BundleAuthority -cne 'tracked' -or
-        [string]$commitSnapshot.AuthorityProof.Authority -cne 'tracked' -or
-        [string]$commitSnapshot.AuthorityProof.ByteSource -cne 'git_commit_blobs' -or
+    $commitSnapshot = $null
+    if ([string]$m.BundleAuthority -ceq 'tracked') {
+        # Preserve the established tracked contract: select immutable Git
+        # bytes before a build process can touch the working tree.
+        $commitSnapshot = Get-VtPublicationSnapshot `
+            -RepoRoot $repoRoot `
+            -SourceCommit $sourceCommit `
+            -Mod $m.Folder `
+            -ExpectedBuilderVersion $builderVersion
+    }
+
+    if (-not $SkipBuild) {
+        Write-Host ""
+        Write-Host "==> Building $($m.Folder)" -ForegroundColor Cyan
+        $buildArguments = @('build', $m.Folder)
+        if ([string]$m.BundleAuthority -ceq 'receipt') { $buildArguments += '--clean' }
+        $buildRun = Invoke-VmbLauncherProcess `
+            -Lease $effectiveLauncherLease `
+            -ArgumentList $buildArguments `
+            -WorkingDirectory $repoRoot `
+            -ReplayOutput
+        if ($buildRun.ExitCode -ne 0) {
+            throw "Build failed for $($m.Folder) (exit $($buildRun.ExitCode))"
+        }
+        if ([string]$m.BundleAuthority -ceq 'receipt') {
+            $null = Invoke-BuildOutputNormalization `
+                -RepoRoot $repoRoot -Mod $m.Folder
+        }
+    }
+
+    if ([string]$m.BundleAuthority -ceq 'receipt') {
+        # Receipt authority has no committed bundleV2 bytes. Capture only after
+        # the clean, normalized build, then detach the restrictive-handle bytes
+        # proven by the committed schema-3 receipt.
+        $commitSnapshot = Get-VtPublicationSnapshot `
+            -RepoRoot $repoRoot `
+            -SourceCommit $sourceCommit `
+            -Mod $m.Folder `
+            -ExpectedBuilderVersion $builderVersion
+    }
+    $expectedByteSource = if ([string]$m.BundleAuthority -ceq 'tracked') {
+        'git_commit_blobs'
+    } else {
+        'materialized_restrictive_handles'
+    }
+    if ([string]$commitSnapshot.BundleAuthority -cne [string]$m.BundleAuthority -or
+        [string]$commitSnapshot.AuthorityProof.Authority -cne [string]$m.BundleAuthority -or
+        [string]$commitSnapshot.AuthorityProof.ByteSource -cne $expectedByteSource -or
         [string]$commitSnapshot.AuthorityProof.SourceCommit -cne $sourceCommit -or
         [string]$commitSnapshot.AuthorityProof.RootBundle -cne [string]$m.RootBundle) {
-        throw "Release publisher requires a coherent tracked immutable snapshot for $($m.Folder)."
+        throw "Release publisher requires a coherent '$($m.BundleAuthority)' immutable snapshot for $($m.Folder)."
     }
     $commitOutputSet = $commitSnapshot.OutputSet
     $version = "$($commitSnapshot.Version)"
@@ -451,6 +493,9 @@ foreach ($m in $releaseSet) {
         Write-Warning "Skipping $($m.Folder): no published_id (unpublished mod)"
         continue
     }
+    if ($workshopId -eq '0' -and [string]$m.BundleAuthority -ceq 'receipt') {
+        throw 'Receipt authority does not support first-upload bootstrap; use the reviewed tracked bootstrap lane first.'
+    }
     if ($workshopId -eq '0' -and -not $PublicationReceiptOutputPath) {
         throw "published_id=0 is accepted only for a one-mod canonical first-upload receipt handoff."
     }
@@ -459,22 +504,9 @@ foreach ($m in $releaseSet) {
         $version = $Tag
     }
 
-    if (-not $SkipBuild) {
-        Write-Host ""
-        Write-Host "==> Building $($m.Folder)" -ForegroundColor Cyan
-        $buildRun = Invoke-VmbLauncherProcess `
-            -Lease $effectiveLauncherLease `
-            -ArgumentList @('build', $m.Folder) `
-            -WorkingDirectory $repoRoot `
-            -ReplayOutput
-        if ($buildRun.ExitCode -ne 0) {
-            throw "Build failed for $($m.Folder) (exit $($buildRun.ExitCode))"
-        }
-    }
-
-    # Stage immutable source-commit blobs, never mutable working-tree paths.
-    # Build remains a build-health gate, but its path output is not a release
-    # input and cannot be swapped into the hosted bytes.
+    # Stage only detached immutable snapshot bytes. For tracked authority these
+    # are source-commit blobs; for receipt authority they are the exact
+    # restrictive-handle bytes proven against the committed schema-3 receipt.
     $modStage = Join-Path $stage $m.Id
     New-Item -ItemType Directory -Force -Path $modStage | Out-Null
     foreach ($bundle in @($commitSnapshot.BundleFiles)) {
@@ -491,9 +523,6 @@ foreach ($m in $releaseSet) {
     # before the updater sidecar is added. Enumerate and validate that exact
     # normalized set first; the updater sidecar is release metadata, not a VMB
     # output, and must never be filtered out of a looser filesystem scan.
-    if ("$($m.BundleAuthority)" -cne 'tracked') {
-        throw "Release publisher refuses unsupported BundleAuthority '$($m.BundleAuthority)' for $($m.Folder)."
-    }
     $stagedOutputSet = Get-VtBundleOutputSet `
         -BundleDirectory $modStage `
         -ExpectedDescriptorName $m.DescriptorName `
@@ -502,11 +531,11 @@ foreach ($m in $releaseSet) {
     $stagedComparison = @(Compare-VtBundleOutputSets `
         -Expected $commitOutputSet `
         -Actual $stagedOutputSet `
-        -ExpectedLabel 'source-commit output' `
+        -ExpectedLabel 'immutable authority output' `
         -ActualLabel 'staged output' `
         -RequireLength $true)
     if ($stagedComparison.Count -gt 0) {
-        throw "Release staging differs from immutable source-commit output: $($stagedComparison -join '; ')"
+        throw "Release staging differs from immutable authority output: $($stagedComparison -join '; ')"
     }
     $bundleFiles = @(ConvertTo-VtBundleManifestRecords -OutputSet $commitOutputSet)
     Set-Content -Path (Join-Path $modStage 'vt2updater_version.txt') -Value $version -Encoding ascii -NoNewline
@@ -552,6 +581,7 @@ foreach ($m in $releaseSet) {
         Folder = $m.Folder
         ModId = $m.Id
         Version = $version
+        PublicationSnapshot = $commitSnapshot
     }
     Write-Host "  staged $($m.Id) v$version -> $zipPath (sha256 $($sha256.Substring(0,12))...)"
 }
@@ -649,11 +679,11 @@ if (-not $manifestVerdict.Valid) {
 }
 Write-Host "Release manifest validation: PASS ($($stagedIds.Count) newly staged provenance entr$(if ($stagedIds.Count -eq 1) { 'y' } else { 'ies' }))." -ForegroundColor Green
 
-# All lint, commit-blob staging, base-manifest lookup, and carry-forward
+# All lint, immutable staging, base-manifest lookup, and carry-forward
 # downloads are complete. Re-query authority only now, immediately before
 # constructing the hosted receipt and mutating the release. Local HEAD/index/
-# worktree are deliberately not re-read: exact sourceCommit blobs already own
-# every new release and receipt byte.
+# worktree are deliberately not re-read: the immutable publication snapshots
+# already own every new release and receipt byte.
 $liveAuthorization = Get-LivePublicationAuthorization -Repo $ghRepo -SourceCommit $sourceCommit
 if (-not $liveAuthorization.Ok) {
     throw "Last-moment independent publication authorization FAILED: $($liveAuthorization.Message)"
@@ -700,6 +730,7 @@ foreach ($receiptInput in $receiptInputs) {
         -Version $receiptInput.Version `
         -Owner (Get-CanonicalShipOwnerId -RepoRoot $repoRoot) `
         -SourceCommit $sourceCommit `
+        -PublicationSnapshot $receiptInput.PublicationSnapshot `
         -AuthorizationEvidence $publicationAuthorization
     $receiptJson = $receipt | ConvertTo-Json -Depth 12
     $receiptBytes = [System.Text.Encoding]::UTF8.GetBytes($receiptJson)
@@ -737,11 +768,11 @@ foreach ($snapshot in $assetSnapshots) {
                 -ZipBytes ([byte[]]$snapshot.Bytes) `
                 -ManifestEntry $entries[0]
             if (-not $zipBinding.Valid) {
-                throw "Zip snapshot '$snapshotName' is not bound to exact commit-derived bundle bytes:`n - $($zipBinding.Errors -join "`n - ")"
+                throw "Zip snapshot '$snapshotName' is not bound to exact authority-selected bundle bytes:`n - $($zipBinding.Errors -join "`n - ")"
             }
         }
         elseif ($bindingMode -ne 'legacy_carried_whole_zip') {
-            throw "Zip snapshot '$snapshotName' lacks commit-derived bundle records and is not an unchanged historical carry."
+            throw "Zip snapshot '$snapshotName' lacks authority-selected bundle records and is not an unchanged historical carry."
         }
     }
 }

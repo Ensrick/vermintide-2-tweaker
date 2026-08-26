@@ -1017,11 +1017,13 @@ Workshop ID / mod_id mapping. **[Corrected 2026-07-07: `gui_tweaker`/`gut` was a
 3. **Update the stable mod's CHANGELOG.md** with a single rolled-up entry
    covering the merged work. Reference the dev versions that contributed
    if it helps the reader (`merge of dev 0.7.62-dev..0.7.66-dev`).
-4. **Claim, then build the tracked artifact** with
+4. **Claim, then build the authority-selected artifact** with
    `tools\ship\claim.ps1 -Mod <stable-mod>` and
    `tools\ship\ship.ps1 -Mod <stable-mod> -BuildOnly`.
-5. **Commit source + generated bundle together**, push a feature branch, open a
-   PR to protected `master`, require `qa-gate`, and merge.
+5. **Commit source plus its exact authority proof together.** Tracked authority
+   commits the generated bundle; receipt authority commits schema 3 and no
+   `bundleV2` output. Push a feature branch, open a PR to protected `master`,
+   require `qa-gate`, and merge.
 6. **Apply the suffix approval rule in § 6.6.** A clean MOD_VERSION needs a
    fresh per-build ship signal naming the version. A user-chosen pre-release
    suffix ships the full pipeline without another prompt, including on a public
@@ -1030,9 +1032,10 @@ Workshop ID / mod_id mapping. **[Corrected 2026-07-07: `gui_tweaker`/`gut` was a
    `ship.ps1 -Mod <stable> -AllowPublic`.** The wrapper requires the merged PR,
    successful hosted `qa-gate`, exact newest CHANGELOG/MOD_VERSION identity,
    and machine-global version claim before any mutation. It clean-builds and
-   proves every `bundleV2` blob equals the tracked merge commit before separate
-   deploy and upload actions. It then records the authorization in the GitHub
-   release manifest.
+   proves the complete output equals the merge commit's tracked blobs or
+   committed schema-3 receipt. Tracked authority may then deploy and upload;
+   receipt authority is publication-only. It records the authorization in the
+   GitHub release manifest.
 8. **Smoke-test the hash-verified deployed stable bundle.** A disabled remote is
    intentionally out of scope and must not be reported as updated. The dev
    bundle may be live in the same install (different mod_id); test that the
@@ -1073,10 +1076,11 @@ full pipeline is:
 1. Acquire the machine-global mod/version claim. Update source, exact first
    CHANGELOG release, and `MOD_VERSION`; run
    `tools\ship\ship.ps1 -Mod <name> -BuildOnly` to generate and validate the
-   tracked bundle without deploying or uploading. **If the change touches TWO
-   mods, `-BuildOnly` BOTH before committing** — the atomicity gate below
-   requires each mod's source change and its own root `.mod_bundle` in the same
-   commit, so a half-built pair fails the PR.
+   authority-selected output without deploying or uploading. **If the change
+   touches TWO mods, `-BuildOnly` BOTH before committing** — the atomicity gate below
+   requires each mod's source change and its own tracked root `.mod_bundle` or
+   committed schema-3 receipt in the same commit, so a half-built pair fails
+   the PR.
 
 **The claim broker owns the version number.** `tools\ship\claim.ps1` writes a
 machine-global claim at `%APPDATA%\VMBLauncher\ship_claims\<mod>.claim`, shared
@@ -1086,12 +1090,14 @@ never shipped burn their numbers permanently. Always renumber `MOD_VERSION`, the
 newest CHANGELOG heading, and any version reference to the broker's answer —
 never to master+1 by inspection, and never re-use a burned number. Claim BEFORE
 bumping, not after; a bump chosen first usually has to be redone.
-2. `git add` / `git commit` source and generated bundle together, push a feature
-   branch, and merge it through protected `master` only after `qa-gate` passes.
+2. `git add` / `git commit` source and its authority proof together (tracked
+   bundle or receipt-mode schema 3), push a feature branch, and merge it through
+   protected `master` only after `qa-gate` passes.
 3. From a clean worktree at the exact live default-branch commit, run
    `tools\ship\ship.ps1 -Mod <name>`. It re-runs hosted authorization, clean
-   build, tracked-bundle parity, deploy, authorization-backed GitHub release,
-   Workshop upload, and transfer verification in that order. Recording
+   build, authority parity, authorization-backed GitHub release, Workshop
+   upload, and transfer verification in that order. Tracked authority deploys
+   first when a target is enabled; receipt authority never deploys. Recording
    authorization before Workshop mutation is mandatory. Add `-AllowPublic`
    when `itemV2.cfg` is public.
    Use `-NoRemote` only to skip an otherwise-enabled remote for that invocation,
@@ -1100,7 +1106,8 @@ bumping, not after; a bump chosen first usually has to be redone.
 There is no pre-merge or hosted-QA publication override. `-SkipGitHub` and
 `-EmergencyPublicationReason` are prohibited because Workshop mutation cannot
 bypass exact clean default HEAD, its merged PR, successful hosted `qa-gate`,
-release provenance, the machine-global claim, or tracked-bundle parity.
+release provenance, the machine-global claim, or authority-selected output
+parity.
 
 The hosted-check lookup is fully paginated (issue #1109). Issue and tracker
 workflows can attach more than GitHub's default 30 check runs to one commit, so
@@ -1122,7 +1129,7 @@ guard rather than hiding or dismissing the window. The launcher repository's
 **One machine-global transaction owns every mutation (issue #1180).** Both
 `ship.ps1 -BuildOnly` and the final ship acquire
 `Global\Ensrick.VMBLauncher.Transaction.v1` before the first settings, VMB, or
-filesystem mutation and retain it continuously through build, tracked parity,
+filesystem mutation and retain it continuously through build, authority parity,
 deploy, GitHub-release mutation, SDK staging/upload, Workshop verification,
 card refresh, and claim finalization. The lock order is machine transaction,
 then the publisher's GitHub-release mutex, then the launcher's legacy upload
@@ -1187,18 +1194,24 @@ or any final authority error remain untouched and must leave the issue outside
 the ready queue until repaired. Run `-DryRun` first; the operation is
 idempotent and preserves no-op card bytes exactly (issue #1343).
 
-**Atomic source/root-bundle gate (issue #724).** A PR that changes an active
-mod's runtime source, `itemV2.cfg`, or newest CHANGELOG release identity must
-also change that mod's exact root `.mod_bundle`, identified by the canonical
-`RootBundle` field in `tools/mod-inventory.psd1`. A common VMF bundle or custom
-asset sidecar cannot stand in for the root. `qa/check_release_bundle_atomicity.ps1`
-enforces this in pre-commit, Quick/full QA, and hosted PR QA. Docs/tests-only and
-bundle-only reconciliation changes remain valid. The trusted stable-promotion
-authorization from the base-owned `pull_request_target` status and
-`qa/check_promotion_authorization.ps1` permits only the exact approved stable
-directories and only after binding the maintainer grant to the current PR head
-and MOD_VERSION; it never executes PR code at the trust boundary and never
-exempts a runtime source delta.
+**Atomic source/output-authority gate (issues #724/#1412).** A PR that changes
+an active mod's runtime source, `itemV2.cfg`, or newest CHANGELOG release
+identity must also change that mod's exact authority proof. `tracked` authority
+requires the exact root `.mod_bundle` identified by the canonical `RootBundle`
+field in `tools/mod-inventory.psd1`; a common VMF bundle or custom asset sidecar
+cannot stand in for the root. `receipt` authority instead requires the exact
+schema-3 receipt and zero tracked `bundleV2` output, with the complete typed
+transition validated by `bundle-authority.ps1`.
+`qa/check_release_bundle_atomicity.ps1` enforces this in pre-commit, Quick/full
+QA, and hosted PR QA. Docs/tests-only and authority-proof-only reconciliation
+changes remain valid. A tracked-output deletion is legal only inside the exact
+typed `tracked` to `receipt` transition; every other deletion keeps the
+retirement-trailer rules, and an active tracked canonical root cannot be
+deleted. The trusted stable-promotion authorization from the base-owned
+`pull_request_target` status and `qa/check_promotion_authorization.ps1` permits
+only the exact approved stable directories and only after binding the
+maintainer grant to the current PR head and MOD_VERSION; it never executes PR
+code at the trust boundary and never exempts a runtime source delta.
 This closes the PR #759/#765/#766/#767/#769 class where
 source/version/config merged first and its compiled artifact followed later.
 
@@ -1225,11 +1238,13 @@ or dirty commit id. Every inventory row explicitly remains
 `BundleAuthority = 'tracked'`; schema 3 shadows and strengthens existing tracked
 parity rather than replacing it, while untouched schema-2 receipts remain
 admissible during migration. Issue #1412 prepares the second exact mode,
-`receipt`, without switching any active row. Its contract, typed transitions,
-and deliberately disabled downstream lanes are documented in
+`receipt`, without switching any active row. Issue #1426 adds only its
+receipt-gated publication consumer; deploy, updater, recovery, and bootstrap
+remain disabled. Its contract and typed transitions are documented in
 `docs/BUNDLE_AUTHORITY.md`. Pre-commit validates the exact staged index,
 hosted QA validates the committed PR tree, and final ship compares the same
-freshly normalized complete output set before the tracked-bundle parity gate.
+freshly normalized complete output set before the authority-specific parity
+gate.
 An extra, missing, renamed, changed, nested, reparse, case-colliding,
 wrong-descriptor, wrong-root, builder-drifted, or policy-drifted output fails
 closed. A source edit after BuildOnly therefore requires another BuildOnly run.
@@ -1297,11 +1312,11 @@ says `public`. There is no suffix-vs-visibility contradiction to tie-break.
   `Uploaded new content`. A receipt-gated `No content change` is also valid when
   canonical `ship.ps1` proved the exact reviewed staged bytes; the launcher's
   generic "Upload finished" text is never evidence by itself.
-- **Existing Workshop item while the author is unsubscribed (#1376):** when the
-  real Steam-managed content directory is absent, canonical `ship.ps1`
-  automatically enters `publication-only` mode. It must not create or write the
+- **Publication-only mode (#1376/#1426):** canonical `ship.ps1` enters this mode
+  when an existing item's real Steam-managed content directory is absent, or
+  whenever its bundle authority is `receipt`. It must not create or write a
   missing Workshop directory, attempt local/remote deploy, or claim a deploy
-  hash. Clean exact-default-head authorization, tracked-bundle parity, the
+  hash. Clean exact-default-head authorization, authority parity, the
   GitHub-hosted publication receipt, VMB staging validation, and the fresh
   Workshop result remain mandatory. To test afterward, the author must
   subscribe/refresh the item first; volunteers use the normal dev-collection
@@ -1313,9 +1328,11 @@ says `public`. There is no suffix-vs-visibility contradiction to tie-break.
 - **`.mod` working-copy CRLF drift is NOT covered by that carve-out.**
   `.gitattributes` declares `*.mod text eol=lf`. The deploy-verify tolerance
   above applies only to the post-deploy Steam comparison. The publication
-  receipt binds exact git commit blobs (`git-commit-blob-snapshot-v1`), so a
-  CRLF working copy makes the raw staged bytes disagree with the commit blob and
-  the receipt fails closed. Before a ship, confirm the mod's `.mod` descriptors
+  receipt always binds exact source Git blobs. Tracked outputs additionally use
+  `git-commit-blob-snapshot-v1`; receipt outputs bind the committed schema-3 map
+  and locked materialized bytes. A CRLF working copy therefore disagrees with
+  the selected output and fails closed. Before a ship, confirm the mod's `.mod`
+  descriptors
   (both the root and the `bundleV2/` copy) are LF. Remaining drifted mods are
   tracked in issue #1085.
 - A real deploy-verify mismatch after a CONFIRMED upload is a Steam reconcile

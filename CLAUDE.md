@@ -314,7 +314,7 @@ fail-closed recovery gate.
 .\tools\ship\claim.ps1 -Mod <name>
 # bump MOD_VERSION to the CLAIMED number and write the newest CHANGELOG entry, make source changes
 .\tools\ship\ship.ps1 -Mod <name> -BuildOnly    # run for EVERY changed mod before committing
-# commit source + bundle + deterministic .build-receipt.json together
+# commit source + its exact authority proof (tracked bundle or schema-3 receipt) together
 # push feature branch, pass hosted qa-gate, merge
 .\tools\ship\ship.ps1 -Mod <name>     # from clean exact default-branch HEAD
 ```
@@ -322,8 +322,10 @@ fail-closed recovery gate.
 Claim BEFORE bumping: the broker owns the number and it can exceed master+1
 (see `PROJECT_STANDARDS.md` section 6.6 "The claim broker owns the version
 number"). If the change touches TWO mods, `-BuildOnly` BOTH before committing -
-`qa/check_release_bundle_atomicity.ps1` (issue #724) requires each mod's source
-change and its own root `.mod_bundle` in the same commit.
+`qa/check_release_bundle_atomicity.ps1` (issues #724/#1412) requires each mod's
+source change and exact authority proof in the same commit: the root
+`.mod_bundle` for `tracked`, or the schema-3 receipt and typed output transition
+for `receipt`.
 BuildOnly also writes `<mod>/.build-receipt.json` (issues #1278/#1400). Schema 3
 binds both the exact raw runtime bytes Stingray consumed and the Git-clean blobs
 staging must preserve to the complete normalized `bundleV2` output set: every
@@ -335,14 +337,18 @@ closed. All inventory rows remain explicitly `BundleAuthority = 'tracked'`, so
 the complete receipt proof augments rather than weakens tracked parity. Untouched
 schema-2 receipts remain valid during the shadow transition; rerun BuildOnly for
 any changed mod instead of committing stale source/output evidence.
+The prepared `receipt` mode is publication-only: it requires a launcher with
+`receipt-authority-publication-v1`, clean-builds before exact receipt-byte
+capture, and never deploys, updates, recovers, or bootstraps a Workshop item.
+No active row has migrated; see `docs/BUNDLE_AUTHORITY.md`.
 
-The publishing invocation fails closed unless HEAD is the live default-branch commit, an associated PR merged that exact commit, hosted `qa-gate` completed successfully on it, the machine-global mod/version claim matches, and a clean build exactly reproduces every tracked `bundleV2` blob. It then runs separate deploy and upload actions and records authorization evidence in the GitHub release manifest. Add `-AllowPublic` when the mod's `itemV2.cfg` has `visibility = public`. Add `-NoRemote` only when intentionally skipping an otherwise-enabled remote target, and say which target was skipped. If no remote target is enabled, no override is needed; report that the deploy was local-only.
+The publishing invocation fails closed unless HEAD is the live default-branch commit, an associated PR merged that exact commit, hosted `qa-gate` completed successfully on it, the machine-global mod/version claim matches, and a clean build exactly reproduces either every tracked `bundleV2` blob or the committed receipt-authority output map. Tracked authority then runs separate deploy and upload actions. Receipt authority skips every deploy target and may only upload through its hosted receipt. Both record authorization evidence in the GitHub release manifest. Add `-AllowPublic` when the mod's `itemV2.cfg` has `visibility = public`. Add `-NoRemote` only when intentionally skipping an otherwise-enabled tracked deploy target, and say which target was skipped. If no remote target is enabled, no override is needed; report that the deploy was local-only.
 
 **Clean version, no suffix (including stable promotions):** requires a fresh, explicit, per-build ship signal from the user naming the version (e.g. "ship cim v0.8.34 now"). A "ship it" from earlier does NOT carry forward. Default for these is `build` + `deploy` only; treat upload like `git push --force`. This guards subscribers - reflex uploads of unstable mid-fix builds cost ~80 cim subscribers in May 2026.
 
 | Intent | Verbs |
 |---|---|
-| Update a `-dev`/`-alpha`/`-beta` build (any active mod) | claim; `ship.ps1 -BuildOnly`; commit source+bundle; push; pass hosted `qa-gate`; merge; then `ship.ps1 -Mod <name>` from exact clean default-branch HEAD. No ask. |
+| Update a `-dev`/`-alpha`/`-beta` build (any active mod) | claim; `ship.ps1 -BuildOnly`; commit source plus its tracked bundle or schema-3 receipt; push; pass hosted `qa-gate`; merge; then `ship.ps1 -Mod <name>` from exact clean default-branch HEAD. No ask. |
 | ...when the target mod's current `itemV2.cfg` says `visibility = "public"` | add `-AllowPublic` |
 | ...while intentionally skipping an enabled remote | add `-NoRemote` and SAY WHICH target was skipped |
 | Confirm a build only compiles | `& $env:VT2_SHIP_VMB_LAUNCHER build <mod>` |

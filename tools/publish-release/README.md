@@ -20,19 +20,20 @@ claim, `-BuildOnly`, protected-merge, and clean-default-HEAD phases.
 Caller JSON is correlation evidence, never authority. Immediately before any
 release mutation, this component re-queries the live default branch, exact
 merged PR SHA, and successful hosted `qa-gate` for the exact source commit.
-One shared immutable publication snapshot reconstructs the selected tracked
-output set and its bytes from that commit's Git blobs, not mutable working-tree
-paths. The publisher independently requires coherent `tracked` authority before
-build, staging, ZIP creation, receipt construction, or release mutation.
-Missing, forged, stale, emergency, receipt-authority, or contradictory evidence
-fails closed.
+One shared immutable publication snapshot selects the complete output set.
+Tracked authority reconstructs every output from source-commit Git blobs before
+the build-health gate. Receipt authority instead clean-builds and normalizes
+first, then captures the exact materialized output under restrictive handles
+and proves it against the committed schema-3 source/output/policy/builder map.
+Missing, forged, stale, emergency, or contradictory evidence fails closed.
 
-The same snapshot abstraction can validate schema-3 receipt authority in
-offline fixtures by capturing an exact materialized output set under restrictive
-file and directory handles. That capability is byte proof only: receipt-mode
-Workshop publication, deployment, updater, and recovery remain disabled. The
-hosted Workshop receipt continues to require a real Git blob for every selected
-byte and the launcher's `git-commit-blob-snapshot-v1` capability.
+Receipt authority is publication-only. Its hosted Workshop receipt carries the
+committed build-receipt proof and exact output map without fabricating bundle
+Git blobs; VMBLauncher must advertise `receipt-authority-publication-v1` and
+independently reconstruct the proof before comparing locked SDK-staging bytes.
+Local/remote deployment, updater, recovery, and first-upload bootstrap remain
+disabled for receipt authority. Tracked publication retains its established
+Git-blob receipt path.
 
 `ship.ps1` also supplies `-LauncherPath`, `-LauncherSource`, and
 `-LauncherApprovalAnchor` internally. That snapshot is the exact approved
@@ -45,16 +46,17 @@ Publication requires VMBLauncher 0.6.0 or newer with
 `hosted-publication-receipt-v3`, `git-commit-blob-snapshot-v1`, and
 `locked-upload-snapshot-v1`, plus
 `constrained-first-upload-bootstrap-v1`, `machine-transaction-lease-v1`, and
-`crash-safe-upload-acl-journal-v1`. The launcher release must land and be
+`crash-safe-upload-acl-journal-v1`. Receipt authority additionally requires
+`receipt-authority-publication-v1`. The launcher release must land and be
 installed before this monorepo guard lands. Both `ship.ps1` and this publisher
-  probe the version and all six capabilities before any GitHub release mutation;
-  VMBLauncher 0.5.9 cannot pass this boundary. Release zip, receipt, and manifest
-  inputs are captured once as immutable bytes; new releases remain drafts until
-  those bytes are uploaded, with the manifest last. Before mutation, every entry
-  inside each immutable ZIP snapshot is independently hashed against the
-  commit-derived manifest bundle records. Each ZIP is assembled in memory
-  directly from the held source-commit blob snapshot, so a staged-file swap
-  cannot alter the hosted bytes or be hidden by restoring the path afterward.
+probe the version and required capabilities before any GitHub release mutation;
+VMBLauncher 0.5.9 cannot pass this boundary. Release zip, receipt, and manifest
+inputs are captured once as immutable bytes; new releases remain drafts until
+those bytes are uploaded, with the manifest last. Before mutation, every entry
+inside each immutable ZIP snapshot is independently hashed against the
+authority-derived manifest bundle records. Each ZIP is assembled in memory
+directly from the held immutable output snapshot, so a staged-file swap
+cannot alter the hosted bytes or be hidden by restoring the path afterward.
 The sole transition exception is an unchanged carried entry whose historical
 manifest predates `bundle_files`: its downloaded ZIP must still match the
 carried whole-asset SHA-256 and is captured in the same immutable byte
@@ -97,11 +99,12 @@ both Windows PowerShell 5.1 and PowerShell 7:
 ## Two modes (issues #436 / #493)
 
 **FULL (no `-Mods`)** — lint the whole repo, run a build-health gate for every
-inventory mod, stage exact source-commit bundle blobs, and write a fresh
-manifest. It publishes the selected commit bytes, not whatever a mutable path
-contains at check time; any mod's broken build still fails the entire run. The
-separate `qa/check_release_reproducibility.ps1` fresh-checkout proof owns
-byte-for-byte rebuild reproducibility.
+inventory mod, stage exact authority-selected output bytes, and write a fresh
+manifest. Tracked bytes come from the commit; receipt bytes come only from the
+clean normalized build that matches the committed receipt. Any mod's broken
+build still fails the entire run. The separate
+`qa/check_release_reproducibility.ps1` fresh-checkout proof owns byte-for-byte
+rebuild reproducibility.
 
 **FILTERED (`-Mods <names>`)** — what `ship.ps1` passes. Only the named mods are linted, built,
 staged, and uploaded; sibling mods are never rebuilt, restaged, or re-uploaded:
@@ -150,7 +153,7 @@ authorized release record must exist before the launcher is allowed to mutate
 Workshop.
 
 The canonical path is `tools\ship\ship.ps1 -Mod <name>`. It invokes this script
-with exact authorization evidence after clean tracked-bundle parity succeeds and
+with exact authorization evidence after clean authority parity succeeds and
 before the final launcher upload. There is no supported manual equivalent.
 
 FULL mode (no `-Mods`) is reserved for authorization-bearing internal automation
@@ -240,9 +243,10 @@ PowerShell 5.1 retains strings; a genuinely different instant still fails.
 
 Before any GitHub mutation, `publish-release.ps1` creates a unique direct-child
 `.release-stage-<guid>` directory and validates every newly staged entry against
-an auditable copy of the exact source-commit bytes. The release ZIP does not read
+an auditable copy of the exact authority-selected bytes. The release ZIP does
+not read
 that mutable copy: it is assembled deterministically in memory from the same
-immutable commit snapshot and complete canonical output set, then written once.
+immutable publication snapshot and complete canonical output set, then written once.
 A filtered publish carries older sibling entries and their SHA-256-verified
 assets verbatim. Historical carried entries may predate provenance entirely, predate
 `publication_authorization`, or record the historical dirty `source_state`;
@@ -281,10 +285,10 @@ Backwards compatibility: older consumers that don't know about `sha256` ignore t
 field. Older manifests without the field cause newer consumers to skip integrity
 verification with a debug log entry — not a hard error.
 
-## Before bundle tracking can stop
+## Before a real mod changes authority
 
-This phase does not delete or ignore any tracked bundle. Stop tracking generated
-outputs only after all of these are complete:
+Issue #1426 does not flip a real inventory row or delete a tracked bundle. A
+later per-mod migration must still satisfy all of these:
 
 1. Publish at least one clean, schema-2 manifest entry for every active release
    mod, with no carried pre-transition warnings.
@@ -305,10 +309,11 @@ outputs only after all of these are complete:
 ### Transition audit and fresh-checkout proof
 
 The canonical transaction requires a clean, reviewed default-branch source
-commit before build, proves the build reproduces tracked artifacts, records
-authorized release provenance, and only then uploads to Workshop. The publisher
-independently reconstructs and verifies the authorized commit bytes as defense
-in depth; mutable worktree status is not its release authority. For a read-only audit:
+commit before build, proves the build reproduces its authority-selected output,
+records authorized release provenance, and only then uploads to Workshop. The
+publisher independently reconstructs and verifies the source-qualified
+authority proof and selected bytes as defense in depth; mutable worktree status
+is not its release authority. For a read-only audit:
 
 ```powershell
 .\qa\check_release_reproducibility.ps1 -Mod <folder-or-mod-id> -AuditOnly
@@ -339,15 +344,16 @@ The verifier first requires clean mod source at the manifest's exact
 `source_commit`, requires `builder.name: VMBLauncher` and an exact launcher
 version match, then invokes only `VMBLauncher build --clean` through an isolated
 temporary settings file whose `ProjectRoot` is the fresh checkout, applies the
-tracked exact-hash output policy, and compares the resulting canonical set.
+inventoried exact-hash output policy, and compares the resulting canonical set.
 Every `.mod_bundle` and `.mod` filename and SHA-256 must match `bundle_files`;
 missing, extra, or changed output fails the proof. It never deploys, uploads,
 edits Workshop state, or treats a zip hash alone as reproducibility evidence.
 
 The canonical transaction is already ordered around immutable reviewed source:
-run `ship.ps1 -BuildOnly`, commit source and the exact generated bundle together,
-push, pass review and hosted `qa-gate`, merge, then run the final ship from a
-clean checkout at the exact live default-branch HEAD. The publisher re-queries
+run `ship.ps1 -BuildOnly`, commit source plus its tracked bundle or schema-3
+receipt together, push, pass review and hosted `qa-gate`, merge, then run the
+final ship from a clean checkout at the exact live default-branch HEAD. The
+publisher re-queries
 that live state after lint, staging, and carry-forward downloads and immediately
 before GitHub mutation. A failure leaves Workshop untouched; there is no
 post-upload source commit or push.

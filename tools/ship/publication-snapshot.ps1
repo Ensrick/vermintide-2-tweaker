@@ -1,8 +1,9 @@
 # publication-snapshot.ps1 - immutable authority-neutral release byte proof (#1422).
 #
-# This helper can prove tracked Git blobs or a schema-3 receipt fixture. It does
-# not authorize publication, deployment, updater, or recovery. Those lanes keep
-# their independent tracked-only gates. ASCII-only for PowerShell 5.1.
+# This helper can prove tracked Git blobs or schema-3 receipt-authority bytes.
+# It does not itself authorize a consumer. Publication has an independent
+# authority gate; deployment, updater, and recovery remain tracked-only.
+# ASCII-only for PowerShell 5.1.
 
 $script:VtPublicationSnapshotReceiptHelper = Join-Path $PSScriptRoot 'publication-receipt.ps1'
 if (-not (Test-Path -LiteralPath $script:VtPublicationSnapshotReceiptHelper -PathType Leaf)) {

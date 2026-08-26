@@ -1,8 +1,9 @@
 # bundle-authority.ps1 - fail-closed bundleV2 authority control plane (#1412).
 #
 # This file owns the exact inventory modes and the typed transition contract.
-# It deliberately does not enable receipt-authority publication, deployment,
-# updater, or recovery. ASCII-only for Windows PowerShell 5.1 parsing.
+# Receipt authority may publish only through the independently validated
+# schema-3 receipt path. Deployment, updater, and recovery remain tracked-only.
+# ASCII-only for Windows PowerShell 5.1 parsing.
 
 $script:VtBundleAuthorityModes = @('tracked', 'receipt')
 
@@ -316,7 +317,7 @@ function Get-VtBundleAuthorityDownstreamPolicy {
         Build = $true
         Receipt = $true
         Normalize = $true
-        Publish = $tracked
+        Publish = $true
         Deploy = $tracked
         Update = $tracked
         Recover = $tracked
@@ -331,8 +332,7 @@ function Assert-VtBundleAuthorityShipPreflight {
 
     $policy = Get-VtBundleAuthorityDownstreamPolicy -Entry $Entry
     if (-not $BuildOnly -and -not $policy.Publish) {
-        throw ("BundleAuthority 'receipt' is build/receipt-only. Workshop publication, " +
-            'deployment, updater, and recovery are disabled until their downstream contracts ship.')
+        throw "BundleAuthority '$($policy.Authority)' does not permit Workshop publication."
     }
     return $policy
 }
