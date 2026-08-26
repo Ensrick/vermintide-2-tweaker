@@ -31,9 +31,10 @@ Receipt authority is publication-only. Its hosted Workshop receipt carries the
 committed build-receipt proof and exact output map without fabricating bundle
 Git blobs; VMBLauncher must advertise `receipt-authority-publication-v1` and
 independently reconstruct the proof before comparing locked SDK-staging bytes.
-Local/remote deployment, updater, recovery, and first-upload bootstrap remain
-disabled for receipt authority. Tracked publication retains its established
-Git-blob receipt path.
+Local/remote deployment, updater/recovery consumption, and first-upload
+bootstrap remain disabled for receipt authority. The publisher may emit the
+producer-only durable recovery record described below; it grants no restore
+authority. Tracked publication retains its established Git-blob receipt path.
 
 `ship.ps1` also supplies `-LauncherPath`, `-LauncherSource`, and
 `-LauncherApprovalAnchor` internally. That snapshot is the exact approved
@@ -183,6 +184,7 @@ Repository-only issues are closed after their named deterministic check passes.
       "visibility": "public",
       "source_commit": "0123456789abcdef0123456789abcdef01234567",
       "source_state": "clean",
+      "bundle_authority": "tracked",
       "builder": {
         "name": "VMBLauncher",
         "version": "1.2.3"
@@ -234,6 +236,40 @@ any repository-tracked exact-name/exact-hash build-artifact exclusions have
 been applied. Its hashes describe the canonical files inside the zip, while the
 existing entry-level `sha256` continues to describe the downloadable zip itself.
 
+### Producer-only durable recovery record
+
+When an immutable publication snapshot has an exact committed schema-3 build
+receipt, the publisher adds `recovery` schema 1 to that mod entry. The record
+does not change `manifest_schema`; older consumers continue to ignore the
+unknown child. Its strict, unknown-field-rejecting shape binds:
+
+- `release.repository` and `release.tag`;
+- `mod_folder`, `mod_id`, `workshop_id`, and `version`;
+- `asset.filename`, `asset.length`, and `asset.sha256`, derived from the exact
+  in-memory ZIP bytes;
+- `source.commit`, clean state, and exact item-cfg SHA/Git blob;
+- exact `builder`, `bundle_authority`, inventory/ignore Git blobs,
+  `root_bundle`, and source-qualified descriptor hash/Git blob;
+- every canonical output filename, byte length, SHA-256, and authority-specific
+  Git blob, plus the canonical output algorithm/fingerprint; and
+- the committed schema-3 build-receipt path/blob/hash and its exact source,
+  root, descriptor, output, builder, and normalization-policy bindings.
+
+The immutable release coordinate available before upload is the repository,
+tag, exact case-sensitive `<mod_id>.zip` asset filename, byte length, and hash.
+Numeric GitHub release/asset IDs are
+not fabricated: they are assigned by GitHub after mutation and belong in a
+future consumer-owned installed-state sidecar after verified resolution.
+Filtered carry-forward keeps a sibling record verbatim, including its original
+asset tag. A newly staged row must instead bind the current manifest tag.
+
+Tracked entries whose source commit has no receipt or only schema 2 remain
+compatible but are explicitly classified as legacy, never source-exact.
+Receipt authority cannot use that legacy path and fails closed without the
+record. This phase implements no updater parser, historical release selection,
+download, extraction, atomic replacement, deployment, or inventory authority
+transition.
+
 `publication_authorization` must be canonical `hosted_qa` evidence. Its source
 and default-branch commits must equal the entry commit; the merged PR and exact
 successful check are independently queried rather than trusted from this JSON.
@@ -259,6 +295,7 @@ Offline validator self-test and manual validation:
 
 ```powershell
 .\qa\check_release_manifest.ps1 -SelfTest
+.\qa\check_release_recovery_record.ps1 -SelfTest
 .\qa\check_release_manifest.ps1 `
   -ManifestPath <printed-.release-stage-guid-path>\manifest.json `
   -StageRoot <printed-.release-stage-guid-path>
@@ -296,9 +333,10 @@ later per-mod migration must still satisfy all of these:
    `source_state: clean`, then verify a fresh checkout of `source_commit` builds
    byte-identical canonical post-policy bundle files with the recorded
    VMBLauncher version.
-3. Teach `vt2-mod-updater` and bisect/recovery documentation how to select a
-   release by source commit and verify each canonical file, while retaining legacy
-   manifest compatibility.
+3. Teach `vt2-mod-updater` and bisect/recovery documentation how to consume the
+   producer record, resolve a bounded exact historical asset, verify its ZIP and
+   canonical files, and retain legacy manifest compatibility. Producer metadata
+   alone is not restore authority.
 4. Add the generated output ignore rules in a coordinated transition commit and
    confirm VMBLauncher can bootstrap a checkout with no tracked `bundleV2`
    files. Keep genuine source assets in Git or Git LFS.

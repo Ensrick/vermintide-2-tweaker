@@ -16,6 +16,12 @@ if (-not (Test-Path -LiteralPath $bundleOutputSetHelpers -PathType Leaf)) {
 }
 . $bundleOutputSetHelpers
 
+$recoveryRecordHelpers = Join-Path $PSScriptRoot 'recovery-record.ps1'
+if (-not (Test-Path -LiteralPath $recoveryRecordHelpers -PathType Leaf)) {
+    throw "Release recovery-record helpers not found: $recoveryRecordHelpers"
+}
+. $recoveryRecordHelpers
+
 function Get-ReleaseSourceCommit {
     param([Parameter(Mandatory = $true)][string]$RepoRoot)
 
@@ -240,6 +246,12 @@ function Test-ReleaseManifest {
         if ("$($entry.builder.name)" -ne 'VMBLauncher') { $errors.Add("$prefix.builder.name must be VMBLauncher") }
         if (-not "$($entry.builder.version)".Trim()) { $errors.Add("$prefix.builder.version is required") }
 
+        $declaredAuthority = [string]$entry.bundle_authority
+        if (-not [string]::IsNullOrWhiteSpace($declaredAuthority) -and
+            @('tracked', 'receipt') -cnotcontains $declaredAuthority) {
+            $errors.Add("$prefix.bundle_authority must be tracked or receipt when present")
+        }
+
         if ($null -eq $entry.publication_authorization) {
             if ($mustHaveProvenance) { $errors.Add("$prefix.publication_authorization is required") }
             else { $warnings.Add("$prefix is a carried pre-authorization entry without publication_authorization") }
@@ -362,6 +374,33 @@ function Test-ReleaseManifest {
                 }
                 $nestedDirs = @(Get-ChildItem -LiteralPath $stagedDir -Directory)
                 if ($nestedDirs.Count -gt 0) { $errors.Add("$prefix staged output contains unrepresented nested directories") }
+            }
+        }
+
+        $hasRecoveryRecord = Test-VtReleaseRecoveryHasProperty -Value $entry -Name 'recovery'
+        if (-not $hasRecoveryRecord -or $null -eq $entry.recovery) {
+            if ($declaredAuthority -ceq 'receipt') {
+                $errors.Add("$prefix receipt authority requires a durable source-exact recovery record")
+            }
+            elseif ($mustHaveProvenance) {
+                $warnings.Add("$prefix is newly staged without a source-exact recovery record; it remains on the explicit legacy recovery path")
+            }
+        }
+        else {
+            if ([string]::IsNullOrWhiteSpace($declaredAuthority)) {
+                $errors.Add("$prefix.bundle_authority is required with a recovery record")
+            }
+            $recoveryVerdict = Test-VtReleaseRecoveryRecord `
+                -Record $entry.recovery `
+                -ManifestEntry $entry `
+                -ManifestReleaseTag ([string]$Manifest.release_tag) `
+                -RequireManifestReleaseTag:$mustHaveProvenance
+            foreach ($problem in @($recoveryVerdict.Errors)) {
+                $errors.Add("$prefix.$problem")
+            }
+            if (-not [string]::IsNullOrWhiteSpace($declaredAuthority) -and
+                [string]$entry.recovery.bundle_authority -cne $declaredAuthority) {
+                $errors.Add("$prefix recovery bundle authority differs from manifest entry")
             }
         }
     }

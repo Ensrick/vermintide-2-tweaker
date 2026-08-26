@@ -12,6 +12,7 @@ $checks = @(
     [pscustomobject]@{ Name = 'check_build_receipts'; Path = (Join-Path $PSScriptRoot 'check_build_receipts.ps1') }
     [pscustomobject]@{ Name = 'check_publication_snapshot'; Path = (Join-Path $PSScriptRoot 'check_publication_snapshot.ps1') }
     [pscustomobject]@{ Name = 'check_publication_receipt'; Path = (Join-Path $PSScriptRoot 'check_publication_receipt.ps1') }
+    [pscustomobject]@{ Name = 'check_release_recovery_record'; Path = (Join-Path $PSScriptRoot 'check_release_recovery_record.ps1') }
 )
 foreach ($check in $checks) {
     if (-not (Test-Path -LiteralPath $check.Path -PathType Leaf)) {
@@ -71,5 +72,5 @@ if ($failed.Count -gt 0) {
     exit 2
 }
 
-Write-Host '[bundle-output-set-host-matrix] OK -- output-set, authority, normalization, build receipt, publication snapshot, and hosted receipt contracts pass in both PowerShell hosts.' -ForegroundColor Green
+Write-Host '[bundle-output-set-host-matrix] OK -- output-set, authority, normalization, build receipt, publication snapshot, hosted receipt, and durable recovery-record contracts pass in both PowerShell hosts.' -ForegroundColor Green
 exit 0

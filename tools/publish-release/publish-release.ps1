@@ -556,6 +556,12 @@ foreach ($m in $releaseSet) {
     $sha256 = (Get-FileHash -Algorithm SHA256 -Path $zipPath).Hash.ToLowerInvariant()
 
     $sourceState = 'clean'
+    $recoveryReceiptProof = Get-VtReleaseRecoveryBuildReceiptProof `
+        -RepoRoot $repoRoot `
+        -SourceCommit $sourceCommit `
+        -Mod $m.Folder `
+        -PublicationSnapshot $commitSnapshot `
+        -ExpectedBuilderVersion $builderVersion
     $manifestEntry = [ordered]@{
         mod_id          = $m.Id
         friendly_name   = $m.Name
@@ -566,6 +572,7 @@ foreach ($m in $releaseSet) {
         visibility      = $visibility
         source_commit   = $sourceCommit
         source_state    = $sourceState
+        bundle_authority = $m.BundleAuthority
         builder         = [ordered]@{
             name    = 'VMBLauncher'
             version = $builderVersion
@@ -573,6 +580,20 @@ foreach ($m in $releaseSet) {
         root_bundle     = $m.RootBundle
         descriptor_name = $m.DescriptorName
         bundle_files    = $bundleFiles
+    }
+    if ($workshopId -ne '0' -and $recoveryReceiptProof.Available) {
+        $manifestEntry['recovery'] = New-VtReleaseRecoveryRecord `
+            -Repository $ghRepo `
+            -ReleaseTag $Tag `
+            -ModFolder $m.Folder `
+            -ModId $m.Id `
+            -WorkshopId $workshopId `
+            -Version $version `
+            -AssetFilename "$($m.Id).zip" `
+            -AssetBytes $zipBytes `
+            -BuilderVersion $builderVersion `
+            -PublicationSnapshot $commitSnapshot `
+            -BuildReceiptProof $recoveryReceiptProof
     }
     $manifestEntry['publication_authorization'] = $publicationAuthorization
     $manifestMods += $manifestEntry
@@ -664,7 +685,7 @@ $manifest = [ordered]@{
     mods         = $manifestMods
 }
 $manifestPath = Join-Path $stage 'manifest.json'
-$manifestJson = $manifest | ConvertTo-Json -Depth 5
+$manifestJson = $manifest | ConvertTo-Json -Depth 12
 [System.IO.File]::WriteAllText($manifestPath, $manifestJson, (New-Object System.Text.UTF8Encoding($false)))
 $assetPaths += $manifestPath
 
@@ -704,7 +725,7 @@ foreach ($receiptInput in $receiptInputs) {
     $entry[0]['publication_authorization'] = $publicationAuthorization
 }
 $manifest.published_at = (Get-Date).ToUniversalTime().ToString('o')
-$manifestJson = $manifest | ConvertTo-Json -Depth 8
+$manifestJson = $manifest | ConvertTo-Json -Depth 12
 $manifestBytes = [System.Text.Encoding]::UTF8.GetBytes($manifestJson)
 [System.IO.File]::WriteAllBytes($manifestPath, $manifestBytes)
 
