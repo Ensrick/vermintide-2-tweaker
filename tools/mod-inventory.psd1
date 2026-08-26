@@ -119,7 +119,18 @@
                 }
             )
         }
-        @{ Dir = 'character_dialogue';         ModId = 'character_dialogue';         WorkshopId = '3765055148'; Visibility = 'friends_only'; Stream = 'single'; Public = $false; Name = 'Character Dialogue'; BundleAuthority = 'tracked'; RootBundle = '0e14765f298dd165.mod_bundle' }
+        @{
+            Dir = 'character_dialogue'; ModId = 'character_dialogue'; WorkshopId = '3765055148';
+            Visibility = 'friends_only'; Stream = 'single'; Public = $false;
+            Name = 'Character Dialogue'; BundleAuthority = 'tracked'; RootBundle = '0e14765f298dd165.mod_bundle';
+            BuildArtifactExclusions = @(
+                @{
+                    Name = 'e7852992f40eb619.mod_bundle';
+                    Sha256 = 'e1a04e500f8255ebedcaffb4e35e829adbd99ebf46c2b8b4cd89d26dca4735e2';
+                    Reason = 'SDK tool-only BUNDLE=false LUT-generator sidecar emitted by clean Stingray builds'
+                }
+            )
+        }
         @{ Dir = 'crafting_in_modded';         ModId = 'cim';                        WorkshopId = '3721038774'; Visibility = 'public';       Stream = 'stable'; Public = $true;  Name = 'Crafting In Modded'; BundleAuthority = 'tracked'; RootBundle = 'cfd4add911f06fa1.mod_bundle' }
         @{
             Dir = 'crafting_in_modded_dev'; ModId = 'cim_dev'; WorkshopId = '3733366851';
