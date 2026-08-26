@@ -1,5 +1,6 @@
 local mod = get_mod("gut")
 local NumericEditor = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_numeric_editor")
+local BooleanRows = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_boolean_rows")
 
 -- Mod Tweaker scenegraph + widgets (v0.3 — native settings-menu chrome).
 -- Rebuilt to look like the game's Options menu by REUSING the native pieces
@@ -591,84 +592,17 @@ end
 -- The ON/OFF strings come from the game's own loc keys so they match exactly.
 -- Two text passes (ON gated on flag, OFF gated on not-flag) avoid the view having
 -- to recompute value_text — the displayed word follows content.flag automatically.
-local function _on_off_text()
-    -- Keep the game's localized "ON"/"OFF" only when it resolves cleanly; reject a
-    -- "<missing-key>" marker (same guard as _vmf_label) and fall back to literals.
-    local function _loc(key, fallback)
-        local ok, s = pcall(Localize, key)
-        if ok and type(s) == "string" and s ~= "" and not string.find(s, "^<") then return s end
-        return fallback
-    end
-    return _loc("menu_settings_on", "ON"), _loc("menu_settings_off", "OFF")
-end
-
-local function create_checkbox(text, base_offset, depth)
-    local y = base_offset[2] - ROW_H
-    base_offset[2] = y
-    local cy = y + ROW_H / 2
-    local ind = INDENT_PER_DEPTH * (depth or 0)   -- LEFT label only; controls stay at RA
-    -- Native ON/OFF stepper columns (shared with create_slider's left arrow so every
-    -- row's decrement arrow lines up flush): [<] at DEC_ARROW_X (RA−400), value
-    -- centered at VALUE_X_STEPPER (RA−200), [>] flush right at INC_ARROW_X_STEPPER
-    -- (RA−19). The ON/OFF word (val_w wide) is centered on the value column.
-    local val_w = 90
-    local dec_x = DEC_ARROW_X                                  -- left arrow, RA−400
-    local inc_x = INC_ARROW_X_STEPPER                          -- right arrow, RA−19
-    local val_x = VALUE_X_STEPPER - val_w / 2                  -- centered on RA−200
-    local on_txt, off_txt = _on_off_text()
-
-    local passes = {
-        -- style_id REQUIRED on the hotspot: all rows share mt_list_start (size {1,1}),
-        -- so without an explicit style.hotspot size the hit target collapses to 1x1.
-        { pass_type = "hotspot", content_id = "hotspot", style_id = "hotspot" },
-        { pass_type = "text", style_id = "label", text_id = "label" },
-        { pass_type = "text", style_id = "on_text",  text_id = "on_text",
-          content_check_function = function(c) return c.flag end },
-        { pass_type = "text", style_id = "off_text", text_id = "off_text",
-          content_check_function = function(c) return not c.flag end },
-    }
-    local style = {
-        hotspot  = { size = { ROW_W, ROW_H }, offset = { 0, y, 0 } },
-        -- (Fix 1, v0.2.151-dev) Label font 16 (was 28). The FARMED vanilla option-row label
-        -- (dumped live from the real Options menu, hell_shark_masked, 16, upper_case, NOT
-        -- dynamic) is 16 — booleans render as a STEPPER here, and every vanilla option row
-        -- (checkbox/slider/dropdown) uses the same 16 label. The earlier 28 (from the
-        -- create_checkbox_widget decompiled literal) rendered far too large once the global
-        -- RESOLUTION_LOOKUP.scale doubled it. hell_shark (unmasked) here vs native
-        -- hell_shark_masked, but the size matches. ON/OFF value text dropped 18 -> 16 to
-        -- stay <= the label size.
-        label    = _text_style(LABEL_BASE_X + ind, y, DEC_ARROW_X - LABEL_BASE_X - 12 - ind, 16),
-        on_text  = _text_style(val_x, y, val_w, 16,
-                     Colors.get_color_table_with_alpha("font_default", 255), "center"),
-        off_text = _text_style(val_x, y, val_w, 16,
-                     Colors.get_color_table_with_alpha("font_default", 255), "center"),
-    }
-    local content = {
-        flag = false, hotspot = {}, label = text,
-        on_text = on_txt, off_text = off_txt,
-        -- dec/inc hotspots = the two arrow hit zones (alternate toggles).
-        dec = {}, inc = {},
-    }
-    -- Arrow hit zones (the view treats either as a toggle). Native stepper hotspots
-    -- are INPUT_FIELD_WIDTH/2 = 200 wide: left hotspot at DEC_ARROW_X (RA−400), right
-    -- hotspot at VALUE_X_STEPPER (RA−200) (options_view_definitions.lua:3435-3444 /
-    -- :3477-3487). Sized to native for the real click feel.
-    passes[#passes + 1] = { pass_type = "hotspot", content_id = "dec", style_id = "dec" }
-    passes[#passes + 1] = { pass_type = "hotspot", content_id = "inc", style_id = "inc" }
-    style.dec = { size = { ARROW_HOTSPOT_W, ROW_H }, offset = { DEC_ARROW_X, y, 0 } }
-    style.inc = { size = { ARROW_HOTSPOT_W, ROW_H }, offset = { VALUE_X_STEPPER, y, 0 } }
-    _append_arrows(passes, style, content, dec_x, inc_x, cy)
-    _append_highlight(passes, style, content, y)
-    _append_separator(passes, style, y)
-
-    return UIWidget.init({
-        scenegraph_id = LIST_SG,
-        element = { passes = passes },
-        content = content,
-        style = style,
-        offset = { 0, 0, 0 },
-    })
-end
+local boolean_rows = BooleanRows.new({
+    UIWidget = UIWidget, Colors = Colors, Localize = Localize,
+    row_h = ROW_H, row_w = ROW_W, indent_per_depth = INDENT_PER_DEPTH,
+    label_base_x = LABEL_BASE_X, dec_arrow_x = DEC_ARROW_X,
+    inc_arrow_x_stepper = INC_ARROW_X_STEPPER, value_x_stepper = VALUE_X_STEPPER,
+    arrow_hotspot_w = ARROW_HOTSPOT_W, list_sg = LIST_SG,
+    text_style = _text_style, append_arrows = _append_arrows,
+    append_highlight = _append_highlight, append_separator = _append_separator,
+})
+local create_checkbox = boolean_rows.create_checkbox
+local create_radio = boolean_rows.create_radio
 
 -- Slider/numeric/dropdown: label + rect track + rect fill (proportion) + atlas
 -- thumb that TRACKS internal_value + native texture arrows ([<]/[>] textures, the
@@ -2097,6 +2031,7 @@ return {
     },
     search_icon_visible = search_icon_visible,
     create_checkbox = create_checkbox,
+    create_radio = create_radio,
     create_slider = create_slider,
     create_stepper = create_stepper,
     create_dropdown = create_dropdown,

@@ -24,6 +24,7 @@ function M.install(ModTweakerView, deps)
     local _format_keybind_value = assert(deps.format_keybind_value, "Mod Tweaker interaction requires keybind formatter")
     local _poll_keybind_combo = assert(deps.poll_keybind_combo, "Mod Tweaker interaction requires keybind poller")
     local _cat_set = assert(deps.cat_set, "Mod Tweaker interaction requires category setter")
+    local _cat_get = assert(deps.cat_get, "Mod Tweaker interaction requires category getter")
     local _play_click = assert(deps.play_click, "Mod Tweaker interaction requires click sound")
     local _play_hover = assert(deps.play_hover, "Mod Tweaker interaction requires hover sound")
     local _printf = assert(deps.printf, "Mod Tweaker interaction requires printf")
@@ -549,6 +550,7 @@ function ModTweakerView:_handle_input(input_service)
                 if not self._search_focused then
                     if self._editing_row then self:_commit_edit(self._editing_row) end
                     self._capturing_keybind = nil
+                    self._kb_mouse_pending = nil   -- (issue 631) drop any deferred mouse hold when focusing search
                     self._search_focused = true
                     self._search_caret_t = 0
                     _play_click()
@@ -793,6 +795,36 @@ function ModTweakerView:_handle_input(input_service)
                     self._search_rebuild_pending = nil
                     return
                 end
+            elseif row._wtype == "radio" then
+                local clicked = c.hotspot and (c.hotspot.on_release or c.hotspot.on_left_release)
+                if clicked and not row._radio_armed then
+                    row._radio_armed = true
+                    -- Selecting the active bubble is intentionally a no-op. A different
+                    -- choice stages one bounded group transaction, then rebuilds so the
+                    -- filled marker moves immediately without touching unrelated settings.
+                    if not c.selected then
+                        local MT = mod.mod_tweaker
+                        local members = MT and MT:get_exclusive_members(row._mt_radio_group)
+                        if row._mt_radio_none then
+                            for j = 1, #(members or {}) do
+                                local member = members[j]
+                                local live = _cat_get(row._category, member.setting_id)
+                                if self:get_staged(row._category, member.setting_id, live) then
+                                    self:stage_set(row._category, member.setting_id, false)
+                                end
+                            end
+                        else
+                            self:stage_set(row._category, row._setting_id, true)
+                            self:_enforce_exclusive(row._category, row._setting_id)
+                        end
+                        _play_click()
+                        self._dd_block_until_press = true
+                        self:_build_rows(self._categories[self._selected])
+                        return
+                    end
+                elseif not clicked then
+                    row._radio_armed = false
+                end
             elseif row._wtype == "checkbox" or row._wtype == "boolean" then
                 -- on_left_release (not on_release): rows share the mt_list_start node,
                 -- which doesn't persist the hotspot input_pressed state, so on_release
@@ -870,11 +902,32 @@ function ModTweakerView:_handle_input(input_service)
                     if Managers.chat and Managers.chat.block_chat_input_for_one_frame then
                         pcall(function() Managers.chat:block_chat_input_for_one_frame() end)
                     end
-                    local combo = _poll_keybind_combo()
-                    if combo then
+                    local combo, primary_is_mouse = _poll_keybind_combo()
+                    if combo and primary_is_mouse then
+                        -- (issue 631) Mouse primary: HOLD, do not commit yet. Snapshot the combo
+                        -- (modifiers re-read each frame) and show a live preview; commit only when
+                        -- the button is released (the `combo == nil` branch below). This keeps the
+                        -- capture branch active for the release frame so its `return` consumes the
+                        -- click, so binding Mouse 1 can't re-enter capture and Mouse 2 can't hit the
+                        -- right-click-clear below — the same release-committed model VMF uses.
+                        self._kb_mouse_pending = combo
+                        row.content.value_text = _format_keybind_value(combo)
+                    elseif combo then
+                        -- Keyboard primary: commit immediately (unchanged, verified path).
                         self._capturing_keybind = nil
+                        self._kb_mouse_pending = nil
                         self:stage_set(row._category, row._setting_id, combo)   -- (#123) STAGE; registers on APPLY
                         row.content.value_text = _format_keybind_value(combo)
+                        _play_click()
+                        return
+                    elseif self._kb_mouse_pending then
+                        -- (issue 631) The held mouse primary was released this frame (poll no longer
+                        -- sees it): commit the snapshot and consume the release.
+                        local pending = self._kb_mouse_pending
+                        self._kb_mouse_pending = nil
+                        self._capturing_keybind = nil
+                        self:stage_set(row._category, row._setting_id, pending)   -- (#123) STAGE; registers on APPLY
+                        row.content.value_text = _format_keybind_value(pending)
                         _play_click()
                         return
                     end
@@ -887,6 +940,7 @@ function ModTweakerView:_handle_input(input_service)
                 elseif c.hotspot and (c.hotspot.on_release or c.hotspot.on_left_release) then
                     if self._editing_row then self:_commit_edit(self._editing_row) end
                     self._capturing_keybind = row
+                    self._kb_mouse_pending = nil   -- (issue 631) fresh capture, drop any stale mouse hold
                     row.content.value_text = "PRESS A KEY..."
                     _play_click()
                     return

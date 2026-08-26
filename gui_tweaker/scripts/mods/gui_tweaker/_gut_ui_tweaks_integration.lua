@@ -227,29 +227,41 @@ _rt_register("uitweaks_sync_map_resolves", function()
 end)
 
 _rt_register("uitweaks_bridged_to_stock_settings", function()
-    -- (#312) The surfaced UI Tweaks toggles in gut's Mod Tweaker MUST route their get/set to
-    -- the stock UI Tweaks (HideBuffs) mod so they stay consistent with UI Tweaks' own VMF
-    -- options (user reports 2026-07-10 / 2026-07-12: toggles ON in UI Tweaks showed OFF here).
-    -- Assert BOTH Mod Tweaker twins carry the bridge helper (marker) AND call it in the
-    -- category-build path. Split needles so this check can never self-match; unreadable
-    -- source => silent skip (pass).
+    -- (#312) The Mod Tweaker must consume HideBuffs' CURRENT VMF widget list and route
+    -- every supported live node to that stock mod. A copied checkbox allow-list silently
+    -- loses future groups/sliders/dropdowns/keybinds. Both twins must use the shared planner
+    -- and must exclude HideBuffs from GUT's own profile snapshots.
     local ok, info = pcall(debug.getinfo, mod.on_setting_changed or function() end, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
     local dir = src:match("^(.*[/\\])[^/\\]*$")
     if not dir then return end
-    local marker    = "[UITWEAKS-BRIDGE" .. "-312]"
-    local call_form = "_bridge_uitweaks_to" .. "_stock(out)"
+    local marker = "[UITWEAKS-BRIDGE" .. "-312]"
+    local live_marker = "[UITWEAKS-LIVE-TREE" .. "-312]"
+    local call_form = "uitweaks_live_group" .. ".apply(out"
     for _, fn in ipairs({ "_mod_tweaker_view.lua", "_mod_tweaker_state.lua" }) do
         local txt = _gut_read_all(dir .. fn)
         if txt then
-            if not txt:find(marker, 1, true) then
-                return fn .. " dropped the UI Tweaks->stock HideBuffs bridge helper (#312)"
-            end
             if not txt:find(call_form, 1, true) then
-                return fn .. " no longer calls the UI Tweaks->stock HideBuffs bridge in the category build (#312)"
+                return fn .. " no longer calls the shared UI Tweaks live-group owner (#312)"
+            end
+            if not txt:find("_profile_excluded_owners", 1, true) then
+                return fn .. " no longer keeps UI Tweaks out of GUT profile snapshots (#312)"
             end
         end
+    end
+    local owner = _gut_read_all(dir .. "_gut_uitweaks_live_group.lua")
+    if owner and (not owner:find(marker, 1, true)
+            or not owner:find(live_marker, 1, true)
+            or not owner:find("external_group.find_mod_list", 1, true)
+            or not owner:find("external_group.replace_group_children", 1, true)
+            or not owner:find("exclude_owner_from_profiles = true", 1, true)) then
+        return "shared UI Tweaks live-group owner lost bridge/profile contracts (#312)"
+    end
+    local planner = _gut_read_all(dir .. "_mod_tweaker_external_group.lua")
+    if planner and (not planner:find("live_tree_spliced", 1, true)
+            or not planner:find("exclude_owner_from_profiles", 1, true)) then
+        return "shared external-group planner lost live-tree/profile-exclusion contracts (#312)"
     end
 end)
 

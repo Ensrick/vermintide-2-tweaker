@@ -1,6 +1,6 @@
 local mod = get_mod("gut")
 
-local MOD_VERSION = "0.2.284"
+local MOD_VERSION = "0.2.285"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -1968,7 +1968,7 @@ pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_gut_mission_hero_select")
 -- StartGameWindowAreaSelection._setup_video_player), hook_safe on
 -- MatchmakingStateWaitForCountdown.on_enter, full hook on GameModeManager.complete_level;
 -- chains mod.on_game_state_changed (preview-package arm). See _gut_mission_map.lua.
-pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_gut_mission_map")
+pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_gut_mission_selection_manifest")
 
 -- Inventory character-preview lighting (#522): preserves the vanilla preview
 -- scene and installs one zero-allocation exposure callback on only

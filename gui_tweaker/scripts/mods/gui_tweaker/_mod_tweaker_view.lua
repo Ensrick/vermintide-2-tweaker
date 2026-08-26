@@ -13,11 +13,14 @@ local _printf = rawget(_G, "printf") or function() end  -- engine printf (surviv
 local defs = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_definitions")
 local transactions = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_transaction")
 local Search = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_search")
+local uitweaks_live_group = mod:dofile("scripts/mods/gui_tweaker/_gut_uitweaks_live_group")
 local profiles = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_profiles")
 local profile_runtime = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_profile_runtime")
 local disabled_sections = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_disabled_sections")
 local tab_labels = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_tab_labels")
 local ordering = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_ordering")
+local ExclusiveLayout = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_exclusive_layout")
+local _poll_keybind_combo = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_keybind_capture").poll
 
 local UIRenderer = UIRenderer
 local UISceneGraph = UISceneGraph
@@ -283,46 +286,6 @@ local function _format_keybind_value(val)
     end
     if #parts == 0 then return "unbound" end
     return table.concat(parts, " + ")
-end
-
--- (#123) Keybind capture: collect the currently-held keyboard buttons by VT2 name and
--- return the VMF combo array {modifiers..., main_key} once a non-modifier key is held,
--- else nil. Names come straight from Keyboard.button_name (the same naming VMF matches
--- against), modifiers first. Mouse/gamepad ignored. NOTE: exact name normalisation
--- ("left ctrl" vs "ctrl") is verified on dev — if a bind does not fire in-game, a single
--- native-menu rebind ([gut-keybind-probe] VMF) reveals VMF's exact stored format to match.
--- VMF stores binds as { primary_key, modifier... } — the MAIN key FIRST, then
--- NORMALISED modifiers ("ctrl"/"alt"/"shift", NOT "left ctrl"). Confirmed from working
--- binds in user_settings.config (e.g. {"c","ctrl"}, single key {"f8"}). v0.2.99 had the
--- order reversed with "left ctrl" names, so VMF couldn't register the bind (#123).
-local _KB_MOD_NORMALIZE = {
-    ["left shift"] = "shift", ["right shift"] = "shift",
-    ["left ctrl"]  = "ctrl",  ["right ctrl"]  = "ctrl",
-    ["left alt"]   = "alt",   ["right alt"]   = "alt",
-}
-local function _poll_keybind_combo()
-    local n = 256
-    local ok_n, cnt = pcall(function() return Keyboard.num_buttons() end)
-    if ok_n and type(cnt) == "number" and cnt > 0 then n = cnt end
-    local mods, seen, main = {}, {}, nil
-    for i = 0, n - 1 do
-        local ok_b, down = pcall(Keyboard.button, i)
-        if ok_b and type(down) == "number" and down > 0 then
-            local ok_name, name = pcall(Keyboard.button_name, i)
-            if ok_name and type(name) == "string" and name ~= "" and name ~= "esc" then
-                local norm = _KB_MOD_NORMALIZE[name]
-                if norm then
-                    if not seen[norm] then seen[norm] = true; mods[#mods + 1] = norm end
-                elseif not main then
-                    main = name
-                end
-            end
-        end
-    end
-    if not main then return nil end
-    local combo = { main }                                  -- VMF: primary key FIRST
-    for _, m in ipairs(mods) do combo[#combo + 1] = m end   -- then normalised modifiers
-    return combo
 end
 
 -- (#123) Apply a keybind change THE WAY VMF DOES (vmf_options_view ~734): save the value,
@@ -693,84 +656,6 @@ local function _inject_ckc_into_gut(out)
     -- gut_cat.mod_obj stays = gut (its own settings fall back via _owner)
 end
 
--- (#312) Bridge gut's surfaced "UI Tweaks" toggles to the STOCK UI Tweaks (HideBuffs)
--- mod so the Mod Tweaker reads/writes ITS live settings, not gut's own private copies.
--- gut kept HideBuffs' setting_ids VERBATIM in its data tree (hide_frames, HIDE_BOSS_HP_BAR,
--- ...), but the two mods persist them in SEPARATE VMF namespaces (gut vs HideBuffs) --
--- so a toggle the user set ON in UI Tweaks' own VMF menu showed OFF in the Mod Tweaker
--- (issue #312, user reports 2026-07-10 / 2026-07-12). When HideBuffs is installed + enabled
--- we route every OVERLAPPING checkbox setting_id's get/set to it via the same per-node
--- _owners mechanism the Equipment merge (#208) and CKC injection (#339) use: reads now show
--- HideBuffs' live value, edits stage under a "HideBuffs" buffer and commit as HB:set(id, v,
--- true) (fires its on_setting_changed live + VMF-persists) -- the own-or-pin doctrine that
--- matches the drag-offset sync module (_gut_uitweaks_sync.lua) and the CKC bridge (#313).
--- HideBuffs becomes the single owner of the shared toggles. No-op when HideBuffs is absent
--- or disabled: gut's own copies drive its absorbed hb/ fork exactly as before. Runs AFTER
--- _inject_ckc_into_gut so it MERGES into any CKC-set _owner_mod_ids. Marker
--- [UITWEAKS-BRIDGE-312]. Byte-parallel twin with the one in _mod_tweaker_state.lua.
-local function _bridge_uitweaks_to_stock(out)
-    local HB = get_mod("HideBuffs")
-    if not HB then return end                          -- stock UI Tweaks absent: gut owns its copies
-    if type(HB.is_enabled) == "function" then
-        local ok_en, en = pcall(HB.is_enabled, HB)
-        if ok_en and en == false then
-            local gut_cat
-            for _, c in ipairs(out) do
-                if c.mod_id == "gut" or c.mod_id == "gut" then gut_cat = c; break end
-            end
-            if gut_cat then
-                gut_cat.widgets = disabled_sections.disable_group_subtree(gut_cat.widgets,
-                    "hb_group",
-                    _equip_loc("gut_disabled_in_vmf", disabled_sections.REASON))
-            end
-            return                                    -- present but disabled: explained header only
-        end
-    end
-    local names = HB.SETTING_NAMES
-    if type(names) ~= "table" then return end
-    -- Real HideBuffs setting_ids are the VALUES of SETTING_NAMES (key may differ from id).
-    local valid = {}
-    for _, sid in pairs(names) do
-        if type(sid) == "string" then valid[sid] = true end
-    end
-    local gut_cat
-    for _, c in ipairs(out) do
-        if c.mod_id == "gut" or c.mod_id == "gut" then gut_cat = c; break end
-    end
-    if not gut_cat or type(gut_cat.widgets) ~= "table" then return end
-
-    local owners  = gut_cat._owners or {}
-    local bridged = 0
-    for i = 1, #gut_cat.widgets do
-        local node  = gut_cat.widgets[i]
-        local sid   = _nf(node, "setting_id")
-        local wtype = _nf(node, "type")
-        -- Bridge only OVERLAPPING value toggles: a checkbox whose id is a real HideBuffs
-        -- setting. Skips groups, the HIDE_HUD hotkey (keybind, read-only here), and gut's
-        -- OWN control settings (gut_uitweaks_sync / the vanilla mirrors are NOT in
-        -- SETTING_NAMES). Never override a node already owned (e.g. a CKC-injected one).
-        if type(sid) == "string" and valid[sid]
-                and (wtype == "checkbox" or wtype == "boolean")
-                and owners[sid] == nil then
-            owners[sid] = { mod_id = "HideBuffs", mod_obj = HB }
-            bridged = bridged + 1
-        end
-    end
-    if bridged == 0 then return end
-    gut_cat._owners = owners
-    -- Merge "HideBuffs" into _owner_mod_ids so apply/dirty flush ITS staged buffer too.
-    -- _inject_ckc_into_gut may have already set this to { gut_id, CKC }; preserve those and
-    -- add gut's own id (its non-bridged settings buffer under it) + HideBuffs.
-    local ids  = gut_cat._owner_mod_ids or {}
-    local seen = {}
-    for _, id in ipairs(ids) do seen[id] = true end
-    if not seen[gut_cat.mod_id] then ids[#ids + 1] = gut_cat.mod_id end
-    seen[gut_cat.mod_id] = true
-    if not seen["HideBuffs"] then ids[#ids + 1] = "HideBuffs" end
-    gut_cat._owner_mod_ids = ids
-    -- gut_cat.mod_obj stays = gut (its own non-bridged settings fall back via _owner).
-end
-
 local function _vmf_categories()
     local out = {}
     local vmf = get_mod("VMF")
@@ -836,7 +721,7 @@ local function _vmf_categories()
     -- (#312) Bridge gut's UI Tweaks toggles to the stock HideBuffs mod's live settings
     -- (own-or-pin) so the Mod Tweaker stays consistent with UI Tweaks' own VMF options.
     -- After CKC injection (it merges into any CKC-set _owner_mod_ids), before the sort.
-    _bridge_uitweaks_to_stock(out)
+    uitweaks_live_group.apply(out, { field = _nf, localize = _equip_loc })
     -- (#208) Fold the four inventory mods into one "Equipment" tab when 2+ are active
     -- (or relabel the N=1-only-CWV tab). Done BEFORE the sort so Equipment participates.
     out = _synthesize_equipment(out)
@@ -938,7 +823,8 @@ function ModTweakerView:_profile_snapshot(category, defaults)
             local _, owner_id = _owner(category, sid)
             local value = defaults and _nf(node, "default_value") or _cat_get(category, sid)
             if value == nil and defaults then value = _cat_get(category, sid) end
-            if owner_id and value ~= nil then
+            local excluded = category._profile_excluded_owners
+            if owner_id and not (excluded and excluded[owner_id]) and value ~= nil then
                 out[profiles.member_key(owner_id, sid)] = value
             end
         end
@@ -1039,7 +925,9 @@ function ModTweakerView:_switch_profile(slot)
     for member, value in pairs(values) do
         local owner_id, sid = profiles.split_member_key(member)
         local _, actual_owner = _owner(category, sid)
+        local excluded = category._profile_excluded_owners
         if owner_id and sid and actual_owner == owner_id
+                and not (excluded and excluded[owner_id])
                 and reconciled_additions[member] == nil then
             self:stage_set(category, sid, value)
             staged = staged + 1
@@ -1332,6 +1220,34 @@ function ModTweakerView:_build_node_row(w, category, base_offset, depth, display
             local live = _cat_get(category, setting_id)
             row.content.flag = self:get_staged(category, setting_id, live) and true or false
             row._last_flag = row.content.flag
+        else err = r end
+    elseif wtype == "radio" then
+        local ok, r = pcall(defs.create_radio, label, base_offset, depth)
+        if ok and r then
+            row = r
+            local group_id = _nf(w, "_mt_exclusive_group")
+            local is_none = _nf(w, "_mt_exclusive_none") == true
+            local selected = false
+            if is_none then
+                selected = true
+                local MT = _mt()
+                local members = MT and MT:get_exclusive_members(group_id)
+                for i = 1, #(members or {}) do
+                    local member = members[i]
+                    local live = _cat_get(category, member.setting_id)
+                    if self:get_staged(category, member.setting_id, live) then
+                        selected = false
+                        break
+                    end
+                end
+            else
+                local live = _cat_get(category, setting_id)
+                selected = self:get_staged(category, setting_id, live) and true or false
+            end
+            row.content.selected = selected
+            row._mt_radio_group = group_id
+            row._mt_radio_none = is_none
+            row._mt_radio_member_mod = _nf(w, "_mt_exclusive_member_mod")
         else err = r end
     elseif wtype == "slider" or wtype == "numeric" then
         local ok, r = pcall(defs.create_slider, label, "", base_offset, depth)
@@ -1695,6 +1611,26 @@ function ModTweakerView:_build_rows(category)
         for i = 1, #category.widgets do _walk_nested(category.widgets[i], nodes, depths, 0) end
     end
     nodes, depths = _order_category_nodes(category, nodes, depths)
+    -- (#446) Upgrade a complete same-parent exclusive cluster from scattered VMF
+    -- checkbox rows to one synthetic collapsible with a None/default radio row and
+    -- one radio row per real setting. The pure planner fails closed for cross-mod,
+    -- incomplete, or structurally scattered clusters, preserving checkbox behavior.
+    local MT = _mt()
+    if MT and type(MT.get_exclusive_group_id) == "function"
+        and type(MT.get_exclusive_members) == "function"
+        and type(MT.get_exclusive_presentation) == "function" then
+        nodes, depths = ExclusiveLayout.plan(nodes, depths, {
+            mod_id = category.mod_id,
+            field = _nf,
+            get_group_id = function(mod_id, setting_id)
+                return MT:get_exclusive_group_id(mod_id, setting_id)
+            end,
+            get_members = function(group_id) return MT:get_exclusive_members(group_id) end,
+            get_presentation = function(group_id)
+                return MT:get_exclusive_presentation(group_id)
+            end,
+        })
+    end
     -- (#163) Keep the flat node/depth arrays for the auto-collapse handler — sibling + descendant
     -- detection needs the tree shape; the group toggle in _handle_input reads these.
     self._build_nodes, self._build_depths, self._build_category = nodes, depths, category
@@ -2442,6 +2378,7 @@ function ModTweakerView:update(dt, t)
         if self._capturing_keybind then
             local row = self._capturing_keybind
             self._capturing_keybind = nil
+            self._kb_mouse_pending = nil   -- (issue 631) drop any deferred mouse hold on ESC-clear
             self:stage_set(row._category, row._setting_id, {})   -- (#123) STAGE the clear; applies on APPLY
             row.content.value_text = _format_keybind_value({})
             _play_click()
@@ -2513,6 +2450,7 @@ Interaction.install(ModTweakerView, {
     format_keybind_value = _format_keybind_value,
     poll_keybind_combo = _poll_keybind_combo,
     cat_set = _cat_set,
+    cat_get = _cat_get,
     play_click = _play_click,
     play_hover = _play_hover,
     printf = _printf,

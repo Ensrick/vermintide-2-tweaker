@@ -114,8 +114,6 @@ return {
     gut_scoreboard_live_native_tooltip = {
         en = "Adds the same expanded statistics panel while you hold Tab in an Adventure mission and on its end screen. It shows the eleven statistics Vermintide already tracks; no custom stat hooks or network messages are added. Disable the standalone Tab Scoreboard mod before using this page.",
     },
-    gut_scoreboard_live_title = { en = "Mission Statistics" },
-    gut_scoreboard_live_statistic = { en = "Statistic" },
     gut_scoreboard_live_sort = { en = "Sort players by" },
     gut_scoreboard_live_sort_tooltip = { en = "Orders the four player columns by the selected live statistic. Damage Taken sorts lowest first; other statistics sort highest first." },
     gut_scoreboard_sort_name = { en = "Player name" },

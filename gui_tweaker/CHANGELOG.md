@@ -1,5 +1,29 @@
 # Tweaker: GUI — Changelog
 
+## 0.2.285 (2026-08-26) — verified selective stable promotion (#312, #446, #631, #649)
+
+### Why
+
+- Promote only the GUI changes that have explicit user or tester verification,
+  while keeping unverified development work out of the non-dev Workshop item.
+
+### Changed
+
+- Promotes mouse buttons 1–5 as Mod Tweaker keybind primaries, including
+  release-committed mouse capture so the click that begins capture cannot bind
+  or clear itself (#631).
+- Adds native-style mutually exclusive radio controls and folds the live UI
+  Tweaks settings tree into Mod Tweaker while preserving the owning mod's live
+  values, ordering, and profile boundary (#446, #312).
+- Guards mission-completion statistics against late or custom careers whose
+  statistics rows are absent, without changing valid native results (#649).
+
+### Notes
+
+- Withholds the unverified 0.2.283/0.2.284 scoreboard candidate from the
+  Workshop artifact. Stable scoreboard code remains byte-identical to the last
+  live 0.2.281 presenter; the candidate and its history remain preserved in Git.
+
 ## 0.2.284 (2026-08-25) -- stable scoreboard release reconciliation (#272) [not-started]
 
 - Reissues the reviewed 0.2.283 stable scoreboard correction under the fresh
