@@ -1,5 +1,19 @@
 # Character Dialogue Changelog
 
+## 0.1.11-dev (2026-08-26) - tracked schema-3 receipt reconciliation (#1428)
+
+- Runtime behavior is unchanged. This build gives the receipt-authority pilot
+  an independently observable release identity without folding in open
+  Character Dialogue feature or bug work.
+- Reconciles the tracked complete output set with VMBLauncher 0.6.1 and records
+  its exact source, descriptor, builder, normalization policy, canonical root,
+  and every normalized output in the schema-3 BuildOnly receipt.
+- Keeps Character Dialogue on tracked authority. The independently landed
+  #1203 policy normalizes the optional SDK-only LUT-generator sidecar to
+  canonical absence; no ignore, deployment-policy, or runtime-code change is
+  part of this release.
+- VT2-Bundle-Retirement: `e7852992f40eb619.mod_bundle`
+
 ## 0.1.10-dev (2026-08-16) -- automatic audio isolation during previews (#998) [verify-fix]
 
 - New "Isolate Audio During Playback" ON/OFF control at the top of Mod
