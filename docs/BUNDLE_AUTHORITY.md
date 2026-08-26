@@ -86,6 +86,38 @@ compares the complete locked SDK-staging set immediately before `ugc_tool`.
 Tracked publication keeps its established pre-build Git-blob selection and
 Git-blob receipt route. Receipt authority cannot bootstrap a new Workshop ID;
 first upload remains tracked-only. Receipt authority also keeps local/remote
-deployment, updater consumption, and recovery consumption disabled. Do not
+deployment, updater consumption, and recovery restoration disabled. Do not
 bypass those policy fields: each later consumer needs its own reviewed
 immutable-byte contract and adversarial coverage.
+
+## Durable recovery producer boundary
+
+Issue #1430 adds metadata production, not recovery execution. A newly staged
+release entry receives a `recovery` schema-1 child only when the immutable
+publication snapshot is backed by a committed, exact schema-3 build receipt.
+That record binds all of the following in one source-exact shape:
+
+- repository, release tag, the exact case-sensitive `<mod_id>.zip` asset filename,
+  byte length, and SHA-256;
+- mod folder/id, Workshop id, version, clean source commit, item cfg, inventory,
+  ignore-state, and builder provenance;
+- bundle authority, canonical root, source-qualified descriptor, and complete
+  ordinal output map with its aggregate fingerprint; and
+- the committed build-receipt blob/hash plus its source, output, builder, and
+  normalization-policy proof.
+
+The asset coordinates available before upload are deliberately logical and
+immutable: repository, tag, filename, byte length, and hash. Numeric GitHub
+release/asset IDs do not exist when the record is constructed. A future
+consumer may persist those numeric IDs in an installed-state sidecar after it
+has resolved and verified the asset; the producer must not predict them.
+Filtered carry-forward preserves a sibling record verbatim, including the tag
+where its exact asset was first recorded. Only a newly staged row must bind the
+manifest's current release tag.
+
+Tracked entries with a missing or schema-2 receipt retain their existing
+behavior and are explicitly classified as legacy rather than source-exact.
+Receipt authority has no safe legacy byte reconstruction, so it fails closed if
+the durable record cannot be produced. No updater, historical resolver, file
+replacement, deployment, authority transition, or active inventory-row change
+is enabled by this producer contract.

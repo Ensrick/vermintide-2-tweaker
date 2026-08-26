@@ -1744,7 +1744,8 @@ if (-not (Test-Path $modDir)) { Fail "Mod directory not found: $modDir" }
 
 # Issue #1412: select the build/publication lane from the exact inventory
 # contract before claims, launcher resolution, build, deploy, or upload. Receipt
-# authority may build and publish only; deploy/update/recovery remain disabled.
+# authority may build and publish only; deploy/update/recovery consumption
+# remains disabled. Producer metadata grants no restore authority.
 try {
     $bundleAuthorityEntry = Get-VtBuildReceiptInventoryEntry -RepoRoot $repoRoot -Mod $Mod
     $bundleAuthorityPolicy = Assert-VtBundleAuthorityShipPreflight `

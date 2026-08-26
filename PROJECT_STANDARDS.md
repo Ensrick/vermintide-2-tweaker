@@ -1239,8 +1239,13 @@ or dirty commit id. Every inventory row explicitly remains
 parity rather than replacing it, while untouched schema-2 receipts remain
 admissible during migration. Issue #1412 prepares the second exact mode,
 `receipt`, without switching any active row. Issue #1426 adds only its
-receipt-gated publication consumer; deploy, updater, recovery, and bootstrap
-remain disabled. Its contract and typed transitions are documented in
+receipt-gated publication consumer; deploy, updater/recovery consumption, and
+bootstrap remain disabled. Issue #1430 adds an additive durable recovery
+record to new release entries only when the immutable publication snapshot has
+an exact committed schema-3 receipt. That record is producer metadata, not a
+historical resolver or restore authority; tracked schema-2/missing receipts
+remain explicit legacy and receipt authority fails closed without the record.
+Its contract and typed transitions are documented in
 `docs/BUNDLE_AUTHORITY.md`. Pre-commit validates the exact staged index,
 hosted QA validates the committed PR tree, and final ship compares the same
 freshly normalized complete output set before the authority-specific parity

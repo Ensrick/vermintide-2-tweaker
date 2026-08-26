@@ -85,8 +85,11 @@ function Invoke-SelfTest {
         Assert (-not (Test-PublicationEvidenceMatchesLive -CallerEvidence $staleCallerAuth -LiveEvidence $movedHeadAuth).Ok) 'rejects caller evidence made stale by a default-branch HEAD move'
 
         $valid = Test-ReleaseManifest -Manifest $manifest -RequiredModIds @('example') -StageRoot $temp
-        Assert $valid.Valid 'accepts complete source-to-bundle provenance'
-        Assert ($valid.Warnings.Count -eq 0) 'complete provenance emits no warnings'
+        Assert $valid.Valid 'accepts the pre-recovery source-to-bundle provenance shape'
+        Assert (
+            $valid.Warnings.Count -eq 1 -and
+            [string]$valid.Warnings[0] -match 'explicit legacy recovery path'
+        ) 'pre-recovery staged provenance remains explicitly legacy'
 
         $immutableOutput = Get-VtBundleOutputSet `
             -BundleDirectory $modStage `
@@ -270,7 +273,7 @@ function Invoke-SelfTest {
         $carried.source_state = 'dirty'
         $legacyProvenanceCarry = Test-ReleaseManifest -Manifest $filteredManifest -RequiredModIds @('example') -StageRoot $temp
         Assert $legacyProvenanceCarry.Valid 'filtered publish allows unchanged carried pre-authorization provenance'
-        Assert ($legacyProvenanceCarry.Warnings.Count -eq 2) 'warns for carried missing authorization and historical dirty source'
+        Assert ($legacyProvenanceCarry.Warnings.Count -eq 3) 'warns for staged legacy recovery plus carried missing authorization and dirty source'
         $requiredLegacyProvenance = Test-ReleaseManifest -Manifest $filteredManifest -RequiredModIds @('example', 'carried') -StageRoot $temp
         Assert (-not $requiredLegacyProvenance.Valid) 'newly staged entries cannot use carried transition allowances'
         $carried.source_state = 'clean'

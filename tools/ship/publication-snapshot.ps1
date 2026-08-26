@@ -2,7 +2,8 @@
 #
 # This helper can prove tracked Git blobs or schema-3 receipt-authority bytes.
 # It does not itself authorize a consumer. Publication has an independent
-# authority gate; deployment, updater, and recovery remain tracked-only.
+# authority gate; deployment and updater/recovery consumption remain
+# tracked-only. Producer metadata grants no restore authority.
 # ASCII-only for PowerShell 5.1.
 
 $script:VtPublicationSnapshotReceiptHelper = Join-Path $PSScriptRoot 'publication-receipt.ps1'

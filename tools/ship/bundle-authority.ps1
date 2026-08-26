@@ -2,7 +2,8 @@
 #
 # This file owns the exact inventory modes and the typed transition contract.
 # Receipt authority may publish only through the independently validated
-# schema-3 receipt path. Deployment, updater, and recovery remain tracked-only.
+# schema-3 receipt path. Deployment and updater/recovery consumption remain
+# tracked-only; additive release recovery metadata grants no consumer policy.
 # ASCII-only for Windows PowerShell 5.1 parsing.
 
 $script:VtBundleAuthorityModes = @('tracked', 'receipt')
