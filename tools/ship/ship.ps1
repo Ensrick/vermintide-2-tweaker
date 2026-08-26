@@ -23,8 +23,8 @@
 # WHY THIS SCRIPT EXISTS -- hard-won facts encoded below (do not "simplify" them away):
 #
 #  * VMBLauncher remains the only sanctioned build/deploy/upload boundary, but
-#    this wrapper invokes its verbs separately so tracked bundle parity and
-#    hosted authorization can be checked before upload. `deploy` is a
+#    this wrapper invokes its verbs separately so authority-selected output
+#    parity and hosted authorization can be checked before upload. `deploy` is a
 #    hash-verified LOCAL copy of `<mod>\bundleV2\*.mod_bundle` + the `.mod` into
 #    `...\steamapps\workshop\content\552500\<published_id>\`. `upload` is the
 #    ugc_tool push to the Steam Workshop SERVER. Public mods require
@@ -219,6 +219,7 @@ function Get-ShipDeploymentPolicy {
     param(
         [Parameter(Mandatory = $true)][string]$PublishedId,
         [Parameter(Mandatory = $true)][bool]$DeployDirectoryExists,
+        [ValidateSet('tracked', 'receipt')][string]$BundleAuthority = 'tracked',
         [switch]$NoRemote
     )
 
@@ -231,6 +232,14 @@ function Get-ShipDeploymentPolicy {
             ShouldDeploy = $false
             RemoteDeploy = $false
             Reason = 'Steam has not assigned the first Workshop identity'
+        }
+    }
+    if ($BundleAuthority -ceq 'receipt') {
+        return [pscustomobject]@{
+            Mode = 'publication-only'
+            ShouldDeploy = $false
+            RemoteDeploy = $false
+            Reason = 'receipt authority permits publication but forbids deployment'
         }
     }
     if (-not $DeployDirectoryExists) {
@@ -1047,6 +1056,8 @@ function Invoke-ShipSelfTest {
     Assert ($subscribedLocalOnlyPolicy.Mode -eq 'subscribed' -and $subscribedLocalOnlyPolicy.ShouldDeploy -and -not $subscribedLocalOnlyPolicy.RemoteDeploy) "-NoRemote preserves subscribed local deploy while skipping remote"
     $unsubscribedPolicy = Get-ShipDeploymentPolicy -PublishedId '3733366851' -DeployDirectoryExists $false
     Assert ($unsubscribedPolicy.Mode -eq 'publication-only' -and -not $unsubscribedPolicy.ShouldDeploy -and -not $unsubscribedPolicy.RemoteDeploy) "unsubscribed existing item selects publication-only with no deploy target"
+    $receiptSubscribedPolicy = Get-ShipDeploymentPolicy -PublishedId '3733366851' -DeployDirectoryExists $true -BundleAuthority receipt
+    Assert ($receiptSubscribedPolicy.Mode -eq 'publication-only' -and -not $receiptSubscribedPolicy.ShouldDeploy -and -not $receiptSubscribedPolicy.RemoteDeploy) "receipt authority remains publication-only even when a local subscription exists"
     $bootstrapPolicy = Get-ShipDeploymentPolicy -PublishedId '0' -DeployDirectoryExists $false
     Assert ($bootstrapPolicy.Mode -eq 'bootstrap' -and -not $bootstrapPolicy.ShouldDeploy -and -not $bootstrapPolicy.RemoteDeploy) "first upload remains a separate no-deploy bootstrap"
     $invalidPublishedIdRejected = $false
@@ -1273,20 +1284,26 @@ function Invoke-ShipSelfTest {
         $pubTxt -match '-AssetSnapshots \$assetSnapshots') "zip, manifest, and receipt uploads consume immutable byte snapshots"
     Assert ($pubTxt -match 'Get-VtPublicationSnapshot' -and
         $pubTxt -match 'New-ReleaseZipBytesFromImmutableOutput' -and
-        $pubTxt -match "ByteSource\s+-cne\s+'git_commit_blobs'" -and
-        $pubTxt -notmatch 'Compress-Archive') "new release zips consume a coherent tracked immutable byte snapshot"
+        $pubTxt -match "expectedByteSource" -and
+        $pubTxt -match "'git_commit_blobs'" -and
+        $pubTxt -match "'materialized_restrictive_handles'" -and
+        $pubTxt -notmatch 'Compress-Archive') "new release zips consume one coherent authority-neutral immutable byte snapshot"
     $publisherSnapshotPos = $pubTxt.IndexOf('Get-VtPublicationSnapshot')
-    $publisherSnapshotGatePos = $pubTxt.IndexOf("ByteSource -cne 'git_commit_blobs'", $publisherSnapshotPos)
-    $publisherBuildMutationPos = $pubTxt.IndexOf("-ArgumentList @('build', `$m.Folder)", $publisherSnapshotPos)
-    $publisherStageMutationPos = $pubTxt.IndexOf('[System.IO.File]::WriteAllBytes($destination', $publisherSnapshotPos)
-    $publisherZipConstructionPos = $pubTxt.IndexOf('New-ReleaseZipBytesFromImmutableOutput', $publisherSnapshotPos)
-    $publisherWorkshopReceiptPos = $pubTxt.IndexOf('New-WorkshopPublicationReceipt', $publisherSnapshotPos)
+    $publisherBuildMutationPos = $pubTxt.IndexOf("buildArguments = @('build', `$m.Folder)", $publisherSnapshotPos)
+    $publisherReceiptSnapshotPos = $pubTxt.IndexOf('Get-VtPublicationSnapshot', $publisherBuildMutationPos)
+    $publisherNormalizationPos = $pubTxt.IndexOf('Invoke-BuildOutputNormalization', $publisherBuildMutationPos)
+    $publisherSnapshotGatePos = $pubTxt.IndexOf('AuthorityProof.ByteSource -cne $expectedByteSource', $publisherReceiptSnapshotPos)
+    $publisherStageMutationPos = $pubTxt.IndexOf('[System.IO.File]::WriteAllBytes($destination', $publisherReceiptSnapshotPos)
+    $publisherZipConstructionPos = $pubTxt.IndexOf('New-ReleaseZipBytesFromImmutableOutput', $publisherReceiptSnapshotPos)
+    $publisherWorkshopReceiptPos = $pubTxt.IndexOf('New-WorkshopPublicationReceipt', $publisherReceiptSnapshotPos)
     Assert ($publisherSnapshotPos -ge 0 -and
-        $publisherSnapshotGatePos -gt $publisherSnapshotPos -and
-        $publisherSnapshotGatePos -lt $publisherBuildMutationPos -and
+        $publisherSnapshotPos -lt $publisherBuildMutationPos -and
+        $publisherBuildMutationPos -lt $publisherNormalizationPos -and
+        $publisherNormalizationPos -lt $publisherReceiptSnapshotPos -and
+        $publisherSnapshotGatePos -gt $publisherReceiptSnapshotPos -and
         $publisherSnapshotGatePos -lt $publisherStageMutationPos -and
         $publisherSnapshotGatePos -lt $publisherZipConstructionPos -and
-        $publisherSnapshotGatePos -lt $publisherWorkshopReceiptPos) "publisher proves tracked snapshot authority before build, staging, ZIP, or Workshop receipt preparation"
+        $publisherSnapshotGatePos -lt $publisherWorkshopReceiptPos) "publisher preserves tracked prebuild selection, then clean-builds and normalizes before receipt capture"
     Assert (-not ($pubTxt -match 'status --porcelain')) "publisher authorization never relies on a mutable worktree cleanliness check"
     Assert (-not ($pubTxt -match '(?m)^\s*gh\s+release\s+create\b')) "new releases use draft API plus immutable byte upload, not path-consuming gh release create"
     $shipSource = [System.IO.File]::ReadAllText($PSCommandPath, [System.Text.Encoding]::UTF8)
@@ -1530,7 +1547,8 @@ function Invoke-ShipSelfTest {
         'transactionLease = Enter-VmbMachineTransactionLease', $mainDispatchPos)
     Assert ($bundleAuthorityPreflightPos -ge 0 -and
         $bundleAuthorityPreflightPos -lt $transactionLeasePos) "bundle authority fails closed before transaction lease or launcher mutation"
-    Assert ($canonicalShipSource.IndexOf('-BuildOnly:$BuildOnly', [System.StringComparison]::Ordinal) -ge 0) "ship permits receipt authority only through its nonpublishing BuildOnly lane"
+    Assert ($canonicalShipSource.IndexOf('-BuildOnly:$BuildOnly', [System.StringComparison]::Ordinal) -ge 0 -and
+        $canonicalShipSource.IndexOf('-RequireReceiptAuthority:', [System.StringComparison]::Ordinal) -ge 0) "ship gates receipt publication on the explicit launcher capability while preserving BuildOnly"
     $loadTagResolvePos = $selfTxt.IndexOf('$loadTagResolution = Get-VtLoadTagResolution -MainLuaPath $luaPath', $mainDispatchPos)
     $statusLabelPos = $selfTxt.IndexOf('==> Status-labeling shipped issues', $mainDispatchPos)
     $refreshLoadTagPos = $selfTxt.IndexOf('LoadTag     = "$loadTag"', $mainDispatchPos)
@@ -1557,7 +1575,9 @@ function Invoke-ShipSelfTest {
     $oldMusketCompiledPos = $selfTxt.IndexOf("oldMusketCompiledGate = Join-Path `$repoRoot 'qa\check_cwv_old_musket_compiled_contract.ps1'", $buildOnlyPostGatePos)
     $buildOnlyCompletePos = $selfTxt.IndexOf('BUILD-ONLY COMPLETE', $buildOnlyPostGatePos)
     $bundleParityPos = $selfTxt.IndexOf('bundleParity = Test-TrackedBundleParity', $mainDispatchPos)
+    $receiptParityPos = $selfTxt.IndexOf('receiptPublicationSnapshot = Get-VtPublicationSnapshot', $mainDispatchPos)
     $deployActionPos = $selfTxt.IndexOf("deployArgs = @('deploy', `$Mod)", $mainDispatchPos)
+    $publisherSkipBuildPos = $selfTxt.IndexOf('& $pubScript -Tag $tag -Mods $Mod -SkipBuild', $mainDispatchPos)
     $finalAuthorizationPos = $selfTxt.LastIndexOf('publicationAuthorization = Get-LivePublicationAuthorization')
     $authorizationRecordPos = $selfTxt.IndexOf('-PublicationAuthorizationJson $publicationAuthorizationJson', $mainDispatchPos)
     $receiptHandoffPos = $selfTxt.IndexOf('-PublicationReceiptOutputPath $receiptPath', $mainDispatchPos)
@@ -1570,7 +1590,14 @@ function Invoke-ShipSelfTest {
     Assert ($cleanBuildPos -lt $buildNormalizationPos -and $buildNormalizationPos -lt $buildOnlyPostGatePos -and $buildNormalizationPos -lt $bundleParityPos) "exact-hash normalization runs after clean build and before BuildOnly QA or final parity"
     Assert ($unitReachabilityPos -gt $buildOnlyPostGatePos -and $unitReachabilityPos -lt $oldMusketCompiledPos -and $oldMusketCompiledPos -lt $buildOnlyCompletePos) "BuildOnly runs CWV compiled geometry/material validation after custom-unit reachability and before success"
     Assert ($buildNormalizationPos -lt $remoteExclusionGuardPos -and $remoteExclusionGuardPos -lt $buildOnlyPostGatePos -and $selfTxt.IndexOf('Re-run with -NoRemote', $remoteExclusionGuardPos) -ge 0) "artifact-exclusion publications require -NoRemote before any deploy"
-    Assert ($cleanBuildPos -lt $bundleParityPos -and $bundleParityPos -lt $deployActionPos) "clean build parity is proven before deploy"
+    Assert ($cleanBuildPos -lt $bundleParityPos -and $cleanBuildPos -lt $receiptParityPos -and
+        $bundleParityPos -lt $deployActionPos -and $receiptParityPos -lt $deployActionPos) "tracked or receipt clean-build parity is proven before any deploy"
+    Assert ($bundleParityPos -lt $publisherSkipBuildPos -and
+        $receiptParityPos -lt $publisherSkipBuildPos -and
+        [regex]::Matches($canonicalShipSource, [regex]::Escape('& $pubScript -Tag $tag -Mods $Mod -SkipBuild')).Count -eq 1) "canonical ship is the sole production -SkipBuild caller and invokes it only after authority parity"
+    Assert ($pubTxt.IndexOf('if ($SkipBuild) {') -ge 0 -and
+        $pubTxt.IndexOf('-SkipBuild requires the live VMBLauncher executable lease from canonical ship.ps1.') -gt
+            $pubTxt.IndexOf('if ($SkipBuild) {')) "publisher -SkipBuild requires the canonical caller's live executable lease"
     Assert ($deployActionPos -lt $finalAuthorizationPos -and $finalAuthorizationPos -lt $uploadActionPos) "authorization is revalidated immediately before Workshop upload"
     Assert ($authorizationRecordPos -lt $finalAuthorizationPos -and $finalAuthorizationPos -lt $uploadActionPos) "authorization evidence is recorded before the last-moment upload gate"
     Assert ($authorizationRecordPos -lt $receiptHandoffPos -and $receiptHandoffPos -lt $finalAuthorizationPos) "publisher hosts the short-lived receipt before the last-moment upload gate"
@@ -1591,7 +1618,7 @@ function Invoke-ShipSelfTest {
     $transactionLeaseExitPos = $selfTxt.LastIndexOf('Exit-VmbMachineTransactionLease -Lease $transactionLease')
     Assert ($callerJsonPos -ge 0 -and $callerJsonPos -lt $publisherLivePos -and $publisherLivePos -lt $publisherMatchPos) "publisher independently re-queries live authorization before accepting caller correlation JSON"
     Assert ($publisherPreparationPos -lt $publisherLivePos -and $publisherLivePos -lt $publisherReceiptPos -and $publisherReceiptPos -lt $publisherMutationPos) "publisher re-queries live authorization after preparation and immediately before receipt/release mutation"
-    Assert ($publisherZipBindingPos -ge 0 -and $publisherZipBindingPos -lt $publisherMutationPos) "publisher binds immutable zip entries to commit-derived bundle hashes before release mutation"
+    Assert ($publisherZipBindingPos -ge 0 -and $publisherZipBindingPos -lt $publisherMutationPos) "publisher binds immutable zip entries to authority-selected bundle hashes before release mutation"
     Assert ($launcherLeasePos -ge 0 -and $launcherLeasePos -lt $launcherCapabilityPos -and
         $launcherCapabilityPos -lt $authorizationRecordPos) "ship leases the exact launcher before probing capabilities or mutating a release"
     Assert ($uploadActionPos -ge 0 -and $uploadActionPos -lt $launcherLeaseExitPos -and
@@ -1600,6 +1627,7 @@ function Invoke-ShipSelfTest {
         $selfTxt.IndexOf('& $launcher', $mainDispatchPos) -lt 0 -and
         $selfTxt.IndexOf('-FilePath $launcher', $mainDispatchPos) -lt 0) "main ship path has no free-path launcher execution or post-build version lookup"
     Assert ($selfTxt.IndexOf('$isFirstUploadBootstrap = ($publishedId -eq ''0'')', $mainDispatchPos) -ge 0) "ship recognizes the explicit published_id=0 bootstrap lane"
+    Assert ($selfTxt.IndexOf('Receipt authority does not support first-upload bootstrap', $mainDispatchPos) -ge 0) "receipt authority cannot enter the tracked first-upload bootstrap lane"
     Assert ($selfTxt.IndexOf('if ($deploymentPolicy.ShouldDeploy) {', $deployActionPos - 100) -ge 0) "deployment policy gates subscribed deploy and skips bootstrap/publication-only targets"
     $deploymentPolicyPos = $selfTxt.IndexOf('$deploymentPolicy = Get-ShipDeploymentPolicy', $mainDispatchPos)
     $quickMainPos = $selfTxt.IndexOf($quickInvocation, $mainDispatchPos)
@@ -1679,6 +1707,7 @@ function Invoke-ShipSelfTest {
     Assert ($pinStepPos -ge 0 -and $pinAuthorityPos -ge 0 -and $pinStepPos -lt $pinAuthorityPos) "pin repoint runs BEFORE the deployed-source authority resolution so this ship's labels already benefit"
     Assert ($pinAuthorityPos -lt $statusLabelPos) "authority resolution still precedes status labeling"
     Assert ($selfTxt.IndexOf('rev-parse "$sourceCommit`:$Mod/scripts/mods"', $mainDispatchPos) -ge 0) "pin repoint resolves the exact scripts/mods subtree the authority compares"
+    Assert ($selfTxt.IndexOf('SKIPPED ($($deploymentPolicy.Reason); exact receipt-gated publication)', $mainDispatchPos) -ge 0) "publication-only success summary reports the exact authority-neutral deployment reason"
     Assert ($selfTxt.IndexOf('Pins         : {0}', $mainDispatchPos) -ge 0) "ship summary reports the pin-repoint outcome"
 
     Write-Host ""
@@ -1715,7 +1744,7 @@ if (-not (Test-Path $modDir)) { Fail "Mod directory not found: $modDir" }
 
 # Issue #1412: select the build/publication lane from the exact inventory
 # contract before claims, launcher resolution, build, deploy, or upload. Receipt
-# authority may use BuildOnly, but all downstream mutation remains disabled.
+# authority may build and publish only; deploy/update/recovery remain disabled.
 try {
     $bundleAuthorityEntry = Get-VtBuildReceiptInventoryEntry -RepoRoot $repoRoot -Mod $Mod
     $bundleAuthorityPolicy = Assert-VtBundleAuthorityShipPreflight `
@@ -1743,15 +1772,20 @@ if ($cfgTxt -notmatch 'published_id\s*=\s*(\d+)L') {
 }
 $publishedId = $matches[1]
 $isFirstUploadBootstrap = ($publishedId -eq '0')
+if ($isFirstUploadBootstrap -and
+    [string]$bundleAuthorityPolicy.Authority -ceq 'receipt') {
+    Fail 'Receipt authority does not support first-upload bootstrap. Bootstrap under tracked authority, reconcile the assigned ID, then migrate in a separately reviewed transaction.'
+}
 $workshopRoot = 'C:\Program Files (x86)\Steam\steamapps\workshop\content\552500'
 $deployDir = if ($isFirstUploadBootstrap) { $null } else { Join-Path $workshopRoot $publishedId }
 $workshopLog = 'C:\Program Files (x86)\Steam\logs\workshop_log.txt'
 $deploymentPolicy = Get-ShipDeploymentPolicy `
     -PublishedId $publishedId `
     -DeployDirectoryExists ([bool]($deployDir -and (Test-Path -LiteralPath $deployDir -PathType Container))) `
+    -BundleAuthority ([string]$bundleAuthorityPolicy.Authority) `
     -NoRemote:$NoRemote
 if ($deploymentPolicy.Mode -eq 'publication-only') {
-    Write-Host ("  NOTICE -- Workshop item {0} is not locally subscribed; exact receipt-gated publication-only mode will skip every deploy target (issue #1376)." -f $publishedId) -ForegroundColor Yellow
+    Write-Host ("  NOTICE -- Workshop item {0} uses exact receipt-gated publication-only mode and will skip every deploy target: {1}." -f $publishedId, $deploymentPolicy.Reason) -ForegroundColor Yellow
 }
 
 # ---------------------------------------------------------------------------
@@ -1865,11 +1899,28 @@ $sourceCommit = ([string]$commitProbe.Lines[-1]).Trim()
 $publicationAuthorization = $null
 if (-not $BuildOnly) {
     try {
-        $commitPublicationSnapshot = Get-VtPublicationSnapshot `
-            -RepoRoot $repoRoot -SourceCommit $sourceCommit -Mod $Mod
+        if ([string]$bundleAuthorityPolicy.Authority -ceq 'tracked') {
+            # Preserve the established tracked contract: select the complete
+            # immutable Git-blob snapshot before any build mutation.
+            $commitPublicationSnapshot = Get-VtPublicationSnapshot `
+                -RepoRoot $repoRoot -SourceCommit $sourceCommit -Mod $Mod
+        }
+        else {
+            $commitPublicationContext = Get-VtPublicationSnapshotInventoryContext `
+                -RepoRoot $repoRoot -SourceCommit $sourceCommit -Mod $Mod
+            if ([string]$commitPublicationContext.Authority -cne
+                [string]$bundleAuthorityPolicy.Authority) {
+                throw "Working inventory authority differs from exact source-commit authority."
+            }
+            # Bind immutable cfg/version/preview/source metadata before the
+            # build. Receipt output is captured only after the clean build.
+            $commitPublicationSnapshot = Get-PublicationCommitSnapshot `
+                -RepoRoot $repoRoot -SourceCommit $sourceCommit -Mod $Mod `
+                -AllowEmptyBundleFiles
+        }
     }
     catch {
-        Fail "Cannot read exact publication blobs from source commit $sourceCommit`: $($_.Exception.Message)"
+        Fail "Cannot read exact publication metadata from source commit $sourceCommit`: $($_.Exception.Message)"
     }
     if ([string]::IsNullOrWhiteSpace("$($commitPublicationSnapshot.PublishedId)")) {
         Fail "Exact source commit has no published_id in $Mod/itemV2.cfg."
@@ -1964,12 +2015,13 @@ try {
         -LauncherPath $launcher -RequireDirectPath
     $launcherCapability = Assert-VmbLauncherPublicationCapability `
         -LauncherExecutableLease $launcherExecutableLease `
-        -WorkingDirectory $repoRoot
+        -WorkingDirectory $repoRoot `
+        -RequireReceiptAuthority:(-not $BuildOnly -and [string]$bundleAuthorityPolicy.Authority -ceq 'receipt')
 }
 catch {
     Fail $_.Exception.Message
 }
-Write-Host ("VMBLauncher publication capability: PASS (v{0}, receipt schema 3, exact commit blobs, locked snapshot)" -f $launcherCapability.Version) -ForegroundColor DarkGray
+Write-Host ("VMBLauncher publication capability: PASS (v{0}, receipt schema 3, authority {1}, locked snapshot)" -f $launcherCapability.Version, $bundleAuthorityPolicy.Authority) -ForegroundColor DarkGray
 
 # ---------------------------------------------------------------------------
 # Headless red gate (issues #590/#591): exercise the same fast, host-runnable
@@ -2113,7 +2165,7 @@ catch {
 
 # Clean Stingray builds can emit inventoried SDK tool-only artifacts whose own
 # package declares BUNDLE=false. Canonicalize only exact name+SHA policy matches
-# before any BuildOnly gate, tracked parity check, deploy, or upload observes them.
+# before any BuildOnly gate, authority parity check, deploy, or upload observes them.
 try {
     $buildNormalization = Invoke-BuildOutputNormalization -RepoRoot $repoRoot -Mod $Mod
 }
@@ -2161,6 +2213,7 @@ try {
         }
         $reviewedReceiptText = [System.IO.File]::ReadAllText($buildReceiptPath, [System.Text.Encoding]::UTF8)
         $reviewedReceipt = ConvertFrom-VtBuildReceiptJson -Json $reviewedReceiptText
+        $minimumReceiptSchema = if ([string]$bundleAuthorityPolicy.Authority -ceq 'receipt') { 3 } else { 2 }
         $receiptProof = Test-VtBuildReceiptProof -Receipt $reviewedReceipt `
             -ExpectedMod $Mod `
             -SourceMap $buildSourceSnapshotAfter `
@@ -2168,7 +2221,7 @@ try {
             -OutputSet $buildOutputSet `
             -NormalizationPolicy $buildNormalization.Policy `
             -ExpectedBuilderVersion $buildBuilderVersion `
-            -MinimumSchema 2
+            -MinimumSchema $minimumReceiptSchema
         if (-not $receiptProof.Ok) {
             throw ("Reviewed BuildOnly receipt no longer matches the clean build: " +
                 ($receiptProof.Problems -join '; '))
@@ -2229,17 +2282,45 @@ if ($BuildOnly) {
     exit 0
 }
 
-$bundleParity = Test-TrackedBundleParity -RepoRoot $repoRoot -Mod $Mod
-if (-not $bundleParity.Ok) {
-    Write-Host "  TRACKED BUNDLE PARITY FAILED:" -ForegroundColor Red
-    $bundleParity.Problems | ForEach-Object { Write-Host "    $_" -ForegroundColor Red }
-    Fail "The clean build does not exactly reproduce $Mod/bundleV2 at reviewed commit $sourceCommit. Commit the generated bundle, pass PR QA, merge it, and ship that exact default-branch commit."
+if ([string]$bundleAuthorityPolicy.Authority -ceq 'tracked') {
+    $bundleParity = Test-TrackedBundleParity -RepoRoot $repoRoot -Mod $Mod
+    if (-not $bundleParity.Ok) {
+        Write-Host "  TRACKED BUNDLE PARITY FAILED:" -ForegroundColor Red
+        $bundleParity.Problems | ForEach-Object { Write-Host "    $_" -ForegroundColor Red }
+        Fail "The clean build does not exactly reproduce $Mod/bundleV2 at reviewed commit $sourceCommit. Commit the generated bundle, pass PR QA, merge it, and ship that exact default-branch commit."
+    }
+}
+else {
+    try {
+        $receiptPublicationSnapshot = Get-VtPublicationSnapshot `
+            -RepoRoot $repoRoot `
+            -SourceCommit $sourceCommit `
+            -Mod $Mod `
+            -ExpectedBuilderVersion $buildBuilderVersion
+        $receiptBuildComparison = @(Compare-VtBundleOutputSets `
+            -Expected $receiptPublicationSnapshot.OutputSet `
+            -Actual $buildOutputSet `
+            -ExpectedLabel 'receipt snapshot output' `
+            -ActualLabel 'clean build output' `
+            -RequireLength $true)
+        if ($receiptBuildComparison.Count -gt 0) {
+            throw ($receiptBuildComparison -join '; ')
+        }
+    }
+    catch {
+        Fail "The clean build is not the exact committed schema-3 receipt output for $Mod`: $($_.Exception.Message)"
+    }
 }
 $postBuildClean = Invoke-NativeCapture { & git -C $repoRoot status --porcelain --untracked-files=all }
 if ($postBuildClean.ExitCode -ne 0 -or $postBuildClean.Lines.Count -gt 0) {
-    Fail "The release worktree changed during the clean build. No deploy or upload was attempted; reviewed source and tracked bundle must remain byte-exact."
+    Fail "The release worktree changed during the clean build. No deploy or upload was attempted; reviewed source and authority-selected output must remain byte-exact."
 }
-Write-Host "  OK -- clean build exactly reproduces the tracked HEAD bundle." -ForegroundColor Green
+$publicationParityLabel = if ([string]$bundleAuthorityPolicy.Authority -ceq 'tracked') {
+    'tracked HEAD bundle'
+} else {
+    'committed schema-3 receipt output'
+}
+Write-Host "  OK -- clean build exactly reproduces the $publicationParityLabel." -ForegroundColor Green
 
 $deployOk = $false
 if ($deploymentPolicy.ShouldDeploy) {
@@ -2266,7 +2347,7 @@ elseif ($deploymentPolicy.Mode -eq 'bootstrap') {
 }
 else {
     Write-Host ""
-    Write-Host "==> Skipping local and remote deploy: author subscription is absent; publication will be proven by exact receipt + Workshop result." -ForegroundColor Yellow
+    Write-Host "==> Skipping local and remote deploy: $($deploymentPolicy.Reason); publication will be proven by exact receipt + Workshop result." -ForegroundColor Yellow
 }
 
 # ---------------------------------------------------------------------------
@@ -2848,7 +2929,7 @@ Write-Host ("  Mod          : {0}" -f $Mod)
 Write-Host ("  Version      : v{0}" -f $modVersion)
 Write-Host ("  Published ID : {0}" -f $publishedId)
 $deployHuman = if ($deploymentPolicy.Mode -eq 'publication-only') {
-    'SKIPPED (author unsubscribed; exact receipt-gated publication)'
+    "SKIPPED ($($deploymentPolicy.Reason); exact receipt-gated publication)"
 } else {
     "OK ($checked file(s) verified; $normalizedDescriptors normalized descriptor(s))"
 }
@@ -2870,8 +2951,8 @@ Write-Host $bar -ForegroundColor Yellow
 Write-Host "  TEST BUILD READY" -ForegroundColor Yellow
 Write-Host $bar -ForegroundColor Yellow
 if ($deploymentPolicy.Mode -eq 'publication-only') {
-    Write-Host "  Author/PC-A: this item was not locally subscribed, so no local deploy" -ForegroundColor Yellow
-    Write-Host "  was claimed. Subscribe/refresh the Workshop item before testing." -ForegroundColor Yellow
+    Write-Host "  Author/PC-A: no local deploy was claimed ($($deploymentPolicy.Reason))." -ForegroundColor Yellow
+    Write-Host "  Subscribe/refresh the Workshop item before testing." -ForegroundColor Yellow
     Write-Host "  Volunteer testers: unsubscribe/resubscribe through the dev collection." -ForegroundColor Yellow
 }
 else {

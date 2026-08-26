@@ -9,6 +9,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path $PSScriptRoot -Parent
 . (Join-Path $repoRoot 'tools\ship\publication-receipt.ps1')
+. (Join-Path $repoRoot 'tools\ship\publication-snapshot.ps1')
 
 if (-not $SelfTest) {
     Write-Host '[check_publication_receipt] Use -SelfTest for offline fixtures.'
@@ -50,6 +51,22 @@ $partialCapability = Test-VmbLauncherPublicationCapabilityOutput -Lines @(
     'capabilities=hosted-publication-receipt-v3,locked-upload-snapshot-v1,git-commit-blob-snapshot-v1,constrained-first-upload-bootstrap-v1,machine-transaction-lease-v1'
 )
 Assert-PublicationFixture (-not $partialCapability.Ok) 'rejects launcher 0.6.0 without crash-safe ACL recovery capability'
+$receiptCapabilityMissing = Test-VmbLauncherPublicationCapabilityOutput `
+    -RequireReceiptAuthority -Lines @(
+        'capability_schema=1',
+        'version=0.6.0',
+        'publication_receipt_schema=3',
+        'capabilities=hosted-publication-receipt-v3,locked-upload-snapshot-v1,git-commit-blob-snapshot-v1,constrained-first-upload-bootstrap-v1,machine-transaction-lease-v1,crash-safe-upload-acl-journal-v1'
+    )
+Assert-PublicationFixture (-not $receiptCapabilityMissing.Ok) 'receipt publication rejects a launcher without its explicit capability'
+$receiptCapabilityPresent = Test-VmbLauncherPublicationCapabilityOutput `
+    -RequireReceiptAuthority -Lines @(
+        'capability_schema=1',
+        'version=0.6.0',
+        'publication_receipt_schema=3',
+        'capabilities=hosted-publication-receipt-v3,locked-upload-snapshot-v1,git-commit-blob-snapshot-v1,constrained-first-upload-bootstrap-v1,machine-transaction-lease-v1,crash-safe-upload-acl-journal-v1,receipt-authority-publication-v1'
+    )
+Assert-PublicationFixture $receiptCapabilityPresent.Ok 'receipt publication accepts a launcher with its explicit capability'
 
 $wocReceiptAsset = Get-WorkshopPublicationReceiptAssetName -Mod 'weapons_of_chaos'
 Assert-PublicationFixture ($wocReceiptAsset -ceq 'publication-receipt-weapons_of_chaos.json') 'WOC receipt coordinate uses canonical lowercase source folder'
@@ -81,8 +98,10 @@ try {
     [System.IO.Directory]::CreateDirectory($bundleRoot) | Out-Null
     [System.IO.Directory]::CreateDirectory($luaRoot) | Out-Null
     [System.IO.Directory]::CreateDirectory($toolsRoot) | Out-Null
+    [System.IO.File]::WriteAllText(
+        (Join-Path $temp '.gitignore'), "# fixture`n", [System.Text.UTF8Encoding]::new($false))
     $inventoryPath = Join-Path $toolsRoot 'mod-inventory.psd1'
-    $inventoryText = "@{ Mods = @( @{ Dir = 'modx'; ModId = 'modx'; Name = 'Mod X'; BundleAuthority = 'tracked'; RootBundle = 'root.mod_bundle' } ) }`n"
+    $inventoryText = "@{ Mods = @( @{ Dir = 'modx'; ModId = 'modx'; Name = 'Mod X'; BundleAuthority = 'tracked'; RootBundle = 'aaaaaaaaaaaaaaaa.mod_bundle' } ) }`n"
     [System.IO.File]::WriteAllText(
         $inventoryPath, $inventoryText, [System.Text.UTF8Encoding]::new($false))
     [System.IO.File]::WriteAllText(
@@ -93,7 +112,7 @@ try {
         [System.Text.Encoding]::UTF8.GetBytes('preview-v1'))
     [System.IO.File]::WriteAllText((Join-Path $modRoot 'modx.mod'), 'descriptor')
     [System.IO.File]::WriteAllText((Join-Path $bundleRoot 'modx.mod'), 'descriptor')
-    [System.IO.File]::WriteAllText((Join-Path $bundleRoot 'root.mod_bundle'), 'bundle')
+    [System.IO.File]::WriteAllText((Join-Path $bundleRoot 'aaaaaaaaaaaaaaaa.mod_bundle'), 'bundle')
     [System.IO.File]::WriteAllText((Join-Path $luaRoot 'modx.lua'), 'local MOD_VERSION = "1.2.3-dev"')
     & git -C $temp init -q
     & git -C $temp config user.email 'qa@example.invalid'
@@ -109,7 +128,7 @@ try {
     Assert-PublicationFixture (
         @($commitInventory.Mods).Count -eq 1 -and
         [string]$commitInventory.Mods[0].BundleAuthority -ceq 'tracked' -and
-        [string]$commitInventory.Mods[0].RootBundle -ceq 'root.mod_bundle'
+        [string]$commitInventory.Mods[0].RootBundle -ceq 'aaaaaaaaaaaaaaaa.mod_bundle'
     ) 'source-commit inventory is parsed as constant immutable data'
     [System.IO.File]::WriteAllText(
         $inventoryPath,
@@ -119,12 +138,14 @@ try {
         -RepoRoot $temp -SourceCommit $commitA
     Assert-PublicationFixture (
         [string]$commitInventoryAfterDirtyEdit.Mods[0].BundleAuthority -ceq 'tracked' -and
-        [string]$commitInventoryAfterDirtyEdit.Mods[0].RootBundle -ceq 'root.mod_bundle'
+        [string]$commitInventoryAfterDirtyEdit.Mods[0].RootBundle -ceq 'aaaaaaaaaaaaaaaa.mod_bundle'
     ) 'dirty worktree inventory cannot alter source-commit publication authority'
     [System.IO.File]::WriteAllText(
         $inventoryPath, $inventoryText, [System.Text.UTF8Encoding]::new($false))
 
     $authorization = [pscustomobject]@{ mode = 'hosted_qa' }
+    $trackedSnapshot = Get-VtPublicationSnapshot `
+        -RepoRoot $temp -SourceCommit $commitA -Mod $mod
     $receipt = New-WorkshopPublicationReceipt `
         -RepoRoot $temp `
         -Repository 'Ensrick/vermintide-2-tweaker' `
@@ -134,9 +155,17 @@ try {
         -Version '1.2.3-dev' `
         -Owner 'codex:724' `
         -SourceCommit $commitA `
+        -PublicationSnapshot $trackedSnapshot `
         -AuthorizationEvidence $authorization
 
     Assert-PublicationFixture ("$($receipt.schema)" -eq '3') 'receipt schema is 3'
+    $legacyTrackedKeys = @(
+        'schema', 'purpose', 'nonce', 'issued_at_utc', 'expires_at_utc',
+        'repository', 'release_tag', 'receipt_asset_name', 'source_root',
+        'source_commit', 'mod', 'version', 'owner', 'item_cfg_sha256',
+        'item_cfg_git_blob', 'bundle_files', 'preview_file', 'authorization')
+    Assert-PublicationFixture ((@($receipt.Keys) -join [char]0) -ceq
+        ($legacyTrackedKeys -join [char]0)) 'tracked receipt preserves its exact legacy top-level field contract'
     Assert-PublicationFixture ("$($receipt.item_cfg_git_blob)" -match '^[0-9a-f]{40}$' -and
         @($receipt.bundle_files | Where-Object { "$($_.git_blob)" -notmatch '^[0-9a-f]{40}$' }).Count -eq 0) 'cfg and every bundle proof are exact source-commit blobs'
     Assert-PublicationFixture ($receipt.preview_file.present -and
@@ -148,6 +177,7 @@ try {
     # Move HEAD and mutate the working tree after receipt issuance. A second
     # proof for commit A must still return commit A's exact object bytes.
     [System.IO.File]::WriteAllText((Join-Path $modRoot 'preview.jpg'), 'preview-v2')
+    [System.IO.File]::WriteAllText((Join-Path $modRoot 'modx.mod'), 'descriptor-v2')
     [System.IO.File]::WriteAllText((Join-Path $bundleRoot 'modx.mod'), 'descriptor-v2')
     & git -C $temp add .
     & git -C $temp commit -q -m 'commit-b'
@@ -174,6 +204,8 @@ try {
     & git -C $temp add .
     & git -C $temp commit -q -m 'first-upload'
     $firstUploadCommit = (& git -C $temp rev-parse HEAD).Trim()
+    $firstUploadSnapshot = Get-VtPublicationSnapshot `
+        -RepoRoot $temp -SourceCommit $firstUploadCommit -Mod $mod
     $firstUploadReceipt = New-WorkshopPublicationReceipt `
         -RepoRoot $temp `
         -Repository 'Ensrick/vermintide-2-tweaker' `
@@ -183,6 +215,7 @@ try {
         -Version '1.2.3-dev' `
         -Owner 'codex:724' `
         -SourceCommit $firstUploadCommit `
+        -PublicationSnapshot $firstUploadSnapshot `
         -AuthorizationEvidence $authorization
     Assert-PublicationFixture ("$($firstUploadReceipt.purpose)" -eq 'workshop_bootstrap' -and
         "$($firstUploadReceipt.item_cfg_git_blob)" -match '^[0-9a-f]{40}$') 'first-upload receipt keeps exact blob authority and uses the constrained bootstrap purpose'

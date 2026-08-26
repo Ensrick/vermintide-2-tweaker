@@ -499,14 +499,12 @@ function Invoke-VtBundleAuthoritySelfTest {
     $trackedPolicy = Get-VtBundleAuthorityDownstreamPolicy -Entry $tracked
     $receiptPolicy = Get-VtBundleAuthorityDownstreamPolicy -Entry $receipt
     if (-not $trackedPolicy.Publish -or -not $trackedPolicy.Deploy -or
-            $receiptPolicy.Publish -or $receiptPolicy.Deploy -or
+            -not $receiptPolicy.Publish -or $receiptPolicy.Deploy -or
+            $receiptPolicy.Update -or $receiptPolicy.Recover -or
             -not $receiptPolicy.Build -or -not $receiptPolicy.Receipt) {
-        throw 'downstream authority policy did not preserve tracked or disable receipt publication'
+        throw 'downstream authority policy did not preserve tracked or publication-only receipt authority'
     }
-    $receiptShipRejected = $false
-    try { Assert-VtBundleAuthorityShipPreflight -Entry $receipt | Out-Null }
-    catch { $receiptShipRejected = $_.Exception.Message -match 'disabled' }
-    if (-not $receiptShipRejected) { throw 'receipt-authority ship was not rejected' }
+    Assert-VtBundleAuthorityShipPreflight -Entry $receipt | Out-Null
     Assert-VtBundleAuthorityShipPreflight -Entry $receipt -BuildOnly | Out-Null
     $passed++
 

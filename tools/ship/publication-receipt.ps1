@@ -9,7 +9,8 @@
 function Test-VmbLauncherPublicationCapabilityOutput {
     param(
         [string[]]$Lines,
-        [version]$MinimumVersion = ([version]'0.6.0')
+        [version]$MinimumVersion = ([version]'0.6.0'),
+        [switch]$RequireReceiptAuthority
     )
 
     $values = @{}
@@ -39,6 +40,10 @@ function Test-VmbLauncherPublicationCapabilityOutput {
     )) {
         if ($capabilities -notcontains $required) { $problems += "missing capability $required" }
     }
+    if ($RequireReceiptAuthority -and
+        $capabilities -notcontains 'receipt-authority-publication-v1') {
+        $problems += 'missing capability receipt-authority-publication-v1'
+    }
     return [pscustomobject]@{
         Ok = ($problems.Count -eq 0)
         Version = $reported
@@ -51,7 +56,8 @@ function Assert-VmbLauncherPublicationCapability {
     param(
         [Parameter(Mandatory = $true)]$LauncherExecutableLease,
         [Parameter(Mandatory = $true)][string]$WorkingDirectory,
-        [version]$MinimumVersion = ([version]'0.6.0')
+        [version]$MinimumVersion = ([version]'0.6.0'),
+        [switch]$RequireReceiptAuthority
     )
 
     $run = Invoke-VmbLauncherProcess `
@@ -62,10 +68,11 @@ function Assert-VmbLauncherPublicationCapability {
         throw "capability probe exited $($run.ExitCode): $($run.Lines -join ' | ')"
     }
     $verdict = Test-VmbLauncherPublicationCapabilityOutput `
-        -Lines @($run.Lines) -MinimumVersion $MinimumVersion
+        -Lines @($run.Lines) -MinimumVersion $MinimumVersion `
+        -RequireReceiptAuthority:$RequireReceiptAuthority
     if (-not $verdict.Ok) {
         throw "VMBLauncher publication capability probe failed: $($verdict.Problems -join '; '). " +
-            'Land/install launcher 0.6.0 before the monorepo publication guard.'
+            'Land/install a launcher with every required publication capability before shipping.'
     }
     $verdict | Add-Member -MemberType NoteProperty `
         -Name ExecutableProof -Value $run.ExecutableProof -Force
@@ -489,6 +496,7 @@ function New-WorkshopPublicationReceipt {
         [string]$Version,
         [string]$Owner,
         [string]$SourceCommit,
+        [Parameter(Mandatory = $true)][object]$PublicationSnapshot,
         [object]$AuthorizationEvidence,
         [datetime]$IssuedAtUtc = ([datetime]::UtcNow),
         [timespan]$Lifetime = ([timespan]::FromMinutes(5))
@@ -512,24 +520,86 @@ function New-WorkshopPublicationReceipt {
         -RepoRoot $root `
         -SourceCommit $SourceCommit.ToLowerInvariant()
     $commitEntries = @($commitInventory.Mods | Where-Object { [string]$_.Dir -ceq $Mod })
-    if ($commitEntries.Count -ne 1 -or
-        [string]$commitEntries[0].BundleAuthority -cne 'tracked') {
-        throw "Workshop publication receipt requires exactly one tracked source-commit inventory entry for '$Mod'."
+    if ($commitEntries.Count -ne 1) {
+        throw "Workshop publication receipt requires exactly one source-commit inventory entry for '$Mod'."
     }
-    $snapshot = Get-PublicationCommitSnapshot `
-        -RepoRoot $root -SourceCommit $SourceCommit.ToLowerInvariant() -Mod $Mod
+    $authority = [string]$commitEntries[0].BundleAuthority
+    if (@('tracked', 'receipt') -cnotcontains $authority) {
+        throw "Workshop publication receipt refuses unsupported BundleAuthority '$authority' for '$Mod'."
+    }
+    $snapshot = $PublicationSnapshot
+    $sourceCommitLower = $SourceCommit.ToLowerInvariant()
+    if ([string]$snapshot.SourceCommit -cne $sourceCommitLower -or
+        [string]$snapshot.BundleAuthority -cne $authority) {
+        throw "Workshop publication snapshot authority does not match source commit $sourceCommitLower for '$Mod'."
+    }
+    $authorityProof = $snapshot.AuthorityProof
+    if ($null -eq $authorityProof -or
+        [string]$authorityProof.Authority -cne $authority -or
+        [string]$authorityProof.SourceCommit -cne $sourceCommitLower -or
+        [string]$authorityProof.RootBundle -cne [string]$commitEntries[0].RootBundle -or
+        [string]$authorityProof.InventoryGitBlob -cnotmatch '^[0-9a-f]{40,64}$' -or
+        [string]$authorityProof.IgnoreGitBlob -cnotmatch '^[0-9a-f]{40,64}$' -or
+        [string]$authorityProof.OutputAlgorithm -eq '' -or
+        [string]$authorityProof.OutputFingerprintSha256 -cnotmatch '^[0-9a-f]{64}$') {
+        throw "Workshop publication snapshot lacks a coherent '$authority' authority proof for '$Mod'."
+    }
     if ([string]$snapshot.ItemCfg.GitBlob -cnotmatch '^[0-9a-f]{40,64}$' -or
         [string]$snapshot.SourceDescriptor.GitBlob -cnotmatch '^[0-9a-f]{40,64}$' -or
         @($snapshot.BundleFiles).Count -eq 0 -or
-        @($snapshot.BundleFiles | Where-Object {
-            [string]$_.GitBlob -cnotmatch '^[0-9a-f]{40,64}$'
-        }).Count -gt 0 -or
         ([bool]$snapshot.PreviewFile.Present -and
          [string]$snapshot.PreviewFile.GitBlob -cnotmatch '^[0-9a-f]{40,64}$')) {
-        throw "Workshop publication receipt requires exact Git blob proof for every selected '$Mod' byte."
+        throw "Workshop publication receipt requires exact source-commit proof and a non-empty output map for '$Mod'."
+    }
+    if ($null -eq $snapshot.OutputSet -or
+        [string]$snapshot.OutputSet.Algorithm -cne [string]$authorityProof.OutputAlgorithm -or
+        [string]$snapshot.OutputSet.Fingerprint -cne [string]$authorityProof.OutputFingerprintSha256 -or
+        @($snapshot.OutputSet.Files).Count -ne @($snapshot.BundleFiles).Count) {
+        throw "Workshop publication snapshot output map does not match its authority proof for '$Mod'."
+    }
+    $seenOutputNames = @{}
+    foreach ($bundleFile in @($snapshot.BundleFiles)) {
+        $path = [string]$bundleFile.Path
+        if ([string]::IsNullOrWhiteSpace($path) -or $seenOutputNames.ContainsKey($path)) {
+            throw "Workshop publication snapshot contains a missing, duplicate, or case-colliding output name for '$Mod'."
+        }
+        $seenOutputNames[$path] = $true
+        $outputMatches = @($snapshot.OutputSet.Files | Where-Object { [string]$_.Name -ceq $path })
+        if ($outputMatches.Count -ne 1 -or
+            [long]$outputMatches[0].Length -ne [long]$bundleFile.Length -or
+            [string]$outputMatches[0].Sha256 -cne [string]$bundleFile.Sha256) {
+            throw "Workshop publication snapshot output '$path' differs from its complete output map."
+        }
+    }
+    if ($authority -ceq 'tracked') {
+        if ([string]$authorityProof.ByteSource -cne 'git_commit_blobs' -or
+            @($snapshot.BundleFiles | Where-Object {
+                [string]$_.GitBlob -cnotmatch '^[0-9a-f]{40,64}$'
+            }).Count -gt 0) {
+            throw "Tracked Workshop publication requires an exact Git blob for every selected '$Mod' output byte."
+        }
+    }
+    else {
+        if ([string]$authorityProof.ByteSource -cne 'materialized_restrictive_handles' -or
+            [string]$authorityProof.BuildReceiptGitBlob -cnotmatch '^[0-9a-f]{40,64}$' -or
+            [string]$authorityProof.BuildReceiptSha256 -cnotmatch '^[0-9a-f]{64}$' -or
+            [int]$authorityProof.ReceiptSchema -ne 3 -or
+            [string]$authorityProof.SourceFingerprintSha256 -cnotmatch '^[0-9a-f]{64}$' -or
+            [string]$authorityProof.BuilderName -cne 'VMBLauncher' -or
+            [string]::IsNullOrWhiteSpace([string]$authorityProof.BuilderVersion) -or
+            [string]$authorityProof.NormalizationPolicyAlgorithm -eq '' -or
+            [string]$authorityProof.NormalizationPolicyFingerprintSha256 -cnotmatch '^[0-9a-f]{64}$' -or
+            @($snapshot.BundleFiles | Where-Object {
+                -not [string]::IsNullOrEmpty([string]$_.GitBlob)
+            }).Count -gt 0) {
+            throw "Receipt-authority Workshop publication lacks its exact committed build/source/output proof for '$Mod'."
+        }
     }
     if ([string]::IsNullOrWhiteSpace("$($snapshot.PublishedId)")) {
         throw "Source-commit itemV2.cfg for '$Mod' has no published_id."
+    }
+    if ($authority -ceq 'receipt' -and "$($snapshot.PublishedId)" -eq '0') {
+        throw 'Receipt authority does not support first-upload bootstrap.'
     }
     if ("$($snapshot.Version)" -ne "$Version") {
         throw "Receipt version '$Version' does not match source-commit MOD_VERSION '$($snapshot.Version)'."
@@ -537,7 +607,7 @@ function New-WorkshopPublicationReceipt {
     $issued = $IssuedAtUtc.ToUniversalTime()
     $expires = $issued.Add($Lifetime)
 
-    return [ordered]@{
+    $result = [ordered]@{
         schema = 3
         purpose = if ("$($snapshot.PublishedId)" -eq '0') {
             'workshop_bootstrap'
@@ -551,7 +621,7 @@ function New-WorkshopPublicationReceipt {
         release_tag = $ReleaseTag
         receipt_asset_name = $ReceiptAssetName
         source_root = $root
-        source_commit = $SourceCommit.ToLowerInvariant()
+        source_commit = $sourceCommitLower
         mod = $Mod
         version = $Version
         owner = $Owner
@@ -574,4 +644,27 @@ function New-WorkshopPublicationReceipt {
         }
         authorization = $AuthorizationEvidence
     }
+    if ($authority -ceq 'receipt') {
+        $result['bundle_authority'] = 'receipt'
+        $result['bundle_authority_proof'] = [ordered]@{
+            authority = [string]$authorityProof.Authority
+            source_commit = [string]$authorityProof.SourceCommit
+            inventory_git_blob = [string]$authorityProof.InventoryGitBlob
+            ignore_git_blob = [string]$authorityProof.IgnoreGitBlob
+            root_bundle = [string]$authorityProof.RootBundle
+            byte_source = [string]$authorityProof.ByteSource
+            build_receipt_path = "$Mod/.build-receipt.json"
+            build_receipt_git_blob = [string]$authorityProof.BuildReceiptGitBlob
+            build_receipt_sha256 = [string]$authorityProof.BuildReceiptSha256
+            receipt_schema = [int]$authorityProof.ReceiptSchema
+            source_fingerprint_sha256 = [string]$authorityProof.SourceFingerprintSha256
+            output_algorithm = [string]$authorityProof.OutputAlgorithm
+            output_fingerprint_sha256 = [string]$authorityProof.OutputFingerprintSha256
+            builder_name = [string]$authorityProof.BuilderName
+            builder_version = [string]$authorityProof.BuilderVersion
+            normalization_policy_algorithm = [string]$authorityProof.NormalizationPolicyAlgorithm
+            normalization_policy_fingerprint_sha256 = [string]$authorityProof.NormalizationPolicyFingerprintSha256
+        }
+    }
+    return $result
 }

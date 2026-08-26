@@ -478,6 +478,20 @@ preview = "item_preview.png";
         -Condition $receiptBytesExact `
         -Label 'receipt snapshot returns exact held-handle bytes, lengths, and hashes'
 
+    $receiptZip = [byte[]](New-ReleaseZipBytesFromImmutableOutput `
+        -OutputSet $receiptSnapshot.OutputSet `
+        -BundleFiles @($receiptSnapshot.BundleFiles) `
+        -Version ([string]$receiptSnapshot.Version))
+    $receiptZipEntry = [pscustomobject]@{
+        version = [string]$receiptSnapshot.Version
+        bundle_files = @(ConvertTo-VtBundleManifestRecords -OutputSet $receiptSnapshot.OutputSet)
+    }
+    $receiptZipVerdict = Test-ReleaseZipSnapshot `
+        -ZipBytes $receiptZip -ManifestEntry $receiptZipEntry
+    Confirm-VtPublicationSnapshotCase `
+        -Condition $receiptZipVerdict.Valid `
+        -Label 'receipt-authority snapshot produces an exact manifest-bound release ZIP'
+
     Confirm-VtPublicationSnapshotFailure `
         -Label 'receipt authority requires an exact expected builder version' `
         -Pattern 'requires the exact expected builder version' `
@@ -487,9 +501,31 @@ preview = "item_preview.png";
                 -SourceCommit $receiptCommit `
                 -Mod $mod
         }
+    $workshopReceipt = New-WorkshopPublicationReceipt `
+        -RepoRoot $fixtureRoot `
+        -Repository 'Ensrick/vermintide-2-tweaker' `
+        -ReleaseTag 'mods-fixture' `
+        -ReceiptAssetName 'publication-receipt-modx.json' `
+        -Mod $mod `
+        -Version '1.2.3-fixture' `
+        -Owner 'fixture:owner' `
+        -SourceCommit $receiptCommit `
+        -PublicationSnapshot $receiptSnapshot `
+        -AuthorizationEvidence ([pscustomobject]@{ mode = 'hosted_qa' })
+    Confirm-VtPublicationSnapshotCase `
+        -Condition ($workshopReceipt.bundle_authority -ceq 'receipt' -and
+            $workshopReceipt.bundle_authority_proof.byte_source -ceq 'materialized_restrictive_handles' -and
+            $workshopReceipt.bundle_authority_proof.build_receipt_path -ceq 'modx/.build-receipt.json' -and
+            $workshopReceipt.bundle_authority_proof.build_receipt_git_blob -match '^[0-9a-f]{40}$' -and
+            $workshopReceipt.bundle_authority_proof.output_fingerprint_sha256 -ceq $workingOutputSet.Fingerprint -and
+            @($workshopReceipt.bundle_files | Where-Object { [string]$_.git_blob -cne '' }).Count -eq 0) `
+        -Label 'Workshop receipt carries the exact receipt-authority proof and output map'
+
+    $originalOutputFingerprint = [string]$receiptSnapshot.AuthorityProof.OutputFingerprintSha256
+    $receiptSnapshot.AuthorityProof.OutputFingerprintSha256 = ('f' * 64)
     Confirm-VtPublicationSnapshotFailure `
-        -Label 'Workshop publication receipt remains tracked-authority-only' `
-        -Pattern 'requires exactly one tracked source-commit inventory entry' `
+        -Label 'Workshop receipt rejects a tampered authority/output fingerprint' `
+        -Pattern 'output map does not match' `
         -Action {
             New-WorkshopPublicationReceipt `
                 -RepoRoot $fixtureRoot `
@@ -500,8 +536,51 @@ preview = "item_preview.png";
                 -Version '1.2.3-fixture' `
                 -Owner 'fixture:owner' `
                 -SourceCommit $receiptCommit `
+                -PublicationSnapshot $receiptSnapshot `
                 -AuthorizationEvidence ([pscustomobject]@{ mode = 'hosted_qa' })
         }
+    $receiptSnapshot.AuthorityProof.OutputFingerprintSha256 = $originalOutputFingerprint
+
+    $tamperedBundle = @($receiptSnapshot.BundleFiles)[0]
+    $originalBundleLength = [long]$tamperedBundle.Length
+    $tamperedBundle.Length = $originalBundleLength + 1
+    Confirm-VtPublicationSnapshotFailure `
+        -Label 'Workshop receipt rejects a tampered detached output record' `
+        -Pattern 'differs from its complete output map' `
+        -Action {
+            New-WorkshopPublicationReceipt `
+                -RepoRoot $fixtureRoot `
+                -Repository 'Ensrick/vermintide-2-tweaker' `
+                -ReleaseTag 'mods-fixture' `
+                -ReceiptAssetName 'publication-receipt-modx.json' `
+                -Mod $mod `
+                -Version '1.2.3-fixture' `
+                -Owner 'fixture:owner' `
+                -SourceCommit $receiptCommit `
+                -PublicationSnapshot $receiptSnapshot `
+                -AuthorizationEvidence ([pscustomobject]@{ mode = 'hosted_qa' })
+        }
+    $tamperedBundle.Length = $originalBundleLength
+
+    $originalPublishedId = [string]$receiptSnapshot.PublishedId
+    $receiptSnapshot.PublishedId = '0'
+    Confirm-VtPublicationSnapshotFailure `
+        -Label 'receipt authority rejects first-upload bootstrap' `
+        -Pattern 'does not support first-upload bootstrap' `
+        -Action {
+            New-WorkshopPublicationReceipt `
+                -RepoRoot $fixtureRoot `
+                -Repository 'Ensrick/vermintide-2-tweaker' `
+                -ReleaseTag 'mods-fixture' `
+                -ReceiptAssetName 'publication-receipt-modx.json' `
+                -Mod $mod `
+                -Version '1.2.3-fixture' `
+                -Owner 'fixture:owner' `
+                -SourceCommit $receiptCommit `
+                -PublicationSnapshot $receiptSnapshot `
+                -AuthorizationEvidence ([pscustomobject]@{ mode = 'hosted_qa' })
+        }
+    $receiptSnapshot.PublishedId = $originalPublishedId
 
     $detachedRoot = @($receiptSnapshot.BundleFiles | Where-Object { [string]$_.Path -ceq $rootBundle })[0]
     $detachedBytes = [byte[]]$detachedRoot.Bytes.Clone()
