@@ -112,7 +112,7 @@ function Invoke-VtBundleOutputSetSelfTest {
 
     try {
         Write-VtBundleOutputTestFile -Path (Join-Path $bundleDirectory $rootBundle) -Text 'root bytes'
-        Write-VtBundleOutputTestFile -Path (Join-Path $bundleDirectory $secondaryBundle) -Text 'secondary bytes'
+        Write-VtBundleOutputTestFile -Path (Join-Path $bundleDirectory $secondaryBundle) -Text 'root bytes'
         Write-VtBundleOutputTestFile -Path (Join-Path $bundleDirectory $descriptorName) -Text 'descriptor bytes'
 
         $physical = Get-VtBundleOutputSet `
@@ -124,6 +124,70 @@ function Invoke-VtBundleOutputSetSelfTest {
         Assert ($physical.Root.Name -ceq $rootBundle) 'binds only the explicitly declared root bundle'
         Assert ($physical.Descriptor.Name -ceq $descriptorName) 'binds the one exact descriptor'
         Assert ($physical.Fingerprint -cmatch '^[0-9a-f]{64}$') 'produces a lowercase SHA-256 fingerprint'
+
+        $byteSnapshot = Get-VtBundleOutputByteSnapshot `
+            -BundleDirectory $bundleDirectory `
+            -ExpectedDescriptorName $descriptorName `
+            -ExpectedRootBundle $rootBundle `
+            -ExpectedDescriptorSha256 $physical.Descriptor.Sha256
+        Assert (
+            (@($byteSnapshot.PSObject.Properties.Name) -join ',') -ceq 'OutputSet,Files' -and
+            (@($byteSnapshot.Files[0].PSObject.Properties.Name) -join ',') -ceq 'Name,Length,Sha256,Bytes' -and
+            $null -eq $byteSnapshot.OutputSet.Files[0].PSObject.Properties['Bytes']
+        ) 'byte snapshot exposes only OutputSet plus ordered Name/Length/Sha256/Bytes rows'
+        Assert (
+            @(Compare-VtBundleOutputSets -Expected $physical -Actual $byteSnapshot.OutputSet).Count -eq 0
+        ) 'byte snapshot embeds the unchanged canonical hash-only output set'
+        Assert (
+            ($byteSnapshot.Files.Name -join ',') -ceq ($byteSnapshot.OutputSet.Files.Name -join ',')
+        ) 'byte snapshot rows use the canonical ordinal output-set order'
+
+        $byteRowsMatch = @($byteSnapshot.Files).Count -eq @($byteSnapshot.OutputSet.Files).Count
+        for ($i = 0; $byteRowsMatch -and $i -lt @($byteSnapshot.Files).Count; $i++) {
+            $byteRecord = $byteSnapshot.Files[$i]
+            $setRecord = $byteSnapshot.OutputSet.Files[$i]
+            $diskBytes = [System.IO.File]::ReadAllBytes((Join-Path $bundleDirectory $byteRecord.Name))
+            $byteRowsMatch =
+                $byteRecord.Name -ceq $setRecord.Name -and
+                [long]$byteRecord.Length -eq [long]$setRecord.Length -and
+                $byteRecord.Sha256 -ceq $setRecord.Sha256 -and
+                $byteRecord.Bytes -is [byte[]] -and
+                [long]$byteRecord.Bytes.LongLength -eq [long]$byteRecord.Length -and
+                [Convert]::ToBase64String([byte[]]$byteRecord.Bytes) -ceq
+                    [Convert]::ToBase64String($diskBytes)
+        }
+        Assert $byteRowsMatch 'byte snapshot binds every Name/Length/Sha256 row to exact held-handle bytes'
+
+        $byteArraysAreDistinct = $true
+        for ($left = 0; $byteArraysAreDistinct -and $left -lt @($byteSnapshot.Files).Count; $left++) {
+            for ($right = $left + 1; $right -lt @($byteSnapshot.Files).Count; $right++) {
+                if ([object]::ReferenceEquals(
+                        [object]$byteSnapshot.Files[$left].Bytes,
+                        [object]$byteSnapshot.Files[$right].Bytes)) {
+                    $byteArraysAreDistinct = $false
+                    break
+                }
+            }
+        }
+        Assert $byteArraysAreDistinct 'byte snapshot returns a distinct byte array for every record'
+
+        $firstByteBefore = [byte]$byteSnapshot.Files[0].Bytes[0]
+        $secondBytesBefore = [Convert]::ToBase64String([byte[]]$byteSnapshot.Files[1].Bytes)
+        $byteSnapshot.Files[0].Bytes[0] = [byte]($firstByteBefore -bxor 255)
+        Assert (
+            [Convert]::ToBase64String([byte[]]$byteSnapshot.Files[1].Bytes) -ceq $secondBytesBefore
+        ) 'caller mutation of one byte row cannot alias another returned row'
+        $byteSnapshot.Files[0].Bytes[0] = $firstByteBefore
+
+        $rootPath = Join-Path $bundleDirectory $rootBundle
+        $capturedRoot = @($byteSnapshot.Files | Where-Object { $_.Name -ceq $rootBundle })[0]
+        $capturedRootBefore = [Convert]::ToBase64String([byte[]]$capturedRoot.Bytes)
+        $rootDiskBefore = [System.IO.File]::ReadAllBytes($rootPath)
+        Write-VtBundleOutputTestFile -Path $rootPath -Text 'post-return disk mutation'
+        Assert (
+            [Convert]::ToBase64String([byte[]]$capturedRoot.Bytes) -ceq $capturedRootBefore
+        ) 'post-return disk mutation cannot change captured snapshot bytes'
+        [System.IO.File]::WriteAllBytes($rootPath, $rootDiskBefore)
 
         $singleRecord = Get-VtBundleOutputFileRecord `
             -Path (Join-Path $bundleDirectory $rootBundle) `
@@ -230,6 +294,9 @@ function Invoke-VtBundleOutputSetSelfTest {
         Assert-Throws {
             Get-VtBundleOutputSet -BundleDirectory $bundleDirectory -ExpectedDescriptorName $descriptorName -ExpectedRootBundle $rootBundle
         } 'missing its exact descriptor' 'physical enumeration rejects a missing descriptor'
+        Assert-Throws {
+            Get-VtBundleOutputByteSnapshot -BundleDirectory $bundleDirectory -ExpectedDescriptorName $descriptorName -ExpectedRootBundle $rootBundle
+        } 'missing its exact descriptor' 'byte snapshot rejects a missing normalized output'
         Write-VtBundleOutputTestFile -Path $descriptorPath -Text 'descriptor bytes'
 
         $wrongDescriptorPath = Join-Path $bundleDirectory 'wrong.mod'
@@ -290,6 +357,9 @@ function Invoke-VtBundleOutputSetSelfTest {
         Assert-Throws {
             Get-VtBundleOutputSet -BundleDirectory $bundleDirectory -ExpectedDescriptorName $descriptorName -ExpectedRootBundle $rootBundle
         } 'unexpected filename' 'physical enumeration enforces lowercase bundle filenames'
+        Assert-Throws {
+            Get-VtBundleOutputByteSnapshot -BundleDirectory $bundleDirectory -ExpectedDescriptorName $descriptorName -ExpectedRootBundle $rootBundle
+        } 'unexpected filename' 'byte snapshot rejects a noncanonical case variant'
         [System.IO.File]::Delete($uppercasePath)
 
         $unexpectedPath = Join-Path $bundleDirectory 'notes.txt'
@@ -297,6 +367,9 @@ function Invoke-VtBundleOutputSetSelfTest {
         Assert-Throws {
             Get-VtBundleOutputSet -BundleDirectory $bundleDirectory -ExpectedDescriptorName $descriptorName -ExpectedRootBundle $rootBundle
         } 'unexpected filename' 'physical enumeration rejects an unexpected extension'
+        Assert-Throws {
+            Get-VtBundleOutputByteSnapshot -BundleDirectory $bundleDirectory -ExpectedDescriptorName $descriptorName -ExpectedRootBundle $rootBundle
+        } 'unexpected filename' 'byte snapshot rejects an extra normalized output'
         [System.IO.File]::Delete($unexpectedPath)
 
         Assert-Throws {
@@ -308,6 +381,9 @@ function Invoke-VtBundleOutputSetSelfTest {
         Assert-Throws {
             Get-VtBundleOutputSet -BundleDirectory $bundleDirectory -ExpectedDescriptorName $descriptorName -ExpectedRootBundle $rootBundle
         } 'contains a directory' 'physical enumeration rejects nested directories'
+        Assert-Throws {
+            Get-VtBundleOutputByteSnapshot -BundleDirectory $bundleDirectory -ExpectedDescriptorName $descriptorName -ExpectedRootBundle $rootBundle
+        } 'contains a directory' 'byte snapshot rejects nested output content'
         [System.IO.Directory]::Delete($nestedPath, $false)
 
         $junctionTarget = Join-Path $temp 'junction-target'
@@ -317,6 +393,9 @@ function Invoke-VtBundleOutputSetSelfTest {
         Assert-Throws {
             Get-VtBundleOutputSet -BundleDirectory $bundleDirectory -ExpectedDescriptorName $descriptorName -ExpectedRootBundle $rootBundle
         } 'reparse-point entry' 'physical enumeration rejects a child directory reparse point'
+        Assert-Throws {
+            Get-VtBundleOutputByteSnapshot -BundleDirectory $bundleDirectory -ExpectedDescriptorName $descriptorName -ExpectedRootBundle $rootBundle
+        } 'reparse-point entry' 'byte snapshot rejects a child reparse point'
         (Get-Item -LiteralPath $nestedJunction -Force).Delete()
 
         $rootJunction = Join-Path $temp 'bundle-link'
@@ -324,6 +403,9 @@ function Invoke-VtBundleOutputSetSelfTest {
         Assert-Throws {
             Get-VtBundleOutputSet -BundleDirectory $rootJunction -ExpectedDescriptorName $descriptorName -ExpectedRootBundle $rootBundle
         } 'reparse-point directory' 'physical enumeration rejects a reparse-point bundle directory'
+        Assert-Throws {
+            Get-VtBundleOutputByteSnapshot -BundleDirectory $rootJunction -ExpectedDescriptorName $descriptorName -ExpectedRootBundle $rootBundle
+        } 'reparse-point directory' 'byte snapshot rejects a reparse-point bundle directory'
         (Get-Item -LiteralPath $rootJunction -Force).Delete()
 
         $rootPath = Join-Path $bundleDirectory $rootBundle
@@ -369,6 +451,38 @@ function Invoke-VtBundleOutputSetSelfTest {
                     [System.IO.File]::WriteAllBytes($replacementPath, $replacementBytes)
                 }
         } 'mutation attempt failed closed while held handles were open' 'production enumeration denies a same-name replacement after its held handles open'
+        Assert-Throws {
+            Get-VtBundleOutputByteSnapshot `
+                -BundleDirectory $bundleDirectory `
+                -ExpectedDescriptorName $descriptorName `
+                -ExpectedRootBundle $rootBundle `
+                -BeforeOpenTestHook {
+                    param($ignoredDirectory, $ignoredSnapshot)
+                    [System.IO.File]::Delete($replacementPath)
+                    [System.IO.File]::WriteAllBytes($replacementPath, $replacementBytes)
+                }
+        } 'mutation attempt failed closed while held handles were open' 'byte snapshot denies a same-name replacement while restrictive handles are held'
+        [System.IO.File]::WriteAllBytes($replacementPath, $replacementBytes)
+
+        $renamedOutputPath = Join-Path $bundleDirectory 'cccccccccccccccc.mod_bundle'
+        Assert-Throws {
+            Get-VtBundleOutputByteSnapshot `
+                -BundleDirectory $bundleDirectory `
+                -ExpectedDescriptorName $descriptorName `
+                -ExpectedRootBundle $rootBundle `
+                -BeforeOpenTestHook {
+                    param($ignoredDirectory, $ignoredSnapshot)
+                    [System.IO.File]::Move($replacementPath, $renamedOutputPath)
+                }
+        } 'mutation attempt failed closed while held handles were open' 'byte snapshot denies an output rename while restrictive handles are held'
+        Assert (
+            (Test-Path -LiteralPath $replacementPath -PathType Leaf) -and
+            -not (Test-Path -LiteralPath $renamedOutputPath)
+        ) 'denied output rename preserves the exact original path'
+        if ((Test-Path -LiteralPath $renamedOutputPath -PathType Leaf) -and
+            -not (Test-Path -LiteralPath $replacementPath)) {
+            [System.IO.File]::Move($renamedOutputPath, $replacementPath)
+        }
 
         $sameLengthOriginal = [System.IO.File]::ReadAllBytes($replacementPath)
         $sameLengthMutation = [byte[]]$sameLengthOriginal.Clone()
@@ -383,8 +497,19 @@ function Invoke-VtBundleOutputSetSelfTest {
                     [System.IO.File]::WriteAllBytes($replacementPath, $sameLengthMutation)
                 }
         } 'mutation attempt failed closed while held handles were open' 'production enumeration denies an in-place same-identity same-length rewrite'
+        Assert-Throws {
+            Get-VtBundleOutputByteSnapshot `
+                -BundleDirectory $bundleDirectory `
+                -ExpectedDescriptorName $descriptorName `
+                -ExpectedRootBundle $rootBundle `
+                -BeforeOpenTestHook {
+                    param($ignoredDirectory, $ignoredSnapshot)
+                    [System.IO.File]::WriteAllBytes($replacementPath, $sameLengthMutation)
+                }
+        } 'mutation attempt failed closed while held handles were open' 'byte snapshot denies an in-place same-identity same-length rewrite'
         Assert ([Convert]::ToBase64String([System.IO.File]::ReadAllBytes($replacementPath)) -ceq
             [Convert]::ToBase64String($sameLengthOriginal)) 'denied same-length rewrite leaves the exact original bytes intact'
+        [System.IO.File]::WriteAllBytes($replacementPath, $sameLengthOriginal)
 
         $mutationPath = Join-Path $bundleDirectory 'cccccccccccccccc.mod_bundle'
         Assert-Throws {
@@ -398,6 +523,34 @@ function Invoke-VtBundleOutputSetSelfTest {
                 }
         } 'appeared during enumeration' 'production second snapshot rejects a filename created after hashing'
         [System.IO.File]::Delete($mutationPath)
+
+        Assert-Throws {
+            Get-VtBundleOutputByteSnapshot `
+                -BundleDirectory $bundleDirectory `
+                -ExpectedDescriptorName $descriptorName `
+                -ExpectedRootBundle $rootBundle `
+                -BeforeSecondSnapshotTestHook {
+                    param($ignoredDirectory, $ignoredRecords)
+                    Write-VtBundleOutputTestFile -Path $mutationPath -Text 'appeared after byte capture'
+                }
+        } 'appeared during enumeration|unexpected filename' 'byte snapshot rejects an output created after byte capture'
+        [System.IO.File]::Delete($mutationPath)
+
+        $renamedBundleDirectory = Join-Path $temp 'bundleV2-renamed'
+        Assert-Throws {
+            Get-VtBundleOutputByteSnapshot `
+                -BundleDirectory $bundleDirectory `
+                -ExpectedDescriptorName $descriptorName `
+                -ExpectedRootBundle $rootBundle `
+                -BeforeOpenTestHook {
+                    param($ignoredDirectory, $ignoredSnapshot)
+                    [System.IO.Directory]::Move($bundleDirectory, $renamedBundleDirectory)
+                }
+        } 'mutation attempt failed closed while held handles were open' 'byte snapshot denies a bundle-directory rename while its identity handle is held'
+        if ((Test-Path -LiteralPath $renamedBundleDirectory -PathType Container) -and
+            -not (Test-Path -LiteralPath $bundleDirectory)) {
+            [System.IO.Directory]::Move($renamedBundleDirectory, $bundleDirectory)
+        }
 
         $final = Get-VtBundleOutputSet `
             -BundleDirectory $bundleDirectory `

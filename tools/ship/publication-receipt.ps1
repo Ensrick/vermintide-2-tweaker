@@ -275,7 +275,8 @@ function Get-PublicationCommitSnapshot {
     param(
         [string]$RepoRoot,
         [string]$SourceCommit,
-        [string]$Mod
+        [string]$Mod,
+        [switch]$AllowEmptyBundleFiles
     )
 
     if ("$SourceCommit" -notmatch '^[0-9a-f]{40}$') {
@@ -358,7 +359,7 @@ function Get-PublicationCommitSnapshot {
             Sha256 = $proof.Sha256
         }
     }
-    if ($bundles.Count -eq 0) {
+    if ($bundles.Count -eq 0 -and -not $AllowEmptyBundleFiles) {
         throw "Source commit $SourceCommit contains no bundleV2 blobs for $Mod."
     }
 
@@ -507,8 +508,26 @@ function New-WorkshopPublicationReceipt {
         throw 'Workshop publication receipt requires independently queried hosted_qa evidence.'
     }
     $root = [System.IO.Path]::GetFullPath($RepoRoot).TrimEnd('\', '/')
+    $commitInventory = Get-PublicationCommitInventory `
+        -RepoRoot $root `
+        -SourceCommit $SourceCommit.ToLowerInvariant()
+    $commitEntries = @($commitInventory.Mods | Where-Object { [string]$_.Dir -ceq $Mod })
+    if ($commitEntries.Count -ne 1 -or
+        [string]$commitEntries[0].BundleAuthority -cne 'tracked') {
+        throw "Workshop publication receipt requires exactly one tracked source-commit inventory entry for '$Mod'."
+    }
     $snapshot = Get-PublicationCommitSnapshot `
         -RepoRoot $root -SourceCommit $SourceCommit.ToLowerInvariant() -Mod $Mod
+    if ([string]$snapshot.ItemCfg.GitBlob -cnotmatch '^[0-9a-f]{40,64}$' -or
+        [string]$snapshot.SourceDescriptor.GitBlob -cnotmatch '^[0-9a-f]{40,64}$' -or
+        @($snapshot.BundleFiles).Count -eq 0 -or
+        @($snapshot.BundleFiles | Where-Object {
+            [string]$_.GitBlob -cnotmatch '^[0-9a-f]{40,64}$'
+        }).Count -gt 0 -or
+        ([bool]$snapshot.PreviewFile.Present -and
+         [string]$snapshot.PreviewFile.GitBlob -cnotmatch '^[0-9a-f]{40,64}$')) {
+        throw "Workshop publication receipt requires exact Git blob proof for every selected '$Mod' byte."
+    }
     if ([string]::IsNullOrWhiteSpace("$($snapshot.PublishedId)")) {
         throw "Source-commit itemV2.cfg for '$Mod' has no published_id."
     }
