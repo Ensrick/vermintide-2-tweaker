@@ -234,6 +234,8 @@ function Invoke-SelfTest {
         $diffWhitespaceScript = Join-Path $repoRootPath "qa/check_diff_whitespace.ps1"
         $refreshCardsScript = Join-Path $repoRootPath "tools/ship/refresh-cards.ps1"
         $commandCollisionScript = Join-Path $repoRootPath "qa/check_command_collisions.ps1"
+        $appearanceScript = Join-Path $repoRootPath "qa/check_appearance_contracts.ps1"
+        $appearanceManifest = Join-Path $repoRootPath "qa/appearance_contracts.psd1"
         foreach ($hostInfo in $hosts) {
             if (Test-Path -LiteralPath $sentinelPath) { Remove-Item -LiteralPath $sentinelPath }
             $zero = Invoke-HostScript -HostPath $hostInfo.Path -ScriptPath $inProgressScript -ScriptArguments @("-RepoRoot", $fixtureRoot, "-SkipGitDiff")
@@ -277,6 +279,18 @@ function Invoke-SelfTest {
             $commandCollision = Invoke-HostScript -HostPath $hostInfo.Path -ScriptPath $commandCollisionScript -ScriptArguments @("-SelfTest")
             if ($commandCollision.ExitCode -ne 0 -or $commandCollision.Output -notmatch '\[check_command_collisions -SelfTest\] OK') {
                 $failures += "$($hostInfo.Name) canonical command-collision self-test failed (exit $($commandCollision.ExitCode))"
+            }
+
+            $appearanceSelfTest = Invoke-HostScript -HostPath $hostInfo.Path -ScriptPath $appearanceScript -ScriptArguments @(
+                '-SelfTest', '-Quiet', '-RepoRoot', $repoRootPath, '-ManifestPath', $appearanceManifest)
+            if ($appearanceSelfTest.ExitCode -ne 0) {
+                $failures += "$($hostInfo.Name) appearance shard-loader self-test failed (exit $($appearanceSelfTest.ExitCode)): $($appearanceSelfTest.Output)"
+            }
+
+            $appearanceGate = Invoke-HostScript -HostPath $hostInfo.Path -ScriptPath $appearanceScript -ScriptArguments @(
+                '-Quiet', '-RepoRoot', $repoRootPath, '-ManifestPath', $appearanceManifest)
+            if ($appearanceGate.ExitCode -ne 0) {
+                $failures += "$($hostInfo.Name) appearance contract gate failed (exit $($appearanceGate.ExitCode)): $($appearanceGate.Output)"
             }
         }
     }

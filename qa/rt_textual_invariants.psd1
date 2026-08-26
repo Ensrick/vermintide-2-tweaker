@@ -670,6 +670,13 @@
     @{ mod='WOC'; file='weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_shared_relic_runtime.lua'; needle='"hub_trophy_empty"'; literal=$true; polarity='absent'; issueRef='#934'; note='trophy ids stay single-sourced in _woc_shared_relic.lua (policy); the runtime resolves them through policy.trophy_for.' }
     @{ mod='WOC'; file='weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua'; needle='"hub_trophy_empty"'; literal=$true; polarity='absent'; issueRef='#934'; note='trophy ids stay single-sourced in the policy module; the entry never inlines one.' }
 
+    # #613: the exact TeamPreviewer bridge must remain wired to the accepted
+    # host lease snapshot. Behavioral tests execute the notification/replay
+    # path; these two composition seams are intentionally textual because a
+    # disconnected owner can leave both leaf modules independently green.
+    @{ mod='WOC'; file='weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_issue613_preview_owner.lua'; needle='identity_listener = notify_identity'; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#613'; note='the shared relic owner forwards accepted host-snapshot changes to the exact preview consumer once.' }
+    @{ mod='WOC'; file='weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_shared_relic_runtime.lua'; needle='function runtime:identity_for_peer(peer_id)'; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#613'; note='preview consumers receive only the read-only semantic view of the accepted host lease snapshot.' }
+
     # #1308: the wt/wt_dev moved-local spelling lists left the offline suite;
     # this is the one entry-side absence from those lists that is load-bearing
     # for wt_dev and was not already pinned above (a re-declared template

@@ -168,6 +168,110 @@ function Get-UniqueErrors([object[]]$Values, [string]$Label) {
     return $errors.ToArray()
 }
 
+# Import the registry as static PowerShell data while allowing it to be split
+# into bounded, explicitly declared shards. Windows PowerShell 5.1 has no
+# -SkipLimitCheck switch and refuses one monolithic registry after its AST
+# safety budget is exceeded. Shards retain Import-PowerShellDataFile's safe
+# evaluator on both supported hosts; includes are flat sibling file names,
+# regular files (not links/reparse points), unique, and data-only.
+function Import-AppearanceManifest([string]$Path) {
+    $resolved = (Resolve-Path -LiteralPath $Path).Path
+    $importCommand = Get-Command Import-PowerShellDataFile -ErrorAction Stop
+    $canSkipLimit = $importCommand.Parameters.ContainsKey('SkipLimitCheck')
+    $importOne = {
+        param([string]$DataPath)
+        $importArgs = @{ LiteralPath = $DataPath }
+        if ($canSkipLimit) { $importArgs['SkipLimitCheck'] = $true }
+        return Import-PowerShellDataFile @importArgs
+    }
+
+    $manifest = & $importOne $resolved
+    if ($null -eq $manifest -or $manifest -isnot [System.Collections.IDictionary]) {
+        throw "Appearance manifest root must be a data-file map: $resolved"
+    }
+
+    if (-not $manifest.Contains('Contracts') -or $null -eq $manifest.Contracts `
+            -or $manifest.Contracts -isnot [System.Array]) {
+        throw "Appearance manifest Contracts must be a non-empty array: $resolved"
+    }
+    if (@($manifest.Contracts).Count -lt 1) {
+        throw "Appearance manifest Contracts must be a non-empty array: $resolved"
+    }
+    foreach ($contract in @($manifest.Contracts)) {
+        if ($null -eq $contract -or $contract -isnot [System.Collections.IDictionary]) {
+            throw "Appearance manifest Contracts contains a non-map row: $resolved"
+        }
+    }
+    if ($manifest.Contains('Includes') -and ($null -eq $manifest.Includes `
+            -or $manifest.Includes -isnot [System.Array])) {
+        throw "Appearance manifest Includes must be an array: $resolved"
+    }
+
+    $manifestDir = [IO.Path]::GetDirectoryName($resolved)
+    $comparer = if ([IO.Path]::DirectorySeparatorChar -eq '\') {
+        [StringComparer]::OrdinalIgnoreCase
+    } else {
+        [StringComparer]::Ordinal
+    }
+    $seen = [System.Collections.Generic.HashSet[string]]::new($comparer)
+    $contracts = [System.Collections.Generic.List[object]]::new()
+    foreach ($contract in @($manifest.Contracts)) { $contracts.Add($contract) }
+
+    foreach ($include in @($manifest.Includes)) {
+        $relative = [string]$include
+        if ([string]::IsNullOrWhiteSpace($relative)) {
+            throw 'Appearance manifest Includes contains an empty path.'
+        }
+        if ([IO.Path]::IsPathRooted($relative) -or
+                $relative.IndexOfAny([char[]]@('\', '/')) -ge 0 -or
+                [IO.Path]::GetFileName($relative) -ne $relative) {
+            throw "Appearance manifest include must be a flat sibling file name: $relative"
+        }
+        $includePath = [IO.Path]::GetFullPath((Join-Path $manifestDir $relative))
+        if ([IO.Path]::GetExtension($includePath) -ne '.psd1') {
+            throw "Appearance manifest include must be a .psd1 data file: $relative"
+        }
+        if (-not $seen.Add($includePath)) {
+            throw "Appearance manifest include is duplicated: $relative"
+        }
+        if (-not (Test-Path -LiteralPath $includePath -PathType Leaf)) {
+            throw "Appearance manifest include is missing: $relative"
+        }
+        $includeItem = Get-Item -LiteralPath $includePath -Force
+        if (($includeItem.Attributes -band [IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Appearance manifest include cannot be a link or reparse point: $relative"
+        }
+        $shard = & $importOne $includePath
+        if ($null -eq $shard -or $shard -isnot [System.Collections.IDictionary]) {
+            throw "Appearance manifest shard root must be a data-file map: $relative"
+        }
+        if ($shard.SchemaVersion -ne $manifest.SchemaVersion) {
+            throw "Appearance manifest shard schema mismatch: $relative"
+        }
+        if ($shard.Contains('Includes')) {
+            throw "Appearance manifest shards cannot include other shards: $relative"
+        }
+        if (-not $shard.Contains('Contracts') -or $null -eq $shard.Contracts -or
+                $shard.Contracts -isnot [System.Array] -or
+                @($shard.Contracts).Count -lt 1) {
+            throw "Appearance manifest shard Contracts must be a non-empty array: $relative"
+        }
+        foreach ($key in @($shard.Keys)) {
+            if ($key -notin @('SchemaVersion', 'Contracts')) {
+                throw "Appearance manifest shard has unsupported key '$key': $relative"
+            }
+        }
+        foreach ($contract in @($shard.Contracts)) {
+            if ($null -eq $contract -or $contract -isnot [System.Collections.IDictionary]) {
+                throw "Appearance manifest shard Contracts contains a non-map row: $relative"
+            }
+        }
+        foreach ($contract in @($shard.Contracts)) { $contracts.Add($contract) }
+    }
+    $manifest['Contracts'] = $contracts.ToArray()
+    return $manifest
+}
+
 function Test-AppearanceManifest(
     $Manifest,
     [string]$Root,
@@ -505,6 +609,100 @@ function Invoke-SelfTest {
             }
         }
 
+        # Static shard-loader policy fixtures. These are deliberately separate
+        # from the semantic manifest fixtures above: the loader must reject a
+        # malformed registry before contract validation can accidentally make
+        # it look usable on either PowerShell host.
+        $loaderDir = Join-Path $temp 'loader'
+        New-Item -ItemType Directory -Path $loaderDir -Force | Out-Null
+        $utf8 = [Text.UTF8Encoding]::new($false)
+        $writeLoaderFile = {
+            param([string]$Name, [string]$Content)
+            $path = Join-Path $loaderDir $Name
+            [IO.File]::WriteAllText($path, $Content, $utf8)
+            return $path
+        }
+        & $writeLoaderFile 'positive-shard.psd1' `
+            "@{ SchemaVersion = 1; Contracts = @(@{ Id = 'shard' }) }" | Out-Null
+        $positivePath = & $writeLoaderFile 'positive.psd1' `
+            "@{ SchemaVersion = 1; Includes = @('positive-shard.psd1'); Contracts = @(@{ Id = 'root' }) }"
+        try {
+            $positive = Import-AppearanceManifest $positivePath
+            $ids = @($positive.Contracts | ForEach-Object { [string]$_.Id })
+            if ($ids.Count -ne 2 -or $ids[0] -ne 'root' -or $ids[1] -ne 'shard') {
+                throw "ordered merge was '$($ids -join ',')'"
+            }
+            if (-not $Quiet) { Write-Host '  [PASS] shard loader preserves root-then-shard order' -ForegroundColor Green }
+        } catch {
+            Write-Host "  [FAIL] positive shard loader: $($_.Exception.Message)" -ForegroundColor Red
+            $failed++
+        }
+
+        & $writeLoaderFile 'duplicate-shard.psd1' `
+            "@{ SchemaVersion = 1; Contracts = @(@{ Id = 'duplicate' }) }" | Out-Null
+        & $writeLoaderFile 'nested-shard.psd1' `
+            "@{ SchemaVersion = 1; Includes = @('duplicate-shard.psd1'); Contracts = @(@{ Id = 'nested' }) }" | Out-Null
+        & $writeLoaderFile 'mismatch-shard.psd1' `
+            "@{ SchemaVersion = 2; Contracts = @(@{ Id = 'mismatch' }) }" | Out-Null
+        & $writeLoaderFile 'unsupported-shard.psd1' `
+            "@{ SchemaVersion = 1; Contracts = @(@{ Id = 'unsupported' }); Extra = 1 }" | Out-Null
+        & $writeLoaderFile 'null-shard.psd1' `
+            "@{ SchemaVersion = 1; Contracts = `$null }" | Out-Null
+        & $writeLoaderFile 'empty-shard.psd1' `
+            "@{ SchemaVersion = 1; Contracts = @() }" | Out-Null
+        & $writeLoaderFile 'shape-shard.psd1' `
+            "@{ SchemaVersion = 1; Contracts = 'not-an-array' }" | Out-Null
+
+        $loaderCases = @(
+            @{ Name = 'missing include rejected'; File = 'missing.psd1'; Content = "@{ SchemaVersion = 1; Includes = @('absent.psd1'); Contracts = @(@{ Id = 'root' }) }"; Needle = 'include is missing' },
+            @{ Name = 'path escape rejected'; File = 'escape.psd1'; Content = "@{ SchemaVersion = 1; Includes = @('../outside.psd1'); Contracts = @(@{ Id = 'root' }) }"; Needle = 'flat sibling file name' },
+            @{ Name = 'duplicate include rejected'; File = 'duplicate.psd1'; Content = "@{ SchemaVersion = 1; Includes = @('duplicate-shard.psd1','duplicate-shard.psd1'); Contracts = @(@{ Id = 'root' }) }"; Needle = 'duplicated' },
+            @{ Name = 'nested include rejected'; File = 'nested.psd1'; Content = "@{ SchemaVersion = 1; Includes = @('nested-shard.psd1'); Contracts = @(@{ Id = 'root' }) }"; Needle = 'cannot include other shards' },
+            @{ Name = 'schema mismatch rejected'; File = 'mismatch.psd1'; Content = "@{ SchemaVersion = 1; Includes = @('mismatch-shard.psd1'); Contracts = @(@{ Id = 'root' }) }"; Needle = 'schema mismatch' },
+            @{ Name = 'unsupported shard key rejected'; File = 'unsupported.psd1'; Content = "@{ SchemaVersion = 1; Includes = @('unsupported-shard.psd1'); Contracts = @(@{ Id = 'root' }) }"; Needle = 'unsupported key' },
+            @{ Name = 'null root Contracts rejected'; File = 'root-null.psd1'; Content = "@{ SchemaVersion = 1; Contracts = `$null }"; Needle = 'Contracts must be a non-empty array' },
+            @{ Name = 'empty root Contracts rejected'; File = 'root-empty.psd1'; Content = "@{ SchemaVersion = 1; Contracts = @() }"; Needle = 'Contracts must be a non-empty array' },
+            @{ Name = 'wrong-shape root Contracts rejected'; File = 'root-shape.psd1'; Content = "@{ SchemaVersion = 1; Contracts = 'not-an-array' }"; Needle = 'Contracts must be a non-empty array' },
+            @{ Name = 'null shard Contracts rejected'; File = 'shard-null.psd1'; Content = "@{ SchemaVersion = 1; Includes = @('null-shard.psd1'); Contracts = @(@{ Id = 'root' }) }"; Needle = 'shard Contracts must be a non-empty array' },
+            @{ Name = 'empty shard Contracts rejected'; File = 'shard-empty.psd1'; Content = "@{ SchemaVersion = 1; Includes = @('empty-shard.psd1'); Contracts = @(@{ Id = 'root' }) }"; Needle = 'shard Contracts must be a non-empty array' },
+            @{ Name = 'wrong-shape shard Contracts rejected'; File = 'shard-shape.psd1'; Content = "@{ SchemaVersion = 1; Includes = @('shape-shard.psd1'); Contracts = @(@{ Id = 'root' }) }"; Needle = 'shard Contracts must be a non-empty array' }
+        )
+        foreach ($case in $loaderCases) {
+            $casePath = & $writeLoaderFile $case.File $case.Content
+            $message = $null
+            try {
+                Import-AppearanceManifest $casePath | Out-Null
+            } catch {
+                $message = $_.Exception.Message
+            }
+            if ($null -ne $message -and $message.IndexOf(
+                    $case.Needle, [StringComparison]::OrdinalIgnoreCase) -ge 0) {
+                if (-not $Quiet) { Write-Host "  [PASS] $($case.Name)" -ForegroundColor Green }
+            } else {
+                Write-Host "  [FAIL] $($case.Name): $message" -ForegroundColor Red
+                $failed++
+            }
+        }
+
+        # Exercise the real static-data loader and its declared shards. Without
+        # this check, -SelfTest could stay green while the ordinary PS5 gate was
+        # unable to import the production registry at all.
+        try {
+            $liveManifest = Import-AppearanceManifest (Resolve-Path -LiteralPath $ManifestPath).Path
+            if (@($liveManifest.Contracts).Count -lt 1 -or
+                    @($liveManifest.Contracts | Where-Object {
+                        $_.Id -eq 'woc.issue613.team-preview-identity'
+                    }).Count -ne 1) {
+                throw 'production manifest loaded without contracts'
+            }
+            if (-not $Quiet) {
+                Write-Host ("  [PASS] production manifest and {0} declared shard(s) load safely" -f @($liveManifest.Includes).Count) -ForegroundColor Green
+            }
+        } catch {
+            Write-Host "  [FAIL] production manifest loader: $($_.Exception.Message)" -ForegroundColor Red
+            $failed++
+        }
+
         # #1197 reverse-direction fixture: a descriptor surface that is absent
         # from the gate's explicit required set must fail even when the manifest
         # and every contract omit it together.
@@ -596,7 +794,7 @@ if ($SelfTest) {
 try {
     $resolvedRoot = (Resolve-Path -LiteralPath $RepoRoot).Path
     $resolvedManifest = (Resolve-Path -LiteralPath $ManifestPath).Path
-    $manifest = Import-PowerShellDataFile -LiteralPath $resolvedManifest
+    $manifest = Import-AppearanceManifest $resolvedManifest
     $authority = Get-AppearanceNameAuthority $resolvedRoot
     $failures = @(Test-AppearanceManifest $manifest $resolvedRoot $authority `
         -RequiredSurfaces $REQUIRED_SURFACES `

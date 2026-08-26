@@ -111,6 +111,6 @@ return function(H, repo_root)
 		H.truthy(preview_source:find(
 			'local perspective = name == policy.UNIT_3P and "3p" or "1p"', 1, true))
 		H.truthy(preview_source:find(
-			'appearance.apply(unit, spec, perspective, surface)', 1, true))
+			'pcall(appearance.apply,', 1, true))
 	end)
 end

@@ -4,8 +4,9 @@
 -- unit. The authored import exposes a separate named render node, so this owner
 -- captures that node's position once, resolves the canonical WA
 -- descriptor once, and re-applies only after a retained-pose comparison fails.
--- Preview worlds are event-driven and remain one-shot; gameplay 1P/3P units
--- are weak-tracked and never create network traffic.
+-- Preview worlds retain weak absolute targets and reapply only after concrete
+-- animation edges; gameplay 1P/3P units keep the measured repair loop. Neither
+-- path creates network traffic.
 local M = {}
 
 M.CONTRACT = {
@@ -17,7 +18,7 @@ M.CONTRACT = {
 	rotation = "absolute_euler_xyz",
 	write_mode = "atomic_local_pose",
 	gameplay = "retained_check_then_reapply",
-	preview = "one_shot",
+	preview = "weak_record_event_reapply",
 	transport = "none",
 }
 
@@ -39,6 +40,20 @@ end
 -- owner spawn (owner_unit_1p ~= nil, gear_utils.lua:201/:273) owes a 1P unit.
 function M.expects_first_person_unit(owner_unit_1p)
 	return owner_unit_1p ~= nil
+end
+
+function M.should_track_surface(surface)
+	return surface == "owner-spawn" or surface == "husk-spawn"
+		or surface == "character-preview" or surface == "item-preview"
+		or surface == "cim-preview" or surface == "lobby-preview"
+		or surface == "score-preview"
+end
+
+-- Gameplay units retain the measured repair loop. Preview records share the
+-- weak target store but replay only from concrete animation/identity events.
+function M.should_poll_record(record)
+	return type(record) == "table"
+		and (record.surface == "owner-spawn" or record.surface == "husk-spawn")
 end
 
 -- A non-identity hold-pose value is authored tuner ownership whether it was
@@ -155,17 +170,44 @@ function M.new(api)
 	local owner = {}
 
 	local function alive(unit)
-		return unit ~= nil and type(api.alive) == "function" and api.alive(unit) == true
+		if unit == nil or type(api.alive) ~= "function" then return false end
+		local ok, value = pcall(api.alive, unit)
+		return ok and value == true
 	end
 
 	local function read(unit, node)
 		if not alive(unit) or type(api.read) ~= "function" then return nil end
-		return api.read(unit, node)
+		local ok, value = pcall(api.read, unit, node)
+		return ok and value or nil
+	end
+
+	local function rotation_components(value)
+		if type(api.rotation_components) ~= "function" then return nil end
+		local ok, result = pcall(api.rotation_components, value)
+		return ok and result or nil
+	end
+
+	local function write(unit, spec)
+		if type(api.apply) ~= "function" then
+			return false, nil, "apply-unavailable"
+		end
+		local ok, wrote, report = pcall(api.apply, unit, spec)
+		if not ok then
+			return false, { ok = false, error = "callback-error" }, "apply-error"
+		end
+		if wrote ~= true then return false, report, "apply-rejected" end
+		return true, report, nil
+	end
+
+	local function predicate(fn, fallback, ...)
+		if type(fn) ~= "function" then return fallback end
+		local ok, value = pcall(fn, ...)
+		return ok and value == true or false
 	end
 
 	local function emit(kind, record, before, after)
 		if type(api.diagnostic) == "function" then
-			api.diagnostic(kind, record, before, after)
+			pcall(api.diagnostic, kind, record, before, after)
 		end
 	end
 
@@ -173,9 +215,8 @@ function M.new(api)
 		local node = type(spec) == "table" and spec.node or nil
 		if type(node) ~= "number" then return false end
 		local base = read(unit, node)
-		if not base or type(api.rotation_components) ~= "function"
-				or type(api.apply) ~= "function" then return false end
-		local expected_rotation = api.rotation_components(spec and spec.rotation)
+		if not base then return false end
+		local expected_rotation = rotation_components(spec and spec.rotation)
 		local target = M.resolve(base, spec, expected_rotation)
 		if not target then return false end
 		local record = {
@@ -185,13 +226,13 @@ function M.new(api)
 			base = base,
 			target = target,
 		}
-		local wrote, write_report = api.apply(unit, target.apply_spec)
-		wrote = wrote == true
+		local wrote, write_report, write_error = write(unit, target.apply_spec)
 		record.write_report = write_report
+		record.write_error = write_error
 		local after = read(unit, node)
 		local retained = wrote and M.matches(after, target)
 		emit(retained and "initial-retained" or "initial-miss", record, base, after)
-		if type(api.should_track) == "function" and api.should_track(surface) then
+		if predicate(api.should_track, false, surface) then
 			records[unit] = record
 		end
 		return retained
@@ -204,15 +245,16 @@ function M.new(api)
 				records[unit] = nil
 			else
 				tracked = tracked + 1
-				local yielded = type(api.should_yield) == "function"
-					and api.should_yield(record) == true
-				if not yielded then
+				local polled = predicate(api.should_poll, true, record)
+				local yielded = predicate(api.should_yield, false, record)
+				if polled and not yielded then
 					local before = read(unit, record.node)
 					local retained = M.matches(before, record.target)
 					if not retained then
-						local wrote, write_report = api.apply(unit, record.target.apply_spec)
-						wrote = wrote == true
+						local wrote, write_report, write_error =
+							write(unit, record.target.apply_spec)
 						record.write_report = write_report
+						record.write_error = write_error
 						local after = read(unit, record.node)
 						if wrote then applied = applied + 1 end
 						if not record.drift_proof_logged then
@@ -231,6 +273,39 @@ function M.new(api)
 		return applied, tracked
 	end
 
+	-- Preview animation/state edges are event driven. Keep their resolved
+	-- absolute target in the same weak record store as gameplay, but never add
+	-- them to the per-frame repair loop. The preview owner calls this only after
+	-- a concrete animation/identity edge; every call writes the stored absolute
+	-- pose and verifies the immediate readback instead of treating setter success
+	-- as retained state.
+	function owner:reapply(unit, edge)
+		local record = records[unit]
+		if not record then return false, "untracked" end
+		if not alive(unit) then
+			records[unit] = nil
+			return false, "dead"
+		end
+		local before = read(unit, record.node)
+		local wrote, write_report, write_error = write(unit, record.target.apply_spec)
+		record.write_report = write_report
+		record.write_error = write_error
+		local after = read(unit, record.node)
+		local retained = wrote and M.matches(after, record.target)
+		record.last_edge = edge
+		emit(retained and "event-retained" or "event-miss", record, before, after)
+		if retained then return true, "retained" end
+		if write_error then return false, write_error end
+		if after == nil then return false, "readback-unavailable" end
+		return false, "readback-mismatch"
+	end
+
+	function owner:forget(unit)
+		if records[unit] == nil then return false end
+		records[unit] = nil
+		return true
+	end
+
 	function owner:clear()
 		for unit in pairs(records) do records[unit] = nil end
 	end
@@ -240,10 +315,8 @@ function M.new(api)
 	-- offset - then apply immediately and re-arm the proof lines so the next
 	-- log documents the new pose. `values` carries scale/offset/rotation.
 	function owner:retarget(values)
-		if type(values) ~= "table"
-				or type(api.rotation_components) ~= "function"
-				or type(api.apply) ~= "function" then return 0, 0 end
-		local expected_rotation = api.rotation_components(values.rotation)
+		if type(values) ~= "table" then return 0, 0 end
+		local expected_rotation = rotation_components(values.rotation)
 		if not expected_rotation then return 0, 0 end
 		local retargeted, live = 0, 0
 		for unit, record in pairs(records) do
@@ -263,10 +336,11 @@ function M.new(api)
 					record.target = target
 					record.drift_proof_logged = nil
 					record.retention_proof_logged = nil
-					local wrote, write_report = api.apply(unit, target.apply_spec)
+					local wrote, write_report, write_error = write(unit, target.apply_spec)
 					record.write_report = write_report
+					record.write_error = write_error
 					local after = read(unit, record.node)
-					if wrote == true and M.matches(after, target) then
+					if wrote and M.matches(after, target) then
 						retargeted = retargeted + 1
 					end
 					emit("retargeted", record, record.base, after)
@@ -304,8 +378,7 @@ function M.new(api)
 						current = current,
 						target = record.target,
 						retained = M.matches(current, record.target),
-						tuner_claims = type(api.should_yield) == "function"
-							and api.should_yield(record) == true or false,
+						tuner_claims = predicate(api.should_yield, false, record),
 						write_report = record.write_report,
 					}
 				end

@@ -1,5 +1,26 @@
 # Weapons of Chaos — Changelog
 
+## v0.1.57-dev (2026-08-25) - Blightreaper preview lifecycle and peer identity (#613)
+
+- Added an exact TeamPreviewer wearer bridge for lobby and score presentation.
+  It resolves only an unambiguous human profile/career/local-player row and
+  consumes the accepted host Blightreaper lease snapshot; vanilla fallback
+  item data is never treated as proof of the custom relic.
+- Retained preview transforms now keep weak absolute targets and perform one
+  readback-verified reapply after concrete pose/animation edges. Preview close,
+  slot destruction, and session replacement deterministically retire those
+  records without adding per-frame preview polling or new network traffic.
+- Hardened Hero, Menu, Loot, and Athanor preview package ownership: custom unit
+  paths borrow resident vanilla package leases, in-flight close releases the
+  alias exactly once, missing resources fail to the vanilla sword, and WOC-owned
+  callback failures cannot crash the preview or leak its package lease.
+- Added structural contracts and adversarial coverage for exact live/score
+  identity, stale generations, authenticated hot-join delivery, copied Menu
+  hooks, package residency/fallback, teardown, and throwing/rejected adapters.
+  Mission-transition, respawn, career-change, hot-join, peer-ready composition,
+  rejoin, preview-reopen, and mod-disable visual retention remain explicitly
+  deferred for live verification rather than being inferred from setter success.
+
 ## v0.1.56-dev (2026-08-25) - reject malformed NetworkLookup state (#428) [not-started]
 
 - Synchronized the canonical NetworkLookup registrar that proves dense numeric
