@@ -30,7 +30,7 @@ local profiles = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_profiles")
 local profile_runtime = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_profile_runtime")
 local disabled_sections = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_disabled_sections")
 local tab_labels = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_tab_labels")
-local external_group = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_external_group")
+local uitweaks_live_group = mod:dofile("scripts/mods/gui_tweaker/_gut_uitweaks_live_group")
 
 local UIRenderer = UIRenderer
 local UISceneGraph = UISceneGraph
@@ -456,97 +456,6 @@ local function _inject_ckc_into_gut(out)
     -- gut_cat.mod_obj stays = gut (its own settings fall back via _owner)
 end
 
--- (#312) Fold the STOCK UI Tweaks (HideBuffs) live VMF widget tree into GUT and
--- route its setting get/set calls to the stock mod, never GUT's private fallback
--- copies. This is a dynamic tree splice, not a copied setting-id allow-list, so a
--- future supported widget type appears without editing GUT. Reads show HideBuffs'
--- live value; Apply commits through HB:set(id, v, true), firing its ordinary VMF
--- callback and persistence path. The per-node _owners model is shared with the
--- Equipment merge (#208) and CKC injection (#339).
--- HideBuffs becomes the single owner of its live tree. No-op when HideBuffs is absent
--- or disabled: gut's own copies drive its absorbed hb/ fork exactly as before. Runs AFTER
--- _inject_ckc_into_gut so it MERGES into any CKC-set _owner_mod_ids. Marker
--- [UITWEAKS-BRIDGE-312]. Byte-parallel twin with the one in _mod_tweaker_view.lua.
-local function _bridge_uitweaks_to_stock(out)
-    local HB = get_mod("HideBuffs")
-    if not HB then return end                          -- stock UI Tweaks absent: gut owns its copies
-    if type(HB.is_enabled) == "function" then
-        local ok_en, en = pcall(HB.is_enabled, HB)
-        if ok_en and en == false then
-            local gut_cat
-            for _, c in ipairs(out) do
-                if c.mod_id == "gut" then gut_cat = c; break end
-            end
-            if gut_cat then
-                gut_cat.widgets = disabled_sections.disable_group_subtree(gut_cat.widgets,
-                    "hb_group",
-                    _equip_loc("gut_disabled_in_vmf", disabled_sections.REASON))
-            end
-            return                                    -- present but disabled: explained header only
-        end
-    end
-    local gut_cat
-    for _, c in ipairs(out) do
-        if c.mod_id == "gut" then gut_cat = c; break end
-    end
-    if not gut_cat or type(gut_cat.widgets) ~= "table" then return end
-
-    -- Consume the stock mod's CURRENT VMF widget list, not the old absorbed fork's
-    -- copied checkbox catalogue. A future UI Tweaks group, slider, dropdown, or
-    -- keybind therefore appears without a GUT code change. The planner shallow-copies
-    -- every VMF node, rebases it under hb_group, removes stale mirrored rows, and
-    -- preserves GUT's own Sync & Vanilla Mirrors subgroup. [UITWEAKS-LIVE-TREE-312]
-    local vmf = get_mod("VMF")
-    local live = external_group.find_mod_list(vmf and vmf.options_widgets_data,
-        "HideBuffs", _nf)
-    local plan = external_group.replace_group_children({
-        widgets = gut_cat.widgets,
-        live_list = live,
-        group_id = "hb_group",
-        preserve_group_ids = { gut_uitweaks_integration_group = true },
-        field = _nf,
-        owners = gut_cat._owners,
-        owner_mod_ids = gut_cat._owner_mod_ids,
-        base_owner_id = gut_cat.mod_id,
-        owner_id = "HideBuffs",
-        owner_obj = HB,
-        profile_excluded_owners = gut_cat._profile_excluded_owners,
-        exclude_owner_from_profiles = true,
-    })
-    if not plan.changed then
-        if not mod._gut_uitweaks_live_tree_missing_logged then
-            mod._gut_uitweaks_live_tree_missing_logged = true
-            _printf("[gut:312] live UI Tweaks tree unavailable reason=%s; keeping authored fallback",
-                tostring(plan.reason))
-        end
-        local fallback = external_group.bridge_known_fallback({
-            widgets = gut_cat.widgets,
-            setting_names = HB.SETTING_NAMES,
-            field = _nf,
-            owners = gut_cat._owners,
-            owner_mod_ids = gut_cat._owner_mod_ids,
-            base_owner_id = gut_cat.mod_id,
-            owner_id = "HideBuffs",
-            owner_obj = HB,
-            profile_excluded_owners = gut_cat._profile_excluded_owners,
-            exclude_owner_from_profiles = true,
-        })
-        if fallback.changed then
-            gut_cat._owners = fallback.owners
-            gut_cat._owner_mod_ids = fallback.owner_mod_ids
-            gut_cat._profile_excluded_owners = fallback.profile_excluded_owners
-        end
-        return
-    end
-    gut_cat.widgets = plan.widgets
-    gut_cat._owners = plan.owners
-    gut_cat._owner_mod_ids = plan.owner_mod_ids
-    -- UI Tweaks owns its own profiles. Its live rows remain editable here, but
-    -- GUT's ten per-tab profile slots never capture or restore HideBuffs values.
-    gut_cat._profile_excluded_owners = plan.profile_excluded_owners
-    -- gut_cat.mod_obj stays = gut (its own non-bridged settings fall back via _owner).
-end
-
 local function _vmf_categories()
     local out = {}
     local vmf = get_mod("VMF")
@@ -612,7 +521,7 @@ local function _vmf_categories()
     -- (#312) Bridge gut's UI Tweaks toggles to the stock HideBuffs mod's live settings
     -- (own-or-pin) so the Mod Tweaker stays consistent with UI Tweaks' own VMF options.
     -- After CKC injection (it merges into any CKC-set _owner_mod_ids), before the sort.
-    _bridge_uitweaks_to_stock(out)
+    uitweaks_live_group.apply(out, { field = _nf, localize = _equip_loc })
     -- (#208) Fold the four inventory mods into one "Equipment" tab when 2+ are active
     -- (or relabel the N=1-only-CWV tab). Done BEFORE the sort so Equipment participates.
     out = _synthesize_equipment(out)

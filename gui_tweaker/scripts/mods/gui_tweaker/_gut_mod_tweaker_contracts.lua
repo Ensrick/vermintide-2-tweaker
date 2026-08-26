@@ -14,6 +14,7 @@ local M = {}
 function M.install(api)
     local _rt_register = assert(api.register, "Mod Tweaker contracts require register")
     local _rt_src_read = assert(api.src_read, "Mod Tweaker contracts require src_read")
+    mod._gut_rt_register = _rt_register
     local math = math
 
 _rt_register("mod_tweaker_esc_entry_hook", function()
@@ -545,16 +546,15 @@ _rt_register("mod_tweaker_keybind_render", function()
     end
 end)
 
--- (#631) Mouse-button keybind capture spans two source owners after the Mod Tweaker
--- interaction split: the VMF key-id map/poller remain in _mod_tweaker_view.lua,
--- while release-committed mouse capture lives in _mod_tweaker_view_interaction.lua.
--- Inspect both owners independently so a healthy split cannot fail merely because
--- View._handle_input's source is the interaction module. Unreadable retail sources
--- remain a no-op; repository QA owns the static half there (#511).
+-- (#631) Mouse capture and release-commit are separate focused owners. Inspect
+-- the poller and interaction callback independently so the check follows the
+-- actual execution boundary rather than relying on a monolithic view source.
 _rt_register("issue631_keybind_mouse_capture", function()
     local ok_view, View = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_mod_tweaker_view")
-    if not ok_view or type(View) ~= "table" or type(View.init) ~= "function"
-            or type(View._handle_input) ~= "function" then
+    local ok_capture, Capture = pcall(mod.dofile, mod,
+        "scripts/mods/gui_tweaker/_mod_tweaker_keybind_capture")
+    if not ok_view or type(View) ~= "table" or type(View._handle_input) ~= "function"
+            or not ok_capture or type(Capture) ~= "table" or type(Capture.poll) ~= "function" then
         return
     end
 
@@ -565,18 +565,18 @@ _rt_register("issue631_keybind_mouse_capture", function()
         return _rt_src_read(path)
     end
 
-    local view_txt = _source_text(View.init)
-    if view_txt then
-        if not view_txt:find("_MOUSE" .. "_KEYID", 1, true) then
-            return "issue 631 regression: _MOUSE_KEYID map is absent from the view owner"
+    local capture_txt = _source_text(Capture.poll)
+    if capture_txt then
+        if not capture_txt:find("MOUSE" .. "_KEYID", 1, true) then
+            return "issue 631 regression: MOUSE_KEYID map is absent from the capture owner"
         end
-        if not view_txt:find("mouse extra 1", 1, true) then
+        if not capture_txt:find("mouse extra 1", 1, true) then
             return "issue 631 regression: VMF mouse key-id 'mouse extra 1' is missing"
         end
-        if not view_txt:find("Mouse" .. ".button, idx", 1, true) then
+        if not capture_txt:find("Mouse" .. ".button, index", 1, true) then
             return "issue 631 regression: keybind poller no longer reads Mouse.button"
         end
-        if not view_txt:find("return combo, primary_is_mouse", 1, true) then
+        if not capture_txt:find("return combo, primary_is_mouse", 1, true) then
             return "issue 631 regression: poller no longer reports a mouse primary"
         end
     end

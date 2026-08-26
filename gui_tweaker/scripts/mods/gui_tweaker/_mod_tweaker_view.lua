@@ -13,13 +13,14 @@ local _printf = rawget(_G, "printf") or function() end  -- engine printf (surviv
 local defs = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_definitions")
 local transactions = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_transaction")
 local Search = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_search")
-local external_group = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_external_group")
+local uitweaks_live_group = mod:dofile("scripts/mods/gui_tweaker/_gut_uitweaks_live_group")
 local profiles = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_profiles")
 local profile_runtime = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_profile_runtime")
 local disabled_sections = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_disabled_sections")
 local tab_labels = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_tab_labels")
 local ordering = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_ordering")
 local ExclusiveLayout = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_exclusive_layout")
+local _poll_keybind_combo = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_keybind_capture").poll
 
 local UIRenderer = UIRenderer
 local UISceneGraph = UISceneGraph
@@ -285,86 +286,6 @@ local function _format_keybind_value(val)
     end
     if #parts == 0 then return "unbound" end
     return table.concat(parts, " + ")
-end
-
--- (#123) Keybind capture: collect the currently-held keyboard/mouse buttons by VT2 name
--- and return the VMF combo array {main_key, modifiers...} once a non-modifier key is held,
--- else nil. Names come straight from Keyboard.button_name (the same naming VMF matches
--- against), modifiers first. Gamepad ignored; mouse buttons 1-5 ARE captured (issue 631,
--- see _MOUSE_KEYID). NOTE: exact name normalisation
--- ("left ctrl" vs "ctrl") is verified on dev — if a bind does not fire in-game, a single
--- native-menu rebind ([gut-keybind-probe] VMF) reveals VMF's exact stored format to match.
--- VMF stores binds as { primary_key, modifier... } — the MAIN key FIRST, then
--- NORMALISED modifiers ("ctrl"/"alt"/"shift", NOT "left ctrl"). Confirmed from working
--- binds in user_settings.config (e.g. {"c","ctrl"}, single key {"f8"}). v0.2.99 had the
--- order reversed with "left ctrl" names, so VMF couldn't register the bind (#123).
-local _KB_MOD_NORMALIZE = {
-    ["left shift"] = "shift", ["right shift"] = "shift",
-    ["left ctrl"]  = "ctrl",  ["right ctrl"]  = "ctrl",
-    ["left alt"]   = "alt",   ["right alt"]   = "alt",
-}
--- (issue 631) Mouse buttons 1-5 as keybind primaries. The strings are VMF's own MOUSE
--- key-ids and the indices are VMF's own button indices, taken verbatim from
--- Vermintide-Mod-Framework/scripts/mods/vmf/modules/core/keybindings.lua:120-124
--- (PRIMARY_BINDABLE_KEYS.MOUSE). Storing e.g. {"mouse extra 1"} therefore resolves back
--- through KEYS_INFO to the MOUSE input-check functions at dispatch
--- (keybindings.lua:161-179, :311-314) — Mouse.pressed / Mouse.button — so the bind fires.
--- Held state is read the way the game's own code does (Mouse.button(idx) > 0, e.g. VT2
--- decompile scripts/managers/debug/debug_manager.lua:299). Mouse 1=left(0) 2=right(1)
--- 3=middle(2) 4=extra 1(3) 5=extra 2(4). Wheel (idx 10-13) is excluded: the issue asks
--- only for the 5 buttons, and a wheel tick has no held/release phase to capture or to
--- release-detect at dispatch.
-local _MOUSE_KEYID = {
-    [0] = "mouse left",
-    [1] = "mouse right",
-    [2] = "mouse middle",
-    [3] = "mouse extra 1",
-    [4] = "mouse extra 2",
-}
--- Returns (combo, primary_is_mouse). primary_is_mouse lets the caller defer committing a
--- mouse bind until the button is RELEASED (VMF does the same, vmf_options_view.lua:3734-
--- 3751): committing a mouse primary on press would let the left-click that ENTERS capture
--- self-bind Mouse 1, and let the release fall through to the hotspot enter / right-click-
--- clear branches. A keyboard primary has no such overlap, so it still commits on press.
-local function _poll_keybind_combo()
-    local n = 256
-    local ok_n, cnt = pcall(function() return Keyboard.num_buttons() end)
-    if ok_n and type(cnt) == "number" and cnt > 0 then n = cnt end
-    local mods, seen, main = {}, {}, nil
-    for i = 0, n - 1 do
-        local ok_b, down = pcall(Keyboard.button, i)
-        if ok_b and type(down) == "number" and down > 0 then
-            local ok_name, name = pcall(Keyboard.button_name, i)
-            if ok_name and type(name) == "string" and name ~= "" and name ~= "esc" then
-                local norm = _KB_MOD_NORMALIZE[name]
-                if norm then
-                    if not seen[norm] then seen[norm] = true; mods[#mods + 1] = norm end
-                elseif not main then
-                    main = name
-                end
-            end
-        end
-    end
-    -- (issue 631) Mouse button as primary when no keyboard main key is held. Keyboard wins
-    -- ties, mirroring VMF capture which checks Keyboard.any_pressed() before Mouse.any_pressed()
-    -- (vmf_options_view.lua:3702-3712). Held keyboard ctrl/alt/shift still combine with a mouse
-    -- primary (VMF supports modifier+mouse). Scanned low-to-high so left-click wins if two
-    -- buttons are somehow held at once.
-    local primary_is_mouse = false
-    if not main then
-        for idx = 0, 4 do
-            local ok_m, down = pcall(Mouse.button, idx)
-            if ok_m and type(down) == "number" and down > 0 then
-                main = _MOUSE_KEYID[idx]
-                primary_is_mouse = true
-                break
-            end
-        end
-    end
-    if not main then return nil end
-    local combo = { main }                                  -- VMF: primary key FIRST
-    for _, m in ipairs(mods) do combo[#combo + 1] = m end   -- then normalised modifiers
-    return combo, primary_is_mouse
 end
 
 -- (#123) Apply a keybind change THE WAY VMF DOES (vmf_options_view ~734): save the value,
@@ -735,97 +656,6 @@ local function _inject_ckc_into_gut(out)
     -- gut_cat.mod_obj stays = gut (its own settings fall back via _owner)
 end
 
--- (#312) Fold the STOCK UI Tweaks (HideBuffs) live VMF widget tree into GUT and
--- route its setting get/set calls to the stock mod, never GUT's private fallback
--- copies. This is a dynamic tree splice, not a copied setting-id allow-list, so a
--- future supported widget type appears without editing GUT. Reads show HideBuffs'
--- live value; Apply commits through HB:set(id, v, true), firing its ordinary VMF
--- callback and persistence path. The per-node _owners model is shared with the
--- Equipment merge (#208) and CKC injection (#339).
--- HideBuffs becomes the single owner of its live tree. No-op when HideBuffs is absent
--- or disabled: gut's own copies drive its absorbed hb/ fork exactly as before. Runs AFTER
--- _inject_ckc_into_gut so it MERGES into any CKC-set _owner_mod_ids. Marker
--- [UITWEAKS-BRIDGE-312]. Byte-parallel twin with the one in _mod_tweaker_state.lua.
-local function _bridge_uitweaks_to_stock(out)
-    local HB = get_mod("HideBuffs")
-    if not HB then return end                          -- stock UI Tweaks absent: gut owns its copies
-    if type(HB.is_enabled) == "function" then
-        local ok_en, en = pcall(HB.is_enabled, HB)
-        if ok_en and en == false then
-            local gut_cat
-            for _, c in ipairs(out) do
-                if c.mod_id == "gut" then gut_cat = c; break end
-            end
-            if gut_cat then
-                gut_cat.widgets = disabled_sections.disable_group_subtree(gut_cat.widgets,
-                    "hb_group",
-                    _equip_loc("gut_disabled_in_vmf", disabled_sections.REASON))
-            end
-            return                                    -- present but disabled: explained header only
-        end
-    end
-    local gut_cat
-    for _, c in ipairs(out) do
-        if c.mod_id == "gut" then gut_cat = c; break end
-    end
-    if not gut_cat or type(gut_cat.widgets) ~= "table" then return end
-
-    -- Consume the stock mod's CURRENT VMF widget list, not the old absorbed fork's
-    -- copied checkbox catalogue. A future UI Tweaks group, slider, dropdown, or
-    -- keybind therefore appears without a GUT code change. The planner shallow-copies
-    -- every VMF node, rebases it under hb_group, removes stale mirrored rows, and
-    -- preserves GUT's own Sync & Vanilla Mirrors subgroup. [UITWEAKS-LIVE-TREE-312]
-    local vmf = get_mod("VMF")
-    local live = external_group.find_mod_list(vmf and vmf.options_widgets_data,
-        "HideBuffs", _nf)
-    local plan = external_group.replace_group_children({
-        widgets = gut_cat.widgets,
-        live_list = live,
-        group_id = "hb_group",
-        preserve_group_ids = { gut_uitweaks_integration_group = true },
-        field = _nf,
-        owners = gut_cat._owners,
-        owner_mod_ids = gut_cat._owner_mod_ids,
-        base_owner_id = gut_cat.mod_id,
-        owner_id = "HideBuffs",
-        owner_obj = HB,
-        profile_excluded_owners = gut_cat._profile_excluded_owners,
-        exclude_owner_from_profiles = true,
-    })
-    if not plan.changed then
-        if not mod._gut_uitweaks_live_tree_missing_logged then
-            mod._gut_uitweaks_live_tree_missing_logged = true
-            _printf("[gut:312] live UI Tweaks tree unavailable reason=%s; keeping authored fallback",
-                tostring(plan.reason))
-        end
-        local fallback = external_group.bridge_known_fallback({
-            widgets = gut_cat.widgets,
-            setting_names = HB.SETTING_NAMES,
-            field = _nf,
-            owners = gut_cat._owners,
-            owner_mod_ids = gut_cat._owner_mod_ids,
-            base_owner_id = gut_cat.mod_id,
-            owner_id = "HideBuffs",
-            owner_obj = HB,
-            profile_excluded_owners = gut_cat._profile_excluded_owners,
-            exclude_owner_from_profiles = true,
-        })
-        if fallback.changed then
-            gut_cat._owners = fallback.owners
-            gut_cat._owner_mod_ids = fallback.owner_mod_ids
-            gut_cat._profile_excluded_owners = fallback.profile_excluded_owners
-        end
-        return
-    end
-    gut_cat.widgets = plan.widgets
-    gut_cat._owners = plan.owners
-    gut_cat._owner_mod_ids = plan.owner_mod_ids
-    -- UI Tweaks owns its own profiles. Its live rows remain editable here, but
-    -- GUT's ten per-tab profile slots never capture or restore HideBuffs values.
-    gut_cat._profile_excluded_owners = plan.profile_excluded_owners
-    -- gut_cat.mod_obj stays = gut (its own non-bridged settings fall back via _owner).
-end
-
 local function _vmf_categories()
     local out = {}
     local vmf = get_mod("VMF")
@@ -891,7 +721,7 @@ local function _vmf_categories()
     -- (#312) Bridge gut's UI Tweaks toggles to the stock HideBuffs mod's live settings
     -- (own-or-pin) so the Mod Tweaker stays consistent with UI Tweaks' own VMF options.
     -- After CKC injection (it merges into any CKC-set _owner_mod_ids), before the sort.
-    _bridge_uitweaks_to_stock(out)
+    uitweaks_live_group.apply(out, { field = _nf, localize = _equip_loc })
     -- (#208) Fold the four inventory mods into one "Equipment" tab when 2+ are active
     -- (or relabel the N=1-only-CWV tab). Done BEFORE the sort so Equipment participates.
     out = _synthesize_equipment(out)
