@@ -20,9 +20,19 @@ claim, `-BuildOnly`, protected-merge, and clean-default-HEAD phases.
 Caller JSON is correlation evidence, never authority. Immediately before any
 release mutation, this component re-queries the live default branch, exact
 merged PR SHA, and successful hosted `qa-gate` for the exact source commit.
-New zip and receipt inputs are reconstructed from that commit's Git blobs, not
-hashed from mutable working-tree paths. Missing, forged, stale, emergency, or
-contradictory evidence fails closed.
+One shared immutable publication snapshot reconstructs the selected tracked
+output set and its bytes from that commit's Git blobs, not mutable working-tree
+paths. The publisher independently requires coherent `tracked` authority before
+build, staging, ZIP creation, receipt construction, or release mutation.
+Missing, forged, stale, emergency, receipt-authority, or contradictory evidence
+fails closed.
+
+The same snapshot abstraction can validate schema-3 receipt authority in
+offline fixtures by capturing an exact materialized output set under restrictive
+file and directory handles. That capability is byte proof only: receipt-mode
+Workshop publication, deployment, updater, and recovery remain disabled. The
+hosted Workshop receipt continues to require a real Git blob for every selected
+byte and the launcher's `git-commit-blob-snapshot-v1` capability.
 
 `ship.ps1` also supplies `-LauncherPath`, `-LauncherSource`, and
 `-LauncherApprovalAnchor` internally. That snapshot is the exact approved
@@ -209,8 +219,9 @@ with older releases.
 `source_commit` is the exact authorized default-branch commit used as the build
 baseline. `source_state` must be `clean`; dirty provenance is rejected. The
 publisher deliberately reconstructs inventory, descriptor, bundle, ZIP, and
-receipt bytes from that commit rather than treating mutable worktree status as
-publication authority. Canonical `ship.ps1` owns the earlier clean-source gate.
+receipt bytes through the commit-qualified immutable snapshot rather than
+treating mutable worktree status as publication authority. Canonical `ship.ps1`
+owns the earlier clean-source gate.
 
 `builder.name` is fixed to `VMBLauncher`, preserving it as the only sanctioned
 builder. `builder.version` comes from the launcher's Windows ProductVersion or

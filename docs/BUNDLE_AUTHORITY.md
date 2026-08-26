@@ -25,8 +25,27 @@ identity. If a local build is materialized, its complete output set must equal
 the receipt byte-for-byte by filename, length, and SHA-256. Missing, extra,
 renamed, changed, nested, reparse-point, or case-colliding output fails closed.
 
-All active inventory rows remain `tracked` as of issue #1412. This control
+All active inventory rows remain `tracked` as of issue #1422. This control
 plane does not itself migrate a real mod.
+
+## Immutable publication snapshots
+
+Issue #1422 adds one authority-neutral byte snapshot boundary without enabling
+any receipt downstream lane. `Get-VtPublicationSnapshot` derives inventory,
+root, mode, metadata, and source inputs from one exact commit. In `tracked`
+mode it returns the same Git blob bytes and complete output-set identity the
+publisher already consumed.
+
+The receipt path exists for offline fixtures and future reviewed phases only.
+It requires the exact committed schema-3 receipt, exact scoped ignore rule,
+zero committed `bundleV2` outputs, commit-qualified source and normalization
+proof, the expected builder version, and a byte-identical materialized output
+set. Every materialized file is opened with restrictive handles; its bytes,
+length, hash, file identity, directory identity, and the complete directory
+snapshot are reconciled before the handles are released. Returned byte arrays
+are detached from disk and from one another.
+
+This snapshot proves bytes; it does not grant authority to publish them.
 
 ## Typed transitions
 
@@ -54,11 +73,14 @@ ordinary tracked-bundle retirement rule.
 ## Deliberately disabled downstream lanes
 
 Receipt authority currently supports normalization, BuildOnly output
-generation, and receipt validation only. Workshop publication, local/remote
-deployment, updater consumption, and recovery consumption remain disabled.
+generation, receipt validation, and the offline immutable snapshot fixture
+only. Workshop publication, local/remote deployment, updater consumption, and
+recovery consumption remain disabled.
 `tools/ship/ship.ps1` rejects receipt authority before acquiring the machine
 transaction lease unless `-BuildOnly` was selected. Publisher and
-reproducibility boundaries continue to fail closed on non-tracked authority.
+Workshop-receipt boundaries continue to fail closed on non-tracked authority.
+Both publisher tracked gates remain in place even though the shared snapshot
+can prove receipt bytes.
 
 Do not add an updater, release, deploy, or recovery consumer by bypassing this
 gate. Each downstream lane requires its own reviewed immutable-byte contract

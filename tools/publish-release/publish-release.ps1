@@ -67,6 +67,11 @@ if (-not (Test-Path -LiteralPath $publicationReceiptHelpers -PathType Leaf)) {
     throw "Publication receipt helpers not found at $publicationReceiptHelpers."
 }
 . $publicationReceiptHelpers
+$publicationSnapshotHelpers = Join-Path $repoRoot 'tools\ship\publication-snapshot.ps1'
+if (-not (Test-Path -LiteralPath $publicationSnapshotHelpers -PathType Leaf)) {
+    throw "Publication snapshot helpers not found at $publicationSnapshotHelpers."
+}
+. $publicationSnapshotHelpers
 $githubReleaseHelpers = Join-Path $PSScriptRoot 'github-release-api.ps1'
 if (-not (Test-Path -LiteralPath $githubReleaseHelpers)) {
     throw "GitHub release helpers not found at $githubReleaseHelpers."
@@ -422,20 +427,19 @@ $stagedIds    = @()
 $receiptInputs = @()
 
 foreach ($m in $releaseSet) {
-    $commitSnapshot = Get-PublicationCommitSnapshot `
-        -RepoRoot $repoRoot -SourceCommit $sourceCommit -Mod $m.Folder
-    $commitOutputRecords = @($commitSnapshot.BundleFiles | ForEach-Object {
-        [pscustomobject][ordered]@{
-            Name = [string]$_.Path
-            Length = [long]$_.Length
-            Sha256 = [string]$_.Sha256
-        }
-    })
-    $commitOutputSet = New-VtBundleOutputSet `
-        -Records $commitOutputRecords `
-        -ExpectedDescriptorName $m.DescriptorName `
-        -ExpectedRootBundle $m.RootBundle `
-        -ExpectedDescriptorSha256 ([string]$commitSnapshot.SourceDescriptor.Sha256)
+    $commitSnapshot = Get-VtPublicationSnapshot `
+        -RepoRoot $repoRoot `
+        -SourceCommit $sourceCommit `
+        -Mod $m.Folder `
+        -ExpectedBuilderVersion $builderVersion
+    if ([string]$commitSnapshot.BundleAuthority -cne 'tracked' -or
+        [string]$commitSnapshot.AuthorityProof.Authority -cne 'tracked' -or
+        [string]$commitSnapshot.AuthorityProof.ByteSource -cne 'git_commit_blobs' -or
+        [string]$commitSnapshot.AuthorityProof.SourceCommit -cne $sourceCommit -or
+        [string]$commitSnapshot.AuthorityProof.RootBundle -cne [string]$m.RootBundle) {
+        throw "Release publisher requires a coherent tracked immutable snapshot for $($m.Folder)."
+    }
+    $commitOutputSet = $commitSnapshot.OutputSet
     $version = "$($commitSnapshot.Version)"
     $workshopId = "$($commitSnapshot.PublishedId)"
     $visibility = "$($commitSnapshot.Visibility)"

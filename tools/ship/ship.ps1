@@ -131,6 +131,12 @@ if (-not (Test-Path -LiteralPath $buildReceiptHelpers -PathType Leaf)) {
 }
 . $buildReceiptHelpers
 
+$publicationSnapshotHelpers = Join-Path $PSScriptRoot 'publication-snapshot.ps1'
+if (-not (Test-Path -LiteralPath $publicationSnapshotHelpers -PathType Leaf)) {
+    throw "Publication snapshot policy not found: $publicationSnapshotHelpers"
+}
+. $publicationSnapshotHelpers
+
 function Fail {
     param([string]$Message)
     Write-Host ""
@@ -1265,9 +1271,22 @@ function Invoke-ShipSelfTest {
         $publisherCapabilityPos -lt $publisherAssetMutationPos) "launcher 0.6.0 machine-transaction and crash-safe ACL capability probe precedes every GitHub release lookup/mutation"
     Assert ($pubTxt -match 'New-GitHubReleaseAssetSnapshots' -and
         $pubTxt -match '-AssetSnapshots \$assetSnapshots') "zip, manifest, and receipt uploads consume immutable byte snapshots"
-    Assert ($pubTxt -match 'Get-PublicationCommitSnapshot' -and
+    Assert ($pubTxt -match 'Get-VtPublicationSnapshot' -and
         $pubTxt -match 'New-ReleaseZipBytesFromImmutableOutput' -and
-        $pubTxt -notmatch 'Compress-Archive') "new release zips are constructed only from exact source-commit blob bytes"
+        $pubTxt -match "ByteSource\s+-cne\s+'git_commit_blobs'" -and
+        $pubTxt -notmatch 'Compress-Archive') "new release zips consume a coherent tracked immutable byte snapshot"
+    $publisherSnapshotPos = $pubTxt.IndexOf('Get-VtPublicationSnapshot')
+    $publisherSnapshotGatePos = $pubTxt.IndexOf("ByteSource -cne 'git_commit_blobs'", $publisherSnapshotPos)
+    $publisherBuildMutationPos = $pubTxt.IndexOf("-ArgumentList @('build', `$m.Folder)", $publisherSnapshotPos)
+    $publisherStageMutationPos = $pubTxt.IndexOf('[System.IO.File]::WriteAllBytes($destination', $publisherSnapshotPos)
+    $publisherZipConstructionPos = $pubTxt.IndexOf('New-ReleaseZipBytesFromImmutableOutput', $publisherSnapshotPos)
+    $publisherWorkshopReceiptPos = $pubTxt.IndexOf('New-WorkshopPublicationReceipt', $publisherSnapshotPos)
+    Assert ($publisherSnapshotPos -ge 0 -and
+        $publisherSnapshotGatePos -gt $publisherSnapshotPos -and
+        $publisherSnapshotGatePos -lt $publisherBuildMutationPos -and
+        $publisherSnapshotGatePos -lt $publisherStageMutationPos -and
+        $publisherSnapshotGatePos -lt $publisherZipConstructionPos -and
+        $publisherSnapshotGatePos -lt $publisherWorkshopReceiptPos) "publisher proves tracked snapshot authority before build, staging, ZIP, or Workshop receipt preparation"
     Assert (-not ($pubTxt -match 'status --porcelain')) "publisher authorization never relies on a mutable worktree cleanliness check"
     Assert (-not ($pubTxt -match '(?m)^\s*gh\s+release\s+create\b')) "new releases use draft API plus immutable byte upload, not path-consuming gh release create"
     $shipSource = [System.IO.File]::ReadAllText($PSCommandPath, [System.Text.Encoding]::UTF8)
@@ -1846,7 +1865,7 @@ $sourceCommit = ([string]$commitProbe.Lines[-1]).Trim()
 $publicationAuthorization = $null
 if (-not $BuildOnly) {
     try {
-        $commitPublicationSnapshot = Get-PublicationCommitSnapshot `
+        $commitPublicationSnapshot = Get-VtPublicationSnapshot `
             -RepoRoot $repoRoot -SourceCommit $sourceCommit -Mod $Mod
     }
     catch {

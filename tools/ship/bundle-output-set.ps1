@@ -11,6 +11,7 @@ function Initialize-VtBundleOutputNativeMethods {
 
     Add-Type -TypeDefinition @'
 using System;
+using System.IO;
 using System.Runtime.InteropServices;
 using Microsoft.Win32.SafeHandles;
 
@@ -38,6 +39,16 @@ namespace VtBundleOutput
         public static extern bool GetFileInformationByHandle(
             SafeFileHandle file,
             out ByHandleFileInformation information);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern SafeFileHandle CreateFileW(
+            string fileName,
+            uint desiredAccess,
+            FileShare shareMode,
+            IntPtr securityAttributes,
+            FileMode creationDisposition,
+            uint flagsAndAttributes,
+            IntPtr templateFile);
     }
 }
 '@
@@ -65,6 +76,82 @@ function Get-VtBundleOutputHandleProof {
             $information.FileIndexHigh,
             $information.FileIndexLow)
         Length = [long]$length
+    }
+}
+
+function Get-VtBundleOutputDirectoryHandleProof {
+    param([Parameter(Mandatory = $true)][Microsoft.Win32.SafeHandles.SafeFileHandle]$Handle)
+
+    Initialize-VtBundleOutputNativeMethods
+    if ($Handle.IsInvalid -or $Handle.IsClosed) {
+        throw 'Unable to inspect a closed or invalid bundle output directory handle.'
+    }
+
+    $information = New-Object VtBundleOutput.ByHandleFileInformation
+    if (-not [VtBundleOutput.NativeMethods]::GetFileInformationByHandle(
+            $Handle,
+            [ref]$information)) {
+        $errorCode = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
+        throw New-Object System.ComponentModel.Win32Exception(
+            $errorCode,
+            'Unable to bind the bundle output directory to its Windows file identity.')
+    }
+
+    return [pscustomobject][ordered]@{
+        Identity = ('{0:x8}:{1:x8}{2:x8}' -f
+            $information.VolumeSerialNumber,
+            $information.FileIndexHigh,
+            $information.FileIndexLow)
+        Attributes = [System.IO.FileAttributes]$information.FileAttributes
+    }
+}
+
+function Open-VtBundleOutputDirectoryIdentityHandle {
+    param([Parameter(Mandatory = $true)][string]$Path)
+
+    Initialize-VtBundleOutputNativeMethods
+    $fileReadAttributes = [uint32]0x00000080
+    $openDirectoryWithoutFollowingReparse = [uint32]0x02200000
+    $shareMode = [System.IO.FileShare]::Read -bor [System.IO.FileShare]::Write
+    $handle = [VtBundleOutput.NativeMethods]::CreateFileW(
+        $Path,
+        $fileReadAttributes,
+        $shareMode,
+        [System.IntPtr]::Zero,
+        [System.IO.FileMode]::Open,
+        $openDirectoryWithoutFollowingReparse,
+        [System.IntPtr]::Zero)
+    if ($null -eq $handle -or $handle.IsInvalid) {
+        $errorCode = [System.Runtime.InteropServices.Marshal]::GetLastWin32Error()
+        if ($null -ne $handle) { $handle.Dispose() }
+        throw New-Object System.ComponentModel.Win32Exception(
+            $errorCode,
+            "Unable to open the bundle output directory identity handle: $Path")
+    }
+    return $handle
+}
+
+function Assert-VtBundleOutputDirectoryIdentity {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][Microsoft.Win32.SafeHandles.SafeFileHandle]$HeldHandle,
+        [Parameter(Mandatory = $true)][string]$ExpectedIdentity
+    )
+
+    $heldProof = Get-VtBundleOutputDirectoryHandleProof -Handle $HeldHandle
+    if ([string]$heldProof.Identity -cne $ExpectedIdentity -or
+        ($heldProof.Attributes -band [System.IO.FileAttributes]::Directory) -eq 0 -or
+        ($heldProof.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "Bundle output directory handle changed identity or type during byte capture: $Path"
+    }
+
+    $currentHandle = Open-VtBundleOutputDirectoryIdentityHandle -Path $Path
+    try { $currentProof = Get-VtBundleOutputDirectoryHandleProof -Handle $currentHandle }
+    finally { $currentHandle.Dispose() }
+    if ([string]$currentProof.Identity -cne $ExpectedIdentity -or
+        ($currentProof.Attributes -band [System.IO.FileAttributes]::Directory) -eq 0 -or
+        ($currentProof.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "Bundle output directory path changed identity or type during byte capture: $Path"
     }
 }
 
@@ -187,6 +274,46 @@ function Get-VtBundleOutputSha256FromStream {
         $Stream.Position = 0
         $bytes = $algorithm.ComputeHash($Stream)
         return ([System.BitConverter]::ToString($bytes).Replace('-', '').ToLowerInvariant())
+    }
+    finally {
+        $algorithm.Dispose()
+    }
+}
+
+function Get-VtBundleOutputBytesFromStream {
+    param([Parameter(Mandatory = $true)][System.IO.Stream]$Stream)
+
+    $length = [long]$Stream.Length
+    if ($length -lt 0 -or $length -gt [int]::MaxValue) {
+        throw "Bundle output byte capture does not support a single file length of $length bytes."
+    }
+
+    $bytes = [byte[]]::new([int]$length)
+    $Stream.Position = 0
+    $offset = 0
+    while ($offset -lt $bytes.Length) {
+        $read = $Stream.Read($bytes, $offset, $bytes.Length - $offset)
+        if ($read -le 0) {
+            throw "Bundle output stream ended after $offset of $length expected bytes."
+        }
+        $offset += $read
+    }
+    if ([long]$Stream.Length -ne $length) {
+        throw 'Bundle output stream length changed during byte capture.'
+    }
+    return ,$bytes
+}
+
+function Get-VtBundleOutputSha256FromBytes {
+    param(
+        [Parameter(Mandatory = $true)]
+        [AllowEmptyCollection()]
+        [byte[]]$Bytes
+    )
+
+    $algorithm = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        return ([System.BitConverter]::ToString($algorithm.ComputeHash($Bytes)).Replace('-', '').ToLowerInvariant())
     }
     finally {
         $algorithm.Dispose()
@@ -627,6 +754,189 @@ function Get-VtBundleOutputSet {
         foreach ($handle in $handles) {
             if ($null -ne $handle.Stream) { $handle.Stream.Dispose() }
         }
+    }
+}
+
+function Get-VtBundleOutputByteSnapshot {
+    param(
+        [Parameter(Mandatory = $true)][string]$BundleDirectory,
+        [Parameter(Mandatory = $true)][string]$ExpectedDescriptorName,
+        [Parameter(Mandatory = $true)][string]$ExpectedRootBundle,
+        [string]$ExpectedDescriptorSha256,
+        [scriptblock]$BeforeOpenTestHook,
+        [scriptblock]$BeforeSecondSnapshotTestHook
+    )
+
+    Assert-VtBundleOutputExpectedNames `
+        -ExpectedDescriptorName $ExpectedDescriptorName `
+        -ExpectedRootBundle $ExpectedRootBundle
+
+    $directoryItem = Get-Item -LiteralPath $BundleDirectory -Force -ErrorAction Stop
+    if (($directoryItem.Attributes -band [System.IO.FileAttributes]::Directory) -eq 0) {
+        throw "Bundle output path is not a directory: $BundleDirectory"
+    }
+    if (($directoryItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+        throw "Bundle output refuses a reparse-point directory: $BundleDirectory"
+    }
+    $bundleFullPath = Get-VtBundleOutputFullPath -Path $directoryItem.FullName
+
+    $directoryHandle = $null
+    $handles = New-Object 'System.Collections.Generic.List[object]'
+    try {
+        # Bind the directory itself, then acquire every restrictive file handle
+        # during the first snapshot. File handles deny writes, deletes, renames,
+        # and replacements until all bytes and both path snapshots are proven.
+        $directoryHandle = Open-VtBundleOutputDirectoryIdentityHandle -Path $bundleFullPath
+        $directoryProof = Get-VtBundleOutputDirectoryHandleProof -Handle $directoryHandle
+        if (($directoryProof.Attributes -band [System.IO.FileAttributes]::Directory) -eq 0 -or
+            ($directoryProof.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Bundle output directory changed type before byte capture: $BundleDirectory"
+        }
+        $directoryIdentity = [string]$directoryProof.Identity
+        Assert-VtBundleOutputDirectoryIdentity `
+            -Path $bundleFullPath `
+            -HeldHandle $directoryHandle `
+            -ExpectedIdentity $directoryIdentity
+
+        $before = @(Get-VtBundleDirectorySnapshot `
+            -DirectoryInfo $directoryItem `
+            -HeldHandles $handles)
+        Assert-VtBundleDirectorySnapshotFiles -Snapshot $before `
+            -BundleDirectory $bundleFullPath `
+            -ExpectedDescriptorName $ExpectedDescriptorName
+        Assert-VtBundleOutputDirectoryIdentity `
+            -Path $bundleFullPath `
+            -HeldHandle $directoryHandle `
+            -ExpectedIdentity $directoryIdentity
+
+        if ($null -ne $BeforeOpenTestHook) {
+            try {
+                & $BeforeOpenTestHook $bundleFullPath @($before)
+            }
+            catch {
+                throw "Bundle output mutation attempt failed closed while held handles were open: $($_.Exception.Message)"
+            }
+        }
+
+        $capturedByName = [System.Collections.Generic.Dictionary[string,object]]::new(
+            [System.StringComparer]::Ordinal)
+        $setRecords = @()
+        foreach ($handle in $handles) {
+            $bytes = [byte[]](Get-VtBundleOutputBytesFromStream -Stream $handle.Stream)
+            $length = [long]$bytes.LongLength
+            $heldProof = Get-VtBundleOutputHandleProof -Stream $handle.Stream
+            if ($length -ne [long]$handle.Length -or
+                [long]$heldProof.Length -ne [long]$handle.Length -or
+                [string]$heldProof.Identity -cne [string]$handle.Identity) {
+                throw "Bundle output entry changed during byte capture: '$($handle.Name)'."
+            }
+            $sha256 = Get-VtBundleOutputSha256FromBytes -Bytes $bytes
+            $capture = [pscustomobject][ordered]@{
+                Name = [string]$handle.Name
+                Length = $length
+                Sha256 = $sha256
+                Bytes = $bytes
+            }
+            $capturedByName.Add([string]$handle.Name, $capture)
+            $setRecords += [pscustomobject][ordered]@{
+                Name = [string]$handle.Name
+                Length = $length
+                Sha256 = $sha256
+            }
+        }
+
+        if ($null -ne $BeforeSecondSnapshotTestHook) {
+            & $BeforeSecondSnapshotTestHook $bundleFullPath @($setRecords)
+        }
+
+        # Build the detached return object before the final disk revalidation so
+        # the last successful operations before handle release are identity and
+        # complete-directory checks, not additional byte transformations.
+        $setArguments = @{
+            Records = $setRecords
+            ExpectedDescriptorName = $ExpectedDescriptorName
+            ExpectedRootBundle = $ExpectedRootBundle
+        }
+        if ($PSBoundParameters.ContainsKey('ExpectedDescriptorSha256')) {
+            $setArguments.ExpectedDescriptorSha256 = $ExpectedDescriptorSha256
+        }
+        $outputSet = New-VtBundleOutputSet @setArguments
+
+        $files = @()
+        $seenByteArrays = [System.Collections.Generic.HashSet[object]]::new()
+        foreach ($setRecord in @($outputSet.Files)) {
+            $name = [string]$setRecord.Name
+            if (-not $capturedByName.ContainsKey($name)) {
+                throw "Bundle output byte capture lost canonical record '$name'."
+            }
+            $capture = $capturedByName[$name]
+            if ([long]$capture.Length -ne [long]$setRecord.Length -or
+                [string]$capture.Sha256 -cne [string]$setRecord.Sha256) {
+                throw "Bundle output byte capture disagrees with canonical record '$name'."
+            }
+            if (-not $seenByteArrays.Add([object]$capture.Bytes)) {
+                throw "Bundle output byte capture reused a byte array for '$name'."
+            }
+            $files += [pscustomobject][ordered]@{
+                Name = $name
+                Length = [long]$capture.Length
+                Sha256 = [string]$capture.Sha256
+                Bytes = [byte[]]$capture.Bytes
+            }
+        }
+        $result = [pscustomobject][ordered]@{
+            OutputSet = $outputSet
+            Files = @($files)
+        }
+
+        $directoryItem.Refresh()
+        if (-not $directoryItem.Exists -or
+            ($directoryItem.Attributes -band [System.IO.FileAttributes]::Directory) -eq 0 -or
+            ($directoryItem.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0) {
+            throw "Bundle output directory changed type during byte capture: $BundleDirectory"
+        }
+
+        foreach ($handle in $handles) {
+            $heldProof = Get-VtBundleOutputHandleProof -Stream $handle.Stream
+            $current = Get-Item -LiteralPath ([string]$handle.Path) -Force -ErrorAction Stop
+            $currentStream = Open-VtBundleOutputIdentityHandle -Path ([string]$handle.Path)
+            try { $currentProof = Get-VtBundleOutputHandleProof -Stream $currentStream }
+            finally { $currentStream.Dispose() }
+            $currentParent = [System.IO.Path]::GetDirectoryName(
+                (Get-VtBundleOutputFullPath -Path ([string]$current.FullName)))
+            if (($current.Attributes -band [System.IO.FileAttributes]::ReparsePoint) -ne 0 -or
+                ($current.Attributes -band [System.IO.FileAttributes]::Directory) -ne 0 -or
+                [string]$current.Name -cne [string]$handle.Name -or
+                -not (Test-VtBundleOutputPathEqual -Left $currentParent -Right $bundleFullPath) -or
+                [long]$current.Length -ne [long]$handle.Length -or
+                [string]$heldProof.Identity -cne [string]$handle.Identity -or
+                [long]$heldProof.Length -ne [long]$handle.Length -or
+                [string]$currentProof.Identity -cne [string]$handle.Identity -or
+                [long]$currentProof.Length -ne [long]$handle.Length) {
+                throw "Bundle output entry changed after byte capture: '$($handle.Name)'."
+            }
+        }
+
+        $afterDirectory = Get-Item -LiteralPath $bundleFullPath -Force -ErrorAction Stop
+        $after = @(Get-VtBundleDirectorySnapshot -DirectoryInfo $afterDirectory)
+        Assert-VtBundleDirectorySnapshotFiles -Snapshot $after `
+            -BundleDirectory $bundleFullPath `
+            -ExpectedDescriptorName $ExpectedDescriptorName
+        $snapshotErrors = @(Compare-VtBundleDirectorySnapshots -Before $before -After $after)
+        if ($snapshotErrors.Count -gt 0) {
+            throw "Bundle output directory changed during byte capture: $($snapshotErrors -join '; ')"
+        }
+        Assert-VtBundleOutputDirectoryIdentity `
+            -Path $bundleFullPath `
+            -HeldHandle $directoryHandle `
+            -ExpectedIdentity $directoryIdentity
+        return $result
+    }
+    finally {
+        foreach ($handle in $handles) {
+            if ($null -ne $handle.Stream) { $handle.Stream.Dispose() }
+        }
+        if ($null -ne $directoryHandle) { $directoryHandle.Dispose() }
     }
 }
 
