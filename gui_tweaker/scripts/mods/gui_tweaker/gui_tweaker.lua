@@ -1,6 +1,6 @@
 local mod = get_mod("gut")
 
-local MOD_VERSION = "0.2.284"
+local MOD_VERSION = "0.2.285"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -75,6 +75,7 @@ local _RT_CHECKS = {}
 local function _rt_register(name, fn)
     _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
 end
+mod._gut_rt_register = _rt_register
 
 -- (#511) io-safe source reader. The VMF retail sandbox exposes NO `io` library
 -- (mods are loadstring'd into the game's shared _G by mod_manager.lua:375-386, and
@@ -1969,6 +1970,10 @@ pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_gut_mission_hero_select")
 -- MatchmakingStateWaitForCountdown.on_enter, full hook on GameModeManager.complete_level;
 -- chains mod.on_game_state_changed (preview-package arm). See _gut_mission_map.lua.
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_gut_mission_map")
+
+-- #649: filter only late custom careers lacking boot-time completion definitions;
+-- StatisticsDatabase itself remains untouched. See guard module for source proof.
+pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_gut_guard649_mission_completion")
 
 -- Inventory character-preview lighting (#522): preserves the vanilla preview
 -- scene and installs one zero-allocation exposure callback on only

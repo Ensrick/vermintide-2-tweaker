@@ -200,26 +200,40 @@ return function(H, repo_root)
         H.equal(live:find("rpc_", 1, true), nil)
     end)
 
-    H.test("GUT #272 stable and dev presenters preserve shared renderer invariants", function()
+    H.test("GUT #272 stable preserves the live baseline while dev owns the unverified renderer", function()
         local stable = read(repo_root
             .. "/gui_tweaker/scripts/mods/gui_tweaker/_gut_scoreboard_live.lua")
         local dev = read(repo_root
             .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_scoreboard_live.lua")
-        for _, entry in ipairs({ { name = "stable", source = stable },
-                                 { name = "dev", source = dev } }) do
-            H.truthy(entry.source:find("is_root = true", 1, true) ~= nil,
-                entry.name .. " presenter lost its explicit root")
-            H.truthy(entry.source:find(
-                '"player_" .. column .. "_row_" .. row', 1, true) ~= nil,
-                entry.name .. " presenter lost per-cell values")
-            H.equal(entry.source:find('table.concat(labels, "\\n")', 1, true), nil,
-                entry.name .. " presenter restored multiline labels")
-            H.equal(entry.source:find('table.concat(lines, "\\n")', 1, true), nil,
-                entry.name .. " presenter restored TSV rows")
-            H.truthy(entry.source:find("type(external.is_enabled) == \"function\"", 1, true) ~= nil,
-                entry.name .. " presenter lost enabled-aware external handoff")
-            H.truthy(entry.source:find("enabled == false", 1, true) ~= nil,
-                entry.name .. " presenter suppresses itself for a disabled external mod")
-        end
+
+        -- Public stable is intentionally pinned to the last live 0.2.281
+        -- implementation until #272's later renderer is user-verified. Do not let a
+        -- dev/stable parity assertion silently promote that unverified source again.
+        H.truthy(stable:find(
+            'mod._GUT272_NATIVE_TAB_MARKER = "gut-272-native-helper-snapshot-bounded-four-by-eleven"',
+            1, true) ~= nil, "stable presenter lost its last-live identity")
+        H.truthy(stable:find('table.concat(labels, "\\n")', 1, true) ~= nil,
+            "stable presenter no longer matches the last-live multiline layout")
+        H.truthy(stable:find('table.concat(lines, "\\n")', 1, true) ~= nil,
+            "stable presenter no longer matches the last-live player columns")
+        H.equal(stable:find("is_root = true", 1, true), nil,
+            "stable presenter acquired the unverified dev renderer root")
+        H.equal(stable:find('"player_" .. column .. "_row_" .. row', 1, true), nil,
+            "stable presenter acquired the unverified dev per-cell renderer")
+
+        -- The newer renderer remains covered where it actually lives: dev only.
+        H.truthy(dev:find("is_root = true", 1, true) ~= nil,
+            "dev presenter lost its explicit root")
+        H.truthy(dev:find(
+            '"player_" .. column .. "_row_" .. row', 1, true) ~= nil,
+            "dev presenter lost per-cell values")
+        H.equal(dev:find('table.concat(labels, "\\n")', 1, true), nil,
+            "dev presenter restored multiline labels")
+        H.equal(dev:find('table.concat(lines, "\\n")', 1, true), nil,
+            "dev presenter restored TSV rows")
+        H.truthy(dev:find("type(external.is_enabled) == \"function\"", 1, true) ~= nil,
+            "dev presenter lost enabled-aware external handoff")
+        H.truthy(dev:find("enabled == false", 1, true) ~= nil,
+            "dev presenter suppresses itself for a disabled external mod")
     end)
 end

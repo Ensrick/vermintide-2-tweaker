@@ -281,7 +281,8 @@ end)
 _rt_register("mod_tweaker_exclusive_group_api", function()
     local MT = mod.mod_tweaker
     if not MT then return "mod.mod_tweaker not set" end
-    for _, name in ipairs({ "register_exclusive_group", "get_exclusive_group_id", "get_exclusive_members" }) do
+    for _, name in ipairs({ "register_exclusive_group", "get_exclusive_group_id",
+        "get_exclusive_members", "get_exclusive_presentation" }) do
         if type(MT[name]) ~= "function" then
             return string.format("mod.mod_tweaker:%s is not a function (got %s)", name, type(MT[name]))
         end
@@ -290,13 +291,18 @@ _rt_register("mod_tweaker_exclusive_group_api", function()
     local ok, err = MT:register_exclusive_group(gid, {
         { mod = "__mt_rt_a__", setting = "flag_a" },
         { mod = "__mt_rt_a__", setting = "flag_b" },
-    })
+    }, { control = "radio", label = "RT group", none_label = "RT none" })
     if not ok then return "register_exclusive_group returned false: " .. tostring(err) end
     if MT:get_exclusive_group_id("__mt_rt_a__", "flag_a") ~= gid then return "member flag_a did not resolve to its group" end
     if MT:get_exclusive_group_id("__mt_rt_a__", "flag_b") ~= gid then return "member flag_b did not resolve to its group" end
     if MT:get_exclusive_group_id("__mt_rt_a__", "not_a_member") ~= nil then return "non-member resolved to a group" end
     local members = MT:get_exclusive_members(gid)
     if type(members) ~= "table" or #members ~= 2 then return "get_exclusive_members did not return the 2-member list" end
+    local presentation = MT:get_exclusive_presentation(gid)
+    if type(presentation) ~= "table" or presentation.control ~= "radio"
+        or presentation.label ~= "RT group" or presentation.none_label ~= "RT none" then
+        return "radio presentation metadata did not round-trip"
+    end
     -- Reject shapes: empty id, single member.
     if MT:register_exclusive_group("", { { mod = "x", setting = "y" }, { mod = "x", setting = "z" } }) then
         return "empty group_id was not rejected"
@@ -304,10 +310,20 @@ _rt_register("mod_tweaker_exclusive_group_api", function()
     if MT:register_exclusive_group("__mt_rt_solo__", { { mod = "x", setting = "y" } }) then
         return "single-member group was not rejected"
     end
+    if MT:register_exclusive_group("__mt_rt_bad_radio__", {
+        { mod = "x", setting = "y" }, { mod = "x", setting = "z" },
+    }, { control = "radio" }) then
+        return "radio presentation without label was not rejected"
+    end
     -- Enforcement is wired: the standalone view class carries the sweep method.
     local ok_v, V = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_mod_tweaker_view")
     if not ok_v or type(V) ~= "table" or type(V._enforce_exclusive) ~= "function" then
         return "ModTweakerView:_enforce_exclusive missing (enforcement not wired)"
+    end
+    local ok_d, defs = pcall(mod.dofile, mod,
+        "scripts/mods/gui_tweaker/_mod_tweaker_definitions")
+    if not ok_d or type(defs) ~= "table" or type(defs.create_radio) ~= "function" then
+        return "Mod Tweaker radio-row factory missing"
     end
 end)
 
@@ -526,6 +542,52 @@ _rt_register("mod_tweaker_keybind_render", function()
     local routed_needle = ': " .. _format_keybind' .. "_value(val)"
     if not txt:find(routed_needle, 1, true) then
         return "#95 regression: the keybind/table branch does not call _format_keybind_value(val)"
+    end
+end)
+
+-- (#631) Mouse-button keybind capture spans two source owners after the Mod Tweaker
+-- interaction split: the VMF key-id map/poller remain in _mod_tweaker_view.lua,
+-- while release-committed mouse capture lives in _mod_tweaker_view_interaction.lua.
+-- Inspect both owners independently so a healthy split cannot fail merely because
+-- View._handle_input's source is the interaction module. Unreadable retail sources
+-- remain a no-op; repository QA owns the static half there (#511).
+_rt_register("issue631_keybind_mouse_capture", function()
+    local ok_view, View = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_mod_tweaker_view")
+    if not ok_view or type(View) ~= "table" or type(View.init) ~= "function"
+            or type(View._handle_input) ~= "function" then
+        return
+    end
+
+    local function _source_text(fn)
+        local ok, info = pcall(debug.getinfo, fn, "S")
+        if not ok or type(info) ~= "table" or not info.source then return nil end
+        local path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
+        return _rt_src_read(path)
+    end
+
+    local view_txt = _source_text(View.init)
+    if view_txt then
+        if not view_txt:find("_MOUSE" .. "_KEYID", 1, true) then
+            return "issue 631 regression: _MOUSE_KEYID map is absent from the view owner"
+        end
+        if not view_txt:find("mouse extra 1", 1, true) then
+            return "issue 631 regression: VMF mouse key-id 'mouse extra 1' is missing"
+        end
+        if not view_txt:find("Mouse" .. ".button, idx", 1, true) then
+            return "issue 631 regression: keybind poller no longer reads Mouse.button"
+        end
+        if not view_txt:find("return combo, primary_is_mouse", 1, true) then
+            return "issue 631 regression: poller no longer reports a mouse primary"
+        end
+    end
+
+    local interaction_txt = _source_text(View._handle_input)
+    if interaction_txt then
+        if not interaction_txt:find("self._kb_mouse_pending = combo", 1, true)
+                or not interaction_txt:find("elseif self._kb_mouse_pending then", 1, true)
+                or not interaction_txt:find("row._setting_id, pending", 1, true) then
+            return "issue 631 regression: interaction owner lost deferred release commit"
+        end
     end
 end)
 
