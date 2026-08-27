@@ -222,6 +222,9 @@ Run-Check "check_versions"                    { & (Join-Path $here "check_versio
 # In hosted PR QA the check also resolves origin/$GITHUB_BASE_REF...HEAD; the
 # workflow invokes that exact range explicitly before this policy-engine pass.
 Run-Check "check_diff_whitespace"             { & (Join-Path $here "check_diff_whitespace.ps1")             -Quiet:$Quiet }
+# Issue #1435: immutable-review evidence must be culture-independent and
+# reproducible under the same repository-owned manifest grammar.
+Run-Check "check_content_manifest"            { & (Join-Path $here "check_content_manifest.ps1")            -SelfTest -Quiet:$Quiet }
 # Issue #1278: every newly generated canonical root carries a deterministic
 # receipt binding it to the exact dirty source snapshot that will be committed.
 # BuildOnly skips the stale pre-build receipt, then writes and validates the new
