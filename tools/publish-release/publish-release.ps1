@@ -685,8 +685,8 @@ $manifest = [ordered]@{
     mods         = $manifestMods
 }
 $manifestPath = Join-Path $stage 'manifest.json'
-$manifestJson = $manifest | ConvertTo-Json -Depth 12
-[System.IO.File]::WriteAllText($manifestPath, $manifestJson, (New-Object System.Text.UTF8Encoding($false)))
+$manifestBytes = ConvertTo-VtReleaseManifestBytes -Manifest $manifest
+[System.IO.File]::WriteAllBytes($manifestPath, [byte[]]$manifestBytes)
 $assetPaths += $manifestPath
 
 # Block before any GitHub mutation if a newly staged entry cannot be mapped to
@@ -725,8 +725,7 @@ foreach ($receiptInput in $receiptInputs) {
     $entry[0]['publication_authorization'] = $publicationAuthorization
 }
 $manifest.published_at = (Get-Date).ToUniversalTime().ToString('o')
-$manifestJson = $manifest | ConvertTo-Json -Depth 12
-$manifestBytes = [System.Text.Encoding]::UTF8.GetBytes($manifestJson)
+$manifestBytes = ConvertTo-VtReleaseManifestBytes -Manifest $manifest
 [System.IO.File]::WriteAllBytes($manifestPath, $manifestBytes)
 
 $finalManifestVerdict = Test-ReleaseManifest -Manifest $manifest -RequiredModIds $stagedIds -StageRoot $stage
