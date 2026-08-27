@@ -134,6 +134,7 @@ technical entry point; from here, follow the tree to the topic-specific referenc
 **Tier 4 - tooling:**
 - **VMBLauncher doctrine** (verbs, flags, preflight gates, visibility-public safety, remote-deploy config) lives in the **separate launcher repository's** `CLAUDE.md`, not in this monorepo - `tools/vmb-launcher/` is an empty machine-local mount point.
 - `docs/PORTABLE_SETUP.md` - launcher + `.vmbrc` resolution for ships from any checkout or linked worktree; `VT2_SHIP_VMB_LAUNCHER` / `VT2_SHIP_VMBRC` overrides. Read before troubleshooting "launcher not found".
+- `tools/review/README.md` - canonical cross-culture content-manifest grammar and command for freezing implementation/review candidates; hand-written hashing recipes are forbidden.
 - `tools/publish-release/README.md` - GitHub-release pipeline that publishes built bundles for `vt2-mod-updater` consumers.
 - `tools/mod-lint/README.md` + `qa/CHECKS.md` - luacheck + custom QA scans.
 

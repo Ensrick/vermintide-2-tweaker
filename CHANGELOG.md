@@ -1,5 +1,14 @@
 # Changelog
 
+## 2026-08-27 - Canonical immutable-review manifests (#1435)
+
+Implementation and review lanes now freeze candidate source through one
+repository-owned, base-commit-bound content manifest. Explicit ordinal sorting,
+strict UTF-8/LF serialization, bounded input validation, present/deleted rows,
+and raw file hashes replace culture-sensitive hand-written PowerShell recipes.
+Cross-host fixtures cover en-US, tr-TR, invariant culture, every identity axis,
+hostile paths, and the real #1429/#1430 review snapshots.
+
 ## 2026-08-13 - Appearance census reaches all seventeen surfaces (#1198/#1197/#1125)
 
 Character Weapon Variants 0.1.514-dev, Cosmetics Tweaker 0.9.209-dev, Weapon

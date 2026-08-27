@@ -916,6 +916,22 @@ Subagent prompt template:
 > Identify any new "guard ≠ bail" violations. Report: ship-ready / fix these
 > first / open questions.
 
+### 5.3a Immutable review manifests (binding, issue #1435)
+
+Any handoff or independent review that claims a frozen multi-file byte set uses
+`tools/review/content-manifest.ps1`. Supply the exact repository root, full base
+commit ID, and bounded repository-relative file set. The canonical manifest and
+its aggregate digest are the evidence identity; ad hoc `Sort-Object` hashing
+recipes are forbidden because PowerShell sorting follows the current culture.
+
+The tool is read-only against the reviewed repository and uses an explicit
+ordinal path order, strict UTF-8-without-BOM/LF grammar, normalized forward-slash
+paths, present/deleted records, raw file lengths/hashes, and a base-commit-bound
+aggregate. Implementation and reviewer lanes invoke the same tool. A candidate
+changes identity when any byte, length, path, deletion state, or base commit
+changes. Full grammar and command examples live in `tools/review/README.md`;
+`qa/check_content_manifest.ps1` is the blocking cross-culture contract.
+
 ### 5.4 Automated host testing
 
 The repository now has all three host-side layers: `luacheck`, PowerShell
