@@ -1,8 +1,8 @@
 {
-  "_comment": "Frozen target-tier Lua debt (files over 1500 and at or below 2500 physical lines). Regenerate ONLY with check_file_sizes.ps1 -UpdateTargetBaseline after review. A frozen file may shrink but may not grow; any unlisted file crossing the target blocks. Issue #2 / PROJECT_STANDARDS sections 2.1 and 11.",
+  "_comment": "Frozen target-tier Lua debt (files over 1500 and at or below 2500 non-empty logical lines). Regenerate ONLY with check_file_sizes.ps1 -UpdateTargetBaseline after review. A frozen file may shrink but may not grow; any unlisted file crossing the target blocks. Issue #2 / PROJECT_STANDARDS sections 2.1 and 11.",
   "target": 1500,
   "hard_limit": 2500,
-  "metric": "PowerShell Measure-Object -Line physical lines",
+  "metric": "PowerShell Get-Content | Measure-Object -Line non-empty logical lines (whitespace-only lines count)",
   "generated": "2026-08-23",
   "files": {
     "career_tweaker/scripts/mods/career_tweaker/_crt_balance_catalog_early.lua": 1622,

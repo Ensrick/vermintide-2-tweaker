@@ -372,8 +372,8 @@ return function(H, repo_root)
         local source = read(base .. "chaos_wastes_tweaker_dev.lua")
         local _, lines = source:gsub("\n", "\n")
         -- 12040 = 2026-07-18 ratchet after the OOP W5 regression-suite extraction
-        -- (_ct_regression.lua) shrank the entry. This physical-line ceiling only
-        -- moves DOWN; the tighter non-empty ceiling lives in
+        -- (_ct_regression.lua) shrank the entry. This raw-newline ceiling only
+        -- moves DOWN; the tighter nonblank ceiling lives in
         -- test_ct_entry_decomposition.lua.
         H.truthy(lines + 1 < 12040, "CT entry file regrew to its frozen baseline")
     end)
