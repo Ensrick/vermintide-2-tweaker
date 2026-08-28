@@ -1,5 +1,19 @@
 # Weapon Tweaker Changelog
 
+## 0.12.312-beta (2026-08-28) -- source-exact Patch 5.2 weapon history (#1436) [not-started]
+
+- Adds a top-level **Pre-Patch Weapon Versions** group with one restart-bound
+  dropdown for each of 14 weapon families changed across game versions 5.1.1,
+  5.2.0, and 5.2.3. **Current (Game Version 6.11.3)** remains the inert default.
+- Restores only non-vacuous historical states reproduced from pinned
+  Vermintide source revisions: 174 template operations, 8 global operations,
+  13 source damage profiles, and one derived private profile. Ordinary Weapon
+  Tweaks apply afterward and therefore compose on top of the selected baseline.
+- Fails closed on source-shape drift, incomplete profile routing, or multiplayer
+  damage-profile parity failure; no historical selection hot-applies mid-run.
+- This is the first source-proven #1436 slice. The issue remains open for weapon
+  patch eras outside 5.1.1-5.2.3 rather than presenting inferred values.
+
 ## 0.12.311-beta (2026-08-27) -- documented weapon-key registry (#159) [not-started]
 
 - Replaces repeated authored weapon-item literals in availability and routing

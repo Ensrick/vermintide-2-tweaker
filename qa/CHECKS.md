@@ -394,6 +394,13 @@ support commands, pins both Workshop IDs/visibilities, and requires dev to be
 one patch ahead. Preview images, changelogs, generated bundles, and Workshop
 metadata remain independent presentation/history surfaces.
 
+`check_wt_history_reproducibility.ps1` is the blocking full-QA provenance gate
+for issue #1436's Patch 5.2 selector slice. It pins the generator, source
+catalog, nine evidence artifacts, and generated public catalog. When the
+decompiled source checkout exists, it additionally regenerates to a temporary
+file and requires byte-exact equality; source-less CI keeps the pinned ledger
+active and emits a visible regeneration skip.
+
 ## Current state of each check
 
 | Check | Last run | Notes |
@@ -403,6 +410,7 @@ metadata remain independent presentation/history surfaces.
 | `check_unpack_safety.ps1` | ✅ OK | all sites in ct/mp/wt either explicit-j or annotated (post-Issue #36 audit) |
 | `check_vmf_widget_types.ps1` | ✅ OK | all 23 active `*_data.lua` clean post-gt v0.2.60-dev `text_input` fix (2026-05-25) |
 | `check_event_register_signature.ps1` | ✅ OK | clean post-gt v0.2.61 → .64 fix cycle (2026-05-25). This static check is the live gate; the former `bt:safe_event_register` runtime safety net (buff_tweaker v0.1.10-alpha+) is RETIRED (bt archived 2026-06). |
+| `check_wt_history_reproducibility.ps1` | ✅ OK (2026-08-28) | Issue #1436 full-QA gate for the pinned Patch 5.2 evidence ledger and byte-exact generated catalog; exact regeneration runs wherever `Vermintide-2-Source-Code` is available. |
 | `check_localization.ps1` | ⚠ 28 warnings | ct BOON_TREE category_ids; et_diff_ + mut_ false-positive prefixes |
 | `check_loc_tags.ps1` | ✅ OK (#694 migration) | Blocking scan covers every active stream, dynamic `en` construction, and obsolete decoration helpers; migration mode verifies key/order/count and value semantics against the merge base. |
 | `check_issue_status_labels.ps1` | ⚠ 1 warning (2026-07-04) | Post label-audit: only #322 (a `tracked-not-fixed` context-mention in ct's #294 crash-fix entry — correctly unlabeled; the check surfaces it for review). All other latest-entry refs are labeled or in skipped loc-sweep entries. Self-test passes. Advisory (never blocks; self-exits 0 offline). |

@@ -250,7 +250,7 @@ function M.new()
     end
 
     function state:apply_one_hand_axe_cleave(enabled, weapons, profiles, power_levels,
-            clone, register, fallback_map, parity_allowed)
+            clone, register, fallback_map, parity_allowed, additional_sources)
         enabled = not not enabled
         local targets, source_names, source_seen = {}, {}, {}
         local template_keys = {}
@@ -282,6 +282,17 @@ function M.new()
             end)
         end
 
+        -- #1436: pre-register composition variants for every private
+        -- historical 1H-Axe profile before #431 captures the wire catalog.
+        -- Registration must not depend on the selected history state or the
+        -- current peer-parity result.
+        for _, source in ipairs(additional_sources or {}) do
+            if type(source) == "string" and not source_seen[source] then
+                source_seen[source] = true
+                source_names[#source_names + 1] = source
+            end
+        end
+
         -- NetworkLookup append order must not depend on pairs() traversal.
         -- Prepare/register every profile even while the default-off toggle is
         -- disabled, so two WT peers cannot diverge merely because their local
@@ -290,7 +301,11 @@ function M.new()
         for _, source in ipairs(source_names) do
             local generated = self:_one_hand_profile(source, profiles, power_levels, clone)
             if generated ~= source then
-                if fallback_map then fallback_map[generated] = source end
+                if fallback_map then
+                    -- A derivative of a historical private profile must fall
+                    -- all the way back to a native donor for non-WT peers.
+                    fallback_map[generated] = fallback_map[source] or source
+                end
                 if register then register(generated) end
             end
         end
@@ -305,6 +320,24 @@ function M.new()
         end
         self.one_hand_cleave_enabled = apply_custom
         return #template_keys, #targets
+    end
+
+    function state:reset_baselines()
+        if self.greataxe_crit_enabled or self.dual_crit_enabled
+                or self.dual_cleave_enabled or self.one_hand_cleave_enabled
+                or self.cog_heavy_speed_enabled or self.mace_sword_speed_enabled
+                or self.executioner_headshot_enabled then
+            return nil, "balance owner must be reverted before baseline reset"
+        end
+        self.greataxe_crit_originals = {}
+        self.dual_crit_originals = {}
+        self.dual_profile_originals = {}
+        self.one_hand_profile_originals = setmetatable({}, { __mode = "k" })
+        self.one_hand_generated_profiles = {}
+        self.cog_speed_originals = setmetatable({}, { __mode = "k" })
+        self.mace_sword_speed_originals = setmetatable({}, { __mode = "k" })
+        self.executioner_profile_originals = setmetatable({}, { __mode = "k" })
+        return true
     end
 
     function state:apply_cog_heavy_speed(enabled, weapons)
@@ -411,11 +444,21 @@ function M.install(mod)
                 mod._wt431_custom_profile_fallback = mod._wt431_custom_profile_fallback or {}
                 local parity_allowed = type(mod._wt431_profiles_allowed) == "function"
                     and mod._wt431_profiles_allowed() == true
+                local history_sources = {}
+                local history = mod._wt_history_runtime
+                if type(history) == "table"
+                        and type(history.private_profiles_for_family) == "function" then
+                    local ok, rows = pcall(
+                        history.private_profiles_for_family, history,
+                        "one_handed_axe_shared")
+                    if ok and type(rows) == "table" then history_sources = rows end
+                end
                 state:apply_one_hand_axe_cleave(
                     enabled(M.ONE_HAND_AXE_CLEAVE_SETTING, false), Weapons,
                     DamageProfileTemplates, PowerLevelTemplates,
                     function(value) return table.clone(value, true) end, register_profile,
-                    mod._wt431_custom_profile_fallback, parity_allowed)
+                    mod._wt431_custom_profile_fallback, parity_allowed,
+                    history_sources)
             end
         end
         if not setting_id or setting_id == M.COG_HAMMER_HEAVY_SPEED_SETTING then
@@ -441,6 +484,9 @@ function M.install(mod)
                     tostring(parity_allowed), M.EXECUTIONER_HEADSHOT_MULT)
             end
         end
+    end
+    mod._wt_reset_axe_balance_baselines = function()
+        return state:reset_baselines()
     end
     mod._wt_apply_axe_balance(nil, false)
     return state

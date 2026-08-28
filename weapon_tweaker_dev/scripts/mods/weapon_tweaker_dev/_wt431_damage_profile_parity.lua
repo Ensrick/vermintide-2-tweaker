@@ -54,9 +54,10 @@ local mod = get_mod("wt_dev")
 
 local _printf = rawget(_G, "printf") or function() end
 local _wire_contract = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt431_wire_contract")
+local _damage_profiles = rawget(_G, "DamageProfileTemplates")
 local _wire_identity, _wire_identity_err, _wire_names =
     _wire_contract.build_wire_identity(mod._wt431_custom_profile_fallback,
-        NetworkLookup and NetworkLookup.damage_profiles)
+        NetworkLookup and NetworkLookup.damage_profiles, _damage_profiles)
 mod._wt431_wire_catalog_identity = _wire_identity
 mod._wt431_wire_catalog_count = _wire_names and #_wire_names or 0
 -- Exact numeric snapshot taken once at load, after every registration site has
@@ -64,7 +65,7 @@ mod._wt431_wire_catalog_count = _wire_names and #_wire_names or 0
 -- of trusting that our indices never moved.
 local _wire_snapshot, _wire_snapshot_err = _wire_contract.capture_catalog(
     mod._wt431_custom_profile_fallback,
-    NetworkLookup and NetworkLookup.damage_profiles)
+    NetworkLookup and NetworkLookup.damage_profiles, _damage_profiles)
 mod._wt431_wire_catalog_snapshot = _wire_snapshot
 if _wire_identity then
     pcall(_printf, "[wt:431] exact damage-profile catalog=%s entries=%d",
@@ -84,7 +85,7 @@ end
 -- ============================================================
 do
     local parity_transport = _wire_identity
-        and _wire_contract.wrap_parity_transport(mod, _wire_identity, { schema = 1 })
+        and _wire_contract.wrap_parity_transport(mod, _wire_identity, { schema = 2 })
         or nil
     local ok, factory = false, nil
     if parity_transport then
@@ -98,8 +99,8 @@ do
             -- wt_peer_parity_present/schema 1 and would ignore the appended exact
             -- proof while still acknowledging us. A dedicated channel makes old
             -- and exact peers fail closed in BOTH directions.
-            channel     = "wt_damage_profiles_exact_v1",
-            schema      = 1,
+            channel     = "wt_damage_profiles_exact_v2",
+            schema      = 2,
             mod_label   = "Weapon Tweaker",
             echo_prefix = "[wt]",
         })
@@ -127,7 +128,7 @@ do
             if status_ok and installed == true then
                 mod._wt_peer_parity = inst
                 mod._wt431_wire_transport = parity_transport
-                pcall(_printf, "[wt:431] exact-catalog peer beacon installed (channel=wt_damage_profiles_exact_v1)")
+                pcall(_printf, "[wt:431] exact-catalog peer beacon installed (channel=wt_damage_profiles_exact_v2)")
             end
         end
     end
@@ -140,22 +141,27 @@ end
 
 -- true ONLY when the beacon has positively confirmed every other human peer
 -- runs wt (settled state). Solo / no-other-humans counts as confirmed.
+local function _peer_exact_confirmed()
+    local pp = mod._wt_peer_parity
+    if type(pp) ~= "table" or type(pp.is_installed) ~= "function"
+            or type(pp.applied_state) ~= "function" then return false end
+    local ok_installed, installed = pcall(pp.is_installed, pp)
+    if not ok_installed or installed ~= true then return false end
+    local ok_state, state = pcall(pp.applied_state, pp)
+    return ok_state and state == "enabled"
+end
+
 if mod._wt_peer_parity then
     -- The application floor: installed AND enabled AND the live catalog still
     -- matches the load-time snapshot. Dropping any one conjunct would let a
     -- custom numeric id reach the wire on a catalog that had shifted under us.
     mod._wt431_profiles_allowed = function()
-        local pp = mod._wt_peer_parity
-        if type(pp) ~= "table" or type(pp.is_installed) ~= "function"
-                or type(pp.applied_state) ~= "function" then return false end
-        local ok_installed, installed = pcall(pp.is_installed, pp)
-        if not ok_installed or installed ~= true then return false end
-        local ok_state, state = pcall(pp.applied_state, pp)
-        if not ok_state or state ~= "enabled" then return false end
+        if not _peer_exact_confirmed() then return false end
         local lookup = rawget(_G, "NetworkLookup")
         lookup = lookup and lookup.damage_profiles
+        local profiles = rawget(_G, "DamageProfileTemplates")
         local ok_catalog, intact = pcall(_wire_contract.catalog_intact,
-            _wire_snapshot, mod._wt431_custom_profile_fallback, lookup)
+            _wire_snapshot, mod._wt431_custom_profile_fallback, lookup, profiles)
         return ok_catalog and intact == true
     end
     -- Real disconnect boundary: retire the peer's transport epoch before a
@@ -219,6 +225,12 @@ end
 -- the lib's settle window.
 -- ============================================================
 local function _wt431_reapply_profile_repoints()
+    local history_reconciled = false
+    if type(mod._wt_reconcile_history_owner_stack) == "function" then
+        local ok, applied = pcall(
+            mod._wt_reconcile_history_owner_stack, "peer_parity")
+        history_reconciled = ok and applied == true
+    end
     if type(mod.wt_apply_priest_punch_buff) == "function" then
         pcall(mod.wt_apply_priest_punch_buff)
     end
@@ -232,7 +244,7 @@ local function _wt431_reapply_profile_repoints()
     -- only while every human peer has WT. Re-run the existing bounded balance
     -- transaction whenever that parity state changes; the other balance
     -- toggles are idempotent and remain local template edits.
-    if type(mod._wt_apply_axe_balance) == "function" then
+    if not history_reconciled and type(mod._wt_apply_axe_balance) == "function" then
         pcall(mod._wt_apply_axe_balance, nil, false)
     end
 end
@@ -264,8 +276,12 @@ local _drop_logged = {}
 -- RPC rather than wiring an id the host may not be able to decode. The custom
 -- id is never returned once the gate or the catalog check fails.
 local function _wire_safe_profile_id(weapon_system, damage_profile_id)
-    local parity_confirmed = type(mod._wt431_profiles_allowed) == "function"
-        and mod._wt431_profiles_allowed() == true
+    -- Do not hash the entire catalog on this hot path. The peer-generation
+    -- gate is checked here, then profile_id_for_send recomputes the ACTIVE
+    -- custom row's semantic digest before allowing its numeric id through.
+    -- This catches in-place mutation after the load-time identity without an
+    -- O(all custom profiles) allocation on every hit.
+    local parity_confirmed = _peer_exact_confirmed()
     local NL = rawget(_G, "NetworkLookup")
     local lookup = NL and NL.damage_profiles
     -- is_server is forwarded so the pure helper can short-circuit the host
@@ -274,7 +290,8 @@ local function _wire_safe_profile_id(weapon_system, damage_profile_id)
     local safe_id, disposition = _wire_contract.profile_id_for_send(
         weapon_system and weapon_system.is_server, damage_profile_id,
         parity_confirmed, _wire_snapshot,
-        mod._wt431_custom_profile_fallback, lookup)
+        mod._wt431_custom_profile_fallback, lookup,
+        rawget(_G, "DamageProfileTemplates"))
     if disposition ~= "fallback" then return safe_id, disposition end
     local name = lookup and rawget(lookup, damage_profile_id)
     local safe_name = lookup and safe_id and rawget(lookup, safe_id)
@@ -335,6 +352,19 @@ if WT and type(WT.rt_register) == "function" then
         end
         if type(mod._wt431_wire_catalog_snapshot) ~= "table" then
             return "exact damage-profile numeric snapshot missing (sender floor would drop every hit)"
+        end
+        if _wire_contract.WIRE_IDENTITY_VERSION ~= 2
+                or type(mod._wt431_wire_catalog_snapshot.profile_digests) ~= "table" then
+            return "schema-v2 semantic damage-profile snapshot missing"
+        end
+        local NL = rawget(_G, "NetworkLookup")
+        local live_lookup = NL and NL.damage_profiles
+        local live_profiles = rawget(_G, "DamageProfileTemplates")
+        local ok_catalog, intact = pcall(_wire_contract.catalog_intact,
+            mod._wt431_wire_catalog_snapshot,
+            mod._wt431_custom_profile_fallback, live_lookup, live_profiles)
+        if not ok_catalog or intact ~= true then
+            return "schema-v2 semantic damage-profile catalog drifted"
         end
         if type(mod._wt431_wire_transport) ~= "table" then
             return "exact-catalog transport wrapper missing"

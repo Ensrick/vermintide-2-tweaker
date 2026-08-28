@@ -1,5 +1,9 @@
 local mod = get_mod("wt")
 local ReworkFamily = mod:dofile("scripts/mods/weapon_tweaker/_wt_rework_master_policy")
+local _wt_history_catalog_module = mod:dofile(
+    "scripts/mods/weapon_tweaker/_wt_history_catalog")
+local _wt_history_catalog, _wt_history_catalog_error =
+    _wt_history_catalog_module.load(mod)
 
 local loc = {
     mod_name = { en = "Tweaker: Weapons" },
@@ -1383,6 +1387,22 @@ for career in pairs(_cwv_career_labels) do
             }
         end
     end
+end
+
+-- #1436: labels and restart/composition descriptions are generated from the
+-- same catalog that builds the dropdowns and drives runtime ownership.
+if _wt_history_catalog then
+    local history_loc, history_loc_error =
+        _wt_history_catalog_module.build_localization(_wt_history_catalog)
+    if history_loc then
+        for key, value in pairs(history_loc) do loc[key] = value end
+    else
+        pcall(printf, "[wt:1436] history localization omitted: %s",
+            tostring(history_loc_error))
+    end
+else
+    pcall(printf, "[wt:1436] history catalog unavailable in localization: %s",
+        tostring(_wt_history_catalog_error))
 end
 
 -- Issue #445: derive every active tweak's attribution from the same exact

@@ -2,7 +2,6 @@ local mod = get_mod("wt_dev")
 local _cwv_ownership = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_cwv_ownership")
 local _cwv_present = _cwv_ownership.cwv_is_active(get_mod("character_weapon_variants"))
 local _cwv_overlap_default = _cwv_present
-
 local data = {
     name = mod:localize("mod_name"),
     description = mod:localize("mod_description"),
@@ -1808,4 +1807,4 @@ if not mod._wt611_master_build_logged then
     printf("[wt:611] built %d Weapon Availability master toggles", _wt_masters_built)
 end
 
-return data
+return mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_history_catalog").decorate_menu(mod, data)
