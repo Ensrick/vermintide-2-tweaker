@@ -436,6 +436,7 @@ local function _register_blightreaper()
 		RarityIndex = rawget(_G, "RarityIndex"),
 		ORDER_RARITY = rawget(_G, "ORDER_RARITY"),
 		NetworkLookup = rawget(_G, "NetworkLookup"),
+		NetworkLookupLib = _network_lookup,
 	})
 	if not rarity_ok then
 		return _registration_deferred("cursed_rarity", rarity_reason)

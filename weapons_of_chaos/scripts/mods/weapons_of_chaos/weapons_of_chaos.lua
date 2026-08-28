@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.57-dev"
+local MOD_VERSION = "0.1.58-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -146,6 +146,7 @@ local _WIRE_PROTECTED_TRAITS = {
 	[_moveset.SHYISH_CURSE_TRAIT] = true,
 }
 local _power = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_power")
+local _network_lookup = mod:dofile("scripts/mods/weapons_of_chaos/_lib_network_lookup")
 local _cursed = mod:dofile("scripts/mods/weapons_of_chaos/_woc_cursed_rarity")
 local TEMPLATE = _moveset.TEMPLATE
 -- Attack-order picker: pure permutation engine + the Blightreaper chain
@@ -162,7 +163,6 @@ end
 local _appearance = mod:dofile("scripts/mods/weapons_of_chaos/_woc_appearance_policy")
 local _issue613 = mod:dofile("scripts/mods/weapons_of_chaos/_woc_issue613_preview_owner")
 local _appearance_lib = mod:dofile("scripts/mods/weapons_of_chaos/_lib_weapon_appearance")
-local _network_lookup = mod:dofile("scripts/mods/weapons_of_chaos/_lib_network_lookup")
 local _durable_transform_lib = mod:dofile(
 	"scripts/mods/weapons_of_chaos/_woc_durable_transform")
 local _appearance_fade = mod:dofile(
@@ -479,14 +479,18 @@ local _audio = type(_audio_lib) == "table" and type(_audio_lib.new) == "function
 		describe = function() end,
 	}
 mod._woc_inventory_icons = _inventory_icons
-_cursed.install({
+local _cursed_ok, _cursed_reason = _cursed.install({
 	Colors = rawget(_G, "Colors"),
 	UISettings = rawget(_G, "UISettings"),
 	RaritySettings = rawget(_G, "RaritySettings"),
 	RarityIndex = rawget(_G, "RarityIndex"),
 	ORDER_RARITY = rawget(_G, "ORDER_RARITY"),
 	NetworkLookup = rawget(_G, "NetworkLookup"),
+	NetworkLookupLib = _network_lookup,
 })
+if not _cursed_ok then
+	_dbg_alert("Cursed rarity registration rejected: %s", tostring(_cursed_reason))
+end
 if type(_wire_policy) ~= "table" or type(_wire_policy.safe_item) ~= "function" then
 	-- Packaging failures must not become startup crashes. Preserve ordinary
 	-- vanilla loadout syncs, but fail closed for explicit WOC identities because

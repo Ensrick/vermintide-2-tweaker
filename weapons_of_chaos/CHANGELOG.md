@@ -1,5 +1,17 @@
 # Weapons of Chaos — Changelog
 
+## v0.1.58-dev (2026-08-28) - make Cursed rarity registration transactional (#428) [not-started]
+
+- Routed both eager and in-mission Blightreaper rarity installation through the
+  one entry-owned canonical NetworkLookup registrar instead of appending through
+  a private lookup path.
+- Added complete preflight validation for the mirrored rarity order and network
+  lookup. Sparse, asymmetric, foreign, or malformed state now fails closed
+  without mutating either registry or the UI presentation tables.
+- Added adversarial coverage for one-time helper ownership, retry injection,
+  idempotence, strict engine metatables, sparse registries, and exact
+  no-mutation rejection.
+
 ## v0.1.57-dev (2026-08-25) - Blightreaper preview lifecycle and peer identity (#613)
 
 - Added an exact TeamPreviewer wearer bridge for lobby and score presentation.
