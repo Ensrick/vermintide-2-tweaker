@@ -291,7 +291,7 @@
         }
         @{
             Marker='[wt:282]'; ModIds=@('wt','wt_dev')
-            ModTrees=@{wt='a18b325f09904a23eb32d97f5aa828d76e3a08a4';wt_dev='4b730b0d96e1c86f27cb417e293bc1fd399b4c8d'}
+            ModTrees=@{wt='dbf2a22c892021f25f7807d325a74c15ad3fda78';wt_dev='573e8600d1c10f4f3dc07ffc45b3c353738a2c38'}
             SourcesByMod=@{
                 wt='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_deepwood_runtime.lua'
                 wt_dev='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_deepwood_runtime.lua'
@@ -625,7 +625,7 @@
             )
         }
         @{
-            Marker='[wt:388]';ModIds=@('wt','wt_dev');ModTrees=@{wt='a18b325f09904a23eb32d97f5aa828d76e3a08a4';wt_dev='4b730b0d96e1c86f27cb417e293bc1fd399b4c8d'}
+            Marker='[wt:388]';ModIds=@('wt','wt_dev');ModTrees=@{wt='dbf2a22c892021f25f7807d325a74c15ad3fda78';wt_dev='573e8600d1c10f4f3dc07ffc45b3c353738a2c38'}
             SourcesByMod=@{wt='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_overcharge_presentation.lua';wt_dev='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_overcharge_presentation.lua'}
             Signature='[wt:388] Deepwood overcharge HUD hook installed';Bound='one HUD-hook installation receipt per module lifetime'
             EmitterAnchors=@(@{Tokens=@('printf','(','String:[wt:388] Deepwood overcharge HUD hook installed',')')})
@@ -635,7 +635,7 @@
             )
         }
         @{
-            Marker='[wt:388]';ModIds=@('wt','wt_dev');ModTrees=@{wt='a18b325f09904a23eb32d97f5aa828d76e3a08a4';wt_dev='4b730b0d96e1c86f27cb417e293bc1fd399b4c8d'}
+            Marker='[wt:388]';ModIds=@('wt','wt_dev');ModTrees=@{wt='dbf2a22c892021f25f7807d325a74c15ad3fda78';wt_dev='573e8600d1c10f4f3dc07ffc45b3c353738a2c38'}
             SourcesByMod=@{wt='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_overcharge_presentation.lua';wt_dev='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_overcharge_presentation.lua'}
             Signature='[wt:388] Deepwood overcharge profile applied career=%s transport=owner-authoritative';Bound='one apply receipt per inactive-to-active extension transition'
             EmitterAnchors=@(@{Tokens=@('printf','(','String:[wt:388] Deepwood overcharge profile applied career=%s transport=owner-authoritative')})
@@ -645,7 +645,7 @@
             )
         }
         @{
-            Marker='[wt:388]';ModIds=@('wt','wt_dev');ModTrees=@{wt='a18b325f09904a23eb32d97f5aa828d76e3a08a4';wt_dev='4b730b0d96e1c86f27cb417e293bc1fd399b4c8d'}
+            Marker='[wt:388]';ModIds=@('wt','wt_dev');ModTrees=@{wt='dbf2a22c892021f25f7807d325a74c15ad3fda78';wt_dev='573e8600d1c10f4f3dc07ffc45b3c353738a2c38'}
             SourcesByMod=@{wt='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_overcharge_presentation.lua';wt_dev='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_overcharge_presentation.lua'}
             Signature='[wt:388] Deepwood overcharge profile restored';Bound='one restore receipt per active-to-inactive extension transition'
             EmitterAnchors=@(@{Tokens=@('printf','(','String:[wt:388] Deepwood overcharge profile restored',')')})
@@ -859,7 +859,7 @@
             )
         }
         @{
-            ModId='wt_dev'; ModTree='4b730b0d96e1c86f27cb417e293bc1fd399b4c8d'
+            ModId='wt_dev'; ModTree='573e8600d1c10f4f3dc07ffc45b3c353738a2c38'
             Source='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_weapon_action_lifecycle.lua'
             Marker='[wt:661]'
             Signature='[wt:661] wield-boundary item=%s career=%s template=%s result=%s trace=%d/%d'
