@@ -891,7 +891,10 @@ function ModTweakerView:_switch_profile(slot)
 
     -- Profile switches are an explicit commit boundary: staged edits are applied
     -- to the profile they were made under before another profile is restored.
-    if self:_active_category_dirty() then self:apply_pending(category) end
+    if self:_active_category_dirty() then
+        self:apply_pending(category)
+        if self:_active_category_dirty() then _printf("[gut:1002] profile switch deferred tab=%s profile=%d pending transaction incomplete", tostring(tab_id), slot); return end
+    end
     self:_profile_capture(category)
 
     if not profile_runtime.migrate(profiles, mod, _printf) then return end
@@ -994,18 +997,18 @@ function ModTweakerView:apply_pending(category)
     local ids = category._owner_mod_ids
     if ids then
         local committed = {}   -- setting_id -> value across all members (for keybind re-reg)
-        local any = false
+        local any, wrote, failed = false, false, false
         for i = 1, #ids do
             local mid = ids[i]
             local p = self._pending[mid]
             if p and next(p) ~= nil then
-                local count, batched, batch_err = transactions.commit(category, p, _owner, _cat_set)
-                for id, value in pairs(p) do committed[id] = value end
+                local count, batched, batch_err, complete = transactions.commit(category, p, _owner, _cat_set)
+                wrote = wrote or count > 0
                 if batched then
-                    printf("[gut:560] committed owner=%s settings=%d notifications=%d error=%s",
-                        tostring(mid), count, batch_err and 0 or 1, tostring(batch_err or "none"))
+                    printf("[gut:560] owner=%s settings=%d notifications=%d complete=%s error=%s", tostring(mid), count, batch_err and 0 or 1, tostring(complete), tostring(batch_err or "none"))
                 end
-                self._pending[mid] = {}
+                if complete then for id, value in pairs(p) do committed[id] = value end; self._pending[mid] = {}
+                else failed = true end
                 any = true
             end
         end
@@ -1016,38 +1019,35 @@ function ModTweakerView:apply_pending(category)
                 _commit_keybind(row, committed[row._setting_id])
             end
         end
-        self._dirty = true
+        self._dirty = self._dirty or wrote
         self:_update_apply_button()
         self:_build_rows(category)
-        self:_profile_capture(category)
+        if not failed then self:_profile_capture(category) end
         _play_click()
-        mod:debug("[mt:apply] committed Equipment buffers {%s}", table.concat(ids, ", "))
+        mod:debug("[mt:apply] Equipment buffers {%s} complete=%s", table.concat(ids, ", "), tostring(not failed))
         return
     end
     local key = _cat_key(category)
     local p = self._pending[key]
     if not p or next(p) == nil then return end
-    local count, batched, batch_err = transactions.commit(category, p, _owner, _cat_set)
+    local count, batched, batch_err, complete = transactions.commit(category, p, _owner, _cat_set)
     if batched then
-        printf("[gut:560] committed owner=%s settings=%d notifications=%d error=%s",
-            tostring(key), count, batch_err and 0 or 1, tostring(batch_err or "none"))
+        printf("[gut:560] owner=%s settings=%d notifications=%d complete=%s error=%s", tostring(key), count, batch_err and 0 or 1, tostring(complete), tostring(batch_err or "none"))
     end
-    -- (#123) Keybinds need VMF re-registration, not just a value set: register any keybind
-    -- whose value was in THIS committed buffer (vmf.add_mod_keybind + generate_keybinds).
-    for _, row in ipairs(self._rows or {}) do
-        if row._is_keybind and row._setting_id and p[row._setting_id] ~= nil then
-            _commit_keybind(row, p[row._setting_id])
+    if complete then
+        for _, row in ipairs(self._rows or {}) do
+            if row._is_keybind and row._setting_id and p[row._setting_id] ~= nil then
+                _commit_keybind(row, p[row._setting_id])
+            end
         end
     end
-    self._pending[key] = {}
-    self._dirty = true   -- a LIVE write happened -> export the TOML on exit
+    if complete then self._pending[key] = {} end
+    self._dirty = self._dirty or count > 0
     self:_update_apply_button()
-    -- Rebuild the rows so each reads its new live value (the mod's on_setting_changed
-    -- may have snapped/clamped further, e.g. ct's 25-coin rounding).
     self:_build_rows(category)
-    self:_profile_capture(category)
+    if complete then self:_profile_capture(category) end
     _play_click()
-    mod:debug("[mt:apply] committed pending buffer for '%s'", tostring(key))
+    mod:debug("[mt:apply] pending buffer for '%s' complete=%s", tostring(key), tostring(complete))
 end
 
 -- (v0.2.148-dev) RESTORE DEFAULTS: stage every setting in the CURRENT tab back to its

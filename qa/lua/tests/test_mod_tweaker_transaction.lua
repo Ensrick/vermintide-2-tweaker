@@ -2,6 +2,8 @@ return function(H, repo_root)
     local module_path = repo_root
         .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_transaction.lua"
     local Transaction = assert(loadfile(module_path))()
+    local StableTransaction = assert(loadfile(repo_root
+        .. "/gui_tweaker/scripts/mods/gui_tweaker/_mod_tweaker_transaction.lua"))()
     local DefaultReset = assert(loadfile(repo_root
         .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_default_reset.lua"))()
     local SliderDragEdge = assert(loadfile(repo_root
@@ -155,6 +157,125 @@ return function(H, repo_root)
         H.equal(complete, false)
         H.truthy(type(err) == "string"
             and string.find(err, "planted legacy failure", 1, true))
+    end)
+
+    H.test("Stable Mod Tweaker #1002 transaction failures remain retryable", function()
+        local count, batched, err, complete = StableTransaction.commit(
+            {}, {}, function() error("empty transaction cannot resolve an owner") end,
+            function() error("empty transaction cannot write") end)
+        H.equal(count, 0)
+        H.equal(batched, false)
+        H.equal(err, nil)
+        H.equal(complete, true)
+
+        local writes, callbacks, reject_callback = 0, 0, true
+        local owner = {
+            set = function() writes = writes + 1 end,
+            on_settings_batch_changed = function()
+                callbacks = callbacks + 1
+                if reject_callback then error("planted stable callback failure") end
+            end,
+        }
+        local pending = { second = 2, first = 1 }
+        count, batched, err, complete = StableTransaction.commit(
+            {}, pending, function() return owner end,
+            function() error("opted-in owner cannot use fallback") end)
+        H.equal(count, 2)
+        H.equal(batched, true)
+        H.equal(complete, false)
+        H.truthy(type(err) == "string"
+            and string.find(err, "planted stable callback failure", 1, true))
+
+        reject_callback = false
+        count, batched, err, complete = StableTransaction.commit(
+            {}, pending, function() return owner end,
+            function() error("opted-in owner cannot use fallback") end)
+        H.equal(count, 2)
+        H.equal(batched, true)
+        H.equal(err, nil)
+        H.equal(complete, true)
+        H.equal(writes, 4, "retry must replay the retained complete owner buffer")
+        H.equal(callbacks, 2, "each transaction attempt gets at most one callback")
+
+        local silent_writes, completions, fail_second = 0, 0, true
+        local flaky_owner = {
+            set = function()
+                silent_writes = silent_writes + 1
+                if fail_second and silent_writes == 2 then
+                    error("planted stable silent-write failure")
+                end
+            end,
+            on_settings_batch_changed = function() completions = completions + 1 end,
+        }
+        local flaky_pending = { c = 3, a = 1, b = 2 }
+        count, batched, err, complete = StableTransaction.commit(
+            {}, flaky_pending, function() return flaky_owner end,
+            function() error("opted-in owner cannot use fallback") end)
+        H.equal(count, 1)
+        H.equal(batched, true)
+        H.equal(complete, false)
+        H.equal(completions, 0, "partial silent writes cannot fire completion")
+        H.truthy(type(err) == "string"
+            and string.find(err, "planted stable silent-write failure", 1, true))
+
+        fail_second = false
+        count, batched, err, complete = StableTransaction.commit(
+            {}, flaky_pending, function() return flaky_owner end,
+            function() error("opted-in owner cannot use fallback") end)
+        H.equal(count, 3)
+        H.equal(batched, true)
+        H.equal(err, nil)
+        H.equal(complete, true)
+        H.equal(silent_writes, 5, "retry must replay the complete retained buffer")
+        H.equal(completions, 1, "successful retry fires one bounded completion")
+
+        count, batched, err, complete = StableTransaction.commit(
+            {}, { legacy = true }, function() return nil end,
+            function() error("planted stable legacy failure") end)
+        H.equal(count, 0)
+        H.equal(batched, false)
+        H.equal(complete, false)
+        H.truthy(type(err) == "string"
+            and string.find(err, "planted stable legacy failure", 1, true))
+    end)
+
+    H.test("Stable Mod Tweaker #1002 views retain incomplete owner state", function()
+        local paths = {
+            "/gui_tweaker/scripts/mods/gui_tweaker/_mod_tweaker_view.lua",
+            "/gui_tweaker/scripts/mods/gui_tweaker/_mod_tweaker_state.lua",
+        }
+        for i = 1, #paths do
+            local file = assert(io.open(repo_root .. paths[i], "rb"))
+            local source = file:read("*a")
+            file:close()
+            H.truthy(source:find("batch_err, complete", 1, true),
+                paths[i] .. " must consume the explicit transaction completion result")
+            H.truthy(source:find("if complete then", 1, true)
+                and source:find("self._pending[mid] = {}", 1, true),
+                paths[i] .. " clears an Equipment owner only after completion")
+            H.truthy(source:find(
+                "if not failed then self:_profile_capture(category) end",
+                1, true), paths[i] .. " cannot capture a partial Equipment profile")
+            H.truthy(source:find(
+                "if complete then self._pending[key] = {} end",
+                1, true), paths[i] .. " retains a failed single-owner buffer")
+            H.truthy(source:find(
+                "if complete then self:_profile_capture(category) end",
+                1, true), paths[i] .. " cannot capture a failed single-owner profile")
+            H.truthy(source:find(
+                "self:apply_pending(category)\n        if self:_active_category_dirty() then",
+                1, true), paths[i] .. " defers a profile switch after an incomplete commit")
+            H.truthy(source:find("[gut:1002]", 1, true),
+                paths[i] .. " emits the bounded incomplete-transaction receipt")
+        end
+
+        local view_file = assert(io.open(repo_root
+            .. "/gui_tweaker/scripts/mods/gui_tweaker/_mod_tweaker_view.lua", "rb"))
+        local view_source = view_file:read("*a")
+        view_file:close()
+        H.truthy(view_source:find(
+            "if complete then\n        for _, row in ipairs(self._rows or {}) do",
+            1, true), "stable keybind registration must wait for transaction completion")
     end)
 
     H.test("Equipment owner commits stay bounded by owner count", function()

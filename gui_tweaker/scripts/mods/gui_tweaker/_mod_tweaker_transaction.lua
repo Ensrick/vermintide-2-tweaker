@@ -11,7 +11,9 @@
 local Transaction = {}
 
 function Transaction.commit(category, pending, owner, set_one)
-    if type(pending) ~= "table" or next(pending) == nil then return 0, false end
+    if type(pending) ~= "table" or next(pending) == nil then
+        return 0, false, nil, true
+    end
 
     local ids = {}
     local batch_owner
@@ -34,10 +36,13 @@ function Transaction.commit(category, pending, owner, set_one)
     if not batch_capable then
         local count = 0
         for setting_id, value in pairs(pending) do
-            set_one(category, setting_id, value)
+            local ok, err = pcall(set_one, category, setting_id, value)
+            if not ok then
+                return count, false, tostring(err), false
+            end
             count = count + 1
         end
-        return count, false
+        return count, false, nil, true
     end
 
     table.sort(ids, function(a, b) return tostring(a) < tostring(b) end)
@@ -47,11 +52,14 @@ function Transaction.commit(category, pending, owner, set_one)
         -- settings dirty; it only suppresses the synchronous per-setting event.
         local ok, err = pcall(batch_owner.set, batch_owner,
             setting_id, pending[setting_id], false)
-        if not ok then return i - 1, true, tostring(err) end
+        if not ok then return i - 1, true, tostring(err), false end
     end
     -- VMF lifecycle callbacks use dot-style event functions (no implicit self).
     local ok, err = pcall(batch_owner.on_settings_batch_changed, ids)
-    return #ids, true, (not ok and tostring(err)) or nil
+    if not ok then
+        return #ids, true, tostring(err), false
+    end
+    return #ids, true, nil, true
 end
 
 return Transaction
