@@ -1,5 +1,29 @@
 # Tweaker: GUI — Changelog
 
+## 0.2.286 (2026-08-28) — verified DEFAULT transaction promotion (#312, #446, #631, #649, #1002)
+
+### Why
+
+- Publish the verified 0.2.285 selective GUI set together with the independently
+  verified Equipment DEFAULT transaction correction, without absorbing any
+  other development-line work.
+
+### Changed
+
+- Carries forward the reviewed #312, #446, #631, and #649 stable changes
+  unchanged.
+- Treats silent-write and owner batch-callback failures as incomplete
+  transactions, retains only the incomplete owner's pending buffer, defers
+  profile capture and switching until retry succeeds, and re-registers keybinds
+  only after a complete commit (#1002).
+- Reconciles the stable Workshop identity `3732144878` with its intended public
+  visibility in both `itemV2.cfg` and the canonical mod inventory.
+
+### Notes
+
+- Excludes #272 and every other unverified or dev-only change. The three stable
+  scoreboard modules remain byte-identical to the reviewed 0.2.285 baseline.
+
 ## 0.2.285 (2026-08-26) — verified selective stable promotion (#312, #446, #631, #649)
 
 ### Why

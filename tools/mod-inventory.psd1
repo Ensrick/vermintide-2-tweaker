@@ -79,7 +79,7 @@
         }
         @{ Dir = 'general_tweaker';            ModId = 'gt';                         WorkshopId = '3713619122'; Visibility = 'public';       Stream = 'stable'; Public = $true;  Name = 'General Tweaker'; BundleAuthority = 'tracked'; RootBundle = '73ac92d9c37dbb6c.mod_bundle' }
         @{ Dir = 'general_tweaker_dev';        ModId = 'gt_dev';                     WorkshopId = '3733367409'; Visibility = 'friends_only'; Stream = 'dev';    Public = $false; Name = 'General Tweaker (Dev)'; BundleAuthority = 'tracked'; RootBundle = 'e6ffaaca2a71199e.mod_bundle' }
-        @{ Dir = 'gui_tweaker';                ModId = 'gut';                        WorkshopId = '3732144878'; Visibility = 'friends_only'; Stream = 'stable'; Public = $false; Name = 'GUI Tweaker'; BundleAuthority = 'tracked'; RootBundle = 'ff654aa303c38f8c.mod_bundle' }
+        @{ Dir = 'gui_tweaker';                ModId = 'gut';                        WorkshopId = '3732144878'; Visibility = 'public';       Stream = 'stable'; Public = $true;  Name = 'GUI Tweaker'; BundleAuthority = 'tracked'; RootBundle = 'ff654aa303c38f8c.mod_bundle' }
         @{
             Dir = 'gui_tweaker_dev'; ModId = 'gut_dev'; WorkshopId = '3751024698';
             Visibility = 'friends_only'; Stream = 'dev'; Public = $false;

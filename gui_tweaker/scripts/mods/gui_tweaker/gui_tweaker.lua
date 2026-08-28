@@ -1,6 +1,6 @@
 local mod = get_mod("gut")
 
-local MOD_VERSION = "0.2.285"
+local MOD_VERSION = "0.2.286"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
