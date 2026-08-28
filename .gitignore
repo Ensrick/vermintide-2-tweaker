@@ -17,6 +17,8 @@ tools/vmb-launcher/
 
 # Pre-built distribution archives
 *.zip
+!qa/fixtures/recovery_manifests/producer-tracked.zip
+!qa/fixtures/recovery_manifests/producer-receipt.zip
 
 # Preprocessor output
 *.lua.processed

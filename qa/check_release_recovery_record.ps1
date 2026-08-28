@@ -806,9 +806,19 @@ return MOD_VERSION
                 ExpectedSha256 = 'c367667af8ddf00c08d8b78f2fb5f8b791dc6b7897109f06316835d41a527dc6'
             },
             [pscustomobject]@{
+                Name = 'producer-tracked.zip'
+                Bytes = [byte[]]$zipBytes
+                ExpectedSha256 = '7d1f642208d5851b8cfa748e4207093c24de70a2a6377b2473b1b1996d86b4e0'
+            },
+            [pscustomobject]@{
                 Name = 'producer-receipt-manifest.json'
                 Bytes = [byte[]]$receiptManifestBytes
                 ExpectedSha256 = '812f656096f178fecfcb59e2a74b37811b046ab187516b0df8b65cc1e43981ec'
+            },
+            [pscustomobject]@{
+                Name = 'producer-receipt.zip'
+                Bytes = [byte[]]$receiptZipBytes
+                ExpectedSha256 = '7d1f642208d5851b8cfa748e4207093c24de70a2a6377b2473b1b1996d86b4e0'
             }
         )
         if ($WriteFixtures) {

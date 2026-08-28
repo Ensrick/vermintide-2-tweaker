@@ -1,10 +1,13 @@
-# Producer-owned recovery manifests
+# Producer-owned recovery manifests and archives
 
-These full schema-2 manifests are deterministic producer contract fixtures for
-the cross-repository `vt2-mod-updater` recovery resolver. They are emitted from
-the real recovery-record constructors and the sole production serializer,
+These full schema-2 manifests and their exact ZIP assets are deterministic
+producer contract fixtures for the cross-repository `vt2-mod-updater` recovery
+resolver and streaming stager. The manifests are emitted from the real
+recovery-record constructors and the sole production serializer,
 `ConvertTo-VtReleaseManifestBytes`, in
-`tools/publish-release/release-manifest.ps1`.
+`tools/publish-release/release-manifest.ps1`. The ZIPs are emitted by
+`New-ReleaseZipBytesFromImmutableOutput`, the same immutable-output archive
+constructor exercised by release-manifest validation.
 
 Regenerate deliberately from the repository root:
 
@@ -23,9 +26,15 @@ Frozen outputs:
 
 - `producer-tracked-manifest.json`: 3,964 bytes,
   SHA-256 `c367667af8ddf00c08d8b78f2fb5f8b791dc6b7897109f06316835d41a527dc6`
+- `producer-tracked.zip`: 546 bytes,
+  SHA-256 `7d1f642208d5851b8cfa748e4207093c24de70a2a6377b2473b1b1996d86b4e0`
 - `producer-receipt-manifest.json`: 3,860 bytes,
   SHA-256 `812f656096f178fecfcb59e2a74b37811b046ab187516b0df8b65cc1e43981ec`
+- `producer-receipt.zip`: 546 bytes,
+  SHA-256 `7d1f642208d5851b8cfa748e4207093c24de70a2a6377b2473b1b1996d86b4e0`
 
-These fixtures prove producer serialization and schema compatibility only.
-They grant no release-selection, download, ZIP extraction, install, deploy,
-Workshop, or restore authority.
+The tracked- and receipt-authority archives are intentionally byte-identical:
+authority changes the manifest proof, not the immutable canonical output set.
+These fixtures prove producer serialization, archive construction, and schema
+compatibility only. They grant no release-selection, download, ZIP extraction,
+install, deploy, Workshop, or restore authority.
