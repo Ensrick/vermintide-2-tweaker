@@ -133,6 +133,7 @@ local suites = {
     "test_wt_settings_runtime",
     "test_wt_rework_master_policy",
     "test_wt_bardin_coverage",
+    "test_wt_documented_keys",
     "test_wt_port_status",
     "test_wt_kruber_coverage",
     "test_wt_skullsplitter_hand",

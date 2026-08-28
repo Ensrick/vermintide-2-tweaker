@@ -1,5 +1,16 @@
 # Weapon Tweaker Changelog
 
+## 0.12.312-dev (2026-08-27) -- documented weapon-key registry mirror (#159) [not-started]
+
+- Mirrors public beta 0.12.311: availability and 3P-routing data consume the
+  same byte-identical 83-entry symbolic weapon-key registry, including adjacent
+  player-facing names at every declaration.
+- Preserves the development-only availability overlay while keeping the base
+  evaluated unlock, conditional handoff, and routing values unchanged.
+- Adds `test_wt_documented_keys` coverage for stream parity, complete current
+  resolution, localization vocabulary, and both bare and quoted raw-key leaks.
+  This source-contract release adds no player-facing behavior or live test.
+
 ## 0.12.311-dev (2026-08-25) -- retire consumed Longbow diagnostic (#499) [not-started]
 
 - Deletes the consumed `_wt_longbow_zoom_probe.lua` module, its two diagnostic

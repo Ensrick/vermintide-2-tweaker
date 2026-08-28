@@ -67,6 +67,12 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path $RepoRoot).Path
+$wtUnlockParser = Join-Path $repoRoot 'tools\wt-unlock-parser.ps1'
+if (-not (Test-Path -LiteralPath $wtUnlockParser -PathType Leaf)) {
+    Write-Host "[gen-name-map] FATAL: shared WT unlock parser not found: $wtUnlockParser" -ForegroundColor Red
+    exit 2
+}
+. $wtUnlockParser
 if (-not (Test-Path $VtSrc)) {
     Write-Host "[gen-name-map] FATAL: Vermintide-2-Source-Code not found at $VtSrc" -ForegroundColor Red
     exit 2
@@ -683,17 +689,10 @@ Log "[6/6] Parsing wt weapon_unlock_map..."
 $wtCount = 0
 $wtUnlockFile = Join-Path $repoRoot 'weapon_tweaker\scripts\mods\weapon_tweaker\wt_unlock_data.lua'
 if (Test-Path $wtUnlockFile) {
-    $wtText = Strip-LuaComments (Read-Utf8 $wtUnlockFile)
-    $mapM = [regex]::Match($wtText, 'weapon_unlock_map\s*=\s*\{')
-    if ($mapM.Success) {
-        $openIdx = $wtText.IndexOf('{', $mapM.Index)
-        $mapBlock = Get-MatchingBraceBlock $wtText $openIdx
-        # Each career line: <career> = { "wk1", "wk2", ... }
-        foreach ($cm in [regex]::Matches($mapBlock, '(?m)^\s*([a-z_]+)\s*=\s*\{([^}]*)\}')) {
-            $career = $cm.Groups[1].Value
-            $weapons = @()
-            foreach ($qm in [regex]::Matches($cm.Groups[2].Value, '"([^"]+)"')) { $weapons += $qm.Groups[1].Value }
-            foreach ($wk in $weapons) {
+    try {
+        $wtUnlockMap = Get-VtWtUnlockMap -UnlockPath $wtUnlockFile
+        foreach ($career in $wtUnlockMap.Keys) {
+            foreach ($wk in @($wtUnlockMap[$career])) {
                 $lk = "unlock_${career}_${wk}"
                 $eng = $null; $dsrc = $null; $unres = $true; $reason = 'no unlock_<career>_<weapon> loc entry in weapon_tweaker_localization.lua'
                 if ($modLoc.ContainsKey('weapon_tweaker') -and $modLoc['weapon_tweaker'].ContainsKey($lk)) {
@@ -705,6 +704,12 @@ if (Test-Path $wtUnlockFile) {
                 $wtCount++
             }
         }
+        if ($wtUnlockMap.Count -gt 0 -and $wtCount -eq 0) {
+            throw "weapon_unlock_map has careers but resolved zero weapon entries"
+        }
+    } catch {
+        Write-Host "[gen-name-map] FATAL: WT unlock source could not be parsed: $($_.Exception.Message)" -ForegroundColor Red
+        exit 2
     }
 }
 Log "      wt unlock entries: $wtCount"

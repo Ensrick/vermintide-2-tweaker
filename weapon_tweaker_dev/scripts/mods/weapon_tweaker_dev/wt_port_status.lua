@@ -36,18 +36,26 @@ base rows are prefix-native routing leads, not current verification.
 --]]
 
 local M = {}
+local function _load_documented_keys()
+    if get_mod then
+        return get_mod("wt_dev"):dofile(
+            "scripts/mods/weapon_tweaker_dev/wt_documented_keys")
+    end
+    return dofile("weapon_tweaker/scripts/mods/weapon_tweaker/wt_documented_keys.lua")
+end
+local W = _load_documented_keys()
 
 -- char_key -> { weapon_key = true } : historical/baked routing on that receiver.
 -- This table is not current verification evidence.
 local _WIRED = {
     kruber = {
         -- user-confirmed in-game 2026-06-28: Falchion (#176) + Crowbill (#177) on Kruber.
-        wh_1h_falchion = true,      -- Saltzpyre "Falchion" rendered on Kruber
-        bw_1h_crowbill = true,      -- Sienna "Crowbill" rendered on Kruber (was held, now confirmed)
-        bw_1h_flail_flaming = true, dr_2h_axe = true, dr_shield_axe = true,
-        we_1h_spears_shield = true, we_1h_sword = true, we_2h_sword = true,
-        we_longbow = true, we_spear = true, wh_1h_axe = true,
-        wh_2h_billhook = true, wh_brace_of_pistols = true, wh_repeating_pistols = true,
+        [W.SALTZPYRE_FALCHION] = true,      -- Saltzpyre "Falchion" rendered on Kruber
+        [W.SIENNA_CROWBILL] = true,      -- Sienna "Crowbill" rendered on Kruber (was held, now confirmed)
+        [W.SIENNA_FLAMING_FLAIL] = true, [W.BARDIN_GREAT_AXE] = true, [W.BARDIN_AXE_AND_SHIELD] = true,
+        [W.KERILLIAN_SPEAR_AND_SHIELD] = true, [W.KERILLIAN_SWORD] = true, [W.KERILLIAN_GREATSWORD] = true,
+        [W.KERILLIAN_LONGBOW] = true, [W.KERILLIAN_SPEAR] = true, [W.SALTZPYRE_AXE] = true,
+        [W.SALTZPYRE_BILLHOOK] = true, [W.SALTZPYRE_BRACE_OF_PISTOLS] = true, [W.SALTZPYRE_REPEATING_PISTOL] = true,
         -- KRUBER_3P_ANIM_DECISIONS.md CONFIRMED extras (Saltzpyre's regular Flail
         -- renders as Empire Flail on Kruber = native es_1h_flail; Sienna's Flail
         -- redirect bw_1h_flail_flaming above; Crowbill held 🧊 — NOT confirmed).
@@ -55,15 +63,15 @@ local _WIRED = {
         -- (weapon_tweaker.lua) after picker tuning was confirmed on Kruber —
         -- moved out of _NEEDS_ANIMS into the historical wired set. Per-attack
         -- picks live in the bake, not the picker.
-        dr_2h_pick = true,          -- -> Empire Greathammer
-        bw_dagger = true,           -- -> Empire 1H Sword
-        bw_flame_sword = true,      -- -> Empire 1H Sword
+        [W.BARDIN_WAR_PICK] = true,          -- -> Empire Greathammer
+        [W.SIENNA_DAGGER] = true,           -- -> Empire 1H Sword
+        [W.SIENNA_FLAME_SWORD] = true,      -- -> Empire 1H Sword
         -- v0.12.150-dev: 2 more ports BAKED career-scoped into _3p_template_remaps
         -- (weapon_tweaker.lua .one_handed_hammer_wizard_template_1.es_ /
         -- .staff_scythe.es_) after picker tuning confirmed on Kruber. The Scythe
         -- ALSO bakes a +0.569 Z es_-scoped 3P grip offset (_weapon_grip_offsets).
-        bw_1h_mace = true,          -- -> Empire Greathammer
-        bw_ghost_scythe = true,     -- -> Empire Greathammer (+ 3P grip offset)
+        [W.SIENNA_MACE] = true,          -- -> Empire Greathammer
+        [W.SIENNA_ENSORCELLED_REAPER] = true,     -- -> Empire Greathammer (+ 3P grip offset)
         -- v0.12.151-dev: 2 more ports BAKED career-scoped into _3p_template_remaps
         -- (.two_handed_hammer_priest_template.es_ / .two_handed_cog_hammers_template_1
         -- .es_) after picker tuning confirmed on Kruber. Coghammer's picks are all
@@ -73,69 +81,69 @@ local _WIRED = {
         -- v0.12.156-dev: 7 more ports BAKED career-scoped into _3p_template_remaps
         -- (weapon_tweaker.lua) from the user's persisted dev-picker picks
         -- (user_settings.config 2026-06-25) — the last Kruber [Needs Animations] ports.
-        we_1h_axe = true,                  -- -> Kruber native 1H Axe
-        we_2h_axe = true,                  -- -> Empire Greathammer (grip offset already set v0.12.152)
-        we_dual_wield_daggers = true,      -- -> Empire Mace & Sword
-        we_dual_wield_sword_dagger = true, -- -> Empire Mace & Sword
-        we_dual_wield_swords = true,       -- -> Empire Mace & Sword
-        wh_dual_hammer = true,             -- -> Empire Mace & Sword
-        wh_flail_shield = true,            -- -> Empire Mace & Shield
+        [W.KERILLIAN_ELVEN_AXE] = true,                  -- -> Kruber native 1H Axe
+        [W.KERILLIAN_GLAIVE] = true,                  -- -> Empire Greathammer (grip offset already set v0.12.152)
+        [W.KERILLIAN_DUAL_DAGGERS] = true,      -- -> Empire Mace & Sword
+        [W.KERILLIAN_SWORD_AND_DAGGER] = true, -- -> Empire Mace & Sword
+        [W.KERILLIAN_DUAL_SWORDS] = true,       -- -> Empire Mace & Sword
+        [W.SALTZPYRE_DUAL_SKULL_SPLITTERS] = true,             -- -> Empire Mace & Sword
+        [W.SALTZPYRE_FLAIL_AND_SHIELD] = true,            -- -> Empire Mace & Shield
         -- v0.12.188-dev: 10 more ports BAKED career-scoped (es_) into
         -- _3p_template_remaps (weapon_tweaker.lua) from the user's persisted
         -- dev-picker picks — the 7 Sienna staves + Deus, plus the re-tuned
         -- Coghammer (#182) and Saltzpyre Greathammer (#180) and the Rapier (#178).
         -- Moved out of _NEEDS_ANIMS.kruber into the historical wired set.
-        bw_skullstaff_beam = true,         -- -> Empire Greathammer
-        bw_skullstaff_fireball = true,     -- -> Empire Greathammer
-        bw_skullstaff_flamethrower = true, -- -> Empire Greathammer
-        bw_skullstaff_geiser = true,       -- -> Empire Greathammer
-        bw_skullstaff_spear = true,        -- -> Empire Greathammer
-        bw_necromancy_staff = true,        -- -> Empire Greathammer
-        bw_deus_01 = true,                 -- -> Empire Greathammer
-        dr_2h_cog_hammer = true,           -- -> Empire Greathammer (re-tuned, #182)
-        wh_2h_hammer = true,               -- -> Empire Greathammer (re-tuned, #180)
-        wh_fencing_sword = true,           -- -> Empire 1H Sword (Rapier, #178)
+        [W.SIENNA_BEAM_STAFF] = true,         -- -> Empire Greathammer
+        [W.SIENNA_FIREBALL_STAFF] = true,     -- -> Empire Greathammer
+        [W.SIENNA_FLAMESTORM_STAFF] = true, -- -> Empire Greathammer
+        [W.SIENNA_CONFLAGRATION_STAFF] = true,       -- -> Empire Greathammer
+        [W.SIENNA_BOLT_STAFF] = true,        -- -> Empire Greathammer
+        [W.SIENNA_SOULSTEALER_STAFF] = true,        -- -> Empire Greathammer
+        [W.SIENNA_CORUSCATION_STAFF] = true,                 -- -> Empire Greathammer
+        [W.BARDIN_COG_HAMMER] = true,           -- -> Empire Greathammer (re-tuned, #182)
+        [W.SALTZPYRE_HOLY_GREAT_HAMMER] = true,               -- -> Empire Greathammer (re-tuned, #180)
+        [W.SALTZPYRE_RAPIER] = true,           -- -> Empire 1H Sword (Rapier, #178)
         -- v0.12.201-dev: Skullsplitter & Tome BAKED es_ (one_handed_hammer_book_priest
         -- _template) from the tester's picks — the tester tuned it as a full anim remap
         -- (1H Skullsplitter vocab), not the mesh-swap the #181 note anticipated.
-        wh_hammer_book = true,             -- -> 1H Mace/Skullsplitter (#181)
+        [W.SALTZPYRE_HAMMER_AND_TOME] = true,             -- -> 1H Mace/Skullsplitter (#181)
     },
     bardin = {
-        bw_1h_crowbill = true, es_1h_sword = true, we_1h_sword = true,
-        wh_1h_falchion = true,
+        [W.SIENNA_CROWBILL] = true, [W.KRUBER_SWORD] = true, [W.KERILLIAN_SWORD] = true,
+        [W.SALTZPYRE_FALCHION] = true,
         -- #110: Empire Handgun shares Bardin's native handgun template/vocab.
         -- Coverage classifies this as native fall-through; catalog it explicitly
         -- because the es_ item prefix is not receiver-native.
-        es_handgun = true,
+        [W.KRUBER_HANDGUN] = true,
     },
     kerillian = {
-        bw_1h_crowbill = true, dr_2h_axe = true, es_1h_flail = true,
-        es_2h_heavy_spear = true, es_2h_sword = true, es_deus_01 = true,
-        es_halberd = true, wh_1h_axe = true, wh_1h_falchion = true,
-        wh_2h_billhook = true, wh_2h_sword = true,
+        [W.SIENNA_CROWBILL] = true, [W.BARDIN_GREAT_AXE] = true, [W.SALTZPYRE_FLAIL] = true,
+        [W.KRUBER_TUSKGOR_SPEAR] = true, [W.KRUBER_GREATSWORD] = true, [W.KRUBER_SPEAR_AND_SHIELD] = true,
+        [W.KRUBER_HALBERD] = true, [W.SALTZPYRE_AXE] = true, [W.SALTZPYRE_FALCHION] = true,
+        [W.SALTZPYRE_BILLHOOK] = true, [W.SALTZPYRE_2H_SWORD] = true,
         -- v0.12.201-dev: Kerillian batch-1 (33 ports) BAKED career-scoped (we_) into
         -- _3p_template_remaps (weapon_tweaker.lua) from the tester's persisted dev-picker
         -- picks (user_settings(4).config 2026-07-03) — every batch-1 port was fully tuned.
         -- Moved out of _NEEDS_ANIMS.kerillian into the historical wired set.
-        es_2h_hammer = true, wh_2h_hammer = true, dr_2h_cog_hammer = true,
-        dr_2h_pick = true, bw_ghost_scythe = true, bw_skullstaff_beam = true,
-        bw_skullstaff_fireball = true, bw_skullstaff_flamethrower = true,
-        bw_skullstaff_geiser = true, bw_skullstaff_spear = true,
-        bw_necromancy_staff = true, bw_deus_01 = true, es_2h_sword_executioner = true,
-        es_bastard_sword = true, wh_fencing_sword = true, bw_1h_flail_flaming = true,
-        bw_dagger = true, bw_flame_sword = true, wh_1h_hammer = true, dr_1h_hammer = true,
-        es_mace_shield = true, es_sword_shield = true, es_sword_shield_breton = true,
-        wh_flail_shield = true, wh_hammer_book = true, wh_hammer_shield = true,
-        dr_shield_axe = true, wh_dual_hammer = true, dr_dual_wield_axes = true,
-        dr_dual_wield_hammers = true, es_dual_wield_hammer_sword = true,
-        wh_dual_wield_axe_falchion = true, dr_1h_throwing_axes = true,
+        [W.KRUBER_TWO_HANDED_HAMMER] = true, [W.SALTZPYRE_HOLY_GREAT_HAMMER] = true, [W.BARDIN_COG_HAMMER] = true,
+        [W.BARDIN_WAR_PICK] = true, [W.SIENNA_ENSORCELLED_REAPER] = true, [W.SIENNA_BEAM_STAFF] = true,
+        [W.SIENNA_FIREBALL_STAFF] = true, [W.SIENNA_FLAMESTORM_STAFF] = true,
+        [W.SIENNA_CONFLAGRATION_STAFF] = true, [W.SIENNA_BOLT_STAFF] = true,
+        [W.SIENNA_SOULSTEALER_STAFF] = true, [W.SIENNA_CORUSCATION_STAFF] = true, [W.KRUBER_EXECUTIONER_SWORD] = true,
+        [W.KRUBER_BRETONNIAN_LONGSWORD] = true, [W.SALTZPYRE_RAPIER] = true, [W.SIENNA_FLAMING_FLAIL] = true,
+        [W.SIENNA_DAGGER] = true, [W.SIENNA_FLAME_SWORD] = true, [W.SALTZPYRE_1H_HAMMER] = true, [W.BARDIN_HAMMER] = true,
+        [W.KRUBER_MACE_AND_SHIELD] = true, [W.KRUBER_SWORD_AND_SHIELD] = true, [W.KRUBER_BRETONNIAN_SWORD_AND_SHIELD] = true,
+        [W.SALTZPYRE_FLAIL_AND_SHIELD] = true, [W.SALTZPYRE_HAMMER_AND_TOME] = true, [W.SALTZPYRE_SKULL_SPLITTER_AND_SHIELD] = true,
+        [W.BARDIN_AXE_AND_SHIELD] = true, [W.SALTZPYRE_DUAL_SKULL_SPLITTERS] = true, [W.BARDIN_DUAL_AXES] = true,
+        [W.BARDIN_DUAL_HAMMERS] = true, [W.KRUBER_MACE_AND_SWORD] = true,
+        [W.SALTZPYRE_AXE_AND_FALCHION] = true, [W.BARDIN_THROWING_AXES] = true,
     },
     saltzpyre = {
-        bw_1h_crowbill = true, dr_2h_axe = true, es_1h_flail = true,
-        es_1h_mace = true, es_1h_sword = true, es_2h_heavy_spear = true,
-        es_longbow = true,
-        we_1h_sword = true, we_2h_sword = true, we_crossbow_repeater = true,
-        we_1h_axe = true, we_longbow = true,
+        [W.SIENNA_CROWBILL] = true, [W.BARDIN_GREAT_AXE] = true, [W.SALTZPYRE_FLAIL] = true,
+        [W.KRUBER_MACE] = true, [W.KRUBER_SWORD] = true, [W.KRUBER_TUSKGOR_SPEAR] = true,
+        [W.KRUBER_LONGBOW] = true,
+        [W.KERILLIAN_SWORD] = true, [W.KERILLIAN_GREATSWORD] = true, [W.KERILLIAN_VOLLEY_CROSSBOW] = true,
+        [W.KERILLIAN_ELVEN_AXE] = true, [W.KERILLIAN_LONGBOW] = true,
         -- wh_flail (Saltzpyre's regular Flail) is NATIVE on Saltzpyre's careers
         -- (es_1h_flail confirmed; native flail handled by prefix rule too).
         -- v0.12.188-dev: all 17 Saltzpyre batch-1/2/3 ports BAKED career-scoped
@@ -143,43 +151,43 @@ local _WIRED = {
         -- persisted dev-picker picks — moved out of _NEEDS_ANIMS.saltzpyre (now
         -- empty) into the historical wired set. es_halberd + we_spear (the batch-3 #161
         -- polearm regression) are among them, re-tuned and baked as Billhook.
-        we_2h_axe = true,                  -- -> WP Greathammer
-        es_dual_wield_hammer_sword = true, -- -> Dual Axe & Falchion
-        we_dual_wield_daggers = true,      -- -> Dual Axe & Falchion
-        we_dual_wield_swords = true,       -- -> Dual Axe & Falchion
-        we_dual_wield_sword_dagger = true, -- -> Dual Axe & Falchion
-        bw_dagger = true,                  -- -> 1H Falchion
-        bw_flame_sword = true,             -- -> 1H Falchion
+        [W.KERILLIAN_GLAIVE] = true,                  -- -> WP Greathammer
+        [W.KRUBER_MACE_AND_SWORD] = true, -- -> Dual Axe & Falchion
+        [W.KERILLIAN_DUAL_DAGGERS] = true,      -- -> Dual Axe & Falchion
+        [W.KERILLIAN_DUAL_SWORDS] = true,       -- -> Dual Axe & Falchion
+        [W.KERILLIAN_SWORD_AND_DAGGER] = true, -- -> Dual Axe & Falchion
+        [W.SIENNA_DAGGER] = true,                  -- -> 1H Falchion
+        [W.SIENNA_FLAME_SWORD] = true,             -- -> 1H Falchion
         -- #576: we_spear reopened after live H1 charge/release failures.
-        es_halberd = true,                 -- -> Billhook (#161)
-        bw_skullstaff_beam = true,         -- -> WP Greathammer
-        bw_skullstaff_fireball = true,     -- -> WP Greathammer
-        bw_skullstaff_flamethrower = true, -- -> WP Greathammer
-        bw_skullstaff_geiser = true,       -- -> WP Greathammer
-        bw_skullstaff_spear = true,        -- -> WP Greathammer
-        bw_necromancy_staff = true,        -- -> WP Greathammer
-        bw_deus_01 = true,                 -- -> WP Greathammer
+        [W.KRUBER_HALBERD] = true,                 -- -> Billhook (#161)
+        [W.SIENNA_BEAM_STAFF] = true,         -- -> WP Greathammer
+        [W.SIENNA_FIREBALL_STAFF] = true,     -- -> WP Greathammer
+        [W.SIENNA_FLAMESTORM_STAFF] = true, -- -> WP Greathammer
+        [W.SIENNA_CONFLAGRATION_STAFF] = true,       -- -> WP Greathammer
+        [W.SIENNA_BOLT_STAFF] = true,        -- -> WP Greathammer
+        [W.SIENNA_SOULSTEALER_STAFF] = true,        -- -> WP Greathammer
+        [W.SIENNA_CORUSCATION_STAFF] = true,                 -- -> WP Greathammer
         -- v0.12.201-dev: Kruber Executioner Sword (#160) BAKED wh_ (two_handed_swords
         -- _executioner_template_1 -> Saltzpyre 2H Sword) from the tester's picks.
-        es_2h_sword_executioner = true,    -- -> Saltzpyre 2H Sword
+        [W.KRUBER_EXECUTIONER_SWORD] = true,    -- -> Saltzpyre 2H Sword
         -- v0.12.213-dev (#519): Saltzpyre batch-2 — 10 of the 11 queued ports BAKED
         -- career-scoped (wh_) into _3p_template_remaps (_wt_anim_remap.lua) from the
         -- tester's persisted dev-picker picks (both persistence namespaces parsed).
         -- dr_dual_wield_hammers had zero non-unset picks — stays in _NEEDS_ANIMS.
-        es_2h_hammer           = true,     -- -> WP Greathammer
-        dr_2h_cog_hammer       = true,     -- -> WP Greathammer
-        dr_2h_pick             = true,     -- -> WP Greathammer
-        bw_1h_mace             = true,     -- -> WP Greathammer
+        [W.KRUBER_TWO_HANDED_HAMMER] = true,     -- -> WP Greathammer
+        [W.BARDIN_COG_HAMMER] = true,     -- -> WP Greathammer
+        [W.BARDIN_WAR_PICK] = true,     -- -> WP Greathammer
+        [W.SIENNA_MACE] = true,     -- -> WP Greathammer
         -- #576: bw_ghost_scythe reopened after live charge/light failures.
-        es_bastard_sword       = true,     -- -> Saltzpyre 2H Sword
-        es_mace_shield         = true,     -- -> Dual Axe & Falchion
-        es_sword_shield        = true,     -- -> Dual Axe & Falchion
-        es_sword_shield_breton = true,     -- -> Dual Axe & Falchion
-        dr_shield_axe          = true,     -- -> Dual Axe & Falchion
+        [W.KRUBER_BRETONNIAN_LONGSWORD] = true,     -- -> Saltzpyre 2H Sword
+        [W.KRUBER_MACE_AND_SHIELD] = true,     -- -> Dual Axe & Falchion
+        [W.KRUBER_SWORD_AND_SHIELD] = true,     -- -> Dual Axe & Falchion
+        [W.KRUBER_BRETONNIAN_SWORD_AND_SHIELD] = true,     -- -> Dual Axe & Falchion
+        [W.BARDIN_AXE_AND_SHIELD] = true,     -- -> Dual Axe & Falchion
     },
     -- wh_priest: all 7 entries ✅/🔁 (ANIMATION_COVERAGE.md:181-185). The only
     -- cross-prefix entry es_1h_flail is ✅; everything else is native wh_*.
-    wh_priest = { es_1h_flail = true },
+    wh_priest = { [W.SALTZPYRE_FLAIL] = true },
     -- sienna: zero cross-character ports — all native (prefix rule covers it).
     sienna = {},
 }
@@ -202,10 +210,10 @@ local _NEEDS_OFFSETS = {
 
 -- char_key -> { weapon_key = true } : no decision captured yet.
 local _UNTESTED = {
-    kruber = { we_javelin = true, we_life_staff = true },
+    kruber = { [W.KERILLIAN_JAVELIN] = true, [W.KERILLIAN_DEEPWOOD_STAFF] = true },
     -- #111: present in every Kerillian unlock list but absent from the coverage
     -- decision ledger. Do not let the generic fallback imply a target exists.
-    kerillian = { es_1h_mace = true, es_longbow = true },
+    kerillian = { [W.KRUBER_MACE] = true, [W.KRUBER_LONGBOW] = true },
 }
 
 -- ===========================================================================
@@ -251,8 +259,8 @@ local _NEEDS_ANIMS = {
     -- from this table under #112. Only the two #576 reopened ports remain live.
     saltzpyre = {
         -- #576: static mappings are candidates, not visual confirmation.
-        bw_ghost_scythe       = "Warrior Priest Greathammer",
-        we_spear              = "Saltzpyre Billhook",
+        [W.SIENNA_ENSORCELLED_REAPER] = "Warrior Priest Greathammer",
+        [W.KERILLIAN_SPEAR] = "Saltzpyre Billhook",
         -- #112: dr_dual_wield_hammers is no longer present in any non-WP
         -- Saltzpyre unlock list and has no picker row. Do not retain an
         -- unreachable status entry that falsely implies it can be tuned here.
@@ -275,54 +283,54 @@ local _NEEDS_ANIMS = {
 -- per-attack vocabulary works.  Unknown rows deliberately remain absent.
 local _DIAGNOSTIC_TARGET = {
     kruber = {
-        dr_1h_throwing_axes = "Empire 1H Mace",
-        dr_drake_pistol = "Repeater Handgun",
-        dr_drakegun = "Empire Blunderbuss",
-        dr_steam_pistol = "Repeater Handgun",
-        dr_deus_01 = "Empire Blunderbuss",
-        we_deus_01 = "Empire Longbow",
-        we_shortbow = "Empire Longbow",
-        we_shortbow_hagbane = "Empire Longbow",
-        we_crossbow_repeater = "Repeater Handgun",
-        wh_crossbow_repeater = "Repeater Handgun",
-        wh_deus_01 = "Repeater Handgun",
+        [W.BARDIN_THROWING_AXES] = "Empire 1H Mace",
+        [W.BARDIN_DRAKEFIRE_PISTOLS] = "Repeater Handgun",
+        [W.BARDIN_DRAKEGUN] = "Empire Blunderbuss",
+        [W.BARDIN_MASTERWORK_PISTOL] = "Repeater Handgun",
+        [W.BARDIN_TROLLHAMMER_TORPEDO] = "Empire Blunderbuss",
+        [W.KERILLIAN_MOONFIRE_BOW] = "Empire Longbow",
+        [W.KERILLIAN_SWIFT_BOW] = "Empire Longbow",
+        [W.KERILLIAN_HAGBANE_SHORT_BOW] = "Empire Longbow",
+        [W.KERILLIAN_VOLLEY_CROSSBOW] = "Repeater Handgun",
+        [W.SALTZPYRE_VOLLEY_CROSSBOW] = "Repeater Handgun",
+        [W.SALTZPYRE_GRIFFON_FOOT] = "Repeater Handgun",
     },
     kerillian = {
         -- #111: coverage-ledger decisions for the remaining unbaked ranged
         -- surface. These labels describe the chosen receiver vocabulary only;
         -- they do not promote the port out of U or make it picker-ready.
-        dr_crossbow = "Elf Repeater Crossbow",
-        dr_deus_01 = "Elf Repeater Crossbow",
-        dr_drake_pistol = "Elf Repeater Crossbow",
-        dr_drakegun = "Elf Repeater Crossbow",
-        dr_rakegun = "Elf Repeater Crossbow",
-        dr_steam_pistol = "Elf Repeater Crossbow",
-        es_blunderbuss = "Elf Repeater Crossbow",
-        es_handgun = "Elf Repeater Crossbow",
-        es_repeating_handgun = "Elf Repeater Crossbow",
-        wh_brace_of_pistols = "Elf Repeater Crossbow",
-        wh_crossbow = "Elf Repeater Crossbow",
-        wh_crossbow_repeater = "Elf Repeater Crossbow",
-        wh_deus_01 = "Elf Repeater Crossbow",
-        wh_repeating_pistols = "Elf Repeater Crossbow",
+        [W.BARDIN_CROSSBOW] = "Elf Repeater Crossbow",
+        [W.BARDIN_TROLLHAMMER_TORPEDO] = "Elf Repeater Crossbow",
+        [W.BARDIN_DRAKEFIRE_PISTOLS] = "Elf Repeater Crossbow",
+        [W.BARDIN_DRAKEGUN] = "Elf Repeater Crossbow",
+        [W.BARDIN_GRUDGE_RAKER] = "Elf Repeater Crossbow",
+        [W.BARDIN_MASTERWORK_PISTOL] = "Elf Repeater Crossbow",
+        [W.KRUBER_BLUNDERBUSS] = "Elf Repeater Crossbow",
+        [W.KRUBER_HANDGUN] = "Elf Repeater Crossbow",
+        [W.KRUBER_REPEATING_HANDGUN] = "Elf Repeater Crossbow",
+        [W.SALTZPYRE_BRACE_OF_PISTOLS] = "Elf Repeater Crossbow",
+        [W.SALTZPYRE_CROSSBOW] = "Elf Repeater Crossbow",
+        [W.SALTZPYRE_VOLLEY_CROSSBOW] = "Elf Repeater Crossbow",
+        [W.SALTZPYRE_GRIFFON_FOOT] = "Elf Repeater Crossbow",
+        [W.SALTZPYRE_REPEATING_PISTOL] = "Elf Repeater Crossbow",
     },
     saltzpyre = {
         -- #112: source/coverage-backed receiver targets for live ports which
         -- remain unbaked or visually unverified. These are diagnostic labels,
         -- not promotions out of U and not implicit picker membership.
-        dr_1h_throwing_axes = "Saltzpyre 1H Axe",
-        dr_deus_01 = "Saltzpyre Crossbow",
-        dr_drake_pistol = "Brace of Pistols",
-        dr_drakegun = "Volley Crossbow",
-        dr_rakegun = "Volley Crossbow",
-        dr_steam_pistol = "Repeater Pistol",
-        es_blunderbuss = "Saltzpyre Crossbow",
-        es_deus_01 = "Dual Axe & Falchion",
-        es_handgun = "Saltzpyre Crossbow",
-        es_repeating_handgun = "Repeater Pistol",
-        we_1h_spears_shield = "Dual Axe & Falchion",
-        we_deus_01 = "Saltzpyre Crossbow",
-        we_javelin = "Saltzpyre 1H Axe",
+        [W.BARDIN_THROWING_AXES] = "Saltzpyre 1H Axe",
+        [W.BARDIN_TROLLHAMMER_TORPEDO] = "Saltzpyre Crossbow",
+        [W.BARDIN_DRAKEFIRE_PISTOLS] = "Brace of Pistols",
+        [W.BARDIN_DRAKEGUN] = "Volley Crossbow",
+        [W.BARDIN_GRUDGE_RAKER] = "Volley Crossbow",
+        [W.BARDIN_MASTERWORK_PISTOL] = "Repeater Pistol",
+        [W.KRUBER_BLUNDERBUSS] = "Saltzpyre Crossbow",
+        [W.KRUBER_SPEAR_AND_SHIELD] = "Dual Axe & Falchion",
+        [W.KRUBER_HANDGUN] = "Saltzpyre Crossbow",
+        [W.KRUBER_REPEATING_HANDGUN] = "Repeater Pistol",
+        [W.KERILLIAN_SPEAR_AND_SHIELD] = "Dual Axe & Falchion",
+        [W.KERILLIAN_MOONFIRE_BOW] = "Saltzpyre Crossbow",
+        [W.KERILLIAN_JAVELIN] = "Saltzpyre 1H Axe",
     },
 }
 
@@ -332,105 +340,105 @@ local _DIAGNOSTIC_TARGET = {
 -- Pending ports still source their target from `_NEEDS_ANIMS` below.
 local _REDIRECT_DISPLAY = {
     kruber = {
-        dr_2h_pick = "Empire Greathammer",
-        dr_2h_cog_hammer = "Empire Greathammer",
-        wh_2h_hammer = "Empire Greathammer",
-        we_2h_axe = "Empire Greathammer",
-        bw_1h_mace = "Empire Greathammer",
-        bw_ghost_scythe = "Empire Greathammer",
-        bw_skullstaff_beam = "Empire Greathammer",
-        bw_skullstaff_fireball = "Empire Greathammer",
-        bw_skullstaff_flamethrower = "Empire Greathammer",
-        bw_skullstaff_geiser = "Empire Greathammer",
-        bw_skullstaff_spear = "Empire Greathammer",
-        bw_necromancy_staff = "Empire Greathammer",
-        bw_deus_01 = "Empire Greathammer",
-        we_dual_wield_daggers = "Empire Mace & Sword",
-        we_dual_wield_swords = "Empire Mace & Sword",
-        we_dual_wield_sword_dagger = "Empire Mace & Sword",
-        wh_dual_hammer = "Empire Mace & Sword",
-        wh_flail_shield = "Empire Mace & Shield",
-        bw_dagger = "Empire 1H Sword",
-        bw_flame_sword = "Empire 1H Sword",
-        wh_fencing_sword = "Empire 1H Sword",
-        we_1h_axe = "Witch Hunter 1H Axe",
-        wh_hammer_book = "1H Mace/Skullsplitter",
+        [W.BARDIN_WAR_PICK] = "Empire Greathammer",
+        [W.BARDIN_COG_HAMMER] = "Empire Greathammer",
+        [W.SALTZPYRE_HOLY_GREAT_HAMMER] = "Empire Greathammer",
+        [W.KERILLIAN_GLAIVE] = "Empire Greathammer",
+        [W.SIENNA_MACE] = "Empire Greathammer",
+        [W.SIENNA_ENSORCELLED_REAPER] = "Empire Greathammer",
+        [W.SIENNA_BEAM_STAFF] = "Empire Greathammer",
+        [W.SIENNA_FIREBALL_STAFF] = "Empire Greathammer",
+        [W.SIENNA_FLAMESTORM_STAFF] = "Empire Greathammer",
+        [W.SIENNA_CONFLAGRATION_STAFF] = "Empire Greathammer",
+        [W.SIENNA_BOLT_STAFF] = "Empire Greathammer",
+        [W.SIENNA_SOULSTEALER_STAFF] = "Empire Greathammer",
+        [W.SIENNA_CORUSCATION_STAFF] = "Empire Greathammer",
+        [W.KERILLIAN_DUAL_DAGGERS] = "Empire Mace & Sword",
+        [W.KERILLIAN_DUAL_SWORDS] = "Empire Mace & Sword",
+        [W.KERILLIAN_SWORD_AND_DAGGER] = "Empire Mace & Sword",
+        [W.SALTZPYRE_DUAL_SKULL_SPLITTERS] = "Empire Mace & Sword",
+        [W.SALTZPYRE_FLAIL_AND_SHIELD] = "Empire Mace & Shield",
+        [W.SIENNA_DAGGER] = "Empire 1H Sword",
+        [W.SIENNA_FLAME_SWORD] = "Empire 1H Sword",
+        [W.SALTZPYRE_RAPIER] = "Empire 1H Sword",
+        [W.KERILLIAN_ELVEN_AXE] = "Witch Hunter 1H Axe",
+        [W.SALTZPYRE_HAMMER_AND_TOME] = "1H Mace/Skullsplitter",
     },
     bardin = {
         -- #110: event-level dr_-scoped remaps, not whole-weapon substitutions.
-        we_1h_sword = "Bardin 1H event map",
-        es_1h_sword = "Bardin 1H event map",
-        wh_1h_falchion = "Bardin 1H event map",
-        bw_1h_crowbill = "Bardin 1H event map",
+        [W.KERILLIAN_SWORD] = "Bardin 1H event map",
+        [W.KRUBER_SWORD] = "Bardin 1H event map",
+        [W.SALTZPYRE_FALCHION] = "Bardin 1H event map",
+        [W.SIENNA_CROWBILL] = "Bardin 1H event map",
     },
     wh_priest = {
         -- #113: the Empire Flail keeps its own wield vocabulary on the Priest
         -- body, with the shipped per-unit push/heavy correction. This is an
         -- event-map label, not a claim that another whole weapon is substituted.
-        es_1h_flail = "Warrior Priest flail event map",
+        [W.SALTZPYRE_FLAIL] = "Warrior Priest flail event map",
     },
     saltzpyre = {
-        we_1h_axe = "Saltzpyre 1H Axe",
-        we_2h_axe = "Warrior Priest Greathammer",
-        es_2h_hammer = "Warrior Priest Greathammer",
-        dr_2h_cog_hammer = "Warrior Priest Greathammer",
-        dr_2h_pick = "Warrior Priest Greathammer",
-        bw_1h_mace = "Warrior Priest Greathammer",
-        bw_skullstaff_beam = "Warrior Priest Greathammer",
-        bw_skullstaff_fireball = "Warrior Priest Greathammer",
-        bw_skullstaff_flamethrower = "Warrior Priest Greathammer",
-        bw_skullstaff_geiser = "Warrior Priest Greathammer",
-        bw_skullstaff_spear = "Warrior Priest Greathammer",
-        bw_necromancy_staff = "Warrior Priest Greathammer",
-        bw_deus_01 = "Warrior Priest Greathammer",
-        es_dual_wield_hammer_sword = "Dual Axe & Falchion",
-        we_dual_wield_daggers = "Dual Axe & Falchion",
-        we_dual_wield_swords = "Dual Axe & Falchion",
-        we_dual_wield_sword_dagger = "Dual Axe & Falchion",
-        es_mace_shield = "Dual Axe & Falchion",
-        es_sword_shield = "Dual Axe & Falchion",
-        es_sword_shield_breton = "Dual Axe & Falchion",
-        dr_shield_axe = "Dual Axe & Falchion",
-        bw_dagger = "1H Falchion",
-        bw_flame_sword = "1H Falchion",
-        es_halberd = "Billhook",
-        es_2h_sword_executioner = "Saltzpyre 2H Sword",
-        es_bastard_sword = "Saltzpyre 2H Sword",
+        [W.KERILLIAN_ELVEN_AXE] = "Saltzpyre 1H Axe",
+        [W.KERILLIAN_GLAIVE] = "Warrior Priest Greathammer",
+        [W.KRUBER_TWO_HANDED_HAMMER] = "Warrior Priest Greathammer",
+        [W.BARDIN_COG_HAMMER] = "Warrior Priest Greathammer",
+        [W.BARDIN_WAR_PICK] = "Warrior Priest Greathammer",
+        [W.SIENNA_MACE] = "Warrior Priest Greathammer",
+        [W.SIENNA_BEAM_STAFF] = "Warrior Priest Greathammer",
+        [W.SIENNA_FIREBALL_STAFF] = "Warrior Priest Greathammer",
+        [W.SIENNA_FLAMESTORM_STAFF] = "Warrior Priest Greathammer",
+        [W.SIENNA_CONFLAGRATION_STAFF] = "Warrior Priest Greathammer",
+        [W.SIENNA_BOLT_STAFF] = "Warrior Priest Greathammer",
+        [W.SIENNA_SOULSTEALER_STAFF] = "Warrior Priest Greathammer",
+        [W.SIENNA_CORUSCATION_STAFF] = "Warrior Priest Greathammer",
+        [W.KRUBER_MACE_AND_SWORD] = "Dual Axe & Falchion",
+        [W.KERILLIAN_DUAL_DAGGERS] = "Dual Axe & Falchion",
+        [W.KERILLIAN_DUAL_SWORDS] = "Dual Axe & Falchion",
+        [W.KERILLIAN_SWORD_AND_DAGGER] = "Dual Axe & Falchion",
+        [W.KRUBER_MACE_AND_SHIELD] = "Dual Axe & Falchion",
+        [W.KRUBER_SWORD_AND_SHIELD] = "Dual Axe & Falchion",
+        [W.KRUBER_BRETONNIAN_SWORD_AND_SHIELD] = "Dual Axe & Falchion",
+        [W.BARDIN_AXE_AND_SHIELD] = "Dual Axe & Falchion",
+        [W.SIENNA_DAGGER] = "1H Falchion",
+        [W.SIENNA_FLAME_SWORD] = "1H Falchion",
+        [W.KRUBER_HALBERD] = "Billhook",
+        [W.KRUBER_EXECUTIONER_SWORD] = "Saltzpyre 2H Sword",
+        [W.KRUBER_BRETONNIAN_LONGSWORD] = "Saltzpyre 2H Sword",
     },
     kerillian = {
-        es_2h_hammer = "Elf 2H Axe/Glaive",
-        wh_2h_hammer = "Elf 2H Axe/Glaive",
-        dr_2h_cog_hammer = "Elf 2H Axe/Glaive",
-        dr_2h_pick = "Elf 2H Axe/Glaive",
-        bw_ghost_scythe = "Elf 2H Axe/Glaive",
-        bw_skullstaff_beam = "Elf 2H Axe/Glaive",
-        bw_skullstaff_fireball = "Elf 2H Axe/Glaive",
-        bw_skullstaff_flamethrower = "Elf 2H Axe/Glaive",
-        bw_skullstaff_geiser = "Elf 2H Axe/Glaive",
-        bw_skullstaff_spear = "Elf 2H Axe/Glaive",
-        bw_necromancy_staff = "Elf 2H Axe/Glaive",
-        bw_deus_01 = "Elf 2H Axe/Glaive",
-        es_2h_sword_executioner = "Elf 2H Sword",
-        es_bastard_sword = "Elf 2H Sword",
-        wh_fencing_sword = "Elf 1H Sword",
-        bw_1h_flail_flaming = "Elf 1H Sword",
-        bw_dagger = "Elf 1H Sword",
-        bw_flame_sword = "Elf 1H Sword",
-        wh_1h_hammer = "Elf 1H Axe",
-        dr_1h_hammer = "Elf 1H Axe",
-        es_mace_shield = "Elf Spear & Shield",
-        es_sword_shield = "Elf Spear & Shield",
-        es_sword_shield_breton = "Elf Spear & Shield",
-        wh_flail_shield = "Elf Spear & Shield",
-        wh_hammer_book = "Elf Spear & Shield",
-        wh_hammer_shield = "Elf Spear & Shield",
-        dr_shield_axe = "Elf Spear & Shield",
-        wh_dual_hammer = "Dual Swords",
-        dr_dual_wield_axes = "Dual Swords",
-        dr_dual_wield_hammers = "Dual Swords",
-        es_dual_wield_hammer_sword = "Sword & Dagger",
-        wh_dual_wield_axe_falchion = "Sword & Dagger",
-        dr_1h_throwing_axes = "Elf Javelin",
+        [W.KRUBER_TWO_HANDED_HAMMER] = "Elf 2H Axe/Glaive",
+        [W.SALTZPYRE_HOLY_GREAT_HAMMER] = "Elf 2H Axe/Glaive",
+        [W.BARDIN_COG_HAMMER] = "Elf 2H Axe/Glaive",
+        [W.BARDIN_WAR_PICK] = "Elf 2H Axe/Glaive",
+        [W.SIENNA_ENSORCELLED_REAPER] = "Elf 2H Axe/Glaive",
+        [W.SIENNA_BEAM_STAFF] = "Elf 2H Axe/Glaive",
+        [W.SIENNA_FIREBALL_STAFF] = "Elf 2H Axe/Glaive",
+        [W.SIENNA_FLAMESTORM_STAFF] = "Elf 2H Axe/Glaive",
+        [W.SIENNA_CONFLAGRATION_STAFF] = "Elf 2H Axe/Glaive",
+        [W.SIENNA_BOLT_STAFF] = "Elf 2H Axe/Glaive",
+        [W.SIENNA_SOULSTEALER_STAFF] = "Elf 2H Axe/Glaive",
+        [W.SIENNA_CORUSCATION_STAFF] = "Elf 2H Axe/Glaive",
+        [W.KRUBER_EXECUTIONER_SWORD] = "Elf 2H Sword",
+        [W.KRUBER_BRETONNIAN_LONGSWORD] = "Elf 2H Sword",
+        [W.SALTZPYRE_RAPIER] = "Elf 1H Sword",
+        [W.SIENNA_FLAMING_FLAIL] = "Elf 1H Sword",
+        [W.SIENNA_DAGGER] = "Elf 1H Sword",
+        [W.SIENNA_FLAME_SWORD] = "Elf 1H Sword",
+        [W.SALTZPYRE_1H_HAMMER] = "Elf 1H Axe",
+        [W.BARDIN_HAMMER] = "Elf 1H Axe",
+        [W.KRUBER_MACE_AND_SHIELD] = "Elf Spear & Shield",
+        [W.KRUBER_SWORD_AND_SHIELD] = "Elf Spear & Shield",
+        [W.KRUBER_BRETONNIAN_SWORD_AND_SHIELD] = "Elf Spear & Shield",
+        [W.SALTZPYRE_FLAIL_AND_SHIELD] = "Elf Spear & Shield",
+        [W.SALTZPYRE_HAMMER_AND_TOME] = "Elf Spear & Shield",
+        [W.SALTZPYRE_SKULL_SPLITTER_AND_SHIELD] = "Elf Spear & Shield",
+        [W.BARDIN_AXE_AND_SHIELD] = "Elf Spear & Shield",
+        [W.SALTZPYRE_DUAL_SKULL_SPLITTERS] = "Dual Swords",
+        [W.BARDIN_DUAL_AXES] = "Dual Swords",
+        [W.BARDIN_DUAL_HAMMERS] = "Dual Swords",
+        [W.KRUBER_MACE_AND_SWORD] = "Sword & Dagger",
+        [W.SALTZPYRE_AXE_AND_FALCHION] = "Sword & Dagger",
+        [W.BARDIN_THROWING_AXES] = "Elf Javelin",
     },
 }
 
@@ -439,13 +447,13 @@ local _REDIRECT_DISPLAY = {
 -- the real equipped item. Keep this mirror aligned with the model dispatchers.
 local _MODEL_SUB = {
     kruber = {
-        wh_brace_of_pistols = "Repeater Handgun",
-        wh_repeating_pistols = "Repeater Handgun",
+        [W.SALTZPYRE_BRACE_OF_PISTOLS] = "Repeater Handgun",
+        [W.SALTZPYRE_REPEATING_PISTOL] = "Repeater Handgun",
     },
     saltzpyre = {
-        es_longbow = "Crossbow",
-        we_longbow = "Crossbow",
-        we_deus_01 = "Crossbow",
+        [W.KRUBER_LONGBOW] = "Crossbow",
+        [W.KERILLIAN_LONGBOW] = "Crossbow",
+        [W.KERILLIAN_MOONFIRE_BOW] = "Crossbow",
     },
 }
 

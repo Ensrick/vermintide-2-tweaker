@@ -1,4 +1,4 @@
-<!-- checker-consumed: verified-current 2026-08-02 -->
+<!-- checker-consumed: verified-current 2026-08-27 -->
 <!-- ^ Read by qa/check_decisions_wired.ps1. This doc is trusted as ground truth
      for which cross-character ports are live work. Re-verify the rows against
      wt_unlock_data.lua + the _data.lua checkboxes + the _localization.lua keys,
@@ -140,7 +140,7 @@ Implementation note: Wave 1 = add to `weapon_unlock_map` + checkboxes + loc keys
 **Loc dumps:**
 - `wh_1h_axe` = Saltzpyre: 1H Axe (already decided in Bardin batch as the replacement for `dr_1h_axe`)
 - `wh_dual_hammer` = Saltzpyre: Dual Hammers
-- `wh_dual_wield_axe_falchion` = Saltzpyre: Axe & Falchion (CWV-managed, skip)
+- `wh_dual_wield_axe_falchion` = Saltzpyre: Axe & Falchion (the former CWV-managed skip was retired by issue #368)
 - `wh_2h_sword` = Saltzpyre: Two-Handed Sword
 - `wh_2h_hammer` = Saltzpyre: Two-Handed Hammer
 - `wh_fencing_sword` = Saltzpyre: Rapier
@@ -158,6 +158,7 @@ Implementation note: Wave 1 = add to `weapon_unlock_map` + checkboxes + loc keys
 | Source weapon (key) | Display name | Target (3P) | Notes |
 |---|---|---|---|
 | `wh_1h_axe` | Saltzpyre: 1H Axe | (native fall-through via `_career_anim_redirect.to_1h_axe → to_1h_sword`) | Already decided as replacement for `dr_1h_axe`. Confirmed fully functional. |
+| `wh_dual_wield_axe_falchion` | Saltzpyre: Axe & Falchion | Native fall-through (the current `dual_wield_axe_falchion_template` patch has no Kruber-specific redirect) | Issue #368 retired the CWV-ceding model. WT independently exposes one availability row on each of Kruber's four careers. |
 | `wh_dual_hammer` | Saltzpyre: Dual Hammers | Empire: Hammer & Sword (`es_dual_wield_hammer_sword` → `to_dual_hammer_sword`) | Internal field name `dual_hammer_sword` is misleading — the in-game weapon is actually a mace + sword. Document at the redirect site. |
 | `wh_2h_hammer` | Saltzpyre: Two-Handed Hammer | Empire: 2H Hammer (`es_2h_hammer` → `to_2h_hammer`) | NOT identical to Kruber's; user confirmed visually distinct |
 | `wh_fencing_sword` | Saltzpyre: Rapier | **Empire: Sword & Shield (`es_sword_shield` → `to_1h_sword_shield`)** | Kruber doesn't author offhand-pistol animation that Saltzpyre's rapier expects; user will experiment with sword+shield thrusts + pistol in shield hand. Special-action pistol fire may map to shield-bash anim — user to iterate in-game |

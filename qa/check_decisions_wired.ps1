@@ -46,6 +46,13 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+$wtUnlockParser = Join-Path $PSScriptRoot '..\tools\wt-unlock-parser.ps1'
+if (-not (Test-Path -LiteralPath $wtUnlockParser -PathType Leaf)) {
+    Write-Host "[check_decisions_wired] FATAL: shared WT unlock parser not found: $wtUnlockParser" -ForegroundColor Red
+    exit 2
+}
+. $wtUnlockParser
+
 # ---------------------------------------------------------------------------
 # Receiver -> career-id set. Confirmed against weapon_unlock_map career keys.
 # ---------------------------------------------------------------------------
@@ -311,83 +318,7 @@ function Parse-Decisions([string]$path) {
 # Robust against multi-line entries, trailing commas, and -- comments.
 # ---------------------------------------------------------------------------
 function Parse-UnlockMap([string]$path) {
-    $text = Read-FileUtf8 $path
-    $map = @{}
-
-    # Strip -- line comments FIRST so the docstring's prose mention of
-    # "weapon_unlock_map = {...}" doesn't get matched as the real table, and so
-    # commented-out careers/keys aren't parsed. (Block comments --[[ ]] are
-    # handled crudely: drop everything up to the `return {`.)
-    $text = [regex]::Replace($text, '--\[\[.*?\]\]', '', [System.Text.RegularExpressions.RegexOptions]::Singleline)
-    $text = [regex]::Replace($text, '--[^\r\n]*', '')
-
-    # Isolate the weapon_unlock_map = { ... } block by brace matching.
-    $startMatch = [regex]::Match($text, 'weapon_unlock_map\s*=\s*\{')
-    if (-not $startMatch.Success) { return $map }
-    $idx = $startMatch.Index + $startMatch.Length
-    $depth = 1
-    $sb = New-Object System.Text.StringBuilder
-    while ($idx -lt $text.Length -and $depth -gt 0) {
-        $ch = $text[$idx]
-        if ($ch -eq '{') { $depth++ }
-        elseif ($ch -eq '}') { $depth--; if ($depth -eq 0) { break } }
-        [void]$sb.Append($ch)
-        $idx++
-    }
-    $block = $sb.ToString()
-
-    # Strip -- line comments so commented careers/keys don't get parsed.
-    $block = [regex]::Replace($block, '--[^\r\n]*', '')
-
-    # Match: career_id = { "k1", "k2", ... }   (the inner braces don't nest here)
-    foreach ($m in [regex]::Matches($block, '([A-Za-z_][A-Za-z0-9_]*)\s*=\s*\{([^{}]*)\}')) {
-        $career = $m.Groups[1].Value
-        $body = $m.Groups[2].Value
-        $keys = @()
-        foreach ($km in [regex]::Matches($body, '"([^"]+)"')) {
-            $keys += $km.Groups[1].Value
-        }
-        $map[$career] = $keys
-    }
-
-    # Apply explicit post-table removals. wt_unlock_data.lua keeps some old
-    # literals in the readable source lists, then removes them from the returned
-    # DATA table to enforce ownership/tombstone decisions. Treating only the
-    # literal table as live produced false ORPHAN rows for ports that runtime
-    # deliberately deletes (for example #594's dr_shield_hammer removal).
-    #
-    # Scope each receiver loop to the next receiver loop (or EOF), and only
-    # interpret it when the body actually calls table.remove on `weapons`.
-    $receiverLoops = [regex]::Matches(
-        $text,
-        'for\s+_,\s*career\s+in\s+ipairs\s*\(\s*\{([^}]*)\}\s*\)\s*do',
-        [System.Text.RegularExpressions.RegexOptions]::Singleline
-    )
-    for ($loopIndex = 0; $loopIndex -lt $receiverLoops.Count; $loopIndex++) {
-        $loop = $receiverLoops[$loopIndex]
-        $bodyStart = $loop.Index + $loop.Length
-        $bodyEnd = if ($loopIndex + 1 -lt $receiverLoops.Count) {
-            $receiverLoops[$loopIndex + 1].Index
-        } else {
-            $text.Length
-        }
-        $loopBody = $text.Substring($bodyStart, $bodyEnd - $bodyStart)
-        if ($loopBody -notmatch 'table\.remove\s*\(\s*weapons\s*,') { continue }
-
-        $careers = @()
-        foreach ($careerMatch in [regex]::Matches($loop.Groups[1].Value, '"([^"]+)"')) {
-            $careers += $careerMatch.Groups[1].Value
-        }
-        $removedKeys = @()
-        foreach ($keyMatch in [regex]::Matches($loopBody, 'weapons\s*\[\s*i\s*\]\s*==\s*"([^"]+)"')) {
-            $removedKeys += $keyMatch.Groups[1].Value
-        }
-        foreach ($career in $careers) {
-            if (-not $map.ContainsKey($career)) { continue }
-            $map[$career] = @($map[$career] | Where-Object { $removedKeys -notcontains $_ })
-        }
-    }
-    return $map
+    return Get-VtWtUnlockMap -UnlockPath $path
 }
 
 # ---------------------------------------------------------------------------
@@ -460,6 +391,7 @@ function Invoke-SelfTest {
     try {
         $docPath = Join-Path $tmp "DECISIONS.md"
         $mapPath = Join-Path $tmp "unlock.lua"
+        $registryPath = Join-Path $tmp "wt_documented_keys.lua"
         $dataPath = Join-Path $tmp "data.lua"
         $locPath = Join-Path $tmp "loc.lua"
 
@@ -481,23 +413,45 @@ function Invoke-SelfTest {
 | Planted Skip (`dr_planted_skip`) | something |
 '@ | Set-Content -Path $docPath -Encoding UTF8
 
-        # Map: dr_planted_skip present (LEAK), dr_planted_shipped absent
-        # (REGRESSION), and dr_planted_removed starts in the literal table but is
-        # deleted by the same post-table pattern used by wt_unlock_data.lua.
         @'
+return {
+    PLANTED_SKIP = "dr_planted_skip",
+    PLANTED_REMOVED = "dr_planted_removed",
+    PLANTED_ADDED = "es_planted_added",
+}
+'@ | Set-Content -Path $registryPath -Encoding UTF8
+
+        # Map: the symbolic dr_planted_skip is present (LEAK),
+        # dr_planted_shipped is absent (REGRESSION), a raw same-character key
+        # proves literal rollout compatibility, and symbolic dr_planted_removed
+        # is deleted by the exact post-table pattern used by wt_unlock_data.lua.
+        @'
+local W = require("wt_documented_keys")
+
 local DATA = {
     weapon_unlock_map = {
-        es_mercenary      = { "dr_planted_skip", "dr_planted_removed" },
-        es_huntsman       = { "dr_planted_skip", "dr_planted_removed" },
-        es_knight         = { "dr_planted_skip", "dr_planted_removed" },
-        es_questingknight = { "dr_planted_skip", "dr_planted_removed" },
+        es_mercenary      = { W.PLANTED_SKIP, "es_native_literal", W.PLANTED_REMOVED, W.PLANTED_ADDED },
+        es_huntsman       = { W.PLANTED_SKIP, "es_native_literal", W.PLANTED_REMOVED },
+        es_knight         = { W.PLANTED_SKIP, "es_native_literal", W.PLANTED_REMOVED },
+        es_questingknight = { W.PLANTED_SKIP, "es_native_literal", W.PLANTED_REMOVED },
     },
 }
+
+-- W.NOT_DECLARED is a comment and must not become a parser error.
+
+for _, career in ipairs({ "es_mercenary", "es_huntsman", "es_knight", "es_questingknight" }) do
+    local weapons = DATA.weapon_unlock_map[career]
+    local found = false
+    for _, weapon_key in ipairs(weapons) do
+        if weapon_key == W.PLANTED_ADDED then found = true; break end
+    end
+    if not found then weapons[#weapons + 1] = W.PLANTED_ADDED end
+end
 
 for _, career in ipairs({ "es_mercenary", "es_huntsman", "es_knight", "es_questingknight" }) do
     local weapons = DATA.weapon_unlock_map[career]
     for i = #weapons, 1, -1 do
-        if weapons[i] == "dr_planted_removed" then
+        if weapons[i] == W.PLANTED_REMOVED then
             table.remove(weapons, i)
         end
     end
@@ -513,6 +467,9 @@ return DATA
         $regHit = $result.Regressions | Where-Object { $_.Key -eq "dr_planted_shipped" }
         $leakHit = $result.Leaks | Where-Object { $_.Key -eq "dr_planted_skip" }
         $removedOrphan = $result.Orphans | Where-Object { $_.Key -eq "dr_planted_removed" }
+        $resolvedRows = @($result.UnlockMap.Keys | Where-Object {
+            (@($result.UnlockMap[$_]) -join ',') -eq 'dr_planted_skip,es_native_literal,es_planted_added'
+        })
 
         $pass = $true
         if ($regHit) { Write-Host "  PASS: REGRESSION fired for planted shipped-but-missing key (dr_planted_shipped)" -ForegroundColor Green }
@@ -523,6 +480,39 @@ return DATA
 
         if (-not $removedOrphan) { Write-Host "  PASS: post-table removal excluded dr_planted_removed from live-map orphans" -ForegroundColor Green }
         else { Write-Host "  FAIL: post-table removal left dr_planted_removed as an orphan" -ForegroundColor Red; $pass = $false }
+
+        if ($resolvedRows.Count -eq 4) { Write-Host "  PASS: symbolic/raw lists preserve order across idempotent additions and removals" -ForegroundColor Green }
+        else { Write-Host "  FAIL: symbolic/raw mutation resolution produced $($resolvedRows.Count)/4 expected career rows" -ForegroundColor Red; $pass = $false }
+
+        $unknownMapPath = Join-Path $tmp "unknown.lua"
+        @'
+local W = require("wt_documented_keys")
+return { weapon_unlock_map = { es_mercenary = { W.NOT_DECLARED } } }
+'@ | Set-Content -Path $unknownMapPath -Encoding UTF8
+        $unknownFailedClosed = $false
+        try {
+            $null = Get-VtWtUnlockMap -UnlockPath $unknownMapPath -RegistryPath $registryPath
+        } catch {
+            $unknownFailedClosed = $_.Exception.Message -match 'W\.NOT_DECLARED' -and $_.Exception.Message -match 'unknown\.lua'
+        }
+        if ($unknownFailedClosed) { Write-Host "  PASS: unknown symbolic key fails closed with symbol and source context" -ForegroundColor Green }
+        else { Write-Host "  FAIL: unknown symbolic key did not fail closed with context" -ForegroundColor Red; $pass = $false }
+
+        $missingRegistryDir = Join-Path $tmp "missing_registry"
+        New-Item -ItemType Directory -Path $missingRegistryDir -Force | Out-Null
+        $missingRegistryMap = Join-Path $missingRegistryDir "unlock.lua"
+        @'
+local W = require("wt_documented_keys")
+return { weapon_unlock_map = { es_mercenary = { W.PLANTED_SKIP } } }
+'@ | Set-Content -Path $missingRegistryMap -Encoding UTF8
+        $missingRegistryFailedClosed = $false
+        try {
+            $null = Get-VtWtUnlockMap -UnlockPath $missingRegistryMap
+        } catch {
+            $missingRegistryFailedClosed = $_.Exception.Message -match 'registry not found' -and $_.Exception.Message -match 'wt_documented_keys\.lua'
+        }
+        if ($missingRegistryFailedClosed) { Write-Host "  PASS: symbolic map without its registry fails closed" -ForegroundColor Green }
+        else { Write-Host "  FAIL: symbolic map without its registry did not fail closed" -ForegroundColor Red; $pass = $false }
 
         if ($pass) { Write-Host "[self-test] OK" -ForegroundColor Green; return 0 }
         else { Write-Host "[self-test] FAILED" -ForegroundColor Red; return 2 }
@@ -727,10 +717,11 @@ $repoRoot = (Resolve-Path $RepoRoot).Path
 $wtBase = Join-Path $repoRoot "weapon_tweaker"
 $docPath = Join-Path $wtBase "CROSS_CHARACTER_PORT_DECISIONS.md"
 $mapPath = Join-Path $wtBase "scripts\mods\weapon_tweaker\wt_unlock_data.lua"
+$registryPath = Join-Path $wtBase "scripts\mods\weapon_tweaker\wt_documented_keys.lua"
 $dataPath = Join-Path $wtBase "scripts\mods\weapon_tweaker\weapon_tweaker_data.lua"
 $locPath = Join-Path $wtBase "scripts\mods\weapon_tweaker\weapon_tweaker_localization.lua"
 
-foreach ($p in @($docPath, $mapPath, $dataPath, $locPath)) {
+foreach ($p in @($docPath, $mapPath, $registryPath, $dataPath, $locPath)) {
     if (-not (Test-Path $p)) {
         Write-Host "[check_decisions_wired] FATAL: required file not found: $p" -ForegroundColor Red
         exit 2
@@ -741,7 +732,12 @@ foreach ($p in @($docPath, $mapPath, $dataPath, $locPath)) {
 # is missing/stale; never changes the exit code below.
 Test-CheckerConsumedFreshness -Path $docPath
 
-$r = Invoke-DecisionsCheck -DocPath $docPath -MapPath $mapPath -DataPath $dataPath -LocPath $locPath -Quiet:$Quiet
+try {
+    $r = Invoke-DecisionsCheck -DocPath $docPath -MapPath $mapPath -DataPath $dataPath -LocPath $locPath -Quiet:$Quiet
+} catch {
+    Write-Host "[check_decisions_wired] FATAL: $($_.Exception.Message)" -ForegroundColor Red
+    exit 2
+}
 
 # ---- Report ----
 Write-Host ""

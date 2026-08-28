@@ -1,5 +1,17 @@
 # Weapon Tweaker Changelog
 
+## 0.12.311-beta (2026-08-27) -- documented weapon-key registry (#159) [not-started]
+
+- Replaces repeated authored weapon-item literals in availability and routing
+  data with one 83-entry symbolic registry. Each declaration keeps its current
+  player-facing weapon name adjacent to the exact engine key.
+- Preserves the evaluated unlock maps, conditional CWV handoffs, and routing
+  tables while making undocumented additions fail the offline source contract.
+- Adds `test_wt_documented_keys` coverage for public/Dev byte parity, complete
+  unlock-map resolution, current localization vocabulary, and both bare and
+  quoted raw-key leakage. This is an autonomous source-contract change with no
+  new in-game behavior or live-test requirement.
+
 ## 0.12.310-beta (2026-08-25) -- paired Longbow diagnostic retirement baseline (#499) [not-started]
 
 - Removes the obsolete global fallback for the consumed friends-only Longbow
