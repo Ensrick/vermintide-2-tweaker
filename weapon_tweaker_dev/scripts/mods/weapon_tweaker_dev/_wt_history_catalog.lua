@@ -1,39 +1,186 @@
--- Canonical cached loader for issue #1436's bounded Patch 5.2 catalog.
+-- Canonical cached loader and strict composer for issue #1436 catalogs.
 --
--- The generated catalog is pure data and may be requested by the VMF data,
--- localization, and runtime chunks.  mod:dofile itself is not a singleton, so
--- this module owns the only cache boundary and prevents the 400 KiB catalog
--- from being reconstructed three times in one Lua VM.
+-- Generated catalogs are pure data and may be requested by the VMF data,
+-- localization, and runtime chunks. mod:dofile itself is not a singleton, so
+-- this module owns the only cache boundary. Catalogs compose only when every
+-- identity axis is disjoint and their current source anchors match exactly.
 local M = {}
 
-local GENERATED_MODULE =
-    "scripts/mods/weapon_tweaker_dev/_wt_history_5_2_catalog"
+local GENERATED_MODULES = {
+    "scripts/mods/weapon_tweaker_dev/_wt_history_5_2_catalog",
+    "scripts/mods/weapon_tweaker_dev/_wt_history_6_8_catalog",
+}
+local GENERATED_MODULE = GENERATED_MODULES[1]
 
-function M.load(mod, generated_module)
+local function dense_array_length(value, label)
+    if type(value) ~= "table" then return nil, label .. " is not an array" end
+    local count, maximum = 0, 0
+    for key in pairs(value) do
+        if type(key) ~= "number" or key < 1 or key % 1 ~= 0 then
+            return nil, label .. " must be a dense array"
+        end
+        count = count + 1
+        if key > maximum then maximum = key end
+    end
+    if count ~= maximum then return nil, label .. " must be a dense array" end
+    return count
+end
+
+local function normalize_modules(generated_modules)
+    if generated_modules == nil then generated_modules = GENERATED_MODULES end
+    if type(generated_modules) == "string" then
+        generated_modules = { generated_modules }
+    end
+    if type(generated_modules) ~= "table" then
+        return nil, "generated module paths are required"
+    end
+    local count, count_error = dense_array_length(
+        generated_modules, "generated module paths")
+    if not count then return nil, count_error end
+    local modules, seen = {}, {}
+    for index = 1, count do
+        local path = rawget(generated_modules, index)
+        if type(path) ~= "string" or path == "" or seen[path] then
+            return nil, "generated module path is invalid or duplicated"
+        end
+        modules[index], seen[path] = path, true
+    end
+    if #modules == 0 then return nil, "generated module paths are empty" end
+    return modules
+end
+
+local function copy_disjoint(target, source, label)
+    if source == nil then return true end
+    if type(source) ~= "table" then return nil, label .. " is not a table" end
+    for key, value in pairs(source) do
+        if rawget(target, key) ~= nil then
+            return nil, "duplicate " .. label .. " " .. tostring(key)
+        end
+        target[key] = value
+    end
+    return true
+end
+
+function M.merge(catalogs)
+    local catalog_count, catalog_count_error = dense_array_length(
+        catalogs, "history catalogs")
+    if not catalog_count then return nil, catalog_count_error end
+    if catalog_count == 0 then return nil, "history catalogs are required" end
+    local first = catalogs[1]
+    if type(first) ~= "table" or type(first.current_source) ~= "table" then
+        return nil, "history catalog has an unsupported shape"
+    end
+    local merged = {
+        catalog_id = "wt_history_composite_v1",
+        current_id = "current",
+        current_source = first.current_source,
+        derived_profiles = {},
+        families = {},
+        generation = { catalogs = {} },
+        profile_specs = {},
+        schema = 2,
+        states = {},
+    }
+    local catalog_ids, family_ids, setting_ids, template_ids = {}, {}, {}, {}
+    for catalog_index = 1, catalog_count do
+        local catalog = catalogs[catalog_index]
+        if type(catalog) ~= "table" or catalog.schema ~= 2
+                or catalog.current_id ~= "current"
+                or type(catalog.catalog_id) ~= "string"
+                or type(catalog.current_source) ~= "table"
+                or catalog.current_source.revision ~= first.current_source.revision
+                or catalog.current_source.display_name ~= first.current_source.display_name
+                or catalog.current_source.label ~= first.current_source.label
+                or type(catalog.families) ~= "table" then
+            return nil, "history catalog has an unsupported or mismatched shape"
+        end
+        if catalog_ids[catalog.catalog_id] then
+            return nil, "duplicate catalog id " .. catalog.catalog_id
+        end
+        catalog_ids[catalog.catalog_id] = true
+        merged.generation.catalogs[catalog_index] = catalog.catalog_id
+
+        local ok, merge_error = copy_disjoint(
+            merged.states, catalog.states, "history state")
+        if not ok then return nil, merge_error end
+        ok, merge_error = copy_disjoint(
+            merged.profile_specs, catalog.profile_specs, "profile state")
+        if not ok then return nil, merge_error end
+        ok, merge_error = copy_disjoint(
+            merged.derived_profiles, catalog.derived_profiles,
+            "derived-profile state")
+        if not ok then return nil, merge_error end
+
+        local family_count, family_count_error = dense_array_length(
+            catalog.families, "history families")
+        if not family_count then return nil, family_count_error end
+        for family_index = 1, family_count do
+            local family = catalog.families[family_index]
+            if type(family) ~= "table" or type(family.id) ~= "string"
+                    or type(family.setting_id) ~= "string"
+                    or type(family.templates) ~= "table" then
+                return nil, "history family identity is incomplete"
+            end
+            if family_ids[family.id] then
+                return nil, "duplicate history family " .. family.id
+            end
+            if setting_ids[family.setting_id] then
+                return nil, "duplicate history setting " .. family.setting_id
+            end
+            family_ids[family.id], setting_ids[family.setting_id] = true, true
+            local template_count, template_count_error = dense_array_length(
+                family.templates, "history family templates")
+            if not template_count then return nil, template_count_error end
+            for template_index = 1, template_count do
+                local template = family.templates[template_index]
+                if type(template) ~= "string" or template == ""
+                        or template_ids[template] then
+                    return nil, "duplicate or invalid history template "
+                        .. tostring(template)
+                end
+                template_ids[template] = true
+            end
+            merged.families[#merged.families + 1] = family
+        end
+    end
+    return merged
+end
+
+function M.load(mod, generated_modules)
     if type(mod) ~= "table" or type(mod.dofile) ~= "function" then
         return nil, "mod:dofile is required"
     end
-    generated_module = generated_module or GENERATED_MODULE
-    if type(generated_module) ~= "string" or generated_module == "" then
-        return nil, "generated module path is required"
-    end
+    local modules, modules_error = normalize_modules(generated_modules)
+    if not modules then return nil, modules_error end
+    local cache_key = table.concat(modules, "\31")
 
     local cache = rawget(mod, "_wt_history_catalog_schema2_cache")
-    if type(cache) == "table" and cache.module == generated_module then
+    if type(cache) == "table" and cache.key == cache_key then
         return cache.catalog
     end
 
-    local ok, catalog = pcall(mod.dofile, mod, generated_module)
-    if not ok or type(catalog) ~= "table" then
-        return nil, "history catalog load failed: " .. tostring(catalog)
+    local catalogs = {}
+    for index, generated_module in ipairs(modules) do
+        local ok, catalog = pcall(mod.dofile, mod, generated_module)
+        if not ok or type(catalog) ~= "table" then
+            return nil, "history catalog load failed: " .. tostring(catalog)
+        end
+        catalogs[index] = catalog
     end
+    local catalog, merge_error
+    if #catalogs == 1 then
+        catalog = catalogs[1]
+    else
+        catalog, merge_error = M.merge(catalogs)
+    end
+    if not catalog then return nil, merge_error end
     if catalog.schema ~= 2 or catalog.current_id ~= "current"
             or type(catalog.families) ~= "table" then
         return nil, "history catalog has an unsupported shape"
     end
     mod._wt_history_catalog_schema2_cache = {
         catalog = catalog,
-        module = generated_module,
+        key = cache_key,
     }
     return catalog
 end
@@ -137,5 +284,6 @@ function M.build_localization(catalog)
 end
 
 M.GENERATED_MODULE = GENERATED_MODULE
+M.GENERATED_MODULES = GENERATED_MODULES
 
 return M

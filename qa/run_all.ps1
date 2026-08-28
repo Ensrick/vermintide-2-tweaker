@@ -345,6 +345,10 @@ Run-Check "bundle_output_set_host_matrix" { & (Join-Path $here "run_bundle_outpu
 # Issue #1436: prove the offline evidence ledger and generated Patch 5.2
 # catalog are pinned; regenerate byte-exactly when the source checkout exists.
 Run-Check "check_wt_history_reproducibility" { & (Join-Path $here "check_wt_history_reproducibility.ps1") -Quiet:$Quiet }
+# Issue #1436: independently select Patch 6.8's Kerillian Greatsword change
+# from the adjacent 6.7.2 -> 6.8.1 boundary, rehydrate its current guard, and
+# reproduce both evidence lanes and the generated catalog from immutable source.
+Run-Check "check_wt_history_patch_6_8_reproducibility" { & (Join-Path $here "check_wt_history_patch_6_8_reproducibility.ps1") -Quiet:$Quiet }
 Run-Check "check_localization" { & (Join-Path $here "check_localization.ps1") -Quiet:$Quiet }
 # Player-facing lifecycle/issue metadata is forbidden in every active stream.
 # This is a blocking repository-wide gate; GitHub labels/changelogs remain the
