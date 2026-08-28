@@ -22,6 +22,22 @@ if (-not (Test-Path -LiteralPath $recoveryRecordHelpers -PathType Leaf)) {
 }
 . $recoveryRecordHelpers
 
+function ConvertTo-VtReleaseManifestJson {
+    param([Parameter(Mandatory = $true)]$Manifest)
+
+    # This is the sole release-manifest serializer. -Compress avoids the
+    # host-specific indentation/newline grammar used by Windows PowerShell 5.1
+    # and PowerShell 7 while preserving ordered producer fields exactly.
+    return [string]($Manifest | ConvertTo-Json -Depth 12 -Compress)
+}
+
+function ConvertTo-VtReleaseManifestBytes {
+    param([Parameter(Mandatory = $true)]$Manifest)
+
+    $encoding = New-Object System.Text.UTF8Encoding($false, $true)
+    return ,([byte[]]$encoding.GetBytes((ConvertTo-VtReleaseManifestJson -Manifest $Manifest)))
+}
+
 function Get-ReleaseSourceCommit {
     param([Parameter(Mandatory = $true)][string]$RepoRoot)
 

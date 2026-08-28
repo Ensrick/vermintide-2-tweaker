@@ -5,11 +5,121 @@
 # ASCII only for Windows PowerShell 5.1 compatibility.
 
 [CmdletBinding()]
-param([switch]$SelfTest)
+param(
+    [switch]$SelfTest,
+    [switch]$UpdateFixtures,
+    [switch]$SelfTestPresentEmptyEnvironment
+)
 
 $ErrorActionPreference = 'Stop'
 $repoRoot = Split-Path $PSScriptRoot -Parent
 . (Join-Path $repoRoot 'tools\publish-release\release-manifest.ps1')
+$producerFixtureRoot = Join-Path $repoRoot 'qa\fixtures\recovery_manifests'
+$gitLocalEnvironmentNames = @(
+    'GIT_ALTERNATE_OBJECT_DIRECTORIES', 'GIT_COMMON_DIR', 'GIT_CONFIG',
+    'GIT_CONFIG_COUNT', 'GIT_CONFIG_PARAMETERS', 'GIT_DIR', 'GIT_GRAFT_FILE',
+    'GIT_IMPLICIT_WORK_TREE', 'GIT_INDEX_FILE', 'GIT_NAMESPACE',
+    'GIT_NO_REPLACE_OBJECTS', 'GIT_OBJECT_DIRECTORY', 'GIT_PREFIX',
+    'GIT_QUARANTINE_PATH', 'GIT_REPLACE_REF_BASE', 'GIT_SHALLOW_FILE',
+    'GIT_WORK_TREE')
+
+# Windows PowerShell 5.1's Env: provider and .NET Framework environment setter
+# both collapse a present-empty process variable into an absent variable. Use
+# the native API so fixture isolation can preserve all three caller states:
+# absent, present-empty, and present-nonempty.
+if (-not ('Vt2ReleaseRecoveryProcessEnvironment' -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+
+public static class Vt2ReleaseRecoveryProcessEnvironment
+{
+    [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetEnvironmentVariableW(string name, string value);
+
+    public static void SetValue(string name, string value)
+    {
+        if (!SetEnvironmentVariableW(name, value ?? String.Empty))
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+    }
+
+    public static void Remove(string name)
+    {
+        if (!SetEnvironmentVariableW(name, null))
+            throw new Win32Exception(Marshal.GetLastWin32Error());
+    }
+}
+'@
+}
+
+function Get-ProcessEnvironmentState {
+    param([Parameter(Mandatory = $true)][string]$Name)
+    $environment = [Environment]::GetEnvironmentVariables('Process')
+    $exists = [bool]$environment.Contains($Name)
+    return [pscustomobject]@{
+        Exists = $exists
+        Value = if ($exists) { [string]$environment[$Name] } else { $null }
+    }
+}
+
+function Set-ProcessEnvironmentValue {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string]$Value
+    )
+    [Vt2ReleaseRecoveryProcessEnvironment]::SetValue($Name, $Value)
+}
+
+function Remove-ProcessEnvironmentValue {
+    param([Parameter(Mandatory = $true)][string]$Name)
+    [Vt2ReleaseRecoveryProcessEnvironment]::Remove($Name)
+}
+
+function Restore-ProcessEnvironmentState {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)]$State
+    )
+    if ([bool]$State.Exists) {
+        Set-ProcessEnvironmentValue -Name $Name -Value ([string]$State.Value)
+    } else {
+        Remove-ProcessEnvironmentValue -Name $Name
+    }
+}
+
+function Restore-ProcessEnvironmentStates {
+    param(
+        [Parameter(Mandatory = $true)][string[]]$Names,
+        [Parameter(Mandatory = $true)]$States
+    )
+    $restoreErrors = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($name in $Names) {
+        try {
+            Restore-ProcessEnvironmentState -Name $name -State $States[$name]
+        }
+        catch {
+            $restoreErrors.Add("$name`: $($_.Exception.Message)")
+        }
+    }
+    if ($restoreErrors.Count -gt 0) {
+        throw "process environment restoration failed: $($restoreErrors -join ' | ')"
+    }
+}
+
+function Test-ProcessEnvironmentStateEqual {
+    param(
+        [Parameter(Mandatory = $true)][string]$Name,
+        [Parameter(Mandatory = $true)]$Expected
+    )
+    $actual = Get-ProcessEnvironmentState -Name $Name
+    if ([bool]$actual.Exists -ne [bool]$Expected.Exists) { return $false }
+    if ($actual.Exists -and [string]$actual.Value -cne [string]$Expected.Value) {
+        return $false
+    }
+    return $true
+}
 
 function Get-TestSha256 {
     param([Parameter(Mandatory = $true)][byte[]]$Bytes)
@@ -37,17 +147,53 @@ function Invoke-TestGit {
         [Parameter(Mandatory = $true)][string]$FixtureRoot,
         [Parameter(Mandatory = $true)][string[]]$Arguments
     )
+    $savedEnvironment = @{}
+    foreach ($name in $gitLocalEnvironmentNames) {
+        $savedEnvironment[$name] = Get-ProcessEnvironmentState -Name $name
+    }
     $previousPreference = $ErrorActionPreference
-    $ErrorActionPreference = 'Continue'
     try {
+        foreach ($name in $gitLocalEnvironmentNames) {
+            Remove-ProcessEnvironmentValue -Name $name
+        }
+        $ErrorActionPreference = 'Continue'
         $lines = @(& git -C $FixtureRoot @Arguments 2>&1 | ForEach-Object { $_.ToString() })
         $exitCode = $LASTEXITCODE
     }
-    finally { $ErrorActionPreference = $previousPreference }
+    finally {
+        $ErrorActionPreference = $previousPreference
+        Restore-ProcessEnvironmentStates `
+            -Names $gitLocalEnvironmentNames -States $savedEnvironment
+    }
     if ($exitCode -ne 0) {
         throw "fixture git $($Arguments -join ' ') failed ($exitCode): $($lines -join ' | ')"
     }
     return ,([string[]]$lines)
+}
+
+function Test-ByteArrayEqual {
+    param(
+        [Parameter(Mandatory = $true)][byte[]]$Left,
+        [Parameter(Mandatory = $true)][byte[]]$Right
+    )
+    if ($Left.Length -ne $Right.Length) { return $false }
+    for ($index = 0; $index -lt $Left.Length; $index++) {
+        if ($Left[$index] -ne $Right[$index]) { return $false }
+    }
+    return $true
+}
+
+function Get-FirstByteDifferenceIndex {
+    param(
+        [Parameter(Mandatory = $true)][byte[]]$Left,
+        [Parameter(Mandatory = $true)][byte[]]$Right
+    )
+    $limit = [Math]::Min($Left.Length, $Right.Length)
+    for ($index = 0; $index -lt $limit; $index++) {
+        if ($Left[$index] -ne $Right[$index]) { return $index }
+    }
+    if ($Left.Length -ne $Right.Length) { return $limit }
+    return -1
 }
 
 function Copy-TestObject {
@@ -76,10 +222,35 @@ function Remove-TestDirectory {
 }
 
 function Invoke-SelfTest {
+    param([switch]$WriteFixtures)
+
     $fixture = Join-Path ([System.IO.Path]::GetTempPath()) `
         ('vt2-release-recovery-' + [guid]::NewGuid().ToString('N'))
     [System.IO.Directory]::CreateDirectory($fixture) | Out-Null
     $failures = [System.Collections.Generic.List[string]]::new()
+    $fixedCommitDate = '2026-08-26T00:00:00Z'
+    $fixedGitEnvironmentValues = [ordered]@{
+        GIT_AUTHOR_DATE = $fixedCommitDate
+        GIT_COMMITTER_DATE = $fixedCommitDate
+        GIT_AUTHOR_NAME = 'Recovery Test'
+        GIT_AUTHOR_EMAIL = 'recovery@example.invalid'
+        GIT_COMMITTER_NAME = 'Recovery Test'
+        GIT_COMMITTER_EMAIL = 'recovery@example.invalid'
+    }
+    $hostileIdentityValues = [ordered]@{
+        GIT_AUTHOR_NAME = 'Polluted Fixture Author'
+        GIT_AUTHOR_EMAIL = 'polluted-author@example.invalid'
+        GIT_COMMITTER_NAME = 'Polluted Fixture Committer'
+        GIT_COMMITTER_EMAIL = 'polluted-committer@example.invalid'
+    }
+    $controlledGitEnvironmentNames = @($fixedGitEnvironmentValues.Keys) + @('GIT_DEFAULT_HASH')
+    $savedCallerGitEnvironment = @{}
+    foreach ($name in $controlledGitEnvironmentNames) {
+        $savedCallerGitEnvironment[$name] = Get-ProcessEnvironmentState -Name $name
+    }
+    $savedGitDeterminismEnvironment = @{}
+    $determinismSnapshotReady = $false
+    $pollutedEnvironmentRestoredExactly = $false
 
     function Assert([bool]$Condition, [string]$Description) {
         if ($Condition) { Write-Host "  [PASS] $Description" -ForegroundColor Green }
@@ -90,6 +261,36 @@ function Invoke-SelfTest {
     }
 
     try {
+        # Plant process-level values that would override repository config and
+        # Git's default object format. Setup is inside the restoration
+        # transaction so a native setter failure cannot strand a partial state.
+        foreach ($name in $hostileIdentityValues.Keys) {
+            Set-ProcessEnvironmentValue `
+                -Name $name -Value ([string]$hostileIdentityValues[$name])
+        }
+        Set-ProcessEnvironmentValue -Name 'GIT_DEFAULT_HASH' -Value 'sha256'
+        $pollutedEnvironment = [Environment]::GetEnvironmentVariables('Process')
+        $pollutedIdentityApplied = $true
+        foreach ($name in $hostileIdentityValues.Keys) {
+            if (-not $pollutedEnvironment.Contains($name) -or
+                [string]$pollutedEnvironment[$name] -cne [string]$hostileIdentityValues[$name]) {
+                $pollutedIdentityApplied = $false
+            }
+        }
+        $hostileDefaultHashApplied = (
+            $pollutedEnvironment.Contains('GIT_DEFAULT_HASH') -and
+            [string]$pollutedEnvironment['GIT_DEFAULT_HASH'] -ceq 'sha256')
+        foreach ($name in $controlledGitEnvironmentNames) {
+            $savedGitDeterminismEnvironment[$name] = `
+                Get-ProcessEnvironmentState -Name $name
+        }
+        $determinismSnapshotReady = $true
+
+        foreach ($name in $fixedGitEnvironmentValues.Keys) {
+            Set-ProcessEnvironmentValue `
+                -Name $name -Value ([string]$fixedGitEnvironmentValues[$name])
+        }
+
         $mod = 'modx'
         $modId = 'mx'
         $workshopId = '1234567890'
@@ -138,14 +339,64 @@ return MOD_VERSION
             (Join-Path $fixture "modx\bundleV2\$descriptorName"),
             [System.IO.File]::ReadAllBytes((Join-Path $fixture 'modx\modx.mod')))
 
-        $null = & git init $fixture 2>&1
-        if ($LASTEXITCODE -ne 0) { throw 'fixture git init failed' }
+        $null = Invoke-TestGit -FixtureRoot $fixture -Arguments @(
+            '-c', 'init.templateDir=', 'init', '--quiet', '--object-format=sha1')
+        $fixtureObjectFormat = [string](@(Invoke-TestGit `
+            -FixtureRoot $fixture `
+            -Arguments @('rev-parse', '--show-object-format'))[-1]).Trim()
+        Assert (
+            $hostileDefaultHashApplied -and $fixtureObjectFormat -ceq 'sha1'
+        ) 'fixture pins SHA-1 despite hostile GIT_DEFAULT_HASH=sha256'
+        $gitEnvironmentTestNames = @(
+            'GIT_CONFIG_COUNT', 'GIT_NAMESPACE', 'GIT_GRAFT_FILE')
+        $savedGitEnvironmentTestState = @{}
+        foreach ($name in $gitEnvironmentTestNames) {
+            $savedGitEnvironmentTestState[$name] = `
+                Get-ProcessEnvironmentState -Name $name
+        }
+        try {
+            foreach ($name in $gitEnvironmentTestNames) {
+                Remove-ProcessEnvironmentValue -Name $name
+            }
+            Set-ProcessEnvironmentValue `
+                -Name 'GIT_CONFIG_COUNT' -Value 'not-an-integer'
+            Set-ProcessEnvironmentValue -Name 'GIT_NAMESPACE' -Value ''
+            $insideWorkTree = [string](@(Invoke-TestGit `
+                -FixtureRoot $fixture `
+                -Arguments @('rev-parse', '--is-inside-work-tree'))[-1]).Trim()
+            $postGitEnvironment = [Environment]::GetEnvironmentVariables('Process')
+            Assert (
+                $insideWorkTree -ceq 'true' -and
+                $postGitEnvironment.Contains('GIT_CONFIG_COUNT') -and
+                [string]$postGitEnvironment['GIT_CONFIG_COUNT'] -ceq 'not-an-integer' -and
+                $postGitEnvironment.Contains('GIT_NAMESPACE') -and
+                [string]$postGitEnvironment['GIT_NAMESPACE'] -ceq '' -and
+                -not $postGitEnvironment.Contains('GIT_GRAFT_FILE')
+            ) 'fixture Git restores exact nonempty, present-empty, and absent states'
+        }
+        finally {
+            Restore-ProcessEnvironmentStates `
+                -Names $gitEnvironmentTestNames `
+                -States $savedGitEnvironmentTestState
+        }
+        $emptyHooksPath = Join-Path $fixture '.git\vt2-empty-hooks'
+        [System.IO.Directory]::CreateDirectory($emptyHooksPath) | Out-Null
+        $null = Invoke-TestGit -FixtureRoot $fixture -Arguments @(
+            'config', 'core.hooksPath', $emptyHooksPath)
         $null = Invoke-TestGit -FixtureRoot $fixture -Arguments @('config', 'user.name', 'Recovery Test')
         $null = Invoke-TestGit -FixtureRoot $fixture -Arguments @('config', 'user.email', 'recovery@example.invalid')
         $null = Invoke-TestGit -FixtureRoot $fixture -Arguments @('config', 'commit.gpgsign', 'false')
+        $null = Invoke-TestGit -FixtureRoot $fixture -Arguments @('config', 'core.autocrlf', 'false')
         $null = Invoke-TestGit -FixtureRoot $fixture -Arguments @('add', '--all')
         $null = Invoke-TestGit -FixtureRoot $fixture -Arguments @('commit', '-m', 'fixture source')
         $commitWithoutReceipt = [string](@(Invoke-TestGit -FixtureRoot $fixture -Arguments @('rev-parse', 'HEAD'))[-1]).Trim()
+        $commitIdentity = [string](@(Invoke-TestGit `
+            -FixtureRoot $fixture `
+            -Arguments @('show', '-s', '--format=%an|%ae|%cn|%ce', 'HEAD'))[-1]).Trim()
+        Assert (
+            $pollutedIdentityApplied -and
+            $commitIdentity -ceq 'Recovery Test|recovery@example.invalid|Recovery Test|recovery@example.invalid'
+        ) 'polluted process identity cannot alter deterministic fixture commit metadata'
 
         $snapshotWithoutReceipt = Get-VtPublicationSnapshot `
             -RepoRoot $fixture -SourceCommit $commitWithoutReceipt -Mod $mod
@@ -218,14 +469,16 @@ return MOD_VERSION
                 mode = 'hosted_qa'; source_commit = $sourceCommit
                 checked_at_utc = '2026-08-26T00:00:00Z'; default_branch = 'master'
                 default_branch_commit = $sourceCommit; merged_pr_number = 1430
-                qa_check = 'qa-gate'; qa_check_url = 'https://example.invalid/1430'
+                qa_check = 'qa-gate'
+                qa_check_url = 'https://github.com/Ensrick/vermintide-2-tweaker/actions/runs/1430'
                 qa_completed_at_utc = '2026-08-26T00:00:00Z'
             }
         }
         $manifest = [ordered]@{
             manifest_schema = 2; release_tag = 'mods-test'
-            published_at = '2026-08-26T00:00:00Z'; mods = @($entry)
+            published_at = '2026-08-26T00:00:00.0000000Z'; mods = @($entry)
         }
+        $trackedManifestBytes = ConvertTo-VtReleaseManifestBytes -Manifest $manifest
 
         $recordVerdict = Test-VtReleaseRecoveryRecord `
             -Record $record -ManifestEntry $entry -ManifestReleaseTag 'mods-test' `
@@ -416,7 +669,7 @@ return MOD_VERSION
         $legacyTrackedEntry.PSObject.Properties.Remove('recovery')
         $legacyTrackedManifest = [ordered]@{
             manifest_schema = 2; release_tag = 'mods-test'
-            published_at = '2026-08-26T00:00:00Z'; mods = @($legacyTrackedEntry)
+            published_at = '2026-08-26T00:00:00.0000000Z'; mods = @($legacyTrackedEntry)
         }
         $legacyStagedVerdict = Test-ReleaseManifest `
             -Manifest $legacyTrackedManifest -RequiredModIds @($modId)
@@ -530,8 +783,9 @@ return MOD_VERSION
         $receiptEntry.recovery = $receiptRecord
         $receiptManifest = [ordered]@{
             manifest_schema = 2; release_tag = 'mods-test'
-            published_at = '2026-08-26T00:00:00Z'; mods = @($receiptEntry)
+            published_at = '2026-08-26T00:00:00.0000000Z'; mods = @($receiptEntry)
         }
+        $receiptManifestBytes = ConvertTo-VtReleaseManifestBytes -Manifest $receiptManifest
         $receiptRecordVerdict = Test-VtReleaseRecoveryRecord `
             -Record $receiptRecord -ManifestEntry $receiptEntry `
             -ManifestReleaseTag 'mods-test' -RequireManifestReleaseTag
@@ -545,16 +799,188 @@ return MOD_VERSION
             }).Count -eq 0
         ) 'receipt authority emits the same source-exact record without fabricating output Git blobs'
 
-        if ($failures.Count -gt 0) {
-            Write-Host "[check_release_recovery_record] SELF-TEST FAILED -- $($failures.Count) case(s)" -ForegroundColor Red
-            return 2
+        $fixtureSpecifications = @(
+            [pscustomobject]@{
+                Name = 'producer-tracked-manifest.json'
+                Bytes = [byte[]]$trackedManifestBytes
+                ExpectedSha256 = 'c367667af8ddf00c08d8b78f2fb5f8b791dc6b7897109f06316835d41a527dc6'
+            },
+            [pscustomobject]@{
+                Name = 'producer-receipt-manifest.json'
+                Bytes = [byte[]]$receiptManifestBytes
+                ExpectedSha256 = '812f656096f178fecfcb59e2a74b37811b046ab187516b0df8b65cc1e43981ec'
+            }
+        )
+        if ($WriteFixtures) {
+            if ($failures.Count -gt 0) {
+                Assert $false 'refuses to update producer fixtures after an earlier contract failure'
+            } else {
+                if (-not (Test-Path -LiteralPath $producerFixtureRoot -PathType Container)) {
+                    [System.IO.Directory]::CreateDirectory($producerFixtureRoot) | Out-Null
+                }
+                foreach ($specification in $fixtureSpecifications) {
+                    $fixturePath = Join-Path $producerFixtureRoot $specification.Name
+                    [System.IO.File]::WriteAllBytes(
+                        $fixturePath,
+                        [byte[]]$specification.Bytes)
+                    Write-Host (
+                        '[check_release_recovery_record] updated {0} bytes={1} sha256={2}' -f
+                        $specification.Name,
+                        ([byte[]]$specification.Bytes).LongLength,
+                        (Get-TestSha256 -Bytes ([byte[]]$specification.Bytes)))
+                }
+            }
         }
-        Write-Host '[check_release_recovery_record] SELF-TEST OK' -ForegroundColor Green
-        return 0
+        foreach ($specification in $fixtureSpecifications) {
+            $fixturePath = Join-Path $producerFixtureRoot $specification.Name
+            $fixtureExists = Test-Path -LiteralPath $fixturePath -PathType Leaf
+            Assert $fixtureExists "checked-in producer fixture exists: $($specification.Name)"
+            if (-not $fixtureExists) { continue }
+
+            $generatedBytes = [byte[]]$specification.Bytes
+            $checkedInBytes = [System.IO.File]::ReadAllBytes($fixturePath)
+            $bytesMatch = Test-ByteArrayEqual -Left $generatedBytes -Right $checkedInBytes
+            Assert $bytesMatch `
+                "producer fixture is byte-exact: $($specification.Name)"
+            if (-not $bytesMatch) {
+                $differenceIndex = Get-FirstByteDifferenceIndex `
+                    -Left $generatedBytes -Right $checkedInBytes
+                Write-Host (
+                    '[check_release_recovery_record] mismatch {0} generated_bytes={1} generated_sha256={2} checked_bytes={3} first_difference={4}' -f
+                    $specification.Name,
+                    $generatedBytes.LongLength,
+                    (Get-TestSha256 -Bytes $generatedBytes),
+                    $checkedInBytes.LongLength,
+                    $differenceIndex) -ForegroundColor Red
+            }
+            $checkedInSha256 = Get-TestSha256 -Bytes $checkedInBytes
+            Assert ($checkedInSha256 -ceq [string]$specification.ExpectedSha256) `
+                "producer fixture hash is frozen: $($specification.Name)"
+            Write-Host (
+                '[check_release_recovery_record] fixture {0} bytes={1} sha256={2}' -f
+                $specification.Name,
+                $checkedInBytes.LongLength,
+                $checkedInSha256)
+        }
+
     }
-    finally { Remove-TestDirectory -Path $fixture }
+    finally {
+        $determinismRestoreException = $null
+        if ($determinismSnapshotReady) {
+            try {
+                Restore-ProcessEnvironmentStates `
+                    -Names $controlledGitEnvironmentNames `
+                    -States $savedGitDeterminismEnvironment
+                $restoredPollutedEnvironment = `
+                    [Environment]::GetEnvironmentVariables('Process')
+                $pollutedEnvironmentRestoredExactly = $true
+                foreach ($name in $controlledGitEnvironmentNames) {
+                    $existsAfter = $restoredPollutedEnvironment.Contains($name)
+                    if ($existsAfter -ne [bool]$savedGitDeterminismEnvironment[$name].Exists) {
+                        $pollutedEnvironmentRestoredExactly = $false
+                    } elseif ($existsAfter -and
+                        [string]$restoredPollutedEnvironment[$name] -cne
+                            [string]$savedGitDeterminismEnvironment[$name].Value) {
+                        $pollutedEnvironmentRestoredExactly = $false
+                    }
+                }
+            }
+            catch { $determinismRestoreException = $_.Exception }
+        }
+        try {
+            Restore-ProcessEnvironmentStates `
+                -Names $controlledGitEnvironmentNames `
+                -States $savedCallerGitEnvironment
+        }
+        finally {
+            Remove-TestDirectory -Path $fixture
+        }
+        if ($null -ne $determinismRestoreException) {
+            throw $determinismRestoreException
+        }
+    }
+
+    Assert $pollutedEnvironmentRestoredExactly `
+        'fixture restores exact polluted identity, date, and default-hash input state'
+    $restoredEnvironment = [Environment]::GetEnvironmentVariables('Process')
+    $environmentRestoredExactly = $true
+    foreach ($name in $controlledGitEnvironmentNames) {
+        $existsAfter = $restoredEnvironment.Contains($name)
+        if ($existsAfter -ne [bool]$savedCallerGitEnvironment[$name].Exists) {
+            $environmentRestoredExactly = $false
+        } elseif ($existsAfter -and
+            [string]$restoredEnvironment[$name] -cne
+                [string]$savedCallerGitEnvironment[$name].Value) {
+            $environmentRestoredExactly = $false
+        }
+    }
+    Assert $environmentRestoredExactly `
+        'self-test restores exact caller identity, date, and default-hash environment state'
+
+    if ($failures.Count -gt 0) {
+        Write-Host "[check_release_recovery_record] SELF-TEST FAILED -- $($failures.Count) case(s)" -ForegroundColor Red
+        return 2
+    }
+    Write-Host '[check_release_recovery_record] SELF-TEST OK' -ForegroundColor Green
+    return 0
 }
 
-if ($SelfTest) { exit (Invoke-SelfTest) }
+function Invoke-PresentEmptyEnvironmentSelfTest {
+    param([switch]$WriteFixtures)
+
+    $name = 'GIT_AUTHOR_EMAIL'
+    $savedState = Get-ProcessEnvironmentState -Name $name
+    $planted = $false
+    $survived = $false
+    $innerResult = 2
+    try {
+        Set-ProcessEnvironmentValue -Name $name -Value ''
+        $plantedState = Get-ProcessEnvironmentState -Name $name
+        $planted = $plantedState.Exists -and [string]$plantedState.Value -ceq ''
+        if ($planted) {
+            Write-Host '  [PASS] adversarial caller variable is present-empty before self-test' -ForegroundColor Green
+            $innerResult = Invoke-SelfTest -WriteFixtures:$WriteFixtures
+            $survivedState = Get-ProcessEnvironmentState -Name $name
+            $survived = $survivedState.Exists -and [string]$survivedState.Value -ceq ''
+        } else {
+            Write-Host '  [FAIL] native process API did not create a present-empty variable' -ForegroundColor Red
+        }
+    }
+    finally {
+        Restore-ProcessEnvironmentState -Name $name -State $savedState
+    }
+
+    if ($survived) {
+        Write-Host '  [PASS] adversarial caller present-empty state survived exact restoration' -ForegroundColor Green
+    } else {
+        Write-Host '  [FAIL] adversarial caller present-empty state did not survive exact restoration' -ForegroundColor Red
+    }
+    $wrapperRestored = Test-ProcessEnvironmentStateEqual `
+        -Name $name -Expected $savedState
+    if ($wrapperRestored) {
+        Write-Host '  [PASS] adversarial wrapper restored its original caller state' -ForegroundColor Green
+    } else {
+        Write-Host '  [FAIL] adversarial wrapper did not restore its original caller state' -ForegroundColor Red
+    }
+    if ($planted -and $survived -and $wrapperRestored -and $innerResult -eq 0) {
+        Write-Host '[check_release_recovery_record] PRESENT-EMPTY SELF-TEST OK' -ForegroundColor Green
+        return 0
+    }
+    Write-Host '[check_release_recovery_record] PRESENT-EMPTY SELF-TEST FAILED' -ForegroundColor Red
+    return 2
+}
+
+if ($UpdateFixtures -and -not $SelfTest) {
+    Write-Host '[check_release_recovery_record] ERROR -- -UpdateFixtures requires -SelfTest.' -ForegroundColor Red
+    exit 2
+}
+if ($SelfTestPresentEmptyEnvironment -and -not $SelfTest) {
+    Write-Host '[check_release_recovery_record] ERROR -- -SelfTestPresentEmptyEnvironment requires -SelfTest.' -ForegroundColor Red
+    exit 2
+}
+if ($SelfTestPresentEmptyEnvironment) {
+    exit (Invoke-PresentEmptyEnvironmentSelfTest -WriteFixtures:$UpdateFixtures)
+}
+if ($SelfTest) { exit (Invoke-SelfTest -WriteFixtures:$UpdateFixtures) }
 Write-Host '[check_release_recovery_record] ERROR -- pass -SelfTest.' -ForegroundColor Red
 exit 2
