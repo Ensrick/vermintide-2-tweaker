@@ -266,7 +266,7 @@ local cwv_style_donors = {
     cwv_combat_style_kerillian_greatsword = "two_handed_swords_wood_elf_template",
     cwv_combat_style_bretonnian_greatsword = "two_handed_swords_template_1",
     cwv_combat_style_saltz_bretonnian_greatsword = "bastard_sword_template",
-    cwv_combat_style_empire_spear_shield = "es_deus_01_template",
+    cwv_combat_style_empire_spear_shield = "es_deus_01_template", -- Kruber: Spear and Shield
     cwv_combat_style_elven_spear_shield = "one_handed_spears_shield_template",
 }
 M.cwv_style_donors = cwv_style_donors
