@@ -1,5 +1,17 @@
 # Weapon Tweaker Changelog
 
+## 0.12.313-beta (2026-08-28) -- source-exact Patch 6.8 Greatsword history (#1436) [not-started]
+
+- Adds **Game Version 6.7.2** to Kerillian's Greatsword history dropdown,
+  restoring its first Heavy Attack range from the current `1.55` to `1.45`.
+- Selects that single operation from the exact adjacent 6.7.2-to-6.8.1 source
+  boundary, then independently rehydrates its current-value guard against the
+  6.11.3 source anchor so later edits in the same template cannot leak in.
+- Composes this new one-family catalog with the Patch 5.2 catalog under strict
+  collision and source-anchor checks. The menu now covers 15 families and 183
+  guarded template/global operations; all existing ordinary tweaks still apply
+  afterward. #1436 remains open for the remaining historical patch eras.
+
 ## 0.12.312-beta (2026-08-28) -- source-exact Patch 5.2 weapon history (#1436) [not-started]
 
 - Adds a top-level **Pre-Patch Weapon Versions** group with one restart-bound

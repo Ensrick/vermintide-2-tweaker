@@ -1,5 +1,15 @@
 # Weapon Tweaker Changelog
 
+## 0.12.314-dev (2026-08-28) -- mirror source-exact Patch 6.8 Greatsword history (#1436) [not-started]
+
+- Mirrors public beta 0.12.313: Kerillian's Greatsword gains the source-exact
+  **Game Version 6.7.2** state, restoring first-heavy range `1.55` to `1.45`.
+- Carries the same adjacent-boundary selection, current-anchor rehydration,
+  independent source oracle, strict catalog composition, and fail-closed guard.
+- Preserves the friends-only availability and diagnostic overlay while keeping
+  all history runtime/menu behavior in stream parity. #1436 remains open for
+  historical patch eras outside the two shipped source-proven slices.
+
 ## 0.12.313-dev (2026-08-28) -- mirror source-exact Patch 5.2 weapon history (#1436) [not-started]
 
 - Mirrors public beta 0.12.312: a top-level **Pre-Patch Weapon Versions** group

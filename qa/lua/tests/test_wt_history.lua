@@ -216,6 +216,55 @@ local function register(H, repo_root)
         return roots, originals
     end
 
+    local function generated_catalogs(catalog_ui, root)
+        local by_path = {}
+        for _, path in ipairs(catalog_ui.GENERATED_MODULES) do
+            local filename = assert(path:match("([^/]+)$")) .. ".lua"
+            by_path[path] = assert(loadfile(root .. filename))()
+        end
+        return by_path
+    end
+
+    local function load_default_catalog(catalog_ui, root)
+        local by_path = generated_catalogs(catalog_ui, root)
+        local paths = {}
+        local mod = {}
+        function mod:dofile(path)
+            paths[#paths + 1] = path
+            return assert(by_path[path], "unexpected generated module " .. tostring(path))
+        end
+        local catalog, catalog_error = catalog_ui.load(mod)
+        return assert(catalog, catalog_error), mod, paths
+    end
+
+    local function catalog_counts(catalog)
+        local counts = {
+            families = #catalog.families,
+            family_states = 0,
+            operations = 0,
+            profiles = 0,
+            derived_profiles = 0,
+            states = 0,
+        }
+        for _ in pairs(catalog.states) do counts.states = counts.states + 1 end
+        for _, family in ipairs(catalog.families) do
+            for _, state_id in ipairs(family.state_order) do
+                counts.family_states = counts.family_states + 1
+                counts.operations = counts.operations
+                    + #family.states[state_id].operations
+            end
+        end
+        for _, specs in pairs(catalog.profile_specs) do
+            for _ in pairs(specs) do counts.profiles = counts.profiles + 1 end
+        end
+        for _, specs in pairs(catalog.derived_profiles) do
+            for _ in pairs(specs) do
+                counts.derived_profiles = counts.derived_profiles + 1
+            end
+        end
+        return counts
+    end
+
     H.test("WT #1436 generated Patch 5.2 catalog passes strict schema validation", function()
         local catalog = assert(loadfile(script_root .. "_wt_history_5_2_catalog.lua"))()
         local valid, validation_error = Policy.validate(catalog)
@@ -223,6 +272,179 @@ local function register(H, repo_root)
         H.equal(valid, true)
         H.equal(catalog.schema, 2)
         H.equal(#catalog.families, 14)
+    end)
+
+    H.test("WT #1436 generated Patch 6.8 catalog pins one exact Greatsword change", function()
+        local catalog = assert(loadfile(script_root .. "_wt_history_6_8_catalog.lua"))()
+        local valid, validation_error = Policy.validate(catalog)
+        H.equal(validation_error, nil)
+        H.equal(valid, true)
+        H.equal(catalog.schema, 2)
+        H.equal(catalog.catalog_id, "wt_history_patch_6_8_v1")
+        H.equal(catalog.current_source.revision,
+            "c5e4968b1fbb00c49884e56d640ef990a9c04dd0")
+        H.equal(#catalog.families, 1)
+        H.equal(next(catalog.profile_specs), nil)
+        H.equal(next(catalog.derived_profiles), nil)
+
+        local family = catalog.families[1]
+        H.equal(family.id, "elf_greatsword")
+        H.equal(family.setting_id, "wt_history_elf_greatsword")
+        H.deep_equal(family.templates, { "two_handed_swords_wood_elf_template" })
+        H.deep_equal(family.state_order, { "6_7_2" })
+        H.equal(catalog.states["6_7_2"].source_revision,
+            "b7c15fc61a3b34fae7d1e2de47f52198e26851ce")
+        H.equal(catalog.states["6_7_2"].official_patch_notes,
+            "https://forums.fatsharkgames.com/t/geheimnisnacht-and-the-skull-of-blosphoros-return-patch-6-8-0-hotfix-6-8-1/113884")
+
+        local state = family.states["6_7_2"]
+        H.deep_equal(state.profile_names, {})
+        H.deep_equal(state.direct_profile_names, {})
+        H.equal(#state.operations, 1)
+        local row = state.operations[1]
+        H.equal(row.root, "Weapons")
+        H.equal(row.template, "two_handed_swords_wood_elf_template")
+        H.deep_equal(row.path, {
+            "actions", "action_one", "heavy_attack_down_first", "range_mod",
+        })
+        H.equal(row.expected_current, 1.55)
+        H.equal(row.result, 1.45)
+        H.equal(row.expected_present, true)
+        H.equal(row.result_present, true)
+        H.equal(row.family_id, family.id)
+        H.equal(row.state_id, "6_7_2")
+        H.equal(row.official_change_id, "P680-ELF-GS-H1-RANGE")
+        H.equal(row.change_class, "official_weapon_balance")
+        H.equal(row.source_revision,
+            "b7c15fc61a3b34fae7d1e2de47f52198e26851ce")
+        H.equal(row.source_blob,
+            "be321d9239d7c0200102f005785587fd5d2dbf3c")
+        H.equal(row.current_source_blob,
+            "9d95add8cf0f06d1c52042e13d5f83912b7f3dd9")
+        H.equal(row.source_path,
+            "scripts/settings/equipment/weapon_templates/2h_swords_wood_elf.lua")
+        H.deep_equal(catalog.generation, {
+            adjacent_operation_count = 1,
+            global_operations = 0,
+            profile_route_count = 0,
+            unsupported_count = 0,
+        })
+    end)
+
+    H.test("WT #1436 default catalog composes Patch 5.2 and 6.8 exactly once", function()
+        local catalog, mod, paths = load_default_catalog(CatalogUI, script_root)
+        H.deep_equal(paths, CatalogUI.GENERATED_MODULES)
+        H.deep_equal(catalog.generation.catalogs, {
+            "wt_history_patch_5_2_v1", "wt_history_patch_6_8_v1",
+        })
+        H.deep_equal(catalog_counts(catalog), {
+            derived_profiles = 1,
+            families = 15,
+            family_states = 23,
+            operations = 183,
+            profiles = 13,
+            states = 4,
+        })
+        local valid, validation_error = Policy.validate(catalog)
+        H.equal(validation_error, nil)
+        H.equal(valid, true)
+
+        local cached, cached_error = CatalogUI.load(mod)
+        H.equal(cached_error, nil)
+        H.equal(cached, catalog)
+        H.equal(#paths, 2, "default composite must reuse its cache")
+    end)
+
+    H.test("WT #1436 catalog merge rejects every cross-catalog identity collision", function()
+        local patch_5_2 = assert(loadfile(script_root
+            .. "_wt_history_5_2_catalog.lua"))()
+        local patch_6_8 = assert(loadfile(script_root
+            .. "_wt_history_6_8_catalog.lua"))()
+
+        local function rejected(mutator, needle)
+            local left, right = clone(patch_5_2), clone(patch_6_8)
+            mutator(left, right)
+            local merged, merge_error = CatalogUI.merge({ left, right })
+            H.equal(merged, nil)
+            H.truthy(type(merge_error) == "string"
+                and merge_error:find(needle, 1, true) ~= nil,
+                "wrong merge rejection for " .. needle .. ": " .. tostring(merge_error))
+        end
+
+        local function rejects_catalogs(catalogs, needle)
+            local merged, merge_error = CatalogUI.merge(catalogs)
+            H.equal(merged, nil)
+            H.truthy(type(merge_error) == "string"
+                and merge_error:find(needle, 1, true) ~= nil,
+                "wrong hostile-array rejection for " .. needle .. ": "
+                    .. tostring(merge_error))
+        end
+
+        rejected(function(left, right) right.catalog_id = left.catalog_id end,
+            "duplicate catalog id")
+        rejected(function(_, right)
+            right.current_source.revision = string.rep("f", 40)
+        end, "unsupported or mismatched shape")
+        rejected(function(left, right)
+            right.states["5_1_1"] = clone(left.states["5_1_1"])
+        end, "duplicate history state")
+        rejected(function(left, right)
+            right.profile_specs["5_1_1"] = clone(left.profile_specs["5_1_1"])
+        end, "duplicate profile state")
+        rejected(function(left, right)
+            right.derived_profiles["5_1_1"] = clone(
+                left.derived_profiles["5_1_1"])
+        end, "duplicate derived-profile state")
+        rejected(function(left, right)
+            right.families[1].id = left.families[1].id
+        end, "duplicate history family")
+        rejected(function(left, right)
+            right.families[1].setting_id = left.families[1].setting_id
+        end, "duplicate history setting")
+        rejected(function(left, right)
+            right.families[1].templates[1] = left.families[1].templates[1]
+        end, "duplicate or invalid history template")
+
+        rejects_catalogs("not-an-array", "not an array")
+        rejects_catalogs({
+            [1] = clone(patch_5_2),
+            [3] = clone(patch_6_8),
+        }, "dense array")
+        rejects_catalogs({ named = clone(patch_5_2) }, "dense array")
+
+        local sparse_families = clone(patch_6_8)
+        sparse_families.families[2] = sparse_families.families[1]
+        sparse_families.families[1] = nil
+        rejects_catalogs({ clone(patch_5_2), sparse_families },
+            "history families must be a dense array")
+        local non_array_families = clone(patch_6_8)
+        non_array_families.families = "not-an-array"
+        rejects_catalogs({ clone(patch_5_2), non_array_families },
+            "unsupported or mismatched shape")
+
+        local sparse_templates = clone(patch_6_8)
+        sparse_templates.families[1].templates[2] =
+            sparse_templates.families[1].templates[1]
+        sparse_templates.families[1].templates[1] = nil
+        rejects_catalogs({ clone(patch_5_2), sparse_templates },
+            "history family templates must be a dense array")
+        local non_array_templates = clone(patch_6_8)
+        non_array_templates.families[1].templates = "not-an-array"
+        rejects_catalogs({ clone(patch_5_2), non_array_templates },
+            "history family identity is incomplete")
+
+        local mod = { dofile = function() error("must not load") end }
+        local duplicate, duplicate_error = CatalogUI.load(mod, {
+            CatalogUI.GENERATED_MODULES[1], CatalogUI.GENERATED_MODULES[1],
+        })
+        H.equal(duplicate, nil)
+        H.truthy(duplicate_error:find("duplicated", 1, true) ~= nil)
+        local sparse, sparse_error = CatalogUI.load(mod, {
+            [1] = CatalogUI.GENERATED_MODULES[1],
+            [3] = CatalogUI.GENERATED_MODULES[2],
+        })
+        H.equal(sparse, nil)
+        H.truthy(sparse_error:find("dense array", 1, true) ~= nil)
     end)
 
     H.test("WT #1436 generated guards retain pinned source-literal precision", function()
@@ -267,8 +489,8 @@ local function register(H, repo_root)
         H.truthy(validation_error:find("missing direct profile routes", 1, true))
     end)
 
-    H.test("WT #1436 menu and localization share the generated family catalog", function()
-        local catalog = assert(loadfile(script_root .. "_wt_history_5_2_catalog.lua"))()
+    H.test("WT #1436 menu and localization share the composite family catalog", function()
+        local catalog = load_default_catalog(CatalogUI, script_root)
         local group = assert(CatalogUI.build_widgets(catalog))
         local loc = assert(CatalogUI.build_localization(catalog))
         H.equal(group.setting_id, "wt_history_patch_versions")
@@ -287,13 +509,12 @@ local function register(H, repo_root)
     end)
 
     H.test("WT #1436 data decoration inserts one history group and fails closed", function()
-        local catalog = catalog_fixture()
+        local by_path = generated_catalogs(CatalogUI, script_root)
         local loads = 0
         local mod = {}
         function mod:dofile(path)
-            H.equal(path, CatalogUI.GENERATED_MODULE)
             loads = loads + 1
-            return catalog
+            return assert(by_path[path], "unexpected generated module " .. tostring(path))
         end
         local first = { setting_id = "first" }
         local second = { setting_id = "second" }
@@ -302,15 +523,16 @@ local function register(H, repo_root)
         H.equal(CatalogUI.decorate_menu(mod, data), data)
         H.equal(data.options.widgets[1], first)
         H.equal(data.options.widgets[2].setting_id, "wt_history_patch_versions")
+        H.equal(#data.options.widgets[2].sub_widgets, 15)
         H.equal(data.options.widgets[3], second)
-        H.equal(loads, 1)
+        H.equal(loads, 2)
         H.equal(CatalogUI.decorate_menu(mod, data), data)
         H.equal(#data.options.widgets, 3)
-        H.equal(loads, 1, "re-decoration must not reload or duplicate the group")
+        H.equal(loads, 2, "re-decoration must not reload or duplicate the group")
 
         local malformed = { options = {} }
         H.equal(CatalogUI.decorate_menu(mod, malformed), malformed)
-        H.equal(loads, 1, "malformed menu data must not load the generated catalog")
+        H.equal(loads, 2, "malformed menu data must not load generated catalogs")
     end)
 
     H.test("WT #1436 public and dev data surfaces return one index-two history group", function()
@@ -338,14 +560,13 @@ local function register(H, repo_root)
 
             local catalog_ui = assert(loadfile(stream.root
                 .. "_wt_history_catalog.lua"))()
-            local catalog = assert(loadfile(stream.root
-                .. "_wt_history_5_2_catalog.lua"))()
+            local by_path = generated_catalogs(catalog_ui, stream.root)
             local loads = 0
             local mod = {}
             function mod:dofile(path)
-                H.equal(path, catalog_ui.GENERATED_MODULE)
                 loads = loads + 1
-                return catalog
+                return assert(by_path[path],
+                    "unexpected generated module " .. tostring(path))
             end
             local availability = { setting_id = "weapon_availability" }
             local overrides = { setting_id = "weapon_overrides" }
@@ -354,15 +575,140 @@ local function register(H, repo_root)
             H.equal(data.options.widgets[1], availability)
             H.equal(data.options.widgets[2].setting_id,
                 "wt_history_patch_versions")
-            H.equal(#data.options.widgets[2].sub_widgets, 14)
+            H.equal(#data.options.widgets[2].sub_widgets, 15)
             H.equal(data.options.widgets[3], overrides)
-            H.equal(loads, 1)
+            H.equal(loads, 2)
             H.equal(catalog_ui.decorate_menu(mod, data), data)
             H.equal(#data.options.widgets, 3,
                 stream.namespace .. " must not duplicate its history group")
-            H.equal(loads, 1,
+            H.equal(loads, 2,
                 stream.namespace .. " must reuse its generated-catalog cache")
         end
+    end)
+
+    H.test("WT #1436 Patch 6.7.2 changes only Greatsword first-heavy range", function()
+        with_profile_globals(function()
+            local catalog = assert(loadfile(script_root
+                .. "_wt_history_6_8_catalog.lua"))()
+
+            local function roots_with_range(range_mod)
+                local heavy_sibling = { damage_profile = "heavy_slashing_linesman" }
+                local light_sibling = { range_mod = 1.25 }
+                local template_sibling = { marker = "preserve exact identity" }
+                local heavy = {
+                    damage_profile = heavy_sibling.damage_profile,
+                    range_mod = range_mod,
+                    total_time = 1.4,
+                }
+                local template = {
+                    actions = {
+                        action_one = {
+                            heavy_attack_down_first = heavy,
+                            light_attack_left = light_sibling,
+                        },
+                    },
+                    metadata = template_sibling,
+                    weapon_type = "SWORD_2H",
+                }
+                return {
+                    BuffTemplates = {},
+                    ExplosionTemplates = {},
+                    PlayerUnitStatusSettings = {},
+                    Weapons = {
+                        two_handed_swords_wood_elf_template = template,
+                    },
+                }, {
+                    heavy = heavy,
+                    light_sibling = light_sibling,
+                    template = template,
+                    template_sibling = template_sibling,
+                }
+            end
+
+            local current_roots, current_refs = roots_with_range(1.55)
+            local current_before = clone(current_roots)
+            local current_mod = mod_fixture({
+                wt_history_elf_greatsword = "current",
+            }, { value = true })
+            local current_runtime = Runtime.install({
+                catalog = catalog,
+                mod = current_mod,
+                policy = Policy,
+                roots = current_roots,
+            })
+            H.equal(current_runtime.fatal_error, nil)
+            H.equal(current_runtime:verify(), nil)
+            H.equal(#(current_runtime.ledgers.elf_greatsword or {}), 0)
+            H.deep_equal(current_roots, current_before,
+                "Current must perform no gameplay writes")
+            H.equal(current_roots.Weapons.two_handed_swords_wood_elf_template,
+                current_refs.template)
+            H.equal(current_refs.template.metadata, current_refs.template_sibling)
+            local current_restore = assert(current_runtime:restore())
+            H.equal(current_restore.changed, false)
+            H.deep_equal(current_roots, current_before,
+                "restoring an already-current family must remain a no-op")
+
+            local history_roots, history_refs = roots_with_range(1.55)
+            local history_before = clone(history_roots)
+            local expected_historical = clone(history_before)
+            expected_historical.Weapons.two_handed_swords_wood_elf_template
+                .actions.action_one.heavy_attack_down_first.range_mod = 1.45
+            local history_mod = mod_fixture({
+                wt_history_elf_greatsword = "6_7_2",
+            }, { value = true })
+            local history_runtime = Runtime.install({
+                catalog = catalog,
+                mod = history_mod,
+                policy = Policy,
+                roots = history_roots,
+            })
+            H.equal(history_runtime.fatal_error, nil)
+            H.equal(history_runtime.last_error, nil)
+            H.equal(history_runtime:verify(), nil)
+            H.equal(#history_runtime.ledgers.elf_greatsword, 1)
+            H.deep_equal(history_roots, expected_historical,
+                "6.7.2 must alter only heavy_attack_down_first.range_mod")
+            H.equal(history_refs.heavy.range_mod, 1.45)
+            H.equal(history_refs.heavy.total_time, 1.4)
+            H.equal(history_refs.light_sibling,
+                history_refs.template.actions.action_one.light_attack_left)
+            H.equal(history_refs.template_sibling, history_refs.template.metadata)
+
+            local restored = assert(history_runtime:restore())
+            H.equal(restored.refused, 0)
+            H.equal(restored.changed, true)
+            H.deep_equal(history_roots, history_before,
+                "history restore must recover the exact current source state")
+            H.equal(history_refs.heavy.range_mod, 1.55)
+            local second_restore = assert(history_runtime:restore())
+            H.equal(second_restore.changed, false)
+            H.deep_equal(history_roots, history_before,
+                "repeated restore must not introduce writes")
+
+            local mismatch_roots, mismatch_refs = roots_with_range(1.56)
+            local mismatch_before = clone(mismatch_roots)
+            local mismatch_mod = mod_fixture({
+                wt_history_elf_greatsword = "6_7_2",
+            }, { value = true })
+            local mismatch_runtime = Runtime.install({
+                catalog = catalog,
+                mod = mismatch_mod,
+                policy = Policy,
+                roots = mismatch_roots,
+            })
+            H.equal(mismatch_runtime.fatal_error, nil)
+            H.truthy(mismatch_runtime.last_error
+                and mismatch_runtime.last_error:find(
+                    "current guard mismatch", 1, true) ~= nil)
+            H.equal(#(mismatch_runtime.ledgers.elf_greatsword or {}), 0)
+            H.deep_equal(mismatch_roots, mismatch_before,
+                "guard mismatch must refuse before the first mutation")
+            H.equal(mismatch_refs.heavy.range_mod, 1.56)
+            H.equal(mismatch_refs.light_sibling,
+                mismatch_refs.template.actions.action_one.light_attack_left)
+            H.equal(mismatch_refs.template_sibling, mismatch_refs.template.metadata)
+        end)
     end)
 
     H.test("WT #1436 Current registers profiles but performs no gameplay writes", function()

@@ -1,7 +1,7 @@
 # Weapon-history evidence and reproduction
 
-This directory owns the bounded, source-exact Patch 5.2 history slice for
-Tweaker: Weapons issue #1436. It is an offline build input, not runtime content.
+This directory owns bounded, source-exact weapon-history slices for Tweaker:
+Weapons issue #1436. It is an offline build input, not runtime content.
 Nothing below `tools/weapon-history/` belongs in a Workshop bundle.
 
 ## Anchors and evidence
@@ -38,6 +38,23 @@ Official scope references:
 - [Patch 5.2.0](https://www.vermintide.com/news/gifts-of-the-wolf-father-and-patch-520)
 - [Hotfix 5.2.3](https://forums.fatsharkgames.com/t/hotfix-megathread-5-2-x-current-5-2-3/91155)
 
+### Patch 6.8 boundary
+
+Patch 6.8 uses an adjacent-boundary contract so later edits to the same source
+file cannot leak into the historical selector:
+
+| Role | Source revision |
+|---|---|
+| Game version 6.7.2 | `b7c15fc61a3b34fae7d1e2de47f52198e26851ce` |
+| Post-boundary 6.8.1 | `447f4eb49921ba08fbbbb945609ce2b9891f4898` |
+| Current anchor (6.11.3) | `c5e4968b1fbb00c49884e56d640ef990a9c04dd0` |
+
+The adjacent 6.7.2-to-6.8.1 evidence selects exactly one operation: Kerillian's
+Greatsword first-heavy `range_mod`, `1.55` to historical `1.45`. A second
+evidence file re-reads only that selected path at 6.7.2 and 6.11.3 to establish
+the runtime guard. Both primary and independent exact-double evaluators must
+agree. The official boundary is [Patch 6.8.0 / Hotfix 6.8.1](https://forums.fatsharkgames.com/t/geheimnisnacht-and-the-skull-of-blosphoros-return-patch-6-8-0-hotfix-6-8-1/113884).
+
 ## Exact reproduction
 
 From the repository root, with the pinned Vermintide source checkout available:
@@ -49,22 +66,30 @@ $source = 'C:\path\to\Vermintide-2-Source-Code'
     $source `
     '.\tools\weapon-history\evidence\patch_5_2' `
     '.\weapon_tweaker\scripts\mods\weapon_tweaker\_wt_history_5_2_catalog.lua'
+
+& $lua '.\tools\weapon-history\generate_patch_6_8_history.lua' `
+    $source `
+    '.\tools\weapon-history\evidence\patch_6_8' `
+    '.\weapon_tweaker\scripts\mods\weapon_tweaker\_wt_history_6_8_catalog.lua'
 ```
 
 Then run the non-mutating exact-output gate:
 
 ```powershell
 .\qa\check_wt_history_reproducibility.ps1 -SourceRepo $source -RequireSource
+.\qa\check_wt_history_patch_6_8_reproducibility.ps1 -SourceRepo $source -RequireSource
 ```
 
-The gate verifies the pinned evidence extractor, generator, source catalog,
+The Patch 5.2 gate verifies the pinned evidence extractor, generator, source catalog,
 independent oracle/spec/routes, evidence hashes, and generated public catalog.
 When the source checkout is present it rehydrates all nine evidence artifacts
 through both evaluators, requires byte-exact primary output and exact-double
 semantic agreement with the independent oracle, regenerates the route/blob
 oracle, then requires byte-exact catalog equality. In source-less CI it still
 enforces every pinned artifact and reports source regeneration as a visible
-skip. `qa/check_wt_stream_parity.ps1` separately proves that the dev stream
+skip. The Patch 6.8 gate applies the same fail-closed policy to its adjacent
+boundary, current-anchor rehydration, two evaluators, and generated catalogs.
+`qa/check_wt_stream_parity.ps1` separately proves that the dev stream
 carries the namespace-normalized catalog.
 
 Do not hand-edit the generated catalog. A deliberate evidence or generator
