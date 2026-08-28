@@ -62,7 +62,8 @@ Cross-reference: `CLAUDE.md` (technical) describes HOW things work. This doc
 - **Exemption**: pure data files (`_cosmetic_unlocks.lua`, etc.) can be larger.
 - **Current violations**: tracked under GitHub Issue #2. Run
   `.\qa\check_file_sizes.ps1` for the live list. The canonical metric is
-  PowerShell `Measure-Object -Line` (physical lines). Files above the hard
+  PowerShell `Get-Content | Measure-Object -Line` (non-empty logical lines;
+  whitespace-only lines count). Files above the hard
   limit are frozen in `qa/baselines/file_sizes.json`; every current file
   between the target and hard limit has an independent exact ceiling in
   `qa/baselines/file_sizes_target.json`. A frozen file may shrink but may not

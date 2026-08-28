@@ -9,7 +9,8 @@
 # may shrink but may not grow; a new file crossing either threshold fails. This
 # blocks regressions without making the known decomposition debt permanently
 # red. Regenerate only through the explicit update switches (never automatic).
-# The canonical metric is Measure-Object -Line (physical lines).
+# The canonical metric is Get-Content piped to Measure-Object -Line: non-empty
+# logical lines. Empty strings do not count; whitespace-only strings do count.
 #
 # Exit codes: 0 = all within target (or only frozen/baselined hard overages),
 #             1 = frozen target-tier debt remains (advisory),
@@ -97,6 +98,13 @@ function Find-ModLuas {
 # Baseline keys are repo-relative paths with forward slashes (cross-platform,
 # JSON-friendly). Normalize any runtime path to that form before comparison.
 function Normalize-RelPath([string]$p) { return $p.Replace('\', '/') }
+
+function Measure-LuaSize([string]$path) {
+    # Preserve the historical baseline metric exactly. Measure-Object -Line
+    # excludes empty strings but includes strings containing only whitespace.
+    return [int]((Get-Content -LiteralPath $path -ErrorAction Stop |
+        Measure-Object -Line).Lines)
+}
 
 function Load-Baseline([string]$path) {
     if (-not (Test-Path $path)) { return @{} }
@@ -201,8 +209,21 @@ function Invoke-SelfTest {
     Assert (Test-RepositoryInternalWorktreePath ".worktrees/task-a/$clonedSuffix") 'ignores conventional top-level hidden worktree checkout'
     Assert (-not (Test-RepositoryInternalWorktreePath $canonicalRel)) 'does not classify canonical module as worktree metadata'
     Assert (Test-ModLuaCandidate $canonicalFile) 'canonical oversized module remains in scan candidates'
-    $canonicalLines = (Get-Content -LiteralPath $canonicalPath | Measure-Object -Line).Lines
+    $canonicalLines = Measure-LuaSize $canonicalPath
     Assert ($canonicalLines -gt $HardLimit) 'canonical fixture still exercises hard-limit enforcement'
+
+    $metricBlankPath = Join-Path ([IO.Path]::GetTempPath()) ('vt2-file-size-blank-' + [guid]::NewGuid().ToString('N') + '.lua')
+    $metricWhitespacePath = Join-Path ([IO.Path]::GetTempPath()) ('vt2-file-size-whitespace-' + [guid]::NewGuid().ToString('N') + '.lua')
+    try {
+        $utf8NoBom = New-Object Text.UTF8Encoding($false)
+        [IO.File]::WriteAllText($metricBlankPath, "first`n`nlast`n", $utf8NoBom)
+        [IO.File]::WriteAllText($metricWhitespacePath, "first`n   `nlast`n", $utf8NoBom)
+        Assert ((Measure-LuaSize $metricBlankPath) -eq 2) 'canonical metric excludes an empty logical line'
+        Assert ((Measure-LuaSize $metricWhitespacePath) -eq 3) 'canonical metric includes a whitespace-only logical line'
+    } finally {
+        if (Test-Path -LiteralPath $metricBlankPath -PathType Leaf) { Remove-Item -LiteralPath $metricBlankPath -Force }
+        if (Test-Path -LiteralPath $metricWhitespacePath -PathType Leaf) { Remove-Item -LiteralPath $metricWhitespacePath -Force }
+    }
 
     $generatedCatalogRel = 'weapon_tweaker/scripts/mods/weapon_tweaker/_wt_history_5_2_catalog.lua'
     $generatedCatalogPath = Join-Path $repoRoot ($generatedCatalogRel.Replace('/', '\'))
@@ -293,7 +314,7 @@ function Invoke-SelfTest {
 if ($SelfTest) { exit (Invoke-SelfTest) }
 
 foreach ($lua in Find-ModLuas) {
-    $lineCount = (Get-Content $lua.FullName | Measure-Object -Line).Lines
+    $lineCount = Measure-LuaSize $lua.FullName
     $relPath = $lua.FullName.Substring($repoRoot.Length + 1)
     $rel = Normalize-RelPath $relPath
     $observedByRel[$rel] = $lineCount
@@ -328,10 +349,10 @@ if ($UpdateTargetBaseline) {
     $files = [ordered]@{}
     foreach ($f in ($overTarget | Sort-Object -Property Rel)) { $files[$f.Rel] = $f.Lines }
     $payload = [ordered]@{
-        '_comment' = "Frozen target-tier Lua debt (files over $Target and at or below $HardLimit physical lines). Regenerate ONLY with check_file_sizes.ps1 -UpdateTargetBaseline after review. A frozen file may shrink but may not grow; any unlisted file crossing the target blocks. Issue #2 / PROJECT_STANDARDS sections 2.1 and 11."
+        '_comment' = "Frozen target-tier Lua debt (files over $Target and at or below $HardLimit non-empty logical lines). Regenerate ONLY with check_file_sizes.ps1 -UpdateTargetBaseline after review. A frozen file may shrink but may not grow; any unlisted file crossing the target blocks. Issue #2 / PROJECT_STANDARDS sections 2.1 and 11."
         'target' = $Target
         'hard_limit' = $HardLimit
-        'metric' = 'PowerShell Measure-Object -Line physical lines'
+        'metric' = 'PowerShell Get-Content | Measure-Object -Line non-empty logical lines (whitespace-only lines count)'
         'generated' = (Get-Date).ToString('yyyy-MM-dd')
         'files' = $files
     }
