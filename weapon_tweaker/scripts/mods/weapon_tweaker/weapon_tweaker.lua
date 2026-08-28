@@ -91,7 +91,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.311-beta"
+local MOD_VERSION = "0.12.312-beta"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -120,6 +120,15 @@ local _wt_axe_balance_policy = mod:dofile("scripts/mods/weapon_tweaker/_wt_axe_b
 local _wt_fire_sword_policy = mod:dofile("scripts/mods/weapon_tweaker/_wt_fire_sword")
 local _wt_grip_offset_policy = mod:dofile("scripts/mods/weapon_tweaker/_wt_grip_offset_policy")
 local _wt_skullsplitter_hand_policy = mod:dofile("scripts/mods/weapon_tweaker/_wt_skullsplitter_hand")
+
+-- #1436: install history before every ordinary balance owner. Private
+-- profiles are registered here so #431 fingerprints a stable catalog later.
+local _wt_history_owner = mod:dofile(
+    "scripts/mods/weapon_tweaker/_wt_history_owner").install({
+        mod = mod,
+        module_root = "scripts/mods/weapon_tweaker/",
+    })
+local _wt_history_runtime = _wt_history_owner.runtime
 -- Bret Sword & Shield damage buff (self-applies at load when wt_brett_sword_shield_buff is ON;
 -- mutates the weapon template, so a restart is needed to apply/revert).
 mod:dofile("scripts/mods/weapon_tweaker/_wt_brett_sword_shield_buff")
@@ -917,7 +926,11 @@ mod.on_game_state_changed = function(status, state_name)
     mod._wt368_deferred_availability = true
     patch_career_actions_on_weapons()
     apply_trait_filters()
-    if mod._wt_apply_axe_balance then mod._wt_apply_axe_balance(nil, false) end
+    if mod._wt_reconcile_history_owner_stack then
+        mod._wt_reconcile_history_owner_stack("game_state")
+    elseif mod._wt_apply_axe_balance then
+        mod._wt_apply_axe_balance(nil, false)
+    end
     if mod._wt_apply_fire_sword then mod._wt_apply_fire_sword(nil, false) end
     if mod._wt374_seed_energy_data then mod._wt374_seed_energy_data() end
     _wt_bolt_staff_overcharge_runtime.apply()
@@ -961,7 +974,7 @@ end
 mod.on_disabled = function()
     if weapon_backend.overcharge_presentation then pcall(weapon_backend.overcharge_presentation.restore) end
     _wt_bolt_staff_overcharge_runtime.revert()
-    if mod._wt_apply_axe_balance then mod._wt_apply_axe_balance(nil, true) end
+    _wt_history_owner:restore()
     if mod._wt_apply_fire_sword then mod._wt_apply_fire_sword(nil, true) end
     if mod._wt374_revert_energy_data then mod._wt374_revert_energy_data() end
     clear_weapon_unlocks()
@@ -990,6 +1003,7 @@ mod:dofile("scripts/mods/weapon_tweaker/_wt_settings_runtime").install({
     bolt_runtime = _wt_bolt_staff_overcharge_runtime,
     balance_policy = _wt_axe_balance_policy,
     fire_sword_policy = _wt_fire_sword_policy,
+    history_runtime = _wt_history_runtime,
 })
 
 -- The #601/#621/#622/#623/#664 balance adapter (mod._wt_apply_axe_balance) is
@@ -1354,6 +1368,12 @@ local _wt_runtime_check_deps = {
     fire_sword_policy = _wt_fire_sword_policy,
 }
 _wt_runtime_checks.install(mod, _rt_register, _wt_runtime_check_deps)
+_rt_register("issue1436_historical_weapon_patch_versions", function()
+    if not _wt_history_runtime then
+        return "#1436: historical weapon runtime was not installed"
+    end
+    return _wt_history_runtime:verify()
+end)
 -- WT_PUBLIC_OVERLAY_BEGIN:public-beta-surface-regression
 _rt_register("issue635_public_beta_dev_surface_absent", function()
     local wt = mod._wt or {}

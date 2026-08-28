@@ -1,5 +1,16 @@
 # Weapon Tweaker Changelog
 
+## 0.12.313-dev (2026-08-28) -- mirror source-exact Patch 5.2 weapon history (#1436) [not-started]
+
+- Mirrors public beta 0.12.312: a top-level **Pre-Patch Weapon Versions** group
+  exposes the same 14 restart-bound family dropdowns for the source-proven
+  5.1.1, 5.2.0, and 5.2.3 states, with current 6.11.3 as the inert default.
+- Carries byte-parity history policy/runtime/catalog behavior, including all
+  182 guarded operations and the parity-gated private damage-profile routes;
+  ordinary Weapon Tweaks still compose after the selected historical baseline.
+- Keeps the development-only availability overlay intact. #1436 remains open
+  for the historical patch eras outside this first exact-source slice.
+
 ## 0.12.312-dev (2026-08-27) -- documented weapon-key registry mirror (#159) [not-started]
 
 - Mirrors public beta 0.12.311: availability and 3P-routing data consume the

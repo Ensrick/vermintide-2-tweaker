@@ -8,11 +8,13 @@
 
 local M = {}
 
-M.WIRE_IDENTITY_VERSION = 1
+M.WIRE_IDENTITY_VERSION = 2
 M.MAX_SAFE_STRING = 64
 M.MAX_VMF_JSON_LENGTH = 500
 M.MAX_RETIRED_EPOCHS_PER_PEER = 8
 M.MAX_RETIRED_PEERS = 32
+M.MAX_PROFILE_DIGEST_DEPTH = 64
+M.MAX_PROFILE_DIGEST_NODES = 32768
 M.RUNTIME_GATE_MAX_ATTEMPTS = 30
 M.RUNTIME_GATE_SETTINGS = {
     "authentic_brace_of_pistols",
@@ -39,9 +41,122 @@ local function _feed_hash(seed, multiplier, modulus, value)
     return seed
 end
 
-function M.build_wire_identity(fallbacks, lookup)
-    if type(fallbacks) ~= "table" or type(lookup) ~= "table" then
-        return nil, "fallbacks-or-lookup-missing"
+local _KEY_ORDER = { boolean = 1, number = 2, string = 3 }
+local _TWO_POW_53 = 9007199254740992
+
+local function _number_token(value)
+    if value ~= value or value == math.huge or value == -math.huge then
+        return nil
+    end
+    -- Lua equality intentionally collapses +0 and -0, but division and some
+    -- profile math do not. Preserve the sign bit in the semantic contract so
+    -- peers cannot acknowledge numerically distinct gameplay data.
+    if value == 0 then
+        return 1 / value == -math.huge and "-0e0" or "0e0"
+    end
+    local sign = value < 0 and "-" or "+"
+    local mantissa, exponent = math.frexp(math.abs(value))
+    -- frexp plus the exact 53-bit significand avoids locale-sensitive decimal
+    -- formatting. Identical IEEE-754 Lua numbers therefore hash identically
+    -- even when two peers use different Windows regional settings.
+    local significand = mantissa * _TWO_POW_53
+    return sign .. string.format("%.0f", significand)
+        .. "e" .. tostring(exponent)
+end
+
+-- DamageProfileTemplates are ordinary Lua data trees. Hash their semantic
+-- content rather than their process-local table addresses so two peers only
+-- acknowledge profiles with the same actual gameplay values. Unsupported
+-- values, cycles, and non-finite numbers fail closed instead of being reduced
+-- to unstable tostring() output.
+local function _profile_content_digest(profile)
+    if type(profile) ~= "table" then return nil, "profile-missing" end
+
+    local h1, h2 = 104729, 130363
+    local active = {}
+    local nodes = 0
+    local function feed(value)
+        h1 = _feed_hash(h1, 131, 2147483647, value)
+        h2 = _feed_hash(h2, 257, 2147483629, value)
+    end
+    local function walk(value, depth)
+        nodes = nodes + 1
+        if nodes > M.MAX_PROFILE_DIGEST_NODES then
+            return false, "profile-too-large"
+        end
+        if depth > M.MAX_PROFILE_DIGEST_DEPTH then
+            return false, "profile-too-deep"
+        end
+        local value_type = type(value)
+        if value_type == "nil" then feed("z;"); return true end
+        if value_type == "boolean" then
+            feed(value and "b1;" or "b0;")
+            return true
+        end
+        if value_type == "number" then
+            local token = _number_token(value)
+            if not token then
+                return false, "profile-number-nonfinite"
+            end
+            feed("n" .. token .. ";")
+            return true
+        end
+        if value_type == "string" then
+            feed("s" .. tostring(#value) .. ":" .. value .. ";")
+            return true
+        end
+        if value_type ~= "table" then
+            return false, "profile-unsupported-" .. value_type
+        end
+        if active[value] then return false, "profile-cycle" end
+
+        active[value] = true
+        local keys = {}
+        for key in pairs(value) do
+            if not _KEY_ORDER[type(key)] then
+                active[value] = nil
+                return false, "profile-key-unsupported-" .. type(key)
+            end
+            if type(key) == "number"
+                    and (key ~= key or key == math.huge or key == -math.huge) then
+                active[value] = nil
+                return false, "profile-key-number-nonfinite"
+            end
+            keys[#keys + 1] = key
+        end
+        table.sort(keys, function(left, right)
+            local left_type, right_type = type(left), type(right)
+            if left_type ~= right_type then
+                return _KEY_ORDER[left_type] < _KEY_ORDER[right_type]
+            end
+            if left_type == "boolean" then
+                return left == false and right == true
+            end
+            return left < right
+        end)
+        feed("t" .. tostring(#keys) .. "{")
+        for _, key in ipairs(keys) do
+            local ok, digest_error = walk(key, depth + 1)
+            if not ok then active[value] = nil; return false, digest_error end
+            ok, digest_error = walk(rawget(value, key), depth + 1)
+            if not ok then active[value] = nil; return false, digest_error end
+        end
+        feed("}")
+        active[value] = nil
+        return true
+    end
+
+    local ok, digest_error = walk(profile, 1)
+    if not ok then return nil, digest_error end
+    return string.format("%08x%08x", h1, h2)
+end
+
+M.profile_content_digest = _profile_content_digest
+
+function M.build_wire_identity(fallbacks, lookup, profiles)
+    if type(fallbacks) ~= "table" or type(lookup) ~= "table"
+            or type(profiles) ~= "table" then
+        return nil, "fallbacks-lookup-or-profiles-missing"
     end
 
     local names = {}
@@ -67,11 +182,19 @@ function M.build_wire_identity(fallbacks, lookup)
         if not _positive_integer(fallback_id) or rawget(lookup, fallback_id) ~= fallback then
             return nil, "fallback-lookup-mismatch:" .. fallback
         end
+        local profile_digest, digest_error =
+            _profile_content_digest(rawget(profiles, custom))
+        if not profile_digest then
+            return nil, "custom-profile-invalid:" .. custom .. ":"
+                .. tostring(digest_error)
+        end
         canonical[#canonical + 1] = custom
         canonical[#canonical + 1] = "="
         canonical[#canonical + 1] = tostring(id)
         canonical[#canonical + 1] = ">"
         canonical[#canonical + 1] = fallback
+        canonical[#canonical + 1] = "#"
+        canonical[#canonical + 1] = profile_digest
         canonical[#canonical + 1] = "\n"
     end
 
@@ -82,25 +205,35 @@ function M.build_wire_identity(fallbacks, lookup)
         M.WIRE_IDENTITY_VERSION, #names, h1, h2), nil, names
 end
 
--- Capture the exact custom/fallback ids once, after every producer has
--- registered. The hot sender floor reads these arrays instead of rebuilding
--- names or hashes, so the per-hit path allocates nothing.
-function M.capture_catalog(fallbacks, lookup)
-    if type(fallbacks) ~= "table" or type(lookup) ~= "table" then
-        return nil, "fallbacks-or-lookup-missing"
+-- Capture exact custom/fallback ids and semantic digests once, after every
+-- producer has registered. The hot sender floor uses the indexed row to avoid
+-- rebuilding or hashing unrelated profiles; it deliberately rehashes the one
+-- active custom profile before allowing that process-local id onto the wire.
+function M.capture_catalog(fallbacks, lookup, profiles)
+    if type(fallbacks) ~= "table" or type(lookup) ~= "table"
+            or type(profiles) ~= "table" then
+        return nil, "fallbacks-lookup-or-profiles-missing"
     end
     local names = {}
     -- Validate before table.sort: a non-string key would make sort throw, and
     -- this runs unprotected at module load.
     for custom in pairs(fallbacks) do
-        if type(custom) ~= "string" or type(fallbacks[custom]) ~= "string" then
+        if type(custom) ~= "string" or custom == ""
+                or type(fallbacks[custom]) ~= "string"
+                or fallbacks[custom] == "" then
             return nil, "invalid-fallback-entry"
         end
         names[#names + 1] = custom
     end
     table.sort(names)
     if #names == 0 then return nil, "fallback-registry-empty" end
-    local snapshot = { names = names, custom_ids = {}, fallback_ids = {}, custom_by_id = {} }
+    local snapshot = {
+        names = names,
+        custom_ids = {},
+        fallback_ids = {},
+        custom_by_id = {},
+        profile_digests = {},
+    }
     for i = 1, #names do
         local custom = names[i]
         local fallback = fallbacks[custom]
@@ -115,6 +248,13 @@ function M.capture_catalog(fallbacks, lookup)
         snapshot.custom_ids[i] = custom_id
         snapshot.fallback_ids[i] = fallback_id
         snapshot.custom_by_id[custom_id] = i
+        local profile_digest, digest_error =
+            _profile_content_digest(rawget(profiles, custom))
+        if not profile_digest then
+            return nil, "custom-profile-invalid:" .. custom .. ":"
+                .. tostring(digest_error)
+        end
+        snapshot.profile_digests[i] = profile_digest
     end
     return snapshot
 end
@@ -122,11 +262,13 @@ end
 -- Live-catalog integrity: every captured name must STILL resolve to the exact
 -- id it had at capture, in both directions. A late registration by another mod
 -- that shifts our indices makes this false, which closes the gate.
-function M.catalog_intact(snapshot, fallbacks, lookup)
+function M.catalog_intact(snapshot, fallbacks, lookup, profiles)
     if type(snapshot) ~= "table" or type(snapshot.names) ~= "table"
             or type(snapshot.custom_ids) ~= "table"
             or type(snapshot.fallback_ids) ~= "table"
-            or type(fallbacks) ~= "table" or type(lookup) ~= "table" then
+            or type(snapshot.profile_digests) ~= "table"
+            or type(fallbacks) ~= "table" or type(lookup) ~= "table"
+            or type(profiles) ~= "table" then
         return false
     end
     for i = 1, #snapshot.names do
@@ -134,15 +276,54 @@ function M.catalog_intact(snapshot, fallbacks, lookup)
         local fallback = fallbacks[custom]
         local custom_id = snapshot.custom_ids[i]
         local fallback_id = snapshot.fallback_ids[i]
-        if not _positive_integer(custom_id) or rawget(lookup, custom) ~= custom_id
+        if type(custom) ~= "string" or custom == ""
+                or type(fallback) ~= "string" or fallback == ""
+                or not _positive_integer(custom_id)
+                or rawget(lookup, custom) ~= custom_id
                 or rawget(lookup, custom_id) ~= custom
                 or not _positive_integer(fallback_id)
                 or rawget(lookup, fallback) ~= fallback_id
                 or rawget(lookup, fallback_id) ~= fallback then
             return false
         end
+        local profile_digest = _profile_content_digest(rawget(profiles, custom))
+        if profile_digest ~= snapshot.profile_digests[i] then return false end
     end
     return true
+end
+
+-- Sender-hot-path guard for one active WT-owned id. This deliberately
+-- recomputes the semantic digest on every custom send. A cached full-catalog
+-- verdict is insufficient: a table can be mutated in place after the beacon
+-- identity was built, and that custom id must then fall back rather than ride
+-- the old acknowledgement onto the wire.
+function M.catalog_row_intact(snapshot, index, fallbacks, lookup, profiles)
+    if type(snapshot) ~= "table" or not _positive_integer(index)
+            or type(snapshot.names) ~= "table"
+            or type(snapshot.custom_ids) ~= "table"
+            or type(snapshot.fallback_ids) ~= "table"
+            or type(snapshot.profile_digests) ~= "table"
+            or type(fallbacks) ~= "table" or type(lookup) ~= "table"
+            or type(profiles) ~= "table" then
+        return false
+    end
+    local custom = snapshot.names[index]
+    local fallback = custom and fallbacks[custom]
+    local custom_id = snapshot.custom_ids[index]
+    local fallback_id = snapshot.fallback_ids[index]
+    if type(custom) ~= "string" or custom == ""
+            or type(fallback) ~= "string" or fallback == ""
+            or not _positive_integer(custom_id)
+            or rawget(lookup, custom) ~= custom_id
+            or rawget(lookup, custom_id) ~= custom
+            or not _positive_integer(fallback_id)
+            or rawget(lookup, fallback) ~= fallback_id
+            or rawget(lookup, fallback_id) ~= fallback then
+        return false
+    end
+    local profile_digest = _profile_content_digest(rawget(profiles, custom))
+    return profile_digest ~= nil
+        and profile_digest == snapshot.profile_digests[index]
 end
 
 -- Numeric sender disposition -- the application floor in one pure function.
@@ -152,7 +333,7 @@ end
 -- returns nil so the caller drops the RPC. The custom id can never survive a
 -- policy or lookup failure.
 function M.profile_id_for_send(is_server, damage_profile_id, exact_safe,
-        snapshot, fallbacks, lookup)
+        snapshot, fallbacks, lookup, profiles)
     -- Truthy, mirroring the engine's own branch at weapon_system.lua:179
     -- (`if self.is_server or LEVEL_EDITOR_TEST`). A host dispatches its local
     -- receiver rather than wiring the id, so narrowing this to `== true` would
@@ -165,12 +346,15 @@ function M.profile_id_for_send(is_server, damage_profile_id, exact_safe,
     local index = type(snapshot) == "table" and type(snapshot.custom_by_id) == "table"
         and rawget(snapshot.custom_by_id, damage_profile_id) or nil
     if index then
-        if exact_safe == true and M.catalog_intact(snapshot, fallbacks, lookup) then
+        if exact_safe == true and M.catalog_row_intact(
+                snapshot, index, fallbacks, lookup, profiles) then
             return damage_profile_id, "custom"
         end
         local fallback = fallbacks[snapshot.names[index]]
         local fallback_id = snapshot.fallback_ids[index]
-        if not _positive_integer(fallback_id) or rawget(lookup, fallback) ~= fallback_id
+        if type(fallback) ~= "string" or fallback == ""
+                or not _positive_integer(fallback_id)
+                or rawget(lookup, fallback) ~= fallback_id
                 or rawget(lookup, fallback_id) ~= fallback then
             return nil, "drop"
         end
@@ -226,7 +410,7 @@ function M.wrap_parity_transport(mod, identity, opts)
     local proxy = {}
     local local_epoch = opts.session_epoch or _default_epoch(mod, proxy)
     if not _safe_string(local_epoch) then return nil, "session-epoch-invalid" end
-    local expected_schema = opts.schema or 1
+    local expected_schema = opts.schema or M.WIRE_IDENTITY_VERSION
     if not _positive_integer(expected_schema) then return nil, "schema-invalid" end
 
     local function challenge()

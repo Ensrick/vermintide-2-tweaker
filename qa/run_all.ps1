@@ -342,6 +342,9 @@ Run-Check "vmb_launcher_path_host_matrix" { & (Join-Path $here "run_vmb_launcher
 # shared by PowerShell 7 and Windows PowerShell 5.1. Keep its canonical ordinal
 # byte contract mandatory in every full local and hosted QA run.
 Run-Check "bundle_output_set_host_matrix" { & (Join-Path $here "run_bundle_output_set_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
+# Issue #1436: prove the offline evidence ledger and generated Patch 5.2
+# catalog are pinned; regenerate byte-exactly when the source checkout exists.
+Run-Check "check_wt_history_reproducibility" { & (Join-Path $here "check_wt_history_reproducibility.ps1") -Quiet:$Quiet }
 Run-Check "check_localization" { & (Join-Path $here "check_localization.ps1") -Quiet:$Quiet }
 # Player-facing lifecycle/issue metadata is forbidden in every active stream.
 # This is a blocking repository-wide gate; GitHub labels/changelogs remain the

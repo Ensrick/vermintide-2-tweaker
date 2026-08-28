@@ -119,6 +119,8 @@ local suites = {
     "test_wt_energy_seed",
     "test_wt_664_solo_parity",
     "test_wt_431_wire_contract",
+    "test_wt_history",
+    "test_wt_history_source_oracle",
     "test_wt_fire_sword",
     "test_wt_hold_pose",
     "test_wt_overcharge_presentation",
