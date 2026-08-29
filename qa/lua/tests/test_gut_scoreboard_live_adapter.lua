@@ -41,13 +41,14 @@ return function(H, repo_root)
         return topics
     end
 
-    local function player(stats_id, name, score)
+    local function player(stats_id, name, score, boss)
         return {
             stats_id = stats_id,
             name = name,
             group_scores = {
                 offense = {
                     { stat_name = "kills_total", score = score or 0 },
+                    { stat_name = "damage_dealt_bosses", score = boss or score or 0 },
                 },
             },
         }
@@ -86,6 +87,9 @@ return function(H, repo_root)
         end
 
         local fake_mod = { hooks = {}, settings = state.settings }
+        fake_mod._gut_boss_damage_sync = {
+            current_scores = function() return state.boss_scores end,
+        }
         function fake_mod:dofile(path)
             return assert(loadfile(mod_root .. path .. ".lua"))()
         end
@@ -296,6 +300,49 @@ return function(H, repo_root)
             end
             H.equal(errors, 1,
                 "a failed mission generation must remain contained and at-most-once")
+        end)
+    end)
+
+    H.test("GUT #1448 Tab and end consume one boss override fingerprint", function()
+        live_harness(function(env)
+            env.mod.settings.gut_scoreboard_live_page = 1
+            env.state.grouped = {
+                host = player("host", "Alpha", 4, 6),
+                remote = player("remote", "Bravo", 2, 5),
+            }
+            env.state.boss_scores = { host = 91 }
+            local list_ui = { _ui_top_renderer = {} }
+            env.tab_draw(list_ui, 0.016)
+            H.equal(env.state.last_widget.content.player_1_row_8, "91")
+            H.equal(env.state.last_widget.content.player_2_row_8, "5",
+                "missing compatible row must retain the native subtotal")
+
+            env.mod.on_game_state_changed("exit", "StateIngame", {
+                statistics_db = env.database,
+                profile_synchronizer = {},
+            })
+            env.state.boss_scores = nil
+            env.mod.on_game_state_changed("enter", "StateIngame", {
+                parent = {
+                    loading_context = { level_end_view_wrappers = { {} } },
+                },
+            })
+            env.end_draw({
+                _context = { players_session_score = env.state.grouped },
+                game_mode_key = "adventure",
+                ui_renderer = {},
+            }, {}, 0.016)
+            H.equal(env.state.last_widget.content.player_1_row_8, "91")
+            H.equal(env.state.last_widget.content.player_2_row_8, "5")
+
+            local tab_fp, end_fp
+            for _, line in ipairs(env.state.logs) do
+                local surface, fp = line:match("surface=(%a+).+fp=([0-9a-f]+)")
+                if surface == "tab" then tab_fp = fp end
+                if surface == "end" then end_fp = fp end
+            end
+            H.truthy(tab_fp ~= nil)
+            H.equal(end_fp, tab_fp)
         end)
     end)
 

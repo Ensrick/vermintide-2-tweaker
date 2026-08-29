@@ -113,11 +113,57 @@ views cannot disagree.
    the saved preference. The optional page keybind only advances the setting
    and owns no Tab/update/input hook. Adventure reconnect retention now includes
    both scalar paths within the existing 8-player / 64-path limits.
-5. **Custom statistics.** Add one field family at a time with an authoritative
-   owner, bounded wire schema, hot-join state, and two-player regression matrix.
+5. **Host boss-subtotal parity (implemented in source for #1448).** The host
+   answers a bounded readiness pull by reading the existing grouped
+   `damage_dealt_bosses` entry from
+   `ScoreboardHelper.get_grouped_topic_statistics`; it does not hook a damage
+   transaction or accumulate a second value. One exact
+   `gut_boss_damage_snapshot_v1` VMF channel carries schema `1` request and
+   aggregate snapshot envelopes. The requester first forces VMF's presence
+   re-handshake, waits 0.4 seconds, and retries at most four sends; the host
+   caches and resends the same immutable response for an exact duplicate request
+   sequence, so a lost request or response is idempotent even though VMF's pong
+   re-fires `on_user_joined`. Pongs cannot rearm a terminal pull, giving each
+   pull an absolute four-send cap. Each peer is limited to one response per 0.75
+   seconds and one fresh extraction per two seconds; same-generation sequences
+   must be contiguous and a mission accepts at most sixteen generations.
+   Compatible clients refresh the aggregate rather than sending per-hit traffic.
+
+   The receiver accepts only the current host peer, its current opaque mission
+   generation, and the exact pending monotonic sequence. It validates one topic,
+   at most four known unique `stats_id` strings, finite non-negative values no
+   greater than one billion, 64-byte generation/player strings, dense arrays, a
+   1,024-byte encoded payload, and at most eight 144-byte chunks.
+   Before every send, the exact eight-argument VMF JSON array is measured and
+   rejected above 400 bytes, leaving headroom beneath the native 500-character
+   packed-message limit (`docs/VMF_RECIPES.md` sections 3, 3a, and 4). A valid
+   row replaces only the matching detached live model cell; absent, expired,
+   mixed-version, and no-GUT snapshots keep the usable native value. A sorted
+   four-row `stats_id` fingerprint observes human and bot roster changes at a
+   0.5-second floor without treating VMF discovery callbacks as physical joins
+   or leaves. Clients poll only while the option owns an enabled pull/display;
+   hosts begin lazily after an authenticated request, so the default-off feature
+   performs no continuous grouped-scoreboard work. A real change rotates the
+   client request identity, rejects partial old chunks, and permits one early
+   host rebuild without bypassing the send floor.
+
+   The accepted row is copied with #1414's StateIngame-exit sidecar. On the end
+   surface only, the model uses `max(valid native final, valid captured host)`;
+   cumulative boss damage therefore cannot be lowered by a host snapshot that
+   predates the final hit, while a newer captured host row can still repair a
+   partial native row. Mission entry/exit, canonical host migration, setting
+   disable, and mod teardown retire the relevant transport state. VMF's early
+   bot `on_user_left` callback only schedules roster reconciliation. The
+   vanilla fixed-count score RPC,
+   `StatisticsDefinitions`, and `NetworkLookup` remain untouched.
+6. **Other custom statistics.** Add one field family at a time with an
+   authoritative owner, bounded wire schema, hot-join state, and two-player
+   regression matrix.
 
 The issue remains open after the native presentation slice. Friendly-fire
 damage, healing amount, and melee/ranged
 damage require separately specified host-authoritative accumulation before they
-may appear; boss damage still needs late-join parity. The shared page and
-visibility policy applies identically to the Tab and end-screen presenters.
+may appear. Boss damage now has source-only late-join parity through #1448 but
+remains unclaimed live behavior until an exact reviewed Dev artifact completes
+the issue's Solo-first acceptance. The shared page and visibility policy applies
+identically to the Tab and end-screen presenters.

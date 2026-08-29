@@ -40,7 +40,9 @@ end
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.342-dev"
+local MOD_VERSION = "0.2.343-dev"
+local GUT_RPC_SCHEMA = 1 -- Bump only when a GUT positional wire shape changes.
+mod._GUT_RPC_SCHEMA = GUT_RPC_SCHEMA
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -2438,6 +2440,19 @@ do
         end
     else
         printf("[gut:437] scoreboard retention module failed: %s", tostring(retention))
+    end
+end
+
+-- #1448: pull the host's grouped vanilla boss subtotal over one bounded v1
+-- channel and expose only a detached overlay to the existing Tab/end model.
+do
+    local ok, boss_sync = pcall(mod.dofile, mod,
+        "scripts/mods/gui_tweaker_dev/_gut_boss_damage_sync")
+    if ok and type(boss_sync) == "table" then
+        mod._gut_boss_damage_sync = boss_sync
+        for _, check in ipairs(boss_sync.rt_checks or {}) do _rt_register(check.name, check.fn) end
+    else
+        printf("[gut:1448] boss snapshot module failed: %s", tostring(boss_sync))
     end
 end
 
