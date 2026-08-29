@@ -1,5 +1,22 @@
 # Modded Progression — Changelog
 
+## 0.2.36-dev (2026-08-29) - exception-safe modded-realm authority (#434)
+
+- Replaced the module-local realm flag bracket with the shared, depth-aware
+  authority owner used by Crafting in Modded. Nested callers now preserve one
+  modded-realm interval regardless of hook order and restore the exact prior raw
+  flag after success or a thrown callback.
+- Added source-backed launch-parameter authority so temporary raw-flag clearing
+  cannot make a cooperating mod misclassify a Modded Realm session as official.
+- Exposed the bounded bracket to cooperating mods without adding an RPC,
+  backend request, polling loop, or official-realm write path.
+- Rebased the login-reward and daily-boundary runtime checks onto pure realm
+  inputs and the real Modded Realm authority. They no longer pretend an
+  official session can be created by clearing only the mutable flag.
+- Added engine-free tests for nested MP/CIM calls, raw true/false restoration,
+  nil-hole return forwarding, exceptions, and byte-identical shared-library
+  copies.
+
 ## 0.2.35-dev (2026-08-13) - #607 local loot-layer trace [diag]
 
 - Replaced the success-callback-only #607 probe with one bounded, modded-realm event ledger at the actual local seams: mission reward entry, native request enqueue, Spoils of War open entry, EAC/API rejection, optional callback success, and MP's persisted inventory census. A rejected request now still produces actionable evidence.

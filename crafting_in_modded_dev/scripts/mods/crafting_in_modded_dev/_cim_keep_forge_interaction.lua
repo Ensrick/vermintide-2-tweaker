@@ -35,10 +35,14 @@ function M.install(mod, interaction_definitions)
     -- wrappers and official/non-Keep behavior remains byte-for-byte delegated.
     client.can_interact = function(interactor_unit, interactable_unit, data, config)
         local original_result = original(interactor_unit, interactable_unit, data, config)
-        local untrusted = script_data and script_data["eac-untrusted"] == true
+        local is_modded = false
+        if type(mod._cim_is_modded_realm) == "function" then
+            local ok, resolved = pcall(mod._cim_is_modded_realm)
+            is_modded = ok and resolved == true
+        end
         local in_keep = mod._cim_is_in_keep and mod._cim_is_in_keep() == true
-        local result = M.resolve(original_result, untrusted, in_keep)
-        if result and untrusted and in_keep and not state.reported then
+        local result = M.resolve(original_result, is_modded, in_keep)
+        if result and is_modded and in_keep and not state.reported then
             state.reported = true
             printf("[cim:624] Keep forge interaction enabled; native forge transition retained")
         end

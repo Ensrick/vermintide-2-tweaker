@@ -46,6 +46,10 @@ ItemMasterList only unlock if the player owns that DLC.
 ]]
 
 local mod = get_mod("cim_dev")
+local _is_modded_realm = mod._cim_is_modded_realm or function() return false end
+local _with_eac_off = mod._cim_with_eac_off or function(func, self, ...)
+    return func(self, ...)
+end
 
 local _fake_skin_backend_ids = {}
 local _pending_local_craft = nil
@@ -255,7 +259,7 @@ mod:hook("BackendInterfaceItemPlayfab", "get_weapon_skin_from_skin_key", functio
     if id then return id, item end
 
     local iml_entry = rawget(ItemMasterList, skin_key)
-    if script_data["eac-untrusted"] and iml_entry and not _skin_requires_unowned_dlc(skin_key) then
+    if _is_modded_realm() and iml_entry and not _skin_requires_unowned_dlc(skin_key) then
         local fake_id = "cim_fake_" .. skin_key
         _fake_skin_backend_ids[fake_id] = skin_key
         local fake_item = {
@@ -273,11 +277,8 @@ end)
 -- 2-4. Customization UI button hooks
 -- ============================================================
 mod:hook("HeroWindowItemCustomization", "_enable_craft_button", function(func, self, enable, disable_edges)
-    if enable and script_data["eac-untrusted"] and self._current_recipe_name == "apply_weapon_skin" then
-        local saved = script_data["eac-untrusted"]
-        script_data["eac-untrusted"] = false
-        func(self, enable, disable_edges)
-        script_data["eac-untrusted"] = saved
+    if enable and _is_modded_realm() and self._current_recipe_name == "apply_weapon_skin" then
+        _with_eac_off(func, self, enable, disable_edges)
         return
     end
     func(self, enable, disable_edges)
@@ -292,7 +293,7 @@ end)
 
 mod:hook("HeroWindowItemCustomization", "_on_illusion_index_pressed", function(func, self, index, ignore_item_spawn, mark_as_equipped)
     local widget = self._illusion_widgets and self._illusion_widgets[index]
-    if script_data["eac-untrusted"] and not ignore_item_spawn then
+    if _is_modded_realm() and not ignore_item_spawn then
         if widget and widget.content then
             local skin_key = widget.content.skin_key
             if skin_key and not _skin_requires_unowned_dlc(skin_key) then
@@ -328,7 +329,7 @@ end)
 --          nil          when this is not an illusion-apply craft (caller
 --                       should defer to the next handler / vanilla)
 mod._cim_try_illusion_apply = function(self, career_name, item_backend_ids, recipe_override)
-    if not script_data["eac-untrusted"] then return nil end
+    if not _is_modded_realm() then return nil end
 
     local backend_items = Managers.backend:get_interface("items")
     local weapon_backend_id, skin_key
@@ -398,7 +399,7 @@ end)
 -- This covers Keep and in-mission HeroWindow customization, including the
 -- cosmetics_tweaker local-mirror bypass seen in the reopened #563 log.
 mod:hook_safe("HeroWindowItemCustomization", "_apply_weapon_skin_craft_complete", function(self, result)
-    if not script_data["eac-untrusted"] then return end
+    if not _is_modded_realm() then return end
     local pending_skin = self and self._cim563_pending_explicit_skin
     if self then self._cim563_pending_explicit_skin = nil end
     local backend_id = self and self._item_backend_id
@@ -427,7 +428,7 @@ end)
 -- DLC gate is the same `_skin_requires_unowned_dlc` used elsewhere in this
 -- file, so paid cosmetic DLC paywalls are still respected.
 mod:hook_safe("BackendInterfaceCraftingPlayfab", "get_unlocked_weapon_skins", function(self)
-    if not script_data["eac-untrusted"] then return end
+    if not _is_modded_realm() then return end
     local mirror = self._backend_mirror
     if not mirror or not mirror._unlocked_weapon_skins then return end
     if not WeaponSkins or not WeaponSkins.skins then return end
@@ -466,7 +467,7 @@ mod:command("inv_dump", "Dump modded item visibility state to log + console", fu
         return
     end
 
-    local eac = script_data["eac-untrusted"] and "true" or "false"
+    local eac = _is_modded_realm() and "true" or "false"
     local sf_active = mod._cim_standard_forge_active and "true" or "false"
     local show_only = mod:get("show_only_modded_weapons") and "true" or "false"
     local mech = Managers.mechanism and Managers.mechanism:current_mechanism_name() or "?"

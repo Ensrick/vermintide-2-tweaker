@@ -53,6 +53,13 @@
             )
         }
         @{
+            Source = "_lib_modded_realm_authority.lua"
+            Consumers = @(
+                "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_lib_modded_realm_authority.lua"
+                "modded_progression/scripts/mods/modded_progression/_lib_modded_realm_authority.lua"
+            )
+        }
+        @{
             Source = "_lib_weapon_appearance.lua"
             Consumers = @(
                 "character_weapon_variants/scripts/mods/character_weapon_variants/_lib_weapon_appearance.lua"

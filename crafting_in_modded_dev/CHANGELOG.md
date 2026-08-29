@@ -1,5 +1,28 @@
 # Crafting in Modded Changelog
 
+## 0.8.131-dev (2026-08-29) -- restore modded-realm illusion authority (#1465) [verify-fix]
+
+- Replaced temporary raw realm-flag writes in the illusion Apply paths with a
+  shared, depth-aware authority bracket that restores the exact prior state on
+  success, errors, nested calls, and either CIM/Modded Progression hook order.
+- Resolves the realm from the launch-time `-eac-untrusted` parameter presence,
+  the current raw flag, or a balanced Modded Progression bracket. The attached
+  report's raw flag changed from true at launch to false inside the affected UI;
+  that transient state can no longer suppress CIM's Apply path.
+- Made the equipped-slot customization path, standard forge, and physical Keep
+  forge resolve the same fail-closed modded-realm authority. Official-realm
+  behavior and PlayFab data remain untouched.
+- Added adversarial Lua coverage for launch-parameter presence, nested ownership,
+  nil-hole returns, thrown callbacks, raw true/false restoration, Keep-forge
+  visibility, and shared-copy parity.
+
+**Test:** Load `Crafting in Modded v0.8.131-dev` in the Modded Realm. With
+Modded Progression disabled, select an equipped weapon, open its Illusion page,
+select a different owned illusion, and confirm **Apply** appears and persists the
+change. Repeat through the physical Keep forge. Then enable Modded Progression
+and repeat once; both paths must still work and official-account data must not
+change.
+
 ## 0.8.130-dev (2026-08-23) -- retire consumed Craft Item telemetry (#499) [not-started]
 
 - Removes the automatic catalog and final-rendered-list logging left behind by
