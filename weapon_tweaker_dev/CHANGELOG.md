@@ -1,5 +1,15 @@
 # Weapon Tweaker Changelog
 
+## 0.12.316-dev (2026-08-29) -- mirror canonical Moonfire NetworkLookup registration (#428)
+
+- Mirrors public beta 0.12.315: Moonfire AOE registration now consumes the
+  canonical shared helper instead of privately appending a forward/reverse pair.
+- Preserves the exact native fallback and rejects malformed, sparse,
+  asymmetric, foreign, or remapped lookup state without partial writes.
+- Carries the same runtime checks, adversarial registration tests, package
+  coverage, and strict public/dev parity while preserving the friends-only
+  development overlay.
+
 ## 0.12.315-dev (2026-08-28) -- mirror source-exact Patch 6.6 Deepwood Staff history (#1436) [not-started]
 
 - Mirrors public beta 0.12.314: Kerillian's Deepwood Staff gains the exact

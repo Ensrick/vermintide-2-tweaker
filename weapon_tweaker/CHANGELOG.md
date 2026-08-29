@@ -1,5 +1,17 @@
 # Weapon Tweaker Changelog
 
+## 0.12.315-beta (2026-08-29) -- canonical Moonfire NetworkLookup registration (#428)
+
+- Replaces the Moonfire AOE owner's private length-based network-lookup append
+  with the shared, source-qualified registration helper already used by the
+  other Tweaker weapon providers.
+- Rejects sparse, asymmetric, remapped, malformed, or foreign lookup state
+  without partially mutating either lookup axis, while keeping repeated loads
+  idempotent and preserving the exact native fallback identity.
+- Extends the runtime and offline regression proofs across both WT streams;
+  `qa/run_all.ps1 -Quick` exercises successful registration, strict
+  metatables, reloads, post-registration drift, and fail-closed fallback paths.
+
 ## 0.12.314-beta (2026-08-28) -- source-exact Patch 6.6 Deepwood Staff history (#1436) [not-started]
 
 - Adds **Game Version 6.5.4** to Kerillian's Deepwood Staff history dropdown.
