@@ -60,7 +60,7 @@
             State = 'complete'
             Entry = 'career_tweaker/scripts/mods/career_tweaker/career_tweaker_balance.lua'
             CeilingLines = 910
-            RequiredModules = @('_career_tweaker_balance_hooks.lua', '_crt_foot_knight.lua', '_crt_balance_catalog.lua')
+            RequiredModules = @('_career_tweaker_balance_hooks.lua', '_crt_foot_knight.lua', '_crt_balance_catalog.lua', '_crt_balance_catalog_engineer.lua')
         }
         @{
             # Structural phase completed at 0.8.121-dev (#1159): the entry is

@@ -12,6 +12,7 @@ local function build(ctx)
 
     local builders = {
         mod:dofile("scripts/mods/career_tweaker/_crt_balance_catalog_early"),
+        mod:dofile("scripts/mods/career_tweaker/_crt_balance_catalog_engineer"),
         mod:dofile("scripts/mods/career_tweaker/_crt_balance_catalog_focused_spirit"),
         mod:dofile("scripts/mods/career_tweaker/_crt_balance_catalog_late"),
     }
