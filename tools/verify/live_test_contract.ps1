@@ -462,7 +462,7 @@ rawset(_G, "printf", mod.debug)
         Assert-VtContractFixture ($mp577Reject.Count -eq 1 -and @($mp577Reject[0].EmitterAnchors).Count -eq 2 -and @($mp577Reject[0].GuardAnchors).Count -eq 4) '#577 rejection authority no longer binds both failure callsites and returns.'
         Assert-VtContractFixture ($mp577Commit.Count -eq 1 -and @($mp577Commit[0].EmitterAnchors).Count -eq 1 -and @($mp577Commit[0].GuardAnchors).Count -eq 5) '#577 committed authority no longer binds the successful transaction tail.'
         foreach($mp577Route in $mp577Routes){
-            Assert-VtContractFixture ([string]$mp577Route.ModTrees.mp -ceq '9d00a1b341cb445fcb937c4ce128383021b16abb') '#577 immutable MP tree pin drifted unexpectedly.'
+            Assert-VtContractFixture ([string]$mp577Route.ModTrees.mp -ceq 'bf943e376bae259ce9e7945e491ca0f5350944d6') '#577 immutable MP tree pin drifted unexpectedly.'
             Assert-VtContractFixture ([string]$mp577Route.SourcesByMod.mp -ceq 'modded_progression/scripts/mods/modded_progression/modded_progression.lua') '#577 audited source path drifted unexpectedly.'
         }
         $requiredRoutes = @(

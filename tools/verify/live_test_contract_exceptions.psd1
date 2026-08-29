@@ -212,7 +212,7 @@
         # local purchase, and overlay synchronization only.
         @{
             Marker='[mp:577]'; ModId='mp'
-            ModTrees=@{mp='9d00a1b341cb445fcb937c4ce128383021b16abb'}
+            ModTrees=@{mp='bf943e376bae259ce9e7945e491ca0f5350944d6'}
             SourcesByMod=@{mp='modded_progression/scripts/mods/modded_progression/modded_progression.lua'}
             Signature='[mp:577] purchase_rejected item=%s reason=%s backend=none'
             Bound='at most one rejection receipt per explicit modded-realm Silver Shilling exchange attempt; both failure branches return before subsequent terminal routes'
@@ -229,7 +229,7 @@
         }
         @{
             Marker='[mp:577]'; ModId='mp'
-            ModTrees=@{mp='9d00a1b341cb445fcb937c4ce128383021b16abb'}
+            ModTrees=@{mp='bf943e376bae259ce9e7945e491ca0f5350944d6'}
             SourcesByMod=@{mp='modded_progression/scripts/mods/modded_progression/modded_progression.lua'}
             Signature='[mp:577] purchase_committed item=%s price=%d balance=%d overlay=%s backend=none'
             Bound='at most one commit receipt per explicit modded-realm Silver Shilling exchange attempt after successful validation and purchase'
@@ -510,7 +510,7 @@
         }
         @{
             Marker='[mp:607]'; ModId='mp'
-            ModTrees=@{mp='9d00a1b341cb445fcb937c4ce128383021b16abb'}
+            ModTrees=@{mp='bf943e376bae259ce9e7945e491ca0f5350944d6'}
             SourcesByMod=@{mp='modded_progression/scripts/mods/modded_progression/_mp_loot_diag_runtime.lua'}
             Signature='[mp:607] event=%s serial=%d flow=%s request=%s reason=%s chest=%s items=%d local_items=%d local_containers=%d local_uses=%d award_capable=%s open_capable=%s first_missing=%s backend=%s'
             Bound='one-mission observer events are persisted in a twelve-record bounded ledger'
@@ -978,7 +978,7 @@
             )
         }
         @{
-            ModId='cim_dev'; ModTree='c92e97f783517f91139414ed407aa6f529fad642'
+            ModId='cim_dev'; ModTree='1425222714884bf07bba5b94471a95f819c242a8'
             Source='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_loadout_wire_owner.lua'
             Marker='[cim:921]'; AddRoute=$true
             Signature='[cim:921] dropped invalid rarity metadata source=%s peer=%s slot=%s value=%s count=%d/%d'
@@ -993,7 +993,7 @@
             )
         }
         @{
-            ModId='cim_dev'; ModTree='c92e97f783517f91139414ed407aa6f529fad642'
+            ModId='cim_dev'; ModTree='1425222714884bf07bba5b94471a95f819c242a8'
             Source='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_loadout_wire_owner.lua'
             Marker='[cim:921]'; AddRoute=$true
             Signature='[cim:921] rarity metadata source=%s peer=%s slot=%s prior=%s current=%s stored=%s->%s count=%d/%d'
@@ -1008,7 +1008,7 @@
             )
         }
         @{
-            ModId='cim_dev'; ModTree='c92e97f783517f91139414ed407aa6f529fad642'
+            ModId='cim_dev'; ModTree='1425222714884bf07bba5b94471a95f819c242a8'
             Source='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_cw_trait_residency.lua'
             Marker='[cim:947]'; AddRoute=$true
             Signature='[cim:947] package=%s ref=%s state=%s detail=%s requests=%d'
