@@ -16,7 +16,7 @@ line by line, as were `IngameUI.setup_views` / the DLC `ui_views` seam and
 grep-verified when written).
 
 **Dev/stable relationship.** This documents `gui_tweaker_dev` (`gut_dev`,
-MOD_VERSION `0.2.341-dev`, friends-only Workshop 3751024698), the ACTIVE working
+MOD_VERSION `0.2.342-dev`, friends-only Workshop 3751024698), the ACTIVE working
 stream. `gui_tweaker/` (`gut`, public-alpha Workshop 3732144878) is its read-only
 public twin; per repo `CLAUDE.md` all in-flight work happens in the dev dir and
 promotion is a separate user-triggered action, so this doc cites only `gut_dev`
@@ -300,9 +300,56 @@ deterministic fingerprint. VMF persists page and per-topic visibility; the
 optional unbound page key only advances that setting. The renderer still owns
 one explicit `is_root` scenegraph and a bounded 11-by-4 grid of individual text
 passes; it does not encode rows as multiline/TSV text, own Tab input, or add a
-network channel. Page and sidecar evidence have independent eight-line session
-caps. Custom-stat ownership decisions remain in
+network channel itself. Page and sidecar evidence have independent eight-line
+session caps. Custom-stat ownership decisions remain in
 `SCOREBOARD_RESEARCH_272.md`.
+
+#1448 adds one VMF transport owner but no engine hook. The client sends the exact
+schema-1 `gut_boss_damage_snapshot_v1` request to the real peer id returned by
+`Managers.mechanism:server_peer_id()` (with the documented network-client/server
+readiness fallback), never the unsupported VMF `"server"` alias. Before each
+bounded request attempt it calls VMF's presence re-handshake and waits 0.4
+seconds [contract: `docs/VMF_RECIPES.md` sections 3 and 3a]. The Adventure host
+reads the existing grouped `damage_dealt_bosses` value through
+`ScoreboardHelper.get_grouped_topic_statistics` [src:
+`scripts/helpers/scoreboard_helper.lua:132-159,344-436`], encodes one topic and
+at most four stable `stats_id` rows, then sends at most eight 144-byte chunks.
+VMF JSON-packs the eight user arguments into the native 500-character string
+field; the transport measures that exact array before every send and rejects it
+above 400 bytes [src:
+`scripts/network_lookup/network_constants.lua:4`;
+`scripts/managers/mod/mod_manager.lua:595-603`]. The client authenticates the
+current host before buffering, validates the mission generation, monotonic
+sequence, dense player/topic counts, known unique identities, finite bounded
+values, string lengths, and total payload bytes, and overlays only the matching
+detached `damage_dealt_bosses` model cell. Missing/incompatible/expired data
+keeps the native model value. Live Tab uses exact host replacement. #1414's
+existing exit sidecar copies an accepted overlay before #1448 clears mission
+state; the end presenter takes `max(valid native final, valid captured host)`
+because boss damage is cumulative and either source may be newer at the exit
+edge. No path writes StatisticsDatabase, the fixed vanilla score payload,
+`StatisticsDefinitions`, or `NetworkLookup`.
+
+Each requesting peer owns one bounded host session: at most one response send
+per 0.75 seconds, one fresh grouped extraction/encode per two seconds, contiguous
+same-generation sequences, at most sixteen accepted generations per mission,
+and byte-identical replay for the exact latest generation/sequence. VMF's full
+pong re-fires `on_user_joined`, but discovery callbacks neither clear the cache
+nor rearm a terminal pull. VMF also reports bot churn through `on_user_left`
+before vanilla removal, so that callback only schedules stable-roster
+reconciliation and never clears an accepted row or host generation. A client
+polls a sorted fingerprint of at most four grouped `stats_id` rows at a
+0.5-second floor only while the option has a live pull/display; a host starts
+the same bounded poll lazily after an authenticated requester exists. This
+observes humans, no-GUT humans, and bots without imposing continuous grouped
+scoreboard work while the default-off feature is unused. A real change advances
+a roster epoch; it may bypass the fresh-build floor once but never the
+response-send floor. The client rotates generation, abandons partial chunks,
+and retains a still-valid prior display until the new snapshot completes. The
+pull has an absolute four-send cap, compatible snapshots refresh no faster than
+two seconds, and accepted data expires after ten seconds. Mission/canonical
+host/role/setting/teardown edges clear the applicable bounded state;
+`[gut:1448] raw` receipts have a 24-line process cap.
 
 #437 adds the missing Adventure disconnect lifecycle without changing scoreboard
 rendering or transport. On the server only, `_gut_scoreboard_retention.lua` wraps

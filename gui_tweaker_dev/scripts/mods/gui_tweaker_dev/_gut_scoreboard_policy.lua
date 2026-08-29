@@ -257,7 +257,13 @@ function M.restore_stat_values(records, write_value, limit)
     return restored
 end
 
-local function _score_map(player, supplemental_scores, stats_id)
+local function _detached_row(rows, stats_id)
+    return type(rows) == "table"
+        and (rawget(rows, tostring(stats_id)) or rawget(rows, stats_id)) or nil
+end
+
+local function _score_map(player, supplemental_scores, boss_scores, stats_id,
+        boss_score_mode)
     local scores = {}
     for _, group in pairs(type(player) == "table" and player.group_scores or {}) do
         for _, entry in ipairs(type(group) == "table" and group or {}) do
@@ -267,13 +273,27 @@ local function _score_map(player, supplemental_scores, stats_id)
             end
         end
     end
-    local supplement = type(supplemental_scores) == "table"
-        and (rawget(supplemental_scores, tostring(stats_id))
-            or rawget(supplemental_scores, stats_id)) or nil
+    local supplement = _detached_row(supplemental_scores, stats_id)
     if type(supplement) == "table" then
         for _, topic in ipairs(M.SUPPLEMENTAL_TOPICS) do
             local value = rawget(supplement, topic.name)
             if type(value) == "number" then scores[topic.name] = value end
+        end
+    end
+    -- #1448 overlays only the detached presentation cell. The native grouped
+    -- row remains the fallback, and StatisticsDatabase / vanilla score payloads
+    -- are never rewritten. The transport validator already owns stricter caps;
+    -- this final model seam independently requires a finite non-negative value.
+    local boss = _detached_row(boss_scores, stats_id)
+    if type(boss) == "number" and boss == boss
+            and boss < math.huge and boss > -math.huge and boss >= 0 then
+        local native = scores.damage_dealt_bosses
+        if boss_score_mode == "max" and type(native) == "number"
+                and native == native and native < math.huge
+                and native > -math.huge and native >= 0 then
+            scores.damage_dealt_bosses = math.max(native, boss)
+        else
+            scores.damage_dealt_bosses = boss
         end
     end
     return scores
@@ -425,7 +445,8 @@ function M.build_native_model(players, topics, options)
                 stats_id = source_id,
                 stats_key = tostring(source_id),
                 name = player.name,
-                scores = _score_map(player, options.supplemental_scores, source_id),
+                scores = _score_map(player, options.supplemental_scores,
+                    options.boss_scores, source_id, options.boss_score_mode),
             }
         end
     end

@@ -1,5 +1,49 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.343-dev (2026-08-29) -- synchronize the host's live boss subtotal (#1448)
+
+- Adds one exact schema-1 `gut_boss_damage_snapshot_v1` request/snapshot
+  channel. The Adventure host reads vanilla's already-grouped
+  `damage_dealt_bosses` row; there is no damage hook, parallel accumulator,
+  vanilla score/statistics RPC change, `StatisticsDefinitions` mutation, or
+  `NetworkLookup` identity.
+- Authenticates snapshots against the current host and bounds the opaque mission
+  generation, monotonic sequence, one topic, four known unique players, finite
+  non-negative values, string lengths, encoded bytes, chunks, retries, refresh
+  rate, expiry, host replay cache, and raw evidence. Each peer has an immutable
+  generation/sequence response, a 0.75-second send floor, a two-second fresh
+  extraction floor, contiguous sequences, and a sixteen-generation mission cap.
+  VMF discovery pongs cannot clear the response cache or rearm a terminal pull,
+  so partial retries cannot mix two snapshots and a mixed/no-GUT peer retires
+  after an absolute four attempts per pull.
+- Polls one sorted four-row `stats_id` roster fingerprint at a 0.5-second floor,
+  including bots and peers without GUT. Polling is inactive while the default-off
+  feature is unused: a client polls only during an enabled live pull/display and
+  a host starts lazily after an authenticated request. A genuine roster change
+  rotates the client request identity and permits one bounded host rebuild while
+  retaining the last accepted display; repeated VMF discovery callbacks do not
+  masquerade as joins or leaves. Delayed old-generation chunks fail closed.
+- Replaces only the matching detached boss cell after a compatible snapshot.
+  Until then, and after expiry/reset, the existing native subtotal remains the
+  fallback. Live Tab uses the exact host subtotal; the end surface takes the
+  maximum of its valid cumulative native final row and the captured valid host
+  row, so a snapshot up to two seconds old cannot erase a final boss hit. The
+  accepted row follows #1414's sidecar and #437's stable `stats_id` retention
+  without adding restored values twice.
+- Adds runtime regression `issue1448_host_boss_damage_snapshot_sync`, which
+  executes the real grouped extractor, validator, overlay, native fallback, and
+  Tab/end fingerprint path and emits a bounded `[gut:1448] raw` verdict. Offline
+  coverage owns forged hosts, stale generation, duplicate/out-of-order sequence,
+  NaN/infinity/negative/malformed/unknown/duplicate/oversized inputs, lost
+  request/response retries, VMF pong replay and terminal-pong caps, same-tick
+  request floods, bounded generation reset, human/bot roster replacement,
+  default-off inactivity, disable-before-send/re-enable identity reset,
+  migration/reset/canonical host loss,
+  stale-final max merge, late-join replacement, mixed fallback, and the
+  no-vanilla-wire boundary.
+- The source and transport have passed independent immutable review; live
+  behavior remains pending the exact Dev artifact's Solo-first verification.
+
 ## 0.2.342-dev (2026-08-25) -- page native scoreboard rows (#1414) [verify-fix]
 
 - The expanded scoreboard now pages a detached 13-topic registry at eleven

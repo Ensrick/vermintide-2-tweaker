@@ -2,7 +2,8 @@
 --
 -- Owns the two existing draw seams, the fixed 11-by-4 widget, detached native
 -- scalar reads, the exit-time end-screen sidecar, and the optional persisted
--- page callback. It owns no transport.
+-- page callback. #1448's sibling transport may supply one validated boss-cell
+-- overlay; this presenter still owns no network registration or native write.
 -- Owned by: gui_tweaker_dev.lua. Consumed via: mod:dofile from the entry point.
 local mod = get_mod("gut_dev")
 local Policy = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_scoreboard_policy")
@@ -142,6 +143,7 @@ local runtime_model_reported = false
 local mission_generation = 0
 local captured_generation
 local end_supplemental_scores
+local end_boss_scores
 local sidecar_evidence_count = 0
 local dummy_input = { get = function() return end, has = function() return end }
 local render_settings = { snap_pixel_positions = true }
@@ -191,11 +193,23 @@ local function _model_options(topics)
     }
 end
 
-local function _build_model(players, helper, database, supplemental_scores)
+local function _current_boss_scores()
+    local api = rawget(mod, "_gut_boss_damage_sync")
+    if type(api) ~= "table" or type(api.current_scores) ~= "function" then
+        return nil
+    end
+    local ok, scores = pcall(api.current_scores)
+    return ok and type(scores) == "table" and scores or nil
+end
+
+local function _build_model(players, helper, database, supplemental_scores,
+        boss_scores, boss_score_mode)
     local topics = Policy.build_topic_registry(helper.scoreboard_topic_stats)
     local options = _model_options(topics)
     local provisional = Policy.build_native_model(players, topics, options)
     options.supplemental_scores = supplemental_scores
+    options.boss_scores = boss_scores
+    options.boss_score_mode = boss_score_mode
     if not supplemental_scores and database then
         options.supplemental_scores = Policy.read_supplemental_scores(
             provisional.players,
@@ -207,7 +221,7 @@ local function _build_model(players, helper, database, supplemental_scores)
     return Policy.build_native_model(players, topics, options)
 end
 
-local function _snapshot(database, profile_synchronizer)
+local function _snapshot(database, profile_synchronizer, boss_scores)
     local helper = rawget(_G, "ScoreboardHelper")
     local managers = rawget(_G, "Managers")
     local player_manager = managers and managers.player
@@ -223,7 +237,8 @@ local function _snapshot(database, profile_synchronizer)
     end
     local ok, players = pcall(helper.get_grouped_topic_statistics, db, synchronizer, nil)
     if not ok then return nil end
-    return _build_model(players, helper, db)
+    if boss_scores == nil then boss_scores = _current_boss_scores() end
+    return _build_model(players, helper, db, nil, boss_scores)
 end
 
 local function _copy_supplemental_scores(model)
@@ -240,11 +255,24 @@ local function _copy_supplemental_scores(model)
     return scores
 end
 
+local function _copy_boss_scores(scores)
+    local copy, count = {}, 0
+    for stats_id, value in pairs(type(scores) == "table" and scores or {}) do
+        if count >= MAX_PLAYERS then break end
+        if type(value) == "number" and value == value
+                and value < math.huge and value > -math.huge and value >= 0 then
+            copy[tostring(stats_id)] = value
+            count = count + 1
+        end
+    end
+    return count > 0 and copy or nil
+end
+
 -- Normal Adventure level_end_view_context does not carry statistics_db
 -- (state_ingame_running.lua:274-344), although EndViewStateScore assigns the
--- absent field (end_view_state_score.lua:23-29). Capture the only two extra
--- scalar leaves at the StateIngame exit edge while StatisticsDatabase rows are
--- still live. GameStateMachine notifies mods with the old state object before
+-- absent field (end_view_state_score.lua:23-29). Capture the two extra scalar
+-- leaves plus any validated #1448 boss overlay at the StateIngame exit edge
+-- while StatisticsDatabase rows are still live. GameStateMachine notifies mods with the old state object before
 -- running the native state transition (game_state_machine.lua:14-21), so that
 -- object's database/synchronizer are the first-choice sources. The detached
 -- sidecar is capped to the model's four player rows; it never modifies
@@ -252,14 +280,17 @@ end
 local function _capture_end_sidecar(state_object)
     if not _enabled() or not _is_adventure() then
         end_supplemental_scores = nil
+        end_boss_scores = nil
         return
     end
     local database = type(state_object) == "table"
         and state_object.statistics_db or nil
     local synchronizer = type(state_object) == "table"
         and state_object.profile_synchronizer or nil
-    local model = _snapshot(database, synchronizer)
+    local boss_scores = _current_boss_scores()
+    local model = _snapshot(database, synchronizer, boss_scores)
     end_supplemental_scores = model and _copy_supplemental_scores(model) or nil
+    end_boss_scores = _copy_boss_scores(boss_scores)
     if sidecar_evidence_count < SIDECAR_EVIDENCE_CAP then
         sidecar_evidence_count = sidecar_evidence_count + 1
         pcall(printf,
@@ -303,6 +334,7 @@ mod.on_game_state_changed = function(status, state_name, ...)
             captured_generation = nil
             if not _carries_end_view_wrapper(state_object) then
                 end_supplemental_scores = nil
+                end_boss_scores = nil
             end
             cached_model = nil
             cached_at = -math.huge
@@ -313,6 +345,7 @@ mod.on_game_state_changed = function(status, state_name, ...)
             local ok, err = pcall(_capture_end_sidecar, state_object)
             if not ok then
                 end_supplemental_scores = nil
+                end_boss_scores = nil
                 if sidecar_evidence_count < SIDECAR_EVIDENCE_CAP then
                     sidecar_evidence_count = sidecar_evidence_count + 1
                     pcall(printf,
@@ -429,7 +462,8 @@ mod:hook_safe("EndViewStateScore", "draw", function(self, input_service, dt)
     local helper = rawget(_G, "ScoreboardHelper")
     local players = self._context and self._context.players_session_score
     if type(helper) ~= "table" or type(players) ~= "table" then return end
-    local model = _build_model(players, helper, nil, end_supplemental_scores)
+    local model = _build_model(players, helper, nil,
+        end_supplemental_scores, end_boss_scores, "max")
     _render_model(self.ui_renderer, input_service, dt, model, "end")
 end)
 

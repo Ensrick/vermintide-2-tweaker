@@ -181,6 +181,22 @@ If this candidate fails, use exactly one evidence-selected fallback:
 - [ ] Probe output remains capped at four records per process and never logs per frame.
 - [ ] `/gut_regression_test` passes `issue272_scoreboard_inventory_diagnostics`; offline `test_gut_scoreboard_diagnostics.lua` passes.
 
+## Host-synchronized live boss subtotal (#1448)
+
+- [ ] Solo first: with **Expanded Scoreboard (Live + End Screen)** enabled, the host's held-Tab boss row remains the vanilla grouped value, mission entry resets the sync generation, and missing/incompatible data leaves the native row usable.
+- [ ] `/gut_regression_test` passes `issue1448_host_boss_damage_snapshot_sync` and emits one bounded `[gut:1448] raw ... event=runtime-check ... verdict=PASS` receipt whose Tab/end fingerprints match.
+- [ ] After the exact Dev artifact passes Solo, two-player co-op covers boss damage before a late join, more boss damage after the join, held-Tab/end parity, disconnect/rejoin exactly-once retention, reversed host/client roles, and host migration.
+- [ ] The late client replaces only each matching `damage_dealt_bosses` cell with the host subtotal; ordinary native rows, Aidings, Times Revived, sorting, visibility, and page selection remain unchanged.
+- [ ] A final boss hit inside the refresh floor is not lowered on the end screen: the valid cumulative native final and captured host totals resolve to the larger value.
+- [ ] A mixed-version/no-GUT host produces at most four readiness attempts and then keeps the native fallback; repeated or delayed VMF pongs before, during, and after the terminal attempt cannot rearm it.
+- [ ] Repeated VMF pongs do not invalidate the host's exact cached response; partial retries remain byte-identical and cannot combine old/new host values.
+- [ ] Human/no-GUT-human join or leave and bot replacement rotate the request identity without blanking the prior usable display; old chunks fail closed.
+- [ ] With **Expanded Scoreboard** disabled and no authenticated requester, neither client nor host continuously calls the grouped-scoreboard extractor; host polling begins only after a valid request.
+- [ ] Disable the option before its first request sends, then re-enable it: the first emitted request uses a fresh generation at sequence one and sync resumes instead of retrying a stranded sequence two.
+- [ ] Forged sender, stale/retired generation, duplicate/out-of-order/gapped sequence, same-tick request floods, malformed/unknown/duplicate/oversized player/topic/value/payload, and chunk-conflict fixtures remain rejected or rate-bounded by `test_gut_boss_damage_sync.lua`.
+- [ ] No damage/hit hook, parallel boss ledger, vanilla `players_session_score`/statistics RPC change, `StatisticsDefinitions` mutation, or `NetworkLookup` identity exists; the only mod channel is exact `gut_boss_damage_snapshot_v1` schema 1.
+- [ ] Mission change, canonical current-host change, host-role migration, setting disable, and teardown clear the applicable snapshot/retry/chunk/cache state; VMF's early bot `on_user_left` callback does not clear it, and raw receipts never exceed 24 per process.
+
 ## On Yer Feet revive attribution (#438)
 
 - [ ] Mercenary with `markus_mercenary_activated_ability_revive` revives one downed bot by Morale Boost and gains exactly one scoreboard revive.
@@ -190,7 +206,7 @@ If this candidate fails, use exactly one evidence-selected fallback:
 
 Subset of the monorepo [REGRESSION_CHECKLIST.md](../docs/REGRESSION_CHECKLIST.md) for Tweaker: GUI dev.
 
-Last updated: 2026-08-13.
+Last updated: 2026-08-28.
 
 ## Floating damage numbers above the network maximum (#938)
 
