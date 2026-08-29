@@ -52,31 +52,6 @@ local function number_literal(value)
     return string.format("%.17g", value)
 end
 
-if self_test_mode then
-    local values = {
-        0, -0.0, 0.1, -0.1, 1 / 3,
-        0.2866666666666667, -0.033824745565652847,
-        9007199254740991, 9007199254740992,
-        math.ldexp(1, -1022), math.ldexp(1, -1074),
-    }
-    local function exact(left, right)
-        if left ~= right then return false end
-        if left == 0 then return 1 / left == 1 / right end
-        return true
-    end
-    for _, value in ipairs(values) do
-        local literal = number_literal(value)
-        assert(not literal:find(",", 1, true), "numeric locale leaked into Lua literal")
-        local chunk, load_error = loadstring("return " .. literal)
-        assert(chunk, load_error)
-        assert(exact(value, chunk()), "numeric round-trip failed: " .. literal)
-    end
-    local ok = pcall(number_literal, 0 / 0)
-    assert(not ok, "NaN must be rejected")
-    io.write("weapon-history numeric serializer: PASS\n")
-    return
-end
-
 local function shell_quote(value)
     return '"' .. tostring(value):gsub('"', '\\"') .. '"'
 end
@@ -528,6 +503,103 @@ local function serializable_clone(value, seen)
     return copy
 end
 
+-- Presence and value are independent axes. Lua's `and/or` value-selection
+-- idiom collapses a present false leaf into nil, so every evidence capture
+-- uses an explicit branch before cloning.
+local function clone_if_present(present, value)
+    if present then
+        return serializable_clone(value)
+    end
+    return nil
+end
+
+if self_test_mode then
+    local values = {
+        0, -0.0, 0.1, -0.1, 1 / 3,
+        0.2866666666666667, -0.033824745565652847,
+        9007199254740991, 9007199254740992,
+        math.ldexp(1, -1022), math.ldexp(1, -1074),
+    }
+    local function exact(left, right)
+        if left ~= right then return false end
+        if left == 0 then return 1 / left == 1 / right end
+        return true
+    end
+    for _, value in ipairs(values) do
+        local literal = number_literal(value)
+        assert(not literal:find(",", 1, true), "numeric locale leaked into Lua literal")
+        local chunk, load_error = loadstring("return " .. literal)
+        assert(chunk, load_error)
+        assert(exact(value, chunk()), "numeric round-trip failed: " .. literal)
+    end
+    local ok = pcall(number_literal, 0 / 0)
+    assert(not ok, "NaN must be rejected")
+
+    local presence_states = {
+        { label = "true", present = true, value = true },
+        { label = "false", present = true, value = false },
+        { label = "absent", present = false },
+    }
+    local function fixture(state)
+        local root = {}
+        if state.present then root.leaf = state.value end
+        return root
+    end
+    for _, historical in ipairs(presence_states) do
+        for _, current in ipairs(presence_states) do
+            local historical_value, historical_present = value_at(
+                fixture(historical), { "leaf" })
+            local current_value, current_present = value_at(
+                fixture(current), { "leaf" })
+            local operation = {
+                expected_current_unset = not current_present,
+                unset = not historical_present,
+            }
+            operation.value = clone_if_present(
+                historical_present, historical_value)
+            operation.expected_current = clone_if_present(
+                current_present, current_value)
+
+            assert(historical_present == historical.present,
+                "historical presence drift: " .. historical.label)
+            assert(current_present == current.present,
+                "current presence drift: " .. current.label)
+            assert((rawget(operation, "value") ~= nil) == historical.present,
+                "historical serialized-field presence drift: " .. historical.label)
+            assert((rawget(operation, "expected_current") ~= nil) == current.present,
+                "current serialized-field presence drift: " .. current.label)
+            if historical.present then
+                assert(operation.value == historical.value,
+                    "historical value drift: " .. historical.label)
+            end
+            if current.present then
+                assert(operation.expected_current == current.value,
+                    "current value drift: " .. current.label)
+            end
+            local rendered = serialize(operation)
+            if historical.label == "false" then
+                assert(rendered:find("value = false", 1, true),
+                    "present historical false was not serialized")
+            elseif historical.label == "absent" then
+                assert(not rendered:find("\n    value =", 1, true),
+                    "absent historical value was serialized")
+            end
+            if current.label == "false" then
+                assert(rendered:find("expected_current = false", 1, true),
+                    "present current false was not serialized")
+            elseif current.label == "absent" then
+                assert(not rendered:find("\n    expected_current =", 1, true),
+                    "absent current value was serialized")
+            end
+        end
+    end
+    assert(serialize({ value = false }):find("value = false", 1, true),
+        "standalone false serialization failed")
+    assert(serialize({}) == "{}", "standalone absence serialization failed")
+    io.write("weapon-history numeric and 3x3 presence serializers: PASS\n")
+    return
+end
+
 -- Re-read both sides of every already-audited operation. This preserves the
 -- deliberately bounded operation/path selection while proving that neither the
 -- historical result nor the current guard is inherited from a lossy artifact.
@@ -553,9 +625,9 @@ if rehydrate_snapshot_mode then
         for _, op in ipairs(record.ops or {}) do
             local historical_value, historical_exists = value_at(historical, op.path)
             local current_value, current_exists = value_at(current, op.path)
-            op.value = historical_exists and serializable_clone(historical_value) or nil
+            op.value = clone_if_present(historical_exists, historical_value)
             op.unset = not historical_exists
-            op.expected_current = current_exists and serializable_clone(current_value) or nil
+            op.expected_current = clone_if_present(current_exists, current_value)
             op.expected_current_unset = not current_exists
         end
     end
@@ -632,7 +704,7 @@ if enrich_mode then
         assert(type(current) == "table", "current template missing: " .. record.template)
         for _, op in ipairs(record.ops or {}) do
             local value, exists = value_at(current, op.path)
-            op.expected_current = exists and serializable_clone(value) or nil
+            op.expected_current = clone_if_present(exists, value)
             op.expected_current_unset = not exists
         end
     end

@@ -360,6 +360,10 @@ Run-Check "wt_history_patch_6_6_host_matrix" { & (Join-Path $here "run_wt_histor
 # from the adjacent 6.7.2 -> 6.8.1 boundary, rehydrate its current guard, and
 # reproduce both evidence lanes and the generated catalog from immutable source.
 Run-Check "check_wt_history_patch_6_8_reproducibility" { & (Join-Path $here "check_wt_history_patch_6_8_reproducibility.ps1") -Quiet:$Quiet }
+# Issue #1436: Patch 4.1.1's Masterwork Pistol boolean boundary requires both
+# evaluators to preserve a present false current guard. Reproduce it under both
+# supported PowerShell hosts, including the adversarial source-checkout fixture.
+Run-Check "wt_history_patch_4_1_1_host_matrix" { & (Join-Path $here "run_wt_history_patch_4_1_1_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
 Run-Check "check_localization" { & (Join-Path $here "check_localization.ps1") -Quiet:$Quiet }
 # Player-facing lifecycle/issue metadata is forbidden in every active stream.
 # This is a blocking repository-wide gate; GitHub labels/changelogs remain the

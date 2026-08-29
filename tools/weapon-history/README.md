@@ -6,8 +6,8 @@ Nothing below `tools/weapon-history/` belongs in a Workshop bundle.
 
 ## Anchors and evidence
 
-The generator projects three immutable historical revisions directly onto the
-current decompiled-source anchor:
+The Patch 5.2 generator projects three immutable historical revisions directly
+onto the current decompiled-source anchor:
 
 | State | Source revision |
 |---|---|
@@ -38,6 +38,24 @@ Official scope references:
 
 - [Patch 5.2.0](https://www.vermintide.com/news/gifts-of-the-wolf-father-and-patch-520)
 - [Hotfix 5.2.3](https://forums.fatsharkgames.com/t/hotfix-megathread-5-2-x-current-5-2-3/91155)
+
+### Patch 4.1.1 boundary
+
+Patch 4.1.1 uses an adjacent-boundary contract for the Masterwork Pistol:
+
+| Role | Source revision |
+|---|---|
+| Game version 4.0.1 | `872027662e076477451c8c4bf077473d8ab9e27d` |
+| Post-boundary 4.1.1 | `d5f1fa23c97e0e324db047cabb21faeffa9819bf` |
+| Current content anchor (6.12.0) | `038498af2b565bcb10bf5ed225638293a7640c83` |
+
+The adjacent evidence selects exactly one operation on
+`heavy_steam_pistol_template_1.ammo_data.reload_on_ammo_pickup`: historical
+`true`. Current source retains the key with value `false`; absence and false
+are therefore distinct guard states throughout extraction, generation,
+planning, rollback, and restore. Independent 3-by-3 true/false/absent
+self-tests pin that presence contract in both evaluator lanes. The official
+boundary is [Patch 4.1.1](https://forums.fatsharkgames.com/t/patch-notes-version-4-1-1/43407).
 
 ### Patch 6.6 boundary
 
@@ -91,6 +109,11 @@ From the repository root, with the pinned Vermintide source checkout available:
 ```powershell
 $lua = '.\qa\lua\vendor\lua-5.1.5-win64\lua5.1.exe'
 $source = 'C:\path\to\Vermintide-2-Source-Code'
+& $lua '.\tools\weapon-history\generate_patch_4_1_1_history.lua' `
+    $source `
+    '.\tools\weapon-history\evidence\patch_4_1_1' `
+    '.\weapon_tweaker\scripts\mods\weapon_tweaker\_wt_history_4_1_1_catalog.lua'
+
 & $lua '.\tools\weapon-history\generate_patch_5_2_history.lua' `
     $source `
     '.\tools\weapon-history\evidence\patch_5_2' `
@@ -115,13 +138,15 @@ $source = 'C:\path\to\Vermintide-2-Source-Code'
 Then run the non-mutating exact-output gate:
 
 ```powershell
+.\qa\check_wt_history_patch_4_1_1_reproducibility.ps1 -SourceRepo $source -RequireSource
+.\qa\run_wt_history_patch_4_1_1_host_matrix.ps1
 .\qa\check_wt_history_reproducibility.ps1 -SourceRepo $source -RequireSource
 .\qa\check_wt_history_patch_6_0_reproducibility.ps1 -SourceRepo $source -RequireSource
 .\qa\run_wt_history_patch_6_6_host_matrix.ps1
 .\qa\check_wt_history_patch_6_8_reproducibility.ps1 -SourceRepo $source -RequireSource
 ```
 
-`current_source_anchor.lua` is the single identity consumed by all four
+`current_source_anchor.lua` is the single identity consumed by all five
 generators and their PowerShell checks. It separates the semantic 6.12.0
 content commit from the later README-only default-branch tip. Ordinary QA runs
 `check_wt_history_source_freshness.ps1` opportunistically: an unreachable
@@ -146,12 +171,14 @@ through both evaluators, requires byte-exact primary output and exact-double
 semantic agreement with the independent oracle, regenerates the route/blob
 oracle, then requires byte-exact catalog equality. In source-less CI it still
 enforces every pinned artifact and reports source regeneration as a visible
-skip. The Patch 6.8 gate applies the same fail-closed policy to its adjacent
-boundary, current-anchor rehydration, two evaluators, and generated catalogs.
-The Patch 6.6 host matrix applies that policy under both PowerShell 7 and
-Windows PowerShell 5.1, including both source paths and the server-authority
-runtime contract. Before any of the three checks selects a source checkout, the
-central read-only selector proves every pinned commit, `commit:path` identity,
+skip. The Patch 4.1.1 and Patch 6.8 gates apply the same fail-closed policy to
+their adjacent boundaries, current-anchor rehydration, two evaluators, and
+generated catalogs. The Patch 4.1.1 and Patch 6.6 host matrices apply that
+policy under both PowerShell 7 and Windows PowerShell 5.1; the former pins
+present-false preservation and the latter includes both source paths plus the
+server-authority runtime contract. Before any of the five reproduction gates
+selects a source checkout, the central read-only selector proves every pinned
+commit, `commit:path` identity,
 and blob object. A stale or partial checkout is therefore unavailable: ordinary
 QA emits a visible skip, while `-RequireSource` fails closed. Selection never
 fetches, lazily retrieves promisor objects, mutates the checkout, or relies on

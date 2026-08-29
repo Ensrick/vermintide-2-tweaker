@@ -33,6 +33,25 @@ local function deep_clone(value, seen)
     return copy
 end
 
+-- Presence cannot use Lua's `and/or` value-selection idiom: a present false
+-- leaf would collapse to nil. Applied values and ownership snapshots call this
+-- separately so table results remain independent clones.
+local function clone_if_present(present, value)
+    if present then
+        return deep_clone(value)
+    end
+    return nil
+end
+
+-- Original values are retained by exact reference for rollback/restore. This
+-- branch preserves both a present false scalar and native table identity.
+local function original_if_present(present, value)
+    if present then
+        return value
+    end
+    return nil
+end
+
 local function deep_equal(left, right, seen)
     if left == right then return true end
     if type(left) ~= type(right) or type(left) ~= "table" then return false end
@@ -467,9 +486,9 @@ local function append_operation(plan, seen, roots, operation, transform)
         end
         applied = transformed
     end
-    local applied_value = operation.result_present and deep_clone(applied) or nil
+    local applied_value = clone_if_present(operation.result_present, applied)
     local entry = {
-        applied_snapshot = operation.result_present and deep_clone(applied) or nil,
+        applied_snapshot = clone_if_present(operation.result_present, applied),
         applied_value = applied_value,
         key = location.key,
         operation = operation,
@@ -557,7 +576,7 @@ function M.commit(plan)
             for rollback = applied, 1, -1 do
                 local prior = plan[rollback]
                 pcall(rawset, prior.parent, prior.key,
-                    prior.original_present and prior.original_value or nil)
+                    original_if_present(prior.original_present, prior.original_value))
             end
             return nil, "history commit failed at " .. tostring(index) .. ": "
                 .. tostring(write_error)
@@ -605,7 +624,7 @@ function M.restore(ledger)
     for index = #ledger, 1, -1 do
         local entry = ledger[index]
         local ok, restore_error = pcall(rawset, entry.parent, entry.key,
-            entry.original_present and entry.original_value or nil)
+            original_if_present(entry.original_present, entry.original_value))
         if not ok then
             return nil, "restore failed " .. target_key(entry.operation) .. ": "
                 .. tostring(restore_error)

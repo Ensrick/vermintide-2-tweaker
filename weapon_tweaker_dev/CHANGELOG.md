@@ -1,5 +1,17 @@
 # Weapon Tweaker Changelog
 
+## 0.12.318-dev (2026-08-29) -- mirror source-exact Patch 4.1.1 Masterwork Pistol history (#1436) [not-started]
+
+- Mirrors public beta 0.12.317: the Masterwork Pistol gains an exact **Game
+  Version 4.0.1** history state that restores its pre-4.1.1 ammo-pickup reload
+  behavior while keeping `Current` gameplay-inert.
+- Carries the same adjacent-source pins, independent dual-host regeneration,
+  authored-false presence semantics, atomic runtime transaction, rollback and
+  identity proofs, and strict public/dev parity.
+- Preserves the friends-only development overlay without introducing hooks,
+  RPCs, damage profiles, or presentation state. #1436 remains open for other
+  historical eras.
+
 ## 0.12.317-dev (2026-08-29) -- mirror source-exact Patch 6.0 launch history (#1436) [not-started]
 
 - Mirrors public beta 0.12.316: Kruber's Sword and Shield, Bretonnian Sword and

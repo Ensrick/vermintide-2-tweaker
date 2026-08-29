@@ -1,5 +1,18 @@
 # Weapon Tweaker Changelog
 
+## 0.12.317-beta (2026-08-29) -- source-exact Patch 4.1.1 Masterwork Pistol history (#1436) [not-started]
+
+- Adds **Game Version 4.0.1** to the Masterwork Pistol history dropdown. The
+  historical selection restores its pre-4.1.1 ammo-pickup reload behavior;
+  `Current` remains the inert default and preserves the live game value.
+- Pins the exact adjacent 4.0.1-to-4.1.1 source boundary and independently
+  regenerates it under PowerShell 7 and Windows PowerShell 5.1. Boolean
+  presence is preserved, so an authored `false` cannot be mistaken for an
+  absent field during extraction, validation, application, or restoration.
+- Extends the atomic history transaction, collision guards, runtime rollback
+  coverage, and public/dev parity without adding hooks, RPCs, damage profiles,
+  or presentation state. #1436 remains open for other historical eras.
+
 ## 0.12.316-beta (2026-08-29) -- source-exact Patch 6.0 launch history (#1436) [not-started]
 
 - Adds **Game Version 5.6.1** to the historical selectors for Kruber's Sword

@@ -1,7 +1,7 @@
-# Blocking offline provenance/reproduction gate for issue #1436's Patch 6.8
-# Kerillian Greatsword slice. The checked-in adjacent diff selects the one
-# official boundary operation; a second pass rehydrates that path against the
-# current source anchor. All generated output is written outside the repo.
+# Blocking offline provenance/reproduction gate for issue #1436's Patch 4.1.1
+# Masterwork Pistol slice. The checked-in adjacent diff selects one official
+# boundary operation; a second pass rehydrates that path against the current
+# source anchor. All generated output is written outside the repository.
 
 [CmdletBinding()]
 param(
@@ -57,77 +57,89 @@ try {
     . $anchorHelpers
     $anchor = Read-WtHistorySourceAnchor -RepoRoot $root
     $toolRoot = Join-Path $root 'tools\weapon-history'
-    $evidenceRoot = Join-Path $toolRoot 'evidence\patch_6_8'
+    $evidenceRoot = Join-Path $toolRoot 'evidence\patch_4_1_1'
     $extractor = Join-Path $toolRoot 'extract_weapon_history.lua'
     $oracleExtractor = Join-Path $toolRoot 'source_oracle\extract_weapon_history_oracle.lua'
-    $generator = Join-Path $toolRoot 'generate_patch_6_8_history.lua'
-    $sourceCatalog = Join-Path $evidenceRoot '_wt_history_6_8_source_catalog.lua'
-    $adjacentEvidence = Join-Path $evidenceRoot '_wt_history_snapshot_6_7_2_to_6_8_1_generated.lua'
-    $rehydratedEvidence = Join-Path $evidenceRoot '_wt_history_snapshot_6_7_2_rehydrated_generated.lua'
-    $generatedCatalog = Join-Path $root 'weapon_tweaker\scripts\mods\weapon_tweaker\_wt_history_6_8_catalog.lua'
-    $devCatalog = Join-Path $root 'weapon_tweaker_dev\scripts\mods\weapon_tweaker_dev\_wt_history_6_8_catalog.lua'
+    $generator = Join-Path $toolRoot 'generate_patch_4_1_1_history.lua'
+    $sourceCatalog = Join-Path $evidenceRoot '_wt_history_4_1_1_source_catalog.lua'
+    $adjacentEvidence = Join-Path $evidenceRoot '_wt_history_snapshot_4_0_1_to_4_1_1_generated.lua'
+    $rehydratedEvidence = Join-Path $evidenceRoot '_wt_history_snapshot_4_0_1_rehydrated_generated.lua'
+    $generatedCatalog = Join-Path $root 'weapon_tweaker\scripts\mods\weapon_tweaker\_wt_history_4_1_1_catalog.lua'
+    $devCatalog = Join-Path $root 'weapon_tweaker_dev\scripts\mods\weapon_tweaker_dev\_wt_history_4_1_1_catalog.lua'
     $lua = Join-Path $root 'qa\lua\vendor\lua-5.1.5-win64\lua5.1.exe'
 
     $pinned = [ordered]@{
         $extractor = 'ae916ba306e0f5933f71e9b41ed0c0e7df46c28585da4fb92b5e2cc03199b15a'
         $oracleExtractor = '1f5f26f4d302671859e7dadcf0f25d536b2601b03ee27d0a6ae35cb8723d52bd'
-        $generator = '9438e3881a0c1b0174f50568122519f07f1d79d483ee109a8d1d86a1eb1b97aa'
-        $sourceCatalog = 'f134c429203dc635290361e361f4e77b59dbb1b700c5f4e45e2dbb37db664947'
-        $adjacentEvidence = 'f088f7130845818d3e5652b8d13d26a25cc74f9d772517dde66e173361c70fcb'
-        $rehydratedEvidence = '0c2733d84dde3525a1c5475fc55c9a0b3922f62b90ac2caf802f40b2e651cd19'
-        $generatedCatalog = '9863e9468dd704356498a25169541769f813583ad6d8b54e80a50b98532419bc'
-        $devCatalog = '9863e9468dd704356498a25169541769f813583ad6d8b54e80a50b98532419bc'
+        $generator = '947d6a57f074c996109be02b054ee4977f62312e0c3efde4d14d465e19822b79'
+        $sourceCatalog = '0021e357693e24ca425dce354599cb60da50c44acbd879c31afddcb6584be331'
+        $adjacentEvidence = '9d261910ff282e25ef3e04a706f45600123842e2fd28f2247377a11ec8ab9417'
+        $rehydratedEvidence = '5cd59760c5af801075c785fd285167768c6d8ecd45b4404b3a2c3cba6ebd156a'
+        $generatedCatalog = '4b5a576f2f82219f29640a5bb0987625264f02d137b734aa37b85040f6e3167a'
+        $devCatalog = '4b5a576f2f82219f29640a5bb0987625264f02d137b734aa37b85040f6e3167a'
     }
     foreach ($entry in $pinned.GetEnumerator()) {
         if (-not (Test-Path -LiteralPath $entry.Key -PathType Leaf)) {
-            throw "missing Patch 6.8 provenance artifact: $($entry.Key)"
+            throw "missing Patch 4.1.1 provenance artifact: $($entry.Key)"
         }
         $actual = Get-Sha256 $entry.Key
         if ($actual -cne $entry.Value) {
-            throw "Patch 6.8 pinned hash drift: $($entry.Key) expected=$($entry.Value) actual=$actual"
+            throw "Patch 4.1.1 pinned hash drift: $($entry.Key) expected=$($entry.Value) actual=$actual"
         }
+    }
+    if ((Get-Sha256 $generatedCatalog) -cne (Get-Sha256 $devCatalog)) {
+        throw 'Patch 4.1.1 public/dev catalogs are not byte-identical'
     }
 
     $sourceText = [IO.File]::ReadAllText($sourceCatalog, [Text.Encoding]::UTF8)
     if ($sourceText.IndexOf($anchor.ContentRevision,
             [StringComparison]::Ordinal) -lt 0) {
-        throw 'Patch 6.8 source catalog does not consume the central current-source anchor'
+        throw 'Patch 4.1.1 source catalog does not consume the central current-source anchor'
     }
     $artifactMatches = [regex]::Matches($sourceText,
         '(?m)^\s*(_wt_history_snapshot_[A-Za-z0-9_]+)\s*=\s*"([0-9a-f]{64})"')
     if ($artifactMatches.Count -ne 2) {
-        throw "Patch 6.8 evidence ledger must contain exactly 2 artifacts; got $($artifactMatches.Count)"
+        throw "Patch 4.1.1 evidence ledger must contain exactly 2 artifacts; got $($artifactMatches.Count)"
     }
     foreach ($match in $artifactMatches) {
         $evidencePath = Join-Path $evidenceRoot ($match.Groups[1].Value + '.lua')
         if (-not (Test-Path -LiteralPath $evidencePath -PathType Leaf)) {
-            throw "Patch 6.8 ledger artifact is missing: $evidencePath"
+            throw "Patch 4.1.1 ledger artifact is missing: $evidencePath"
         }
         $actual = Get-Sha256 $evidencePath
         if ($actual -cne $match.Groups[2].Value) {
-            throw "Patch 6.8 evidence ledger drift: $evidencePath expected=$($match.Groups[2].Value) actual=$actual"
+            throw "Patch 4.1.1 evidence ledger drift: $evidencePath expected=$($match.Groups[2].Value) actual=$actual"
         }
     }
 
     $expectedEvidence = @(
-        '_wt_history_6_8_source_catalog.lua',
-        '_wt_history_snapshot_6_7_2_rehydrated_generated.lua',
-        '_wt_history_snapshot_6_7_2_to_6_8_1_generated.lua'
+        '_wt_history_4_1_1_source_catalog.lua',
+        '_wt_history_snapshot_4_0_1_rehydrated_generated.lua',
+        '_wt_history_snapshot_4_0_1_to_4_1_1_generated.lua'
     ) | Sort-Object
     $actualEvidence = @(Get-ChildItem -LiteralPath $evidenceRoot -File -Filter '*.lua' |
         ForEach-Object Name | Sort-Object)
     if (($actualEvidence -join "`n") -cne ($expectedEvidence -join "`n")) {
-        throw 'Patch 6.8 evidence directory contains an unledgered or missing Lua artifact'
+        throw 'Patch 4.1.1 evidence directory contains an unledgered or missing Lua artifact'
     }
 
-    $historicalRevision = 'b7c15fc61a3b34fae7d1e2de47f52198e26851ce'
-    $postRevision = '447f4eb49921ba08fbbbb945609ce2b9891f4898'
+    $extractorSelfTest = @(& $lua $extractor --self-test 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Patch 4.1.1 primary numeric/presence self-test failed: $($extractorSelfTest -join ' ')"
+    }
+    $oracleSelfTest = @(& $lua $oracleExtractor --self-test 2>&1)
+    if ($LASTEXITCODE -ne 0) {
+        throw "Patch 4.1.1 oracle numeric/presence self-test failed: $($oracleSelfTest -join ' ')"
+    }
+
+    $historicalRevision = '872027662e076477451c8c4bf077473d8ab9e27d'
+    $postRevision = 'd5f1fa23c97e0e324db047cabb21faeffa9819bf'
     $currentRevision = $anchor.ContentRevision
-    $sourcePath = 'scripts/settings/equipment/weapon_templates/2h_swords_wood_elf.lua'
+    $sourcePath = 'scripts/settings/equipment/weapon_templates/heavy_steam_pistol.lua'
     $sourceRequirements = @(
-        [pscustomobject]@{ Revision = $historicalRevision; Path = $sourcePath; Blob = 'be321d9239d7c0200102f005785587fd5d2dbf3c' },
-        [pscustomobject]@{ Revision = $postRevision; Path = $sourcePath; Blob = 'f0a7b263ddc481445608ab269d69d260946aa891' },
-        [pscustomobject]@{ Revision = $currentRevision; Path = $sourcePath; Blob = '9d95add8cf0f06d1c52042e13d5f83912b7f3dd9' }
+        [pscustomobject]@{ Revision = $historicalRevision; Path = $sourcePath; Blob = '25a4db5545750c0a5eb590e8d1bfc9882c80d30a' },
+        [pscustomobject]@{ Revision = $postRevision; Path = $sourcePath; Blob = 'b705e7b247242d60a6177682a2c2a89ae5164b2a' },
+        [pscustomobject]@{ Revision = $currentRevision; Path = $sourcePath; Blob = 'd68819bb59bdece50b69c9401a9feb5ae238b3cb' }
     )
     $sourceSelection = Find-WtHistorySourceRepo -Root $root -Explicit $SourceRepo `
         -Requirements $sourceRequirements
@@ -139,32 +151,23 @@ try {
         if ($RequireSource) {
             throw "Vermintide-2-Source-Code checkout is required but unavailable or incomplete: $selectionDetail"
         }
-        Write-Host "[check_wt_history_patch_6_8_reproducibility] source checkout unavailable or incomplete; exact regeneration SKIP (pinned evidence/output OK): $selectionDetail" -ForegroundColor Yellow
+        Write-Host "[check_wt_history_patch_4_1_1_reproducibility] source checkout unavailable or incomplete; exact regeneration SKIP (pinned evidence/output OK): $selectionDetail" -ForegroundColor Yellow
         exit 0
     }
 
     $tempBase = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
-    $temporaryRoot = Join-Path $tempBase ('wt1436-p68-' + [guid]::NewGuid().ToString('N'))
+    $temporaryRoot = Join-Path $tempBase ('wt1436-p411-' + [guid]::NewGuid().ToString('N'))
     if (-not $temporaryRoot.StartsWith($tempBase, [StringComparison]::OrdinalIgnoreCase)) {
         throw 'unsafe temporary reproduction path'
     }
     New-Item -ItemType Directory -Path $temporaryRoot | Out-Null
     try {
-        $extractorSelfTest = @(& $lua $extractor --self-test 2>&1)
-        if ($LASTEXITCODE -ne 0) {
-            throw "Patch 6.8 primary numeric self-test failed: $($extractorSelfTest -join ' ')"
-        }
-        $oracleSelfTest = @(& $lua $oracleExtractor --self-test 2>&1)
-        if ($LASTEXITCODE -ne 0) {
-            throw "Patch 6.8 oracle numeric self-test failed: $($oracleSelfTest -join ' ')"
-        }
-
         $primaryAdjacent = Join-Path $temporaryRoot 'primary-adjacent.lua'
         Invoke-LuaGeneratedFile -Lua $lua -Script $extractor `
             -Arguments @($historicalRevision, $postRevision, $sourcePath) `
             -WorkingDirectory $source -OutputPath $primaryAdjacent
         if ((Get-Sha256 $primaryAdjacent) -cne (Get-Sha256 $adjacentEvidence)) {
-            throw 'Patch 6.8 adjacent source evidence is not byte-reproducible'
+            throw 'Patch 4.1.1 adjacent source evidence is not byte-reproducible'
         }
 
         $oracleAdjacent = Join-Path $temporaryRoot 'oracle-adjacent.lua'
@@ -175,7 +178,7 @@ try {
         $comparison = @(& $lua $oracleExtractor --compare-evidence `
             $adjacentEvidence $oracleAdjacent 2>&1)
         if ($LASTEXITCODE -ne 0) {
-            throw "Patch 6.8 independent adjacent evidence differs: $($comparison -join ' ')"
+            throw "Patch 4.1.1 independent adjacent evidence differs: $($comparison -join ' ')"
         }
 
         $primaryRehydrated = Join-Path $temporaryRoot 'primary-rehydrated.lua'
@@ -184,7 +187,7 @@ try {
                 $currentRevision, $adjacentEvidence) `
             -WorkingDirectory $source -OutputPath $primaryRehydrated
         if ((Get-Sha256 $primaryRehydrated) -cne (Get-Sha256 $rehydratedEvidence)) {
-            throw 'Patch 6.8 current-anchor evidence is not byte-reproducible'
+            throw 'Patch 4.1.1 current-anchor evidence is not byte-reproducible'
         }
 
         $oracleRehydrated = Join-Path $temporaryRoot 'oracle-rehydrated.lua'
@@ -195,16 +198,16 @@ try {
         $comparison = @(& $lua $oracleExtractor --compare-evidence `
             $rehydratedEvidence $oracleRehydrated 2>&1)
         if ($LASTEXITCODE -ne 0) {
-            throw "Patch 6.8 independent current-anchor evidence differs: $($comparison -join ' ')"
+            throw "Patch 4.1.1 independent current-anchor evidence differs: $($comparison -join ' ')"
         }
 
-        $temporaryCatalog = Join-Path $temporaryRoot '_wt_history_6_8_catalog.lua'
+        $temporaryCatalog = Join-Path $temporaryRoot '_wt_history_4_1_1_catalog.lua'
         $generatorOutput = @(& $lua $generator $source $evidenceRoot $temporaryCatalog 2>&1)
         if ($LASTEXITCODE -ne 0) {
-            throw "Patch 6.8 catalog generator failed (exit $LASTEXITCODE): $($generatorOutput -join ' ')"
+            throw "Patch 4.1.1 catalog generator failed (exit $LASTEXITCODE): $($generatorOutput -join ' ')"
         }
         if ((Get-Sha256 $temporaryCatalog) -cne (Get-Sha256 $generatedCatalog)) {
-            throw 'Patch 6.8 generated catalog is not byte-reproducible'
+            throw 'Patch 4.1.1 generated catalog is not byte-reproducible'
         }
     } finally {
         if (Test-Path -LiteralPath $temporaryRoot) {
@@ -223,9 +226,9 @@ try {
         }
     }
 
-    Write-Detail "[check_wt_history_patch_6_8_reproducibility] OK - adjacent boundary, current guard, independent oracle, and catalog reproduced from $source" 'Green'
+    Write-Detail "[check_wt_history_patch_4_1_1_reproducibility] OK - adjacent boundary, present-false current guard, independent oracle, and catalog reproduced from $source" 'Green'
     exit 0
 } catch {
-    Write-Host "[check_wt_history_patch_6_8_reproducibility] ERROR - $($_.Exception.Message)" -ForegroundColor Red
+    Write-Host "[check_wt_history_patch_4_1_1_reproducibility] ERROR - $($_.Exception.Message)" -ForegroundColor Red
     exit 2
 }

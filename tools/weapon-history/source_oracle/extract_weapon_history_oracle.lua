@@ -79,29 +79,6 @@ local function number_literal(value)
         .. "," .. tostring(exponent - 53) .. ")"
 end
 
-if self_test_mode then
-    local values = {
-        0, -0.0, 0.1, -0.1, 1 / 3, 9007199254740991,
-        9007199254740992, math.ldexp(1, -1022), math.ldexp(1, -1074),
-        math.huge, -math.huge,
-    }
-    local function exact(left, right)
-        if left ~= right then return false end
-        if left == 0 then return 1 / left == 1 / right end
-        return true
-    end
-    for _, value in ipairs(values) do
-        local literal = number_literal(value)
-        local chunk, load_error = loadstring("return " .. literal)
-        assert(chunk, load_error)
-        assert(exact(value, chunk()), "numeric round-trip failed: " .. literal)
-    end
-    local ok = pcall(number_literal, 0 / 0)
-    assert(not ok, "NaN must be rejected")
-    io.write("source-oracle numeric serializer: PASS\n")
-    return
-end
-
 if compare_mode then
     local function load_evidence(path)
         local chunk, load_error = loadfile(path)
@@ -558,6 +535,99 @@ local function serializable_clone(value, seen)
     return copy
 end
 
+-- This oracle lane deliberately owns its own presence-preserving branch.
+-- Keeping it independent from the primary evaluator prevents a shared
+-- `false`-to-nil implementation bug from making both lanes agree incorrectly.
+local function oracle_copy_present_leaf(value, is_present)
+    if not is_present then
+        return nil
+    end
+    return serializable_clone(value)
+end
+
+if self_test_mode then
+    local values = {
+        0, -0.0, 0.1, -0.1, 1 / 3, 9007199254740991,
+        9007199254740992, math.ldexp(1, -1022), math.ldexp(1, -1074),
+        math.huge, -math.huge,
+    }
+    local function exact(left, right)
+        if left ~= right then return false end
+        if left == 0 then return 1 / left == 1 / right end
+        return true
+    end
+    for _, value in ipairs(values) do
+        local literal = number_literal(value)
+        local chunk, load_error = loadstring("return " .. literal)
+        assert(chunk, load_error)
+        assert(exact(value, chunk()), "numeric round-trip failed: " .. literal)
+    end
+    local ok = pcall(number_literal, 0 / 0)
+    assert(not ok, "NaN must be rejected")
+
+    local states = {
+        { name = "true", is_present = true, leaf = true },
+        { name = "false", is_present = true, leaf = false },
+        { name = "absent", is_present = false },
+    }
+    local function read_state(state)
+        local container = {}
+        if state.is_present then rawset(container, "leaf", state.leaf) end
+        return value_at(container, { "leaf" })
+    end
+    for _, old_state in ipairs(states) do
+        for _, live_state in ipairs(states) do
+            local old_value, old_present = read_state(old_state)
+            local live_value, live_present = read_state(live_state)
+            local row = {}
+            row.unset = not old_present
+            row.value = oracle_copy_present_leaf(old_value, old_present)
+            row.expected_current_unset = not live_present
+            row.expected_current = oracle_copy_present_leaf(
+                live_value, live_present)
+
+            assert(old_present == old_state.is_present,
+                "oracle old presence mismatch: " .. old_state.name)
+            assert(live_present == live_state.is_present,
+                "oracle live presence mismatch: " .. live_state.name)
+            assert((rawget(row, "value") ~= nil) == old_state.is_present,
+                "oracle old field presence mismatch: " .. old_state.name)
+            assert((rawget(row, "expected_current") ~= nil)
+                    == live_state.is_present,
+                "oracle live field presence mismatch: " .. live_state.name)
+            if old_state.is_present then
+                assert(row.value == old_state.leaf,
+                    "oracle old value mismatch: " .. old_state.name)
+            end
+            if live_state.is_present then
+                assert(row.expected_current == live_state.leaf,
+                    "oracle live value mismatch: " .. live_state.name)
+            end
+            local text = serialize(row)
+            if old_state.name == "false" then
+                assert(text:find("value = false", 1, true),
+                    "oracle dropped serialized old false")
+            elseif old_state.name == "absent" then
+                assert(not text:find("\n    value =", 1, true),
+                    "oracle serialized an absent old leaf")
+            end
+            if live_state.name == "false" then
+                assert(text:find("expected_current = false", 1, true),
+                    "oracle dropped serialized live false")
+            elseif live_state.name == "absent" then
+                assert(not text:find("\n    expected_current =", 1, true),
+                    "oracle serialized an absent live leaf")
+            end
+        end
+    end
+    assert(serialize({ expected_current = false }):find(
+        "expected_current = false", 1, true),
+        "oracle standalone false serialization failed")
+    assert(serialize({}) == "{}", "oracle standalone absence serialization failed")
+    io.write("source-oracle numeric and 3x3 presence serializers: PASS\n")
+    return
+end
+
 if routes_mode then
     local spec_path = arg[3]
     local spec_chunk, spec_error = loadfile(spec_path)
@@ -698,9 +768,11 @@ if rehydrate_snapshot_mode then
         for _, operation in ipairs(record.ops or {}) do
             local historical_value, historical_exists = value_at(historical, operation.path)
             local current_value, current_exists = value_at(current, operation.path)
-            operation.value = historical_exists and serializable_clone(historical_value) or nil
+            operation.value = oracle_copy_present_leaf(
+                historical_value, historical_exists)
             operation.unset = not historical_exists
-            operation.expected_current = current_exists and serializable_clone(current_value) or nil
+            operation.expected_current = oracle_copy_present_leaf(
+                current_value, current_exists)
             operation.expected_current_unset = not current_exists
         end
     end
@@ -771,7 +843,7 @@ if enrich_mode then
         assert(type(current) == "table", "current template missing: " .. record.template)
         for _, op in ipairs(record.ops or {}) do
             local value, exists = value_at(current, op.path)
-            op.expected_current = exists and serializable_clone(value) or nil
+            op.expected_current = oracle_copy_present_leaf(value, exists)
             op.expected_current_unset = not exists
         end
     end
