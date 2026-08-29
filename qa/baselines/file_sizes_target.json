@@ -8,7 +8,6 @@
     "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_regression.lua": 1721,
     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_combat_styles.lua": 2151,
     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_husk_path.lua": 1575,
-    "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_identity.lua": 2439,
     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_render.lua": 2238,
     "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_runtime_checks.lua": 2284,
     "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_glow_picker.lua": 1515,

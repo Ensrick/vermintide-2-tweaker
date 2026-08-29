@@ -55,9 +55,24 @@ explicit engine-surface review:
   `on_game_state_changed`, `on_enabled`, `on_disabled`, and `on_unload`
   callbacks. Appearance replay, dual-weapon package leases, Crowbill state,
   and mace/hammer restoration must continue to compose there.
-- `_cwv_regression_identity.lua` and `_cwv_regression_render.lua` install the
-  in-game regression checks in their original order. The split boundary is
-  organizational only; check names remain one public command surface.
+- `_cwv_regression_owner_loader.lua` is a hook-free, engine-free validator
+  loaded from the entry manifest immediately before the regression owners. Its
+  public surface is one function, injected as `regression_owner_loader`, that
+  accepts an already-loaded constructor and returns only a complete, bounded,
+  uniquely named check-row array plus its validated export. It must run before
+  any real `_rt_register` call, and no child receives that live callback.
+- `_cwv_regression_runtime_identity.lua` is loaded next from the entry manifest.
+  Its constructor receives the exact eight dependencies used by the extracted
+  low-level item/husk checks and returns their 22 ordered rows plus the shared
+  CWV-entry iterator. It owns no hooks, commands, lifecycle callback, RPC, or
+  direct registration side effect.
+- `_cwv_regression_identity.lua` remains the wrapper at the original install
+  position. It validates the runtime-identity child before registering its own
+  20-row prefix followed by the child's 22-row tail. The later combat-style,
+  husk/ammo, and render regression owners retain their existing entry-manifest
+  order. These boundaries are organizational only: all names remain one public
+  `/cwv_regression_test` command surface, and decomposed modules never dofile
+  one another.
 
 Offline source-contract tests that need the historical composed surface must
 use `qa/lua/cwv_source.lua`. Tests concerned specifically with entry size or
@@ -82,6 +97,13 @@ load order should read the entry file directly.
   `_cwv_musket_ammo_pool.lua`; put only native counter selection in
   `_cwv_musket_ammo_hud.lua`, installed from `_cwv_musket_runtime.lua` after the
   pool exists. A HUD fix must never create a second ammo authority.
+- Put a new regression check in the module that owns the guarded behavior. If
+  an existing low-level item/husk identity check must move or change, keep it in
+  `_cwv_regression_runtime_identity.lua`, update the exact row-count/order and
+  moved-body fixture deliberately, and preserve entry-manifest loading through
+  `_cwv_regression_owner_loader.lua`. Never add a nested `mod:dofile`, pass the
+  live registration callback into a child, or register a partially built row
+  set.
 
 ### Native HUD presentation ownership
 

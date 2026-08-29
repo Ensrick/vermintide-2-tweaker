@@ -1,5 +1,18 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.534-dev (2026-08-29) -- split the CWV regression-identity owner (#2) [not-started]
+
+- Split the 42-check identity regression owner into its original ordered
+  20-check prefix and a focused 22-check runtime-identity owner without
+  changing any check body, name, index, or registration order.
+- Added one fail-before-registration loader that validates the complete child
+  row set, rejects malformed or duplicate rows, and never gives a decomposed
+  owner the live registration callback.
+- Reduced the frozen target-tier file-size debt by one while preserving entry
+  load order, package reachability, hook/RPC/lifecycle cardinality, and the
+  public `/cwv_regression_test` surface. This is repository hardening only;
+  issue #2 remains open for the remaining size debt.
+
 ## 0.1.533-dev (2026-08-25) -- reject malformed NetworkLookup state (#428) [not-started]
 
 - Synchronized the canonical NetworkLookup registrar that now proves the

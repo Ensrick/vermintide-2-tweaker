@@ -93,7 +93,7 @@
             State = 'complete'
             Entry = 'character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua'
             CeilingLines = 1490
-            RequiredModules = @('_cwv_variant_catalog.lua', '_cwv_core_templates.lua', '_cwv_skin_registry.lua', '_cwv_illusion_families.lua', '_cwv_husk_path.lua', '_cwv_musket_runtime.lua', '_cwv_musket_ammo_hud.lua', '_cwv_husk_residency_owner.lua', '_cwv_item_registration_owner.lua', '_cwv_menu_preview_owner.lua', '_cwv_weapon_transform_owner.lua', '_cwv_custom_mesh_runtime.lua', '_cwv_musket_equip_surface.lua', '_cwv_javelin_runtime_owner.lua', '_cwv_rapier_runtime_owner.lua', '_cwv_variant_bootstrap_owner.lua', '_cwv_item_identity_transport_owner.lua', '_cwv_world_equipment_owner.lua', '_cwv_regression_identity.lua', '_cwv_regression_husk_ammo.lua', '_cwv_illusion_provenance.lua')
+            RequiredModules = @('_cwv_variant_catalog.lua', '_cwv_core_templates.lua', '_cwv_skin_registry.lua', '_cwv_illusion_families.lua', '_cwv_husk_path.lua', '_cwv_musket_runtime.lua', '_cwv_musket_ammo_hud.lua', '_cwv_husk_residency_owner.lua', '_cwv_item_registration_owner.lua', '_cwv_menu_preview_owner.lua', '_cwv_weapon_transform_owner.lua', '_cwv_custom_mesh_runtime.lua', '_cwv_musket_equip_surface.lua', '_cwv_javelin_runtime_owner.lua', '_cwv_rapier_runtime_owner.lua', '_cwv_variant_bootstrap_owner.lua', '_cwv_item_identity_transport_owner.lua', '_cwv_world_equipment_owner.lua', '_cwv_regression_owner_loader.lua', '_cwv_regression_identity.lua', '_cwv_regression_runtime_identity.lua', '_cwv_regression_husk_ammo.lua', '_cwv_illusion_provenance.lua')
         }
         @{
             # Completed by extracting registration/Deus lifecycle and native

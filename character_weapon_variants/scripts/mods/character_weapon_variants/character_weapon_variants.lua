@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.533-dev"
+local MOD_VERSION = "0.1.534-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
 mod._cwv_dev_anim_picker = mod:dofile("scripts/mods/character_weapon_variants/cwv_dev_anim_picker")
@@ -1515,6 +1515,13 @@ mod:dofile("scripts/mods/character_weapon_variants/_cwv_commands_lifecycle")(mod
     give_variant = _give_variant,
 })
 
+-- Regression owners are manifest-loaded here and injected into the identity
+-- wrapper. The wrapper validates the complete child row set before its first
+-- real registration; no decomposed module dofiles another module.
+local _regression_owner_loader = mod:dofile(
+	"scripts/mods/character_weapon_variants/_cwv_regression_owner_loader")
+local _runtime_identity_owner = mod:dofile(
+	"scripts/mods/character_weapon_variants/_cwv_regression_runtime_identity")
 local _cwv_regression_context = {
 	mod_version = MOD_VERSION,
 	om = _om,
@@ -1528,6 +1535,8 @@ local _cwv_regression_context = {
 	auto_register_all = _om.item_registration.auto_register_all,
 	cross_access_action_remap = _cross_access_action_remap,
 	wield_hook_registration_count = _cwv_wield_hook_registration_count,
+	regression_owner_loader = _regression_owner_loader,
+	runtime_identity_owner = _runtime_identity_owner,
 	transform_map = _transform_map,
 	skin_transform_map = _skin_transform_map,
 	crowbill_transform_by_unit = _crowbill_transform_by_unit,
