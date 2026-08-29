@@ -128,9 +128,10 @@ end)
 -- The ONLY spawn surface is the test-only host command /et_spawn_chosen and
 -- gt's Creature Spawner (#454 enumerates live Breeds). No pool integration.
 --
--- NETWORK / UNMODDED-CLIENT CONSTRAINT: same as the Skaven Warlord — the
--- breed name joins NetworkLookup.breeds and .damage_sources, so EVERY peer
--- must have enemy_tweaker INSTALLED (enabled or not) before this spawns.
+-- NETWORK FLOOR (#451B): a dedicated exact channel fingerprints both ET breed
+-- names, their registrar semantics, and all three numeric ids. The command
+-- refuses without positive pre-ack; both ConflictDirector spawn surfaces also
+-- substitute the validated vanilla donor if another caller bypasses it.
 --
 -- PACKAGE RESIDENCY POLICY (explicit): EnemyPackageLoaderSettings.alias_to_breed
 -- resolves the clone to chaos_warrior (enemy_package_loader.lua:189/:263), and
@@ -139,6 +140,7 @@ end)
 -- never trigger a dynamic per-breed package load whose bundle existence for
 -- an always-startup breed is [unverified].
 local Registrar = ET.CustomBreedRegistrar
+local Identity = ET.CustomBreedIdentity
 local CHOSEN = Core.CHOSEN
 local CHOSEN_BREED = CHOSEN.name
 
@@ -151,24 +153,101 @@ end
 -- The same declarative registrar owns the Chosen and Warlord surfaces.  This
 -- owner contributes only policy: clone overrides, an exact reload signature,
 -- one ephemeral localization row, and its public readiness flag.
+local _source = rawget(rawget(_G, "Breeds") or {}, CHOSEN.source_breed)
+local _source_fields = {
+    "boss", "elite", "threat_value", "infighting", "category_mask",
+    "run_on_spawn", "run_on_death", "run_on_despawn",
+}
+local _source_nil = {}
+local _source_before = nil
+if type(_source) == "table" then
+    _source_before = {}
+    for i = 1, #_source_fields do
+        local value = rawget(_source, _source_fields[i])
+        _source_before[i] = value == nil and _source_nil or value
+    end
+end
+
+local function _conflict_method(name)
+    local managers = rawget(_G, "Managers")
+    local conflict = managers and managers.state and managers.state.conflict
+    local method = type(conflict) == "table" and conflict[name]
+    if type(method) ~= "function" then
+        error("chosen_conflict_method_missing:" .. name, 0)
+    end
+    return method, conflict
+end
+
+local _breed_utils = rawget(_G, "BreedUtils")
+local _inject_breed_category_mask = type(_breed_utils) == "table"
+    and _breed_utils.inject_breed_category_mask or nil
+local chosen_services = {
+    boss_infighting = rawget(rawget(_G, "InfightingSettings") or {}, "boss"),
+    inject_breed_category_mask = function(breed)
+        if type(_inject_breed_category_mask) ~= "function" then
+            error("BreedUtils.inject_breed_category_mask missing", 0)
+        end
+        return _inject_breed_category_mask(breed)
+    end,
+    add_boss = function(unit)
+        local method, conflict = _conflict_method("add_unit_to_bosses")
+        return method(conflict, unit)
+    end,
+    add_angry = function(_, blackboard)
+        local method, conflict = _conflict_method("add_angry_boss")
+        return method(conflict, 1, blackboard)
+    end,
+    remove_boss = function(unit)
+        local method, conflict = _conflict_method("remove_unit_from_bosses")
+        return method(conflict, unit)
+    end,
+    remove_angry = function()
+        local method, conflict = _conflict_method("add_angry_boss")
+        return method(conflict, -1)
+    end,
+}
+
 mod._et_chosen_ready = false
 local chosen_ok, chosen_reason = Registrar.register({
     owner = "enemy_tweaker.chosen_greataxe",
     name = CHOSEN_BREED,
     source_breed = CHOSEN.source_breed,
     race = "chaos",
-    fingerprint = "et-custom-breed:v3:chosen-greataxe:chaos-warrior",
+    fingerprint = assert(Identity.fingerprint_for(CHOSEN_BREED),
+        "missing Chosen registrar fingerprint"),
     configure = function(breed)
-        Core.apply_chosen_overrides(breed, CHOSEN)
+        local configured, reason = Core.apply_chosen_overrides(
+            breed, CHOSEN, chosen_services)
+        if not configured then error(reason, 0) end
     end,
-    validate_breed = function(breed)
+    validate_breed = function(breed, source)
         if breed.display_name ~= CHOSEN.display_name_key
             or breed.default_inventory_template ~= CHOSEN.inventory_template
-            or breed.boss_staggers ~= true or type(breed.max_health) ~= "table" then
+            or breed.boss ~= true or breed.elite ~= nil
+            or breed.boss_staggers ~= true
+            or breed.show_health_bar ~= true
+            or breed.far_off_despawn_immunity ~= true
+            or breed.threat_value ~= CHOSEN.threat_value
+            or type(breed.infighting) ~= "table"
+            or type(breed.category_mask) ~= "number"
+            or type(breed.max_health) ~= "table"
+            or type(breed.run_on_spawn) ~= "function"
+            or type(breed.run_on_death) ~= "function"
+            or type(breed.run_on_despawn) ~= "function" then
             return nil, "chosen_override_mismatch"
+        end
+        if type(source) ~= "table" or breed.run_on_spawn == source.run_on_spawn
+                or breed.run_on_death == source.run_on_death
+                or breed.run_on_despawn == source.run_on_despawn then
+            return nil, "chosen_lifecycle_wrapper_mismatch"
         end
         for i = 1, 8 do
             if breed.max_health[i] ~= 2000 then return nil, "chosen_health_mismatch" end
+        end
+        local captured_mask = breed.category_mask
+        local category_ok = pcall(chosen_services.inject_breed_category_mask, breed)
+        if not category_ok or breed.category_mask ~= captured_mask then
+            return nil, "chosen_category_mask_stale"
         end
         return true
     end,
@@ -224,6 +303,12 @@ mod:command("et_spawn_chosen", "Spawn the greataxe Chosen prototype (#451 test o
         mod:echo("[et:451] Chaos Warrior package is not loaded on this mission - use a mission that has Chaos enemies")
         return
     end
+    local exact_safe = type(ET.custom_breeds_exact_safe) == "function"
+        and ET.custom_breeds_exact_safe()
+    if exact_safe ~= true then
+        mod:echo("[et:451] Chosen spawn blocked: every human peer must pre-ack the exact Enemy Tweaker custom-breed identity")
+        return
+    end
     local player = player_manager:local_player()
     local unit = player and player.player_unit
     if not unit or not Unit.alive(unit) then
@@ -236,7 +321,7 @@ mod:command("et_spawn_chosen", "Spawn the greataxe Chosen prototype (#451 test o
     conflict:spawn_queued_unit(Breeds_t[CHOSEN_BREED], Vector3Box(pos),
         QuaternionBox(face_player), "debug_spawn", nil, nil, {})
     _chosen_log("spawn queued at player position (test command)")
-    mod:echo("[et:451] Chosen queued. Reminder: every player in the lobby must have Enemy Tweaker installed.")
+    mod:echo("[et:451] Chosen queued after exact peer/catalog confirmation.")
 end)
 
 ET.rt_register("issue451_chosen_greataxe_prototype", function()
@@ -246,7 +331,22 @@ ET.rt_register("issue451_chosen_greataxe_prototype", function()
     local breeds = rawget(_G, "Breeds")
     local breed = breeds and breeds[CHOSEN_BREED]
     if type(breed) ~= "table" then return "published breed missing from Breeds" end
+    if breed.boss ~= true or breed.elite ~= nil then
+        return "Chosen is not classified exclusively as a boss"
+    end
     if breed.boss_staggers ~= true then return "monster stagger policy missing" end
+    if breed.show_health_bar ~= true then return "boss health bar missing" end
+    if breed.far_off_despawn_immunity ~= true then return "far-despawn immunity missing" end
+    if breed.threat_value ~= 32 then return "boss threat value drifted" end
+    local infighting = rawget(rawget(_G, "InfightingSettings") or {}, "boss")
+    if type(infighting) == "table" and not rawequal(breed.infighting, infighting) then
+        return "boss infighting policy drifted"
+    end
+    local category_before = breed.category_mask
+    local probe_ok = pcall(chosen_services.inject_breed_category_mask, breed)
+    if not probe_ok or breed.category_mask ~= category_before then
+        return "breed category mask is stale"
+    end
     if type(breed.max_health) ~= "table" or breed.max_health[1] ~= 2000
             or breed.max_health[8] ~= 2000 then
         return "2000 HP stat block drifted"
@@ -259,20 +359,31 @@ ET.rt_register("issue451_chosen_greataxe_prototype", function()
         return "inventory template missing from InventoryConfigurations"
     end
     local src = breeds[CHOSEN.source_breed]
-    if type(src) == "table" and src.boss_staggers then
-        return "vanilla chaos_warrior mutated: boss_staggers leaked to the source breed"
+    if type(src) == "table" and _source_before then
+        for i = 1, #_source_fields do
+            local key = _source_fields[i]
+            local value = _source_before[i]
+            if value == _source_nil then value = nil end
+            if rawget(src, key) ~= value then
+                return "vanilla chaos_warrior mutated at " .. tostring(key)
+            end
+        end
     end
     local actions = rawget(_G, "BreedActions")
     if actions and type(actions[CHOSEN_BREED]) ~= "table" then
         return "BreedActions clone missing"
     end
     local nl = rawget(_G, "NetworkLookup")
-    for _, table_name in ipairs({ "breeds", "damage_sources" }) do
+    for _, table_name in ipairs({ "breeds", "damage_sources", "statistics_path_names" }) do
         local lookup = nl and rawget(nl, table_name)
         local idx = lookup and rawget(lookup, CHOSEN_BREED)
         if type(idx) ~= "number" or rawget(lookup, idx) ~= CHOSEN_BREED then
             return "wire pair asymmetric or missing in NetworkLookup." .. table_name
         end
+    end
+    local elites = rawget(_G, "ELITES")
+    if type(elites) == "table" and rawget(elites, CHOSEN_BREED) ~= nil then
+        return "Chosen leaked into ELITES"
     end
     local epls = rawget(_G, "EnemyPackageLoaderSettings")
     if not epls or epls.alias_to_breed[CHOSEN_BREED] ~= CHOSEN.source_breed then

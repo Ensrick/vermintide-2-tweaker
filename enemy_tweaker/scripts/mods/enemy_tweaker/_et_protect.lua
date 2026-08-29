@@ -30,8 +30,11 @@ local _dbg_alert  = ET.dbg_alert
 -- breed_freezer.lua:77 -- `class(...)` at file scope), so these markers are set
 -- at mod load, before any mission, and are readable when /et_regression_test
 -- runs at the keep.
-ET.wrap_registry = ET.wrap_registry or { plain = {}, tick = {} }
+ET.wrap_registry = ET.wrap_registry or { plain = {}, tick = {}, once = {} }
 local _wrap_registry = ET.wrap_registry
+_wrap_registry.plain = _wrap_registry.plain or {}
+_wrap_registry.tick = _wrap_registry.tick or {}
+_wrap_registry.once = _wrap_registry.once or {}
 local function _reg_key(class, method) return tostring(class) .. "." .. tostring(method) end
 
 -- _safe(label, fn, ...) — call fn(...) under pcall. On failure log a
@@ -75,6 +78,35 @@ local function _hook_wrap(class, method, label, body)
         return nil
     end)
     _wrap_registry.plain[_reg_key(class, method)] = true
+end
+
+-- _hook_resolve_first_once(class, method, label, resolver, unsafe_original)
+-- protects a sender whose first argument is the identity-bearing payload.
+-- Resolver work is protected, then native is invoked OUTSIDE pcall exactly
+-- once with the resolved first argument. A native mutate-then-throw therefore
+-- propagates unchanged and can never trigger a second native call.
+--
+-- If planning throws, an original unsafe/custom payload is held. An ordinary
+-- vanilla payload is passed to native once unchanged, preserving the standard
+-- fail-open policy without ever replaying an unsafe identity.
+local function _hook_resolve_first_once(class, method, label, resolver,
+        unsafe_original)
+    mod:hook(class, method, function(func, self, first, ...)
+        local ok, resolved = pcall(resolver, first, ...)
+        if not ok then
+            local err = tostring(resolved)
+            mod:warning("[et:hook] %s (%s.%s) planner errored: %s -- no retry",
+                tostring(label), tostring(class), tostring(method), err)
+            _dbg_alert("hook %s (%s.%s) planner errored: %s -- no retry",
+                tostring(label), tostring(class), tostring(method), err)
+            local guard_ok, unsafe = pcall(unsafe_original, first)
+            if not guard_ok or unsafe == true then return nil end
+            resolved = first
+        end
+        if resolved == nil then return nil end
+        return func(self, resolved, ...)
+    end)
+    _wrap_registry.once[_reg_key(class, method)] = true
 end
 
 -- _hook_wrap_table(class_table, method, label, body) — table-form variant
@@ -219,6 +251,7 @@ end
 
 ET.safe = _safe
 ET.hook_wrap = _hook_wrap
+ET.hook_resolve_first_once = _hook_resolve_first_once
 ET.hook_wrap_table = _hook_wrap_table
 ET.hook_wrap_tick = _hook_wrap_tick
 ET.mult = _mult
@@ -229,6 +262,9 @@ rt_register("spawn_scaling_helpers_present", function()
     if type(_scale_count) ~= "function" then return "_scale_count helper missing" end
     if type(_safe) ~= "function"        then return "_safe helper missing" end
     if type(_hook_wrap) ~= "function"   then return "_hook_wrap helper missing" end
+    if type(_hook_resolve_first_once) ~= "function" then
+        return "_hook_resolve_first_once helper missing"
+    end
     if type(ET.spawn_dbg) ~= "function"   then return "_spawn_dbg helper missing" end
     if type(ET.spawn_dbg_alert) ~= "function" then return "_spawn_dbg_alert helper missing" end
 end)

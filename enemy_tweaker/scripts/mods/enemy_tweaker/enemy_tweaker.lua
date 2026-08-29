@@ -1,6 +1,6 @@
 local mod = get_mod("enemy_tweaker")
 
-local MOD_VERSION = "0.7.58-dev"
+local MOD_VERSION = "0.7.60-dev"
 -- RPC schema version (VMF_RECIPES.md section 10, GitHub Issue #42). Prepended as
 -- the FIRST positional arg of every mod:network_send this mod emits, and
 -- validated as the first arg of every mod:network_register callback; a peer on a
@@ -30,12 +30,10 @@ mod:info("Enemy Tweaker v%s loaded", MOD_VERSION)
 --   * _et_log before _et_protect (the protect wrappers alert through dbg_alert),
 --   * data/state providers (presets/swaps/mimic/roaming/champion) before
 --     _et_director_hooks, which re-applies them on ConflictDirector init/refresh,
---   * _et_skaven_warlord_breed MUST precede _et_champion_warlord: the new
---     breed deep-copies Breeds[skaven_storm_vermin_champion] and this order
---     guarantees the copy snapshots PRISTINE vanilla 800-HP champion values
---     even when champion_in_elite_pool is saved ON (#324),
---   * _et_lifecycle and _et_commands last among the new modules (they consume
---     everything), then the two pre-existing feature modules.
+--   * Warlord registration precedes Chosen/parity and snapshots the pristine
+--     800-HP Champion donor; both transactions precede identity capture (#324/#451B),
+--   * parity installs before _et_champion_warlord hot-join/spawn hooks,
+--   * _et_lifecycle preserves parity's update wrapper; remaining modules follow.
 -- Regression checks print in registration order, so reordering this manifest
 -- reorders /et_regression_test output (names are the frozen surface; the
 -- v0.7.31-dev split moved each check into the module that owns what it checks,
@@ -64,6 +62,7 @@ mod._et.PersonalHandicapPolicy = mod:dofile("scripts/mods/enemy_tweaker/_et_pers
 mod._et.PersonalHandicapUnits = mod:dofile("scripts/mods/enemy_tweaker/_et_personal_handicap_units") -- #640 lifetime-safe Unit boundary
 mod._et.NetworkLookupLib = mod:dofile("scripts/mods/enemy_tweaker/_lib_network_lookup") -- #428 strict bidirectional registration owner
 mod._et.CustomBreedRegistrar = mod:dofile("scripts/mods/enemy_tweaker/_et_custom_breed_registrar"); mod._et.CustomBreedRegistrar.lookup_lib = mod._et.NetworkLookupLib -- #1413 atomic Enemy-local breed owner
+mod._et.CustomBreedIdentity = mod:dofile("scripts/mods/enemy_tweaker/_et_custom_breed_identity") -- #451B exact three-axis custom-breed identity + donor floor
 -- Startup marker: unconditional mod:info (the "applied" log marker pattern).
 -- Prefix changed v0.5.14 from [et:br] -> [et] to match the universal convention
 -- (PROJECT_STANDARDS.md § 3.6). host_required=true retained as a per-mod addendum.
@@ -81,6 +80,8 @@ mod:dofile("scripts/mods/enemy_tweaker/_et_swaps")                -- breed/facti
 mod:dofile("scripts/mods/enemy_tweaker/_et_mimic")                -- per-system difficulty mimic
 mod:dofile("scripts/mods/enemy_tweaker/_et_roaming")              -- roaming size (SIP + recycler guard + ambient density + clone shim)
 mod:dofile("scripts/mods/enemy_tweaker/_et_skaven_warlord_breed") -- #324 mod-added breed (MUST precede _et_champion_warlord)
+mod:dofile("scripts/mods/enemy_tweaker/_et_boss_ideas")           -- #451 audit + Chosen registration (MUST precede exact parity install)
+mod:dofile("scripts/mods/enemy_tweaker/_et_custom_breed_parity")  -- #451B exact peer floor (installed before hot-join/spawn hooks)
 mod:dofile("scripts/mods/enemy_tweaker/_et_champion_warlord")     -- champion/warlord pools + consolidated spawn hook + crash guards
 mod:dofile("scripts/mods/enemy_tweaker/_et_director_hooks")       -- ConflictDirector init/refresh re-apply chain
 mod:dofile("scripts/mods/enemy_tweaker/_et_event_size")           -- terror-event horde size scaling
@@ -96,7 +97,6 @@ mod:dofile("scripts/mods/enemy_tweaker/_et_boss_tweaks")          -- boss mechan
 mod:dofile("scripts/mods/enemy_tweaker/_et_boss_balance")         -- #450 per-boss balance toggles (health/armor/warp-lightning data mutations)
 mod:dofile("scripts/mods/enemy_tweaker/_et_boss_grudge")          -- #531 grudge-mark behavioral knobs (Skarrik Berserk / Bodvarr Crippling, Cata+)
 mod:dofile("scripts/mods/enemy_tweaker/_et_boss_behavior")        -- #450 Halescourge Cata+ half-health monster add
-mod:dofile("scripts/mods/enemy_tweaker/_et_boss_ideas")           -- #451 feasibility audit + greataxe Chosen prototype breed (test-only spawn command)
 mod:dofile("scripts/mods/enemy_tweaker/_et_special_variants")     -- #452 bounded premium-special asset audit; no breed/spawn mutation
 mod:dofile("scripts/mods/enemy_tweaker/_et_enemy_modifiers")      -- #453 bounded modifier/template/category audit; no application yet
 

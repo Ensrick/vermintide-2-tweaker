@@ -1,5 +1,28 @@
 # Enemy Tweaker Changelog
 
+## 0.7.60-dev (2026-08-29): Chosen boss contract and custom-breed parity (#451) [diagnostics-armed]
+
+- Classified the greataxe Chosen as a genuine boss while preserving its Chaos
+  Warrior donor behavior: boss health-bar/category surfaces, far-despawn
+  immunity, threat and infighting values, and exactly-once boss lifecycle
+  callbacks now form one validated contract.
+- Added a deterministic three-axis custom-breed identity for both the Chosen
+  and Skaven Warlord. Every custom spawn and synchronization route now requires
+  exact Enemy Tweaker peer parity; unknown, pending, disabled, or mismatched
+  peers receive a validated vanilla donor instead of an unsafe numeric custom
+  breed identity.
+- Hardened hot join with bounded challenge/timeout handling and a fail-closed
+  live-plus-queued custom-breed census. Pending exact proof may delay admission,
+  while malformed census state, replay, mismatch, and General Tweaker-style
+  bypass routes cannot leak a custom breed onto an unproven peer.
+- Added offline coverage for solo and exact-peer success, mismatch and timeout
+  containment, queued/immediate spawn paths, donor fallback, reload/tamper,
+  disconnect cleanup, category/lifecycle behavior, hook ownership, and bounded
+  diagnostics.
+- Both Conflict Director sender floors use a no-replay protective hook. A
+  native or floor error can no longer fall back through the original custom
+  breed payload or invoke a partially completed spawn a second time.
+
 ## 0.7.58-dev (2026-08-25): transactional custom-breed registrar (#1413) [not-started]
 
 - Registration now validates complete dense `breeds`, `damage_sources`, and

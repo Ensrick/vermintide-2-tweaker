@@ -2,8 +2,8 @@
 local M = {}
 
 M.CANDIDATES = {
-    { id = "chosen_shield", source_breed = "chaos_raider", model_breed = "chaos_exalted_champion_warcamp", status = "prototype_required" },
-    { id = "chosen_greataxe", source_breed = "chaos_raider", model_breed = "chaos_exalted_champion_warcamp", status = "prototype_required" },
+    { id = "chosen_shield", source_breed = "chaos_warrior", model_breed = "chaos_exalted_champion_warcamp", status = "prototype_required" },
+    { id = "chosen_greataxe", source_breed = "chaos_warrior", model_breed = "chaos_exalted_champion_warcamp", status = "prototype_required" },
     { id = "stormfiend_ratlings", source_breed = "skaven_stormfiend_boss", status = "arena_coupled" },
     { id = "skaven_warlock", source_breed = "skaven_grey_seer", status = "arena_coupled" },
     { id = "chaos_sorcerer", source_breed = "chaos_exalted_sorcerer", status = "arena_coupled" },
@@ -29,19 +29,150 @@ M.CHOSEN = {
     inventory_template = "warrior_axe",
     max_health = 2000,
     difficulty_count = 8,
+    threat_value = 32,
 }
 
--- Mutates and returns the supplied CLONE table. Engine-free: no global reads.
-function M.apply_chosen_overrides(breed, spec)
+local function _pack(...)
+    return { n = select("#", ...), ... }
+end
+
+local function _call(callback, ...)
+    if callback == nil then return { n = 1, true } end
+    return _pack(pcall(callback, ...))
+end
+
+local function _first_error(has_error, first, result)
+    if not result[1] and not has_error then return true, result[2] end
+    return has_error, first
+end
+
+-- Compose the Chaos Warrior donor lifecycle with the two engine boss ledgers.
+-- The donor callback still runs on every engine callback. Boss/angry operations
+-- are attempt-once per unit: their latch is written BEFORE the call, so an
+-- operation which mutates and then throws cannot be repeated by a second
+-- death/despawn callback. Every operation is protected long enough to run the
+-- remaining cleanup, after which the first error is rethrown unchanged.
+function M.wrap_chosen_lifecycle(breed, services)
+    if type(breed) ~= "table" then return nil, "breed_clone_missing" end
+    services = type(services) == "table" and services or {}
+    for _, name in ipairs({ "add_boss", "add_angry", "remove_boss", "remove_angry" }) do
+        if type(services[name]) ~= "function" then
+            return nil, "lifecycle_service_missing:" .. name
+        end
+    end
+
+    local donor_spawn = rawget(breed, "run_on_spawn")
+    local donor_death = rawget(breed, "run_on_death")
+    local donor_despawn = rawget(breed, "run_on_despawn")
+    if donor_spawn ~= nil and type(donor_spawn) ~= "function" then
+        return nil, "donor_spawn_invalid"
+    end
+    if donor_death ~= nil and type(donor_death) ~= "function" then
+        return nil, "donor_death_invalid"
+    end
+    if donor_despawn ~= nil and type(donor_despawn) ~= "function" then
+        return nil, "donor_despawn_invalid"
+    end
+
+    local states = setmetatable({}, { __mode = "k" })
+    local function state_for(unit)
+        if unit == nil then error("chosen_lifecycle_unit_missing", 0) end
+        local state = states[unit]
+        if not state then
+            state = {}
+            states[unit] = state
+        end
+        return state
+    end
+    local function attempt_once(state, key, callback, ...)
+        if state[key] then return { n = 1, true } end
+        state[key] = true
+        return _call(callback, ...)
+    end
+
+    breed.run_on_spawn = function(unit, blackboard, ...)
+        local donor = _call(donor_spawn, unit, blackboard, ...)
+        local failed, first = _first_error(false, nil, donor)
+        local state = state_for(unit)
+        local boss = attempt_once(state, "boss_added", services.add_boss,
+            unit, blackboard)
+        failed, first = _first_error(failed, first, boss)
+        local angry = attempt_once(state, "angry_added", services.add_angry,
+            unit, blackboard)
+        failed, first = _first_error(failed, first, angry)
+        if angry[1] and type(blackboard) == "table" then
+            blackboard.is_angry = true
+        end
+        if failed then error(first, 0) end
+        return unpack(donor, 2, donor.n)
+    end
+
+    local function finish(donor_callback, unit, blackboard, ...)
+        local donor = _call(donor_callback, unit, blackboard, ...)
+        local failed, first = _first_error(false, nil, donor)
+        local state = state_for(unit)
+        if state.boss_added then
+            local boss = attempt_once(state, "boss_removed",
+                services.remove_boss, unit, blackboard)
+            failed, first = _first_error(failed, first, boss)
+        end
+        if state.angry_added then
+            local angry = attempt_once(state, "angry_removed",
+                services.remove_angry, unit, blackboard)
+            failed, first = _first_error(failed, first, angry)
+            if angry[1] and type(blackboard) == "table" then
+                blackboard.is_angry = false
+            end
+        end
+        if failed then error(first, 0) end
+        return unpack(donor, 2, donor.n)
+    end
+
+    breed.run_on_death = function(unit, blackboard, ...)
+        return finish(donor_death, unit, blackboard, ...)
+    end
+    breed.run_on_despawn = function(unit, blackboard, ...)
+        return finish(donor_despawn, unit, blackboard, ...)
+    end
+    return breed
+end
+
+-- Mutates and returns the supplied CLONE table. Engine-free: every engine
+-- service (boss infighting, category injection, lifecycle ledgers) is supplied
+-- by the runtime owner and is therefore replaceable in offline tests.
+function M.apply_chosen_overrides(breed, spec, services)
     spec = spec or M.CHOSEN
     if type(breed) ~= "table" then return nil, "breed_clone_missing" end
+    services = type(services) == "table" and services or {}
+    if type(services.boss_infighting) ~= "table" then
+        return nil, "boss_infighting_missing"
+    end
+    if type(services.inject_breed_category_mask) ~= "function" then
+        return nil, "category_injector_missing"
+    end
+    local wrapped, wrap_reason = M.wrap_chosen_lifecycle(breed, services)
+    if not wrapped then return nil, wrap_reason end
     breed.name = spec.name
     breed.display_name = spec.display_name_key
     local health = {}
     for i = 1, spec.difficulty_count do health[i] = spec.max_health end
     breed.max_health = health
+    breed.boss = true
+    breed.elite = nil
     breed.boss_staggers = true
+    breed.show_health_bar = true
+    breed.far_off_despawn_immunity = true
+    breed.threat_value = spec.threat_value
+    breed.infighting = services.boss_infighting
     breed.default_inventory_template = spec.inventory_template
+    local category_ok, category_error = pcall(
+        services.inject_breed_category_mask, breed)
+    if not category_ok then
+        return nil, "category_injector_threw:" .. tostring(category_error)
+    end
+    if type(breed.category_mask) ~= "number" then
+        return nil, "category_mask_missing"
+    end
     return breed
 end
 

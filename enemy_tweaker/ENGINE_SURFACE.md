@@ -18,12 +18,12 @@ breeds and factions in hordes, scales counts, and adds two custom breeds (the
 Skaven Warlord and greataxe Chosen). Almost every seam it touches lives under
 `docs/engine/07` (conflict director + mutators). It is a host-required mod - the
 spawn decisions are server-authoritative - with two exceptions that reach every
-peer: the mod-added breeds (their NetworkLookup entries must exist on every peer) and
-the global `table.clone` shim.
+peer: custom-breed wire identity (now exact-gated with vanilla donors at both
+ConflictDirector send surfaces) and the global `table.clone` shim.
 
 ## Hook table
 
-26 LIVE registration sites, grouped into 7 rows-of-concern. Almost all route
+30 LIVE registration sites, grouped into 9 rows-of-concern. Almost all route
 through the mod's own protective factories in `_et_protect.lua`:
 `_hook_wrap` = `mod:hook` body wrapped in pcall with a vanilla-fallback on inner
 error; `_hook_wrap_table` = the same for a plain dispatcher table (table-form);
@@ -90,7 +90,10 @@ part of the count or table.
 
 | Class.method (kind) | Vanilla behavior | Why et hooks it | Trap / invariant |
 |---|---|---|---|
-| `ConflictDirector.spawn_queued_unit` [wrap] `_et_champion_warlord.lua:176` | Server-authoritative breed spawn from the queue [src: `conflict_director.lua:1732`] | SINGLE consolidated hook for two disjoint substitutions: eligible monster -> Skaven Warlord, and roaming elite -> Champion (`:176`) | ROW OF CONCERN. Host-only substitution (`Managers.player.is_server`) so the breed replicates normally - but the mod-added breed's `NetworkLookup` entries only exist on et peers, so EVERY peer must run et (wire safety, `docs/engine/03`). Consolidated per the one-hook-per-pair rule. A bounded optional-data marker exempts #450's curated Troll/Spawn add from monster-pool substitution. |
+| `ConflictDirector.spawn_queued_unit` [resolve-first-once] `_et_champion_warlord.lua` | Server-authoritative queue append; returns the real queue id [src: `conflict_director.lua:1732-1788`] | SINGLE consolidated hook for eligible monster -> custom Warlord, roaming elite -> vanilla Champion, and the unconditional final custom-breed sender floor | ROW OF CONCERN. Planning is protected, but native is called outside `pcall` exactly once with the resolved breed. A planner fault holds original custom intent while ordinary vanilla calls native once unchanged; a native mutate-then-throw propagates and is never retried. The final floor recognizes custom intent by name, so direct/GT callers cannot bypass it. Exact peers pass the canonical custom table; unsafe peers receive the validated vanilla donor. The native queue id and all arguments are preserved verbatim. The #450 no-pool-swap marker remains intact. |
+| `ConflictDirector.spawn_unit_immediate` [resolve-first-once] `_et_champion_warlord.lua` | Calls `_spawn_unit` immediately and returns `(unit, go_id)` without traversing `spawn_queued_unit` [src: `conflict_director.lua:1893-1899`] | Mirror the exact custom-breed sender floor for callers which bypass the queue | ROW OF CONCERN. This is the sole Enemy hook on the immediate method. It shares the protected-plan/exactly-one-native-call contract, preserves every argument and native multi-return, and rejects invalid donor state before any custom id can be emitted. |
+| `GameNetworkManager.set_peer_synchronizing` [hook] / `NetworkServer.is_network_state_fully_synced_for_peer` [hook] `_et_custom_breed_parity.lua` | The first marks the peer synchronizing immediately before full game-object replay; PeerStates later asks the second predicate before adding the peer to GameSession [src: `game_network_manager.lua:832-836`; `network_server.lua:242`; `peer_states.lua:383-393`] | Call canonical parity `require_peer` before vanilla, then census live and `num_queued_spawn_by_breed` counts for both ET custom breeds. Only four proven zeroes run native donor-safe sync. Any live/queued custom state holds a pending challenge outside GameSession without kick; delayed exact proof admits, while timeout or definitive proof revocation starts one kick | ROW OF CONCERN. `spawn_queued_unit` stores `d[1]` and the drain consumes it directly [src: `conflict_director.lua:1732-1791,1835-1891`], so queued custom state cannot be ignored. Missing/malformed counts fail closed. The first canonical false is pending, never mismatch; a kicked peer cannot be revived by a late ack. |
+| `GameNetworkManager.remove_peer` [safe] `_et_custom_breed_parity.lua` | Tears down synchronizing state, server/player/room ownership on a real disconnect [src: `game_network_manager.lua:814-830`] | Forget the peer and retire its exact process epoch so rapid same-id rejoin cannot reuse delayed proof | This is Enemy's sole hook on the pair. Level-transition roster gaps are handled by the canonical library and do not call this real teardown seam. |
 | `BTSpawnAllies.find_spawn_point` [wrap,tbl] `_et_champion_warlord.lua:308` | The Warlord's call-allies BT node resolves a spawner group and `_spawn` derefs `data.spawners` [src: `scripts/entity_system/systems/behaviour/nodes/bt_spawn_allies_action.lua:175`] | CRASH GUARD: off its home arena the spawner group is absent; nil `blackboard.spawning_allies` so the node returns "done" before `_spawn`'s `#spawners` modulo-crash, giving the Warlord a wind-up but no reinforcements (`:308`) | Table-form (`BTSpawnAllies` by ref). Only diverts when the group is genuinely absent AND no fallback-spawner escape exists; uses `POSITION_LOOKUP`/`Unit.world_position` with `Vector3Box` for the stored position |
 | `_G.Localize` [hook] `_et_skaven_warlord_breed.lua` | Global loc-key -> string lookup; the boss health-UI and the grudge-name list read it [src: `boss_health_ui.lua:174`, `terror_event_utils.lua:75`] | et's ONLY `_G.Localize` hook: supply both custom-breed display names + 12 Warlord grudge names | One `_G.Localize` hook only - a second silently shadows (CLAUDE.md NON-NEGOTIABLE 8). VMF `_localization.lua` is not in global `Localize`, so vanilla-visible strings must come through here |
 | `BreedFreezer.try_mark_unit_for_freeze` [wrap] `_et_pacing.lua:305` | Queues a unit for deferred freeze; the actual freeze is deferred to `commit_freezes` [src: `scripts/managers/conflict_director/breed_freezer.lua:232`; vanilla error `:253`] | Issue 213 guard: with et's raised `max_grunts`, `deactivate_area -> destroy_unit` can re-mark the same unit same-frame, and vanilla prints "freeze unit twice" AND falls through to a conflicting `mark_for_deletion`. Replicate vanilla's own dup-check first and return true to suppress (`:305`) | ROW OF CONCERN (`docs/engine/04`). Reads vanilla's own `units_to_freeze[breed]` - the exact state vanilla checks, same lifecycle - so no frame/pool guesswork. Fail-open: any missing state falls through to vanilla |
@@ -163,6 +166,39 @@ another. Only ephemeral presentation and readiness rows may be republished. The 
 transaction contract and the source-imposed opaque-threat exception live in
 `DEVELOPMENT.md`.
 
+### Exact custom-breed emission floor (owner: `docs/engine/03`)
+
+Same-mod presence does not prove numeric identity: another ET build or a
+different mod registration order can assign the same custom name a different
+integer. `_et_custom_breed_identity` therefore captures both ET custom names,
+their registrar schema/fingerprints, and the exact forward/reverse ids on
+`NetworkLookup.breeds`, `.damage_sources`, and `.statistics_path_names`. The
+canonical `_lib_peer_parity` exact protocol adds challenge, process epoch, and
+reply echo, rejecting mismatches and replay while keeping bounded retired
+history. The application floor re-proves the load-time identity and every
+registrar declaration at each custom emission.
+
+`GameNetworkManager.set_peer_synchronizing` occurs before full hot-join sync, so
+`require_peer(false)` means a challenge is pending, not that the peer mismatched.
+When the ConflictDirector census proves both live and queued counts zero for
+both ET custom breeds, an unknown peer may synchronize normally; parity stays
+non-exact and sender surfaces use donors. A queued custom row is already unsafe:
+the drain consumes its stored `d[1]` without re-entering the sender hook [src:
+`conflict_director.lua:1732-1791,1835-1891`]. Any live/queued custom state, or an
+unreadable count, holds the peer outside `GameSession` without a kick until
+delayed exact proof arrives. A bounded timeout, or definitive proof revocation
+after an exact ack, starts one irreversible kick; a late ack cannot revive that
+peer. `remove_peer` retires the proof and clears the hold. When closed, queued
+and immediate ConflictDirector calls substitute `chaos_warrior` for the Chosen
+or `skaven_storm_vermin_champion` for the Warlord after validating the donor's
+canonical breed row and bidirectional breed id. `/et_spawn_chosen` is stricter:
+it refuses instead of deliberately spawning a donor. Missing/throwing floors or
+invalid donors hold the custom request without reaching `_hook_wrap`'s generic
+vanilla fallback, so a direct General Tweaker caller cannot turn a guard error
+into a custom-id emission. This source-backed policy
+has offline coverage only in this lane; in-game solo/co-op behavior is not yet
+verified.
+
 ### Protective wrapper factories + the issue-479 tick discipline (owner: `docs/engine/07`)
 
 Every et hook body is bracketed (`PROJECT_STANDARDS` § 4.1): nothing fails silently.
@@ -220,13 +256,14 @@ Pulled from `DEVELOPMENT.md` and `docs/BUG_CLASSES.md` - do not re-discover thes
 ## Doc maintenance
 
 #451's six-candidate census remains observation-only, while its explicitly
-bounded greataxe Chosen prototype is a real custom breed registered through the
-#1413 owner. `_et_boss_ideas_core.lua` classifies the proposals without engine
+bounded greataxe Chosen prototype is a real boss-only custom breed registered
+through the #1413 owner. `_et_boss_ideas_core.lua` classifies the proposals without engine
 globals; `_et_boss_ideas.lua` reads `Breeds`,
 `BreedActions`, `BreedBehaviors`, `InventoryConfigurations`,
 `NetworkLookup.breeds`, and `Application.can_get("unit", ...)`. It adds no hook
-or automatic pool injection; `/et_spawn_chosen` is host-only and package-
-residency-gated. Breed
+or automatic pool injection; `/et_spawn_chosen` is host-only, package-
+residency-gated, and exact-parity-gated. Both ConflictDirector spawn surfaces
+substitute validated vanilla donors for unsafe direct callers. Breed
 ids are serialized through `NetworkLookup.breeds` [src:
 `network_lookup.lua:267-270`; `game_object_initializers_extractors.lua:178-179`].
 The four lord sources remain `level_specific` package entries [src:

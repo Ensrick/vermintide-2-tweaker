@@ -278,9 +278,9 @@ return function(H, repo_root)
     end
 
     local owner_global_keys = {
-        "Application", "BreedActions", "BreedBehaviors", "Breeds",
+        "Application", "BreedActions", "BreedBehaviors", "BreedUtils", "Breeds",
         "GrudgeMarkedNames", "InventoryConfigurations", "NetworkLookup",
-        "UISettings", "get_mod", "printf",
+        "InfightingSettings", "UISettings", "get_mod", "printf",
     }
     local breeds_module_name =
         "scripts/mods/enemy_tweaker/enemy_tweaker_breeds"
@@ -335,12 +335,15 @@ return function(H, repo_root)
             .. "/enemy_tweaker/scripts/mods/enemy_tweaker/enemy_tweaker_breeds.lua"
         local core_path = repo_root
             .. "/enemy_tweaker/scripts/mods/enemy_tweaker/_et_boss_ideas_core.lua"
+        local identity_path = repo_root
+            .. "/enemy_tweaker/scripts/mods/enemy_tweaker/_et_custom_breed_identity.lua"
         local warlord_path = repo_root
             .. "/enemy_tweaker/scripts/mods/enemy_tweaker/_et_skaven_warlord_breed.lua"
         local chosen_path = repo_root
             .. "/enemy_tweaker/scripts/mods/enemy_tweaker/_et_boss_ideas.lua"
         local B = assert(loadfile(breeds_path))()
         local Core = assert(loadfile(core_path))()
+        local Identity = assert(loadfile(identity_path))()
         local capture = {
             specs = {}, hooks = {}, commands = {}, runtime_checks = {},
             runtime_check_order = {},
@@ -358,6 +361,7 @@ return function(H, repo_root)
         local ET = {
             BossIdeasCore = Core,
             CustomBreedRegistrar = capture_registrar,
+            CustomBreedIdentity = Identity,
         }
         ET.rt_register = function(name, callback)
             capture.runtime_checks[name] = callback
@@ -395,8 +399,17 @@ return function(H, repo_root)
             { target = _G, key = "Breeds", value = {} },
             { target = _G, key = "BreedActions", value = {} },
             { target = _G, key = "BreedBehaviors", value = {} },
+            { target = _G, key = "BreedUtils", value = {
+                inject_breed_category_mask = function(breed)
+                    breed.category_mask = (breed.boss and 64 or 0)
+                        + (breed.armor_category or 0)
+                end,
+            } },
             { target = _G, key = "InventoryConfigurations", value = {} },
             { target = _G, key = "NetworkLookup", value = { breeds = {} } },
+            { target = _G, key = "InfightingSettings", value = {
+                boss = { kind = "boss" },
+            } },
             { target = _G, key = "Application", value = {
                 can_get = function() return false end,
             } },
@@ -547,7 +560,7 @@ return function(H, repo_root)
         H.equal(chosen_spec.source_breed, "chaos_warrior")
         H.equal(chosen_spec.race, "chaos")
         H.equal(chosen_spec.fingerprint,
-            "et-custom-breed:v3:chosen-greataxe:chaos-warrior")
+            "et-custom-breed:v4:chosen-greataxe:boss-parity")
         H.equal(#chosen_spec.presentations, 1)
         H.equal(chosen_spec.presentations[1].target,
             capture.mod._et_warlord2_loc_strings)
@@ -730,8 +743,8 @@ return function(H, repo_root)
             {
                 label = "chosen_elite_pair", owner = 2,
                 mutate = function(fx, breed, spec)
-                    breed.elite = nil
-                    fx.runtime.elites[spec.name] = nil
+                    breed.elite = true
+                    fx.runtime.elites[spec.name] = true
                 end,
             },
             {
@@ -1494,5 +1507,7 @@ return function(H, repo_root)
         fixture = fixture, Registrar = Registrar,
         assert_unpublished = assert_unpublished, STAT_NAMES = STAT_NAMES,
         clone = clone, Lookup = Lookup, STRICT = STRICT, repo_root = repo_root,
+        capture_actual_owner_specs = capture_actual_owner_specs,
+        with_raw_bindings = with_raw_bindings,
     })
 end

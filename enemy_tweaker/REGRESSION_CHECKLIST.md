@@ -4,7 +4,7 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-08-25.
+Last updated: 2026-08-28.
 
 ---
 ## Personal difficulty combat handicap (#61)
@@ -38,11 +38,14 @@ Last updated: 2026-08-25.
 | Field | Detail |
 |---|---|
 | Safety boundary | Never put `skaven_stormfiend_boss`, `skaven_grey_seer`, `chaos_exalted_sorcerer`, or `chaos_troll_chief` directly into the ordinary monster pool. Their vanilla action sets are arena-coupled. |
+| Chosen classification | `et_chosen_greataxe` is `boss=true`, never elite/`ELITES`, shows a health bar, resists far despawn, has threat 32 + boss infighting, and carries the freshly recomputed Boss category bit. Vanilla `chaos_warrior` stays unchanged. |
+| Lifecycle | Donor spawn/death/despawn callbacks run once per engine callback. Boss-list and angry-counter adds/removes are attempt-once per unit; death plus despawn cannot double-remove, and later cleanup still runs after an earlier callback/operation throws. |
+| Wire floor | Both custom breeds share one exact identity over registrar fingerprints and symmetric `breeds`/`damage_sources`/`statistics_path_names` ids. Install precedes hot-join hooks. Only proven zero live and queued counts for both breeds permit an absent/mismatched/unavailable peer to synchronize while non-exact emissions use donors; missing/malformed counts fail closed. With custom state live or queued, the first false only holds; delayed exact proof admits, while timeout or definitive proof revocation kicks once and remains held. Disconnect clears pending state and retires proof. Unsafe queued/immediate callers receive validated vanilla donors; missing/throwing floors and invalid donors hold. Both Conflict Director senders protect planning only and invoke native outside `pcall` exactly once, so a native fault cannot replay the original custom identity or double-run a partial spawn. `/et_spawn_chosen` refuses unsafe parity. |
 | Automatic diagnostic | On mod load, exactly seven log-only `[et:451]` lines report breed/model, actions, behavior, inventory, wire, residency, and arena-risk state. |
 | Optional mission census | Run `/et_boss_idea_audit` once in a representative mission. Compare boot/mission `model_resident`; the command adds only one chat summary and never spawns a boss. |
-| Offline | `test_et_boss_ideas` covers catalog bounds, complete structure, package residency separation, and absent-global failure. |
-| Runtime check | `/et_regression_test`: `issue451_boss_ideas_safely_decomposed` reports PASS with six complete source contracts and four arena-risk markers detected. |
-| Lifecycle | The six-candidate census remains `diagnostics-armed`. The separate greataxe Chosen prototype uses `/et_spawn_chosen`; custom-breed registration safety is owned by #1413 and peer parity remains #371. |
+| Offline | `test_et_boss_ideas` covers boss flags/category/no-elite membership, immutable donor state, exactly-once callbacks and error paths. `test_et_custom_breed_parity` covers deterministic three-axis identity, mutation rejection, canonical helper solo/exact/mismatch/replay, zero-live/zero-queued absent/mismatch/unavailable donor-safe sync, live and queued delayed-ack admission, live and queued timeout/definitive-mismatch single-kick hold, invalid census rejection, exact pre-ack, disconnect cleanup, and the real installed queued/immediate hooks. Its production-hook matrix proves ordinary vanilla, both pool substitutions, no-pool exclusion, canonical/fabricated/unsafe custom identities, invalid/throwing floors, throwing settings, exact arguments/multi-returns, and native mutate-then-throw at-most-once behavior. `test_et_custom_breed_registrar` covers the real v4 owner, command safe/unsafe, exact reload, and coherent tamper. |
+| Runtime check | `/et_regression_test`: `issue451_boss_ideas_safely_decomposed`, `issue451_chosen_greataxe_prototype`, and `issue451_exact_custom_breed_parity`. These are structural/offline-backed until live deployment is authorized. |
+| Evidence boundary | This lane is offline-only. Do not claim solo or co-op verification until a later authorized build/deploy run captures logs and the command/fallback behavior in game. |
 
 ---
 
@@ -59,7 +62,7 @@ Last updated: 2026-08-25.
 | Presentation | Every table-valued declared presentation is copied into a graph disjoint from every declaration and every other selected presentation row. Detached authorities require primitive keys and nil metatables. Reload rejects in-place content mutation and root/nested/cross-row re-aliasing before any live write. |
 | Offline | `test_et_custom_breed_registrar` drives the real Warlord/Chosen specs through pre-bake registration and fresh registrar reloads after two engine-style difficulty passes; validates faithful Foundation no-seen clone behavior for the real three-action Chosen declaration topology, donor sharing/splitting drift, mutable table-key/metatable rejection, hot-join statistics path encode/decode, all three strict axes, both capacity boundaries, table-presentation graph separation, coherent breed/action/threat/elite/wire/dismemberment/hit-zone/marker tamper, topology drift, false/non-table residue, callback isolation, every planner failure, every raw-write rollback including false prior shapes, and opaque-setter terminal behavior. `test_shared_network_lookup` pins helper ownership/load order and byte identity. |
 | Integration | Source review is not a release. The serialized publisher must regenerate the exact root bundle and current receipt from the reviewed commit before build/deploy/publication evidence is claimed. |
-| Scope | #371 peer parity, #324 Warlord combat behavior, and #451 boss classification remain separate. |
+| Scope | The #1413 registrar remains the only publisher. #451B consumes its marker/fingerprints for parity without changing #324 Warlord combat AI or the registrar transaction semantics. |
 
 ---
 ## Premium-skin special variants (#452)
