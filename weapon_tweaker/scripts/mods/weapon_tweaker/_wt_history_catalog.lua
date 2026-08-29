@@ -8,6 +8,7 @@ local M = {}
 
 local GENERATED_MODULES = {
     "scripts/mods/weapon_tweaker/_wt_history_5_2_catalog",
+    "scripts/mods/weapon_tweaker/_wt_history_6_6_catalog",
     "scripts/mods/weapon_tweaker/_wt_history_6_8_catalog",
 }
 local GENERATED_MODULE = GENERATED_MODULES[1]
@@ -82,6 +83,21 @@ function M.merge(catalogs)
         states = {},
     }
     local catalog_ids, family_ids, setting_ids, template_ids = {}, {}, {}, {}
+    local localization_keys = {
+        wt_history_patch_versions = "reserved history group",
+        wt_history_patch_versions_description = "reserved history group description",
+        wt_history_state_current = "reserved current-state label",
+    }
+    local function claim_localization_key(key, owner)
+        if type(key) ~= "string" or key == "" then
+            return nil, "history localization key is missing for " .. owner
+        end
+        if localization_keys[key] then
+            return nil, "duplicate history localization key " .. key
+        end
+        localization_keys[key] = owner
+        return true
+    end
     for catalog_index = 1, catalog_count do
         local catalog = catalogs[catalog_index]
         if type(catalog) ~= "table" or catalog.schema ~= 2
@@ -100,9 +116,20 @@ function M.merge(catalogs)
         catalog_ids[catalog.catalog_id] = true
         merged.generation.catalogs[catalog_index] = catalog.catalog_id
 
+        if type(catalog.states) ~= "table" then
+            return nil, "history catalog has an unsupported or mismatched shape"
+        end
         local ok, merge_error = copy_disjoint(
             merged.states, catalog.states, "history state")
         if not ok then return nil, merge_error end
+        for state_id, state in pairs(catalog.states) do
+            if type(state) ~= "table" then
+                return nil, "history state identity is incomplete"
+            end
+            local claimed, claim_error = claim_localization_key(
+                state.label_key, "state " .. tostring(state_id))
+            if not claimed then return nil, claim_error end
+        end
         ok, merge_error = copy_disjoint(
             merged.profile_specs, catalog.profile_specs, "profile state")
         if not ok then return nil, merge_error end
@@ -118,6 +145,7 @@ function M.merge(catalogs)
             local family = catalog.families[family_index]
             if type(family) ~= "table" or type(family.id) ~= "string"
                     or type(family.setting_id) ~= "string"
+                    or type(family.label_key) ~= "string"
                     or type(family.templates) ~= "table" then
                 return nil, "history family identity is incomplete"
             end
@@ -128,6 +156,16 @@ function M.merge(catalogs)
                 return nil, "duplicate history setting " .. family.setting_id
             end
             family_ids[family.id], setting_ids[family.setting_id] = true, true
+            local family_keys = {
+                family.label_key,
+                family.setting_id,
+                family.setting_id .. "_description",
+            }
+            for _, key in ipairs(family_keys) do
+                local claimed, claim_error = claim_localization_key(
+                    key, "family " .. family.id)
+                if not claimed then return nil, claim_error end
+            end
             local template_count, template_count_error = dense_array_length(
                 family.templates, "history family templates")
             if not template_count then return nil, template_count_error end
@@ -279,6 +317,11 @@ function M.build_localization(catalog)
             en = "Choose the native balance state for " .. family.display_name
                 .. ". Historical choices require a game restart. Other Weapon Tweaks compose on top of this baseline.",
         }
+        if family.authority == "server" then
+            entries[family.setting_id .. "_description"].en =
+                entries[family.setting_id .. "_description"].en
+                .. " This selector applies only while hosting or playing solo."
+        end
     end
     return entries
 end

@@ -9,7 +9,7 @@
 -- every generated snapshot/profile module projects that state directly over the
 -- current source anchor instead of depending on another historical state.
 
-local current_revision = "c5e4968b1fbb00c49884e56d640ef990a9c04dd0"
+local current_revision = "038498af2b565bcb10bf5ed225638293a7640c83"
 
 local snapshot_modules = {
 	["5_1_1"] = {
@@ -469,20 +469,20 @@ return {
 				{ old_revision = "8224b443", new_revision = "4f496970", patch = "5.2.0" },
 				{ old_revision = "4f496970", new_revision = "cdc0a86e", patch = "5.2.3" },
 			},
-			direct_projection_target = "c5e4968b",
+			direct_projection_target = "038498af",
 			decompiler_rewrite_revision = "9239fe14",
 			spread_surface_5_2_3 = "semantic_equal_across_decompiler_rewrite",
 		},
 		artifact_sha256 = {
-			_wt_history_profiles_5_1_1_dlc_generated = "274fa5ba793284c496fc1efafeefde20a8f62f836513cd660dd8f08cbc00463f",
-			_wt_history_profiles_5_1_1_generated = "95dd6b3443429b87c62c9674f708d7f16e02d78696022ecac21b740c3b68b9cd",
-			_wt_history_profiles_5_2_0_dlc_generated = "85bf7360af0b28d8773ad7295ec1adbad563e6ba6d1ed68728632f2eda326999",
-			_wt_history_profiles_5_2_0_generated = "e35fe9c30aa6ce53ef2e29fb36c514dd6de6c6d0a0df0a4370c997509a4c346b",
-			_wt_history_snapshot_5_1_1_part_1_generated = "bce7c528ab897a155d095b1e3126f61da6bbde0434c1e474727490fc0593d7fe",
-			_wt_history_snapshot_5_1_1_part_2_generated = "65c574c4d38b23685105b0e5432607d8eabbed108dabef30d4cac2912fa08e9a",
-			_wt_history_snapshot_5_2_0_part_1_generated = "3958cd464cb733599a0de378bee5201bfe1d1f886a8cd14c66ce7bb85e438be3",
-			_wt_history_snapshot_5_2_0_part_2_generated = "ffd47051a5872a3142e586036978454b8dc8bdf2ff075ce22bb24c2538cb8d23",
-			_wt_history_snapshot_5_2_3_generated = "f2b97388e9dd937f451de3c88753426d821e6a8f08c4d6964527f0c02fb58520",
+			_wt_history_profiles_5_1_1_dlc_generated = "e7732661917d1c97fd3aa9f6be10cf0901ca6f60f86f58b289487521a9b24b91",
+			_wt_history_profiles_5_1_1_generated = "3b97e99e59fe69944d4ae97cda369faa052e2b06810b3b62d6623153ac0858da",
+			_wt_history_profiles_5_2_0_dlc_generated = "6a1a5c937465c34c4f353836abb472c8a4ebde859706557f7fd6b0ab21dac2c1",
+			_wt_history_profiles_5_2_0_generated = "f474c6ae30eb14be8c14722826159ee78c5baa2107cfc5a2aa2884180845e680",
+			_wt_history_snapshot_5_1_1_part_1_generated = "053ac18e31ea263e694c5bd1559135249ecd31a6cbd18660620208a53716d38c",
+			_wt_history_snapshot_5_1_1_part_2_generated = "2259e0328ce726554b6a3ffa5e27ac90b4f7a5c13b53cc91195aea8ae1dd34cd",
+			_wt_history_snapshot_5_2_0_part_1_generated = "516fc41a07d86925ab23d3409fa02637e054b6132c199f90c9189cf27c1ca114",
+			_wt_history_snapshot_5_2_0_part_2_generated = "8eb23cc93427cefa49c86499a3f2440f25c4d7e7c05b7ae04bf8dac415989e64",
+			_wt_history_snapshot_5_2_3_generated = "8a9e7e25a4bb40362c809a613b6fd0b147870ba466526f5e03420a5633e9ca0f",
 		},
 	},
 	completeness = {
@@ -514,7 +514,6 @@ return {
 		known_source_metadata_mismatches = {
 			"8224b443 has VersionSettings 5.1.1 although its aggregate commit subject says 5.10.1 through 5.10.5",
 			"cdc0a86e is the 5.2.3 source commit but its VersionSettings value remained 5.2.0",
-			"c5e4968b is the 6.11.3 source commit but its VersionSettings value remained 6.11.2",
 		},
 	},
 }

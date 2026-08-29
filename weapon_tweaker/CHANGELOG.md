@@ -1,5 +1,22 @@
 # Weapon Tweaker Changelog
 
+## 0.12.314-beta (2026-08-28) -- source-exact Patch 6.6 Deepwood Staff history (#1436) [not-started]
+
+- Adds **Game Version 6.5.4** to Kerillian's Deepwood Staff history dropdown.
+  While hosting or playing solo, the three-leaf atomic projection restores the
+  shielded Chaos Warrior lift from the current four seconds to eight seconds;
+  clients refuse the host-owned state without writing gameplay data.
+- Composes the exact adjacent 6.5.4-to-6.6.0 boundary with the existing Patch
+  5.2 and 6.8 catalogs. The menu now covers 16 families and 186 guarded
+  template/global operations, with strict mutation-path and localization-key
+  collision rejection plus exact restore on authority loss.
+- Refreshes every catalog's inert current default to the semantic 6.12.0 source
+  commit `038498af`, separately records the canonical README-only tip
+  `fd46866f`, and blocks WT builds/releases if that remote tip moves. Ordinary
+  offline QA retains byte-exact evidence checks without requiring network.
+- Keeps public/Dev gameplay, catalog, menu, and lifecycle code in byte parity.
+  #1436 remains open for the remaining historical patch eras.
+
 ## 0.12.313-beta (2026-08-28) -- source-exact Patch 6.8 Greatsword history (#1436) [not-started]
 
 - Adds **Game Version 6.7.2** to Kerillian's Greatsword history dropdown,

@@ -91,7 +91,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.314-dev"
+local MOD_VERSION = "0.12.315-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test

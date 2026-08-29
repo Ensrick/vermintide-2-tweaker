@@ -329,8 +329,22 @@ local function environment()
         concat = table.concat,
         insert = table.insert,
         remove = table.remove,
+        set = function(values)
+            assert(type(values) == "table", "table.set expects a table")
+            local result = {}
+            for index = 1, #values do result[values[index]] = true end
+            return result
+        end,
         sort = table.sort,
     }
+    env.DLCSettings = { woods = {} }
+    setmetatable(env.DLCSettings, {
+        __index = function(target, key)
+            local value = symbol("DLCSettings." .. tostring(key))
+            rawset(target, key, value)
+            return value
+        end,
+    })
     env._G = env
     env.require = function() return nil end
     env.fassert = function(condition, message, ...)
@@ -355,9 +369,18 @@ local function evaluate(source, source_name)
     remember_source(source, source_name)
     local chunk, load_error = loadstring(source, "@" .. source_name)
     assert(chunk, load_error)
-    setfenv(chunk, environment())
+    local env = environment()
+    setfenv(chunk, env)
     local ok, result = pcall(chunk)
     assert(ok, source_name .. ": " .. tostring(result))
+    if result == nil then
+        local dlc_settings = rawget(env, "DLCSettings")
+        local woods = type(dlc_settings) == "table"
+            and rawget(dlc_settings, "woods")
+        local vortex_templates = type(woods) == "table"
+            and rawget(woods, "vortex_templates")
+        if type(vortex_templates) == "table" then result = vortex_templates end
+    end
     assert(type(result) == "table", source_name .. " did not return a template table")
     return result
 end

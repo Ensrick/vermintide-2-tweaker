@@ -397,14 +397,49 @@ metadata remain independent presentation/history surfaces.
 `check_wt_history_reproducibility.ps1` is the blocking full-QA provenance gate
 for issue #1436's Patch 5.2 selector slice. It pins the generator, source
 catalog, nine evidence artifacts, and generated public catalog. When the
-decompiled source checkout exists, it additionally regenerates to a temporary
-file and requires byte-exact equality; source-less CI keeps the pinned ledger
-active and emits a visible regeneration skip.
+complete decompiled source checkout exists, it additionally regenerates to a
+temporary file and requires byte-exact equality. The central selector first
+proves every required commit, `commit:path`, and blob through read-only Git
+queries; missing, stale, or partial source keeps the pinned ledger active and
+emits a visible regeneration skip, while `-RequireSource` fails closed.
+
+`check_wt_history_source_freshness.ps1` consumes the one weapon-history anchor
+manifest and reads only the canonical remote's symbolic HEAD with bounded,
+noninteractive `git ls-remote`. Ordinary QA accepts genuine network
+unavailability as a visible skip while retaining every pinned offline gate; a
+reachable lagged, moved, malformed, or ambiguous remote is blocking. Canonical
+WT public/dev BuildOnly and release runs require remote freshness, so an
+unavailable remote also blocks there. Offline adversarial fixtures cover exact
+tip, lag, default-branch movement, malformed/ambiguous output, timeout, and the
+optional-versus-required unavailability split under both PowerShell hosts. The
+1--60 second total budget includes bounded tree-termination proof: PS7 uses
+`Process.Kill(true)`, while PS5.1 uses trusted system `taskkill.exe /T /F` with
+captured status plus bounded helper containment. Nonzero, timed-out, or
+unproven termination returns immediately as unavailable. Real nested
+parent/descendant and injected taskkill failure/timeout fixtures prove the time
+bound, policy split, cleanup, and no root, descendant, or helper orphan.
+
+`check_wt_history_source_checkout.ps1` is the offline source-selection
+adversary. Under both PowerShell hosts it presents all three reproduction gates
+with an intentionally incomplete Git checkout, requires an ordinary visible
+skip and a `-RequireSource` failure from each, and restores its environment
+without fetch (including promisor lazy-fetch), network access, checkout
+mutation, or deletion.
+
+`run_wt_history_patch_6_6_host_matrix.ps1` is the blocking dual-host gate for
+the Patch 6.6 Deepwood Staff slice. Under both PowerShell 7 and Windows
+PowerShell 5.1 it runs the pinned-artifact gate, regenerates the adjacent
+6.5.4-to-6.6.0 evidence and current-anchor guards when source is available,
+requires independent-oracle agreement, and regenerates the byte-exact public
+and dev catalogs. Its three-operation transaction covers both staff templates
+and the server-owned spirit-storm vortex leaf; the runtime refuses the
+historical state on a client. The matrix also runs the bounded-process and
+incomplete-checkout adversaries on both hosts.
 
 `check_wt_history_patch_6_8_reproducibility.ps1` is the corresponding blocking
 gate for the Patch 6.8 Kerillian Greatsword slice. It selects the operation from
 the exact adjacent 6.7.2-to-6.8.1 diff, rehydrates only that selected path
-against the current 6.11.3 anchor, and requires byte-exact primary evidence,
+against the current 6.12.0 content anchor, and requires byte-exact primary evidence,
 exact-double agreement with the independent source oracle, byte-exact public
 and dev catalogs, and byte-exact catalog regeneration. Source-less CI retains
 the complete pinned-artifact gate and reports the regeneration skip.
@@ -418,7 +453,10 @@ the complete pinned-artifact gate and reports the regeneration skip.
 | `check_unpack_safety.ps1` | ✅ OK | all sites in ct/mp/wt either explicit-j or annotated (post-Issue #36 audit) |
 | `check_vmf_widget_types.ps1` | ✅ OK | all 23 active `*_data.lua` clean post-gt v0.2.60-dev `text_input` fix (2026-05-25) |
 | `check_event_register_signature.ps1` | ✅ OK | clean post-gt v0.2.61 → .64 fix cycle (2026-05-25). This static check is the live gate; the former `bt:safe_event_register` runtime safety net (buff_tweaker v0.1.10-alpha+) is RETIRED (bt archived 2026-06). |
-| `check_wt_history_reproducibility.ps1` | ✅ OK (2026-08-28) | Issue #1436 full-QA gate for the pinned Patch 5.2 evidence ledger and byte-exact generated catalog; exact regeneration runs wherever `Vermintide-2-Source-Code` is available. |
+| `check_wt_history_reproducibility.ps1` | ✅ OK (2026-08-28) | Issue #1436 full-QA gate for the pinned Patch 5.2 evidence ledger and byte-exact generated catalog; exact regeneration runs only from a checkout whose complete pinned commit/path/blob ledger passes the read-only selector. |
+| `check_wt_history_source_freshness.ps1` | ✅ OK (2026-08-28) | Issue #1436 central 6.12.0 semantic anchor plus separately observed canonical default tip; ordinary offline QA may visibly skip only unavailable network, while WT BuildOnly/release requires exact remote ref/tip freshness without fetch/FETCH_HEAD mutation. The total timeout includes proven bounded process-tree termination on PS7 and PS5.1, including taskkill-helper containment. |
+| `check_wt_history_source_checkout.ps1` | ✅ OK (2026-08-28) | Offline PS7/PS5.1 adversary proves that stale/partial Git trees visibly skip ordinary regeneration and fail closed under `-RequireSource` for the Patch 5.2, 6.6, and 6.8 gates. |
+| `run_wt_history_patch_6_6_host_matrix.ps1` | ✅ OK (2026-08-28) | Issue #1436 blocking dual-host gate for the exact Patch 6.6 Deepwood Staff adjacent boundary, 6.12.0 current guards, independent-oracle agreement, byte-exact public/dev catalogs, and the timeout/source-selection adversaries. |
 | `check_wt_history_patch_6_8_reproducibility.ps1` | ✅ OK (2026-08-28) | Issue #1436 full-QA gate for the source-adjacent Patch 6.8 Kerillian Greatsword boundary, current-anchor rehydration, independent oracle agreement, and byte-exact generated catalogs. |
 | `check_localization.ps1` | ⚠ 28 warnings | ct BOON_TREE category_ids; et_diff_ + mut_ false-positive prefixes |
 | `check_loc_tags.ps1` | ✅ OK (#694 migration) | Blocking scan covers every active stream, dynamic `en` construction, and obsolete decoration helpers; migration mode verifies key/order/count and value semantics against the merge base. |

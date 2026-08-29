@@ -1,4 +1,4 @@
--- Restart-bound Patch 5.2 historical weapon-state owner (#1436).
+-- Restart-bound source-exact historical weapon-state owner (#1436).
 --
 -- Composition is fixed:
 --   current engine baseline -> selected historical state -> ordinary WT tweaks.
@@ -234,6 +234,7 @@ function M.install(config)
         boot_selections = {},
         catalog = catalog,
         fatal_error = nil,
+        is_server = config.is_server,
         last_error = nil,
         ledgers = {},
         mod = mod,
@@ -300,6 +301,19 @@ function M.install(config)
         if type(self.mod._wt431_profiles_allowed) ~= "function" then return false end
         local ok, allowed = pcall(self.mod._wt431_profiles_allowed)
         return ok and allowed == true
+    end
+
+    function runtime:_authority_allowed(family)
+        if family.authority == nil then return true end
+        if family.authority ~= "server" or type(self.is_server) ~= "function" then
+            return false, "server authority unavailable"
+        end
+        local ok, is_server = pcall(self.is_server)
+        if not ok then
+            return false, "server authority unavailable: " .. tostring(is_server)
+        end
+        if is_server ~= true then return false, "server authority required" end
+        return true
     end
 
     function runtime:_transform(state_id, profile_names, parity, operation, value)
@@ -386,6 +400,23 @@ function M.install(config)
         local active = self.active[family.id]
         local status = #ledger > 0 and self.policy.ledger_status(ledger, self.roots) or "none"
 
+        if selected ~= self.catalog.current_id then
+            local authority_allowed, authority_error = self:_authority_allowed(family)
+            if not authority_allowed then
+                if #ledger > 0 then
+                    if status == "drift" then
+                        return nil, "restore ownership lost", selected, parity
+                    end
+                    local restored, restore_error = self:_restore_family(family.id)
+                    if not restored then
+                        return nil, restore_error, selected, parity
+                    end
+                    return nil, authority_error, selected, parity, true
+                end
+                return nil, authority_error, selected, parity
+            end
+        end
+
         if selected == self.catalog.current_id then
             if #ledger == 0 then return true, false, selected, parity end
             if status == "drift" then return nil, "restore ownership lost", selected, parity end
@@ -431,10 +462,11 @@ function M.install(config)
         if not roots then self.last_error = roots_error; return nil, roots_error end
         local changed, historical, gated, refused, writes = false, 0, 0, 0, 0
         for _, family in ipairs(self.catalog.families) do
-            local ok, changed_or_error, state, parity = self:_apply_family(
+            local ok, changed_or_error, state, parity, refusal_changed = self:_apply_family(
                 family, force_current == true)
             if not ok then
                 refused = refused + 1
+                if refusal_changed == true then changed = true end
                 self.last_error = changed_or_error
                 log_error("%s projection refused: %s", family.id,
                     tostring(changed_or_error))

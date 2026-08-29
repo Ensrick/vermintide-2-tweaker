@@ -49,6 +49,10 @@ local function load_module(path)
     return value
 end
 
+local script_dir = slash(tostring(arg[0] or "")):match("^(.*)/[^/]+$") or "."
+local current_anchor = load_module(script_dir .. "/current_source_anchor.lua")
+assert(current_anchor.schema == 1, "unsupported current source anchor")
+
 local source_catalog = load_module(evidence_dir
     .. "/_wt_history_5_2_source_catalog.lua")
 
@@ -85,7 +89,7 @@ local full_revision = {
 }
 
 local current_revision = source_catalog.current_revision
-assert(current_revision == "c5e4968b1fbb00c49884e56d640ef990a9c04dd0",
+assert(current_revision == current_anchor.content_revision,
     "unexpected current source anchor")
 
 local function path_text(path)
@@ -517,8 +521,8 @@ local output = {
     catalog_id = "wt_history_patch_5_2_v1",
     current_id = "current",
     current_source = {
-        display_name = "Current (Game Version 6.11.3)",
-        label = "6.11.3 source anchor",
+        display_name = "Current (Game Version " .. current_anchor.game_version .. ")",
+        label = current_anchor.game_version .. " source anchor",
         revision = current_revision,
     },
     derived_profiles = derived_profiles,
