@@ -1,6 +1,7 @@
 # Real nested process fixture for the weapon-history freshness timeout gate.
-# The parent records its direct child's PID, then both remain alive until the
-# caller proves process-tree termination. ASCII only for Windows PowerShell 5.1.
+# The parent records its direct child's PID and UTC start-time identity, then
+# both remain alive until the caller proves process-tree termination. ASCII
+# only for Windows PowerShell 5.1.
 
 [CmdletBinding()]
 param([Parameter(Mandatory)][string]$ChildPidPath)
@@ -16,7 +17,9 @@ $child = Start-Process -FilePath $hostPath `
         'Start-Sleep -Seconds 30') `
     -PassThru -WindowStyle Hidden
 try {
-    [IO.File]::WriteAllText($ChildPidPath, [string]$child.Id,
+    $childIdentity = ([string]$child.Id) + "`r`n" +
+        ([string][long]$child.StartTime.ToFileTimeUtc()) + "`r`n"
+    [IO.File]::WriteAllText($ChildPidPath, $childIdentity,
         [Text.Encoding]::ASCII)
     Start-Sleep -Seconds 30
 }

@@ -97,6 +97,41 @@ function New-WtHistoryTaskkillStartInfo {
     return $start
 }
 
+function Get-WtHistoryProcessIdentityState {
+    param(
+        [Parameter(Mandatory)][int]$ProcessId,
+        [Parameter(Mandatory)][long]$StartTimeFileTimeUtc
+    )
+
+    if ($ProcessId -le 0 -or $StartTimeFileTimeUtc -le 0) {
+        return 'unavailable'
+    }
+
+    $observed = $null
+    try {
+        $observed = [System.Diagnostics.Process]::GetProcessById($ProcessId)
+        if ($observed.HasExited) { return 'gone' }
+        $observedStart = [long]$observed.StartTime.ToFileTimeUtc()
+        if ($observedStart -ne $StartTimeFileTimeUtc) { return 'reused' }
+        if ($observed.HasExited) { return 'gone' }
+        return 'alive'
+    }
+    catch [System.ArgumentException] {
+        return 'gone'
+    }
+    catch [System.InvalidOperationException] {
+        # The exact process can exit between GetProcessById/HasExited/StartTime.
+        return 'gone'
+    }
+    catch {
+        # Access denial or an unknown observation failure cannot prove absence.
+        return 'unavailable'
+    }
+    finally {
+        if ($observed) { $observed.Dispose() }
+    }
+}
+
 function Invoke-WtHistoryBoundedTaskkill {
     param(
         [Parameter(Mandatory)][int]$TargetPid,
@@ -108,6 +143,7 @@ function Invoke-WtHistoryBoundedTaskkill {
     $helper = New-Object System.Diagnostics.Process
     $started = $false
     $helperPid = -1
+    [long]$helperStartTimeFileTimeUtc = -1
     try {
         $helper.StartInfo = if ($StartInfoOverride) {
             $StartInfoOverride
@@ -117,6 +153,7 @@ function Invoke-WtHistoryBoundedTaskkill {
         if (-not $helper.Start()) { throw 'taskkill helper did not start' }
         $started = $true
         $helperPid = $helper.Id
+        $helperStartTimeFileTimeUtc = [long]$helper.StartTime.ToFileTimeUtc()
         $stdoutTask = $helper.StandardOutput.ReadToEndAsync()
         $stderrTask = $helper.StandardError.ReadToEndAsync()
 
@@ -155,6 +192,7 @@ function Invoke-WtHistoryBoundedTaskkill {
                 TerminationProven = [bool]$helperProven
                 Error = $detail
                 ProcessId = $helperPid
+                StartTimeFileTimeUtc = $helperStartTimeFileTimeUtc
             }
         }
 
@@ -172,6 +210,7 @@ function Invoke-WtHistoryBoundedTaskkill {
                 TerminationProven = $true
                 Error = 'taskkill helper output drain exceeded its total budget'
                 ProcessId = $helperPid
+                StartTimeFileTimeUtc = $helperStartTimeFileTimeUtc
             }
         }
 
@@ -189,6 +228,7 @@ function Invoke-WtHistoryBoundedTaskkill {
                 TerminationProven = $true
                 Error = "taskkill helper exited $($helper.ExitCode): $detail"
                 ProcessId = $helperPid
+                StartTimeFileTimeUtc = $helperStartTimeFileTimeUtc
             }
         }
         return [pscustomobject]@{
@@ -198,6 +238,7 @@ function Invoke-WtHistoryBoundedTaskkill {
             TerminationProven = $true
             Error = ''
             ProcessId = $helperPid
+            StartTimeFileTimeUtc = $helperStartTimeFileTimeUtc
         }
     }
     catch {
@@ -220,6 +261,7 @@ function Invoke-WtHistoryBoundedTaskkill {
             TerminationProven = [bool]$helperProven
             Error = "taskkill helper failed: $($_.Exception.Message)"
             ProcessId = $helperPid
+            StartTimeFileTimeUtc = $helperStartTimeFileTimeUtc
         }
     }
     finally {
@@ -248,6 +290,7 @@ function Stop-WtHistoryProbeProcess {
                 TreeKillAttempted = $false
                 TreeKillMethod = ''
                 TaskkillProcessId = -1
+                TaskkillStartTimeFileTimeUtc = -1
                 TaskkillTerminationProven = $true
                 TaskkillTimedOut = $false
                 TaskkillExitCode = -1
@@ -258,6 +301,7 @@ function Stop-WtHistoryProbeProcess {
         return [pscustomobject]@{
             Proven = $false; Error = $_.Exception.Message; TreeKillAttempted = $false
             TreeKillMethod = ''; TaskkillProcessId = -1
+            TaskkillStartTimeFileTimeUtc = -1
             TaskkillTerminationProven = $true; TaskkillTimedOut = $false
             TaskkillExitCode = -1
         }
@@ -280,6 +324,7 @@ function Stop-WtHistoryProbeProcess {
                 TreeKillAttempted = $true
                 TreeKillMethod = $treeKillMethodName
                 TaskkillProcessId = -1
+                TaskkillStartTimeFileTimeUtc = -1
                 TaskkillTerminationProven = $true
                 TaskkillTimedOut = $false
                 TaskkillExitCode = -1
@@ -306,6 +351,7 @@ function Stop-WtHistoryProbeProcess {
                 TreeKillAttempted = $true
                 TreeKillMethod = $treeKillMethodName
                 TaskkillProcessId = -1
+                TaskkillStartTimeFileTimeUtc = -1
                 TaskkillTerminationProven = $true
                 TaskkillTimedOut = $false
                 TaskkillExitCode = -1
@@ -321,6 +367,7 @@ function Stop-WtHistoryProbeProcess {
                 TreeKillAttempted = $true
                 TreeKillMethod = $treeKillMethodName
                 TaskkillProcessId = [int]$taskkillResult.ProcessId
+                TaskkillStartTimeFileTimeUtc = [long]$taskkillResult.StartTimeFileTimeUtc
                 TaskkillTerminationProven = [bool]$taskkillResult.TerminationProven
                 TaskkillTimedOut = [bool]$taskkillResult.TimedOut
                 TaskkillExitCode = [int]$taskkillResult.ExitCode
@@ -343,6 +390,9 @@ function Stop-WtHistoryProbeProcess {
             TaskkillProcessId = if ($taskkillResult) {
                 [int]$taskkillResult.ProcessId
             } else { -1 }
+            TaskkillStartTimeFileTimeUtc = if ($taskkillResult) {
+                [long]$taskkillResult.StartTimeFileTimeUtc
+            } else { -1 }
             TaskkillTerminationProven = if ($taskkillResult) {
                 [bool]$taskkillResult.TerminationProven
             } else { $true }
@@ -362,6 +412,9 @@ function Stop-WtHistoryProbeProcess {
             TreeKillMethod = $treeKillMethodName
             TaskkillProcessId = if ($taskkillResult) {
                 [int]$taskkillResult.ProcessId
+            } else { -1 }
+            TaskkillStartTimeFileTimeUtc = if ($taskkillResult) {
+                [long]$taskkillResult.StartTimeFileTimeUtc
             } else { -1 }
             TaskkillTerminationProven = if ($taskkillResult) {
                 [bool]$taskkillResult.TerminationProven
@@ -399,10 +452,12 @@ function Invoke-WtHistoryBoundedProcessProbe {
     $process.StartInfo = $StartInfo
     $started = $false
     $processId = -1
+    [long]$processStartTimeFileTimeUtc = -1
     try {
         if (-not $process.Start()) { throw 'probe process did not start' }
         $started = $true
         $processId = $process.Id
+        $processStartTimeFileTimeUtc = [long]$process.StartTime.ToFileTimeUtc()
         $stdoutTask = $process.StandardOutput.ReadToEndAsync()
         $stderrTask = $process.StandardError.ReadToEndAsync()
         if (-not $process.WaitForExit($executionBudget)) {
@@ -422,10 +477,12 @@ function Invoke-WtHistoryBoundedProcessProbe {
                 TreeKillAttempted = [bool]$termination.TreeKillAttempted
                 TreeKillMethod = [string]$termination.TreeKillMethod
                 TaskkillProcessId = [int]$termination.TaskkillProcessId
+                TaskkillStartTimeFileTimeUtc = [long]$termination.TaskkillStartTimeFileTimeUtc
                 TaskkillTerminationProven = [bool]$termination.TaskkillTerminationProven
                 TaskkillTimedOut = [bool]$termination.TaskkillTimedOut
                 TaskkillExitCode = [int]$termination.TaskkillExitCode
                 ProcessId = $processId
+                ProcessStartTimeFileTimeUtc = $processStartTimeFileTimeUtc
             }
         }
 
@@ -445,10 +502,12 @@ function Invoke-WtHistoryBoundedProcessProbe {
                 TreeKillAttempted = $false
                 TreeKillMethod = ''
                 TaskkillProcessId = -1
+                TaskkillStartTimeFileTimeUtc = -1
                 TaskkillTerminationProven = $true
                 TaskkillTimedOut = $false
                 TaskkillExitCode = -1
                 ProcessId = $processId
+                ProcessStartTimeFileTimeUtc = $processStartTimeFileTimeUtc
             }
         }
         return [pscustomobject]@{
@@ -462,10 +521,12 @@ function Invoke-WtHistoryBoundedProcessProbe {
             TreeKillAttempted = $false
             TreeKillMethod = ''
             TaskkillProcessId = -1
+            TaskkillStartTimeFileTimeUtc = -1
             TaskkillTerminationProven = $true
             TaskkillTimedOut = $false
             TaskkillExitCode = -1
             ProcessId = $processId
+            ProcessStartTimeFileTimeUtc = $processStartTimeFileTimeUtc
         }
     }
     catch {
@@ -475,6 +536,7 @@ function Invoke-WtHistoryBoundedProcessProbe {
             TreeKillAttempted = $false
             TreeKillMethod = ''
             TaskkillProcessId = -1
+            TaskkillStartTimeFileTimeUtc = -1
             TaskkillTerminationProven = $true
             TaskkillTimedOut = $false
             TaskkillExitCode = -1
@@ -497,10 +559,12 @@ function Invoke-WtHistoryBoundedProcessProbe {
             TreeKillAttempted = [bool]$termination.TreeKillAttempted
             TreeKillMethod = [string]$termination.TreeKillMethod
             TaskkillProcessId = [int]$termination.TaskkillProcessId
+            TaskkillStartTimeFileTimeUtc = [long]$termination.TaskkillStartTimeFileTimeUtc
             TaskkillTerminationProven = [bool]$termination.TaskkillTerminationProven
             TaskkillTimedOut = [bool]$termination.TaskkillTimedOut
             TaskkillExitCode = [int]$termination.TaskkillExitCode
             ProcessId = $processId
+            ProcessStartTimeFileTimeUtc = $processStartTimeFileTimeUtc
         }
     }
     finally {
@@ -525,8 +589,8 @@ function Invoke-WtHistoryRemoteProbe {
 
 function Invoke-FreshnessSelfTest {
     $failures = New-Object 'System.Collections.Generic.List[string]'
-    $fixturePids = New-Object 'System.Collections.Generic.List[int]'
-    $helperPids = New-Object 'System.Collections.Generic.List[int]'
+    $fixtureIdentities = New-Object 'System.Collections.Generic.List[object]'
+    $helperIdentities = New-Object 'System.Collections.Generic.List[object]'
     $fixturePidPaths = New-Object 'System.Collections.Generic.List[string]'
     $anchor = [pscustomobject]@{
         DefaultRef = 'refs/heads/master'
@@ -589,31 +653,110 @@ function Invoke-FreshnessSelfTest {
         $fixturePidPaths.Add($path) | Out-Null
         return $path
     }
-    function Read-FixtureChildPid([string]$Path) {
+    function Register-FixtureIdentity(
+        $Collection,
+        [string]$Label,
+        [int]$ProcessId,
+        [long]$StartTimeFileTimeUtc
+    ) {
+        if ($ProcessId -le 0 -or $StartTimeFileTimeUtc -le 0) {
+            $failures.Add("$Label identity is unavailable: PID=$ProcessId start=$StartTimeFileTimeUtc") |
+                Out-Null
+            return $null
+        }
+        $identity = [pscustomobject]@{
+            Label = $Label
+            ProcessId = $ProcessId
+            StartTimeFileTimeUtc = $StartTimeFileTimeUtc
+        }
+        $Collection.Add($identity) | Out-Null
+        return $identity
+    }
+    function Read-FixtureChildIdentity([string]$Path) {
         $clock = [System.Diagnostics.Stopwatch]::StartNew()
         while ($clock.ElapsedMilliseconds -lt 1000 -and
             -not (Test-Path -LiteralPath $Path -PathType Leaf)) {
             Start-Sleep -Milliseconds 25
         }
         $clock.Stop()
-        if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return -1 }
-        $text = [IO.File]::ReadAllText($Path).Trim()
-        $parsed = 0
-        if (-not [int]::TryParse($text, [ref]$parsed) -or $parsed -le 0) {
-            return -1
+        if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) { return $null }
+        $lines = @([regex]::Split([IO.File]::ReadAllText($Path).Trim(), "\r?\n"))
+        [int]$parsedPid = 0
+        [long]$parsedStart = 0
+        if ($lines.Count -ne 2 -or
+            -not [int]::TryParse($lines[0], [ref]$parsedPid) -or
+            -not [long]::TryParse($lines[1], [ref]$parsedStart) -or
+            $parsedPid -le 0 -or $parsedStart -le 0) {
+            return $null
         }
-        return $parsed
+        return [pscustomobject]@{
+            ProcessId = $parsedPid
+            StartTimeFileTimeUtc = $parsedStart
+        }
     }
-    function Stop-FixtureProcess([int]$FixturePid) {
+    function Stop-FixtureProcess {
+        param(
+            [Parameter(Mandatory)][int]$FixturePid,
+            [Parameter(Mandatory)][long]$ExpectedStartTimeFileTimeUtc,
+            [scriptblock]$HandleBindingProbe
+        )
+
+        if ($FixturePid -le 0 -or $ExpectedStartTimeFileTimeUtc -le 0) {
+            return $false
+        }
+
         $fixture = $null
+        $boundHandle = $null
+        $handleRefAdded = $false
         try {
-            try { $fixture = [System.Diagnostics.Process]::GetProcessById($FixturePid) }
-            catch { return $true }
+            try {
+                $fixture = [System.Diagnostics.Process]::GetProcessById($FixturePid)
+            }
+            catch [System.ArgumentException] { return $true }
+            catch { return $false }
+
+            # Process.GetProcessById(), HasExited, and StartTime do not retain a
+            # process handle on Windows PowerShell 5.1. Bind SafeHandle before
+            # checking identity so Kill()/WaitForExit() operate on that exact
+            # process object even if its numeric PID is reused meanwhile.
+            try {
+                $boundHandle = $fixture.SafeHandle
+                if (-not $boundHandle -or $boundHandle.IsInvalid -or
+                    $boundHandle.IsClosed) {
+                    return $false
+                }
+                $boundHandle.DangerousAddRef([ref]$handleRefAdded)
+                if (-not $handleRefAdded) { return $false }
+            }
+            catch { return $false }
+
             if ($fixture.HasExited) { return $true }
+            if ([long]$fixture.StartTime.ToFileTimeUtc() -ne
+                $ExpectedStartTimeFileTimeUtc) {
+                # The original process is gone and this PID belongs to a new
+                # process. Never kill the reused identity during cleanup.
+                return $true
+            }
+            if ($HandleBindingProbe) {
+                try {
+                    $bindingAccepted = & $HandleBindingProbe $fixture `
+                        $boundHandle $handleRefAdded
+                    if (-not [bool]$bindingAccepted) { return $false }
+                }
+                catch { return $false }
+            }
             try { $fixture.Kill() } catch { return $false }
             return [bool]$fixture.WaitForExit(2000)
         }
+        catch [System.InvalidOperationException] {
+            try { return [bool]$fixture.HasExited }
+            catch { return $false }
+        }
+        catch { return $false }
         finally {
+            if ($handleRefAdded -and $boundHandle) {
+                try { $boundHandle.DangerousRelease() } catch { }
+            }
             if ($fixture) { $fixture.Dispose() }
         }
     }
@@ -651,6 +794,141 @@ function Invoke-FreshnessSelfTest {
     Assert-State 'required unavailable' $unavailable $true 'fail'
 
     try {
+        # Deterministic model of the hosted-runner race: a dead helper's PID is
+        # immediately occupied by another live process. The old PID-only
+        # Get-Process assertion necessarily called this an orphan. Exact
+        # PID+start-time identity must recognize the replacement while still
+        # recognizing the same live identity.
+        $currentProcess = [System.Diagnostics.Process]::GetCurrentProcess()
+        try {
+            $currentStart = [long]$currentProcess.StartTime.ToFileTimeUtc()
+            $sameState = Get-WtHistoryProcessIdentityState `
+                -ProcessId $currentProcess.Id `
+                -StartTimeFileTimeUtc $currentStart
+            $differentStart = if ($currentStart -gt 1) {
+                $currentStart - 1
+            } else { $currentStart + 1 }
+            $reusedState = Get-WtHistoryProcessIdentityState `
+                -ProcessId $currentProcess.Id `
+                -StartTimeFileTimeUtc $differentStart
+            if ($sameState -cne 'alive' -or $reusedState -cne 'reused') {
+                $failures.Add("PID-reuse identity fixture failed: same=$sameState reused=$reusedState") | Out-Null
+            }
+        }
+        finally { $currentProcess.Dispose() }
+
+        # Exercise the cleanup function itself against a retained live decoy.
+        # A mismatched start time must be treated as a reused PID and preserve
+        # that process; the same exact identity must remain observable as alive
+        # until an intentional exact-identity cleanup terminates it.
+        $decoyProcess = New-Object System.Diagnostics.Process
+        $decoyStarted = $false
+        $decoyIdentity = $null
+        try {
+            $decoyProcess.StartInfo = New-HostCommandStartInfo `
+                'Start-Sleep -Seconds 30'
+            if (-not $decoyProcess.Start()) {
+                throw 'PID-reuse decoy did not start'
+            }
+            $decoyStarted = $true
+            $decoyIdentity = Register-FixtureIdentity $fixtureIdentities `
+                'PID-reuse decoy' $decoyProcess.Id `
+                ([long]$decoyProcess.StartTime.ToFileTimeUtc())
+            if ($decoyIdentity) {
+                $decoyStart = [long]$decoyIdentity.StartTimeFileTimeUtc
+                $unavailableStop = Stop-FixtureProcess `
+                    -FixturePid $decoyIdentity.ProcessId `
+                    -ExpectedStartTimeFileTimeUtc 0
+                $afterUnavailableState = Get-WtHistoryProcessIdentityState `
+                    -ProcessId $decoyIdentity.ProcessId `
+                    -StartTimeFileTimeUtc $decoyStart
+                if ($unavailableStop -or $afterUnavailableState -cne 'alive') {
+                    $failures.Add("identity-free cleanup did not fail closed and preserve the live decoy: result=$unavailableStop state=$afterUnavailableState") | Out-Null
+                }
+
+                $mismatchedStart = if ($decoyStart -gt 1) {
+                    $decoyStart - 1
+                } else { $decoyStart + 1 }
+                $mismatchedStop = Stop-FixtureProcess `
+                    -FixturePid $decoyIdentity.ProcessId `
+                    -ExpectedStartTimeFileTimeUtc $mismatchedStart
+                $afterMismatchState = Get-WtHistoryProcessIdentityState `
+                    -ProcessId $decoyIdentity.ProcessId `
+                    -StartTimeFileTimeUtc $decoyStart
+                if (-not $mismatchedStop -or $afterMismatchState -cne 'alive') {
+                    $failures.Add("mismatched cleanup did not preserve the live decoy: result=$mismatchedStop state=$afterMismatchState") | Out-Null
+                }
+
+                $beforeExactStopState = Get-WtHistoryProcessIdentityState `
+                    -ProcessId $decoyIdentity.ProcessId `
+                    -StartTimeFileTimeUtc $decoyStart
+                $handleBindingEvidence = @{
+                    Called = $false
+                    Bound = $false
+                }
+                $handleBindingProbe = {
+                    param($ObservedProcess, $RetainedHandle, $HandleRefAdded)
+
+                    $handleBindingEvidence['Called'] = $true
+                    $flags = [Reflection.BindingFlags]'Instance,NonPublic'
+                    $haveHandleField = $ObservedProcess.GetType().GetField(
+                        'haveProcessHandle', $flags)
+                    if (-not $haveHandleField) {
+                        $haveHandleField = $ObservedProcess.GetType().GetField(
+                            '_haveProcessHandle', $flags)
+                    }
+                    $storedHandleField = $ObservedProcess.GetType().GetField(
+                        'm_processHandle', $flags)
+                    if (-not $storedHandleField) {
+                        $storedHandleField = $ObservedProcess.GetType().GetField(
+                            '_processHandle', $flags)
+                    }
+                    $storedHandle = if ($storedHandleField) {
+                        $storedHandleField.GetValue($ObservedProcess)
+                    } else { $null }
+                    $sameNativeHandle = $storedHandle -and $RetainedHandle -and
+                        -not $storedHandle.IsInvalid -and
+                        -not $storedHandle.IsClosed -and
+                        -not $RetainedHandle.IsInvalid -and
+                        -not $RetainedHandle.IsClosed -and
+                        $storedHandle.DangerousGetHandle() -eq
+                            $RetainedHandle.DangerousGetHandle()
+                    $bound = $haveHandleField -and
+                        [bool]$haveHandleField.GetValue($ObservedProcess) -and
+                        [bool]$HandleRefAdded -and $sameNativeHandle
+                    $handleBindingEvidence['Bound'] = [bool]$bound
+                    return [bool]$bound
+                }.GetNewClosure()
+                $exactStop = Stop-FixtureProcess `
+                    -FixturePid $decoyIdentity.ProcessId `
+                    -ExpectedStartTimeFileTimeUtc $decoyStart `
+                    -HandleBindingProbe $handleBindingProbe
+                $afterExactStopState = Get-WtHistoryProcessIdentityState `
+                    -ProcessId $decoyIdentity.ProcessId `
+                    -StartTimeFileTimeUtc $decoyStart
+                if ($beforeExactStopState -cne 'alive' -or -not $exactStop -or
+                    -not $handleBindingEvidence['Called'] -or
+                    -not $handleBindingEvidence['Bound'] -or
+                    @('gone', 'reused') -cnotcontains $afterExactStopState) {
+                    $failures.Add("handle-bound exact cleanup did not terminate only the intended decoy identity: before=$beforeExactStopState result=$exactStop probeCalled=$($handleBindingEvidence['Called']) handleBound=$($handleBindingEvidence['Bound']) after=$afterExactStopState") | Out-Null
+                }
+            }
+        }
+        finally {
+            if ($decoyStarted -and -not $decoyIdentity) {
+                # If identity capture itself failed, the exact Process handle is
+                # still safe to contain; never fall back to a bare PID lookup.
+                try {
+                    if (-not $decoyProcess.HasExited) {
+                        $decoyProcess.Kill()
+                        $null = $decoyProcess.WaitForExit(2000)
+                    }
+                }
+                catch { }
+            }
+            $decoyProcess.Dispose()
+        }
+
         $treeKillSupported = @([System.Diagnostics.Process].GetMethods() |
             Where-Object {
                 $_.Name -ceq 'Kill' -and $_.GetParameters().Count -eq 1 -and
@@ -662,19 +940,28 @@ function Invoke-FreshnessSelfTest {
         $realTimeout = Invoke-WtHistoryBoundedProcessProbe `
             -StartInfo (New-NestedHangingStartInfo $realPidPath) -TimeoutMs 3000
         $realClock.Stop()
-        if ($realTimeout.ProcessId -gt 0) {
-            $fixturePids.Add([int]$realTimeout.ProcessId) | Out-Null
+        $realParentIdentity = Register-FixtureIdentity $fixtureIdentities `
+            'real nested parent' ([int]$realTimeout.ProcessId) `
+            ([long]$realTimeout.ProcessStartTimeFileTimeUtc)
+        $realChildRecordedIdentity = Read-FixtureChildIdentity $realPidPath
+        $realChildIdentity = if ($realChildRecordedIdentity) {
+            Register-FixtureIdentity $fixtureIdentities `
+                'real nested descendant' `
+                ([int]$realChildRecordedIdentity.ProcessId) `
+                ([long]$realChildRecordedIdentity.StartTimeFileTimeUtc)
+        } else {
+            $failures.Add('real nested descendant identity was not recorded') | Out-Null
+            $null
         }
-        $realChildPid = Read-FixtureChildPid $realPidPath
-        if ($realChildPid -gt 0) {
-            $fixturePids.Add($realChildPid) | Out-Null
-        }
+        $realHelperIdentity = $null
         if ($realTimeout.TaskkillProcessId -gt 0) {
-            $helperPids.Add([int]$realTimeout.TaskkillProcessId) | Out-Null
+            $realHelperIdentity = Register-FixtureIdentity $helperIdentities `
+                'real taskkill helper' ([int]$realTimeout.TaskkillProcessId) `
+                ([long]$realTimeout.TaskkillStartTimeFileTimeUtc)
         }
         if (-not $realTimeout.TimedOut -or -not $realTimeout.KillAttempted -or
             -not $realTimeout.TreeKillAttempted -or
-            -not $realTimeout.TerminationProven -or $realChildPid -le 0) {
+            -not $realTimeout.TerminationProven -or -not $realChildIdentity) {
             $failures.Add("real nested process tree was not terminated with bounded proof: $($realTimeout | Out-String)") | Out-Null
         }
         if ($realClock.ElapsedMilliseconds -gt 5000) {
@@ -692,17 +979,22 @@ function Invoke-FreshnessSelfTest {
                 -not $realTimeout.TaskkillTerminationProven)) {
             $failures.Add("PS5 taskkill result was not captured as an exact success: $($realTimeout | Out-String)") | Out-Null
         }
-        if ($realTimeout.ProcessId -gt 0 -and
-            (Get-Process -Id $realTimeout.ProcessId -ErrorAction SilentlyContinue)) {
-            $failures.Add("real nested parent remains alive after proven termination: PID $($realTimeout.ProcessId)") | Out-Null
+        foreach ($identity in @($realParentIdentity, $realChildIdentity)) {
+            if (-not $identity) { continue }
+            $identityState = Get-WtHistoryProcessIdentityState `
+                -ProcessId $identity.ProcessId `
+                -StartTimeFileTimeUtc $identity.StartTimeFileTimeUtc
+            if (@('gone', 'reused') -cnotcontains $identityState) {
+                $failures.Add("$($identity.Label) identity is not proven gone: PID $($identity.ProcessId) state=$identityState") | Out-Null
+            }
         }
-        if ($realChildPid -gt 0 -and
-            (Get-Process -Id $realChildPid -ErrorAction SilentlyContinue)) {
-            $failures.Add("real nested descendant remains alive after proven termination: PID $realChildPid") | Out-Null
-        }
-        if ($realTimeout.TaskkillProcessId -gt 0 -and
-            (Get-Process -Id $realTimeout.TaskkillProcessId -ErrorAction SilentlyContinue)) {
-            $failures.Add("real taskkill helper remains alive: PID $($realTimeout.TaskkillProcessId)") | Out-Null
+        if ($realHelperIdentity) {
+            $realHelperState = Get-WtHistoryProcessIdentityState `
+                -ProcessId $realHelperIdentity.ProcessId `
+                -StartTimeFileTimeUtc $realHelperIdentity.StartTimeFileTimeUtc
+            if (@('gone', 'reused') -cnotcontains $realHelperState) {
+                $failures.Add("real taskkill helper identity is not proven gone: PID $($realHelperIdentity.ProcessId) state=$realHelperState") | Out-Null
+            }
         }
 
         $failurePidPath = New-FixturePidPath
@@ -712,15 +1004,25 @@ function Invoke-FreshnessSelfTest {
             -TimeoutMs 3000 -ForceTaskkill `
             -TaskkillStartInfoOverride (New-HostCommandStartInfo 'exit 7')
         $failureClock.Stop()
-        if ($taskkillFailure.ProcessId -gt 0) {
-            $fixturePids.Add([int]$taskkillFailure.ProcessId) | Out-Null
+        $failureParentIdentity = Register-FixtureIdentity $fixtureIdentities `
+            'failed-taskkill nested parent' ([int]$taskkillFailure.ProcessId) `
+            ([long]$taskkillFailure.ProcessStartTimeFileTimeUtc)
+        $failureChildRecordedIdentity = Read-FixtureChildIdentity $failurePidPath
+        $failureChildIdentity = if ($failureChildRecordedIdentity) {
+            Register-FixtureIdentity $fixtureIdentities `
+                'failed-taskkill nested descendant' `
+                ([int]$failureChildRecordedIdentity.ProcessId) `
+                ([long]$failureChildRecordedIdentity.StartTimeFileTimeUtc)
+        } else {
+            $failures.Add('failed-taskkill nested descendant identity was not recorded') | Out-Null
+            $null
         }
-        $failureChildPid = Read-FixtureChildPid $failurePidPath
-        if ($failureChildPid -gt 0) {
-            $fixturePids.Add($failureChildPid) | Out-Null
-        }
+        $failureHelperIdentity = $null
         if ($taskkillFailure.TaskkillProcessId -gt 0) {
-            $helperPids.Add([int]$taskkillFailure.TaskkillProcessId) | Out-Null
+            $failureHelperIdentity = Register-FixtureIdentity $helperIdentities `
+                'failed taskkill helper' `
+                ([int]$taskkillFailure.TaskkillProcessId) `
+                ([long]$taskkillFailure.TaskkillStartTimeFileTimeUtc)
         }
         if (-not $taskkillFailure.TimedOut -or
             $taskkillFailure.TerminationProven -or
@@ -736,14 +1038,22 @@ function Invoke-FreshnessSelfTest {
         }
         Assert-State 'optional taskkill failure' $taskkillFailure $false 'skip'
         Assert-State 'required taskkill failure' $taskkillFailure $true 'fail'
-        if ($taskkillFailure.ProcessId -le 0 -or $failureChildPid -le 0 -or
-            -not (Get-Process -Id $taskkillFailure.ProcessId -ErrorAction SilentlyContinue) -or
-            -not (Get-Process -Id $failureChildPid -ErrorAction SilentlyContinue)) {
-            $failures.Add('taskkill failure fixture did not retain both target PIDs for bounded cleanup') | Out-Null
+        foreach ($identity in @($failureParentIdentity, $failureChildIdentity)) {
+            if (-not $identity) { continue }
+            $identityState = Get-WtHistoryProcessIdentityState `
+                -ProcessId $identity.ProcessId `
+                -StartTimeFileTimeUtc $identity.StartTimeFileTimeUtc
+            if ($identityState -cne 'alive') {
+                $failures.Add("$($identity.Label) was not retained alive for exact-identity cleanup: PID $($identity.ProcessId) state=$identityState") | Out-Null
+            }
         }
-        if ($taskkillFailure.TaskkillProcessId -gt 0 -and
-            (Get-Process -Id $taskkillFailure.TaskkillProcessId -ErrorAction SilentlyContinue)) {
-            $failures.Add("failed taskkill helper remained orphaned: PID $($taskkillFailure.TaskkillProcessId)") | Out-Null
+        if ($failureHelperIdentity) {
+            $failureHelperState = Get-WtHistoryProcessIdentityState `
+                -ProcessId $failureHelperIdentity.ProcessId `
+                -StartTimeFileTimeUtc $failureHelperIdentity.StartTimeFileTimeUtc
+            if (@('gone', 'reused') -cnotcontains $failureHelperState) {
+                $failures.Add("failed taskkill helper identity is not proven gone: PID $($failureHelperIdentity.ProcessId) state=$failureHelperState") | Out-Null
+            }
         }
 
         $timeoutPidPath = New-FixturePidPath
@@ -754,15 +1064,25 @@ function Invoke-FreshnessSelfTest {
             -TaskkillStartInfoOverride `
                 (New-HostCommandStartInfo 'Start-Sleep -Seconds 30')
         $helperTimeoutClock.Stop()
-        if ($taskkillTimeout.ProcessId -gt 0) {
-            $fixturePids.Add([int]$taskkillTimeout.ProcessId) | Out-Null
+        $timeoutParentIdentity = Register-FixtureIdentity $fixtureIdentities `
+            'timed-out-taskkill nested parent' ([int]$taskkillTimeout.ProcessId) `
+            ([long]$taskkillTimeout.ProcessStartTimeFileTimeUtc)
+        $timeoutChildRecordedIdentity = Read-FixtureChildIdentity $timeoutPidPath
+        $timeoutChildIdentity = if ($timeoutChildRecordedIdentity) {
+            Register-FixtureIdentity $fixtureIdentities `
+                'timed-out-taskkill nested descendant' `
+                ([int]$timeoutChildRecordedIdentity.ProcessId) `
+                ([long]$timeoutChildRecordedIdentity.StartTimeFileTimeUtc)
+        } else {
+            $failures.Add('timed-out-taskkill nested descendant identity was not recorded') | Out-Null
+            $null
         }
-        $timeoutChildPid = Read-FixtureChildPid $timeoutPidPath
-        if ($timeoutChildPid -gt 0) {
-            $fixturePids.Add($timeoutChildPid) | Out-Null
-        }
+        $timeoutHelperIdentity = $null
         if ($taskkillTimeout.TaskkillProcessId -gt 0) {
-            $helperPids.Add([int]$taskkillTimeout.TaskkillProcessId) | Out-Null
+            $timeoutHelperIdentity = Register-FixtureIdentity $helperIdentities `
+                'timed-out taskkill helper' `
+                ([int]$taskkillTimeout.TaskkillProcessId) `
+                ([long]$taskkillTimeout.TaskkillStartTimeFileTimeUtc)
         }
         if (-not $taskkillTimeout.TimedOut -or
             $taskkillTimeout.TerminationProven -or
@@ -777,36 +1097,66 @@ function Invoke-FreshnessSelfTest {
         }
         Assert-State 'optional taskkill timeout' $taskkillTimeout $false 'skip'
         Assert-State 'required taskkill timeout' $taskkillTimeout $true 'fail'
-        if ($taskkillTimeout.ProcessId -le 0 -or $timeoutChildPid -le 0 -or
-            -not (Get-Process -Id $taskkillTimeout.ProcessId -ErrorAction SilentlyContinue) -or
-            -not (Get-Process -Id $timeoutChildPid -ErrorAction SilentlyContinue)) {
-            $failures.Add('taskkill timeout fixture did not retain both target PIDs for bounded cleanup') | Out-Null
+        foreach ($identity in @($timeoutParentIdentity, $timeoutChildIdentity)) {
+            if (-not $identity) { continue }
+            $identityState = Get-WtHistoryProcessIdentityState `
+                -ProcessId $identity.ProcessId `
+                -StartTimeFileTimeUtc $identity.StartTimeFileTimeUtc
+            if ($identityState -cne 'alive') {
+                $failures.Add("$($identity.Label) was not retained alive for exact-identity cleanup: PID $($identity.ProcessId) state=$identityState") | Out-Null
+            }
         }
-        if ($taskkillTimeout.TaskkillProcessId -le 0 -or
-            (Get-Process -Id $taskkillTimeout.TaskkillProcessId -ErrorAction SilentlyContinue)) {
-            $failures.Add('timed-out taskkill helper termination was not observable and orphan-free') | Out-Null
+        $timeoutHelperState = if ($timeoutHelperIdentity) {
+            Get-WtHistoryProcessIdentityState `
+                -ProcessId $timeoutHelperIdentity.ProcessId `
+                -StartTimeFileTimeUtc $timeoutHelperIdentity.StartTimeFileTimeUtc
+        } else { 'unavailable' }
+        if (@('gone', 'reused') -cnotcontains $timeoutHelperState) {
+            $failures.Add("timed-out taskkill helper identity is not proven gone: PID $($taskkillTimeout.TaskkillProcessId) state=$timeoutHelperState") | Out-Null
         }
     }
     catch {
         $failures.Add("real process fixture crashed: $($_.Exception.Message)") | Out-Null
     }
     finally {
-        foreach ($fixturePid in @($fixturePids | Sort-Object -Unique -Descending)) {
-            if (-not (Stop-FixtureProcess $fixturePid)) {
-                $failures.Add("fixture cleanup could not prove child termination: PID $fixturePid") | Out-Null
+        foreach ($identity in $fixtureIdentities.ToArray()) {
+            $fixturePid = [int]$identity.ProcessId
+            $fixtureStart = [long]$identity.StartTimeFileTimeUtc
+            $fixtureState = Get-WtHistoryProcessIdentityState `
+                -ProcessId $fixturePid `
+                -StartTimeFileTimeUtc $fixtureStart
+            if ($fixtureState -ceq 'alive' -and
+                -not (Stop-FixtureProcess -FixturePid $fixturePid `
+                    -ExpectedStartTimeFileTimeUtc $fixtureStart)) {
+                $failures.Add("$($identity.Label) cleanup could not prove exact-identity termination: PID $fixturePid") | Out-Null
             }
-            if (Get-Process -Id $fixturePid -ErrorAction SilentlyContinue) {
-                $failures.Add("fixture child remained orphaned after cleanup: PID $fixturePid") | Out-Null
+            elseif ($fixtureState -ceq 'unavailable') {
+                $failures.Add("$($identity.Label) identity was unavailable during cleanup: PID $fixturePid") | Out-Null
+            }
+            $afterState = Get-WtHistoryProcessIdentityState `
+                -ProcessId $fixturePid `
+                -StartTimeFileTimeUtc $fixtureStart
+            if (@('gone', 'reused') -cnotcontains $afterState) {
+                $failures.Add("$($identity.Label) remained live or unobservable after cleanup: PID $fixturePid state=$afterState") | Out-Null
             }
         }
-        foreach ($helperPid in @($helperPids | Sort-Object -Unique)) {
-            if (Get-Process -Id $helperPid -ErrorAction SilentlyContinue) {
-                if (-not (Stop-FixtureProcess $helperPid)) {
-                    $failures.Add("taskkill helper cleanup could not prove termination: PID $helperPid") | Out-Null
-                }
+        foreach ($helperIdentity in $helperIdentities.ToArray()) {
+            $helperPid = [int]$helperIdentity.ProcessId
+            $helperStart = [long]$helperIdentity.StartTimeFileTimeUtc
+            $helperState = Get-WtHistoryProcessIdentityState `
+                -ProcessId $helperPid -StartTimeFileTimeUtc $helperStart
+            if ($helperState -ceq 'alive' -and
+                -not (Stop-FixtureProcess -FixturePid $helperPid `
+                    -ExpectedStartTimeFileTimeUtc $helperStart)) {
+                $failures.Add("taskkill helper cleanup could not prove termination: PID $helperPid") | Out-Null
             }
-            if (Get-Process -Id $helperPid -ErrorAction SilentlyContinue) {
-                $failures.Add("taskkill helper remained orphaned after cleanup: PID $helperPid") | Out-Null
+            elseif ($helperState -ceq 'unavailable') {
+                $failures.Add("taskkill helper identity was unavailable during cleanup: PID $helperPid") | Out-Null
+            }
+            $afterState = Get-WtHistoryProcessIdentityState `
+                -ProcessId $helperPid -StartTimeFileTimeUtc $helperStart
+            if (@('gone', 'reused') -cnotcontains $afterState) {
+                $failures.Add("taskkill helper remained live or unobservable after cleanup: PID $helperPid state=$afterState") | Out-Null
             }
         }
         $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
@@ -825,7 +1175,7 @@ function Invoke-FreshnessSelfTest {
         $failures | ForEach-Object { Write-Host "  X $_" -ForegroundColor Red }
         exit 2
     }
-    Write-Host '[check_wt_history_source_freshness:selftest] OK - identity policies, real nested-tree termination, bounded taskkill failure/timeout containment, and no-orphan cleanup pass.' -ForegroundColor Green
+    Write-Host '[check_wt_history_source_freshness:selftest] OK - identity policies, handle-bound PID-reuse-safe nested-tree termination, bounded taskkill failure/timeout containment, and no-orphan cleanup pass.' -ForegroundColor Green
     exit 0
 }
 
