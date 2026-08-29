@@ -16,6 +16,15 @@ Major sections (search by name to jump):
 ]]
 
 local mod = get_mod("cim_dev")
+local RealmAuthority = mod:dofile(
+    "scripts/mods/crafting_in_modded_dev/_lib_modded_realm_authority")
+mod._cim_is_modded_realm = function()
+    return RealmAuthority.sibling_is_modded(
+        script_data, get_mod, rawget(_G, "Development"))
+end
+mod._cim_with_eac_off = function(func, self, ...)
+    return RealmAuthority.sibling_with_eac_off(script_data, get_mod, func, self, nil, ...)
+end
 local _FORGE_PREVIEW_POLICY = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_forge_preview_policy")
 mod._cim_forge_preview_policy = _FORGE_PREVIEW_POLICY
@@ -27,7 +36,7 @@ mod._cim959_accessory_property_policy = mod:dofile(
 local _BULK_ACCESSORY_CRAFT = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_bulk_accessory_craft")
 _MEM_PROBE_T0_CIMD = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.8.130-dev"
+local MOD_VERSION = "0.8.131-dev"
 local _bootstrap = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_bootstrap_runtime")({
         mod = mod,

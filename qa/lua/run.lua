@@ -116,6 +116,7 @@ local suites = {
     "test_mp_emporium_purchase",
     "test_mp_loot_diag",
     "test_mp_fresh_profile_census",
+    "test_modded_realm_authority",
     "test_wt_passive_charge",
     "test_wt_deepwood_runtime",
     "test_wt_energy_seed",

@@ -5,7 +5,7 @@ via VMF settings; the real PlayFab account is never written to.
 
 Full design: modded_progression/PLAN.md.
 
-Status (v0.2.35-dev): selected local quest/Emporium paths and bounded runtime
+Status (v0.2.36-dev): selected local quest/Emporium paths and bounded runtime
 diagnostics are wired; the complete local mission-loot feature is not. No
 mission chest is awarded or opened locally by the issue #607 instrumentation.
 
@@ -21,12 +21,14 @@ Major sections (search by name to jump):
 ]]
 
 local mod = get_mod("mp")
+local RealmAuthority = mod:dofile(
+    "scripts/mods/modded_progression/_lib_modded_realm_authority")
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- File-local (was a bare _G global pre-0.2.14; issue 434 / audit F7): read only
 -- at the bottom of this same chunk, so no _G or cross-file exposure is needed.
 local _MEM_PROBE_T0_MP = collectgarbage("count")
 
-local MOD_VERSION = "0.2.35-dev"
+local MOD_VERSION = "0.2.36-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([mp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -419,6 +421,10 @@ mod._mp_eac_depth = 0
 -- when the bracket actually cleared a true eac-untrusted flag.
 mod._mp_modded_depth = 0
 mod.is_eac_window = function() return (mod._mp_eac_depth or 0) > 0 end
+mod.is_modded_realm = function()
+    return RealmAuthority.is_modded(
+        script_data, mod._mp_modded_depth, rawget(_G, "Development"))
+end
 
 -- issue 434: the flag AND the depth counter MUST be restored on EVERY exit path.
 -- A throw inside `func` used to skip both the decrement and the flag restore,
@@ -429,23 +435,12 @@ mod.is_eac_window = function() return (mod._mp_eac_depth or 0) > 0 end
 -- throw-exposure wrapped fn. We pcall the inner call, restore both in finally
 -- style, then re-raise the original error transparently so callers behave as
 -- vanilla would have (the only difference is the realm is re-gated first).
-local function _with_eac_off(func, self, ...)
-    local orig = script_data["eac-untrusted"]
-    script_data["eac-untrusted"] = nil
-    mod._mp_eac_depth = mod._mp_eac_depth + 1
-    if orig == true then mod._mp_modded_depth = mod._mp_modded_depth + 1 end
-    -- _capture over pcall: results[1] is the pcall `ok`; func's own returns
-    -- (nil holes preserved via the explicit count `n`) start at index 2.
-    local n, results = _capture(pcall(func, self, ...))
-    mod._mp_eac_depth = mod._mp_eac_depth - 1
-    if orig == true then mod._mp_modded_depth = mod._mp_modded_depth - 1 end
-    script_data["eac-untrusted"] = orig
-    if not results[1] then
-        _dbg_alert("_with_eac_off: wrapped fn threw; eac flag restored, re-raising: %s", tostring(results[2]))
-        error(results[2], 0)  -- re-raise with the original message, no added position
-    end
-    return unpack(results, 2, n)
+mod.with_eac_off = function(func, self, ...)
+    return RealmAuthority.with_eac_off(script_data, mod, func, self, function(err)
+        _dbg_alert("_with_eac_off: wrapped fn threw; eac flag restored, re-raising: %s", tostring(err))
+    end, ...)
 end
+local _with_eac_off = mod.with_eac_off
 
 -- issue 434 regression: a throw inside `_with_eac_off` must restore the
 -- eac-untrusted flag AND the depth counter on ALL paths, and re-raise. If the
@@ -504,7 +499,7 @@ _rt_register("sibling_api_surface_present", function()
     -- wallet cannot cover the amount.
     for _, name in ipairs({ "is_unlocked", "mark_unlocked", "has_currency",
                             "spend", "credit", "get_currency", "grant_item",
-                            "is_eac_window" }) do
+                            "is_eac_window", "is_modded_realm", "with_eac_off" }) do
         if type(mod[name]) ~= "function" then
             return "sibling API function mod." .. name .. " missing (CWV/cosmetics depend on it)"
         end
@@ -518,7 +513,7 @@ end)
 -- EAC-un-gate.  Without this second condition `_create_entries` would briefly
 -- look like official realm and leak the vanilla daily list back into MP.
 local function _is_mp_realm()
-    return script_data["eac-untrusted"] == true or (mod._mp_modded_depth or 0) > 0
+    return mod.is_modded_realm()
 end
 
 -- #577: persisted Emporium grants are overlaid onto the native mirror only in
@@ -795,10 +790,14 @@ end)
 -- payload needs the durable mirror-overlay inventory transaction that remains
 -- under construction. Fail closed at BOTH the UI action and backend request
 -- boundary. Official-realm calls run the original function byte-for-byte.
-local function _route_store_login_claim(func, self, ...)
-    if _is_mp_realm() then return false, 0, nil end
+local function _route_store_login_claim_for_realm(is_modded, func, self, ...)
+    if is_modded then return false, 0, nil end
     local n, results = _capture(func(self, ...))
     return true, n, results
+end
+
+local function _route_store_login_claim(func, self, ...)
+    return _route_store_login_claim_for_realm(_is_mp_realm(), func, self, ...)
 end
 
 local function _disable_store_login_claim(popup)
@@ -810,22 +809,18 @@ local function _disable_store_login_claim(popup)
 end
 
 _rt_register("mp589_store_login_claim_request_boundary", function()
-    local saved_flag = script_data["eac-untrusted"]
-    local saved_depth = mod._mp_modded_depth
     local calls = 0
     local fake = function() calls = calls + 1; return "official", nil, 3 end
 
-    mod._mp_modded_depth = 0
-    script_data["eac-untrusted"] = nil
-    local allowed, n, results = _route_store_login_claim(fake, nil)
+    -- Exercise the pure realm decision directly. A real Modded Realm retains
+    -- immutable launch-parameter authority, so clearing only the mutable raw
+    -- flag is not (and must never become) a valid official-realm simulation.
+    local allowed, n, results = _route_store_login_claim_for_realm(false, fake, nil)
     local official_ok = allowed and calls == 1 and n == 3 and results[1] == "official" and results[2] == nil and results[3] == 3
 
-    script_data["eac-untrusted"] = true
-    local blocked = not _route_store_login_claim(fake, nil)
+    local blocked = not _route_store_login_claim_for_realm(true, fake, nil)
     local modded_ok = blocked and calls == 1
 
-    script_data["eac-untrusted"] = saved_flag
-    mod._mp_modded_depth = saved_depth
     if not official_ok then return "official login-reward claim was not passed through exactly" end
     if not modded_ok then return "modded login-reward claim reached the request function" end
 end)
@@ -838,17 +833,23 @@ _rt_register("mp589_store_login_claim_ui_disabled", function()
     end
 end)
 
-_rt_register("simulated_daily_realm_boundary", function()
-    local saved = script_data["eac-untrusted"]
-    local official_seen, modded_seen
-    script_data["eac-untrusted"] = nil
-    _with_eac_off(function() official_seen = _is_mp_realm() end, nil)
-    script_data["eac-untrusted"] = true
+_rt_register("modded_daily_realm_boundary", function()
+    local saved_flag = rawget(script_data, "eac-untrusted")
+    local saved_eac_depth = mod._mp_eac_depth
+    local saved_modded_depth = mod._mp_modded_depth
+    if not _is_mp_realm() then return "loaded MP session is not classified as modded" end
+
+    local modded_seen
     _with_eac_off(function() modded_seen = _is_mp_realm() end, nil)
-    script_data["eac-untrusted"] = saved
-    if official_seen then return "official-realm UI bracket classified as modded" end
+
     if not modded_seen then return "modded-realm UI bracket lost ownership state" end
-    if (mod._mp_modded_depth or 0) ~= 0 then return "modded realm depth leaked" end
+    if rawget(script_data, "eac-untrusted") ~= saved_flag then
+        return "modded-realm UI bracket changed the raw flag shape"
+    end
+    if mod._mp_eac_depth ~= saved_eac_depth
+            or mod._mp_modded_depth ~= saved_modded_depth then
+        return "modded realm bracket depth leaked"
+    end
 end)
 
 local QuestBoundary = mod:dofile("scripts/mods/modded_progression/_mp_quest_boundary")
