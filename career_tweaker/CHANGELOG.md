@@ -1,5 +1,20 @@
 # Career Tweaker Changelog
 
+## 0.4.28-beta (2026-08-29) - extract Engineer balance catalogue (#2) [not-started]
+
+- Moved the three Outcast Engineer balance definitions into the bounded,
+  hook-neutral `_crt_balance_catalog_engineer.lua` owner without changing
+  their patch fields or apply/restore callback bodies.
+- Preserved synchronous catalogue load/build order and duplicate-owner
+  rejection; the new owner receives only the existing restore-stub dependency.
+- Reduced `_crt_balance_catalog_early.lua` from 1,622 to 1,435 canonical
+  measured lines. The new owner begins at 203, removing one frozen target-tier
+  debt row and lowering repository target debt from 34 files to 33.
+- Added exact composer-order, dependency-failure, metadata, Leading Shots
+  registration/restore, existing-template ownership, and Full Head of Steam
+  tooltip round-trip coverage. Verify autonomously with
+  `qa/check_lua_unit_tests.ps1` and `qa/check_file_sizes.ps1`.
+
 ## 0.4.27-beta (2026-08-25) - reject malformed NetworkLookup state (#428) [not-started]
 
 - Synchronized the canonical NetworkLookup registrar that validates the full
