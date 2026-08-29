@@ -1,5 +1,5 @@
 -- Issue #1148 / #1156: the three cwv marker checks were relocated out of the entry file into
--- `_cwv_regression_identity.lua`, but the marker constants stayed file-scope locals in the
+-- `_cwv_regression_identity.lua` family, but the marker constants stayed file-scope locals in the
 -- entry. Read as bare globals they resolved to nil, so the checks reported "was the fix
 -- reverted?" FAIL against code that was verifiably present -- BUG_CLASSES 85 sub-pattern (b),
 -- a marker scope-break. The repair publishes the constants on the mod table; nothing offline
@@ -23,7 +23,7 @@ return function(H, repo_root)
     end
 
     local entry = read("character_weapon_variants.lua")
-    local identity = read("_cwv_regression_identity.lua")
+    local identity = read("_cwv_regression_runtime_identity.lua")
 
     -- The authored marker values, taken from the entry's own local definitions. Everything the
     -- checks are asserted against below descends from these, never from the checks themselves.
@@ -48,7 +48,7 @@ return function(H, repo_root)
     local function extract_check(name)
         local pattern = '_rt_register("' .. name .. '", function()'
         local from = identity:find(pattern, 1, true)
-        H.truthy(from, name .. " is no longer registered in _cwv_regression_identity.lua")
+        H.truthy(from, name .. " is no longer registered in _cwv_regression_runtime_identity.lua")
         local line_start = identity:sub(1, from):match("()[^\n]*$")
         local block_end = identity:find("\nend)\n", from, true)
         H.truthy(block_end, name .. " check block has no column-anchored end)")
@@ -158,7 +158,7 @@ return function(H, repo_root)
         for _, const in pairs(MARKER_LOCALS) do
             local found, line = appears_in_code(identity, const)
             H.equal(found, false,
-                const .. " is read in code in _cwv_regression_identity.lua; it is an entry-file "
+                const .. " is read in code in _cwv_regression_runtime_identity.lua; it is an entry-file "
                     .. "local and resolves to nil there (#1148): " .. tostring(line))
             H.truthy(entry:find("local " .. const, 1, true))
         end
@@ -189,7 +189,7 @@ return function(H, repo_root)
         -- #1159: the collector and its `_om` publication moved into the musket
         -- equip-surface owner with the career slot_melee override it feeds. The
         -- publication is what matters, not which file holds it -- the check in
-        -- _cwv_regression_identity.lua reads it back off `_om`.
+        -- _cwv_regression_runtime_identity.lua reads it back off `_om`.
         H.truthy(read("_cwv_musket_equip_surface.lua"):find("_collect_cross_slot_careers", 1, true),
             "the musket equip-surface owner no longer publishes the cross-slot collector on _om")
         H.equal(entry:find("_collect_cross_slot_careers", 1, true), nil,

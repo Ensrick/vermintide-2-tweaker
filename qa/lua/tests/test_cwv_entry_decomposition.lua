@@ -36,7 +36,9 @@ return function(H, repo_root)
     local musket_runtime = read("_cwv_musket_runtime.lua")
     local musket_ammo_hud = read("_cwv_musket_ammo_hud.lua")
     local lifecycle = read("_cwv_commands_lifecycle.lua")
+	local regression_loader = read("_cwv_regression_owner_loader.lua")
     local identity = read("_cwv_regression_identity.lua")
+	local runtime_identity = read("_cwv_regression_runtime_identity.lua")
 	local combat_style = read("_cwv_regression_combat_style.lua")
     -- #1188/#1186 split out of the identity owner when it crossed the section 2.1
 	-- hard limit. #774 now has its own executable Combat Style owner between
@@ -48,6 +50,50 @@ return function(H, repo_root)
     local variant_bootstrap = read("_cwv_variant_bootstrap_owner.lua")
     local identity_transport = read("_cwv_item_identity_transport_owner.lua")
     local world_equipment = read("_cwv_world_equipment_owner.lua")
+	local identity_check_names = {
+		"cwv_variant_flag_present",
+		"issue620_per_instance_combat_styles",
+		"issue916_half_swording_combat_style_contract",
+		"issue786_peer_resolution_multi_return",
+		"issue914_peer_ready_identity_lifecycle",
+		"issue645_reciprocal_style_descriptors",
+		"issue317_career_scoped_animation_picker",
+		"dual_axes_cosmetic_family_parity",
+		"issue396_imperial_longsword_identity_and_remote_husk",
+		"issue660_world_identity_lifecycle_replay",
+		"issue719_imperial_crowbill_remote_identity",
+		"issue579_dual_axes_preview_and_husk_skin_continuity",
+		"issue416_483_transition_generated_skin_identity",
+		"issue412_old_musket_universal_special_interrupt",
+		"issue932_primary_slot_musket_ammo_pool_contract",
+		"issue1107_melee_slot_reload_drains_reserve",
+		"issue1108_primary_slot_musket_ammo_hud_contract",
+		"issue273_cwv_deus_identity_is_exact",
+		"issue474_old_musket_hot_join_identity_and_remote_fire",
+		"issue474_old_musket_presentation_surface_coverage",
+		"issue582_dual_axes_native_variant_ownership_boundary",
+		"issue593_kruber_axe_shield_canonical_ownership",
+		"issue586_cross_character_dual_axes_fp_residency",
+		"cwv_key_resolution_uuid_safe",
+		"issue484_crafted_old_musket_identity",
+		"cwv_inherits_base_name",
+		"cwv_ammo_mirroring",
+		"cwv_in_inventory_package_list",
+		"cwv_itemmasterlist_uses_rawget",
+		"cwv_networklookup_uses_rawget",
+		"cwv_slot_extension_scoped",
+		"cwv_wield_hook_unique",
+		"issue398_cross_access_audio_uses_networked_receiver_event",
+		"cwv_husk_fx_guard_installed",
+		"cwv_net_safe_loadout_sync_installed",
+		"cwv_outrider_no_ammo_unit",
+		"cwv_husk_override_residency",
+		"cwv_no_ammo_strip_coverage",
+		"cwv_husk_transform_coverage",
+		"cwv_husk_stale_unit_and_postcondition",
+		"issue399_outrider_husk_ammo_adapter",
+		"issue1204_deus_identity_uses_committed_parity",
+	}
 
     H.test("CWV entry remains below its frozen line baseline", function()
         local lines = 0
@@ -65,6 +111,8 @@ return function(H, repo_root)
             variant_bootstrap,
             identity_transport,
             world_equipment,
+			regression_loader,
+			runtime_identity,
         }
         for _, source in ipairs(owners) do
             local lines = 0
@@ -108,6 +156,8 @@ return function(H, repo_root)
             "_cwv_world_equipment_owner",
             "_cwv_menu_preview_owner",
             "_cwv_commands_lifecycle",
+			"_cwv_regression_owner_loader",
+			"_cwv_regression_runtime_identity",
             "_cwv_regression_identity",
 			"_cwv_regression_combat_style",
             "_cwv_regression_render",
@@ -132,6 +182,8 @@ return function(H, repo_root)
         local world_equipment_at = assert(entry:find("_cwv_world_equipment_owner", 1, true))
         local menu_preview_at = assert(entry:find("_cwv_menu_preview_owner", 1, true))
         local lifecycle_at = assert(entry:find("_cwv_commands_lifecycle", 1, true))
+		local regression_loader_at = assert(entry:find("_cwv_regression_owner_loader", 1, true))
+		local runtime_identity_at = assert(entry:find("_cwv_regression_runtime_identity", 1, true))
         local identity_at = assert(entry:find("_cwv_regression_identity", 1, true))
 		local combat_style_at = assert(entry:find("_cwv_regression_combat_style", 1, true))
         local husk_ammo_at = assert(entry:find("_cwv_regression_husk_ammo", 1, true))
@@ -177,7 +229,16 @@ return function(H, repo_root)
         H.truthy(husk_at < menu_preview_at)
         H.truthy(menu_preview_at < lifecycle_at)
         H.truthy(husk_at < lifecycle_at)
+		H.truthy(lifecycle_at < regression_loader_at)
+		H.truthy(regression_loader_at < runtime_identity_at)
+		H.truthy(runtime_identity_at < identity_at)
         H.truthy(lifecycle_at < identity_at)
+		H.equal(count_plain(identity, "_cwv_regression_owner_loader"), 0)
+		H.equal(count_plain(entry, "_cwv_regression_owner_loader"), 1)
+		H.equal(count_plain(identity, "_cwv_regression_runtime_identity"), 1)
+		H.equal(count_plain(entry, "_cwv_regression_runtime_identity"), 1)
+		H.equal(count_plain(identity, "mod:dofile"), 0,
+			"decomposed regression owners must be loaded only by the entry manifest")
 		-- Each regression owner appends to one ordered runner list. The #774
 		-- transaction drive must run after identity checks and before the existing
 		-- husk/ammo split, without moving either owner's code boundary.
@@ -396,10 +457,21 @@ return function(H, repo_root)
 
     H.test("CWV regression registration split preserves all checks and boundary", function()
         local names = {}
+		H.equal(count_plain(identity, '_rt_register("'), 20)
+		H.equal(count_plain(runtime_identity, '_rt_register("'), 22)
+		local loader_at = assert(identity:find("_load_regression_owner({", 1, true))
+		local first_register_at = assert(identity:find('_rt_register("', 1, true))
+		local append_at = assert(identity:find("for index = 1, 22 do", 1, true))
+		local last_retained_at = assert(identity:find(
+			'_rt_register("issue474_old_musket_presentation_surface_coverage"', 1, true))
+		H.truthy(loader_at < first_register_at,
+			"child must be loaded and validated before the first registration")
+		H.truthy(last_retained_at < append_at,
+			"moved rows must append after the original 20-check prefix")
         -- Concatenated in ENTRY DOFILE ORDER, so the index pins below describe the
         -- order the runner actually registers in, not the order files happen to
         -- be read here.
-		for name in (identity .. "\n" .. combat_style .. "\n" .. husk_ammo .. "\n" .. render)
+		for name in (identity .. "\n" .. runtime_identity .. "\n" .. combat_style .. "\n" .. husk_ammo .. "\n" .. render)
                 :gmatch('_rt_register%("([^"]+)"') do
             names[#names + 1] = name
         end
@@ -420,6 +492,10 @@ return function(H, repo_root)
         -- husk/ammo/projectile owner.
 		H.equal(names[41], "issue399_outrider_husk_ammo_adapter")
 		H.equal(names[42], "issue1204_deus_identity_uses_committed_parity")
+		for index, expected in ipairs(identity_check_names) do
+			H.equal(names[index], expected,
+				"identity check order changed at index " .. tostring(index))
+		end
 		H.equal(names[43], "issue774_mission_combat_style_interruption")
 		H.equal(names[44], "issue660_greatsword_style_appearance_transaction")
 		H.equal(names[45], "issue604_crowbill_template_ownership")
@@ -445,6 +521,167 @@ return function(H, repo_root)
             seen[name] = true
         end
     end)
+
+	H.test("CWV runtime identity moved bodies remain byte-normalized", function()
+		local marker = '_rt_register("issue582_dual_axes_native_variant_ownership_boundary"'
+		local first = assert(runtime_identity:find(marker, 1, true))
+		local boundary = assert(runtime_identity:find("\n\nreturn runtime.checks", first, true))
+		local moved = runtime_identity:sub(first, boundary - 1)
+		moved = moved:gsub("\r\n", "\n"):gsub("[\r\n]+$", "")
+		-- Frozen from origin/master ae2d16cd before the mechanical extraction.
+		-- An intentional future callback edit must update both values explicitly;
+		-- the split itself may not silently alter a body, message, or options row.
+		H.equal(#moved, 51219)
+		local rolling = 0
+		for index = 1, #moved do
+			rolling = (rolling * 131 + moved:byte(index)) % 2147483647
+		end
+		H.equal(rolling, 59524266)
+	end)
+
+	H.test("CWV runtime identity owner validates before any registration", function()
+		local load_owner = assert(loadfile(root .. "_cwv_regression_owner_loader.lua"))()
+		local runtime_factory = assert(loadfile(
+			root .. "_cwv_regression_runtime_identity.lua"))()
+		local dependencies = {
+			mod = {},
+			om = {},
+			variant_definitions = {},
+			find_def = function() end,
+			build_entry = function() end,
+			auto_register_all = function() end,
+			cross_access_action_remap = {},
+			wield_hook_registration_count = 1,
+		}
+		local child_name =
+			"scripts/mods/character_weapon_variants/_cwv_regression_runtime_identity"
+		local events, captured = {}, nil
+		local mod = {}
+		local constructor = function(deps)
+			events[#events + 1] = "construct"
+			captured = deps
+			return runtime_factory(deps)
+		end
+		dependencies.mod = mod
+		local spec = {
+			name = child_name,
+			constructor = constructor,
+			dependencies = dependencies,
+			expected_count = 22,
+			export_type = "function",
+		}
+		local rows, iterator = load_owner(spec)
+		H.equal(events[1], "construct")
+		H.equal(#rows, 22)
+		H.equal(type(iterator), "function")
+		for index = 1, 22 do
+			H.equal(rows[index].name, identity_check_names[index + 20])
+			H.equal(type(rows[index].fn), "function")
+		end
+
+		local dependency_keys = {
+			mod = true,
+			om = true,
+			variant_definitions = true,
+			find_def = true,
+			build_entry = true,
+			auto_register_all = true,
+			cross_access_action_remap = true,
+			wield_hook_registration_count = true,
+		}
+		local dependency_count = 0
+		for key in pairs(captured) do
+			H.equal(dependency_keys[key], true,
+				"unexpected runtime identity dependency " .. tostring(key))
+			dependency_count = dependency_count + 1
+		end
+		H.equal(dependency_count, 8)
+		H.equal(captured.mod, mod)
+		H.equal(captured.rt_register, nil,
+			"child must not receive the live registration callback")
+
+		local function valid_rows()
+			local valid = {}
+			for index = 1, 22 do
+				valid[index] = { name = "row_" .. tostring(index), fn = function() end }
+			end
+			return valid
+		end
+		local function rejects_before_register(provider, label)
+			local register_count = 0
+			local ok = pcall(function()
+				local child = provider()
+				local checked = load_owner({
+					name = child_name,
+					constructor = child,
+					dependencies = {},
+					expected_count = 22,
+					export_type = "function",
+				})
+				for index = 1, #checked do
+					register_count = register_count + 1
+				end
+			end)
+			H.equal(ok, false, label .. " must fail closed")
+			H.equal(register_count, 0, label .. " partially registered checks")
+		end
+
+		rejects_before_register(function() error("dofile failure") end,
+			"throwing child load")
+		rejects_before_register(function() return {} end, "non-constructor child")
+		rejects_before_register(function()
+			return function() error("constructor failure") end
+		end, "throwing child constructor")
+		rejects_before_register(function()
+			return function() return nil, function() end end
+		end, "missing child rows")
+		rejects_before_register(function()
+			return function() return valid_rows(), nil end
+		end, "missing child iterator")
+		rejects_before_register(function()
+			return function()
+				local invalid = valid_rows()
+				invalid[22] = nil
+				return invalid, function() end
+			end
+		end, "short child row set")
+		rejects_before_register(function()
+			return function()
+				local invalid = valid_rows()
+				invalid[7] = nil
+				invalid[23] = { name = "displaced", fn = function() end }
+				return invalid, function() end
+			end
+		end, "sparse child row set")
+		rejects_before_register(function()
+			return function()
+				local invalid = valid_rows()
+				invalid[23] = { name = "extra", fn = function() end }
+				return invalid, function() end
+			end
+		end, "oversized child row set")
+		rejects_before_register(function()
+			return function()
+				local invalid = valid_rows()
+				invalid[3].fn = false
+				return invalid, function() end
+			end
+		end, "malformed child callback")
+		rejects_before_register(function()
+			return function()
+				local invalid = valid_rows()
+				invalid[4].opts = "invalid"
+				return invalid, function() end
+			end
+		end, "malformed child options")
+		rejects_before_register(function()
+			return function()
+				local invalid = valid_rows()
+				invalid[5].name = invalid[4].name
+				return invalid, function() end
+			end
+		end, "duplicate child name")
+	end)
 
     H.test("CWV catalog stays data-only and retains policy-backed identities", function()
         H.equal(count_plain(catalog, "mod:hook"), 0)

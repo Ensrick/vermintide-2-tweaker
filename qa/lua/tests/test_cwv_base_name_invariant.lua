@@ -5,7 +5,7 @@
 return function(H, repo_root)
     local path = repo_root
         .. "/character_weapon_variants/scripts/mods/character_weapon_variants/"
-        .. "_cwv_regression_identity.lua"
+        .. "_cwv_regression_runtime_identity.lua"
     local file = assert(io.open(path, "rb"))
     local source = file:read("*a")
     file:close()

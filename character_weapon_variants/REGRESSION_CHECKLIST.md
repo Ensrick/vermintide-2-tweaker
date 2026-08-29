@@ -6,6 +6,21 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-08-21.
 
+## Regression-owner source map
+
+- `_cwv_regression_identity.lua` owns the original 20-check identity prefix and
+  appends the validated 22-check tail from
+  `_cwv_regression_runtime_identity.lua`.
+- `_cwv_regression_owner_loader.lua` is the fail-before-registration validator;
+  both modules are loaded once by the entry manifest before the identity wrapper.
+- `qa/lua/tests/test_cwv_entry_decomposition.lua` pins the 42 names and order,
+  the exact moved-body fixture, bounded file sizes, explicit dependencies, and
+  throwing/non-function/short/sparse/extra/malformed/duplicate child rejection.
+
+Any new or relocated check updates this source map and its exact order fixture
+in the same change. A module-load or child-schema failure must leave the public
+runner with zero registrations from the identity family.
+
 ## #1204 Deus identity uses committed parity
 
 - [ ] Restart both clients with CWV 0.1.513-dev, join the same modded-realm lobby, and start a Chaos Wastes expedition with at least one CWV weapon eligible as a starting weapon.
