@@ -1,10 +1,17 @@
-# Patch 5.2 independent source oracle
+# Independent weapon-history source oracle
 
-This lane prevents the generated Tweaker: Weapons history catalog from testing
-itself. Its family/state matrix is declared in `patch_5_2_source_spec.lua`;
+This lane prevents generated Tweaker: Weapons history catalogs from testing
+themselves. The Patch 5.2 family/state matrix is declared in
+`patch_5_2_source_spec.lua`;
 historical/current values remain in the preserved extractor evidence; and
 `patch_5_2_routes_oracle.lua` is regenerated directly from immutable Git objects
 in the decompiled source checkout. No runtime-catalog value is an oracle input.
+
+The same independently written evaluator also reproduces the adjacent/current
+evidence lanes for Patch 4.1.1, 6.0, 6.6, and 6.8. Its `--self-test` includes an
+independent 3-by-3 true/false/absent presence table and serialized false-versus-
+absence assertions, so a present `false` source leaf cannot silently become an
+unset leaf.
 
 Pinned source input:
 
@@ -35,9 +42,12 @@ qa/lua/vendor/lua-5.1.5-win64/lua5.1.exe `
   tools/weapon-history/source_oracle/patch_5_2_source_spec.lua
 ```
 
-The standalone test `qa/lua/tests/test_wt_history_source_oracle.lua` proves all
-14 families and 22 states against independently loaded source evidence. It also
-checks the 182-operation census, historical result fidelity, 13 source profiles,
+The standalone test `qa/lua/tests/test_wt_history_source_oracle.lua` proves the
+Patch 5.2 set of 14 families and 22 states against independently loaded source
+evidence. It also checks that slice's 182-operation census, historical result
+fidelity, 13 source profiles,
 one derived profile, route/source-only classification, exact Git blob identity,
 zero-write preflight, actual runtime installation, commit, and exact-reference
-restore. The suite is registered in `qa/lua/run.lua` and is part of full QA.
+restore. It separately pins Patch 4.1.1's current present-false guard through
+planning, commit, and exact restore. The suite is registered in
+`qa/lua/run.lua` and is part of full QA.

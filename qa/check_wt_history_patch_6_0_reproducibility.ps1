@@ -40,8 +40,8 @@ try {
     $devCatalog = Join-Path $root 'weapon_tweaker_dev\scripts\mods\weapon_tweaker_dev\_wt_history_6_0_catalog.lua'
     $lua = Join-Path $root 'qa\lua\vendor\lua-5.1.5-win64\lua5.1.exe'
     $pins = [ordered]@{
-        $extractor='76e6e9b05d1945c94022e94ed6190b079b5320dae7a5f0797000cd5a098e338f'
-        $oracle='3f4c3f2d630c261a3b0037a42e41ebafd560d8050afd49bc67c67259b406f311'
+        $extractor='ae916ba306e0f5933f71e9b41ed0c0e7df46c28585da4fb92b5e2cc03199b15a'
+        $oracle='1f5f26f4d302671859e7dadcf0f25d536b2601b03ee27d0a6ae35cb8723d52bd'
         $generator='18762b353dc2e4896f2dd8845e74b881083330fd2e5b3293d906c6d2c94ef754'
         $sourceCatalog='e450a95939b4d39ae6011e30e2283f969282ceeeb92b36e7e0737f2bbb1c918f'
         $catalog='7ba475c8ab7a8e635b1bfde179a867dde8594af654cce5ce1d70255e1bdae826'
@@ -85,8 +85,8 @@ try {
     $selection = Find-WtHistorySourceRepo -Root $root -Explicit $SourceRepo -Requirements $requirements
     $source=$selection.Path
     if (-not $source) {
-        if ($RequireSource) { throw "required source checkout unavailable: $($selection.Rejections -join '; ')" }
-        Write-Host '[check_wt_history_patch_6_0_reproducibility] exact regeneration SKIP (pinned artifacts OK)' -ForegroundColor Yellow
+        if ($RequireSource) { throw "source checkout is required but unavailable or incomplete: $($selection.Rejections -join '; ')" }
+        Write-Host '[check_wt_history_patch_6_0_reproducibility] source checkout unavailable or incomplete; exact regeneration SKIP (pinned artifacts OK)' -ForegroundColor Yellow
         exit 0
     }
     $tempBase=[IO.Path]::GetFullPath([IO.Path]::GetTempPath()); $tmp=Join-Path $tempBase ('wt1436-p60-'+[guid]::NewGuid().ToString('N'))

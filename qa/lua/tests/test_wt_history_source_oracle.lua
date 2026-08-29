@@ -8,6 +8,8 @@
 local function register(H, repo_root)
     local oracle_root = repo_root .. "/tools/weapon-history/source_oracle/"
     local evidence_root = repo_root .. "/tools/weapon-history/evidence/patch_5_2/"
+    local patch_4_1_1_evidence_root = repo_root
+        .. "/tools/weapon-history/evidence/patch_4_1_1/"
     local runtime_root = repo_root .. "/weapon_tweaker/scripts/mods/weapon_tweaker/"
     local spec = assert(loadfile(oracle_root .. "patch_5_2_source_spec.lua"))()
     local routes_oracle = assert(loadfile(
@@ -15,6 +17,14 @@ local function register(H, repo_root)
     local source_catalog = assert(loadfile(
         evidence_root .. "_wt_history_5_2_source_catalog.lua"))()
     local catalog = assert(loadfile(runtime_root .. "_wt_history_5_2_catalog.lua"))()
+    local patch_4_1_1_source_catalog = assert(loadfile(
+        patch_4_1_1_evidence_root .. "_wt_history_4_1_1_source_catalog.lua"))()
+    local patch_4_1_1_adjacent = assert(loadfile(patch_4_1_1_evidence_root
+        .. "_wt_history_snapshot_4_0_1_to_4_1_1_generated.lua"))()
+    local patch_4_1_1_rehydrated = assert(loadfile(patch_4_1_1_evidence_root
+        .. "_wt_history_snapshot_4_0_1_rehydrated_generated.lua"))()
+    local patch_4_1_1_catalog = assert(loadfile(runtime_root
+        .. "_wt_history_4_1_1_catalog.lua"))()
     local Policy = assert(loadfile(runtime_root .. "_wt_history_policy.lua"))()
     local Runtime = assert(loadfile(runtime_root .. "_wt_history_runtime.lua"))()
 
@@ -266,9 +276,11 @@ local function register(H, repo_root)
             fail("inconsistent independent baseline " .. operation_key(operation))
         end
         if present and prior == nil then rawset(parent, key, value) end
+        local stored
+        if present then stored = rawget(parent, key) end
         originals[#originals + 1] = {
             key = key, parent = parent, present = present,
-            value = present and rawget(parent, key) or nil,
+            value = stored,
         }
     end
 
@@ -338,6 +350,91 @@ local function register(H, repo_root)
         if not outcome[1] then error(outcome[2], 0) end
         return unpack(outcome, 2)
     end
+
+    H.test("WT #1436 Patch 4.1.1 evidence preserves false as a present source value", function()
+        H.equal(patch_4_1_1_source_catalog.schema, 1)
+        H.equal(patch_4_1_1_source_catalog.boundary.historical_revision,
+            "872027662e076477451c8c4bf077473d8ab9e27d")
+        H.equal(patch_4_1_1_source_catalog.boundary.historical_blob,
+            "25a4db5545750c0a5eb590e8d1bfc9882c80d30a")
+        H.equal(patch_4_1_1_source_catalog.boundary.post_revision,
+            "d5f1fa23c97e0e324db047cabb21faeffa9819bf")
+        H.equal(patch_4_1_1_source_catalog.boundary.post_blob,
+            "b705e7b247242d60a6177682a2c2a89ae5164b2a")
+        H.equal(patch_4_1_1_source_catalog.current.revision,
+            "038498af2b565bcb10bf5ed225638293a7640c83")
+        H.equal(patch_4_1_1_source_catalog.current.blob,
+            "d68819bb59bdece50b69c9401a9feb5ae238b3cb")
+
+        H.equal(#patch_4_1_1_adjacent.records, 1)
+        H.equal(#patch_4_1_1_adjacent.records[1].ops, 1)
+        local adjacent = patch_4_1_1_adjacent.records[1].ops[1]
+        H.deep_equal(adjacent.path, {
+            "ammo_data", "reload_on_ammo_pickup",
+        })
+        H.equal(adjacent.unset, false)
+        H.equal(rawget(adjacent, "value") ~= nil, true)
+        H.equal(adjacent.value, true)
+
+        H.equal(#patch_4_1_1_rehydrated.records, 1)
+        H.equal(#patch_4_1_1_rehydrated.records[1].ops, 1)
+        local rehydrated = patch_4_1_1_rehydrated.records[1].ops[1]
+        H.deep_equal(rehydrated.path, adjacent.path)
+        H.equal(rehydrated.expected_current_unset, false)
+        H.equal(rawget(rehydrated, "expected_current") ~= nil, true)
+        H.equal(rehydrated.expected_current, false)
+        H.equal(rehydrated.unset, false)
+        H.equal(rehydrated.value, true)
+
+        local family = patch_4_1_1_catalog.families[1]
+        local operation = family.states["4_0_1"].operations[1]
+        H.equal(family.id, "masterwork_pistol")
+        H.deep_equal(operation.path, adjacent.path)
+        H.equal(operation.expected_present, true)
+        H.equal(rawget(operation, "expected_current") ~= nil, true)
+        H.equal(operation.expected_current, false)
+        H.equal(operation.result_present, true)
+        H.equal(operation.result, true)
+
+        local function pistol_roots(present, value)
+            local ammo_data = {}
+            if present then ammo_data.reload_on_ammo_pickup = value end
+            return {
+                BuffTemplates = {}, ExplosionTemplates = {},
+                PlayerUnitStatusSettings = {}, VortexTemplates = {},
+                Weapons = { heavy_steam_pistol_template_1 = {
+                    ammo_data = ammo_data,
+                } },
+            }, ammo_data
+        end
+        local roots, ammo_data = pistol_roots(true, false)
+        local plan = assert(Policy.build_family_plan(
+            patch_4_1_1_catalog, family, "4_0_1", roots))
+        H.equal(#plan, 1)
+        H.equal(plan[1].original_present, true)
+        H.equal(rawget(plan[1], "original_value") ~= nil, true)
+        H.equal(plan[1].original_value, false)
+        H.equal(rawget(plan[1], "applied_value") ~= nil, true)
+        H.equal(plan[1].applied_value, true)
+        local ledger = assert(Policy.commit(plan))
+        H.equal(rawget(ammo_data, "reload_on_ammo_pickup") ~= nil, true)
+        H.equal(ammo_data.reload_on_ammo_pickup, true)
+        H.equal(Policy.restore(ledger), true)
+        H.equal(rawget(ammo_data, "reload_on_ammo_pickup") ~= nil, true)
+        H.equal(ammo_data.reload_on_ammo_pickup, false)
+
+        for _, hostile in ipairs({
+            { present = false, label = "absent" },
+            { present = true, value = true, label = "true" },
+        }) do
+            local hostile_roots = pistol_roots(hostile.present, hostile.value)
+            local refused, refusal = Policy.build_family_plan(
+                patch_4_1_1_catalog, family, "4_0_1", hostile_roots)
+            H.equal(refused, nil)
+            H.truthy(refusal and refusal:find(
+                "current guard mismatch", 1, true) ~= nil, hostile.label)
+        end
+    end)
 
     H.test("WT #1436 source oracle binds exact revisions, census, and route provenance", function()
         H.equal(spec.oracle_id, routes_oracle.oracle_id)
@@ -499,8 +596,10 @@ local function register(H, repo_root)
                 H.equal(Policy.ledger_status(ledger, roots), "same")
                 H.equal(Policy.restore(ledger), true)
                 for _, original in ipairs(originals) do
+                    H.equal(rawget(original.parent, original.key) ~= nil,
+                        original.present, "restore lost baseline presence")
                     H.equal(rawget(original.parent, original.key), original.value,
-                        "restore lost exact baseline reference")
+                        "restore lost exact baseline value/reference")
                 end
                 preflighted = preflighted + 1
             end
@@ -538,8 +637,11 @@ local function register(H, repo_root)
                     local restored = assert(runtime:restore())
                     H.equal(restored.refused, 0)
                     for _, original in ipairs(originals) do
+                        H.equal(rawget(original.parent, original.key) ~= nil,
+                            original.present,
+                            "runtime restore lost exact source baseline presence")
                         H.equal(rawget(original.parent, original.key), original.value,
-                            "runtime restore lost exact source baseline reference")
+                            "runtime restore lost exact source baseline value/reference")
                     end
                     exercised = exercised + 1
                 end

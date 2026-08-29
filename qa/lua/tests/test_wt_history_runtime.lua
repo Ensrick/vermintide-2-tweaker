@@ -294,6 +294,151 @@ local function register(H, context)
         end)
     end)
 
+    H.test("WT #1436 Patch 4.0.1 restores Masterwork Pistol present false exactly", function()
+        with_profile_globals(function()
+            local catalog = assert(loadfile(script_root
+                .. "_wt_history_4_1_1_catalog.lua"))()
+
+            local function roots_with_reload(present, value)
+                local ammo_sibling = { marker = "ammo sibling" }
+                local template_sibling = { marker = "template sibling" }
+                local ammo_data = { metadata = ammo_sibling }
+                if present then ammo_data.reload_on_ammo_pickup = value end
+                local template = {
+                    ammo_data = ammo_data,
+                    metadata = template_sibling,
+                    weapon_type = "MASTERWORK_PISTOL",
+                }
+                return {
+                    BuffTemplates = {}, ExplosionTemplates = {},
+                    PlayerUnitStatusSettings = {}, VortexTemplates = {},
+                    Weapons = { heavy_steam_pistol_template_1 = template },
+                }, {
+                    ammo_data = ammo_data,
+                    ammo_sibling = ammo_sibling,
+                    template = template,
+                    template_sibling = template_sibling,
+                }
+            end
+
+            local current_roots, current_refs = roots_with_reload(true, false)
+            local current_before = clone(current_roots)
+            local current_runtime = Runtime.install({
+                catalog = catalog,
+                mod = mod_fixture({ wt_history_masterwork_pistol = "current" },
+                    { value = true }),
+                policy = Policy,
+                roots = current_roots,
+            })
+            H.equal(current_runtime.fatal_error, nil)
+            H.equal(current_runtime.last_error, nil)
+            H.equal(current_runtime:verify(), nil)
+            H.equal(#(current_runtime.ledgers.masterwork_pistol or {}), 0)
+            H.equal(rawget(current_refs.ammo_data,
+                "reload_on_ammo_pickup") ~= nil, true)
+            H.equal(current_refs.ammo_data.reload_on_ammo_pickup, false)
+            H.deep_equal(current_roots, current_before,
+                "Current must leave the present-false source value untouched")
+            H.equal(current_roots.Weapons.heavy_steam_pistol_template_1,
+                current_refs.template)
+            H.equal(current_refs.ammo_data.metadata, current_refs.ammo_sibling)
+            H.equal(current_refs.template.metadata, current_refs.template_sibling)
+
+            local roots, refs = roots_with_reload(true, false)
+            local before = clone(roots)
+            local runtime = Runtime.install({
+                catalog = catalog,
+                mod = mod_fixture({ wt_history_masterwork_pistol = "4_0_1" },
+                    { value = true }),
+                policy = Policy,
+                roots = roots,
+            })
+            H.equal(runtime.fatal_error, nil)
+            H.equal(runtime.last_error, nil)
+            H.equal(runtime:verify(), nil)
+            H.equal(#runtime.ledgers.masterwork_pistol, 1)
+            H.equal(rawget(refs.ammo_data, "reload_on_ammo_pickup") ~= nil, true)
+            H.equal(refs.ammo_data.reload_on_ammo_pickup, true)
+            H.equal(roots.Weapons.heavy_steam_pistol_template_1, refs.template)
+            H.equal(refs.ammo_data.metadata, refs.ammo_sibling)
+            H.equal(refs.template.metadata, refs.template_sibling)
+
+            local reapplied = assert(runtime:reapply())
+            H.equal(reapplied.changed, false,
+                "an unchanged historical selection must be idempotent")
+            H.equal(rawget(refs.ammo_data, "reload_on_ammo_pickup") ~= nil, true)
+            H.equal(refs.ammo_data.reload_on_ammo_pickup, true)
+            H.equal(roots.Weapons.heavy_steam_pistol_template_1, refs.template)
+            H.equal(refs.ammo_data.metadata, refs.ammo_sibling)
+
+            local restored = assert(runtime:restore())
+            H.equal(restored.refused, 0)
+            H.equal(restored.changed, true)
+            H.equal(rawget(refs.ammo_data, "reload_on_ammo_pickup") ~= nil, true)
+            H.equal(refs.ammo_data.reload_on_ammo_pickup, false)
+            H.deep_equal(roots, before,
+                "restore must recover present false, not collapse it to absence")
+            H.equal(roots.Weapons.heavy_steam_pistol_template_1, refs.template)
+            H.equal(refs.ammo_data.metadata, refs.ammo_sibling)
+            H.equal(refs.template.metadata, refs.template_sibling)
+            H.equal(assert(runtime:restore()).changed, false)
+
+            for _, hostile in ipairs({
+                { present = false, label = "absent" },
+                { present = true, value = true, label = "true" },
+            }) do
+                local hostile_roots, hostile_refs = roots_with_reload(
+                    hostile.present, hostile.value)
+                local hostile_before = clone(hostile_roots)
+                local hostile_runtime = Runtime.install({
+                    catalog = catalog,
+                    mod = mod_fixture({ wt_history_masterwork_pistol = "4_0_1" },
+                        { value = true }),
+                    policy = Policy,
+                    roots = hostile_roots,
+                })
+                H.equal(hostile_runtime.fatal_error, nil)
+                H.truthy(hostile_runtime.last_error
+                    and hostile_runtime.last_error:find(
+                        "current guard mismatch", 1, true) ~= nil,
+                    hostile.label .. " guard must reject")
+                H.equal(#(hostile_runtime.ledgers.masterwork_pistol or {}), 0)
+                H.deep_equal(hostile_roots, hostile_before,
+                    hostile.label .. " guard mismatch must write nothing")
+                H.equal(hostile_roots.Weapons.heavy_steam_pistol_template_1,
+                    hostile_refs.template)
+                H.equal(hostile_refs.ammo_data.metadata, hostile_refs.ammo_sibling)
+            end
+        end)
+    end)
+
+    H.test("WT #1436 commit rollback restores an original present false", function()
+        local original_parent = { flag = false }
+        local plan = {
+            {
+                applied_value = true,
+                key = "flag",
+                original_present = true,
+                original_value = false,
+                parent = original_parent,
+            },
+            {
+                applied_value = true,
+                key = "forced_failure",
+                original_present = false,
+                parent = false,
+            },
+        }
+        local committed, commit_error = Policy.commit(plan)
+        H.equal(committed, nil)
+        H.truthy(commit_error
+            and commit_error:find("history commit failed at 2", 1, true) ~= nil)
+        H.equal(rawget(original_parent, "flag") ~= nil, true,
+            "rollback must preserve the original key presence")
+        H.equal(original_parent.flag, false,
+            "rollback must restore false rather than delete the key")
+    end)
+
     H.test("WT #1436 Current registers profiles but performs no gameplay writes", function()
         with_profile_globals(function()
             local catalog = catalog_fixture()
@@ -576,6 +721,10 @@ local function register(H, context)
             catalog, family, "5_1_1", roots, { validated = true }))
         H.equal(#plan, #state.operations,
             "the entire source-exact moveset must commit as one plan")
+        H.equal(plan[1].original_value, originals[1].value,
+            "planning must retain the exact original table identity")
+        H.truthy(plan[1].applied_value ~= plan[1].applied_snapshot,
+            "applied table value and ownership snapshot must be separate clones")
         local ledger = assert(Policy.commit(plan))
         H.equal(Policy.ledger_status(ledger, roots), "same")
         H.equal(Policy.restore(ledger), true)

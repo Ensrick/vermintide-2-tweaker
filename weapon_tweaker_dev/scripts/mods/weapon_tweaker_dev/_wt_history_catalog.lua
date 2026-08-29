@@ -13,6 +13,7 @@ local GENERATED_MODULES = {
     "scripts/mods/weapon_tweaker_dev/_wt_history_6_0_catalog",
     "scripts/mods/weapon_tweaker_dev/_wt_history_6_6_catalog",
     "scripts/mods/weapon_tweaker_dev/_wt_history_6_8_catalog",
+    "scripts/mods/weapon_tweaker_dev/_wt_history_4_1_1_catalog",
 }
 local GENERATED_MODULE = GENERATED_MODULES[1]
 
@@ -89,6 +90,25 @@ local function arrays_equal(left, right)
         if rawget(left, index) ~= rawget(right, index) then return false end
     end
     return true
+end
+
+local function history_state_less(left, right)
+    local left_major, left_minor, left_patch = tostring(left):match(
+        "^(%d+)_(%d+)_(%d+)$")
+    local right_major, right_minor, right_patch = tostring(right):match(
+        "^(%d+)_(%d+)_(%d+)$")
+    if left_major and right_major then
+        left_major, left_minor, left_patch = tonumber(left_major),
+            tonumber(left_minor), tonumber(left_patch)
+        right_major, right_minor, right_patch = tonumber(right_major),
+            tonumber(right_minor), tonumber(right_patch)
+        if left_major ~= right_major then return left_major < right_major end
+        if left_minor ~= right_minor then return left_minor < right_minor end
+        if left_patch ~= right_patch then return left_patch < right_patch end
+    elseif left_major or right_major then
+        return left_major ~= nil
+    end
+    return tostring(left) < tostring(right)
 end
 
 local function family_identity_mismatch(left, right)
@@ -281,6 +301,9 @@ function M.merge(catalogs)
                 setting_ids[family.setting_id] = family.id
             end
         end
+    end
+    for _, family in ipairs(merged.families) do
+        table.sort(family.state_order, history_state_less)
     end
     return merged
 end

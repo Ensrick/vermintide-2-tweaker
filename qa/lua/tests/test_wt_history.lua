@@ -289,7 +289,8 @@ local function register(H, repo_root)
                 parent = parent[key]
             end
             local key = row.path[#row.path]
-            local value = row.expected_present and clone(row.expected_current) or nil
+            local value
+            if row.expected_present then value = clone(row.expected_current) end
             parent[key] = value
             originals[index] = { key = key, parent = parent, value = value }
         end
@@ -569,26 +570,88 @@ local function register(H, repo_root)
         })
     end)
 
+    H.test("WT #1436 generated Patch 4.1.1 catalog preserves a present-false guard", function()
+        local catalog = assert(loadfile(script_root
+            .. "_wt_history_4_1_1_catalog.lua"))()
+        local valid, validation_error = Policy.validate(catalog)
+        H.equal(validation_error, nil)
+        H.equal(valid, true)
+        H.equal(catalog.schema, 2)
+        H.equal(catalog.catalog_id, "wt_history_patch_4_1_1_v1")
+        H.equal(catalog.current_source.revision,
+            "038498af2b565bcb10bf5ed225638293a7640c83")
+        H.equal(#catalog.families, 1)
+        H.equal(next(catalog.profile_specs), nil)
+        H.equal(next(catalog.derived_profiles), nil)
+
+        local family = catalog.families[1]
+        H.equal(family.id, "masterwork_pistol")
+        H.equal(family.setting_id, "wt_history_masterwork_pistol")
+        H.equal(family.label_key, "wt_history_family_masterwork_pistol")
+        H.equal(family.display_name, "Bardin's Masterwork Pistol")
+        H.deep_equal(family.templates, { "heavy_steam_pistol_template_1" })
+        H.deep_equal(family.state_order, { "4_0_1" })
+        local state = family.states["4_0_1"]
+        H.deep_equal(state.profile_names, {})
+        H.deep_equal(state.direct_profile_names, {})
+        H.equal(#state.operations, 1)
+        local row = state.operations[1]
+        H.equal(row.root, "Weapons")
+        H.equal(row.template, "heavy_steam_pistol_template_1")
+        H.deep_equal(row.path, { "ammo_data", "reload_on_ammo_pickup" })
+        H.equal(row.expected_present, true)
+        H.equal(rawget(row, "expected_current") ~= nil, true)
+        H.equal(row.expected_current, false)
+        H.equal(row.result_present, true)
+        H.equal(rawget(row, "result") ~= nil, true)
+        H.equal(row.result, true)
+        H.equal(row.family_id, family.id)
+        H.equal(row.state_id, "4_0_1")
+        H.equal(row.official_change_id, "P411-MASTERWORK-PISTOL-AMMO-RELOAD")
+        H.equal(row.source_revision,
+            "872027662e076477451c8c4bf077473d8ab9e27d")
+        H.equal(row.source_blob,
+            "25a4db5545750c0a5eb590e8d1bfc9882c80d30a")
+        H.equal(row.current_source_blob,
+            "d68819bb59bdece50b69c9401a9feb5ae238b3cb")
+        H.equal(row.source_path,
+            "scripts/settings/equipment/weapon_templates/heavy_steam_pistol.lua")
+        H.deep_equal(catalog.generation, {
+            adjacent_operation_count = 1,
+            global_operations = 0,
+            profile_route_count = 0,
+            unsupported_count = 0,
+        })
+        H.equal(read_file(script_root .. "_wt_history_4_1_1_catalog.lua"),
+            read_file(repo_root
+                .. "/weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/"
+                .. "_wt_history_4_1_1_catalog.lua"),
+            "public and dev must carry byte-identical pure Patch 4.1.1 data")
+    end)
+
     H.test("WT #1436 default catalog composes every bounded patch exactly once", function()
         local catalog, mod, paths = load_default_catalog(CatalogUI, script_root)
         H.deep_equal(paths, CatalogUI.GENERATED_MODULES)
         H.deep_equal(catalog.generation.catalogs, {
             "wt_history_patch_5_2_v1", "wt_history_patch_6_0_v1",
             "wt_history_patch_6_6_v1", "wt_history_patch_6_8_v1",
+            "wt_history_patch_4_1_1_v1",
         })
         H.deep_equal(catalog_counts(catalog), {
             derived_profiles = 1,
             families = 18,
-            family_states = 27,
-            operations = 197,
+            family_states = 28,
+            operations = 198,
             profiles = 14,
-            states = 6,
+            states = 7,
         })
-        local kruber
+        local kruber, masterwork
         for _, family in ipairs(catalog.families) do
             if family.id == "kruber_sword_and_shield" then kruber = family end
+            if family.id == "masterwork_pistol" then masterwork = family end
         end
         H.deep_equal(assert(kruber).state_order, { "5_1_1", "5_2_0", "5_6_1" })
+        H.deep_equal(assert(masterwork).state_order, { "4_0_1", "5_2_0" })
         local valid, validation_error = Policy.validate(catalog)
         H.equal(validation_error, nil)
         H.equal(valid, true)
@@ -596,7 +659,7 @@ local function register(H, repo_root)
         local cached, cached_error = CatalogUI.load(mod)
         H.equal(cached_error, nil)
         H.equal(cached, catalog)
-        H.equal(#paths, 4, "default composite must reuse its cache")
+        H.equal(#paths, 5, "default composite must reuse its cache")
     end)
 
     H.test("WT #1436 Patch 6.0 applies, reads back, and restores exact state", function()
@@ -772,6 +835,81 @@ local function register(H, repo_root)
         end)
     end)
 
+    H.test("WT #1436 policy preserves all non-vacuous boolean presence transitions", function()
+        local catalog = catalog_fixture()
+        local family = catalog.families[1]
+        local state = family.states["5_1_1"]
+        state.profile_names = {}
+        state.direct_profile_names = {}
+        state.atomic_group = "BOOLEAN-PRESENCE-TRUTH-TABLE"
+        state.operations = {}
+
+        local cases = {
+            { id = "absent_to_false", expected_present = false,
+                result_present = true, result = false },
+            { id = "absent_to_true", expected_present = false,
+                result_present = true, result = true },
+            { id = "false_to_absent", expected_present = true, expected = false,
+                result_present = false },
+            { id = "false_to_true", expected_present = true, expected = false,
+                result_present = true, result = true },
+            { id = "true_to_absent", expected_present = true, expected = true,
+                result_present = false },
+            { id = "true_to_false", expected_present = true, expected = true,
+                result_present = true, result = false },
+        }
+        local roots = {
+            BuffTemplates = {}, ExplosionTemplates = {},
+            PlayerUnitStatusSettings = {}, VortexTemplates = {},
+            Weapons = { we_1h_axe_template_1 = { stats = {} } },
+        }
+        local stats = roots.Weapons.we_1h_axe_template_1.stats
+        for index, case in ipairs(cases) do
+            local row = operation({ "stats", case.id }, case.expected, case.result)
+            row.expected_present = case.expected_present
+            if not case.expected_present then row.expected_current = nil end
+            row.result_present = case.result_present
+            if not case.result_present then row.result = nil end
+            row.official_change_id = "BOOLEAN-PRESENCE-" .. index
+            state.operations[index] = row
+            if case.expected_present then stats[case.id] = case.expected end
+        end
+
+        local plan, plan_error = Policy.build_family_plan(
+            catalog, family, "5_1_1", roots)
+        H.truthy(plan, tostring(plan_error))
+        H.equal(#plan, #cases)
+        for index, case in ipairs(cases) do
+            local entry = plan[index]
+            H.equal(entry.original_present, case.expected_present, case.id)
+            H.equal(rawget(entry, "original_value") ~= nil,
+                case.expected_present, case.id .. " original presence")
+            H.equal(entry.original_value, case.expected, case.id .. " original value")
+            H.equal(rawget(entry, "applied_value") ~= nil,
+                case.result_present, case.id .. " applied presence")
+            H.equal(entry.applied_value, case.result, case.id .. " applied value")
+            H.equal(rawget(entry, "applied_snapshot") ~= nil,
+                case.result_present, case.id .. " snapshot presence")
+            H.equal(entry.applied_snapshot, case.result,
+                case.id .. " snapshot value")
+        end
+
+        local ledger = assert(Policy.commit(plan))
+        for _, case in ipairs(cases) do
+            H.equal(rawget(stats, case.id) ~= nil, case.result_present,
+                case.id .. " committed presence")
+            H.equal(rawget(stats, case.id), case.result,
+                case.id .. " committed value")
+        end
+        H.equal(Policy.restore(ledger), true)
+        for _, case in ipairs(cases) do
+            H.equal(rawget(stats, case.id) ~= nil, case.expected_present,
+                case.id .. " restored presence")
+            H.equal(rawget(stats, case.id), case.expected,
+                case.id .. " restored value")
+        end
+    end)
+
     H.test("WT #1436 catalog merge rejects every cross-catalog identity collision", function()
         local patch_5_2 = assert(loadfile(script_root
             .. "_wt_history_5_2_catalog.lua"))()
@@ -920,7 +1058,7 @@ local function register(H, repo_root)
         local merged, merge_error = CatalogUI.merge({ left, right })
         H.equal(merge_error, nil)
         H.equal(#merged.families, 1)
-        H.deep_equal(merged.families[1].state_order, { "6_7_2", "6_0_0" })
+        H.deep_equal(merged.families[1].state_order, { "6_0_0", "6_7_2" })
         H.truthy(merged.families[1].states["6_7_2"] ~= nil)
         H.truthy(merged.families[1].states["6_0_0"] ~= nil)
         H.deep_equal(left, left_before, "left input catalog must remain immutable")
@@ -951,8 +1089,8 @@ local function register(H, repo_root)
             left.families[1].setting_id)
         H.deep_equal(group.sub_widgets[1].options, {
             { text = "wt_history_state_current", value = "current" },
-            { text = "wt_history_state_6_7_2", value = "6_7_2" },
             { text = "wt_history_state_6_0_0", value = "6_0_0" },
+            { text = "wt_history_state_6_7_2", value = "6_7_2" },
         })
 
         local reversed = assert(CatalogUI.merge({ clone(right), clone(left) }))
@@ -1206,14 +1344,14 @@ local function register(H, repo_root)
         H.equal(data.options.widgets[2].setting_id, "wt_history_patch_versions")
         H.equal(#data.options.widgets[2].sub_widgets, 18)
         H.equal(data.options.widgets[3], second)
-        H.equal(loads, 4)
+        H.equal(loads, 5)
         H.equal(CatalogUI.decorate_menu(mod, data), data)
         H.equal(#data.options.widgets, 3)
-        H.equal(loads, 4, "re-decoration must not reload or duplicate the group")
+        H.equal(loads, 5, "re-decoration must not reload or duplicate the group")
 
         local malformed = { options = {} }
         H.equal(CatalogUI.decorate_menu(mod, malformed), malformed)
-        H.equal(loads, 4, "malformed menu data must not load generated catalogs")
+        H.equal(loads, 5, "malformed menu data must not load generated catalogs")
     end)
 
     H.test("WT #1436 public and dev data surfaces return one index-two history group", function()
@@ -1258,11 +1396,11 @@ local function register(H, repo_root)
                 "wt_history_patch_versions")
             H.equal(#data.options.widgets[2].sub_widgets, 18)
             H.equal(data.options.widgets[3], overrides)
-            H.equal(loads, 4)
+            H.equal(loads, 5)
             H.equal(catalog_ui.decorate_menu(mod, data), data)
             H.equal(#data.options.widgets, 3,
                 stream.namespace .. " must not duplicate its history group")
-            H.equal(loads, 4,
+            H.equal(loads, 5,
                 stream.namespace .. " must reuse its generated-catalog cache")
         end
     end)
