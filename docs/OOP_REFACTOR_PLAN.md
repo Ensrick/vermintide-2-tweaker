@@ -218,7 +218,7 @@ sender-side substitution on it (BUG_CLASSES 31).
 ### WS4 - Shared-lib extraction (#428, respects the standalone invariant: copied `_lib_*.lua`, build-time sync, never `get_mod` deps)
 
 > **STATUS: PARTIAL 2026-08-25.** `tools/shared_lib/manifest.psd1` currently
-> enforces 13 canonical libraries across 44 consumer copies. The canonical
+> enforces 13 canonical libraries across 45 consumer copies. The canonical
 > `_lib_network_lookup` now has four strict, byte-identical consumers and Enemy's
 > Warlord/Chosen owners share one entry-loaded instance. Remaining-consumer
 > migrations for direct NetworkLookup owners, wire substitution, DLC ownership, the

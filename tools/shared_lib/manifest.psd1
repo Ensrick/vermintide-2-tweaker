@@ -28,6 +28,7 @@
                 "career_tweaker/scripts/mods/career_tweaker/_lib_peer_parity.lua"
                 "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_lib_peer_parity.lua"
                 "character_weapon_variants/scripts/mods/character_weapon_variants/_lib_peer_parity.lua"
+                "enemy_tweaker/scripts/mods/enemy_tweaker/_lib_peer_parity.lua"
                 "event_tweaker/scripts/mods/event_tweaker/_lib_peer_parity.lua"
                 "weapon_tweaker/scripts/mods/weapon_tweaker/_lib_peer_parity.lua"
                 "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_lib_peer_parity.lua"

@@ -7,7 +7,8 @@ local mod = get_mod("enemy_tweaker")
 -- et_skaven_warlord breed registered by _et_skaven_warlord_breed.lua, which
 -- MUST be dofile'd BEFORE this module — the clone snapshots pristine vanilla
 -- champion values before the retune below can touch them), the CONSOLIDATED
--- ConflictDirector.spawn_queued_unit hook both swaps share, and the two
+-- ConflictDirector.spawn_queued_unit hook both swaps and the custom-breed
+-- sender floor share, the immediate-spawn sender floor, and the two
 -- off-arena Skarrik crash guards (intro_timer stagger default, BTSpawnAllies
 -- missing-spawner-group neutralization).
 --
@@ -16,11 +17,13 @@ local mod = get_mod("enemy_tweaker")
 -- exports: apply_champion_breed_overrides.
 
 local ET = mod._et
+local CustomBreedIdentity = ET.CustomBreedIdentity
 local rt_register = ET.rt_register
 local _dbg_alert  = ET.dbg_alert
 local _spawn_dbg  = ET.spawn_dbg
 local _safe       = ET.safe
 local _hook_wrap  = ET.hook_wrap
+local _hook_resolve_first_once = ET.hook_resolve_first_once
 local _hook_wrap_table = ET.hook_wrap_table
 
 -- ============================================================
@@ -165,6 +168,38 @@ local _WARLORD_ELIGIBLE_MONSTERS = {
     beastmen_minotaur = true,
 }
 
+local FLOOR_REJECTION_LOG_CAP = 8
+local floor_rejection_logs = 0
+local _CUSTOM_BREED_NAMES = {
+    et_chosen_greataxe = true,
+    et_skaven_warlord = true,
+}
+local function _custom_breed_intent(breed)
+    return type(breed) == "table"
+        and _CUSTOM_BREED_NAMES[rawget(breed, "name")] == true
+end
+local function _custom_breed_floor(breed, surface)
+    local identity = CustomBreedIdentity
+    local resolved, decision
+    if type(identity) ~= "table"
+            or type(identity.guard_spawn_surface) ~= "function" then
+        local name = type(breed) == "table" and rawget(breed, "name")
+        if not _CUSTOM_BREED_NAMES[name] then return breed end
+        decision = "identity-unavailable"
+    else
+        resolved, decision = identity.guard_spawn_surface(
+            breed, surface, ET.custom_breed_spawn_floor)
+    end
+    if resolved == nil and floor_rejection_logs < FLOOR_REJECTION_LOG_CAP then
+        floor_rejection_logs = floor_rejection_logs + 1
+        pcall(printf, "[et:451] custom sender floor HELD surface=%s wanted=%s reason=%s row=%d/%d",
+            tostring(surface), tostring(type(breed) == "table" and rawget(breed, "name")),
+            tostring(decision), floor_rejection_logs,
+            FLOOR_REJECTION_LOG_CAP)
+    end
+    return resolved
+end
+
 -- ============================================================
 -- CONSOLIDATED spawn_queued_unit hook (SINGLE hook per Class.method — VMF drops
 -- duplicates). Two independent breed substitutions share this body:
@@ -173,8 +208,8 @@ local _WARLORD_ELIGIBLE_MONSTERS = {
 -- They gate on disjoint (breed, spawn_type) conditions, so at most one fires per
 -- spawn. Singleton-invariant marker: _et_spawn_queued_unit_consolidated.
 -- ============================================================
-_hook_wrap("ConflictDirector", "spawn_queued_unit", "spawn_queued_unit_swaps",
-        function(func, self, breed, boxed_spawn_pos, boxed_spawn_rot, spawn_category,
+local function _plan_queued_breed(breed, boxed_spawn_pos, boxed_spawn_rot,
+        spawn_category,
                  spawn_animation, spawn_type, optional_data, group_data, unit_data)
     -- 1. Skaven Warlord monster-pool swap (#324: target is the mod-added
     -- et_skaven_warlord breed, no longer literal Skarrik). Fast early-out:
@@ -192,9 +227,9 @@ _hook_wrap("ConflictDirector", "spawn_queued_unit", "spawn_queued_unit_swaps",
         -- Substituting on the host means the warlord replicates to clients
         -- normally (engine network-synced loader + is_breed_loaded_on_all_peers
         -- gate). Managers.player.is_server is a boolean field (player_manager.lua:41).
-        -- CLIENT REQUIREMENT: every peer must have enemy_tweaker installed —
-        -- the mod-added breed's NetworkLookup entries only exist on et peers
-        -- (see the constraint banner in _et_skaven_warlord_breed.lua).
+        -- The unconditional final sender floor below requires exact peer/catalog
+        -- parity for this custom result and substitutes its validated Champion
+        -- donor otherwise (including calls from other mods).
         local pm = Managers and Managers.player
         if pm and pm.is_server then
             local chance = mod:get("warlord_monster_chance") or 0
@@ -228,9 +263,27 @@ _hook_wrap("ConflictDirector", "spawn_queued_unit", "spawn_queued_unit_swaps",
         end
     end
 
-    return func(self, breed, boxed_spawn_pos, boxed_spawn_rot, spawn_category,
-                spawn_animation, spawn_type, optional_data, group_data, unit_data)
-end)
+    -- 3. Unconditional final sender floor. It runs AFTER every substitution so
+    -- the Warlord pool cannot bypass parity, and it also catches direct callers
+    -- such as /et_spawn_chosen or General Tweaker's enumerated creature spawner.
+    -- The native function's queue id is returned verbatim.
+    breed = _custom_breed_floor(breed, "spawn_queued_unit")
+    return breed
+end
+
+_hook_resolve_first_once("ConflictDirector", "spawn_queued_unit",
+    "spawn_queued_unit_swaps", _plan_queued_breed, _custom_breed_intent)
+
+-- Immediate callers bypass the queue hook entirely
+-- (conflict_director.lua:1893). No other Enemy module hooks this method (whole
+-- tree census before #451B), so this is the single immediate sender floor.
+-- Native `(unit, go_id)` returns are preserved verbatim.
+_hook_resolve_first_once("ConflictDirector", "spawn_unit_immediate",
+    "custom_breed_immediate_floor",
+    function(breed)
+        return _custom_breed_floor(breed, "spawn_unit_immediate")
+    end, _custom_breed_intent)
+mod._et_spawn_unit_immediate_custom_breed_floor = true
 
 -- v0.7.14-dev: husk / open-pool warlord `intro_timer` crash guard.
 -- `breed.stagger_modifier_function` (breed_skaven_storm_vermin_warlord.lua:170)
@@ -435,6 +488,16 @@ rt_register("champion_elite_swap_consolidated", function()
     if type(rawget(_G, "ConflictDirector")) ~= "table"
             or type(ConflictDirector.spawn_queued_unit) ~= "function" then
         return "ConflictDirector.spawn_queued_unit missing — consolidated swap hook target absent"
+    end
+    if type(ConflictDirector.spawn_unit_immediate) ~= "function"
+            or not mod._et_spawn_unit_immediate_custom_breed_floor then
+        return "ConflictDirector.spawn_unit_immediate custom-breed floor absent"
+    end
+    local once = ET.wrap_registry and ET.wrap_registry.once
+    if type(once) ~= "table"
+            or once["ConflictDirector.spawn_queued_unit"] ~= true
+            or once["ConflictDirector.spawn_unit_immediate"] ~= true then
+        return "custom-breed sender floors are not registered no-replay"
     end
     if not (rawget(_G, "Breeds") and Breeds[_CHAMPION_BREED]) then
         return "Breeds.skaven_storm_vermin_champion missing — Champion breed not registered"

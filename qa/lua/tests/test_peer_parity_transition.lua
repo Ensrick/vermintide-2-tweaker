@@ -172,7 +172,7 @@ local function register(Harness, repo_root)
         return source
     end
 
-    Harness.test("shared exact mode is authorized only for CRT, Event, the CWV exact runtime and CT", function()
+    Harness.test("shared exact mode is authorized only for CRT Event CWV CT and Enemy custom breeds", function()
         local unauthorized = {
             -- CWV's entry file keeps the PRESENCE beacon
             -- (cwv_peer_parity_present): deployed CWV builds already speak that
@@ -229,6 +229,15 @@ local function register(Harness, repo_root)
             "CT #426 exact channel disappeared")
         Harness.equal(ct:find('channel     = "ct_peer_parity_present"', 1, true), nil,
             "the legacy CT channel would let an unconverted build ack")
+
+        -- #451B: Enemy's two custom breeds share one exact identity over their
+        -- registrar fingerprints and all three numeric lookup axes.
+        local enemy = read_source("enemy_tweaker/scripts/mods/enemy_tweaker/"
+            .. "_et_custom_breed_parity.lua")
+        Harness.truthy(enemy:find("[^_%w]wire_identity%s*=%s*snapshot%.identity") ~= nil,
+            "Enemy must opt its custom-breed identity into exact mode")
+        Harness.truthy(enemy:find('"et_custom_breeds_exact_v1"', 1, true) ~= nil,
+            "Enemy custom-breed exact channel disappeared")
         -- The identity must be reachable before the beacon is built, and the
         -- reservation that makes it build-stable must run in the registry.
         local registry = read_source("chaos_wastes_tweaker_dev/scripts/mods/"

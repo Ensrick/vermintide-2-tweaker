@@ -57,8 +57,10 @@ the file - so modules never dofile each other; shared helpers publish into
 | `_et_mimic` | per-system difficulty mimic |
 | `_et_roaming` | roaming size (SIP + recycler guard + ambient density + clone shim) |
 | `_et_custom_breed_registrar` | #1413 Enemy-local declarative transaction owner for every custom breed: off-table clone/side-surface plan, three strict wire axes planned on shadows through `_lib_network_lookup`, source-authoritative damage/statistics-path capacities, exact reload fingerprint with bounded engine-owned difficulty overlays, detached table presentations, reversible raw-table commit, `Breeds` publication last, and fail-closed terminal handling for the engine's opaque threat upvalue |
+| `_et_custom_breed_identity` | #451B engine-free exact identity over both ET breed names, registrar schema/fingerprints, and symmetric ids on `NetworkLookup.{breeds,damage_sources,statistics_path_names}`; also owns the canonical-custom/validated-vanilla-donor decision used by both spawn surfaces |
 | `_et_skaven_warlord_breed` | #324 Warlord policy/spec consumed by `_et_custom_breed_registrar` (MUST precede `_et_champion_warlord`) + bounded `[et:324]` spawn diagnostics: AI/BT/target/nav/locomotion snapshot at spawn/+5s/+15s for up to 4 Warlord spawns per session, dispatched from the `_post_spawn_unit` seam and the lifecycle update owner |
-| `_et_champion_warlord` | champion/warlord pools + consolidated spawn hook + crash guards |
+| `_et_custom_breed_parity` | #451B canonical exact peer-parity instance, installed after both breed registrations and before hot-join/spawn hooks; revalidates registrar + identity at emission; permits donor-safe native sync only when both live and queued counters for both ET breeds are proven zero; holds a live/queued-state join's pending challenge outside `GameSession` without kicking, admits delayed exact proof, and kicks once only after timeout or definitive proof revocation; forgets disconnect epochs and owns bounded donor/hot-join logs |
+| `_et_champion_warlord` | champion/warlord pools + SINGLE consolidated `spawn_queued_unit` hook extended with the custom-breed sender floor + sole `spawn_unit_immediate` floor + existing #324 crash guards |
 | `_et_director_hooks` | ConflictDirector init/refresh re-apply chain |
 | `_et_event_size` | terror-event horde size scaling |
 | `_et_pacing` | spawn pacing (CD tick #479 guard, freq/caps), #213 freeze guard, #449 rush-intervention freeze gate |
@@ -66,14 +68,15 @@ the file - so modules never dofile each other; shared helpers publish into
 | `_et_patrol` | patrol formation size |
 | `_et_specials` | per-difficulty special spawns |
 | `_et_health_multiplier` | #369 host-authoritative final-spawn health scaling + bounded live rescale/replication |
-| `_et_lifecycle` | queued on_setting_changed / batch completion / update drain + on_enabled / on_disabled + BR bootstrap; sole `mod.update` owner also dispatches the bounded #450 boss monitor and the #324 Warlord spawn-diagnostic samples |
+| `_et_lifecycle` | queued on_setting_changed / batch completion / update drain + on_enabled / on_disabled + BR bootstrap; final `mod.update` owner preserves the earlier canonical parity wrapper and also dispatches the bounded #450 boss monitor and #324 Warlord samples |
 | `_et_commands` | chat commands (`/et_status`, `/verify_*`, dumps, `/et_reset`) |
 | `_et_boss_tweaks` | fly-disable duration; issue 275 probe |
 | `_et_boss_balance` | #450 reversible boss data toggles (health/armor/warp-lightning and Deathrattler's dual-gun rotation window; no hooks). Bodvarr is runtime breed `chaos_exalted_champion_warcamp`, never the unsuffixed source-family stem. |
 | `_et_boss_grudge` | #531 grudge-mark behavioral knobs (Skarrik Berserk / Bodvarr Crippling on Cata+ Adventure); single `hook_safe` on `ConflictDirector._post_spawn_unit`, applies vanilla CW grudge-mark buff templates host-side. Bodvarr maps to `chaos_exalted_champion_warcamp`; `_norsca` is the Skittergate champion. |
 | `_et_boss_behavior` | #450 runtime behavior adapter: Halescourge uses existing post-spawn/update owners for one package-aware Troll/Spawn; Skarrik composes the existing damage owner; one exact `BTStormfiendShootAction._fire_from_position_direction` hook halves Deathrattler-only ratling tracking. |
-| `_et_boss_ideas` | #451 feasibility audit + greataxe Chosen policy/spec consumed by `_et_custom_breed_registrar` (`chaos_warrior` clone, 2000 HP, `boss_staggers`, resident `warrior_axe` greataxe inventory) + residency-gated, host-only `/et_spawn_chosen`. Owns no spawn hook and never injects arena-coupled lord breeds. See `BOSS_IDEA_FEASIBILITY.md`. |
+| `_et_boss_ideas` | #451 feasibility audit + greataxe Chosen policy/spec consumed by `_et_custom_breed_registrar`: honest boss-only classification, health bar/far-despawn immunity/threat 32/boss infighting/recomputed category mask, donor-preserving exactly-once boss+angry lifecycle, 2000 HP and resident `warrior_axe`; host command requires package residency and exact peer identity. Owns no spawn hook and never injects arena-coupled lord breeds. |
 | `_lib_network_lookup` | Byte-exact copy of `tools/shared_lib/_lib_network_lookup.lua` (#428 guard patterns); loaded exactly once, then injected into `_et_custom_breed_registrar`. The registrar plans all three custom-breed lookup axes against shadows before any real write. Never edit here - edit the canonical copy and re-sync. |
+| `_lib_peer_parity` | Byte-exact manifest-managed copy of `tools/shared_lib/_lib_peer_parity.lua`; exact challenge/epoch/replay transport for the custom-breed owner. Never edit the consumer copy. |
 
 Where new code goes: the module whose "Owns" row it extends; a new subsystem gets a
 new `_et_<name>.lua` + one manifest line + a row here (same discipline as

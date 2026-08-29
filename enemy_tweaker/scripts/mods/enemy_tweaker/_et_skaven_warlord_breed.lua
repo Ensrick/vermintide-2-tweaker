@@ -33,7 +33,8 @@ ordering ever regresses.
 EAGER-REGISTRATION DOCTRINE (DEVELOPMENT.md "Lessons"): VMF-disabled mods
 still execute module-level code, so this module submits one declarative spec to
 the #1413 registrar at load. The registrar publishes nothing until every
-mandatory surface and both wire axes pass. The single mod:hook in this file
+mandatory surface and all three strict wire/statistics axes pass. The single
+mod:hook in this file
 (_G.Localize) is display-only; if et is disabled the hook doesn't fire and
 grudge names render as raw keys — degraded text, never a crash.
 
@@ -60,14 +61,12 @@ Open-world / behaviour-tree safety (verified, no guards needed):
     boss loot. Cosmetic only (dice land off-site); same behaviour as et's
     shipped Champion swap.
 
-NETWORK / UNMODDED-CLIENT CONSTRAINT: the breed name is appended to
-NetworkLookup.breeds and NetworkLookup.damage_sources (both carry a strict
-__index metatable, network_lookup.lua:2360-2367). Registration is a single
-deterministic append at mod load, so every peer RUNNING enemy_tweaker agrees
-on the index. A client WITHOUT enemy_tweaker cannot resolve the index when
-the breed spawns/deals damage and will hard-error — every peer in the lobby
-must have enemy_tweaker installed (enabled or not; module-level registration
-runs either way) before the host spawns this breed.
+NETWORK FLOOR (#451B): eager registration still appends all three strict axes,
+but registration order is not wire proof. Enemy's exact channel fingerprints
+both ET breed names, registrar semantics, and exact numeric ids. The custom
+Warlord reaches a ConflictDirector spawn surface only after every human peer
+pre-acks that identity; otherwise the validated vanilla Champion donor is
+passed to the native spawn.
 ]]
 
 local mod = get_mod("enemy_tweaker")
@@ -122,7 +121,8 @@ local registration_ok, registration_reason = Registrar.register({
     name = BREED_NAME,
     source_breed = SOURCE_BREED,
     race = "skaven",
-    fingerprint = "et-custom-breed:v3:skaven-warlord:champion-pristine",
+    fingerprint = assert(ET.CustomBreedIdentity.fingerprint_for(BREED_NAME),
+        "missing Warlord registrar fingerprint"),
     configure = function(breed)
         breed.display_name = B.ET_SKAVEN_WARLORD_NAME_KEY
     end,

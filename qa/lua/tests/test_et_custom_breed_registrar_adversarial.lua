@@ -5,6 +5,8 @@ return function(H, C)
     local STAT_NAMES, clone = assert(C.STAT_NAMES), assert(C.clone)
     local Lookup, STRICT = assert(C.Lookup), assert(C.STRICT)
     local repo_root = assert(C.repo_root)
+    local capture_actual_owner_specs = assert(C.capture_actual_owner_specs)
+    local with_raw_bindings = assert(C.with_raw_bindings)
 
     -- Faithful to Foundation table.clone for ordinary nil-metatable tables:
     -- every occurrence is recursively cloned without a global seen map.
@@ -1011,5 +1013,74 @@ return function(H, C)
             "#324 combat diagnostics must remain out of the registrar migration")
         H.truthy(chosen:find("issue451_chosen_greataxe_prototype", 1, true) ~= nil,
             "#451 prototype diagnostics must remain intact")
+    end)
+
+    H.test("ET #451 Chosen command blocks unsafe parity and queues only exact-safe identity", function()
+        local capture = capture_actual_owner_specs()
+        local command
+        for i = 1, #capture.commands do
+            if capture.commands[i].name == "et_spawn_chosen" then
+                command = capture.commands[i].callback
+            end
+        end
+        H.truthy(type(command) == "function")
+
+        local exact_safe, spawned, echoes = false, {}, {}
+        capture.mod._et_chosen_ready = true
+        capture.mod._et.custom_breeds_exact_safe = function() return exact_safe end
+        capture.mod.echo = function(_, fmt, ...)
+            local ok, message = pcall(string.format, fmt, ...)
+            echoes[#echoes + 1] = ok and message or tostring(fmt)
+        end
+        local chosen = { name = "et_chosen_greataxe" }
+        local conflict = {
+            enemy_package_loader = {
+                is_breed_processed = function(_, name)
+                    return name == "et_chosen_greataxe"
+                end,
+            },
+            spawn_queued_unit = function(_, breed, ...)
+                spawned[#spawned + 1] = { breed = breed, argc = select("#", ...) }
+                return 77
+            end,
+        }
+        local unit = {}
+        local QuaternionT = setmetatable({
+            multiply = function() return "facing-player" end,
+        }, { __call = function() return "half-turn" end })
+        with_raw_bindings({
+            { target = _G, key = "Breeds", value = {
+                et_chosen_greataxe = chosen,
+            } },
+            { target = _G, key = "Managers", value = {
+                player = {
+                    is_server = true,
+                    local_player = function() return { player_unit = unit } end,
+                },
+                state = { conflict = conflict },
+            } },
+            { target = _G, key = "Unit", value = {
+                alive = function(candidate) return candidate == unit end,
+                world_position = function() return "position" end,
+                world_rotation = function() return "rotation" end,
+            } },
+            { target = _G, key = "Vector3", value = {
+                up = function() return "up" end,
+            } },
+            { target = _G, key = "Quaternion", value = QuaternionT },
+            { target = _G, key = "Vector3Box", value = function(value) return value end },
+            { target = _G, key = "QuaternionBox", value = function(value) return value end },
+        }, function()
+            command()
+            H.equal(#spawned, 0,
+                "unsafe command must not queue its donor or custom breed")
+            H.truthy(echoes[#echoes]:find("spawn blocked", 1, true) ~= nil)
+
+            exact_safe = true
+            command()
+            H.equal(#spawned, 1)
+            H.equal(spawned[1].breed, chosen)
+            H.truthy(echoes[#echoes]:find("exact peer/catalog", 1, true) ~= nil)
+        end)
     end)
 end
