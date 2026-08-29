@@ -96,6 +96,11 @@ $source = 'C:\path\to\Vermintide-2-Source-Code'
     '.\tools\weapon-history\evidence\patch_5_2' `
     '.\weapon_tweaker\scripts\mods\weapon_tweaker\_wt_history_5_2_catalog.lua'
 
+& $lua '.\tools\weapon-history\generate_patch_6_0_history.lua' `
+    $source `
+    '.\tools\weapon-history\evidence\patch_6_0' `
+    '.\weapon_tweaker\scripts\mods\weapon_tweaker\_wt_history_6_0_catalog.lua'
+
 & $lua '.\tools\weapon-history\generate_patch_6_6_history.lua' `
     $source `
     '.\tools\weapon-history\evidence\patch_6_6' `
@@ -111,11 +116,12 @@ Then run the non-mutating exact-output gate:
 
 ```powershell
 .\qa\check_wt_history_reproducibility.ps1 -SourceRepo $source -RequireSource
+.\qa\check_wt_history_patch_6_0_reproducibility.ps1 -SourceRepo $source -RequireSource
 .\qa\run_wt_history_patch_6_6_host_matrix.ps1
 .\qa\check_wt_history_patch_6_8_reproducibility.ps1 -SourceRepo $source -RequireSource
 ```
 
-`current_source_anchor.lua` is the single identity consumed by all three
+`current_source_anchor.lua` is the single identity consumed by all four
 generators and their PowerShell checks. It separates the semantic 6.12.0
 content commit from the later README-only default-branch tip. Ordinary QA runs
 `check_wt_history_source_freshness.ps1` opportunistically: an unreachable

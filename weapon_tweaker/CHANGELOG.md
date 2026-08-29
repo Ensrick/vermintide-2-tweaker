@@ -1,5 +1,21 @@
 # Weapon Tweaker Changelog
 
+## 0.12.316-beta (2026-08-29) -- source-exact Patch 6.0 launch history (#1436) [not-started]
+
+- Adds **Game Version 5.6.1** to the historical selectors for Kruber's Sword
+  and Shield, Bretonnian Sword and Shield, and Fireball Staff. The bounded
+  launch-era projection contains eleven scalar template operations and one
+  deterministic private-profile leaf; `Current` remains gameplay-inert.
+- Introduces an exact-identity catalog-fragment composer so disjoint historical
+  states for the same weapon family share one dropdown. It deep-detaches inputs
+  and outputs and rejects identity, state, localization, template, profile, or
+  mutation-path collisions before runtime registration.
+- Regenerates the Patch 6.0 slice from pinned pre/post source snapshots under
+  both PowerShell 7 and Windows PowerShell 5.1, while excluding Versus-only,
+  presentation, sound, trait-pool, function-body, and unrelated source drift.
+- Preserves public/dev parity and carries the exact deployed-source pins from
+  the preceding #428 release. #1436 remains open for other historical eras.
+
 ## 0.12.315-beta (2026-08-29) -- canonical Moonfire NetworkLookup registration (#428)
 
 - Replaces the Moonfire AOE owner's private length-based network-lookup append

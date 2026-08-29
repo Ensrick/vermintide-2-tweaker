@@ -230,6 +230,28 @@ local function register(H, repo_root)
         return unpack(outcome, 2)
     end
 
+    local function with_named_profile_globals(profiles, body)
+        local prior_profiles = rawget(_G, "DamageProfileTemplates")
+        local prior_lookup = rawget(_G, "NetworkLookup")
+        local prior_printf = rawget(_G, "printf")
+        local names = {}
+        for name in pairs(profiles) do names[#names + 1] = name end
+        table.sort(names)
+        local lookup = {}
+        for index, name in ipairs(names) do
+            lookup[index], lookup[name] = name, index
+        end
+        rawset(_G, "DamageProfileTemplates", profiles)
+        rawset(_G, "NetworkLookup", { damage_profiles = lookup })
+        rawset(_G, "printf", function() end)
+        local outcome = { xpcall(body, debug.traceback) }
+        rawset(_G, "DamageProfileTemplates", prior_profiles)
+        rawset(_G, "NetworkLookup", prior_lookup)
+        rawset(_G, "printf", prior_printf)
+        if not outcome[1] then error(outcome[2], 0) end
+        return unpack(outcome, 2)
+    end
+
     local function mod_fixture(selections, parity)
         local mod = { selections = selections or {}, records = {} }
         function mod:get(setting_id) return self.selections[setting_id] end
@@ -328,6 +350,93 @@ local function register(H, repo_root)
         H.equal(valid, true)
         H.equal(catalog.schema, 2)
         H.equal(#catalog.families, 14)
+    end)
+
+    H.test("WT #1436 generated Patch 6.0 catalog is an exact 11-plus-1 slice", function()
+        local catalog = assert(loadfile(script_root .. "_wt_history_6_0_catalog.lua"))()
+        local valid, validation_error = Policy.validate(catalog)
+        H.equal(validation_error, nil)
+        H.equal(valid, true)
+        H.equal(catalog.catalog_id, "wt_history_patch_6_0_v1")
+        H.equal(catalog.current_source.revision,
+            "038498af2b565bcb10bf5ed225638293a7640c83")
+        H.equal(#catalog.families, 3)
+        H.equal(next(catalog.derived_profiles), nil)
+        H.deep_equal(catalog.generation, {
+            adjacent_operation_count = 11,
+            global_operations = 0,
+            profile_route_count = 1,
+            unsupported_count = 0,
+        })
+        H.equal(catalog.states["5_6_1"].display_name, "Game Version 5.6.1")
+        H.equal(catalog.states["5_6_1"].source_revision,
+            "f64ecd2495bd26b1b0a4d296970bef0a0d7a06a9")
+        H.equal(catalog.states["5_6_1"].official_patch_notes,
+            "https://www.vermintide.com/news/versus-launch-patch-5-7-0")
+
+        local by_id = {}
+        for _, family in ipairs(catalog.families) do by_id[family.id] = family end
+        local shield = assert(by_id.kruber_sword_and_shield)
+        H.equal(shield.setting_id, "wt_history_kruber_sword_and_shield")
+        H.deep_equal(shield.templates, { "one_handed_sword_shield_template_1" })
+        H.equal(#shield.states["5_6_1"].operations, 5)
+        local breton = assert(by_id.kruber_bretonnian_sword_and_shield)
+        H.deep_equal(breton.templates, { "one_handed_sword_shield_template_2" })
+        H.equal(#breton.states["5_6_1"].operations, 6)
+
+        local expected = {
+            damage_window_end = { current = 0.32, historical = 0.28 },
+            damage_window_start = { current = 0.22, historical = 0.18 },
+            dedicated_target_range = { current = 2.8, historical = 2.5 },
+            range_mod = { current = { 1.3, 1.5 }, historical = 1.2 },
+            range_mod_add = { current = { 0.2, 0.25 }, absent = true },
+            sweep_z_offset = { current = -0.035, absent = true },
+        }
+        for family_index, family in ipairs({ shield, breton }) do
+            local seen = {}
+            for _, row in ipairs(family.states["5_6_1"].operations) do
+                H.deep_equal({ row.path[1], row.path[2], row.path[3] }, {
+                    "actions", "action_one", "light_attack_stab_postpush",
+                })
+                local leaf = row.path[4]
+                local wanted = assert(expected[leaf])
+                seen[leaf] = true
+                local current = type(wanted.current) == "table"
+                    and wanted.current[family_index] or wanted.current
+                H.equal(row.expected_current, current)
+                H.equal(row.expected_present, true)
+                H.equal(row.result_present, not wanted.absent)
+                H.equal(row.result, wanted.historical)
+                H.equal(row.family_id, family.id)
+                H.equal(row.state_id, "5_6_1")
+                H.equal(row.change_class, "official_weapon_balance")
+                H.equal(row.source_revision,
+                    "f64ecd2495bd26b1b0a4d296970bef0a0d7a06a9")
+            end
+            H.equal(seen.sweep_z_offset == true, family_index == 2)
+        end
+
+        local fireball = assert(by_id.sienna_fireball_staff)
+        H.deep_equal(fireball.templates, { "staff_fireball_fireball_template_1" })
+        H.deep_equal(fireball.states["5_6_1"].operations, {})
+        H.deep_equal(fireball.states["5_6_1"].profile_names,
+            { "staff_fireball_charged" })
+        H.deep_equal(fireball.states["5_6_1"].direct_profile_names,
+            { "staff_fireball_charged" })
+        local profile = catalog.profile_specs["5_6_1"].staff_fireball_charged
+        H.equal(profile.private_name, "wt_hist_5_6_1_staff_fireball_charged")
+        H.equal(profile.current_source_blob,
+            "e8330328d0085f6aee09e0495ba88fdc0211d5aa")
+        H.equal(profile.source_blob,
+            "e5d56cfb8de366baf1a946f70566ea052688c969")
+        H.equal(profile.historical_profile.armor_modifier.attack[5], 0.1)
+        H.equal(profile.historical_profile.armor_modifier.attack[4], 1)
+        H.equal(profile.historical_profile.armor_modifier.attack[6], 0)
+        H.equal(read_file(script_root .. "_wt_history_6_0_catalog.lua"),
+            read_file(repo_root
+                .. "/weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/"
+                .. "_wt_history_6_0_catalog.lua"),
+            "public and dev must carry byte-identical pure Patch 6.0 data")
     end)
 
     H.test("WT #1436 generated Patch 6.6 catalog pins one atomic Deepwood boundary", function()
@@ -458,21 +567,26 @@ local function register(H, repo_root)
         })
     end)
 
-    H.test("WT #1436 default catalog composes Patch 5.2, 6.6, and 6.8 exactly once", function()
+    H.test("WT #1436 default catalog composes every bounded patch exactly once", function()
         local catalog, mod, paths = load_default_catalog(CatalogUI, script_root)
         H.deep_equal(paths, CatalogUI.GENERATED_MODULES)
         H.deep_equal(catalog.generation.catalogs, {
-            "wt_history_patch_5_2_v1", "wt_history_patch_6_6_v1",
-            "wt_history_patch_6_8_v1",
+            "wt_history_patch_5_2_v1", "wt_history_patch_6_0_v1",
+            "wt_history_patch_6_6_v1", "wt_history_patch_6_8_v1",
         })
         H.deep_equal(catalog_counts(catalog), {
             derived_profiles = 1,
-            families = 16,
-            family_states = 24,
-            operations = 186,
-            profiles = 13,
-            states = 5,
+            families = 18,
+            family_states = 27,
+            operations = 197,
+            profiles = 14,
+            states = 6,
         })
+        local kruber
+        for _, family in ipairs(catalog.families) do
+            if family.id == "kruber_sword_and_shield" then kruber = family end
+        end
+        H.deep_equal(assert(kruber).state_order, { "5_1_1", "5_2_0", "5_6_1" })
         local valid, validation_error = Policy.validate(catalog)
         H.equal(validation_error, nil)
         H.equal(valid, true)
@@ -480,7 +594,180 @@ local function register(H, repo_root)
         local cached, cached_error = CatalogUI.load(mod)
         H.equal(cached_error, nil)
         H.equal(cached, catalog)
-        H.equal(#paths, 3, "default composite must reuse its cache")
+        H.equal(#paths, 4, "default composite must reuse its cache")
+    end)
+
+    H.test("WT #1436 Patch 6.0 applies, reads back, and restores exact state", function()
+        local catalog = assert(loadfile(script_root .. "_wt_history_6_0_catalog.lua"))()
+        local historical = catalog.profile_specs["5_6_1"]
+            .staff_fireball_charged.historical_profile
+        local native_profile = clone(historical)
+        native_profile.armor_modifier.attack[5] = 1
+
+        local function roots_fixture_6_0()
+            local shield_postpush = {
+                damage_window_end = 0.32, damage_window_start = 0.22,
+                dedicated_target_range = 2.8, range_mod = 1.3,
+                range_mod_add = 0.2, sibling = { owner = "kruber" },
+            }
+            local breton_postpush = {
+                damage_window_end = 0.32, damage_window_start = 0.22,
+                dedicated_target_range = 2.8, range_mod = 1.5,
+                range_mod_add = 0.25, sweep_z_offset = -0.035,
+                sibling = { owner = "breton" },
+            }
+            local fireball_action = {
+                damage_profile = "staff_fireball_charged",
+                sibling = { owner = "fireball" },
+            }
+            local roots = {
+                BuffTemplates = {}, ExplosionTemplates = {},
+                PlayerUnitStatusSettings = {}, VortexTemplates = {},
+                Weapons = {
+                    one_handed_sword_shield_template_1 = { actions = {
+                        action_one = { light_attack_stab_postpush = shield_postpush },
+                    } },
+                    one_handed_sword_shield_template_2 = { actions = {
+                        action_one = { light_attack_stab_postpush = breton_postpush },
+                    } },
+                    staff_fireball_fireball_template_1 = { actions = {
+                        action_one = { shoot_charged = fireball_action },
+                    } },
+                },
+            }
+            return roots, {
+                breton = breton_postpush, fireball = fireball_action,
+                shield = shield_postpush,
+            }
+        end
+
+        with_named_profile_globals({
+            staff_fireball_charged = native_profile,
+        }, function()
+            local roots, refs = roots_fixture_6_0()
+            local before = clone(roots)
+            local native_before = clone(native_profile)
+            local mod = mod_fixture({
+                wt_history_kruber_sword_and_shield = "5_6_1",
+                wt_history_kruber_bretonnian_sword_and_shield = "5_6_1",
+                wt_history_sienna_fireball_staff = "5_6_1",
+            }, { value = true })
+            local runtime = Runtime.install({
+                catalog = catalog, mod = mod, policy = Policy, roots = roots,
+            })
+
+            H.equal(runtime.fatal_error, nil)
+            H.equal(runtime.last_error, nil)
+            H.equal(runtime:verify(), nil)
+            H.equal(#runtime.ledgers.kruber_sword_and_shield, 5)
+            H.equal(#runtime.ledgers.kruber_bretonnian_sword_and_shield, 6)
+            H.equal(#runtime.ledgers.sienna_fireball_staff, 1)
+            H.equal(refs.shield.damage_window_start, 0.18)
+            H.equal(refs.shield.damage_window_end, 0.28)
+            H.equal(refs.shield.dedicated_target_range, 2.5)
+            H.equal(refs.shield.range_mod, 1.2)
+            H.equal(rawget(refs.shield, "range_mod_add"), nil)
+            H.equal(refs.breton.damage_window_start, 0.18)
+            H.equal(refs.breton.damage_window_end, 0.28)
+            H.equal(refs.breton.dedicated_target_range, 2.5)
+            H.equal(refs.breton.range_mod, 1.2)
+            H.equal(rawget(refs.breton, "range_mod_add"), nil)
+            H.equal(rawget(refs.breton, "sweep_z_offset"), nil)
+            H.equal(refs.fireball.damage_profile,
+                "wt_hist_5_6_1_staff_fireball_charged")
+            local private = DamageProfileTemplates[refs.fireball.damage_profile]
+            H.equal(private.armor_modifier.attack[5], 0.1)
+            H.equal(private.armor_modifier.attack[4], 1)
+            H.equal(private.armor_modifier.attack[6], 0)
+            H.deep_equal(native_profile, native_before,
+                "private registration must not mutate the native profile")
+
+            local restored = assert(runtime:restore())
+            H.equal(restored.refused, 0)
+            H.equal(restored.changed, true)
+            H.deep_equal(roots, before)
+            H.equal(roots.Weapons.one_handed_sword_shield_template_1.actions
+                .action_one.light_attack_stab_postpush, refs.shield)
+            H.equal(roots.Weapons.one_handed_sword_shield_template_2.actions
+                .action_one.light_attack_stab_postpush, refs.breton)
+            H.equal(roots.Weapons.staff_fireball_fireball_template_1.actions
+                .action_one.shoot_charged, refs.fireball)
+            H.equal(runtime:verify(),
+                "kruber_sword_and_shield historical selection has no ledger")
+            local second = assert(runtime:restore())
+            H.equal(second.changed, false)
+            H.deep_equal(roots, before)
+        end)
+
+        local hostile_cases = {
+            {
+                family = "kruber_sword_and_shield",
+                mutate = function(refs) refs.shield.range_mod_add = 0.201 end,
+                setting = "wt_history_kruber_sword_and_shield",
+            },
+            {
+                family = "kruber_bretonnian_sword_and_shield",
+                mutate = function(refs) refs.breton.sweep_z_offset = -0.036 end,
+                setting = "wt_history_kruber_bretonnian_sword_and_shield",
+            },
+        }
+        for _, case in ipairs(hostile_cases) do
+            with_named_profile_globals({
+                staff_fireball_charged = clone(native_profile),
+            }, function()
+                local roots, refs = roots_fixture_6_0()
+                case.mutate(refs)
+                local before = clone(roots)
+                local runtime = Runtime.install({
+                    catalog = catalog,
+                    mod = mod_fixture({ [case.setting] = "5_6_1" }, { value = true }),
+                    policy = Policy, roots = roots,
+                })
+                H.truthy(runtime.last_error and runtime.last_error:find(
+                    "current guard mismatch", 1, true) ~= nil)
+                H.equal(#(runtime.ledgers[case.family] or {}), 0)
+                H.deep_equal(roots, before,
+                    case.family .. " must reject before its first write")
+            end)
+        end
+
+        with_named_profile_globals({
+            staff_fireball_charged = clone(native_profile),
+        }, function()
+            local roots, refs = roots_fixture_6_0()
+            refs.fireball.damage_profile = "renamed_profile"
+            local before = clone(roots)
+            local runtime = Runtime.install({
+                catalog = catalog,
+                mod = mod_fixture({
+                    wt_history_sienna_fireball_staff = "5_6_1",
+                }, { value = true }),
+                policy = Policy, roots = roots,
+            })
+            H.truthy(runtime.last_error and runtime.last_error:find(
+                "native profile route not found staff_fireball_charged", 1, true))
+            H.equal(#(runtime.ledgers.sienna_fireball_staff or {}), 0)
+            H.deep_equal(roots, before,
+                "missing Fireball route must reject before gameplay writes")
+        end)
+
+        with_named_profile_globals({
+            staff_fireball_charged = clone(native_profile),
+        }, function()
+            local roots, refs = roots_fixture_6_0()
+            local runtime = Runtime.install({
+                catalog = catalog,
+                mod = mod_fixture({
+                    wt_history_sienna_fireball_staff = "5_6_1",
+                }, { value = false }),
+                policy = Policy, roots = roots,
+            })
+            H.equal(runtime.last_error, nil)
+            H.equal(refs.fireball.damage_profile, "staff_fireball_charged",
+                "unproven peers must retain the native Fireball profile")
+            H.equal(runtime.active.sienna_fireball_staff.parity, false)
+            H.equal(runtime:verify(), nil)
+        end)
     end)
 
     H.test("WT #1436 catalog merge rejects every cross-catalog identity collision", function()
@@ -525,7 +812,7 @@ local function register(H, repo_root)
         end, "duplicate derived-profile state")
         rejected(function(left, right)
             right.families[1].id = left.families[1].id
-        end, "duplicate history family")
+        end, "history family identity mismatch setting_id")
         rejected(function(left, right)
             right.families[1].setting_id = left.families[1].setting_id
         end, "duplicate history setting")
@@ -582,6 +869,145 @@ local function register(H, repo_root)
         })
         H.equal(sparse, nil)
         H.truthy(sparse_error:find("dense array", 1, true) ~= nil)
+    end)
+
+    H.test("WT #1436 catalog merge coalesces only exact family fragments", function()
+        local source = assert(loadfile(script_root
+            .. "_wt_history_6_8_catalog.lua"))()
+
+        local function fragment(catalog_id, state_id, label_key, source_revision)
+            local catalog = clone(source)
+            local family = catalog.families[1]
+            local old_state_id = family.state_order[1]
+            local family_state = family.states[old_state_id]
+            local state = catalog.states[old_state_id]
+            catalog.catalog_id = catalog_id
+            catalog.states[old_state_id] = nil
+            catalog.states[state_id] = state
+            state.display_name = "Game Version " .. state_id
+            state.label_key = label_key
+            state.source_revision = source_revision
+            family.state_order = { state_id }
+            family.states[old_state_id] = nil
+            family.states[state_id] = family_state
+            for _, row in ipairs(family_state.operations) do
+                row.official_change_id = "TEST-" .. state_id
+                row.source_revision = source_revision
+                row.state_id = state_id
+            end
+            return catalog
+        end
+
+        local left = fragment("fragment_left", "6_7_2",
+            "wt_history_state_6_7_2", HASH_A)
+        local right = fragment("fragment_right", "6_0_0",
+            "wt_history_state_6_0_0", HASH_B)
+        left.profile_specs["6_7_2"] = {
+            native_profile = { historical_profile = { attack = 1 } },
+        }
+        right.profile_specs["6_0_0"] = {
+            native_profile = { historical_profile = { attack = 2 } },
+        }
+        left.derived_profiles["6_7_2"] = {
+            derived_profile = { derivation = { source = "left" } },
+        }
+        right.derived_profiles["6_0_0"] = {
+            derived_profile = { derivation = { source = "right" } },
+        }
+        local left_before, right_before = clone(left), clone(right)
+        local merged, merge_error = CatalogUI.merge({ left, right })
+        H.equal(merge_error, nil)
+        H.equal(#merged.families, 1)
+        H.deep_equal(merged.families[1].state_order, { "6_7_2", "6_0_0" })
+        H.truthy(merged.families[1].states["6_7_2"] ~= nil)
+        H.truthy(merged.families[1].states["6_0_0"] ~= nil)
+        H.deep_equal(left, left_before, "left input catalog must remain immutable")
+        H.deep_equal(right, right_before, "right input catalog must remain immutable")
+
+        merged.families[1].state_order[1] = "mutated"
+        merged.families[1].states["6_0_0"].operations[1].result = -1
+        merged.current_source.display_name = "Mutated source"
+        merged.states["6_7_2"].display_name = "Mutated left state"
+        merged.states["6_0_0"].display_name = "Mutated right state"
+        merged.profile_specs["6_7_2"].native_profile
+            .historical_profile.attack = -1
+        merged.profile_specs["6_0_0"].native_profile
+            .historical_profile.attack = -1
+        merged.derived_profiles["6_7_2"].derived_profile
+            .derivation.source = "mutated"
+        merged.derived_profiles["6_0_0"].derived_profile
+            .derivation.source = "mutated"
+        H.deep_equal(left, left_before,
+            "merged family edits must not alias the left input catalog")
+        H.deep_equal(right, right_before,
+            "merged family edits must not alias the right input catalog")
+
+        merged = assert(CatalogUI.merge({ clone(left), clone(right) }))
+        local group = assert(CatalogUI.build_widgets(merged))
+        H.equal(#group.sub_widgets, 1)
+        H.equal(group.sub_widgets[1].setting_id,
+            left.families[1].setting_id)
+        H.deep_equal(group.sub_widgets[1].options, {
+            { text = "wt_history_state_current", value = "current" },
+            { text = "wt_history_state_6_7_2", value = "6_7_2" },
+            { text = "wt_history_state_6_0_0", value = "6_0_0" },
+        })
+
+        local reversed = assert(CatalogUI.merge({ clone(right), clone(left) }))
+        H.deep_equal(reversed.families[1].state_order, { "6_0_0", "6_7_2" })
+        H.equal(#reversed.families, 1)
+
+        local repeat_merge = assert(CatalogUI.merge({ clone(left), clone(right) }))
+        H.deep_equal(repeat_merge, assert(CatalogUI.merge({
+            clone(left), clone(right),
+        })), "same ordered inputs must compose deterministically")
+
+        local function rejected(mutator, needle)
+            local hostile_left, hostile_right = clone(left), clone(right)
+            mutator(hostile_left.families[1], hostile_right.families[1],
+                hostile_left, hostile_right)
+            local hostile, hostile_error = CatalogUI.merge({
+                hostile_left, hostile_right,
+            })
+            H.equal(hostile, nil)
+            H.truthy(type(hostile_error) == "string"
+                and hostile_error:find(needle, 1, true) ~= nil,
+                "wrong fragment rejection for " .. needle .. ": "
+                    .. tostring(hostile_error))
+        end
+
+        rejected(function(_, family) family.setting_id = "different_setting" end,
+            "identity mismatch setting_id")
+        rejected(function(_, family) family.label_key = "different_label" end,
+            "identity mismatch label_key")
+        rejected(function(_, family) family.display_name = "Different Family" end,
+            "identity mismatch display_name")
+        rejected(function(_, family) family.authority = "server" end,
+            "identity mismatch authority")
+        rejected(function(_, family)
+            family.templates = { "different_template" }
+        end, "identity mismatch templates")
+        rejected(function(_, family)
+            family.id = "different_family"
+            family.setting_id = "different_family_setting"
+            family.label_key = "different_family_label"
+        end, "duplicate or invalid history template")
+
+        rejected(function(_, family, _, hostile_right)
+            local replacement = hostile_right.states["6_0_0"]
+            hostile_right.states["6_0_0"] = nil
+            hostile_right.states["6_7_2"] = replacement
+            family.states["6_0_0"] = nil
+            family.states["6_7_2"] = family.states["6_7_2"] or {
+                direct_profile_names = {}, operations = {}, profile_names = {},
+            }
+            family.state_order = { "6_7_2" }
+        end, "duplicate history state")
+
+        rejected(function(_, _, hostile_left, hostile_right)
+            hostile_left.profile_specs["profile_path"] = { sentinel = true }
+            hostile_right.profile_specs["profile_path"] = { sentinel = true }
+        end, "duplicate profile state")
     end)
 
     H.test("WT #1436 generated guards retain pinned source-literal precision", function()
@@ -776,16 +1202,16 @@ local function register(H, repo_root)
         H.equal(CatalogUI.decorate_menu(mod, data), data)
         H.equal(data.options.widgets[1], first)
         H.equal(data.options.widgets[2].setting_id, "wt_history_patch_versions")
-        H.equal(#data.options.widgets[2].sub_widgets, 16)
+        H.equal(#data.options.widgets[2].sub_widgets, 18)
         H.equal(data.options.widgets[3], second)
-        H.equal(loads, 3)
+        H.equal(loads, 4)
         H.equal(CatalogUI.decorate_menu(mod, data), data)
         H.equal(#data.options.widgets, 3)
-        H.equal(loads, 3, "re-decoration must not reload or duplicate the group")
+        H.equal(loads, 4, "re-decoration must not reload or duplicate the group")
 
         local malformed = { options = {} }
         H.equal(CatalogUI.decorate_menu(mod, malformed), malformed)
-        H.equal(loads, 3, "malformed menu data must not load generated catalogs")
+        H.equal(loads, 4, "malformed menu data must not load generated catalogs")
     end)
 
     H.test("WT #1436 public and dev data surfaces return one index-two history group", function()
@@ -828,13 +1254,13 @@ local function register(H, repo_root)
             H.equal(data.options.widgets[1], availability)
             H.equal(data.options.widgets[2].setting_id,
                 "wt_history_patch_versions")
-            H.equal(#data.options.widgets[2].sub_widgets, 16)
+            H.equal(#data.options.widgets[2].sub_widgets, 18)
             H.equal(data.options.widgets[3], overrides)
-            H.equal(loads, 3)
+            H.equal(loads, 4)
             H.equal(catalog_ui.decorate_menu(mod, data), data)
             H.equal(#data.options.widgets, 3,
                 stream.namespace .. " must not duplicate its history group")
-            H.equal(loads, 3,
+            H.equal(loads, 4,
                 stream.namespace .. " must reuse its generated-catalog cache")
         end
     end)
