@@ -2,8 +2,8 @@
 --
 -- Extracted verbatim from the entry. The entry keeps a bare dofile at the
 -- former execution position, so hook-registration order and the _rt_register
--- append order are unchanged. Everything below the accessor block is
--- byte-identical to the lines it replaced.
+-- append order are unchanged. The #428 lookup-helper migration changes only
+-- the registration primitive at that same file-scope position.
 --
 -- resource-safety: wt_535_moonfire_aoe_owner
 -- The single native boundary here is the World.create_particles jitter cluster
@@ -14,6 +14,7 @@
 -- evidence: qa/lua/tests/test_wt_moonfire_aoe_owner.lua.
 
 local mod = get_mod("wt")
+local _network_lookup = mod:dofile("scripts/mods/weapon_tweaker/_lib_network_lookup")
 
 -- Late-binding accessor. The entry's file-scope `_rt_register` local does not
 -- cross the chunk boundary; `_wt_regression` publishes the same function on the
@@ -46,6 +47,7 @@ local _MOONFIRE_PUFF_FX = "fx/wpnfx_we_deus_01_impact"
 -- auto-name loop at the end of explosion_templates.lua runs at engine boot
 -- (before mods load), so we set .name explicitly here.
 local _MOONFIRE_AOE_NAME = "wt_moonfire_aoe_revert"
+local _MOONFIRE_FALLBACK_NAME = "machinegun_poison_arrow"
 local _MOONFIRE_AOE_TEMPLATE = {
     name = _MOONFIRE_AOE_NAME,
     explosion = {
@@ -70,7 +72,9 @@ end
 -- is frozen at engine boot with a strict __index that errors on any missing key
 -- [src: scripts/network_lookup/network_lookup.lua build :1211 (create_lookup
 -- {"n/a"}, ExplosionTemplates); strict __index :2360-2367]. Forward + reverse
--- append, rawget-guarded so it registers once.
+-- append through the canonical shared helper. It proves the complete numeric
+-- and string axes are dense and symmetric before trusting an existing pair or
+-- choosing N+1, and rejects malformed state without mutation.
 --
 -- WIRE-PATH ANALYSIS (why this registration is belt-and-suspenders, NOT
 -- load-bearing): the moonfire hook calls DamageUtils.create_explosion DIRECTLY
@@ -87,14 +91,51 @@ end
 -- non-wt peer). Full trace in weapon_tweaker/ENGINE_SURFACE.md. Registration is
 -- still done for index determinism + to kill the footgun should a future change
 -- ever route moonfire through AreaDamageSystem.create_explosion.
+local _moonfire_lookup_index
+local _moonfire_lookup_reason
+local _moonfire_lookup_shape_reason
+local _moonfire_fallback_index
 do
     local NL = rawget(_G, "NetworkLookup")
-    local lookup = NL and NL.explosion_templates
-    if lookup and not rawget(lookup, _MOONFIRE_AOE_NAME) then
-        local idx = #lookup + 1
-        rawset(lookup, idx, _MOONFIRE_AOE_NAME)
-        rawset(lookup, _MOONFIRE_AOE_NAME, idx)
+    local lookup
+    if NL ~= nil and type(NL) ~= "table" then
+        _moonfire_lookup_shape_reason = "NetworkLookup:" .. type(NL)
+    elseif type(NL) == "table" then
+        lookup = rawget(NL, "explosion_templates")
+        if lookup ~= nil and type(lookup) ~= "table" then
+            _moonfire_lookup_shape_reason =
+                "NetworkLookup.explosion_templates:" .. type(lookup)
+        end
+    end
+    local idx, inserted, reason = _network_lookup.register_named(
+        NL,
+        "explosion_templates",
+        _MOONFIRE_AOE_NAME
+    )
+    _moonfire_lookup_index = idx
+    _moonfire_lookup_reason = reason
+    local fallback_index = type(lookup) == "table"
+        and rawget(lookup, _MOONFIRE_FALLBACK_NAME)
+    if idx
+        and type(fallback_index) == "number"
+        and fallback_index > 0
+        and fallback_index % 1 == 0
+        and rawget(lookup, fallback_index) == _MOONFIRE_FALLBACK_NAME then
+        _moonfire_fallback_index = fallback_index
+    end
+    if inserted then
         pcall(printf, "[wt:535] registered %s into NetworkLookup.explosion_templates at index %d (wire-inert; see ENGINE_SURFACE.md)", _MOONFIRE_AOE_NAME, idx)
+    elseif reason ~= "already_registered" then
+        local seen = mod._wt428_moonfire_lookup_rejections
+        if type(seen) ~= "table" then
+            seen = {}
+            mod._wt428_moonfire_lookup_rejections = seen
+        end
+        local reason_key = tostring(reason)
+        if not rawget(seen, reason_key) then
+            rawset(seen, reason_key, true)
+            pcall(printf, "[wt:428] rejected NetworkLookup.explosion_templates registration for %s (%s); lookup left unchanged", _MOONFIRE_AOE_NAME, reason_key)
+        end
     end
     -- Record the wire-safe vanilla fallback for the moonfire AoE. machinegun_poison_arrow
     -- is the closest vanilla explosion template: same gameplay shape - damage_profile
@@ -106,7 +147,7 @@ do
     -- asserts it resolves to a real vanilla index. Same map shape as the #431
     -- damage-profile fallback (mod._wt431_custom_profile_fallback).
     mod._wt535_explosion_template_fallback = mod._wt535_explosion_template_fallback or {}
-    mod._wt535_explosion_template_fallback[_MOONFIRE_AOE_NAME] = "machinegun_poison_arrow"
+    mod._wt535_explosion_template_fallback[_MOONFIRE_AOE_NAME] = _MOONFIRE_FALLBACK_NAME
 end
 
 -- issue #535 regression: the moonfire AoE template must be registered in BOTH
@@ -120,22 +161,63 @@ _rt_register("wt_535_moonfire_explosion_registered", function()
     if type(entry) ~= "table" then return "wt_moonfire_aoe_revert missing from ExplosionTemplates" end
     if entry.name ~= _MOONFIRE_AOE_NAME then return "wt_moonfire_aoe_revert entry missing its .name field" end
     local NL = rawget(_G, "NetworkLookup")
-    local lookup = NL and NL.explosion_templates
-    if not lookup then return "skip: NetworkLookup.explosion_templates not loaded" end
+    local lookup = type(NL) == "table" and rawget(NL, "explosion_templates")
+    if _moonfire_lookup_shape_reason then
+        return string.format(
+            "wt_moonfire_aoe_revert NetworkLookup registration rejected (%s; %s)",
+            tostring(_moonfire_lookup_reason),
+            _moonfire_lookup_shape_reason
+        )
+    end
+    if type(lookup) ~= "table" then
+        if _moonfire_lookup_index then
+            if lookup == nil then
+                return "NetworkLookup.explosion_templates disappeared after registration"
+            end
+            return string.format(
+                "NetworkLookup.explosion_templates became invalid after registration (%s)",
+                type(lookup)
+            )
+        end
+        return "skip: NetworkLookup.explosion_templates not loaded"
+    end
+    if not _moonfire_lookup_index then
+        return string.format(
+            "wt_moonfire_aoe_revert NetworkLookup registration rejected (%s)",
+            tostring(_moonfire_lookup_reason)
+        )
+    end
     local idx = rawget(lookup, _MOONFIRE_AOE_NAME)
     if type(idx) ~= "number" then
         return "wt_moonfire_aoe_revert not in NetworkLookup.explosion_templates (an encode would strict-__index fatal)"
+    end
+    if idx ~= _moonfire_lookup_index then
+        return "wt_moonfire_aoe_revert NetworkLookup index changed after registration"
     end
     if rawget(lookup, idx) ~= _MOONFIRE_AOE_NAME then
         return "NetworkLookup.explosion_templates reverse map broken (idx->name mismatch)"
     end
     local map = mod._wt535_explosion_template_fallback
-    local fb = map and map[_MOONFIRE_AOE_NAME]
-    if type(fb) ~= "string" or fb == _MOONFIRE_AOE_NAME then
-        return "moonfire wire-safe fallback not recorded (must be a vanilla name, not the custom one)"
+    if type(map) ~= "table" then
+        return "moonfire wire-safe fallback map missing or invalid"
     end
-    if not rawget(lookup, fb) then
-        return string.format("wire-safe fallback %s not in NetworkLookup.explosion_templates", tostring(fb))
+    local fb = rawget(map, _MOONFIRE_AOE_NAME)
+    if fb ~= _MOONFIRE_FALLBACK_NAME then
+        return string.format(
+            "moonfire wire-safe fallback identity changed (expected %s, got %s)",
+            _MOONFIRE_FALLBACK_NAME,
+            tostring(fb)
+        )
+    end
+    if not _moonfire_fallback_index then
+        return string.format("wire-safe fallback %s had no valid round-trip at registration", tostring(fb))
+    end
+    local fallback_index = rawget(lookup, fb)
+    if fallback_index ~= _moonfire_fallback_index then
+        return string.format("wire-safe fallback %s index changed after registration", tostring(fb))
+    end
+    if rawget(lookup, fallback_index) ~= fb then
+        return string.format("wire-safe fallback %s reverse map broken", tostring(fb))
     end
 end)
 

@@ -104,6 +104,8 @@
                 "character_weapon_variants/scripts/mods/character_weapon_variants/_lib_network_lookup.lua"
                 "career_tweaker/scripts/mods/career_tweaker/_lib_network_lookup.lua"
                 "enemy_tweaker/scripts/mods/enemy_tweaker/_lib_network_lookup.lua"
+                "weapon_tweaker/scripts/mods/weapon_tweaker/_lib_network_lookup.lua"
+                "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_lib_network_lookup.lua"
                 "weapons_of_chaos/scripts/mods/weapons_of_chaos/_lib_network_lookup.lua"
             )
         }
