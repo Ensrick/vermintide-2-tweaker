@@ -10,7 +10,11 @@ local ALLOWED_ROOTS = {
     BuffTemplates = true,
     ExplosionTemplates = true,
     PlayerUnitStatusSettings = true,
+    VortexTemplates = true,
     Weapons = true,
+}
+local ALLOWED_AUTHORITIES = {
+    server = true,
 }
 local ALLOWED_CHANGE_CLASSES = {
     official_weapon_balance = true,
@@ -105,6 +109,14 @@ local function path_is_prefix(left, right)
     return true
 end
 
+local function paths_equal(left, right)
+    if #left ~= #right then return false end
+    for index = 1, #left do
+        if left[index] ~= right[index] then return false end
+    end
+    return true
+end
+
 local function fail(message)
     return nil, message
 end
@@ -182,6 +194,22 @@ function M.validate(catalog)
         return fail("current source provenance incomplete")
     end
 
+    local localization_keys = {
+        wt_history_patch_versions = true,
+        wt_history_patch_versions_description = true,
+        wt_history_state_current = true,
+    }
+    local function claim_localization_key(key)
+        if type(key) ~= "string" or key == "" then
+            return fail("history localization key missing")
+        end
+        if localization_keys[key] then
+            return fail("duplicate history localization key " .. key)
+        end
+        localization_keys[key] = true
+        return true
+    end
+
     local state_count = 0
     for state_id, state in pairs(catalog.states or {}) do
         state_count = state_count + 1
@@ -191,12 +219,14 @@ function M.validate(catalog)
         if type(state) ~= "table"
                 or not ALLOWED_CHANGE_CLASSES[state.change_class]
                 or type(state.display_name) ~= "string" or state.display_name == ""
-                or type(state.label_key) ~= "string"
+                or type(state.label_key) ~= "string" or state.label_key == ""
                 or not full_hash(state.source_revision)
                 or type(state.official_patch_notes) ~= "string"
                 or not state.official_patch_notes:match("^https://") then
             return fail("state provenance incomplete: " .. tostring(state_id))
         end
+        local claimed, claim_error = claim_localization_key(state.label_key)
+        if not claimed then return nil, claim_error end
     end
     if state_count == 0 then return fail("catalog has no historical states") end
 
@@ -249,6 +279,7 @@ function M.validate(catalog)
         return fail("families must be a non-empty array")
     end
     local family_ids, setting_ids, template_owners = {}, {}, {}
+    local catalog_owned_paths = {}
     for family_index = 1, family_count do
         local family = catalog.families[family_index]
         if type(family) ~= "table" or type(family.id) ~= "string" or family.id == ""
@@ -257,11 +288,22 @@ function M.validate(catalog)
                 or type(family.label_key) ~= "string" then
             return fail("family identity incomplete at index " .. family_index)
         end
+        if family.authority ~= nil and not ALLOWED_AUTHORITIES[family.authority] then
+            return fail("unsupported family authority " .. family.id)
+        end
         if family_ids[family.id] then return fail("duplicate family id " .. family.id) end
         if setting_ids[family.setting_id] then
             return fail("duplicate setting id " .. family.setting_id)
         end
         family_ids[family.id], setting_ids[family.setting_id] = true, true
+        for _, key in ipairs({
+            family.label_key,
+            family.setting_id,
+            family.setting_id .. "_description",
+        }) do
+            local claimed, claim_error = claim_localization_key(key)
+            if not claimed then return nil, claim_error end
+        end
 
         local template_count = array_length(family.templates)
         if not template_count or template_count == 0 then
@@ -350,6 +392,24 @@ function M.validate(catalog)
                 end
                 seen_targets[key] = true
                 seen_paths[#seen_paths + 1] = operation
+                for _, prior in ipairs(catalog_owned_paths) do
+                    if prior.family_id ~= family.id
+                            and prior.operation.root == operation.root
+                            and prior.operation.template == operation.template then
+                        if paths_equal(prior.operation.path, operation.path) then
+                            return fail("cross-family target collision " .. key)
+                        end
+                        if path_is_prefix(prior.operation.path, operation.path)
+                                or path_is_prefix(operation.path, prior.operation.path) then
+                            return fail("cross-family ancestor/descendant target conflict "
+                                .. key)
+                        end
+                    end
+                end
+                catalog_owned_paths[#catalog_owned_paths + 1] = {
+                    family_id = family.id,
+                    operation = operation,
+                }
             end
         end
         for state_id in pairs(family.states or {}) do
@@ -555,6 +615,7 @@ function M.restore(ledger)
 end
 
 M.ALLOWED_ROOTS = ALLOWED_ROOTS
+M.ALLOWED_AUTHORITIES = ALLOWED_AUTHORITIES
 M.deep_clone = deep_clone
 M.deep_equal = deep_equal
 M.path_text = path_text

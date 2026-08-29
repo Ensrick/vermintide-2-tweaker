@@ -3,9 +3,9 @@ return {
     catalog_id = "wt_history_patch_5_2_v1",
     current_id = "current",
     current_source = {
-        display_name = "Current (Game Version 6.11.3)",
-        label = "6.11.3 source anchor",
-        revision = "c5e4968b1fbb00c49884e56d640ef990a9c04dd0",
+        display_name = "Current (Game Version 6.12.0)",
+        label = "6.12.0 source anchor",
+        revision = "038498af2b565bcb10bf5ed225638293a7640c83",
     },
     derived_profiles = {
         ["5_1_1"] = {

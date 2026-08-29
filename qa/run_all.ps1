@@ -225,6 +225,10 @@ Run-Check "check_diff_whitespace"             { & (Join-Path $here "check_diff_w
 # Issue #1435: immutable-review evidence must be culture-independent and
 # reproducible under the same repository-owned manifest grammar.
 Run-Check "check_content_manifest"            { & (Join-Path $here "check_content_manifest.ps1")            -SelfTest -Quiet:$Quiet }
+# Weapon-history source freshness is opportunistic in ordinary QA: unreachable
+# network is a visible skip, while any reachable ref/tip mismatch blocks. The
+# canonical WT BuildOnly/release path separately requires remote availability.
+Run-Check "check_wt_history_source_freshness" { & (Join-Path $here "check_wt_history_source_freshness.ps1") -Quiet:$Quiet }
 # Issue #1278: every newly generated canonical root carries a deterministic
 # receipt binding it to the exact dirty source snapshot that will be committed.
 # BuildOnly skips the stale pre-build receipt, then writes and validates the new
@@ -345,6 +349,10 @@ Run-Check "bundle_output_set_host_matrix" { & (Join-Path $here "run_bundle_outpu
 # Issue #1436: prove the offline evidence ledger and generated Patch 5.2
 # catalog are pinned; regenerate byte-exactly when the source checkout exists.
 Run-Check "check_wt_history_reproducibility" { & (Join-Path $here "check_wt_history_reproducibility.ps1") -Quiet:$Quiet }
+# Issue #1436: Patch 6.6's Deepwood Staff lift duration crosses weapon and
+# vortex runtime roots. Reproduce its adjacent/current evidence and catalog
+# under both supported PowerShell hosts before accepting either stream.
+Run-Check "wt_history_patch_6_6_host_matrix" { & (Join-Path $here "run_wt_history_patch_6_6_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
 # Issue #1436: independently select Patch 6.8's Kerillian Greatsword change
 # from the adjacent 6.7.2 -> 6.8.1 boundary, rehydrate its current guard, and
 # reproduce both evidence lanes and the generated catalog from immutable source.

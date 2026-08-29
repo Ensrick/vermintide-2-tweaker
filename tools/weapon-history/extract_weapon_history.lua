@@ -276,8 +276,26 @@ local function environment()
         concat = table.concat,
         insert = table.insert,
         remove = table.remove,
+        set = function(values)
+            assert(type(values) == "table", "table.set expects a table")
+            local result = {}
+            for _, value in ipairs(values) do result[value] = true end
+            return result
+        end,
         sort = table.sort,
     }
+    -- Most equipment chunks return their templates directly. DLC equipment
+    -- settings instead mutate DLCSettings and return nil. Preserve symbolic
+    -- fallback for every other DLC while giving the woods evaluator the exact
+    -- side-effect owner needed by Deepwood Staff's vortex definition.
+    env.DLCSettings = { woods = {} }
+    setmetatable(env.DLCSettings, {
+        __index = function(target, key)
+            local value = symbol("DLCSettings." .. tostring(key))
+            rawset(target, key, value)
+            return value
+        end,
+    })
     env._G = env
     env.require = function() return nil end
     env.fassert = function(condition, message, ...)
@@ -302,9 +320,16 @@ local function evaluate(source, source_name)
     remember_source(source, source_name)
     local chunk, load_error = loadstring(source, "@" .. source_name)
     assert(chunk, load_error)
-    setfenv(chunk, environment())
+    local env = environment()
+    setfenv(chunk, env)
     local ok, result = pcall(chunk)
     assert(ok, source_name .. ": " .. tostring(result))
+    if result == nil then
+        local woods = rawget(env.DLCSettings, "woods")
+        local vortex_templates = type(woods) == "table"
+            and rawget(woods, "vortex_templates")
+        if type(vortex_templates) == "table" then result = vortex_templates end
+    end
     assert(type(result) == "table", source_name .. " did not return a template table")
     return result
 end
@@ -340,36 +365,46 @@ local excluded_root = {
     wwise_dep_right_hand = true,
 }
 
-local function scalar_equal(a, b)
+local value_equal
+value_equal = function(a, b, seen)
     if getmetatable(a) == symbol_mt or getmetatable(b) == symbol_mt then
         return getmetatable(a) == symbol_mt and getmetatable(b) == symbol_mt
             and a.__symbol == b.__symbol
     end
-    if type(a) == "function" and type(b) == "function" then
+    local a_type, b_type = type(a), type(b)
+    if a_type ~= b_type then return false end
+    if a_type ~= "table" and a_type ~= "function" then return a == b end
+
+    seen = seen or {}
+    if seen[a] ~= nil then return seen[a] == b end
+    seen[a] = b
+
+    if a_type == "function" then
         local a_source, b_source = function_fingerprint(a), function_fingerprint(b)
         if a_source == nil or b_source == nil or a_source ~= b_source then return false end
-        -- Function text alone is not semantic identity: equal bodies can close
-        -- over different constants. Compare only scalar/symbolic upvalues; any
-        -- executable or table-bearing capture is conservatively unsupported.
+        -- Decompiled template callbacks often close over another helper and a
+        -- scalar-only configuration table. Compare that complete acyclic
+        -- closure graph instead of flagging source-identical functions merely
+        -- because each immutable revision produced a distinct Lua object.
         local index = 1
         while true do
             local a_name, a_value = debug.getupvalue(a, index)
             local b_name, b_value = debug.getupvalue(b, index)
             if a_name == nil or b_name == nil then return a_name == b_name end
-            if a_name ~= b_name then return false end
-            local a_type, b_type = type(a_value), type(b_value)
-            if getmetatable(a_value) == symbol_mt or getmetatable(b_value) == symbol_mt then
-                if getmetatable(a_value) ~= symbol_mt or getmetatable(b_value) ~= symbol_mt
-                        or a_value.__symbol ~= b_value.__symbol then return false end
-            elseif a_type ~= b_type or a_type == "table" or a_type == "function"
-                    or a_type == "userdata" or a_type == "thread"
-                    or a_value ~= b_value then
+            if a_name ~= b_name or not value_equal(a_value, b_value, seen) then
                 return false
             end
             index = index + 1
         end
     end
-    return type(a) == type(b) and a == b
+
+    for key, value in pairs(a) do
+        if not value_equal(value, rawget(b, key), seen) then return false end
+    end
+    for key in pairs(b) do
+        if rawget(a, key) == nil then return false end
+    end
+    return true
 end
 
 local key_type_order = { number = 1, string = 2, boolean = 3 }
@@ -384,20 +419,7 @@ local function canonical_key_less(left, right)
 end
 
 local function table_equal(a, b, seen)
-    if type(a) ~= "table" or type(b) ~= "table"
-            or getmetatable(a) == symbol_mt or getmetatable(b) == symbol_mt then
-        return scalar_equal(a, b)
-    end
-    seen = seen or {}
-    if seen[a] == b then return true end
-    seen[a] = b
-    for key, value in pairs(a) do
-        if not table_equal(value, b[key], seen) then return false end
-    end
-    for key in pairs(b) do
-        if a[key] == nil then return false end
-    end
-    return true
+    return value_equal(a, b, seen)
 end
 
 local function path_copy(path, key)

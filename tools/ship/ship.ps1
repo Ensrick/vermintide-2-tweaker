@@ -147,6 +147,24 @@ function Fail {
     exit 1
 }
 
+function Assert-WtHistorySourceFreshness {
+    param(
+        [Parameter(Mandatory)][string]$Mod,
+        [Parameter(Mandatory)][string]$RepoRoot,
+        [Parameter(Mandatory)][string]$Phase
+    )
+    if ($Mod -ne 'weapon_tweaker' -and $Mod -ne 'weapon_tweaker_dev') { return }
+    $gate = Join-Path $RepoRoot 'qa\check_wt_history_source_freshness.ps1'
+    if (-not (Test-Path -LiteralPath $gate -PathType Leaf)) {
+        Fail "Weapon-history source freshness gate not found: $gate"
+    }
+    & $gate -RequireRemoteFresh -Quiet
+    if ($LASTEXITCODE -ne 0) {
+        Fail "Canonical weapon-history source moved or could not be verified at $Phase; no later release mutation was attempted."
+    }
+    Write-Host "  OK -- canonical weapon-history source ref/tip is fresh ($Phase)." -ForegroundColor Green
+}
+
 # ---------------------------------------------------------------------------
 # Pure helpers, hoisted so `-SelfTest` exercises the SAME code the live ship
 # runs: the native-probe guard (issue #489) + step 6 labeling (issue #326).
@@ -1507,6 +1525,15 @@ function Invoke-ShipSelfTest {
     Assert ($quickPos -ge 0) "ship source invokes the fast headless QA gate (issue #591)"
     Assert ($lintPos -ge 0) "ship source invokes target-mod lint (issue #591)"
     Assert ($launcherPos -ge 0 -and $quickPos -lt $launcherPos -and $lintPos -lt $launcherPos) "both headless gates precede launcher build/deploy/upload"
+    $freshnessBuildMarker = "Assert-WtHistorySourceFreshness -Mod `$Mod -RepoRoot `$repoRoot -Phase 'pre-build'"
+    $freshnessBuildPos = $selfTxt.LastIndexOf($freshnessBuildMarker)
+    Assert ($freshnessBuildPos -ge 0 -and $freshnessBuildPos -lt $launcherPos) "WT source freshness is required immediately before launcher build/deploy/upload"
+    $freshnessCalls = [regex]::Matches($selfTxt, '(?m)^' +
+        [regex]::Escape('Assert-WtHistorySourceFreshness -Mod $Mod -RepoRoot $repoRoot -Phase')).Count
+    Assert ($freshnessCalls -eq 4) "WT freshness closes preflight, pre-build, pre-release, and pre-upload windows"
+    Assert ($selfTxt.IndexOf("`$Mod -ne 'weapon_tweaker' -and `$Mod -ne 'weapon_tweaker_dev'") -ge 0) "required freshness is scoped to both WT release streams"
+    Assert ($selfTxt.IndexOf('& $gate -RequireRemoteFresh -Quiet') -ge 0) "release freshness fails closed on unavailable canonical remote"
+    Assert ($selfTxt.IndexOf('check_wt_history_source_freshness.ps1') -ge 0) "ship delegates freshness to the canonical QA gate"
 
     # Parallel-session collision guard: the ship/version claim gate must be
     # present, must precede the launcher, and must expose the -NoClaim escape
@@ -1891,6 +1918,10 @@ else {
     }
 }
 
+# Weapon-history catalogs claim one canonical current source. Fail fast before
+# expensive QA, then close the same window again at build/release boundaries.
+Assert-WtHistorySourceFreshness -Mod $Mod -RepoRoot $repoRoot -Phase 'preflight'
+
 $commitProbe = Invoke-NativeCapture { & git -C $repoRoot rev-parse HEAD }
 if ($commitProbe.ExitCode -ne 0 -or $commitProbe.Lines.Count -eq 0) {
     Fail "Cannot resolve the invoking checkout's source commit at $repoRoot. Shipping requires a git worktree identity (issue #647)."
@@ -2098,6 +2129,8 @@ try {
 catch {
     Fail "Cannot fingerprint BuildOnly source before the clean build: $($_.Exception.Message)"
 }
+
+Assert-WtHistorySourceFreshness -Mod $Mod -RepoRoot $repoRoot -Phase 'pre-build'
 
 $launcherArgs = @('build', $Mod, '--clean')
 $launcherArgs += @('--config', $launcherSettings)
@@ -2430,6 +2463,7 @@ if (-not $publicationAuthorization.Ok) {
     Fail "Final publication authorization FAILED: $($publicationAuthorization.Message). No Workshop upload was attempted."
 }
 Write-Host ("  OK -- final publication authorization: {0}" -f $publicationAuthorization.Message) -ForegroundColor Green
+Assert-WtHistorySourceFreshness -Mod $Mod -RepoRoot $repoRoot -Phase 'pre-release'
 
 # Persist independently queried authorization evidence before Workshop mutation.
 $tag       = "mods-$(Get-Date -Format yyyy-MM-dd)"
@@ -2477,6 +2511,7 @@ if (-not $publicationAuthorization.Ok) {
     Remove-Item -LiteralPath $receiptPath -Force -ErrorAction SilentlyContinue
     Fail "Last-moment publication authorization FAILED: $($publicationAuthorization.Message). No Workshop upload was attempted."
 }
+Assert-WtHistorySourceFreshness -Mod $Mod -RepoRoot $repoRoot -Phase 'pre-upload'
 # The launcher now reconstructs source proofs from sourceCommit blobs and pins
 # the staged cfg/content/preview/tool before comparing them. Do not insert a
 # mutable worktree hash/cleanliness precheck here: it would recreate the

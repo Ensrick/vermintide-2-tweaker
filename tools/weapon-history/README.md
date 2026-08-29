@@ -14,7 +14,8 @@ current decompiled-source anchor:
 | Game version 5.1.1 | `8224b4436e20905a6ba463cb28fa2d7771bb2330` |
 | Game version 5.2.0 | `4f496970e2e7514bef7d612ab91331aa065d5e52` |
 | Game version 5.2.3 | `cdc0a86e24e017119e6d6998870bf76f6e76e868` |
-| Current anchor (6.11.3) | `c5e4968b1fbb00c49884e56d640ef990a9c04dd0` |
+| Current content anchor (6.12.0) | `038498af2b565bcb10bf5ed225638293a7640c83` |
+| Observed canonical default tip (README-only child) | `fd46866fe4d9aad8a1f1480fad4be6b960d4f83e` |
 
 The inert Lua modules in `evidence/patch_5_2/` preserve the semantic snapshots,
 damage profiles, family ownership, explicit exclusions, official patch-note
@@ -38,6 +39,34 @@ Official scope references:
 - [Patch 5.2.0](https://www.vermintide.com/news/gifts-of-the-wolf-father-and-patch-520)
 - [Hotfix 5.2.3](https://forums.fatsharkgames.com/t/hotfix-megathread-5-2-x-current-5-2-3/91155)
 
+### Patch 6.6 boundary
+
+Patch 6.6 uses an adjacent-boundary contract across both Deepwood Staff source
+owners:
+
+| Role | Source revision |
+|---|---|
+| Game version 6.5.4 | `5a74a378502353b075cbe0c3abe37da07f1d9bc9` |
+| Post-boundary 6.6.0 scripts | `877aa9b2720d297e0594f7039773eca610324f5b` |
+| Current content anchor (6.12.0) | `038498af2b565bcb10bf5ed225638293a7640c83` |
+
+The adjacent evidence selects exactly three absent historical leaves: the
+`chaos_bulwark` row in `staff_life` and `staff_life_vs` prioritized breeds, and
+the matching `spirit_storm.reduce_duration_per_breed` row. Current values are
+`1`, `1`, and `0.5`. Removing all three recreates the pre-6.6 behavior while
+leaving later rows such as `chaos_tether_sorcerer` untouched. The evaluator's
+`table.set` implementation and its capture of the side-effect assignment to
+`DLCSettings.woods.vortex_templates` are covered by byte-exact regeneration in
+both source evaluators. The official boundary is [Patch 6.6.0 / Hotfix 6.6.1](https://forums.fatsharkgames.com/t/new-map-the-well-of-dreams-live-now-skulls-in-game-event-patch-6-6-0-hotfix-6-6-1/108063).
+
+This family is deliberately host/solo only. Vanilla
+`ActionSpiritStorm.fire` sends `rpc_summon_vortex` to the server, the server
+spawns the network vortex, and `SummonedVortexExtension` reads the vortex
+template's breed-duration multiplier. A client-side selector could therefore
+present a selected state without owning the authoritative behavior. The
+runtime refuses the historical state on a client and transactionally applies
+or restores all three leaves on the host.
+
 ### Patch 6.8 boundary
 
 Patch 6.8 uses an adjacent-boundary contract so later edits to the same source
@@ -47,11 +76,11 @@ file cannot leak into the historical selector:
 |---|---|
 | Game version 6.7.2 | `b7c15fc61a3b34fae7d1e2de47f52198e26851ce` |
 | Post-boundary 6.8.1 | `447f4eb49921ba08fbbbb945609ce2b9891f4898` |
-| Current anchor (6.11.3) | `c5e4968b1fbb00c49884e56d640ef990a9c04dd0` |
+| Current content anchor (6.12.0) | `038498af2b565bcb10bf5ed225638293a7640c83` |
 
 The adjacent 6.7.2-to-6.8.1 evidence selects exactly one operation: Kerillian's
 Greatsword first-heavy `range_mod`, `1.55` to historical `1.45`. A second
-evidence file re-reads only that selected path at 6.7.2 and 6.11.3 to establish
+evidence file re-reads only that selected path at 6.7.2 and 6.12.0 to establish
 the runtime guard. Both primary and independent exact-double evaluators must
 agree. The official boundary is [Patch 6.8.0 / Hotfix 6.8.1](https://forums.fatsharkgames.com/t/geheimnisnacht-and-the-skull-of-blosphoros-return-patch-6-8-0-hotfix-6-8-1/113884).
 
@@ -67,6 +96,11 @@ $source = 'C:\path\to\Vermintide-2-Source-Code'
     '.\tools\weapon-history\evidence\patch_5_2' `
     '.\weapon_tweaker\scripts\mods\weapon_tweaker\_wt_history_5_2_catalog.lua'
 
+& $lua '.\tools\weapon-history\generate_patch_6_6_history.lua' `
+    $source `
+    '.\tools\weapon-history\evidence\patch_6_6' `
+    '.\weapon_tweaker\scripts\mods\weapon_tweaker\_wt_history_6_6_catalog.lua'
+
 & $lua '.\tools\weapon-history\generate_patch_6_8_history.lua' `
     $source `
     '.\tools\weapon-history\evidence\patch_6_8' `
@@ -77,8 +111,27 @@ Then run the non-mutating exact-output gate:
 
 ```powershell
 .\qa\check_wt_history_reproducibility.ps1 -SourceRepo $source -RequireSource
+.\qa\run_wt_history_patch_6_6_host_matrix.ps1
 .\qa\check_wt_history_patch_6_8_reproducibility.ps1 -SourceRepo $source -RequireSource
 ```
+
+`current_source_anchor.lua` is the single identity consumed by all three
+generators and their PowerShell checks. It separates the semantic 6.12.0
+content commit from the later README-only default-branch tip. Ordinary QA runs
+`check_wt_history_source_freshness.ps1` opportunistically: an unreachable
+remote reports a visible skip while all pinned offline evidence remains
+blocking, but a reachable mismatched or malformed remote fails. Canonical
+BuildOnly/release runs use `-RequireRemoteFresh`, so network unavailability or
+any default-ref/tip movement blocks before compilation. The probe is bounded
+`git ls-remote --symref`; its advertised 1--60 second budget includes bounded
+termination proof. PowerShell 7 uses `Process.Kill(true)`. Windows PowerShell
+5.1, whose process API cannot kill descendants, invokes the trusted
+`%SystemRoot%\System32\taskkill.exe /PID <pid> /T /F` with captured output,
+exit status, and a bounded helper-process containment budget. A nonzero,
+timed-out, or unproven tree kill is unavailable (visible skip in ordinary QA,
+failure when freshness is required). Real nested parent/descendant and injected
+taskkill failure/timeout fixtures prove both hosts leave no helper orphan. The
+probe never fetches or writes `FETCH_HEAD`.
 
 The Patch 5.2 gate verifies the pinned evidence extractor, generator, source catalog,
 independent oracle/spec/routes, evidence hashes, and generated public catalog.
@@ -89,6 +142,14 @@ oracle, then requires byte-exact catalog equality. In source-less CI it still
 enforces every pinned artifact and reports source regeneration as a visible
 skip. The Patch 6.8 gate applies the same fail-closed policy to its adjacent
 boundary, current-anchor rehydration, two evaluators, and generated catalogs.
+The Patch 6.6 host matrix applies that policy under both PowerShell 7 and
+Windows PowerShell 5.1, including both source paths and the server-authority
+runtime contract. Before any of the three checks selects a source checkout, the
+central read-only selector proves every pinned commit, `commit:path` identity,
+and blob object. A stale or partial checkout is therefore unavailable: ordinary
+QA emits a visible skip, while `-RequireSource` fails closed. Selection never
+fetches, lazily retrieves promisor objects, mutates the checkout, or relies on
+`FETCH_HEAD`.
 `qa/check_wt_stream_parity.ps1` separately proves that the dev stream
 carries the namespace-normalized catalog.
 

@@ -1,6 +1,6 @@
 -- Rehydrated from immutable source revisions; do not hand-edit.
 return {
-    new_revision = "c5e4968b",
+    new_revision = "038498af",
     old_revision = "8224b443",
     profiles = {
         heavy_slashing_linesman = {

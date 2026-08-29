@@ -50,35 +50,11 @@ function Invoke-LuaGeneratedFile {
     }
 }
 
-function Find-SourceRepo([string]$Root, [string]$Explicit) {
-    $candidates = @()
-    if ($Explicit) { $candidates += $Explicit }
-    if ($env:VT2_SOURCE_REPO) { $candidates += $env:VT2_SOURCE_REPO }
-    $candidates += (Join-Path (Split-Path $Root -Parent) 'Vermintide-2-Source-Code')
-
-    try {
-        $common = (& git -C $Root rev-parse --git-common-dir 2>$null)
-        if ($LASTEXITCODE -eq 0 -and $common) {
-            if (-not [IO.Path]::IsPathRooted($common)) {
-                $common = Join-Path $Root $common
-            }
-            $mainRoot = Split-Path ([IO.Path]::GetFullPath($common)) -Parent
-            $candidates += (Join-Path (Split-Path $mainRoot -Parent) 'Vermintide-2-Source-Code')
-        }
-    } catch {
-        # Absence is handled below; the pinned evidence gate remains available.
-    }
-
-    foreach ($candidate in @($candidates | Select-Object -Unique)) {
-        if ($candidate -and (Test-Path -LiteralPath (Join-Path $candidate '.git'))) {
-            return (Resolve-Path -LiteralPath $candidate).Path
-        }
-    }
-    return $null
-}
-
 try {
     $root = (Resolve-Path -LiteralPath $RepoRoot).Path
+    $anchorHelpers = Join-Path $root 'tools\weapon-history\source-anchor.ps1'
+    . $anchorHelpers
+    $anchor = Read-WtHistorySourceAnchor -RepoRoot $root
     $toolRoot = Join-Path $root 'tools\weapon-history'
     $evidenceRoot = Join-Path $toolRoot 'evidence\patch_5_2'
     $extractor = Join-Path $toolRoot 'extract_weapon_history.lua'
@@ -92,13 +68,13 @@ try {
     $lua = Join-Path $root 'qa\lua\vendor\lua-5.1.5-win64\lua5.1.exe'
 
     $pinned = [ordered]@{
-        $extractor = 'c0a2775e5c3f52e9b11ca701e7ed9e916287cc78b39e1c5edc5caf52d6468e46'
-        $generator = 'bb2e366992226a9ffb1acc223dee99fa944264d02e3ad96be410e8d660a6f523'
-        $sourceCatalog = '4d346e1b5f0f79f8ddc06e9d58d2e8345257ed24d30ac02fb53373ea96d34dd4'
-        $generatedCatalog = '95cc058d5fc32751859f1c4fe913a93d7d31553dea91edd834d700bcafb9ae43'
-        $oracleExtractor = '6c8ae7ef0dee07e93632e20427600cab15046aadcb0ad4bbe082d15a95ea5bdf'
-        $oracleSpec = 'df8976bdfbd6bf182fae88dededd00554a9352eabf2fc9413a59184d846bdc1d'
-        $oracleRoutes = '07e2dd48b667b1c26550299ca60d02658aebc29804bf8caa3a57081353af99c4'
+        $extractor = '76e6e9b05d1945c94022e94ed6190b079b5320dae7a5f0797000cd5a098e338f'
+        $generator = 'd1fc8d4a8b1100b11326c81acd85fa6e20cc32c425fcf038eba61aa929588507'
+        $sourceCatalog = 'fdfa169606d9eb7c4893e8e6be3fe8e727d2b63c6c7a91894e050a1ffcb5fa65'
+        $generatedCatalog = 'bd01a4cb28d9e58bbf073b9c4ebe5ad97541d9a20f4880908229671b0620f66c'
+        $oracleExtractor = '3f4c3f2d630c261a3b0037a42e41ebafd560d8050afd49bc67c67259b406f311'
+        $oracleSpec = 'a85a92267033246b175315f2935ebbc56dd5002d7722975e460e516758036e26'
+        $oracleRoutes = '5cfe899ef388217f0947572fe9cd2aef0d011f9f4feadb679757912d82c56a27'
     }
     foreach ($entry in $pinned.GetEnumerator()) {
         if (-not (Test-Path -LiteralPath $entry.Key -PathType Leaf)) {
@@ -111,6 +87,10 @@ try {
     }
 
     $sourceText = [IO.File]::ReadAllText($sourceCatalog, [Text.Encoding]::UTF8)
+    if ($sourceText.IndexOf($anchor.ContentRevision,
+            [StringComparison]::Ordinal) -lt 0) {
+        throw '#1436 source catalog does not consume the central current-source anchor'
+    }
     $artifactMatches = [regex]::Matches($sourceText,
         '(?m)^\s*(_wt_history_(?:profiles|snapshot)_[A-Za-z0-9_]+)\s*=\s*"([0-9a-f]{64})"')
     if ($artifactMatches.Count -ne 9) {
@@ -136,16 +116,25 @@ try {
         throw '#1436 evidence directory contains an unledgered or missing Lua artifact'
     }
 
-    $source = Find-SourceRepo $root $SourceRepo
+    $sourceRequirements = @(Read-WtHistorySourceBlobLedger -Path $oracleRoutes)
+    if ($sourceRequirements.Count -ne 63) {
+        throw "#1436 Patch 5.2 source-object ledger must contain 63 rows; got $($sourceRequirements.Count)"
+    }
+    $sourceSelection = Find-WtHistorySourceRepo -Root $root -Explicit $SourceRepo `
+        -Requirements $sourceRequirements
+    $source = $sourceSelection.Path
     if (-not $source) {
+        $selectionDetail = if ($sourceSelection.Rejections.Count -gt 0) {
+            $sourceSelection.Rejections -join '; '
+        } else { 'no source checkout candidate was found' }
         if ($RequireSource) {
-            throw 'Vermintide-2-Source-Code checkout is required but was not found'
+            throw "Vermintide-2-Source-Code checkout is required but unavailable or incomplete: $selectionDetail"
         }
-        Write-Detail '[check_wt_history_reproducibility] source checkout absent; exact regeneration SKIP (pinned evidence/output OK)' 'Yellow'
+        Write-Host "[check_wt_history_reproducibility] source checkout unavailable or incomplete; exact regeneration SKIP (pinned evidence/output OK): $selectionDetail" -ForegroundColor Yellow
         exit 0
     }
 
-    $currentRevision = 'c5e4968b1fbb00c49884e56d640ef990a9c04dd0'
+    $currentRevision = $anchor.ContentRevision
     $rehydration = @(
         [pscustomobject]@{ Name = '_wt_history_snapshot_5_1_1_part_1_generated.lua'; Mode = '--rehydrate-snapshot'; Revision = '8224b4436e20905a6ba463cb28fa2d7771bb2330' },
         [pscustomobject]@{ Name = '_wt_history_snapshot_5_1_1_part_2_generated.lua'; Mode = '--rehydrate-snapshot'; Revision = '8224b4436e20905a6ba463cb28fa2d7771bb2330' },

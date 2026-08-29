@@ -1,5 +1,20 @@
 # Weapon Tweaker Changelog
 
+## 0.12.315-dev (2026-08-28) -- mirror source-exact Patch 6.6 Deepwood Staff history (#1436) [not-started]
+
+- Mirrors public beta 0.12.314: Kerillian's Deepwood Staff gains the exact
+  **Game Version 6.5.4** host/solo state, restoring shielded Chaos Warrior lifts
+  from four seconds to eight through one authority-owned three-leaf transaction.
+- Carries the same Patch 5.2/6.6/6.8 catalog composition, source guards,
+  localization/mutation collision policy, atomic authority-loss restore, and
+  production host/client transition behavior as the public stream.
+- Refreshes the inert current default to semantic source 6.12.0 (`038498af`),
+  separately records canonical default tip `fd46866f`, and requires exact
+  remote freshness for canonical WT builds/releases while keeping offline QA
+  independent of network availability.
+- Preserves friends-only availability and development diagnostics. #1436
+  remains open for the remaining historical patch eras.
+
 ## 0.12.314-dev (2026-08-28) -- mirror source-exact Patch 6.8 Greatsword history (#1436) [not-started]
 
 - Mirrors public beta 0.12.313: Kerillian's Greatsword gains the source-exact

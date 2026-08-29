@@ -23,6 +23,11 @@ local function load_data(path)
     return value
 end
 
+local normalized_script = tostring(arg[0] or ""):gsub("\\", "/")
+local script_dir = normalized_script:match("^(.*)/[^/]+$") or "."
+local current_anchor = load_data(script_dir .. "/current_source_anchor.lua")
+assert(current_anchor.schema == 1, "unsupported current source anchor")
+
 local function shell_quote(value)
     return '"' .. tostring(value):gsub('"', '\\"') .. '"'
 end
@@ -113,6 +118,8 @@ end
 
 local source_catalog = load_data(evidence_dir .. "/_wt_history_6_8_source_catalog.lua")
 assert(source_catalog.schema == 1, "unsupported Patch 6.8 source catalog")
+assert(source_catalog.current.revision == current_anchor.content_revision,
+    "unexpected current revision")
 assert(git_blob(source_catalog.boundary.historical_revision,
         source_catalog.source_path) == source_catalog.boundary.historical_blob,
     "historical source blob drift")
@@ -136,8 +143,8 @@ local catalog = {
     catalog_id = "wt_history_patch_6_8_v1",
     current_id = "current",
     current_source = {
-        display_name = "Current (Game Version 6.11.3)",
-        label = "6.11.3 source anchor",
+        display_name = "Current (Game Version " .. current_anchor.game_version .. ")",
+        label = current_anchor.game_version .. " source anchor",
         revision = source_catalog.current.revision,
     },
     derived_profiles = {},

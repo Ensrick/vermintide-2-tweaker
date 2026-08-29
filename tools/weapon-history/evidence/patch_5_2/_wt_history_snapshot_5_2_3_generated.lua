@@ -1,6 +1,6 @@
 -- Rehydrated from immutable source revisions; do not hand-edit.
 return {
-    new_revision = "c5e4968b",
+    new_revision = "038498af",
     old_revision = "cdc0a86e",
     records = {
         [1] = {
