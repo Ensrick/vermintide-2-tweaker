@@ -1,5 +1,17 @@
 # Weapon Tweaker Changelog
 
+## 0.12.317-dev (2026-08-29) -- mirror source-exact Patch 6.0 launch history (#1436) [not-started]
+
+- Mirrors public beta 0.12.316: Kruber's Sword and Shield, Bretonnian Sword and
+  Shield, and Fireball Staff gain the exact **Game Version 5.6.1** historical
+  state through eleven scalar operations and one private-profile leaf.
+- Carries the exact-family fragment composer, strict collision rejection,
+  detached catalog semantics, dual-host source regeneration, and the explicit
+  exclusion of unrelated launch-era engine and presentation changes.
+- Preserves friends-only development diagnostics, public/dev gameplay parity,
+  and the exact deployed-source pins from the preceding #428 release. #1436
+  remains open for historical eras outside the source-proven shipped slices.
+
 ## 0.12.316-dev (2026-08-29) -- mirror canonical Moonfire NetworkLookup registration (#428)
 
 - Mirrors public beta 0.12.315: Moonfire AOE registration now consumes the

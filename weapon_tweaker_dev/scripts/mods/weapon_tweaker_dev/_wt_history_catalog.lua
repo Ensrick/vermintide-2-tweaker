@@ -2,12 +2,15 @@
 --
 -- Generated catalogs are pure data and may be requested by the VMF data,
 -- localization, and runtime chunks. mod:dofile itself is not a singleton, so
--- this module owns the only cache boundary. Catalogs compose only when every
--- identity axis is disjoint and their current source anchors match exactly.
+-- this module owns the only cache boundary. Catalogs compose only when their
+-- current source anchors match exactly. A repeated family may contribute only
+-- disjoint states under the same complete identity; all other ownership axes
+-- remain disjoint.
 local M = {}
 
 local GENERATED_MODULES = {
     "scripts/mods/weapon_tweaker_dev/_wt_history_5_2_catalog",
+    "scripts/mods/weapon_tweaker_dev/_wt_history_6_0_catalog",
     "scripts/mods/weapon_tweaker_dev/_wt_history_6_6_catalog",
     "scripts/mods/weapon_tweaker_dev/_wt_history_6_8_catalog",
 }
@@ -50,6 +53,8 @@ local function normalize_modules(generated_modules)
     return modules
 end
 
+local copy_value
+
 local function copy_disjoint(target, source, label)
     if source == nil then return true end
     if type(source) ~= "table" then return nil, label .. " is not a table" end
@@ -57,9 +62,69 @@ local function copy_disjoint(target, source, label)
         if rawget(target, key) ~= nil then
             return nil, "duplicate " .. label .. " " .. tostring(key)
         end
-        target[key] = value
+        target[key] = copy_value(value)
     end
     return true
+end
+
+copy_value = function(value, seen)
+    if type(value) ~= "table" then return value end
+    seen = seen or {}
+    if seen[value] then return seen[value] end
+    local copy = {}
+    seen[value] = copy
+    for key, child in pairs(value) do
+        copy[copy_value(key, seen)] = copy_value(child, seen)
+    end
+    return copy
+end
+
+local function arrays_equal(left, right)
+    local left_count = dense_array_length(left, "left identity array")
+    local right_count = dense_array_length(right, "right identity array")
+    if not left_count or not right_count or left_count ~= right_count then
+        return false
+    end
+    for index = 1, left_count do
+        if rawget(left, index) ~= rawget(right, index) then return false end
+    end
+    return true
+end
+
+local function family_identity_mismatch(left, right)
+    for _, field in ipairs({
+        "id", "setting_id", "label_key", "display_name", "authority",
+    }) do
+        if rawget(left, field) ~= rawget(right, field) then return field end
+    end
+    if not arrays_equal(left.templates, right.templates) then return "templates" end
+    return nil
+end
+
+local function validate_family_states(family)
+    if type(family.states) ~= "table" then
+        return nil, "history family states are not a table"
+    end
+    local state_count, state_count_error = dense_array_length(
+        family.state_order, "history family state order")
+    if not state_count then return nil, state_count_error end
+    local listed = {}
+    for state_index = 1, state_count do
+        local state_id = rawget(family.state_order, state_index)
+        if type(state_id) ~= "string" or state_id == "" or listed[state_id]
+                or type(family.states[state_id]) ~= "table" then
+            return nil, "duplicate or invalid history family state "
+                .. tostring(state_id)
+        end
+        listed[state_id] = true
+    end
+    for state_id, state in pairs(family.states) do
+        if not listed[state_id] or type(state) ~= "table" then
+            return nil, "history family state missing from order "
+                .. tostring(state_id)
+        end
+    end
+    return state_count
 end
 
 function M.merge(catalogs)
@@ -74,7 +139,7 @@ function M.merge(catalogs)
     local merged = {
         catalog_id = "wt_history_composite_v1",
         current_id = "current",
-        current_source = first.current_source,
+        current_source = copy_value(first.current_source),
         derived_profiles = {},
         families = {},
         generation = { catalogs = {} },
@@ -149,36 +214,72 @@ function M.merge(catalogs)
                     or type(family.templates) ~= "table" then
                 return nil, "history family identity is incomplete"
             end
-            if family_ids[family.id] then
-                return nil, "duplicate history family " .. family.id
-            end
-            if setting_ids[family.setting_id] then
-                return nil, "duplicate history setting " .. family.setting_id
-            end
-            family_ids[family.id], setting_ids[family.setting_id] = true, true
-            local family_keys = {
-                family.label_key,
-                family.setting_id,
-                family.setting_id .. "_description",
-            }
-            for _, key in ipairs(family_keys) do
-                local claimed, claim_error = claim_localization_key(
-                    key, "family " .. family.id)
-                if not claimed then return nil, claim_error end
-            end
             local template_count, template_count_error = dense_array_length(
                 family.templates, "history family templates")
             if not template_count then return nil, template_count_error end
             for template_index = 1, template_count do
                 local template = family.templates[template_index]
-                if type(template) ~= "string" or template == ""
-                        or template_ids[template] then
+                if type(template) ~= "string" or template == "" then
                     return nil, "duplicate or invalid history template "
                         .. tostring(template)
                 end
-                template_ids[template] = true
             end
-            merged.families[#merged.families + 1] = family
+            local state_count, state_count_error = validate_family_states(family)
+            if not state_count then return nil, state_count_error end
+
+            local owner = family_ids[family.id]
+            if owner then
+                local mismatch = family_identity_mismatch(owner.family, family)
+                if mismatch then
+                    return nil, "history family identity mismatch " .. mismatch
+                        .. " for " .. family.id
+                end
+                if setting_ids[family.setting_id] ~= family.id then
+                    return nil, "duplicate history setting " .. family.setting_id
+                end
+                for template_index = 1, template_count do
+                    local template = family.templates[template_index]
+                    if template_ids[template] ~= family.id then
+                        return nil, "duplicate or invalid history template "
+                            .. tostring(template)
+                    end
+                end
+                for state_index = 1, state_count do
+                    local state_id = family.state_order[state_index]
+                    if owner.family.states[state_id] ~= nil then
+                        return nil, "duplicate history family state " .. family.id
+                            .. "/" .. state_id
+                    end
+                    owner.family.state_order[#owner.family.state_order + 1] = state_id
+                    owner.family.states[state_id] = copy_value(family.states[state_id])
+                end
+            else
+                if setting_ids[family.setting_id] then
+                    return nil, "duplicate history setting " .. family.setting_id
+                end
+                local family_keys = {
+                    family.label_key,
+                    family.setting_id,
+                    family.setting_id .. "_description",
+                }
+                for _, key in ipairs(family_keys) do
+                    local claimed, claim_error = claim_localization_key(
+                        key, "family " .. family.id)
+                    if not claimed then return nil, claim_error end
+                end
+                for template_index = 1, template_count do
+                    local template = family.templates[template_index]
+                    if template_ids[template] then
+                        return nil, "duplicate or invalid history template "
+                            .. tostring(template)
+                    end
+                    template_ids[template] = family.id
+                end
+                local merged_family = copy_value(family)
+                merged.families[#merged.families + 1] = merged_family
+                family_ids[family.id] = { family = merged_family }
+                setting_ids[family.setting_id] = family.id
+            end
         end
     end
     return merged
