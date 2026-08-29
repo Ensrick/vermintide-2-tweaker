@@ -132,19 +132,75 @@ function Get-WtHistoryProcessIdentityState {
     }
 }
 
+function New-WtHistoryProbeDeadlinePlan {
+    param([ValidateRange(1000, 60000)][int]$TimeoutMilliseconds)
+
+    # The production default keeps eleven seconds for the network probe, then
+    # gives taskkill three seconds and one final second to either contain a
+    # timed-out helper or prove the successfully killed root is gone. Those two
+    # proof outcomes are mutually exclusive, so they share one final bucket.
+    $terminationMilliseconds = [Math]::Min(4000,
+        [int][Math]::Floor($TimeoutMilliseconds * 3.0 / 4.0))
+    $postProofMilliseconds = [Math]::Min(1000,
+        [Math]::Max(250,
+            [int][Math]::Ceiling($terminationMilliseconds / 4.0)))
+    $networkMilliseconds = $TimeoutMilliseconds - $terminationMilliseconds
+    $taskkillMilliseconds = $terminationMilliseconds - $postProofMilliseconds
+
+    return [pscustomobject]@{
+        TotalMilliseconds = $TimeoutMilliseconds
+        NetworkMilliseconds = $networkMilliseconds
+        TaskkillMilliseconds = $taskkillMilliseconds
+        PostProofMilliseconds = $postProofMilliseconds
+        NetworkDeadlineMilliseconds = $networkMilliseconds
+        TaskkillDeadlineMilliseconds = $networkMilliseconds + $taskkillMilliseconds
+        TotalDeadlineMilliseconds = $TimeoutMilliseconds
+    }
+}
+
+function Get-WtHistoryDeadlineRemainingMilliseconds {
+    param(
+        [Parameter(Mandatory)][System.Diagnostics.Stopwatch]$Clock,
+        [ValidateRange(0, 60000)][int]$DeadlineMilliseconds
+    )
+
+    # Ceiling makes every wait conservative: fractional elapsed milliseconds
+    # are charged before asking the OS to wait again.
+    $elapsedMilliseconds = [int][Math]::Ceiling($Clock.Elapsed.TotalMilliseconds)
+    return [Math]::Max(0, $DeadlineMilliseconds - $elapsedMilliseconds)
+}
+
 function Invoke-WtHistoryBoundedTaskkill {
     param(
         [Parameter(Mandatory)][int]$TargetPid,
-        [ValidateRange(1, 60000)][int]$TimeoutMilliseconds,
+        [Parameter(Mandatory)][System.Diagnostics.Stopwatch]$Clock,
+        [ValidateRange(0, 60000)][int]$TaskkillDeadlineMilliseconds,
+        [ValidateRange(0, 60000)][int]$TotalDeadlineMilliseconds,
         [System.Diagnostics.ProcessStartInfo]$StartInfoOverride
     )
 
-    $clock = [System.Diagnostics.Stopwatch]::StartNew()
     $helper = New-Object System.Diagnostics.Process
     $started = $false
     $helperPid = -1
     [long]$helperStartTimeFileTimeUtc = -1
     try {
+        if ($TaskkillDeadlineMilliseconds -gt $TotalDeadlineMilliseconds) {
+            throw 'taskkill deadline exceeds the total probe deadline'
+        }
+        $runRemaining = Get-WtHistoryDeadlineRemainingMilliseconds `
+            -Clock $Clock -DeadlineMilliseconds $TaskkillDeadlineMilliseconds
+        if ($runRemaining -le 0) {
+            return [pscustomobject]@{
+                Succeeded = $false
+                ExitCode = -1
+                TimedOut = $true
+                TerminationProven = $true
+                Error = 'no bounded budget remains for process-tree taskkill'
+                ProcessId = -1
+                StartTimeFileTimeUtc = -1
+            }
+        }
+
         $helper.StartInfo = if ($StartInfoOverride) {
             $StartInfoOverride
         } else {
@@ -157,22 +213,23 @@ function Invoke-WtHistoryBoundedTaskkill {
         $stdoutTask = $helper.StandardOutput.ReadToEndAsync()
         $stderrTask = $helper.StandardError.ReadToEndAsync()
 
-        # The helper's own containment belongs to this same total budget.
-        $containmentReserve = [Math]::Min(250,
-            [Math]::Max(50, [int][Math]::Ceiling($TimeoutMilliseconds / 4.0)))
-        if ($containmentReserve -ge $TimeoutMilliseconds) {
-            $containmentReserve = $TimeoutMilliseconds - 1
-        }
-        $runBudget = $TimeoutMilliseconds - $containmentReserve
-        if (-not $helper.WaitForExit($runBudget)) {
+        # Helper start time is charged to its absolute phase deadline. The
+        # final shared bucket remains available only for containment if this
+        # helper misses that deadline.
+        $runRemaining = Get-WtHistoryDeadlineRemainingMilliseconds `
+            -Clock $Clock -DeadlineMilliseconds $TaskkillDeadlineMilliseconds
+        $helperExited = if ($helper.HasExited) { $true }
+        elseif ($runRemaining -gt 0) { $helper.WaitForExit($runRemaining) }
+        else { $helper.HasExited }
+        if (-not $helperExited) {
             $killError = ''
             try {
                 if (-not $helper.HasExited) { $helper.Kill() }
             }
             catch { $killError = $_.Exception.Message }
 
-            $remaining = [Math]::Max(0,
-                $TimeoutMilliseconds - [int]$clock.ElapsedMilliseconds)
+            $remaining = Get-WtHistoryDeadlineRemainingMilliseconds `
+                -Clock $Clock -DeadlineMilliseconds $TotalDeadlineMilliseconds
             $helperProven = $false
             try {
                 $helperProven = if ($helper.HasExited) { $true }
@@ -196,11 +253,11 @@ function Invoke-WtHistoryBoundedTaskkill {
             }
         }
 
-        $remaining = [Math]::Max(0,
-            $TimeoutMilliseconds - [int]$clock.ElapsedMilliseconds)
+        $remaining = Get-WtHistoryDeadlineRemainingMilliseconds `
+            -Clock $Clock -DeadlineMilliseconds $TaskkillDeadlineMilliseconds
         $stdoutComplete = $stdoutTask.Wait($remaining)
-        $remaining = [Math]::Max(0,
-            $TimeoutMilliseconds - [int]$clock.ElapsedMilliseconds)
+        $remaining = Get-WtHistoryDeadlineRemainingMilliseconds `
+            -Clock $Clock -DeadlineMilliseconds $TaskkillDeadlineMilliseconds
         $stderrComplete = $stderrTask.Wait($remaining)
         if (-not $stdoutComplete -or -not $stderrComplete) {
             return [pscustomobject]@{
@@ -246,8 +303,8 @@ function Invoke-WtHistoryBoundedTaskkill {
         if ($started) {
             try {
                 if (-not $helper.HasExited) { $helper.Kill() }
-                $remaining = [Math]::Max(0,
-                    $TimeoutMilliseconds - [int]$clock.ElapsedMilliseconds)
+                $remaining = Get-WtHistoryDeadlineRemainingMilliseconds `
+                    -Clock $Clock -DeadlineMilliseconds $TotalDeadlineMilliseconds
                 $helperProven = if ($helper.HasExited) { $true }
                 elseif ($remaining -gt 0) { $helper.WaitForExit($remaining) }
                 else { $helper.HasExited }
@@ -265,7 +322,6 @@ function Invoke-WtHistoryBoundedTaskkill {
         }
     }
     finally {
-        $clock.Stop()
         $helper.Dispose()
     }
 }
@@ -273,12 +329,13 @@ function Invoke-WtHistoryBoundedTaskkill {
 function Stop-WtHistoryProbeProcess {
     param(
         [Parameter(Mandatory)][System.Diagnostics.Process]$Process,
-        [ValidateRange(0, 60000)][int]$WaitMilliseconds,
+        [Parameter(Mandatory)][System.Diagnostics.Stopwatch]$Clock,
+        [ValidateRange(0, 60000)][int]$TaskkillDeadlineMilliseconds,
+        [ValidateRange(0, 60000)][int]$TotalDeadlineMilliseconds,
         [System.Diagnostics.ProcessStartInfo]$TaskkillStartInfoOverride,
         [switch]$ForceTaskkill
     )
 
-    $clock = [System.Diagnostics.Stopwatch]::StartNew()
     $treeKillAttempted = $false
     $treeKillMethodName = ''
     $taskkillResult = $null
@@ -334,31 +391,14 @@ function Stop-WtHistoryProbeProcess {
     else {
         # Windows PowerShell 5.1 has only Process.Kill(), which cannot prove
         # descendant termination. Use the trusted system taskkill with /T /F,
-        # capture its result, and keep its execution/containment inside the
-        # caller's remaining total budget.
+        # capture its result, and keep its execution plus conditional helper
+        # containment inside the caller's one absolute deadline.
         $treeKillAttempted = $true
         $treeKillMethodName = 'taskkill.exe /T /F'
-        $rootProofReserve = [Math]::Min(250,
-            [Math]::Max(50, [int][Math]::Ceiling($WaitMilliseconds / 4.0)))
-        if ($rootProofReserve -ge $WaitMilliseconds) {
-            $rootProofReserve = [Math]::Max(0, $WaitMilliseconds - 1)
-        }
-        $taskkillBudget = $WaitMilliseconds - $rootProofReserve
-        if ($taskkillBudget -le 0) {
-            return [pscustomobject]@{
-                Proven = $false
-                Error = 'no bounded budget remains for process-tree taskkill'
-                TreeKillAttempted = $true
-                TreeKillMethod = $treeKillMethodName
-                TaskkillProcessId = -1
-                TaskkillStartTimeFileTimeUtc = -1
-                TaskkillTerminationProven = $true
-                TaskkillTimedOut = $false
-                TaskkillExitCode = -1
-            }
-        }
         $taskkillResult = Invoke-WtHistoryBoundedTaskkill `
-            -TargetPid $Process.Id -TimeoutMilliseconds $taskkillBudget `
+            -TargetPid $Process.Id -Clock $Clock `
+            -TaskkillDeadlineMilliseconds $TaskkillDeadlineMilliseconds `
+            -TotalDeadlineMilliseconds $TotalDeadlineMilliseconds `
             -StartInfoOverride $TaskkillStartInfoOverride
         if (-not $taskkillResult.Succeeded) {
             return [pscustomobject]@{
@@ -376,8 +416,12 @@ function Stop-WtHistoryProbeProcess {
     }
 
     try {
-        $remaining = [Math]::Max(0,
-            $WaitMilliseconds - [int]$clock.ElapsedMilliseconds)
+        # A successful action may donate unused taskkill time to root proof;
+        # the total deadline never moves. A timed-out helper instead consumes
+        # the same remaining interval for its own containment and returns
+        # without attempting root proof.
+        $remaining = Get-WtHistoryDeadlineRemainingMilliseconds `
+            -Clock $Clock -DeadlineMilliseconds $TotalDeadlineMilliseconds
         $proven = if ($Process.HasExited) { $true }
         elseif ($remaining -gt 0) {
             $Process.WaitForExit($remaining)
@@ -427,7 +471,6 @@ function Stop-WtHistoryProbeProcess {
             } else { -1 }
         }
     }
-    finally { $clock.Stop() }
 }
 
 function Invoke-WtHistoryBoundedProcessProbe {
@@ -438,15 +481,10 @@ function Invoke-WtHistoryBoundedProcessProbe {
         [switch]$ForceTaskkill
     )
 
-    # Reserve a bounded slice of the caller's advertised total budget for
-    # termination proof. Execution + kill + post-kill wait never requests more
-    # than TimeoutMs; there is no parameterless WaitForExit or Task.Result wait.
-    $terminationBudget = [Math]::Min(2000,
-        [Math]::Max(1000, [int][Math]::Ceiling($TimeoutMs / 5.0)))
-    if ($terminationBudget -ge $TimeoutMs) {
-        $terminationBudget = [int][Math]::Floor($TimeoutMs / 2.0)
-    }
-    $executionBudget = $TimeoutMs - $terminationBudget
+    # One monotonic stopwatch owns the advertised total budget. Every phase
+    # waits only to an absolute deadline, so process startup and prior work are
+    # charged before another bounded wait begins.
+    $plan = New-WtHistoryProbeDeadlinePlan -TimeoutMilliseconds $TimeoutMs
     $clock = [System.Diagnostics.Stopwatch]::StartNew()
     $process = New-Object System.Diagnostics.Process
     $process.StartInfo = $StartInfo
@@ -460,10 +498,17 @@ function Invoke-WtHistoryBoundedProcessProbe {
         $processStartTimeFileTimeUtc = [long]$process.StartTime.ToFileTimeUtc()
         $stdoutTask = $process.StandardOutput.ReadToEndAsync()
         $stderrTask = $process.StandardError.ReadToEndAsync()
-        if (-not $process.WaitForExit($executionBudget)) {
-            $remaining = [Math]::Max(0, $TimeoutMs - [int]$clock.ElapsedMilliseconds)
+        $networkRemaining = Get-WtHistoryDeadlineRemainingMilliseconds `
+            -Clock $clock `
+            -DeadlineMilliseconds $plan.NetworkDeadlineMilliseconds
+        $processExited = if ($process.HasExited) { $true }
+        elseif ($networkRemaining -gt 0) { $process.WaitForExit($networkRemaining) }
+        else { $process.HasExited }
+        if (-not $processExited) {
             $termination = Stop-WtHistoryProbeProcess -Process $process `
-                -WaitMilliseconds $remaining `
+                -Clock $clock `
+                -TaskkillDeadlineMilliseconds $plan.TaskkillDeadlineMilliseconds `
+                -TotalDeadlineMilliseconds $plan.TotalDeadlineMilliseconds `
                 -TaskkillStartInfoOverride $TaskkillStartInfoOverride `
                 -ForceTaskkill:$ForceTaskkill
             return [pscustomobject]@{
@@ -486,9 +531,11 @@ function Invoke-WtHistoryBoundedProcessProbe {
             }
         }
 
-        $remaining = [Math]::Max(0, $TimeoutMs - [int]$clock.ElapsedMilliseconds)
+        $remaining = Get-WtHistoryDeadlineRemainingMilliseconds `
+            -Clock $clock -DeadlineMilliseconds $plan.NetworkDeadlineMilliseconds
         $stdoutComplete = $stdoutTask.Wait($remaining)
-        $remaining = [Math]::Max(0, $TimeoutMs - [int]$clock.ElapsedMilliseconds)
+        $remaining = Get-WtHistoryDeadlineRemainingMilliseconds `
+            -Clock $clock -DeadlineMilliseconds $plan.NetworkDeadlineMilliseconds
         $stderrComplete = $stderrTask.Wait($remaining)
         if (-not $stdoutComplete -or -not $stderrComplete) {
             return [pscustomobject]@{
@@ -542,9 +589,10 @@ function Invoke-WtHistoryBoundedProcessProbe {
             TaskkillExitCode = -1
         }
         if ($started) {
-            $remaining = [Math]::Max(0, $TimeoutMs - [int]$clock.ElapsedMilliseconds)
             $termination = Stop-WtHistoryProbeProcess -Process $process `
-                -WaitMilliseconds $remaining `
+                -Clock $clock `
+                -TaskkillDeadlineMilliseconds $plan.TaskkillDeadlineMilliseconds `
+                -TotalDeadlineMilliseconds $plan.TotalDeadlineMilliseconds `
                 -TaskkillStartInfoOverride $TaskkillStartInfoOverride `
                 -ForceTaskkill:$ForceTaskkill
         }
@@ -642,6 +690,29 @@ function Invoke-FreshnessSelfTest {
         $start.RedirectStandardError = $true
         return $start
     }
+    function New-ExitingParentStartInfo([string]$ChildPidPath) {
+        $hostPath = (Get-Process -Id $PID).Path
+        if (-not $hostPath -or -not (Test-Path -LiteralPath $hostPath -PathType Leaf)) {
+            throw 'current PowerShell executable is unavailable'
+        }
+        $fixtureScript = Join-Path $PSScriptRoot `
+            'fixtures\wt_history\exiting_parent_process_tree.ps1'
+        if (-not (Test-Path -LiteralPath $fixtureScript -PathType Leaf)) {
+            throw "root-exit process fixture is unavailable: $fixtureScript"
+        }
+        if ($fixtureScript.Contains('"') -or $ChildPidPath.Contains('"')) {
+            throw 'root-exit process fixture paths cannot contain a quote'
+        }
+        $start = New-Object System.Diagnostics.ProcessStartInfo
+        $start.FileName = $hostPath
+        $start.Arguments = '-NoLogo -NoProfile -NonInteractive -File "' +
+            $fixtureScript + '" -ChildPidPath "' + $ChildPidPath + '"'
+        $start.UseShellExecute = $false
+        $start.CreateNoWindow = $true
+        $start.RedirectStandardOutput = $true
+        $start.RedirectStandardError = $true
+        return $start
+    }
     function New-FixturePidPath {
         $tempRoot = [IO.Path]::GetFullPath([IO.Path]::GetTempPath())
         $path = Join-Path $tempRoot `
@@ -674,7 +745,7 @@ function Invoke-FreshnessSelfTest {
     }
     function Read-FixtureChildIdentity([string]$Path) {
         $clock = [System.Diagnostics.Stopwatch]::StartNew()
-        while ($clock.ElapsedMilliseconds -lt 1000 -and
+        while ($clock.ElapsedMilliseconds -lt 5000 -and
             -not (Test-Path -LiteralPath $Path -PathType Leaf)) {
             Start-Sleep -Milliseconds 25
         }
@@ -760,6 +831,56 @@ function Invoke-FreshnessSelfTest {
             if ($fixture) { $fixture.Dispose() }
         }
     }
+    function Start-PreparedNestedFixture([string]$Label) {
+        $pidPath = New-FixturePidPath
+        $fixtureProcess = New-Object System.Diagnostics.Process
+        try {
+            $fixtureProcess.StartInfo = New-NestedHangingStartInfo $pidPath
+            if (-not $fixtureProcess.Start()) {
+                throw "$Label parent did not start"
+            }
+            $parentIdentity = Register-FixtureIdentity $fixtureIdentities `
+                "$Label parent" $fixtureProcess.Id `
+                ([long]$fixtureProcess.StartTime.ToFileTimeUtc())
+            $childRecordedIdentity = Read-FixtureChildIdentity $pidPath
+            if (-not $childRecordedIdentity) {
+                throw "$Label descendant identity was not recorded"
+            }
+            $childIdentity = Register-FixtureIdentity $fixtureIdentities `
+                "$Label descendant" `
+                ([int]$childRecordedIdentity.ProcessId) `
+                ([long]$childRecordedIdentity.StartTimeFileTimeUtc)
+            if (-not $parentIdentity -or -not $childIdentity) {
+                throw "$Label exact process identities are unavailable"
+            }
+            return [pscustomobject]@{
+                Process = $fixtureProcess
+                ParentIdentity = $parentIdentity
+                ChildIdentity = $childIdentity
+            }
+        }
+        catch {
+            $fixtureProcess.Dispose()
+            throw
+        }
+    }
+    function Assert-ExactIdentityState(
+        [string]$Context,
+        $Identity,
+        [string[]]$AllowedStates
+    ) {
+        if (-not $Identity) {
+            $failures.Add("$Context identity is unavailable") | Out-Null
+            return
+        }
+        $state = Get-WtHistoryProcessIdentityState `
+            -ProcessId $Identity.ProcessId `
+            -StartTimeFileTimeUtc $Identity.StartTimeFileTimeUtc
+        if ($AllowedStates -cnotcontains $state) {
+            $failures.Add("$Context identity state=$state expected=$($AllowedStates -join '/')") |
+                Out-Null
+        }
+    }
     $exact = [pscustomobject]@{
         ExitCode = 0; TimedOut = $false
         Stdout = "ref: refs/heads/master`tHEAD`n$('a' * 40)`tHEAD`n"
@@ -792,6 +913,77 @@ function Invoke-FreshnessSelfTest {
     $unavailable = [pscustomobject]@{ ExitCode = 128; TimedOut = $false; Stdout = '' }
     Assert-State 'optional unavailable' $unavailable $false 'skip'
     Assert-State 'required unavailable' $unavailable $true 'fail'
+
+    $deadlineCases = @(
+        [pscustomobject]@{ Total = 1000; Network = 250; Taskkill = 500; Post = 250 }
+        [pscustomobject]@{ Total = 2666; Network = 667; Taskkill = 1499; Post = 500 }
+        [pscustomobject]@{ Total = 2667; Network = 667; Taskkill = 1500; Post = 500 }
+        [pscustomobject]@{ Total = 3000; Network = 750; Taskkill = 1687; Post = 563 }
+        [pscustomobject]@{ Total = 5333; Network = 1334; Taskkill = 2999; Post = 1000 }
+        [pscustomobject]@{ Total = 5334; Network = 1334; Taskkill = 3000; Post = 1000 }
+        [pscustomobject]@{ Total = 15000; Network = 11000; Taskkill = 3000; Post = 1000 }
+        [pscustomobject]@{ Total = 60000; Network = 56000; Taskkill = 3000; Post = 1000 }
+    )
+    foreach ($expected in $deadlineCases) {
+        $plan = New-WtHistoryProbeDeadlinePlan `
+            -TimeoutMilliseconds $expected.Total
+        $sum = [int]$plan.NetworkMilliseconds +
+            [int]$plan.TaskkillMilliseconds +
+            [int]$plan.PostProofMilliseconds
+        if ([int]$plan.TotalMilliseconds -ne $expected.Total -or
+            [int]$plan.NetworkMilliseconds -ne $expected.Network -or
+            [int]$plan.TaskkillMilliseconds -ne $expected.Taskkill -or
+            [int]$plan.PostProofMilliseconds -ne $expected.Post -or
+            [int]$plan.NetworkDeadlineMilliseconds -ne $expected.Network -or
+            [int]$plan.TaskkillDeadlineMilliseconds -ne
+                ($expected.Network + $expected.Taskkill) -or
+            [int]$plan.TotalDeadlineMilliseconds -ne $expected.Total -or
+            $sum -ne $expected.Total -or
+            $plan.NetworkMilliseconds -le 0 -or
+            $plan.TaskkillMilliseconds -le 0 -or
+            $plan.PostProofMilliseconds -le 0 -or
+            $plan.NetworkDeadlineMilliseconds -ge
+                $plan.TaskkillDeadlineMilliseconds -or
+            $plan.TaskkillDeadlineMilliseconds -ge
+                $plan.TotalDeadlineMilliseconds) {
+            $failures.Add("deadline allocation mismatch for $($expected.Total)ms: $($plan | Out-String)") |
+                Out-Null
+        }
+    }
+    $previousPlan = $null
+    for ($totalMilliseconds = 1000; $totalMilliseconds -le 60000;
+        $totalMilliseconds++) {
+        $plan = New-WtHistoryProbeDeadlinePlan `
+            -TimeoutMilliseconds $totalMilliseconds
+        $sum = [int]$plan.NetworkMilliseconds +
+            [int]$plan.TaskkillMilliseconds +
+            [int]$plan.PostProofMilliseconds
+        $invalid = $sum -ne $totalMilliseconds -or
+            $plan.NetworkMilliseconds -le 0 -or
+            $plan.TaskkillMilliseconds -le 0 -or
+            $plan.PostProofMilliseconds -le 0 -or
+            $plan.NetworkDeadlineMilliseconds -ge
+                $plan.TaskkillDeadlineMilliseconds -or
+            $plan.TaskkillDeadlineMilliseconds -ge
+                $plan.TotalDeadlineMilliseconds
+        if ($previousPlan) {
+            $invalid = $invalid -or
+                $plan.NetworkMilliseconds -lt
+                    $previousPlan.NetworkMilliseconds -or
+                $plan.TaskkillMilliseconds -lt
+                    $previousPlan.TaskkillMilliseconds -or
+                $plan.PostProofMilliseconds -lt
+                    $previousPlan.PostProofMilliseconds -or
+                $plan.TaskkillDeadlineMilliseconds -lt
+                    $previousPlan.TaskkillDeadlineMilliseconds
+        }
+        if ($invalid) {
+            $failures.Add("deadline allocation invariant failed at ${totalMilliseconds}ms: $($plan | Out-String)") |
+                Out-Null
+            break
+        }
+        $previousPlan = $plan
+    }
 
     try {
         # Deterministic model of the hosted-runner race: a dead helper's PID is
@@ -934,89 +1126,235 @@ function Invoke-FreshnessSelfTest {
                 $_.Name -ceq 'Kill' -and $_.GetParameters().Count -eq 1 -and
                 $_.GetParameters()[0].ParameterType -eq [bool]
             }).Count -gt 0
-
-        $realPidPath = New-FixturePidPath
-        $realClock = [System.Diagnostics.Stopwatch]::StartNew()
-        $realTimeout = Invoke-WtHistoryBoundedProcessProbe `
-            -StartInfo (New-NestedHangingStartInfo $realPidPath) -TimeoutMs 3000
-        $realClock.Stop()
-        $realParentIdentity = Register-FixtureIdentity $fixtureIdentities `
-            'real nested parent' ([int]$realTimeout.ProcessId) `
-            ([long]$realTimeout.ProcessStartTimeFileTimeUtc)
-        $realChildRecordedIdentity = Read-FixtureChildIdentity $realPidPath
-        $realChildIdentity = if ($realChildRecordedIdentity) {
-            Register-FixtureIdentity $fixtureIdentities `
-                'real nested descendant' `
-                ([int]$realChildRecordedIdentity.ProcessId) `
-                ([long]$realChildRecordedIdentity.StartTimeFileTimeUtc)
-        } else {
-            $failures.Add('real nested descendant identity was not recorded') | Out-Null
-            $null
-        }
-        $realHelperIdentity = $null
-        if ($realTimeout.TaskkillProcessId -gt 0) {
-            $realHelperIdentity = Register-FixtureIdentity $helperIdentities `
-                'real taskkill helper' ([int]$realTimeout.TaskkillProcessId) `
-                ([long]$realTimeout.TaskkillStartTimeFileTimeUtc)
-        }
-        if (-not $realTimeout.TimedOut -or -not $realTimeout.KillAttempted -or
-            -not $realTimeout.TreeKillAttempted -or
-            -not $realTimeout.TerminationProven -or -not $realChildIdentity) {
-            $failures.Add("real nested process tree was not terminated with bounded proof: $($realTimeout | Out-String)") | Out-Null
-        }
-        if ($realClock.ElapsedMilliseconds -gt 5000) {
-            $failures.Add("real nested-tree timeout exceeded its bounded wall allowance: $($realClock.ElapsedMilliseconds)ms") | Out-Null
-        }
         $expectedTreeMethod = if ($treeKillSupported) {
             'Process.Kill(true)'
         } else { 'taskkill.exe /T /F' }
-        if ($realTimeout.TreeKillMethod -cne $expectedTreeMethod) {
-            $failures.Add("real nested tree used wrong termination method: expected=$expectedTreeMethod actual=$($realTimeout.TreeKillMethod)") | Out-Null
+
+        # A root may exit while a descendant retains its redirected handles.
+        # Output draining is network work and must fail closed at that phase's
+        # deadline instead of consuming the taskkill and proof allocations.
+        $outputPidPath = New-FixturePidPath
+        $outputClock = [System.Diagnostics.Stopwatch]::StartNew()
+        $outputProbe = Invoke-WtHistoryBoundedProcessProbe `
+            -StartInfo (New-ExitingParentStartInfo $outputPidPath) `
+            -TimeoutMs 5000
+        $outputClock.Stop()
+        $outputParentIdentity = Register-FixtureIdentity $fixtureIdentities `
+            'output-drain exited parent' ([int]$outputProbe.ProcessId) `
+            ([long]$outputProbe.ProcessStartTimeFileTimeUtc)
+        $outputChildRecordedIdentity = Read-FixtureChildIdentity $outputPidPath
+        $outputChildIdentity = if ($outputChildRecordedIdentity) {
+            Register-FixtureIdentity $fixtureIdentities `
+                'output-drain live descendant' `
+                ([int]$outputChildRecordedIdentity.ProcessId) `
+                ([long]$outputChildRecordedIdentity.StartTimeFileTimeUtc)
+        } else {
+            $failures.Add('output-drain descendant identity was not recorded') | Out-Null
+            $null
         }
-        if (-not $treeKillSupported -and
-            ($realTimeout.TaskkillExitCode -ne 0 -or
-                $realTimeout.TaskkillTimedOut -or
-                -not $realTimeout.TaskkillTerminationProven)) {
-            $failures.Add("PS5 taskkill result was not captured as an exact success: $($realTimeout | Out-String)") | Out-Null
+        if (-not $outputProbe.TimedOut -or $outputProbe.TerminationProven -or
+            $outputProbe.KillAttempted -or
+            $outputProbe.Stderr -cne 'bounded output drain expired' -or
+            $outputClock.ElapsedMilliseconds -gt 2250) {
+            $failures.Add("root-exit output drain did not stop at its network deadline: elapsed=$($outputClock.ElapsedMilliseconds) result=$($outputProbe | Out-String)") | Out-Null
         }
-        foreach ($identity in @($realParentIdentity, $realChildIdentity)) {
-            if (-not $identity) { continue }
-            $identityState = Get-WtHistoryProcessIdentityState `
-                -ProcessId $identity.ProcessId `
-                -StartTimeFileTimeUtc $identity.StartTimeFileTimeUtc
-            if (@('gone', 'reused') -cnotcontains $identityState) {
-                $failures.Add("$($identity.Label) identity is not proven gone: PID $($identity.ProcessId) state=$identityState") | Out-Null
+        Assert-State 'optional root-exit output drain' $outputProbe $false 'skip'
+        Assert-State 'required root-exit output drain' $outputProbe $true 'fail'
+        Assert-ExactIdentityState 'output-drain exited parent' `
+            $outputParentIdentity @('gone', 'reused')
+        Assert-ExactIdentityState 'output-drain live descendant' `
+            $outputChildIdentity @('alive')
+
+        # Prove the exact three-second termination allocation against a nested
+        # tree that is ready before the monotonic deadline begins. PS5 repeats
+        # the real taskkill path to expose hosted-runner latency variance.
+        $threeSecondPlan = New-WtHistoryProbeDeadlinePlan -TimeoutMilliseconds 3000
+        $realIterations = if ($treeKillSupported) { 1 } else { 3 }
+        for ($iteration = 1; $iteration -le $realIterations; $iteration++) {
+            $realLabel = "3s real tree $iteration"
+            $realFixture = Start-PreparedNestedFixture $realLabel
+            $realClock = [System.Diagnostics.Stopwatch]::StartNew()
+            try {
+                Start-Sleep -Milliseconds $threeSecondPlan.NetworkMilliseconds
+                $realTermination = Stop-WtHistoryProbeProcess `
+                    -Process $realFixture.Process -Clock $realClock `
+                    -TaskkillDeadlineMilliseconds `
+                        $threeSecondPlan.TaskkillDeadlineMilliseconds `
+                    -TotalDeadlineMilliseconds `
+                        $threeSecondPlan.TotalDeadlineMilliseconds
             }
-        }
-        if ($realHelperIdentity) {
-            $realHelperState = Get-WtHistoryProcessIdentityState `
-                -ProcessId $realHelperIdentity.ProcessId `
-                -StartTimeFileTimeUtc $realHelperIdentity.StartTimeFileTimeUtc
-            if (@('gone', 'reused') -cnotcontains $realHelperState) {
-                $failures.Add("real taskkill helper identity is not proven gone: PID $($realHelperIdentity.ProcessId) state=$realHelperState") | Out-Null
+            finally {
+                $realClock.Stop()
+                $realFixture.Process.Dispose()
+            }
+            $realHelperIdentity = $null
+            if ($realTermination.TaskkillProcessId -gt 0) {
+                $realHelperIdentity = Register-FixtureIdentity $helperIdentities `
+                    "$realLabel taskkill helper" `
+                    ([int]$realTermination.TaskkillProcessId) `
+                    ([long]$realTermination.TaskkillStartTimeFileTimeUtc)
+            }
+            if (-not $realTermination.Proven -or
+                -not $realTermination.TreeKillAttempted -or
+                $realTermination.TreeKillMethod -cne $expectedTreeMethod) {
+                $failures.Add("$realLabel was not terminated with bounded proof: $($realTermination | Out-String)") | Out-Null
+            }
+            if (-not $treeKillSupported -and
+                ($realTermination.TaskkillExitCode -ne 0 -or
+                    $realTermination.TaskkillTimedOut -or
+                    -not $realTermination.TaskkillTerminationProven)) {
+                $failures.Add("$realLabel PS5 taskkill was not an exact success: $($realTermination | Out-String)") | Out-Null
+            }
+            if ($realClock.ElapsedMilliseconds -gt 4000) {
+                $failures.Add("$realLabel exceeded the 3s deadline plus 1s scheduler allowance: $($realClock.ElapsedMilliseconds)ms") | Out-Null
+            }
+            Assert-ExactIdentityState "$realLabel parent" `
+                $realFixture.ParentIdentity @('gone', 'reused')
+            Assert-ExactIdentityState "$realLabel descendant" `
+                $realFixture.ChildIdentity @('gone', 'reused')
+            if ($realHelperIdentity) {
+                Assert-ExactIdentityState "$realLabel helper" `
+                    $realHelperIdentity @('gone', 'reused')
             }
         }
 
-        $failurePidPath = New-FixturePidPath
+        # One production-default PS5 case delays the wrapper before invoking
+        # the trusted real taskkill. It deterministically consumes the former
+        # 1.5s helper slice while fitting the new 3s action deadline.
+        if (-not $treeKillSupported) {
+            $defaultPlan = New-WtHistoryProbeDeadlinePlan `
+                -TimeoutMilliseconds 15000
+            $defaultFixture = Start-PreparedNestedFixture '15s delayed real tree'
+            $delayedCommand = 'Start-Sleep -Milliseconds 1500; ' +
+                '$taskkill = [IO.Path]::Combine($env:SystemRoot, ''System32'', ''taskkill.exe''); ' +
+                '& $taskkill /PID ' + $defaultFixture.Process.Id +
+                ' /T /F; exit $LASTEXITCODE'
+            $defaultClock = [System.Diagnostics.Stopwatch]::StartNew()
+            try {
+                Start-Sleep -Milliseconds $defaultPlan.NetworkMilliseconds
+                $defaultTermination = Stop-WtHistoryProbeProcess `
+                    -Process $defaultFixture.Process -Clock $defaultClock `
+                    -TaskkillDeadlineMilliseconds `
+                        $defaultPlan.TaskkillDeadlineMilliseconds `
+                    -TotalDeadlineMilliseconds `
+                        $defaultPlan.TotalDeadlineMilliseconds `
+                    -ForceTaskkill -TaskkillStartInfoOverride `
+                        (New-HostCommandStartInfo $delayedCommand)
+            }
+            finally {
+                $defaultClock.Stop()
+                $defaultFixture.Process.Dispose()
+            }
+            $defaultHelperIdentity = $null
+            if ($defaultTermination.TaskkillProcessId -gt 0) {
+                $defaultHelperIdentity = Register-FixtureIdentity $helperIdentities `
+                    '15s delayed real taskkill helper' `
+                    ([int]$defaultTermination.TaskkillProcessId) `
+                    ([long]$defaultTermination.TaskkillStartTimeFileTimeUtc)
+            }
+            if (-not $defaultTermination.Proven -or
+                $defaultTermination.TaskkillExitCode -ne 0 -or
+                $defaultTermination.TaskkillTimedOut -or
+                -not $defaultTermination.TaskkillTerminationProven -or
+                $defaultClock.ElapsedMilliseconds -lt 12400 -or
+                $defaultClock.ElapsedMilliseconds -gt 16000) {
+                $failures.Add("15s delayed real taskkill did not succeed inside its exact deadline: elapsed=$($defaultClock.ElapsedMilliseconds) result=$($defaultTermination | Out-String)") | Out-Null
+            }
+            Assert-ExactIdentityState '15s delayed real parent' `
+                $defaultFixture.ParentIdentity @('gone', 'reused')
+            Assert-ExactIdentityState '15s delayed real descendant' `
+                $defaultFixture.ChildIdentity @('gone', 'reused')
+            if ($defaultHelperIdentity) {
+                Assert-ExactIdentityState '15s delayed real helper' `
+                    $defaultHelperIdentity @('gone', 'reused')
+            }
+        }
+
+        # An already-expired action deadline must refuse to launch any helper.
+        $refusalClock = [System.Diagnostics.Stopwatch]::StartNew()
+        Start-Sleep -Milliseconds 25
+        $refusal = Invoke-WtHistoryBoundedTaskkill -TargetPid $PID `
+            -Clock $refusalClock -TaskkillDeadlineMilliseconds 10 `
+            -TotalDeadlineMilliseconds 100 `
+            -StartInfoOverride (New-HostCommandStartInfo 'Start-Sleep -Seconds 30')
+        $refusalClock.Stop()
+        if ($refusal.Succeeded -or -not $refusal.TimedOut -or
+            -not $refusal.TerminationProven -or $refusal.ProcessId -ne -1 -or
+            $refusal.Error -cne 'no bounded budget remains for process-tree taskkill') {
+            $failures.Add("expired taskkill deadline did not refuse before helper launch: $($refusal | Out-String)") | Out-Null
+        }
+
+        # A quick successful helper may donate unused action time forward. The
+        # target exits naturally after the action deadline but before the total
+        # deadline; root proof must observe that exit without moving the total.
+        $donationMarker = New-FixturePidPath
+        $donationCommand = '[IO.File]::WriteAllText(''' +
+            $donationMarker.Replace("'", "''") +
+            ''', ''ready''); Start-Sleep -Milliseconds 2600'
+        $donationProcess = New-Object System.Diagnostics.Process
+        try {
+            $donationProcess.StartInfo = New-HostCommandStartInfo $donationCommand
+            if (-not $donationProcess.Start()) {
+                throw 'unused-taskkill donation target did not start'
+            }
+            $donationIdentity = Register-FixtureIdentity $fixtureIdentities `
+                'unused-taskkill donation target' $donationProcess.Id `
+                ([long]$donationProcess.StartTime.ToFileTimeUtc())
+            $readyClock = [System.Diagnostics.Stopwatch]::StartNew()
+            while ($readyClock.ElapsedMilliseconds -lt 5000 -and
+                -not (Test-Path -LiteralPath $donationMarker -PathType Leaf)) {
+                Start-Sleep -Milliseconds 25
+            }
+            $readyClock.Stop()
+            if (-not (Test-Path -LiteralPath $donationMarker -PathType Leaf)) {
+                throw 'unused-taskkill donation target did not become ready'
+            }
+
+            $donationClock = [System.Diagnostics.Stopwatch]::StartNew()
+            Start-Sleep -Milliseconds $threeSecondPlan.NetworkMilliseconds
+            $donationTermination = Stop-WtHistoryProbeProcess `
+                -Process $donationProcess -Clock $donationClock `
+                -TaskkillDeadlineMilliseconds `
+                    $threeSecondPlan.TaskkillDeadlineMilliseconds `
+                -TotalDeadlineMilliseconds `
+                    $threeSecondPlan.TotalDeadlineMilliseconds `
+                -ForceTaskkill -TaskkillStartInfoOverride `
+                    (New-HostCommandStartInfo 'exit 0')
+            $donationClock.Stop()
+        }
+        finally { $donationProcess.Dispose() }
+        $donationHelperIdentity = $null
+        if ($donationTermination.TaskkillProcessId -gt 0) {
+            $donationHelperIdentity = Register-FixtureIdentity $helperIdentities `
+                'unused-taskkill donation helper' `
+                ([int]$donationTermination.TaskkillProcessId) `
+                ([long]$donationTermination.TaskkillStartTimeFileTimeUtc)
+        }
+        if (-not $donationTermination.Proven -or
+            $donationTermination.TaskkillExitCode -ne 0 -or
+            $donationClock.ElapsedMilliseconds -lt
+                $threeSecondPlan.TaskkillDeadlineMilliseconds -or
+            $donationClock.ElapsedMilliseconds -gt 4000) {
+            $failures.Add("unused taskkill time was not donated within the immutable total deadline: elapsed=$($donationClock.ElapsedMilliseconds) result=$($donationTermination | Out-String)") | Out-Null
+        }
+        Assert-ExactIdentityState 'unused-taskkill donation target' `
+            $donationIdentity @('gone', 'reused')
+        if ($donationHelperIdentity) {
+            Assert-ExactIdentityState 'unused-taskkill donation helper' `
+                $donationHelperIdentity @('gone', 'reused')
+        }
+
+        # Nonzero taskkill fails closed, preserves the exact target identity,
+        # and never spends the conditional proof bucket on an unrelated wait.
         $failureClock = [System.Diagnostics.Stopwatch]::StartNew()
         $taskkillFailure = Invoke-WtHistoryBoundedProcessProbe `
-            -StartInfo (New-NestedHangingStartInfo $failurePidPath) `
+            -StartInfo (New-HostCommandStartInfo 'Start-Sleep -Seconds 30') `
             -TimeoutMs 3000 -ForceTaskkill `
             -TaskkillStartInfoOverride (New-HostCommandStartInfo 'exit 7')
         $failureClock.Stop()
         $failureParentIdentity = Register-FixtureIdentity $fixtureIdentities `
-            'failed-taskkill nested parent' ([int]$taskkillFailure.ProcessId) `
+            'failed-taskkill target' ([int]$taskkillFailure.ProcessId) `
             ([long]$taskkillFailure.ProcessStartTimeFileTimeUtc)
-        $failureChildRecordedIdentity = Read-FixtureChildIdentity $failurePidPath
-        $failureChildIdentity = if ($failureChildRecordedIdentity) {
-            Register-FixtureIdentity $fixtureIdentities `
-                'failed-taskkill nested descendant' `
-                ([int]$failureChildRecordedIdentity.ProcessId) `
-                ([long]$failureChildRecordedIdentity.StartTimeFileTimeUtc)
-        } else {
-            $failures.Add('failed-taskkill nested descendant identity was not recorded') | Out-Null
-            $null
-        }
         $failureHelperIdentity = $null
         if ($taskkillFailure.TaskkillProcessId -gt 0) {
             $failureHelperIdentity = Register-FixtureIdentity $helperIdentities `
@@ -1033,50 +1371,30 @@ function Invoke-FreshnessSelfTest {
                 [StringComparison]::Ordinal) -lt 0) {
             $failures.Add("injected taskkill failure was not captured and fail-closed: $($taskkillFailure | Out-String)") | Out-Null
         }
-        if ($failureClock.ElapsedMilliseconds -gt 5000) {
+        if ($failureClock.ElapsedMilliseconds -gt 4000) {
             $failures.Add("injected taskkill failure exceeded its bounded wall allowance: $($failureClock.ElapsedMilliseconds)ms") | Out-Null
         }
         Assert-State 'optional taskkill failure' $taskkillFailure $false 'skip'
         Assert-State 'required taskkill failure' $taskkillFailure $true 'fail'
-        foreach ($identity in @($failureParentIdentity, $failureChildIdentity)) {
-            if (-not $identity) { continue }
-            $identityState = Get-WtHistoryProcessIdentityState `
-                -ProcessId $identity.ProcessId `
-                -StartTimeFileTimeUtc $identity.StartTimeFileTimeUtc
-            if ($identityState -cne 'alive') {
-                $failures.Add("$($identity.Label) was not retained alive for exact-identity cleanup: PID $($identity.ProcessId) state=$identityState") | Out-Null
-            }
-        }
+        Assert-ExactIdentityState 'failed-taskkill target' `
+            $failureParentIdentity @('alive')
         if ($failureHelperIdentity) {
-            $failureHelperState = Get-WtHistoryProcessIdentityState `
-                -ProcessId $failureHelperIdentity.ProcessId `
-                -StartTimeFileTimeUtc $failureHelperIdentity.StartTimeFileTimeUtc
-            if (@('gone', 'reused') -cnotcontains $failureHelperState) {
-                $failures.Add("failed taskkill helper identity is not proven gone: PID $($failureHelperIdentity.ProcessId) state=$failureHelperState") | Out-Null
-            }
+            Assert-ExactIdentityState 'failed taskkill helper' `
+                $failureHelperIdentity @('gone', 'reused')
         }
 
-        $timeoutPidPath = New-FixturePidPath
+        # A hanging helper consumes its action deadline, is contained only by
+        # the shared final proof bucket, and leaves the target for exact cleanup.
         $helperTimeoutClock = [System.Diagnostics.Stopwatch]::StartNew()
         $taskkillTimeout = Invoke-WtHistoryBoundedProcessProbe `
-            -StartInfo (New-NestedHangingStartInfo $timeoutPidPath) `
+            -StartInfo (New-HostCommandStartInfo 'Start-Sleep -Seconds 30') `
             -TimeoutMs 3000 -ForceTaskkill `
             -TaskkillStartInfoOverride `
                 (New-HostCommandStartInfo 'Start-Sleep -Seconds 30')
         $helperTimeoutClock.Stop()
         $timeoutParentIdentity = Register-FixtureIdentity $fixtureIdentities `
-            'timed-out-taskkill nested parent' ([int]$taskkillTimeout.ProcessId) `
+            'timed-out-taskkill target' ([int]$taskkillTimeout.ProcessId) `
             ([long]$taskkillTimeout.ProcessStartTimeFileTimeUtc)
-        $timeoutChildRecordedIdentity = Read-FixtureChildIdentity $timeoutPidPath
-        $timeoutChildIdentity = if ($timeoutChildRecordedIdentity) {
-            Register-FixtureIdentity $fixtureIdentities `
-                'timed-out-taskkill nested descendant' `
-                ([int]$timeoutChildRecordedIdentity.ProcessId) `
-                ([long]$timeoutChildRecordedIdentity.StartTimeFileTimeUtc)
-        } else {
-            $failures.Add('timed-out-taskkill nested descendant identity was not recorded') | Out-Null
-            $null
-        }
         $timeoutHelperIdentity = $null
         if ($taskkillTimeout.TaskkillProcessId -gt 0) {
             $timeoutHelperIdentity = Register-FixtureIdentity $helperIdentities `
@@ -1089,30 +1407,59 @@ function Invoke-FreshnessSelfTest {
             -not $taskkillTimeout.TaskkillTimedOut -or
             -not $taskkillTimeout.TaskkillTerminationProven -or
             $taskkillTimeout.TerminationError.IndexOf('timed out',
-                [StringComparison]::Ordinal) -lt 0) {
+                [StringComparison]::Ordinal) -lt 0 -or
+            $helperTimeoutClock.ElapsedMilliseconds -lt
+                ($threeSecondPlan.TaskkillDeadlineMilliseconds - 100)) {
             $failures.Add("taskkill helper timeout was not bounded, contained, and fail-closed: $($taskkillTimeout | Out-String)") | Out-Null
         }
-        if ($helperTimeoutClock.ElapsedMilliseconds -gt 5000) {
+        if ($helperTimeoutClock.ElapsedMilliseconds -gt 4000) {
             $failures.Add("taskkill helper timeout exceeded its bounded wall allowance: $($helperTimeoutClock.ElapsedMilliseconds)ms") | Out-Null
         }
         Assert-State 'optional taskkill timeout' $taskkillTimeout $false 'skip'
         Assert-State 'required taskkill timeout' $taskkillTimeout $true 'fail'
-        foreach ($identity in @($timeoutParentIdentity, $timeoutChildIdentity)) {
-            if (-not $identity) { continue }
-            $identityState = Get-WtHistoryProcessIdentityState `
-                -ProcessId $identity.ProcessId `
-                -StartTimeFileTimeUtc $identity.StartTimeFileTimeUtc
-            if ($identityState -cne 'alive') {
-                $failures.Add("$($identity.Label) was not retained alive for exact-identity cleanup: PID $($identity.ProcessId) state=$identityState") | Out-Null
-            }
+        Assert-ExactIdentityState 'timed-out-taskkill target' `
+            $timeoutParentIdentity @('alive')
+        if ($timeoutHelperIdentity) {
+            Assert-ExactIdentityState 'timed-out taskkill helper' `
+                $timeoutHelperIdentity @('gone', 'reused')
+        } else {
+            $failures.Add('timed-out taskkill helper identity is unavailable') | Out-Null
         }
-        $timeoutHelperState = if ($timeoutHelperIdentity) {
-            Get-WtHistoryProcessIdentityState `
-                -ProcessId $timeoutHelperIdentity.ProcessId `
-                -StartTimeFileTimeUtc $timeoutHelperIdentity.StartTimeFileTimeUtc
-        } else { 'unavailable' }
-        if (@('gone', 'reused') -cnotcontains $timeoutHelperState) {
-            $failures.Add("timed-out taskkill helper identity is not proven gone: PID $($taskkillTimeout.TaskkillProcessId) state=$timeoutHelperState") | Out-Null
+
+        # The minimum one-second contract remains fail closed: if hosted load
+        # consumes its short action slice, helper containment still shares the
+        # same absolute deadline and the exact target is retained for cleanup.
+        $minimumClock = [System.Diagnostics.Stopwatch]::StartNew()
+        $minimumTimeout = Invoke-WtHistoryBoundedProcessProbe `
+            -StartInfo (New-HostCommandStartInfo 'Start-Sleep -Seconds 30') `
+            -TimeoutMs 1000 -ForceTaskkill `
+            -TaskkillStartInfoOverride `
+                (New-HostCommandStartInfo 'Start-Sleep -Seconds 30')
+        $minimumClock.Stop()
+        $minimumTargetIdentity = Register-FixtureIdentity $fixtureIdentities `
+            '1s fail-closed target' ([int]$minimumTimeout.ProcessId) `
+            ([long]$minimumTimeout.ProcessStartTimeFileTimeUtc)
+        $minimumHelperIdentity = $null
+        if ($minimumTimeout.TaskkillProcessId -gt 0) {
+            $minimumHelperIdentity = Register-FixtureIdentity $helperIdentities `
+                '1s fail-closed helper' `
+                ([int]$minimumTimeout.TaskkillProcessId) `
+                ([long]$minimumTimeout.TaskkillStartTimeFileTimeUtc)
+        }
+        if (-not $minimumTimeout.TimedOut -or
+            $minimumTimeout.TerminationProven -or
+            -not $minimumTimeout.TaskkillTimedOut -or
+            -not $minimumTimeout.TaskkillTerminationProven -or
+            $minimumClock.ElapsedMilliseconds -gt 2000) {
+            $failures.Add("1s minimum timeout did not remain bounded and fail closed: elapsed=$($minimumClock.ElapsedMilliseconds) result=$($minimumTimeout | Out-String)") | Out-Null
+        }
+        Assert-State 'optional 1s timeout' $minimumTimeout $false 'skip'
+        Assert-State 'required 1s timeout' $minimumTimeout $true 'fail'
+        Assert-ExactIdentityState '1s fail-closed target' `
+            $minimumTargetIdentity @('alive')
+        if ($minimumHelperIdentity) {
+            Assert-ExactIdentityState '1s fail-closed helper' `
+                $minimumHelperIdentity @('gone', 'reused')
         }
     }
     catch {
@@ -1175,7 +1522,7 @@ function Invoke-FreshnessSelfTest {
         $failures | ForEach-Object { Write-Host "  X $_" -ForegroundColor Red }
         exit 2
     }
-    Write-Host '[check_wt_history_source_freshness:selftest] OK - identity policies, handle-bound PID-reuse-safe nested-tree termination, bounded taskkill failure/timeout containment, and no-orphan cleanup pass.' -ForegroundColor Green
+    Write-Host '[check_wt_history_source_freshness:selftest] OK - exact absolute deadlines, bounded output/action/proof phases, PID-reuse-safe tree termination, and no-orphan cleanup pass.' -ForegroundColor Green
     exit 0
 }
 

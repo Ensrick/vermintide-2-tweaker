@@ -417,7 +417,17 @@ optional-versus-required unavailability split under both PowerShell hosts. The
 captured status plus bounded helper containment. Nonzero, timed-out, or
 unproven termination returns immediately as unavailable. Real nested
 parent/descendant and injected taskkill failure/timeout fixtures prove the time
-bound, policy split, cleanup, and no root, descendant, or helper orphan.
+bound, policy split, cleanup, and no root, descendant, or helper orphan. One
+monotonic stopwatch allocates smooth, positive network/action/proof phases and
+charges process startup plus every output/process wait to absolute deadlines.
+At 3 seconds those phases are 750/1687/563 ms; the 15-second production default
+is 11000/3000/1000 ms, and the 60-second maximum is 56000/3000/1000 ms. The
+final proof phase is conditional: a timed-out helper uses it for containment,
+while a successful taskkill reserves it for root proof. An early successful
+taskkill may donate unused action time forward, but no phase moves the total
+deadline. Exhaustive allocator, root-exit output, expired-deadline, 1-second
+fail-closed, repeated real PS5 tree, and delayed-real-taskkill fixtures pin the
+contract under both PowerShell hosts.
 
 `check_wt_history_source_checkout.ps1` is the offline source-selection
 adversary. Under both PowerShell hosts it presents all three reproduction gates
