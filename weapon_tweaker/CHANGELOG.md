@@ -1,5 +1,20 @@
 # Weapon Tweaker Changelog
 
+## 0.12.320-beta (2026-08-30) -- source-exact Patch 3.1 Blunderbuss history (#1436) [not-started]
+
+- Adds a **Pre-Patch 3.1 (3.0.x source)** bounded patch-delta option to
+  Kruber's Blunderbuss history dropdown. It restores maximum ammunition from
+  the current `16` to the source-exact earlier value of `12`; `Current` remains
+  gameplay-inert.
+- Deliberately restores only that official adjacent balance change rather than
+  presenting it as a complete Game Version 3.0 state. The current-only Versus
+  Blunderbuss template remains untouched.
+- Pins and independently regenerates adjacent and current-source evidence under
+  PowerShell 7 and Windows PowerShell 5.1. A fail-closed completeness ledger
+  now distinguishes bounded patch deltas from complete direct historical
+  baselines and rejects catalog, scope, or count drift. No profile, hook, RPC,
+  or presentation state is added. #1436 remains open for the remaining slices.
+
 ## 0.12.319-beta (2026-08-29) -- source-exact Patch 3.2 One-Handed Axe history (#1436) [not-started]
 
 - Adds **Game Version 3.1.0** to Kerillian's One-handed Axe history dropdown.

@@ -39,6 +39,33 @@ Official scope references:
 - [Patch 5.2.0](https://www.vermintide.com/news/gifts-of-the-wolf-father-and-patch-520)
 - [Hotfix 5.2.3](https://forums.fatsharkgames.com/t/hotfix-megathread-5-2-x-current-5-2-3/91155)
 
+### Patch 3.1 boundary
+
+Patch 3.1 uses an adjacent-boundary contract for Kruber's Blunderbuss:
+
+| Role | Source revision |
+|---|---|
+| Pre-Patch 3.1 source | `c96aa3858011ecd557d55d80b66fe3bb8342eeb2` |
+| Post-boundary Patch 3.1 source | `3f0e3ba442d8dcafb8b5f829ff6c2a95ae24ae63` |
+| Current content anchor (6.12.0) | `038498af2b565bcb10bf5ed225638293a7640c83` |
+
+The adjacent source diff contains exactly one gameplay leaf:
+`blunderbuss_template_1.ammo_data.max_ammo`, from `12` to `16`. The
+historical selector projects only that bounded delta over the exact current
+`16` guard. It is not a complete Game 3.0 baseline. The current-only
+`blunderbuss_template_1_vs` is absent from both boundary revisions and remains
+explicitly excluded. The official boundary is
+[Patch 3.1](https://www.vermintide.com/news/patch-31).
+
+The runtime completeness ledger classifies this and every other exposed
+family/state as either `adjacent_delta` or
+`complete_direct_historical_baseline`. It records declared scope, official
+coverage, later-same-leaf/cumulative policy, explicit exclusions, and the
+exact `8 / 20 / 31 / 10 / 200` catalog/family/family-state/state/operation
+census. Default catalog loading refuses any missing, extra, duplicate,
+malformed, or count-drifted declaration; public and Dev ledger bytes must be
+identical.
+
 ### Patch 3.2 boundary
 
 Patch 3.2 uses an adjacent-boundary contract for Kerillian's One-Handed Axe:
@@ -163,6 +190,11 @@ From the repository root, with the pinned Vermintide source checkout available:
 ```powershell
 $lua = '.\qa\lua\vendor\lua-5.1.5-win64\lua5.1.exe'
 $source = 'C:\path\to\Vermintide-2-Source-Code'
+& $lua '.\tools\weapon-history\generate_patch_3_1_history.lua' `
+    $source `
+    '.\tools\weapon-history\evidence\patch_3_1' `
+    '.\weapon_tweaker\scripts\mods\weapon_tweaker\_wt_history_3_1_catalog.lua'
+
 & $lua '.\tools\weapon-history\generate_patch_3_2_history.lua' `
     $source `
     '.\tools\weapon-history\evidence\patch_3_2' `
@@ -202,6 +234,7 @@ $source = 'C:\path\to\Vermintide-2-Source-Code'
 Then run the non-mutating exact-output gate:
 
 ```powershell
+.\qa\run_wt_history_patch_3_1_host_matrix.ps1
 .\qa\run_wt_history_patch_3_2_host_matrix.ps1
 .\qa\check_wt_history_patch_4_1_1_reproducibility.ps1 -SourceRepo $source -RequireSource
 .\qa\run_wt_history_patch_4_1_1_host_matrix.ps1
@@ -213,7 +246,7 @@ Then run the non-mutating exact-output gate:
 .\qa\check_wt_history_patch_6_8_reproducibility.ps1 -SourceRepo $source -RequireSource
 ```
 
-`current_source_anchor.lua` is the single identity consumed by all seven
+`current_source_anchor.lua` is the single identity consumed by all eight
 generators and their PowerShell checks. It separates the semantic 6.12.0
 content commit from the later README-only default-branch tip. Ordinary QA runs
 `check_wt_history_source_freshness.ps1` opportunistically: an unreachable
@@ -238,9 +271,9 @@ through both evaluators, requires byte-exact primary output and exact-double
 semantic agreement with the independent oracle, regenerates the route/blob
 oracle, then requires byte-exact catalog equality. In source-less CI it still
 enforces every pinned artifact and reports source regeneration as a visible
-skip. The Patch 3.2, Patch 4.1.1, Patch 4.6, and Patch 6.8 gates apply the same fail-closed policy to
+skip. The Patch 3.1, Patch 3.2, Patch 4.1.1, Patch 4.6, and Patch 6.8 gates apply the same fail-closed policy to
 their adjacent boundaries, current-anchor rehydration, two evaluators, and
-generated catalogs. The Patch 3.2, Patch 4.1.1, Patch 4.6, and Patch 6.6 host matrices
+generated catalogs. The Patch 3.1, Patch 3.2, Patch 4.1.1, Patch 4.6, and Patch 6.6 host matrices
 apply that policy under both PowerShell 7 and Windows PowerShell 5.1; Patch 4.6
 accepts `-SourceRepo` and `-RequireSource` for the strict release proof, while
 ordinary source-less QA reports pinned-only validation without claiming source
@@ -249,7 +282,7 @@ present-false preservation, and Patch 6.6 includes
 both source paths plus the server-authority runtime contract. The Patch 4.6 gate additionally pins its
 seven-artifact census, independently regenerates the two current profile
 routes, and proves both emitted private profiles differ from current only by
-the absent finesse flag. Before any of the seven reproduction gates
+the absent finesse flag. Before any of the eight reproduction gates
 selects a source checkout, the central read-only selector proves every pinned
 commit, `commit:path` identity,
 and blob object. A stale or partial checkout is therefore unavailable: ordinary

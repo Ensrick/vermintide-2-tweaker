@@ -349,6 +349,10 @@ Run-Check "bundle_output_set_host_matrix" { & (Join-Path $here "run_bundle_outpu
 # Issue #1436: prove the offline evidence ledger and generated Patch 5.2
 # catalog are pinned; regenerate byte-exactly when the source checkout exists.
 Run-Check "check_wt_history_reproducibility" { & (Join-Path $here "check_wt_history_reproducibility.ps1") -Quiet:$Quiet }
+# Issue #1436: Patch 3.1's Blunderbuss selector is a one-leaf bounded delta,
+# not a complete 3.0 baseline. Reproduce the exact adjacent/current evidence,
+# current-only Versus exclusion, and completeness ledger on both hosts.
+Run-Check "wt_history_patch_3_1_host_matrix" { & (Join-Path $here "run_wt_history_patch_3_1_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
 # Issue #1436: Patch 3.2's Kerillian One-Handed Axe boundary uses an older
 # fallback-global source shape. Reproduce the adjacent/current evidence under
 # both PowerShell hosts and prove immutable evaluations cannot alias.
