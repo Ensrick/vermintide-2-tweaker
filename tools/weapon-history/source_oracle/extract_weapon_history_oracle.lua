@@ -138,8 +138,15 @@ local function git_blob(rev, path)
 end
 
 local symbol_mt = {}
-local symbol_cache = setmetatable({}, { __mode = "v" })
+local symbol_cache
 local source_lines = {}
+
+local function reset_symbol_cache()
+    -- Symbols are evaluation-local. Reusing a mutable proxy across immutable
+    -- revisions aliases the two snapshots and can erase a real source diff.
+    symbol_cache = setmetatable({}, { __mode = "v" })
+end
+reset_symbol_cache()
 
 local function remember_source(source, source_name)
     local lines = {}
@@ -282,6 +289,7 @@ local function merge(target, source)
 end
 
 local function environment()
+    reset_symbol_cache()
     local env = {
         assert = assert,
         error = error,
@@ -624,7 +632,27 @@ if self_test_mode then
         "expected_current = false", 1, true),
         "oracle standalone false serialization failed")
     assert(serialize({}) == "{}", "oracle standalone absence serialization failed")
-    io.write("source-oracle numeric and 3x3 presence serializers: PASS\n")
+
+    local old_templates = evaluate([[
+local weapon_template = weapon_template or {}
+weapon_template.actions = { action_one = { light = { value = 0.1 } } }
+return { test_template = table.clone(weapon_template) }
+]], "oracle-self-test-old")
+    local new_templates = evaluate([[
+local weapon_template = weapon_template or {}
+weapon_template.actions = { action_one = { light = { value = 0.2 } } }
+return { test_template = table.clone(weapon_template) }
+]], "oracle-self-test-new")
+    local old_template = old_templates.test_template
+    local new_template = new_templates.test_template
+    assert(old_template ~= new_template,
+        "oracle aliased immutable revision roots")
+    assert(old_template.actions.action_one.light.value == 0.1,
+        "oracle mutated the historical revision proxy")
+    assert(new_template.actions.action_one.light.value == 0.2,
+        "oracle lost the current revision value")
+
+    io.write("source-oracle numeric, presence, and revision isolation: PASS\n")
     return
 end
 

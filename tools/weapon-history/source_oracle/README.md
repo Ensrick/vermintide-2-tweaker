@@ -8,7 +8,7 @@ historical/current values remain in the preserved extractor evidence; and
 in the decompiled source checkout. No runtime-catalog value is an oracle input.
 
 The same independently written evaluator also reproduces the adjacent/current
-evidence lanes for Patch 4.1.1, 4.6, 6.0, 6.6, and 6.8. Patch 4.6 additionally
+evidence lanes for Patch 3.2, 4.1.1, 4.6, 6.0, 6.6, and 6.8. Patch 4.6 additionally
 uses `patch_4_6_source_spec.lua` to regenerate the exact two current Hagbane
 profile routes without reading the runtime catalog. Its enclosing gate also
 declares and preflights the Morris/Cog/Woods contributors used by both profile
@@ -16,7 +16,10 @@ rehydrators: six source files and 18 exact objects total, with lazy fetch and
 optional Git locks disabled after selection. Its `--self-test` includes an
 independent 3-by-3 true/false/absent presence table and serialized false-versus-
 absence assertions, so a present `false` source leaf cannot silently become an
-unset leaf.
+unset leaf. It also evaluates two adversarial immutable revisions that use the
+historical `local weapon_template = weapon_template or {}` pattern and proves
+their mutable symbolic roots remain distinct, preventing a later evaluation
+from overwriting an earlier snapshot and hiding a real source change.
 
 Pinned source input:
 

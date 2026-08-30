@@ -39,6 +39,26 @@ Official scope references:
 - [Patch 5.2.0](https://www.vermintide.com/news/gifts-of-the-wolf-father-and-patch-520)
 - [Hotfix 5.2.3](https://forums.fatsharkgames.com/t/hotfix-megathread-5-2-x-current-5-2-3/91155)
 
+### Patch 3.2 boundary
+
+Patch 3.2 uses an adjacent-boundary contract for Kerillian's One-Handed Axe:
+
+| Role | Source revision |
+|---|---|
+| Game version 3.1.0 | `3f0e3ba442d8dcafb8b5f829ff6c2a95ae24ae63` |
+| Post-boundary 3.2 scripts | `98965ca6e57e46d5a161f7262471b2124e0d0823` |
+| Current content anchor (6.12.0) | `038498af2b565bcb10bf5ed225638293a7640c83` |
+
+The adjacent evidence selects exactly one operation: the push-follow-up
+`additional_critical_strike_chance`, from historical `0.1` to post-boundary
+`0.2`. Current source no longer carries this leaf, so selecting Game Version
+3.1.0 adds exactly `0.1` and returning to Current removes the field. The
+independent oracle also proves that the older
+`local weapon_template = weapon_template or {}` source shape is evaluated with
+revision-local symbolic state; otherwise the later revision could overwrite
+the historical snapshot and hide the change. The official boundary is
+[Patch 3.2](https://www.vermintide.com/news/patch-32-quality-of-life-update).
+
 ### Patch 4.1.1 boundary
 
 Patch 4.1.1 uses an adjacent-boundary contract for the Masterwork Pistol:
@@ -143,6 +163,11 @@ From the repository root, with the pinned Vermintide source checkout available:
 ```powershell
 $lua = '.\qa\lua\vendor\lua-5.1.5-win64\lua5.1.exe'
 $source = 'C:\path\to\Vermintide-2-Source-Code'
+& $lua '.\tools\weapon-history\generate_patch_3_2_history.lua' `
+    $source `
+    '.\tools\weapon-history\evidence\patch_3_2' `
+    '.\weapon_tweaker\scripts\mods\weapon_tweaker\_wt_history_3_2_catalog.lua'
+
 & $lua '.\tools\weapon-history\generate_patch_4_1_1_history.lua' `
     $source `
     '.\tools\weapon-history\evidence\patch_4_1_1' `
@@ -177,6 +202,7 @@ $source = 'C:\path\to\Vermintide-2-Source-Code'
 Then run the non-mutating exact-output gate:
 
 ```powershell
+.\qa\run_wt_history_patch_3_2_host_matrix.ps1
 .\qa\check_wt_history_patch_4_1_1_reproducibility.ps1 -SourceRepo $source -RequireSource
 .\qa\run_wt_history_patch_4_1_1_host_matrix.ps1
 .\qa\check_wt_history_patch_4_6_reproducibility.ps1 -SourceRepo $source -RequireSource
@@ -187,7 +213,7 @@ Then run the non-mutating exact-output gate:
 .\qa\check_wt_history_patch_6_8_reproducibility.ps1 -SourceRepo $source -RequireSource
 ```
 
-`current_source_anchor.lua` is the single identity consumed by all six
+`current_source_anchor.lua` is the single identity consumed by all seven
 generators and their PowerShell checks. It separates the semantic 6.12.0
 content commit from the later README-only default-branch tip. Ordinary QA runs
 `check_wt_history_source_freshness.ps1` opportunistically: an unreachable
@@ -212,17 +238,18 @@ through both evaluators, requires byte-exact primary output and exact-double
 semantic agreement with the independent oracle, regenerates the route/blob
 oracle, then requires byte-exact catalog equality. In source-less CI it still
 enforces every pinned artifact and reports source regeneration as a visible
-skip. The Patch 4.1.1, Patch 4.6, and Patch 6.8 gates apply the same fail-closed policy to
+skip. The Patch 3.2, Patch 4.1.1, Patch 4.6, and Patch 6.8 gates apply the same fail-closed policy to
 their adjacent boundaries, current-anchor rehydration, two evaluators, and
-generated catalogs. The Patch 4.1.1, Patch 4.6, and Patch 6.6 host matrices
+generated catalogs. The Patch 3.2, Patch 4.1.1, Patch 4.6, and Patch 6.6 host matrices
 apply that policy under both PowerShell 7 and Windows PowerShell 5.1; Patch 4.6
 accepts `-SourceRepo` and `-RequireSource` for the strict release proof, while
 ordinary source-less QA reports pinned-only validation without claiming source
-regeneration. Patch 4.1.1 pins present-false preservation and Patch 6.6 includes
+regeneration. Patch 3.2 pins immutable-revision isolation, Patch 4.1.1 pins
+present-false preservation, and Patch 6.6 includes
 both source paths plus the server-authority runtime contract. The Patch 4.6 gate additionally pins its
 seven-artifact census, independently regenerates the two current profile
 routes, and proves both emitted private profiles differ from current only by
-the absent finesse flag. Before any of the six reproduction gates
+the absent finesse flag. Before any of the seven reproduction gates
 selects a source checkout, the central read-only selector proves every pinned
 commit, `commit:path` identity,
 and blob object. A stale or partial checkout is therefore unavailable: ordinary

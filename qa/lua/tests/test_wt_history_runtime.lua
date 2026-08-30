@@ -169,6 +169,102 @@ local function register(H, context)
         end)
     end)
 
+    H.test("WT #1436 Patch 3.1 Axe adds and restores an absent current leaf", function()
+        with_profile_globals(function()
+            local catalog = assert(loadfile(script_root
+                .. "_wt_history_3_2_catalog.lua"))()
+
+            local function roots_with_crit(present, value)
+                local bopp_sibling = { damage_profile = "light_slashing_smiter" }
+                local template_sibling = { marker = "preserve axe identity" }
+                local bopp = {
+                    damage_profile = bopp_sibling.damage_profile,
+                    metadata = bopp_sibling,
+                }
+                if present then
+                    bopp.additional_critical_strike_chance = value
+                end
+                local template = {
+                    actions = { action_one = { light_attack_bopp = bopp } },
+                    metadata = template_sibling,
+                    weapon_type = "AXE_1H",
+                }
+                return {
+                    BuffTemplates = {},
+                    ExplosionTemplates = {},
+                    PlayerUnitStatusSettings = {},
+                    Weapons = { we_one_hand_axe_template = template },
+                }, {
+                    bopp = bopp,
+                    bopp_sibling = bopp_sibling,
+                    template = template,
+                    template_sibling = template_sibling,
+                }
+            end
+
+            local current_roots, current_refs = roots_with_crit(false)
+            local current_before = clone(current_roots)
+            local current_runtime = Runtime.install({
+                catalog = catalog,
+                mod = mod_fixture({ wt_history_elf_one_handed_axe = "current" },
+                    { value = true }),
+                policy = Policy,
+                roots = current_roots,
+            })
+            H.equal(current_runtime.fatal_error, nil)
+            H.equal(current_runtime:verify(), nil)
+            H.equal(#(current_runtime.ledgers.elf_one_handed_axe or {}), 0)
+            H.deep_equal(current_roots, current_before,
+                "Current must leave the absent critical-chance leaf absent")
+            H.equal(current_refs.bopp.metadata, current_refs.bopp_sibling)
+
+            local history_roots, history_refs = roots_with_crit(false)
+            local history_before = clone(history_roots)
+            local history_runtime = Runtime.install({
+                catalog = catalog,
+                mod = mod_fixture({ wt_history_elf_one_handed_axe = "3_1_0" },
+                    { value = true }),
+                policy = Policy,
+                roots = history_roots,
+            })
+            H.equal(history_runtime.fatal_error, nil)
+            H.equal(history_runtime.last_error, nil)
+            H.equal(history_runtime:verify(), nil)
+            H.equal(#history_runtime.ledgers.elf_one_handed_axe, 1)
+            H.equal(history_refs.bopp.additional_critical_strike_chance, 0.1)
+            H.equal(history_refs.bopp.metadata, history_refs.bopp_sibling)
+            H.equal(history_roots.Weapons.we_one_hand_axe_template,
+                history_refs.template)
+            H.equal(history_refs.template.metadata, history_refs.template_sibling)
+
+            local restored = assert(history_runtime:restore())
+            H.equal(restored.refused, 0)
+            H.equal(restored.changed, true)
+            H.equal(rawget(history_refs.bopp,
+                "additional_critical_strike_chance"), nil)
+            H.deep_equal(history_roots, history_before,
+                "restore must remove the historically inserted leaf exactly")
+            H.equal(assert(history_runtime:restore()).changed, false)
+
+            local mismatch_roots, mismatch_refs = roots_with_crit(true, 0.2)
+            local mismatch_before = clone(mismatch_roots)
+            local mismatch_runtime = Runtime.install({
+                catalog = catalog,
+                mod = mod_fixture({ wt_history_elf_one_handed_axe = "3_1_0" },
+                    { value = true }),
+                policy = Policy,
+                roots = mismatch_roots,
+            })
+            H.truthy(mismatch_runtime.last_error
+                and mismatch_runtime.last_error:find(
+                    "current guard mismatch", 1, true) ~= nil)
+            H.equal(#(mismatch_runtime.ledgers.elf_one_handed_axe or {}), 0)
+            H.deep_equal(mismatch_roots, mismatch_before,
+                "a stale present leaf must refuse before any write")
+            H.equal(mismatch_refs.bopp.additional_critical_strike_chance, 0.2)
+        end)
+    end)
+
     H.test("WT #1436 Patch 6.7.2 changes only Greatsword first-heavy range", function()
         with_profile_globals(function()
             local catalog = assert(loadfile(script_root
