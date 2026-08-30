@@ -170,7 +170,7 @@ _rt_register("issue318_disabled_integrations_keep_normal_sections", function()
     for _, fn in ipairs({ "_mod_tweaker_view.lua", "_mod_tweaker_state.lua" }) do
         local txt = _gut_read_all(dir .. fn)
         if txt then
-            if not txt:find("disabled_sections.select_" .. "members(cats, _EQUIP_ROLE)", 1, true) then
+            if not txt:find("disabled_sections.select_equipment_" .. "members(cats)", 1, true) then
                 return "#318 " .. fn .. " no longer uses presence-based Equipment membership"
             end
             if not txt:find("disabled_sections.disable_group_" .. "subtree", 1, true) then
@@ -183,22 +183,77 @@ _rt_register("issue318_disabled_integrations_keep_normal_sections", function()
     end
 end)
 
-_rt_register("uitweaks_not_separate_modtweaker_tab", function()
-    -- #312 (reworked per user): HideBuffs must NOT be in the _MY_MODS whitelist.
-    -- UI Tweaks options live in gut's OWN menu under the single "UI Tweaks" group
-    -- (hb_group), not as a separate Mod Tweaker tab. A re-add resurrects the
-    -- duplicate tab the user flagged, so this now guards AGAINST the whitelist.
+-- (#636) Tweaker: Weapons Dev registers as wt_dev, while the public beta registers
+-- as wt. Both aliases must be discovered and folded into the same Weapons section.
+-- Keep this in the pure policy so the standalone view and keep sub-state cannot drift.
+_rt_register("issue636_wt_dev_equipment_collapsible", function()
+    local ok_p, Policy = pcall(mod.dofile, mod,
+        "scripts/mods/gui_tweaker/_mod_tweaker_disabled_sections")
+    if not ok_p or type(Policy) ~= "table" then
+        return "#636 Mod Tweaker integration policy unavailable"
+    end
+    if not Policy.is_author_mod("wt") or not Policy.is_author_mod("wt_dev") then
+        return "#636 a Tweaker: Weapons registration alias is missing from discovery"
+    end
+
+    local dev_widgets = {
+        { mod_name = "wt_dev" },
+        { setting_id = "weapon_availability", type = "group", depth = 1 },
+        { setting_id = "enable_dev_anim_picker", type = "checkbox", depth = 1 },
+        { setting_id = "wt_dev_hold_pose", type = "group", depth = 1 },
+    }
+    local members, count = Policy.select_equipment_members({
+        { mod_id = "wt", enabled = false, widgets = {
+            { mod_name = "wt" }, { setting_id = "weapon_availability" },
+        } },
+        { mod_id = "wt_dev", enabled = true, widgets = dev_widgets },
+        { mod_id = "character_weapon_variants", enabled = true, widgets = {
+            { mod_name = "character_weapon_variants" },
+            { setting_id = "cwv_weapon_availability" },
+        } },
+    })
+    local weapons = members and members.weapons
+    if count ~= 2 or not weapons or weapons.mod_id ~= "wt_dev"
+        or weapons.widgets ~= dev_widgets
+        or weapons.widgets[2].setting_id ~= "weapon_availability"
+        or weapons.widgets[3].setting_id ~= "enable_dev_anim_picker"
+        or weapons.widgets[4].setting_id ~= "wt_dev_hold_pose" then
+        return "#636 wt_dev did not retain the expected Weapons rows"
+    end
+
     local ok, info = pcall(debug.getinfo, mod.on_setting_changed or function() end, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
     local dir = src:match("^(.*[/\\])[^/\\]*$")
     if not dir then return end
-    local needle = "HideBuffs = " .. "true"
     for _, fn in ipairs({ "_mod_tweaker_view.lua", "_mod_tweaker_state.lua" }) do
         local txt = _gut_read_all(dir .. fn)
-        if txt and txt:find(needle, 1, true) then
-            return "HideBuffs is whitelisted in " .. fn .. " -- that resurrects the separate UI Tweaks tab (#312)"
+        if txt then
+            if not txt:find("disabled_sections.is_author_" .. "mod(mod_name)", 1, true) then
+                return "#636 " .. fn .. " bypasses shared authored-mod discovery"
+            end
+            if not txt:find("disabled_sections.select_equipment_" .. "members(cats)", 1, true) then
+                return "#636 " .. fn .. " bypasses shared Equipment aliases"
+            end
+            if not txt:find('"__equip_' .. 'weapons"', 1, true) then
+                return "#636 " .. fn .. " no longer creates the Weapons collapsible"
+            end
+            if not txt:find("_add_member(members." .. "weapons, 1)", 1, true) then
+                return "#636 " .. fn .. " no longer adds Tweaker: Weapons rows"
+            end
         end
+    end
+end)
+
+_rt_register("uitweaks_not_separate_modtweaker_tab", function()
+    -- #312 (reworked per user): HideBuffs must NOT be in authored-mod discovery.
+    -- UI Tweaks options live in gut's OWN menu under the single "UI Tweaks" group
+    -- (hb_group), not as a separate Mod Tweaker tab. A re-add resurrects the
+    -- duplicate tab the user flagged, so this now guards AGAINST the whitelist.
+    local ok_p, Policy = pcall(mod.dofile, mod,
+        "scripts/mods/gui_tweaker/_mod_tweaker_disabled_sections")
+    if ok_p and type(Policy) == "table" and Policy.is_author_mod("HideBuffs") then
+        return "HideBuffs is in authored-mod discovery -- that resurrects the separate UI Tweaks tab (#312)"
     end
 end)
 
@@ -363,9 +418,9 @@ end)
 _rt_register("mod_tweaker_no_integrated_toplevel_tabs", function()
     -- (#339) A third-party INTEGRATED mod must NEVER get a top-level Mod Tweaker tab --
     -- a tab is only for the author's own Tweaker-series mods. Crosshair Kill Confirmation
-    -- (#313, absorbed) must NOT be in the _MY_MODS whitelist of the two TAB-DRIVING files;
+    -- (#313, absorbed) must NOT be in the shared authored-mod discovery policy;
     -- its options fold INTO gut's Interface tab under the HUD group via _inject_ckc_into_gut
-    -- (the UI Tweaks / HideBuffs #312 precedent). Re-adding CKC to _MY_MODS resurrects the
+    -- (the UI Tweaks / HideBuffs #312 precedent). Re-adding CKC to that policy resurrects the
     -- wrong #313 tab this issue corrects. NOTE: the config-EXPORT whitelist in
     -- _gut_config_file.lua is a SEPARATE concern (settings snapshot/restore) and
     -- legitimately keeps CKC + HideBuffs, so it is intentionally NOT checked here.
@@ -375,15 +430,16 @@ _rt_register("mod_tweaker_no_integrated_toplevel_tabs", function()
     local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
     local dir = src:match("^(.*[/\\])[^/\\]*$")
     if not dir then return end
-    local ckc_tab_needle = '["Crosshair Kill Confirmation"] = ' .. "true"
+    local ok_p, Policy = pcall(mod.dofile, mod,
+        "scripts/mods/gui_tweaker/_mod_tweaker_disabled_sections")
+    if ok_p and type(Policy) == "table"
+        and Policy.is_author_mod("Crosshair Kill Confirmation") then
+        return "CKC is in authored-mod discovery -- resurrects the wrong #313 top-level tab (#339)"
+    end
     local fold_needle    = "_inject_ckc_into" .. "_gut"
     for _, fn in ipairs({ "_mod_tweaker_view.lua", "_mod_tweaker_state.lua" }) do
         local txt = _gut_read_all(dir .. fn)
         if txt then
-            if txt:find(ckc_tab_needle, 1, true) then
-                return "CKC is whitelisted in _MY_MODS in " .. fn ..
-                    " -- resurrects the wrong #313 top-level tab (#339); it must fold into the HUD group"
-            end
             if not txt:find(fold_needle, 1, true) then
                 return "_inject_ckc_into_gut fold missing from " .. fn ..
                     " -- CKC options would not appear under the Interface>HUD category (#339)"
