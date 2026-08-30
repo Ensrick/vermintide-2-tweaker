@@ -60,6 +60,12 @@ local function read(name)
             echo = function() end, info = function() end,
             warning = function() end, debug = function() end,
         }
+        mod.dofile = function(_, path)
+            if path == "scripts/mods/chaos_wastes_tweaker_dev/_ct_regression_resource_safety" then
+                return assert(loadfile(ct_root .. "_ct_regression_resource_safety.lua"))()
+            end
+            error("unexpected CT regression dofile: " .. tostring(path))
+        end
         mod._ct_rt_register = function(name, fn) registrations[name] = fn end
         if overrides.accessor ~= false then
             local injected = overrides.injected or {}
