@@ -235,9 +235,8 @@ local _ok_dumpc, _err_dumpc = pcall(mod.dofile, mod, "scripts/mods/crafting_in_m
 if not _ok_dumpc then mod:error("Failed to load _cim_dump_commands: %s", tostring(_err_dumpc)) end
 local _ok_tab, _err_tab = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded_dev/_cim_tab_preview")
 if not _ok_tab then mod:error("Failed to load _cim_tab_preview: %s", tostring(_err_tab)) end
--- Entry alias for the mid-mission keep detector (published by _cim_mission_forge_safety
--- above). The HDR regression checks in `_cim_regression_checks.lua` receive this
--- same helper through the late installer context.
+-- Entry alias from _cim_mission_forge_safety; the HDR checks in
+-- `_cim_regression_forge_surfaces.lua` receive it through the late context.
 local _is_in_keep = mod._cim_is_in_keep
 -- Pure destructive-cleanup policy (#277), shared with the offline Lua suite.
 -- Loaded once and kept on the mod table to preserve entry-chunk local headroom.
@@ -1511,23 +1510,16 @@ _install_command_owner({
     modded_loadout_save = _modded_loadout_save,
 })
 
--- Regression registrations live in one late-loaded module so every production
--- helper/hook above is installed before its invariant closes over the shared state.
--- The installer receives narrow accessors for entry-local mutable stores; public
--- flat mod._cim_* APIs and runtime hook/load order remain unchanged.
+-- Regression registrations load together after every production helper/hook.
+-- Their installers receive one narrow context for entry-local mutable stores;
+-- public flat mod._cim_* APIs and runtime registration order remain unchanged.
 local _install_cleanup_regression_checks = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_regression_cleanup")
-_install_cleanup_regression_checks({
-    mod = mod,
-    rt_register = _rt_register,
-    rt_src_read = _rt_src_read,
-    accessory_property_policy = mod._cim959_accessory_property_policy,
-})
-
 local _install_regression_checks = mod:dofile(
-    "scripts/mods/crafting_in_modded_dev/_cim_regression_checks"
-)
-_install_regression_checks({
+    "scripts/mods/crafting_in_modded_dev/_cim_regression_checks")
+local _install_regression_forge_surfaces = mod:dofile(
+    "scripts/mods/crafting_in_modded_dev/_cim_regression_forge_surfaces")
+local _regression_context = {
     mod = mod,
     rt_register = _rt_register,
     rt_src_read = _rt_src_read,
@@ -1551,6 +1543,10 @@ _install_regression_checks({
     set_modded_loadout = _LOADOUT_OWNER.set_modded_loadout,
     modded_loadout_load = _modded_loadout_load,
     rpc_schema = CIM_RPC_SCHEMA,
-})
+}
+_install_cleanup_regression_checks(_regression_context)
+local _regression_support = _install_regression_checks(_regression_context)
+_regression_context.with_loadout_sandbox = _regression_support.with_loadout_sandbox
+_install_regression_forge_surfaces(_regression_context)
 
 mod:info("[mem-probe] cim_dev boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_CIMD) / 1024)
