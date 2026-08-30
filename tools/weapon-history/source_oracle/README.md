@@ -9,8 +9,9 @@ in the decompiled source checkout. No runtime-catalog value is an oracle input.
 
 The same independently written evaluator also reproduces the adjacent/current
 evidence lanes for Patch 3.1, 3.2, 4.1.1, 4.6, 6.0, 6.6, and 6.8. Patch 3.1
-proves the single Blunderbuss `max_ammo` boundary and independently confirms
-that the current-only Versus template is outside the adjacent source family.
+proves the bounded Blunderbuss `max_ammo` and Tuskgor Spear
+`block_fatigue_point_multiplier` boundaries and independently confirms that
+the current-only Versus template is outside the adjacent Blunderbuss family.
 Patch 4.6 additionally
 uses `patch_4_6_source_spec.lua` to regenerate the exact two current Hagbane
 profile routes without reading the runtime catalog. Its enclosing gate also

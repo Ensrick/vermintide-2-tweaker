@@ -1,5 +1,18 @@
 # Weapon Tweaker Changelog
 
+## 0.12.321-beta (2026-08-30) -- source-exact Patch 3.1 Tuskgor Spear history (#1436) [not-started]
+
+- Extends the existing **Pre-Patch 3.1 (3.0.x source)** state with a separate
+  Tuskgor Spear family selector. The historical state restores
+  `block_fatigue_point_multiplier` from the current `0.5` to the source-exact
+  earlier value of `0.25`; `Current` remains gameplay-inert.
+- Projects exactly that one leaf over an exact current-value guard, preserving
+  sibling data and the existing Blunderbuss selector. No profiles, hooks, RPCs,
+  or global gameplay writes are added.
+- Pins adjacent and current-source evidence from immutable Git objects and
+  independently reproduces both evaluators under PowerShell 7 and Windows
+  PowerShell 5.1. #1436 remains open for the remaining historical slices.
+
 ## 0.12.320-beta (2026-08-30) -- source-exact Patch 3.1 Blunderbuss history (#1436) [not-started]
 
 - Adds a **Pre-Patch 3.1 (3.0.x source)** bounded patch-delta option to

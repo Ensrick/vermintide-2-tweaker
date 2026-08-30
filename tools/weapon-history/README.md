@@ -41,7 +41,8 @@ Official scope references:
 
 ### Patch 3.1 boundary
 
-Patch 3.1 uses an adjacent-boundary contract for Kruber's Blunderbuss:
+Patch 3.1 uses an adjacent-boundary contract for Kruber's Blunderbuss and
+Tuskgor Spear:
 
 | Role | Source revision |
 |---|---|
@@ -49,10 +50,11 @@ Patch 3.1 uses an adjacent-boundary contract for Kruber's Blunderbuss:
 | Post-boundary Patch 3.1 source | `3f0e3ba442d8dcafb8b5f829ff6c2a95ae24ae63` |
 | Current content anchor (6.12.0) | `038498af2b565bcb10bf5ed225638293a7640c83` |
 
-The adjacent source diff contains exactly one gameplay leaf:
-`blunderbuss_template_1.ammo_data.max_ammo`, from `12` to `16`. The
-historical selector projects only that bounded delta over the exact current
-`16` guard. It is not a complete Game 3.0 baseline. The current-only
+The adjacent source diff contains exactly two catalogued gameplay leaves:
+`blunderbuss_template_1.ammo_data.max_ammo`, from `12` to `16`, and
+`two_handed_heavy_spears_template.block_fatigue_point_multiplier`, from
+`0.25` to `0.5`. Each family selector projects only its own bounded delta over
+the exact current guard; neither is a complete Game 3.0 baseline. The current-only
 `blunderbuss_template_1_vs` is absent from both boundary revisions and remains
 explicitly excluded. The official boundary is
 [Patch 3.1](https://www.vermintide.com/news/patch-31).
@@ -61,7 +63,7 @@ The runtime completeness ledger classifies this and every other exposed
 family/state as either `adjacent_delta` or
 `complete_direct_historical_baseline`. It records declared scope, official
 coverage, later-same-leaf/cumulative policy, explicit exclusions, and the
-exact `8 / 20 / 31 / 10 / 200` catalog/family/family-state/state/operation
+exact `8 / 21 / 32 / 10 / 201` catalog/family/family-state/state/operation
 census. Default catalog loading refuses any missing, extra, duplicate,
 malformed, or count-drifted declaration; public and Dev ledger bytes must be
 identical.

@@ -403,14 +403,15 @@ proves every required commit, `commit:path`, and blob through read-only Git
 queries; missing, stale, or partial source keeps the pinned ledger active and
 emits a visible regeneration skip, while `-RequireSource` fails closed.
 
-`check_wt_history_patch_3_1_reproducibility.ps1` pins the exact three-file
-evidence census and two-artifact ledger for the bounded Blunderbuss slice. It
-proves the adjacent `max_ammo` change from `12` to `16`, rehydrates the exact
-current `16` guard, excludes the current-only Versus template, independently
-reproduces both evaluator lanes, and regenerates byte-identical public/dev
+`check_wt_history_patch_3_1_reproducibility.ps1` pins the exact five-file
+evidence census and four-artifact ledger for the bounded Blunderbuss and
+Tuskgor Spear slices. It proves the adjacent `max_ammo` change from `12` to
+`16` and block-cost change from `0.25` to `0.5`, rehydrates both exact current
+guards, excludes the current-only Versus template, independently reproduces
+both evaluator lanes, and regenerates byte-identical public/dev
 catalogs. It also pins the byte-identical machine-readable completeness ledger:
-8 catalogs, 20 unique families, 31 family/state rows, 10 distinct states, and
-200 scalar operations, with every exposed row classified as an adjacent delta
+8 catalogs, 21 unique families, 32 family/state rows, 10 distinct states, and
+201 scalar operations, with every exposed row classified as an adjacent delta
 or complete direct historical baseline. The blocking
 `run_wt_history_patch_3_1_host_matrix.ps1` repeats the gate and source-selection
 adversaries under PowerShell 7 and Windows PowerShell 5.1.
@@ -522,7 +523,7 @@ the complete pinned-artifact gate and reports the regeneration skip.
 | `check_vmf_widget_types.ps1` | ✅ OK | all 23 active `*_data.lua` clean post-gt v0.2.60-dev `text_input` fix (2026-05-25) |
 | `check_event_register_signature.ps1` | ✅ OK | clean post-gt v0.2.61 → .64 fix cycle (2026-05-25). This static check is the live gate; the former `bt:safe_event_register` runtime safety net (buff_tweaker v0.1.10-alpha+) is RETIRED (bt archived 2026-06). |
 | `check_wt_history_reproducibility.ps1` | ✅ OK (2026-08-28) | Issue #1436 full-QA gate for the pinned Patch 5.2 evidence ledger and byte-exact generated catalog; exact regeneration runs only from a checkout whose complete pinned commit/path/blob ledger passes the read-only selector. |
-| `run_wt_history_patch_3_1_host_matrix.ps1` | ✅ OK (2026-08-30) | Issue #1436 blocking dual-host gate for the exact bounded Patch 3.1 Blunderbuss maximum-ammunition boundary, current-only Versus exclusion, independent-oracle agreement, byte-exact public/dev catalogs, and fail-closed completeness ledger. |
+| `run_wt_history_patch_3_1_host_matrix.ps1` | ✅ OK (2026-08-30) | Issue #1436 blocking dual-host gate for the exact bounded Patch 3.1 Blunderbuss maximum-ammunition and Tuskgor Spear block-cost boundaries, current-only Versus exclusion, independent-oracle agreement, byte-exact public/dev catalogs, and fail-closed completeness ledger. |
 | `run_wt_history_patch_3_2_host_matrix.ps1` | ✅ OK (2026-08-29) | Issue #1436 blocking dual-host gate for the exact Patch 3.2 Kerillian One-Handed Axe boundary, absent current guard, revision-isolated older source evaluator, independent-oracle agreement, and byte-exact public/dev catalogs. |
 | `run_wt_history_patch_4_1_1_host_matrix.ps1` | ✅ OK (2026-08-29) | Issue #1436 blocking dual-host gate for the exact Patch 4.1.1 Masterwork Pistol boundary, present-false current guard, independent 3-by-3 evaluator presence tests, current rehydration, two-artifact/three-file evidence contract, and byte-exact public/dev catalogs. |
 | `check_wt_history_patch_4_6_reproducibility.ps1` | ✅ OK (2026-08-29) | Issue #1436 source-exact Hagbane-only Patch 4.6 gate: two finesse-DoT profile leaves, two current routes, current-schema private rehydration, Ricochet/weapon-diagram/refactor exclusions, primary/oracle agreement, and byte-exact public/dev catalogs. |

@@ -9,14 +9,15 @@ return {
         {
             catalog_id = "wt_history_patch_3_1_v1",
             cumulative_backfill = false,
-            declared_scope = "Blunderbuss Patch 3.1 maximum-ammunition leaf only",
+            declared_scope = "Patch 3.1 Blunderbuss maximum-ammunition and Tuskgor Spear block-cost leaves only",
             exclusions = {
                 { id = "current_only_versus_template", reason = "blunderbuss_template_1_vs is absent from both adjacent revisions and remains current" },
             },
             family_states = {
                 { family_id = "kruber_blunderbuss", operations = 1, profiles = 0, state_id = "pre_3_1_delta" },
+                { family_id = "tuskgor_spear", operations = 1, profiles = 0, state_id = "pre_3_1_delta" },
             },
-            later_same_leaf_policy = "only the adjacent 12-to-16 boundary delta is projected over the current 16 guard",
+            later_same_leaf_policy = "only the adjacent 12-to-16 ammo and 0.25-to-0.5 block-cost deltas are projected over exact current guards",
             official_coverage = "complete_for_declared_scope",
             projection_kind = "adjacent_delta",
         },
@@ -146,9 +147,9 @@ return {
     stream_identity = "public_dev_byte_identical",
     totals = {
         catalogs = 8,
-        families = 20,
-        family_states = 31,
-        operations = 200,
+        families = 21,
+        family_states = 32,
+        operations = 201,
         states = 10,
     },
 }

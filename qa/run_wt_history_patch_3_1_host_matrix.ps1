@@ -1,5 +1,5 @@
-# Blocking dual-host provenance gate for issue #1436's Patch 3.1 Blunderbuss
-# slice. Both PowerShell hosts independently validate the pinned ledger,
+# Blocking dual-host provenance gate for issue #1436's bounded Patch 3.1
+# Blunderbuss and Tuskgor Spear slices. Both PowerShell hosts validate the ledger,
 # reproduce adjacent/current source evidence when the source checkout exists,
 # and regenerate the byte-exact catalog outside the repository.
 

@@ -265,6 +265,111 @@ local function register(H, context)
         end)
     end)
 
+    H.test("WT #1436 Patch 3.1 Tuskgor block cost is atomic and fail-closed", function()
+        with_profile_globals(function()
+            local catalog = assert(loadfile(script_root
+                .. "_wt_history_3_1_catalog.lua"))()
+
+            local function roots_with_block_cost(present, value)
+                local metadata = { marker = "preserve Tuskgor identity" }
+                local template = {
+                    metadata = metadata,
+                    outer_block_fatigue_point_multiplier = 2,
+                    weapon_type = "SPEAR_2H",
+                }
+                if present then
+                    template.block_fatigue_point_multiplier = value
+                end
+                return {
+                    BuffTemplates = {},
+                    ExplosionTemplates = {},
+                    PlayerUnitStatusSettings = {},
+                    Weapons = {
+                        two_handed_heavy_spears_template = template,
+                    },
+                }, {
+                    metadata = metadata,
+                    template = template,
+                }
+            end
+
+            local current_roots, current_refs = roots_with_block_cost(true, 0.5)
+            local current_before = clone(current_roots)
+            local current_runtime = Runtime.install({
+                catalog = catalog,
+                mod = mod_fixture({ wt_history_tuskgor_spear = "current" },
+                    { value = true }),
+                policy = Policy,
+                roots = current_roots,
+            })
+            H.equal(current_runtime.fatal_error, nil)
+            H.equal(current_runtime:verify(), nil)
+            H.equal(#(current_runtime.ledgers.tuskgor_spear or {}), 0)
+            H.deep_equal(current_roots, current_before)
+            H.equal(current_roots.Weapons.two_handed_heavy_spears_template,
+                current_refs.template)
+            H.equal(current_refs.template.metadata, current_refs.metadata)
+
+            local history_roots, history_refs = roots_with_block_cost(true, 0.5)
+            local history_before = clone(history_roots)
+            local history_runtime = Runtime.install({
+                catalog = catalog,
+                mod = mod_fixture({
+                    wt_history_tuskgor_spear = "pre_3_1_delta",
+                }, { value = true }),
+                policy = Policy,
+                roots = history_roots,
+            })
+            H.equal(history_runtime.fatal_error, nil)
+            H.equal(history_runtime.last_error, nil)
+            H.equal(history_runtime:verify(), nil)
+            H.equal(#history_runtime.ledgers.tuskgor_spear, 1)
+            H.equal(history_refs.template.block_fatigue_point_multiplier, 0.25)
+            H.equal(history_refs.template.outer_block_fatigue_point_multiplier, 2)
+            H.equal(history_refs.template.metadata, history_refs.metadata)
+            H.equal(history_roots.Weapons.two_handed_heavy_spears_template,
+                history_refs.template)
+            local unchanged = assert(history_runtime:reapply())
+            H.equal(unchanged.refused, 0)
+            H.equal(unchanged.changed, false)
+            H.equal(#history_runtime.ledgers.tuskgor_spear, 1)
+
+            local restored = assert(history_runtime:restore())
+            H.equal(restored.refused, 0)
+            H.equal(restored.changed, true)
+            H.equal(history_refs.template.block_fatigue_point_multiplier, 0.5)
+            H.deep_equal(history_roots, history_before)
+            H.equal(assert(history_runtime:restore()).changed, false)
+
+            for _, hostile in ipairs({
+                { present = true, value = 0.25, label = "historical" },
+                { present = true, value = 0.49, label = "foreign" },
+                { present = false, label = "absent" },
+            }) do
+                local hostile_roots, hostile_refs = roots_with_block_cost(
+                    hostile.present, hostile.value)
+                local hostile_before = clone(hostile_roots)
+                local hostile_runtime = Runtime.install({
+                    catalog = catalog,
+                    mod = mod_fixture({
+                        wt_history_tuskgor_spear = "pre_3_1_delta",
+                    }, { value = true }),
+                    policy = Policy,
+                    roots = hostile_roots,
+                })
+                H.truthy(hostile_runtime.last_error
+                    and hostile_runtime.last_error:find(
+                        "current guard mismatch", 1, true) ~= nil,
+                    hostile.label .. " guard must refuse")
+                H.equal(#(hostile_runtime.ledgers.tuskgor_spear or {}), 0)
+                H.deep_equal(hostile_roots, hostile_before,
+                    hostile.label .. " refusal must occur before writes")
+                H.equal(hostile_refs.template.metadata, hostile_refs.metadata)
+                H.equal(hostile_refs.template.outer_block_fatigue_point_multiplier, 2)
+            end
+        end)
+    end)
+
     H.test("WT #1436 Patch 6.7.2 changes only Greatsword first-heavy range", function()
         with_profile_globals(function()
             local catalog = assert(loadfile(script_root
