@@ -8,10 +8,8 @@ param([string]$SourceRepo, [switch]$RequireSource, [switch]$Quiet)
 
 $ErrorActionPreference = 'Stop'
 $checkPath = Join-Path $PSScriptRoot 'check_wt_history_patch_4_6_reproducibility.ps1'
-$freshnessPath = Join-Path $PSScriptRoot 'check_wt_history_source_freshness.ps1'
-$sourceCheckoutPath = Join-Path $PSScriptRoot 'check_wt_history_source_checkout.ps1'
 
-foreach ($requiredPath in @($checkPath, $freshnessPath, $sourceCheckoutPath)) {
+foreach ($requiredPath in @($checkPath)) {
     if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) {
         Write-Host "[wt-history-patch-4-6-host-matrix] ERROR -- missing $requiredPath" -ForegroundColor Red
         exit 2
@@ -54,26 +52,6 @@ foreach ($hostEntry in $hosts) {
 
     if (-not $Quiet) {
         Write-Host ("=== {0}: Patch 4.6 history reproduction ===" -f $hostEntry.Name) -ForegroundColor Cyan
-    }
-
-    $freshnessArguments = @('-NoLogo', '-NoProfile', '-NonInteractive',
-        '-File', $freshnessPath, '-SelfTest')
-    & $hostEntry.Path @freshnessArguments
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host ("  [FAIL] {0} freshness fixtures (exit {1})" -f
-            $hostEntry.Name, $LASTEXITCODE) -ForegroundColor Red
-        $failed += $hostEntry.Name
-        continue
-    }
-
-    $sourceCheckoutArguments = @('-NoLogo', '-NoProfile', '-NonInteractive',
-        '-File', $sourceCheckoutPath, '-SelfTest')
-    & $hostEntry.Path @sourceCheckoutArguments
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host ("  [FAIL] {0} source-checkout fixtures (exit {1})" -f
-            $hostEntry.Name, $LASTEXITCODE) -ForegroundColor Red
-        $failed += $hostEntry.Name
-        continue
     }
 
     $guardArguments = @('-NoLogo', '-NoProfile', '-NonInteractive',

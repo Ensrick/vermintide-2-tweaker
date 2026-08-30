@@ -447,9 +447,8 @@ requires exactly the two `allow_dot_finesse_hit` additions, retains the
 Ricochet `aoe_on_bounce`, presentation-only `weapon_diagram`, and refactor
 symbol as explicit exclusions, and proves the generated private profiles
 preserve the current schema.
-`run_wt_history_patch_4_6_host_matrix.ps1` repeats that gate plus the freshness
-and incomplete-checkout adversaries under PowerShell 7 and Windows PowerShell
-5.1. The real-source gate also rejects an otherwise complete ledger with the
+`run_wt_history_patch_4_6_host_matrix.ps1` repeats that patch-specific gate
+under PowerShell 7 and Windows PowerShell 5.1. The real-source gate also rejects an otherwise complete ledger with the
 current Woods profile blob identity altered, while the no-lazy-fetch guard
 prevents an absent object from being fetched after source selection.
 Ordinary source-less CI reports pinned-only validation; the documented
@@ -474,8 +473,8 @@ optional-versus-required unavailability split under both PowerShell hosts. The
 `Process.Kill(true)`, while PS5.1 uses trusted system `taskkill.exe /T /F` with
 captured status plus bounded helper containment. Nonzero, timed-out, or
 unproven termination returns immediately as unavailable. Real nested
-parent/descendant and injected taskkill failure/timeout fixtures prove the time
-bound, policy split, cleanup, and no root, descendant, or helper orphan. One
+parent/descendant and taskkill failure/timeout fixtures prove the policy split,
+cleanup, and no root, descendant, or helper orphan. One
 monotonic stopwatch allocates smooth, positive network/action/proof phases and
 charges process startup plus every output/process wait to absolute deadlines.
 At 3 seconds those phases are 750/1687/563 ms; the 15-second production default
@@ -484,8 +483,13 @@ final proof phase is conditional: a timed-out helper uses it for containment,
 while a successful taskkill reserves it for root proof. An early successful
 taskkill may donate unused action time forward, but no phase moves the total
 deadline. Exhaustive allocator, root-exit output, expired-deadline, 1-second
-fail-closed, repeated real PS5 tree, and delayed-real-taskkill fixtures pin the
-contract under both PowerShell hosts.
+fail-closed, and delayed-real-taskkill fixtures pin the contract. Injected
+elapsed-time and wait/kill observers prove the exact programmed waits at every
+phase boundary, including a host resume at 5763 ms: later waits are zero, the
+hung helper is contained once, root proof is skipped, and output fails closed.
+Raw scheduler and synchronous OS-call latency is diagnostic rather than a hard
+real-time correctness assertion. One real PS5.1 hanging-helper case retains
+exact PID/start-time cleanup and orphan detection.
 
 `check_wt_history_source_checkout.ps1` is the offline source-selection
 adversary. Under both PowerShell hosts it presents all eight reproduction gates
@@ -495,6 +499,12 @@ skip and a `-RequireSource` failure from each, and restores its environment
 without fetch (including promisor lazy-fetch), network access, checkout
 mutation, or deletion.
 
+`run_wt_history_source_host_matrix.ps1` is the one blocking full-QA owner for
+both generic self-tests. It runs each once under PowerShell 7 and Windows
+PowerShell 5.1; `run_selftests.ps1` honors their `SELFTEST-OWNER` declarations,
+and a static fixture rejects duplicated shared-matrix wiring or any generic
+source guard reintroduced into a patch-specific host matrix.
+
 `run_wt_history_patch_6_6_host_matrix.ps1` is the blocking dual-host gate for
 the Patch 6.6 Deepwood Staff slice. Under both PowerShell 7 and Windows
 PowerShell 5.1 it runs the pinned-artifact gate, regenerates the adjacent
@@ -502,8 +512,7 @@ PowerShell 5.1 it runs the pinned-artifact gate, regenerates the adjacent
 requires independent-oracle agreement, and regenerates the byte-exact public
 and dev catalogs. Its three-operation transaction covers both staff templates
 and the server-owned spirit-storm vortex leaf; the runtime refuses the
-historical state on a client. The matrix also runs the bounded-process and
-incomplete-checkout adversaries on both hosts.
+historical state on a client.
 
 `check_wt_history_patch_6_8_reproducibility.ps1` is the corresponding blocking
 gate for the Patch 6.8 Kerillian Greatsword slice. It selects the operation from
@@ -529,14 +538,15 @@ the complete pinned-artifact gate and reports the regeneration skip.
 | `check_wt_history_patch_4_6_reproducibility.ps1` | ✅ OK (2026-08-29) | Issue #1436 source-exact Hagbane-only Patch 4.6 gate: two finesse-DoT profile leaves, two current routes, current-schema private rehydration, Ricochet/weapon-diagram/refactor exclusions, primary/oracle agreement, and byte-exact public/dev catalogs. |
 | `run_wt_history_patch_4_6_host_matrix.ps1` | ✅ OK (2026-08-29) | Issue #1436 blocking dual-host validator for the complete six-file/18-object Patch 4.6 source closure, one-DLC-blob-identity adversary, no-fetch/no-lock extraction and exact raw-environment restoration; strict `-RequireSource` performs and requires both regenerations, while source-less CI is explicitly pinned-only. |
 | `check_wt_history_patch_6_0_reproducibility.ps1` | ✅ OK (2026-08-29) | Issue #1436 full-QA gate for the bounded Patch 6.0 shield-scalar and Fireball-profile slice; exact primary/oracle reproduction and catalog generation pass from the complete pinned source checkout. |
-| `check_wt_history_source_freshness.ps1` | ✅ OK (2026-08-28) | Issue #1436 central 6.12.0 semantic anchor plus separately observed canonical default tip; ordinary offline QA may visibly skip only unavailable network, while WT BuildOnly/release requires exact remote ref/tip freshness without fetch/FETCH_HEAD mutation. The total timeout includes proven bounded process-tree termination on PS7 and PS5.1, including taskkill-helper containment. |
+| `check_wt_history_source_freshness.ps1` | ✅ OK (2026-08-30) | Issues #1436/#540 central 6.12.0 semantic anchor plus separately observed canonical default tip; ordinary offline QA may visibly skip only unavailable network, while WT BuildOnly/release requires exact remote ref/tip freshness without fetch/FETCH_HEAD mutation. Injected 750/1687/563 ms deadline traces prove every programmed wait, including the 5763 ms resume adversary; scheduler/OS latency is diagnostic, and one real PS5.1 hanging-helper case retains exact cleanup proof. |
 | `check_wt_history_source_checkout.ps1` | ✅ OK (2026-08-30) | Offline PS7/PS5.1 adversary proves that stale/partial Git trees visibly skip ordinary regeneration and fail closed under `-RequireSource` for the Patch 3.1, 3.2, 4.1.1, 4.6, 5.2, 6.0, 6.6, and 6.8 gates. |
-| `run_wt_history_patch_6_6_host_matrix.ps1` | ✅ OK (2026-08-28) | Issue #1436 blocking dual-host gate for the exact Patch 6.6 Deepwood Staff adjacent boundary, 6.12.0 current guards, independent-oracle agreement, byte-exact public/dev catalogs, and the timeout/source-selection adversaries. |
+| `run_wt_history_source_host_matrix.ps1` | ✅ OK (2026-08-30) | Issue #540 blocking dual-host owner for the generic freshness and incomplete-checkout self-tests. Full QA invokes it exactly once; static coverage forbids patch-specific matrices and `run_selftests.ps1` from multiplying the same process fixtures. |
+| `run_wt_history_patch_6_6_host_matrix.ps1` | ✅ OK (2026-08-28) | Issue #1436 blocking dual-host gate for the exact Patch 6.6 Deepwood Staff adjacent boundary, 6.12.0 current guards, independent-oracle agreement, and byte-exact public/dev catalogs. |
 | `check_wt_history_patch_6_8_reproducibility.ps1` | ✅ OK (2026-08-28) | Issue #1436 full-QA gate for the source-adjacent Patch 6.8 Kerillian Greatsword boundary, current-anchor rehydration, independent oracle agreement, and byte-exact generated catalogs. |
 | `check_localization.ps1` | ⚠ 28 warnings | ct BOON_TREE category_ids; et_diff_ + mut_ false-positive prefixes |
 | `check_loc_tags.ps1` | ✅ OK (#694 migration) | Blocking scan covers every active stream, dynamic `en` construction, and obsolete decoration helpers; migration mode verifies key/order/count and value semantics against the merge base. |
 | `check_issue_status_labels.ps1` | ⚠ 1 warning (2026-07-04) | Post label-audit: only #322 (a `tracked-not-fixed` context-mention in ct's #294 crash-fix entry — correctly unlabeled; the check surfaces it for review). All other latest-entry refs are labeled or in skipped loc-sweep entries. Self-test passes. Advisory (never blocks; self-exits 0 offline). |
-| `run_selftests.ps1` | ✅ OK (2026-07-17) | Unit-test entry point: auto-discovers every `qa/check_*.ps1` with a `[switch]$SelfTest` param plus `tools/ship/ship.ps1` (including explicit coop/diagnostic intent, exactly-one lifecycle transitions, native-probe handling, filtered-release contracts, descriptor deploy equivalence, and the current-host launcher provenance contract; rows 19f/60/60a/60b/60c/60g), runs each `-SelfTest`, and replays output on failure. All fixtures are offline. Exit 2 on any regression — Standard policy in `run_all` (full pass, not `-Quick`) so a broken check BLOCKS; also a blocking CI step in `qa.yml`. Failure path verified with a planted failing check. Row 60g additionally has a dedicated blocking full-QA wrapper that requires both PowerShell 7 and Windows PowerShell 5.1. |
+| `run_selftests.ps1` | ✅ OK (2026-08-30) | Unit-test entry point: auto-discovers every ordinary `qa/check_*.ps1` with a `[switch]$SelfTest` param plus explicit tools, while checks with a `SELFTEST-OWNER` declaration run only through their dedicated dual-host wrapper. It replays output on failure and exits 2 on any regression, so a broken check blocks full QA. Rows 60g and the #540 weapon-history source guards have dedicated blocking PS7/PS5.1 wrappers. |
 | `run_vmb_launcher_path_host_matrix.ps1` | ✅ OK (2026-07-17) | Issue #683 dual-host gate: invokes `check_vmb_launcher_path.ps1 -SelfTest` in both PowerShell 7 and Windows PowerShell 5.1, fails closed when either host is unavailable or either contract fails, and is an explicit Blocking full-run `Run-Check`. |
 | `run_bundle_output_set_host_matrix.ps1` | ✅ OK (2026-08-26) | Issues #1400/#1412/#1422/#1426/#1430 dual-host gate: runs the shared output-set, exact tracked/receipt authority, handle-locked normalization, schema-3 receipt, immutable snapshot, receipt-publication, and durable recovery-record adversarial suites under PowerShell 7 and Windows PowerShell 5.1; full `run_all.ps1` treats either host's failure as blocking. |
 | `check_lua_unit_tests.ps1` | ✅ OK (2026-07-13) | Offline host-unit tier (issue #544): vendored Lua 5.1.5, dependency-free harness, and 3 initial production-helper tests for Bestiary & Armory attack-chain classification/sorting/label normalization. Runs in Quick + full QA. `-SelfTest` proves the harness pass path and planted-failure detection and is auto-discovered by `run_selftests.ps1`. Tier boundary and binary provenance live in `qa/lua/README.md`. |

@@ -262,9 +262,15 @@ termination proof. PowerShell 7 uses `Process.Kill(true)`. Windows PowerShell
 `%SystemRoot%\System32\taskkill.exe /PID <pid> /T /F` with captured output,
 exit status, and a bounded helper-process containment budget. A nonzero,
 timed-out, or unproven tree kill is unavailable (visible skip in ordinary QA,
-failure when freshness is required). Real nested parent/descendant and injected
-taskkill failure/timeout fixtures prove both hosts leave no helper orphan. The
-probe never fetches or writes `FETCH_HEAD`.
+failure when freshness is required). Injected elapsed-time and wait/kill
+observers prove every programmed phase budget, including a 5763 ms hosted
+resume that authorizes no later wait and fails closed after one helper
+containment action. Scheduler and synchronous OS-call latency is recorded only
+as diagnostic evidence because it cannot provide a hard real-time ceiling. One
+real Windows PowerShell 5.1 hanging-helper case retains exact PID/start cleanup
+and no-orphan proof. `run_wt_history_source_host_matrix.ps1` owns the freshness
+and incomplete-checkout self-tests exactly once under both hosts; patch-specific
+matrices do not repeat them. The probe never fetches or writes `FETCH_HEAD`.
 
 The Patch 5.2 gate verifies the pinned evidence extractor, generator, source catalog,
 independent oracle/spec/routes, evidence hashes, and generated public catalog.

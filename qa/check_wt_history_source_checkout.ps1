@@ -2,6 +2,7 @@
 # The Tweaker repository itself is an intentionally incomplete source checkout:
 # it has .git, but none of the required source commits/paths. No fixture repo,
 # fetch, network access, source mutation, or recursive cleanup is needed.
+# SELFTEST-OWNER: run_wt_history_source_host_matrix.ps1
 
 [CmdletBinding()]
 param(

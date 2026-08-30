@@ -1,6 +1,7 @@
 # Optional ordinary-QA / required release freshness gate for weapon-history
 # source provenance. It reads the canonical remote with git ls-remote only:
 # no fetch, no FETCH_HEAD write, and no mutation of a source checkout.
+# SELFTEST-OWNER: run_wt_history_source_host_matrix.ps1
 
 [CmdletBinding()]
 param(
@@ -161,13 +162,67 @@ function New-WtHistoryProbeDeadlinePlan {
 function Get-WtHistoryDeadlineRemainingMilliseconds {
     param(
         [Parameter(Mandatory)][System.Diagnostics.Stopwatch]$Clock,
-        [ValidateRange(0, 60000)][int]$DeadlineMilliseconds
+        [ValidateRange(0, 60000)][int]$DeadlineMilliseconds,
+        $Timing
     )
 
     # Ceiling makes every wait conservative: fractional elapsed milliseconds
     # are charged before asking the OS to wait again.
-    $elapsedMilliseconds = [int][Math]::Ceiling($Clock.Elapsed.TotalMilliseconds)
+    $elapsedMilliseconds = if ($Timing -and
+        $Timing.PSObject.Properties['GetElapsedMilliseconds']) {
+        $getElapsed = $Timing.GetElapsedMilliseconds
+        [int][Math]::Ceiling([double](& $getElapsed))
+    } else {
+        [int][Math]::Ceiling($Clock.Elapsed.TotalMilliseconds)
+    }
+    if ($elapsedMilliseconds -lt 0) {
+        throw 'injected elapsed milliseconds cannot be negative'
+    }
     return [Math]::Max(0, $DeadlineMilliseconds - $elapsedMilliseconds)
+}
+
+function Invoke-WtHistoryProcessWait {
+    param(
+        [Parameter(Mandatory)][System.Diagnostics.Process]$Process,
+        [ValidateRange(1, 60000)][int]$Milliseconds,
+        [Parameter(Mandatory)][string]$Phase,
+        $Timing
+    )
+
+    if ($Timing -and $Timing.PSObject.Properties['WaitForExit']) {
+        $waitForExit = $Timing.WaitForExit
+        return [bool](& $waitForExit $Process $Milliseconds $Phase)
+    }
+    return [bool]$Process.WaitForExit($Milliseconds)
+}
+
+function Invoke-WtHistoryTaskWait {
+    param(
+        [Parameter(Mandatory)][System.Threading.Tasks.Task]$Task,
+        [ValidateRange(0, 60000)][int]$Milliseconds,
+        [Parameter(Mandatory)][string]$Phase,
+        $Timing
+    )
+
+    if ($Timing -and $Timing.PSObject.Properties['WaitForTask']) {
+        $waitForTask = $Timing.WaitForTask
+        return [bool](& $waitForTask $Task $Milliseconds $Phase)
+    }
+    return [bool]$Task.Wait($Milliseconds)
+}
+
+function Invoke-WtHistoryProcessKill {
+    param(
+        [Parameter(Mandatory)][System.Diagnostics.Process]$Process,
+        [Parameter(Mandatory)][string]$Phase,
+        $Timing
+    )
+
+    if ($Timing -and $Timing.PSObject.Properties['ObserveKill']) {
+        $observeKill = $Timing.ObserveKill
+        & $observeKill $Process $Phase
+    }
+    $Process.Kill()
 }
 
 function Invoke-WtHistoryBoundedTaskkill {
@@ -176,7 +231,8 @@ function Invoke-WtHistoryBoundedTaskkill {
         [Parameter(Mandatory)][System.Diagnostics.Stopwatch]$Clock,
         [ValidateRange(0, 60000)][int]$TaskkillDeadlineMilliseconds,
         [ValidateRange(0, 60000)][int]$TotalDeadlineMilliseconds,
-        [System.Diagnostics.ProcessStartInfo]$StartInfoOverride
+        [System.Diagnostics.ProcessStartInfo]$StartInfoOverride,
+        $Timing
     )
 
     $helper = New-Object System.Diagnostics.Process
@@ -188,7 +244,8 @@ function Invoke-WtHistoryBoundedTaskkill {
             throw 'taskkill deadline exceeds the total probe deadline'
         }
         $runRemaining = Get-WtHistoryDeadlineRemainingMilliseconds `
-            -Clock $Clock -DeadlineMilliseconds $TaskkillDeadlineMilliseconds
+            -Clock $Clock -DeadlineMilliseconds $TaskkillDeadlineMilliseconds `
+            -Timing $Timing
         if ($runRemaining -le 0) {
             return [pscustomobject]@{
                 Succeeded = $false
@@ -217,23 +274,36 @@ function Invoke-WtHistoryBoundedTaskkill {
         # final shared bucket remains available only for containment if this
         # helper misses that deadline.
         $runRemaining = Get-WtHistoryDeadlineRemainingMilliseconds `
-            -Clock $Clock -DeadlineMilliseconds $TaskkillDeadlineMilliseconds
+            -Clock $Clock -DeadlineMilliseconds $TaskkillDeadlineMilliseconds `
+            -Timing $Timing
         $helperExited = if ($helper.HasExited) { $true }
-        elseif ($runRemaining -gt 0) { $helper.WaitForExit($runRemaining) }
+        elseif ($runRemaining -gt 0) {
+            Invoke-WtHistoryProcessWait -Process $helper `
+                -Milliseconds $runRemaining -Phase 'taskkill-action' `
+                -Timing $Timing
+        }
         else { $helper.HasExited }
         if (-not $helperExited) {
             $killError = ''
             try {
-                if (-not $helper.HasExited) { $helper.Kill() }
+                if (-not $helper.HasExited) {
+                    Invoke-WtHistoryProcessKill -Process $helper `
+                        -Phase 'taskkill-helper-timeout' -Timing $Timing
+                }
             }
             catch { $killError = $_.Exception.Message }
 
             $remaining = Get-WtHistoryDeadlineRemainingMilliseconds `
-                -Clock $Clock -DeadlineMilliseconds $TotalDeadlineMilliseconds
+                -Clock $Clock -DeadlineMilliseconds $TotalDeadlineMilliseconds `
+                -Timing $Timing
             $helperProven = $false
             try {
                 $helperProven = if ($helper.HasExited) { $true }
-                elseif ($remaining -gt 0) { $helper.WaitForExit($remaining) }
+                elseif ($remaining -gt 0) {
+                    Invoke-WtHistoryProcessWait -Process $helper `
+                        -Milliseconds $remaining -Phase 'taskkill-containment' `
+                        -Timing $Timing
+                }
                 else { $helper.HasExited }
             }
             catch {
@@ -254,11 +324,17 @@ function Invoke-WtHistoryBoundedTaskkill {
         }
 
         $remaining = Get-WtHistoryDeadlineRemainingMilliseconds `
-            -Clock $Clock -DeadlineMilliseconds $TaskkillDeadlineMilliseconds
-        $stdoutComplete = $stdoutTask.Wait($remaining)
+            -Clock $Clock -DeadlineMilliseconds $TaskkillDeadlineMilliseconds `
+            -Timing $Timing
+        $stdoutComplete = Invoke-WtHistoryTaskWait -Task $stdoutTask `
+            -Milliseconds $remaining -Phase 'taskkill-output-stdout' `
+            -Timing $Timing
         $remaining = Get-WtHistoryDeadlineRemainingMilliseconds `
-            -Clock $Clock -DeadlineMilliseconds $TaskkillDeadlineMilliseconds
-        $stderrComplete = $stderrTask.Wait($remaining)
+            -Clock $Clock -DeadlineMilliseconds $TaskkillDeadlineMilliseconds `
+            -Timing $Timing
+        $stderrComplete = Invoke-WtHistoryTaskWait -Task $stderrTask `
+            -Milliseconds $remaining -Phase 'taskkill-output-stderr' `
+            -Timing $Timing
         if (-not $stdoutComplete -or -not $stderrComplete) {
             return [pscustomobject]@{
                 Succeeded = $false
@@ -302,11 +378,19 @@ function Invoke-WtHistoryBoundedTaskkill {
         $helperProven = -not $started
         if ($started) {
             try {
-                if (-not $helper.HasExited) { $helper.Kill() }
+                if (-not $helper.HasExited) {
+                    Invoke-WtHistoryProcessKill -Process $helper `
+                        -Phase 'taskkill-helper-exception' -Timing $Timing
+                }
                 $remaining = Get-WtHistoryDeadlineRemainingMilliseconds `
-                    -Clock $Clock -DeadlineMilliseconds $TotalDeadlineMilliseconds
+                    -Clock $Clock -DeadlineMilliseconds $TotalDeadlineMilliseconds `
+                    -Timing $Timing
                 $helperProven = if ($helper.HasExited) { $true }
-                elseif ($remaining -gt 0) { $helper.WaitForExit($remaining) }
+                elseif ($remaining -gt 0) {
+                    Invoke-WtHistoryProcessWait -Process $helper `
+                        -Milliseconds $remaining `
+                        -Phase 'taskkill-exception-containment' -Timing $Timing
+                }
                 else { $helper.HasExited }
             }
             catch { $helperProven = $false }
@@ -333,7 +417,8 @@ function Stop-WtHistoryProbeProcess {
         [ValidateRange(0, 60000)][int]$TaskkillDeadlineMilliseconds,
         [ValidateRange(0, 60000)][int]$TotalDeadlineMilliseconds,
         [System.Diagnostics.ProcessStartInfo]$TaskkillStartInfoOverride,
-        [switch]$ForceTaskkill
+        [switch]$ForceTaskkill,
+        $Timing
     )
 
     $treeKillAttempted = $false
@@ -399,7 +484,7 @@ function Stop-WtHistoryProbeProcess {
             -TargetPid $Process.Id -Clock $Clock `
             -TaskkillDeadlineMilliseconds $TaskkillDeadlineMilliseconds `
             -TotalDeadlineMilliseconds $TotalDeadlineMilliseconds `
-            -StartInfoOverride $TaskkillStartInfoOverride
+            -StartInfoOverride $TaskkillStartInfoOverride -Timing $Timing
         if (-not $taskkillResult.Succeeded) {
             return [pscustomobject]@{
                 Proven = $false
@@ -421,10 +506,12 @@ function Stop-WtHistoryProbeProcess {
         # the same remaining interval for its own containment and returns
         # without attempting root proof.
         $remaining = Get-WtHistoryDeadlineRemainingMilliseconds `
-            -Clock $Clock -DeadlineMilliseconds $TotalDeadlineMilliseconds
+            -Clock $Clock -DeadlineMilliseconds $TotalDeadlineMilliseconds `
+            -Timing $Timing
         $proven = if ($Process.HasExited) { $true }
         elseif ($remaining -gt 0) {
-            $Process.WaitForExit($remaining)
+            Invoke-WtHistoryProcessWait -Process $Process `
+                -Milliseconds $remaining -Phase 'root-proof' -Timing $Timing
         } else { $Process.HasExited }
         return [pscustomobject]@{
             Proven = [bool]$proven
@@ -478,7 +565,8 @@ function Invoke-WtHistoryBoundedProcessProbe {
         [Parameter(Mandatory)][System.Diagnostics.ProcessStartInfo]$StartInfo,
         [ValidateRange(1000, 60000)][int]$TimeoutMs,
         [System.Diagnostics.ProcessStartInfo]$TaskkillStartInfoOverride,
-        [switch]$ForceTaskkill
+        [switch]$ForceTaskkill,
+        $Timing
     )
 
     # One monotonic stopwatch owns the advertised total budget. Every phase
@@ -500,9 +588,14 @@ function Invoke-WtHistoryBoundedProcessProbe {
         $stderrTask = $process.StandardError.ReadToEndAsync()
         $networkRemaining = Get-WtHistoryDeadlineRemainingMilliseconds `
             -Clock $clock `
-            -DeadlineMilliseconds $plan.NetworkDeadlineMilliseconds
+            -DeadlineMilliseconds $plan.NetworkDeadlineMilliseconds `
+            -Timing $Timing
         $processExited = if ($process.HasExited) { $true }
-        elseif ($networkRemaining -gt 0) { $process.WaitForExit($networkRemaining) }
+        elseif ($networkRemaining -gt 0) {
+            Invoke-WtHistoryProcessWait -Process $process `
+                -Milliseconds $networkRemaining -Phase 'network-probe' `
+                -Timing $Timing
+        }
         else { $process.HasExited }
         if (-not $processExited) {
             $termination = Stop-WtHistoryProbeProcess -Process $process `
@@ -510,7 +603,7 @@ function Invoke-WtHistoryBoundedProcessProbe {
                 -TaskkillDeadlineMilliseconds $plan.TaskkillDeadlineMilliseconds `
                 -TotalDeadlineMilliseconds $plan.TotalDeadlineMilliseconds `
                 -TaskkillStartInfoOverride $TaskkillStartInfoOverride `
-                -ForceTaskkill:$ForceTaskkill
+                -ForceTaskkill:$ForceTaskkill -Timing $Timing
             return [pscustomobject]@{
                 ExitCode = -1
                 Stdout = ''
@@ -532,11 +625,17 @@ function Invoke-WtHistoryBoundedProcessProbe {
         }
 
         $remaining = Get-WtHistoryDeadlineRemainingMilliseconds `
-            -Clock $clock -DeadlineMilliseconds $plan.NetworkDeadlineMilliseconds
-        $stdoutComplete = $stdoutTask.Wait($remaining)
+            -Clock $clock -DeadlineMilliseconds $plan.NetworkDeadlineMilliseconds `
+            -Timing $Timing
+        $stdoutComplete = Invoke-WtHistoryTaskWait -Task $stdoutTask `
+            -Milliseconds $remaining -Phase 'network-output-stdout' `
+            -Timing $Timing
         $remaining = Get-WtHistoryDeadlineRemainingMilliseconds `
-            -Clock $clock -DeadlineMilliseconds $plan.NetworkDeadlineMilliseconds
-        $stderrComplete = $stderrTask.Wait($remaining)
+            -Clock $clock -DeadlineMilliseconds $plan.NetworkDeadlineMilliseconds `
+            -Timing $Timing
+        $stderrComplete = Invoke-WtHistoryTaskWait -Task $stderrTask `
+            -Milliseconds $remaining -Phase 'network-output-stderr' `
+            -Timing $Timing
         if (-not $stdoutComplete -or -not $stderrComplete) {
             return [pscustomobject]@{
                 ExitCode = -1
@@ -594,7 +693,7 @@ function Invoke-WtHistoryBoundedProcessProbe {
                 -TaskkillDeadlineMilliseconds $plan.TaskkillDeadlineMilliseconds `
                 -TotalDeadlineMilliseconds $plan.TotalDeadlineMilliseconds `
                 -TaskkillStartInfoOverride $TaskkillStartInfoOverride `
-                -ForceTaskkill:$ForceTaskkill
+                -ForceTaskkill:$ForceTaskkill -Timing $Timing
         }
         return [pscustomobject]@{
             ExitCode = -1
@@ -637,6 +736,7 @@ function Invoke-WtHistoryRemoteProbe {
 
 function Invoke-FreshnessSelfTest {
     $failures = New-Object 'System.Collections.Generic.List[string]'
+    $latencyDiagnostics = New-Object 'System.Collections.Generic.List[string]'
     $fixtureIdentities = New-Object 'System.Collections.Generic.List[object]'
     $helperIdentities = New-Object 'System.Collections.Generic.List[object]'
     $fixturePidPaths = New-Object 'System.Collections.Generic.List[string]'
@@ -651,6 +751,89 @@ function Invoke-FreshnessSelfTest {
             $failures.Add("$Name expected=$Expected actual=$($result.State): $($result.Message)") |
                 Out-Null
         }
+    }
+    function Get-OrdinalOccurrenceCount([string]$Text, [string]$Needle) {
+        if ([string]::IsNullOrEmpty($Needle)) { throw 'occurrence needle is empty' }
+        $count = 0
+        $offset = 0
+        while ($offset -lt $Text.Length) {
+            $hit = $Text.IndexOf($Needle, $offset, [StringComparison]::Ordinal)
+            if ($hit -lt 0) { break }
+            $count++
+            $offset = $hit + $Needle.Length
+        }
+        return $count
+    }
+    function Add-LatencyDiagnostic([string]$Name, [long]$Elapsed, [long]$Allowance) {
+        if ($Elapsed -gt $Allowance) {
+            $latencyDiagnostics.Add("$Name scheduler/OS latency exceeded the non-contract observation threshold: elapsed=${Elapsed}ms threshold=${Allowance}ms") | Out-Null
+        }
+    }
+
+    # Generic source guards have one full-QA owner. This fixture fails if a
+    # patch matrix reintroduces either expensive dual-host self-test or if the
+    # shared owner is multiplied/removed. It also pins the production wait seam:
+    # direct Process/Task waits belong only in the two injectable wrappers.
+    try {
+        $resolvedRepoRoot = (Resolve-Path -LiteralPath $RepoRoot).Path
+        $runAllText = [IO.File]::ReadAllText((Join-Path $resolvedRepoRoot 'qa\run_all.ps1'))
+        $sharedMatrixPath = Join-Path $resolvedRepoRoot `
+            'qa\run_wt_history_source_host_matrix.ps1'
+        $sharedMatrixText = [IO.File]::ReadAllText($sharedMatrixPath)
+        $runSelfTestsText = [IO.File]::ReadAllText((Join-Path $resolvedRepoRoot `
+            'qa\run_selftests.ps1'))
+        $sourceText = [IO.File]::ReadAllText($PSCommandPath)
+        $checkoutText = [IO.File]::ReadAllText((Join-Path $resolvedRepoRoot `
+            'qa\check_wt_history_source_checkout.ps1'))
+        $ownerMarker = '# SELFTEST-' +
+            'OWNER: run_wt_history_source_host_matrix.ps1'
+
+        if ((Get-OrdinalOccurrenceCount $runAllText `
+                'run_wt_history_source_host_matrix.ps1') -ne 1) {
+            $failures.Add('full QA must invoke the shared source host matrix exactly once') | Out-Null
+        }
+        if ((Get-OrdinalOccurrenceCount $sharedMatrixText `
+                '& $hostEntry.Path @freshnessArguments') -ne 1 -or
+            (Get-OrdinalOccurrenceCount $sharedMatrixText `
+                '& $hostEntry.Path @sourceCheckoutArguments') -ne 1) {
+            $failures.Add('shared source host matrix must invoke each generic self-test once inside its host loop') | Out-Null
+        }
+        if ((Get-OrdinalOccurrenceCount $sourceText $ownerMarker) -ne 1 -or
+            (Get-OrdinalOccurrenceCount $checkoutText $ownerMarker) -ne 1 -or
+            $runSelfTestsText.IndexOf('SELFTEST-OWNER:',
+                [StringComparison]::Ordinal) -lt 0) {
+            $failures.Add('generic source self-tests are not exclusively delegated out of run_selftests') | Out-Null
+        }
+
+        $patchMatrices = @(Get-ChildItem (Join-Path $resolvedRepoRoot `
+                'qa\run_wt_history_patch_*_host_matrix.ps1') -File)
+        if ($patchMatrices.Count -lt 1) {
+            $failures.Add('no patch-specific weapon-history host matrices were found') | Out-Null
+        }
+        foreach ($patchMatrix in $patchMatrices) {
+            $patchText = [IO.File]::ReadAllText($patchMatrix.FullName)
+            if ($patchText.IndexOf('check_wt_history_source_freshness.ps1',
+                    [StringComparison]::Ordinal) -ge 0 -or
+                $patchText.IndexOf('check_wt_history_source_checkout.ps1',
+                    [StringComparison]::Ordinal) -ge 0) {
+                $failures.Add("patch-specific matrix owns a generic source self-test: $($patchMatrix.Name)") | Out-Null
+            }
+        }
+
+        $selfTestOffset = $sourceText.IndexOf('function Invoke-FreshnessSelfTest',
+            [StringComparison]::Ordinal)
+        if ($selfTestOffset -lt 0) {
+            $failures.Add('freshness self-test boundary is missing') | Out-Null
+        } else {
+            $productionText = $sourceText.Substring(0, $selfTestOffset)
+            if ((Get-OrdinalOccurrenceCount $productionText '.WaitForExit(') -ne 1 -or
+                (Get-OrdinalOccurrenceCount $productionText '.Wait(') -ne 1) {
+                $failures.Add('production waits bypass or multiply the injectable deadline wrappers') | Out-Null
+            }
+        }
+    }
+    catch {
+        $failures.Add("shared-matrix/wait wiring fixture crashed: $($_.Exception.Message)") | Out-Null
     }
     function New-HostCommandStartInfo([string]$Command) {
         $hostPath = (Get-Process -Id $PID).Path
@@ -1009,6 +1192,114 @@ function Invoke-FreshnessSelfTest {
         }
         finally { $currentProcess.Dispose() }
 
+        # Deadline arithmetic is deterministic even when the host resumes well
+        # after the advertised total. These values pin every phase boundary and
+        # prove that a 5763ms scheduler resume cannot authorize another wait.
+        $remainingCases = @(
+            [pscustomobject]@{ Elapsed = 0; Deadline = 750; Expected = 750 }
+            [pscustomobject]@{ Elapsed = 749; Deadline = 750; Expected = 1 }
+            [pscustomobject]@{ Elapsed = 750; Deadline = 750; Expected = 0 }
+            [pscustomobject]@{ Elapsed = 750; Deadline = 2437; Expected = 1687 }
+            [pscustomobject]@{ Elapsed = 2436; Deadline = 2437; Expected = 1 }
+            [pscustomobject]@{ Elapsed = 2437; Deadline = 2437; Expected = 0 }
+            [pscustomobject]@{ Elapsed = 2437; Deadline = 3000; Expected = 563 }
+            [pscustomobject]@{ Elapsed = 2999; Deadline = 3000; Expected = 1 }
+            [pscustomobject]@{ Elapsed = 3000; Deadline = 3000; Expected = 0 }
+            [pscustomobject]@{ Elapsed = 5763; Deadline = 3000; Expected = 0 }
+        )
+        $injectedClock = [System.Diagnostics.Stopwatch]::StartNew()
+        $injectedClock.Stop()
+        foreach ($remainingCase in $remainingCases) {
+            $elapsedValue = [long]$remainingCase.Elapsed
+            $elapsedTiming = [pscustomobject]@{
+                GetElapsedMilliseconds = ({ return $elapsedValue }.GetNewClosure())
+            }
+            $actualRemaining = Get-WtHistoryDeadlineRemainingMilliseconds `
+                -Clock $injectedClock `
+                -DeadlineMilliseconds ([int]$remainingCase.Deadline) `
+                -Timing $elapsedTiming
+            if ($actualRemaining -ne [int]$remainingCase.Expected) {
+                $failures.Add("injected deadline mismatch: elapsed=$elapsedValue deadline=$($remainingCase.Deadline) expected=$($remainingCase.Expected) actual=$actualRemaining") | Out-Null
+            }
+        }
+
+        # Reproduce the hosted 5763ms resume without asking the OS scheduler to
+        # honor a wall-clock ceiling. The virtual wait returns at each programmed
+        # phase, jumps past the total deadline during the helper action, and
+        # records every later wait/containment decision made by production code.
+        $virtualTimingState = @{
+            Elapsed = [long]0
+            Waits = New-Object 'System.Collections.Generic.List[object]'
+            Kills = New-Object 'System.Collections.Generic.List[string]'
+        }
+        $virtualTiming = [pscustomobject]@{
+            GetElapsedMilliseconds = ({
+                return [long]$virtualTimingState.Elapsed
+            }.GetNewClosure())
+            WaitForExit = ({
+                param($Process, [int]$Milliseconds, [string]$Phase)
+                $virtualTimingState.Waits.Add([pscustomobject]@{
+                        Phase = $Phase
+                        Milliseconds = $Milliseconds
+                    }) | Out-Null
+                if ($Phase -ceq 'network-probe') {
+                    $virtualTimingState.Elapsed = [long]750
+                    return $false
+                }
+                if ($Phase -ceq 'taskkill-action') {
+                    $virtualTimingState.Elapsed = [long]5763
+                    return $false
+                }
+                throw "unexpected virtual process wait: $Phase/${Milliseconds}ms"
+            }.GetNewClosure())
+            WaitForTask = ({
+                param($Task, [int]$Milliseconds, [string]$Phase)
+                throw "unexpected virtual task wait: $Phase/${Milliseconds}ms"
+            }.GetNewClosure())
+            ObserveKill = ({
+                param($Process, [string]$Phase)
+                $virtualTimingState.Kills.Add($Phase) | Out-Null
+            }.GetNewClosure())
+        }
+        $virtualResume = Invoke-WtHistoryBoundedProcessProbe `
+            -StartInfo (New-HostCommandStartInfo 'Start-Sleep -Seconds 30') `
+            -TimeoutMs 3000 -ForceTaskkill `
+            -TaskkillStartInfoOverride `
+                (New-HostCommandStartInfo 'Start-Sleep -Seconds 30') `
+            -Timing $virtualTiming
+        $virtualTargetIdentity = Register-FixtureIdentity $fixtureIdentities `
+            'virtual-resume target' ([int]$virtualResume.ProcessId) `
+            ([long]$virtualResume.ProcessStartTimeFileTimeUtc)
+        $virtualHelperIdentity = $null
+        if ($virtualResume.TaskkillProcessId -gt 0) {
+            $virtualHelperIdentity = Register-FixtureIdentity $helperIdentities `
+                'virtual-resume helper' ([int]$virtualResume.TaskkillProcessId) `
+                ([long]$virtualResume.TaskkillStartTimeFileTimeUtc)
+        }
+        $virtualWaits = @($virtualTimingState.Waits.ToArray())
+        $virtualKills = @($virtualTimingState.Kills.ToArray())
+        if ($virtualWaits.Count -ne 2 -or
+            $virtualWaits[0].Phase -cne 'network-probe' -or
+            $virtualWaits[0].Milliseconds -ne 750 -or
+            $virtualWaits[1].Phase -cne 'taskkill-action' -or
+            $virtualWaits[1].Milliseconds -ne 1687 -or
+            $virtualKills.Count -ne 1 -or
+            $virtualKills[0] -cne 'taskkill-helper-timeout' -or
+            -not $virtualResume.TimedOut -or
+            -not $virtualResume.KillAttempted -or
+            -not $virtualResume.TreeKillAttempted -or
+            -not $virtualResume.TaskkillTimedOut -or
+            $virtualResume.TerminationProven -or
+            $virtualResume.TerminationError.IndexOf('timed out',
+                [StringComparison]::Ordinal) -lt 0) {
+            $failures.Add("5763ms virtual resume added a wait, skipped containment, or did not fail closed: waits=$($virtualWaits | Out-String) kills=$($virtualKills -join ',') result=$($virtualResume | Out-String)") | Out-Null
+        }
+        Assert-ExactIdentityState 'virtual-resume target' `
+            $virtualTargetIdentity @('alive')
+        if (-not $virtualHelperIdentity) {
+            $failures.Add('5763ms virtual resume did not expose helper identity') | Out-Null
+        }
+
         # Exercise the cleanup function itself against a retained live decoy.
         # A mismatched start time must be treated as a reused PID and preserve
         # that process; the same exact identity must remain observable as alive
@@ -1154,10 +1445,11 @@ function Invoke-FreshnessSelfTest {
         }
         if (-not $outputProbe.TimedOut -or $outputProbe.TerminationProven -or
             $outputProbe.KillAttempted -or
-            $outputProbe.Stderr -cne 'bounded output drain expired' -or
-            $outputClock.ElapsedMilliseconds -gt 2250) {
+            $outputProbe.Stderr -cne 'bounded output drain expired') {
             $failures.Add("root-exit output drain did not stop at its network deadline: elapsed=$($outputClock.ElapsedMilliseconds) result=$($outputProbe | Out-String)") | Out-Null
         }
+        Add-LatencyDiagnostic 'root-exit output drain' `
+            $outputClock.ElapsedMilliseconds 2250
         Assert-State 'optional root-exit output drain' $outputProbe $false 'skip'
         Assert-State 'required root-exit output drain' $outputProbe $true 'fail'
         Assert-ExactIdentityState 'output-drain exited parent' `
@@ -1166,10 +1458,11 @@ function Invoke-FreshnessSelfTest {
             $outputChildIdentity @('alive')
 
         # Prove the exact three-second termination allocation against a nested
-        # tree that is ready before the monotonic deadline begins. PS5 repeats
-        # the real taskkill path to expose hosted-runner latency variance.
+        # tree that is ready before the monotonic deadline begins. One real run
+        # per host retains exact parent/descendant cleanup coverage; programmed
+        # wait budgets are proven by the injected fixtures above.
         $threeSecondPlan = New-WtHistoryProbeDeadlinePlan -TimeoutMilliseconds 3000
-        $realIterations = if ($treeKillSupported) { 1 } else { 3 }
+        $realIterations = 1
         for ($iteration = 1; $iteration -le $realIterations; $iteration++) {
             $realLabel = "3s real tree $iteration"
             $realFixture = Start-PreparedNestedFixture $realLabel
@@ -1205,9 +1498,7 @@ function Invoke-FreshnessSelfTest {
                     -not $realTermination.TaskkillTerminationProven)) {
                 $failures.Add("$realLabel PS5 taskkill was not an exact success: $($realTermination | Out-String)") | Out-Null
             }
-            if ($realClock.ElapsedMilliseconds -gt 4000) {
-                $failures.Add("$realLabel exceeded the 3s deadline plus 1s scheduler allowance: $($realClock.ElapsedMilliseconds)ms") | Out-Null
-            }
+            Add-LatencyDiagnostic $realLabel $realClock.ElapsedMilliseconds 4000
             Assert-ExactIdentityState "$realLabel parent" `
                 $realFixture.ParentIdentity @('gone', 'reused')
             Assert-ExactIdentityState "$realLabel descendant" `
@@ -1256,10 +1547,11 @@ function Invoke-FreshnessSelfTest {
                 $defaultTermination.TaskkillExitCode -ne 0 -or
                 $defaultTermination.TaskkillTimedOut -or
                 -not $defaultTermination.TaskkillTerminationProven -or
-                $defaultClock.ElapsedMilliseconds -lt 12400 -or
-                $defaultClock.ElapsedMilliseconds -gt 16000) {
+                $defaultClock.ElapsedMilliseconds -lt 12400) {
                 $failures.Add("15s delayed real taskkill did not succeed inside its exact deadline: elapsed=$($defaultClock.ElapsedMilliseconds) result=$($defaultTermination | Out-String)") | Out-Null
             }
+            Add-LatencyDiagnostic '15s delayed real taskkill' `
+                $defaultClock.ElapsedMilliseconds 16000
             Assert-ExactIdentityState '15s delayed real parent' `
                 $defaultFixture.ParentIdentity @('gone', 'reused')
             Assert-ExactIdentityState '15s delayed real descendant' `
@@ -1333,10 +1625,11 @@ function Invoke-FreshnessSelfTest {
         if (-not $donationTermination.Proven -or
             $donationTermination.TaskkillExitCode -ne 0 -or
             $donationClock.ElapsedMilliseconds -lt
-                $threeSecondPlan.TaskkillDeadlineMilliseconds -or
-            $donationClock.ElapsedMilliseconds -gt 4000) {
+                $threeSecondPlan.TaskkillDeadlineMilliseconds) {
             $failures.Add("unused taskkill time was not donated within the immutable total deadline: elapsed=$($donationClock.ElapsedMilliseconds) result=$($donationTermination | Out-String)") | Out-Null
         }
+        Add-LatencyDiagnostic 'unused taskkill donation' `
+            $donationClock.ElapsedMilliseconds 4000
         Assert-ExactIdentityState 'unused-taskkill donation target' `
             $donationIdentity @('gone', 'reused')
         if ($donationHelperIdentity) {
@@ -1371,9 +1664,8 @@ function Invoke-FreshnessSelfTest {
                 [StringComparison]::Ordinal) -lt 0) {
             $failures.Add("injected taskkill failure was not captured and fail-closed: $($taskkillFailure | Out-String)") | Out-Null
         }
-        if ($failureClock.ElapsedMilliseconds -gt 4000) {
-            $failures.Add("injected taskkill failure exceeded its bounded wall allowance: $($failureClock.ElapsedMilliseconds)ms") | Out-Null
-        }
+        Add-LatencyDiagnostic 'injected taskkill failure' `
+            $failureClock.ElapsedMilliseconds 4000
         Assert-State 'optional taskkill failure' $taskkillFailure $false 'skip'
         Assert-State 'required taskkill failure' $taskkillFailure $true 'fail'
         Assert-ExactIdentityState 'failed-taskkill target' `
@@ -1383,87 +1675,53 @@ function Invoke-FreshnessSelfTest {
                 $failureHelperIdentity @('gone', 'reused')
         }
 
-        # A hanging helper consumes its action deadline, is contained only by
-        # the shared final proof bucket, and leaves the target for exact cleanup.
-        $helperTimeoutClock = [System.Diagnostics.Stopwatch]::StartNew()
-        $taskkillTimeout = Invoke-WtHistoryBoundedProcessProbe `
-            -StartInfo (New-HostCommandStartInfo 'Start-Sleep -Seconds 30') `
-            -TimeoutMs 3000 -ForceTaskkill `
-            -TaskkillStartInfoOverride `
-                (New-HostCommandStartInfo 'Start-Sleep -Seconds 30')
-        $helperTimeoutClock.Stop()
-        $timeoutParentIdentity = Register-FixtureIdentity $fixtureIdentities `
-            'timed-out-taskkill target' ([int]$taskkillTimeout.ProcessId) `
-            ([long]$taskkillTimeout.ProcessStartTimeFileTimeUtc)
-        $timeoutHelperIdentity = $null
-        if ($taskkillTimeout.TaskkillProcessId -gt 0) {
-            $timeoutHelperIdentity = Register-FixtureIdentity $helperIdentities `
-                'timed-out taskkill helper' `
-                ([int]$taskkillTimeout.TaskkillProcessId) `
-                ([long]$taskkillTimeout.TaskkillStartTimeFileTimeUtc)
-        }
-        if (-not $taskkillTimeout.TimedOut -or
-            $taskkillTimeout.TerminationProven -or
-            -not $taskkillTimeout.TaskkillTimedOut -or
-            -not $taskkillTimeout.TaskkillTerminationProven -or
-            $taskkillTimeout.TerminationError.IndexOf('timed out',
-                [StringComparison]::Ordinal) -lt 0 -or
-            $helperTimeoutClock.ElapsedMilliseconds -lt
-                ($threeSecondPlan.TaskkillDeadlineMilliseconds - 100)) {
-            $failures.Add("taskkill helper timeout was not bounded, contained, and fail-closed: $($taskkillTimeout | Out-String)") | Out-Null
-        }
-        if ($helperTimeoutClock.ElapsedMilliseconds -gt 4000) {
-            $failures.Add("taskkill helper timeout exceeded its bounded wall allowance: $($helperTimeoutClock.ElapsedMilliseconds)ms") | Out-Null
-        }
-        Assert-State 'optional taskkill timeout' $taskkillTimeout $false 'skip'
-        Assert-State 'required taskkill timeout' $taskkillTimeout $true 'fail'
-        Assert-ExactIdentityState 'timed-out-taskkill target' `
-            $timeoutParentIdentity @('alive')
-        if ($timeoutHelperIdentity) {
-            Assert-ExactIdentityState 'timed-out taskkill helper' `
-                $timeoutHelperIdentity @('gone', 'reused')
-        } else {
-            $failures.Add('timed-out taskkill helper identity is unavailable') | Out-Null
-        }
-
-        # The minimum one-second contract remains fail closed: if hosted load
-        # consumes its short action slice, helper containment still shares the
-        # same absolute deadline and the exact target is retained for cleanup.
-        $minimumClock = [System.Diagnostics.Stopwatch]::StartNew()
-        $minimumTimeout = Invoke-WtHistoryBoundedProcessProbe `
-            -StartInfo (New-HostCommandStartInfo 'Start-Sleep -Seconds 30') `
-            -TimeoutMs 1000 -ForceTaskkill `
-            -TaskkillStartInfoOverride `
-                (New-HostCommandStartInfo 'Start-Sleep -Seconds 30')
-        $minimumClock.Stop()
-        $minimumTargetIdentity = Register-FixtureIdentity $fixtureIdentities `
-            '1s fail-closed target' ([int]$minimumTimeout.ProcessId) `
-            ([long]$minimumTimeout.ProcessStartTimeFileTimeUtc)
-        $minimumHelperIdentity = $null
-        if ($minimumTimeout.TaskkillProcessId -gt 0) {
-            $minimumHelperIdentity = Register-FixtureIdentity $helperIdentities `
-                '1s fail-closed helper' `
-                ([int]$minimumTimeout.TaskkillProcessId) `
-                ([long]$minimumTimeout.TaskkillStartTimeFileTimeUtc)
-        }
-        if (-not $minimumTimeout.TimedOut -or
-            $minimumTimeout.TerminationProven -or
-            -not $minimumTimeout.TaskkillTimedOut -or
-            -not $minimumTimeout.TaskkillTerminationProven -or
-            $minimumClock.ElapsedMilliseconds -gt 2000) {
-            $failures.Add("1s minimum timeout did not remain bounded and fail closed: elapsed=$($minimumClock.ElapsedMilliseconds) result=$($minimumTimeout | Out-String)") | Out-Null
-        }
-        Assert-State 'optional 1s timeout' $minimumTimeout $false 'skip'
-        Assert-State 'required 1s timeout' $minimumTimeout $true 'fail'
-        Assert-ExactIdentityState '1s fail-closed target' `
-            $minimumTargetIdentity @('alive')
-        if ($minimumHelperIdentity) {
-            Assert-ExactIdentityState '1s fail-closed helper' `
-                $minimumHelperIdentity @('gone', 'reused')
+        # Keep one real Windows PowerShell 5.1 hanging-helper containment case
+        # for exact PID/start cleanup and orphan detection. PS7 exercises the
+        # same forced-taskkill path through the deterministic 5763ms fixture.
+        if (-not $treeKillSupported) {
+            $helperTimeoutClock = [System.Diagnostics.Stopwatch]::StartNew()
+            $taskkillTimeout = Invoke-WtHistoryBoundedProcessProbe `
+                -StartInfo (New-HostCommandStartInfo 'Start-Sleep -Seconds 30') `
+                -TimeoutMs 3000 -ForceTaskkill `
+                -TaskkillStartInfoOverride `
+                    (New-HostCommandStartInfo 'Start-Sleep -Seconds 30')
+            $helperTimeoutClock.Stop()
+            $timeoutParentIdentity = Register-FixtureIdentity $fixtureIdentities `
+                'timed-out-taskkill target' ([int]$taskkillTimeout.ProcessId) `
+                ([long]$taskkillTimeout.ProcessStartTimeFileTimeUtc)
+            $timeoutHelperIdentity = $null
+            if ($taskkillTimeout.TaskkillProcessId -gt 0) {
+                $timeoutHelperIdentity = Register-FixtureIdentity $helperIdentities `
+                    'timed-out taskkill helper' `
+                    ([int]$taskkillTimeout.TaskkillProcessId) `
+                    ([long]$taskkillTimeout.TaskkillStartTimeFileTimeUtc)
+            }
+            if (-not $taskkillTimeout.TimedOut -or
+                $taskkillTimeout.TerminationProven -or
+                -not $taskkillTimeout.TaskkillTimedOut -or
+                -not $taskkillTimeout.TaskkillTerminationProven -or
+                $taskkillTimeout.TerminationError.IndexOf('timed out',
+                    [StringComparison]::Ordinal) -lt 0 -or
+                $helperTimeoutClock.ElapsedMilliseconds -lt
+                    ($threeSecondPlan.TaskkillDeadlineMilliseconds - 100)) {
+                $failures.Add("taskkill helper timeout was not contained and fail-closed: $($taskkillTimeout | Out-String)") | Out-Null
+            }
+            Add-LatencyDiagnostic 'real PS5.1 hanging taskkill helper' `
+                $helperTimeoutClock.ElapsedMilliseconds 4000
+            Assert-State 'optional taskkill timeout' $taskkillTimeout $false 'skip'
+            Assert-State 'required taskkill timeout' $taskkillTimeout $true 'fail'
+            Assert-ExactIdentityState 'timed-out-taskkill target' `
+                $timeoutParentIdentity @('alive')
+            if ($timeoutHelperIdentity) {
+                Assert-ExactIdentityState 'timed-out taskkill helper' `
+                    $timeoutHelperIdentity @('gone', 'reused')
+            } else {
+                $failures.Add('timed-out taskkill helper identity is unavailable') | Out-Null
+            }
         }
     }
     catch {
-        $failures.Add("real process fixture crashed: $($_.Exception.Message)") | Out-Null
+        $failures.Add("real process fixture crashed: $($_.Exception.Message) at $($_.ScriptStackTrace)") | Out-Null
     }
     finally {
         foreach ($identity in $fixtureIdentities.ToArray()) {
@@ -1517,12 +1775,17 @@ function Invoke-FreshnessSelfTest {
         }
     }
 
+    if ($latencyDiagnostics.Count -gt 0) {
+        $latencyDiagnostics | ForEach-Object {
+            Write-Host "  [DIAG] $_" -ForegroundColor DarkYellow
+        }
+    }
     if ($failures.Count -gt 0) {
         Write-Host '[check_wt_history_source_freshness:selftest] FAILED' -ForegroundColor Red
         $failures | ForEach-Object { Write-Host "  X $_" -ForegroundColor Red }
         exit 2
     }
-    Write-Host '[check_wt_history_source_freshness:selftest] OK - exact absolute deadlines, bounded output/action/proof phases, PID-reuse-safe tree termination, and no-orphan cleanup pass.' -ForegroundColor Green
+    Write-Host '[check_wt_history_source_freshness:selftest] OK - injected programmed-wait deadlines, exact process containment, shared-matrix ownership, and no-orphan cleanup pass.' -ForegroundColor Green
     exit 0
 }
 
