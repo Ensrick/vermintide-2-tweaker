@@ -1,5 +1,13 @@
 # Weapon Tweaker Changelog
 
+## 0.12.323-dev (2026-08-30) -- publication-claim reconciliation (#1436) [not-started]
+
+- Mirrors public beta 0.12.322 under a fresh machine-global publication claim
+  after the earlier reservation was intentionally released during a
+  usage-conservation pause.
+- Contains no additional gameplay behavior and preserves the reviewed
+  friends-only development overlay unchanged.
+
 ## 0.12.322-dev (2026-08-30) -- mirror source-exact Patch 3.1 Tuskgor Spear history (#1436) [not-started]
 
 - Mirrors public beta 0.12.321: the existing **Pre-Patch 3.1 (3.0.x source)**
