@@ -1,6 +1,6 @@
 local mod = get_mod("gut")
 
-local MOD_VERSION = "0.2.287"
+local MOD_VERSION = "0.2.288"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -1984,19 +1984,18 @@ do  -- do-block: locals release back to the chunk (Lua 5.1 200-local ceiling)
     end
 end
 
--- On Yer Feet, Mates! revive scoreboard attribution (#438). Vanilla's
--- server-side rpc_request_revive omits the StatisticsUtil call used by ordinary
--- revives and Comet's Gift. Repair only an unchanged revive count, so an
--- upstream or parallel credit wins without duplication.
-do
-    local ok, api = pcall(mod.dofile, mod,
-        "scripts/mods/gui_tweaker/_gut_revive_scoreboard")
+-- Bounded scoreboard attribution repairs (#438, #1151).
+for _, spec in ipairs({
+    { 438, "revive-scoreboard", "scripts/mods/gui_tweaker/_gut_revive_scoreboard" },
+    { 1151, "damage-taken scoreboard", "scripts/mods/gui_tweaker/_gut_damage_taken_scoreboard" },
+}) do
+    local ok, api = pcall(mod.dofile, mod, spec[3])
     if ok and type(api) == "table" then
         for _, check in ipairs(api.rt_checks or {}) do
             _rt_register(check.name, check.fn)
         end
     else
-        printf("[gut:438] revive-scoreboard module failed: %s", tostring(api))
+        printf("[gut:%d] %s module failed: %s", spec[1], spec[2], tostring(api))
     end
 end
 
