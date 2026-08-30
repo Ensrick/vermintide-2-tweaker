@@ -15,7 +15,7 @@
 --   * `_auto_register_all`, the once-per-session deferred pass on
 --     StateInGameRunning.on_enter: build, ItemMasterList mirror, #661 career
 --     action integration, the #567 WeaponSkins reverse-index invalidate and
---     rebuild, the inline NetworkLookup.item_names append, #592 Blacksmith seed
+--     rebuild, the canonical NetworkLookup.item_names append, #592 Blacksmith seed
 --     registration and the legacy auto-grant purge;
 --   * `_om.install_deus_identities` (#273) and the DeusMechanism._setup_run
 --     last-chance boundary that re-runs it before Chaos Wastes reads
@@ -24,11 +24,10 @@
 --
 -- Registers exactly two hooks, each the mod's sole registration on its
 -- (Class, method) pair: StateInGameRunning.on_enter (hook_safe) and
--- DeusMechanism._setup_run. The inline bidirectional NetworkLookup.item_names
--- register moved BYTE-IDENTICAL and is deliberately NOT folded onto the shared
--- lookup-registration helper: that fold is a behavior-adjacent #428 change and
--- rides its own slice, so the helper is not referenced anywhere in this file
--- (an offline gate asserts its absence).
+-- DeusMechanism._setup_run. The deferred bidirectional
+-- NetworkLookup.item_names registration consumes the canonical #428 helper,
+-- preserving pending-definition order and the original lifecycle position while
+-- rejecting malformed lookup state before mutation.
 --
 -- Exports on ctx.om, read back by the entry's two context tables (commands
 -- lifecycle + regression): `_om.item_registration.registered_keys`,
@@ -40,7 +39,7 @@
 --
 -- Load-time deps: nothing beyond the ctx table. Every moved block is a
 -- definition, an assignment or a hook registration; none of them reads game
--- state at load. `_variant_definitions`, `_custom_skin_keys`,
+-- state at load. `_variant_definitions`, `_custom_skin_keys`, `_network_lookup`,
 -- `_career_weapon_actions`, `_cwv_career_weapon_actions` and
 -- `_career_action_owner` are each bound exactly once in the entry and never
 -- rebound, so the captured references cannot go stale.
@@ -69,6 +68,8 @@ local function install(mod, ctx)
 local _om = ctx.om
 local _dbg = ctx.dbg
 local _dbg_alert = ctx.dbg_alert
+local _network_lookup = assert(ctx.network_lookup,
+	"cwv item registration owner requires the shared network_lookup helper")
 local _variant_definitions = ctx.variant_definitions
 local _custom_skin_keys = ctx.custom_skin_keys
 local _career_weapon_actions = ctx.career_weapon_actions
@@ -680,11 +681,7 @@ local function _auto_register_all()
 		if NetworkLookup and NetworkLookup.item_names then
 			for _, pending in ipairs(pending_defs) do
 				local key = pending.def.item_key
-				if not rawget(NetworkLookup.item_names, key) then
-					local idx = #NetworkLookup.item_names + 1
-					rawset(NetworkLookup.item_names, idx, key)
-					rawset(NetworkLookup.item_names, key, idx)
-				end
+				_network_lookup.register_named(NetworkLookup, "item_names", key)
 			end
 		end
 

@@ -1,5 +1,18 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.535-dev (2026-08-30) -- adopt the canonical deferred item-name registrar (#428) [not-started]
+
+- Replaced CWV's private deferred `NetworkLookup.item_names` append with the
+  already-manifested canonical shared registrar at the same registration
+  boundary and in the same pending-definition order.
+- Preserved missing-table behavior, valid-pair idempotence, downstream
+  Blacksmith registration order, and `_auto_registered` timing while malformed,
+  sparse, or asymmetric lookup state now fails before any CWV key is inserted.
+- Added executable equivalence, strict-metatable, idempotence, malformed-state,
+  canonical-copy, and decomposition coverage. This is the narrow CWV child of
+  #428; skin registration, identity transport, acquisition, Deus, and career
+  logic remain unchanged.
+
 ## 0.1.534-dev (2026-08-29) -- split the CWV regression-identity owner (#2) [not-started]
 
 - Split the 42-check identity regression owner into its original ordered
