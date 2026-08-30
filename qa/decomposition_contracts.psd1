@@ -70,8 +70,8 @@
             Name = 'crafting_in_modded_dev'
             State = 'complete'
             Entry = 'crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua'
-            CeilingLines = 1433
-            RequiredModules = @('_cim_bootstrap_runtime.lua', '_cim_forge_state_owner.lua', '_cim_loadout_wire_owner.lua', '_cim_forge_preview.lua', '_cim_forge_preview_owner.lua', '_cim_forge_picker_owner.lua', '_cim_forge_ui_owner.lua', '_cim_inventory_filter.lua', '_cim_command_owner.lua', '_cim_weave_economy.lua', '_cim_modded_loadout_owner.lua', '_cim_weave_loadout_owner.lua', '_cim_regression_checks.lua')
+            CeilingLines = 1427
+            RequiredModules = @('_cim_bootstrap_runtime.lua', '_cim_forge_state_owner.lua', '_cim_loadout_wire_owner.lua', '_cim_forge_preview.lua', '_cim_forge_preview_owner.lua', '_cim_forge_picker_owner.lua', '_cim_forge_ui_owner.lua', '_cim_inventory_filter.lua', '_cim_command_owner.lua', '_cim_weave_economy.lua', '_cim_modded_loadout_owner.lua', '_cim_weave_loadout_owner.lua', '_cim_regression_cleanup.lua', '_cim_regression_checks.lua', '_cim_regression_forge_surfaces.lua')
         }
         @{
             # Completed by extracting host-state transport, run/backend

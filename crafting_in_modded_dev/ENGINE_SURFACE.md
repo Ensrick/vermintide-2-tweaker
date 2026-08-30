@@ -117,7 +117,11 @@ idempotence guard, and the one draw hook resolves that current panel at call
 time, so a missing first-load panel can recover without retaining a stale one.
 
 The `/cim_regression_test` harness and initialization-time contract checks
-remain in the entry; the late block lives in `_cim_regression_checks.lua`.
+remain in the entry. The frozen late stream is composed from
+`_cim_regression_cleanup.lua`, `_cim_regression_checks.lua`, and
+`_cim_regression_forge_surfaces.lua`; all three chunks load before the first
+installer runs, and the core passes its exact loadout-sandbox helper to the
+forge-surface suffix.
 Source-reading checks resolve an anchor published by the owner module they
 inspect, never the entry-owned registrar (#1227), and fail if that ownership
 anchor is missing. The #414 slot-family check also runs an independent census

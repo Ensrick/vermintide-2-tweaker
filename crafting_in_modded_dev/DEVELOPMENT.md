@@ -41,7 +41,9 @@ new module needs only its manifest dofile line + a row here.
 | `_cim_ranalds_firestore.lua` | Hook-free #1360 bounded asynchronous reader for the public Ranald's Gift Firestore collection. Uses a 16-field mask, one career filter, document-name cursor pages, stale-generation cancellation, and per-response/result/aggregate byte caps. It cannot mutate game state. |
 | `_cim_ranalds_import.lua` | Hook-free #1360 transaction coordinator. Preflights career/DLC/provider/item/property/trait/talent legality and the exact five-slot snapshot before mutation, then creates and persists five fresh CIM items, writes all five selected-index slots plus six talents, performs one live refresh, or compensates every boundary on failure. |
 | `_cim_ranalds_browser.lua` | Hook-free #1360 own-scenegraph Athanor overview browser: current-career default, career navigation, likes/recent sorting, five-row pagination, explicit selection/import, bounded status text, and close-time request cancellation. `_cim_forge_ui_owner.lua` is its only draw/input driver. |
-| `_cim_regression_checks.lua` | The 79-check late `/cim_regression_test` block, in its frozen registration order. Loaded once at the end of the entry after production hooks/helpers exist. Receives narrow function/state accessors for reassigned stores; checks still consume the established flat `mod._cim_*` runtime API. Together with the four identity registrations in `_cim_forge_state_owner.lua`, the bootstrap-owned registry contains 83 checks. |
+| `_cim_regression_cleanup.lua` | The first three late `/cim_regression_test` checks: exact-owner cleanup, accessory-property layers, and exact Hold-Tab identity. Loaded before the two bounded regression owners below. |
+| `_cim_regression_checks.lua` | The next 33 core runtime checks in frozen order. Receives narrow function/state accessors for reassigned stores and returns the exact loadout-sandbox helper required by the following owner. |
+| `_cim_regression_forge_surfaces.lua` | The final 46 Athanor, standard-forge, inventory, loadout, and mission-safe presentation checks in frozen order. All three chunks are loaded before any installer runs; this owner receives the core helper by identity and validates required context before registering any suffix check. |
 | `_cim_bulk_cleanup_core.lua` + `_cim_bulk_cleanup_command.lua` | Issue #277 exact-owner cleanup. The pure core classifies/fingerprints candidates and clears persistence references; the one-time command adapter owns `/forge_delete_all` and receives narrow accessors for the entry's reassigned craft store plus backend interfaces. Destructive scope comes only from `_cim_synthetic_item_contract.lua` and fails closed on unreadable identity or equip state. |
 | `modded_rarities.lua` | Custom "modded" rarity registration (Colors/UISettings/RaritySettings/NetworkLookup table contacts), `_G.Localize` supply, deus weapon-pool scrub, Jewellery->Accessories relabel. Pre-existing. |
 | `standard_forge.lua` | The standard Keep crafting bench: material-clean craft/salvage/reroll synth into the backend mirror, the EAC choke-point `craft`/`_get_valid_recipe`/`enqueue` hooks, CraftPage requirement forcing, jewelry-slot pin, and manifest owner for the salvage-button extension. Pre-existing. |
@@ -121,9 +123,12 @@ new module needs only its manifest dofile line + a row here.
 - **New read-only diagnostic dump command** with no cim-state dependency ->
   `_cim_dump_commands.lua`. A dump that reads `_custom_forge_active` / `_forged_weapons`
   belongs in accessor-backed `_cim_command_owner.lua`.
-- **New regression check** -> add `_rt_register("name", fn)` in
-  `_cim_regression_checks.lua` in the existing registration order. A check that SOURCE-SCANS a module's file
-  must anchor `debug.getinfo` on a function DEFINED in that module (e.g.
+- **New regression check** -> register it in the module that owns the guarded
+  behavior when that module already receives `rt_register`. Cross-owner late
+  invariants go into the narrowest bounded regression owner above without
+  reordering the frozen cleanup/core/forge-surface stream; do not grow the core
+  file by default. A check that SOURCE-SCANS a module's file must anchor
+  `debug.getinfo` on a function DEFINED in that module (e.g.
   `mod._cim_sweep_leaked_hdr_worlds`), never on `_rt_register` (entry).
 - **New cross-file value** -> publish `mod._cim_<name>` in the owning module and reference
   it via the namespace at RUNTIME (call-time), so dofile order stays free. If an entry

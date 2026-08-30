@@ -12,7 +12,6 @@
     "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_runtime_checks.lua": 2284,
     "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_glow_picker.lua": 1515,
     "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_la_bridge.lua": 1553,
-    "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_regression_checks.lua": 2429,
     "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/standard_forge.lua": 1744,
     "crafting_in_modded/scripts/mods/crafting_in_modded/_cim_regression_checks.lua": 2234,
     "crafting_in_modded/scripts/mods/crafting_in_modded/standard_forge.lua": 1691,
