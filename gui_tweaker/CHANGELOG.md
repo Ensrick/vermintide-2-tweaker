@@ -35,6 +35,9 @@
 - This is a selective stable promotion. It does not import unrelated GUI Dev
   work, change the public Workshop identity, or alter Mod Tweaker row-color
   policy.
+- Normalizes away the SDK tool-only LUT-generator sidecar so clean rebuilds and
+  reviewed publication receipts describe the same runtime artifact set.
+- VT2-Bundle-Retirement: `e7852992f40eb619.mod_bundle`
 
 ## 0.2.286 (2026-08-28) — verified DEFAULT transaction promotion (#312, #446, #631, #649, #1002)
 
