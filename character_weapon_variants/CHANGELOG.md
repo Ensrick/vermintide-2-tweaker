@@ -1,5 +1,14 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.536-dev (2026-08-30) -- reconcile the canonical registrar release (#428) [not-started]
+
+- Reissued the already-reviewed `0.1.535-dev` CWV registrar child under a fresh
+  canonical ship claim after the earlier claim was released before Workshop
+  publication. Production behavior is unchanged from `0.1.535-dev`.
+- This build carries only the bounded deferred item-name registration child of
+  #428. The architectural umbrella remains open; no in-game readiness or
+  resolution is claimed by this release-only reconciliation.
+
 ## 0.1.535-dev (2026-08-30) -- adopt the canonical deferred item-name registrar (#428) [not-started]
 
 - Replaced CWV's private deferred `NetworkLookup.item_names` append with the
