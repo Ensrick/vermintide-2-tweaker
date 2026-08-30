@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.534-dev"
+local MOD_VERSION = "0.1.535-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
 mod._cwv_dev_anim_picker = mod:dofile("scripts/mods/character_weapon_variants/cwv_dev_anim_picker")
@@ -978,6 +978,8 @@ mod:dofile("scripts/mods/character_weapon_variants/_cwv_item_registration_owner"
 	om = _om,
 	dbg = _dbg,
 	dbg_alert = _dbg_alert,
+	network_lookup = mod:dofile(
+		"scripts/mods/character_weapon_variants/_lib_network_lookup"),
 	variant_definitions = _variant_definitions,
 	custom_skin_keys = _custom_skin_keys,
 	career_weapon_actions = _career_weapon_actions,

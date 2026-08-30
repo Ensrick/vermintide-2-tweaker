@@ -104,6 +104,20 @@ local function assert_raw_unchanged(H, value, snapshot, label)
 	end
 end
 
+local function assert_raw_equal(H, left, right, label)
+	local left_snapshot = raw_snapshot(left)
+	local right_snapshot = raw_snapshot(right)
+	H.equal(left_snapshot.count, right_snapshot.count, label .. " raw key count drifted")
+	for key, entry in next, left do
+		local other = rawget(right, key)
+		H.truthy(other ~= nil, label .. " lost raw key " .. tostring(key))
+		H.truthy(same_value(entry, other), label .. " changed raw key " .. tostring(key))
+	end
+	for key in next, right do
+		H.truthy(rawget(left, key) ~= nil, label .. " added raw key " .. tostring(key))
+	end
+end
+
 local function expect_rejection(H, M, lookup, name, expected_reason, label)
 	local snapshot = raw_snapshot(lookup)
 	local ok, index, inserted, reason = pcall(M.register, lookup, name)
@@ -355,6 +369,141 @@ return function(H, repo_root)
 		H.equal(reason, "reverse_not_numeric")
 		assert_raw_unchanged(H, network_lookup, outer_snapshot, "strict named outer lookup")
 		assert_raw_unchanged(H, child, child_snapshot, "strict named child lookup")
+	end)
+
+	H.test("CWV #428 deferred item-name registration preserves legacy order and idempotence", function()
+		local pending_defs = {
+			{ def = { item_key = "cwv_first" } },
+			{ def = { item_key = "cwv_existing" } },
+			{ def = { item_key = "cwv_last" } },
+		}
+		local reference = { "vanilla", "cwv_existing" }
+		reference.vanilla = 1
+		reference.cwv_existing = 2
+		local shared = { "vanilla", "cwv_existing" }
+		shared.vanilla = 1
+		shared.cwv_existing = 2
+
+		-- Exact pre-#428 CWV loop, retained only as the equivalence oracle.
+		for _, pending in ipairs(pending_defs) do
+			local key = pending.def.item_key
+			if not rawget(reference, key) then
+				local index = #reference + 1
+				rawset(reference, index, key)
+				rawset(reference, key, index)
+			end
+		end
+
+		local strict = {
+			__index = function() error("strict __index reached") end,
+			__newindex = function() error("strict __newindex reached") end,
+		}
+		setmetatable(shared, strict)
+		local network_lookup = setmetatable({ item_names = shared }, strict)
+		for _, pending in ipairs(pending_defs) do
+			local key = pending.def.item_key
+			local index, _, reason = M.register_named(network_lookup, "item_names", key)
+			H.truthy(index ~= nil, "CWV registration rejected " .. key .. ": " .. tostring(reason))
+		end
+
+		assert_raw_equal(H, shared, reference, "CWV ordered registration")
+		H.equal(rawget(shared, 3), "cwv_first", "first pending insertion moved")
+		H.equal(rawget(shared, 4), "cwv_last", "last pending insertion moved")
+		H.equal(getmetatable(shared), strict, "CWV registration changed child metatable")
+		H.equal(getmetatable(network_lookup), strict, "CWV registration changed outer metatable")
+
+		local before_second_pass = raw_snapshot(shared)
+		for _, pending in ipairs(pending_defs) do
+			local key = pending.def.item_key
+			local index, inserted, reason = M.register_named(
+				network_lookup, "item_names", key)
+			H.equal(index, rawget(shared, key), "CWV idempotent index drifted for " .. key)
+			H.equal(inserted, false, "CWV idempotent pass reinserted " .. key)
+			H.equal(reason, "already_registered", "CWV idempotent reason drifted for " .. key)
+		end
+		assert_raw_unchanged(H, shared, before_second_pass, "CWV idempotent batch")
+	end)
+
+	H.test("CWV #428 malformed item-name lookups reject a whole batch without mutation", function()
+		local strict = {
+			__index = function() error("strict __index reached") end,
+			__newindex = function() error("strict __newindex reached") end,
+		}
+		local pending_defs = {
+			{ def = { item_key = "cwv_first" } },
+			{ def = { item_key = "cwv_second" } },
+		}
+		local cases = {
+			{
+				label = "sparse",
+				reason = "numeric_side_sparse",
+				lookup = {
+					[1] = "vanilla",
+					[3] = "foreign",
+					vanilla = 1,
+					foreign = 3,
+				},
+			},
+			{
+				label = "asymmetric",
+				reason = "pair_asymmetric",
+				lookup = {
+					[1] = "vanilla",
+					vanilla = 2,
+				},
+			},
+		}
+
+		for _, case in ipairs(cases) do
+			local malformed = setmetatable(case.lookup, strict)
+			local network_lookup = setmetatable({ item_names = malformed }, strict)
+			local outer_before = raw_snapshot(network_lookup)
+			local child_before = raw_snapshot(malformed)
+			for _, pending in ipairs(pending_defs) do
+				local index, inserted, reason = M.register_named(
+					network_lookup, "item_names", pending.def.item_key)
+				H.equal(index, nil, case.label .. " CWV batch returned an index")
+				H.equal(inserted, false, case.label .. " CWV batch reported insertion")
+				H.equal(reason, case.reason, case.label .. " CWV reason drifted")
+			end
+			assert_raw_unchanged(H, network_lookup, outer_before,
+				"CWV " .. case.label .. " outer lookup")
+			assert_raw_unchanged(H, malformed, child_before,
+				"CWV " .. case.label .. " item_names")
+		end
+	end)
+
+	H.test("CWV #428 item registration consumes its manifested canonical helper", function()
+		local cwv_consumer = repo_root
+			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_lib_network_lookup.lua"
+		H.equal(read(cwv_consumer), read(canonical_path), "CWV helper copy drifted")
+		local manifest = read(repo_root .. "/tools/shared_lib/manifest.psd1")
+		H.truthy(manifest:find(
+			'"character_weapon_variants/scripts/mods/character_weapon_variants/_lib_network_lookup.lua"',
+			1, true), "CWV helper is absent from the shared-library manifest")
+
+		local entry = read(repo_root
+			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua")
+		local owner = read(repo_root
+			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_item_registration_owner.lua")
+		local helper_path = "scripts/mods/character_weapon_variants/_lib_network_lookup"
+		H.equal(count_plain(entry, helper_path), 1,
+			"CWV entry must inject the helper into item registration exactly once")
+		H.truthy(entry:find("network_lookup = mod:dofile(", 1, true),
+			"CWV entry does not inject the shared helper")
+		H.truthy(owner:find("local _network_lookup = assert(ctx.network_lookup,", 1, true),
+			"CWV item registration does not require its injected helper")
+		H.truthy(owner:find(
+			'_network_lookup.register_named(NetworkLookup, "item_names", key)',
+			1, true), "CWV item registration does not use register_named")
+		H.truthy(owner:find("if NetworkLookup and NetworkLookup.item_names then", 1, true),
+			"CWV missing-table guard drifted")
+		H.truthy(owner:find("for _, pending in ipairs(pending_defs) do", 1, true),
+			"CWV pending-definition order is no longer ipairs order")
+		H.equal(owner:find("#NetworkLookup.item_names + 1", 1, true), nil,
+			"CWV still owns the legacy append index")
+		H.equal(owner:find("rawset(NetworkLookup.item_names", 1, true), nil,
+			"CWV still mutates item_names outside the canonical helper")
 	end)
 
 	H.test("Career Tweaker #428 shared registration preserves all 36 legacy rows", function()
