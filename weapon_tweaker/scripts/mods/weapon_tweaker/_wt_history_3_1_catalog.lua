@@ -50,9 +50,49 @@ return {
                 [1] = "blunderbuss_template_1",
             },
         },
+        [2] = {
+            display_name = "Kruber's Tuskgor Spear",
+            id = "tuskgor_spear",
+            label_key = "wt_history_family_tuskgor_spear",
+            setting_id = "wt_history_tuskgor_spear",
+            state_order = {
+                [1] = "pre_3_1_delta",
+            },
+            states = {
+                pre_3_1_delta = {
+                    direct_profile_names = {},
+                    operations = {
+                        [1] = {
+                            change_class = "official_weapon_balance",
+                            current_source_blob = "7575b5035a40d9957514667538d253af46e18c9a",
+                            expected_current = 0.5,
+                            expected_present = true,
+                            family_id = "tuskgor_spear",
+                            official_change_id = "P310-TUSKGOR-BLOCK-COST",
+                            official_summary = "Patch 3.1 changed the Tuskgor Spear from the shield block-cost modifier to the normal block-cost modifier.",
+                            path = {
+                                [1] = "block_fatigue_point_multiplier",
+                            },
+                            result = 0.25,
+                            result_present = true,
+                            root = "Weapons",
+                            source_blob = "bdd5a9bed6cf3e4a826206318a090cc198ccf7de",
+                            source_path = "scripts/settings/equipment/weapon_templates/2h_heavy_spears.lua",
+                            source_revision = "c96aa3858011ecd557d55d80b66fe3bb8342eeb2",
+                            state_id = "pre_3_1_delta",
+                            template = "two_handed_heavy_spears_template",
+                        },
+                    },
+                    profile_names = {},
+                },
+            },
+            templates = {
+                [1] = "two_handed_heavy_spears_template",
+            },
+        },
     },
     generation = {
-        adjacent_operation_count = 1,
+        adjacent_operation_count = 2,
         global_operations = 0,
         profile_route_count = 0,
         unsupported_count = 0,

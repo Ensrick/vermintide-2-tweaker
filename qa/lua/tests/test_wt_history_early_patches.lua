@@ -75,7 +75,7 @@ local function register(H, repo_root)
             "public and dev must carry byte-identical pure Patch 3.2 data")
     end)
 
-    H.test("WT #1436 generated Patch 3.1 catalog pins one bounded Blunderbuss delta", function()
+    H.test("WT #1436 generated Patch 3.1 catalog pins two bounded family deltas", function()
         local catalog = assert(loadfile(script_root .. "_wt_history_3_1_catalog.lua"))()
         local valid, validation_error = Policy.validate(catalog)
         H.equal(validation_error, nil)
@@ -84,7 +84,7 @@ local function register(H, repo_root)
         H.equal(catalog.catalog_id, "wt_history_patch_3_1_v1")
         H.equal(catalog.current_source.revision,
             "038498af2b565bcb10bf5ed225638293a7640c83")
-        H.equal(#catalog.families, 1)
+        H.equal(#catalog.families, 2)
         H.equal(next(catalog.profile_specs), nil)
         H.equal(next(catalog.derived_profiles), nil)
 
@@ -118,7 +118,7 @@ local function register(H, repo_root)
             "87dca4018c18051d653a80b7aff501ed9815a5d0")
         H.equal(row.official_change_id, "P310-BLUNDERBUSS-MAX-AMMO")
         H.deep_equal(catalog.generation, {
-            adjacent_operation_count = 1,
+            adjacent_operation_count = 2,
             global_operations = 0,
             profile_route_count = 0,
             unsupported_count = 0,
@@ -135,6 +135,11 @@ local function register(H, repo_root)
             Weapons = {
                 blunderbuss_template_1 = { ammo_data = { max_ammo = 16 } },
                 blunderbuss_template_1_vs = { ammo_data = { max_ammo = 9 } },
+                two_handed_heavy_spears_template = {
+                    block_fatigue_point_multiplier = 0.5,
+                    metadata = { owner = "tuskgor" },
+                    outer_block_fatigue_point_multiplier = 2,
+                },
             },
         }
         local plan = assert(Policy.build_family_plan(
@@ -142,6 +147,9 @@ local function register(H, repo_root)
         H.equal(#plan, 1)
         local ledger = assert(Policy.commit(plan))
         H.equal(roots.Weapons.blunderbuss_template_1.ammo_data.max_ammo, 12)
+        H.equal(roots.Weapons.two_handed_heavy_spears_template
+            .block_fatigue_point_multiplier, 0.5,
+            "Blunderbuss selection must not alter the Tuskgor family")
         H.equal(roots.Weapons.blunderbuss_template_1_vs.ammo_data.max_ammo, 9,
             "current-only Versus template must remain excluded")
         H.equal(Policy.restore(ledger), true)
@@ -152,6 +160,66 @@ local function register(H, repo_root)
             catalog, family, "pre_3_1_delta", roots)
         H.equal(refused, nil)
         H.truthy(refusal and refusal:find("current guard mismatch", 1, true))
+
+        roots.Weapons.blunderbuss_template_1.ammo_data.max_ammo = 16
+        local spear = catalog.families[2]
+        H.equal(spear.id, "tuskgor_spear")
+        H.equal(spear.setting_id, "wt_history_tuskgor_spear")
+        H.equal(spear.label_key, "wt_history_family_tuskgor_spear")
+        H.equal(spear.display_name, "Kruber's Tuskgor Spear")
+        H.deep_equal(spear.templates, { "two_handed_heavy_spears_template" })
+        H.deep_equal(spear.state_order, { "pre_3_1_delta" })
+        local spear_state = spear.states.pre_3_1_delta
+        H.deep_equal(spear_state.profile_names, {})
+        H.deep_equal(spear_state.direct_profile_names, {})
+        H.equal(#spear_state.operations, 1)
+        local spear_row = spear_state.operations[1]
+        H.equal(spear_row.root, "Weapons")
+        H.equal(spear_row.template, "two_handed_heavy_spears_template")
+        H.deep_equal(spear_row.path, { "block_fatigue_point_multiplier" })
+        H.equal(spear_row.expected_present, true)
+        H.equal(spear_row.expected_current, 0.5)
+        H.equal(spear_row.result_present, true)
+        H.equal(spear_row.result, 0.25)
+        H.equal(spear_row.source_revision,
+            "c96aa3858011ecd557d55d80b66fe3bb8342eeb2")
+        H.equal(spear_row.source_blob,
+            "bdd5a9bed6cf3e4a826206318a090cc198ccf7de")
+        H.equal(spear_row.current_source_blob,
+            "7575b5035a40d9957514667538d253af46e18c9a")
+        H.equal(spear_row.source_path,
+            "scripts/settings/equipment/weapon_templates/2h_heavy_spears.lua")
+        H.equal(spear_row.official_change_id, "P310-TUSKGOR-BLOCK-COST")
+        H.equal(spear_row.family_id, "tuskgor_spear")
+        H.equal(spear_row.state_id, "pre_3_1_delta")
+
+        local spear_template = roots.Weapons.two_handed_heavy_spears_template
+        local spear_metadata = spear_template.metadata
+        local spear_plan = assert(Policy.build_family_plan(
+            catalog, spear, "pre_3_1_delta", roots))
+        H.equal(#spear_plan, 1)
+        local spear_ledger = assert(Policy.commit(spear_plan))
+        H.equal(spear_template.block_fatigue_point_multiplier, 0.25)
+        H.equal(spear_template.outer_block_fatigue_point_multiplier, 2)
+        H.equal(spear_template.metadata, spear_metadata,
+            "Tuskgor projection must preserve sibling identity")
+        H.equal(roots.Weapons.blunderbuss_template_1.ammo_data.max_ammo, 16,
+            "Tuskgor selection must not alter the Blunderbuss family")
+        H.equal(Policy.restore(spear_ledger), true)
+        H.equal(spear_template.block_fatigue_point_multiplier, 0.5)
+
+        spear_template.block_fatigue_point_multiplier = 0.25
+        refused, refusal = Policy.build_family_plan(
+            catalog, spear, "pre_3_1_delta", roots)
+        H.equal(refused, nil)
+        H.truthy(refusal and refusal:find("current guard mismatch", 1, true))
+        spear_template.block_fatigue_point_multiplier = nil
+        refused, refusal = Policy.build_family_plan(
+            catalog, spear, "pre_3_1_delta", roots)
+        H.equal(refused, nil)
+        H.truthy(refusal and refusal:find("current guard mismatch", 1, true))
+        H.equal(spear_template.outer_block_fatigue_point_multiplier, 2,
+            "failed plans must not write sibling leaves")
     end)
 
     H.test("WT #1436 generated Patch 4.1.1 catalog preserves a present-false guard", function()

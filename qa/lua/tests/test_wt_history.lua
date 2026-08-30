@@ -688,21 +688,23 @@ local function register(H, repo_root)
         })
         H.deep_equal(catalog_counts(catalog), {
             derived_profiles = 1,
-            families = 20,
-            family_states = 31,
-            operations = 200,
+            families = 21,
+            family_states = 32,
+            operations = 201,
             profiles = 16,
             states = 10,
         })
-        local elf_axe, kruber, masterwork
+        local elf_axe, kruber, masterwork, tuskgor
         for _, family in ipairs(catalog.families) do
             if family.id == "elf_one_handed_axe" then elf_axe = family end
             if family.id == "kruber_sword_and_shield" then kruber = family end
             if family.id == "masterwork_pistol" then masterwork = family end
+            if family.id == "tuskgor_spear" then tuskgor = family end
         end
         H.deep_equal(assert(kruber).state_order, { "5_1_1", "5_2_0", "5_6_1" })
         H.deep_equal(assert(masterwork).state_order, { "4_0_1", "5_2_0" })
         H.deep_equal(assert(elf_axe).state_order, { "3_1_0", "5_1_1", "5_2_0" })
+        H.deep_equal(assert(tuskgor).state_order, { "pre_3_1_delta" })
         local valid, validation_error = Policy.validate(catalog)
         H.equal(validation_error, nil)
         H.equal(valid, true)
@@ -758,7 +760,7 @@ local function register(H, repo_root)
         rejects(function(value)
             value.catalogs[1].unexpected = true
         end, "unexpected key")
-        rejects(function(value) value.totals.operations = 201 end,
+        rejects(function(value) value.totals.operations = 202 end,
             "aggregate totals drift")
 
         local extra_state_catalogs = clone(catalogs)
@@ -1463,7 +1465,7 @@ local function register(H, repo_root)
         H.equal(CatalogUI.decorate_menu(mod, data), data)
         H.equal(data.options.widgets[1], first)
         H.equal(data.options.widgets[2].setting_id, "wt_history_patch_versions")
-        H.equal(#data.options.widgets[2].sub_widgets, 20)
+        H.equal(#data.options.widgets[2].sub_widgets, 21)
         H.equal(data.options.widgets[3], second)
         H.equal(loads, 9)
         H.equal(CatalogUI.decorate_menu(mod, data), data)
@@ -1515,7 +1517,7 @@ local function register(H, repo_root)
             H.equal(data.options.widgets[1], availability)
             H.equal(data.options.widgets[2].setting_id,
                 "wt_history_patch_versions")
-            H.equal(#data.options.widgets[2].sub_widgets, 20)
+            H.equal(#data.options.widgets[2].sub_widgets, 21)
             H.equal(data.options.widgets[3], overrides)
             H.equal(loads, 9)
             H.equal(catalog_ui.decorate_menu(mod, data), data)

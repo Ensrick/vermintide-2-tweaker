@@ -1,4 +1,4 @@
--- Generate the bounded Patch 3.1 Blunderbuss history catalog (#1436).
+-- Generate the bounded Patch 3.1 weapon-history catalog (#1436).
 --
 -- Usage:
 --   lua5.1 generate_patch_3_1_history.lua <source-repo> <evidence-dir> <output.lua>
@@ -75,66 +75,181 @@ local function exact_keys(value, expected, label)
     end
 end
 
-local expected_path = { "ammo_data", "max_ammo" }
+local expected_by_family = {
+    kruber_blunderbuss = {
+        adjacent = "_wt_history_snapshot_pre_3_1_to_3_1_generated.lua",
+        current = 16,
+        historical = 12,
+        path = { "ammo_data", "max_ammo" },
+        rehydrated = "_wt_history_snapshot_pre_3_1_rehydrated_generated.lua",
+    },
+    tuskgor_spear = {
+        adjacent =
+            "_wt_history_snapshot_pre_3_1_tuskgor_to_3_1_generated.lua",
+        current = 0.5,
+        historical = 0.25,
+        path = { "block_fatigue_point_multiplier" },
+        rehydrated =
+            "_wt_history_snapshot_pre_3_1_tuskgor_rehydrated_generated.lua",
+    },
+}
 
-local function validate_snapshot(snapshot, rehydrated, catalog)
+local function validate_snapshot(snapshot, rehydrated, catalog, change, expected)
+    local family_id = change.family.id
     exact_keys(snapshot, { "new_revision", "old_revision", "records" },
-        rehydrated and "rehydrated snapshot" or "adjacent snapshot")
+        family_id .. (rehydrated and " rehydrated snapshot" or " adjacent snapshot"))
     assert(snapshot.old_revision == catalog.boundary.historical_revision,
-        "historical revision drift")
+        family_id .. " historical revision drift")
     assert(snapshot.new_revision == catalog.boundary.post_revision,
-        "boundary revision drift")
-    assert(array_length(snapshot.records) == 1, "snapshot record budget drift")
+        family_id .. " boundary revision drift")
+    assert(array_length(snapshot.records) == 1,
+        family_id .. " snapshot record budget drift")
     local record = snapshot.records[1]
     exact_keys(record, { "ops", "source_path", "template", "unsupported" },
-        "snapshot record")
-    assert(record.source_path == catalog.source_path, "source path drift")
-    assert(record.template == catalog.family.template, "template drift")
-    assert(count_keys(record.unsupported) == 0, "unsupported source delta present")
-    assert(array_length(record.ops) == 1, "operation budget drift")
+        family_id .. " snapshot record")
+    assert(record.source_path == change.source_path,
+        family_id .. " source path drift")
+    assert(record.template == change.family.template,
+        family_id .. " template drift")
+    assert(count_keys(record.unsupported) == 0,
+        family_id .. " unsupported source delta present")
+    assert(array_length(record.ops) == 1,
+        family_id .. " operation budget drift")
     local operation = record.ops[1]
     exact_keys(operation, rehydrated
         and { "expected_current", "expected_current_unset", "path", "unset", "value" }
-        or { "path", "unset", "value" }, "snapshot operation")
-    assert(array_length(operation.path) == #expected_path, "operation path length drift")
-    for index, key in ipairs(expected_path) do
-        assert(operation.path[index] == key, "operation path drift at " .. index)
+        or { "path", "unset", "value" }, family_id .. " snapshot operation")
+    assert(array_length(operation.path) == #expected.path,
+        family_id .. " operation path length drift")
+    for index, key in ipairs(expected.path) do
+        assert(operation.path[index] == key,
+            family_id .. " operation path drift at " .. index)
     end
-    assert(operation.unset == false and operation.value == 12,
-        "historical maximum ammunition drift")
+    assert(operation.unset == false and operation.value == expected.historical,
+        family_id .. " historical value drift")
     if rehydrated then
         assert(operation.expected_current_unset == false
-                and operation.expected_current == 16,
-            "current maximum ammunition guard drift")
+                and operation.expected_current == expected.current,
+            family_id .. " current guard drift")
     end
-    return operation
+    return record, operation
 end
 
 local source_catalog = load_data(evidence_dir .. "/_wt_history_3_1_source_catalog.lua")
-assert(source_catalog.schema == 1, "unsupported Patch 3.1 source catalog")
+assert(source_catalog.schema == 2, "unsupported Patch 3.1 source catalog")
+exact_keys(source_catalog, {
+    "artifacts", "boundary", "changes", "current", "exclusions",
+    "official_patch_notes", "schema", "state",
+}, "Patch 3.1 source catalog")
+exact_keys(source_catalog.boundary,
+    { "historical_revision", "post_revision" }, "Patch 3.1 boundary")
+exact_keys(source_catalog.current, { "revision" }, "Patch 3.1 current source")
+exact_keys(source_catalog.state,
+    { "display_name", "id", "label_key" }, "Patch 3.1 state")
 assert(source_catalog.current.revision == current_anchor.content_revision,
     "unexpected current revision")
+assert(source_catalog.boundary.historical_revision
+        == "c96aa3858011ecd557d55d80b66fe3bb8342eeb2"
+        and source_catalog.boundary.post_revision
+            == "3f0e3ba442d8dcafb8b5f829ff6c2a95ae24ae63",
+    "Patch 3.1 boundary identity drift")
+assert(source_catalog.state.id == "pre_3_1_delta",
+    "Patch 3.1 state identity drift")
+assert(source_catalog.official_patch_notes
+        == "https://www.vermintide.com/news/patch-31",
+    "Patch 3.1 official source drift")
 assert(array_length(source_catalog.exclusions) == 1
         and source_catalog.exclusions[1].template == "blunderbuss_template_1_vs",
     "current-only Versus exclusion drift")
-assert(git_blob(source_catalog.boundary.historical_revision,
-        source_catalog.source_path) == source_catalog.boundary.historical_blob,
-    "historical source blob drift")
-assert(git_blob(source_catalog.boundary.post_revision,
-        source_catalog.source_path) == source_catalog.boundary.post_blob,
-    "post-boundary source blob drift")
-assert(git_blob(source_catalog.current.revision,
-        source_catalog.source_path) == source_catalog.current.blob,
-    "current source blob drift")
+exact_keys(source_catalog.exclusions[1], { "id", "reason", "template" },
+    "Patch 3.1 exclusion")
 
-local adjacent = load_data(evidence_dir
-    .. "/_wt_history_snapshot_pre_3_1_to_3_1_generated.lua")
-local rehydrated = load_data(evidence_dir
-    .. "/_wt_history_snapshot_pre_3_1_rehydrated_generated.lua")
-validate_snapshot(adjacent, false, source_catalog)
-local operation = validate_snapshot(rehydrated, true, source_catalog)
+local change_count = array_length(source_catalog.changes)
+assert(change_count == 2, "Patch 3.1 change budget drift")
+local generated_families = {}
+local seen_families, seen_settings, seen_sources, seen_templates = {}, {}, {}, {}
+for index, change in ipairs(source_catalog.changes) do
+    exact_keys(change, {
+        "current_blob", "family", "historical_blob", "official_change_id",
+        "official_summary", "post_blob", "source_path",
+    }, "Patch 3.1 change " .. index)
+    exact_keys(change.family, {
+        "display_name", "id", "label_key", "setting_id", "template",
+    }, "Patch 3.1 family " .. index)
+    local family = change.family
+    local expected = expected_by_family[family.id]
+    assert(expected and not seen_families[family.id],
+        "duplicate or unknown Patch 3.1 family " .. tostring(family.id))
+    assert(not seen_settings[family.setting_id],
+        "duplicate Patch 3.1 setting " .. tostring(family.setting_id))
+    assert(not seen_sources[change.source_path],
+        "duplicate Patch 3.1 source " .. tostring(change.source_path))
+    assert(not seen_templates[family.template],
+        "duplicate Patch 3.1 template " .. tostring(family.template))
+    assert(type(change.official_change_id) == "string"
+            and change.official_change_id ~= ""
+            and type(change.official_summary) == "string"
+            and change.official_summary ~= "",
+        "Patch 3.1 official identity is incomplete for " .. family.id)
+    assert(git_blob(source_catalog.boundary.historical_revision,
+            change.source_path) == change.historical_blob,
+        family.id .. " historical source blob drift")
+    assert(git_blob(source_catalog.boundary.post_revision,
+            change.source_path) == change.post_blob,
+        family.id .. " post-boundary source blob drift")
+    assert(git_blob(source_catalog.current.revision,
+            change.source_path) == change.current_blob,
+        family.id .. " current source blob drift")
 
-local family, state = source_catalog.family, source_catalog.state
+    local adjacent = load_data(evidence_dir .. "/" .. expected.adjacent)
+    local rehydrated = load_data(evidence_dir .. "/" .. expected.rehydrated)
+    validate_snapshot(adjacent, false, source_catalog, change, expected)
+    local _, operation = validate_snapshot(
+        rehydrated, true, source_catalog, change, expected)
+    local state = source_catalog.state
+    generated_families[#generated_families + 1] = {
+        display_name = family.display_name,
+        id = family.id,
+        label_key = family.label_key,
+        setting_id = family.setting_id,
+        state_order = { state.id },
+        states = {
+            [state.id] = {
+                direct_profile_names = {},
+                operations = {
+                    {
+                        change_class = "official_weapon_balance",
+                        current_source_blob = change.current_blob,
+                        expected_current = operation.expected_current,
+                        expected_present = not operation.expected_current_unset,
+                        family_id = family.id,
+                        official_change_id = change.official_change_id,
+                        official_summary = change.official_summary,
+                        path = operation.path,
+                        result = operation.value,
+                        result_present = not operation.unset,
+                        root = "Weapons",
+                        source_blob = change.historical_blob,
+                        source_path = change.source_path,
+                        source_revision = source_catalog.boundary.historical_revision,
+                        state_id = state.id,
+                        template = family.template,
+                    },
+                },
+                profile_names = {},
+            },
+        },
+        templates = { family.template },
+    }
+    seen_families[family.id] = true
+    seen_settings[family.setting_id] = true
+    seen_sources[change.source_path] = true
+    seen_templates[family.template] = true
+end
+assert(count_keys(seen_families) == count_keys(expected_by_family),
+    "Patch 3.1 expected-family census drift")
+
+local state = source_catalog.state
 local catalog = {
     catalog_id = "wt_history_patch_3_1_v1",
     current_id = "current",
@@ -144,44 +259,9 @@ local catalog = {
         revision = source_catalog.current.revision,
     },
     derived_profiles = {},
-    families = {
-        {
-            display_name = family.display_name,
-            id = family.id,
-            label_key = family.label_key,
-            setting_id = family.setting_id,
-            state_order = { state.id },
-            states = {
-                [state.id] = {
-                    direct_profile_names = {},
-                    operations = {
-                        {
-                            change_class = "official_weapon_balance",
-                            current_source_blob = source_catalog.current.blob,
-                            expected_current = operation.expected_current,
-                            expected_present = true,
-                            family_id = family.id,
-                            official_change_id = source_catalog.official_change_id,
-                            official_summary = source_catalog.official_summary,
-                            path = operation.path,
-                            result = operation.value,
-                            result_present = true,
-                            root = "Weapons",
-                            source_blob = source_catalog.boundary.historical_blob,
-                            source_path = source_catalog.source_path,
-                            source_revision = source_catalog.boundary.historical_revision,
-                            state_id = state.id,
-                            template = family.template,
-                        },
-                    },
-                    profile_names = {},
-                },
-            },
-            templates = { family.template },
-        },
-    },
+    families = generated_families,
     generation = {
-        adjacent_operation_count = 1,
+        adjacent_operation_count = change_count,
         global_operations = 0,
         profile_route_count = 0,
         unsupported_count = 0,
@@ -246,4 +326,5 @@ file:write("-- AUTO-GENERATED by tools/weapon-history/generate_patch_3_1_history
 file:write("return ", serialize(catalog), "\n")
 file:close()
 
-print("generated " .. output_path .. " families=1 operations=1 profiles=0 globals=0")
+print("generated " .. output_path .. " families=" .. change_count
+    .. " operations=" .. change_count .. " profiles=0 globals=0")
