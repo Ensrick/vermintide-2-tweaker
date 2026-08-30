@@ -414,9 +414,28 @@ source-less CI still exercises the boolean contract. The blocking
 `run_wt_history_patch_4_1_1_host_matrix.ps1` repeats the gate and both source
 selection adversaries under PowerShell 7 and Windows PowerShell 5.1.
 
+`check_wt_history_patch_4_6_reproducibility.ps1` pins the bounded Hagbane-only
+slice: six immutable source files and all 18 exact revision/path/blob inputs,
+seven evidence artifacts, the independent two-route oracle, and byte-identical
+public/dev catalogs. All post-selection Git reads disable lazy fetch and
+optional locks. Both evaluator lanes
+reproduce the historical, post-boundary, and current profile payloads. The gate
+requires exactly the two `allow_dot_finesse_hit` additions, retains the
+Ricochet `aoe_on_bounce`, presentation-only `weapon_diagram`, and refactor
+symbol as explicit exclusions, and proves the generated private profiles
+preserve the current schema.
+`run_wt_history_patch_4_6_host_matrix.ps1` repeats that gate plus the freshness
+and incomplete-checkout adversaries under PowerShell 7 and Windows PowerShell
+5.1. The real-source gate also rejects an otherwise complete ledger with the
+current Woods profile blob identity altered, while the no-lazy-fetch guard
+prevents an absent object from being fetched after source selection.
+Ordinary source-less CI reports pinned-only validation; the documented
+`-SourceRepo ... -RequireSource` invocation is the strict dual-host release
+proof and rejects any source-regeneration skip.
+
 `check_wt_history_patch_6_0_reproducibility.ps1` pins the bounded Patch 6.0
 two-shield scalar and Fireball profile slice. Its source-unavailable messages
-share the same visible-skip/required-failure contract as the other four gates,
+share the same visible-skip/required-failure contract as the other five gates,
 so the incomplete-checkout adversary now covers every supported slice.
 
 `check_wt_history_source_freshness.ps1` consumes the one weapon-history anchor
@@ -446,8 +465,8 @@ fail-closed, repeated real PS5 tree, and delayed-real-taskkill fixtures pin the
 contract under both PowerShell hosts.
 
 `check_wt_history_source_checkout.ps1` is the offline source-selection
-adversary. Under both PowerShell hosts it presents all five reproduction gates
-for Patch 4.1.1, 5.2, 6.0, 6.6, and 6.8,
+adversary. Under both PowerShell hosts it presents all six reproduction gates
+for Patch 4.1.1, 4.6, 5.2, 6.0, 6.6, and 6.8,
 with an intentionally incomplete Git checkout, requires an ordinary visible
 skip and a `-RequireSource` failure from each, and restores its environment
 without fetch (including promisor lazy-fetch), network access, checkout
@@ -482,9 +501,11 @@ the complete pinned-artifact gate and reports the regeneration skip.
 | `check_event_register_signature.ps1` | ✅ OK | clean post-gt v0.2.61 → .64 fix cycle (2026-05-25). This static check is the live gate; the former `bt:safe_event_register` runtime safety net (buff_tweaker v0.1.10-alpha+) is RETIRED (bt archived 2026-06). |
 | `check_wt_history_reproducibility.ps1` | ✅ OK (2026-08-28) | Issue #1436 full-QA gate for the pinned Patch 5.2 evidence ledger and byte-exact generated catalog; exact regeneration runs only from a checkout whose complete pinned commit/path/blob ledger passes the read-only selector. |
 | `run_wt_history_patch_4_1_1_host_matrix.ps1` | ✅ OK (2026-08-29) | Issue #1436 blocking dual-host gate for the exact Patch 4.1.1 Masterwork Pistol boundary, present-false current guard, independent 3-by-3 evaluator presence tests, current rehydration, two-artifact/three-file evidence contract, and byte-exact public/dev catalogs. |
+| `check_wt_history_patch_4_6_reproducibility.ps1` | ✅ OK (2026-08-29) | Issue #1436 source-exact Hagbane-only Patch 4.6 gate: two finesse-DoT profile leaves, two current routes, current-schema private rehydration, Ricochet/weapon-diagram/refactor exclusions, primary/oracle agreement, and byte-exact public/dev catalogs. |
+| `run_wt_history_patch_4_6_host_matrix.ps1` | ✅ OK (2026-08-29) | Issue #1436 blocking dual-host validator for the complete six-file/18-object Patch 4.6 source closure, one-DLC-blob-identity adversary, no-fetch/no-lock extraction and exact raw-environment restoration; strict `-RequireSource` performs and requires both regenerations, while source-less CI is explicitly pinned-only. |
 | `check_wt_history_patch_6_0_reproducibility.ps1` | ✅ OK (2026-08-29) | Issue #1436 full-QA gate for the bounded Patch 6.0 shield-scalar and Fireball-profile slice; exact primary/oracle reproduction and catalog generation pass from the complete pinned source checkout. |
 | `check_wt_history_source_freshness.ps1` | ✅ OK (2026-08-28) | Issue #1436 central 6.12.0 semantic anchor plus separately observed canonical default tip; ordinary offline QA may visibly skip only unavailable network, while WT BuildOnly/release requires exact remote ref/tip freshness without fetch/FETCH_HEAD mutation. The total timeout includes proven bounded process-tree termination on PS7 and PS5.1, including taskkill-helper containment. |
-| `check_wt_history_source_checkout.ps1` | ✅ OK (2026-08-29) | Offline PS7/PS5.1 adversary proves that stale/partial Git trees visibly skip ordinary regeneration and fail closed under `-RequireSource` for the Patch 4.1.1, 5.2, 6.0, 6.6, and 6.8 gates. |
+| `check_wt_history_source_checkout.ps1` | ✅ OK (2026-08-29) | Offline PS7/PS5.1 adversary proves that stale/partial Git trees visibly skip ordinary regeneration and fail closed under `-RequireSource` for the Patch 4.1.1, 4.6, 5.2, 6.0, 6.6, and 6.8 gates. |
 | `run_wt_history_patch_6_6_host_matrix.ps1` | ✅ OK (2026-08-28) | Issue #1436 blocking dual-host gate for the exact Patch 6.6 Deepwood Staff adjacent boundary, 6.12.0 current guards, independent-oracle agreement, byte-exact public/dev catalogs, and the timeout/source-selection adversaries. |
 | `check_wt_history_patch_6_8_reproducibility.ps1` | ✅ OK (2026-08-28) | Issue #1436 full-QA gate for the source-adjacent Patch 6.8 Kerillian Greatsword boundary, current-anchor rehydration, independent oracle agreement, and byte-exact generated catalogs. |
 | `check_localization.ps1` | ⚠ 28 warnings | ct BOON_TREE category_ids; et_diff_ + mut_ false-positive prefixes |

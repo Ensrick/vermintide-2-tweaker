@@ -1,5 +1,18 @@
 # Weapon Tweaker Changelog
 
+## 0.12.318-beta (2026-08-29) -- source-exact Patch 4.6 Hagbane history (#1436) [not-started]
+
+- Adds **Game Version 4.5.1** to Kerillian's Hagbane Shortbow history dropdown.
+  The historical state restores both normal and charged arrows to their exact
+  pre-4.6 finesse poison profiles; `Current` remains gameplay-inert.
+- Reconstructs the two private damage profiles from pinned adjacent 4.5.1 and
+  4.6 source revisions, then independently regenerates and compares the full
+  evidence ledger under PowerShell 7 and Windows PowerShell 5.1.
+- Keeps the Patch 4.6 Ricochet change, weapon-diagram presentation root, and
+  Moonfire Bow outside this bounded transaction. No shared native damage
+  profile, hook, RPC, or presentation state is mutated. #1436 remains open for
+  the remaining historical slices.
+
 ## 0.12.317-beta (2026-08-29) -- source-exact Patch 4.1.1 Masterwork Pistol history (#1436) [not-started]
 
 - Adds **Game Version 4.0.1** to the Masterwork Pistol history dropdown. The

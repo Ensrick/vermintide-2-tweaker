@@ -352,6 +352,10 @@ Run-Check "check_wt_history_reproducibility" { & (Join-Path $here "check_wt_hist
 # Issue #1436: reproduce Patch 6.0's bounded two-shield scalar slice and
 # Fireball private-profile leaf from the adjacent and current source anchors.
 Run-Check "check_wt_history_patch_6_0_reproducibility" { & (Join-Path $here "check_wt_history_patch_6_0_reproducibility.ps1") -Quiet:$Quiet }
+# Issue #1436: reproduce the source-adjacent Patch 4.6 Hagbane finesse-DoT
+# profiles and current routes under both supported PowerShell hosts while
+# pinning the excluded Ricochet/refactor rows and source-selection adversaries.
+Run-Check "wt_history_patch_4_6_host_matrix" { & (Join-Path $here "run_wt_history_patch_4_6_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
 # Issue #1436: Patch 6.6's Deepwood Staff lift duration crosses weapon and
 # vortex runtime roots. Reproduce its adjacent/current evidence and catalog
 # under both supported PowerShell hosts before accepting either stream.

@@ -442,6 +442,108 @@ local function register(H, repo_root)
             "public and dev must carry byte-identical pure Patch 6.0 data")
     end)
 
+    H.test("WT #1436 Patch 4.6 Hagbane routes are atomic and parity gated", function()
+        local catalog = assert(loadfile(script_root .. "_wt_history_4_6_catalog.lua"))()
+        local family = catalog.families[1]
+        local function roots(default_name, charged_name)
+            return {
+                BuffTemplates = {}, ExplosionTemplates = {},
+                PlayerUnitStatusSettings = {}, VortexTemplates = {},
+                Weapons = { shortbow_hagbane_template_1 = { actions = {
+                    action_one = {
+                        default = { impact_data = {
+                            damage_profile = default_name,
+                        } },
+                        shoot_charged = { impact_data = {
+                            damage_profile = charged_name,
+                        } },
+                    },
+                } } },
+            }
+        end
+        with_named_profile_globals({
+            shortbow_hagbane = { marker = "native default" },
+            shortbow_hagbane_charged = { marker = "native charged" },
+        }, function()
+            local parity = { value = true }
+            local current_roots = roots(
+                "shortbow_hagbane", "shortbow_hagbane_charged")
+            local current_runtime = Runtime.install({
+                catalog = catalog,
+                mod = mod_fixture({}, parity),
+                policy = Policy,
+                roots = current_roots,
+            })
+            H.equal(current_runtime.fatal_error, nil)
+            H.equal(#(current_runtime.ledgers[family.id] or {}), 0)
+            H.equal(current_roots.Weapons.shortbow_hagbane_template_1.actions
+                .action_one.default.impact_data.damage_profile,
+                "shortbow_hagbane")
+
+            local historical_roots = roots(
+                "shortbow_hagbane", "shortbow_hagbane_charged")
+            local historical_runtime = Runtime.install({
+                catalog = catalog,
+                mod = mod_fixture({
+                    [family.setting_id] = "4_5_1",
+                }, parity),
+                policy = Policy,
+                roots = historical_roots,
+            })
+            H.equal(historical_runtime.last_error, nil)
+            H.equal(#historical_runtime.ledgers[family.id], 2)
+            H.equal(historical_roots.Weapons.shortbow_hagbane_template_1.actions
+                .action_one.default.impact_data.damage_profile,
+                "wt_hist_4_5_1_shortbow_hagbane")
+            H.equal(historical_roots.Weapons.shortbow_hagbane_template_1.actions
+                .action_one.shoot_charged.impact_data.damage_profile,
+                "wt_hist_4_5_1_shortbow_hagbane_charged")
+            H.equal(historical_runtime:restore().refused, 0)
+            H.equal(historical_roots.Weapons.shortbow_hagbane_template_1.actions
+                .action_one.default.impact_data.damage_profile,
+                "shortbow_hagbane")
+
+            parity.value = false
+            local mixed_roots = roots(
+                "shortbow_hagbane", "shortbow_hagbane_charged")
+            local mixed_runtime = Runtime.install({
+                catalog = catalog,
+                mod = mod_fixture({
+                    [family.setting_id] = "4_5_1",
+                }, parity),
+                policy = Policy,
+                roots = mixed_roots,
+            })
+            H.equal(mixed_runtime.last_error, nil)
+            H.equal(#mixed_runtime.ledgers[family.id], 2)
+            H.equal(mixed_roots.Weapons.shortbow_hagbane_template_1.actions
+                .action_one.default.impact_data.damage_profile,
+                "shortbow_hagbane",
+                "mixed peers must receive the exact native fallback identity")
+            H.equal(mixed_roots.Weapons.shortbow_hagbane_template_1.actions
+                .action_one.shoot_charged.impact_data.damage_profile,
+                "shortbow_hagbane_charged")
+
+            parity.value = true
+            local hostile_roots = roots("shortbow_hagbane", "unexpected_profile")
+            local hostile_runtime = Runtime.install({
+                catalog = catalog,
+                mod = mod_fixture({
+                    [family.setting_id] = "4_5_1",
+                }, parity),
+                policy = Policy,
+                roots = hostile_roots,
+            })
+            H.truthy(hostile_runtime.last_error and hostile_runtime.last_error:find(
+                "native profile route not found shortbow_hagbane_charged", 1, true))
+            H.equal(#(hostile_runtime.ledgers[family.id] or {}), 0)
+            H.equal(hostile_roots.Weapons.shortbow_hagbane_template_1.actions
+                .action_one.default.impact_data.damage_profile,
+                "shortbow_hagbane",
+                "failed two-route preflight must commit no partial write")
+        end)
+    end)
+
     H.test("WT #1436 generated Patch 6.6 catalog pins one atomic Deepwood boundary", function()
         local catalog = assert(loadfile(script_root .. "_wt_history_6_6_catalog.lua"))()
         local valid, validation_error = Policy.validate(catalog)
@@ -635,15 +737,15 @@ local function register(H, repo_root)
         H.deep_equal(catalog.generation.catalogs, {
             "wt_history_patch_5_2_v1", "wt_history_patch_6_0_v1",
             "wt_history_patch_6_6_v1", "wt_history_patch_6_8_v1",
-            "wt_history_patch_4_1_1_v1",
+            "wt_history_patch_4_1_1_v1", "wt_history_patch_4_6_hagbane_v1",
         })
         H.deep_equal(catalog_counts(catalog), {
             derived_profiles = 1,
-            families = 18,
-            family_states = 28,
+            families = 19,
+            family_states = 29,
             operations = 198,
-            profiles = 14,
-            states = 7,
+            profiles = 16,
+            states = 8,
         })
         local kruber, masterwork
         for _, family in ipairs(catalog.families) do
@@ -659,7 +761,7 @@ local function register(H, repo_root)
         local cached, cached_error = CatalogUI.load(mod)
         H.equal(cached_error, nil)
         H.equal(cached, catalog)
-        H.equal(#paths, 5, "default composite must reuse its cache")
+        H.equal(#paths, 6, "default composite must reuse its cache")
     end)
 
     H.test("WT #1436 Patch 6.0 applies, reads back, and restores exact state", function()
@@ -1342,16 +1444,16 @@ local function register(H, repo_root)
         H.equal(CatalogUI.decorate_menu(mod, data), data)
         H.equal(data.options.widgets[1], first)
         H.equal(data.options.widgets[2].setting_id, "wt_history_patch_versions")
-        H.equal(#data.options.widgets[2].sub_widgets, 18)
+        H.equal(#data.options.widgets[2].sub_widgets, 19)
         H.equal(data.options.widgets[3], second)
-        H.equal(loads, 5)
+        H.equal(loads, 6)
         H.equal(CatalogUI.decorate_menu(mod, data), data)
         H.equal(#data.options.widgets, 3)
-        H.equal(loads, 5, "re-decoration must not reload or duplicate the group")
+        H.equal(loads, 6, "re-decoration must not reload or duplicate the group")
 
         local malformed = { options = {} }
         H.equal(CatalogUI.decorate_menu(mod, malformed), malformed)
-        H.equal(loads, 5, "malformed menu data must not load generated catalogs")
+        H.equal(loads, 6, "malformed menu data must not load generated catalogs")
     end)
 
     H.test("WT #1436 public and dev data surfaces return one index-two history group", function()
@@ -1394,13 +1496,13 @@ local function register(H, repo_root)
             H.equal(data.options.widgets[1], availability)
             H.equal(data.options.widgets[2].setting_id,
                 "wt_history_patch_versions")
-            H.equal(#data.options.widgets[2].sub_widgets, 18)
+            H.equal(#data.options.widgets[2].sub_widgets, 19)
             H.equal(data.options.widgets[3], overrides)
-            H.equal(loads, 5)
+            H.equal(loads, 6)
             H.equal(catalog_ui.decorate_menu(mod, data), data)
             H.equal(#data.options.widgets, 3,
                 stream.namespace .. " must not duplicate its history group")
-            H.equal(loads, 5,
+            H.equal(loads, 6,
                 stream.namespace .. " must reuse its generated-catalog cache")
         end
     end)
