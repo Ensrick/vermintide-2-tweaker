@@ -8,8 +8,10 @@
 # (full pass, not -Quick) and CI (.github/workflows/qa.yml).
 #
 # DISCOVERY: any qa/check_*.ps1 whose param block declares `[switch]$SelfTest`
-# is picked up automatically - a new check with a self-test needs no wiring
-# here. Out-of-tree release/GitHub policy tools are added explicitly.
+# is picked up automatically unless it declares a `# SELFTEST-OWNER:` wrapper.
+# Dual-host wrappers own those checks so full QA does not run the same expensive
+# process fixtures again in the current host. Out-of-tree release/GitHub policy
+# tools are added explicitly.
 #
 # Self-tests are OFFLINE by convention (no gh/network) so this runner is safe
 # in CI and never flakes on connectivity.
@@ -34,6 +36,8 @@ Write-Host "=== run_selftests ===" -ForegroundColor Cyan
 $targets = @(
     Get-ChildItem (Join-Path $here 'check_*.ps1') -File `
         | Where-Object { Select-String -Path $_.FullName -Pattern '\[switch\]\$SelfTest' -Quiet } `
+        | Where-Object { -not (Select-String -Path $_.FullName `
+            -Pattern '^# SELFTEST-OWNER:\s+run_[A-Za-z0-9_.-]+\.ps1$' -Quiet) } `
         | ForEach-Object { $_.FullName }
 )
 $shipPs1 = Join-Path $repoRoot 'tools\ship\ship.ps1'

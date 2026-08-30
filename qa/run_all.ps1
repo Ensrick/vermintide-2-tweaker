@@ -349,6 +349,9 @@ Run-Check "bundle_output_set_host_matrix" { & (Join-Path $here "run_bundle_outpu
 # Issue #1436: prove the offline evidence ledger and generated Patch 5.2
 # catalog are pinned; regenerate byte-exactly when the source checkout exists.
 Run-Check "check_wt_history_reproducibility" { & (Join-Path $here "check_wt_history_reproducibility.ps1") -Quiet:$Quiet }
+# Issue #540: generic remote-freshness and incomplete-source adversaries have
+# one dual-host owner. Patch-specific matrices must not multiply these fixtures.
+Run-Check "wt_history_source_host_matrix" { & (Join-Path $here "run_wt_history_source_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
 # Issue #1436: Patch 3.1's Blunderbuss selector is a one-leaf bounded delta,
 # not a complete 3.0 baseline. Reproduce the exact adjacent/current evidence,
 # current-only Versus exclusion, and completeness ledger on both hosts.
