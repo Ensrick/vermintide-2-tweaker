@@ -57,6 +57,40 @@ planning, rollback, and restore. Independent 3-by-3 true/false/absent
 self-tests pin that presence contract in both evaluator lanes. The official
 boundary is [Patch 4.1.1](https://forums.fatsharkgames.com/t/patch-notes-version-4-1-1/43407).
 
+### Patch 4.6 boundary
+
+Patch 4.6 uses the exact adjacent profile boundary and rehydrates only the
+approved Hagbane payload against the current profile schema:
+
+| Role | Source revision |
+|---|---|
+| Game version 4.5.1 | `0cec9547152a395c4f35f75288f29d8b18b8294f` |
+| Post-boundary 4.6 scripts | `b38754a3bd61983118215359845d5b4fe5005014` |
+| Current content anchor (6.12.0) | `038498af2b565bcb10bf5ed225638293a7640c83` |
+
+The declared source closure is six files at all three revisions: the base
+power/profile files, the Morris/Cog/Woods profile contributors loaded during
+rehydration, and the Hagbane weapon template. The gate preflights all 18 exact
+revision/path/blob objects, then disables lazy fetch and optional Git locks for
+every extractor, oracle, route, and catalog read.
+
+The profile evaluator finds exactly two adjacent leaves: Patch 4.6 adds
+`allow_dot_finesse_hit = true` to `shortbow_hagbane` and
+`shortbow_hagbane_charged`. The historical selector registers two deterministic
+private profiles cloned from the current 6.12.0 payloads with only those flags
+removed, then parity-gates the two source-proven current template routes. It
+never mutates the shared native profiles. Current is a zero-write state; a
+missing route refuses the complete two-route plan before any write.
+
+The adjacent Hagbane template evidence is retained as an exclusion ledger: the
+`__symbol` row is decompiler/refactor noise, `aoe_on_bounce` is explicitly
+Ricochet-talent behavior, and the separately declared `weapon_diagram` root is
+presentation-only. None enters the weapon-balance catalog. Moonfire Bow is also
+excluded from this independently safe slice because its historical
+state crosses a global buff profile route, buff timing, and two live explosion
+table references that the current runtime cannot yet commit as one peer-safe
+transaction. The official boundary is [Patch 4.6](https://www.vermintide.com/news/patch-46-patch-notes).
+
 ### Patch 6.6 boundary
 
 Patch 6.6 uses an adjacent-boundary contract across both Deepwood Staff source
@@ -114,6 +148,11 @@ $source = 'C:\path\to\Vermintide-2-Source-Code'
     '.\tools\weapon-history\evidence\patch_4_1_1' `
     '.\weapon_tweaker\scripts\mods\weapon_tweaker\_wt_history_4_1_1_catalog.lua'
 
+& $lua '.\tools\weapon-history\generate_patch_4_6_history.lua' `
+    $source `
+    '.\tools\weapon-history\evidence\patch_4_6' `
+    '.\weapon_tweaker\scripts\mods\weapon_tweaker\_wt_history_4_6_catalog.lua'
+
 & $lua '.\tools\weapon-history\generate_patch_5_2_history.lua' `
     $source `
     '.\tools\weapon-history\evidence\patch_5_2' `
@@ -140,13 +179,15 @@ Then run the non-mutating exact-output gate:
 ```powershell
 .\qa\check_wt_history_patch_4_1_1_reproducibility.ps1 -SourceRepo $source -RequireSource
 .\qa\run_wt_history_patch_4_1_1_host_matrix.ps1
+.\qa\check_wt_history_patch_4_6_reproducibility.ps1 -SourceRepo $source -RequireSource
+.\qa\run_wt_history_patch_4_6_host_matrix.ps1 -SourceRepo $source -RequireSource
 .\qa\check_wt_history_reproducibility.ps1 -SourceRepo $source -RequireSource
 .\qa\check_wt_history_patch_6_0_reproducibility.ps1 -SourceRepo $source -RequireSource
 .\qa\run_wt_history_patch_6_6_host_matrix.ps1
 .\qa\check_wt_history_patch_6_8_reproducibility.ps1 -SourceRepo $source -RequireSource
 ```
 
-`current_source_anchor.lua` is the single identity consumed by all five
+`current_source_anchor.lua` is the single identity consumed by all six
 generators and their PowerShell checks. It separates the semantic 6.12.0
 content commit from the later README-only default-branch tip. Ordinary QA runs
 `check_wt_history_source_freshness.ps1` opportunistically: an unreachable
@@ -171,12 +212,17 @@ through both evaluators, requires byte-exact primary output and exact-double
 semantic agreement with the independent oracle, regenerates the route/blob
 oracle, then requires byte-exact catalog equality. In source-less CI it still
 enforces every pinned artifact and reports source regeneration as a visible
-skip. The Patch 4.1.1 and Patch 6.8 gates apply the same fail-closed policy to
+skip. The Patch 4.1.1, Patch 4.6, and Patch 6.8 gates apply the same fail-closed policy to
 their adjacent boundaries, current-anchor rehydration, two evaluators, and
-generated catalogs. The Patch 4.1.1 and Patch 6.6 host matrices apply that
-policy under both PowerShell 7 and Windows PowerShell 5.1; the former pins
-present-false preservation and the latter includes both source paths plus the
-server-authority runtime contract. Before any of the five reproduction gates
+generated catalogs. The Patch 4.1.1, Patch 4.6, and Patch 6.6 host matrices
+apply that policy under both PowerShell 7 and Windows PowerShell 5.1; Patch 4.6
+accepts `-SourceRepo` and `-RequireSource` for the strict release proof, while
+ordinary source-less QA reports pinned-only validation without claiming source
+regeneration. Patch 4.1.1 pins present-false preservation and Patch 6.6 includes
+both source paths plus the server-authority runtime contract. The Patch 4.6 gate additionally pins its
+seven-artifact census, independently regenerates the two current profile
+routes, and proves both emitted private profiles differ from current only by
+the absent finesse flag. Before any of the six reproduction gates
 selects a source checkout, the central read-only selector proves every pinned
 commit, `commit:path` identity,
 and blob object. A stale or partial checkout is therefore unavailable: ordinary

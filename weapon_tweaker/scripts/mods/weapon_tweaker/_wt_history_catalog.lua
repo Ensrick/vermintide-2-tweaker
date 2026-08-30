@@ -14,6 +14,7 @@ local GENERATED_MODULES = {
     "scripts/mods/weapon_tweaker/_wt_history_6_6_catalog",
     "scripts/mods/weapon_tweaker/_wt_history_6_8_catalog",
     "scripts/mods/weapon_tweaker/_wt_history_4_1_1_catalog",
+    "scripts/mods/weapon_tweaker/_wt_history_4_6_catalog",
 }
 local GENERATED_MODULE = GENERATED_MODULES[1]
 

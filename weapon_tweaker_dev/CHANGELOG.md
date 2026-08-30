@@ -1,5 +1,18 @@
 # Weapon Tweaker Changelog
 
+## 0.12.319-dev (2026-08-29) -- mirror source-exact Patch 4.6 Hagbane history (#1436) [not-started]
+
+- Mirrors public beta 0.12.318: Kerillian's Hagbane Shortbow gains an exact
+  **Game Version 4.5.1** state for its normal and charged finesse poison
+  profiles, while `Current` remains gameplay-inert.
+- Carries the same pinned adjacent-source boundary, private-profile isolation,
+  dual-host regeneration, independent evidence comparison, atomic rollback,
+  and explicit exclusion of Ricochet, weapon-diagram presentation, and
+  Moonfire changes.
+- Preserves the friends-only development overlay without adding hooks, RPCs,
+  shared native-profile writes, or presentation state. #1436 remains open for
+  the remaining historical slices.
+
 ## 0.12.318-dev (2026-08-29) -- mirror source-exact Patch 4.1.1 Masterwork Pistol history (#1436) [not-started]
 
 - Mirrors public beta 0.12.317: the Masterwork Pistol gains an exact **Game
