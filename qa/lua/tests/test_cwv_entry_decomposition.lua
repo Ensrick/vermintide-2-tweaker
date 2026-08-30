@@ -843,22 +843,39 @@ return function(H, repo_root)
         H.equal(count_plain(combined, 'mod:hook_safe("StateInGameRunning", "on_enter"'), 1)
         H.equal(count_plain(combined, 'mod:hook("DeusMechanism", "_setup_run"'), 1)
 
-        -- #428 NON-FOLD: the inline bidirectional NetworkLookup.item_names
-        -- register moved BYTE-IDENTICAL. Collapsing it onto _lib_network_lookup
-        -- is a behavior-adjacent change that rides its own slice, so the owner
-        -- must not reach the shared helper.
-        H.equal(count_plain(registration, "local idx = #NetworkLookup.item_names + 1"), 1)
-        H.equal(count_plain(registration, "rawset(NetworkLookup.item_names, idx, key)"), 1)
-        H.equal(count_plain(registration, "rawset(NetworkLookup.item_names, key, idx)"), 1)
-        H.equal(count_plain(registration, "_lib_network_lookup"), 0,
-            "#428 fold must not ride this slice")
+        -- #428: the owner keeps the original availability guard, pending_defs
+        -- order, and lifecycle position while delegating the symmetric append to
+        -- the already-manifested canonical helper.
+        H.equal(count_plain(registration, "local idx = #NetworkLookup.item_names + 1"), 0)
+        H.equal(count_plain(registration, "rawset(NetworkLookup.item_names"), 0)
+        H.equal(count_plain(registration,
+            '_network_lookup.register_named(NetworkLookup, "item_names", key)'), 1)
+        H.equal(count_plain(registration,
+            "if NetworkLookup and NetworkLookup.item_names then"), 1)
+        H.equal(count_plain(registration,
+            "for _, pending in ipairs(pending_defs) do"), 2)
+        H.equal(count_plain(entry,
+            "scripts/mods/character_weapon_variants/_lib_network_lookup"), 1)
+        H.truthy(entry:find("network_lookup = mod:dofile(", 1, true))
+        H.truthy(registration:find(
+            "local _network_lookup = assert(ctx.network_lookup,", 1, true))
         H.equal(count_plain(entry, "local idx = #NetworkLookup.item_names + 1"), 0)
+
+        local register_named_at = assert(registration:find(
+            '_network_lookup.register_named(NetworkLookup, "item_names", key)', 1, true))
+        local backend_seed_at = assert(registration:find("local backend_items", 1, true))
+        local auto_registered_at = assert(registration:find("_auto_registered = true", 1, true))
+        H.truthy(register_named_at < backend_seed_at,
+            "item-name registration moved after Blacksmith seed registration")
+        H.truthy(backend_seed_at < auto_registered_at,
+            "_auto_registered timing moved before downstream registration")
 
         -- Entry-local dependencies arrive as explicit context, same shape as
         -- _cwv_husk_path / _cwv_husk_residency_owner. Every one of these is
         -- bound exactly once in the entry and never rebound.
         H.truthy(registration:find("local function install(mod, ctx)", 1, true))
         H.truthy(entry:find("dbg_alert = _dbg_alert,", 1, true))
+        H.truthy(entry:find("network_lookup = mod:dofile(", 1, true))
         H.truthy(entry:find("cwv_career_weapon_actions = _cwv_career_weapon_actions,", 1, true))
         H.truthy(entry:find("career_action_owner = _career_action_owner,", 1, true))
 
