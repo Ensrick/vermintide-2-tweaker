@@ -672,6 +672,66 @@ local function register(H, repo_root)
         })
     end)
 
+    H.test("WT #1436 generated Patch 3.2 catalog pins one absent-current Axe change", function()
+        local catalog = assert(loadfile(script_root .. "_wt_history_3_2_catalog.lua"))()
+        local valid, validation_error = Policy.validate(catalog)
+        H.equal(validation_error, nil)
+        H.equal(valid, true)
+        H.equal(catalog.schema, 2)
+        H.equal(catalog.catalog_id, "wt_history_patch_3_2_v1")
+        H.equal(catalog.current_source.revision,
+            "038498af2b565bcb10bf5ed225638293a7640c83")
+        H.equal(#catalog.families, 1)
+        H.equal(next(catalog.profile_specs), nil)
+        H.equal(next(catalog.derived_profiles), nil)
+
+        local family = catalog.families[1]
+        H.equal(family.id, "elf_one_handed_axe")
+        H.equal(family.setting_id, "wt_history_elf_one_handed_axe")
+        H.equal(family.display_name, "Kerillian's One-handed Axe")
+        H.deep_equal(family.templates, { "we_one_hand_axe_template" })
+        H.deep_equal(family.state_order, { "3_1_0" })
+        H.equal(catalog.states["3_1_0"].source_revision,
+            "3f0e3ba442d8dcafb8b5f829ff6c2a95ae24ae63")
+        H.equal(catalog.states["3_1_0"].official_patch_notes,
+            "https://www.vermintide.com/news/patch-32-quality-of-life-update")
+
+        local state = family.states["3_1_0"]
+        H.deep_equal(state.profile_names, {})
+        H.deep_equal(state.direct_profile_names, {})
+        H.equal(#state.operations, 1)
+        local row = state.operations[1]
+        H.equal(row.root, "Weapons")
+        H.equal(row.template, "we_one_hand_axe_template")
+        H.deep_equal(row.path, {
+            "actions", "action_one", "light_attack_bopp",
+            "additional_critical_strike_chance",
+        })
+        H.equal(row.expected_present, false)
+        H.equal(rawget(row, "expected_current"), nil)
+        H.equal(row.result_present, true)
+        H.equal(row.result, 0.1)
+        H.equal(row.family_id, family.id)
+        H.equal(row.state_id, "3_1_0")
+        H.equal(row.official_change_id, "P320-ELF1HA-BOPP-CRIT")
+        H.equal(row.change_class, "official_weapon_balance")
+        H.equal(row.source_blob,
+            "d8a526f548596c8915826352cd7f1cb9a03486f8")
+        H.equal(row.current_source_blob,
+            "25c9ac9c38d51cb7b588c20d46e2773ca67149eb")
+        H.deep_equal(catalog.generation, {
+            adjacent_operation_count = 1,
+            global_operations = 0,
+            profile_route_count = 0,
+            unsupported_count = 0,
+        })
+        H.equal(read_file(script_root .. "_wt_history_3_2_catalog.lua"),
+            read_file(repo_root
+                .. "/weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/"
+                .. "_wt_history_3_2_catalog.lua"),
+            "public and dev must carry byte-identical pure Patch 3.2 data")
+    end)
+
     H.test("WT #1436 generated Patch 4.1.1 catalog preserves a present-false guard", function()
         local catalog = assert(loadfile(script_root
             .. "_wt_history_4_1_1_catalog.lua"))()
@@ -735,6 +795,7 @@ local function register(H, repo_root)
         local catalog, mod, paths = load_default_catalog(CatalogUI, script_root)
         H.deep_equal(paths, CatalogUI.GENERATED_MODULES)
         H.deep_equal(catalog.generation.catalogs, {
+            "wt_history_patch_3_2_v1",
             "wt_history_patch_5_2_v1", "wt_history_patch_6_0_v1",
             "wt_history_patch_6_6_v1", "wt_history_patch_6_8_v1",
             "wt_history_patch_4_1_1_v1", "wt_history_patch_4_6_hagbane_v1",
@@ -742,18 +803,20 @@ local function register(H, repo_root)
         H.deep_equal(catalog_counts(catalog), {
             derived_profiles = 1,
             families = 19,
-            family_states = 29,
-            operations = 198,
+            family_states = 30,
+            operations = 199,
             profiles = 16,
-            states = 8,
+            states = 9,
         })
-        local kruber, masterwork
+        local elf_axe, kruber, masterwork
         for _, family in ipairs(catalog.families) do
+            if family.id == "elf_one_handed_axe" then elf_axe = family end
             if family.id == "kruber_sword_and_shield" then kruber = family end
             if family.id == "masterwork_pistol" then masterwork = family end
         end
         H.deep_equal(assert(kruber).state_order, { "5_1_1", "5_2_0", "5_6_1" })
         H.deep_equal(assert(masterwork).state_order, { "4_0_1", "5_2_0" })
+        H.deep_equal(assert(elf_axe).state_order, { "3_1_0", "5_1_1", "5_2_0" })
         local valid, validation_error = Policy.validate(catalog)
         H.equal(validation_error, nil)
         H.equal(valid, true)
@@ -761,7 +824,7 @@ local function register(H, repo_root)
         local cached, cached_error = CatalogUI.load(mod)
         H.equal(cached_error, nil)
         H.equal(cached, catalog)
-        H.equal(#paths, 6, "default composite must reuse its cache")
+        H.equal(#paths, 7, "default composite must reuse its cache")
     end)
 
     H.test("WT #1436 Patch 6.0 applies, reads back, and restores exact state", function()
@@ -1446,14 +1509,14 @@ local function register(H, repo_root)
         H.equal(data.options.widgets[2].setting_id, "wt_history_patch_versions")
         H.equal(#data.options.widgets[2].sub_widgets, 19)
         H.equal(data.options.widgets[3], second)
-        H.equal(loads, 6)
+        H.equal(loads, 7)
         H.equal(CatalogUI.decorate_menu(mod, data), data)
         H.equal(#data.options.widgets, 3)
-        H.equal(loads, 6, "re-decoration must not reload or duplicate the group")
+        H.equal(loads, 7, "re-decoration must not reload or duplicate the group")
 
         local malformed = { options = {} }
         H.equal(CatalogUI.decorate_menu(mod, malformed), malformed)
-        H.equal(loads, 6, "malformed menu data must not load generated catalogs")
+        H.equal(loads, 7, "malformed menu data must not load generated catalogs")
     end)
 
     H.test("WT #1436 public and dev data surfaces return one index-two history group", function()
@@ -1498,11 +1561,11 @@ local function register(H, repo_root)
                 "wt_history_patch_versions")
             H.equal(#data.options.widgets[2].sub_widgets, 19)
             H.equal(data.options.widgets[3], overrides)
-            H.equal(loads, 6)
+            H.equal(loads, 7)
             H.equal(catalog_ui.decorate_menu(mod, data), data)
             H.equal(#data.options.widgets, 3,
                 stream.namespace .. " must not duplicate its history group")
-            H.equal(loads, 6,
+            H.equal(loads, 7,
                 stream.namespace .. " must reuse its generated-catalog cache")
         end
     end)

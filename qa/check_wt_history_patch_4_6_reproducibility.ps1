@@ -134,7 +134,7 @@ try {
 
     $pins = [ordered]@{
         $extractor = 'ae916ba306e0f5933f71e9b41ed0c0e7df46c28585da4fb92b5e2cc03199b15a'
-        $oracle = '1f5f26f4d302671859e7dadcf0f25d536b2601b03ee27d0a6ae35cb8723d52bd'
+        $oracle = '767c73dd8f2caf35575324aae7ac09e2460a3506f9ad6c8296d2bee6e973a2d5'
         $generator = '27a406f45632d85e80a72e839f8c642e51a7f379d66b12e795424f7c5d5d7b7d'
         $spec = '69f2a7df8e5b1e6dac681b684e67ddefa55eace25ffe7eee0d4095422313913e'
         $sourceCatalog = 'ee34d0026406343e3b5800f72d63da7cfb4c950aef0abb3a1b5dda8f911b2940'

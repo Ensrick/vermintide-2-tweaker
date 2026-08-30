@@ -41,7 +41,7 @@ try {
     $lua = Join-Path $root 'qa\lua\vendor\lua-5.1.5-win64\lua5.1.exe'
     $pins = [ordered]@{
         $extractor='ae916ba306e0f5933f71e9b41ed0c0e7df46c28585da4fb92b5e2cc03199b15a'
-        $oracle='1f5f26f4d302671859e7dadcf0f25d536b2601b03ee27d0a6ae35cb8723d52bd'
+        $oracle='767c73dd8f2caf35575324aae7ac09e2460a3506f9ad6c8296d2bee6e973a2d5'
         $generator='18762b353dc2e4896f2dd8845e74b881083330fd2e5b3293d906c6d2c94ef754'
         $sourceCatalog='e450a95939b4d39ae6011e30e2283f969282ceeeb92b36e7e0737f2bbb1c918f'
         $catalog='7ba475c8ab7a8e635b1bfde179a867dde8594af654cce5ce1d70255e1bdae826'

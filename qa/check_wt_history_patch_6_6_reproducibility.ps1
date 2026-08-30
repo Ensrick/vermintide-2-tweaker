@@ -70,7 +70,7 @@ try {
 
     $pinned = [ordered]@{
         $extractor = 'ae916ba306e0f5933f71e9b41ed0c0e7df46c28585da4fb92b5e2cc03199b15a'
-        $oracleExtractor = '1f5f26f4d302671859e7dadcf0f25d536b2601b03ee27d0a6ae35cb8723d52bd'
+        $oracleExtractor = '767c73dd8f2caf35575324aae7ac09e2460a3506f9ad6c8296d2bee6e973a2d5'
         $generator = 'df810099b04fab5b274f6ce3caf82a085be2a721907a76a4348fd4bc07de93fa'
         $sourceCatalog = '3a089597cf316eb88d8283e74f74507f9038631b83b84b7d76632ef345a4a252'
         $adjacentEvidence = 'c3e97e994ac6cc9da1862fdcd1d494fbdc924daddb039c15d03a9379d5e59121'

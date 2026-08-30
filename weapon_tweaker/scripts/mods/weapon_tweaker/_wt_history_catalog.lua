@@ -9,6 +9,7 @@
 local M = {}
 
 local GENERATED_MODULES = {
+    "scripts/mods/weapon_tweaker/_wt_history_3_2_catalog",
     "scripts/mods/weapon_tweaker/_wt_history_5_2_catalog",
     "scripts/mods/weapon_tweaker/_wt_history_6_0_catalog",
     "scripts/mods/weapon_tweaker/_wt_history_6_6_catalog",
