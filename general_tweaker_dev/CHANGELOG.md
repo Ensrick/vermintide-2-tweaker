@@ -12,6 +12,9 @@
   state owner, receipt family, command/arm path, hook cardinality, and load
   order. #499 remains open for the remaining serialized legacy owners and
   stable-stream retirements.
+- Normalizes away the SDK tool-only LUT-generator sidecar; runtime Lua and
+  player-visible behavior are unchanged.
+- VT2-Bundle-Retirement: `e7852992f40eb619.mod_bundle`
 
 ## 0.2.271-dev (2026-08-24) -- name permanent stat policy by role (#499) [not-started]
 

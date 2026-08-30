@@ -14,6 +14,9 @@
   registration/restore, existing-template ownership, and Full Head of Steam
   tooltip round-trip coverage. Verify autonomously with
   `qa/check_lua_unit_tests.ps1` and `qa/check_file_sizes.ps1`.
+- Normalizes away the SDK tool-only LUT-generator sidecar; runtime Lua and
+  player-visible behavior are unchanged.
+- VT2-Bundle-Retirement: `e7852992f40eb619.mod_bundle`
 
 ## 0.4.27-beta (2026-08-25) - reject malformed NetworkLookup state (#428) [not-started]
 

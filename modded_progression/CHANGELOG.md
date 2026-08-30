@@ -16,6 +16,9 @@
 - Added engine-free tests for nested MP/CIM calls, raw true/false restoration,
   nil-hole return forwarding, exceptions, and byte-identical shared-library
   copies.
+- Normalizes away the SDK tool-only LUT-generator sidecar; runtime Lua and
+  player-visible behavior are unchanged.
+- VT2-Bundle-Retirement: `e7852992f40eb619.mod_bundle`
 
 ## 0.2.35-dev (2026-08-13) - #607 local loot-layer trace [diag]
 
