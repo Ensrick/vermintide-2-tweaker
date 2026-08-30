@@ -1,26 +1,33 @@
 # tools/ship/refresh-cards.ps1
 #
 # Post-ship refresh and corrective reconciliation of pinned
-# "## CURRENT LIVE TEST" card VERSION SURFACES (issues #1102 and #1343). The
+# "## CURRENT LIVE TEST" card DEPLOYMENT SURFACES (issues #1102 and #1343). The
 # 2026-08-02 audit found all 31 sampled pinned cards naming
 # superseded builds (5-18 patches behind), so a tester following a card fails
 # the [id:LOAD] confirmation on a perfectly correct build. This script walks
 # the open live-test queue and mechanically advances ONLY the just-shipped
-# mod's stale version/manifest tokens inside each pinned exact card:
+# mod's stale version, manifest, and typed current-artifact tokens inside each
+# pinned exact card:
 #
 #   * version tokens attributed to the shipped mod through its exact runtime
 #     anchor ([<tag>:LOAD] vX.Y.Z / vX.Y.Z [<tag>:LOAD] / "[<TAG>] vX.Y.Z
 #     loaded" exact banners) are rewritten to the shipped MOD_VERSION;
 #   * "item `<published_id>`, ManifestID `<N>`" / "Workshop item
 #     `<published_id>`, manifest `<N>`" tokens are rewritten to the manifest
-#     the workshop_log confirmed for THIS upload.
+#     the workshop_log confirmed for THIS upload;
+#   * `Current receipt`, `Current <stream> receipt`, `Exact live artifact`,
+#     `Live artifact`, and `Exact source` fields are bound to the hosted
+#     release manifest's source commit, root bundle/SHA-256, and ZIP/SHA-256.
+#     Exact `Feature provenance` and every untyped evidence heading remain
+#     historical and byte-identical.
 #
-# Card step text, expected needles, topology, and every other mod's tokens are
-# NEVER touched. When a card's version surfaces do not match the expected
-# patterns exactly (no anchor for the shipped tag, two distinct anchored
-# versions, a version token on a sibling-attributed line, a version string
-# shared with another mod's anchor, unrecognized manifest syntax), the card is
-# SKIPPED and reported instead of guessed at. The #138 WT card is the canonical
+# Card step text, expected needles, topology, feature provenance, untyped
+# evidence, and every other mod's tokens are NEVER touched. When a card's
+# deployment surfaces do not match the expected patterns exactly (no anchor for
+# the shipped tag, two distinct anchored versions, a version token on a
+# sibling-attributed line, a version string shared with another mod's anchor,
+# unrecognized manifest/current-artifact syntax), the card is SKIPPED and
+# reported instead of guessed at. The #138 WT card is the canonical
 # sibling-line case: normalize that card through the sanctioned lifecycle path;
 # never weaken stream attribution to make the bulk refresher accept it.
 # The edit is a GraphQL updateIssueComment on the pinned comment in place, so
@@ -395,7 +402,8 @@ function Get-VtCardRefreshPlan {
         [bool]$SharedLoadTag = $false,
         [string]$StreamIdentity,
         [string[]]$SiblingPublishedIds = @(),
-        [string[]]$SiblingStreamIdentities = @()
+        [string[]]$SiblingStreamIdentities = @(),
+        $ArtifactTarget
     )
 
     $result = [pscustomobject]@{
@@ -697,6 +705,22 @@ function Get-VtCardRefreshPlan {
                 return $result
             }
         }
+    }
+
+    # Current/live artifact headings are deployment-bound authority surfaces,
+    # just like the version and optional ManifestID. The shared reviewer owns
+    # both parsing and the pure replacement candidate used by strict policy.
+    $artifactReview = Get-VtCardCurrentArtifactReview -Card $newBody -Targets @($ArtifactTarget)
+    if ($artifactReview.Status -eq 'unparseable') {
+        $result.Status = 'unparseable'
+        $result.Reason = @($artifactReview.StructuralErrors) -join ', '
+        $result.Changes = @()
+        $result.NewBody = $null
+        return $result
+    }
+    if ($artifactReview.Status -eq 'stale') {
+        $newBody = [string]$artifactReview.NewCard
+        $changes += @($artifactReview.Changes)
     }
 
     if ($changes.Count -eq 0) {
@@ -1021,13 +1045,25 @@ function Get-VtAllStreamReconcilePlan {
         $lines[$lineIndex] = $line
     }
 
+    $newBody = $lines -join $lineEnding
+    $artifactReview = Get-VtCardCurrentArtifactReview -Card $newBody -Targets $Streams
+    if ($artifactReview.Status -eq 'unparseable') {
+        $result.Status = 'unparseable'
+        $result.Reason = @($artifactReview.StructuralErrors) -join ', '
+        return $result
+    }
+    if ($artifactReview.Recognized) { $recognized = $true }
+    if ($artifactReview.Status -eq 'stale') {
+        $newBody = [string]$artifactReview.NewCard
+        foreach ($change in @($artifactReview.Changes)) { $changes.Add([string]$change) }
+    }
+
     if (-not $recognized) { return $result }
     if ($changes.Count -eq 0) {
         $result.Status = 'current'
         $result.NewBody = $Body
         return $result
     }
-    $newBody = $lines -join $lineEnding
     if ($newBody -ceq $Body) {
         $result.Status = 'current'
         $result.NewBody = $Body
@@ -1503,8 +1539,158 @@ function Invoke-RefreshCardsSelfTest {
     Assert ($plan.Status -eq 'refresh') 'CRLF card body parses and refreshes'
     Assert ($plan.NewBody -match "`r`n") 'CRLF line endings preserved'
 
+    # Exact post-ship regressions that reopened #1102. Version and ManifestID
+    # are already current; only the typed artifact claims are stale.
+    $cwvArtifact = [pscustomobject]@{
+        ModId='character_weapon_variants'; Directory='character_weapon_variants'
+        PublishedId='3716869446'; WorkshopId='3716869446'; LoadTag='cwv'
+        Identity='Character Weapon Variants'; Version='0.1.536-dev'
+        SourceCommit='d03cbc98de87a29511fd8dcb1f7c3ec163646005'
+        RootBundle='0f038849957ad1b7.mod_bundle'
+        RootBundleSha256='607b7df1ceff8f5247fea266f43601b0299751c78d0ccbf7fa277cdd3d5c9d5a'
+        AssetFilename='character_weapon_variants.zip'
+        AssetSha256='8f768a4e8aadfa8abb98748af490d684e4c43ab2a6e24fff6f1a12d1b3745e04'
+    }
+    $issue932Card = @'
+## CURRENT LIVE TEST
+
+**Build/banner:** Character Weapon Variants `v0.1.536-dev`; confirm `[cwv:LOAD] v0.1.536-dev`.
+**Current receipt:** Workshop item `3716869446`, ManifestID `2764743062372452902`; root `0f038849957ad1b7.mod_bundle` SHA-256 `141990831137E45663B7EE20CF11DD22AEDE84FBBADDD5A8C502D882B8DFE16B`; exact source `07899bb7fc6a2e7c0bb0c6d8156e610a8add14ef`.
+**Topology:** Solo
+
+1. Confirm the newest game log contains `[cwv:LOAD] v0.1.536-dev`.
+
+**Expected:** The issue #932 ammunition contract passes.
+'@
+    $plan = Get-VtCardRefreshPlan -Body $issue932Card -PublishedId '3716869446' `
+        -NewVersion '0.1.536-dev' -LoadTag 'cwv' -NewManifest '2764743062372452902' `
+        -ArtifactTarget $cwvArtifact
+    Assert ($plan.Status -eq 'refresh' -and @($plan.Changes).Count -eq 2) `
+        '#932 current version/Manifest card still refreshes its stale source/root receipt'
+    Assert ($plan.NewBody -match '607b7df1ceff8f5247fea266f43601b0299751c78d0ccbf7fa277cdd3d5c9d5a' -and
+        $plan.NewBody -match 'd03cbc98de87a29511fd8dcb1f7c3ec163646005' -and
+        $plan.NewBody -notmatch '141990831137E456|07899bb7') `
+        '#932 typed receipt advances to the exact hosted root/source tuple'
+    $issue932Second = Get-VtCardRefreshPlan -Body $plan.NewBody -PublishedId '3716869446' `
+        -NewVersion '0.1.536-dev' -LoadTag 'cwv' -NewManifest '2764743062372452902' `
+        -ArtifactTarget $cwvArtifact
+    Assert ($issue932Second.Status -eq 'current' -and $issue932Second.NewBody -ceq $plan.NewBody) `
+        '#932 artifact repair is byte-identical on its second pass'
+
+    $issue798Card = @'
+## CURRENT LIVE TEST
+
+**Build/banner:** Character Weapon Variants v0.1.536-dev; confirm `[cwv:LOAD] v0.1.536-dev` in the newest log
+**Exact live artifact:** Workshop item `3716869446`, manifest `2764743062372452902`; `character_weapon_variants.zip` SHA-256 `551de16dcb2af13b109a18a36d54e21bd18b17a7d80d1a52e81c0610a077173b`
+**Exact source:** `3464ff0b09e352b4e317a2be067840e1af350dc2`
+**Topology:** Solo
+
+1. Run `/cwv_regression_test` and retain the newest console log.
+
+**Expected:** Every Crowbill supports Weapon Special switching.
+'@
+    $plan = Get-VtAllStreamReconcilePlan -Body $issue798Card -Streams @($cwvArtifact)
+    Assert ($plan.Status -eq 'refresh' -and @($plan.Changes).Count -eq 2) `
+        '#798 all-stream pass repairs stale Exact live artifact and Exact source fields'
+    Assert ($plan.NewBody -match '8f768a4e8aadfa8abb98748af490d684e4c43ab2a6e24fff6f1a12d1b3745e04' -and
+        $plan.NewBody -match 'd03cbc98de87a29511fd8dcb1f7c3ec163646005' -and
+        $plan.NewBody -notmatch '551de16dcb2a|3464ff0b') `
+        '#798 exact-live fields advance without preserving a feature commit as current source'
+
+    $issue774Card = @'
+## CURRENT LIVE TEST
+
+**Build/banner:** Character Weapon Variants v0.1.536-dev, confirm `[cwv:LOAD] v0.1.536-dev`; Tweaker: GUI Dev v0.2.343-dev, confirm `[gut:LOAD] v0.2.343-dev`
+**Workshop:** Character Weapon Variants, item `3716869446`, manifest `2764743062372452902`
+**Topology:** Solo
+
+1. Run `/cwv_regression_test` and retain the newest log if any step fails.
+
+**Expected:** The issue #774 interruption contract passes.
+
+**Deployed evidence:** Source commit `6c354be49ba63793fb3488ce886a40f9b889f29c`; PR #1359; exact-master QA run `32548198950`; release ZIP SHA-256 `b206a76aec4f09fe8c6bcac4564eafedb8edf8698ee12c836d7d02d46e91d2cd`.
+'@
+    $issue774Review = Get-VtCardCurrentArtifactReview -Card $issue774Card -Targets @($cwvArtifact)
+    Assert ($issue774Review.Status -eq 'none' -and $issue774Review.NewCard -ceq $issue774Card) `
+        '#774 untyped Deployed evidence remains immutable feature history'
+    $featureProvenanceCard = $issue774Card.Replace('**Deployed evidence:**', '**Feature provenance:**')
+    $featureProvenanceReview = Get-VtCardCurrentArtifactReview -Card $featureProvenanceCard -Targets @($cwvArtifact)
+    Assert ($featureProvenanceReview.Status -eq 'none' -and
+        $featureProvenanceReview.FeatureProvenanceLines -eq 1 -and
+        $featureProvenanceReview.NewCard -ceq $featureProvenanceCard) `
+        'typed Feature provenance is explicitly recognized and preserved byte-for-byte'
+
+    $partialRootCard = $issue932Card -replace
+        'root `0f038849957ad1b7\.mod_bundle` SHA-256 `[0-9A-F]+`',
+        'root `0f038849957ad1b7.mod_bundle`'
+    $partialRootReview = Get-VtCardCurrentArtifactReview -Card $partialRootCard -Targets @($cwvArtifact)
+    Assert ($partialRootReview.Status -eq 'unparseable' -and
+        $partialRootReview.StructuralErrors -contains 'current-artifact-root-unparseable:character_weapon_variants@line4' -and
+        -not $partialRootReview.NewCard) `
+        'partial typed root tuple fails closed with no replacement candidate'
+
+    $wrongNamesCard = $issue932Card.Replace(
+        '0f038849957ad1b7.mod_bundle` SHA-256 `141990831137E45663B7EE20CF11DD22AEDE84FBBADDD5A8C502D882B8DFE16B',
+        'ffffffffffffffff.mod_bundle` SHA-256 `607b7df1ceff8f5247fea266f43601b0299751c78d0ccbf7fa277cdd3d5c9d5a'
+    ).Replace('exact source `07899bb7fc6a2e7c0bb0c6d8156e610a8add14ef`',
+        'exact source `d03cbc98de87a29511fd8dcb1f7c3ec163646005`')
+    $wrongNamesReview = Get-VtCardCurrentArtifactReview -Card $wrongNamesCard -Targets @($cwvArtifact)
+    Assert ($wrongNamesReview.Status -eq 'stale' -and
+        $wrongNamesReview.DriftErrors -contains 'current-artifact-root-name-drift:character_weapon_variants@line4' -and
+        $wrongNamesReview.NewCard -match 'root `0f038849957ad1b7\.mod_bundle`') `
+        'wrong root filename with a right digest is corrected independently'
+
+    $wrongZipNameCard = $issue798Card.Replace('character_weapon_variants.zip` SHA-256 `551de16dcb2af13b109a18a36d54e21bd18b17a7d80d1a52e81c0610a077173b',
+        'old_character_weapon_variants.zip` SHA-256 `8f768a4e8aadfa8abb98748af490d684e4c43ab2a6e24fff6f1a12d1b3745e04').Replace(
+        '3464ff0b09e352b4e317a2be067840e1af350dc2','d03cbc98de87a29511fd8dcb1f7c3ec163646005')
+    $wrongZipNameReview = Get-VtCardCurrentArtifactReview -Card $wrongZipNameCard -Targets @($cwvArtifact)
+    Assert ($wrongZipNameReview.Status -eq 'stale' -and
+        $wrongZipNameReview.DriftErrors -contains 'current-artifact-zip-name-drift:character_weapon_variants@line4' -and
+        $wrongZipNameReview.NewCard -match '`character_weapon_variants\.zip` SHA-256') `
+        'wrong ZIP filename with a right digest is corrected independently'
+
+    $hashBaitCard = $issue774Card.Replace('**Deployed evidence:**', '**Notes:**') + @'
+
+1. Do not paste `07899bb7fc6a2e7c0bb0c6d8156e610a8add14ef` into the URL.
+**Expected detail:** https://example.invalid/551de16dcb2af13b109a18a36d54e21bd18b17a7d80d1a52e81c0610a077173b remains documentation bait.
+'@
+    $hashBaitReview = Get-VtCardCurrentArtifactReview -Card $hashBaitCard -Targets @($cwvArtifact)
+    Assert ($hashBaitReview.Status -eq 'none' -and $hashBaitReview.NewCard -ceq $hashBaitCard) `
+        'source/hash bait outside typed headings is never scanned or rewritten'
+
+    $conflictingHashCard = $issue798Card.Replace(
+        '551de16dcb2af13b109a18a36d54e21bd18b17a7d80d1a52e81c0610a077173b`',
+        '551de16dcb2af13b109a18a36d54e21bd18b17a7d80d1a52e81c0610a077173b`; mirror `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`')
+    $conflictingHashReview = Get-VtCardCurrentArtifactReview -Card $conflictingHashCard -Targets @($cwvArtifact)
+    Assert ($conflictingHashReview.Status -eq 'unparseable' -and
+        $conflictingHashReview.StructuralErrors -contains 'current-artifact-unrecognized-hash:character_weapon_variants@line4') `
+        'an extra hash in a typed current line fails closed instead of being stranded'
+
+    $unexplainedOnlyCard = $issue932Card.Replace(
+        'root `0f038849957ad1b7.mod_bundle` SHA-256 `141990831137E45663B7EE20CF11DD22AEDE84FBBADDD5A8C502D882B8DFE16B`; exact source `07899bb7fc6a2e7c0bb0c6d8156e610a8add14ef`',
+        'opaque `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`')
+    $unexplainedOnlyReview = Get-VtCardCurrentArtifactReview -Card $unexplainedOnlyCard -Targets @($cwvArtifact)
+    Assert ($unexplainedOnlyReview.Status -eq 'unparseable' -and
+        $unexplainedOnlyReview.StructuralErrors -contains 'current-artifact-unrecognized-hash:character_weapon_variants@line4') `
+        'an unexplained-only hash under a typed current heading fails closed'
+
+    $pathZipCard = $issue798Card.Replace('character_weapon_variants.zip', 'nested/character_weapon_variants.zip')
+    $pathZipReview = Get-VtCardCurrentArtifactReview -Card $pathZipCard -Targets @($cwvArtifact)
+    Assert ($pathZipReview.Status -eq 'unparseable' -and
+        $pathZipReview.StructuralErrors -contains 'current-artifact-zip-unparseable:character_weapon_variants@line4') `
+        'a path-shaped ZIP claim fails closed instead of repairing only its basename'
+
+    $mixedEndingCard = $issue932Card.Replace("`n**Current receipt:**", "`r`n**Current receipt:**")
+    $mixedEndingExpected = $mixedEndingCard.Replace(
+        '141990831137E45663B7EE20CF11DD22AEDE84FBBADDD5A8C502D882B8DFE16B',
+        '607b7df1ceff8f5247fea266f43601b0299751c78d0ccbf7fa277cdd3d5c9d5a').Replace(
+        '07899bb7fc6a2e7c0bb0c6d8156e610a8add14ef','d03cbc98de87a29511fd8dcb1f7c3ec163646005')
+    $mixedEndingReview = Get-VtCardCurrentArtifactReview -Card $mixedEndingCard -Targets @($cwvArtifact)
+    Assert ($mixedEndingReview.Status -eq 'stale' -and $mixedEndingReview.NewCard -ceq $mixedEndingExpected) `
+        'artifact repair preserves every original mixed line ending byte'
+
     $allStreams = @(
-        [pscustomobject]@{ ModId='character_weapon_variants'; Directory='character_weapon_variants'; PublishedId='3716869446'; LoadTag='cwv'; Identity='Character Weapon Variants'; LegacyIdentities=@('Career Weapon Variants','Career Weapon Variants Dev'); Version='0.1.521-dev' },
+        [pscustomobject]@{ ModId='character_weapon_variants'; Directory='character_weapon_variants'; PublishedId='3716869446'; LoadTag='cwv'; Identity='Character Weapon Variants'; LegacyIdentities=@('Career Weapon Variants','Career Weapon Variants Dev'); Version='0.1.521-dev'; SourceCommit=$cwvArtifact.SourceCommit; RootBundle=$cwvArtifact.RootBundle; RootBundleSha256=$cwvArtifact.RootBundleSha256; AssetFilename=$cwvArtifact.AssetFilename; AssetSha256=$cwvArtifact.AssetSha256 },
         [pscustomobject]@{ ModId='tweaker_cosmetics'; Directory='tweaker_cosmetics'; PublishedId='3715714222'; LoadTag='cosmetics'; Identity='Tweaker: Cosmetics'; Version='0.9.215-dev' },
         [pscustomobject]@{ ModId='tweaker_weapons'; Directory='tweaker_weapons'; PublishedId='3712896117'; LoadTag='wt'; Identity='Tweaker: Weapons'; Version='0.13.2-beta' },
         [pscustomobject]@{ ModId='tweaker_weapons_dev'; Directory='tweaker_weapons_dev'; PublishedId='3748824853'; LoadTag='wt'; Identity='Tweaker: Weapons Dev'; Version='0.12.268-dev' }
@@ -1796,6 +1982,7 @@ catch {
 }
 $streamInventory = @(Get-VtStreamInventory -RepoRoot $repoRoot)
 $reconcileStreams = @()
+$currentArtifactTarget = $null
 if ($ReconcileAllStreams) {
     try {
         foreach ($inventoryStream in $streamInventory) {
@@ -1821,6 +2008,11 @@ if ($ReconcileAllStreams) {
                 Identity = [string]$inventoryStream.Identity
                 LegacyIdentities = @($inventoryStream.LegacyIdentities)
                 Version = ([string]$authorityRow.Version).TrimStart('v', 'V')
+                SourceCommit = [string]$authorityRow.SourceCommit
+                RootBundle = [string]$authorityRow.RootBundle
+                RootBundleSha256 = [string]$authorityRow.RootBundleSha256
+                AssetFilename = [string]$authorityRow.AssetFilename
+                AssetSha256 = [string]$authorityRow.AssetSha256
             }
         }
         if ($reconcileStreams.Count -ne @($sourceAuthority.Records).Count) {
@@ -1847,6 +2039,15 @@ else {
             $PublishedId, $LoadTag, $StreamIdentity) -ForegroundColor Red
         exit 2
     }
+    $currentAuthorityRows = @($sourceAuthority.Records | Where-Object {
+        [string]$_.Dir -ceq [string]$ModDirectory -and
+        [string]$_.WorkshopId -ceq [string]$PublishedId
+    })
+    if ($currentAuthorityRows.Count -ne 1) {
+        Write-Host "refresh-cards: exact stream '$ModDirectory' did not resolve to one deployed artifact authority record." -ForegroundColor Red
+        exit 2
+    }
+    $currentArtifactTarget = $currentAuthorityRows[0]
     $siblingStreams = @($streamInventory | Where-Object {
         $_.Directory -ne $ModDirectory -and
         ([string]$_.LoadTag).Equals($LoadTag, [System.StringComparison]::OrdinalIgnoreCase)
@@ -2035,7 +2236,8 @@ try {
                 $plan = Get-VtCardRefreshPlan -Body ([string]$card.body) -PublishedId $PublishedId `
                     -NewVersion $NewVersion -LoadTag $LoadTag -NewManifest $NewManifest `
                     -SharedLoadTag $sharedLoadTag -StreamIdentity $StreamIdentity `
-                    -SiblingPublishedIds $siblingPublishedIds -SiblingStreamIdentities $siblingStreamIdentities
+                    -SiblingPublishedIds $siblingPublishedIds -SiblingStreamIdentities $siblingStreamIdentities `
+                    -ArtifactTarget $currentArtifactTarget
             }
             if ($plan.Status -eq 'not-applicable') { continue }
             $cardsSeen++

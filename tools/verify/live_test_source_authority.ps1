@@ -1491,6 +1491,30 @@ function Get-VtCardSourceAuthority {
     # blobs. Legacy no-commit rows are validated against pinned trees below.
     foreach($id in @($deployedById.Keys)){
         $row=$deployedById[$id];$commit=[string]$row.source_commit
+        $assetFilename=[string]$row.asset_filename
+        $assetSha256=[string]$row.sha256
+        if([string]::IsNullOrWhiteSpace($assetFilename)-or
+           [IO.Path]::GetFileName($assetFilename) -cne $assetFilename -or
+           $assetFilename -notmatch '(?i)\.zip$'){
+            throw "Deployed mod '$id' asset_filename must be one ZIP basename."
+        }
+        if($assetSha256 -notmatch '^[0-9a-f]{64}$'){
+            throw "Deployed mod '$id' ZIP sha256 is not a full lowercase 64-hex digest."
+        }
+        $rootBundle=[string]$row.root_bundle
+        if(-not[string]::IsNullOrWhiteSpace($rootBundle)){
+            if([IO.Path]::GetFileName($rootBundle) -cne $rootBundle -or
+               $rootBundle -notmatch '(?i)\.mod_bundle$'){
+                throw "Deployed mod '$id' root_bundle must be one mod_bundle basename."
+            }
+            $rootRows=@($row.bundle_files|Where-Object{[string]$_.filename -ceq $rootBundle})
+            if($rootRows.Count -ne 1){
+                throw "Deployed mod '$id' root_bundle '$rootBundle' must resolve to exactly one bundle_files row."
+            }
+            if([string]$rootRows[0].sha256 -notmatch '^[0-9a-f]{64}$'){
+                throw "Deployed mod '$id' root bundle sha256 is not a full lowercase 64-hex digest."
+            }
+        }
         if([string]::IsNullOrWhiteSpace($commit)){continue}
         if($commit -notmatch '^[0-9a-f]{40}$'){throw "Deployed mod '$id' source_commit is not a full 40-hex commit."}
         if([string]$row.source_state -cne 'clean'){throw "Deployed mod '$id' source_state must be clean, got '$($row.source_state)'."}
@@ -1608,10 +1632,20 @@ function Get-VtCardSourceAuthority {
         Set-VtStructuralReceiptBounds -Documents $documents -Routes $receiptRoutes
         Set-VtReceiptOverrideBounds -ModId $id -ModTree $modTree -Documents $documents -Routes $receiptRoutes -CommandRoutes $commandRoutes -Exceptions $exceptions
         if($loadRoutes.Count -eq 0){throw "Deployed mod '$id' exposes no literal runtime [*:LOAD] route."}
+        $rootBundle=[string]$row.root_bundle
+        $rootBundleSha256=$null
+        if(-not[string]::IsNullOrWhiteSpace($rootBundle)){
+            $rootBundleSha256=[string]@($row.bundle_files|Where-Object{
+                [string]$_.filename -ceq $rootBundle
+            })[0].sha256
+        }
         $records.Add([pscustomobject][ordered]@{
             ModId=$id; Dir=[string]$entry.Dir; FriendlyName=[string]$row.friendly_name
             Version=([string]$row.version).TrimStart('v'); WorkshopId=[string]$row.workshop_id
             SourceCommit=if($commit){$commit}else{$null}; RootTree=$rootTree; ModTree=$modTree
+            RootBundle=if($rootBundle){$rootBundle}else{$null}
+            RootBundleSha256=$rootBundleSha256
+            AssetFilename=[string]$row.asset_filename; AssetSha256=[string]$row.sha256
             ReleaseTag=[string]$DeploymentManifest.release_tag
             LoadRoutes=@($loadRoutes.ToArray()); ExactBannerRoutes=@($bannerRoutes.ToArray())
             CommandRoutes=@($commandRoutes.ToArray()); ReceiptRoutes=@($receiptRoutes.ToArray())

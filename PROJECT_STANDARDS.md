@@ -2168,6 +2168,14 @@ labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix
   release identities fail closed. Unbound sibling versions/tags are invalid.
   Workshop item/ManifestID coordinates are optional; if either is supplied, the
   complete pair must be unique and its item must belong to the selected build.
+  A line explicitly headed `Current receipt`, `Current <stream> receipt`,
+  `Exact live artifact`, `Live artifact`, or `Exact source` is also a deployed
+  claim: every source commit, root bundle/SHA-256, and release ZIP/SHA-256 named
+  there must match that selected build's latest release-manifest row. Partial,
+  ambiguous, or unexplained artifact hashes fail closed. A line headed exactly
+  `Feature provenance` is immutable historical evidence, not a claim about the
+  current deployment; untyped evidence headings are likewise never inferred or
+  rewritten as current artifact authority.
   The card also needs `Topology:`
   (`Solo` or `Co-op`), numbered player-facing steps, and `Expected:`. Numbered
   steps use localized names players see in-game, never internal snake-case keys.

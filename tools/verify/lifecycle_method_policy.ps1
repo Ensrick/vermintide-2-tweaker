@@ -325,6 +325,377 @@ function Get-VtCardManifestErrors {
     return @((Get-VtCardManifestReview -Card $Card -Authority $Authority -Targets $Targets).Errors)
 }
 
+# Issue #1102: headings that explicitly claim a current/live artifact are
+# deployment authority, not historical feature provenance. Keep parsing and
+# replacement planning pure and shared so the refresher and strict guard cannot
+# disagree about a card. Untyped evidence and exact Feature provenance lines
+# remain immutable.
+function Get-VtCardArtifactObjectValue {
+    param($Object, [string[]]$Names)
+    if ($null -eq $Object) { return $null }
+    foreach ($name in @($Names)) {
+        $value = $null
+        if ($Object -is [System.Collections.IDictionary]) {
+            if ($Object.Contains($name)) { $value = $Object[$name] }
+        }
+        else {
+            $property = $Object.PSObject.Properties[$name]
+            if ($property) { $value = $property.Value }
+        }
+        if (-not [string]::IsNullOrWhiteSpace([string]$value)) {
+            return [string]$value
+        }
+    }
+    return $null
+}
+
+function ConvertTo-VtCardArtifactTarget {
+    param($Target)
+    $names = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    foreach ($name in @(
+        (Get-VtCardArtifactObjectValue $Target @('ModId')),
+        (Get-VtCardArtifactObjectValue $Target @('Dir','Directory')),
+        (Get-VtCardArtifactObjectValue $Target @('FriendlyName','Identity')),
+        (Get-VtCardArtifactObjectValue $Target @('LoadTag'))
+    )) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$name)) { $null = $names.Add([string]$name) }
+    }
+
+    $markers = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    foreach ($route in @($Target.LoadRoutes)) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$route.Marker)) { $null = $markers.Add([string]$route.Marker) }
+    }
+    foreach ($route in @($Target.ExactBannerRoutes)) {
+        if (-not [string]::IsNullOrWhiteSpace([string]$route.Tag)) { $null = $markers.Add([string]$route.Tag) }
+    }
+    $loadTag = Get-VtCardArtifactObjectValue $Target @('LoadTag')
+    if ($loadTag) {
+        $null = $markers.Add("[$loadTag`:LOAD]")
+        $null = $markers.Add("[$loadTag]")
+    }
+
+    return [pscustomobject][ordered]@{
+        Raw = $Target
+        ModId = Get-VtCardArtifactObjectValue $Target @('ModId')
+        Directory = Get-VtCardArtifactObjectValue $Target @('Dir','Directory')
+        FriendlyName = Get-VtCardArtifactObjectValue $Target @('FriendlyName','Identity')
+        Version = ([string](Get-VtCardArtifactObjectValue $Target @('Version'))).TrimStart('v','V')
+        WorkshopId = Get-VtCardArtifactObjectValue $Target @('WorkshopId','PublishedId')
+        SourceCommit = Get-VtCardArtifactObjectValue $Target @('SourceCommit')
+        RootBundle = Get-VtCardArtifactObjectValue $Target @('RootBundle')
+        RootBundleSha256 = Get-VtCardArtifactObjectValue $Target @('RootBundleSha256')
+        AssetFilename = Get-VtCardArtifactObjectValue $Target @('AssetFilename')
+        AssetSha256 = Get-VtCardArtifactObjectValue $Target @('AssetSha256')
+        Names = @($names)
+        Markers = @($markers)
+    }
+}
+
+function Get-VtCardArtifactSelectedTargets {
+    param([string]$Card, $Targets)
+    $rows = @($Targets)
+    if ($rows.Count -le 1) { return $rows }
+    $build = Get-VtCardField -Card $Card -Name 'Build/banner'
+    $identities = @(Get-VtBuildBannerIdentities -BuildBanner $build)
+    if ($identities.Count -eq 0) { return $rows }
+
+    $selected = New-Object System.Collections.Generic.List[object]
+    $selectedKeys = @{}
+    foreach ($identity in $identities) {
+        $matches = @($rows | Where-Object {
+            ([string]$_.Version).Equals(([string]$identity.Version).TrimStart('v','V'),
+                [System.StringComparison]::OrdinalIgnoreCase) -and
+            @($_.Markers | Where-Object {
+                ([string]$_).Equals([string]$identity.Marker,
+                    [System.StringComparison]::OrdinalIgnoreCase)
+            }).Count -gt 0
+        })
+        if ($matches.Count -ne 1) { return $rows }
+        $key = [string]$matches[0].ModId + "`n" + [string]$matches[0].WorkshopId
+        if (-not $selectedKeys.ContainsKey($key)) {
+            $selected.Add($matches[0])
+            $selectedKeys[$key] = $true
+        }
+    }
+    if ($selected.Count -eq 0) { return $rows }
+    return @($selected.ToArray())
+}
+
+function ConvertTo-VtCardArtifactNameKey {
+    param([string]$Value)
+    if ([string]::IsNullOrWhiteSpace($Value)) { return '' }
+    return ([regex]::Replace($Value.ToLowerInvariant(), '[^a-z0-9]+', ''))
+}
+
+function Resolve-VtCardArtifactLineTargets {
+    param([string]$Line, [string]$Heading, $Targets)
+    $rows = @($Targets)
+    $itemIds = @([regex]::Matches($Line,
+        '(?i)\b(?:Workshop(?:\s+item)?|item|PublishedFileID)\s*(?:=|:)?\s*`?([0-9]{5,})`?') |
+        ForEach-Object { [string]$_.Groups[1].Value } | Sort-Object -Unique)
+    if ($itemIds.Count -gt 0) {
+        return @($rows | Where-Object { $itemIds -contains [string]$_.WorkshopId })
+    }
+    if ($rows.Count -eq 1) { return $rows }
+
+    if ($Heading -match '(?i)^Current[ \t]+(.+?)[ \t]+receipt$') {
+        $qualifier = ConvertTo-VtCardArtifactNameKey $Matches[1]
+        if ($qualifier) {
+            return @($rows | Where-Object {
+                @($_.Names | Where-Object {
+                    (ConvertTo-VtCardArtifactNameKey ([string]$_)) -ceq $qualifier
+                }).Count -gt 0
+            })
+        }
+    }
+    return @()
+}
+
+function Get-VtCardCurrentArtifactReview {
+    [CmdletBinding()]
+    param([string]$Card, $Targets)
+
+    $structuralErrors = New-Object System.Collections.Generic.List[string]
+    $driftErrors = New-Object System.Collections.Generic.List[string]
+    $changes = New-Object System.Collections.Generic.List[string]
+    $claims = New-Object System.Collections.Generic.List[object]
+    $cardEdits = New-Object System.Collections.Generic.List[object]
+    $recognizedHeadings = 0
+    $featureProvenanceLines = 0
+
+    if ([string]::IsNullOrWhiteSpace($Card)) {
+        return [pscustomobject][ordered]@{
+            Status='none';Recognized=$false;FeatureProvenanceLines=0;Claims=@()
+            StructuralErrors=@();DriftErrors=@();Errors=@();Changes=@();NewCard=$Card
+        }
+    }
+
+    $normalizedTargets = @($Targets | ForEach-Object { ConvertTo-VtCardArtifactTarget $_ })
+    $cardTargets = @(Get-VtCardArtifactSelectedTargets -Card $Card -Targets $normalizedTargets)
+    $lines = @($Card -split "`r?`n")
+    $lineStarts = New-Object System.Collections.Generic.List[int]
+    $lineCursor = 0
+    for ($lineOffsetIndex = 0; $lineOffsetIndex -lt $lines.Count; $lineOffsetIndex++) {
+        $lineStarts.Add($lineCursor)
+        if ($lineOffsetIndex -lt ($lines.Count - 1)) {
+            $nextNewline = $Card.IndexOf("`n", $lineCursor)
+            if ($nextNewline -lt 0) { break }
+            $lineCursor = $nextNewline + 1
+        }
+    }
+
+    for ($lineIndex = 0; $lineIndex -lt $lines.Count; $lineIndex++) {
+        $line = [string]$lines[$lineIndex]
+        $headingMatch = [regex]::Match($line,
+            '^[ \t]*(?:[-*][ \t]+)?\*\*(?<heading>[^*\r\n]{1,100}?):\*\*[ \t]*(?<value>.*)$')
+        if (-not $headingMatch.Success) { continue }
+        $heading = $headingMatch.Groups['heading'].Value.Trim()
+        if ($heading.Equals('Feature provenance', [System.StringComparison]::OrdinalIgnoreCase)) {
+            $featureProvenanceLines++
+            continue
+        }
+        $typedCurrentHeading = $heading.Equals('Exact live artifact', [System.StringComparison]::OrdinalIgnoreCase) -or
+            $heading.Equals('Live artifact', [System.StringComparison]::OrdinalIgnoreCase) -or
+            $heading.Equals('Exact source', [System.StringComparison]::OrdinalIgnoreCase) -or
+            $heading.Equals('Current receipt', [System.StringComparison]::OrdinalIgnoreCase) -or
+            $heading -match '(?i)^Current[ \t]+.{1,80}[ \t]+receipt$'
+        if (-not $typedCurrentHeading) { continue }
+        $recognizedHeadings++
+
+        $valueGroup = $headingMatch.Groups['value']
+        $value = [string]$valueGroup.Value
+        $valueOffset = [int]$valueGroup.Index
+        $sourceHint = $heading.Equals('Exact source', [System.StringComparison]::OrdinalIgnoreCase) -or
+            $value -match '(?i)\b(?:exact[ \t]+source|source(?:[ \t]+commit)?)\b'
+        $rootHint = $value -match '(?i)\broot\b|\.mod_bundle\b'
+        $zipHint = $value -match '(?i)\b(?:release[ \t]+)?zip\b|\.zip\b'
+        $hashMatches = @([regex]::Matches($value,
+            '(?i)(?<![0-9a-f])(?:[0-9a-f]{64}|[0-9a-f]{40})(?![0-9a-f])'))
+        if (-not $sourceHint -and -not $rootHint -and -not $zipHint -and
+            $hashMatches.Count -eq 0) { continue }
+
+        $lineNumber = $lineIndex + 1
+        $lineTargets = @(Resolve-VtCardArtifactLineTargets -Line $line -Heading $heading -Targets $cardTargets)
+        if ($lineTargets.Count -ne 1) {
+            $structuralErrors.Add("current-artifact-target-ambiguous:$heading@line$lineNumber")
+            continue
+        }
+        $target = $lineTargets[0]
+        $targetKey = if ($target.ModId) { [string]$target.ModId } else { [string]$target.WorkshopId }
+        $lineEdits = New-Object System.Collections.Generic.List[object]
+        $parsedHashRanges = New-Object System.Collections.Generic.List[object]
+
+        if ($sourceHint) {
+            $sourceMatches = if ($heading.Equals('Exact source', [System.StringComparison]::OrdinalIgnoreCase)) {
+                @([regex]::Matches($value,
+                    '(?i)(?<![0-9a-f])(?<value>[0-9a-f]{40})(?![0-9a-f])'))
+            }
+            else {
+                @([regex]::Matches($value,
+                    '(?i)\b(?:exact[ \t]+source|source(?:[ \t]+commit)?)[ \t]*(?:=|:)?[ \t]*`?(?<value>[0-9a-f]{40})`?'))
+            }
+            if ($sourceMatches.Count -ne 1) {
+                $structuralErrors.Add("current-artifact-source-unparseable:$targetKey@line$lineNumber")
+            }
+            else {
+                $group = $sourceMatches[0].Groups['value']
+                $claimed = [string]$group.Value
+                $expected = [string]$target.SourceCommit
+                $absoluteIndex = $valueOffset + [int]$group.Index
+                $parsedHashRanges.Add([pscustomobject]@{Index=$absoluteIndex;Length=[int]$group.Length})
+                if ($expected -notmatch '^[0-9a-f]{40}$') {
+                    $structuralErrors.Add("current-artifact-source-authority-unavailable:$targetKey@line$lineNumber")
+                }
+                else {
+                    $claims.Add([pscustomobject]@{Field='source';Claimed=$claimed;Expected=$expected;Target=$targetKey;Line=$lineNumber})
+                    if (-not $claimed.Equals($expected, [System.StringComparison]::OrdinalIgnoreCase)) {
+                        $driftErrors.Add("current-artifact-source-drift:$targetKey@line$lineNumber")
+                        $lineEdits.Add([pscustomobject]@{Index=$absoluteIndex;Length=[int]$group.Length;Replacement=$expected})
+                        $changes.Add("line $lineNumber`: $targetKey source $claimed -> $expected")
+                    }
+                }
+            }
+        }
+
+        if ($rootHint) {
+            $rootMatches = @([regex]::Matches($value,
+                '(?i)\broot(?:[ \t]+bundle)?(?:[ \t]*(?:=|:)?[ \t]*`?(?<name>[A-Za-z0-9._-]+\.mod_bundle)`?)?[ \t]*(?:,|;)?[ \t]*SHA(?:-?256)[ \t]*(?:=|:)?[ \t]*`?(?<sha>[0-9a-f]{64})`?'))
+            if ($rootMatches.Count -ne 1) {
+                $structuralErrors.Add("current-artifact-root-unparseable:$targetKey@line$lineNumber")
+            }
+            else {
+                $rootMatch = $rootMatches[0]
+                $nameGroup = $rootMatch.Groups['name']
+                $shaGroup = $rootMatch.Groups['sha']
+                $claimedSha = [string]$shaGroup.Value
+                $expectedSha = [string]$target.RootBundleSha256
+                $shaIndex = $valueOffset + [int]$shaGroup.Index
+                $parsedHashRanges.Add([pscustomobject]@{Index=$shaIndex;Length=[int]$shaGroup.Length})
+                if ([string]$target.RootBundle -notmatch '(?i)\.mod_bundle$' -or
+                    $expectedSha -notmatch '^[0-9a-f]{64}$') {
+                    $structuralErrors.Add("current-artifact-root-authority-unavailable:$targetKey@line$lineNumber")
+                }
+                else {
+                    if ($nameGroup.Success -and $nameGroup.Length -gt 0) {
+                        $claimedName = [string]$nameGroup.Value
+                        $expectedName = [string]$target.RootBundle
+                        $claims.Add([pscustomobject]@{Field='root-name';Claimed=$claimedName;Expected=$expectedName;Target=$targetKey;Line=$lineNumber})
+                        if (-not $claimedName.Equals($expectedName, [System.StringComparison]::OrdinalIgnoreCase)) {
+                            $driftErrors.Add("current-artifact-root-name-drift:$targetKey@line$lineNumber")
+                            $lineEdits.Add([pscustomobject]@{Index=($valueOffset+[int]$nameGroup.Index);Length=[int]$nameGroup.Length;Replacement=$expectedName})
+                            $changes.Add("line $lineNumber`: $targetKey root $claimedName -> $expectedName")
+                        }
+                    }
+                    $claims.Add([pscustomobject]@{Field='root-sha256';Claimed=$claimedSha;Expected=$expectedSha;Target=$targetKey;Line=$lineNumber})
+                    if (-not $claimedSha.Equals($expectedSha, [System.StringComparison]::OrdinalIgnoreCase)) {
+                        $driftErrors.Add("current-artifact-root-sha256-drift:$targetKey@line$lineNumber")
+                        $lineEdits.Add([pscustomobject]@{Index=$shaIndex;Length=[int]$shaGroup.Length;Replacement=$expectedSha})
+                        $changes.Add("line $lineNumber`: $targetKey root SHA-256 $claimedSha -> $expectedSha")
+                    }
+                }
+            }
+        }
+
+        if ($zipHint) {
+            $zipMatches = @([regex]::Matches($value,
+                '(?i)(?<![-A-Za-z0-9._/\\])`?(?<name>[A-Za-z0-9._-]+\.zip)`?[ \t]*(?:,|;)?[ \t]*SHA(?:-?256)[ \t]*(?:=|:)?[ \t]*`?(?<sha>[0-9a-f]{64})`?'))
+            if ($zipMatches.Count -eq 0) {
+                $zipMatches = @([regex]::Matches($value,
+                    '(?i)\b(?:release[ \t]+)?ZIP(?:[ \t]+asset)?[ \t]*(?:,|;)?[ \t]*SHA(?:-?256)[ \t]*(?:=|:)?[ \t]*`?(?<sha>[0-9a-f]{64})`?'))
+            }
+            if ($zipMatches.Count -ne 1) {
+                $structuralErrors.Add("current-artifact-zip-unparseable:$targetKey@line$lineNumber")
+            }
+            else {
+                $zipMatch = $zipMatches[0]
+                $nameGroup = $zipMatch.Groups['name']
+                $shaGroup = $zipMatch.Groups['sha']
+                $claimedSha = [string]$shaGroup.Value
+                $expectedSha = [string]$target.AssetSha256
+                $shaIndex = $valueOffset + [int]$shaGroup.Index
+                $parsedHashRanges.Add([pscustomobject]@{Index=$shaIndex;Length=[int]$shaGroup.Length})
+                if ([string]$target.AssetFilename -notmatch '(?i)\.zip$' -or
+                    $expectedSha -notmatch '^[0-9a-f]{64}$') {
+                    $structuralErrors.Add("current-artifact-zip-authority-unavailable:$targetKey@line$lineNumber")
+                }
+                else {
+                    if ($nameGroup.Success -and $nameGroup.Length -gt 0) {
+                        $claimedName = [string]$nameGroup.Value
+                        $expectedName = [string]$target.AssetFilename
+                        $claims.Add([pscustomobject]@{Field='zip-name';Claimed=$claimedName;Expected=$expectedName;Target=$targetKey;Line=$lineNumber})
+                        if (-not $claimedName.Equals($expectedName, [System.StringComparison]::OrdinalIgnoreCase)) {
+                            $driftErrors.Add("current-artifact-zip-name-drift:$targetKey@line$lineNumber")
+                            $lineEdits.Add([pscustomobject]@{Index=($valueOffset+[int]$nameGroup.Index);Length=[int]$nameGroup.Length;Replacement=$expectedName})
+                            $changes.Add("line $lineNumber`: $targetKey ZIP $claimedName -> $expectedName")
+                        }
+                    }
+                    $claims.Add([pscustomobject]@{Field='zip-sha256';Claimed=$claimedSha;Expected=$expectedSha;Target=$targetKey;Line=$lineNumber})
+                    if (-not $claimedSha.Equals($expectedSha, [System.StringComparison]::OrdinalIgnoreCase)) {
+                        $driftErrors.Add("current-artifact-zip-sha256-drift:$targetKey@line$lineNumber")
+                        $lineEdits.Add([pscustomobject]@{Index=$shaIndex;Length=[int]$shaGroup.Length;Replacement=$expectedSha})
+                        $changes.Add("line $lineNumber`: $targetKey ZIP SHA-256 $claimedSha -> $expectedSha")
+                    }
+                }
+            }
+        }
+
+        foreach ($hashMatch in $hashMatches) {
+            $absoluteIndex = $valueOffset + [int]$hashMatch.Index
+            $known = @($parsedHashRanges.ToArray() | Where-Object {
+                $absoluteIndex -ge [int]$_.Index -and
+                ($absoluteIndex + $hashMatch.Length) -le ([int]$_.Index + [int]$_.Length)
+            }).Count -gt 0
+            if (-not $known) {
+                $structuralErrors.Add("current-artifact-unrecognized-hash:$targetKey@line$lineNumber")
+            }
+        }
+
+        $editKeys = @{}
+        foreach ($edit in @($lineEdits.ToArray())) {
+            $key = "$($edit.Index):$($edit.Length)"
+            if ($editKeys.ContainsKey($key) -and [string]$editKeys[$key] -cne [string]$edit.Replacement) {
+                $structuralErrors.Add("current-artifact-overlapping-edit:$targetKey@line$lineNumber")
+            }
+            else { $editKeys[$key] = [string]$edit.Replacement }
+        }
+        $uniqueEdits = @($lineEdits.ToArray() | Group-Object { "$($_.Index):$($_.Length)" } |
+            ForEach-Object { $_.Group[0] } | Sort-Object Index -Descending)
+        foreach ($edit in $uniqueEdits) {
+            $cardEdits.Add([pscustomobject]@{
+                Index = [int]$lineStarts[$lineIndex] + [int]$edit.Index
+                Length = [int]$edit.Length
+                Replacement = [string]$edit.Replacement
+            })
+        }
+    }
+
+    $structural = @($structuralErrors.ToArray() | Select-Object -Unique)
+    $drift = @($driftErrors.ToArray() | Select-Object -Unique)
+    $status = if ($structural.Count -gt 0) { 'unparseable' }
+        elseif ($drift.Count -gt 0) { 'stale' }
+        elseif ($recognizedHeadings -gt 0) { 'current' }
+        else { 'none' }
+    $newCard = $Card
+    if ($structural.Count -gt 0) { $newCard = $null }
+    elseif ($drift.Count -gt 0) {
+        foreach ($edit in @($cardEdits.ToArray() | Sort-Object Index -Descending)) {
+            $newCard = $newCard.Substring(0, [int]$edit.Index) + [string]$edit.Replacement +
+                $newCard.Substring([int]$edit.Index + [int]$edit.Length)
+        }
+    }
+    return [pscustomobject][ordered]@{
+        Status = $status
+        Recognized = $recognizedHeadings -gt 0
+        FeatureProvenanceLines = $featureProvenanceLines
+        Claims = @($claims.ToArray())
+        StructuralErrors = $structural
+        DriftErrors = $drift
+        Errors = @($structural + $drift)
+        Changes = @($changes.ToArray())
+        NewCard = $newCard
+    }
+}
+
 function Test-VtNativeChatMarkerException {
     param([string]$Line,$Match,$AllMatches)
     $end=$Line.Length
@@ -598,6 +969,7 @@ function Get-VtLiveTestCardSelection {
     $authorityAdvisories = New-Object System.Collections.Generic.List[string]
     $buildResolution=Resolve-VtBuildAuthorityTargets -BuildBanner $build -Authority $Authority
     $targets=@($buildResolution.Targets)
+    $currentArtifactReview=$null
 
     if (-not $card) {
         $errors.Add('missing-current-live-test-card')
@@ -645,6 +1017,12 @@ function Get-VtLiveTestCardSelection {
             foreach ($manifestAdvisory in @($manifestReview.Advisories)) {
                 $authorityAdvisories.Add($manifestAdvisory)
             }
+            if($Authority){
+                $currentArtifactReview=Get-VtCardCurrentArtifactReview -Card $card -Targets $targets
+                foreach($artifactError in @($currentArtifactReview.Errors)){
+                    $authorityErrors.Add($artifactError)
+                }
+            }
             foreach ($evidenceError in @(Get-VtCardEvidenceErrors -Card $card -Authority $Authority -Targets $targets)) {
                 $authorityErrors.Add($evidenceError)
             }
@@ -673,6 +1051,7 @@ function Get-VtLiveTestCardSelection {
         Steps = @($steps)
         Expected = $expected
         AuthorityTargets = @($targets)
+        CurrentArtifactReview = $currentArtifactReview
         AuthorityEnforced = [bool]$EnforceAuthority
         AuthorityErrors = @($authorityErrors | Select-Object -Unique)
         AuthorityAdvisories = @($authorityAdvisories | Select-Object -Unique)
