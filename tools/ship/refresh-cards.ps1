@@ -261,6 +261,7 @@ function Get-VtCardRefreshPlan {
 
     $anchorLineOurIdentity = $false
     $anchorLineSiblingIdentity = $false
+    $anchorLineForeignConflict = $false
     $itemLineOurIdentity = $false
     $itemLineSiblingIdentity = $false
     $lineAttributions = @()
@@ -309,7 +310,10 @@ function Get-VtCardRefreshPlan {
                 elseif ($lineHasSiblingIdentity) { $anchorOwnership = 'foreign' }
             }
             if ($anchorOwnership -eq 'owned') { $anchorLineOurIdentity = $true }
-            elseif ($anchorOwnership -eq 'foreign') { $anchorLineSiblingIdentity = $true }
+            elseif ($anchorOwnership -eq 'foreign') {
+                $anchorLineSiblingIdentity = $true
+                if ($lineHasOurIdentity) { $anchorLineForeignConflict = $true }
+            }
             elseif ($anchorOwnership -eq 'ambiguous') {
                 $anchorLineOurIdentity = $true
                 $anchorLineSiblingIdentity = $true
@@ -391,6 +395,11 @@ function Get-VtCardRefreshPlan {
         }
 
         if ($versionOwnership -eq 'foreign' -and -not $pidPresent) { return $result }
+        if ($versionOwnership -eq 'foreign' -and $pidPresent -and $anchorLineForeignConflict) {
+            $result.Status = 'unparseable'
+            $result.Reason = "shared load tag '$LoadTag' anchor conflicts with same-line '$StreamIdentity' attribution"
+            return $result
+        }
         if ($versionOwnership -eq 'ambiguous') {
             $result.Status = 'unparseable'
             $result.Reason = "shared load tag '$LoadTag' has no unique '$StreamIdentity' stream attribution"
@@ -1022,6 +1031,31 @@ function Invoke-RefreshCardsSelfTest {
         -SiblingStreamIdentities @('Tweaker: Weapons')
     Assert ($plan.Status -eq 'unparseable') '#290 same-line warning with a sibling old version fails closed'
     Assert ($null -eq $plan.NewBody) '#290 sibling collision cannot partially rewrite the card'
+
+    $wtIssue270Shape = @'
+## CURRENT LIVE TEST
+
+**Build/banner:** Tweaker: Cosmetics `v0.9.218-dev`, confirm `[cosmetics:LOAD] v0.9.218-dev`; Tweaker: Weapons Dev `v0.12.317-dev`, confirm `[wt:LOAD] v0.12.317-dev`. Do not enable public Tweaker: Weapons at the same time.
+**Workshop receipts:** Tweaker: Cosmetics item `3715714222`, ManifestID `7466125697896787016`; Tweaker: Weapons Dev item `3748824853`, ManifestID `4857948458985088043`
+**Topology:** Solo
+
+1. Test the Deepwood Staff and helmet containment path.
+
+**Expected:** Works.
+'@
+    $plan = Get-VtCardRefreshPlan -Body $wtIssue270Shape -PublishedId '3748824853' `
+        -NewVersion '0.12.320-dev' -LoadTag 'wt' -SharedLoadTag $true `
+        -StreamIdentity 'Tweaker: Weapons Dev' -SiblingPublishedIds @('3712896117') `
+        -SiblingStreamIdentities @('Tweaker: Weapons')
+    Assert ($plan.Status -eq 'unparseable') '#270 same-line foreign anchor cannot be reported current through its Dev item id'
+    Assert ($null -eq $plan.NewBody) '#270 version conflict leaves the entire card untouched'
+
+    $plan = Get-VtCardRefreshPlan -Body $wtIssue270Shape -PublishedId '3748824853' `
+        -NewVersion '0.12.320-dev' -LoadTag 'wt' -NewManifest '999' -SharedLoadTag $true `
+        -StreamIdentity 'Tweaker: Weapons Dev' -SiblingPublishedIds @('3712896117') `
+        -SiblingStreamIdentities @('Tweaker: Weapons')
+    Assert ($plan.Status -eq 'unparseable') '#270 same-line conflict blocks a manifest-only partial repair'
+    Assert ($null -eq $plan.NewBody) '#270 manifest conflict leaves the entire card untouched'
 
     $wtIssue138Shape = @'
 ## CURRENT LIVE TEST
