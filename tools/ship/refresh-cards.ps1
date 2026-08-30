@@ -158,6 +158,164 @@ function Test-VtStreamIdentityPresent {
     return [bool]($pattern -and $Body -match $pattern)
 }
 
+function Get-VtStreamIdentitySet {
+    param($Stream)
+    return @(@([string]$Stream.Identity) + @($Stream.LegacyIdentities) |
+        Where-Object { -not [string]::IsNullOrWhiteSpace([string]$_) } |
+        ForEach-Object { ([string]$_).Trim() } | Sort-Object -Unique)
+}
+
+function Test-VtAnyStreamIdentityPresent {
+    param([string]$Body, $Stream)
+    foreach ($identity in @(Get-VtStreamIdentitySet $Stream)) {
+        if (Test-VtStreamIdentityPresent -Body $Body -Identity $identity) { return $true }
+    }
+    return $false
+}
+
+function Get-VtVersionTrack {
+    param([string]$Version)
+    $clean = ([string]$Version).Trim().TrimStart('v', 'V')
+    $match = [regex]::Match($clean, '-(?<track>[A-Za-z][A-Za-z0-9.]*)$')
+    if ($match.Success) { return $match.Groups['track'].Value.ToLowerInvariant() }
+    return 'release'
+}
+
+function Get-VtBuildClauseRange {
+    param([string]$Line, [int]$Index)
+    $searchIndex = [Math]::Max(0, [Math]::Min($Index, $Line.Length - 1))
+    $leftSemicolon = $Line.LastIndexOf([char]';', $searchIndex)
+    $leftPipe = $Line.LastIndexOf([char]'|', $searchIndex)
+    $left = [Math]::Max($leftSemicolon, $leftPipe)
+    $start = $left + 1
+    $rightSemicolon = $Line.IndexOf([char]';', $searchIndex)
+    $rightPipe = $Line.IndexOf([char]'|', $searchIndex)
+    $right = if ($rightSemicolon -lt 0) { $rightPipe }
+        elseif ($rightPipe -lt 0) { $rightSemicolon }
+        else { [Math]::Min($rightSemicolon, $rightPipe) }
+    $end = if ($right -ge 0) { $right } else { $Line.Length }
+    return [pscustomobject]@{
+        Start = $start
+        End = $end
+        Text = $Line.Substring($start, $end - $start)
+    }
+}
+
+function Get-VtPreviousBuildClauseRange {
+    param([string]$Line, [int]$ClauseStart)
+    if ($ClauseStart -le 0) { return $null }
+    $separator = $ClauseStart - 1
+    if ($Line[$separator] -ne [char]';' -and $Line[$separator] -ne [char]'|') { return $null }
+    $left = if ($separator -gt 0) {
+        $leftSemicolon = $Line.LastIndexOf([char]';', $separator - 1)
+        $leftPipe = $Line.LastIndexOf([char]'|', $separator - 1)
+        [Math]::Max($leftSemicolon, $leftPipe)
+    }
+    else { -1 }
+    $start = $left + 1
+    return [pscustomobject]@{
+        Start = $start
+        End = $separator
+        Text = $Line.Substring($start, $separator - $start)
+    }
+}
+
+function Get-VtAllStreamAnchorContext {
+    param([string]$Line, $ClauseRange, [string]$OldVersion)
+    $context = [string]$ClauseRange.Text
+    $previous = Get-VtPreviousBuildClauseRange -Line $Line `
+        -ClauseStart ([int]$ClauseRange.Start)
+    if (-not $previous) { return $context }
+    $oldPattern = '(?<![0-9A-Za-z.-])v?' + [regex]::Escape($OldVersion) +
+        '(?![0-9A-Za-z-])(?!\.[0-9A-Za-z])'
+    $hasRuntimeMarker = $previous.Text -match '\[[A-Za-z][A-Za-z0-9_-]*:LOAD\]' -or
+        $previous.Text -match ('(?i)\[[A-Za-z][A-Za-z0-9_-]*\][ \t]+v?' +
+            $script:VtSemverPattern + '[ \t]+loaded')
+    if ($previous.Text -match $oldPattern -and -not $hasRuntimeMarker) {
+        return $previous.Text + ';' + $context
+    }
+    return $context
+}
+
+function Resolve-VtAllStreamAnchor {
+    param(
+        [object[]]$Candidates,
+        [string]$Clause,
+        [string]$Body,
+        [string]$OldVersion
+    )
+    $remaining = @($Candidates)
+    if ($remaining.Count -le 1) { return $remaining }
+
+    $byItem = @($remaining | Where-Object {
+        $Clause -match ('(?<!\d)' + [regex]::Escape([string]$_.PublishedId) + '(?!\d)')
+    })
+
+    # Public and development streams intentionally share several LOAD tags.
+    # A stale but explicit -dev / -beta / clean-release suffix is durable
+    # stream evidence even when its numeric version no longer matches either
+    # deployed row. This cannot cross a stream boundary because exactly one
+    # candidate must own the same release track.
+    $oldTrack = Get-VtVersionTrack $OldVersion
+    $byTrack = @($remaining | Where-Object {
+        (Get-VtVersionTrack ([string]$_.Version)) -ceq $oldTrack
+    })
+
+    $byIdentity = @($remaining | Where-Object {
+        Test-VtAnyStreamIdentityPresent -Body $Clause -Stream $_
+    })
+    if ($byIdentity.Count -gt 1) {
+        $scored = @($byIdentity | ForEach-Object {
+            $stream = $_
+            $matchingLengths = @(Get-VtStreamIdentitySet $stream | Where-Object {
+                Test-VtStreamIdentityPresent -Body $Clause -Identity ([string]$_)
+            } | ForEach-Object { ([string]$_).Length })
+            [pscustomobject]@{
+                Stream = $stream
+                Length = if ($matchingLengths.Count -gt 0) {
+                    ($matchingLengths | Measure-Object -Maximum).Maximum
+                }
+                else { 0 }
+            }
+        })
+        $maxLength = ($scored | Measure-Object -Property Length -Maximum).Maximum
+        $byIdentity = @($scored | Where-Object { $_.Length -eq $maxLength } |
+            ForEach-Object { $_.Stream })
+    }
+    $byCurrentVersion = @($remaining | Where-Object {
+        ([string]$_.Version).Equals($OldVersion, [System.StringComparison]::OrdinalIgnoreCase)
+    })
+
+    # A complete item coordinate elsewhere in the card is a final exact
+    # discriminator, but only when precisely one sibling item is named.
+    $byBodyItem = @($remaining | Where-Object {
+        $Body -match ('(?<!\d)' + [regex]::Escape([string]$_.PublishedId) + '(?!\d)')
+    })
+
+    # Every exact discriminator that resolves to one sibling must agree.
+    # Track-only evidence is useful for old shared-tag cards, but it must never
+    # overrule a contradictory item or display identity. A contradiction
+    # returns the original ambiguous set so the caller performs zero writes.
+    $evidenceRows = New-Object System.Collections.Generic.List[object]
+    foreach ($candidateSet in @(
+        [pscustomobject]@{ Rows = @($byItem) },
+        [pscustomobject]@{ Rows = @($byIdentity) },
+        [pscustomobject]@{ Rows = @($byTrack) },
+        [pscustomobject]@{ Rows = @($byCurrentVersion) },
+        [pscustomobject]@{ Rows = @($byBodyItem) }
+    )) {
+        if (@($candidateSet.Rows).Count -eq 1) { $evidenceRows.Add($candidateSet.Rows[0]) }
+    }
+    if ($evidenceRows.Count -eq 0) { return $remaining }
+    $keys = @($evidenceRows | ForEach-Object {
+        ([string]$_.Directory) + '|' + ([string]$_.PublishedId)
+    } | Sort-Object -Unique)
+    if ($keys.Count -ne 1) { return $remaining }
+    return @($remaining | Where-Object {
+        (([string]$_.Directory) + '|' + ([string]$_.PublishedId)) -ceq $keys[0]
+    })
+}
+
 function Get-VtMatchRangeDistance {
     param($Left, $Right)
     $leftStart = [int]$Left.Index
@@ -183,6 +341,13 @@ function Get-VtCfgStreamIdentity {
 function Get-VtStreamInventory {
     param([string]$RepoRoot)
     $rows = @()
+    # Exact historical display names still present on pinned cards. These are
+    # aliases only for attribution; canonical output always comes from cfg.
+    # CWV's former Career name is evidenced by #343/#807 and this tool's
+    # pre-rename fixtures. No fuzzy title matching is allowed.
+    $legacyIdentitiesByDirectory = @{
+        character_weapon_variants = @('Career Weapon Variants', 'Career Weapon Variants Dev')
+    }
     foreach ($directory in Get-ChildItem -LiteralPath $RepoRoot -Directory) {
         $name = $directory.Name
         $cfgPath = Join-Path $directory.FullName 'itemV2.cfg'
@@ -203,6 +368,10 @@ function Get-VtStreamInventory {
             PublishedId = $publishedMatch.Groups[1].Value
             LoadTag = $loadTagResolution.LoadTag
             Identity = Get-VtCfgStreamIdentity -CfgText $cfg -Directory $name
+            LegacyIdentities = if ($legacyIdentitiesByDirectory.ContainsKey($name)) {
+                @($legacyIdentitiesByDirectory[$name])
+            }
+            else { @() }
         }
     }
     return $rows
@@ -586,6 +755,8 @@ function Get-VtAllStreamReconcilePlan {
     for ($lineIndex = 0; $lineIndex -lt $lines.Count; $lineIndex++) {
         $line = [string]$lines[$lineIndex]
         $edits = New-Object System.Collections.Generic.List[object]
+        $resolvedAnchors = New-Object System.Collections.Generic.List[object]
+        $seenAnchorIndexes = @{}
 
         foreach ($tagKey in @($streamsByTag.Keys | Sort-Object)) {
             $tagStreams = @($streamsByTag[$tagKey])
@@ -600,29 +771,15 @@ function Get-VtAllStreamReconcilePlan {
                     $recognized = $true
                     $versionGroup = $match.Groups['version']
                     $oldVersion = [string]$versionGroup.Value
-                    $candidates = @($tagStreams)
-                    if ($candidates.Count -gt 1) {
-                        $byItem = @($candidates | Where-Object {
-                            $line -match ('(?<!\d)' + [regex]::Escape([string]$_.PublishedId) + '(?!\d)')
-                        })
-                        if ($byItem.Count -eq 1) {
-                            $candidates = $byItem
-                        }
-                        else {
-                            $byIdentity = @($candidates | Where-Object {
-                                Test-VtStreamIdentityPresent -Body $line -Identity ([string]$_.Identity)
-                            })
-                            if ($byIdentity.Count -eq 1) {
-                                $candidates = $byIdentity
-                            }
-                            else {
-                                $byCurrentVersion = @($candidates | Where-Object {
-                                    ([string]$_.Version).Equals($oldVersion, [System.StringComparison]::OrdinalIgnoreCase)
-                                })
-                                if ($byCurrentVersion.Count -eq 1) { $candidates = $byCurrentVersion }
-                            }
-                        }
-                    }
+                    $markerMatch = [regex]::Match($match.Value,
+                        ('(?i)\[' + $tagEsc + '(?::LOAD)?\]'))
+                    $markerIndex = [int]($match.Index + $markerMatch.Index)
+                    if ($seenAnchorIndexes.ContainsKey($markerIndex)) { continue }
+                    $clauseRange = Get-VtBuildClauseRange -Line $line -Index $markerIndex
+                    $anchorContext = Get-VtAllStreamAnchorContext -Line $line `
+                        -ClauseRange $clauseRange -OldVersion $oldVersion
+                    $candidates = @(Resolve-VtAllStreamAnchor -Candidates $tagStreams `
+                        -Clause $anchorContext -Body $Body -OldVersion $oldVersion)
                     if ($candidates.Count -ne 1) {
                         $result.Status = 'unparseable'
                         $result.Reason = "shared load tag '$($tagStreams[0].LoadTag)' on line $($lineIndex + 1) has no unique stream attribution"
@@ -630,14 +787,160 @@ function Get-VtAllStreamReconcilePlan {
                     }
                     $stream = $candidates[0]
                     $newVersion = ([string]$stream.Version).TrimStart('v', 'V')
-                    if (-not $oldVersion.Equals($newVersion, [System.StringComparison]::OrdinalIgnoreCase)) {
-                        $edits.Add([pscustomobject]@{
-                            Index = [int]$versionGroup.Index
-                            Length = [int]$versionGroup.Length
-                            Replacement = $newVersion
-                        })
-                        $changes.Add("line $($lineIndex + 1): $($stream.ModId) v$oldVersion -> v$newVersion")
+                    $seenAnchorIndexes[$markerIndex] = $true
+                    $resolvedAnchors.Add([pscustomobject]@{
+                        MarkerIndex = $markerIndex
+                        ClauseStart = [int]$clauseRange.Start
+                        ClauseEnd = [int]$clauseRange.End
+                        OldVersion = $oldVersion
+                        NewVersion = $newVersion
+                        ModId = [string]$stream.ModId
+                        Identity = [string]$stream.Identity
+                        LegacyIdentities = @($stream.LegacyIdentities)
+                    })
+                }
+            }
+        }
+
+        # Historical cards sometimes put punctuation or explanatory prose
+        # between the version and LOAD marker. The lifecycle parser can still
+        # bind those identities safely, so feed only otherwise-unseen markers
+        # through the same exact stream resolver.
+        if ($line -match '^[ \t]*\*\*Build/banner:\*\*') {
+            foreach ($identity in @(Get-VtBuildBannerIdentities $line)) {
+                $markerIndex = [int]$identity.MarkerIndex
+                if ($seenAnchorIndexes.ContainsKey($markerIndex)) { continue }
+                $markerText = [string]$identity.Marker
+                $tag = $null
+                if ($markerText -match '^\[(?<tag>[A-Za-z][A-Za-z0-9_-]*):LOAD\]$') {
+                    $tag = $matches['tag']
+                }
+                elseif ($markerText -match '^\[(?<tag>[A-Za-z][A-Za-z0-9_-]*)\]$') {
+                    $tag = $matches['tag']
+                }
+                if ([string]::IsNullOrWhiteSpace($tag)) { continue }
+                $tagKey = $tag.ToLowerInvariant()
+                if (-not $streamsByTag.ContainsKey($tagKey)) {
+                    $result.Status = 'unparseable'
+                    $result.Reason = "unknown load tag '$tag' on line $($lineIndex + 1)"
+                    return $result
+                }
+                $recognized = $true
+                $oldVersion = [string]$identity.Version
+                $clauseRange = Get-VtBuildClauseRange -Line $line -Index $markerIndex
+                $anchorContext = Get-VtAllStreamAnchorContext -Line $line `
+                    -ClauseRange $clauseRange -OldVersion $oldVersion
+                $candidates = @(Resolve-VtAllStreamAnchor -Candidates @($streamsByTag[$tagKey]) `
+                    -Clause $anchorContext -Body $Body -OldVersion $oldVersion)
+                if ($candidates.Count -ne 1) {
+                    $result.Status = 'unparseable'
+                    $result.Reason = "shared load tag '$tag' on line $($lineIndex + 1) has no unique stream attribution"
+                    return $result
+                }
+                $stream = $candidates[0]
+                $seenAnchorIndexes[$markerIndex] = $true
+                $resolvedAnchors.Add([pscustomobject]@{
+                    MarkerIndex = $markerIndex
+                    ClauseStart = [int]$clauseRange.Start
+                    ClauseEnd = [int]$clauseRange.End
+                    OldVersion = $oldVersion
+                    NewVersion = ([string]$stream.Version).TrimStart('v', 'V')
+                    ModId = [string]$stream.ModId
+                    Identity = [string]$stream.Identity
+                    LegacyIdentities = @($stream.LegacyIdentities)
+                })
+            }
+        }
+
+        # Replace every duplicate copy inside the anchor's exact semicolon
+        # clause. Historical cards sometimes put a marker-only confirmation
+        # clause immediately after a display-name clause. Widen into that one
+        # preceding clause only when it contains this stream's exact identity,
+        # the same old version, and no competing LOAD marker. This repairs the
+        # half-updated identity that reopened #1102 without sweeping unrelated
+        # same-version prose elsewhere on the line.
+        $editKeys = @{}
+        foreach ($group in @($resolvedAnchors | Group-Object {
+            '{0}|{1}|{2}' -f $_.ClauseStart, $_.ClauseEnd, $_.OldVersion.ToLowerInvariant()
+        })) {
+            $rows = @($group.Group)
+            $newVersions = @($rows | ForEach-Object { [string]$_.NewVersion } | Sort-Object -Unique)
+            if ($newVersions.Count -ne 1) {
+                $result.Status = 'unparseable'
+                $result.Reason = "version v$($rows[0].OldVersion) has conflicting stream ownership on line $($lineIndex + 1)"
+                return $result
+            }
+            $oldVersion = [string]$rows[0].OldVersion
+            $newVersion = [string]$newVersions[0]
+            if ($oldVersion.Equals($newVersion, [System.StringComparison]::OrdinalIgnoreCase)) { continue }
+            $segmentStart = [int]$rows[0].ClauseStart
+            $segmentEnd = [int]$rows[0].ClauseEnd
+            $versionPattern = '(?<![0-9A-Za-z.-])(?<prefix>[vV]?)' +
+                [regex]::Escape($oldVersion) + '(?![0-9A-Za-z-])(?!\.[0-9A-Za-z])'
+            $identities = @($rows | ForEach-Object { Get-VtStreamIdentitySet $_ } |
+                Sort-Object -Unique)
+            if ($identities.Count -gt 0) {
+                $previous = Get-VtPreviousBuildClauseRange -Line $line -ClauseStart $segmentStart
+                $previousIdentityMatches = @()
+                if ($previous) {
+                    $previousIdentityMatches = @($identities | Where-Object {
+                        Test-VtStreamIdentityPresent -Body $previous.Text -Identity ([string]$_)
+                    })
+                }
+                if ($previous -and
+                    $previousIdentityMatches.Count -gt 0 -and
+                    $previous.Text -match $versionPattern -and
+                    $previous.Text -notmatch '\[[A-Za-z][A-Za-z0-9_-]*:LOAD\]' -and
+                    $previous.Text -notmatch ('(?i)\[[A-Za-z][A-Za-z0-9_-]*\][ \t]+v?' +
+                        $script:VtSemverPattern + '[ \t]+loaded')) {
+                    $segmentStart = [int]$previous.Start
+                }
+            }
+            $segment = $line.Substring($segmentStart, $segmentEnd - $segmentStart)
+            $tokenMatches = @([regex]::Matches($segment, $versionPattern))
+            if ($tokenMatches.Count -eq 0) {
+                $result.Status = 'unparseable'
+                $result.Reason = "resolved version v$oldVersion has no bounded token on line $($lineIndex + 1)"
+                return $result
+            }
+            foreach ($token in $tokenMatches) {
+                $index = $segmentStart + [int]$token.Index
+                $key = "$index`:$($token.Length)"
+                $prefix = [string]$token.Groups['prefix'].Value
+                $replacement = $prefix + $newVersion
+                if ($editKeys.ContainsKey($key)) {
+                    if ([string]$editKeys[$key] -cne $replacement) {
+                        $result.Status = 'unparseable'
+                        $result.Reason = "version token at line $($lineIndex + 1), column $($index + 1) has conflicting stream ownership"
+                        return $result
                     }
+                    continue
+                }
+                $edits.Add([pscustomobject]@{
+                    Index = $index
+                    Length = [int]$token.Length
+                    Replacement = $replacement
+                })
+                $editKeys[$key] = $replacement
+            }
+            $owners = @($rows | ForEach-Object { [string]$_.ModId } | Sort-Object -Unique) -join ','
+            $changes.Add("line $($lineIndex + 1): $owners v$oldVersion -> v$newVersion ($($tokenMatches.Count) token(s))")
+        }
+
+        foreach ($oldVersion in @($resolvedAnchors | ForEach-Object {
+            if (-not ([string]$_.OldVersion).Equals([string]$_.NewVersion,
+                    [System.StringComparison]::OrdinalIgnoreCase)) {
+                [string]$_.OldVersion
+            }
+        } | Sort-Object -Unique)) {
+            $versionPattern = '(?<![0-9A-Za-z.-])(?<prefix>[vV]?)' +
+                [regex]::Escape($oldVersion) + '(?![0-9A-Za-z-])(?!\.[0-9A-Za-z])'
+            foreach ($token in @([regex]::Matches($line, $versionPattern))) {
+                $key = "$([int]$token.Index)`:$($token.Length)"
+                if (-not $editKeys.ContainsKey($key)) {
+                    $result.Status = 'unparseable'
+                    $result.Reason = "version v$oldVersion has an unattributed same-line token at column $([int]$token.Index + 1)"
+                    return $result
                 }
             }
         }
@@ -1201,7 +1504,7 @@ function Invoke-RefreshCardsSelfTest {
     Assert ($plan.NewBody -match "`r`n") 'CRLF line endings preserved'
 
     $allStreams = @(
-        [pscustomobject]@{ ModId='career_weapon_variants'; Directory='character_weapon_variants'; PublishedId='3716869446'; LoadTag='cwv'; Identity='Career Weapon Variants'; Version='0.1.521-dev' },
+        [pscustomobject]@{ ModId='character_weapon_variants'; Directory='character_weapon_variants'; PublishedId='3716869446'; LoadTag='cwv'; Identity='Character Weapon Variants'; LegacyIdentities=@('Career Weapon Variants','Career Weapon Variants Dev'); Version='0.1.521-dev' },
         [pscustomobject]@{ ModId='tweaker_cosmetics'; Directory='tweaker_cosmetics'; PublishedId='3715714222'; LoadTag='cosmetics'; Identity='Tweaker: Cosmetics'; Version='0.9.215-dev' },
         [pscustomobject]@{ ModId='tweaker_weapons'; Directory='tweaker_weapons'; PublishedId='3712896117'; LoadTag='wt'; Identity='Tweaker: Weapons'; Version='0.13.2-beta' },
         [pscustomobject]@{ ModId='tweaker_weapons_dev'; Directory='tweaker_weapons_dev'; PublishedId='3748824853'; LoadTag='wt'; Identity='Tweaker: Weapons Dev'; Version='0.12.268-dev' }
@@ -1224,6 +1527,22 @@ function Invoke-RefreshCardsSelfTest {
     Assert ($plan.NewBody -notmatch 'Workshop item `3716869446`') `
         'known incomplete Workshop coordinates are removed rather than fabricated'
 
+    $legacyCwvSplitCard = @'
+## CURRENT LIVE TEST
+
+**Build/banner:** Career Weapon Variants Dev `v0.1.518-dev`; confirm `[cwv:LOAD] v0.1.518-dev`; Workshop item `3716869446`, ManifestID `111`
+**Topology:** Solo
+
+1. Preserve this exact step.
+
+**Expected:** Works.
+'@
+    $plan = Get-VtAllStreamReconcilePlan -Body $legacyCwvSplitCard -Streams $allStreams
+    Assert ($plan.Status -eq 'refresh' -and
+        ([regex]::Matches($plan.NewBody, 'v0\.1\.521-dev')).Count -eq 2 -and
+        $plan.NewBody -notmatch '0\.1\.518-dev') `
+        'source-qualified CWV legacy Dev identity repairs display and LOAD tokens atomically'
+
     $sharedTagCard = @'
 ## CURRENT LIVE TEST
 
@@ -1242,7 +1561,7 @@ function Invoke-RefreshCardsSelfTest {
     $ambiguousAllStreamCard = @'
 ## CURRENT LIVE TEST
 
-**Build/banner:** confirm `[wt:LOAD] v0.12.111-dev`
+**Build/banner:** confirm `[wt:LOAD] v0.12.111-preview`
 **Topology:** Solo
 
 1. Test the feature.
@@ -1251,7 +1570,125 @@ function Invoke-RefreshCardsSelfTest {
 '@
     $plan = Get-VtAllStreamReconcilePlan -Body $ambiguousAllStreamCard -Streams $allStreams
     Assert ($plan.Status -eq 'unparseable' -and $plan.Reason -match 'no unique stream attribution') `
-        'all-stream reconciliation fails closed on an unattributed shared LOAD tag'
+        'all-stream reconciliation fails closed on an unattributed shared LOAD tag and unknown release track'
+
+    $trackOnlyCard = $ambiguousAllStreamCard -replace '0\.12\.111-preview', '0.12.111-dev'
+    $plan = Get-VtAllStreamReconcilePlan -Body $trackOnlyCard -Streams $allStreams
+    Assert ($plan.Status -eq 'refresh' -and $plan.NewBody -match '\[wt:LOAD\] v0\.12\.268-dev' -and
+        $plan.NewBody -notmatch '0\.13\.2-beta') `
+        'stale dev suffix resolves a shared LOAD tag without crossing into public beta'
+
+    $conflictingTrackIdentity = $trackOnlyCard -replace
+        'confirm `\[wt:LOAD\]', 'Tweaker: Weapons public `[wt:LOAD]'
+    $plan = Get-VtAllStreamReconcilePlan -Body $conflictingTrackIdentity -Streams $allStreams
+    Assert ($plan.Status -eq 'unparseable' -and $plan.Reason -match 'no unique stream attribution') `
+        'a public display identity cannot be overruled by a contradictory Dev version track'
+
+    $devWithPublicWarning = @'
+## CURRENT LIVE TEST
+
+**Build/banner:** Tweaker: Weapons Dev v0.12.267-dev; confirm `[wt:LOAD] v0.12.267-dev` and do not enable public Tweaker: Weapons simultaneously
+**Topology:** Solo
+
+1. Preserve this exact step.
+
+**Expected:** Works.
+'@
+    $plan = Get-VtAllStreamReconcilePlan -Body $devWithPublicWarning -Streams $allStreams
+    Assert ($plan.Status -eq 'refresh' -and
+        ([regex]::Matches($plan.NewBody, 'v0\.12\.268-dev')).Count -eq 2 -and
+        $plan.NewBody -notmatch '0\.13\.2-beta') `
+        'adjacent exact Dev display and Dev track outrank a same-line unversioned public warning'
+
+    $duplicateBuildVersions = @'
+## CURRENT LIVE TEST
+
+**Build/banner:** Tweaker: Cosmetics `v0.9.211-dev`, confirm `[cosmetics:LOAD] v0.9.211-dev`; Tweaker: Weapons Dev `v0.12.267-dev`, confirm `[wt:LOAD] v0.12.267-dev`.
+**Topology:** Solo
+
+1. Preserve this exact step.
+
+**Expected:** Works.
+'@
+    $plan = Get-VtAllStreamReconcilePlan -Body $duplicateBuildVersions -Streams $allStreams
+    Assert ($plan.Status -eq 'refresh' -and
+        ([regex]::Matches($plan.NewBody, 'v0\.9\.215-dev')).Count -eq 2 -and
+        ([regex]::Matches($plan.NewBody, 'v0\.12\.268-dev')).Count -eq 2) `
+        'duplicate display and LOAD-adjacent versions advance in one clause-bounded plan'
+    Assert ($plan.NewBody -notmatch '0\.9\.211-dev|0\.12\.267-dev' -and
+        $plan.NewBody -match '1\. Preserve this exact step\.') `
+        'duplicate-version repair removes stale build tokens and preserves test steps'
+
+    $semicolonSplitVersion = @'
+## CURRENT LIVE TEST
+
+**Build/banner:** Tweaker: Weapons Dev `v0.12.267-dev`; confirm `[wt:LOAD] v0.12.267-dev`
+**Topology:** Solo
+
+1. Preserve this exact step.
+
+**Expected:** Works.
+'@
+    $plan = Get-VtAllStreamReconcilePlan -Body $semicolonSplitVersion -Streams $allStreams
+    Assert ($plan.Status -eq 'refresh' -and
+        ([regex]::Matches($plan.NewBody, 'v0\.12\.268-dev')).Count -eq 2 -and
+        $plan.NewBody -notmatch '0\.12\.267-dev') `
+        'semicolon-split display and LOAD versions advance atomically on one versioned line'
+
+    $foreignSameVersion = $semicolonSplitVersion -replace
+        '\*\*Build/banner:\*\*',
+        '**Build/banner:** Unrelated Tool `v0.12.267-dev`;'
+    $plan = Get-VtAllStreamReconcilePlan -Body $foreignSameVersion -Streams $allStreams
+    Assert ($plan.Status -eq 'unparseable' -and
+        $plan.Reason -match 'unattributed same-line token') `
+        'same-version prose outside the exact stream segment fails closed instead of being swept'
+
+    $foreignPipeVersion = $semicolonSplitVersion -replace
+        '`\[wt:LOAD\] v0\.12\.267-dev`',
+        '`[wt:LOAD] v0.12.267-dev` | unrelated prose v0.12.267-dev'
+    $plan = Get-VtAllStreamReconcilePlan -Body $foreignPipeVersion -Streams $allStreams
+    Assert ($plan.Status -eq 'unparseable' -and
+        $plan.Reason -match 'unattributed same-line token') `
+        'pipe-separated foreign prose is a separate clause and fails closed instead of being swept'
+
+    $foreignExactBanner = $semicolonSplitVersion -replace
+        '`v0\.12\.267-dev`;',
+        '`v0.12.267-dev` with `[foreign] v0.12.267-dev loaded`;'
+    $plan = Get-VtAllStreamReconcilePlan -Body $foreignExactBanner -Streams $allStreams
+    Assert ($plan.Status -eq 'unparseable' -and
+        $plan.Reason -match 'unattributed same-line token') `
+        'a preceding clause with a foreign exact banner is never widened or rewritten'
+
+    $punctuatedBuildVersion = @'
+## CURRENT LIVE TEST
+
+**Build/banner:** v0.12.267-dev, confirm `[wt:LOAD]`; Tweaker: Weapons Dev Workshop item `3748824853`, manifest `111`
+**Topology:** Solo
+
+1. Preserve this exact step.
+
+**Expected:** Works.
+'@
+    $plan = Get-VtAllStreamReconcilePlan -Body $punctuatedBuildVersion -Streams $allStreams
+    Assert ($plan.Status -eq 'refresh' -and $plan.NewBody -match
+        'v0\.12\.268-dev, confirm `\[wt:LOAD\]`') `
+        'punctuated version-before-marker identity advances through the lifecycle parser binding'
+
+    $dualWtStreams = @'
+## CURRENT LIVE TEST
+
+**Build/banner:** Tweaker: Weapons public `v0.13.1-beta`, confirm `[wt:LOAD] v0.13.1-beta`; Tweaker: Weapons Dev `v0.12.267-dev`, confirm `[wt:LOAD] v0.12.267-dev`
+**Topology:** Solo
+
+1. Test each stream in a separate launch.
+
+**Expected:** Works.
+'@
+    $plan = Get-VtAllStreamReconcilePlan -Body $dualWtStreams -Streams $allStreams
+    Assert ($plan.Status -eq 'refresh' -and
+        ([regex]::Matches($plan.NewBody, 'v0\.13\.2-beta')).Count -eq 2 -and
+        ([regex]::Matches($plan.NewBody, 'v0\.12\.268-dev')).Count -eq 2) `
+        'one card can advance public and dev siblings independently by clause and release track'
 
     $duplicatePairCard = @'
 ## CURRENT LIVE TEST
@@ -1382,6 +1819,7 @@ if ($ReconcileAllStreams) {
                 PublishedId = [string]$inventoryStream.PublishedId
                 LoadTag = [string]$inventoryStream.LoadTag
                 Identity = [string]$inventoryStream.Identity
+                LegacyIdentities = @($inventoryStream.LegacyIdentities)
                 Version = ([string]$authorityRow.Version).TrimStart('v', 'V')
             }
         }

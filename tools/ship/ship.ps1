@@ -1578,9 +1578,17 @@ function Invoke-ShipSelfTest {
         $canonicalShipSource.IndexOf('-RequireReceiptAuthority:', [System.StringComparison]::Ordinal) -ge 0) "ship gates receipt publication on the explicit launcher capability while preserving BuildOnly"
     $loadTagResolvePos = $selfTxt.IndexOf('$loadTagResolution = Get-VtLoadTagResolution -MainLuaPath $luaPath', $mainDispatchPos)
     $statusLabelPos = $selfTxt.IndexOf('==> Status-labeling shipped issues', $mainDispatchPos)
+    $reconcileArgsPos = $selfTxt.IndexOf('$reconcileArgs = @{', $mainDispatchPos)
+    $reconcileInvokePos = $selfTxt.IndexOf('& $refreshScript @reconcileArgs', $mainDispatchPos)
     $refreshLoadTagPos = $selfTxt.IndexOf('LoadTag     = "$loadTag"', $mainDispatchPos)
     $refreshInvokePos = $selfTxt.IndexOf('& $refreshScript @refreshArgs', $mainDispatchPos)
     Assert ($loadTagResolvePos -ge 0 -and $loadTagResolvePos -lt $statusLabelPos) "ship resolves the authoritative LOAD tag before lifecycle mutation"
+    Assert ($reconcileArgsPos -gt $statusLabelPos -and $reconcileArgsPos -lt $reconcileInvokePos -and
+        $selfTxt.Substring($reconcileArgsPos, $reconcileInvokePos - $reconcileArgsPos) -match
+            'ReconcileAllStreams\s*=\s*\$true') `
+        "every ordinary ship automatically requests exact all-stream reconciliation"
+    Assert ($reconcileInvokePos -lt $refreshInvokePos) `
+        "cross-mod versions reconcile atomically before the exact shipped-stream manifest pass"
     Assert ($refreshLoadTagPos -gt $statusLabelPos -and $refreshLoadTagPos -lt $refreshInvokePos) "card refresher receives the previously resolved LOAD tag through named splatting"
     $helperOwnedTag = Resolve-VtLoadTag -MainLuaText 'local MOD_VERSION = "0.8.124-dev"' `
         -LuaTexts @('mod:echo("[cim:LOAD]")') -FallbackTag 'crafting_in_modded_dev'
@@ -2888,11 +2896,13 @@ catch {
 # ---------------------------------------------------------------------------
 # The 2026-08-02 audit found every sampled pinned card naming a superseded
 # build, so testers failed the [id:LOAD] confirmation on correct builds.
-# After the workshop_log has confirmed this upload, refresh-cards.ps1 rewrites
-# ONLY the just-shipped mod's stale version/manifest tokens inside each pinned
-# exact card (selection by this mod's Workshop item id or its exact runtime
-# anchor); step text, expected needles, topology, and other mods' tokens are
-# never touched, and unparseable cards are skipped and reported. Runs for BOTH
+# After the workshop_log has confirmed this upload, refresh-cards.ps1 first
+# reconciles every source-authorized stream in one atomic per-card plan. That
+# prevents a stale sibling build surface from deadlocking the subsequent exact
+# just-shipped-stream refresh. The second pass then rewrites the just-shipped
+# mod's fresh Workshop ManifestID as well as its version surfaces. Step text,
+# expected needles, topology, and unrelated prose are never touched, and
+# unparseable cards are skipped and reported. Runs for BOTH
 # streams: unlike step 6's lifecycle labels (applied when the dev build
 # shipped), version surfaces go stale on every upload, dev or stable. Like
 # step 6, this step NEVER fails the ship -- the upload already succeeded.
@@ -2918,6 +2928,22 @@ try {
             $cardSummary = 'SKIPPED (script missing)'
         }
         else {
+            # Cross-mod cards must advance atomically. Running this source-
+            # authoritative pass before the exact shipped-stream pass prevents
+            # one stale sibling from making every later single-stream ship skip
+            # the same card forever. This pass never changes Workshop manifest
+            # IDs; the exact pass below owns the freshly confirmed ID.
+            $reconcileArgs = @{
+                ReconcileAllStreams = $true
+                Repository = 'Ensrick/vermintide-2-tweaker'
+                MaxIssues = 300
+            }
+            & $refreshScript @reconcileArgs
+            $reconcileExit = $LASTEXITCODE
+            if ($reconcileExit -ne 0) {
+                Write-Host "  WARNING: all-stream card reconciliation exited $reconcileExit -- continuing with the exact shipped-stream pass." -ForegroundColor Yellow
+            }
+
             # Manifest: only a confirmed 'Uploaded new content' line carries a
             # fresh ManifestID. On NOCHANGE the server manifest did not move,
             # so existing card manifests are still current -- leave them.
@@ -2940,12 +2966,13 @@ try {
             }
             if ($shipManifestId) { $refreshArgs.NewManifest = "$shipManifestId" }
             & $refreshScript @refreshArgs
-            if ($LASTEXITCODE -eq 0) {
+            $exactRefreshExit = $LASTEXITCODE
+            if ($reconcileExit -eq 0 -and $exactRefreshExit -eq 0) {
                 $cardSummary = 'OK'
             }
             else {
-                Write-Host "  WARNING: refresh-cards.ps1 exited $LASTEXITCODE -- inspect the per-card lines above and refresh the skipped cards by hand." -ForegroundColor Yellow
-                $cardSummary = "PARTIAL (exit $LASTEXITCODE) -- see per-card lines"
+                Write-Host "  WARNING: refresh-cards.ps1 was partial (all-stream=$reconcileExit, exact=$exactRefreshExit) -- inspect the per-card lines above." -ForegroundColor Yellow
+                $cardSummary = "PARTIAL (all-stream=$reconcileExit, exact=$exactRefreshExit) -- see per-card lines"
             }
         }
     }
