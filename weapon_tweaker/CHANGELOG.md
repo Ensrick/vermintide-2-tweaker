@@ -1,5 +1,17 @@
 # Weapon Tweaker Changelog
 
+## 0.12.323-beta (2026-08-30) -- source-exact Patch 2.0.6 Handgun history (#1436) [not-started]
+
+- Adds a shared **Game Version 2.0.5** selector for Kruber's and Bardin's
+  Handguns. It restores the exact adjacent pre-2.0.6 shield/armour penetration
+  leaves while `Current` remains gameplay-inert.
+- Projects only those three source-proven leaves onto the two current
+  gameplay-identical Handgun clones: six operations in one atomic group, with
+  no profiles, hooks, RPCs, globals, or current-only Versus templates.
+- Pins the historical, post-patch, and current source blobs; independently
+  regenerates the evidence and byte-identical catalog; and exercises exact
+  apply/restore, drift, partial-template, and dual-host adversaries.
+
 ## 0.12.322-beta (2026-08-30) -- publication-claim reconciliation (#1436) [not-started]
 
 - Reissues the reviewed 0.12.321-beta Tuskgor Spear Patch 3.1 slice under a
