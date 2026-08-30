@@ -78,7 +78,18 @@
             )
         }
         @{ Dir = 'general_tweaker';            ModId = 'gt';                         WorkshopId = '3713619122'; Visibility = 'public';       Stream = 'stable'; Public = $true;  Name = 'General Tweaker'; BundleAuthority = 'tracked'; RootBundle = '73ac92d9c37dbb6c.mod_bundle' }
-        @{ Dir = 'general_tweaker_dev';        ModId = 'gt_dev';                     WorkshopId = '3733367409'; Visibility = 'friends_only'; Stream = 'dev';    Public = $false; Name = 'General Tweaker (Dev)'; BundleAuthority = 'tracked'; RootBundle = 'e6ffaaca2a71199e.mod_bundle' }
+        @{
+            Dir = 'general_tweaker_dev'; ModId = 'gt_dev'; WorkshopId = '3733367409';
+            Visibility = 'friends_only'; Stream = 'dev'; Public = $false;
+            Name = 'General Tweaker (Dev)'; BundleAuthority = 'tracked'; RootBundle = 'e6ffaaca2a71199e.mod_bundle';
+            BuildArtifactExclusions = @(
+                @{
+                    Name = 'e7852992f40eb619.mod_bundle';
+                    Sha256 = 'e1a04e500f8255ebedcaffb4e35e829adbd99ebf46c2b8b4cd89d26dca4735e2';
+                    Reason = 'SDK tool-only BUNDLE=false LUT-generator sidecar emitted by clean Stingray builds'
+                }
+            )
+        }
         @{
             Dir = 'gui_tweaker'; ModId = 'gut'; WorkshopId = '3732144878';
             Visibility = 'public'; Stream = 'stable'; Public = $true;
@@ -115,9 +126,42 @@
                 }
             )
         }
-        @{ Dir = 'dynamic_cosmetic_portraits'; ModId = 'dynamic_cosmetic_portraits'; WorkshopId = '3721036701'; Visibility = 'friends_only'; Stream = 'single'; Public = $false; Name = 'Dynamic Cosmetic Portraits'; BundleAuthority = 'tracked'; RootBundle = '4b0d338589a2926c.mod_bundle' }
-        @{ Dir = 'career_tweaker';             ModId = 'crt';                        WorkshopId = '3716286199'; Visibility = 'public';       Stream = 'single'; Public = $true;  Name = 'Career Tweaker'; BundleAuthority = 'tracked'; RootBundle = '92ad046507348beb.mod_bundle' }
-        @{ Dir = 'enemy_tweaker';              ModId = 'enemy_tweaker';              WorkshopId = '3716780252'; Visibility = 'friends_only'; Stream = 'single'; Public = $false; Name = 'Enemy Tweaker'; BundleAuthority = 'tracked'; RootBundle = '002586295f98ba25.mod_bundle' }
+        @{
+            Dir = 'dynamic_cosmetic_portraits'; ModId = 'dynamic_cosmetic_portraits'; WorkshopId = '3721036701';
+            Visibility = 'friends_only'; Stream = 'single'; Public = $false;
+            Name = 'Dynamic Cosmetic Portraits'; BundleAuthority = 'tracked'; RootBundle = '4b0d338589a2926c.mod_bundle';
+            BuildArtifactExclusions = @(
+                @{
+                    Name = 'e7852992f40eb619.mod_bundle';
+                    Sha256 = 'e1a04e500f8255ebedcaffb4e35e829adbd99ebf46c2b8b4cd89d26dca4735e2';
+                    Reason = 'SDK tool-only BUNDLE=false LUT-generator sidecar emitted by clean Stingray builds'
+                }
+            )
+        }
+        @{
+            Dir = 'career_tweaker'; ModId = 'crt'; WorkshopId = '3716286199';
+            Visibility = 'public'; Stream = 'single'; Public = $true;
+            Name = 'Career Tweaker'; BundleAuthority = 'tracked'; RootBundle = '92ad046507348beb.mod_bundle';
+            BuildArtifactExclusions = @(
+                @{
+                    Name = 'e7852992f40eb619.mod_bundle';
+                    Sha256 = 'e1a04e500f8255ebedcaffb4e35e829adbd99ebf46c2b8b4cd89d26dca4735e2';
+                    Reason = 'SDK tool-only BUNDLE=false LUT-generator sidecar emitted by clean Stingray builds'
+                }
+            )
+        }
+        @{
+            Dir = 'enemy_tweaker'; ModId = 'enemy_tweaker'; WorkshopId = '3716780252';
+            Visibility = 'friends_only'; Stream = 'single'; Public = $false;
+            Name = 'Enemy Tweaker'; BundleAuthority = 'tracked'; RootBundle = '002586295f98ba25.mod_bundle';
+            BuildArtifactExclusions = @(
+                @{
+                    Name = 'e7852992f40eb619.mod_bundle';
+                    Sha256 = 'e1a04e500f8255ebedcaffb4e35e829adbd99ebf46c2b8b4cd89d26dca4735e2';
+                    Reason = 'SDK tool-only BUNDLE=false LUT-generator sidecar emitted by clean Stingray builds'
+                }
+            )
+        }
         @{
             Dir = 'character_weapon_variants'; ModId = 'character_weapon_variants'; WorkshopId = '3716869446';
             Visibility = 'public'; Stream = 'single'; Public = $true;
@@ -167,9 +211,42 @@
                 }
             )
         }
-        @{ Dir = 'modded_progression';         ModId = 'mp';                         WorkshopId = '3730422873'; Visibility = 'private';      Stream = 'single'; Public = $false; Name = 'Modded Progression'; BundleAuthority = 'tracked'; RootBundle = 'c30cf98443ecafec.mod_bundle' }
+        @{
+            Dir = 'modded_progression'; ModId = 'mp'; WorkshopId = '3730422873';
+            Visibility = 'private'; Stream = 'single'; Public = $false;
+            Name = 'Modded Progression'; BundleAuthority = 'tracked'; RootBundle = 'c30cf98443ecafec.mod_bundle';
+            BuildArtifactExclusions = @(
+                @{
+                    Name = 'e7852992f40eb619.mod_bundle';
+                    Sha256 = 'e1a04e500f8255ebedcaffb4e35e829adbd99ebf46c2b8b4cd89d26dca4735e2';
+                    Reason = 'SDK tool-only BUNDLE=false LUT-generator sidecar emitted by clean Stingray builds'
+                }
+            )
+        }
         @{ Dir = 'verminious_dreams_lighting'; ModId = 'verminious_dreams_lighting'; WorkshopId = '3727221800'; Visibility = 'public';       Stream = 'stable'; Public = $true;  Name = 'Verminious Dreams Lighting'; BundleAuthority = 'tracked'; RootBundle = '9acd667c38b63afe.mod_bundle' }
-        @{ Dir = 'verminious_dreams_lighting_dev'; ModId = 'verminious_dreams_lighting_dev'; WorkshopId = '3733366748'; Visibility = 'friends_only'; Stream = 'dev'; Public = $false; Name = 'Verminious Dreams Lighting (Dev)'; BundleAuthority = 'tracked'; RootBundle = '6b34ac1c97e5a1be.mod_bundle' }
-        @{ Dir = 'weapons_of_chaos';           ModId = 'WOC';                        WorkshopId = '3753880932'; Visibility = 'friends_only'; Stream = 'single'; Public = $false; Name = 'Weapons of Chaos'; BundleAuthority = 'tracked'; RootBundle = 'dcea08518941f940.mod_bundle' }
+        @{
+            Dir = 'verminious_dreams_lighting_dev'; ModId = 'verminious_dreams_lighting_dev'; WorkshopId = '3733366748';
+            Visibility = 'friends_only'; Stream = 'dev'; Public = $false;
+            Name = 'Verminious Dreams Lighting (Dev)'; BundleAuthority = 'tracked'; RootBundle = '6b34ac1c97e5a1be.mod_bundle';
+            BuildArtifactExclusions = @(
+                @{
+                    Name = 'e7852992f40eb619.mod_bundle';
+                    Sha256 = 'e1a04e500f8255ebedcaffb4e35e829adbd99ebf46c2b8b4cd89d26dca4735e2';
+                    Reason = 'SDK tool-only BUNDLE=false LUT-generator sidecar emitted by clean Stingray builds'
+                }
+            )
+        }
+        @{
+            Dir = 'weapons_of_chaos'; ModId = 'WOC'; WorkshopId = '3753880932';
+            Visibility = 'friends_only'; Stream = 'single'; Public = $false;
+            Name = 'Weapons of Chaos'; BundleAuthority = 'tracked'; RootBundle = 'dcea08518941f940.mod_bundle';
+            BuildArtifactExclusions = @(
+                @{
+                    Name = 'e7852992f40eb619.mod_bundle';
+                    Sha256 = 'e1a04e500f8255ebedcaffb4e35e829adbd99ebf46c2b8b4cd89d26dca4735e2';
+                    Reason = 'SDK tool-only BUNDLE=false LUT-generator sidecar emitted by clean Stingray builds'
+                }
+            )
+        }
     )
 }

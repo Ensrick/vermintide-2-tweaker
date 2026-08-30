@@ -17,6 +17,88 @@ if (-not (Test-Path -LiteralPath $helperPath -PathType Leaf)) {
 }
 . $helperPath
 
+$script:SdkSidecarName = 'e7852992f40eb619.mod_bundle'
+$script:SdkSidecarSha256 = 'e1a04e500f8255ebedcaffb4e35e829adbd99ebf46c2b8b4cd89d26dca4735e2'
+$script:SdkSidecarPolicyDirs = @(
+    'weapon_tweaker',
+    'weapon_tweaker_dev',
+    'chaos_wastes_tweaker_dev',
+    'general_tweaker_dev',
+    'gui_tweaker',
+    'gui_tweaker_dev',
+    'cosmetics_tweaker',
+    'dynamic_cosmetic_portraits',
+    'career_tweaker',
+    'enemy_tweaker',
+    'character_weapon_variants',
+    'character_dialogue',
+    'crafting_in_modded_dev',
+    'event_tweaker',
+    'modded_progression',
+    'verminious_dreams_lighting_dev',
+    'weapons_of_chaos'
+)
+$script:SdkSidecarDeferredDirs = @(
+    'chaos_wastes_tweaker',
+    'general_tweaker',
+    'crafting_in_modded',
+    'verminious_dreams_lighting'
+)
+
+function Get-SdkSidecarInventoryCompletenessErrors {
+    param([Parameter(Mandatory = $true)][object[]]$ModEntries)
+
+    $errors = [System.Collections.Generic.List[string]]::new()
+    $byDir = @{}
+    foreach ($entry in @($ModEntries)) {
+        $dir = [string]$entry.Dir
+        if (-not [string]::IsNullOrWhiteSpace($dir)) { $byDir[$dir] = $entry }
+    }
+
+    $expected = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    foreach ($dir in $script:SdkSidecarPolicyDirs) { [void]$expected.Add($dir) }
+    $actual = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::Ordinal)
+    foreach ($entry in @($ModEntries)) {
+        if (@($entry.BuildArtifactExclusions | Where-Object { $null -ne $_ }).Count -gt 0) {
+            [void]$actual.Add([string]$entry.Dir)
+        }
+    }
+
+    foreach ($dir in $script:SdkSidecarPolicyDirs) {
+        if (-not $actual.Contains($dir)) {
+            $errors.Add("SDK sidecar policy is missing from required mod: $dir")
+            continue
+        }
+        $entry = $byDir[$dir]
+        $rows = @($entry.BuildArtifactExclusions | Where-Object { $null -ne $_ })
+        if ($rows.Count -ne 1) {
+            $errors.Add("SDK sidecar policy must contain exactly one exclusion for ${dir}: found $($rows.Count)")
+            continue
+        }
+        if ([string]$rows[0].Name -cne $script:SdkSidecarName) {
+            $errors.Add("SDK sidecar policy filename drifted for ${dir}: $([string]$rows[0].Name)")
+        }
+        if ([string]$rows[0].Sha256 -cne $script:SdkSidecarSha256) {
+            $errors.Add("SDK sidecar policy SHA-256 drifted for $dir")
+        }
+        if ([string]$entry.RootBundle -ceq $script:SdkSidecarName) {
+            $errors.Add("SDK sidecar policy collides with RootBundle for $dir")
+        }
+    }
+
+    foreach ($dir in $actual) {
+        if (-not $expected.Contains($dir)) {
+            $errors.Add("unexpected SDK sidecar policy-bearing mod: $dir")
+        }
+    }
+    foreach ($dir in $script:SdkSidecarDeferredDirs) {
+        if ($actual.Contains($dir)) {
+            $errors.Add("deferred stable mod must remain policy-free pending its own evidence: $dir")
+        }
+    }
+    return @($errors)
+}
+
 function Remove-LeafTree {
     param([Parameter(Mandatory = $true)][string]$Path)
     if (-not (Test-Path -LiteralPath $Path)) { return }
@@ -272,6 +354,74 @@ function Invoke-NormalizationSelfTest {
         catch { $malformedProofInputFailed = $_.Exception.Message -match 'invalid BuildArtifactExclusions SHA-256' }
         Assert $malformedProofInputFailed 'policy proof constructor rejects malformed exact exclusions'
 
+        function New-SdkSidecarCompletenessFixture {
+            $rows = @()
+            foreach ($dir in $script:SdkSidecarPolicyDirs) {
+                $rows += [pscustomobject]@{
+                    Dir = $dir
+                    RootBundle = ($dir + '.mod_bundle')
+                    BuildArtifactExclusions = @(
+                        [pscustomobject]@{
+                            Name = $script:SdkSidecarName
+                            Sha256 = $script:SdkSidecarSha256
+                            Reason = 'fixture SDK tool-only output'
+                        }
+                    )
+                }
+            }
+            foreach ($dir in $script:SdkSidecarDeferredDirs) {
+                $rows += [pscustomobject]@{
+                    Dir = $dir
+                    RootBundle = ($dir + '.mod_bundle')
+                    BuildArtifactExclusions = @()
+                }
+            }
+            return @($rows)
+        }
+
+        $completeInventory = @(New-SdkSidecarCompletenessFixture)
+        Assert (@(Get-SdkSidecarInventoryCompletenessErrors -ModEntries $completeInventory).Count -eq 0) `
+            'live inventory completeness accepts the exact 17-policy transfer'
+
+        $omittedInventory = @($completeInventory | Where-Object { $_.Dir -cne 'general_tweaker_dev' })
+        Assert ((@(Get-SdkSidecarInventoryCompletenessErrors -ModEntries $omittedInventory) -match
+            'missing from required mod: general_tweaker_dev').Count -eq 1) `
+            'live inventory completeness rejects one omitted candidate'
+
+        $extraInventory = @(New-SdkSidecarCompletenessFixture)
+        $extraRow = @($extraInventory | Where-Object { $_.Dir -ceq 'general_tweaker' })[0]
+        $extraRow.BuildArtifactExclusions = @(
+            [pscustomobject]@{
+                Name = $script:SdkSidecarName
+                Sha256 = $script:SdkSidecarSha256
+                Reason = 'premature stable transfer'
+            }
+        )
+        $extraErrors = @(Get-SdkSidecarInventoryCompletenessErrors -ModEntries $extraInventory)
+        Assert ((@($extraErrors -match 'unexpected SDK sidecar policy-bearing mod: general_tweaker').Count -eq 1) -and
+            (@($extraErrors -match 'deferred stable mod must remain policy-free.*general_tweaker').Count -eq 1)) `
+            'live inventory completeness rejects an unevidenced deferred stable row'
+
+        $wrongHashInventory = @(New-SdkSidecarCompletenessFixture)
+        @($wrongHashInventory | Where-Object { $_.Dir -ceq 'career_tweaker' })[0].BuildArtifactExclusions[0].Sha256 = ('f' * 64)
+        Assert ((@(Get-SdkSidecarInventoryCompletenessErrors -ModEntries $wrongHashInventory) -match
+            'SHA-256 drifted for career_tweaker').Count -eq 1) `
+            'live inventory completeness rejects a changed candidate hash'
+
+        $secondExclusionInventory = @(New-SdkSidecarCompletenessFixture)
+        $secondRow = @($secondExclusionInventory | Where-Object { $_.Dir -ceq 'enemy_tweaker' })[0]
+        $secondRow.BuildArtifactExclusions = @(
+            @($secondRow.BuildArtifactExclusions)[0],
+            [pscustomobject]@{
+                Name = 'ffffffffffffffff.mod_bundle'
+                Sha256 = ('a' * 64)
+                Reason = 'unexpected second exclusion'
+            }
+        )
+        Assert ((@(Get-SdkSidecarInventoryCompletenessErrors -ModEntries $secondExclusionInventory) -match
+            'exactly one exclusion for enemy_tweaker: found 2').Count -eq 1) `
+            'live inventory completeness rejects a second valid-looking exclusion'
+
         if ($failures.Count -gt 0) {
             Write-Host "[check_build_output_normalization] SELF-TEST FAILED - $($failures.Count) case(s)" -ForegroundColor Red
             return 2
@@ -294,6 +444,7 @@ if (-not (Test-Path -LiteralPath $inventoryPath -PathType Leaf)) {
 }
 $inventory = Import-PowerShellDataFile -Path $inventoryPath
 $errors = @()
+$errors += @(Get-SdkSidecarInventoryCompletenessErrors -ModEntries @($inventory.Mods))
 foreach ($entry in @($inventory.Mods)) {
     $errors += @(Get-BuildOutputPolicyErrors -ModEntry $entry)
     try {

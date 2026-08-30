@@ -11,6 +11,9 @@
 - Added adversarial coverage for one-time helper ownership, retry injection,
   idempotence, strict engine metatables, sparse registries, and exact
   no-mutation rejection.
+- Normalizes away the SDK tool-only LUT-generator sidecar; weapon resources and
+  player-visible behavior are unchanged.
+- VT2-Bundle-Retirement: `e7852992f40eb619.mod_bundle`
 
 ## v0.1.57-dev (2026-08-25) - Blightreaper preview lifecycle and peer identity (#613)
 

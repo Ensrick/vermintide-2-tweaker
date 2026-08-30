@@ -22,6 +22,9 @@
 - Both Conflict Director sender floors use a no-replay protective hook. A
   native or floor error can no longer fall back through the original custom
   breed payload or invoke a partially completed spawn a second time.
+- Normalizes away the SDK tool-only LUT-generator sidecar; runtime Lua and
+  player-visible behavior are unchanged.
+- VT2-Bundle-Retirement: `e7852992f40eb619.mod_bundle`
 
 ## 0.7.58-dev (2026-08-25): transactional custom-breed registrar (#1413) [not-started]
 

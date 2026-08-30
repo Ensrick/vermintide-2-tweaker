@@ -9,6 +9,9 @@
   skin-first portrait resolver with malformed-input and production-wiring tests.
 - Removed the retired owner from the #499 diagnostic registry. No portrait
   assets, hooks, RPCs, settings, or player-visible selection behavior changed.
+- Normalizes away the SDK tool-only LUT-generator sidecar; portrait resources
+  and player-visible behavior are unchanged.
+- VT2-Bundle-Retirement: `e7852992f40eb619.mod_bundle`
 
 ## 0.1.28-dev (2026-07-22) — #526/#925 portrait atlas and live invalidation [not-started]
 

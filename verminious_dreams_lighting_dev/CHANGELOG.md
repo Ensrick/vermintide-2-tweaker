@@ -4,6 +4,9 @@
 
 - Rebuilt the unchanged lighting implementation from one clean, source-addressable commit so the Lua version, Workshop title, tracked root bundle, BuildOnly receipt, release manifest, and publication receipt identify the same artifact.
 - This is provenance-only reconciliation for issue #1287; no lighting profiles, settings, hooks, commands, or gameplay behavior changed.
+- Normalizes away the SDK tool-only LUT-generator sidecar; lighting resources
+  and player-visible behavior are unchanged.
+- VT2-Bundle-Retirement: `e7852992f40eb619.mod_bundle`
 
 ## v1.0.18-dev - 2026-07-18 - complete stranded ship pipeline
 
