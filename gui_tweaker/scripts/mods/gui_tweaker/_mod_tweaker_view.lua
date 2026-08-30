@@ -21,6 +21,7 @@ local tab_labels = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_tab_labels"
 local ordering = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_ordering")
 local ExclusiveLayout = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_exclusive_layout")
 local _poll_keybind_combo = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_keybind_capture").poll
+local label_policy = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_label_policy")
 
 local UIRenderer = UIRenderer
 local UISceneGraph = UISceneGraph
@@ -182,22 +183,12 @@ end
 local MAX_TABS = 8   -- tab nodes that fit the window width; >MAX => paginate
 
 -- The Mod Tweaker is for the USER'S OWN mods only — there isn't room for a tab per
--- installed VMF mod. Whitelist of this author's mod ids (new_mod registration ids).
+-- installed VMF mod. The shared policy owns this author's registration ids so the
+-- standalone and keep-substate presentation paths cannot drift apart (#636).
 -- verminious_dreams_lighting (+ _dev) are intentionally OMITTED — they keep their
 -- own normal VMF menu and don't belong as a Mod Tweaker tab.
-local _MY_MODS = {
-    gut = true, gut = true, wt = true, ct = true, ct_dev = true, gt = true, gt_dev = true,
-    cim = true, cim_dev = true, crt = true, cosmetics_tweaker = true,
-    dynamic_cosmetic_portraits = true, enemy_tweaker = true,
-    character_weapon_variants = true, event_tweaker = true, mp = true, bt = true,
-    -- HideBuffs deliberately NOT whitelisted (#312): UI Tweaks options live in
-    -- gut's OWN menu under the "UI Tweaks" group (gut_hide_hud_ui_group), not as a
-    -- separate Mod Tweaker tab. Re-adding it would resurrect the duplicate tab.
-    -- Crosshair Kill Confirmation deliberately NOT whitelisted (#339, was wrongly a
-    -- tab under #313): its options are injected INTO gut's Interface tab under the HUD
-    -- group by _inject_ckc_into_gut, exactly like the UI Tweaks precedent. A THIRD-PARTY
-    -- integration is NEVER a top-level tab -- see gui_tweaker/MOD_TWEAKER_INTEGRATION.md.
-}
+-- HideBuffs and Crosshair Kill Confirmation remain deliberately excluded; their
+-- settings are integrated into gut's Interface tab below.
 
 -- Third-party mod whose options fold into a gut category (NOT a tab). #339.
 local _CKC_NAME = "Crosshair Kill Confirmation"
@@ -238,9 +229,11 @@ local function _vmf_label(node, mod_obj)
     local key = inner or t
     if mod_obj and mod_obj.localize then
         local ok, s = pcall(mod_obj.localize, mod_obj, key)
-        if ok and type(s) == "string" and s ~= "" and not string.find(s, "^<") then return s end
+        if ok and type(s) == "string" and s ~= "" and not string.find(s, "^<") then
+            return label_policy.clean(s)
+        end
     end
-    return key
+    return label_policy.clean(key)
 end
 
 -- (#207) The node's tooltip DESCRIPTION (the hover-popup body). In VMF widget data the
@@ -438,23 +431,15 @@ local function _play_close() _play_event("Play_hud_button_close") end
 -- (#208) EQUIPMENT MERGE. The four inventory-management mods get folded into ONE
 -- collapsible "Equipment" tab when 2+ are installed. Disabled members retain their
 -- normal section header with no editable rows and a "Disabled in VMF" tooltip. Roles:
---   cosmetics_tweaker -> Cosmetics ; cim/cim_dev -> Crafting ; wt -> Weapons ;
+--   cosmetics_tweaker -> Cosmetics ; cim/cim_dev -> Crafting ; wt/wt_dev -> Weapons ;
 --   character_weapon_variants -> Career Weapon Variants.
 -- Sections render top-level (Cosmetics, Crafting, Weapons); CWV nests UNDER Weapons
--- when wt is also active, else sits top-level. N=1-only-CWV just relabels that one tab
+-- when wt/wt_dev is also active, else sits top-level. N=1-only-CWV just relabels that one tab
 -- "Weapons". The synthesized category is FLAT (_flat=true) with a parallel `_depths`
 -- array (so each member keeps its own internal group/gear nesting, shifted under its
 -- section header) + a `_owners[setting_id]` map so get/set/stage/apply route per-node to
 -- the owning mod object (see _owner + the staged-change helpers). TWIN of the HeroView
 -- sub-state's identical block — keep both in sync.
--- ---------------------------------------------------------------
-local _EQUIP_ROLE = {
-    cosmetics_tweaker = "cosmetics",
-    cim = "crafting", cim_dev = "crafting",
-    wt = "weapons",
-    character_weapon_variants = "cwv",
-}
-
 -- Localize a gut section/tab label; reject a "<missing-key>" marker + fall back to a
 -- literal (same guard as _vmf_label). Safe at _rebuild time (loc is registered by then).
 local function _equip_loc(key, fallback)
@@ -467,7 +452,7 @@ end
 
 -- Post-process the _vmf_categories() output (called just before its final sort).
 local function _synthesize_equipment(cats)
-    local members, n = disabled_sections.select_members(cats, _EQUIP_ROLE)
+    local members, n = disabled_sections.select_equipment_members(cats)
     if n == 0 then return cats end
 
     if n == 1 then
@@ -549,7 +534,7 @@ local function _synthesize_equipment(cats)
             _add_member(members.cwv, 2)
         end
     elseif members.cwv then
-        -- No wt: CWV sits at the TOP LEVEL of Equipment (no Weapons wrapper).
+        -- No wt/wt_dev: CWV sits at the TOP LEVEL of Equipment (no Weapons wrapper).
         _add_header("__equip_cwv", _equip_loc("gut_equip_cwv", "Career Weapon Variants"), 0,
             members.cwv.enabled)
         _add_member(members.cwv, 1)
@@ -694,7 +679,7 @@ local function _vmf_categories()
     for _, list in ipairs(widget_data) do
         local header = (type(list) == "table") and list[1]
         local mod_name = header and _nf(header, "mod_name")
-        if type(mod_name) == "string" and _MY_MODS[mod_name] then
+        if type(mod_name) == "string" and disabled_sections.is_author_mod(mod_name) then
             local mod_obj = get_mod(mod_name)
             local label = _nf(header, "readable_mod_name") or mod_name
             -- (Fix 3) gut's OWN Mod Tweaker tab reads "Interface" (this IS the interface/GUI

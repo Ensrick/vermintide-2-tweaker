@@ -1,5 +1,41 @@
 # Tweaker: GUI — Changelog
 
+## 0.2.287 (2026-08-29) — verified WT Dev discovery and clean labels (#636, #694)
+
+### Why
+
+- Promote only the two independently verified Mod Tweaker compatibility fixes
+  that remain absent from the stable stream.
+
+### Changed
+
+- Recognizes both `wt` and `wt_dev` as Tweaker: Weapons registration aliases
+  and folds the enabled stream into one Equipment > Weapons collapsible in the
+  Keep and mission presentations. Weapon Availability, the Development
+  Animation Picker, and the Development Weapon Hold-Pose Tuner remain owned by
+  WT Dev and visible beneath that section (#636).
+- Removes legacy engineering lifecycle decorations such as `[Working]`,
+  `[Untested]`, `[Issue N]`, and `[verify-fix]` at the Mod Tweaker label-resolution
+  boundary while preserving functional qualifiers such as `(CWV)`, `[Host Only]`,
+  `[Client]`, `[WARNING]`, `[EXP]`, and units (#694).
+- Centralizes authored-mod discovery and Equipment stream aliases so the two
+  presentation paths cannot drift independently.
+
+### Verification
+
+- With Tweaker: Weapons Dev and CWV enabled and public WT disabled or absent,
+  inspect Equipment > Weapons in the Keep and in a mission, then run
+  `/gut_regression_test`; `issue636_wt_dev_equipment_collapsible` must pass.
+- Inspect tab, collapsible, setting, and option labels across installed Tweaker
+  mods. Engineering lifecycle decorations must be absent and functional
+  qualifiers must remain unchanged.
+
+### Notes
+
+- This is a selective stable promotion. It does not import unrelated GUI Dev
+  work, change the public Workshop identity, or alter Mod Tweaker row-color
+  policy.
+
 ## 0.2.286 (2026-08-28) — verified DEFAULT transaction promotion (#312, #446, #631, #649, #1002)
 
 ### Why

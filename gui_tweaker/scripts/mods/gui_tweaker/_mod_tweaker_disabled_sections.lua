@@ -4,6 +4,28 @@ local M = {
     REASON = "Disabled in VMF",
 }
 
+-- Keep authored-mod discovery and Equipment stream aliases in one pure policy table.
+-- The Mod Tweaker has two presentation paths (_state and _view); duplicating these
+-- tables in both let the wt_dev namespace drift out of the UI in issue #636.
+M.AUTHOR_MOD_IDS = {
+    gut = true, wt = true, wt_dev = true,
+    ct = true, ct_dev = true, gt = true, gt_dev = true,
+    cim = true, cim_dev = true, crt = true, cosmetics_tweaker = true,
+    dynamic_cosmetic_portraits = true, enemy_tweaker = true,
+    character_weapon_variants = true, event_tweaker = true, mp = true, bt = true,
+}
+
+M.EQUIPMENT_ROLES = {
+    cosmetics_tweaker = "cosmetics",
+    cim = "crafting", cim_dev = "crafting",
+    wt = "weapons", wt_dev = "weapons",
+    character_weapon_variants = "cwv",
+}
+
+function M.is_author_mod(mod_id)
+    return M.AUTHOR_MOD_IDS[mod_id] == true
+end
+
 local function field(node, key)
     if type(node) ~= "table" then return nil end
     local value = node[key]
@@ -25,6 +47,10 @@ function M.select_members(categories, roles)
     local count = 0
     for _ in pairs(members) do count = count + 1 end
     return members, count
+end
+
+function M.select_equipment_members(categories)
+    return M.select_members(categories, M.EQUIPMENT_ROLES)
 end
 
 function M.disabled_header(setting_id, title, depth, reason)
