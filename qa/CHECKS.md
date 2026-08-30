@@ -403,6 +403,18 @@ proves every required commit, `commit:path`, and blob through read-only Git
 queries; missing, stale, or partial source keeps the pinned ledger active and
 emits a visible regeneration skip, while `-RequireSource` fails closed.
 
+`check_wt_history_patch_3_1_reproducibility.ps1` pins the exact three-file
+evidence census and two-artifact ledger for the bounded Blunderbuss slice. It
+proves the adjacent `max_ammo` change from `12` to `16`, rehydrates the exact
+current `16` guard, excludes the current-only Versus template, independently
+reproduces both evaluator lanes, and regenerates byte-identical public/dev
+catalogs. It also pins the byte-identical machine-readable completeness ledger:
+8 catalogs, 20 unique families, 31 family/state rows, 10 distinct states, and
+200 scalar operations, with every exposed row classified as an adjacent delta
+or complete direct historical baseline. The blocking
+`run_wt_history_patch_3_1_host_matrix.ps1` repeats the gate and source-selection
+adversaries under PowerShell 7 and Windows PowerShell 5.1.
+
 `check_wt_history_patch_3_2_reproducibility.ps1` pins the exact three-file
 evidence census and two-artifact ledger for Kerillian's One-Handed Axe. It
 requires the single adjacent `0.1` critical-chance operation, rehydrates that
@@ -475,8 +487,8 @@ fail-closed, repeated real PS5 tree, and delayed-real-taskkill fixtures pin the
 contract under both PowerShell hosts.
 
 `check_wt_history_source_checkout.ps1` is the offline source-selection
-adversary. Under both PowerShell hosts it presents all seven reproduction gates
-for Patch 3.2, 4.1.1, 4.6, 5.2, 6.0, 6.6, and 6.8,
+adversary. Under both PowerShell hosts it presents all eight reproduction gates
+for Patch 3.1, 3.2, 4.1.1, 4.6, 5.2, 6.0, 6.6, and 6.8,
 with an intentionally incomplete Git checkout, requires an ordinary visible
 skip and a `-RequireSource` failure from each, and restores its environment
 without fetch (including promisor lazy-fetch), network access, checkout
@@ -510,13 +522,14 @@ the complete pinned-artifact gate and reports the regeneration skip.
 | `check_vmf_widget_types.ps1` | ✅ OK | all 23 active `*_data.lua` clean post-gt v0.2.60-dev `text_input` fix (2026-05-25) |
 | `check_event_register_signature.ps1` | ✅ OK | clean post-gt v0.2.61 → .64 fix cycle (2026-05-25). This static check is the live gate; the former `bt:safe_event_register` runtime safety net (buff_tweaker v0.1.10-alpha+) is RETIRED (bt archived 2026-06). |
 | `check_wt_history_reproducibility.ps1` | ✅ OK (2026-08-28) | Issue #1436 full-QA gate for the pinned Patch 5.2 evidence ledger and byte-exact generated catalog; exact regeneration runs only from a checkout whose complete pinned commit/path/blob ledger passes the read-only selector. |
+| `run_wt_history_patch_3_1_host_matrix.ps1` | ✅ OK (2026-08-30) | Issue #1436 blocking dual-host gate for the exact bounded Patch 3.1 Blunderbuss maximum-ammunition boundary, current-only Versus exclusion, independent-oracle agreement, byte-exact public/dev catalogs, and fail-closed completeness ledger. |
 | `run_wt_history_patch_3_2_host_matrix.ps1` | ✅ OK (2026-08-29) | Issue #1436 blocking dual-host gate for the exact Patch 3.2 Kerillian One-Handed Axe boundary, absent current guard, revision-isolated older source evaluator, independent-oracle agreement, and byte-exact public/dev catalogs. |
 | `run_wt_history_patch_4_1_1_host_matrix.ps1` | ✅ OK (2026-08-29) | Issue #1436 blocking dual-host gate for the exact Patch 4.1.1 Masterwork Pistol boundary, present-false current guard, independent 3-by-3 evaluator presence tests, current rehydration, two-artifact/three-file evidence contract, and byte-exact public/dev catalogs. |
 | `check_wt_history_patch_4_6_reproducibility.ps1` | ✅ OK (2026-08-29) | Issue #1436 source-exact Hagbane-only Patch 4.6 gate: two finesse-DoT profile leaves, two current routes, current-schema private rehydration, Ricochet/weapon-diagram/refactor exclusions, primary/oracle agreement, and byte-exact public/dev catalogs. |
 | `run_wt_history_patch_4_6_host_matrix.ps1` | ✅ OK (2026-08-29) | Issue #1436 blocking dual-host validator for the complete six-file/18-object Patch 4.6 source closure, one-DLC-blob-identity adversary, no-fetch/no-lock extraction and exact raw-environment restoration; strict `-RequireSource` performs and requires both regenerations, while source-less CI is explicitly pinned-only. |
 | `check_wt_history_patch_6_0_reproducibility.ps1` | ✅ OK (2026-08-29) | Issue #1436 full-QA gate for the bounded Patch 6.0 shield-scalar and Fireball-profile slice; exact primary/oracle reproduction and catalog generation pass from the complete pinned source checkout. |
 | `check_wt_history_source_freshness.ps1` | ✅ OK (2026-08-28) | Issue #1436 central 6.12.0 semantic anchor plus separately observed canonical default tip; ordinary offline QA may visibly skip only unavailable network, while WT BuildOnly/release requires exact remote ref/tip freshness without fetch/FETCH_HEAD mutation. The total timeout includes proven bounded process-tree termination on PS7 and PS5.1, including taskkill-helper containment. |
-| `check_wt_history_source_checkout.ps1` | ✅ OK (2026-08-29) | Offline PS7/PS5.1 adversary proves that stale/partial Git trees visibly skip ordinary regeneration and fail closed under `-RequireSource` for the Patch 3.2, 4.1.1, 4.6, 5.2, 6.0, 6.6, and 6.8 gates. |
+| `check_wt_history_source_checkout.ps1` | ✅ OK (2026-08-30) | Offline PS7/PS5.1 adversary proves that stale/partial Git trees visibly skip ordinary regeneration and fail closed under `-RequireSource` for the Patch 3.1, 3.2, 4.1.1, 4.6, 5.2, 6.0, 6.6, and 6.8 gates. |
 | `run_wt_history_patch_6_6_host_matrix.ps1` | ✅ OK (2026-08-28) | Issue #1436 blocking dual-host gate for the exact Patch 6.6 Deepwood Staff adjacent boundary, 6.12.0 current guards, independent-oracle agreement, byte-exact public/dev catalogs, and the timeout/source-selection adversaries. |
 | `check_wt_history_patch_6_8_reproducibility.ps1` | ✅ OK (2026-08-28) | Issue #1436 full-QA gate for the source-adjacent Patch 6.8 Kerillian Greatsword boundary, current-anchor rehydration, independent oracle agreement, and byte-exact generated catalogs. |
 | `check_localization.ps1` | ⚠ 28 warnings | ct BOON_TREE category_ids; et_diff_ + mut_ false-positive prefixes |

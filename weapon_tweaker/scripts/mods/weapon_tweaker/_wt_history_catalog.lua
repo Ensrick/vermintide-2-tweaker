@@ -9,6 +9,7 @@
 local M = {}
 
 local GENERATED_MODULES = {
+    "scripts/mods/weapon_tweaker/_wt_history_3_1_catalog",
     "scripts/mods/weapon_tweaker/_wt_history_3_2_catalog",
     "scripts/mods/weapon_tweaker/_wt_history_5_2_catalog",
     "scripts/mods/weapon_tweaker/_wt_history_6_0_catalog",
@@ -18,6 +19,8 @@ local GENERATED_MODULES = {
     "scripts/mods/weapon_tweaker/_wt_history_4_6_catalog",
 }
 local GENERATED_MODULE = GENERATED_MODULES[1]
+local COMPLETENESS_LEDGER_MODULE =
+    "scripts/mods/weapon_tweaker/_wt_history_completeness_ledger"
 
 local function dense_array_length(value, label)
     if type(value) ~= "table" then return nil, label .. " is not an array" end
@@ -32,6 +35,202 @@ local function dense_array_length(value, label)
     if count ~= maximum then return nil, label .. " must be a dense array" end
     return count
 end
+
+local function exact_table_keys(value, expected, label)
+    if type(value) ~= "table" then return nil, label .. " is not a table" end
+    local allowed = {}
+    for _, key in ipairs(expected) do allowed[key] = true end
+    for key in pairs(value) do
+        if not allowed[key] then
+            return nil, label .. " has unexpected key " .. tostring(key)
+        end
+    end
+    for _, key in ipairs(expected) do
+        if rawget(value, key) == nil then
+            return nil, label .. " is missing key " .. key
+        end
+    end
+    return true
+end
+
+local function nonnegative_integer(value)
+    return type(value) == "number" and value >= 0 and value % 1 == 0
+end
+
+local function nonempty_string(value)
+    return type(value) == "string" and value ~= ""
+end
+
+local function count_keys(value)
+    local count = 0
+    for _ in pairs(value or {}) do count = count + 1 end
+    return count
+end
+
+local function validate_completeness(catalogs, ledger)
+    local ok, validation_error = exact_table_keys(ledger, {
+        "catalogs", "current_revision", "schema", "stream_identity", "totals",
+    }, "history completeness ledger")
+    if not ok then return nil, validation_error end
+    if ledger.schema ~= 1
+            or ledger.stream_identity ~= "public_dev_byte_identical"
+            or not nonempty_string(ledger.current_revision) then
+        return nil, "history completeness ledger identity is invalid"
+    end
+    ok, validation_error = exact_table_keys(ledger.totals, {
+        "catalogs", "families", "family_states", "operations", "states",
+    }, "history completeness totals")
+    if not ok then return nil, validation_error end
+    for _, key in ipairs({
+        "catalogs", "families", "family_states", "operations", "states",
+    }) do
+        if not nonnegative_integer(ledger.totals[key]) then
+            return nil, "history completeness total is invalid " .. key
+        end
+    end
+
+    local catalog_count, catalog_count_error = dense_array_length(
+        catalogs, "history catalogs")
+    if not catalog_count then return nil, catalog_count_error end
+    local ledger_count, ledger_count_error = dense_array_length(
+        ledger.catalogs, "history completeness catalogs")
+    if not ledger_count then return nil, ledger_count_error end
+    if catalog_count ~= ledger_count or catalog_count ~= ledger.totals.catalogs then
+        return nil, "history completeness catalog count drift"
+    end
+
+    local catalog_ids, family_ids, state_ids, projection_by_state = {}, {}, {}, {}
+    local family_state_count, operation_count = 0, 0
+    for catalog_index = 1, catalog_count do
+        local catalog = catalogs[catalog_index]
+        local declaration = ledger.catalogs[catalog_index]
+        ok, validation_error = exact_table_keys(declaration, {
+            "catalog_id", "cumulative_backfill", "declared_scope", "exclusions",
+            "family_states", "later_same_leaf_policy", "official_coverage",
+            "projection_kind",
+        }, "history completeness catalog " .. catalog_index)
+        if not ok then return nil, validation_error end
+        if catalog_ids[declaration.catalog_id] then
+            return nil, "history completeness catalog is duplicated "
+                .. declaration.catalog_id
+        end
+        catalog_ids[declaration.catalog_id] = true
+        if type(catalog) ~= "table"
+                or catalog.catalog_id ~= declaration.catalog_id
+                or type(catalog.current_source) ~= "table"
+                or catalog.current_source.revision ~= ledger.current_revision then
+            return nil, "history completeness catalog identity drift "
+                .. tostring(declaration.catalog_id)
+        end
+        local adjacent = declaration.projection_kind == "adjacent_delta"
+        local direct = declaration.projection_kind
+            == "complete_direct_historical_baseline"
+        if not adjacent and not direct then
+            return nil, "history completeness projection kind is invalid "
+                .. tostring(declaration.projection_kind)
+        end
+        if declaration.cumulative_backfill ~= direct
+                or declaration.official_coverage ~= "complete_for_declared_scope"
+                or not nonempty_string(declaration.declared_scope)
+                or not nonempty_string(declaration.later_same_leaf_policy) then
+            return nil, "history completeness scope contract is invalid "
+                .. declaration.catalog_id
+        end
+
+        local exclusion_count, exclusion_error = dense_array_length(
+            declaration.exclusions, "history completeness exclusions")
+        if not exclusion_count then return nil, exclusion_error end
+        local exclusion_ids = {}
+        for exclusion_index = 1, exclusion_count do
+            local exclusion = declaration.exclusions[exclusion_index]
+            ok, validation_error = exact_table_keys(exclusion, { "id", "reason" },
+                "history completeness exclusion")
+            if not ok then return nil, validation_error end
+            if not nonempty_string(exclusion.id)
+                    or not nonempty_string(exclusion.reason)
+                    or exclusion_ids[exclusion.id] then
+                return nil, "history completeness exclusion is invalid "
+                    .. declaration.catalog_id
+            end
+            exclusion_ids[exclusion.id] = true
+        end
+
+        local declared_count, declared_error = dense_array_length(
+            declaration.family_states, "history completeness family states")
+        if not declared_count then return nil, declared_error end
+        local declared_rows, declared_state_ids = {}, {}
+        for row_index = 1, declared_count do
+            local row = declaration.family_states[row_index]
+            ok, validation_error = exact_table_keys(row, {
+                "family_id", "operations", "profiles", "state_id",
+            }, "history completeness family state")
+            if not ok then return nil, validation_error end
+            local key = tostring(row.family_id) .. "\31" .. tostring(row.state_id)
+            if not nonempty_string(row.family_id) or not nonempty_string(row.state_id)
+                    or not nonnegative_integer(row.operations)
+                    or not nonnegative_integer(row.profiles) or declared_rows[key] then
+                return nil, "history completeness family-state declaration is invalid "
+                    .. declaration.catalog_id
+            end
+            declared_rows[key] = row
+            declared_state_ids[row.state_id] = true
+        end
+
+        local actual_rows = 0
+        for _, family in ipairs(catalog.families or {}) do
+            family_ids[family.id] = true
+            for _, state_id in ipairs(family.state_order or {}) do
+                local key = tostring(family.id) .. "\31" .. tostring(state_id)
+                local row = declared_rows[key]
+                local state = type(family.states) == "table"
+                    and family.states[state_id] or nil
+                if not row or type(state) ~= "table"
+                        or type(state.operations) ~= "table"
+                        or type(state.profile_names) ~= "table"
+                        or #state.operations ~= row.operations
+                        or #state.profile_names ~= row.profiles then
+                    return nil, "history completeness family-state drift "
+                        .. declaration.catalog_id .. "/" .. key
+                end
+                declared_rows[key] = nil
+                actual_rows = actual_rows + 1
+                family_state_count = family_state_count + 1
+                operation_count = operation_count + #state.operations
+            end
+        end
+        if actual_rows ~= declared_count or next(declared_rows) ~= nil then
+            return nil, "history completeness family-state count drift "
+                .. declaration.catalog_id
+        end
+        for state_id in pairs(catalog.states or {}) do
+            if not declared_state_ids[state_id] then
+                return nil, "history completeness unowned state "
+                    .. declaration.catalog_id .. "/" .. tostring(state_id)
+            end
+            if projection_by_state[state_id] then
+                return nil, "history completeness state is multiply owned " .. state_id
+            end
+            projection_by_state[state_id] = declaration.projection_kind
+            state_ids[state_id] = true
+        end
+        for state_id in pairs(declared_state_ids) do
+            if type(catalog.states[state_id]) ~= "table" then
+                return nil, "history completeness state missing "
+                    .. declaration.catalog_id .. "/" .. state_id
+            end
+        end
+    end
+
+    if count_keys(family_ids) ~= ledger.totals.families
+            or count_keys(state_ids) ~= ledger.totals.states
+            or family_state_count ~= ledger.totals.family_states
+            or operation_count ~= ledger.totals.operations then
+        return nil, "history completeness aggregate totals drift"
+    end
+    return projection_by_state
+end
+
+M.validate_completeness = validate_completeness
 
 local function normalize_modules(generated_modules)
     if generated_modules == nil then generated_modules = GENERATED_MODULES end
@@ -314,9 +513,11 @@ function M.load(mod, generated_modules)
     if type(mod) ~= "table" or type(mod.dofile) ~= "function" then
         return nil, "mod:dofile is required"
     end
+    local require_completeness = generated_modules == nil
     local modules, modules_error = normalize_modules(generated_modules)
     if not modules then return nil, modules_error end
     local cache_key = table.concat(modules, "\31")
+        .. (require_completeness and "\31" .. COMPLETENESS_LEDGER_MODULE or "")
 
     local cache = rawget(mod, "_wt_history_catalog_schema2_cache")
     if type(cache) == "table" and cache.key == cache_key then
@@ -331,6 +532,17 @@ function M.load(mod, generated_modules)
         end
         catalogs[index] = catalog
     end
+    local projection_by_state
+    if require_completeness then
+        local ok, ledger = pcall(mod.dofile, mod, COMPLETENESS_LEDGER_MODULE)
+        if not ok or type(ledger) ~= "table" then
+            return nil, "history completeness ledger load failed: " .. tostring(ledger)
+        end
+        local completeness_error
+        projection_by_state, completeness_error = validate_completeness(
+            catalogs, ledger)
+        if not projection_by_state then return nil, completeness_error end
+    end
     local catalog, merge_error
     if #catalogs == 1 then
         catalog = catalogs[1]
@@ -341,6 +553,12 @@ function M.load(mod, generated_modules)
     if catalog.schema ~= 2 or catalog.current_id ~= "current"
             or type(catalog.families) ~= "table" then
         return nil, "history catalog has an unsupported shape"
+    end
+    for state_id, projection_kind in pairs(projection_by_state or {}) do
+        if type(catalog.states[state_id]) ~= "table" then
+            return nil, "history completeness state missing " .. state_id
+        end
+        catalog.states[state_id].projection_kind = projection_kind
     end
     mod._wt_history_catalog_schema2_cache = {
         catalog = catalog,
@@ -417,7 +635,7 @@ function M.build_localization(catalog)
             en = "Pre-Patch Weapon Versions",
         },
         wt_history_patch_versions_description = {
-            en = "Restore source-proven weapon balance from earlier game versions. Current is the safe default. A changed selection takes effect after restarting the game; ordinary Weapon Tweaks are then applied on top.",
+            en = "Choose a source-proven historical balance projection. Current is the safe default. Bounded patch deltas restore only the named patch change; a changed selection takes effect after restarting the game, and ordinary Weapon Tweaks are applied afterward.",
         },
         wt_history_state_current = {
             en = type(catalog.current_source) == "table"
@@ -429,7 +647,12 @@ function M.build_localization(catalog)
                 or type(state.display_name) ~= "string" then
             return nil, "history state localization missing " .. tostring(state_id)
         end
-        entries[state.label_key] = { en = state.display_name }
+        local display_name = state.display_name
+        if state.projection_kind == "adjacent_delta"
+                and not display_name:find("bounded patch delta", 1, true) then
+            display_name = display_name .. " - bounded patch delta"
+        end
+        entries[state.label_key] = { en = display_name }
     end
     for _, family in ipairs(catalog.families) do
         if type(family.label_key) ~= "string"
@@ -440,8 +663,8 @@ function M.build_localization(catalog)
         entries[family.label_key] = { en = family.display_name }
         entries[family.setting_id] = { en = family.display_name }
         entries[family.setting_id .. "_description"] = {
-            en = "Choose the native balance state for " .. family.display_name
-                .. ". Historical choices require a game restart. Other Weapon Tweaks compose on top of this baseline.",
+            en = "Choose the historical balance projection for " .. family.display_name
+                .. ". Bounded patch deltas restore only their named change. Historical choices require a game restart; other Weapon Tweaks compose afterward.",
         }
         if family.authority == "server" then
             entries[family.setting_id .. "_description"].en =
@@ -454,5 +677,6 @@ end
 
 M.GENERATED_MODULE = GENERATED_MODULE
 M.GENERATED_MODULES = GENERATED_MODULES
+M.COMPLETENESS_LEDGER_MODULE = COMPLETENESS_LEDGER_MODULE
 
 return M

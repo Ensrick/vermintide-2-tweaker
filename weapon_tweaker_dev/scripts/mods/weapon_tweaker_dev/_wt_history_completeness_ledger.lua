@@ -1,0 +1,154 @@
+-- Machine-readable completeness contract for the exposed history catalog.
+--
+-- This ledger distinguishes bounded adjacent patch deltas from the Patch 5.2
+-- direct historical baselines. _wt_history_catalog.lua validates it before the
+-- runtime exposes any selector, so a missing, extra, or misclassified row makes
+-- the whole history surface unavailable instead of silently overclaiming it.
+return {
+    catalogs = {
+        {
+            catalog_id = "wt_history_patch_3_1_v1",
+            cumulative_backfill = false,
+            declared_scope = "Blunderbuss Patch 3.1 maximum-ammunition leaf only",
+            exclusions = {
+                { id = "current_only_versus_template", reason = "blunderbuss_template_1_vs is absent from both adjacent revisions and remains current" },
+            },
+            family_states = {
+                { family_id = "kruber_blunderbuss", operations = 1, profiles = 0, state_id = "pre_3_1_delta" },
+            },
+            later_same_leaf_policy = "only the adjacent 12-to-16 boundary delta is projected over the current 16 guard",
+            official_coverage = "complete_for_declared_scope",
+            projection_kind = "adjacent_delta",
+        },
+        {
+            catalog_id = "wt_history_patch_3_2_v1",
+            cumulative_backfill = false,
+            declared_scope = "Kerillian One-Handed Axe Patch 3.2 push-follow-up critical-chance leaf only",
+            exclusions = {},
+            family_states = {
+                { family_id = "elf_one_handed_axe", operations = 1, profiles = 0, state_id = "3_1_0" },
+            },
+            later_same_leaf_policy = "only the adjacent Patch 3.2 leaf is projected; later absent-current state is guarded explicitly",
+            official_coverage = "complete_for_declared_scope",
+            projection_kind = "adjacent_delta",
+        },
+        {
+            catalog_id = "wt_history_patch_5_2_v1",
+            cumulative_backfill = true,
+            declared_scope = "all official Patch 5.2.0 and 5.2.3 named weapon groups in the recorded source surfaces",
+            exclusions = {
+                { id = "flaming_sword_unowned_delta", reason = "source-semantic fatigue-cost delta is absent from the official named weapon groups" },
+                { id = "presentation_roots", reason = "units, animation state machines, sounds, tooltips, and other presentation roots remain current" },
+            },
+            family_states = {
+                { family_id = "coruscation_staff", operations = 9, profiles = 3, state_id = "5_1_1" },
+                { family_id = "dual_daggers", operations = 6, profiles = 0, state_id = "5_1_1" },
+                { family_id = "dual_daggers", operations = 6, profiles = 1, state_id = "5_2_0" },
+                { family_id = "one_handed_sword_shared", operations = 9, profiles = 2, state_id = "5_1_1" },
+                { family_id = "one_handed_sword_shared", operations = 7, profiles = 1, state_id = "5_2_0" },
+                { family_id = "two_handed_sword_shared", operations = 3, profiles = 1, state_id = "5_1_1" },
+                { family_id = "one_handed_axe_shared", operations = 24, profiles = 1, state_id = "5_1_1" },
+                { family_id = "one_handed_axe_shared", operations = 22, profiles = 0, state_id = "5_2_0" },
+                { family_id = "one_handed_hammer_shared", operations = 9, profiles = 0, state_id = "5_1_1" },
+                { family_id = "one_handed_hammer_shared", operations = 6, profiles = 0, state_id = "5_2_0" },
+                { family_id = "javelin", operations = 0, profiles = 4, state_id = "5_1_1" },
+                { family_id = "elf_one_handed_axe", operations = 33, profiles = 1, state_id = "5_1_1" },
+                { family_id = "elf_one_handed_axe", operations = 15, profiles = 0, state_id = "5_2_0" },
+                { family_id = "kruber_sword_and_shield", operations = 6, profiles = 0, state_id = "5_1_1" },
+                { family_id = "kruber_sword_and_shield", operations = 5, profiles = 0, state_id = "5_2_0" },
+                { family_id = "falchion", operations = 4, profiles = 0, state_id = "5_2_0" },
+                { family_id = "falchion", operations = 3, profiles = 0, state_id = "5_2_3" },
+                { family_id = "crowbill", operations = 7, profiles = 0, state_id = "5_2_0" },
+                { family_id = "crowbill", operations = 6, profiles = 0, state_id = "5_2_3" },
+                { family_id = "one_handed_flail", operations = 1, profiles = 0, state_id = "5_2_0" },
+                { family_id = "sword_and_dagger", operations = 1, profiles = 0, state_id = "5_2_0" },
+                { family_id = "masterwork_pistol", operations = 0, profiles = 1, state_id = "5_2_0" },
+            },
+            later_same_leaf_policy = "each selected historical state is projected directly over the current anchor",
+            official_coverage = "complete_for_declared_scope",
+            projection_kind = "complete_direct_historical_baseline",
+        },
+        {
+            catalog_id = "wt_history_patch_6_0_v1",
+            cumulative_backfill = false,
+            declared_scope = "Patch 6.0 sword-and-shield scalar leaves and Fireball charged profile route",
+            exclusions = {
+                { id = "outside_declared_patch_slice", reason = "other Patch 6.0 changes are outside this independently proven shield-and-Fireball slice" },
+            },
+            family_states = {
+                { family_id = "kruber_sword_and_shield", operations = 5, profiles = 0, state_id = "5_6_1" },
+                { family_id = "kruber_bretonnian_sword_and_shield", operations = 6, profiles = 0, state_id = "5_6_1" },
+                { family_id = "sienna_fireball_staff", operations = 0, profiles = 1, state_id = "5_6_1" },
+            },
+            later_same_leaf_policy = "only the adjacent Patch 6.0 leaves are projected against exact current guards",
+            official_coverage = "complete_for_declared_scope",
+            projection_kind = "adjacent_delta",
+        },
+        {
+            catalog_id = "wt_history_patch_6_6_v1",
+            cumulative_backfill = false,
+            declared_scope = "Patch 6.6 Deepwood Staff chaos-bulwark lift across two weapon templates and the vortex table",
+            exclusions = {
+                { id = "later_breed_rows", reason = "later rows such as chaos_tether_sorcerer remain current" },
+            },
+            family_states = {
+                { family_id = "deepwood_staff", operations = 3, profiles = 0, state_id = "6_5_4" },
+            },
+            later_same_leaf_policy = "only the three adjacent chaos-bulwark leaves are removed transactionally",
+            official_coverage = "complete_for_declared_scope",
+            projection_kind = "adjacent_delta",
+        },
+        {
+            catalog_id = "wt_history_patch_6_8_v1",
+            cumulative_backfill = false,
+            declared_scope = "Kerillian Greatsword Patch 6.8 first-heavy range leaf only",
+            exclusions = {
+                { id = "outside_declared_patch_slice", reason = "other Patch 6.8 content is outside this one-leaf source-proven slice" },
+            },
+            family_states = {
+                { family_id = "elf_greatsword", operations = 1, profiles = 0, state_id = "6_7_2" },
+            },
+            later_same_leaf_policy = "only the adjacent first-heavy range leaf is projected over its current guard",
+            official_coverage = "complete_for_declared_scope",
+            projection_kind = "adjacent_delta",
+        },
+        {
+            catalog_id = "wt_history_patch_4_1_1_v1",
+            cumulative_backfill = false,
+            declared_scope = "Masterwork Pistol Patch 4.1.1 ammo-pickup reload flag only",
+            exclusions = {},
+            family_states = {
+                { family_id = "masterwork_pistol", operations = 1, profiles = 0, state_id = "4_0_1" },
+            },
+            later_same_leaf_policy = "only the adjacent present-false flag is projected; absence and false remain distinct",
+            official_coverage = "complete_for_declared_scope",
+            projection_kind = "adjacent_delta",
+        },
+        {
+            catalog_id = "wt_history_patch_4_6_hagbane_v1",
+            cumulative_backfill = false,
+            declared_scope = "Hagbane Patch 4.6 finesse-DoT flags and their two current profile routes",
+            exclusions = {
+                { id = "ricochet_behavior", reason = "aoe_on_bounce belongs to Ricochet-talent behavior" },
+                { id = "weapon_diagram", reason = "weapon_diagram is presentation-only" },
+                { id = "moonfire_boundary", reason = "Moonfire crosses a global buff profile, timing, and live explosion references outside this atomic slice" },
+            },
+            family_states = {
+                { family_id = "hagbane_shortbow", operations = 0, profiles = 2, state_id = "4_5_1" },
+            },
+            later_same_leaf_policy = "only the two adjacent finesse flags are removed from current-schema private profiles",
+            official_coverage = "complete_for_declared_scope",
+            projection_kind = "adjacent_delta",
+        },
+    },
+    current_revision = "038498af2b565bcb10bf5ed225638293a7640c83",
+    schema = 1,
+    stream_identity = "public_dev_byte_identical",
+    totals = {
+        catalogs = 8,
+        families = 20,
+        family_states = 31,
+        operations = 200,
+        states = 10,
+    },
+}

@@ -1,5 +1,17 @@
 # Weapon Tweaker Changelog
 
+## 0.12.321-dev (2026-08-30) -- mirror source-exact Patch 3.1 Blunderbuss history (#1436) [not-started]
+
+- Mirrors public beta 0.12.320: Kruber's Blunderbuss gains a bounded
+  **Pre-Patch 3.1 (3.0.x source)** option that restores maximum ammunition from
+  `16` to the exact earlier value of `12`; `Current` remains gameplay-inert.
+- Carries the same adjacent/current source pins, current-only Versus exclusion,
+  dual-host regeneration, exact restoration, and fail-closed completeness
+  ledger as the public stream.
+- Preserves the friends-only development overlay without adding profiles,
+  hooks, RPCs, or presentation state. #1436 remains open for the remaining
+  historical slices.
+
 ## 0.12.320-dev (2026-08-29) -- mirror source-exact Patch 3.2 One-Handed Axe history (#1436) [not-started]
 
 - Mirrors public beta 0.12.319: Kerillian's One-handed Axe gains the exact

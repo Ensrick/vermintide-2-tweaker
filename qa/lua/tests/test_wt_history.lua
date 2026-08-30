@@ -303,6 +303,9 @@ local function register(H, repo_root)
             local filename = assert(path:match("([^/]+)$")) .. ".lua"
             by_path[path] = assert(loadfile(root .. filename))()
         end
+        local ledger_path = catalog_ui.COMPLETENESS_LEDGER_MODULE
+        local ledger_filename = assert(ledger_path:match("([^/]+)$")) .. ".lua"
+        by_path[ledger_path] = assert(loadfile(root .. ledger_filename))()
         return by_path
     end
 
@@ -732,6 +735,85 @@ local function register(H, repo_root)
             "public and dev must carry byte-identical pure Patch 3.2 data")
     end)
 
+    H.test("WT #1436 generated Patch 3.1 catalog pins one bounded Blunderbuss delta", function()
+        local catalog = assert(loadfile(script_root .. "_wt_history_3_1_catalog.lua"))()
+        local valid, validation_error = Policy.validate(catalog)
+        H.equal(validation_error, nil)
+        H.equal(valid, true)
+        H.equal(catalog.schema, 2)
+        H.equal(catalog.catalog_id, "wt_history_patch_3_1_v1")
+        H.equal(catalog.current_source.revision,
+            "038498af2b565bcb10bf5ed225638293a7640c83")
+        H.equal(#catalog.families, 1)
+        H.equal(next(catalog.profile_specs), nil)
+        H.equal(next(catalog.derived_profiles), nil)
+
+        local family = catalog.families[1]
+        H.equal(family.id, "kruber_blunderbuss")
+        H.equal(family.setting_id, "wt_history_kruber_blunderbuss")
+        H.deep_equal(family.templates, { "blunderbuss_template_1" })
+        H.deep_equal(family.state_order, { "pre_3_1_delta" })
+        H.equal(catalog.states.pre_3_1_delta.display_name,
+            "Pre-Patch 3.1 (3.0.x source) — bounded patch delta")
+        H.equal(catalog.states.pre_3_1_delta.official_patch_notes,
+            "https://www.vermintide.com/news/patch-31")
+
+        local state = family.states.pre_3_1_delta
+        H.deep_equal(state.profile_names, {})
+        H.deep_equal(state.direct_profile_names, {})
+        H.equal(#state.operations, 1)
+        local row = state.operations[1]
+        H.equal(row.root, "Weapons")
+        H.equal(row.template, "blunderbuss_template_1")
+        H.deep_equal(row.path, { "ammo_data", "max_ammo" })
+        H.equal(row.expected_present, true)
+        H.equal(row.expected_current, 16)
+        H.equal(row.result_present, true)
+        H.equal(row.result, 12)
+        H.equal(row.source_revision,
+            "c96aa3858011ecd557d55d80b66fe3bb8342eeb2")
+        H.equal(row.source_blob,
+            "f8f6ec97a974bd5767c1ccabf9fc593dba785d34")
+        H.equal(row.current_source_blob,
+            "87dca4018c18051d653a80b7aff501ed9815a5d0")
+        H.equal(row.official_change_id, "P310-BLUNDERBUSS-MAX-AMMO")
+        H.deep_equal(catalog.generation, {
+            adjacent_operation_count = 1,
+            global_operations = 0,
+            profile_route_count = 0,
+            unsupported_count = 0,
+        })
+        H.equal(read_file(script_root .. "_wt_history_3_1_catalog.lua"),
+            read_file(repo_root
+                .. "/weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/"
+                .. "_wt_history_3_1_catalog.lua"),
+            "public and dev must carry byte-identical pure Patch 3.1 data")
+
+        local roots = {
+            BuffTemplates = {}, ExplosionTemplates = {},
+            PlayerUnitStatusSettings = {}, VortexTemplates = {},
+            Weapons = {
+                blunderbuss_template_1 = { ammo_data = { max_ammo = 16 } },
+                blunderbuss_template_1_vs = { ammo_data = { max_ammo = 9 } },
+            },
+        }
+        local plan = assert(Policy.build_family_plan(
+            catalog, family, "pre_3_1_delta", roots))
+        H.equal(#plan, 1)
+        local ledger = assert(Policy.commit(plan))
+        H.equal(roots.Weapons.blunderbuss_template_1.ammo_data.max_ammo, 12)
+        H.equal(roots.Weapons.blunderbuss_template_1_vs.ammo_data.max_ammo, 9,
+            "current-only Versus template must remain excluded")
+        H.equal(Policy.restore(ledger), true)
+        H.equal(roots.Weapons.blunderbuss_template_1.ammo_data.max_ammo, 16)
+
+        roots.Weapons.blunderbuss_template_1.ammo_data.max_ammo = 12
+        local refused, refusal = Policy.build_family_plan(
+            catalog, family, "pre_3_1_delta", roots)
+        H.equal(refused, nil)
+        H.truthy(refusal and refusal:find("current guard mismatch", 1, true))
+    end)
+
     H.test("WT #1436 generated Patch 4.1.1 catalog preserves a present-false guard", function()
         local catalog = assert(loadfile(script_root
             .. "_wt_history_4_1_1_catalog.lua"))()
@@ -793,20 +875,22 @@ local function register(H, repo_root)
 
     H.test("WT #1436 default catalog composes every bounded patch exactly once", function()
         local catalog, mod, paths = load_default_catalog(CatalogUI, script_root)
-        H.deep_equal(paths, CatalogUI.GENERATED_MODULES)
+        local expected_paths = clone(CatalogUI.GENERATED_MODULES)
+        expected_paths[#expected_paths + 1] = CatalogUI.COMPLETENESS_LEDGER_MODULE
+        H.deep_equal(paths, expected_paths)
         H.deep_equal(catalog.generation.catalogs, {
-            "wt_history_patch_3_2_v1",
+            "wt_history_patch_3_1_v1", "wt_history_patch_3_2_v1",
             "wt_history_patch_5_2_v1", "wt_history_patch_6_0_v1",
             "wt_history_patch_6_6_v1", "wt_history_patch_6_8_v1",
             "wt_history_patch_4_1_1_v1", "wt_history_patch_4_6_hagbane_v1",
         })
         H.deep_equal(catalog_counts(catalog), {
             derived_profiles = 1,
-            families = 19,
-            family_states = 30,
-            operations = 199,
+            families = 20,
+            family_states = 31,
+            operations = 200,
             profiles = 16,
-            states = 9,
+            states = 10,
         })
         local elf_axe, kruber, masterwork
         for _, family in ipairs(catalog.families) do
@@ -824,7 +908,70 @@ local function register(H, repo_root)
         local cached, cached_error = CatalogUI.load(mod)
         H.equal(cached_error, nil)
         H.equal(cached, catalog)
-        H.equal(#paths, 7, "default composite must reuse its cache")
+        H.equal(#paths, 9, "default composite must reuse its cache")
+    end)
+
+    H.test("WT #1436 completeness ledger fails closed on census and scope drift", function()
+        local by_path = generated_catalogs(CatalogUI, script_root)
+        local catalogs = {}
+        for _, path in ipairs(CatalogUI.GENERATED_MODULES) do
+            catalogs[#catalogs + 1] = clone(by_path[path])
+        end
+        local original = assert(by_path[CatalogUI.COMPLETENESS_LEDGER_MODULE])
+        local projection = assert(CatalogUI.validate_completeness(
+            catalogs, clone(original)))
+        H.equal(projection.pre_3_1_delta, "adjacent_delta")
+        H.equal(projection["5_1_1"], "complete_direct_historical_baseline")
+
+        local function rejects(mutator, needle)
+            local hostile = clone(original)
+            mutator(hostile)
+            local accepted, refusal = CatalogUI.validate_completeness(
+                catalogs, hostile)
+            H.equal(accepted, nil)
+            H.truthy(refusal and refusal:find(needle, 1, true),
+                "wrong completeness refusal: " .. tostring(refusal))
+        end
+        rejects(function(value) value.schema = 2 end, "identity is invalid")
+        rejects(function(value) value.catalogs[8] = nil end, "catalog count drift")
+        rejects(function(value)
+            value.catalogs[9] = clone(value.catalogs[8])
+        end, "catalog count drift")
+        rejects(function(value)
+            value.catalogs[2] = clone(value.catalogs[1])
+        end, "catalog is duplicated")
+        rejects(function(value)
+            value.catalogs[1].family_states[1].operations = 2
+        end, "family-state drift")
+        rejects(function(value)
+            value.catalogs[1].family_states[2] = clone(
+                value.catalogs[1].family_states[1])
+        end, "declaration is invalid")
+        rejects(function(value)
+            value.catalogs[1].projection_kind = "complete_direct_historical_baseline"
+        end, "scope contract is invalid")
+        rejects(function(value)
+            value.catalogs[1].exclusions[1].reason = ""
+        end, "exclusion is invalid")
+        rejects(function(value)
+            value.catalogs[1].unexpected = true
+        end, "unexpected key")
+        rejects(function(value) value.totals.operations = 201 end,
+            "aggregate totals drift")
+
+        local extra_state_catalogs = clone(catalogs)
+        extra_state_catalogs[1].states.unowned = clone(
+            extra_state_catalogs[1].states.pre_3_1_delta)
+        local accepted, refusal = CatalogUI.validate_completeness(
+            extra_state_catalogs, clone(original))
+        H.equal(accepted, nil)
+        H.truthy(refusal and refusal:find("unowned state", 1, true))
+
+        H.equal(read_file(script_root .. "_wt_history_completeness_ledger.lua"),
+            read_file(repo_root
+                .. "/weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/"
+                .. "_wt_history_completeness_ledger.lua"),
+            "public and dev must carry a byte-identical completeness ledger")
     end)
 
     H.test("WT #1436 Patch 6.0 applies, reads back, and restores exact state", function()
@@ -1475,6 +1622,13 @@ local function register(H, repo_root)
         local loc = assert(CatalogUI.build_localization(catalog))
         H.equal(group.setting_id, "wt_history_patch_versions")
         H.equal(#group.sub_widgets, #catalog.families)
+        H.truthy(loc.wt_history_patch_versions_description.en
+            :find("historical balance projection", 1, true) ~= nil)
+        H.truthy(loc.wt_history_state_3_1_0.en
+            :find("bounded patch delta", 1, true) ~= nil)
+        H.truthy(loc.wt_history_state_5_1_1.en
+            :find("bounded patch delta", 1, true) == nil,
+            "complete direct historical baseline must not be mislabeled as adjacent")
         for index, family in ipairs(catalog.families) do
             local widget = group.sub_widgets[index]
             H.equal(widget.setting_id, family.setting_id)
@@ -1507,16 +1661,16 @@ local function register(H, repo_root)
         H.equal(CatalogUI.decorate_menu(mod, data), data)
         H.equal(data.options.widgets[1], first)
         H.equal(data.options.widgets[2].setting_id, "wt_history_patch_versions")
-        H.equal(#data.options.widgets[2].sub_widgets, 19)
+        H.equal(#data.options.widgets[2].sub_widgets, 20)
         H.equal(data.options.widgets[3], second)
-        H.equal(loads, 7)
+        H.equal(loads, 9)
         H.equal(CatalogUI.decorate_menu(mod, data), data)
         H.equal(#data.options.widgets, 3)
-        H.equal(loads, 7, "re-decoration must not reload or duplicate the group")
+        H.equal(loads, 9, "re-decoration must not reload or duplicate the group")
 
         local malformed = { options = {} }
         H.equal(CatalogUI.decorate_menu(mod, malformed), malformed)
-        H.equal(loads, 7, "malformed menu data must not load generated catalogs")
+        H.equal(loads, 9, "malformed menu data must not load generated catalogs")
     end)
 
     H.test("WT #1436 public and dev data surfaces return one index-two history group", function()
@@ -1559,13 +1713,13 @@ local function register(H, repo_root)
             H.equal(data.options.widgets[1], availability)
             H.equal(data.options.widgets[2].setting_id,
                 "wt_history_patch_versions")
-            H.equal(#data.options.widgets[2].sub_widgets, 19)
+            H.equal(#data.options.widgets[2].sub_widgets, 20)
             H.equal(data.options.widgets[3], overrides)
-            H.equal(loads, 7)
+            H.equal(loads, 9)
             H.equal(catalog_ui.decorate_menu(mod, data), data)
             H.equal(#data.options.widgets, 3,
                 stream.namespace .. " must not duplicate its history group")
-            H.equal(loads, 7,
+            H.equal(loads, 9,
                 stream.namespace .. " must reuse its generated-catalog cache")
         end
     end)
