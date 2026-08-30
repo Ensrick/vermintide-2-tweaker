@@ -1,5 +1,13 @@
 # Weapon Tweaker Changelog
 
+## 0.12.322-beta (2026-08-30) -- publication-claim reconciliation (#1436) [not-started]
+
+- Reissues the reviewed 0.12.321-beta Tuskgor Spear Patch 3.1 slice under a
+  fresh machine-global publication claim after the earlier reservation was
+  intentionally released during a usage-conservation pause.
+- Contains no additional gameplay behavior. The exact source provenance,
+  one-leaf projection, and `Current` no-op contract remain unchanged.
+
 ## 0.12.321-beta (2026-08-30) -- source-exact Patch 3.1 Tuskgor Spear history (#1436) [not-started]
 
 - Extends the existing **Pre-Patch 3.1 (3.0.x source)** state with a separate
