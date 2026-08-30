@@ -1,5 +1,17 @@
 # Weapon Tweaker Changelog
 
+## 0.12.320-dev (2026-08-29) -- mirror source-exact Patch 3.2 One-Handed Axe history (#1436) [not-started]
+
+- Mirrors public beta 0.12.319: Kerillian's One-handed Axe gains the exact
+  **Game Version 3.1.0** push-follow-up critical-chance state while `Current`
+  remains gameplay-inert and preserves the absent live-source field.
+- Carries the same pinned adjacent boundary, independently rehydrated absence
+  guard, revision-isolated oracle, dual-host reproduction, exact restore, and
+  byte-identical catalog data as the public stream.
+- Preserves the friends-only development overlay without adding profiles,
+  hooks, RPCs, global gameplay writes, or presentation state. #1436 remains
+  open for the remaining historical slices.
+
 ## 0.12.319-dev (2026-08-29) -- mirror source-exact Patch 4.6 Hagbane history (#1436) [not-started]
 
 - Mirrors public beta 0.12.318: Kerillian's Hagbane Shortbow gains an exact

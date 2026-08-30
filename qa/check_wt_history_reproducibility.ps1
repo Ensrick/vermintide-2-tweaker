@@ -72,7 +72,7 @@ try {
         $generator = 'd1fc8d4a8b1100b11326c81acd85fa6e20cc32c425fcf038eba61aa929588507'
         $sourceCatalog = 'fdfa169606d9eb7c4893e8e6be3fe8e727d2b63c6c7a91894e050a1ffcb5fa65'
         $generatedCatalog = 'bd01a4cb28d9e58bbf073b9c4ebe5ad97541d9a20f4880908229671b0620f66c'
-        $oracleExtractor = '1f5f26f4d302671859e7dadcf0f25d536b2601b03ee27d0a6ae35cb8723d52bd'
+        $oracleExtractor = '767c73dd8f2caf35575324aae7ac09e2460a3506f9ad6c8296d2bee6e973a2d5'
         $oracleSpec = 'a85a92267033246b175315f2935ebbc56dd5002d7722975e460e516758036e26'
         $oracleRoutes = '5cfe899ef388217f0947572fe9cd2aef0d011f9f4feadb679757912d82c56a27'
     }

@@ -1,5 +1,21 @@
 # Weapon Tweaker Changelog
 
+## 0.12.319-beta (2026-08-29) -- source-exact Patch 3.2 One-Handed Axe history (#1436) [not-started]
+
+- Adds **Game Version 3.1.0** to Kerillian's One-handed Axe history dropdown.
+  The historical state restores the push-follow-up's `10%` additional critical
+  chance; `Current` remains the gameplay-inert default and leaves the now-absent
+  source field absent.
+- Selects exactly one scalar operation from the pinned adjacent 3.1.0-to-3.2
+  boundary, then independently rehydrates its current absence guard and
+  regenerates the byte-exact public/dev catalog under PowerShell 7 and Windows
+  PowerShell 5.1.
+- Repairs the independent source oracle so mutable symbolic roots are isolated
+  between immutable revisions. The adversarial self-test proves the older
+  fallback-global source shape cannot erase a real diff. No profile, hook, RPC,
+  global gameplay table, or presentation state is added. #1436 remains open for
+  the remaining historical slices.
+
 ## 0.12.318-beta (2026-08-29) -- source-exact Patch 4.6 Hagbane history (#1436) [not-started]
 
 - Adds **Game Version 4.5.1** to Kerillian's Hagbane Shortbow history dropdown.
