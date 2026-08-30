@@ -1,5 +1,33 @@
 # Tweaker: GUI — Changelog
 
+## 0.2.288 (2026-08-30) — verified Damage Taken award promotion (#1151)
+
+### Why
+
+- Promote the independently verified end-score correction without absorbing
+  unrelated GUI Dev work.
+
+### Changed
+
+- Recomputes only the Damage Taken row's green-circle candidate from the
+  numeric scores vanilla already accumulated, so the lowest positive value can
+  win while legitimate zeroes and ties remain valid (#1151).
+- Leaves every other scoreboard row, renderer, transport, and persistence path
+  unchanged. Diagnostic evidence remains bounded to eight records per process.
+
+### Verification
+
+- Rain verified the corrected winner in an Adventure end screen on GUI Dev and
+  the attached session log recorded the bounded repair plus a passing
+  `issue1151_damage_taken_green_circle_minimum` runtime check.
+- The promoted adapter and pure policy are the byte-proven GUI Dev implementation,
+  changed only for the stable `gut` namespace and source path.
+
+### Notes
+
+- This is a selective stable promotion. It excludes every open, diagnostic, and
+  otherwise unverified GUI Dev feature.
+
 ## 0.2.287 (2026-08-29) — verified WT Dev discovery and clean labels (#636, #694)
 
 ### Why
