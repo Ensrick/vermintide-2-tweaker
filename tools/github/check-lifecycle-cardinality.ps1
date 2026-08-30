@@ -200,6 +200,11 @@ function Invoke-SelfTest {
         Records = @(
             [pscustomobject]@{
                 ModId='wt_dev'; Version='1.2.3-dev'; WorkshopId='1111111111'
+                SourceCommit='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+                RootBundle='0123456789abcdef.mod_bundle'
+                RootBundleSha256='1111111111111111111111111111111111111111111111111111111111111111'
+                AssetFilename='weapon_tweaker_dev.zip'
+                AssetSha256='2222222222222222222222222222222222222222222222222222222222222222'
                 LoadRoutes=@([pscustomobject]@{Marker='[wt:LOAD]'})
                 ExactBannerRoutes=@([pscustomobject]@{Tag='[wt]'})
                 CommandRoutes=@(
@@ -220,6 +225,11 @@ function Invoke-SelfTest {
             },
             [pscustomobject]@{
                 ModId='ct_dev'; Version='2.3.4-dev'; WorkshopId='2222222222'
+                SourceCommit='bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+                RootBundle='fedcba9876543210.mod_bundle'
+                RootBundleSha256='3333333333333333333333333333333333333333333333333333333333333333'
+                AssetFilename='career_tweaker_dev.zip'
+                AssetSha256='4444444444444444444444444444444444444444444444444444444444444444'
                 LoadRoutes=@([pscustomobject]@{Marker='[ct:LOAD]'})
                 ExactBannerRoutes=@([pscustomobject]@{Tag='[ct]'})
                 CommandRoutes=@([pscustomobject]@{Command='/ct_probe'})
@@ -264,6 +274,57 @@ function Invoke-SelfTest {
     Assert-Contract 'second selected build may omit payload coordinates' ($multiTarget -replace '(?m)^Workshop item `2222222222`.+$','') $true $null
     Assert-Contract 'second selected build item-only coordinate is rejected' (($multiTarget -replace '(?m)^Workshop item `2222222222`.+$','Workshop item `2222222222`.')) $false 'workshop-item-without-manifest:*'
     Assert-Contract 'conflicting trailing manifest' ($contractCard + "`nManifestID ``7000000001``.") $false 'distinct-manifests-for-workshop-item:*'
+
+    # #1102: typed current/live artifact headings are release authority. The
+    # refresher and strict guard consume the same pure reviewer, while exact
+    # Feature provenance remains immutable historical evidence.
+    $currentReceiptLine = '**Current receipt:** Workshop item `1111111111`, ManifestID `9000000001`; root `0123456789abcdef.mod_bundle` SHA-256 `1111111111111111111111111111111111111111111111111111111111111111`; exact source `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`.'
+    $currentReceiptCard = $contractCard -replace '(?m)^\*\*Workshop:\*\*.+$', $currentReceiptLine
+    Assert-Contract 'typed current receipt matches release artifact authority' $currentReceiptCard $true $null
+    Assert-Contract 'typed current receipt rejects stale source' `
+        ($currentReceiptCard.Replace('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','cccccccccccccccccccccccccccccccccccccccc')) `
+        $false 'current-artifact-source-drift:*'
+    Assert-Contract 'typed current receipt rejects stale root digest' `
+        ($currentReceiptCard.Replace('1111111111111111111111111111111111111111111111111111111111111111','5555555555555555555555555555555555555555555555555555555555555555')) `
+        $false 'current-artifact-root-sha256-drift:*'
+    Assert-Contract 'typed current receipt rejects wrong root filename independently' `
+        ($currentReceiptCard.Replace('0123456789abcdef.mod_bundle','wrong.mod_bundle')) `
+        $false 'current-artifact-root-name-drift:*'
+
+    $exactArtifactCard = $contractCard -replace '(?m)^\*\*Workshop:\*\*.+$', `
+        '**Exact live artifact:** Workshop item `1111111111`, ManifestID `9000000001`; `weapon_tweaker_dev.zip` SHA-256 `2222222222222222222222222222222222222222222222222222222222222222`'
+    $exactArtifactCard += "`n**Exact source:** ``aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa``"
+    Assert-Contract 'exact live ZIP and source match release artifact authority' $exactArtifactCard $true $null
+    Assert-Contract 'exact live artifact rejects stale ZIP digest' `
+        ($exactArtifactCard.Replace('2222222222222222222222222222222222222222222222222222222222222222','6666666666666666666666666666666666666666666666666666666666666666')) `
+        $false 'current-artifact-zip-sha256-drift:*'
+    Assert-Contract 'exact live artifact rejects wrong ZIP filename independently' `
+        ($exactArtifactCard.Replace('weapon_tweaker_dev.zip','wrong.zip')) `
+        $false 'current-artifact-zip-name-drift:*'
+    Assert-Contract 'partial root tuple fails closed' `
+        ($contractCard -replace '(?m)^\*\*Workshop:\*\*.+$', '**Current receipt:** Workshop item `1111111111`, ManifestID `9000000001`; root SHA-256 `short`') `
+        $false 'current-artifact-root-unparseable:*'
+    Assert-Contract 'unrecognized hash in typed current line fails closed' `
+        ($currentReceiptCard.Replace('exact source `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`.', 'exact source `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`; unexplained `7777777777777777777777777777777777777777`.')) `
+        $false 'current-artifact-unrecognized-hash:*'
+    Assert-Contract 'unexplained-only hash in typed current line fails closed' `
+        ($currentReceiptCard -replace 'root `0123456789abcdef\.mod_bundle` SHA-256 `1{64}`; exact source `a{40}`\.', 'opaque `7777777777777777777777777777777777777777`.') `
+        $false 'current-artifact-unrecognized-hash:*'
+    Assert-Contract 'multi-target exact source without item is ambiguous' `
+        ($multiTarget + "`n**Exact source:** ``aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa``") `
+        $false 'current-artifact-target-ambiguous:*'
+
+    $featureProvenanceCard = $contractCard + "`n**Feature provenance:** source ``cccccccccccccccccccccccccccccccccccccccc``; ZIP SHA-256 ``6666666666666666666666666666666666666666666666666666666666666666``."
+    Assert-Contract 'Feature provenance remains immutable historical evidence' $featureProvenanceCard $true $null
+    $reportOnlyArtifact = Get-VtLiveTestCardSelection -Comments @([pscustomobject]@{
+        body=$currentReceiptCard.Replace('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa','cccccccccccccccccccccccccccccccccccccccc')
+    }) -Authority $authority
+    if (-not $reportOnlyArtifact.Valid -or
+        @($reportOnlyArtifact.AuthorityErrors | Where-Object { $_ -like 'current-artifact-source-drift:*' }).Count -ne 1 -or
+        @($reportOnlyArtifact.Advisories | Where-Object { $_ -like 'current-artifact-source-drift:*' }).Count -ne 1) {
+        throw 'report-only rollout did not surface typed current artifact drift as one advisory'
+    }
+
     Assert-Contract 'non-printf diagnostic evidence' ($contractCard.Replace('[gt:probe]', '[gt:debug-only]')) $false 'diagnostic-evidence-not-in-selected-build:*'
     Assert-Contract 'other selected-record evidence cannot leak' ($contractCard.Replace('[gt:probe]', '[ct:only]')) $false 'diagnostic-evidence-not-in-selected-build:*'
     Assert-Contract 'marker-only evidence cannot hide an unbounded sibling' ($contractCard.Replace('[gt:probe] result=ok','[gt:probe]')) $false 'diagnostic-evidence-not-bounded:*'

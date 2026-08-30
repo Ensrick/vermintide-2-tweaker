@@ -194,14 +194,26 @@ end)
                 friendly_name='Fixture'
                 workshop_id='1234567890'
                 version='1.2.3-dev'
+                asset_filename='fixture_mod.zip'
+                sha256=('e' * 64)
                 source_commit=$commit
                 source_state='clean'
+                root_bundle='0123456789abcdef.mod_bundle'
+                bundle_files=@([pscustomobject]@{
+                    filename='0123456789abcdef.mod_bundle'
+                    sha256=('f' * 64)
+                })
             })
         }
 
         $contract = Get-VtDeployedSourceContract -RepoRoot $tmp -ReleaseManifest $manifest
         Assert-VtContractFixture (@($contract.Records).Count -eq 1) 'Fixture authority did not resolve exactly one record.'
         $record = @($contract.Records)[0]
+        Assert-VtContractFixture ([string]$record.SourceCommit -ceq $commit) 'Exact source commit was not projected into card authority.'
+        Assert-VtContractFixture ([string]$record.RootBundle -ceq '0123456789abcdef.mod_bundle') 'Root bundle filename was not projected into card authority.'
+        Assert-VtContractFixture ([string]$record.RootBundleSha256 -ceq ('f' * 64)) 'Root bundle digest was not projected into card authority.'
+        Assert-VtContractFixture ([string]$record.AssetFilename -ceq 'fixture_mod.zip') 'ZIP filename was not projected into card authority.'
+        Assert-VtContractFixture ([string]$record.AssetSha256 -ceq ('e' * 64)) 'ZIP digest was not projected into card authority.'
         Assert-VtContractFixture (@($record.LoadRoutes.Marker) -contains '[fx:LOAD]') 'Literal LOAD route was not recovered.'
         Assert-VtContractFixture (@($record.LoadRoutes.Marker) -notcontains '[bait:LOAD]') 'String-only LOAD bait was accepted.'
         Assert-VtContractFixture (@($record.LoadRoutes.Marker) -notcontains '[dead:LOAD]') 'Literal-false LOAD route was accepted.'
@@ -438,6 +450,21 @@ rawset(_G, "printf", mod.debug)
         catch { $rejected = $_.Exception.Message -match 'MOD_VERSION drift' }
         Assert-VtContractFixture $rejected 'Manifest/source version mismatch was accepted.'
         $manifest.mods[0].version = '1.2.3-dev'
+
+        $manifest.mods[0].sha256 = 'not-a-sha256'
+        $rejected = $false
+        try { Get-VtDeployedSourceContract -RepoRoot $tmp -ReleaseManifest $manifest | Out-Null }
+        catch { $rejected = $_.Exception.Message -match 'ZIP sha256' }
+        Assert-VtContractFixture $rejected 'Malformed ZIP authority was accepted.'
+        $manifest.mods[0].sha256 = ('e' * 64)
+
+        $savedBundleFiles = $manifest.mods[0].bundle_files
+        $manifest.mods[0].bundle_files = @()
+        $rejected = $false
+        try { Get-VtDeployedSourceContract -RepoRoot $tmp -ReleaseManifest $manifest | Out-Null }
+        catch { $rejected = $_.Exception.Message -match 'must resolve to exactly one bundle_files row' }
+        Assert-VtContractFixture $rejected 'A root bundle missing from bundle_files was accepted.'
+        $manifest.mods[0].bundle_files = $savedBundleFiles
 
         $manifest.mods += [pscustomobject]@{
             mod_id='fixture'
