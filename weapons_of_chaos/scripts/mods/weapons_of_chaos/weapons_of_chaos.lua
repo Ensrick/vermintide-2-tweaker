@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.58-dev"
+local MOD_VERSION = "0.1.59-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -165,8 +165,7 @@ local _issue613 = mod:dofile("scripts/mods/weapons_of_chaos/_woc_issue613_previe
 local _appearance_lib = mod:dofile("scripts/mods/weapons_of_chaos/_lib_weapon_appearance")
 local _durable_transform_lib = mod:dofile(
 	"scripts/mods/weapons_of_chaos/_woc_durable_transform")
-local _appearance_fade = mod:dofile(
-	"scripts/mods/weapons_of_chaos/_lib_appearance_fade").new({
+local _appearance_fade, _resource_residency = _appearance.load_runtime_helpers(mod, {
 	alive = function(unit) return Unit and Unit.alive and Unit.alive(unit) end,
 	get_extension = function(owner, name)
 		return ScriptUnit and ScriptUnit.has_extension
@@ -182,14 +181,13 @@ local _appearance_fade = mod:dofile(
 			tostring(row.edge), tostring(row.reason), tonumber(row.count) or 0,
 			tostring(row.error))
 	end,
-})
+}, _rt_register, printf)
 local _career_weapon_actions = mod:dofile(
 	"scripts/mods/weapons_of_chaos/_lib_career_weapon_actions")
 local _career_action_owner = "weapons_of_chaos"
 local _audio_lib = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_audio")
 local _pulse_lib = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_pulse")
-mod._woc_resource_residency = mod:dofile(
-	"scripts/mods/weapons_of_chaos/_lib_resource_residency")
+mod._woc_resource_residency = _resource_residency
 local _spirits = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_spirits")
 local _inventory_icons = mod:dofile("scripts/mods/weapons_of_chaos/_woc_inventory_icons")
 local _relic_policy = mod:dofile("scripts/mods/weapons_of_chaos/_woc_relic_policy")

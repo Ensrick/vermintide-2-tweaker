@@ -1,5 +1,17 @@
 # Weapons of Chaos — Changelog
 
+## v0.1.59-dev (2026-08-31) - prevent source-only helper regressions (#595)
+
+- Added the omitted appearance-fade and resource-residency helpers to WOC's
+  compiled Lua package. Both existed in source and the build receipt but were
+  absent from the released v0.1.58-dev root bundle.
+- Made optional fade construction fail closed through a bounded no-op adapter;
+  missing, throwing, or malformed helper modules no longer cascade into entry
+  initialization failure. A named runtime check proves both required helpers.
+- Replaced the line-local dofile/package guard with a comment-aware multiline
+  Lua tokenizer. PS7 and PS5.1 adversaries cover colon, dot, protected pcall,
+  strings, comments, wildcards, and wrong package sections.
+
 ## v0.1.58-dev (2026-08-28) - make Cursed rarity registration transactional (#428) [not-started]
 
 - Routed both eager and in-mission Blightreaper rarity installation through the

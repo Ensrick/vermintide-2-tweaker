@@ -138,6 +138,98 @@ function M.appearance_api(globals)
 	}
 end
 
+-- Issue #595 regression containment. A package omission must not cascade from
+-- VMF's nil/throwing dofile result into entry-point initialization. The real
+-- fade adapter is optional presentation behavior; its absence disables only
+-- late linked-unit enrollment and reports one bounded reason.
+function M.new_fade_adapter(module, deps, report)
+	local function unavailable(reason)
+		if type(report) == "function" then pcall(report, reason) end
+		local fallback = {}
+		function fallback:enroll(_, edge)
+			return false, {
+				edge = edge,
+				reason = "adapter_unavailable",
+				count = 0,
+				error = reason,
+			}
+		end
+		function fallback:last_report()
+			return nil
+		end
+		return fallback, false, reason
+	end
+
+	if type(module) ~= "table" then
+		return unavailable("module_unavailable")
+	end
+	local member_ok, constructor = pcall(function() return module.new end)
+	if not member_ok or type(constructor) ~= "function" then
+		return unavailable("constructor_unavailable")
+	end
+	local create_ok, instance = pcall(constructor, deps)
+	if not create_ok then
+		return unavailable("constructor_failed:" .. tostring(instance))
+	end
+	local shape_ok, enroll = pcall(function() return instance and instance.enroll end)
+	if not shape_ok or type(instance) ~= "table" or type(enroll) ~= "function" then
+		return unavailable("adapter_shape_invalid")
+	end
+	return instance, true, "ready"
+end
+
+local function guarded_dofile(mod, path)
+	local member_ok, loader = pcall(function() return mod and mod.dofile end)
+	if not member_ok or type(loader) ~= "function" then
+		return false, member_ok and "dofile_unavailable" or loader
+	end
+	return pcall(loader, mod, path)
+end
+
+local function safe_printf(printf_fn, fmt, ...)
+	if type(printf_fn) == "function" then pcall(printf_fn, fmt, ...) end
+end
+
+-- Keep the entry point declarative: this boundary owns both package-backed
+-- helper loads, their fail-closed substitutes, and the one named runtime check.
+function M.load_runtime_helpers(mod, fade_deps, rt_register, printf_fn)
+	local fade_ok, fade_module = guarded_dofile(
+		mod, "scripts/mods/weapons_of_chaos/_lib_appearance_fade")
+	local fade, fade_ready, fade_reason = M.new_fade_adapter(
+		fade_ok and fade_module or nil, fade_deps)
+	if not fade_ready then
+		safe_printf(printf_fn,
+			"[WOC:595] fade adapter unavailable; continuing without custom fade enrollment reason=%s load=%s",
+			tostring(fade_reason), fade_ok and "returned" or tostring(fade_module))
+	end
+
+	local residency_ok, residency = guarded_dofile(
+		mod, "scripts/mods/weapons_of_chaos/_lib_resource_residency")
+	local residency_ready = residency_ok and type(residency) == "table"
+		and type(residency.resource_resident) == "function"
+	if not residency_ready then
+		safe_printf(printf_fn,
+			"[WOC:595] residency helper unavailable; pulse admission will use its fail-closed compatibility path load=%s",
+			residency_ok and "invalid-shape" or tostring(residency))
+	end
+
+	if type(rt_register) == "function" then
+		rt_register("issue595_required_runtime_helpers_loaded", function()
+			if not fade_ok or not fade_ready then
+				error("appearance fade helper unavailable")
+			end
+			if not residency_ready then
+				error("resource residency helper unavailable")
+			end
+		end)
+	else
+		safe_printf(printf_fn,
+			"[WOC:595] runtime helper check registration unavailable")
+	end
+
+	return fade, residency_ready and residency or nil
+end
+
 -- Install only forward name -> vanilla index aliases. The numeric reverse
 -- lookup remains vanilla, so a peer that lacks WOC never decodes a custom path.
 function M.install_network_package_aliases(lookup)
