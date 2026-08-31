@@ -7,6 +7,22 @@
 return {
     catalogs = {
         {
+            catalog_id = "wt_history_patch_2_0_6_v1",
+            cumulative_backfill = false,
+            declared_scope = "Patch 2.0.6 Handgun hipfire/aimed penetration leaves projected onto both current gameplay clones",
+            exclusions = {
+                { id = "adjacent_key_order_churn", reason = "all other handguns.lua movement is table-key ordering" },
+                { id = "unrelated_dot_network_sync", reason = "the adjacent weapons.lua DoT network-sync fix is outside this Handgun boundary" },
+                { id = "current_versus_clones", reason = "current Versus Handgun clones do not exist at the adjacent boundary" },
+            },
+            family_states = {
+                { family_id = "handgun_shared", operations = 6, profiles = 0, state_id = "2_0_5" },
+            },
+            later_same_leaf_policy = "only the three adjacent leaves are projected onto each exact current gameplay clone over source-derived guards",
+            official_coverage = "complete_for_declared_scope",
+            projection_kind = "adjacent_delta",
+        },
+        {
             catalog_id = "wt_history_patch_3_1_v1",
             cumulative_backfill = false,
             declared_scope = "Patch 3.1 Blunderbuss maximum-ammunition and Tuskgor Spear block-cost leaves only",
@@ -146,10 +162,10 @@ return {
     schema = 1,
     stream_identity = "public_dev_byte_identical",
     totals = {
-        catalogs = 8,
-        families = 21,
-        family_states = 32,
-        operations = 201,
-        states = 10,
+        catalogs = 9,
+        families = 22,
+        family_states = 33,
+        operations = 207,
+        states = 11,
     },
 }

@@ -83,8 +83,8 @@ try {
         $tuskgorRehydratedEvidence = '6b5030dc1316a6080f1ae579d3beed3cff637d64d621d8d10701c6add6f9f5d3'
         $generatedCatalog = '60539707496e9ecb1e77aa3d6b4168aca96d271c2ff92a7267d0637d544018ad'
         $devCatalog = '60539707496e9ecb1e77aa3d6b4168aca96d271c2ff92a7267d0637d544018ad'
-        $ledger = '2bc38b6f53624e7e9b54661131a3ca1f849b02d7737f4661f7f0fa9fc9f88a56'
-        $devLedger = '2bc38b6f53624e7e9b54661131a3ca1f849b02d7737f4661f7f0fa9fc9f88a56'
+        $ledger = '78abbe4c437386c4557ecf89c9c63b88b7cceab860128a5f480accc665475be5'
+        $devLedger = '78abbe4c437386c4557ecf89c9c63b88b7cceab860128a5f480accc665475be5'
     }
     foreach ($entry in $pinned.GetEnumerator()) {
         if (-not (Test-Path -LiteralPath $entry.Key -PathType Leaf)) {

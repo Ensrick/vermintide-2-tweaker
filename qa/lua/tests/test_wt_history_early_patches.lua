@@ -1,5 +1,5 @@
--- Source-bound direct-operation coverage for the early Patch 3.1, 3.2, and
--- 4.1.1 weapon-history slices. Keeping these adjacent-boundary contracts in a
+-- Source-bound direct-operation coverage for the early Patch 2.0.6, 3.1, 3.2,
+-- and 4.1.1 weapon-history slices. Keeping these adjacent-boundary contracts in a
 -- focused suite prevents the composite history owner from regrowing past the
 -- repository's 1,500-line test target.
 
@@ -14,6 +14,142 @@ local function register(H, repo_root)
         file:close()
         return content
     end
+
+    local function clone(value, seen)
+        if type(value) ~= "table" then return value end
+        seen = seen or {}
+        if seen[value] then return seen[value] end
+        local copy = {}
+        seen[value] = copy
+        for key, child in pairs(value) do
+            copy[clone(key, seen)] = clone(child, seen)
+        end
+        return copy
+    end
+
+    H.test("WT #1436 generated Patch 2.0.6 catalog pins both Handgun clones", function()
+        local catalog = assert(loadfile(script_root
+            .. "_wt_history_2_0_6_catalog.lua"))()
+        local valid, validation_error = Policy.validate(catalog)
+        H.equal(validation_error, nil)
+        H.equal(valid, true)
+        H.equal(catalog.schema, 2)
+        H.equal(catalog.catalog_id, "wt_history_patch_2_0_6_v1")
+        H.equal(catalog.current_source.revision,
+            "038498af2b565bcb10bf5ed225638293a7640c83")
+        H.equal(#catalog.families, 1)
+        H.equal(next(catalog.profile_specs), nil)
+        H.equal(next(catalog.derived_profiles), nil)
+
+        local family = catalog.families[1]
+        H.equal(family.id, "handgun_shared")
+        H.equal(family.setting_id, "wt_history_handgun_shared")
+        H.equal(family.display_name, "Kruber's and Bardin's Handguns")
+        H.deep_equal(family.templates, {
+            "handgun_template_1", "handgun_template_2",
+        })
+        H.deep_equal(family.state_order, { "2_0_5" })
+        H.equal(catalog.states["2_0_5"].source_revision,
+            "b5a93414e883825f69c61eb3e90e73f52d6c2e80")
+        H.equal(catalog.states["2_0_5"].official_patch_notes,
+            "https://forums.fatsharkgames.com/t/vermintide-2-patch-2-0-6-1/35277")
+
+        local state = family.states["2_0_5"]
+        H.equal(state.atomic_group, "P206-HANDGUN-SHIELD-PIERCE")
+        H.deep_equal(state.profile_names, {})
+        H.deep_equal(state.direct_profile_names, {})
+        H.equal(#state.operations, 6)
+        local expected = {
+            ["actions.action_one.default.ignore_shield_hit"] = {
+                expected_present = true, expected_current = true,
+                result_present = false,
+            },
+            ["actions.action_one.zoomed_shot.ignore_armour_hit"] = {
+                expected_present = false, result_present = true, result = true,
+            },
+            ["actions.action_one.zoomed_shot.ignore_shield_hit"] = {
+                expected_present = true, expected_current = true,
+                result_present = false,
+            },
+        }
+        local seen = {}
+        for _, row in ipairs(state.operations) do
+            local key = row.template .. "|" .. table.concat(row.path, ".")
+            H.equal(seen[key], nil)
+            seen[key] = true
+            local contract = assert(expected[table.concat(row.path, ".")])
+            H.equal(row.expected_present, contract.expected_present)
+            H.equal(row.expected_current, contract.expected_current)
+            H.equal(row.result_present, contract.result_present)
+            H.equal(row.result, contract.result)
+            H.equal(row.family_id, family.id)
+            H.equal(row.state_id, "2_0_5")
+            H.equal(row.official_change_id, "P206-HANDGUN-SHIELD-PIERCE")
+            H.equal(row.change_class, "official_weapon_balance")
+            H.equal(row.source_revision,
+                "b5a93414e883825f69c61eb3e90e73f52d6c2e80")
+            H.equal(row.source_blob,
+                "9068877534daa29eb050d51cf548c7677a2000b3")
+            H.equal(row.current_source_blob,
+                "547f75e51dbf656184ed351ecd261714db4f25fe")
+        end
+        H.equal(next(seen) ~= nil, true)
+        H.deep_equal(catalog.generation, {
+            adjacent_operation_count = 6,
+            global_operations = 0,
+            profile_route_count = 0,
+            unsupported_count = 0,
+        })
+        H.equal(read_file(script_root .. "_wt_history_2_0_6_catalog.lua"),
+            read_file(repo_root
+                .. "/weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/"
+                .. "_wt_history_2_0_6_catalog.lua"),
+            "public and dev must carry byte-identical pure Patch 2.0.6 data")
+
+        local function current_template(owner)
+            return {
+                actions = { action_one = {
+                    default = { ignore_shield_hit = true, owner = owner },
+                    zoomed_shot = { ignore_shield_hit = true, owner = owner },
+                } },
+                presentation = { owner = owner },
+            }
+        end
+        local roots = {
+            BuffTemplates = {}, ExplosionTemplates = {},
+            PlayerUnitStatusSettings = {}, VortexTemplates = {},
+            Weapons = {
+                handgun_template_1 = current_template("kruber"),
+                handgun_template_2 = current_template("bardin"),
+            },
+        }
+        local before = clone(roots)
+        local plan = assert(Policy.build_family_plan(
+            catalog, family, "2_0_5", roots))
+        H.equal(#plan, 6)
+        local ledger = assert(Policy.commit(plan))
+        for _, template_name in ipairs(family.templates) do
+            local template = roots.Weapons[template_name]
+            H.equal(template.actions.action_one.default.ignore_shield_hit, nil)
+            H.equal(template.actions.action_one.zoomed_shot.ignore_shield_hit, nil)
+            H.equal(template.actions.action_one.zoomed_shot.ignore_armour_hit, true)
+            H.equal(template.presentation.owner,
+                template_name == "handgun_template_1" and "kruber" or "bardin")
+        end
+        H.equal(Policy.restore(ledger), true)
+        H.deep_equal(roots, before)
+
+        local hostile = clone(before)
+        hostile.Weapons.handgun_template_2.actions.action_one.zoomed_shot
+            .ignore_armour_hit = true
+        local hostile_before = clone(hostile)
+        local refused, refusal = Policy.build_family_plan(
+            catalog, family, "2_0_5", hostile)
+        H.equal(refused, nil)
+        H.truthy(refusal and refusal:find("current guard mismatch", 1, true))
+        H.deep_equal(hostile, hostile_before,
+            "one stale clone must refuse the complete six-write plan")
+    end)
 
     H.test("WT #1436 generated Patch 3.2 catalog pins one absent-current Axe change", function()
         local catalog = assert(loadfile(script_root .. "_wt_history_3_2_catalog.lua"))()

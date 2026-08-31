@@ -8,6 +8,8 @@
 local function register(H, repo_root)
     local oracle_root = repo_root .. "/tools/weapon-history/source_oracle/"
     local evidence_root = repo_root .. "/tools/weapon-history/evidence/patch_5_2/"
+    local patch_2_0_6_evidence_root = repo_root
+        .. "/tools/weapon-history/evidence/patch_2_0_6/"
     local patch_4_1_1_evidence_root = repo_root
         .. "/tools/weapon-history/evidence/patch_4_1_1/"
     local runtime_root = repo_root .. "/weapon_tweaker/scripts/mods/weapon_tweaker/"
@@ -17,6 +19,14 @@ local function register(H, repo_root)
     local source_catalog = assert(loadfile(
         evidence_root .. "_wt_history_5_2_source_catalog.lua"))()
     local catalog = assert(loadfile(runtime_root .. "_wt_history_5_2_catalog.lua"))()
+    local patch_2_0_6_source_catalog = assert(loadfile(
+        patch_2_0_6_evidence_root .. "_wt_history_2_0_6_source_catalog.lua"))()
+    local patch_2_0_6_adjacent = assert(loadfile(patch_2_0_6_evidence_root
+        .. "_wt_history_snapshot_2_0_5_to_2_0_6_generated.lua"))()
+    local patch_2_0_6_rehydrated = assert(loadfile(patch_2_0_6_evidence_root
+        .. "_wt_history_snapshot_2_0_5_rehydrated_generated.lua"))()
+    local patch_2_0_6_catalog = assert(loadfile(runtime_root
+        .. "_wt_history_2_0_6_catalog.lua"))()
     local patch_4_1_1_source_catalog = assert(loadfile(
         patch_4_1_1_evidence_root .. "_wt_history_4_1_1_source_catalog.lua"))()
     local patch_4_1_1_adjacent = assert(loadfile(patch_4_1_1_evidence_root
@@ -350,6 +360,74 @@ local function register(H, repo_root)
         if not outcome[1] then error(outcome[2], 0) end
         return unpack(outcome, 2)
     end
+
+    H.test("WT #1436 Patch 2.0.6 evidence pins three leaves before clone projection", function()
+        H.equal(patch_2_0_6_source_catalog.schema, 1)
+        H.equal(patch_2_0_6_source_catalog.boundary.historical_revision,
+            "b5a93414e883825f69c61eb3e90e73f52d6c2e80")
+        H.equal(patch_2_0_6_source_catalog.boundary.historical_blob,
+            "9068877534daa29eb050d51cf548c7677a2000b3")
+        H.equal(patch_2_0_6_source_catalog.boundary.post_revision,
+            "750fa8f8a393d807f2f7205dfed4b60b6abe3c46")
+        H.equal(patch_2_0_6_source_catalog.boundary.post_blob,
+            "a04a5e7579702c75f7ccbfc4dde33363b1e13c84")
+        H.equal(patch_2_0_6_source_catalog.current.revision,
+            "038498af2b565bcb10bf5ed225638293a7640c83")
+        H.equal(patch_2_0_6_source_catalog.current.blob,
+            "547f75e51dbf656184ed351ecd261714db4f25fe")
+        H.deep_equal(patch_2_0_6_source_catalog.family.templates, {
+            "handgun_template_1", "handgun_template_2",
+        })
+
+        H.equal(#patch_2_0_6_adjacent.records, 1)
+        H.equal(patch_2_0_6_adjacent.records[1].template,
+            "handgun_template_1")
+        H.equal(#patch_2_0_6_adjacent.records[1].ops, 3)
+        local adjacent = patch_2_0_6_adjacent.records[1].ops
+        H.deep_equal(adjacent[1].path, {
+            "actions", "action_one", "default", "ignore_shield_hit",
+        })
+        H.equal(adjacent[1].unset, true)
+        H.deep_equal(adjacent[2].path, {
+            "actions", "action_one", "zoomed_shot", "ignore_armour_hit",
+        })
+        H.equal(adjacent[2].unset, false)
+        H.equal(adjacent[2].value, true)
+        H.deep_equal(adjacent[3].path, {
+            "actions", "action_one", "zoomed_shot", "ignore_shield_hit",
+        })
+        H.equal(adjacent[3].unset, true)
+
+        H.equal(#patch_2_0_6_rehydrated.records, 1)
+        H.equal(#patch_2_0_6_rehydrated.records[1].ops, 3)
+        local rehydrated = patch_2_0_6_rehydrated.records[1].ops
+        H.equal(rehydrated[1].expected_current_unset, false)
+        H.equal(rehydrated[1].expected_current, true)
+        H.equal(rehydrated[2].expected_current_unset, true)
+        H.equal(rawget(rehydrated[2], "expected_current"), nil)
+        H.equal(rehydrated[3].expected_current_unset, false)
+        H.equal(rehydrated[3].expected_current, true)
+
+        local family = patch_2_0_6_catalog.families[1]
+        local operations = family.states["2_0_5"].operations
+        H.equal(family.id, "handgun_shared")
+        H.equal(#operations, 6)
+        for index = 1, 3 do
+            local kruber, bardin = operations[index], operations[index + 3]
+            H.equal(kruber.template, "handgun_template_1")
+            H.equal(bardin.template, "handgun_template_2")
+            H.deep_equal(kruber.path, rehydrated[index].path)
+            H.deep_equal(bardin.path, rehydrated[index].path)
+            H.equal(kruber.expected_present,
+                not rehydrated[index].expected_current_unset)
+            H.equal(bardin.expected_present, kruber.expected_present)
+            H.equal(bardin.expected_current, kruber.expected_current)
+            H.equal(bardin.result_present, kruber.result_present)
+            H.equal(bardin.result, kruber.result)
+            H.equal(bardin.source_blob, kruber.source_blob)
+            H.equal(bardin.current_source_blob, kruber.current_source_blob)
+        end
+    end)
 
     H.test("WT #1436 Patch 4.1.1 evidence preserves false as a present source value", function()
         H.equal(patch_4_1_1_source_catalog.schema, 1)

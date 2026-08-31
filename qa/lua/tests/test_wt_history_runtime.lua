@@ -370,6 +370,122 @@ local function register(H, context)
         end)
     end)
 
+    H.test("WT #1436 Patch 2.0.5 Handguns apply and restore as one six-leaf unit", function()
+        with_profile_globals(function()
+            local catalog = assert(loadfile(script_root
+                .. "_wt_history_2_0_6_catalog.lua"))()
+
+            local function handgun_roots(hostile_template, hostile_leaf)
+                local function template(owner)
+                    return {
+                        actions = { action_one = {
+                            default = {
+                                ignore_shield_hit = true,
+                                sibling = { owner = owner .. " hipfire" },
+                            },
+                            zoomed_shot = {
+                                ignore_shield_hit = true,
+                                sibling = { owner = owner .. " aimed" },
+                            },
+                        } },
+                        presentation = { owner = owner },
+                    }
+                end
+                local roots = {
+                    BuffTemplates = {}, ExplosionTemplates = {},
+                    PlayerUnitStatusSettings = {}, VortexTemplates = {},
+                    Weapons = {
+                        handgun_template_1 = template("kruber"),
+                        handgun_template_2 = template("bardin"),
+                    },
+                }
+                if hostile_template and hostile_leaf == "armour_present" then
+                    roots.Weapons[hostile_template].actions.action_one.zoomed_shot
+                        .ignore_armour_hit = true
+                elseif hostile_template and hostile_leaf == "hipfire_false" then
+                    roots.Weapons[hostile_template].actions.action_one.default
+                        .ignore_shield_hit = false
+                elseif hostile_template and hostile_leaf == "aimed_absent" then
+                    roots.Weapons[hostile_template].actions.action_one.zoomed_shot
+                        .ignore_shield_hit = nil
+                end
+                return roots
+            end
+
+            local current_roots = handgun_roots()
+            local current_before = clone(current_roots)
+            local current_runtime = Runtime.install({
+                catalog = catalog,
+                mod = mod_fixture({ wt_history_handgun_shared = "current" },
+                    { value = true }),
+                policy = Policy,
+                roots = current_roots,
+            })
+            H.equal(current_runtime.fatal_error, nil)
+            H.equal(current_runtime:verify(), nil)
+            H.equal(#(current_runtime.ledgers.handgun_shared or {}), 0)
+            H.deep_equal(current_roots, current_before,
+                "Current must not touch either Handgun clone")
+
+            local historical_roots = handgun_roots()
+            local historical_before = clone(historical_roots)
+            local runtime = Runtime.install({
+                catalog = catalog,
+                mod = mod_fixture({ wt_history_handgun_shared = "2_0_5" },
+                    { value = true }),
+                policy = Policy,
+                roots = historical_roots,
+            })
+            H.equal(runtime.fatal_error, nil)
+            H.equal(runtime.last_error, nil)
+            H.equal(runtime:verify(), nil)
+            H.equal(#runtime.ledgers.handgun_shared, 6)
+            for template_name, template in pairs(historical_roots.Weapons) do
+                local actions = template.actions.action_one
+                H.equal(actions.default.ignore_shield_hit, nil,
+                    template_name .. " hipfire must return to shield-blockable")
+                H.equal(actions.zoomed_shot.ignore_shield_hit, nil,
+                    template_name .. " aimed shield route must be absent")
+                H.equal(actions.zoomed_shot.ignore_armour_hit, true,
+                    template_name .. " aimed armour route must be restored")
+                H.truthy(actions.default.sibling)
+                H.truthy(actions.zoomed_shot.sibling)
+                H.truthy(template.presentation)
+            end
+            H.equal(assert(runtime:reapply()).changed, false)
+            local restored = assert(runtime:restore())
+            H.equal(restored.refused, 0)
+            H.equal(restored.changed, true)
+            H.deep_equal(historical_roots, historical_before,
+                "restore must recover both exact current Handgun clones")
+            H.equal(assert(runtime:restore()).changed, false)
+
+            for _, hostile in ipairs({
+                { template = "handgun_template_1", leaf = "armour_present" },
+                { template = "handgun_template_2", leaf = "hipfire_false" },
+                { template = "handgun_template_2", leaf = "aimed_absent" },
+            }) do
+                local hostile_roots = handgun_roots(
+                    hostile.template, hostile.leaf)
+                local hostile_before = clone(hostile_roots)
+                local hostile_runtime = Runtime.install({
+                    catalog = catalog,
+                    mod = mod_fixture({
+                        wt_history_handgun_shared = "2_0_5",
+                    }, { value = true }),
+                    policy = Policy,
+                    roots = hostile_roots,
+                })
+                H.truthy(hostile_runtime.last_error
+                    and hostile_runtime.last_error:find(
+                        "current guard mismatch", 1, true), hostile.leaf)
+                H.equal(#(hostile_runtime.ledgers.handgun_shared or {}), 0)
+                H.deep_equal(hostile_roots, hostile_before,
+                    "one hostile clone must refuse before all six writes")
+            end
+        end)
+    end)
+
     H.test("WT #1436 Patch 6.7.2 changes only Greatsword first-heavy range", function()
         with_profile_globals(function()
             local catalog = assert(loadfile(script_root

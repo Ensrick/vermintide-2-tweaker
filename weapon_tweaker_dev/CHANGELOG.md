@@ -1,5 +1,16 @@
 # Weapon Tweaker Changelog
 
+## 0.12.324-dev (2026-08-30) -- mirror source-exact Patch 2.0.6 Handgun history (#1436) [not-started]
+
+- Mirrors public beta 0.12.323: Kruber's and Bardin's Handguns gain one shared
+  **Game Version 2.0.5** selector for the exact adjacent pre-2.0.6
+  shield/armour penetration behavior; `Current` remains inert.
+- Carries the same six-operation atomic projection, immutable source pins,
+  independent regeneration, current-clone proof, Versus exclusion, and
+  adversarial/runtime coverage as public.
+- Preserves the friends-only development overlay without adding profiles,
+  hooks, RPCs, global gameplay writes, or presentation state.
+
 ## 0.12.323-dev (2026-08-30) -- publication-claim reconciliation (#1436) [not-started]
 
 - Mirrors public beta 0.12.322 under a fresh machine-global publication claim

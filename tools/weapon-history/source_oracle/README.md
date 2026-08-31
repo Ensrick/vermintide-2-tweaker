@@ -8,7 +8,9 @@ historical/current values remain in the preserved extractor evidence; and
 in the decompiled source checkout. No runtime-catalog value is an oracle input.
 
 The same independently written evaluator also reproduces the adjacent/current
-evidence lanes for Patch 3.1, 3.2, 4.1.1, 4.6, 6.0, 6.6, and 6.8. Patch 3.1
+evidence lanes for Patch 2.0.6, 3.1, 3.2, 4.1.1, 4.6, 6.0, 6.6, and 6.8.
+Patch 2.0.6 proves the three shared historical Handgun penetration leaves
+before the generator projects them onto the two immutable current clones. Patch 3.1
 proves the bounded Blunderbuss `max_ammo` and Tuskgor Spear
 `block_fatigue_point_multiplier` boundaries and independently confirms that
 the current-only Versus template is outside the adjacent Blunderbuss family.
