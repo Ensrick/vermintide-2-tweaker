@@ -1,5 +1,17 @@
 # Weapon Tweaker Changelog
 
+## 0.12.325-beta (2026-08-31) -- source-exact Patch 2.0.9.1 Halberd history (#1436) [not-started]
+
+- Adds **Game Version 2.0.9** to Kruber's Halberd selector, restoring the
+  source-proven push-follow-up chain from immediately before Patch 2.0.9.1;
+  `Current` remains gameplay-inert.
+- Projects exactly 20 adjacent-boundary leaves as one family transaction.
+  One missing, foreign, or stale scalar or chain row refuses before any write,
+  while returning to Current restores the original table identities.
+- Pins the historical, post-boundary, and current source objects and verifies
+  byte-exact primary regeneration, independent-oracle agreement, public/Dev
+  parity, and adversarial rollback under both supported PowerShell hosts.
+
 ## 0.12.324-beta (2026-08-31) -- source-exact Patch 2.0.10 Sword and Dagger history (#1436) [not-started]
 
 - Adds **Game Version 2.0.9.1** to Kerillian's Sword and Dagger selector,

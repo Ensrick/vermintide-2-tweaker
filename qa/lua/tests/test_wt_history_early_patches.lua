@@ -1,7 +1,7 @@
--- Source-bound direct-operation coverage for the early Patch 2.0.6, 3.1, 3.2,
--- and 4.1.1 weapon-history slices. Keeping these adjacent-boundary contracts in a
--- focused suite prevents the composite history owner from regrowing past the
--- repository's 1,500-line test target.
+-- Source-bound direct-operation coverage for the early Patch 2.0.6, 2.0.9.1,
+-- 3.1, 3.2, and 4.1.1 weapon-history slices. Keeping these adjacent-boundary
+-- contracts in a focused suite prevents the composite history owner from
+-- regrowing past the repository's 1,500-line test target.
 
 local function register(H, repo_root)
     local script_root = repo_root
@@ -149,6 +149,193 @@ local function register(H, repo_root)
         H.truthy(refusal and refusal:find("current guard mismatch", 1, true))
         H.deep_equal(hostile, hostile_before,
             "one stale clone must refuse the complete six-write plan")
+    end)
+
+    H.test("WT #1436 Patch 2.0.9.1 Halberd chain is atomic and reversible", function()
+        local catalog = assert(loadfile(script_root
+            .. "_wt_history_2_0_9_1_catalog.lua"))()
+        local valid, validation_error = Policy.validate(catalog)
+        H.equal(validation_error, nil)
+        H.equal(valid, true)
+        H.equal(catalog.catalog_id,
+            "wt_history_patch_2_0_9_1_halberd_v1")
+        H.equal(catalog.current_source.revision,
+            "038498af2b565bcb10bf5ed225638293a7640c83")
+        H.equal(#catalog.families, 1)
+        H.equal(next(catalog.profile_specs), nil)
+        H.equal(next(catalog.derived_profiles), nil)
+
+        local family = catalog.families[1]
+        H.equal(family.id, "kruber_halberd")
+        H.equal(family.setting_id, "wt_history_kruber_halberd")
+        H.equal(family.display_name, "Kruber's Halberd")
+        H.deep_equal(family.templates, { "two_handed_halberds_template_1" })
+        H.deep_equal(family.state_order, { "2_0_9" })
+        H.equal(catalog.states["2_0_9"].display_name, "Game Version 2.0.9")
+        H.equal(catalog.states["2_0_9"].source_revision,
+            "6d41bab482ac64ebebc5c8bba2c3a47954952af9")
+        H.equal(catalog.states["2_0_9"].official_patch_notes,
+            "https://forums.fatsharkgames.com/t/vermintide-2-patch-2-0-9-1/36058")
+
+        local state = family.states["2_0_9"]
+        H.equal(state.atomic_group, "P2091-HALBERD-PUSH-OVERHEAD")
+        H.deep_equal(state.profile_names, {})
+        H.deep_equal(state.direct_profile_names, {})
+        H.equal(#state.operations, 20)
+        H.deep_equal(catalog.generation, {
+            adjacent_operation_count = 20,
+            global_operations = 0,
+            profile_route_count = 0,
+            unsupported_count = 0,
+        })
+        for _, operation in ipairs(state.operations) do
+            H.equal(operation.root, "Weapons")
+            H.equal(operation.template, "two_handed_halberds_template_1")
+            H.equal(operation.family_id, family.id)
+            H.equal(operation.state_id, "2_0_9")
+            H.equal(operation.official_change_id,
+                "P2091-HALBERD-PUSH-OVERHEAD")
+            H.equal(operation.change_class, "official_weapon_balance")
+            H.equal(operation.source_revision,
+                "6d41bab482ac64ebebc5c8bba2c3a47954952af9")
+            H.equal(operation.source_blob,
+                "220f6834ce7e54eaa3264792786fcdf4bb0c4198")
+            H.equal(operation.current_source_blob,
+                "68256d553f364ca97a7dabccb617020afe5a0064")
+            H.deep_equal({
+                operation.path[1], operation.path[2],
+                operation.path[3], operation.path[4],
+            }, {
+                "actions", "action_one", "light_attack_down",
+                "allowed_chain_actions",
+            })
+        end
+        H.equal(read_file(script_root .. "_wt_history_2_0_9_1_catalog.lua"),
+            read_file(repo_root
+                .. "/weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/"
+                .. "_wt_history_2_0_9_1_catalog.lua"),
+            "public and dev must carry byte-identical pure Patch 2.0.9.1 data")
+
+        local chain = {
+            {
+                end_time = 0.6,
+                marker = "first",
+                start_time = 0.5,
+                sub_action = "default_last",
+            },
+            {
+                end_time = 0.6,
+                marker = "second",
+                start_time = 0.5,
+            },
+            {
+                action = "action_one",
+                end_time = 1.8,
+                input = "action_one",
+                marker = "third",
+                release_required = "action_two_hold",
+                start_time = 0.6,
+                sub_action = "default_right",
+            },
+            {
+                action = "action_one",
+                end_time = 1.8,
+                input = "action_one_hold",
+                marker = "fourth",
+                release_required = "action_two_hold",
+                start_time = 0.6,
+                sub_action = "default_right",
+            },
+            {
+                action = "action_one", input = "action_one",
+                start_time = 1.8, sub_action = "default",
+            },
+            {
+                action = "action_two", input = "action_two_hold",
+                start_time = 0.45, sub_action = "default",
+            },
+            {
+                action = "action_wield", input = "action_wield",
+                start_time = 0.45, sub_action = "default",
+            },
+            metadata = { owner = "current-halberd" },
+        }
+        local roots = {
+            BuffTemplates = {}, ExplosionTemplates = {},
+            PlayerUnitStatusSettings = {}, VortexTemplates = {},
+            Weapons = {
+                two_handed_halberds_template_1 = {
+                    actions = { action_one = {
+                        light_attack_down = {
+                            allowed_chain_actions = chain,
+                            presentation_marker = "preserve",
+                        },
+                    } },
+                },
+            },
+        }
+        local before = clone(roots)
+        local fifth, sixth, seventh = chain[5], chain[6], chain[7]
+        local current_plan = assert(Policy.build_family_plan(
+            catalog, family, "current", roots))
+        H.equal(#current_plan, 0)
+        H.deep_equal(roots, before)
+
+        local plan = assert(Policy.build_family_plan(
+            catalog, family, "2_0_9", roots))
+        H.equal(#plan, 20)
+        local ledger = assert(Policy.commit(plan))
+        H.equal(chain[1].end_time, nil)
+        H.equal(chain[1].start_time, 0.6)
+        H.equal(chain[1].sub_action, "default_right")
+        H.equal(chain[1].marker, "first")
+        H.equal(chain[2].end_time, nil)
+        H.equal(chain[2].start_time, 0.6)
+        H.equal(chain[3].action, "action_two")
+        H.equal(chain[3].end_time, nil)
+        H.equal(chain[3].input, "action_two_hold")
+        H.equal(chain[3].release_required, nil)
+        H.equal(chain[3].start_time, 0.45)
+        H.equal(chain[3].sub_action, "default")
+        H.equal(chain[4].action, "action_wield")
+        H.equal(chain[4].end_time, nil)
+        H.equal(chain[4].input, "action_wield")
+        H.equal(chain[4].release_required, nil)
+        H.equal(chain[4].start_time, 0.45)
+        H.equal(chain[4].sub_action, "default")
+        H.equal(chain[5], nil)
+        H.equal(chain[6], nil)
+        H.equal(chain[7], nil)
+        H.equal(#chain, 4)
+        H.equal(chain.metadata.owner, "current-halberd")
+        H.equal(Policy.ledger_status(ledger, roots), "same")
+        H.equal(Policy.restore(ledger), true)
+        H.deep_equal(roots, before)
+        H.equal(chain[5], fifth)
+        H.equal(chain[6], sixth)
+        H.equal(chain[7], seventh)
+
+        local hostile = clone(before)
+        hostile.Weapons.two_handed_halberds_template_1.actions.action_one
+            .light_attack_down.allowed_chain_actions[3].input = "foreign"
+        local hostile_before = clone(hostile)
+        local refused, refusal = Policy.build_family_plan(
+            catalog, family, "2_0_9", hostile)
+        H.equal(refused, nil)
+        H.truthy(refusal and refusal:find("current guard mismatch", 1, true))
+        H.deep_equal(hostile, hostile_before,
+            "one foreign chain leaf must refuse the complete transaction")
+
+        hostile = clone(before)
+        hostile.Weapons.two_handed_halberds_template_1.actions.action_one
+            .light_attack_down.allowed_chain_actions[6].foreign = true
+        hostile_before = clone(hostile)
+        refused, refusal = Policy.build_family_plan(
+            catalog, family, "2_0_9", hostile)
+        H.equal(refused, nil)
+        H.truthy(refusal and refusal:find("current guard mismatch", 1, true))
+        H.deep_equal(hostile, hostile_before,
+            "one foreign chain row must refuse before any write")
     end)
 
     H.test("WT #1436 generated Patch 3.2 catalog pins one absent-current Axe change", function()

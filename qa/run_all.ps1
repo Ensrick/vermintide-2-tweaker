@@ -356,6 +356,10 @@ Run-Check "wt_history_source_host_matrix" { & (Join-Path $here "run_wt_history_s
 # boundary onto both current gameplay-identical clones. Reproduce the exact
 # three-leaf evidence and six-operation catalog under both PowerShell hosts.
 Run-Check "wt_history_patch_2_0_6_host_matrix" { & (Join-Path $here "run_wt_history_patch_2_0_6_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
+# Issue #1436: Patch 2.0.9.1 repaired the Halberd push-follow-up overhead.
+# Reproduce its complete 20-leaf chain projection, current guards, and exact
+# transactional restoration under both supported PowerShell hosts.
+Run-Check "wt_history_patch_2_0_9_1_host_matrix" { & (Join-Path $here "run_wt_history_patch_2_0_9_1_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
 # Issue #1436: Patch 2.0.10 exchanges the two Sword-and-Dagger heavy-profile
 # melee-boost values. Reproduce two private current-schema profiles and their
 # four explicit, atomic hand routes under both supported PowerShell hosts.
