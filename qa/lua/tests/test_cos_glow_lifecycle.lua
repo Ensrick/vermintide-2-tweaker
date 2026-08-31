@@ -207,6 +207,11 @@ return function(H, repo_root)
         H.truthy(button_owner:find('scenegraph_id = "info_window"', 1, true))
         H.truthy(entry:find("GlowPicker.position_toggle(self, glow_widget, 96, 20)", 1, true))
         H.truthy(picker:find('mod:dofile("scripts/mods/cosmetics_tweaker/_cos_glow_panel_layout")', 1, true))
+        H.truthy(picker:find(
+            "GlowPicker.frame_style = PANEL_LAYOUT.make_frame_style(GlowPicker)", 1, true))
+        H.truthy(picker:find(
+            "GlowPicker.position_toggle = PANEL_LAYOUT.make_toggle_positioner(PANEL_INSET)",
+            1, true))
         H.truthy(picker:find('scale = "fit"', 1, true))
         H.truthy(picker:find("PANEL_LAYOUT.resolve(preview_host)", 1, true))
         H.truthy(picker:find("PANEL_LAYOUT.contains(GlowPicker._panel_bounds, cx, cy)", 1, true))

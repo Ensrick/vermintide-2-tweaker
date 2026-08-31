@@ -51,6 +51,41 @@ return function(H, repo_root)
         H.equal(layout.contains(bounds, 1846, 960), false)
     end)
 
+    H.test("Cosmetics glow frame and toggle helpers remain layout-owned", function()
+        local style_owner = {
+            FRAME_TEX_SIZE = { 64, 64 },
+            FRAME_TEX_SIZES = {
+                corner = { 11, 11 },
+                vertical = { 5, 1 },
+                horizontal = { 1, 5 },
+            },
+        }
+        local frame_style = layout.make_frame_style(style_owner)
+        local frame = frame_style(96, 38, 7)
+        H.truthy(frame.texture_size == style_owner.FRAME_TEX_SIZE)
+        H.truthy(frame.texture_sizes == style_owner.FRAME_TEX_SIZES)
+        H.equal(frame.color[1], 255)
+        H.equal(frame.offset[3], 7)
+        H.equal(frame.area_size[1], 96)
+        H.equal(frame.area_size[2], 38)
+
+        local replacement = { 32, 32 }
+        style_owner.FRAME_TEX_SIZE = replacement
+        H.truthy(frame_style(1, 2).texture_size == replacement)
+
+        local position_toggle = layout.make_toggle_positioner(18)
+        local host = { _ui_scenegraph = { info_window = {
+            size = { 500, 800 }, world_position = { 1345, 160, 2 },
+        } } }
+        local widget = {}
+        H.truthy(position_toggle(host, widget, 96, 20))
+        H.equal(widget.offset[1], 386)
+        H.equal(widget.offset[2], 18)
+        H.equal(widget.offset[3], 20)
+        H.equal(position_toggle({}, widget, 96, 20), false)
+        H.equal(position_toggle(host, false, 96, 20), false)
+    end)
+
     H.test("Cosmetics glow native Information transaction always restores", function()
         local original = { "native title", "native description" }
         local host = { _info_widgets = original }

@@ -167,7 +167,10 @@ The editor replaces the contents of vanilla's right-side Information panel and
 does not cover the weapon model. `_cos_glow_panel_layout.lua` reads the live
 `HeroWindowItemCustomization._ui_scenegraph.info_window` size and world
 position; `_glow_picker.lua` binds its own `scale = "fit"` scenegraph to those
-values before input and draw. Missing or malformed host geometry fails closed.
+values before input and draw. The same pure layout owner constructs the shared
+ornate frame styles and binds the persistent toggle position, so panel chrome
+and live host geometry cannot drift between callers. Missing or malformed host
+geometry fails closed.
 The native Information frame/background remains the sole panel chrome. The
 editor is built lazily on first `open_for(...)` and includes:
 
