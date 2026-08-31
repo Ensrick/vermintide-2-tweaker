@@ -179,6 +179,25 @@ return function(H, repo_root)
         H.equal(P.world.oc_updates, 1)
     end)
 
+    H.test("GUT #209 receipts are direct and fail closed when engine printf throws", function()
+        local file = assert(io.open(root .. "_gut_camera.lua", "rb"))
+        local source = file:read("*a")
+        file:close()
+
+        H.equal(source:find('local _printf209 = rawget(_G, "printf")', 1, true), nil)
+        H.truthy(source:find('pcall(printf, "[gut:209] %s | effect=', 1, true))
+        H.truthy(source:find('pcall(printf, "[gut:209] tp-%s | live=%s"', 1, true))
+
+        local P = load_production()
+        P.env.printf = function() error("planted #209 logger failure") end
+
+        local create_ok, id = pcall(P.fp.create_screen_particles,
+            {}, "fx/screenspace_logger_fault", nil)
+        H.equal(create_ok, true)
+        H.equal(id, 101)
+        H.equal(pcall(P.mod._gut_apply_tp, true), true)
+    end)
+
     H.test("GUT #209 stop/destroy rows keep the #216 nil-guards", function()
         local P = load_production()
         local fp_self = {}
