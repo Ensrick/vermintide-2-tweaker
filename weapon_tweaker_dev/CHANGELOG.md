@@ -1,5 +1,16 @@
 # Weapon Tweaker Changelog
 
+## 0.12.325-dev (2026-08-31) -- mirror source-exact Patch 2.0.10 Sword and Dagger history (#1436) [not-started]
+
+- Mirrors public beta 0.12.324: Kerillian's Sword and Dagger gains a
+  **Game Version 2.0.9.1** state for the exact two-leaf pre-2.0.10 profile
+  boundary; `Current` remains a zero-write default.
+- Carries the same two immutable profiles, four explicit hand routes, exact
+  current guards, peer-safe fallback, independent source oracle, and dual-host
+  reproduction as public.
+- Preserves the friends-only development overlay without adding hooks, RPCs,
+  globals, or presentation state.
+
 ## 0.12.324-dev (2026-08-30) -- mirror source-exact Patch 2.0.6 Handgun history (#1436) [not-started]
 
 - Mirrors public beta 0.12.323: Kruber's and Bardin's Handguns gain one shared

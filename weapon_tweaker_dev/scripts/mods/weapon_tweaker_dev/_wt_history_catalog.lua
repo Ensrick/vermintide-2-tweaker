@@ -10,6 +10,7 @@ local M = {}
 
 local GENERATED_MODULES = {
     "scripts/mods/weapon_tweaker_dev/_wt_history_2_0_6_catalog",
+    "scripts/mods/weapon_tweaker_dev/_wt_history_2_0_10_catalog",
     "scripts/mods/weapon_tweaker_dev/_wt_history_3_1_catalog",
     "scripts/mods/weapon_tweaker_dev/_wt_history_3_2_catalog",
     "scripts/mods/weapon_tweaker_dev/_wt_history_5_2_catalog",
@@ -295,20 +296,27 @@ local function arrays_equal(left, right)
 end
 
 local function history_state_less(left, right)
-    local left_major, left_minor, left_patch = tostring(left):match(
-        "^(%d+)_(%d+)_(%d+)$")
-    local right_major, right_minor, right_patch = tostring(right):match(
-        "^(%d+)_(%d+)_(%d+)$")
-    if left_major and right_major then
-        left_major, left_minor, left_patch = tonumber(left_major),
-            tonumber(left_minor), tonumber(left_patch)
-        right_major, right_minor, right_patch = tonumber(right_major),
-            tonumber(right_minor), tonumber(right_patch)
-        if left_major ~= right_major then return left_major < right_major end
-        if left_minor ~= right_minor then return left_minor < right_minor end
-        if left_patch ~= right_patch then return left_patch < right_patch end
-    elseif left_major or right_major then
-        return left_major ~= nil
+    local function numeric_parts(value)
+        local text, parts = tostring(value), {}
+        if text:find("[^%d_]", 1) or text:find("__", 1, true)
+                or text:sub(1, 1) == "_" or text:sub(-1) == "_" then
+            return nil
+        end
+        for part in text:gmatch("[^_]+") do parts[#parts + 1] = tonumber(part) end
+        if #parts < 2 then return nil end
+        return parts
+    end
+    local left_parts, right_parts = numeric_parts(left), numeric_parts(right)
+    if left_parts and right_parts then
+        local shared = math.min(#left_parts, #right_parts)
+        for index = 1, shared do
+            if left_parts[index] ~= right_parts[index] then
+                return left_parts[index] < right_parts[index]
+            end
+        end
+        if #left_parts ~= #right_parts then return #left_parts < #right_parts end
+    elseif left_parts or right_parts then
+        return left_parts ~= nil
     end
     return tostring(left) < tostring(right)
 end

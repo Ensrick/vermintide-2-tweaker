@@ -190,7 +190,8 @@ local function validate_operation(operation, family, state_id, family_templates)
         return fail("operation provenance incomplete " .. target_key(operation))
     end
     if operation.expected_present == operation.result_present
-            and deep_equal(operation.expected_current, operation.result) then
+            and deep_equal(operation.expected_current, operation.result)
+            and operation.synthetic_profile_route ~= true then
         return fail("vacuous operation " .. target_key(operation))
     end
     return true
@@ -400,6 +401,20 @@ function M.validate(catalog)
                 local valid, operation_error = validate_operation(
                     operation, family, state_id, family_templates)
                 if not valid then return nil, operation_error end
+                if operation.synthetic_profile_route ~= nil then
+                    local final_key = operation.path[#operation.path]
+                    if operation.synthetic_profile_route ~= true
+                            or operation.root ~= "Weapons"
+                            or type(final_key) ~= "string"
+                            or not final_key:find("damage_profile", 1, true)
+                            or operation.expected_present ~= true
+                            or operation.result_present ~= true
+                            or operation.expected_current ~= operation.result
+                            or not family_profile_names[operation.result] then
+                        return fail("invalid synthetic profile route "
+                            .. target_key(operation))
+                    end
+                end
                 local key = target_key(operation)
                 if seen_targets[key] then return fail("duplicate operation target " .. key) end
                 for _, prior in ipairs(seen_paths) do

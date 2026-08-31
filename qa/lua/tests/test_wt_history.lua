@@ -682,6 +682,7 @@ local function register(H, repo_root)
         H.deep_equal(paths, expected_paths)
         H.deep_equal(catalog.generation.catalogs, {
             "wt_history_patch_2_0_6_v1",
+            "wt_history_patch_2_0_10_sword_and_dagger_v1",
             "wt_history_patch_3_1_v1", "wt_history_patch_3_2_v1",
             "wt_history_patch_5_2_v1", "wt_history_patch_6_0_v1",
             "wt_history_patch_6_6_v1", "wt_history_patch_6_8_v1",
@@ -690,24 +691,26 @@ local function register(H, repo_root)
         H.deep_equal(catalog_counts(catalog), {
             derived_profiles = 1,
             families = 22,
-            family_states = 33,
-            operations = 207,
-            profiles = 16,
-            states = 11,
+            family_states = 34,
+            operations = 211,
+            profiles = 18,
+            states = 12,
         })
-        local elf_axe, handgun, kruber, masterwork, tuskgor
+        local elf_axe, handgun, kruber, masterwork, sword_dagger, tuskgor
         for _, family in ipairs(catalog.families) do
             if family.id == "elf_one_handed_axe" then elf_axe = family end
             if family.id == "kruber_sword_and_shield" then kruber = family end
             if family.id == "masterwork_pistol" then masterwork = family end
             if family.id == "tuskgor_spear" then tuskgor = family end
             if family.id == "handgun_shared" then handgun = family end
+            if family.id == "sword_and_dagger" then sword_dagger = family end
         end
         H.deep_equal(assert(kruber).state_order, { "5_1_1", "5_2_0", "5_6_1" })
         H.deep_equal(assert(masterwork).state_order, { "4_0_1", "5_2_0" })
         H.deep_equal(assert(elf_axe).state_order, { "3_1_0", "5_1_1", "5_2_0" })
         H.deep_equal(assert(tuskgor).state_order, { "pre_3_1_delta" })
         H.deep_equal(assert(handgun).state_order, { "2_0_5" })
+        H.deep_equal(assert(sword_dagger).state_order, { "2_0_9_1", "5_2_0" })
         local valid, validation_error = Policy.validate(catalog)
         H.equal(validation_error, nil)
         H.equal(valid, true)
@@ -715,7 +718,7 @@ local function register(H, repo_root)
         local cached, cached_error = CatalogUI.load(mod)
         H.equal(cached_error, nil)
         H.equal(cached, catalog)
-        H.equal(#paths, 10, "default composite must reuse its cache")
+        H.equal(#paths, 11, "default composite must reuse its cache")
     end)
 
     H.test("WT #1436 completeness ledger fails closed on census and scope drift", function()
@@ -740,9 +743,9 @@ local function register(H, repo_root)
                 "wrong completeness refusal: " .. tostring(refusal))
         end
         rejects(function(value) value.schema = 2 end, "identity is invalid")
-        rejects(function(value) value.catalogs[9] = nil end, "catalog count drift")
+        rejects(function(value) value.catalogs[10] = nil end, "catalog count drift")
         rejects(function(value)
-            value.catalogs[10] = clone(value.catalogs[9])
+            value.catalogs[11] = clone(value.catalogs[10])
         end, "catalog count drift")
         rejects(function(value)
             value.catalogs[2] = clone(value.catalogs[1])
@@ -763,7 +766,7 @@ local function register(H, repo_root)
         rejects(function(value)
             value.catalogs[1].unexpected = true
         end, "unexpected key")
-        rejects(function(value) value.totals.operations = 208 end,
+        rejects(function(value) value.totals.operations = 212 end,
             "aggregate totals drift")
 
         local extra_state_catalogs = clone(catalogs)
@@ -1470,14 +1473,14 @@ local function register(H, repo_root)
         H.equal(data.options.widgets[2].setting_id, "wt_history_patch_versions")
         H.equal(#data.options.widgets[2].sub_widgets, 22)
         H.equal(data.options.widgets[3], second)
-        H.equal(loads, 10)
+        H.equal(loads, 11)
         H.equal(CatalogUI.decorate_menu(mod, data), data)
         H.equal(#data.options.widgets, 3)
-        H.equal(loads, 10, "re-decoration must not reload or duplicate the group")
+        H.equal(loads, 11, "re-decoration must not reload or duplicate the group")
 
         local malformed = { options = {} }
         H.equal(CatalogUI.decorate_menu(mod, malformed), malformed)
-        H.equal(loads, 10, "malformed menu data must not load generated catalogs")
+        H.equal(loads, 11, "malformed menu data must not load generated catalogs")
     end)
 
     H.test("WT #1436 public and dev data surfaces return one index-two history group", function()
@@ -1522,11 +1525,11 @@ local function register(H, repo_root)
                 "wt_history_patch_versions")
             H.equal(#data.options.widgets[2].sub_widgets, 22)
             H.equal(data.options.widgets[3], overrides)
-            H.equal(loads, 10)
+            H.equal(loads, 11)
             H.equal(catalog_ui.decorate_menu(mod, data), data)
             H.equal(#data.options.widgets, 3,
                 stream.namespace .. " must not duplicate its history group")
-            H.equal(loads, 10,
+            H.equal(loads, 11,
                 stream.namespace .. " must reuse its generated-catalog cache")
         end
     end)

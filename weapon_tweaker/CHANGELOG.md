@@ -1,5 +1,17 @@
 # Weapon Tweaker Changelog
 
+## 0.12.324-beta (2026-08-31) -- source-exact Patch 2.0.10 Sword and Dagger history (#1436) [not-started]
+
+- Adds **Game Version 2.0.9.1** to Kerillian's Sword and Dagger selector,
+  restoring the two source-proven pre-2.0.10 damage-profile scalars while
+  `Current` remains gameplay-inert.
+- Projects two immutable private current-schema profiles through all four
+  explicit left/right heavy-attack routes, with exact current-value guards and
+  no mutation of the shared native profiles.
+- Pins the adjacent historical, post-patch, and current source snapshots and
+  verifies independent regeneration, peer-safe identity, drift rejection, and
+  exact restoration under both PowerShell hosts.
+
 ## 0.12.323-beta (2026-08-30) -- source-exact Patch 2.0.6 Handgun history (#1436) [not-started]
 
 - Adds a shared **Game Version 2.0.5** selector for Kruber's and Bardin's
