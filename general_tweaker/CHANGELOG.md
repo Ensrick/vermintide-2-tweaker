@@ -1,5 +1,21 @@
 # General Tweaker Changelog
 
+## v0.2.178 (2026-08-30) -- VMF-native debug gating (#169)
+
+- Replaces the stable stream's final executable read of the retired
+  `enable_debug_logging` setting with the same fail-closed VMF logging-state
+  predicate already used by General Tweaker Dev.
+- Expensive debug probes now arm only when VMF uses custom logging and its
+  debug output level is positive. VMF lookup/setting failures are contained and
+  fail closed without suppressing the original Hero View method; routine
+  logging remains owned by VMF.
+- Publishes the stable regression registrar so
+  `issue169_vmf_debug_gate` is actually present in `/gt_regression_test`.
+- Adds repository-wide regression coverage that rejects executable reads,
+  writes, or widgets for the retired setting across single-line and multiline
+  layouts while preserving historical changelog prose.
+- VT2-Bundle-Retirement: `e7852992f40eb619.mod_bundle`
+
 ## v0.2.177 (2026-07-19) -- #724 canonical public bundle reissue [diag]
 
 - Reissues stable General Tweaker from protected clean `master` under a fresh

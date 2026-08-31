@@ -1,6 +1,6 @@
 local mod = get_mod("gt")
 
-local MOD_VERSION = "0.2.177"
+local MOD_VERSION = "0.2.178"
 _MEM_PROBE_T0_GT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Public field so cross-mod code (e.g. bt's /bug_report walker, the
 -- gt_lobby_* manifest broadcaster below) can read the version without
@@ -356,6 +356,9 @@ local _RT_CHECKS = {}
 local function _rt_register(name, fn)
     _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
 end
+-- Sibling modules register into the same ordered suite. Stable previously kept
+-- this registrar file-local, which made issue169_vmf_debug_gate silently absent.
+mod._gt_rt_register = _rt_register
 mod:command("gt_regression_test", "Run regression smoke checks for past bugs", function()
     local pass, fail = 0, 0
     mod:echo("=== gt regression_test (v%s) ===", MOD_VERSION)

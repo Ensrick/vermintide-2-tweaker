@@ -2,7 +2,7 @@
 #
 # Encodes PROJECT_STANDARDS.md § 3.6 (Debug logging + "Chat-echo policy" matrix)
 # and docs/BUG_CLASSES.md § 17 (chat-echo spam + Variant B, Issue #240). Three
-# advisory sub-checks, each with a false-positive-safe suppression path:
+# three advisory sub-checks plus one hard retired-key contract:
 #
 #   (a) ECHO       — a `mod:echo(` call in one of the § 3.6 / BUG_CLASSES § 17
 #       "NEVER" contexts, i.e. the sites those docs say to audit against the
@@ -36,6 +36,10 @@
 #       NOT flagged — chat visibility is arguably wanted there. Suppress an
 #       intentional in-helper chat warning with `-- allow-warn-chat: <reason>`.
 #
+#   (d) RETIRED-DEBUG-KEY — executable `get`/`set` calls or a widget
+#       `setting_id` for `enable_debug_logging`. Comments and historical prose
+#       are allowed; production execution is a hard #169 regression.
+#
 # Existing hygiene debt is advisory by result: ordinary findings exit 1, which
 # Standard policy reports without blocking. Issue #427's monotonic warn-chat
 # floor is blocking: any warning-backed diagnostic helper outside the exact
@@ -61,13 +65,14 @@
 
 [CmdletBinding()]
 param(
-    [string]$RepoRoot = (Join-Path $PSScriptRoot ".."),
+    [string]$RepoRoot,
     [switch]$Quiet,
     [switch]$SelfTest,
     [switch]$WarnChatRegression
 )
 
 $ErrorActionPreference = "Stop"
+if (-not $RepoRoot) { $RepoRoot = Join-Path $PSScriptRoot ".." }
 $repoRoot = (Resolve-Path $RepoRoot).Path
 
 # Issue #427 migration floor. These are the three public stable-stream helpers
@@ -98,6 +103,9 @@ $rxHookUpd   = [regex]'\bmod:hook\w*\s*\([^)]*["'']update["'']'
 # audit passes). The author's own :dbg tag is the intent signal -- it is a
 # diagnostic, so it must not reach chat, whatever scope it sits in.
 $rxWarnDbgTag = [regex]'\bmod:warning\s*\(\s*["'']\s*\[[A-Za-z_][\w\-]*:dbg\]|\bmod:warning\s*\(\s*["'']\s*\[dbg\]'
+$rxRetiredKeyLiteral = [regex]'(["''])enable_debug_logging\1'
+$rxRetiredDebugCall = [regex]'(?ms)[:\.]\s*[gs]et\s*\(\s*__VT_RETIRED_DEBUG_KEY__'
+$rxRetiredDebugWidget = [regex]'(?ms)\bsetting_id\s*=\s*__VT_RETIRED_DEBUG_KEY__'
 
 # escape comments (accepted on the flagged line OR the line directly above)
 $rxAllowEcho = [regex]'--\s*allow-echo\s*:'
@@ -228,7 +236,8 @@ function Scan-LoggingFile {
         throw "I/O failure reading ${Path}: $_"
     }
     # fast bail — nothing to scan
-    if (-not ($rxEcho.IsMatch($text) -or $rxInfo.IsMatch($text) -or $rxWarning.IsMatch($text))) {
+    if (-not ($rxEcho.IsMatch($text) -or $rxInfo.IsMatch($text) -or $rxWarning.IsMatch($text) `
+            -or $text.Contains('enable_debug_logging'))) {
         return ,$findings
     }
 
@@ -239,15 +248,21 @@ function Scan-LoggingFile {
     $alertFloor  = $null      # innermost dbg/alert helper scope
     $inBlock = $false
     $blockCloser = ""
+    $retiredCodeLines = New-Object 'System.Collections.Generic.List[string]'
 
     for ($i = 0; $i -lt $lines.Count; $i++) {
         $raw = $lines[$i]
         $prev = if ($i -gt 0) { $lines[$i - 1] } else { "" }
 
-        $strip = Get-CodePart -Line $raw -InBlock $inBlock -BlockCloser $blockCloser
+        # Preserve only the exact retired key literal as a bare sentinel before
+        # lexical stripping. Comments and enclosing prose strings still blank
+        # the sentinel, while executable strings survive for a multiline scan.
+        $scanRaw = $rxRetiredKeyLiteral.Replace($raw, '__VT_RETIRED_DEBUG_KEY__')
+        $strip = Get-CodePart -Line $scanRaw -InBlock $inBlock -BlockCloser $blockCloser
         $code = $strip.Code
         $inBlock = $strip.InBlock
         $blockCloser = $strip.BlockCloser
+        $retiredCodeLines.Add($code)
         if ([string]::IsNullOrEmpty($code)) { continue }
 
         $depthBefore = $depth
@@ -301,13 +316,22 @@ function Scan-LoggingFile {
                 $findings += [pscustomobject]@{ File = $Path; Line = $i + 1; Category = 'warn-chat'; Text = $raw.Trim() }
             }
         }
-
         # ---- apply block-depth delta, then close any scope that has ended ----
         $depth += (Get-Delta -Code $code)
         if ($depth -lt 0) { $depth = 0 }   # never underflow on a stray/miscounted end
         if ($null -ne $neverFloor  -and $depth -le $neverFloor)  { $neverFloor  = $null }
         if ($null -ne $updateFloor -and $depth -le $updateFloor) { $updateFloor = $null }
         if ($null -ne $alertFloor  -and $depth -le $alertFloor)  { $alertFloor  = $null }
+    }
+
+    # Executable resurrection of the retired per-mod key may place the call,
+    # literal, and closing delimiter on separate lines. Scan the complete
+    # comment/string-normalized source so formatting cannot evade the guard.
+    $retiredCode = [string]::Join("`n", $retiredCodeLines)
+    foreach ($match in @($rxRetiredDebugCall.Matches($retiredCode)) + @($rxRetiredDebugWidget.Matches($retiredCode))) {
+        $line = 1 + [regex]::Matches($retiredCode.Substring(0, $match.Index), "`n").Count
+        $textAtLine = if ($line -le $lines.Count) { $lines[$line - 1].Trim() } else { '' }
+        $findings += [pscustomobject]@{ File = $Path; Line = $line; Category = 'retired-debug-key'; Text = $textAtLine }
     }
     return ,$findings
 }
@@ -345,12 +369,13 @@ function Invoke-SelfTest {
     }
     # Expected finding counts per category per fixture.
     $cases = @(
-        @{ Path = "logging_echo_bad.lua";     Echo = 2; Frame = 0; Warn = 0; Desc = "hook-body + on_setting_changed echo flagged; command / dev-banner / annotated echo suppressed" },
-        @{ Path = "logging_perframe_bad.lua"; Echo = 0; Frame = 2; Warn = 0; Desc = "mod:info + mod:warning in update() flagged; annotated one suppressed" },
-        @{ Path = "logging_warn_helper_bad.lua"; Echo = 0; Frame = 0; Warn = 1; Desc = "mod:warning in _dbg_alert flagged; genuine-guard warning + annotated one suppressed" },
-        @{ Path = "logging_warn_dbgtag_bad.lua"; Echo = 0; Frame = 0; Warn = 1; Desc = "self-tagged [x:dbg] mod:warning outside any helper flagged; annotated one + untagged player-facing warning suppressed" },
-        @{ Path = "logging_string_dash.lua";  Echo = 1; Frame = 0; Warn = 0; Desc = "`--`-in-string with a `while` keyword must not desync scope; command echoes stay clean" },
-        @{ Path = "logging_clean.lua";        Echo = 0; Frame = 0; Warn = 0; Desc = "all sanctioned forms — zero findings" }
+        @{ Path = "logging_echo_bad.lua";     Echo = 2; Frame = 0; Warn = 0; Retired = 0; Desc = "hook-body + on_setting_changed echo flagged; command / dev-banner / annotated echo suppressed" },
+        @{ Path = "logging_perframe_bad.lua"; Echo = 0; Frame = 2; Warn = 0; Retired = 0; Desc = "mod:info + mod:warning in update() flagged; annotated one suppressed" },
+        @{ Path = "logging_warn_helper_bad.lua"; Echo = 0; Frame = 0; Warn = 1; Retired = 0; Desc = "mod:warning in _dbg_alert flagged; genuine-guard warning + annotated one suppressed" },
+        @{ Path = "logging_warn_dbgtag_bad.lua"; Echo = 0; Frame = 0; Warn = 1; Retired = 0; Desc = "self-tagged [x:dbg] mod:warning outside any helper flagged; annotated one + untagged player-facing warning suppressed" },
+        @{ Path = "logging_string_dash.lua";  Echo = 1; Frame = 0; Warn = 0; Retired = 0; Desc = "`--`-in-string with a `while` keyword must not desync scope; command echoes stay clean" },
+        @{ Path = "logging_retired_debug_key.lua"; Echo = 0; Frame = 0; Warn = 0; Retired = 4; Desc = "single-line and multiline retired reads/widgets fail; comments and quoted prose remain legal" },
+        @{ Path = "logging_clean.lua";        Echo = 0; Frame = 0; Warn = 0; Retired = 0; Desc = "all sanctioned forms — zero findings" }
     )
     $allPass = $true
     foreach ($c in $cases) {
@@ -364,11 +389,12 @@ function Invoke-SelfTest {
         $ge = @($rows | Where-Object { $_.Category -eq 'echo' }).Count
         $gf = @($rows | Where-Object { $_.Category -eq 'perframe' }).Count
         $gw = @($rows | Where-Object { $_.Category -eq 'warn-chat' }).Count
-        $ok = ($ge -eq $c.Echo) -and ($gf -eq $c.Frame) -and ($gw -eq $c.Warn)
+        $gr = @($rows | Where-Object { $_.Category -eq 'retired-debug-key' }).Count
+        $ok = ($ge -eq $c.Echo) -and ($gf -eq $c.Frame) -and ($gw -eq $c.Warn) -and ($gr -eq $c.Retired)
         $verdict = if ($ok) { "PASS" } else { "FAIL" }
         $colour  = if ($ok) { "Green" } else { "Red" }
-        Write-Host ("  [{0}] {1} -- echo={2}/{3} frame={4}/{5} warn={6}/{7}" -f `
-            $verdict, $c.Path, $ge, $c.Echo, $gf, $c.Frame, $gw, $c.Warn) -ForegroundColor $colour
+        Write-Host ("  [{0}] {1} -- echo={2}/{3} frame={4}/{5} warn={6}/{7} retired={8}/{9}" -f `
+            $verdict, $c.Path, $ge, $c.Echo, $gf, $c.Frame, $gw, $c.Warn, $gr, $c.Retired) -ForegroundColor $colour
         if (-not $ok) { Write-Host "        $($c.Desc)" -ForegroundColor DarkYellow; $allPass = $false }
     }
 
@@ -459,6 +485,16 @@ if ($hardError) {
 }
 
 $warnRows = @($all | Where-Object { $_.Category -eq 'warn-chat' })
+$retiredRows = @($all | Where-Object { $_.Category -eq 'retired-debug-key' })
+if ($retiredRows.Count -gt 0) {
+    Write-Host "[check_logging] FAILED -- $($retiredRows.Count) executable retired debug-key site(s)." -ForegroundColor Red
+    foreach ($row in $retiredRows) {
+        $rel = $row.File
+        if ($rel.StartsWith($repoRoot)) { $rel = $rel.Substring($repoRoot.Length).TrimStart('\','/') }
+        Write-Host ("  ! {0}:{1}`n      {2}" -f $rel, $row.Line, $row.Text) -ForegroundColor Red
+    }
+    exit 2
+}
 $unexpectedWarnRows = @(Get-UnexpectedWarnChatRows -Rows $warnRows -Root $repoRoot)
 if ($unexpectedWarnRows.Count -gt 0) {
     Write-Host "[check_logging] FAILED -- $($unexpectedWarnRows.Count) new warning-backed diagnostic helper(s) exceed the #427 migration floor." -ForegroundColor Red

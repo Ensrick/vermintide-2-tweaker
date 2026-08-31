@@ -1,5 +1,17 @@
 # General Tweaker Changelog
 
+## 0.2.273-dev (2026-08-30) -- contain VMF debug-gate failures (#169) [not-started]
+
+- The VMF-native expensive-probe gate now contains both a throwing VMF registry
+  and unreadable logging settings, always returning `false` instead of
+  suppressing the original Hero View method.
+- `issue169_vmf_debug_gate` exercises the throwing-reader boundary in-game.
+  Offline coverage executes both Stable and Dev production modules, proves the
+  stable registrar is published, and forwards the native Hero View callback
+  under both failure modes.
+- The paired repository guard now detects direct retired-key reads and widgets
+  even when their call, assignment, and literal span multiple lines.
+
 ## 0.2.272-dev (2026-08-25) -- name chest-pickup diagnostic state by role (#499) [not-started]
 
 - Renamed the bounded closed-chest pickup state core to

@@ -49,9 +49,10 @@ local mod = get_mod("gt")
 -- triage. To surface in chat too, raise gt's Logging Level in VMF's
 -- per-mod settings.
 --
--- The toggle gates emission only — hooks register once at mod load
--- and early-return on every call when the toggle is off, so the
--- runtime cost in the off state is one mod:get() per event.
+-- The VMF debug gate (see vmf_debug_enabled below, #169) gates the
+-- heavy dump triggers only — hooks register once at mod load and
+-- early-return on every call while VMF debug output is off, so the
+-- runtime cost in the off state is two vmf:get() per event.
 --
 -- Why mod:hook (not hook_safe) for the observation hooks: hook_safe
 -- registrations on the same Class.method silently overwrite each
@@ -59,8 +60,8 @@ local mod = get_mod("gt")
 -- preserves all returns intact (VMF_RECIPES § 2) and chains cleanly
 -- with other mods' wrappers on the same method.
 
--- v0.2.54-dev: renamed from `gt_debug_mode` to the universal
--- `enable_debug_logging` key per PROJECT_STANDARDS.md § 3.6.
+-- v0.2.54-dev history: renamed `gt_debug_mode` to the former universal key.
+-- #169 later retired that per-mod key in favor of VMF-native logging.
 -- v0.2.55-dev: shadows the top-of-file `_dbg`/`_dbg_alert` pair.
 -- v0.2.142-dev: gate removed; routes through VMF logging (mod:debug).
 local function _dbg(fmt, ...)
@@ -87,10 +88,64 @@ mod._dbg_alert = _dbg_alert
 -- The logger `_dbg`/`_dbg_log` correctly stays ungated (routes through VMF
 -- mod:debug); only the expensive dump triggers need this gate. Restore it as a
 -- file-local + expose on `mod` (the AI Takeover module reads mod._dbg_on).
+--
+-- #169 residual FIX: the v0.2.144-dev restore resurrected a read of the RETIRED
+-- per-mod `enable_debug_logging` key, which no gt data file declares any more,
+-- so the gate was permanently false and the heavy dump triggers could never
+-- arm. Gate on VMF's own logging state instead, mirroring VMF
+-- vmf/modules/core/logging.lua:139+146 exactly: mod:debug emission is enabled
+-- only when `logging_mode == "custom"` and `output_mode_debug > 0`. That makes
+-- the expensive dumps arm precisely when their mod:debug output could surface.
+-- Fails closed (false) when VMF or either setting is unreachable. Pure helper:
+-- the VMF mod object is injectable for offline tests.
+local function vmf_debug_enabled(vmf_mod)
+    local ok, enabled = pcall(function()
+        if vmf_mod == nil then
+            local resolve_mod = rawget(_G, "get_mod")
+            if type(resolve_mod) ~= "function" then return false end
+            vmf_mod = resolve_mod("VMF")
+        end
+        if not (vmf_mod and type(vmf_mod.get) == "function") then return false end
+        if vmf_mod:get("logging_mode") ~= "custom" then return false end
+        return (tonumber(vmf_mod:get("output_mode_debug")) or 0) > 0
+    end)
+    return ok and enabled == true
+end
+mod._gt_vmf_debug_enabled = vmf_debug_enabled
+
 local function _dbg_on()
-    return mod:get("enable_debug_logging") == true
+    return vmf_debug_enabled()
 end
 mod._dbg_on = _dbg_on
+
+if type(mod._gt_rt_register) == "function" then
+    mod._gt_rt_register("issue169_vmf_debug_gate", function()
+        -- Runner contract: nil == PASS, a reason string == FAIL (#1153).
+        local on = { get = function(_, key)
+            return key == "logging_mode" and "custom" or 1
+        end }
+        local off = { get = function(_, key)
+            return key == "logging_mode" and "default" or 3
+        end }
+        local throwing = { get = function() error("unreadable VMF setting") end }
+        if vmf_debug_enabled(on) ~= true then
+            return "gate refused VMF custom mode with debug level 1"
+        end
+        if vmf_debug_enabled(off) ~= false then
+            return "gate armed outside VMF custom logging mode"
+        end
+        if vmf_debug_enabled({}) ~= false then
+            return "gate did not fail closed on a settings-less VMF object"
+        end
+        local safe, enabled = pcall(vmf_debug_enabled, throwing)
+        if not safe or enabled ~= false then
+            return "gate did not contain an unreadable VMF setting"
+        end
+        if type(_dbg_on()) ~= "boolean" then
+            return "live dbg gate did not resolve to a boolean"
+        end
+    end)
+end
 
 local function _ctx_str()
     -- Single-line context summary, all fields nil-safe so calls from

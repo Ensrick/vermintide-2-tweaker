@@ -316,8 +316,8 @@ that dumps current state in a copy-pasteable form. Examples:
 
 ### 3.6 Debug logging — VMF-native, no per-mod toggle (current policy 2026-06-29)
 
-> **CURRENT POLICY (established 2026-06-29, supersedes the 2026-05-25 per-mod
-> toggle below).** We do **NOT** ship our own `enable_debug_logging` checkbox
+> **CURRENT POLICY (established 2026-06-29, supersedes the retired 2026-05-25
+> per-mod convention).** We do **NOT** ship our own `enable_debug_logging` checkbox
 > anymore — it is redundant with VMF's own logging controls. Diagnostics route
 > through VMF's logging methods and are gated by VMF's logging output level,
 > which the user sets ONCE in VMF's options. There is **no per-mod toggle to
@@ -352,64 +352,16 @@ that dumps current state in a copy-pasteable form. Examples:
 >   `_dbg`/`_dbg_alert` route through `mod:debug`/`mod:warning`; zero live reads
 >   of any `enable_debug_logging` key; no menu widget.
 >
-> **Migration status (2026-08-02).** Fully VMF-native (no `enable_debug_logging`
-> key anywhere): `ct_dev`, `chaos_wastes_tweaker` (stable),
-> `character_weapon_variants`, `weapons_of_chaos`, `career_tweaker`,
-> `enemy_tweaker`, `event_tweaker`, `modded_progression`. Still on the legacy
-> per-mod gate, keyed in code only (no menu widget): `cosmetics_tweaker`,
-> `crafting_in_modded`, `crafting_in_modded_dev`, `dynamic_cosmetic_portraits`,
-> `general_tweaker`, `general_tweaker_dev`. Still exposing the menu checkbox in
-> `*_data.lua`: `gui_tweaker`, `gui_tweaker_dev`, `weapon_tweaker`,
-> `weapon_tweaker_dev`. Rolling the VMF-native pattern out is a per-mod task — do
-> it when touching each mod, or as a deliberate sweep. **Re-derive this list
-> before trusting it** (`grep -rl enable_debug_logging --include=*.lua`, then the
-> same over `--include=*_data.lua` for the widget split); the 2026-07-07 snapshot
-> this replaces had drifted wrong in both directions.
+> **Migration status (2026-08-27).** The per-mod setting is retired. Active data
+> files expose no `enable_debug_logging` widget, and production code must not
+> execute a read or write of that key. Expensive probes that should run only
+> when their `mod:debug` output can surface use a small fail-closed predicate
+> matching VMF's own settings: `logging_mode == "custom"` and
+> `output_mode_debug > 0`. Always-required bounded telemetry uses raw `printf`.
+> Repository tests must strip comments and reject any executable resurrection;
+> historical changelogs may retain the old key as provenance.
 
 ---
-
-#### Legacy: per-mod Debug Logging toggle (2026-05-25 — being phased out)
-
-> Retained for the not-yet-migrated mods above. Do NOT add this to new mods or
-> to `ct_dev`. New work follows the VMF-native policy above.
-
-Established 2026-05-25. User feedback: "VMF menu options for debug are
-inconsistent. Just a toggle for Debug Logging at the BOTTOM and have one
-available for every single mod I have."
-
-Each legacy (unmigrated) mod exposes a single VMF widget with **exactly** these
-properties:
-
-| Field | Value |
-|---|---|
-| `setting_id` | `enable_debug_logging` (verbatim — no per-mod prefix) |
-| Widget type | `checkbox` |
-| `default_value` | `false` |
-| Localization (en) | `"Debug Logging"` |
-| Tooltip (en) | `"Emit detailed diagnostic logs to %%APPDATA%%\\Fatshark\\Vermintide 2\\console_logs\\. Increases log volume; enable when investigating a bug, then disable."` (note `%%APPDATA%%` — every literal `%` MUST be doubled because VMF runs the value through `string.format`; see `docs/LOCALIZATION_STANDARD.md` § 1) |
-| Position | At the **BOTTOM of the widget tree**, as a **direct child of the top-level `mod.options_widgets`**. NOT nested inside any `group` / `Advanced` / `Misc` / `Developer` heading. |
-
-**Anti-patterns:**
-- Don't use a per-mod prefix on the setting_id (NOT `wt_enable_debug_logging`,
-  NOT `cwv_debug_mode`). Same key everywhere.
-- Don't nest it inside a group widget. Top-level only.
-- Don't add it under "Advanced" / "Misc" / "Developer" group headings.
-
-**Wiring (every `<mod>.lua` exposes a file-local `_dbg` helper near the top):**
-
-```lua
-local function _dbg(fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[%s:dbg] " .. fmt, "<mod_id>", ...)
-    end
-end
-```
-
-If the mod already has a `_dbg` / `_log` / `mod:debug` helper under a different
-gate name (`debug_mode`, `wt_debug_mode`, `cwv_debug_mode`, `debug_dumps`,
-`debug`), the helper body must be renormalized to read
-`mod:get("enable_debug_logging")`. Don't break existing call sites — the gate
-key changes, the helper signature and call sites stay the same.
 
 ### 3.7 Debug mode is a DATA HARNESS (established 2026-06-11)
 
@@ -437,8 +389,9 @@ hand. Debug Logging ON = the user is granting a data-collection window — use i
    (`[illusion-probe]`, `[wt:dev_anim]`). Never multi-line free text.
 3. **Opportunistic capture is encouraged** when it's data-not-in-source and
    cheap: low-volume always-on probes (≤1 line per user action — the
-   cosmetics `[illusion-probe]` precedent) may even stay UNGATED; anything
-   chattier rides the `enable_debug_logging` gate.
+   cosmetics `[illusion-probe]` precedent) may stay UNGATED; anything
+   chattier uses `mod:debug` and, if capture itself is expensive, VMF's
+   fail-closed custom/debug-output predicate.
 4. **Tune→export→bake loop.** Any in-game tuning surface (anim picker, hold
    pose, glow sliders, scale/grip) MUST pair with an export command that
    serializes the user's current tuned values as paste-ready Lua. Tuning UIs
@@ -447,112 +400,78 @@ hand. Debug Logging ON = the user is granting a data-collection window — use i
    tags exist and what they capture, so a later session greps the log instead
    of re-deriving.
 
-**Migration:** when renaming an old key, leave a brief CHANGELOG note that the
-old key (`wt_debug_mode`, etc.) was renamed and users may need to re-toggle the
-new `Debug Logging` checkbox after first load. Don't try to silently auto-
-migrate the saved value — the friction is one re-tick.
+**Migration:** never create, read, write, or migrate a replacement per-mod
+debug key. Historical key names may remain in changelogs only. Remove obsolete
+saved-key cleanup writes; VMF owns logging configuration.
 
-Cross-ref: `docs/VMF_RECIPES.md` § 9. For Layer 3 `mod:traced_hook` (shipped in `weapon_tweaker` v0.12.84-dev), which emits structured `[<mod>:trace] event=enter|exit class=<C> method=<m> n_args=N` / `n_returned=M` log lines gated on this same `enable_debug_logging` toggle, see `docs/VMF_RECIPES.md` § 2b "Layer 3: traced_hook" — including the per-frame rate-limit caveat.
+Cross-ref: `docs/VMF_RECIPES.md` § 9. For Layer 3 `mod:traced_hook`, which
+emits structured `[<mod>:trace] event=enter|exit class=<C> method=<m>
+n_args=N` / `n_returned=M` through VMF logging, see § 2b, including the
+per-frame rate-limit caveat.
 
 #### Two-channel discipline (`_dbg` vs `_dbg_alert`)
 
-Established 2026-05-25. User feedback: "When debug logging is on, I want
-messages to be consistent for each mod, and show up in the in-game chat log
-via echo whenever something is unexpected or wrong. If things go as expected
-or just to confirm things are working or firing, I want log messages in the
-actual log, not the ingame chat log. Likewise info dumps and such go into
-the game log, not the in-game log."
-
-Every mod ships **two** debug helpers (not one), both gated on the same
-`enable_debug_logging` key:
+Routine diagnostics use VMF severity channels directly. There is no mod-owned
+enable switch and no saved setting to inspect or mutate.
 
 **Decision matrix:**
 
 | Case | Helper | Lands in |
 |---|---|---|
 | Confirmation / dump / expected behavior | `_dbg` | log file only |
-| Unexpected / wrong / mismatch / error condition | `_dbg_alert` | log file AND in-game chat |
+| Unexpected / wrong / mismatch / error condition | `_dbg_alert` | VMF warning channel; chat only when VMF routes warnings there |
 | User-operational (chat command reply, `/verify_*` output) | bare `mod:echo` | chat (not gated) |
 | Permanent operational log (`[wt] enabled vX.Y.Z`) | bare `mod:info` | log file (not gated) |
-| Stricter VMF levels | `mod:warning` / `mod:error` | VMF default semantics |
+| Critical bounded capture required with VMF off | raw `printf` | console log |
 
 **Canonical helper pair** (insert near top of every `<mod>/scripts/mods/<mod>/<mod>.lua`):
 
 ```lua
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
--- Both gate on `enable_debug_logging`. Both no-op when toggle is off.
--- `_dbg` is for confirmation / expected behavior — file only.
--- `_dbg_alert` is for unexpected / wrong / mismatch — file AND in-game chat.
 local function _dbg(fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[<mod_id>:dbg] " .. fmt, ...)
-    end
+    mod:debug("[<mod_id>:dbg] " .. fmt, ...)
 end
 
 local function _dbg_alert(fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[<mod_id>:dbg] " .. fmt, ...)
-        mod:echo("[<mod_id>] " .. fmt, ...)
-    end
+    -- allow-warn-chat: actionable anomaly is intentionally player-visible
+    mod:warning("[<mod_id>] " .. fmt, ...)
 end
 ```
 
-Replace `<mod_id>` with the mod's short ID (`wt`, `ct`, `gt`, `cwv`, `cosmetics`,
-`cim`, `bt`, etc.) — match the existing log prefix convention. The mod's
-`_RT_CHECKS` regression scaffold must include the smoke test:
+Because VMF warning output is chat-visible by default, `_dbg_alert` is reserved
+for genuine actionable anomalies. Expected guards, timing states, and routine
+captures remain `_dbg`. A mod that requires log-only anomaly telemetry may use
+a bounded, `pcall`-guarded `printf` helper instead of `mod:warning`.
+
+If an expensive probe should not execute unless its debug output can surface,
+mirror VMF's predicate and fail closed:
 
 ```lua
-_rt_register("dbg_helpers_two_channel", function()
-    if type(_dbg) ~= "function" then return "_dbg helper missing" end
-    if type(_dbg_alert) ~= "function" then return "_dbg_alert helper missing" end
-    local saved = mod:get("enable_debug_logging")
-    if saved ~= false then mod:set("enable_debug_logging", false) end
-    local ok = pcall(_dbg, "smoke test off")
-    if not ok then return "_dbg raised with toggle off" end
-    ok = pcall(_dbg_alert, "smoke test off")
-    if not ok then return "_dbg_alert raised with toggle off" end
-    if saved == true then mod:set("enable_debug_logging", true) end
-end)
+local function vmf_debug_enabled(vmf_mod)
+    local ok, enabled = pcall(function()
+        if vmf_mod == nil then
+            local resolve_mod = rawget(_G, "get_mod")
+            if type(resolve_mod) ~= "function" then return false end
+            vmf_mod = resolve_mod("VMF")
+        end
+        if not (vmf_mod and type(vmf_mod.get) == "function") then return false end
+        if vmf_mod:get("logging_mode") ~= "custom" then return false end
+        return (tonumber(vmf_mod:get("output_mode_debug")) or 0) > 0
+    end)
+    return ok and enabled == true
+end
 ```
-
-**Classifying call sites:**
-
-When picking between `_dbg` and `_dbg_alert` for a new call site, look at the
-format string + context:
-
-- Words/phrases suggesting an **ALERT** (`_dbg_alert`):
-  "failed", "error", "unexpected", "missing", "nil", "mismatch", "raised",
-  "skipped", "dropped", "fallback", "corrupt", "stale", "couldn't",
-  "no longer", "broken", "invalid"
-- Words/phrases suggesting **CONFIRMATION** (`_dbg`):
-  "fired", "applied", "installed", "registered", "loaded", "completed",
-  "ok", "ready", "received", "sent", "match", "found"
-- Ambiguous → leave as `_dbg`. **Conservative default.**
-
-**Edge cases:**
-
-- **Expected guard / SKIP branches** — even if the format string says "nil"
-  or "no X", if the branch is the normal-flow exit when a guard condition
-  is unmet (e.g. `if not local_player then _dbg("no local player"); return end`),
-  keep as `_dbg`. Promoting it would spam chat during normal play.
-- **Hot-path observation hooks** — state machine transitions, frame-by-frame
-  hook entry logs, scale/grip dumps, wield events. These are confirmation,
-  not alerts. `_dbg`.
-- **Post-warning follow-up logs** — when a `mod:warning` has already fired
-  and a follow-up `_dbg` line documents the resulting bail path,
-  promote to `_dbg_alert` so the user sees the chain.
 
 **Anti-patterns:**
 
-- Don't use bare `mod:echo` for non-user-facing dumps — that bypasses the
-  toggle and pollutes chat. Use `_dbg` (log file) or `_dbg_alert` (chat
-  when toggle is on).
-- Don't use `_dbg_alert` for routine confirmations — that defeats the
-  whole point of the two-channel split.
-- Don't introduce a third helper. Two channels (log-only, log+chat) cover
-  every case in the policy matrix above.
+- Never call `mod:get`/`mod:set` for `enable_debug_logging` or add its widget.
+- Never use bare `mod:echo` or `mod:warning` for routine dumps.
+- Never run an expensive capture merely because `mod:debug` is cheap; guard
+  the capture with the VMF predicate above.
+- Never use the predicate to suppress operational receipts that must always
+  exist; bounded receipts use `printf`.
 
-**Cross-ref:** `docs/VMF_RECIPES.md` § 9 (universal debug toggle).
+**Cross-ref:** `docs/VMF_RECIPES.md` § 9 (VMF-native debug logging).
 
 #### Applied marker line (universal)
 
@@ -561,7 +480,7 @@ Established 2026-05-25 (rolled out across all 16 active mods in the same pass th
 | Field | Value |
 |---|---|
 | Line format | `[<mod_id>] enabled v<MOD_VERSION> settings_fp=<8-hex>` |
-| Log level | `mod:info` — ALWAYS fires. Not gated on `enable_debug_logging` — this is operational telemetry, not debug noise. |
+| Log level | `mod:info` — ALWAYS fires. This is operational telemetry, not debug noise. |
 | When | Once, at load. Right after the `_dbg_alert` helper (or inside `mod.on_enabled` if the mod is togglable and the on-load surface is awkward). |
 | Where to place | File-local `_settings_fingerprint()` helper near MOD_VERSION setup; the marker line directly below it. |
 | Per-mod addenda | OK as trailing space-separated `key=value` tokens (e.g. et appends `host_required=true`). Keep them short. |
@@ -623,7 +542,7 @@ mod:info("[<mod_id>] enabled v%s settings_fp=%s", MOD_VERSION, _settings_fingerp
 
 **Anti-patterns:**
 
-- Don't gate the marker on `enable_debug_logging` — it MUST always fire so logs are self-documenting.
+- Don't gate the marker on VMF debug state — it MUST always fire so logs are self-documenting.
 - Don't walk `widget_definitions` or VMF internals — the simple recursive walk of the returned data table works for every shape used in this repo.
 - Don't hardcode `_BR_SETTING_NAMES`-style key lists per mod for the universal marker. That pattern is fine for feature-specific RPC compares (et's `_br_settings_fingerprint` still uses it because the BR cross-peer RPC needs a stable subset), but the universal marker hashes everything.
 - Don't include the master toggle in a per-mod addendum if it's already in the hashed key set — the fingerprint already changes when the master flips. Addenda are for fields that AREN'T in the widget tree (et's `host_required=true` is a static design-intent token).
@@ -641,11 +560,11 @@ Established 2026-05-25. User feedback: *"on enabling debug logging, I'm getting 
 |---|---|---|
 | Module load (top of `<mod>.lua`) -- stable (>=1.0.0) versions | **NEVER** | The applied marker `[<mod>] enabled v<X> settings_fp=<hash>` line already lands in the console log; chat banner is pure spam. |
 | Module load (top of `<mod>.lua`) -- dev / alpha / beta / rc / 0.x versions | **REQUIRED** -- one line, `[<mod_id>] v<MOD_VERSION> loaded` (see snippet below) | Established 2026-05-25 EOD: in-flight builds change patch-by-patch and the user needs the active version visible at a glance. Silent dev banners feel like errors are being hidden. Cross-ref § 14a persistence-after-fix protocol. The applied marker is log-only and not enough for live iteration. |
-| `mod.on_setting_changed` for routine settings | **NEVER** | Spams chat on every checkbox flip — including the universal `enable_debug_logging` toggle, which is what triggered this policy. Use `_dbg` if you need a trace. |
+| `mod.on_setting_changed` for routine settings | **NEVER** | Spams chat on every checkbox flip. Use `_dbg` if you need a trace. |
 | `mod.on_setting_changed` for explicit high-impact toggles | **OK** | Operational feedback the user expects in response to a deliberate action. Canonical examples: `bt`'s `bt_master_enable_br_registrations` ("can't apply yet — restart" / "master toggled OFF") at `buff_tweaker.lua:~275`; `gt`'s AI takeover toggle ("AI ON / OFF requested") at `general_tweaker.lua:~826-828`. |
 | `mod.on_enabled` echoing version / banner | **NEVER** | Same reasoning as module load — the applied marker line covers it. |
 | `mod.on_enabled` / `mod.on_disabled` for non-trivial state changes | **OK** | When the user toggles the whole mod off/on via the VMF menu, immediate chat confirmation of what unwound (or didn't) is high-impact operational feedback. Canonical examples: `enemy`'s "Enemy Tweaker enabled / disabled — compositions restored" at `enemy_tweaker.lua:~929/949`; `gt`'s `on_disabled` "Disable does not fully unwind active mutations" warning at `general_tweaker.lua:~849` (this is the canonical Issue #15 documented-limitation pattern from `docs/BUG_CLASSES.md § 7`). |
-| Inside `mod:command(...)` bodies (`/verify_*`, `/<mod>_regression_test`, `/dump`, status commands, etc.) | **OK** | User invoked the command via chat; reply belongs in chat. Don't gate these on `enable_debug_logging`. |
+| Inside `mod:command(...)` bodies (`/verify_*`, `/<mod>_regression_test`, `/dump`, status commands, etc.) | **OK** | User invoked the command via chat; reply belongs in chat. Do not gate it on VMF debug state. |
 | Routine confirmations / diagnostic traces | **NEVER bare `mod:echo`** — and NEVER `mod:warning` either | Use `_dbg` (debug channel, log-only) or a log-only printf helper. `mod:warning` posts to CHAT under VMF default settings (Issue #240; `BUG_CLASSES.md § 17 Variant B`). |
 | Unexpected guard / fallback recovery | `_dbg_alert` (or `mod:warning`) | Per two-channel discipline. NB: `mod:warning` lands in chat whenever VMF's warning channel is chat-enabled — which is the DEFAULT (mode 3), not only when debug logging is on. Acceptable for genuine anomalies; et routes its alert helpers through log-only printf instead (#240). |
 
@@ -663,7 +582,8 @@ end
 Replace `<mod_id>` with the canonical short id (bt / crt / ct / cwv / cosmetics / cim / dcp / et / ewt / gt / gut / mp / wt). The `^0%.` branch catches versions like `0.1.12` (no track suffix) so dcp and other 0.x stable-looking versions still print. Bump to 1.0.0+ to flip a mod to silent-on-load — no other change needed; the detector matches no branches and the `if` falls through.
 
 **Anti-patterns:**
-- Don't add a debug-gated `if mod:get("enable_debug_logging") then mod:echo(version) end` — the dev-banner above already runs unconditionally for dev/alpha/beta/0.x and is silent for stable. Gating on debug-logging is the wrong axis.
+- Don't gate a version echo on VMF debug state — the dev banner above already
+  runs unconditionally for dev/alpha/beta/0.x and is silent for stable.
 - Don't add new `mod:echo` in any hook body without confirming the call site appears in the OK column above. New chat echoes are a code-review red flag.
 - Don't downgrade an OK echo to `_dbg` just because the policy mentions `_dbg`. The matrix is exhaustive — if the call site is in an OK row, keep the bare `mod:echo`.
 - Don't echo more than one banner per module load — one line is enough. The applied-marker `mod:info` line above stays unchanged and remains log-only.

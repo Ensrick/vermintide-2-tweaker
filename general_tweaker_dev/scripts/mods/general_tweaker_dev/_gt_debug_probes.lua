@@ -99,14 +99,17 @@ mod._dbg_alert = _dbg_alert
 -- Fails closed (false) when VMF or either setting is unreachable. Pure helper:
 -- the VMF mod object is injectable for offline tests.
 local function vmf_debug_enabled(vmf_mod)
-    vmf_mod = vmf_mod or get_mod("VMF")
-    if not (vmf_mod and type(vmf_mod.get) == "function") then
-        return false
-    end
-    if vmf_mod:get("logging_mode") ~= "custom" then
-        return false
-    end
-    return (tonumber(vmf_mod:get("output_mode_debug")) or 0) > 0
+    local ok, enabled = pcall(function()
+        if vmf_mod == nil then
+            local resolve_mod = rawget(_G, "get_mod")
+            if type(resolve_mod) ~= "function" then return false end
+            vmf_mod = resolve_mod("VMF")
+        end
+        if not (vmf_mod and type(vmf_mod.get) == "function") then return false end
+        if vmf_mod:get("logging_mode") ~= "custom" then return false end
+        return (tonumber(vmf_mod:get("output_mode_debug")) or 0) > 0
+    end)
+    return ok and enabled == true
 end
 mod._gt_vmf_debug_enabled = vmf_debug_enabled
 
@@ -124,6 +127,7 @@ if type(mod._gt_rt_register) == "function" then
         local off = { get = function(_, key)
             return key == "logging_mode" and "default" or 3
         end }
+        local throwing = { get = function() error("unreadable VMF setting") end }
         if vmf_debug_enabled(on) ~= true then
             return "gate refused VMF custom mode with debug level 1"
         end
@@ -132,6 +136,10 @@ if type(mod._gt_rt_register) == "function" then
         end
         if vmf_debug_enabled({}) ~= false then
             return "gate did not fail closed on a settings-less VMF object"
+        end
+        local safe, enabled = pcall(vmf_debug_enabled, throwing)
+        if not safe or enabled ~= false then
+            return "gate did not contain an unreadable VMF setting"
         end
         if type(_dbg_on()) ~= "boolean" then
             return "live dbg gate did not resolve to a boolean"

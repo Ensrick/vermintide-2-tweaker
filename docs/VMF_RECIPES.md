@@ -301,7 +301,7 @@ patches.
 `mod:traced_hook(class, method, handler)` and `mod:traced_hook_safe(class,
 method, handler)` are Layer-3 wrappers that delegate to `safe_hook` /
 `safe_hook_safe` (Layer 2) AND emit structured entry/exit log lines gated
-on `mod:get("enable_debug_logging")`. Shipped in `weapon_tweaker` v0.12.84-dev.
+through VMF-native `mod:debug` output. The former per-mod gate is retired.
 
 Log format:
 
@@ -979,86 +979,66 @@ ui_renderer_injections = {
 
 ---
 
-## 9. Debug Logging toggle (universal convention)
+## 9. VMF-native debug logging (universal convention)
 
-**Rule:** every mod in this repo exposes a single `enable_debug_logging`
-checkbox at the BOTTOM of the widget tree (un-nested), and gates all verbose
-diagnostic prints behind a file-local `_dbg` helper that reads
-`mod:get("enable_debug_logging")`. Established 2026-05-25 after user feedback
-that the debug toggles across the 16 active mods were inconsistent (some used
-`debug_mode`, some `wt_debug_mode`, some `cwv_debug_mode`, some `debug_dumps`,
-some none at all).
+**Rule:** mods do not expose, read, write, or migrate a per-mod debug setting.
+VMF owns logging configuration. Routine diagnostics use `mod:debug`; genuine
+actionable anomalies use `mod:warning` only when chat visibility is intended.
+Bounded operational receipts that must survive VMF logging being disabled use
+raw `printf`.
 
-The authoritative spec is in `PROJECT_STANDARDS.md` § 3.6 — exact `setting_id`,
-default, localization string, tooltip text, position rule, helper pattern.
-Don't recapitulate it here; treat that section as binding.
+The authoritative policy is `PROJECT_STANDARDS.md` § 3.6.
 
 ### Quick reference
 
 ```lua
--- _data.lua — at the BOTTOM of options.widgets, NOT inside a group
-{
-    setting_id    = "enable_debug_logging",
-    type          = "checkbox",
-    default_value = false,
-    tooltip       = mod:localize("enable_debug_logging_tooltip"),
-},
-```
-
-```lua
--- _localization.lua
-enable_debug_logging         = { en = "Debug Logging" },
-enable_debug_logging_tooltip = {
-    en = "Emit detailed diagnostic logs to %APPDATA%\\Fatshark\\Vermintide 2\\console_logs\\. Increases log volume; enable when investigating a bug, then disable.",
-},
-```
-
-```lua
--- <mod>.lua near the top of file (two-helper policy 2026-05-25; see
--- PROJECT_STANDARDS.md § 3.6 "Two-channel discipline" for the full
--- decision matrix + classifier word lists.)
 local function _dbg(fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[<mod_id>:dbg] " .. fmt, ...)
-    end
+    mod:debug("[<mod_id>:dbg] " .. fmt, ...)
 end
 
 local function _dbg_alert(fmt, ...)
-    if mod:get("enable_debug_logging") then
-        mod:info("[<mod_id>:dbg] " .. fmt, ...)
-        mod:echo("[<mod_id>] " .. fmt, ...)
-    end
+    -- allow-warn-chat: actionable anomaly is intentionally player-visible
+    mod:warning("[<mod_id>] " .. fmt, ...)
 end
 ```
 
-`_dbg` is for confirmation / expected behavior (log file only). `_dbg_alert`
-is for unexpected / wrong / mismatch (log file AND in-game chat). Both gate
-on the same `enable_debug_logging` toggle. For the decision matrix +
-call-site classification rules + judgment-call examples, see
-**PROJECT_STANDARDS.md § 3.6**.
+Do not use `_dbg_alert` for routine guards or confirmations: VMF warnings are
+chat-visible by default. A mod that needs log-only anomaly evidence may use a
+bounded, `pcall`-guarded `printf` helper.
 
-### Why
+Expensive probes may mirror VMF's own debug-emission predicate so their capture
+cost is paid only when output can surface:
 
-Friction. Before the convention every mod's debug toggle lived somewhere
-different, was named something different, and the user had to hunt for it per-
-mod when chasing a bug. Universal key + universal position = "toggle the
-bottom box, send logs."
+```lua
+local function vmf_debug_enabled(vmf_mod)
+    local ok, enabled = pcall(function()
+        if vmf_mod == nil then
+            local resolve_mod = rawget(_G, "get_mod")
+            if type(resolve_mod) ~= "function" then return false end
+            vmf_mod = resolve_mod("VMF")
+        end
+        if not (vmf_mod and type(vmf_mod.get) == "function") then return false end
+        if vmf_mod:get("logging_mode") ~= "custom" then return false end
+        return (tonumber(vmf_mod:get("output_mode_debug")) or 0) > 0
+    end)
+    return ok and enabled == true
+end
+```
+
+This predicate gates capture cost, not correctness or required evidence. It
+fails closed when VMF/settings are unavailable. `mod:debug` itself remains the
+emission owner.
 
 ### Anti-patterns
 
-- Per-mod prefix on the key (`wt_enable_debug_logging`) — same key everywhere.
-- Nesting under `group` / `Advanced` / `Misc` / `Developer` — top-level only,
-  at the bottom.
-- Cluttering the gate body with mod-specific names — the gate is always
-  `mod:get("enable_debug_logging")`.
+- Adding an `enable_debug_logging` widget or localization.
+- Executing `mod:get`/`mod:set` for the retired key.
+- Migrating an older debug key into a new per-mod key.
+- Sending routine diagnostics through `mod:echo` or `mod:warning`.
+- Suppressing required load/version/runtime receipts behind VMF debug state.
 
-### Burn history
-
-The pre-2026-05-25 state was the burn: across 16 mods, only 5 had any debug
-toggle at all (`wt_debug_mode`, `cwv_debug_mode`, `gt_debug_mode`,
-`debug_mode` for cim, `debug_dumps` for cosmetics_tweaker) and each lived in
-a different position in the widget tree. The 2026-05-25 sweep renamed all
-five and added the toggle to the eleven mods that lacked it.
+Historical changelogs may retain retired key names as provenance. Production
+code and current guidance may mention them only to prohibit their use.
 
 ## 10. RPC schema versioning — explicit version + drop-on-mismatch
 
@@ -1285,7 +1265,10 @@ DON'T USE perf_record when:
 
 ### Anti-patterns
 
-- **Don't gate `perf_record` calls behind `enable_debug_logging`.** The point is always-on hook timing; the gate is on `/perf_dump` (user-initiated read), not on the writes. If you want a debug-only perf dump, write your own gated wrapper.
+- **Don't gate `perf_record` calls behind VMF debug state.** The point is
+  always-on hook timing; the gate is on `/perf_dump` (user-initiated read), not
+  on the writes. If you need a debug-only capture, use an explicitly bounded
+  VMF-state predicate rather than a mod-owned setting.
 - **Don't introduce a per-mod copy of the accumulator.** The whole point of putting it in bt is one shared registry the user can `/perf_dump` from any mod's hooks. Cross-mod perf comparisons are the load-bearing use case.
 - **Don't propagate to every mod's every hook in one PR.** The bt framework landed in 0.1.6-alpha with ONE example consumer (bt's own `on_all_mods_loaded` time). Other mods adopt the helper one at a time, motivated by a specific perf question — not as a mass migration.
 
