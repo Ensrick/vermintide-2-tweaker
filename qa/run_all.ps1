@@ -356,6 +356,10 @@ Run-Check "wt_history_source_host_matrix" { & (Join-Path $here "run_wt_history_s
 # boundary onto both current gameplay-identical clones. Reproduce the exact
 # three-leaf evidence and six-operation catalog under both PowerShell hosts.
 Run-Check "wt_history_patch_2_0_6_host_matrix" { & (Join-Path $here "run_wt_history_patch_2_0_6_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
+# Issue #1436: Patch 2.0.10 exchanges the two Sword-and-Dagger heavy-profile
+# melee-boost values. Reproduce two private current-schema profiles and their
+# four explicit, atomic hand routes under both supported PowerShell hosts.
+Run-Check "wt_history_patch_2_0_10_host_matrix" { & (Join-Path $here "run_wt_history_patch_2_0_10_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
 # Issue #1436: Patch 3.1's Blunderbuss selector is a one-leaf bounded delta,
 # not a complete 3.0 baseline. Reproduce the exact adjacent/current evidence,
 # current-only Versus exclusion, and completeness ledger on both hosts.

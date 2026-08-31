@@ -416,6 +416,16 @@ damage-over-time network fix. The blocking
 under PowerShell 7 and Windows PowerShell 5.1; the shared source adversaries
 remain centralized in `run_wt_history_source_host_matrix.ps1`.
 
+`check_wt_history_patch_2_0_10_reproducibility.ps1` pins the two exact
+Sword-and-Dagger profile leaves, the complete 12-object source closure, and the
+four independently discovered current left/right heavy routes. It regenerates
+historical, post-boundary, and current-schema profiles through the primary and
+independent evaluators, then requires a byte-exact public/dev catalog. The
+catalog uses four explicit synthetic profile-route operations so a missing or
+foreign hand refuses atomically before writes; native profiles remain current.
+`run_wt_history_patch_2_0_10_host_matrix.ps1` repeats the strict source proof
+under PowerShell 7 and Windows PowerShell 5.1.
+
 `check_wt_history_patch_3_1_reproducibility.ps1` pins the exact five-file
 evidence census and four-artifact ledger for the bounded Blunderbuss and
 Tuskgor Spear slices. It proves the adjacent `max_ammo` change from `12` to
@@ -423,8 +433,8 @@ Tuskgor Spear slices. It proves the adjacent `max_ammo` change from `12` to
 guards, excludes the current-only Versus template, independently reproduces
 both evaluator lanes, and regenerates byte-identical public/dev
 catalogs. It also pins the byte-identical machine-readable completeness ledger:
-9 catalogs, 22 unique families, 33 family/state rows, 11 distinct states, and
-207 scalar operations, with every exposed row classified as an adjacent delta
+10 catalogs, 22 unique families, 34 family/state rows, 12 distinct states, and
+211 scalar operations, with every exposed row classified as an adjacent delta
 or complete direct historical baseline. The blocking
 `run_wt_history_patch_3_1_host_matrix.ps1` repeats the gate and source-selection
 adversaries under PowerShell 7 and Windows PowerShell 5.1.
@@ -505,8 +515,8 @@ real-time correctness assertion. One real PS5.1 hanging-helper case retains
 exact PID/start-time cleanup and orphan detection.
 
 `check_wt_history_source_checkout.ps1` is the offline source-selection
-adversary. Under both PowerShell hosts it presents all nine reproduction gates
-for Patch 2.0.6, 3.1, 3.2, 4.1.1, 4.6, 5.2, 6.0, 6.6, and 6.8,
+adversary. Under both PowerShell hosts it presents all ten reproduction gates
+for Patch 2.0.6, 2.0.10, 3.1, 3.2, 4.1.1, 4.6, 5.2, 6.0, 6.6, and 6.8,
 with an intentionally incomplete Git checkout, requires an ordinary visible
 skip and a `-RequireSource` failure from each, and restores its environment
 without fetch (including promisor lazy-fetch), network access, checkout
@@ -546,6 +556,7 @@ the complete pinned-artifact gate and reports the regeneration skip.
 | `check_event_register_signature.ps1` | ✅ OK | clean post-gt v0.2.61 → .64 fix cycle (2026-05-25). This static check is the live gate; the former `bt:safe_event_register` runtime safety net (buff_tweaker v0.1.10-alpha+) is RETIRED (bt archived 2026-06). |
 | `check_wt_history_reproducibility.ps1` | ✅ OK (2026-08-28) | Issue #1436 full-QA gate for the pinned Patch 5.2 evidence ledger and byte-exact generated catalog; exact regeneration runs only from a checkout whose complete pinned commit/path/blob ledger passes the read-only selector. |
 | `run_wt_history_patch_2_0_6_host_matrix.ps1` | ✅ OK (2026-08-30) | Issue #1436 blocking dual-host gate for the exact Patch 2.0.6 Handgun three-leaf boundary, immutable current-clone projection, independent-oracle agreement, and byte-exact six-operation public/dev catalogs. |
+| `run_wt_history_patch_2_0_10_host_matrix.ps1` | ✅ OK (2026-08-30) | Issue #1436 blocking dual-host gate for the exact Patch 2.0.10 Sword-and-Dagger two-profile boundary, four explicit atomic hand routes, independent-oracle agreement, and byte-exact public/dev catalogs. |
 | `run_wt_history_patch_3_1_host_matrix.ps1` | ✅ OK (2026-08-30) | Issue #1436 blocking dual-host gate for the exact bounded Patch 3.1 Blunderbuss maximum-ammunition and Tuskgor Spear block-cost boundaries, current-only Versus exclusion, independent-oracle agreement, byte-exact public/dev catalogs, and fail-closed completeness ledger. |
 | `run_wt_history_patch_3_2_host_matrix.ps1` | ✅ OK (2026-08-29) | Issue #1436 blocking dual-host gate for the exact Patch 3.2 Kerillian One-Handed Axe boundary, absent current guard, revision-isolated older source evaluator, independent-oracle agreement, and byte-exact public/dev catalogs. |
 | `run_wt_history_patch_4_1_1_host_matrix.ps1` | ✅ OK (2026-08-29) | Issue #1436 blocking dual-host gate for the exact Patch 4.1.1 Masterwork Pistol boundary, present-false current guard, independent 3-by-3 evaluator presence tests, current rehydration, two-artifact/three-file evidence contract, and byte-exact public/dev catalogs. |
@@ -553,7 +564,7 @@ the complete pinned-artifact gate and reports the regeneration skip.
 | `run_wt_history_patch_4_6_host_matrix.ps1` | ✅ OK (2026-08-29) | Issue #1436 blocking dual-host validator for the complete six-file/18-object Patch 4.6 source closure, one-DLC-blob-identity adversary, no-fetch/no-lock extraction and exact raw-environment restoration; strict `-RequireSource` performs and requires both regenerations, while source-less CI is explicitly pinned-only. |
 | `check_wt_history_patch_6_0_reproducibility.ps1` | ✅ OK (2026-08-29) | Issue #1436 full-QA gate for the bounded Patch 6.0 shield-scalar and Fireball-profile slice; exact primary/oracle reproduction and catalog generation pass from the complete pinned source checkout. |
 | `check_wt_history_source_freshness.ps1` | ✅ OK (2026-08-30) | Issues #1436/#540 central 6.12.0 semantic anchor plus separately observed canonical default tip; ordinary offline QA may visibly skip only unavailable network, while WT BuildOnly/release requires exact remote ref/tip freshness without fetch/FETCH_HEAD mutation. Injected 750/1687/563 ms deadline traces prove every programmed wait, including the 5763 ms resume adversary; scheduler/OS latency is diagnostic, and one real PS5.1 hanging-helper case retains exact cleanup proof. |
-| `check_wt_history_source_checkout.ps1` | ✅ OK (2026-08-30) | Offline PS7/PS5.1 adversary proves that stale/partial Git trees visibly skip ordinary regeneration and fail closed under `-RequireSource` for the Patch 2.0.6, 3.1, 3.2, 4.1.1, 4.6, 5.2, 6.0, 6.6, and 6.8 gates. |
+| `check_wt_history_source_checkout.ps1` | ✅ OK (2026-08-30) | Offline PS7/PS5.1 adversary proves that stale/partial Git trees visibly skip ordinary regeneration and fail closed under `-RequireSource` for the Patch 2.0.6, 2.0.10, 3.1, 3.2, 4.1.1, 4.6, 5.2, 6.0, 6.6, and 6.8 gates. |
 | `run_wt_history_source_host_matrix.ps1` | ✅ OK (2026-08-30) | Issue #540 blocking dual-host owner for the generic freshness and incomplete-checkout self-tests. Full QA invokes it exactly once; static coverage forbids patch-specific matrices and `run_selftests.ps1` from multiplying the same process fixtures. |
 | `run_wt_history_patch_6_6_host_matrix.ps1` | ✅ OK (2026-08-28) | Issue #1436 blocking dual-host gate for the exact Patch 6.6 Deepwood Staff adjacent boundary, 6.12.0 current guards, independent-oracle agreement, and byte-exact public/dev catalogs. |
 | `check_wt_history_patch_6_8_reproducibility.ps1` | ✅ OK (2026-08-28) | Issue #1436 full-QA gate for the source-adjacent Patch 6.8 Kerillian Greatsword boundary, current-anchor rehydration, independent oracle agreement, and byte-exact generated catalogs. |

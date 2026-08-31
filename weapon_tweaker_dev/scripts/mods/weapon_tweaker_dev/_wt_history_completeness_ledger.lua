@@ -23,6 +23,21 @@ return {
             projection_kind = "adjacent_delta",
         },
         {
+            catalog_id = "wt_history_patch_2_0_10_sword_and_dagger_v1",
+            cumulative_backfill = false,
+            declared_scope = "Patch 2.0.10 Sword-and-Dagger heavy-profile melee-boost values and their four exact current routes",
+            exclusions = {
+                { id = "outside_sword_and_dagger_family", reason = "all other adjacent Patch 2.0.10 files and leaves are outside the official Sword-and-Dagger heavy-attack fix" },
+                { id = "shared_profile_consumers", reason = "native shared profiles remain current; only private profiles on exact Sword-and-Dagger routes are selected" },
+            },
+            family_states = {
+                { family_id = "sword_and_dagger", operations = 4, profiles = 2, state_id = "2_0_9_1" },
+            },
+            later_same_leaf_policy = "only the two adjacent scalar values are projected into private current-schema profiles over exact current route guards",
+            official_coverage = "complete_for_declared_scope",
+            projection_kind = "adjacent_delta",
+        },
+        {
             catalog_id = "wt_history_patch_3_1_v1",
             cumulative_backfill = false,
             declared_scope = "Patch 3.1 Blunderbuss maximum-ammunition and Tuskgor Spear block-cost leaves only",
@@ -162,10 +177,10 @@ return {
     schema = 1,
     stream_identity = "public_dev_byte_identical",
     totals = {
-        catalogs = 9,
+        catalogs = 10,
         families = 22,
-        family_states = 33,
-        operations = 207,
-        states = 11,
+        family_states = 34,
+        operations = 211,
+        states = 12,
     },
 }
