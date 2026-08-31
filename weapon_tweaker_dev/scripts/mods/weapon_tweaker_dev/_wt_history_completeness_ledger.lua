@@ -23,6 +23,20 @@ return {
             projection_kind = "adjacent_delta",
         },
         {
+            catalog_id = "wt_history_patch_2_0_9_1_halberd_v1",
+            cumulative_backfill = false,
+            declared_scope = "Patch 2.0.9.1 Halberd push-follow-up chain leaves only",
+            exclusions = {
+                { id = "outside_halberd_push_follow_up", reason = "all other adjacent source changes are outside the official missing-overhead fix" },
+            },
+            family_states = {
+                { family_id = "kruber_halberd", operations = 20, profiles = 0, state_id = "2_0_9" },
+            },
+            later_same_leaf_policy = "only the exact adjacent push-follow-up chain is projected over current source-derived guards",
+            official_coverage = "complete_for_declared_scope",
+            projection_kind = "adjacent_delta",
+        },
+        {
             catalog_id = "wt_history_patch_2_0_10_sword_and_dagger_v1",
             cumulative_backfill = false,
             declared_scope = "Patch 2.0.10 Sword-and-Dagger heavy-profile melee-boost values and their four exact current routes",
@@ -177,10 +191,10 @@ return {
     schema = 1,
     stream_identity = "public_dev_byte_identical",
     totals = {
-        catalogs = 10,
-        families = 22,
-        family_states = 34,
-        operations = 211,
-        states = 12,
+        catalogs = 11,
+        families = 23,
+        family_states = 35,
+        operations = 231,
+        states = 13,
     },
 }

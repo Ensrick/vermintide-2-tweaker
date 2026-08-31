@@ -1,5 +1,16 @@
 # Weapon Tweaker Changelog
 
+## 0.12.326-dev (2026-08-31) -- mirror source-exact Patch 2.0.9.1 Halberd history (#1436) [not-started]
+
+- Mirrors public beta 0.12.325: Kruber's Halberd gains a
+  **Game Version 2.0.9** state for the exact pre-2.0.9.1 push-follow-up chain;
+  `Current` remains a zero-write default.
+- Carries the same 20-leaf atomic plan, source-derived current guards,
+  fail-closed foreign-row handling, exact restoration, independent source
+  oracle, and dual-host reproduction as public.
+- Preserves the friends-only development overlay without adding hooks, RPCs,
+  profiles, assets, globals, or presentation state.
+
 ## 0.12.325-dev (2026-08-31) -- mirror source-exact Patch 2.0.10 Sword and Dagger history (#1436) [not-started]
 
 - Mirrors public beta 0.12.324: Kerillian's Sword and Dagger gains a

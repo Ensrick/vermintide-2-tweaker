@@ -8,10 +8,13 @@ historical/current values remain in the preserved extractor evidence; and
 in the decompiled source checkout. No runtime-catalog value is an oracle input.
 
 The same independently written evaluator also reproduces the adjacent/current
-evidence lanes for Patch 2.0.6, 2.0.10, 3.1, 3.2, 4.1.1, 4.6, 6.0, 6.6,
+evidence lanes for Patch 2.0.6, 2.0.9.1, 2.0.10, 3.1, 3.2, 4.1.1, 4.6, 6.0, 6.6,
 and 6.8.
 Patch 2.0.6 proves the three shared historical Handgun penetration leaves
 before the generator projects them onto the two immutable current clones.
+Patch 2.0.9.1 proves the complete 20-leaf Halberd push-follow-up chain
+boundary, including three current-only chain rows and exact nested-table
+guards, before the generator emits one atomic historical projection.
 Patch 2.0.10 independently proves the two Sword-and-Dagger heavy-profile
 values and regenerates the four exact current left/right routes without reading
 the runtime catalog. Patch 3.1
