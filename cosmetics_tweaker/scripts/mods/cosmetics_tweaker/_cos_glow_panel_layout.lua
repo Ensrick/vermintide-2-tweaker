@@ -43,6 +43,37 @@ function PanelLayout.toggle_offset(panel_width, button_width, inset, z)
     return { math.max(inset, panel_width - button_width - inset), inset, z or 20 }
 end
 
+-- Bind the picker-owned frame constants once while continuing to read their
+-- current values at call time. This keeps the public GlowPicker frame contract
+-- intact while the pure layout owner constructs all shared frame styles.
+function PanelLayout.make_frame_style(style_owner)
+    return function(width, height, z, color)
+        return {
+            texture_size = style_owner.FRAME_TEX_SIZE,
+            texture_sizes = style_owner.FRAME_TEX_SIZES,
+            color = color or { 255, 255, 255, 255 },
+            offset = { 0, 0, z or 3 },
+            area_size = { width, height },
+        }
+    end
+end
+
+-- Bind the authored inset once so every persistent toggle uses the same live
+-- Information-panel geometry and fail-closed mutation policy.
+function PanelLayout.make_toggle_positioner(inset)
+    return function(host, widget, button_width, z)
+        local layout = PanelLayout.resolve(host)
+        if not layout or type(widget) ~= "table" then return false end
+        local target = PanelLayout.toggle_offset(
+            layout.width, button_width, inset, z or 20)
+        if not target then return false end
+        widget.offset = widget.offset or { 0, 0, 0 }
+        widget.offset[1], widget.offset[2], widget.offset[3] =
+            target[1], target[2], target[3]
+        return true
+    end
+end
+
 function PanelLayout.contains(layout, x, y)
     return type(layout) == "table" and _finite_number(x) and _finite_number(y)
         and x >= layout.x and x <= layout.x + layout.width

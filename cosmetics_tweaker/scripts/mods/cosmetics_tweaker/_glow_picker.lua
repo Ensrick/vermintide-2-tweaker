@@ -101,27 +101,8 @@ GlowPicker.FRAME_TEX_SIZES = {
     horizontal = { 1, 5 },
 }
 
-function GlowPicker.frame_style(width, height, z, color)
-    return {
-        texture_size = GlowPicker.FRAME_TEX_SIZE,
-        texture_sizes = GlowPicker.FRAME_TEX_SIZES,
-        color = color or { 255, 255, 255, 255 },
-        offset = { 0, 0, z or 3 },
-        area_size = { width, height },
-    }
-end
-
-function GlowPicker.position_toggle(host, widget, button_width, z)
-    local layout = PANEL_LAYOUT.resolve(host)
-    if not layout or type(widget) ~= "table" then return false end
-    local target = PANEL_LAYOUT.toggle_offset(
-        layout.width, button_width, PANEL_INSET, z or 20)
-    if not target then return false end
-    widget.offset = widget.offset or { 0, 0, 0 }
-    widget.offset[1], widget.offset[2], widget.offset[3] =
-        target[1], target[2], target[3]
-    return true
-end
+GlowPicker.frame_style = PANEL_LAYOUT.make_frame_style(GlowPicker)
+GlowPicker.position_toggle = PANEL_LAYOUT.make_toggle_positioner(PANEL_INSET)
 
 local function _make_scenegraph_definition()
     -- audit 2026-06-07 (F11): `UILayer` is a vanilla global (scripts/ui/ui_layer.lua,
