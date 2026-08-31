@@ -171,7 +171,8 @@ return function(H, repo_root)
     H.test("CT #1124 owner is strictly observation-only and bounded", function()
         local source = read(owner_path)
         H.truthy(source:find('MARKER = "CT_GARGOYLE1124_OBSERVATION_ONLY_V1"', 1, true))
-        H.truthy(source:find('pcall(engine_printf, "[ct:1124] %s", line)', 1, true))
+        H.truthy(source:find('pcall(printf, "[ct:1124] %s", line)', 1, true))
+        H.equal(source:find('rawget(_G, "printf")', 1, true), nil)
         H.truthy(source:find("RUN_RECORD_CAP = 96", 1, true))
         H.truthy(source:find("TOTAL_RECORD_CAP = 512", 1, true))
         H.truthy(source:find("mutation=false", 1, true))
@@ -654,6 +655,39 @@ return function(H, repo_root)
             end
             H.equal(calls, 700)
             H.equal(#f.logs, 512)
+        end)
+    end)
+
+    H.test("CT #1124 direct engine output is fail-closed", function()
+        exercise_fixture(function(f)
+            local register = f.hooks["LimitedItemTrackSystem.register_group"]
+            local system = {
+                active_groups = {},
+                active_groups_n = 0,
+                groups = {},
+            }
+            local calls = 0
+            local function native(self, group_name, pool_size)
+                calls = calls + 1
+                self.groups[group_name] = {
+                    pool_size = pool_size,
+                    spawners = {},
+                    spawners_n = 0,
+                }
+                return "native", nil, calls
+            end
+
+            _G.printf = nil
+            local a, b, c = register(native, system, "missing_printf", 1)
+            H.equal(a, "native")
+            H.equal(b, nil)
+            H.equal(c, 1)
+
+            _G.printf = function() error("engine logger failure") end
+            a, b, c = register(native, system, "throwing_printf", 1)
+            H.equal(a, "native")
+            H.equal(b, nil)
+            H.equal(c, 2)
         end)
     end)
 

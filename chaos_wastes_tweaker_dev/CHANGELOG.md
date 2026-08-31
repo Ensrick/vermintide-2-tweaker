@@ -1,5 +1,13 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.348-dev (2026-08-30) -- make gargoyle evidence source-provable (#1124) [not-started]
+
+- Emits the existing bounded, observation-only `[ct:1124]` ledger through a
+  direct engine `printf` call so the deployed-tree lifecycle authority can
+  prove the exact diagnostic marker without trusting an indirect alias.
+- Missing or throwing engine output remains contained by `pcall`; behavioral
+  coverage proves neither condition can suppress the original objective path.
+
 ## 0.7.347-dev (2026-08-25) -- extract peer-parity owner (#2, #1416) [not-started]
 
 - Moves the complete peer-catalog parity, pool-filtering, shared-state,
