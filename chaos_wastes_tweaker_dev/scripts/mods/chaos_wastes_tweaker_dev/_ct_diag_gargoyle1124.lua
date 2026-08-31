@@ -132,10 +132,10 @@ return function(mod, ctx)
         end
         local ok, line = pcall(string.format, fmt, ...)
         if not ok then line = "format_error=true mutation=false" end
-        local engine_printf = rawget(_G, "printf")
-        if type(engine_printf) == "function" then
-            pcall(engine_printf, "[ct:1124] %s", line)
-        end
+        -- Direct engine output keeps the literal issue marker provable by the
+        -- deployed-tree lifecycle verifier.  `pcall` also makes a missing or
+        -- throwing engine logger observation-only and fail-closed.
+        pcall(printf, "[ct:1124] %s", line)
         run.emitted = run.emitted + 1
         owner.records = owner.records + 1
         return true
