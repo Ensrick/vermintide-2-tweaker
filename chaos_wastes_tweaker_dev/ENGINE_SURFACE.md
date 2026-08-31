@@ -36,10 +36,10 @@ orchestration, adventure presentation, boon/grudge runtime, and settings
 lifecycle have explicit completion owners; boon internals remain split into
 `_ct_boon_balance.lua`, `_ct_boon_registry.lua`, and `_ct_meta_trait_boons.lua`,
 weapon generation is owned by `_ct_weapon_trait_generation.lua`, peer/version
-diagnostics are owned by `_ct_peer_manifest_owner.lua`, and the bulk of the
-`/ct_regression_test` check suite extracted verbatim into `_ct_regression.lua`
-(a pure `return function(mod, ctx)` installer, dofiled once at the suite's
-original position so append order is preserved), plus its existing sibling
+diagnostics are owned by `_ct_peer_manifest_owner.lua`, and the
+`/ct_regression_test` stream is split between `_ct_regression.lua` and its
+bounded `_ct_regression_resource_safety.lua` tail (pure installers loaded before
+registration and invoked in the original order), plus its existing sibling
 modules. It reshapes CW
 economy, the boon/power-up pool, curses/mutators, altars/chests, weapon
 generation, and injects vanilla Adventure missions into the CW graph. Its engine

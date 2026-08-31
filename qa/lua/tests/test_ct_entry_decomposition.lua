@@ -23,6 +23,7 @@ return function(H, repo_root)
     local entry = CTSource.entry(repo_root)
     local expanded = CTSource.expanded(repo_root)
     local regression = read("_ct_regression.lua")
+    local resource_safety = read("_ct_regression_resource_safety.lua")
     local owners = {
         host = read("_ct_host_state_transport_owner.lua"),
         run = read("_ct_run_runtime_owner.lua"),
@@ -38,6 +39,8 @@ return function(H, repo_root)
             "_ct_adventure_runtime_owner.lua",
             "_ct_boon_runtime_owner.lua",
             "_ct_settings_lifecycle_owner.lua",
+            "_ct_regression.lua",
+            "_ct_regression_resource_safety.lua",
         }) do
             local installer = assert(loadfile(root .. name))()
             H.equal(type(installer), "function", name .. " must return an installer")
@@ -60,6 +63,18 @@ return function(H, repo_root)
             H.truthy(owner_lines < 1500,
                 name .. " owner exceeded the 1500-line owner ceiling")
         end
+        local regression_lines = 0
+        for line in regression:gmatch("[^\r\n]+") do
+            if line:match("%S") then regression_lines = regression_lines + 1 end
+        end
+        local resource_lines = 0
+        for line in resource_safety:gmatch("[^\r\n]+") do
+            if line:match("%S") then resource_lines = resource_lines + 1 end
+        end
+        H.truthy(regression_lines < 1500,
+            "CT core regression owner exceeded the 1500-line target")
+        H.truthy(resource_lines < 1500,
+            "CT resource-safety regression owner exceeded the 1500-line target")
     end)
 
     H.test("CT completion owners install exactly once in preserved runtime order", function()
@@ -99,7 +114,10 @@ return function(H, repo_root)
         -- 71 pre-extraction checks + issue917_adventure_illusion_preservation
         -- (#917 added a NEW runtime check; cardinality is still conserved for
         -- every extracted check).
-        H.equal(count_plain(regression, "_rt_register("), 72)
+        H.equal(count_plain(regression, "_rt_register("), 62)
+        H.equal(count_plain(resource_safety, "_rt_register("), 10)
+        H.equal(count_plain(regression, "_rt_register(")
+            + count_plain(resource_safety, "_rt_register("), 72)
 
         H.equal(count_plain(owners.host, "_rt_register("), 4)
         H.equal(count_plain(owners.run, "_rt_register("), 0)

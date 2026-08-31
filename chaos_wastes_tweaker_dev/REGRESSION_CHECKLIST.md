@@ -54,7 +54,7 @@ Last updated: 2026-08-13.
 | Symptom | The dev entry file regrows past its frozen size baseline, or a boon extraction changes hook order, duplicates a hook, loses mutable save/restore state, or hides a source contract from QA. |
 | Root cause | Moving a lexical block without an explicit dependency/state contract, or teaching a sibling module to load another sibling independently. |
 | Expected post-fix | Entry loads balance, registry, then meta/trait exactly once at the original load point; the short-lived context is cleared; the entry remains at or below its completed 1,498 canonical-line ceiling. The meta/trait wrapper synchronously installs the peer-parity owner at the former inline boundary; that owner retains the exact #426/#1191 channel, catalog, pool/strip/diagnostic behavior, one `hot_join_sync`, one `remove_peer`, two mutually exclusive update branches, public `mod._ct_*` fields, and all eight runtime checks before `_ct_stack_rebroadcast_owner.lua` consumes the beacon. Every retained callback stays inert behind a terminal false marker until the beacon commits; any pre-commit failure restores exact raw publications and cannot be retried. The wrapper and owner each stay below 1,500 canonical lines; target-size debt drops by one without changing the two hard-limit offenders. |
-| Detection | `qa/check_file_sizes.ps1`; `qa/check_decomposition_contracts.ps1`; `qa/check_lua_unit_tests.ps1` including `test_ct_boon_split`, `test_peer_parity_transition`, `test_peer_parity_install_transaction`, `test_ct_426_exact_catalog`, `test_ct_ammo_guard_policy`, and `test_ct_entry_decomposition`; strict CT mod lint must retain the hook inventory with zero duplicates and zero forward/late-local warnings. |
+| Detection | `qa/check_file_sizes.ps1`; `qa/check_decomposition_contracts.ps1`; `qa/check_lua_unit_tests.ps1` including `test_ct_boon_split`, `test_peer_parity_transition`, `test_peer_parity_install_transaction`, `test_ct_426_exact_catalog`, `test_ct_ammo_guard_policy`, `test_ct_entry_decomposition`, and `test_ct_regression_resource_safety`; strict CT mod lint must retain the hook inventory with zero duplicates and zero forward/late-local warnings. |
 | Manual risk | Engine-free tests cannot prove every VT2 lifecycle callback. Before promotion, run `/ct_regression_test`, change one vanilla boon tweak and one CT trait boon setting, then start a solo expedition and confirm both reapply without duplicate-hook warnings. |
 
 ### modded-boon pre-roster hot-join parity - issue #426
@@ -343,7 +343,7 @@ Falsifiable fallback paths if the live pass fails:
 | Category | UNIT |
 | Repro | Open Mod Options with CT dev enabled and inspect the Single Mission Loader's Run Progress dropdown. |
 | Expected post-fix | All five labels render with one literal `%`; startup contains no `Invalid string format` exception for `ctdm_p_1` through `ctdm_p_5`. The final label is `Deepest (99.9%)`, matching vanilla's strict `< 1.0` engine boundary. |
-| Detection | `/ct_regression_test`: `localization_format_safe` and `mission_catalog_localization_format_safe_564` both pass. |
+| Detection | `/ct_regression_test`: `localization_format_safe` and `mission_catalog_localization_format_safe_564` both pass. Offline `test_ct_regression_resource_safety.lua` pins the generated-resource check's owner, order, and error behavior. |
 
 ### starting-boon-preview-chamber-context - Preview misses the pre-queue preparation window
 
