@@ -209,7 +209,6 @@ end)
 -- the exact registered function objects against fake delegates.
 local _SPLedger = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_screen_particle_ledger")
 local _p209_state = _SPLedger.new()
-local _printf209 = rawget(_G, "printf") or function(fmt, ...) print(string.format(fmt, ...)) end
 
 -- Best-effort caller identification: first stack frame outside gut/VMF files.
 -- The retail sandbox may not expose `debug`; degrade to "?" (never throw).
@@ -230,13 +229,15 @@ end
 local function _p209_row(kind, effect, id)
     local allowed, capped_now = _SPLedger.row_allowed(_p209_state)
     if not allowed then return end
-    _printf209("[gut:209] %s | effect=%s id=%s tp=%s callsite=%s%s",
+    -- Keep the literal emitter directly visible to deployed-tree authority.
+    -- The observation must remain fail-closed if engine logging is unavailable.
+    pcall(printf, "[gut:209] %s | effect=%s id=%s tp=%s callsite=%s%s",
         kind, tostring(effect), tostring(id), tostring(_tp_enabled), _p209_callsite(),
         capped_now and " | ROW-CAP reached, further lifecycle rows suppressed" or "")
 end
 
 local function _p209_transition(kind)
-    _printf209("[gut:209] tp-%s | live=%s", kind, _SPLedger.snapshot(_p209_state))
+    pcall(printf, "[gut:209] tp-%s | live=%s", kind, _SPLedger.snapshot(_p209_state))
 end
 mod._gut209_transition_receipt = _p209_transition
 

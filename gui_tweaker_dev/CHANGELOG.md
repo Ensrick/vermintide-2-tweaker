@@ -1,5 +1,15 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.344-dev (2026-08-31) -- source-authoritative screen-particle diagnostics (#209) [diagnostics-armed]
+
+- Routes both bounded `[gut:209]` lifecycle signatures directly through
+  fail-closed engine `pcall(printf, literal, ...)` emitters. This removes the
+  ambient `rawget(_G, "printf")` alias that the strict deployed-tree verifier
+  could not prove while preserving the existing row cap, transition receipts,
+  particle ledger, and diagnostic-only behavior.
+- Adds production-path coverage that plants a throwing engine logger and proves
+  particle creation plus the third-person transition remain fail-closed.
+
 ## 0.2.343-dev (2026-08-29) -- synchronize the host's live boss subtotal (#1448)
 
 - Adds one exact schema-1 `gut_boss_damage_snapshot_v1` request/snapshot
