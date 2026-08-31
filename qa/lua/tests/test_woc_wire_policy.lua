@@ -82,7 +82,7 @@ return function(H, repo_root)
 		H.truthy(source:find("rawget(names, woc_id) ~= ITEM_KEY", 1, true))
 	end)
 
-	H.test("WOC issue 595 packages its wire policy and guards module load failure", function()
+	H.test("WOC issue 595 packages helpers and guards module load failure", function()
 		local package_path = repo_root
 			.. "/weapons_of_chaos/resource_packages/weapons_of_chaos/weapons_of_chaos.package"
 		local package_file = assert(io.open(package_path, "rb"))
@@ -90,6 +90,10 @@ return function(H, repo_root)
 		package_file:close()
 		H.truthy(package_source:find(
 			'"scripts/mods/weapons_of_chaos/_woc_wire_policy"', 1, true))
+		H.truthy(package_source:find(
+			'"scripts/mods/weapons_of_chaos/_lib_appearance_fade"', 1, true))
+		H.truthy(package_source:find(
+			'"scripts/mods/weapons_of_chaos/_lib_resource_residency"', 1, true))
 
 		local main_path = repo_root
 			.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua"
@@ -98,5 +102,13 @@ return function(H, repo_root)
 		main_file:close()
 		H.truthy(main_source:find('type(_wire_policy.safe_item) ~= "function"', 1, true))
 		H.truthy(main_source:find("[WOC:595] wire policy unavailable", 1, true))
+		H.truthy(main_source:find("_appearance.load_runtime_helpers", 1, true))
+
+		local policy_path = repo_root
+			.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_appearance_policy.lua"
+		local policy_file = assert(io.open(policy_path, "rb"))
+		local policy_source = policy_file:read("*a")
+		policy_file:close()
+		H.truthy(policy_source:find("issue595_required_runtime_helpers_loaded", 1, true))
 	end)
 end

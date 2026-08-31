@@ -6,9 +6,10 @@ lives in `CHANGELOG.md`; reusable patterns are promoted to
 
 ---
 
-## #595 — Startup crash from a source-only wire-policy helper
+## #595 — Startup failure from source-only Lua helpers
 
 - **Detected:** 2026-07-14, WOC v0.1.11-dev.
+- **Regressed:** 2026-08-31, WOC v0.1.58-dev.
 - **Crash GUID:** `5906f1d7-ed94-444b-8f61-832ee17c1e49`.
 - **Fix build:** WOC v0.1.12-dev.
 
@@ -27,12 +28,28 @@ source tree the tests exercised. VMF contained the failed dofile, but the later
 loadout hook assumed a table and converted the packaging omission into a startup
 crash.
 
+The class regressed in v0.1.58-dev. `_lib_appearance_fade.lua` and
+`_lib_resource_residency.lua` existed in source and in the build receipt, but
+their `mod.dofile` calls were split across lines and neither helper was listed
+in the package. The shipped root bundle therefore omitted both compiled Lua
+resources. `_lib_appearance_fade` failed first and its immediate `.new(...)`
+index converted the nil result into a WOC initialization error.
+
+The original preventative gate was line-local: it searched each physical line
+for both the dofile call and its quoted target. Its documentation claimed every
+literal target was covered, but multiline calls were outside its real scope.
+
 ### Prevention
 - WOC's package now explicitly includes `_woc_wire_policy`.
 - The module load validates both the table and `safe_item` function. On failure,
   vanilla items pass unchanged and explicit `woc_` items fail closed.
-- The blocking Quick gate `check_dofile_package_coverage.ps1` audits every
-  literal dofile in all canonical active mods against source and package lists.
+- The blocking Quick gate `check_dofile_package_coverage.ps1` now tokenizes Lua
+  across whitespace and comments under both PS7 and PS5.1. It audits colon,
+  dot, and protected `pcall` forms even when their target is on another line,
+  and ignores calls or package entries that exist only in comments/strings.
+- Optional fade initialization validates the loaded module and constructor and
+  falls back to a bounded no-op adapter. Missing residency support similarly
+  leaves the pulse owner on its fail-closed compatibility path.
 - The built v0.1.12-dev bundle was independently listed: Murmur64
   `DFB5217E81413589` for `_woc_wire_policy` is present as a compiled Lua entry.
 - BUG_CLASSES class 45 records the cross-mod diagnosis and fix template.

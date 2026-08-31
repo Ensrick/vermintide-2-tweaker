@@ -1779,6 +1779,7 @@ Related coverage: CWV `cwv_wire_safe_thrown_variant_installed` and offline
 ## 45. Literal `mod:dofile` helper omitted from the compiled resource package
 
 **First seen:** 2026-07-14 (Weapons of Chaos v0.1.11-dev)
+**Regressed:** 2026-08-31 (Weapons of Chaos v0.1.58-dev; multiline calls)
 **Canonical Issue:** [#595](https://github.com/Ensrick/vermintide-2-tweaker/issues/595)
 **Lives in:** any VMB mod that adds a Lua helper and loads it with a literal
 `mod:dofile(...)`, `mod.dofile(mod, ...)`, or `pcall(mod.dofile, mod, ...)`
@@ -1797,7 +1798,9 @@ stream accidentally names the sibling stream's localization/helper file.
    calls such as `pcall(mod.dofile, mod, "...")`; those are the same VMF
    resource boundary even though they do not contain the `mod:dofile` token.
 2. Read the owning `resource_packages/<mod>/<mod>.package`; an explicit `lua =
-   [...]` list that omits the new helper is the root cause.
+   [...]` list that omits the new helper is the root cause. Do not search only
+   the physical source line containing `mod:dofile`: the receiver and literal
+   target may be separated by whitespace and comments across multiple lines.
 3. Do not accept source-level unit coverage as bundle evidence. Build with
    VMBLauncher and Murmur-hash the resource path; the resulting hash must appear
    as a `.lua` entry in the built mod bundle.
@@ -1807,13 +1810,20 @@ stream accidentally names the sibling stream's localization/helper file.
   that mod intentionally compiles every module.
 - Validate the returned module shape before registering consumers. Preserve
   unrelated vanilla behavior and fail closed for unsafe mod-owned identities.
-- Keep `qa/check_dofile_package_coverage.ps1` in the Quick gate. It checks every
-  literal dofile target in the canonical active-mod inventory for both source
-  existence and package coverage, including colon-form and dot-form calls.
+- Keep `qa/check_dofile_package_coverage.ps1` in the Quick gate. Its
+  comment-aware Lua tokenizer checks every direct literal target in the
+  canonical active-mod inventory for source existence and active `lua = [...]`
+  package coverage, including multiline colon, dot, and protected `pcall`
+  forms. Its dual-host self-test must retain multiline, comment, string,
+  wildcard, and wrong-package-section adversaries.
 
 ### Related Issues / commits
 - WOC v0.1.12-dev (#595); offline `test_woc_wire_policy.lua`; repository gate
   `check_dofile_package_coverage.ps1`.
+- WOC v0.1.58-dev recurrence (#595/#1497): `_lib_appearance_fade` and
+  `_lib_resource_residency` were omitted because the former gate was
+  line-local. Exact release-bundle enumeration proved both hashes absent even
+  though the source receipt listed both files.
 - GUT dev #824; the runtime localization-format check used
   `pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/gui_tweaker_localization")`
   and then treated the missing resource as a pass. The fix uses the dev

@@ -42,6 +42,86 @@ return function(H, repo_root)
 		H.equal(lookup[42], policy.VANILLA_3P)
 	end)
 
+	H.test("WOC #595 fade adapter construction fails closed", function()
+		local reports = {}
+		local deps = { marker = "deps" }
+		local live, ok, reason = policy.new_fade_adapter({
+			new = function(received)
+				return {
+					deps = received,
+					enroll = function() return true, { reason = "applied" } end,
+				}
+			end,
+		}, deps, function(row) reports[#reports + 1] = row end)
+		H.equal(ok, true)
+		H.equal(reason, "ready")
+		H.equal(live.deps, deps)
+		H.equal(#reports, 0)
+
+		local fallback, missing_ok, missing_reason = policy.new_fade_adapter(nil, deps,
+			function(row) reports[#reports + 1] = row end)
+		H.equal(missing_ok, false)
+		H.equal(missing_reason, "module_unavailable")
+		H.equal(reports[1], "module_unavailable")
+		local applied, report = fallback:enroll("owner", "owner_wield")
+		H.equal(applied, false)
+		H.equal(report.edge, "owner_wield")
+		H.equal(report.reason, "adapter_unavailable")
+		H.equal(report.error, "module_unavailable")
+
+		local throwing = setmetatable({}, {
+			__index = function() error("planted member failure") end,
+		})
+		local guarded, guarded_ok, guarded_reason = policy.new_fade_adapter(
+			throwing, deps, function() error("planted reporter failure") end)
+		H.equal(guarded_ok, false)
+		H.equal(guarded_reason, "constructor_unavailable")
+		H.equal(type(guarded.enroll), "function")
+
+		local malformed, malformed_ok, malformed_reason = policy.new_fade_adapter({
+			new = function() return {} end,
+		}, deps)
+		H.equal(malformed_ok, false)
+		H.equal(malformed_reason, "adapter_shape_invalid")
+		H.equal(type(malformed.enroll), "function")
+	end)
+
+	H.test("WOC #595 runtime helper loader contains missing packages", function()
+		local paths, checks, reports = {}, {}, {}
+		local fade_module = {
+			new = function(deps)
+				return { deps = deps, enroll = function() return true end }
+			end,
+		}
+		local residency_module = { resource_resident = function() return true end }
+		local loader = {
+			dofile = function(_, path)
+				paths[#paths + 1] = path
+				if path:find("appearance_fade", 1, true) then return fade_module end
+				return residency_module
+			end,
+		}
+		local fade, residency = policy.load_runtime_helpers(
+			loader, { marker = "deps" },
+			function(name, check) checks[name] = check end,
+			function(fmt, ...) reports[#reports + 1] = string.format(fmt, ...) end)
+		H.equal(#paths, 2)
+		H.equal(fade.deps.marker, "deps")
+		H.equal(residency, residency_module)
+		H.equal(#reports, 0)
+		local live_check = checks.issue595_required_runtime_helpers_loaded
+		H.equal(type(live_check), "function")
+		H.equal(pcall(live_check), true)
+
+		local failed_check
+		local fallback, missing = policy.load_runtime_helpers({
+			dofile = function() error("planted package miss") end,
+		}, {}, function(_, check) failed_check = check end, function() end)
+		H.equal(missing, nil)
+		H.equal(fallback:enroll("owner", "owner_wield"), false)
+		H.equal(pcall(failed_check), false)
+	end)
+
 	H.test("WOC #613 master package reaches model material and texture roots", function()
 		local path = repo_root .. "/weapons_of_chaos/resource_packages/weapons_of_chaos/weapons_of_chaos.package"
 		local file = assert(io.open(path, "rb"))
