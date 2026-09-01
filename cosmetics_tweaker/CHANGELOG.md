@@ -1,5 +1,30 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.219-dev (2026-09-01) -- transactional Loremaster registration (#428, #2) [offline/tooling]
+
+- Moves Loremaster's Armoury discovery and publication into one Cosmetics-owned
+  transaction. Clone rows, offhand catalogs, parent packages, localization,
+  and both strict network-lookup axes are planned and validated off-table in
+  deterministic order before any live surface changes.
+- Snapshots and restores ItemMasterList, MoreItemsLibrary persistent/backend
+  mirrors, both network lookups, every bridge map/list, backend item mirrors,
+  dirty state, and readiness flags if MIL rejects a row or any commit stage
+  raises. Rollback never calls MIL removal, which can refuse equipped items.
+- Publishes LA readiness last and leaves the frame scheduler retryable after a
+  preflight, commit, or post-registration failure. Identical retry failures are
+  logged only once rather than once per frame.
+- Treats LA's texture-apply function as an explicit post-commit readiness
+  boundary. A loaded SKIN_LIST without the callable apply API no longer permits
+  offhand merge, persistence restore, or the one-way scheduler latch; the same
+  bounded retry completes automatically once LA publishes that API.
+- Proves the apply gate occupies LA's raw function field before publishing
+  readiness. Inherited, discarded, or throwing assignment-proxy shapes remain
+  unlatched with stable retry evidence instead of reporting a phantom install.
+- Adds executable strict-lookup, foreign-owner, missing-dependency, silent-MIL,
+  every-stage rollback/retry, insertion-order, production-bridge, and scheduler
+  adversarial coverage. This is an offline architecture hardening lane; it does
+  not by itself claim the remaining in-game appearance defects fixed.
+
 ## 0.9.218-dev (2026-08-24) -- name Chaos Wastes yield diagnostic by role (#499) [not-started]
 
 - Renames the active Chaos Wastes appearance-yield diagnostic to

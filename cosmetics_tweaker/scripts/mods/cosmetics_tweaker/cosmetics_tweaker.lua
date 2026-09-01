@@ -46,8 +46,8 @@ local MH_EMBED = mod:dofile("scripts/mods/cosmetics_tweaker/_material_hijack_emb
 -- sibling tweaker mod already claimed via `_G._cos_mil_embed_owner`.
 mod:dofile("scripts/mods/cosmetics_tweaker/_moreitemslibrary_embedded")
 
-local U = mod:dofile("scripts/mods/cosmetics_tweaker/_cosmetic_unlocks")
-local LA_BRIDGE = mod:dofile("scripts/mods/cosmetics_tweaker/_la_bridge")
+local U = mod:dofile("scripts/mods/cosmetics_tweaker/_cosmetic_unlocks"); mod._cos_network_lookup = mod:dofile("scripts/mods/cosmetics_tweaker/_lib_network_lookup")
+mod._cos_la_registration_owner_module = mod:dofile("scripts/mods/cosmetics_tweaker/_la_registration_owner"); local LA_BRIDGE = mod:dofile("scripts/mods/cosmetics_tweaker/_la_bridge")
 local CUSTOM_HATS = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_custom_hats")
 mod._cos_attachment_link_policy = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_attachment_link_policy")
 local GK_SET = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_grail_knight_set"); mod._cos_reikland_provider_registered = GK_SET.add_outfit_provider(mod:dofile("scripts/mods/cosmetics_tweaker/_cos_reikland_griffin"))
@@ -106,7 +106,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- ([174:loadout] retired with #174/#500; _diag_probe renamed per §2.2b/#499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.218-dev"
+local MOD_VERSION = "0.9.219-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the

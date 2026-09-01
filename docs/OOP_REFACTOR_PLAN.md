@@ -112,14 +112,14 @@ explains the contracts; it is not a second hand-maintained numeric authority.
 | Event Tweaker | Structural phase complete | 62-line entry manifest; `_evt_*` owners retained by contract | #504 |
 | Enemy Tweaker | Structural phase complete | 97-line entry manifest; `_et_*` owners retained by contract | #504 |
 | General Tweaker Dev bot fixes | Target-tier helper complete | `_gt_bot_fixes.lua` reduced from 2,483 to 1,485 measured lines; ordered update and aid owners retained by contract | #2 |
-| Cosmetics | Structural phase complete | Thirty-seven required owners retain the exact-instance offhand state/apply, diagnostics, Deus precedence, and prior render/wire/lifecycle boundaries; current entry ceiling 1,494 nonblank lines meets the 1,500 completion target | #504 / #2 / #1159 |
+| Cosmetics | Structural phase complete | Thirty-nine required owners/helpers retain the exact-instance offhand state/apply, transactional LA registration, strict lookup validation, diagnostics, Deus precedence, and prior render/wire/lifecycle boundaries; current entry ceiling 1,494 nonblank lines meets the 1,500 completion target | #504 / #2 / #1159 / #428 |
 | Weapon Tweaker | Structural phase complete | Ten required animation, availability, transform, cross-character safety/template, local/preview presentation, Moonfire AOE, regression, and balance owners retained per stream; stable/dev entry ceilings 1,328/1,487 nonblank lines meet the 1,500 completion target | #504 / #2 / #1159 |
 | Career Tweaker | Structural phase complete | 907-line balance orchestrator under its 910-line ceiling; bounded catalog, hook, and Foot Knight owners retained by contract | #504 / #2 / #1159 |
 | CIM Dev | Structural phase complete | Thirteen required bootstrap/state/wire/forge/inventory/command/economy/loadout/regression owners retained; current entry ceiling 1,433 nonblank lines meets the 1,500 completion target | #1159 / #504 / #2 |
 | CT Dev | Structural phase complete | Twenty-eight required owners include host-state transport, run/backend orchestration, adventure presentation, boon/grudge runtime, settings lifecycle, and every prior specialized boundary; current entry ceiling 1,498 nonblank lines meets the 1,500 completion target | #1159 / #504 / #291 / #107 / #104 / #258 / #271 / #2 |
 | CWV | Structural phase complete | Nineteen required catalog, template, skin/illusion, javelin/rapier, bootstrap, identity-transport, world/husk/menu presentation, registration, transform, mesh, musket, and regression owners retained; current entry ceiling 1,490 nonblank lines meets the 1,500 completion target | #504 / #2 / #1159 |
 | Weapons of Chaos | Structural phase complete | Fourteen required wire, Blightreaper, rarity, appearance, preview, icon, relic-registration, relic-catalog, and lifecycle owners retained; current entry ceiling 1,390 nonblank lines meets the 1,500 completion target | #504 / #2 / #1159 |
-| Shared copied libraries | Partial | exact-byte sync gate covers 12 canonical libraries across 37 manifested consumer copies; roadmap items remain under #428 | #428 |
+| Shared copied libraries | Partial | exact-byte sync gate covers 14 canonical libraries across 51 manifested consumer copies; roadmap items remain under #428 | #428 |
 | Appearance consistency | Separate architecture program | descriptor/census work and live diagnostics are owned by #660; module splitting alone does not prove render-surface consistency | #660 |
 
 #504 owns the staged structural decomposition and its module contracts. #2 owns
@@ -218,8 +218,8 @@ sender-side substitution on it (BUG_CLASSES 31).
 ### WS4 - Shared-lib extraction (#428, respects the standalone invariant: copied `_lib_*.lua`, build-time sync, never `get_mod` deps)
 
 > **STATUS: PARTIAL 2026-08-25.** `tools/shared_lib/manifest.psd1` currently
-> enforces 13 canonical libraries across 45 consumer copies. The canonical
-> `_lib_network_lookup` now has four strict, byte-identical consumers and Enemy's
+> enforces 14 canonical libraries across 51 consumer copies. The canonical
+> `_lib_network_lookup` now has seven strict, byte-identical consumer copies and Enemy's
 > Warlord/Chosen owners share one entry-loaded instance. Remaining-consumer
 > migrations for direct NetworkLookup owners, wire substitution, DLC ownership, the
 > regression harness, and MIL/build-entry consolidation remain roadmap items.
@@ -306,8 +306,9 @@ lookup moved into `_cos_offhand_state_runtime.lua`; local body and preview mesh
 validation/paint moved into `_cos_offhand_apply_runtime.lua`; read-only offhand
 and glow diagnostics and the Deus mission-only precedence rule gained dedicated
 owners. Executable tests pin idempotent merge, bounded restore, fail-closed dual
-validation, and mismatched-mesh paint refusal. The entry ceiling is now 1,494
-nonblank lines (down from 2,051), with 37 required owners. The Cosmetics
+validation, and mismatched-mesh paint refusal. The entry ceiling remains 1,494
+nonblank lines (down from 2,051), now with 39 required owners/helpers after the
+transactional LA registrar and manifested lookup consumer. The Cosmetics
 structural phase is complete; appearance behavior remains tracked separately.
 
 ### WS6 - Hygiene sweep (small, high count)

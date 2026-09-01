@@ -249,14 +249,34 @@ Exposes Loremaster's Armoury (LA) cosmetic recolors as separate equippable items
 **Dependencies:** Loremaster's Armoury, MoreItemsLibrary (MIL). Both optional — bridge is a no-op if either is missing.
 
 **Files:**
-- `cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_la_bridge.lua` — clone registration, apply gate, texture routing
+- `cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_la_registration_owner.lua` — deterministic registration plan, strict preflight, atomic commit, exact rollback
+- `cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_la_bridge.lua` — pure clone/offhand planning inputs, apply gate, texture routing
 - `cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua` — loadout hooks, preview hooks, diagnostic commands (search for "LA bridge" / "la_bridge" / "loadout" sections)
 
 ### How it works end-to-end
 
-#### 1. Clone Registration (boot time, `_la_bridge.lua:register_all`)
+#### 1. Clone Registration (deferred, `_la_bridge.lua:register_all`)
 
-Iterates `LA.SKIN_LIST`, filters for `swap_hand == "hat" or "armor"`, matches each variant's `new_units[1]` to a vanilla `ItemMasterList` key via a unit-path index, then clones the IML entry:
+`_la_registration_owner.lua` sorts `LA.SKIN_LIST`, matches hat/armor variants
+to a deterministic lexical `ItemMasterList` unit-path owner, and builds every
+clone and derived bridge catalog off-table. It also discovers every
+`kind="unit"` inventory package unconditionally, sorts the package and item-name
+axes, and validates complete shadow copies of both strict bidirectional
+`NetworkLookup` tables before any live write. A sparse, asymmetric, missing, or
+foreign-owned surface rejects the attempt without mutation.
+
+After preflight, the owner snapshots the exact current IML, MIL persistent
+tables and captured mirrors, backend item mirror/dirty state, both network
+lookups, all affected bridge maps/lists, and readiness flags. MIL registration,
+IML publication, lookup publication, and bridge publication form one protected
+commit. Any thrown or silently rejected MIL row restores every snapshot directly;
+rollback never calls MIL removal because upstream may refuse equipped items.
+`la_registered` is the final publication write. The update scheduler latches
+completion only after the apply gate, offhand merge, and persisted-selection
+restore also succeed; otherwise the next frame retries and identical failure
+logs are coalesced.
+
+Each accepted hat/armor variant becomes:
 
 ```
 backend_id = vanilla_key .. "_LA_" .. la_key
@@ -271,7 +291,7 @@ Clone entry modifications (`build_clone_entry`):
 - `entry.cos_la_armoury_key = la_key` — LA's internal key for texture lookup
 - `entry.cos_la_vanilla_key = vanilla_key` — original hat key
 
-Clones are registered with MIL via `mil():add_mod_items_to_local_backend(entries, "cosmetics_tweaker")` and added to `NetworkLookup.item_names` to prevent network-lookup crashes.
+Clones are registered with MIL via `mil():add_mod_items_to_local_backend(entries, "cosmetics_tweaker")`; their item names and all manifested LA unit packages are published to their already-validated lookup shadows as part of the same commit.
 
 **Lookup tables** (all on the `M` module table):
 | Table | Key → Value | Purpose |
