@@ -37,11 +37,12 @@ Patch 6.11.0 independently selects and rehydrates Kruber Longbow's exact
 automatic-zoom delay on both source-evaluated templates. The two evaluator
 lanes agree on two operations and zero unsupported deltas before the generator
 can expose the family as one atomic selector.
-Hotfix 6.11.2 independently selects Sienna Dagger Heavy Attack 2's one
-damage-profile route, rehydrates its current native-profile guard, and agrees
-with the primary evaluator before catalog generation. Its enclosing gate also
-pins the current native damage-profile and network-lookup blobs, proving both
-profile identities share the vanilla lookup without adding transport.
+Hotfix 6.11.2 independently selects Sienna Dagger Heavy Attack 2's route and
+Axe & Falchion Heavy Attacks 1 and 2's right-hand routes, rehydrates all three
+current native-profile guards, and agrees with the primary evaluator before
+catalog generation. Its enclosing gate pins the current native damage-profile
+and network-lookup blobs, proving all identities share the vanilla lookup
+without adding transport.
 
 Pinned source input:
 

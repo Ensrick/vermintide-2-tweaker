@@ -1,5 +1,21 @@
 # Weapon Tweaker Changelog
 
+## 0.12.328-beta (2026-09-01) -- complete source-exact Hotfix 6.11.2 route slice (#1436) [not-started]
+
+- Extends **Game Version 6.11.1** to **Saltzpyre's Axe and Falchion**. It
+  restores only Heavy Attacks 1 and 2's right-hand damage-profile routes from
+  current `light_slashing_smiter_dual` to source-exact
+  `axe_falcion_heavy_smiter_vertical_right`; the existing Sienna Dagger route
+  remains unchanged and `Current` remains inert.
+- The shared Hotfix 6.11.2 boundary now proves exactly three native routes
+  through adjacent and current-anchor evidence, two independent evaluators,
+  native profile/network-lookup checks, and byte-identical public/Dev data.
+- Axe & Falchion refuses both writes atomically if either current guard is
+  missing or foreign, restores exact table identities, and owns no private
+  profile, RPC, wire schema, asset, or global root.
+- #1436 remains open and outside the live-test queue because this is one bounded
+  slice of the requested all-weapons history catalog.
+
 ## 0.12.327-beta (2026-09-01) -- source-exact Patch 6.11.0 Kruber Longbow history (#1436) [not-started]
 
 - Adds **Game Version 6.10.0** for **Kruber's Longbow**. The bounded state

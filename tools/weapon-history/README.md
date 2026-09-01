@@ -273,8 +273,8 @@ owned. The official boundary is [Patch 6.11.0](https://forums.fatsharkgames.com/
 
 ### Hotfix 6.11.2 boundary
 
-Hotfix 6.11.2 uses an adjacent-boundary contract for Sienna's Dagger Heavy
-Attack 2:
+Hotfix 6.11.2 uses adjacent-boundary contracts for Sienna's Dagger Heavy
+Attack 2 and Saltzpyre's Axe & Falchion Heavy Attacks 1 and 2:
 
 | Role | Source revision |
 |---|---|
@@ -282,13 +282,18 @@ Attack 2:
 | Post-boundary 6.11.2 | `9fbf92c11acfaca5c49f5e40d565b0743a2bdf43` |
 | Current content anchor (6.12.0) | `038498af2b565bcb10bf5ed225638293a7640c83` |
 
-The adjacent evidence selects exactly one operation:
+The Dagger evidence selects exactly one operation:
 `one_handed_daggers_template_1.actions.action_one.heavy_attack_right.damage_profile`,
 from current/post-boundary `medium_burning_smiter_stab_H` to historical
-`dagger_h1_medium_smiter_diag`. Both identities are native current damage
-profiles, and the current network lookup is built from the complete native
-`DamageProfileTemplates` table. The reproducibility gate pins both source
-blobs in addition to the three weapon-template objects, so this state requires
+`dagger_h1_medium_smiter_diag`. The Axe & Falchion evidence selects exactly
+`heavy_attack.damage_profile_right` and
+`heavy_attack_2.damage_profile_right` on
+`dual_wield_axe_falchion_template`, from current/post-boundary
+`light_slashing_smiter_dual` to historical
+`axe_falcion_heavy_smiter_vertical_right`. All identities are native current
+damage profiles, and the current network lookup is built from the complete
+native `DamageProfileTemplates` table. The reproducibility gate pins both
+template histories and the native profile/lookup blobs, so these states require
 no private profile, RPC, or fallback transport. The official boundary is
 [Hotfix 6.11.2](https://forums.fatsharkgames.com/t/hotfix-6-11-2-2nd-of-june-hotfix-6-11-3/122090).
 

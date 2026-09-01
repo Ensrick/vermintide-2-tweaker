@@ -4,10 +4,10 @@
 -- Usage:
 --   lua5.1 generate_patch_6_11_2_history.lua <source-repo> <evidence-dir> <output.lua>
 --
--- The operation set comes from the adjacent 6.11.1 -> 6.11.2 source diff.
--- The exact selected path is separately rehydrated against the current anchor.
--- This prevents later changes in the same weapon template from being mistaken
--- for Hotfix 6.11.2 changes.
+-- Each operation set comes from the adjacent 6.11.1 -> 6.11.2 source diff.
+-- The exact selected paths are separately rehydrated against the current anchor.
+-- This prevents later changes in either source file from being mistaken for
+-- Hotfix 6.11.2 changes.
 
 local source_repo = assert(arg[1], "source repository path required")
 local evidence_dir = assert(arg[2], "evidence directory required")
@@ -79,71 +79,138 @@ local function exact_keys(value, expected, label)
     end
 end
 
-local expected_path = {
-    "actions", "action_one", "heavy_attack_right", "damage_profile",
-}
+local function arrays_equal(left, right)
+    if array_length(left) ~= array_length(right) then return false end
+    for index = 1, #left do
+        if left[index] ~= right[index] then return false end
+    end
+    return true
+end
 
-local function validate_snapshot(snapshot, rehydrated, catalog)
+local function validate_snapshot(snapshot, rehydrated, source_catalog, family)
     exact_keys(snapshot, { "new_revision", "old_revision", "records" },
         rehydrated and "rehydrated snapshot" or "adjacent snapshot")
-    assert(snapshot.old_revision == catalog.boundary.historical_revision,
+    assert(snapshot.old_revision == source_catalog.boundary.historical_revision,
         "historical revision drift")
-    assert(snapshot.new_revision == catalog.boundary.post_revision,
+    assert(snapshot.new_revision == source_catalog.boundary.post_revision,
         "boundary revision drift")
-    assert(array_length(snapshot.records) == 1, "snapshot record budget drift")
+    assert(array_length(snapshot.records) == 1,
+        family.id .. " snapshot record budget drift")
     local record = snapshot.records[1]
     exact_keys(record, { "ops", "source_path", "template", "unsupported" },
-        "snapshot record")
-    assert(record.source_path == catalog.source_path, "source path drift")
-    assert(record.template == catalog.family.template, "template drift")
-    assert(count_keys(record.unsupported) == 0, "unsupported source delta present")
-    assert(array_length(record.ops) == 1, "operation budget drift")
-    local operation = record.ops[1]
-    local operation_keys = rehydrated
-        and { "expected_current", "expected_current_unset", "path", "unset", "value" }
-        or { "path", "unset", "value" }
-    exact_keys(operation, operation_keys, "snapshot operation")
-    assert(array_length(operation.path) == #expected_path, "operation path length drift")
-    for index, key in ipairs(expected_path) do
-        assert(operation.path[index] == key, "operation path drift at " .. index)
+        family.id .. " snapshot record")
+    assert(record.source_path == family.source_path,
+        family.id .. " source path drift")
+    assert(record.template == family.template, family.id .. " template drift")
+    assert(count_keys(record.unsupported) == 0,
+        family.id .. " unsupported source delta present")
+    assert(array_length(record.ops) == array_length(family.operations),
+        family.id .. " operation budget drift")
+
+    for index, expected in ipairs(family.operations) do
+        exact_keys(expected,
+            { "current_value", "historical_value", "path" },
+            family.id .. " operation specification")
+        local operation = record.ops[index]
+        local operation_keys = rehydrated
+            and { "expected_current", "expected_current_unset", "path", "unset", "value" }
+            or { "path", "unset", "value" }
+        exact_keys(operation, operation_keys,
+            family.id .. " snapshot operation " .. index)
+        assert(arrays_equal(operation.path, expected.path),
+            family.id .. " operation path drift " .. index)
+        assert(operation.unset == false
+                and operation.value == expected.historical_value,
+            family.id .. " historical value drift " .. index)
+        if rehydrated then
+            assert(operation.expected_current_unset == false
+                    and operation.expected_current == expected.current_value,
+                family.id .. " current guard drift " .. index)
+        end
     end
-    assert(operation.unset == false
-            and operation.value == "dagger_h1_medium_smiter_diag",
-        "historical damage profile drift")
-    if rehydrated then
-        assert(operation.expected_current_unset == false
-                and operation.expected_current == "medium_burning_smiter_stab_H",
-            "current damage profile guard drift")
-    end
-    return operation
+    return record.ops
 end
 
 local source_catalog = load_data(evidence_dir
     .. "/_wt_history_6_11_2_source_catalog.lua")
-assert(source_catalog.schema == 1, "unsupported Hotfix 6.11.2 source catalog")
+exact_keys(source_catalog, {
+    "artifacts", "boundary", "current", "families", "official_patch_notes",
+    "schema", "state",
+}, "Hotfix 6.11.2 source catalog")
+assert(source_catalog.schema == 2, "unsupported Hotfix 6.11.2 source catalog")
 assert(source_catalog.current.revision == current_anchor.content_revision,
     "unexpected current revision")
-assert(git_blob(source_catalog.boundary.historical_revision,
-        source_catalog.source_path) == source_catalog.boundary.historical_blob,
-    "historical source blob drift")
-assert(git_blob(source_catalog.boundary.post_revision,
-        source_catalog.source_path) == source_catalog.boundary.post_blob,
-    "post-boundary source blob drift")
-assert(git_blob(source_catalog.current.revision,
-        source_catalog.source_path) == source_catalog.current.blob,
-    "current source blob drift")
+assert(array_length(source_catalog.families) == 2,
+    "Hotfix 6.11.2 family budget drift")
 
-local adjacent = load_data(evidence_dir
-    .. "/_wt_history_snapshot_6_11_1_to_6_11_2_generated.lua")
-local rehydrated = load_data(evidence_dir
-    .. "/_wt_history_snapshot_6_11_1_rehydrated_generated.lua")
-validate_snapshot(adjacent, false, source_catalog)
-local operation = validate_snapshot(rehydrated, true, source_catalog)
-
-local family = source_catalog.family
 local state = source_catalog.state
+local generated_families = {}
+local operation_count = 0
+for family_index, family in ipairs(source_catalog.families) do
+    exact_keys(family, {
+        "adjacent_artifact", "current_blob", "display_name", "historical_blob",
+        "id", "label_key", "official_change_id", "official_summary",
+        "operations", "post_blob", "rehydrated_artifact", "setting_id",
+        "source_path", "template",
+    }, "Hotfix 6.11.2 family " .. family_index)
+    assert(git_blob(source_catalog.boundary.historical_revision,
+            family.source_path) == family.historical_blob,
+        family.id .. " historical source blob drift")
+    assert(git_blob(source_catalog.boundary.post_revision,
+            family.source_path) == family.post_blob,
+        family.id .. " post-boundary source blob drift")
+    assert(git_blob(source_catalog.current.revision,
+            family.source_path) == family.current_blob,
+        family.id .. " current source blob drift")
+
+    local adjacent = load_data(evidence_dir .. "/"
+        .. family.adjacent_artifact .. ".lua")
+    local rehydrated = load_data(evidence_dir .. "/"
+        .. family.rehydrated_artifact .. ".lua")
+    validate_snapshot(adjacent, false, source_catalog, family)
+    local operations = validate_snapshot(rehydrated, true, source_catalog, family)
+    local emitted_operations = {}
+    for operation_index, operation in ipairs(operations) do
+        emitted_operations[operation_index] = {
+            change_class = "official_weapon_balance",
+            current_source_blob = family.current_blob,
+            expected_current = operation.expected_current,
+            expected_present = true,
+            family_id = family.id,
+            official_change_id = family.official_change_id,
+            official_summary = family.official_summary,
+            path = operation.path,
+            result = operation.value,
+            result_present = true,
+            root = "Weapons",
+            source_blob = family.historical_blob,
+            source_path = family.source_path,
+            source_revision = source_catalog.boundary.historical_revision,
+            state_id = state.id,
+            template = family.template,
+        }
+    end
+    operation_count = operation_count + #emitted_operations
+    generated_families[family_index] = {
+        display_name = family.display_name,
+        id = family.id,
+        label_key = family.label_key,
+        setting_id = family.setting_id,
+        state_order = { state.id },
+        states = {
+            [state.id] = {
+                direct_profile_names = {},
+                operations = emitted_operations,
+                profile_names = {},
+            },
+        },
+        templates = { family.template },
+    }
+end
+
+assert(operation_count == 3, "Hotfix 6.11.2 total operation budget drift")
 local catalog = {
-    catalog_id = "wt_history_patch_6_11_2_sienna_dagger_v1",
+    catalog_id = "wt_history_patch_6_11_2_reversions_v2",
     current_id = "current",
     current_source = {
         display_name = "Current (Game Version " .. current_anchor.game_version .. ")",
@@ -151,44 +218,9 @@ local catalog = {
         revision = source_catalog.current.revision,
     },
     derived_profiles = {},
-    families = {
-        {
-            display_name = family.display_name,
-            id = family.id,
-            label_key = family.label_key,
-            setting_id = family.setting_id,
-            state_order = { state.id },
-            states = {
-                [state.id] = {
-                    direct_profile_names = {},
-                    operations = {
-                        {
-                            change_class = "official_weapon_balance",
-                            current_source_blob = source_catalog.current.blob,
-                            expected_current = operation.expected_current,
-                            expected_present = true,
-                            family_id = family.id,
-                            official_change_id = source_catalog.official_change_id,
-                            official_summary = source_catalog.official_summary,
-                            path = operation.path,
-                            result = operation.value,
-                            result_present = true,
-                            root = "Weapons",
-                            source_blob = source_catalog.boundary.historical_blob,
-                            source_path = source_catalog.source_path,
-                            source_revision = source_catalog.boundary.historical_revision,
-                            state_id = state.id,
-                            template = family.template,
-                        },
-                    },
-                    profile_names = {},
-                },
-            },
-            templates = { family.template },
-        },
-    },
+    families = generated_families,
     generation = {
-        adjacent_operation_count = 1,
+        adjacent_operation_count = operation_count,
         global_operations = 0,
         profile_route_count = 0,
         unsupported_count = 0,
@@ -257,4 +289,5 @@ file:write("-- AUTO-GENERATED by tools/weapon-history/generate_patch_6_11_2_hist
 file:write("return ", serialize(catalog), "\n")
 file:close()
 
-print("generated " .. output_path .. " families=1 operations=1 profiles=0 globals=0")
+print("generated " .. output_path
+    .. " families=2 operations=3 profiles=0 globals=0")

@@ -1,6 +1,6 @@
-# Blocking dual-host provenance gate for issue #1436's Hotfix 6.11.2 Sienna
-# Dagger H2 slice. Both supported PowerShell hosts independently validate the
-# pinned ledger, native-profile lookup, and exact source reproduction.
+# Blocking dual-host provenance gate for issue #1436's Hotfix 6.11.2 Dagger
+# H2 and Axe & Falchion H1/H2 slice. Both supported PowerShell hosts validate
+# the pinned ledger, native-profile lookup, and exact source reproduction.
 
 [CmdletBinding()]
 param(

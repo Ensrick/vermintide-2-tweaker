@@ -391,9 +391,9 @@ Run-Check "check_wt_history_patch_6_8_reproducibility" { & (Join-Path $here "che
 # both source-evaluated templates. Reproduce the atomic two-route boundary and
 # exact current guards under both supported PowerShell hosts.
 Run-Check "wt_history_patch_6_11_0_host_matrix" { & (Join-Path $here "run_wt_history_patch_6_11_0_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
-# Issue #1436: Hotfix 6.11.2 reverted Sienna Dagger Heavy Attack 2's
-# damage-profile route. Reproduce the one-route boundary, native profile
-# lookup, current guard, and byte-identical catalogs under both PS hosts.
+# Issue #1436: Hotfix 6.11.2 reverted Sienna Dagger H2 and Axe & Falchion
+# H1/H2 damage-profile routes. Reproduce the exact three-route boundary,
+# native profile lookups, current guards, and catalogs under both PS hosts.
 Run-Check "wt_history_patch_6_11_2_host_matrix" { & (Join-Path $here "run_wt_history_patch_6_11_2_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
 # Issue #1436: Patch 4.1.1's Masterwork Pistol boolean boundary requires both
 # evaluators to preserve a present false current guard. Reproduce it under both
