@@ -159,6 +159,20 @@ return {
             projection_kind = "adjacent_delta",
         },
         {
+            catalog_id = "wt_history_patch_6_11_2_sienna_dagger_v1",
+            cumulative_backfill = false,
+            declared_scope = "Hotfix 6.11.2 Sienna Dagger Heavy Attack 2 damage-profile route only",
+            exclusions = {
+                { id = "outside_sienna_dagger_h2", reason = "all other Hotfix 6.11.2 changes are outside this independently proven one-route slice" },
+            },
+            family_states = {
+                { family_id = "sienna_dagger", operations = 1, profiles = 0, state_id = "6_11_1" },
+            },
+            later_same_leaf_policy = "only the adjacent Heavy Attack 2 damage-profile route is projected over its exact current guard",
+            official_coverage = "complete_for_declared_scope",
+            projection_kind = "adjacent_delta",
+        },
+        {
             catalog_id = "wt_history_patch_4_1_1_v1",
             cumulative_backfill = false,
             declared_scope = "Masterwork Pistol Patch 4.1.1 ammo-pickup reload flag only",
@@ -191,10 +205,10 @@ return {
     schema = 1,
     stream_identity = "public_dev_byte_identical",
     totals = {
-        catalogs = 11,
-        families = 23,
-        family_states = 35,
-        operations = 231,
-        states = 13,
+        catalogs = 12,
+        families = 24,
+        family_states = 36,
+        operations = 232,
+        states = 14,
     },
 }
