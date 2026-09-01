@@ -1,6 +1,6 @@
 # Co-op Playtest Checklist
 
-> Auto-generated on 2026-07-22 15:35 UTC. Plain-language co-op-only checklist for a second tester.
+> Auto-generated on 2026-09-01 11:13 UTC. Plain-language co-op-only checklist for a second tester.
 
 Thanks for helping test. Each item below is either a fix to verify or a diagnostic check that needs real co-op evidence. You do not need any of our tools or notes, just the game and this list.
 
@@ -19,37 +19,49 @@ Thanks for helping test. Each item below is either a fix to verify or a diagnost
 
 ## Games with 2 players
 
-1. (Item #914) The host equips the CWV Dual Axes with a visibly different illusion on each axe before the joining player joins the Keep.
+1. (Item #786) Both players confirm the banner above in their own logs.
    - It works if: everything behaves normally for all players and nobody crashes.
-2. (Item #401) The host equips Imperial Axe and Shield before the joining player joins the Keep.
+2. (Item #399) Both players confirm the banner above in their own logs.
    - It works if: everything behaves normally for all players and nobody crashes.
-3. (Item #278) cross-mod: Host crafts and equips Dual Axes, Imperial Crowbill, or another CWV weapon through Crafting in Modded.
+3. (Item #278) cross-mod: Host crafts and equips Outrider Grenade Launcher through Crafting in Modded.
    - It works if: everything behaves normally for all players and nobody crashes.
-4. (Item #421) cross-mod: On the Cosmetics player, equip a Chaos Wastes or Weave weapon illusion and note its exact in-game name.
+4. (Item #398) As Kruber, the weapon owner equips Character Weapon Variants Dual Axes and an ordinary Sword as the vanilla control.
    - It works if: everything behaves normally for all players and nobody crashes.
-5. (Item #139) General: Host with two humans and bots; enable Bot Behavior Improvements, aid priority, Split follow mode, and a 15 metre snap-back distance.
+5. (Item #914) Before joining each other, both equip a crafted CWV Imperial Longsword with a clearly recognizable illusion. Do not use Dual Axes for this test.
    - It works if: everything behaves normally for all players and nobody crashes.
-6. (Item #154) Cosmetics: The owner equips a visibly distinct cross-character weapon cosmetic before the observer joins.
+6. (Item #1211) The host equips the Old Musket in the keep and fires several shots while the joining player watches and listens.
    - It works if: everything behaves normally for all players and nobody crashes.
-7. (Item #233) Cosmetics: Player A equips a Loremaster shield or outfit before Player B joins.
+7. (Item #1145) Cosmetics: The host equips the Imperial Longsword and Shield.
    - It works if: everything behaves normally for all players and nobody crashes.
-8. (Item #416) Cosmetics: Player A equips Sword and Shield, chooses a different shield in Cosmetics' second/offhand row, applies it, and exits the cosmetic screen. Player B confirms the chosen...
+8. (Item #579) Cosmetics: The owner equips Character Weapon Variants Dual Axes and uses Tweaker: Cosmetics to apply one visibly different illusion to the right axe and another to the left axe.
    - It works if: everything behaves normally for all players and nobody crashes.
-9. (Item #738) Cosmetics: The host equips a clearly different weapon or outfit cosmetic before the joining player joins.
-   - Please report: attach both players' logs and note what appeared on each player's screen.
-10. (Item #476) The owner equips Imperial Sword and Shield before the observer joins.
+9. (Item #476) Cosmetics: The owner equips the Imperial Sword and Shield with a custom shield and a custom sword illusion before the observer joins.
    - It works if: everything behaves normally for all players and nobody crashes.
-11. (Item #378) General: The host enables a hash-neutral mod that the joining player does not have.
+10. (Item #421) cross-mod: The Cosmetics player refreshes Tweaker: Cosmetics, confirms the current banner, and equips the illusion named Mace & Bretonnian Shield.
    - It works if: everything behaves normally for all players and nobody crashes.
-12. (Item #394) On Kruber, the owner equips Scythe, then Imperial Longsword. Also equip one ordinary unmodified vanilla weapon as a control.
+11. (Item #233) Cosmetics: Player A equips Sword and Shield, selects Reikland Captain's Shield in the shield picker, applies it, then closes the game so the selection is persisted.
    - It works if: everything behaves normally for all players and nobody crashes.
-13. (Item #322) Chaos Wastes: Start a two-player Chaos Wastes mission and equip Bardin's Throwing Axes.
+12. (Item #1034) General: On the host, leave Host-side Melee Latency Compensation enabled and Maximum Compensation Window at 250 ms.
    - It works if: everything behaves normally for all players and nobody crashes.
-14. (Item #719) cross-mod: Kruber equips Imperial Crowbill before the observer joins.
+13. (Item #416) Cosmetics: Before joining, Player A saves a visibly distinct offhand illusion on Sword and Shield. Player B joins cold and checks A before A opens Cosmetics again.
    - It works if: everything behaves normally for all players and nobody crashes.
-15. (Item #309) General: Both players confirm the exact Tweaker: General Dev banner above.
-   - Please report: attach both players' logs and note what appeared on each player's screen.
-16. (Item #61) Enemies: Host a mission with both players on Auto and record repeatable hostile-enemy damage dealt and received.
+14. (Item #738) Cosmetics: Before the joining player joins, the host equips a clearly distinct weapon, hat, or outfit cosmetic.
+   - It works if: everything behaves normally for all players and nobody crashes.
+15. (Item #322) Chaos Wastes: Start a two-player Chaos Wastes mission and equip Bardin's Throwing Axes.
+   - It works if: everything behaves normally for all players and nobody crashes.
+16. (Item #249) Chaos Wastes: Both players enable Numeric UI, Tweaker: GUI Dev, and Tweaker: Chaos Wastes Dev.
+   - It works if: everything behaves normally for all players and nobody crashes.
+17. (Item #1188) Weapons: In Tweaker: Weapons, enable Trollhammer Torpedo for one Kruber career.
+   - It works if: everything behaves normally for all players and nobody crashes.
+18. (Item #1143) General: Host a private Adventure game with both players running this exact build.
+   - It works if: everything behaves normally for all players and nobody crashes.
+19. (Item #1150) General: Host enables Allow Duplicate Careers while the joining player disables it.
+   - It works if: everything behaves normally for all players and nobody crashes.
+20. (Item #61) Enemies: Host a mission with both players on Auto and compare repeatable hostile-enemy damage dealt and received.
+   - It works if: everything behaves normally for all players and nobody crashes.
+21. (Item #1204) cross-mod: Restart both players on the exact build and join the same modded-realm lobby.
+   - It works if: everything behaves normally for all players and nobody crashes.
+22. (Item #719) cross-mod: Kruber equips Imperial Crowbill before the observer joins.
    - It works if: everything behaves normally for all players and nobody crashes.
 
 When you are done, tell us which item numbers passed and which did not. Thank you.
