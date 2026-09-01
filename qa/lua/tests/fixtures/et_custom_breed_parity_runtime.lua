@@ -50,6 +50,10 @@ return function(H, repo_root)
         local check_options = {}
         local latest, receiver = {}, nil
         local ctx = fixture()
+        if options.identity_capture_failure then
+            ctx.breeds.et_chosen_greataxe[ctx.marker_key].fingerprint =
+                "fixture-breed-mismatch"
+        end
         local supplied_live = options.live_counts or {}
         local supplied_queued = options.queued_counts or {}
         local live_counts, queued_counts = {}, {}

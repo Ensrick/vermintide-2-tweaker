@@ -49,6 +49,21 @@ Last updated: 2026-08-28.
 
 ---
 
+## Local-host custom-breed admission (#1497)
+
+| Field | Detail |
+|---|---|
+| Symptom | The listen server was treated as a remote hot join and could remain indefinitely in `WaitingForEnterGame`; after the behavioral fix, the named check still falsely failed when custom-breed registration had produced no parity owner. |
+| Vanilla boundary | `WaitingForEnterGame` calls both `GameNetworkManager.set_peer_synchronizing` and `NetworkServer.is_network_state_fully_synced_for_peer` for the local owner, but only a remote peer reaches `GameSession.add_peer` [src: `peer_states.lua:383-402`]. |
+| Local contract | Both installed hooks source-classify the current listen-server peer, clear only its ET fence row, retire canonical proof when the exact boot owner exists, and delegate the full native chain once. Missing, replaced, malformed, throwing, or no-op cleanup stays visible to the named check. |
+| Absent-owner contract | If registration failed closed before parity construction, the immutable boot owner and current exported owner must both be nil. That is source-proven absence, not a failed retirement. A later foreign owner, including equality-spoofing tables, fails raw-identity validation. |
+| Remote contract | No local exception weakens remote policy. Live, queued, or unreadable custom state remains held and times out to one kick; a proven empty state remains donor-safe. |
+| Offline | `test_et_issue1497_local_host_fence` covers both real hooks, exact native tuples, stale owner recovery, valid retirement, factory and identity-capture absence, missing/throwing/no-op cleanup, mutable-owner tamper, live-state remote hold/kick, and empty-state donor safety. |
+| Runtime | Solo in the Keep, `/et_regression_test` must report `PASS: issue1497_local_host_hot_join_bypass`, with no Enemy Tweaker `hot-join sync HELD` or `KICKED` row for the local peer. |
+| Lifecycle | After the exact build is deployed, use `verify-fix` solo. Keep #451 gameplay parity and #1413 registration/capacity failures as separate issues; #358 is unrelated. |
+
+---
+
 ## Atomic custom-breed registration (#1413)
 
 | Field | Detail |

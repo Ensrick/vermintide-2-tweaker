@@ -195,16 +195,28 @@ local function _current_parity_instance()
 end
 
 local function _retire_local_server_peer(peer_id, server)
-    if not _is_local_server_peer(peer_id, server) then return false, false end
+    if not _is_local_server_peer(peer_id, server) then
+        return false, false, false
+    end
 
-    local instance = _current_parity_instance()
+    -- The exported handle is a diagnostic surface, not behavioral authority.
+    -- A foreign replacement must never receive cleanup calls or influence
+    -- admission before the named check can report the identity drift.
+    local instance = parity
     hot_join_peers[peer_id] = nil
+    -- Registration can fail closed before the canonical parity instance is
+    -- constructed (for example, when a NetworkLookup axis has no remaining
+    -- capacity). In that state there is no canonical pending/acked/transport
+    -- row to retire. Distinguish that safe absence from a malformed instance,
+    -- a missing API, or a throwing cleanup so the live diagnostic does not
+    -- demand an impossible mutation while still failing closed on real errors.
+    if instance == nil then return true, false, parity == nil end
     local forget_peer = type(instance) == "table"
         and rawget(instance, "forget_peer") or nil
-    if type(forget_peer) ~= "function" then return true, false end
+    if type(forget_peer) ~= "function" then return true, false, false end
     local ok = pcall(forget_peer, instance, peer_id)
-    if not ok then return true, false end
-    return true, true
+    if not ok then return true, false, false end
+    return true, true, false
 end
 
 -- The engine census is the authority for whether a live OR already-queued
@@ -252,7 +264,7 @@ local function _custom_state_live()
 end
 
 local function _peer_exact(peer_id)
-    local instance = ET.CustomBreedParity
+    local instance = parity
     if type(instance) ~= "table" or type(instance.peer_has) ~= "function" then
         return false
     end
@@ -304,10 +316,12 @@ end
 local local_bypass_provenance = {
     set_peer_synchronizing = {
         callback = nil, observed = false, retirement_observed = false,
+        parity_absence_observed = false,
         last_local_peer_id = nil,
     },
     fully_synced_for_peer = {
         callback = nil, observed = false, retirement_observed = false,
+        parity_absence_observed = false,
         last_local_peer_id = nil,
     },
 }
@@ -318,13 +332,17 @@ local function _set_peer_synchronizing_hook(func, self, peer_id)
         end
         local server = type(self) == "table"
             and rawget(self, "network_server") or nil
-        local is_local, retired = _retire_local_server_peer(peer_id, server)
+        local is_local, retired, parity_absent =
+            _retire_local_server_peer(peer_id, server)
         if is_local then
             local evidence = local_bypass_provenance.set_peer_synchronizing
             evidence.observed = true
             evidence.last_local_peer_id = peer_id
             if retired then
                 evidence.retirement_observed = true
+            end
+            if parity_absent then
+                evidence.parity_absence_observed = true
             end
             -- Also recovers a stale row after a live dofile or a previously
             -- unreadable owner id, including canonical parity proof state.
@@ -337,7 +355,7 @@ local function _set_peer_synchronizing_hook(func, self, peer_id)
             return
         end
 
-        local instance = ET.CustomBreedParity
+        local instance = parity
         local confirmed = false
         local reason = "parity-unavailable"
         if type(instance) == "table"
@@ -372,13 +390,17 @@ local_bypass_provenance.set_peer_synchronizing.callback =
 mod._et_custom_breed_hot_join_fence = true
 
 local function _fully_synced_for_peer_hook(func, self, peer_id)
-        local is_local, retired = _retire_local_server_peer(peer_id, self)
+        local is_local, retired, parity_absent =
+            _retire_local_server_peer(peer_id, self)
         if is_local then
             local evidence = local_bypass_provenance.fully_synced_for_peer
             evidence.observed = true
             evidence.last_local_peer_id = peer_id
             if retired then
                 evidence.retirement_observed = true
+            end
+            if parity_absent then
+                evidence.parity_absence_observed = true
             end
             -- Independent recovery is required because a stale pending/kicked
             -- row or canonical pending proof would otherwise keep returning
@@ -428,7 +450,7 @@ mod:hook_safe("GameNetworkManager", "remove_peer", function(_, peer_id)
     if type(peer_id) == "string" then
         hot_join_peers[peer_id] = nil
     end
-    local instance = ET.CustomBreedParity
+    local instance = parity
     if type(instance) == "table" and type(instance.forget_peer) == "function" then
         pcall(instance.forget_peer, instance, peer_id)
     end
@@ -463,7 +485,7 @@ end)
 -- This issue check is intentionally SOLO: with no remote humans,
 -- all_peers_have()==true plus peer_has(local)==false independently proves the
 -- local id is absent from canonical `_pending` as well as `_acked`.
-local function _local_retirement_postcondition(evidence, label)
+local function _local_retirement_postcondition(evidence, label, instance)
     local peer_id = type(evidence) == "table"
         and rawget(evidence, "last_local_peer_id") or nil
     if type(peer_id) ~= "string" or peer_id == "" then
@@ -472,7 +494,7 @@ local function _local_retirement_postcondition(evidence, label)
     if hot_join_peers[peer_id] ~= nil then
         return label .. " local fence state retained"
     end
-    local instance = _current_parity_instance()
+    if instance == nil then return end
     local peer_has = type(instance) == "table"
         and rawget(instance, "peer_has") or nil
     local all_peers_have = type(instance) == "table"
@@ -627,9 +649,24 @@ ET.rt_register("issue1497_local_host_hot_join_bypass", function()
             or rawget(synced_evidence, "last_local_peer_id") ~= current_peer_id then
         return "local peer evidence stale for current listen server"
     end
+    local current_instance = _current_parity_instance()
+    if parity == nil then
+        if current_instance ~= nil then
+            return "canonical parity instance changed after boot"
+        end
+        if rawget(set_evidence, "parity_absence_observed") ~= true
+                and rawget(synced_evidence, "parity_absence_observed") ~= true
+                then
+            return "canonical parity absence not observed"
+        end
+        return _local_retirement_postcondition(set_evidence, "local-host", nil)
+    end
+    if not rawequal(current_instance, parity) then
+        return "canonical parity instance changed after boot"
+    end
     if rawget(set_evidence, "retirement_observed") ~= true
             and rawget(synced_evidence, "retirement_observed") ~= true then
         return "canonical parity retirement not observed"
     end
-    return _local_retirement_postcondition(set_evidence, "local-host")
+    return _local_retirement_postcondition(set_evidence, "local-host", parity)
 end, { precondition = _issue1497_stable_solo_precondition })

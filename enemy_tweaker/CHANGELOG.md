@@ -1,5 +1,23 @@
 # Enemy Tweaker Changelog
 
+## 0.7.62-dev (2026-09-01): parity-absent local-host evidence (#1497) [not-started]
+
+- Corrected the #1497 runtime diagnostic for sessions where custom-breed
+  registration fails closed before the canonical parity owner exists. Both
+  actual vanilla ingress hooks now distinguish that source-proven absence from
+  a failed, malformed, or replaced cleanup owner; the local host still follows
+  its native admission chain exactly once.
+- Behavioral admission and cleanup stay bound to the immutable boot-time parity
+  owner; the mutable exported handle is diagnostic-only and cannot authorize a
+  remote peer or receive cleanup calls. The named check accepts only
+  boot-absent/currently-absent state or exact raw identity plus a successful
+  retirement and clean postcondition. Removing, replacing, or equality-spoofing
+  an installed owner remains a failure.
+- Added Rain's exact identity-capture failure, factory failure, missing,
+  throwing and no-op retirement, owner replacement, remote live-state hold and
+  kick, and donor-safe empty-state cases. Remote admission and #451/#1413
+  registration behavior are unchanged.
+
 ## 0.7.61-dev (2026-08-31): local-host custom-breed fence recovery (#1497, #451) [verify-fix]
 
 - Restricted the pre-roster custom-breed parity fence to actual remote hot

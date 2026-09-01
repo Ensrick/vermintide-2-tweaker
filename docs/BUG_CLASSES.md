@@ -2205,12 +2205,21 @@ is inferred from `PlayerManager` or a mod handshake triggered by player creation
 4. Keep read-only UI projections out of the admission state machine. A preview
    may mirror the current parity decision, but must not call the selector that
    arms/releases the pre-admission lock merely because a panel rendered.
+5. Prove whether each pre-roster seam also runs for the listen-server owner.
+   `WaitingForEnterGame` invokes both ET synchronization seams for every peer,
+   while only `GameSession.add_peer` is remote-gated. Treating every nonempty
+   peer id as a remote join can deadlock the host before the keep appears.
 
 ### Fix template
 - Prefer vanilla-resident units/templates so no peer capability is required.
 - Otherwise enforce a session contract before `GameSession.add_peer`: reject or
   defer joins while unsafe objects may exist, and separately fail closed when a
   server-known peer is not yet represented in the roster.
+- At every real ingress, source-classify and exclude the listen-server owner,
+  clear only its stale local fence state, and delegate the existing native chain
+  exactly once. If an optional parity owner was never constructed, record that
+  immutable boot absence as inapplicable cleanup; do not confuse it with an
+  installed owner that disappeared, changed identity, or threw during cleanup.
 - If neither pre-admission containment nor complete synchronous teardown is
   proven, keep the package-bearing feature inert. A warning after roster
   insertion is diagnostics, not crash safety.
@@ -2629,6 +2638,11 @@ across preview worlds, owner units, or remote husks.
   Drop mismatch/collision traffic before vanilla, preserve unrelated traffic
   unchanged, and bound diagnostics once per reason/template.
 - Keep the hot-join sender filter: replay occurs before any peer ack can exist.
+- The pre-roster receiver must also distinguish the listen-server owner from a
+  remote join at every engine ingress. Same-process local identity needs no
+  parity challenge and must not be held outside its own game state; optional
+  parity absent since boot has no numeric state to retire. Preserve exact
+  cleanup and postconditions whenever an owner did exist.
 - Route legal timed effects through the native synced path appropriate to their
   authority. For CRT's owner+server Impetuous effects, use
   `BuffSyncType.LocalAndServer` (`buff_system.lua:803-812,849-879`; vanilla
