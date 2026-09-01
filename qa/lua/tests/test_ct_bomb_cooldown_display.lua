@@ -87,7 +87,8 @@ local function read(path)
             _G.Managers = {
                 state = { network = { network_client = { server_peer_id = "host-peer" } } },
                 player = {
-                    local_player = function() return { player_unit = "local-unit" } end,
+                    local_player = function() error("unsafe local_player must not be called") end,
+                    local_player_safe = function() return { player_unit = "local-unit" } end,
                 },
             }
 

@@ -143,13 +143,13 @@ Interpret `/ct_426_diag` without changing the run:
 
 | Field | Value |
 |---|---|
-| Symptom | The optional eight-second Manann's Tempest gate has no visible ready-time feedback. |
-| Root cause | The host-side chain-lightning timestamp buckets had no owner-targeted presentation path. |
-| Fix version(s) | ct_dev 0.7.275-dev (not deployed) |
-| Category | COOP / OWNER UI / HOST AUTHORITY / VMF RPC |
-| Repro | Enable the tweak and proc the mod boon and weapon trait separately, then stagger both sources on one owner. |
-| Expected post-fix | Each allowed source shows its own native-icon eight-second timer only to the owner. Rejected/ineligible procs do not refresh it; toggle off shows nothing. |
-| Detection | Offline `test_ct_manann_cooldown_display.lua`; `/ct_regression_test`: `issue358_manann_tempest_cooldown_display`; `[ct:cooldown-display]` owner/drop rows. |
+| Symptom | Unwielding the trait weapon during its eight-second cooldown hides the timer; re-wielding before the host deadline incorrectly shows the ready icon. |
+| Root cause | The finite HUD buff was the presentation layer's only cooldown memory. Source loss removed it even though the host's per-unit/per-source deadline remained live. A first deadline mirror still treated every receipt inside that local window as a replay, so a legitimate second host proc with lower latency could be discarded. The same update path also called network-gated `local_player(1)` before a backend existed. |
+| Fix version(s) | ct_dev 0.7.342-dev (initial two-state display); deadline-mirror correction pending release |
+| Category | SOLO / OWNER UI / HOST AUTHORITY / RETAINED STATE |
+| Repro | Proc the trait, unwield at `t+2`, re-wield at `t+3`, and repeat with staggered boon/trait procs and toggle-off/on. |
+| Expected post-fix | Source/toggle loss hides both icons without erasing an unexpired per-source deadline. Reacquisition resumes only the remaining duration; ready appears at the original deadline. The authoritative gameplay bucket increments one bounded generation per accepted proc; each higher generation replaces the mirror, while equal/older and malformed work cannot refresh or resurrect it. A new player unit starts a new generation epoch; a backwards mission clock clears only deadlines while preserving the surviving unit's epoch against delayed old packets. A presentation/network exception never suppresses gameplay: vanilla runs exactly once and at most four always-on diagnostic rows are emitted. Pre-network ticks are silent. |
+| Detection | Offline `test_ct_manann_cooldown_display.lua` executes the real registered `ProcFunctions.chain_lightning` hook across a surviving-unit clock rewind and a throwing notifier with exact multi-return assertions, then drives the actual display callback through decreasing-latency consecutive procs, equal/older replay, malformed/foreign traffic, source churn, and reset behavior; `/ct_regression_test`: `issue358_manann_tempest_cooldown_display`; bounded `[ct:issue358]` error edges and `[ct:cooldown-display]` accepted-proc rows. |
 
 ### bomb-bubble-owner-cooldown-display - issue #357
 
