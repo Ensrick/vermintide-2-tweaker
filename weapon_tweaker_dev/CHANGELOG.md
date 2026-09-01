@@ -1,5 +1,19 @@
 # Weapon Tweaker Changelog
 
+## 0.12.328-dev (2026-09-01) -- mirror source-exact Patch 6.11.0 Kruber Longbow history (#1436) [not-started]
+
+- Mirrors public beta `0.12.327`: **Kruber's Longbow** gains a
+  **Game Version 6.10.0** state that restores the source-exact automatic-zoom
+  delay from current `0.22` to historical `2` on both source-evaluated
+  templates; `Current` remains inert.
+- Carries the same atomic two-route plan, exact current guards, identity-safe
+  restore, independent source oracle, and dual-host reproduction as public.
+- The public and Dev generated catalogs remain byte-identical. The friends-only
+  development overlay stays intact without adding profiles, RPCs, globals, or
+  assets, and ordinary weapon adapters continue to layer afterward.
+- #1436 remains open and outside the live-test queue because this is one bounded
+  slice of the requested all-weapons history catalog.
+
 ## 0.12.327-dev (2026-09-01) -- mirror source-exact Hotfix 6.11.2 Sienna Dagger history (#1436) [not-started]
 
 - Mirrors public beta `0.12.326`: **Sienna's Dagger** gains a

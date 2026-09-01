@@ -387,6 +387,10 @@ Run-Check "wt_history_patch_6_6_host_matrix" { & (Join-Path $here "run_wt_histor
 # from the adjacent 6.7.2 -> 6.8.1 boundary, rehydrate its current guard, and
 # reproduce both evidence lanes and the generated catalog from immutable source.
 Run-Check "check_wt_history_patch_6_8_reproducibility" { & (Join-Path $here "check_wt_history_patch_6_8_reproducibility.ps1") -Quiet:$Quiet }
+# Issue #1436: Patch 6.11.0 reduced Kruber Longbow automatic-zoom delay on
+# both source-evaluated templates. Reproduce the atomic two-route boundary and
+# exact current guards under both supported PowerShell hosts.
+Run-Check "wt_history_patch_6_11_0_host_matrix" { & (Join-Path $here "run_wt_history_patch_6_11_0_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
 # Issue #1436: Hotfix 6.11.2 reverted Sienna Dagger Heavy Attack 2's
 # damage-profile route. Reproduce the one-route boundary, native profile
 # lookup, current guard, and byte-identical catalogs under both PS hosts.

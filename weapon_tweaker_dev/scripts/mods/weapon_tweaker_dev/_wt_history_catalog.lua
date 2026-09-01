@@ -18,6 +18,7 @@ local GENERATED_MODULES = {
     "scripts/mods/weapon_tweaker_dev/_wt_history_6_0_catalog",
     "scripts/mods/weapon_tweaker_dev/_wt_history_6_6_catalog",
     "scripts/mods/weapon_tweaker_dev/_wt_history_6_8_catalog",
+    "scripts/mods/weapon_tweaker_dev/_wt_history_6_11_0_catalog",
     "scripts/mods/weapon_tweaker_dev/_wt_history_6_11_2_catalog",
     "scripts/mods/weapon_tweaker_dev/_wt_history_4_1_1_catalog",
     "scripts/mods/weapon_tweaker_dev/_wt_history_4_6_catalog",

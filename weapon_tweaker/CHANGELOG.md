@@ -1,5 +1,21 @@
 # Weapon Tweaker Changelog
 
+## 0.12.327-beta (2026-09-01) -- source-exact Patch 6.11.0 Kruber Longbow history (#1436) [not-started]
+
+- Adds **Game Version 6.10.0** for **Kruber's Longbow**. The bounded state
+  restores the automatic-zoom delay from current `0.22` to the source-exact
+  historical value `2`; `Current` remains the zero-write default.
+- Applies the identical leaf atomically to both the gameplay and tutorial
+  Longbow templates. A missing or foreign second route refuses before either
+  template changes, and returning to Current restores both exact identities.
+- Pins the historical, post-patch, and current source blobs and reproduces the
+  two-operation catalog through independent evaluators under both supported
+  PowerShell hosts. This adds no profiles, RPCs, globals, or assets, and
+  ordinary Tweaker: Weapons adapters continue to compose afterward.
+- This is one incremental historical catalog slice; #1436 remains open and
+  outside the live-test queue until the requested all-weapons catalog reaches a
+  complete testable boundary.
+
 ## 0.12.326-beta (2026-09-01) -- source-exact Hotfix 6.11.2 Sienna Dagger history (#1436) [not-started]
 
 - Adds **Game Version 6.11.1** for **Sienna's Dagger**. The bounded state

@@ -159,6 +159,20 @@ return {
             projection_kind = "adjacent_delta",
         },
         {
+            catalog_id = "wt_history_patch_6_11_0_kruber_longbow_v1",
+            cumulative_backfill = false,
+            declared_scope = "Patch 6.11.0 Kruber Longbow automatic-zoom delay across both source-evaluated gameplay and tutorial templates",
+            exclusions = {
+                { id = "outside_kruber_longbow_autozoom", reason = "all other Patch 6.11.0 changes are outside this independently proven two-route scalar slice" },
+            },
+            family_states = {
+                { family_id = "kruber_longbow", operations = 2, profiles = 0, state_id = "6_10_0" },
+            },
+            later_same_leaf_policy = "only the adjacent automatic-zoom delay leaf is projected onto both current Longbow templates over exact guards",
+            official_coverage = "complete_for_declared_scope",
+            projection_kind = "adjacent_delta",
+        },
+        {
             catalog_id = "wt_history_patch_6_11_2_sienna_dagger_v1",
             cumulative_backfill = false,
             declared_scope = "Hotfix 6.11.2 Sienna Dagger Heavy Attack 2 damage-profile route only",
@@ -205,10 +219,10 @@ return {
     schema = 1,
     stream_identity = "public_dev_byte_identical",
     totals = {
-        catalogs = 12,
-        families = 24,
-        family_states = 36,
-        operations = 232,
-        states = 14,
+        catalogs = 13,
+        families = 25,
+        family_states = 37,
+        operations = 234,
+        states = 15,
     },
 }
