@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.348-dev"
+local MOD_VERSION = "0.7.349-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -67,14 +67,19 @@ pcall(printf, "Chaos Wastes Tweaker v%s loaded", MOD_VERSION)
 -- Graceful-degradation path for old peers (pre-v0.7.114 without CT_RPC_SCHEMA):
 --   * Old peer sends without the version arg → new receiver sees its first real
 --     payload field (e.g. `session`, a number) in the schema_version slot →
---     compares against CT_RPC_SCHEMA (1) → likely fails → drops. No corruption.
---   * New peer sends WITH version=1 → old receiver (which doesn't expect it) shifts
+--     compares against CT_RPC_SCHEMA (2) → likely fails → drops. No corruption.
+--   * New peer sends WITH version=2 → old receiver (which doesn't expect it) shifts
 --     every arg by one position → its type-checks on the legacy first arg fail → drops.
 --     Worst case: the old receiver mis-handles a packet on a mod that's about to be
 --     replaced anyway. Acceptable; the schema gate IS the migration cliff.
 --
 -- VMF_RECIPES.md § 10 documents the full design + when to bump.
-local CT_RPC_SCHEMA = 1
+-- v2 adds the bounded Manann allowed-proc generation to only that variant of
+-- ct_bomb_cooldown_display_v1. All other channel payloads retain their shapes;
+-- the mod-wide bump intentionally drops mixed-build traffic per the documented
+-- all-current-build contract instead of letting an old receiver ignore the new
+-- ordering field.
+local CT_RPC_SCHEMA = 2
 pcall(printf, "[ct:rpc] schema_version=%d", CT_RPC_SCHEMA)
 
 -- #357 uses one owner-targeted VMF event and client-local BuffTemplates. Keeping

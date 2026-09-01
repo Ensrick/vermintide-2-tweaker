@@ -84,7 +84,10 @@ end
 -- worked at the same call site.
 if ProcFunctions and ProcFunctions.chain_lightning then
     local MANANN_TEMPEST_COOLDOWN_S = 8.0
+    local MAX_MANANN_GENERATION = 2147483647
+    local MAX_MANANN_DISPLAY_ERRORS = 4
     local _manann_tempest_t = setmetatable({}, { __mode = "k" })
+    local _manann_display_error_count = 0
 
     mod:hook(ProcFunctions, "chain_lightning", function(func, owner_unit, buff, params, world, param_order)
         local template = buff and buff.template
@@ -110,22 +113,55 @@ if ProcFunctions and ProcFunctions.chain_lightning then
         local t = (Managers and Managers.time and Managers.time:time("game")) or 0
         local bucket = _manann_tempest_t[owner_unit]
         if not bucket then
-            bucket = { boon_next_t = 0, trait_next_t = 0 }
+            bucket = {
+                boon_next_t = 0,
+                trait_next_t = 0,
+                boon_generation = 0,
+                trait_generation = 0,
+                last_game_t = t,
+            }
             _manann_tempest_t[owner_unit] = bucket
         end
+        -- A surviving player unit can outlive a game-clock reset during a run
+        -- transition.  Future deadlines from the old clock must not suppress
+        -- every proc on the new timeline. Reset only the authoritative deadlines:
+        -- the unit identity is the receipt epoch, so retaining its monotonic
+        -- generation prevents delayed pre-rewind packets from colliding with a
+        -- reused sequence value.
+        if t < (bucket.last_game_t or t) then
+            bucket.boon_next_t = 0
+            bucket.trait_next_t = 0
+        end
+        bucket.last_game_t = t
         local key = is_boon and "boon_next_t" or "trait_next_t"
         if t < bucket[key] then
             return
         end
         bucket[key] = t + MANANN_TEMPEST_COOLDOWN_S
+        local generation_key = is_boon and "boon_generation" or "trait_generation"
+        local generation
+        if bucket[generation_key] < MAX_MANANN_GENERATION then
+            bucket[generation_key] = bucket[generation_key] + 1
+            generation = bucket[generation_key]
+        end
         -- #358 presentation only. The host targets the proc owner through the
         -- same schema/host-validated VMF display channel as #357. Separate boon
         -- and trait template names preserve these independent timestamp buckets.
         local display = mod._ct_bomb_cooldown_display
-        if display and display.notify_allowed then
-            display.notify_allowed(owner_unit,
+        if generation and display and display.notify_allowed then
+            local notified, notify_error = pcall(display.notify_allowed, owner_unit,
                 is_boon and "manann_boon" or "manann_trait",
-                MANANN_TEMPEST_COOLDOWN_S)
+                MANANN_TEMPEST_COOLDOWN_S,
+                generation)
+            if not notified and _manann_display_error_count < MAX_MANANN_DISPLAY_ERRORS then
+                _manann_display_error_count = _manann_display_error_count + 1
+                if type(printf) == "function" then
+                    pcall(printf,
+                        "[ct:issue358] Manann cooldown display failure (%d/%d): %s",
+                        _manann_display_error_count, MAX_MANANN_DISPLAY_ERRORS,
+                        tostring(notify_error))
+                end
+            end
         end
         return func(owner_unit, buff, params, world, param_order)
     end)

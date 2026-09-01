@@ -213,6 +213,14 @@ end)
 -- cooldowns) so toggling the mod off via VMF doesn't leave them in a tweaked state until restart.
 -- All other mutations in this mod are scoped (save-and-restore inside hooks).
 mod.on_disabled = function()
+    -- #358: VMF stops the update ticker while disabled, so hide the two
+    -- owner-local Manann presentation states synchronously. The display owner
+    -- deliberately retains an unexpired same-unit deadline because the host
+    -- gameplay bucket survives disable/re-enable too.
+    local cooldown_display = mod._ct_bomb_cooldown_display
+    if cooldown_display and type(cooldown_display.hide_manann_displays) == "function" then
+        cooldown_display.hide_manann_displays()
+    end
     mod._ct_boon_balance.revert_reckless_swings_tweak()
     mod._ct_boon_balance.revert_bomb_cooldown_tweak()
     mod._ct_boon_balance.revert_boon_movespeed_tweak()

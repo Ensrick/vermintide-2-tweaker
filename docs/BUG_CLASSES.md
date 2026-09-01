@@ -1485,11 +1485,12 @@ end
 3. Grep the mod for `:local_player()` on any update-consumer path.
 
 ### Fix template
-- Replace `pm:local_player()` with `pm.local_player_safe and pm:local_player_safe()` on every per-frame path; treat nil as "not in a session yet" and bail. In-session behavior is identical - once a player unit exists both calls resolve the same player.
+- Replace `pm:local_player()` with `pm.local_player_safe and pm:local_player_safe()` on every per-frame path; treat nil as "not in a session yet" and bail. In-session behavior is identical - once a player unit exists both calls resolve the same player. Because `local_player_safe` still calls `Network.peer_id()` after its readiness check, wrap it in `pcall` and treat the exact backend-teardown race as ordinary absence.
 - Harden the update dispatcher: log one line per DISTINCT consumer error per streak (re-arm on success or message change), never one per frame - a recoverable boot-phase failure must not flood chat/log (gt_dev `mod.update`, v0.2.200-dev).
 
 ### Related Issues / commits
 - gt_dev v0.2.200-dev (#508): `_gt_debug_highlights.lua` `_local_player_unit` + dispatcher suppression; regression check `gt_dh_local_player_safe_508`.
+- ct_dev #358: the owner-local Manann display ticker used `local_player(1)` every 0.5 seconds and logged the backend failure repeatedly; `_ct_bomb_cooldown_display.lua` now uses the protected safe accessor and a four-row per-session error ceiling. Its authoritative gameplay bucket assigns one bounded generation to each accepted proc: local receipt time alone cannot classify replay versus a legitimate consecutive proc when network latency decreases. A backwards game clock clears deadlines but preserves the surviving unit's generation epoch, preventing both permanent lockout and delayed old-packet sequence collisions. Optional presentation calls are protected separately: their failure is diagnosed at most four times and can never suppress or duplicate the vanilla proc. Offline coverage executes the real `chain_lightning` hook across rewind and a throwing notifier, then drives the actual registered display callback through ordering, teardown, and recovery edges.
 - Related: class 21 / class 32 (the "VMF ticks outside game states" family); `docs/engine/03` network readiness.
 
 ## 34. Bot-BT recovery keyed to a timer or one-shot latch that outlives the failure window

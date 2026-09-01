@@ -1,5 +1,42 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.349-dev (2026-09-01) -- preserve Manann display deadlines (#358) [not-started]
+
+- Keeps one weak, owner-local deadline per player unit and Manann source after
+  an allowed host proc. Unwielding the trait weapon or disabling the setting
+  hides the optional HUD states without forgetting the host's still-live
+  bucket; re-wield/re-enable resumes only the remaining duration, and ready
+  appears at the original deadline.
+- The authoritative gameplay bucket increments a bounded monotonic generation
+  exactly once per accepted Manann proc and carries it on the display receipt. A
+  higher generation always replaces the prior receipt-relative mirror, even
+  when decreasing network latency makes the new proc arrive before the old
+  display deadline; equal/older generations cannot extend or resurrect it.
+  Generic #357 bomb-boon messages retain their exact payload. Because one RPC
+  variant gained a field, the mod-wide RPC schema advances from 1 to 2 and
+  mixed builds fail closed under the all-current-build requirement.
+- Boon and trait deadlines remain independent. Duplicate receipts cannot extend
+  a live window, player-unit replacement and backwards mission clocks cannot
+  inherit an old window, and mod disable now hides both display states
+  synchronously. A same-unit game-clock rewind clears the authoritative host
+  deadlines while preserving the unit's generation epoch, so delayed old-run
+  packets cannot collide with the first new-run proc.
+- Replaces the update-loop `local_player(1)` call with a protected
+  `local_player_safe(1)` lookup. Expected network teardown is silent; unexpected
+  failures are edge-triggered and hard-capped at four rows per session.
+- Treats the owner HUD notification as optional presentation: a throwing
+  notifier or network boundary emits at most four always-on diagnostic rows,
+  then the accepted proc still executes vanilla exactly once with every return
+  value preserved.
+- Extends `/ct_regression_test` check
+  `issue358_manann_tempest_cooldown_display` and the offline state-machine suite
+  across unwield/re-wield, decreasing-latency consecutive procs, replay and
+  malformed generations, source churn, staggered boon/trait deadlines,
+  toggle-off/on, disable cleanup, pre-network lifecycle, error bounds, unit
+  replacement, real `ProcFunctions.chain_lightning` clock reset, throwing
+  presentation boundaries, exact vanilla multi-return preservation, and
+  rejected/replayed non-refresh behavior.
+
 ## 0.7.348-dev (2026-08-30) -- make gargoyle evidence source-provable (#1124) [not-started]
 
 - Emits the existing bounded, observation-only `[ct:1124]` ledger through a
