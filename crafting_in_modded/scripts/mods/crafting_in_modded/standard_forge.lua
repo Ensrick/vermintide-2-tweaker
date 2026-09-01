@@ -22,6 +22,10 @@ and reverts everything. This matches how the Athanor handles property/trait edit
 ]]
 
 local mod = get_mod("cim")
+local _is_modded_realm = mod._cim_is_modded_realm or function() return false end
+local _with_eac_off = mod._cim_with_eac_off or function(func, self, ...)
+    return func(self, ...)
+end
 mod:dofile("scripts/mods/crafting_in_modded/_cim_salvage_modded_button")
 local template_selector = mod:dofile("scripts/mods/crafting_in_modded/_cim_template_selector")
 local template_catalog = mod:dofile("scripts/mods/crafting_in_modded/_cim_template_catalog")
@@ -159,11 +163,8 @@ mod._cim_versus_shadowed = _cim_versus_shadowed
 --          eac-untrusted term but keeping force_disable + requirements.
 mod:hook("HeroWindowItemCustomization", "_update_state_craft_button", function(func, self, recipe_name, ...)
     local result
-    if script_data["eac-untrusted"] and recipe_name == "apply_weapon_skin" then
-        local saved = script_data["eac-untrusted"]
-        script_data["eac-untrusted"] = false
-        result = func(self, recipe_name, ...)
-        script_data["eac-untrusted"] = saved
+    if _is_modded_realm() and recipe_name == "apply_weapon_skin" then
+        result = _with_eac_off(func, self, recipe_name, ...)
     else
         result = func(self, recipe_name, ...)
     end
@@ -263,6 +264,11 @@ for _, klass in ipairs({ "HeroWindowItemCustomization", "HeroWindowCrafting", "H
         return unpack(results, 1, results.n)
     end)
     mod:hook_safe(klass, "on_exit", function(self)
+        local owner = mod._cim_illusion_apply_presentation_owner
+        if class_for_dump == "HeroWindowItemCustomization"
+                and type(owner) == "table" and type(owner.release) == "function" then
+            owner.release(self, "window-exit")
+        end
         mod._cim_standard_forge_active = false
     end)
 end

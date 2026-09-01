@@ -4,7 +4,18 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-08-23.
+Last updated: 2026-09-01.
+
+### issue1465-equipped-illusion-apply - selection and Apply are one transaction
+
+| Field | Value |
+|---|---|
+| Symptom | Selecting a different eligible illusion from an equipped weapon's gear-icon page leaves the Apply graphic absent; Space/controller input also does nothing even though vanilla records `_skin_dirty=true`. |
+| Root cause | Vanilla writes selection, material identity, requirement state, generic input actions, and button presentation through separate callbacks. CIM previously cleared the realm gate transiently but did not own their final shared postcondition. |
+| Fix version(s) | cim_dev 0.8.132-dev (#1465) |
+| Category | SOLO / UI / TRANSACTION / CROSS-MOD |
+| Expected post-fix | A registered, DLC-owned, provably different illusion presents one enabled Apply action for mouse and Space/controller. Apply persists the exact instance and releases all adapter-owned progress/input state. Current, malformed, missing-id, unowned-DLC, resolver-error, missing-widget, and official-realm paths remain disabled or vanilla-owned. |
+| Detection | `_cim_illusion_apply_presentation.lua` owns the engine-free transaction and `illusion_swap.lua` registers `issue1465_illusion_apply_presentation` for `/cim_regression_test`. `test_cim_illusion_apply_presentation.lua`, `test_modded_realm_authority.lua`, and `test_cos_modded_illusion_swap.lua` cover public/Dev byte parity, hostile hook order, completion/window exit, nil-hole returns, and provider failure. In game, select a different eligible illusion on an equipped weapon and verify the visible Apply button and Space input before confirming persistence after reopen. |
 
 ### issue1360-ranalds-build-import - external builds commit atomically
 

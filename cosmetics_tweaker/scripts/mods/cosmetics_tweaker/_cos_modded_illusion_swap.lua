@@ -25,8 +25,21 @@ function M.install(mod, deps)
     local _fake_skin_backend_ids = {}
     local _pending_local_craft
 
+    local function _provider_owns(mod_id)
+        local got_mod, candidate = pcall(get_mod, mod_id)
+        if not got_mod or type(candidate) ~= "table" then return false end
+        local provider = rawget(candidate, "_cim_illusion_swap_provider")
+        if type(provider) ~= "table" or rawget(provider, "schema") ~= 1 then
+            return false
+        end
+        local owns = rawget(provider, "owns_illusion_swap")
+        if type(owns) ~= "function" then return false end
+        local called, result = pcall(owns)
+        return called and result == true
+    end
+
     local function _cim_owns_illusion_swap()
-        return get_mod("cim") ~= nil
+        return _provider_owns("cim") or _provider_owns("cim_dev")
     end
 
     mod:hook("BackendInterfaceItemPlayfab", "get_weapon_skin_from_skin_key", function(func, self, skin_key)

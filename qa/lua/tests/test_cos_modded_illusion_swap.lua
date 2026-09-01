@@ -97,6 +97,36 @@ return function(H, repo_root)
         ItemMasterList, script_data = old_iml, old_script
     end)
 
+    H.test("Cosmetics #1465 yields to exact stable or Dev CIM capability providers", function()
+        local _, owner, _, installed_mods = fixture()
+        H.equal(owner.owns_illusion_swap(), false)
+
+        installed_mods.cim = {
+            _cim_illusion_swap_provider = {
+                schema = 1,
+                owns_illusion_swap = function() return true end,
+            },
+        }
+        H.equal(owner.owns_illusion_swap(), true)
+
+        installed_mods.cim = nil
+        installed_mods.cim_dev = {
+            _cim_illusion_swap_provider = {
+                schema = 1,
+                owns_illusion_swap = function() return true end,
+            },
+        }
+        H.equal(owner.owns_illusion_swap(), true)
+
+        installed_mods.cim_dev._cim_illusion_swap_provider.schema = 2
+        H.equal(owner.owns_illusion_swap(), false)
+        installed_mods.cim_dev._cim_illusion_swap_provider.schema = 1
+        installed_mods.cim_dev._cim_illusion_swap_provider.owns_illusion_swap = function()
+            error("hostile-provider")
+        end
+        H.equal(owner.owns_illusion_swap(), false)
+    end)
+
     H.test("Cosmetics #702 Apply completion commits the exact pending offhand", function()
         local mod, _, hooks, _, commits = fixture()
         mod._pending_la_emit_on_exit = {

@@ -1,5 +1,22 @@
 # Crafting in Modded Changelog
 
+## 0.8.132-dev (2026-09-01) -- restore equipped-weapon illusion Apply (#1465) [not-started]
+
+- Makes the equipped weapon gear-icon illusion page one bounded transaction:
+  selecting a different eligible illusion now commits its exact synthetic
+  material id, requirement state, generic input actions, visible Apply button,
+  hotspot, and progress presentation after every downstream hook returns.
+- Current, invalid, missing-id, and unowned-DLC selections fail closed. Apply
+  completion and window exit release only adapter-owned state, preserving the
+  selected semantic key long enough for exact-instance persistence.
+- Public and Dev use one byte-identical owner and launch-aware realm authority.
+  Tweaker: Cosmetics yields through a validated stable-or-Dev CIM capability,
+  removing the Dev-only competing-hook boundary seen in Rain's failed test.
+- Adds named `/cim_regression_test` check
+  `issue1465_illusion_apply_presentation` and adversarial Lua 5.1 coverage for
+  desktop/controller presentation, hook order, errors, and official-realm
+  isolation.
+
 ## 0.8.131-dev (2026-08-29) -- restore modded-realm illusion authority (#1465) [verify-fix]
 
 - Replaced temporary raw realm-flag writes in the illusion Apply paths with a

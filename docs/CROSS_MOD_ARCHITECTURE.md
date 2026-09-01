@@ -24,6 +24,30 @@ Three mods with distinct responsibilities, designed to work independently but en
 
 ---
 
+## Crafting in Modded ↔ Tweaker: Cosmetics: illusion Apply ownership (#1465)
+
+Both public `cim` and friends-only `cim_dev` publish
+`_cim_illusion_swap_provider` with schema `1`. The provider's
+`owns_illusion_swap` callable must return the exact boolean `true`; Cosmetics
+reads the raw field and validates it under `pcall` at callback time. A missing
+mod, missing or foreign schema, non-callable field, thrown call, or any result
+other than exact `true` leaves Cosmetics' established standalone illusion
+fallback active.
+
+When the capability is valid, Cosmetics yields only the overlapping
+customization Apply seams. Its offhand picker, glow-editor, preview, and
+completion-observer work remains installed. CIM owns the complete Apply
+presentation/input transaction and exact-instance persistence boundary; neither
+mod infers ownership from a mod id alone.
+
+The one-time compatible publication order for schema 1 is **public CIM first,
+then Cosmetics, then CIM Dev**. Old Cosmetics already yields to public `cim` by
+presence, so the new public provider can land safely first. Publishing new
+Cosmetics before either new CIM stream would make its fail-closed fallback
+compete with that old CIM stream and is forbidden.
+
+---
+
 ## weapon_tweaker ↔ character_weapon_variants: independent; wt is the availability control surface
 
 > **Spec (2026-07-05, Issue #368) — supersedes the earlier "wt suppresses/defers to CWV" model

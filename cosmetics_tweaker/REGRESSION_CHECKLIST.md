@@ -4,7 +4,18 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-08-16.
+Last updated: 2026-09-01.
+
+---
+## CIM illusion Apply capability arbitration (#1465)
+
+| Field | Value |
+|---|---|
+| Boundary | `_cos_modded_illusion_swap.lua` checks public `cim` and `cim_dev` at callback time for raw `_cim_illusion_swap_provider`, schema `1`, and an `owns_illusion_swap` callable returning exact `true` under `pcall`. |
+| Ownership | A valid provider makes Cosmetics yield only the overlapping Apply-button, illusion-selection, craft, update, and state callbacks. Glow, offhand, preview, and completion-observer behavior remains installed. |
+| Fail-closed | Missing mods, absent/malformed/foreign-schema providers, non-callable ownership, thrown calls, and non-true results retain Cosmetics' standalone fallback. A mod id alone never proves ownership. |
+| Fix version(s) | cosmetics_tweaker 0.9.220-dev (#1465) |
+| Detection | `test_cos_modded_illusion_swap.lua` exercises stable, Dev, missing, malformed, foreign-schema, and throwing providers. `test_cim_illusion_apply_presentation.lua` pins both CIM owners and `test_modded_realm_authority.lua` pins their shared authority. Live verification pairs Cosmetics with the newly deployed CIM stream and confirms one visible Apply action plus working glow/offhand observers. |
 
 ---
 ## Athanor exact offhand preview ownership (#481)

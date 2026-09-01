@@ -1,5 +1,16 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.220-dev (2026-09-01) -- yield illusion Apply to either CIM stream (#1465) [not-started]
+
+- Replaces the stable-only CIM presence check with an explicit schema-1
+  capability lookup for both `cim` and `cim_dev`, so Cosmetics' eight-hook
+  fallback owner yields at callback time to the installed Apply transaction.
+- Missing, malformed, mismatched-schema, and throwing providers fail closed to
+  Cosmetics' established local fallback. No hook, RPC, package, persistence, or
+  official-realm behavior is added.
+- Adds stable/Dev/provider-error behavioral coverage and preserves the existing
+  standalone Cosmetics path when neither CIM stream proves ownership.
+
 ## 0.9.219-dev (2026-09-01) -- transactional Loremaster registration (#428, #2) [offline/tooling]
 
 - Moves Loremaster's Armoury discovery and publication into one Cosmetics-owned

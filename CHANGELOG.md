@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-09-01 - Equipped-weapon illusion Apply has one cross-mod owner (#1465)
+
+Crafting in Modded 0.8.93 and 0.8.132-dev now own the equipped-weapon
+gear-icon illusion Apply presentation as one bounded transaction: semantic
+selection, material identity, requirements, mouse/controller input, visible
+button state, completion release, and exact-instance persistence. Tweaker:
+Cosmetics 0.9.220-dev recognizes either CIM stream through a validated schema-1
+capability and yields only the overlapping Apply seams. Resolver, DLC, widget,
+provider, and official-realm failures are covered by fail-closed Lua 5.1 tests.
+
 ## 2026-08-27 - Canonical immutable-review manifests (#1435)
 
 Implementation and review lanes now freeze candidate source through one
