@@ -1641,6 +1641,7 @@ function Get-VtCardSourceAuthority {
         }
         $records.Add([pscustomobject][ordered]@{
             ModId=$id; Dir=[string]$entry.Dir; FriendlyName=[string]$row.friendly_name
+            Stream=[string]$entry.Stream; Visibility=[string]$entry.Visibility; Public=[bool]$entry.Public
             Version=([string]$row.version).TrimStart('v'); WorkshopId=[string]$row.workshop_id
             SourceCommit=if($commit){$commit}else{$null}; RootTree=$rootTree; ModTree=$modTree
             RootBundle=if($rootBundle){$rootBundle}else{$null}

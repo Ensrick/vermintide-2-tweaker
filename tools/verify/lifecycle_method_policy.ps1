@@ -1176,6 +1176,7 @@ function Get-VtOpenIssueLifecycleDecision {
     $ready = @($lifecycle | Where-Object { $script:VtReadyLifecycleLabels -contains $_ })
     $blocked = $labels -contains 'blocked'
     $coop = $labels -contains 'coop-required'
+    $publicRelease = $labels -contains 'public-release'
     $card = Get-VtLiveTestCardSelection -Comments $Issue.comments -RequirePinnedCard:$RequirePinnedCard -Authority $Authority -EnforceAuthority:$EnforceAuthority
     $errors = New-Object System.Collections.Generic.List[string]
 
@@ -1194,6 +1195,14 @@ function Get-VtOpenIssueLifecycleDecision {
         if (Test-VtHasUnreconciledDesignatedPlaytesterComment $Issue.comments) {
             $errors.Add('unreconciled-designated-playtester-comment')
         }
+        if ($publicRelease) {
+            if (-not $Authority) {
+                $errors.Add('public-release-card-authority-unavailable')
+            }
+            elseif (@($card.AuthorityTargets | Where-Object { [bool]$_.Public }).Count -eq 0) {
+                $errors.Add('public-release-card-requires-official-public-target')
+            }
+        }
     }
     elseif ($coop) {
         $errors.Add('coop-required-without-ready-state')
@@ -1205,6 +1214,7 @@ function Get-VtOpenIssueLifecycleDecision {
         Ready = $ready.Count -eq 1
         Blocked = $blocked
         CoopRequired = $coop
+        PublicRelease = $publicRelease
         Card = $card
         Advisories = @($card.Advisories | ForEach-Object { "live-card-$_" } | Select-Object -Unique)
         Errors = @($errors | Select-Object -Unique)

@@ -260,7 +260,8 @@ function Invoke-SelfTest {
     $authority = [pscustomobject]@{
         Records = @(
             [pscustomobject]@{
-                ModId='wt_dev'; Version='1.2.3-dev'; WorkshopId='1111111111'
+                ModId='wt_dev'; Dir='weapon_tweaker_dev'; Stream='dev'; Visibility='friends_only'; Public=$false
+                Version='1.2.3-dev'; WorkshopId='1111111111'
                 SourceCommit='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
                 RootBundle='0123456789abcdef.mod_bundle'
                 RootBundleSha256='1111111111111111111111111111111111111111111111111111111111111111'
@@ -285,7 +286,8 @@ function Invoke-SelfTest {
                 MenuSurfaces=@('Registered Pickup Diagnostics')
             },
             [pscustomobject]@{
-                ModId='ct_dev'; Version='2.3.4-dev'; WorkshopId='2222222222'
+                ModId='ct_dev'; Dir='chaos_wastes_tweaker_dev'; Stream='dev'; Visibility='friends_only'; Public=$false
+                Version='2.3.4-dev'; WorkshopId='2222222222'
                 SourceCommit='bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
                 RootBundle='fedcba9876543210.mod_bundle'
                 RootBundleSha256='3333333333333333333333333333333333333333333333333333333333333333'
@@ -296,9 +298,50 @@ function Invoke-SelfTest {
                 CommandRoutes=@([pscustomobject]@{Command='/ct_probe'})
                 ReceiptRoutes=@([pscustomobject]@{Marker='[ct:only]';Signature='[ct:only] result=%s';Bound=$true})
                 MenuSurfaces=@('Chest Diagnostics')
+            },
+            [pscustomobject]@{
+                ModId='wt'; Dir='weapon_tweaker'; Stream='single'; Visibility='public'; Public=$true
+                Version='1.2.2-beta'; WorkshopId='3333333333'
+                SourceCommit='cccccccccccccccccccccccccccccccccccccccc'
+                RootBundle='0011223344556677.mod_bundle'
+                RootBundleSha256='5555555555555555555555555555555555555555555555555555555555555555'
+                AssetFilename='weapon_tweaker.zip'
+                AssetSha256='6666666666666666666666666666666666666666666666666666666666666666'
+                LoadRoutes=@([pscustomobject]@{Marker='[wt:LOAD]'})
+                ExactBannerRoutes=@([pscustomobject]@{Tag='[wt]'})
+                CommandRoutes=@()
+                ReceiptRoutes=@()
+                MenuSurfaces=@()
             }
         )
     }
+    function Assert-PublicReleaseDecision {
+        param([string]$Name, [string]$Lifecycle, [string]$Card, [bool]$Valid, [string]$Error)
+        $comments = if ([string]::IsNullOrWhiteSpace($Card)) { @() } else { @((New-TestComment $Card)) }
+        $issue = [pscustomobject]@{
+            number=199
+            title=$Name
+            labels=@(@{name=$Lifecycle}, @{name='public-release'})
+            comments=$comments
+        }
+        $decision = Get-VtOpenIssueLifecycleDecision -Issue $issue -RequirePinnedCard -Authority $authority -EnforceAuthority
+        if ([bool]$decision.Valid -ne $Valid) {
+            throw "$Name validity mismatch: $($decision.Errors -join ', ')"
+        }
+        if ($Error -and $decision.Errors -notcontains $Error) {
+            throw "$Name missing expected error '$Error': $($decision.Errors -join ', ')"
+        }
+    }
+    $devPublicReleaseCard = "## CURRENT LIVE TEST`n`n**Build/banner:** v1.2.3-dev, confirm ``[wt:LOAD]```n**Topology:** Solo`n`n1. Equip Kruber's Mace in the Keep.`n`n**Expected:** The selected weapon behaves normally."
+    $officialPublicReleaseCard = $devPublicReleaseCard.Replace('v1.2.3-dev', 'v1.2.2-beta')
+    $mixedPublicReleaseCard = $devPublicReleaseCard.Replace(
+        'v1.2.3-dev, confirm `[wt:LOAD]`',
+        'v1.2.3-dev, confirm `[wt:LOAD]`; v1.2.2-beta, confirm `[wt:LOAD]`')
+    Assert-PublicReleaseDecision 'public-release Dev-only card fails' 'verify-fix' $devPublicReleaseCard $false 'public-release-card-requires-official-public-target'
+    Assert-PublicReleaseDecision 'public-release official card passes' 'verify-fix' $officialPublicReleaseCard $true $null
+    Assert-PublicReleaseDecision 'public-release not-started remains allowed' 'not-started' $null $true $null
+    Assert-PublicReleaseDecision 'public-release mixed card with official target passes' 'verify-fix' $mixedPublicReleaseCard $true $null
+
     $contractCard = "## CURRENT LIVE TEST`n`n**Build/banner:** v1.2.3-dev, confirm ``[wt:LOAD]```n**Topology:** Solo`n`n1. Run ``/gt_regression_test`` in chat.`n`n**Expected:** One bounded ``[gt:probe] result=ok`` receipt appears.`n`n**Workshop:** item ``1111111111``, manifest ``9000000001``."
     function Assert-Contract([string]$Name, [string]$Card, [bool]$Valid, [string]$Error) {
         $selection = Get-VtLiveTestCardSelection -Comments @([pscustomobject]@{body=$Card}) -Authority $authority -EnforceAuthority
@@ -410,7 +453,7 @@ function Invoke-SelfTest {
         throw 'report-only rollout failed to preserve a legacy card while exposing its strict authority defect'
     }
     $ambiguousAuthority=[pscustomobject]@{Records=@($authority.Records + [pscustomobject]@{
-        ModId='wt_clone';Version='1.2.3-dev';WorkshopId='3333333333'
+        ModId='wt_clone';Dir='weapon_tweaker_clone';Stream='dev';Visibility='friends_only';Public=$false;Version='1.2.3-dev';WorkshopId='4444444444'
         LoadRoutes=@([pscustomobject]@{Marker='[wt:LOAD]'});ExactBannerRoutes=@();CommandRoutes=@();ReceiptRoutes=@();MenuSurfaces=@()
     })}
     $ambiguousSelection=Get-VtLiveTestCardSelection -Comments @([pscustomobject]@{body=$contractCard}) -Authority $ambiguousAuthority -EnforceAuthority

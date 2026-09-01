@@ -34,7 +34,7 @@ function Invoke-VtDeployedSourceContractSelfTest {
         [IO.Directory]::CreateDirectory($luaRoot) | Out-Null
         [IO.File]::WriteAllText((Join-Path $tmp 'tools\mod-inventory.psd1'), @'
 @{ Mods = @(
-    @{ Dir='fixture_mod'; ModId='fixture'; WorkshopId='1234567890'; Name='Fixture' }
+    @{ Dir='fixture_mod'; ModId='fixture'; WorkshopId='1234567890'; Visibility='public'; Stream='single'; Public=$true; Name='Fixture' }
 ) }
 '@, $utf8)
         [IO.File]::WriteAllText((Join-Path $tmp 'tools\verify\live_test_contract_exceptions.psd1'), @'
@@ -209,6 +209,9 @@ end)
         $contract = Get-VtDeployedSourceContract -RepoRoot $tmp -ReleaseManifest $manifest
         Assert-VtContractFixture (@($contract.Records).Count -eq 1) 'Fixture authority did not resolve exactly one record.'
         $record = @($contract.Records)[0]
+        Assert-VtContractFixture ([string]$record.Stream -ceq 'single') 'Inventory stream was not projected into card authority.'
+        Assert-VtContractFixture ([string]$record.Visibility -ceq 'public') 'Inventory visibility was not projected into card authority.'
+        Assert-VtContractFixture ([bool]$record.Public) 'Inventory public-release fact was not projected into card authority.'
         Assert-VtContractFixture ([string]$record.SourceCommit -ceq $commit) 'Exact source commit was not projected into card authority.'
         Assert-VtContractFixture ([string]$record.RootBundle -ceq '0123456789abcdef.mod_bundle') 'Root bundle filename was not projected into card authority.'
         Assert-VtContractFixture ([string]$record.RootBundleSha256 -ceq ('f' * 64)) 'Root bundle digest was not projected into card authority.'
