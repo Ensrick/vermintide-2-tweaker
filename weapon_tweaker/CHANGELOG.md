@@ -1,5 +1,19 @@
 # Weapon Tweaker Changelog
 
+## 0.12.326-beta (2026-09-01) -- source-exact Hotfix 6.11.2 Sienna Dagger history (#1436) [not-started]
+
+- Adds **Game Version 6.11.1** for **Sienna's Dagger**. The bounded state
+  changes only Heavy Attack 2's damage-profile route from the current
+  `medium_burning_smiter_stab_H` to the source-exact historical
+  `dagger_h1_medium_smiter_diag` value.
+- Pins the historical, post-hotfix, and current source blobs and reproduces the
+  one-operation catalog through independent extractors. Both profile identities
+  remain native and network-registered, so the state owns no private profile,
+  RPC, or fallback transport.
+- This is one incremental historical catalog slice; #1436 remains open and
+  outside the live-test queue until the requested all-weapons catalog reaches a
+  complete testable boundary.
+
 ## 0.12.325-beta (2026-08-31) -- source-exact Patch 2.0.9.1 Halberd history (#1436) [not-started]
 
 - Adds **Game Version 2.0.9** to Kruber's Halberd selector, restoring the

@@ -9,7 +9,7 @@ in the decompiled source checkout. No runtime-catalog value is an oracle input.
 
 The same independently written evaluator also reproduces the adjacent/current
 evidence lanes for Patch 2.0.6, 2.0.9.1, 2.0.10, 3.1, 3.2, 4.1.1, 4.6, 6.0, 6.6,
-and 6.8.
+6.8, and Hotfix 6.11.2.
 Patch 2.0.6 proves the three shared historical Handgun penetration leaves
 before the generator projects them onto the two immutable current clones.
 Patch 2.0.9.1 proves the complete 20-leaf Halberd push-follow-up chain
@@ -33,6 +33,11 @@ unset leaf. It also evaluates two adversarial immutable revisions that use the
 historical `local weapon_template = weapon_template or {}` pattern and proves
 their mutable symbolic roots remain distinct, preventing a later evaluation
 from overwriting an earlier snapshot and hiding a real source change.
+Hotfix 6.11.2 independently selects Sienna Dagger Heavy Attack 2's one
+damage-profile route, rehydrates its current native-profile guard, and agrees
+with the primary evaluator before catalog generation. Its enclosing gate also
+pins the current native damage-profile and network-lookup blobs, proving both
+profile identities share the vanilla lookup without adding transport.
 
 Pinned source input:
 

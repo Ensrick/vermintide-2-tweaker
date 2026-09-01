@@ -1,5 +1,17 @@
 # Weapon Tweaker Changelog
 
+## 0.12.327-dev (2026-09-01) -- mirror source-exact Hotfix 6.11.2 Sienna Dagger history (#1436) [not-started]
+
+- Mirrors public beta `0.12.326`: **Sienna's Dagger** gains a
+  **Game Version 6.11.1** state whose only operation restores Heavy Attack 2's
+  source-exact `dagger_h1_medium_smiter_diag` damage-profile route.
+- The public and Dev generated catalogs remain byte-identical. Historical,
+  post-hotfix, and current source evidence is independently reproducible; both
+  profile identities remain native, so this adds no private profile or network
+  surface.
+- #1436 remains open and outside the live-test queue because this is one bounded
+  slice of the requested all-weapons history catalog.
+
 ## 0.12.326-dev (2026-08-31) -- mirror source-exact Patch 2.0.9.1 Halberd history (#1436) [not-started]
 
 - Mirrors public beta 0.12.325: Kruber's Halberd gains a

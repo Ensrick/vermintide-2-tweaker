@@ -1,4 +1,4 @@
-# Offline adversarial fixture for all eleven weapon-history source reproducers.
+# Offline adversarial fixture for all twelve weapon-history source reproducers.
 # The Tweaker repository itself is an intentionally incomplete source checkout:
 # it has .git, but none of the required source commits/paths. No fixture repo,
 # fetch, network access, source mutation, or recursive cleanup is needed.
@@ -89,6 +89,10 @@ $checks = @(
     [pscustomobject]@{
         Name = 'Patch 6.8'
         Path = Join-Path $PSScriptRoot 'check_wt_history_patch_6_8_reproducibility.ps1'
+    },
+    [pscustomobject]@{
+        Name = 'Hotfix 6.11.2'
+        Path = Join-Path $PSScriptRoot 'check_wt_history_patch_6_11_2_reproducibility.ps1'
     }
 )
 
@@ -167,5 +171,5 @@ if ($failures.Count -gt 0) {
     exit 2
 }
 
-Write-Host '[check_wt_history_source_checkout:selftest] OK - all eleven reproducers visibly skip an incomplete checkout and fail closed when source is required.' -ForegroundColor Green
+Write-Host '[check_wt_history_source_checkout:selftest] OK - all twelve reproducers visibly skip an incomplete checkout and fail closed when source is required.' -ForegroundColor Green
 exit 0

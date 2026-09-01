@@ -687,15 +687,16 @@ local function register(H, repo_root)
             "wt_history_patch_3_1_v1", "wt_history_patch_3_2_v1",
             "wt_history_patch_5_2_v1", "wt_history_patch_6_0_v1",
             "wt_history_patch_6_6_v1", "wt_history_patch_6_8_v1",
+            "wt_history_patch_6_11_2_sienna_dagger_v1",
             "wt_history_patch_4_1_1_v1", "wt_history_patch_4_6_hagbane_v1",
         })
         H.deep_equal(catalog_counts(catalog), {
             derived_profiles = 1,
-            families = 23,
-            family_states = 35,
-            operations = 231,
+            families = 24,
+            family_states = 36,
+            operations = 232,
             profiles = 18,
-            states = 13,
+            states = 14,
         })
         local elf_axe, halberd, handgun, kruber, masterwork, sword_dagger, tuskgor
         for _, family in ipairs(catalog.families) do
@@ -721,7 +722,7 @@ local function register(H, repo_root)
         local cached, cached_error = CatalogUI.load(mod)
         H.equal(cached_error, nil)
         H.equal(cached, catalog)
-        H.equal(#paths, 12, "default composite must reuse its cache")
+        H.equal(#paths, 13, "default composite must reuse its cache")
     end)
 
     H.test("WT #1436 completeness ledger fails closed on census and scope drift", function()
@@ -746,9 +747,9 @@ local function register(H, repo_root)
                 "wrong completeness refusal: " .. tostring(refusal))
         end
         rejects(function(value) value.schema = 2 end, "identity is invalid")
-        rejects(function(value) value.catalogs[11] = nil end, "catalog count drift")
+        rejects(function(value) value.catalogs[12] = nil end, "catalog count drift")
         rejects(function(value)
-            value.catalogs[12] = clone(value.catalogs[11])
+            value.catalogs[13] = clone(value.catalogs[12])
         end, "catalog count drift")
         rejects(function(value)
             value.catalogs[2] = clone(value.catalogs[1])
@@ -769,7 +770,7 @@ local function register(H, repo_root)
         rejects(function(value)
             value.catalogs[1].unexpected = true
         end, "unexpected key")
-        rejects(function(value) value.totals.operations = 232 end,
+        rejects(function(value) value.totals.operations = 233 end,
             "aggregate totals drift")
 
         local extra_state_catalogs = clone(catalogs)
@@ -1474,16 +1475,16 @@ local function register(H, repo_root)
         H.equal(CatalogUI.decorate_menu(mod, data), data)
         H.equal(data.options.widgets[1], first)
         H.equal(data.options.widgets[2].setting_id, "wt_history_patch_versions")
-        H.equal(#data.options.widgets[2].sub_widgets, 23)
+        H.equal(#data.options.widgets[2].sub_widgets, 24)
         H.equal(data.options.widgets[3], second)
-        H.equal(loads, 12)
+        H.equal(loads, 13)
         H.equal(CatalogUI.decorate_menu(mod, data), data)
         H.equal(#data.options.widgets, 3)
-        H.equal(loads, 12, "re-decoration must not reload or duplicate the group")
+        H.equal(loads, 13, "re-decoration must not reload or duplicate the group")
 
         local malformed = { options = {} }
         H.equal(CatalogUI.decorate_menu(mod, malformed), malformed)
-        H.equal(loads, 12, "malformed menu data must not load generated catalogs")
+        H.equal(loads, 13, "malformed menu data must not load generated catalogs")
     end)
 
     H.test("WT #1436 public and dev data surfaces return one index-two history group", function()
@@ -1526,13 +1527,13 @@ local function register(H, repo_root)
             H.equal(data.options.widgets[1], availability)
             H.equal(data.options.widgets[2].setting_id,
                 "wt_history_patch_versions")
-            H.equal(#data.options.widgets[2].sub_widgets, 23)
+            H.equal(#data.options.widgets[2].sub_widgets, 24)
             H.equal(data.options.widgets[3], overrides)
-            H.equal(loads, 12)
+            H.equal(loads, 13)
             H.equal(catalog_ui.decorate_menu(mod, data), data)
             H.equal(#data.options.widgets, 3,
                 stream.namespace .. " must not duplicate its history group")
-            H.equal(loads, 12,
+            H.equal(loads, 13,
                 stream.namespace .. " must reuse its generated-catalog cache")
         end
     end)
