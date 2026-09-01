@@ -251,7 +251,13 @@ Out of scope for THIS change (CWV manages its own per-character variant unit pat
 
 ### NetworkLookup.inventory_packages registration
 
-Already handled by `M.pre_register_la_inventory_packages` at `_la_bridge.lua:245`. Every `kind="unit"` LA variant's `new_units[1]` and `new_units[2]` are registered at boot in sorted order on every peer (the v0.8.66 doctrine fix). The husk's `ProfileSynchronizer` sync of an LA mesh path will resolve to the same NetworkLookup index across peers.
+Owned by `_la_registration_owner.lua`. Every `kind="unit"` LA variant's
+`new_units[1]` and `new_units[2]` are discovered unconditionally and sorted
+off-table. The canonical strict lookup helper validates a complete shadow of
+`NetworkLookup.inventory_packages`; only the all-or-nothing registration commit
+publishes it. The husk's `ProfileSynchronizer` therefore resolves an LA mesh
+path to the same deterministic index on peers with the same manifested catalog,
+without exposing the former partially appended lookup on a failed boot attempt.
 
 ### `slot.skin` reading on the husk
 

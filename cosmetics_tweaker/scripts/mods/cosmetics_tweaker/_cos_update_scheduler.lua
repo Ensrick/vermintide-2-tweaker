@@ -231,20 +231,46 @@ function M.install(mod, ctx)
             if ItemMasterList
                and has_la
                and has_mil then
-                LA_BRIDGE.register_all()
-                LA_BRIDGE.install_apply_gate()
-                -- v0.8.31 REVERT: skin injection (v0.8.29-30) didn't match
-                -- the user's "shield and main weapon are changed separately"
-                -- mental model. Restore the row-2 LA merge so LA shields
-                -- show up in the offhand picker again. Cross-weapon leak +
-                -- preview-texture issues remain known limitations to address
-                -- under a different design (likely per-backend_id selection
-                -- + backend-mirror persistence).
-                _merge_la_offhand_options()
-                -- v0.9.71-dev: pools are built - restore persisted shield picks.
-                if mod._la_restore_offhand_selections then mod._la_restore_offhand_selections() end
-                _la_bridge_init_done = true
-                ctx.set_la_bridge_init_done(_la_bridge_init_done)
+                local call_ok, registered, reason = pcall(LA_BRIDGE.register_all)
+                if call_ok and registered then
+                    local gate_ok, gate_ready, gate_reason = pcall(
+                        LA_BRIDGE.install_apply_gate)
+                    if not gate_ok then
+                        reason = "post_commit:" .. tostring(gate_ready)
+                        registered = false
+                    elseif gate_ready ~= true then
+                        reason = "post_commit:" .. tostring(
+                            gate_reason or "la_apply_not_ready")
+                        registered = false
+                    else
+                        local post_ok, post_error = pcall(function()
+                            -- v0.8.31 REVERT: skin injection (v0.8.29-30) didn't match
+                            -- the user's "shield and main weapon are changed separately"
+                            -- mental model. Restore the row-2 LA merge so LA shields
+                            -- show up in the offhand picker again.
+                            _merge_la_offhand_options()
+                            if mod._la_restore_offhand_selections then
+                                mod._la_restore_offhand_selections()
+                            end
+                        end)
+                        if post_ok then
+                            state.la_registration_failure = nil
+                            _la_bridge_init_done = true
+                            ctx.set_la_bridge_init_done(_la_bridge_init_done)
+                        else
+                            reason = "post_commit:" .. tostring(post_error)
+                            registered = false
+                        end
+                    end
+                elseif not call_ok then
+                    reason = "register_error:" .. tostring(registered)
+                    registered = false
+                end
+                if not registered and state.la_registration_failure ~= reason then
+                    -- allow-perframe: edge-triggered; identical retry failures are silent
+                    mod:info("[LA bridge] registration deferred: %s", tostring(reason))
+                    state.la_registration_failure = reason
+                end
             end
         end
         -- Native/CWV hand persistence is independent of LA. Retry until backend
