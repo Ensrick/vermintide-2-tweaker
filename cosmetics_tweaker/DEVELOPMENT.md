@@ -12,7 +12,7 @@ diagnostic, and scheduler owners without changing their engine registration
 order. The final slice moved exact-instance offhand state restoration and local
 paint gating into dedicated owners, separated read-only offhand/glow diagnostics,
 and isolated the Deus mission-only precedence policy. At 1,494 nonblank lines and
-37 required owners, Cosmetics now satisfies the 1,500-line structural-completion
+39 required owners, Cosmetics now satisfies the 1,500-line structural-completion
 target. Future changes must preserve or reduce that ceiling; behavior and
 cross-surface appearance completeness remain governed by their own issues and
 tests rather than inferred from file size alone.
@@ -41,6 +41,8 @@ exactly once from the manifest.
 | Module | Owns / public surface (on `mod._cos` unless noted) |
 |---|---|
 | `cosmetics_tweaker.lua` (entry) | Composition root: MOD_VERSION (launcher parses it here — never move it), load banner/echo, embed manifest, shared `mod._cos` namespace, ordered owner installation, remaining live render adapters, and #282 MH session-residency diagnostics. Its 1,494-line ceiling is the completed structural-phase ratchet. |
+| `_la_registration_owner.lua` | #428/#2 all-or-nothing Loremaster registration owner. Discovers the sorted LA catalog and builds clone, localization, package, item-name, offhand, resolution, and parent-package plans off-table; validates both strict lookup axes on shadows; snapshots IML, MIL persistent/mirror state, backend mirrors, bridge maps/lists, dirty state, and readiness; commits once and publishes `la_registered` last; restores exact prior state on any error without calling MIL removal. It owns no hook, RPC, command, package load, UI, renderer, or lifecycle callback. |
+| `_lib_network_lookup.lua` | Manifested byte-exact consumer of the canonical strict bidirectional NetworkLookup registration primitive. The LA transaction uses it only against shadow tables during preflight and publishes the validated whole-table result during commit. |
 | `_cos_mod_lifecycle.lua` | Idempotent owner of the existing `on_game_state_changed`, `on_disabled`, and `on_unload` callbacks. Preserves transition telemetry, bounded LA/glow/replay arming, TPE/LA disable cleanup, and offhand-package unload order. It receives the four earlier entry locals explicitly and adds no hook, RPC, update loop, or persistence surface. |
 | `_cos_la_replay_runtime.lua` | Idempotent #660 owner of the bounded Loremaster appearance-replay coordinator. Owns the replay state initialization plus `apply`/`on_edge` status and invalidation routing at the historical post-`_la_reconcile`, pre-RPC position. It receives the pure replay policy and five existing runtime dependencies explicitly and adds no hook, RPC, update loop, lifecycle callback, persistence write, or renderer mutation. |
 | `_cos_glow_transport.lua` | Idempotent host-authoritative per-peer glow transport/replay owner. Owns the existing `cos_glow_apply_req` / `cos_glow_apply` registrations, coalesced local publisher, bounded material-only rehydrate queue, and hot-join replay helpers at their historical post-LA-RPC, pre-husk-wield position. It adds no hook, lifecycle callback, persistence write, or material mutation; the frame scheduler's existing `mod.update`, hot-join, picker, and shared husk hooks consume its stable `mod._*` functions. |

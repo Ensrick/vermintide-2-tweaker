@@ -1071,7 +1071,7 @@ Last updated: 2026-05-22. Source: CHANGELOG.md files + ~/.claude memory.
 | Category | STATIC + UNIT |
 | Repro | Duplicate merge/paint logic in the entry, restore an Armoury key against a sibling item type, pass an unregistered dual-unit path, or present a proven preview unit path that differs from the authored variant. |
 | Expected post-fix | `_cos_offhand_state_runtime.lua` exclusively owns idempotent merge, bounded exact-instance restore, lazy lookup, and dual validation; `_cos_offhand_apply_runtime.lua` exclusively owns item-type resolution, exact spawned-mesh validation, and local body/preview paint. Diagnostics and Deus precedence have their own non-overlapping owners. |
-| Detection | `qa/check_lua_unit_tests.ps1`, `qa/check_rt_textual_invariants.ps1`, strict Cosmetics mod-lint, and `qa/check_decomposition_contracts.ps1`; the entry must remain at or below 1,494 nonblank lines with 37 required owners and state `complete`. |
+| Detection | `qa/check_lua_unit_tests.ps1`, `qa/check_rt_textual_invariants.ps1`, strict Cosmetics mod-lint, and `qa/check_decomposition_contracts.ps1`; the entry must remain at or below 1,494 nonblank lines with 39 required owners/helpers and state `complete`. |
 
 ---
 

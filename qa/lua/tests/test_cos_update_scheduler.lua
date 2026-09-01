@@ -71,6 +71,7 @@ return function(H, repo_root)
     local function build(options)
         options = options or {}
         local events = {}
+        local infos = {}
         local now = options.now or 10
         local bridge_done = options.bridge_done
         if bridge_done == nil then bridge_done = true end
@@ -95,14 +96,36 @@ return function(H, repo_root)
         end
 
         local la_bridge = { registered = true }
-        function la_bridge.register_all() event("register-la") end
-        function la_bridge.install_apply_gate() event("install-la-gate") end
+        local la_gate_ready = options.la_gate_ready
+        if la_gate_ready == nil then la_gate_ready = true end
+        local la_gate_installed = false
+        function la_bridge.register_all()
+            event("register-la")
+            if options.la_register_error then error(options.la_register_error) end
+            if options.la_register_result == false then
+                return false, options.la_register_reason or "planned-rejection"
+            end
+            return true, "registered"
+        end
+        function la_bridge.install_apply_gate()
+            event("install-la-gate")
+            if options.la_post_error then error(options.la_post_error) end
+            if la_gate_installed then return true, "already_installed" end
+            if not la_gate_ready then
+                return false, options.la_gate_reason or "la_apply_not_ready"
+            end
+            la_gate_installed = true
+            return true, "installed"
+        end
 
         local mod = {
             _cos_rewield = { drain = function() event("rewield") end },
             _la_offhand_restore_done = true,
         }
-        function mod:info() event("info") end
+        function mod:info(...)
+            infos[#infos + 1] = { ... }
+            event("info")
+        end
         function mod:network_send(...)
             sends[#sends + 1] = { ... }
             event("state-pull-send")
@@ -151,11 +174,13 @@ return function(H, repo_root)
         local Runtime = assert(loadfile(module_path))()
         local owner = Runtime.install(mod, deps)
         return {
-            mod = mod, deps = deps, owner = owner, events = events, sends = sends,
+            mod = mod, deps = deps, owner = owner, events = events,
+            infos = infos, sends = sends,
             set_now = function(value) now = value end,
             get_pending = function() return pending end,
             set_pending = function(value) pending = value end,
             bridge_done = function() return bridge_done end,
+            set_la_gate_ready = function(value) la_gate_ready = value end,
         }
     end
 
@@ -182,6 +207,63 @@ return function(H, repo_root)
         H.equal(occurrences(table.concat(fixture.events, ","), "merge-offhands"), 1)
         fixture.mod.update(0.016)
         H.equal(occurrences(table.concat(fixture.events, ","), "register-la"), 1)
+    end)
+
+    H.test("cos update scheduler keeps rejected and post-failed registration retryable", function()
+        local rejected = build({ bridge_done = false, la_register_result = false })
+        rejected.mod.update(0.016)
+        rejected.mod.update(0.016)
+        H.equal(rejected.bridge_done(), false)
+        H.equal(occurrences(table.concat(rejected.events, ","), "register-la"), 2)
+        H.equal(occurrences(table.concat(rejected.events, ","), "info"), 1,
+            "an unchanged retry failure must log only once")
+
+        local post_failed = build({ bridge_done = false, la_post_error = "gate" })
+        post_failed.mod.update(0.016)
+        post_failed.mod.update(0.016)
+        H.equal(post_failed.bridge_done(), false)
+        H.equal(occurrences(table.concat(post_failed.events, ","), "register-la"), 2)
+        H.equal(occurrences(table.concat(post_failed.events, ","), "install-la-gate"), 2)
+        H.equal(occurrences(table.concat(post_failed.events, ","), "merge-offhands"), 0)
+        H.equal(occurrences(table.concat(post_failed.events, ","), "restore-offhands"), 0)
+        H.equal(occurrences(table.concat(post_failed.events, ","), "info"), 1,
+            "a stable throwing gate failure must log only once")
+    end)
+
+    H.test("cos update scheduler waits when LA SKIN_LIST is ready before its apply API", function()
+        local fixture = build({
+            bridge_done = false,
+            la_gate_ready = false,
+            get_mod = function(name)
+                if name == "Loremasters-Armoury" then return { SKIN_LIST = {} } end
+                if name == "MoreItemsLibrary" then return {} end
+                return nil
+            end,
+        })
+        fixture.mod.update(0.016)
+        fixture.mod.update(0.016)
+        local events = table.concat(fixture.events, ",")
+        H.equal(fixture.bridge_done(), false)
+        H.equal(occurrences(events, "register-la"), 2)
+        H.equal(occurrences(events, "install-la-gate"), 2)
+        H.equal(occurrences(events, "merge-offhands"), 0)
+        H.equal(occurrences(events, "restore-offhands"), 0)
+        H.equal(occurrences(events, "info"), 1)
+        H.equal(fixture.infos[1][2], "post_commit:la_apply_not_ready")
+
+        fixture.set_la_gate_ready(true)
+        fixture.mod.update(0.016)
+        events = table.concat(fixture.events, ",")
+        H.equal(fixture.bridge_done(), true)
+        H.equal(occurrences(events, "register-la"), 3)
+        H.equal(occurrences(events, "install-la-gate"), 3)
+        H.equal(occurrences(events, "merge-offhands"), 1)
+        H.equal(occurrences(events, "restore-offhands"), 1)
+
+        fixture.mod.update(0.016)
+        events = table.concat(fixture.events, ",")
+        H.equal(occurrences(events, "register-la"), 3)
+        H.equal(occurrences(events, "install-la-gate"), 3)
     end)
 
     H.test("cos update scheduler refreshes dependencies without replacing its owner", function()

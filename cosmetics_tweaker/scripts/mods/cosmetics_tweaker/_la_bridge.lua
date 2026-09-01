@@ -35,6 +35,10 @@ end
 local M = {}
 local SHIELD_PARITY = mod:dofile("scripts/mods/cosmetics_tweaker/_la_shield_parity")
 local RESIDENCY = mod:dofile("scripts/mods/cosmetics_tweaker/_lib_resource_residency")
+local NETWORK_LOOKUP = assert(mod._cos_network_lookup,
+    "Cosmetics NetworkLookup owner must load before LA bridge")
+local REGISTRATION_OWNER = assert(mod._cos_la_registration_owner_module,
+    "Cosmetics LA registration owner must load before LA bridge")
 M.kruber_shield_item_types = SHIELD_PARITY.KRUBER_SHIELD_ITEM_TYPES
 M.kruber_shield_families = SHIELD_PARITY.KRUBER_SHIELD_FAMILIES
 
@@ -95,11 +99,22 @@ end
 -- Build vanilla unit-path -> ItemMasterList key index
 -- CLARIFY: pairs() iteration on ItemMasterList does NOT trigger __index, so
 -- this is safe (the crashify metamethod only fires on missing-key reads).
-local function build_unit_index()
+local function build_unit_index(item_master_list)
     local idx = {}
-    for key, entry in pairs(ItemMasterList) do
+    local keys = {}
+    for key, entry in next, item_master_list do
+        if type(key) == "string" and type(entry) == "table"
+                and type(entry.unit) == "string" then
+            keys[#keys + 1] = key
+        end
+    end
+    table.sort(keys)
+    for i = 1, #keys do
+        local key = keys[i]
+        local entry = rawget(item_master_list, key)
         if type(entry) == "table" and type(entry.unit) == "string" then
-            -- prefer first-seen; if collisions happen we'll log
+            -- A unit path can have multiple IML aliases. Lexical ownership is
+            -- deterministic across peers and independent of hash iteration.
             if not idx[entry.unit] then idx[entry.unit] = key end
         end
     end
@@ -115,11 +130,12 @@ local function pick_vanilla_key(la_variant, unit_index)
     return nil
 end
 
-local function build_clone_entry(vanilla_key, la_key, suffix_id, name_override)
+local function build_clone_entry(vanilla_key, la_key, suffix_id, name_override,
+        localization, item_master_list)
     -- rawget: ItemMasterList __index crashifies on missing keys. vanilla_key
     -- is normally validated by pick_vanilla_key, but using rawget here keeps
     -- the function safe if a future caller forwards an unvalidated key.
-    local original = rawget(ItemMasterList, vanilla_key)
+    local original = rawget(item_master_list, vanilla_key)
     if not original then return nil end
     local entry = table.clone(original)
 
@@ -131,11 +147,9 @@ local function build_clone_entry(vanilla_key, la_key, suffix_id, name_override)
     local name_key = suffix_id .. "_name"
     entry.display_name = name_key
     local readable = humanize_armoury_key(la_key)
-    M.localization[name_key] = readable .. " (LA)"
+    localization[name_key] = readable .. " (LA)"
 
     entry.rarity = "exotic"
-
-    ItemMasterList[suffix_id] = entry
 
     entry.mod_data = {
         backend_id     = suffix_id,
@@ -213,97 +227,9 @@ local function _is_supported_variant(variant)
     return false
 end
 
--- Register an LA mesh path in `NetworkLookup.inventory_packages` so vanilla
--- VT2 code that reads the table during inventory sync / serialization
--- doesn't trip the strict `__index` metamethod (which `error()`s on missing
--- key). LA's compiled `.unit` files have NetworkLookup IDs assigned at
--- compile time but they aren't merged into the runtime NetworkLookup
--- bootstrap, so we add bidirectional entries (string→idx, idx→string)
--- using `rawset` to bypass the strict __index. Idempotent; safe to call
--- on every variant during build_offhand_options.
-local function _register_la_path_in_network_lookup(path)
-    if not path or path == "" then return end
-    if not NetworkLookup or not NetworkLookup.inventory_packages then return end
-    local ip = NetworkLookup.inventory_packages
-    if rawget(ip, path) then return end
-    local idx = #ip + 1
-    rawset(ip, idx, path)
-    rawset(ip, path, idx)
-end
-
--- v0.8.66: pre-register EVERY kind="unit" left-hand LA variant's new_units paths
--- in NetworkLookup.inventory_packages BEFORE any of the gated/filtered code paths
--- run. This is the same shape of fix as ct v0.7.60 / 0.7.61 / 0.7.62 — the
--- doctrine memo `feedback_vt2_gated_registration_diverges.md` covers it.
---
--- Crash this prevents: lynnd's session 2026-05-19,
---   `network_lookup.lua:2514: Table inventory_packages does not contain key: 2296`
--- (peer 11000010ef3befb / danjo equipped an LA shield → ProfileSynchronizer
--- broadcast an inventory_list whose first_person_packages[9] resolved to network
--- index 2296 on danjo's machine but lynnd's NetworkLookup.inventory_packages
--- had no entry there).
---
--- Why the gated path diverged: `build_offhand_options` iterates `pairs(SKIN_LIST)`
--- (unordered) and only registers paths whose `_is_supported_variant` check passes
--- (`Application.can_get("unit", ...)` — timing-dependent on whether LA's units have
--- finished loading at registration time). Two peers can both have cosmetics_tweaker
--- + LA installed and still end up with different append orders or different
--- supported-variant sets. With `idx = #ip + 1`, even one skipped or reordered entry
--- shifts every subsequent index → the same path lands on different network IDs
--- across peers → ProfileSynchronizer crashes the receiver.
---
--- Sorted iteration is load-bearing per the doctrine — two peers running the same
--- ct + same LA version always assign identical indices regardless of which
--- variants their own filter thinks are presently usable. The runtime
--- `build_offhand_options` still runs the supported-variant filter for UI pool
--- building; it just no longer drives the NetworkLookup assignments.
---
--- v0.8.66-dev: extended to ALL `kind="unit"` LA variants, not just shield
--- offhands. The original `swap_hand == "left_hand_unit"` scope-limit was a
--- holdover from when only shields reached the picker. v0.8.x added direct-
--- clone hat/armor exposure (build_clone_entry), and a `kind="unit"` LA HAT or
--- WEAPON-ILLUSION equipped via cosmetics_tweaker triggers the same
--- ProfileSynchronizer leak: get_item_units returns the LA mesh path,
--- profile_packages adds it to inventory_list, equipper's
--- NetworkLookup.inventory_packages has it (LA's swap_units_new dynamically
--- inserted it on equip), the receiver's doesn't → `Table inventory_packages
--- does not contain key: <N>` fatal in network_lookup.lua's strict __index,
--- bypasses pcall via shared_state RPC decode. Crash signature: dump
--- 2026-05-19-02.05.59. Pre-registering every kind="unit" path in sorted order
--- on both peers gives both sides the same indices regardless of which variant
--- was actually equipped.
-function M.pre_register_la_inventory_packages()
-    if not la() then return end
-    if not NetworkLookup or not NetworkLookup.inventory_packages then return end
-    local SKIN_LIST = la().SKIN_LIST
-    if type(SKIN_LIST) ~= "table" then return end
-
-    local sorted_keys = {}
-    for la_key, _ in pairs(SKIN_LIST) do
-        sorted_keys[#sorted_keys + 1] = la_key
-    end
-    table.sort(sorted_keys)
-
-    local registered = 0
-    for _, la_key in ipairs(sorted_keys) do
-        local variant = SKIN_LIST[la_key]
-        if type(variant) == "table"
-                and variant.kind == "unit"
-                and type(variant.new_units) == "table" then
-            local before = #NetworkLookup.inventory_packages
-            -- new_units[1] = 1P / primary mesh; new_units[2] = 3P sibling for
-            -- shields and weapons (left_hand_unit / right_hand_unit). For
-            -- hats / armor, [2] may be nil. _register_la_path_in_network_lookup
-            -- is nil-safe.
-            _register_la_path_in_network_lookup(variant.new_units[1])
-            _register_la_path_in_network_lookup(variant.new_units[2])
-            if #NetworkLookup.inventory_packages > before then
-                registered = registered + 1
-            end
-        end
-    end
-    mod:info("[LA bridge] pre_register_la_inventory_packages: %d variant(s) registered (sorted, all kind=unit)", registered)
-end
+-- LA package and item-name registration is owned transactionally by
+-- `_la_registration_owner.lua`. Discovery stays unconditional and sorted, but
+-- no live lookup table is mutated until both complete shadow tables validate.
 
 -- Build per-weapon-type LA shield pools.
 --
@@ -420,16 +346,10 @@ local LA_OPTION_ICON = mod:dofile(
     "scripts/mods/cosmetics_tweaker/_cos_la_option_icon_policy")
 M.normalize_weapon_type = _normalize_weapon_type
 
-local function build_offhand_options()
-    M.la_offhand_options_by_weapon_type = {}
-    M._la_offhand_resolution = {}
-    local SKIN_LIST = la().SKIN_LIST
-    -- v0.8.66: sorted iteration. After pre_register_la_inventory_packages has
-    -- already filled NetworkLookup.inventory_packages for every kind="unit"
-    -- left_hand variant, the per-variant calls inside this loop are no-ops via
-    -- the rawget(ip, path) guard. Sorting still matters defensively: any future
-    -- mutation that depends on first-seen order will be deterministic across
-    -- peers. pairs() over a string-keyed table is not guaranteed deterministic.
+local function plan_offhand_options(target, SKIN_LIST)
+    -- Sorted discovery is load-bearing, while lookup registration is now a
+    -- separate shadow-plan owned by `_la_registration_owner.lua`. This function
+    -- writes only to the supplied off-table target.
     local sorted_keys = {}
     for la_key, _ in pairs(SKIN_LIST) do
         sorted_keys[#sorted_keys + 1] = la_key
@@ -437,7 +357,8 @@ local function build_offhand_options()
     table.sort(sorted_keys)
     for _, la_key in ipairs(sorted_keys) do
         local variant = SKIN_LIST[la_key]
-        if variant.swap_hand == "left_hand_unit"
+        if type(variant) == "table"
+            and variant.swap_hand == "left_hand_unit"
             and _is_supported_variant(variant)
             and type(variant.icons) == "table"
         then
@@ -520,17 +441,7 @@ local function build_offhand_options()
                     end
                     table.sort(sorted_icons)
                     local intended_unit, source = _resolve_intended_unit(la_key, variant, sorted_icons)
-                    -- For every canonical-mesh variant, register both
-                    -- new_units entries (1p and 3p) in
-                    -- NetworkLookup.inventory_packages so vanilla code
-                    -- reading the table for sync doesn't crash on the
-                    -- strict __index. kind="texture" variants point to
-                    -- vanilla meshes that are already in the table.
-                    if variant.new_units then
-                        _register_la_path_in_network_lookup(variant.new_units[1])
-                        _register_la_path_in_network_lookup(variant.new_units[2])
-                    end
-                    M._la_offhand_resolution[la_key] = {
+                    target._la_offhand_resolution[la_key] = {
                         intended_unit = intended_unit,
                         source        = source,
                         authored_family = authored_family,
@@ -562,8 +473,11 @@ local function build_offhand_options()
                     -- knows how to render per-hand rows.
                     local hand_field = "left_hand_unit"
                     for wt, _ in pairs(weapon_types) do
-                        local per_hand = M.la_offhand_options_by_weapon_type[wt]
-                        if not per_hand then per_hand = {}; M.la_offhand_options_by_weapon_type[wt] = per_hand end
+                        local per_hand = target.la_offhand_options_by_weapon_type[wt]
+                        if not per_hand then
+                            per_hand = {}
+                            target.la_offhand_options_by_weapon_type[wt] = per_hand
+                        end
                         local list = per_hand[hand_field]
                         if not list then list = {}; per_hand[hand_field] = list end
                         -- #923: never share one mutable option across target
@@ -577,7 +491,7 @@ local function build_offhand_options()
             end
         end
     end
-    M.report_magic_receiver_gaps()
+    return true
 end
 
 -- #373 boot-time validation pass (log-only, capped): walk the live
@@ -641,98 +555,49 @@ function M.dump_offhand_resolution()
         (function() local n = 0; for _ in pairs(M._la_offhand_resolution) do n = n + 1 end; return n end)())
 end
 
+local _registration_owner = nil
+
+local function registration_owner()
+    if _registration_owner then return _registration_owner end
+    _registration_owner = REGISTRATION_OWNER.new({
+        bridge = M,
+        network_lookup_lib = NETWORK_LOOKUP,
+        get_la = la,
+        get_mil = mil,
+        get_item_master_list = function() return ItemMasterList end,
+        get_network_lookup = function() return NetworkLookup end,
+        get_managers = function() return Managers end,
+        build_unit_index = build_unit_index,
+        pick_vanilla_key = pick_vanilla_key,
+        build_clone_entry = build_clone_entry,
+        plan_offhand_options = plan_offhand_options,
+        plan_parent_packages = function(skin_list)
+            return M._plan_la_path_to_parent_package(skin_list)
+        end,
+    })
+    return _registration_owner
+end
+
 function M.register_all()
-    if M.la_registered then return end
-    if not la() or not mil() then
-        mod:info("[LA bridge] LA or MIL not present; skipping registration")
-        return
+    local ok, reason, plan = registration_owner().register_all()
+    if not ok then
+        return false, reason
     end
-    if not ItemMasterList then return end
-    if type(la().SKIN_LIST) ~= "table" then return end
-
-    -- v0.8.66: pre-register kind="unit" left-hand variant inventory_packages
-    -- BEFORE any other registration so two peers always assign identical network
-    -- indices regardless of their per-machine filter outcomes. See
-    -- pre_register_la_inventory_packages above and the doctrine memo
-    -- feedback_vt2_gated_registration_diverges.md.
-    M.pre_register_la_inventory_packages()
-
-    local unit_index = build_unit_index()
-    local entries_to_register = {}
-    local registered, skipped = 0, {}
-
-    -- v0.8.66: sorted iteration so the order in which we append to
-    -- entries_to_register (and downstream NetworkLookup.item_names below) is
-    -- identical across peers. pairs() over a string-keyed table is not
-    -- guaranteed deterministic across LuaJIT VMs even with the same key set.
-    local sorted_la_keys = {}
-    for la_key, _ in pairs(la().SKIN_LIST) do
-        sorted_la_keys[#sorted_la_keys + 1] = la_key
-    end
-    table.sort(sorted_la_keys)
-
-    for _, la_key in ipairs(sorted_la_keys) do
-        local variant = la().SKIN_LIST[la_key]
-        local hand = variant.swap_hand
-        if hand == "hat" or hand == "armor" then
-            local vanilla_key, unit_path = pick_vanilla_key(variant, unit_index)
-
-            if not vanilla_key and hand == "armor" and variant.cosmetic_key then
-                vanilla_key = variant.cosmetic_key
-                if not rawget(ItemMasterList, vanilla_key) then vanilla_key = nil end
-                if vanilla_key and variant.new_units and variant.new_units[1] then
-                    unit_path = variant.new_units[1]
-                end
-            end
-
-            if vanilla_key then
-                local backend_id = vanilla_key .. "_LA_" .. la_key
-                local name_override = (hand == "armor") and vanilla_key or nil
-                local entry = build_clone_entry(vanilla_key, la_key, backend_id, name_override)
-                if entry then
-                    table.insert(entries_to_register, entry)
-                    M.backend_to_armoury[backend_id] = la_key
-                    M.backend_to_vanilla[backend_id] = vanilla_key
-                    M.armoury_to_backend[la_key]     = backend_id
-                    if unit_path then
-                        M.unit_path_to_clones[unit_path] = M.unit_path_to_clones[unit_path] or {}
-                        table.insert(M.unit_path_to_clones[unit_path], backend_id)
-                    end
-                    registered = registered + 1
-                end
-            else
-                table.insert(skipped, la_key)
+    if plan then
+        for weapon_type, per_hand in pairs(M.la_offhand_options_by_weapon_type) do
+            for hand_field, list in pairs(per_hand) do
+                mod:info("[LA bridge] %s/%s offhand pool: %d entries",
+                    weapon_type, hand_field, #list)
             end
         end
-    end
-
-    if #entries_to_register > 0 then
-        mil():add_mod_items_to_local_backend(entries_to_register, "cosmetics_tweaker")
-
-        if NetworkLookup and NetworkLookup.item_names then
-            for _, entry in ipairs(entries_to_register) do
-                local key = entry.key or entry.name
-                if key and not rawget(NetworkLookup.item_names, key) then
-                    local idx = #NetworkLookup.item_names + 1
-                    rawset(NetworkLookup.item_names, idx, key)
-                    rawset(NetworkLookup.item_names, key, idx)
-                end
-            end
+        mod:info("[LA bridge] registered %d items, skipped %d (transactional)",
+            #plan.entries, #plan.skipped)
+        if #plan.skipped > 0 then
+            mod:info("[LA bridge] skipped: %s", table.concat(plan.skipped, ", "))
         end
+        M.report_magic_receiver_gaps()
     end
-
-    build_offhand_options()
-    M._build_la_path_to_parent_package()
-    for weapon_type, per_hand in pairs(M.la_offhand_options_by_weapon_type) do
-        for hand_field, list in pairs(per_hand) do
-            mod:info("[LA bridge] %s/%s offhand pool: %d entries", weapon_type, hand_field, #list)
-        end
-    end
-
-    M.la_registered = true
-    M.registered = true
-    mod:info("[LA bridge] registered %d items, skipped %d (no vanilla unit match)", registered, #skipped)
-    if #skipped > 0 then mod:info("[LA bridge] skipped: %s", table.concat(skipped, ", ")) end
+    return true, reason
 end
 
 -- Find any equipped clone for the given vanilla unit path. Returns
@@ -803,13 +668,14 @@ M._bridge_active = false
 M._gate_installed = false
 
 function M.install_apply_gate()
-    if M._gate_installed then return end
+    if M._gate_installed then return true, "already_installed" end
     local LA = la()
-    if not LA or not LA.apply_new_skin_from_texture then return end
-    M._gate_installed = true
+    if type(LA) ~= "table" then return false, "la_missing" end
+    local original_apply = rawget(LA, "apply_new_skin_from_texture")
+    if type(original_apply) ~= "function" then
+        return false, "la_apply_not_ready"
+    end
 
-    local original_apply = LA.apply_new_skin_from_texture
-    M._original_apply = original_apply
     -- v0.9.33: gate checks _gate_installed so that if uninstall can't restore the
     -- original (another mod re-wrapped on top of us — see uninstall_apply_gate),
     -- clearing the flag still makes a stranded gate a transparent passthrough.
@@ -821,9 +687,22 @@ function M.install_apply_gate()
         if M.trace then mod:info("[LA bridge] GATE allowed %s (bridge_active=%s)", armoury_key, tostring(M._bridge_active)) end
         return original_apply(armoury_key, world, skin, unit)
     end
+    -- Publish readiness only after the raw replacement succeeds and reads back
+    -- exactly. Inherited/discarding/throwing proxy shapes cannot claim a gate
+    -- that is not the live raw LA function.
+    local write_ok, write_error = pcall(
+        rawset, LA, "apply_new_skin_from_texture", gate_fn)
+    if not write_ok then
+        return false, "la_apply_install_failed:" .. tostring(write_error)
+    end
+    if rawget(LA, "apply_new_skin_from_texture") ~= gate_fn then
+        return false, "la_apply_install_rejected"
+    end
+    M._original_apply = original_apply
     M._gate_fn = gate_fn  -- v0.9.33: saved so uninstall can verify the live fn is still ours
-    LA.apply_new_skin_from_texture = gate_fn
+    M._gate_installed = true
     mod:info("[LA bridge] apply gate installed (raw replacement)")
+    return true, "installed"
 end
 
 -- audit 2026-06-07 (F7): install_apply_gate() RAW-replaces
@@ -1148,25 +1027,23 @@ M.la_kind_unit_preview_scale = {
 -- mesh path; the previewer queries the _3p form.
 M.la_path_to_parent_package = {}
 
--- Hoisted onto M so `register_all` can call it without forward-ref
--- crashes (per `feedback_lua_forward_reference.md` — local-function
--- declarations are scoped at parse time, so a `local function` declared
--- AFTER its caller resolves to nil at call time, not the function body).
-function M._build_la_path_to_parent_package()
-    M.la_path_to_parent_package = {}
-    local SKIN_LIST = la() and la().SKIN_LIST
-    if not SKIN_LIST then return end
+-- Pure registration-plan helper. The transaction owner publishes the returned
+-- map only after IML, MIL, and both strict lookup tables have committed.
+function M._plan_la_path_to_parent_package(SKIN_LIST)
+    local planned = {}
+    if type(SKIN_LIST) ~= "table" then return planned end
     for armoury_key, parent in pairs(M.la_kind_unit_parent_packages) do
         local variant = SKIN_LIST[armoury_key]
         if variant and type(variant.new_units) == "table" then
             if variant.new_units[1] then
-                M.la_path_to_parent_package[variant.new_units[1]] = parent
+                planned[variant.new_units[1]] = parent
             end
             if variant.new_units[2] then
-                M.la_path_to_parent_package[variant.new_units[2]] = parent
+                planned[variant.new_units[2]] = parent
             end
         end
     end
+    return planned
 end
 
 -- Paint LA's textures onto a single unit using `Unit.set_texture_for_materials`,
