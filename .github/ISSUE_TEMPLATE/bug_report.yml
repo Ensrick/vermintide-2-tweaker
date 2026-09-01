@@ -45,6 +45,25 @@ body:
         - 3-low
     validations:
       required: true
+  - type: dropdown
+    id: release_stream
+    attributes:
+      label: Affected Workshop stream
+      description: Choose from the build that actually reproduced the bug. Maintainers verify this against the attached log and canonical Workshop inventory; reporter identity and version suffix are not stream evidence.
+      options:
+        - Official/public Workshop item
+        - Friends-only Dev/test Workshop item
+        - Unknown; determine from attached log
+    validations:
+      required: true
+  - type: input
+    id: loaded_banner
+    attributes:
+      label: Exact loaded build banner
+      description: Paste the exact `[mod:LOAD]` line or complete versioned loaded banner from the reproducing log. If it is unavailable, enter `unknown` and attach the log.
+      placeholder: "[gt:LOAD] v0.2.177"
+    validations:
+      required: true
   - type: textarea
     id: symptom_evidence
     attributes:

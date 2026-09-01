@@ -101,8 +101,23 @@ function New-TestCard([string]$Topology = 'Solo', [string]$Steps = '1. Equip Kru
     return "## CURRENT LIVE TEST`n`n**Build/banner:** v1.2.3-dev, confirm ``[wt:LOAD]```n**Topology:** $Topology$soloLine`n`n$Steps`n`n**Expected:** The selected weapon behaves normally."
 }
 
-function New-TestComment([string]$Body, [bool]$IsPinned = $true, [string]$CreatedAt = '2026-07-21T00:00:00Z') {
-    return [pscustomobject]@{ body=$Body; createdAt=$CreatedAt; isPinned=$IsPinned }
+function New-TestComment(
+    [string]$Body,
+    [bool]$IsPinned = $true,
+    [string]$CreatedAt = '2026-07-21T00:00:00Z',
+    [string]$AuthorLogin = '',
+    [string]$UpdatedAt = '',
+    [long]$DatabaseId = 0
+) {
+    if ([string]::IsNullOrWhiteSpace($UpdatedAt)) { $UpdatedAt = $CreatedAt }
+    return [pscustomobject]@{
+        body=$Body
+        createdAt=$CreatedAt
+        updatedAt=$UpdatedAt
+        databaseId=if ($DatabaseId -gt 0) { $DatabaseId } else { $null }
+        isPinned=$IsPinned
+        author=[pscustomobject]@{ login=$AuthorLogin }
+    }
 }
 
 function Test-VtRetryableGitHubTransportError([string]$Message) {
@@ -193,13 +208,60 @@ function Invoke-SelfTest {
     $unknownPin = @($violations | Where-Object number -eq 21)[0]
     if ($unknownPin.errors -notcontains 'live-card-current-live-test-card-pin-state-unavailable') { throw 'unknown pin-state gate missing' }
 
+    function Assert-PlaytesterWatermark {
+        param([string]$Name, [object[]]$Comments, [bool]$Valid)
+        $issue = [pscustomobject]@{
+            number=99
+            title=$Name
+            labels=@(@{name='verify-fix'})
+            comments=@($Comments)
+        }
+        $decision = Get-VtOpenIssueLifecycleDecision -Issue $issue -RequirePinnedCard
+        if ([bool]$decision.Valid -ne $Valid) {
+            throw "$Name validity mismatch: $($decision.Errors -join ', ')"
+        }
+        $hasWatermarkError = $decision.Errors -contains 'unreconciled-designated-playtester-comment'
+        if ($hasWatermarkError -eq $Valid) {
+            throw "$Name designated-playtester watermark mismatch: $($decision.Errors -join ', ')"
+        }
+    }
+
+    $watermarkCard = New-TestComment $validSolo $true '2026-07-21T00:00:00Z' 'Ensrick' '' 100
+    $rainPass = New-TestComment 'Test complete. Everything works.' $false '2026-07-22T00:00:00Z' 'RainReligion' '' 101
+    $rainFail = New-TestComment 'Still broken.' $false '2026-07-22T00:00:00Z' 'RainReligion' '' 102
+    Assert-PlaytesterWatermark 'newer Rain pass prose blocks without inference' @($watermarkCard, $rainPass) $false
+    Assert-PlaytesterWatermark 'newer Rain fail prose blocks without inference' @($watermarkCard, $rainFail) $false
+
+    $ownerComment = New-TestComment 'Deployment evidence recorded.' $false '2026-07-22T00:00:00Z' 'Ensrick' '' 103
+    $otherComment = New-TestComment 'Can you clarify step two?' $false '2026-07-22T00:00:00Z' 'unrelated-user' '' 104
+    Assert-PlaytesterWatermark 'owner comment does not consume playtest card' @($watermarkCard, $ownerComment) $true
+    Assert-PlaytesterWatermark 'non-designated comment does not consume playtest card' @($watermarkCard, $otherComment) $true
+
+    $newerCard = New-TestComment $validSolo $true '2026-07-23T00:00:00Z' 'Ensrick' '' 105
+    $olderCard = New-TestComment $validSolo $false '2026-07-21T00:00:00Z' 'Ensrick' '' 100
+    Assert-PlaytesterWatermark 'newer valid card clears older Rain result' @($newerCard, $rainPass, $olderCard) $true
+
+    $editedRain = New-TestComment 'Attached log.' $false '2026-07-20T00:00:00Z' 'RainReligion' '2026-07-22T00:00:00Z' 106
+    Assert-PlaytesterWatermark 'editing an older Rain comment after the card blocks' @($editedRain, $watermarkCard) $false
+    $sameSecondEditedRain = New-TestComment 'Edited attachment.' $false '2026-07-20T00:00:00Z' 'RainReligion' '2026-07-21T00:00:00Z' 99
+    Assert-PlaytesterWatermark 'same-second edit fails closed before creation-id tie break' @($watermarkCard, $sameSecondEditedRain) $false
+    Assert-PlaytesterWatermark 'deleted Rain comment disappears from current history' @($watermarkCard) $true
+
+    $tieCard = New-TestComment $validSolo $true '2026-07-24T00:00:00Z' 'Ensrick' '' 200
+    $tieRainAfter = New-TestComment 'Same-second result.' $false '2026-07-24T00:00:00Z' 'rainreligion' '' 201
+    Assert-PlaytesterWatermark 'database id resolves same-second Rain comment after card' @($tieRainAfter, $tieCard) $false
+    $tieCardAfter = New-TestComment $validSolo $true '2026-07-24T00:00:00Z' 'Ensrick' '' 203
+    $tieRainBefore = New-TestComment 'Same-second earlier result.' $false '2026-07-24T00:00:00Z' 'RainReligion' '' 202
+    Assert-PlaytesterWatermark 'database id resolves same-second card after Rain comment' @($tieCardAfter, $tieRainBefore) $true
+
     # Planted authoritative-card fixtures. These are deliberately separate
     # from the structural lifecycle fixtures above so the old parser tests do
     # not silently become coupled to a made-up release.
     $authority = [pscustomobject]@{
         Records = @(
             [pscustomobject]@{
-                ModId='wt_dev'; Version='1.2.3-dev'; WorkshopId='1111111111'
+                ModId='wt_dev'; Dir='weapon_tweaker_dev'; Stream='dev'; Visibility='friends_only'; Public=$false
+                Version='1.2.3-dev'; WorkshopId='1111111111'
                 SourceCommit='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
                 RootBundle='0123456789abcdef.mod_bundle'
                 RootBundleSha256='1111111111111111111111111111111111111111111111111111111111111111'
@@ -224,7 +286,8 @@ function Invoke-SelfTest {
                 MenuSurfaces=@('Registered Pickup Diagnostics')
             },
             [pscustomobject]@{
-                ModId='ct_dev'; Version='2.3.4-dev'; WorkshopId='2222222222'
+                ModId='ct_dev'; Dir='chaos_wastes_tweaker_dev'; Stream='dev'; Visibility='friends_only'; Public=$false
+                Version='2.3.4-dev'; WorkshopId='2222222222'
                 SourceCommit='bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
                 RootBundle='fedcba9876543210.mod_bundle'
                 RootBundleSha256='3333333333333333333333333333333333333333333333333333333333333333'
@@ -235,9 +298,50 @@ function Invoke-SelfTest {
                 CommandRoutes=@([pscustomobject]@{Command='/ct_probe'})
                 ReceiptRoutes=@([pscustomobject]@{Marker='[ct:only]';Signature='[ct:only] result=%s';Bound=$true})
                 MenuSurfaces=@('Chest Diagnostics')
+            },
+            [pscustomobject]@{
+                ModId='wt'; Dir='weapon_tweaker'; Stream='single'; Visibility='public'; Public=$true
+                Version='1.2.2-beta'; WorkshopId='3333333333'
+                SourceCommit='cccccccccccccccccccccccccccccccccccccccc'
+                RootBundle='0011223344556677.mod_bundle'
+                RootBundleSha256='5555555555555555555555555555555555555555555555555555555555555555'
+                AssetFilename='weapon_tweaker.zip'
+                AssetSha256='6666666666666666666666666666666666666666666666666666666666666666'
+                LoadRoutes=@([pscustomobject]@{Marker='[wt:LOAD]'})
+                ExactBannerRoutes=@([pscustomobject]@{Tag='[wt]'})
+                CommandRoutes=@()
+                ReceiptRoutes=@()
+                MenuSurfaces=@()
             }
         )
     }
+    function Assert-PublicReleaseDecision {
+        param([string]$Name, [string]$Lifecycle, [string]$Card, [bool]$Valid, [string]$Error)
+        $comments = if ([string]::IsNullOrWhiteSpace($Card)) { @() } else { @((New-TestComment $Card)) }
+        $issue = [pscustomobject]@{
+            number=199
+            title=$Name
+            labels=@(@{name=$Lifecycle}, @{name='public-release'})
+            comments=$comments
+        }
+        $decision = Get-VtOpenIssueLifecycleDecision -Issue $issue -RequirePinnedCard -Authority $authority -EnforceAuthority
+        if ([bool]$decision.Valid -ne $Valid) {
+            throw "$Name validity mismatch: $($decision.Errors -join ', ')"
+        }
+        if ($Error -and $decision.Errors -notcontains $Error) {
+            throw "$Name missing expected error '$Error': $($decision.Errors -join ', ')"
+        }
+    }
+    $devPublicReleaseCard = "## CURRENT LIVE TEST`n`n**Build/banner:** v1.2.3-dev, confirm ``[wt:LOAD]```n**Topology:** Solo`n`n1. Equip Kruber's Mace in the Keep.`n`n**Expected:** The selected weapon behaves normally."
+    $officialPublicReleaseCard = $devPublicReleaseCard.Replace('v1.2.3-dev', 'v1.2.2-beta')
+    $mixedPublicReleaseCard = $devPublicReleaseCard.Replace(
+        'v1.2.3-dev, confirm `[wt:LOAD]`',
+        'v1.2.3-dev, confirm `[wt:LOAD]`; v1.2.2-beta, confirm `[wt:LOAD]`')
+    Assert-PublicReleaseDecision 'public-release Dev-only card fails' 'verify-fix' $devPublicReleaseCard $false 'public-release-card-requires-official-public-target'
+    Assert-PublicReleaseDecision 'public-release official card passes' 'verify-fix' $officialPublicReleaseCard $true $null
+    Assert-PublicReleaseDecision 'public-release not-started remains allowed' 'not-started' $null $true $null
+    Assert-PublicReleaseDecision 'public-release mixed card with official target passes' 'verify-fix' $mixedPublicReleaseCard $true $null
+
     $contractCard = "## CURRENT LIVE TEST`n`n**Build/banner:** v1.2.3-dev, confirm ``[wt:LOAD]```n**Topology:** Solo`n`n1. Run ``/gt_regression_test`` in chat.`n`n**Expected:** One bounded ``[gt:probe] result=ok`` receipt appears.`n`n**Workshop:** item ``1111111111``, manifest ``9000000001``."
     function Assert-Contract([string]$Name, [string]$Card, [bool]$Valid, [string]$Error) {
         $selection = Get-VtLiveTestCardSelection -Comments @([pscustomobject]@{body=$Card}) -Authority $authority -EnforceAuthority
@@ -349,7 +453,7 @@ function Invoke-SelfTest {
         throw 'report-only rollout failed to preserve a legacy card while exposing its strict authority defect'
     }
     $ambiguousAuthority=[pscustomobject]@{Records=@($authority.Records + [pscustomobject]@{
-        ModId='wt_clone';Version='1.2.3-dev';WorkshopId='3333333333'
+        ModId='wt_clone';Dir='weapon_tweaker_clone';Stream='dev';Visibility='friends_only';Public=$false;Version='1.2.3-dev';WorkshopId='4444444444'
         LoadRoutes=@([pscustomobject]@{Marker='[wt:LOAD]'});ExactBannerRoutes=@();CommandRoutes=@();ReceiptRoutes=@();MenuSurfaces=@()
     })}
     $ambiguousSelection=Get-VtLiveTestCardSelection -Comments @([pscustomobject]@{body=$contractCard}) -Authority $ambiguousAuthority -EnforceAuthority
@@ -384,6 +488,9 @@ function Invoke-SelfTest {
     if ([int]$batchSpec.Variables.number0 -ne 579 -or [string]$batchSpec.Variables.after0 -ne 'cursor-579') { throw 'comment batch must retain the first issue cursor' }
     if ([int]$batchSpec.Variables.number1 -ne 750 -or $null -ne $batchSpec.Variables.after1) { throw 'comment batch must leave a first-page cursor null' }
     if ([int]$batchSpec.AliasToNumber.issue0 -ne 579 -or [int]$batchSpec.AliasToNumber.issue1 -ne 750) { throw 'comment batch aliases must map back to exact issues' }
+    foreach ($field in @('databaseId', 'createdAt', 'updatedAt', 'isPinned', 'author { login }')) {
+        if ($batchSpec.Query -notmatch [regex]::Escape($field)) { throw "comment batch omitted watermark field: $field" }
+    }
     $batchCapRejected = $false
     try { New-VtIssueCommentBatchQuerySpec -Owner 'owner' -Name 'repo' -Numbers @(1..21) | Out-Null } catch { $batchCapRejected = $true }
     if (-not $batchCapRejected) { throw 'comment batch must reject more than 20 issues' }
@@ -459,7 +566,7 @@ function New-VtIssueCommentBatchQuerySpec {
     ${alias}: issue(number: `$$numberVar) {
       number
       comments(first: 100, after: `$$afterVar) {
-        nodes { body createdAt isPinned }
+        nodes { databaseId body createdAt updatedAt isPinned author { login } }
         pageInfo { hasNextPage endCursor }
       }
     }

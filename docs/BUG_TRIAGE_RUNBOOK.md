@@ -92,6 +92,12 @@ the fix.
   stale build - go straight to STEP 7, ship the current build, and ask them to
   re-test BEFORE diagnosing anything. Do not diagnose against source the user
   was not running.
+- [ ] **Classify the affected Workshop stream from evidence now.** Match the
+  exact loaded banner and Workshop identity against `tools/mod-inventory.psd1`.
+  Do not infer the stream from the reporter or from `-dev` / `-beta` text: a
+  public single-stream item may carry either suffix. If the reproducing row has
+  `Public = $true`, apply `public-release` and service it before Dev-only work of
+  equal or lower severity. Record the banner/Workshop evidence in the issue.
 - [ ] **Determine which mods were ACTIVE**, not merely subscribed:
   - `Init VMF mod '<name>'` lines = mods that actually initialized this session.
   - `[ModManager] mods[N] = (id=..., name="...", enabled="true", ...)` = the
@@ -135,6 +141,10 @@ is missing after you solve it, you add it in STEP 9.
   broke it" is not evidence of which one.
 - [ ] Once scoped to a single mod, everything below operates on that mod's DEV
   directory (for split mods) or its single-stream directory.
+- [ ] For a split-mod `public-release` issue, plan the official promotion in
+  the same issue. Dev is the implementation/proof lane, not the acceptance
+  target; the issue remains unready until the proven fix is ported, published
+  to the canonical public inventory row, and testable there.
 
 ---
 
@@ -190,6 +200,10 @@ is missing after you solve it, you add it in STEP 9.
   `verminious_dreams_lighting_dev`) or its single-stream directory. Never edit
   the stable directory for in-flight work. One focused change per item; do not
   batch unrelated fixes into one patch.
+- [ ] **Do not strand a `public-release` fix in Dev.** After the Dev candidate
+  passes its bounded checks, use the §6.5 promotion procedure to port that
+  exact fix into the official row. Until the official build is published, keep
+  the issue `not-started`; a Dev pass is supporting evidence only.
 - [ ] **Hook pre-flight (MANDATORY before writing any `mod:hook` /
   `mod:hook_safe`).** Grep the target file for `("ClassName"` AND
   `<ClassNameSymbol>,` to find every existing hook on that class. If ANY hook
@@ -294,6 +308,12 @@ shipping. Agent publication is headless and opens no interactive window.
     signal from the user naming the version.** "Ship it" earlier does not carry
     forward. Default for these is `build` + `deploy`, never `upload`. Treat a
     stable public upload like `git push --force`.
+- [ ] **Official-card requirement for `public-release`.** Do not apply
+  `diagnostics-armed` or `verify-fix` until the fix/diagnostic is deployed on
+  the canonical inventory row with `Public = $true`. Its pinned current card
+  must select at least one exact official/public build. A Dev build may appear
+  as a comparison control, but a Dev-only card is invalid. This requirement
+  does not relax the clean-version authorization rule above.
 - [ ] **Verify the upload landed.** Confirm a fresh item-specific
   `Uploaded new content` result in
   `C:\Program Files (x86)\Steam\logs\workshop_log.txt`. Canonical
@@ -414,6 +434,17 @@ shipping. Agent publication is headless and opens no interactive window.
 - [ ] **If it is still broken, believe them.** Return to STEP 2 with the NEW
   log (they must be on the version you just shipped - re-verify the echoed
   version first). Do not re-defend the previous diagnosis.
+- [ ] **Reconcile designated-playtester activity before trusting labels.** A
+  RainReligion comment created or edited after the current card consumes that
+  card regardless of whether its prose sounds like pass, fail, a question, or
+  only a log attachment. Read the evidence, then close after a verified pass,
+  return unready work to `not-started`, or deploy and post a newer pinned card.
+  Do not classify the result with keyword heuristics, and do not treat an edit
+  to the older card as a new test request.
+- [ ] **Classify the release stream from the loaded log/banner, not the
+  reporter.** If the affected build is the official non-Dev stream, add the
+  existing `public-release` label; Dev-only verification cannot close it until
+  the fix is promoted/deployed there and a current stable card passes.
 - [ ] **When verification passes:** record the human or autonomous evidence,
   keep the existing verify lifecycle while completing the **post-fix pass**:
   harden the code path (guard the CLASS, not just the instance), write/extend the

@@ -1010,6 +1010,13 @@ Workshop ID / mod_id mapping. **[Corrected 2026-07-07: `gui_tweaker`/`gut` was a
   experiments. Never edit the stable directory directly for in-flight work —
   if a stable-bound user bug needs a hotfix, write the fix in `<mod>-dev/`
   first, verify it in the dev stream, then promote.
+- **A `public-release` bug owns its official-stream promotion.** Development
+  still begins and proves the candidate in `<mod>-dev/`, but a Dev pass is not
+  the issue's acceptance result. Port the proven fix into the inventory row
+  whose `Public = $true`, publish that exact official build, and keep the issue
+  `not-started` until an official-build live-test card is runnable. The label
+  changes queue priority and release target; it never waives §6.6's fresh,
+  exact-version authorization for a clean stable release.
 - **Dev MOD_VERSION carries `-dev`/`-alpha`/`-beta`/`-rc<N>`** per § 6.1. Dev
   uploads always target the friends-only item with `visibility = "friends_only"`
   in the dev clone's `itemV2.cfg`. They never use `--allow-public`.
@@ -2238,6 +2245,22 @@ labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix
   path, update the owning prevention docs, add regression coverage, and close.
   If the evidence does not verify the fix, return it to `not-started` or post a
   replacement current card for the next genuinely ready diagnostic/test.
+- **Designated-playtester watermark:** a RainReligion comment created or edited
+  after a ready issue's current card consumes that test invitation until it is
+  reconciled. The guard does not infer pass/fail from prose. Close after a
+  verified pass, return failed or unready work to `not-started`, or post and pin
+  a newer authority-valid card after the next deploy. Editing the older card
+  does not clear a tester result; deleting the tester comment removes that
+  activity from current history. Owner and non-designated comments do not
+  consume the card. This prevents an attached log or result from being hidden
+  by a stale `verify-fix` or `diagnostics-armed` label.
+- **Release-stream classification:** classify the affected build from the
+  attached log/banner and Workshop identity, not the reporter's identity or a
+  version suffix. `tools/mod-inventory.psd1` is authoritative: an affected row
+  with `Public = $true` gets the existing `public-release` label, including a
+  public beta/single stream whose version happens to carry `-beta` or `-dev`.
+  Dev-only verification cannot close it until the fix is promoted/deployed to
+  that official stream and a current official-build card passes.
 - **Retired 2026-07-03:** `verify-in-game` → merged into `verify-fix`; `probe-live` →
   merged into `diagnostics-armed`. Do not recreate them.
 - **Retired for OPEN issues 2026-07-21:** `Fixed` and `verify-fix-coop`. `Fixed`
@@ -2298,7 +2321,7 @@ small, often vanilla, bugs). A `crash`-flagged bug is `0-critical`.
 **Optional modifiers (informational, never a substitute for a type, priority, or
 lifecycle):** `regression` (a fix that broke a working feature), `audit`,
 `refactor`, `blocked`, `deferred`, `coop-required`, `architecture`,
-`vanilla-bug`, `stable-promotion-approved`. `coop-required` is a live-test
+`vanilla-bug`, `public-release`, `stable-promotion-approved`. `coop-required` is a live-test
 routing qualifier, never a lifecycle or a substitute for the solo-first proof in
 the current card. `vanilla-bug` marks a defect that exists in the official game —
 we work around it rather than owning it, so it caps expectations on a fix and
@@ -2308,6 +2331,15 @@ authorization consumed by `qa/check_promotion_authorization.ps1` (§6.6 atomic
 source/root-bundle gate). Never add or re-add it by hand to keep a promotion PR
 green — removing and re-granting it is the documented revocation path, and a
 grant edited after the fact fails closed.
+
+`public-release` marks a bug empirically reproduced on the official/public
+Workshop inventory row (`Public = $true`). It is classified from the exact
+loaded banner and Workshop identity, never from who filed the issue and never
+from a `MOD_VERSION` suffix. Service it before Dev-only work of equal or lower
+severity. A ready `public-release` issue must select at least one exact deployed
+public target in its current card; Dev-only cards are development evidence, not
+acceptance. The label does not authorize publication: a clean stable version
+still needs the fresh exact-version signal in §6.6.
 
 When you ship a fix or diagnostic, add the matching status label and remove every
 competing/retired lifecycle in the **same pass** as the CHANGELOG entry. Filing a
@@ -2373,9 +2405,15 @@ close and label/comment changes, manually, and daily. GitHub exposes comment
 pin state through GraphQL but no comment-pin workflow activity, so pin-only drift
 is caught by the next manual/daily run. Both workflows fail on cardinality,
 invalid open labels, blocked queue leakage, stale/mismatched co-op routing,
-tooling queue leakage, malformed newest cards, or invalid pin state. The advisory
+tooling queue leakage, malformed newest cards, invalid pin state, or a
+designated-playtester comment created/edited after the current card. The advisory
 `qa/check_issue_status_labels.ps1` sweep remains the local nudge; the CI step is
 the backstop that the #750 sweep proved necessary.
+
+The open-issue guard also rejects a ready `public-release` issue whose selected
+deployed targets contain no canonical `Public = $true` inventory row. Auditing
+and reopening a manually closed `public-release` issue is a separate follow-up
+gap; this open-queue contract must not be described as a close-event audit.
 
 **Pull-request closure integrity:** PR bodies use `Refs #N`, never GitHub's
 auto-closing keyword forms. A merge proves source integration, not user
