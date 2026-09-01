@@ -2238,6 +2238,20 @@ labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix
   path, update the owning prevention docs, add regression coverage, and close.
   If the evidence does not verify the fix, return it to `not-started` or post a
   replacement current card for the next genuinely ready diagnostic/test.
+- **Designated-playtester watermark:** a RainReligion comment created or edited
+  after a ready issue's current card consumes that test invitation until it is
+  reconciled. The guard does not infer pass/fail from prose. Close after a
+  verified pass, return failed or unready work to `not-started`, or post and pin
+  a newer authority-valid card after the next deploy. Editing the older card
+  does not clear a tester result; deleting the tester comment removes that
+  activity from current history. Owner and non-designated comments do not
+  consume the card. This prevents an attached log or result from being hidden
+  by a stale `verify-fix` or `diagnostics-armed` label.
+- **Release-stream classification:** classify the affected build from the
+  attached log/banner, not the reporter's identity; an official non-Dev build
+  gets the existing `public-release` label, and Dev-only verification cannot
+  close it until the fix is promoted/deployed to that official stream and a
+  current stable card passes.
 - **Retired 2026-07-03:** `verify-in-game` → merged into `verify-fix`; `probe-live` →
   merged into `diagnostics-armed`. Do not recreate them.
 - **Retired for OPEN issues 2026-07-21:** `Fixed` and `verify-fix-coop`. `Fixed`
@@ -2373,7 +2387,8 @@ close and label/comment changes, manually, and daily. GitHub exposes comment
 pin state through GraphQL but no comment-pin workflow activity, so pin-only drift
 is caught by the next manual/daily run. Both workflows fail on cardinality,
 invalid open labels, blocked queue leakage, stale/mismatched co-op routing,
-tooling queue leakage, malformed newest cards, or invalid pin state. The advisory
+tooling queue leakage, malformed newest cards, invalid pin state, or a
+designated-playtester comment created/edited after the current card. The advisory
 `qa/check_issue_status_labels.ps1` sweep remains the local nudge; the CI step is
 the backstop that the #750 sweep proved necessary.
 

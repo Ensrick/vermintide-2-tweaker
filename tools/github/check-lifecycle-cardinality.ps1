@@ -101,8 +101,23 @@ function New-TestCard([string]$Topology = 'Solo', [string]$Steps = '1. Equip Kru
     return "## CURRENT LIVE TEST`n`n**Build/banner:** v1.2.3-dev, confirm ``[wt:LOAD]```n**Topology:** $Topology$soloLine`n`n$Steps`n`n**Expected:** The selected weapon behaves normally."
 }
 
-function New-TestComment([string]$Body, [bool]$IsPinned = $true, [string]$CreatedAt = '2026-07-21T00:00:00Z') {
-    return [pscustomobject]@{ body=$Body; createdAt=$CreatedAt; isPinned=$IsPinned }
+function New-TestComment(
+    [string]$Body,
+    [bool]$IsPinned = $true,
+    [string]$CreatedAt = '2026-07-21T00:00:00Z',
+    [string]$AuthorLogin = '',
+    [string]$UpdatedAt = '',
+    [long]$DatabaseId = 0
+) {
+    if ([string]::IsNullOrWhiteSpace($UpdatedAt)) { $UpdatedAt = $CreatedAt }
+    return [pscustomobject]@{
+        body=$Body
+        createdAt=$CreatedAt
+        updatedAt=$UpdatedAt
+        databaseId=if ($DatabaseId -gt 0) { $DatabaseId } else { $null }
+        isPinned=$IsPinned
+        author=[pscustomobject]@{ login=$AuthorLogin }
+    }
 }
 
 function Test-VtRetryableGitHubTransportError([string]$Message) {
@@ -192,6 +207,52 @@ function Invoke-SelfTest {
     if ($doublePinned.errors -notcontains 'live-card-pinned-current-live-test-card-count-2') { throw 'one-pinned-card cardinality gate missing' }
     $unknownPin = @($violations | Where-Object number -eq 21)[0]
     if ($unknownPin.errors -notcontains 'live-card-current-live-test-card-pin-state-unavailable') { throw 'unknown pin-state gate missing' }
+
+    function Assert-PlaytesterWatermark {
+        param([string]$Name, [object[]]$Comments, [bool]$Valid)
+        $issue = [pscustomobject]@{
+            number=99
+            title=$Name
+            labels=@(@{name='verify-fix'})
+            comments=@($Comments)
+        }
+        $decision = Get-VtOpenIssueLifecycleDecision -Issue $issue -RequirePinnedCard
+        if ([bool]$decision.Valid -ne $Valid) {
+            throw "$Name validity mismatch: $($decision.Errors -join ', ')"
+        }
+        $hasWatermarkError = $decision.Errors -contains 'unreconciled-designated-playtester-comment'
+        if ($hasWatermarkError -eq $Valid) {
+            throw "$Name designated-playtester watermark mismatch: $($decision.Errors -join ', ')"
+        }
+    }
+
+    $watermarkCard = New-TestComment $validSolo $true '2026-07-21T00:00:00Z' 'Ensrick' '' 100
+    $rainPass = New-TestComment 'Test complete. Everything works.' $false '2026-07-22T00:00:00Z' 'RainReligion' '' 101
+    $rainFail = New-TestComment 'Still broken.' $false '2026-07-22T00:00:00Z' 'RainReligion' '' 102
+    Assert-PlaytesterWatermark 'newer Rain pass prose blocks without inference' @($watermarkCard, $rainPass) $false
+    Assert-PlaytesterWatermark 'newer Rain fail prose blocks without inference' @($watermarkCard, $rainFail) $false
+
+    $ownerComment = New-TestComment 'Deployment evidence recorded.' $false '2026-07-22T00:00:00Z' 'Ensrick' '' 103
+    $otherComment = New-TestComment 'Can you clarify step two?' $false '2026-07-22T00:00:00Z' 'unrelated-user' '' 104
+    Assert-PlaytesterWatermark 'owner comment does not consume playtest card' @($watermarkCard, $ownerComment) $true
+    Assert-PlaytesterWatermark 'non-designated comment does not consume playtest card' @($watermarkCard, $otherComment) $true
+
+    $newerCard = New-TestComment $validSolo $true '2026-07-23T00:00:00Z' 'Ensrick' '' 105
+    $olderCard = New-TestComment $validSolo $false '2026-07-21T00:00:00Z' 'Ensrick' '' 100
+    Assert-PlaytesterWatermark 'newer valid card clears older Rain result' @($newerCard, $rainPass, $olderCard) $true
+
+    $editedRain = New-TestComment 'Attached log.' $false '2026-07-20T00:00:00Z' 'RainReligion' '2026-07-22T00:00:00Z' 106
+    Assert-PlaytesterWatermark 'editing an older Rain comment after the card blocks' @($editedRain, $watermarkCard) $false
+    $sameSecondEditedRain = New-TestComment 'Edited attachment.' $false '2026-07-20T00:00:00Z' 'RainReligion' '2026-07-21T00:00:00Z' 99
+    Assert-PlaytesterWatermark 'same-second edit fails closed before creation-id tie break' @($watermarkCard, $sameSecondEditedRain) $false
+    Assert-PlaytesterWatermark 'deleted Rain comment disappears from current history' @($watermarkCard) $true
+
+    $tieCard = New-TestComment $validSolo $true '2026-07-24T00:00:00Z' 'Ensrick' '' 200
+    $tieRainAfter = New-TestComment 'Same-second result.' $false '2026-07-24T00:00:00Z' 'rainreligion' '' 201
+    Assert-PlaytesterWatermark 'database id resolves same-second Rain comment after card' @($tieRainAfter, $tieCard) $false
+    $tieCardAfter = New-TestComment $validSolo $true '2026-07-24T00:00:00Z' 'Ensrick' '' 203
+    $tieRainBefore = New-TestComment 'Same-second earlier result.' $false '2026-07-24T00:00:00Z' 'RainReligion' '' 202
+    Assert-PlaytesterWatermark 'database id resolves same-second card after Rain comment' @($tieCardAfter, $tieRainBefore) $true
 
     # Planted authoritative-card fixtures. These are deliberately separate
     # from the structural lifecycle fixtures above so the old parser tests do
@@ -384,6 +445,9 @@ function Invoke-SelfTest {
     if ([int]$batchSpec.Variables.number0 -ne 579 -or [string]$batchSpec.Variables.after0 -ne 'cursor-579') { throw 'comment batch must retain the first issue cursor' }
     if ([int]$batchSpec.Variables.number1 -ne 750 -or $null -ne $batchSpec.Variables.after1) { throw 'comment batch must leave a first-page cursor null' }
     if ([int]$batchSpec.AliasToNumber.issue0 -ne 579 -or [int]$batchSpec.AliasToNumber.issue1 -ne 750) { throw 'comment batch aliases must map back to exact issues' }
+    foreach ($field in @('databaseId', 'createdAt', 'updatedAt', 'isPinned', 'author { login }')) {
+        if ($batchSpec.Query -notmatch [regex]::Escape($field)) { throw "comment batch omitted watermark field: $field" }
+    }
     $batchCapRejected = $false
     try { New-VtIssueCommentBatchQuerySpec -Owner 'owner' -Name 'repo' -Numbers @(1..21) | Out-Null } catch { $batchCapRejected = $true }
     if (-not $batchCapRejected) { throw 'comment batch must reject more than 20 issues' }
@@ -459,7 +523,7 @@ function New-VtIssueCommentBatchQuerySpec {
     ${alias}: issue(number: `$$numberVar) {
       number
       comments(first: 100, after: `$$afterVar) {
-        nodes { body createdAt isPinned }
+        nodes { databaseId body createdAt updatedAt isPinned author { login } }
         pageInfo { hasNextPage endCursor }
       }
     }

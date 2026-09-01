@@ -414,6 +414,17 @@ shipping. Agent publication is headless and opens no interactive window.
 - [ ] **If it is still broken, believe them.** Return to STEP 2 with the NEW
   log (they must be on the version you just shipped - re-verify the echoed
   version first). Do not re-defend the previous diagnosis.
+- [ ] **Reconcile designated-playtester activity before trusting labels.** A
+  RainReligion comment created or edited after the current card consumes that
+  card regardless of whether its prose sounds like pass, fail, a question, or
+  only a log attachment. Read the evidence, then close after a verified pass,
+  return unready work to `not-started`, or deploy and post a newer pinned card.
+  Do not classify the result with keyword heuristics, and do not treat an edit
+  to the older card as a new test request.
+- [ ] **Classify the release stream from the loaded log/banner, not the
+  reporter.** If the affected build is the official non-Dev stream, add the
+  existing `public-release` label; Dev-only verification cannot close it until
+  the fix is promoted/deployed there and a current stable card passes.
 - [ ] **When verification passes:** record the human or autonomous evidence,
   keep the existing verify lifecycle while completing the **post-fix pass**:
   harden the code path (guard the CLASS, not just the instance), write/extend the

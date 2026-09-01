@@ -8,6 +8,11 @@
 $script:VtOpenLifecycleLabels = @('not-started', 'diagnostics-armed', 'verify-fix')
 $script:VtReadyLifecycleLabels = @('diagnostics-armed', 'verify-fix')
 $script:VtInvalidOpenLifecycleLabels = @('Fixed', 'verify-fix-coop')
+# A designated playtester comment after the current test card is an unanswered
+# queue result, regardless of whether its prose sounds like pass, fail, a log,
+# or a question. Keep this list centralized: closure authorization has a
+# broader trust model and must not silently expand the live-test watermark.
+$script:VtDesignatedPlaytesterLogins = @('RainReligion')
 
 $liveTestContractPolicy = Join-Path $PSScriptRoot 'live_test_contract.ps1'
 if (-not (Test-Path -LiteralPath $liveTestContractPolicy -PathType Leaf)) {
@@ -26,32 +31,132 @@ function Test-VtCurrentLiveTestCard {
     return $Body -match '(?m)^## CURRENT LIVE TEST\s*$'
 }
 
-function Get-VtCurrentLiveTestComment {
+function Get-VtCommentCreatedAt {
+    param($Comment, [switch]$IncludeEdits)
+    if ($null -eq $Comment) { return [datetime]::MinValue }
+
+    $createdAt = [datetime]::MinValue
+    if ($Comment.createdAt) {
+        [datetime]::TryParse([string]$Comment.createdAt, [ref]$createdAt) | Out-Null
+    }
+    if (-not $IncludeEdits -or -not $Comment.updatedAt) { return $createdAt }
+
+    $updatedAt = [datetime]::MinValue
+    [datetime]::TryParse([string]$Comment.updatedAt, [ref]$updatedAt) | Out-Null
+    if ($updatedAt -gt $createdAt) { return $updatedAt }
+    return $createdAt
+}
+
+function Get-VtCommentDatabaseId {
+    param($Comment)
+    if ($null -eq $Comment) { return $null }
+    $raw = $Comment.databaseId
+    if ($null -eq $raw) { $raw = $Comment.database_id }
+    $value = 0L
+    if ($null -ne $raw -and [long]::TryParse([string]$raw, [ref]$value)) { return $value }
+    return $null
+}
+
+function Test-VtCommentPositionAfter {
+    param(
+        $Candidate,
+        [int]$CandidateIndex,
+        $Baseline,
+        [int]$BaselineIndex,
+        [switch]$CandidateIncludesEdits
+    )
+    if ($null -eq $Candidate -or $null -eq $Baseline) { return $false }
+
+    $candidateAt = Get-VtCommentCreatedAt -Comment $Candidate -IncludeEdits:$CandidateIncludesEdits
+    $baselineAt = Get-VtCommentCreatedAt -Comment $Baseline
+    if ($candidateAt -gt $baselineAt) { return $true }
+    if ($candidateAt -lt $baselineAt) { return $false }
+
+    # Database ids order comment creation, not later edits. If an edit and the
+    # card share GitHub's timestamp precision, fail closed instead of letting
+    # the comment's older creation id hide the new tester activity.
+    $candidateCreatedAt = Get-VtCommentCreatedAt -Comment $Candidate
+    if ($CandidateIncludesEdits -and $candidateAt -gt $candidateCreatedAt) { return $true }
+
+    $candidateId = Get-VtCommentDatabaseId $Candidate
+    $baselineId = Get-VtCommentDatabaseId $Baseline
+    if ($null -ne $candidateId -and $null -ne $baselineId -and $candidateId -ne $baselineId) {
+        return $candidateId -gt $baselineId
+    }
+    return $CandidateIndex -gt $BaselineIndex
+}
+
+function Get-VtCurrentLiveTestCommentPosition {
     param($Comments)
     if (-not $Comments) { return $null }
     $arr = @($Comments)
     $selected = $null
-    $selectedAt = [datetime]::MinValue
     $selectedIndex = -1
     for ($i = 0; $i -lt $arr.Count; $i++) {
         $body = [string]$arr[$i].body
         if (-not (Test-VtCurrentLiveTestCard $body)) { continue }
-        $createdAt = [datetime]::MinValue
-        # GitHub returns PSCustomObject comments, while offline fixtures often
-        # use hashtables. Dot-key lookup works for both; PSObject.Properties
-        # does not expose hashtable keys and would silently fall back to array
-        # order in the guard's own regression tests.
-        $rawCreatedAt = $arr[$i].createdAt
-        if ($rawCreatedAt) {
-            [datetime]::TryParse([string]$rawCreatedAt, [ref]$createdAt) | Out-Null
-        }
-        if ($createdAt -gt $selectedAt -or ($createdAt -eq $selectedAt -and $i -gt $selectedIndex)) {
+        if ($null -eq $selected -or
+            (Test-VtCommentPositionAfter -Candidate $arr[$i] -CandidateIndex $i -Baseline $selected -BaselineIndex $selectedIndex)) {
             $selected = $arr[$i]
-            $selectedAt = $createdAt
             $selectedIndex = $i
         }
     }
-    return $selected
+    if ($null -eq $selected) { return $null }
+    return [pscustomobject]@{ Comment=$selected; Index=$selectedIndex }
+}
+
+function Get-VtCurrentLiveTestComment {
+    param($Comments)
+    $position = Get-VtCurrentLiveTestCommentPosition $Comments
+    if (-not $position) { return $null }
+    return $position.Comment
+}
+
+function Get-VtCommentAuthorLogin {
+    param($Comment)
+    if ($null -eq $Comment) { return $null }
+    if ($Comment.author -and $Comment.author.login) { return [string]$Comment.author.login }
+    if ($Comment.user -and $Comment.user.login) { return [string]$Comment.user.login }
+    return $null
+}
+
+function Test-VtDesignatedPlaytesterComment {
+    param($Comment)
+    $login = Get-VtCommentAuthorLogin $Comment
+    if ([string]::IsNullOrWhiteSpace($login)) { return $false }
+    foreach ($designated in @($script:VtDesignatedPlaytesterLogins)) {
+        if ($designated -and $designated.Equals($login, [System.StringComparison]::OrdinalIgnoreCase)) {
+            return $true
+        }
+    }
+    return $false
+}
+
+function Get-VtNewestDesignatedPlaytesterCommentPosition {
+    param($Comments)
+    if (-not $Comments) { return $null }
+    $arr = @($Comments)
+    $selected = $null
+    $selectedIndex = -1
+    for ($i = 0; $i -lt $arr.Count; $i++) {
+        if (-not (Test-VtDesignatedPlaytesterComment $arr[$i])) { continue }
+        if ($null -eq $selected -or
+            (Test-VtCommentPositionAfter -Candidate $arr[$i] -CandidateIndex $i -Baseline $selected -BaselineIndex $selectedIndex -CandidateIncludesEdits)) {
+            $selected = $arr[$i]
+            $selectedIndex = $i
+        }
+    }
+    if ($null -eq $selected) { return $null }
+    return [pscustomobject]@{ Comment=$selected; Index=$selectedIndex }
+}
+
+function Test-VtHasUnreconciledDesignatedPlaytesterComment {
+    param($Comments)
+    $card = Get-VtCurrentLiveTestCommentPosition $Comments
+    $tester = Get-VtNewestDesignatedPlaytesterCommentPosition $Comments
+    if (-not $card -or -not $tester) { return $false }
+    return Test-VtCommentPositionAfter -Candidate $tester.Comment -CandidateIndex $tester.Index `
+        -Baseline $card.Comment -BaselineIndex $card.Index -CandidateIncludesEdits
 }
 
 function Get-VtCurrentLiveTestCard {
@@ -1086,6 +1191,9 @@ function Get-VtOpenIssueLifecycleDecision {
         if ($labels -contains 'tooling') { $errors.Add('tooling-cannot-enter-live-test-queue') }
         foreach ($cardError in @($card.Errors)) { $errors.Add("live-card-$cardError") }
         if ($coop -ne $card.RequiresCoop) { $errors.Add('coop-label-topology-mismatch') }
+        if (Test-VtHasUnreconciledDesignatedPlaytesterComment $Issue.comments) {
+            $errors.Add('unreconciled-designated-playtester-comment')
+        }
     }
     elseif ($coop) {
         $errors.Add('coop-required-without-ready-state')
