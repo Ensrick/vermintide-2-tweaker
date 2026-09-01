@@ -271,6 +271,19 @@ return function(H, repo_root)
             parity.all_peers_have = original_all_peers_have
             H.equal(check(), nil)
 
+            runtime.mod._et.CustomBreedParity = nil
+            H.equal(check(), "canonical parity instance changed after boot")
+            runtime.mod._et.CustomBreedParity = setmetatable({
+                peer_has = parity.peer_has,
+                all_peers_have = parity.all_peers_have,
+                forget_peer = parity.forget_peer,
+            }, {
+                __eq = function() return true end,
+            })
+            H.equal(check(), "canonical parity instance changed after boot")
+            runtime.mod._et.CustomBreedParity = parity
+            H.equal(check(), nil)
+
             runtime.mod._et_custom_breed_local_host_provenance = nil
             H.equal(check(), "local-host bypass provenance missing")
             runtime.mod._et_custom_breed_local_host_provenance = provenance
@@ -278,6 +291,226 @@ return function(H, repo_root)
             H.equal(runtime.mod._et.custom_breed_hot_join_phase("host"), nil,
                 "runtime check mutated live peer-fence state")
         end)
+    end)
+
+    H.test("ET #1497 runtime check accepts source-proven absent parity", function()
+        local cases = {
+            { name = "factory-unavailable", parity_unavailable = true },
+            { name = "identity-capture-failed", identity_capture_failure = true },
+        }
+        for i = 1, #cases do
+            local case = cases[i]
+            with_runtime(case, function(runtime)
+                local check_name = "issue1497_local_host_hot_join_bypass"
+                local check = assert(runtime.checks[check_name])
+                local precondition = assert(runtime.check_options[
+                    check_name].precondition)
+                local peer_state_machines = { host = {} }
+                runtime.roster[1] = { peer_id = "host" }
+                runtime.managers.state.network = {
+                    is_server = true,
+                    network_server = {
+                        my_peer_id = "host",
+                        peer_state_machines = peer_state_machines,
+                    },
+                }
+                H.equal(runtime.mod._et.CustomBreedParity, nil)
+                if case.identity_capture_failure then
+                    H.equal(runtime.mod._et.CustomBreedIdentitySnapshot, nil)
+                else
+                    H.equal(type(runtime.mod._et.CustomBreedIdentitySnapshot),
+                        "table")
+                end
+                H.equal(precondition(), true)
+
+                local set_hook = assert(runtime.hooks[
+                    "GameNetworkManager.set_peer_synchronizing"])
+                local synced_hook = assert(runtime.hooks[
+                    "NetworkServer.is_network_state_fully_synced_for_peer"])
+                local server = { my_peer_id = "host" }
+                local manager = { network_server = server }
+                local set_calls, synced_calls = 0, 0
+                H.equal(set_hook(function()
+                    set_calls = set_calls + 1
+                    return "set-native"
+                end, manager, "host"), "set-native")
+                H.equal(synced_hook(function()
+                    synced_calls = synced_calls + 1
+                    return true, "sync-native"
+                end, server, "host"), true)
+                H.equal(set_calls, 1)
+                H.equal(synced_calls, 1)
+                H.equal(runtime.mod._et.custom_breed_hot_join_phase("host"),
+                    nil)
+                H.equal(#runtime.sends, 0)
+                H.equal(check(), nil, case.name
+                    .. " invented canonical state that must be retired")
+
+                local evidence = assert(runtime.mod.
+                    _et_custom_breed_local_host_provenance)
+                evidence.set_peer_synchronizing.parity_absence_observed = false
+                evidence.fully_synced_for_peer.parity_absence_observed = false
+                H.equal(check(), "canonical parity absence not observed")
+
+                evidence.set_peer_synchronizing.parity_absence_observed = true
+                runtime.mod._et.CustomBreedParity = "malformed"
+                H.equal(check(),
+                    "canonical parity instance changed after boot")
+            end)
+        end
+    end)
+
+    H.test("ET #1497 unavailable parity preserves remote fence policy", function()
+        with_runtime({
+            identity_capture_failure = true,
+            live_counts = { et_chosen_greataxe = 1 },
+        }, function(runtime)
+            local set_hook = assert(runtime.hooks[
+                "GameNetworkManager.set_peer_synchronizing"])
+            local synced_hook = assert(runtime.hooks[
+                "NetworkServer.is_network_state_fully_synced_for_peer"])
+            local kicks, set_calls, synced_calls = 0, 0, 0
+            local server = {
+                my_peer_id = "host",
+                kick_peer = function(_, peer_id)
+                    H.equal(peer_id, "remote")
+                    kicks = kicks + 1
+                end,
+            }
+            local manager = { network_server = server }
+            H.equal(set_hook(function()
+                set_calls = set_calls + 1
+                return "unsafe-native"
+            end, manager, "remote"), nil)
+            H.equal(set_calls, 0)
+            H.equal(runtime.mod._et.custom_breed_hot_join_phase("remote"),
+                "pending")
+
+            runtime.mod.update(
+                runtime.mod._et.CUSTOM_BREED_HOT_JOIN_TIMEOUT + 0.01)
+            H.equal(synced_hook(function()
+                synced_calls = synced_calls + 1
+                return true
+            end, server, "remote"), false)
+            H.equal(synced_calls, 0)
+            H.equal(kicks, 1)
+            H.equal(runtime.mod._et.custom_breed_hot_join_phase("remote"),
+                "kicked")
+            H.equal(synced_hook(function()
+                synced_calls = synced_calls + 1
+                return true
+            end, server, "remote"), false)
+            H.equal(synced_calls, 0)
+            H.equal(kicks, 1, "unavailable remote peer was kicked twice")
+        end)
+
+        with_runtime({ identity_capture_failure = true }, function(runtime)
+            local set_hook = assert(runtime.hooks[
+                "GameNetworkManager.set_peer_synchronizing"])
+            local native_calls, kicks = 0, 0
+            local manager = { network_server = {
+                my_peer_id = "host",
+                kick_peer = function() kicks = kicks + 1 end,
+            } }
+            H.equal(set_hook(function(_, peer_id)
+                native_calls = native_calls + 1
+                return "native:" .. peer_id
+            end, manager, "remote"), "native:remote")
+            H.equal(native_calls, 1)
+            H.equal(kicks, 0)
+            H.equal(runtime.mod._et.custom_breed_hot_join_phase("remote"),
+                "admitted")
+        end)
+    end)
+
+    H.test("ET #1497 mutable parity export is never behavioral authority", function()
+        with_runtime({ live_counts = { et_chosen_greataxe = 1 } },
+            function(runtime)
+                local canonical = assert(runtime.mod._et.CustomBreedParity)
+                local original_forget = canonical.forget_peer
+                local canonical_forget_calls = 0
+                canonical.forget_peer = function(self, peer_id)
+                    canonical_forget_calls = canonical_forget_calls + 1
+                    return original_forget(self, peer_id)
+                end
+
+                local foreign_calls = {
+                    require_peer = 0,
+                    peer_has = 0,
+                    forget_peer = 0,
+                }
+                local foreign = {
+                    require_peer = function()
+                        foreign_calls.require_peer =
+                            foreign_calls.require_peer + 1
+                        return true
+                    end,
+                    peer_has = function()
+                        foreign_calls.peer_has = foreign_calls.peer_has + 1
+                        return true
+                    end,
+                    forget_peer = function()
+                        foreign_calls.forget_peer =
+                            foreign_calls.forget_peer + 1
+                    end,
+                }
+                runtime.mod._et.CustomBreedParity = foreign
+
+                local set_hook = assert(runtime.hooks[
+                    "GameNetworkManager.set_peer_synchronizing"])
+                local synced_hook = assert(runtime.hooks[
+                    "NetworkServer.is_network_state_fully_synced_for_peer"])
+                local remove_hook = assert(runtime.safe_hooks[
+                    "GameNetworkManager.remove_peer"])
+                local server = {
+                    my_peer_id = "host",
+                    kick_peer = function() end,
+                }
+                local manager = { network_server = server }
+
+                H.equal(canonical:require_peer("host"), false)
+                local native_local = 0
+                H.equal(set_hook(function()
+                    native_local = native_local + 1
+                    return "local-set"
+                end, manager, "host"), "local-set")
+                H.equal(canonical:peer_has("host"), false)
+
+                H.equal(canonical:require_peer("host"), false)
+                H.equal(synced_hook(function()
+                    native_local = native_local + 1
+                    return true, "local-synced"
+                end, server, "host"), true)
+                H.equal(native_local, 2)
+                H.equal(canonical:peer_has("host"), false)
+                H.equal(canonical_forget_calls, 2)
+
+                local remote_native = 0
+                H.equal(set_hook(function()
+                    remote_native = remote_native + 1
+                    return "unsafe-native"
+                end, manager, "remote"), nil)
+                H.equal(remote_native, 0,
+                    "foreign pre-ack bypassed the live-state fence")
+                H.equal(runtime.mod._et.custom_breed_hot_join_phase("remote"),
+                    "pending")
+                H.equal(synced_hook(function()
+                    remote_native = remote_native + 1
+                    return true
+                end, server, "remote"), false)
+                H.equal(remote_native, 0)
+
+                H.equal(canonical:require_peer("disconnect"), false)
+                remove_hook(manager, "disconnect")
+                H.equal(canonical:peer_has("disconnect"), false)
+                H.equal(canonical_forget_calls, 3)
+                H.equal(foreign_calls.require_peer, 0)
+                H.equal(foreign_calls.peer_has, 0)
+                H.equal(foreign_calls.forget_peer, 0)
+
+                runtime.mod._et.CustomBreedParity = canonical
+                canonical.forget_peer = original_forget
+            end)
     end)
 
     H.test("ET #1497 local identity authority fallback and stale recovery", function()
@@ -441,7 +674,7 @@ return function(H, repo_root)
 
     H.test("ET #1497 local retirement errors admit native and retry fail closed", function()
         for _, failure in ipairs({
-            "forget-missing", "forget-throwing",
+            "forget-missing", "forget-throwing", "forget-no-op",
         }) do
             with_runtime({}, function(runtime)
                 local set_hook = assert(runtime.hooks[
@@ -462,6 +695,10 @@ return function(H, repo_root)
                         forget_calls = forget_calls + 1
                         error("forget-peer-threw")
                     end
+                elseif failure == "forget-no-op" then
+                    parity.forget_peer = function()
+                        forget_calls = forget_calls + 1
+                    end
                 end
 
                 local native_calls = 0
@@ -474,7 +711,7 @@ return function(H, repo_root)
                 H.equal(c, failure)
                 H.equal(native_calls, 1)
                 H.equal(forget_calls,
-                    failure == "forget-throwing" and 1 or 0)
+                    failure == "forget-missing" and 0 or 1)
                 H.equal(runtime.mod._et.custom_breed_hot_join_phase("host"), nil)
                 H.equal(parity:all_peers_have(), false,
                     "failed canonical cleanup did not remain fail closed")
