@@ -688,18 +688,18 @@ local function register(H, repo_root)
             "wt_history_patch_5_2_v1", "wt_history_patch_6_0_v1",
             "wt_history_patch_6_6_v1", "wt_history_patch_6_8_v1",
             "wt_history_patch_6_11_0_kruber_longbow_v1",
-            "wt_history_patch_6_11_2_sienna_dagger_v1",
+            "wt_history_patch_6_11_2_reversions_v2",
             "wt_history_patch_4_1_1_v1", "wt_history_patch_4_6_hagbane_v1",
         })
         H.deep_equal(catalog_counts(catalog), {
             derived_profiles = 1,
-            families = 25,
-            family_states = 37,
-            operations = 234,
+            families = 26,
+            family_states = 38,
+            operations = 236,
             profiles = 18,
             states = 15,
         })
-        local elf_axe, halberd, handgun, kruber, longbow, masterwork,
+        local axe_falchion, elf_axe, halberd, handgun, kruber, longbow, masterwork,
             sword_dagger, tuskgor
         for _, family in ipairs(catalog.families) do
             if family.id == "elf_one_handed_axe" then elf_axe = family end
@@ -710,6 +710,7 @@ local function register(H, repo_root)
             if family.id == "kruber_halberd" then halberd = family end
             if family.id == "kruber_longbow" then longbow = family end
             if family.id == "sword_and_dagger" then sword_dagger = family end
+            if family.id == "axe_and_falchion" then axe_falchion = family end
         end
         H.deep_equal(assert(kruber).state_order, { "5_1_1", "5_2_0", "5_6_1" })
         H.deep_equal(assert(masterwork).state_order, { "4_0_1", "5_2_0" })
@@ -719,6 +720,7 @@ local function register(H, repo_root)
         H.deep_equal(assert(halberd).state_order, { "2_0_9" })
         H.deep_equal(assert(longbow).state_order, { "6_10_0" })
         H.deep_equal(assert(sword_dagger).state_order, { "2_0_9_1", "5_2_0" })
+        H.deep_equal(assert(axe_falchion).state_order, { "6_11_1" })
         local valid, validation_error = Policy.validate(catalog)
         H.equal(validation_error, nil)
         H.equal(valid, true)
@@ -1479,7 +1481,7 @@ local function register(H, repo_root)
         H.equal(CatalogUI.decorate_menu(mod, data), data)
         H.equal(data.options.widgets[1], first)
         H.equal(data.options.widgets[2].setting_id, "wt_history_patch_versions")
-        H.equal(#data.options.widgets[2].sub_widgets, 25)
+        H.equal(#data.options.widgets[2].sub_widgets, 26)
         H.equal(data.options.widgets[3], second)
         H.equal(loads, 14)
         H.equal(CatalogUI.decorate_menu(mod, data), data)
@@ -1531,7 +1533,7 @@ local function register(H, repo_root)
             H.equal(data.options.widgets[1], availability)
             H.equal(data.options.widgets[2].setting_id,
                 "wt_history_patch_versions")
-            H.equal(#data.options.widgets[2].sub_widgets, 25)
+            H.equal(#data.options.widgets[2].sub_widgets, 26)
             H.equal(data.options.widgets[3], overrides)
             H.equal(loads, 14)
             H.equal(catalog_ui.decorate_menu(mod, data), data)

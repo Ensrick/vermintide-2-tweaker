@@ -1,10 +1,23 @@
 # Regression Checklist — weapon_tweaker
 
+## #1436 - Hotfix 6.11.2 Dagger and Axe & Falchion history
+
+| Field | Check |
+|---|---|
+| Candidate version | WT 0.12.328-beta / WT Dev 0.12.329-dev. |
+| Default | **Sienna's Dagger** and **Saltzpyre's Axe and Falchion** default to **Current (Game Version 6.12.0)** and perform zero gameplay writes. |
+| Historical | Select **Game Version 6.11.1**. Dagger Heavy Attack 2 restores `dagger_h1_medium_smiter_diag`; Axe & Falchion Heavy Attacks 1 and 2 restore `axe_falcion_heavy_smiter_vertical_right` on the right-hand route only. |
+| Atomic refusal | A missing or foreign Axe & Falchion H1/H2 current guard refuses both family writes before mutation. |
+| Restore/isolation | Returning to Current restores all three exact native routes and original table identities. Dagger and Axe & Falchion selections remain independent. |
+| Automated | `test_wt_history_patch_6_11_2.lua`, the Hotfix 6.11.2 block in `test_wt_history_runtime.lua`, and `run_wt_history_patch_6_11_2_host_matrix.ps1` under PS7 + PS5.1. |
+
+---
+
 ## #1436 - Patch 6.11.0 Kruber Longbow history
 
 | Field | Check |
 |---|---|
-| Candidate version | WT 0.12.327-beta / WT Dev 0.12.328-dev. |
+| Candidate version | WT 0.12.327-beta / WT Dev 0.12.328-dev (prior slice). |
 | Default | **Kruber's Longbow** history defaults to **Current (Game Version 6.12.0)** and performs zero gameplay writes. |
 | Historical | Select **Game Version 6.10.0**, restart, and confirm both `longbow_empire_template` and its tutorial clone use source-exact `aim_zoom_delay = 2`; no other Longbow leaf changes. |
 | Atomic refusal | A missing tutorial template or either non-`0.22` current guard refuses the whole family before the gameplay template changes. |

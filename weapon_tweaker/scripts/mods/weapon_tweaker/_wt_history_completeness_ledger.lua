@@ -173,16 +173,17 @@ return {
             projection_kind = "adjacent_delta",
         },
         {
-            catalog_id = "wt_history_patch_6_11_2_sienna_dagger_v1",
+            catalog_id = "wt_history_patch_6_11_2_reversions_v2",
             cumulative_backfill = false,
-            declared_scope = "Hotfix 6.11.2 Sienna Dagger Heavy Attack 2 damage-profile route only",
+            declared_scope = "Hotfix 6.11.2 Sienna Dagger Heavy Attack 2 and Axe-and-Falchion Heavy Attack 1/2 damage-profile route reversions",
             exclusions = {
-                { id = "outside_sienna_dagger_h2", reason = "all other Hotfix 6.11.2 changes are outside this independently proven one-route slice" },
+                { id = "outside_declared_native_route_reversions", reason = "all other Hotfix 6.11.2 changes are outside this independently proven three-route slice" },
             },
             family_states = {
                 { family_id = "sienna_dagger", operations = 1, profiles = 0, state_id = "6_11_1" },
+                { family_id = "axe_and_falchion", operations = 2, profiles = 0, state_id = "6_11_1" },
             },
-            later_same_leaf_policy = "only the adjacent Heavy Attack 2 damage-profile route is projected over its exact current guard",
+            later_same_leaf_policy = "only the three adjacent reverted damage-profile routes are projected over their exact current guards",
             official_coverage = "complete_for_declared_scope",
             projection_kind = "adjacent_delta",
         },
@@ -220,9 +221,9 @@ return {
     stream_identity = "public_dev_byte_identical",
     totals = {
         catalogs = 13,
-        families = 25,
-        family_states = 37,
-        operations = 234,
+        families = 26,
+        family_states = 38,
+        operations = 236,
         states = 15,
     },
 }

@@ -562,12 +562,12 @@ delay from the adjacent boundary on both gameplay and tutorial templates,
 rehydrates both current guards through the primary and independent evaluators,
 and regenerates byte-identical two-operation public/Dev catalogs. Source-less
 CI retains the complete pinned-artifact gate; strict
-`-SourceRepo ... -RequireSource` requires all three commit/path/blob proofs.
+`-SourceRepo ... -RequireSource` requires every pinned commit/path/blob proof.
 
 `run_wt_history_patch_6_11_2_host_matrix.ps1` is the blocking dual-host gate
-for the Hotfix 6.11.2 Sienna Dagger H2 slice. It selects the exact one-route
-adjacent delta, rehydrates its current damage-profile guard through both source
-evaluators, pins both native profile definitions plus the vanilla
+for the Hotfix 6.11.2 Dagger H2 and Axe & Falchion H1/H2 slice. It selects the
+exact three-route adjacent delta, rehydrates each current damage-profile guard
+through both source evaluators, pins all native profile definitions plus the vanilla
 `NetworkLookup.damage_profiles` construction, and regenerates byte-identical
 public and Dev catalogs. Source-less CI retains the complete pinned-artifact
 gate; strict `-SourceRepo ... -RequireSource` requires every source proof.
@@ -597,7 +597,7 @@ gate; strict `-SourceRepo ... -RequireSource` requires every source proof.
 | `run_wt_history_patch_6_6_host_matrix.ps1` | ✅ OK (2026-08-28) | Issue #1436 blocking dual-host gate for the exact Patch 6.6 Deepwood Staff adjacent boundary, 6.12.0 current guards, independent-oracle agreement, and byte-exact public/dev catalogs. |
 | `check_wt_history_patch_6_8_reproducibility.ps1` | ✅ OK (2026-08-28) | Issue #1436 full-QA gate for the source-adjacent Patch 6.8 Kerillian Greatsword boundary, current-anchor rehydration, independent oracle agreement, and byte-exact generated catalogs. |
 | `run_wt_history_patch_6_11_0_host_matrix.ps1` | ✅ OK (2026-09-01) | Issue #1436 blocking dual-host gate for the exact Patch 6.11.0 Kruber Longbow two-template automatic-zoom-delay boundary, current-route rehydration, independent-oracle agreement, and byte-exact public/dev catalogs. |
-| `run_wt_history_patch_6_11_2_host_matrix.ps1` | ✅ OK (2026-09-01) | Issue #1436 blocking dual-host gate for the exact Hotfix 6.11.2 Sienna Dagger Heavy Attack 2 one-route boundary, current-route rehydration, native profile/network-lookup proof, independent-oracle agreement, and byte-exact public/dev catalogs. |
+| `run_wt_history_patch_6_11_2_host_matrix.ps1` | ✅ OK (2026-09-01) | Issue #1436 blocking dual-host gate for the exact Hotfix 6.11.2 Dagger H2 and Axe & Falchion H1/H2 three-route boundary, current-route rehydration, native profile/network-lookup proof, independent-oracle agreement, and byte-exact public/dev catalogs. |
 | `check_localization.ps1` | ⚠ 28 warnings | ct BOON_TREE category_ids; et_diff_ + mut_ false-positive prefixes |
 | `check_loc_tags.ps1` | ✅ OK (#694 migration) | Blocking scan covers every active stream, dynamic `en` construction, and obsolete decoration helpers; migration mode verifies key/order/count and value semantics against the merge base. |
 | `check_issue_status_labels.ps1` | ⚠ 1 warning (2026-07-04) | Post label-audit: only #322 (a `tracked-not-fixed` context-mention in ct's #294 crash-fix entry — correctly unlabeled; the check surfaces it for review). All other latest-entry refs are labeled or in skipped loc-sweep entries. Self-test passes. Advisory (never blocks; self-exits 0 offline). |
