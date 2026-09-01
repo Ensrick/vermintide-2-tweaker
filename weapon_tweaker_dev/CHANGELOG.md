@@ -1,5 +1,18 @@
 # Weapon Tweaker Changelog
 
+## 0.12.330-dev (2026-09-01) -- mirror Patch 6.11.0 one-handed Hammer/Mace history (#1436) [not-started]
+
+- Mirrors public beta `0.12.329`: **One-handed Hammer/Mace (Kruber, Bardin,
+  and Saltzpyre)** gains the source-exact **Game Version 6.10.0** state for
+  `block_angle = 90` and `dodge_count = 3` across all three shared templates;
+  Current remains inert at `120` and `4`.
+- Carries the same six-write atomic guard/refusal contract, exact identity-safe
+  restore, independent source oracle, and dual-host reproduction as public.
+- Public and Dev carry byte-identical generated Patch 6.11.0 data. This state
+  adds no profile, RPC, wire schema, global root, or asset.
+- #1436 remains open and outside the live-test queue because this is one
+  bounded slice of the requested all-weapons history catalog.
+
 ## 0.12.329-dev (2026-09-01) -- mirror complete Hotfix 6.11.2 route slice (#1436) [not-started]
 
 - Mirrors public beta `0.12.328`: **Saltzpyre's Axe and Falchion** gains the

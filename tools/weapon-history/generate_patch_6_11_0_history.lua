@@ -1,11 +1,13 @@
--- Generate the bounded Patch 6.11.0 Kruber Longbow history catalog (#1436).
+-- Generate the bounded Patch 6.11.0 Longbow and shared Hammer/Mace history
+-- catalog (#1436).
 --
 -- Usage:
 --   lua5.1 generate_patch_6_11_0_history.lua <source-repo> <evidence-dir> <output.lua>
 --
--- Both source-evaluated templates own the same adjacent aim_zoom_delay leaf.
--- They are emitted as one atomic family over independently rehydrated current
--- guards; later changes elsewhere in the templates remain current.
+-- Both Longbow templates own the same adjacent aim_zoom_delay leaf. The two
+-- Hammer/Mace source files expose the same block-angle and dodge-count leaves
+-- across three templates. Each family is emitted atomically over independently
+-- rehydrated current guards; later changes elsewhere remain current.
 
 local source_repo = assert(arg[1], "source repository path required")
 local evidence_dir = assert(arg[2], "evidence directory required")
@@ -81,7 +83,7 @@ local expected_path = {
     "actions", "action_two", "default", "aim_zoom_delay",
 }
 
-local function validate_snapshot(snapshot, rehydrated, catalog)
+local function validate_longbow_snapshot(snapshot, rehydrated, catalog)
     exact_keys(snapshot, { "new_revision", "old_revision", "records" },
         rehydrated and "rehydrated snapshot" or "adjacent snapshot")
     assert(snapshot.old_revision == catalog.boundary.historical_revision,
@@ -124,9 +126,69 @@ local function validate_snapshot(snapshot, rehydrated, catalog)
     return operations
 end
 
+local hammer_paths = {
+    { "block_angle" },
+    { "dodge_count" },
+}
+local hammer_historical_values = { 90, 3 }
+local hammer_current_values = { 120, 4 }
+
+local function validate_hammer_snapshot(snapshot, rehydrated, catalog, source)
+    exact_keys(snapshot, { "new_revision", "old_revision", "records" },
+        rehydrated and "rehydrated Hammer/Mace snapshot"
+            or "adjacent Hammer/Mace snapshot")
+    assert(snapshot.old_revision == catalog.boundary.historical_revision,
+        "Hammer/Mace historical revision drift")
+    assert(snapshot.new_revision == catalog.boundary.post_revision,
+        "Hammer/Mace boundary revision drift")
+    assert(array_length(snapshot.records) == #source.templates,
+        "Hammer/Mace snapshot record budget drift")
+    local operations = {}
+    for index, expected_template in ipairs(source.templates) do
+        local record = snapshot.records[index]
+        exact_keys(record, { "ops", "source_path", "template", "unsupported" },
+            "Hammer/Mace snapshot record " .. index)
+        assert(record.source_path == source.path,
+            "Hammer/Mace source path drift")
+        assert(record.template == expected_template,
+            "Hammer/Mace template order or identity drift at record " .. index)
+        assert(count_keys(record.unsupported) == 0,
+            "unsupported Hammer/Mace source delta at record " .. index)
+        assert(array_length(record.ops) == 2,
+            "Hammer/Mace operation budget drift at record " .. index)
+        operations[index] = {}
+        for operation_index = 1, 2 do
+            local operation = record.ops[operation_index]
+            local operation_keys = rehydrated
+                and { "expected_current", "expected_current_unset", "path", "unset", "value" }
+                or { "path", "unset", "value" }
+            exact_keys(operation, operation_keys,
+                "Hammer/Mace snapshot operation " .. index .. "/"
+                    .. operation_index)
+            assert(array_length(operation.path) == 1
+                    and operation.path[1] == hammer_paths[operation_index][1],
+                "Hammer/Mace operation path drift at " .. index .. "/"
+                    .. operation_index)
+            assert(operation.unset == false
+                    and operation.value == hammer_historical_values[operation_index],
+                "historical Hammer/Mace value drift at " .. index .. "/"
+                    .. operation_index)
+            if rehydrated then
+                assert(operation.expected_current_unset == false
+                        and operation.expected_current
+                            == hammer_current_values[operation_index],
+                    "current Hammer/Mace guard drift at " .. index .. "/"
+                        .. operation_index)
+            end
+            operations[index][operation_index] = operation
+        end
+    end
+    return operations
+end
+
 local source_catalog = load_data(evidence_dir
     .. "/_wt_history_6_11_0_source_catalog.lua")
-assert(source_catalog.schema == 1, "unsupported Patch 6.11.0 source catalog")
+assert(source_catalog.schema == 2, "unsupported Patch 6.11.0 source catalog")
 assert(source_catalog.current.revision == current_anchor.content_revision,
     "unexpected current revision")
 assert(array_length(source_catalog.family.templates) == 2,
@@ -145,8 +207,65 @@ local adjacent = load_data(evidence_dir
     .. "/_wt_history_snapshot_6_10_0_to_6_11_0_generated.lua")
 local rehydrated = load_data(evidence_dir
     .. "/_wt_history_snapshot_6_10_0_rehydrated_generated.lua")
-validate_snapshot(adjacent, false, source_catalog)
-local source_operations = validate_snapshot(rehydrated, true, source_catalog)
+validate_longbow_snapshot(adjacent, false, source_catalog)
+local source_operations = validate_longbow_snapshot(
+    rehydrated, true, source_catalog)
+
+assert(array_length(source_catalog.hammer_sources) == 2,
+    "Hammer/Mace source-file budget drift")
+assert(array_length(source_catalog.hammer_family.templates) == 3,
+    "Hammer/Mace family template budget drift")
+local hammer_operations = {}
+local hammer_template_index = 0
+for _, source in ipairs(source_catalog.hammer_sources) do
+    assert(git_blob(source_catalog.boundary.historical_revision, source.path)
+            == source.historical_blob,
+        "Hammer/Mace historical source blob drift")
+    assert(git_blob(source_catalog.boundary.post_revision, source.path)
+            == source.post_blob,
+        "Hammer/Mace post-boundary source blob drift")
+    assert(git_blob(source_catalog.current.revision, source.path)
+            == source.current_blob,
+        "Hammer/Mace current source blob drift")
+    local hammer_adjacent = load_data(evidence_dir
+        .. "/_wt_history_snapshot_6_10_0_" .. source.evidence_stem
+        .. "_to_6_11_0_generated.lua")
+    local hammer_rehydrated = load_data(evidence_dir
+        .. "/_wt_history_snapshot_6_10_0_" .. source.evidence_stem
+        .. "_rehydrated_generated.lua")
+    validate_hammer_snapshot(hammer_adjacent, false, source_catalog, source)
+    local evaluated = validate_hammer_snapshot(
+        hammer_rehydrated, true, source_catalog, source)
+    for template_index, template in ipairs(source.templates) do
+        hammer_template_index = hammer_template_index + 1
+        assert(source_catalog.hammer_family.templates[hammer_template_index]
+                == template,
+            "Hammer/Mace family/source template order drift")
+        for operation_index = 1, 2 do
+            local operation = evaluated[template_index][operation_index]
+            hammer_operations[#hammer_operations + 1] = {
+                change_class = "official_weapon_balance",
+                current_source_blob = source.current_blob,
+                expected_current = operation.expected_current,
+                expected_present = true,
+                family_id = source_catalog.hammer_family.id,
+                official_change_id = source_catalog.hammer_official_change_id,
+                official_summary = source_catalog.hammer_official_summary,
+                path = operation.path,
+                result = operation.value,
+                result_present = true,
+                root = "Weapons",
+                source_blob = source.historical_blob,
+                source_path = source.path,
+                source_revision = source_catalog.boundary.historical_revision,
+                state_id = source_catalog.state.id,
+                template = template,
+            }
+        end
+    end
+end
+assert(hammer_template_index == 3 and #hammer_operations == 6,
+    "Hammer/Mace emitted operation budget drift")
 
 local family = source_catalog.family
 local state = source_catalog.state
@@ -173,8 +292,9 @@ for index, template in ipairs(family.templates) do
     }
 end
 
+local hammer_family = source_catalog.hammer_family
 local catalog = {
-    catalog_id = "wt_history_patch_6_11_0_kruber_longbow_v1",
+    catalog_id = "wt_history_patch_6_11_0_v2",
     current_id = "current",
     current_source = {
         display_name = "Current (Game Version " .. current_anchor.game_version .. ")",
@@ -198,9 +318,24 @@ local catalog = {
             },
             templates = family.templates,
         },
+        {
+            display_name = hammer_family.display_name,
+            id = hammer_family.id,
+            label_key = hammer_family.label_key,
+            setting_id = hammer_family.setting_id,
+            state_order = { state.id },
+            states = {
+                [state.id] = {
+                    direct_profile_names = {},
+                    operations = hammer_operations,
+                    profile_names = {},
+                },
+            },
+            templates = hammer_family.templates,
+        },
     },
     generation = {
-        adjacent_operation_count = 2,
+        adjacent_operation_count = 8,
         global_operations = 0,
         profile_route_count = 0,
         unsupported_count = 0,
@@ -269,4 +404,4 @@ file:write("-- AUTO-GENERATED by tools/weapon-history/generate_patch_6_11_0_hist
 file:write("return ", serialize(catalog), "\n")
 file:close()
 
-print("generated " .. output_path .. " families=1 operations=2 profiles=0 globals=0")
+print("generated " .. output_path .. " families=2 operations=8 profiles=0 globals=0")

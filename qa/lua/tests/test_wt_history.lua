@@ -687,20 +687,20 @@ local function register(H, repo_root)
             "wt_history_patch_3_1_v1", "wt_history_patch_3_2_v1",
             "wt_history_patch_5_2_v1", "wt_history_patch_6_0_v1",
             "wt_history_patch_6_6_v1", "wt_history_patch_6_8_v1",
-            "wt_history_patch_6_11_0_kruber_longbow_v1",
+            "wt_history_patch_6_11_0_v2",
             "wt_history_patch_6_11_2_reversions_v2",
             "wt_history_patch_4_1_1_v1", "wt_history_patch_4_6_hagbane_v1",
         })
         H.deep_equal(catalog_counts(catalog), {
             derived_profiles = 1,
             families = 26,
-            family_states = 38,
-            operations = 236,
+            family_states = 39,
+            operations = 242,
             profiles = 18,
             states = 15,
         })
-        local axe_falchion, elf_axe, halberd, handgun, kruber, longbow, masterwork,
-            sword_dagger, tuskgor
+        local axe_falchion, elf_axe, halberd, hammer, handgun, kruber, longbow,
+            masterwork, sword_dagger, tuskgor
         for _, family in ipairs(catalog.families) do
             if family.id == "elf_one_handed_axe" then elf_axe = family end
             if family.id == "kruber_sword_and_shield" then kruber = family end
@@ -709,6 +709,7 @@ local function register(H, repo_root)
             if family.id == "handgun_shared" then handgun = family end
             if family.id == "kruber_halberd" then halberd = family end
             if family.id == "kruber_longbow" then longbow = family end
+            if family.id == "one_handed_hammer_shared" then hammer = family end
             if family.id == "sword_and_dagger" then sword_dagger = family end
             if family.id == "axe_and_falchion" then axe_falchion = family end
         end
@@ -719,6 +720,8 @@ local function register(H, repo_root)
         H.deep_equal(assert(handgun).state_order, { "2_0_5" })
         H.deep_equal(assert(halberd).state_order, { "2_0_9" })
         H.deep_equal(assert(longbow).state_order, { "6_10_0" })
+        H.deep_equal(assert(hammer).state_order,
+            { "5_1_1", "5_2_0", "6_10_0" })
         H.deep_equal(assert(sword_dagger).state_order, { "2_0_9_1", "5_2_0" })
         H.deep_equal(assert(axe_falchion).state_order, { "6_11_1" })
         local valid, validation_error = Policy.validate(catalog)

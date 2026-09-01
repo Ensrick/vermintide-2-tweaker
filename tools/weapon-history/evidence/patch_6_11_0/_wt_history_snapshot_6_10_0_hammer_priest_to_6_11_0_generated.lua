@@ -1,0 +1,28 @@
+-- Generated from decompiled source revisions; do not hand-edit.
+return {
+    new_revision = "abe82ab4ba3e00c22d912093b37234c59f8a00d9",
+    old_revision = "5ff26df11311ba011f3313b9b232ed0d8b64b921",
+    records = {
+        [1] = {
+            ops = {
+                [1] = {
+                    path = {
+                        [1] = "block_angle",
+                    },
+                    unset = false,
+                    value = 90,
+                },
+                [2] = {
+                    path = {
+                        [1] = "dodge_count",
+                    },
+                    unset = false,
+                    value = 3,
+                },
+            },
+            source_path = "scripts/settings/equipment/weapon_templates/1h_hammers_priest.lua",
+            template = "one_handed_hammer_priest_template",
+            unsupported = {},
+        },
+    },
+}

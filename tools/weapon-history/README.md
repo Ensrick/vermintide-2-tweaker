@@ -252,7 +252,8 @@ agree. The official boundary is [Patch 6.8.0 / Hotfix 6.8.1](https://forums.fats
 
 ### Patch 6.11.0 boundary
 
-Patch 6.11.0 uses an adjacent-boundary contract for Kruber's Longbow:
+Patch 6.11.0 uses adjacent-boundary contracts for Kruber's Longbow and the
+shared one-handed Hammer/Mace templates used by Kruber, Bardin, and Saltzpyre:
 
 | Role | Source revision |
 |---|---|
@@ -260,16 +261,27 @@ Patch 6.11.0 uses an adjacent-boundary contract for Kruber's Longbow:
 | Post-boundary 6.11.0 | `abe82ab4ba3e00c22d912093b37234c59f8a00d9` |
 | Current content anchor (6.12.0) | `038498af2b565bcb10bf5ed225638293a7640c83` |
 
-The adjacent evidence selects the same exact scalar leaf on both evaluated
+The Longbow evidence selects the same exact scalar leaf on both evaluated
 templates: `actions.action_two.default.aim_zoom_delay`, from current/post
 `0.22` to historical `2`. The source clones both
 `longbow_empire_template` and `longbow_empire_tutorial_template` before
 export, so the selector treats them as one family and commits both operations
 atomically. A missing or foreign tutorial guard refuses before the gameplay
-template changes. Current performs no writes, exact restore preserves both
-template and sibling identities, and ordinary Tweaker: Weapons adapters load
-after the selected baseline. No damage profile, RPC, asset, or global root is
-owned. The official boundary is [Patch 6.11.0](https://forums.fatsharkgames.com/t/weapon-balance-update-patch-6-11-0-patch-notes/121528).
+template changes.
+
+The Hammer/Mace evidence selects `block_angle`, from current/post `120` to
+historical `90`, and `dodge_count`, from current/post `4` to historical `3`,
+on each of `one_handed_hammer_template_1`,
+`one_handed_hammer_template_2`, and
+`one_handed_hammer_priest_template`. Those six leaves form one shared family
+state because the same setting already owns the three templates at the Patch
+5.2 boundary. Any missing or foreign current guard refuses all six writes
+before mutation.
+
+For both families, Current performs no writes, exact restore preserves table
+and sibling identities, and ordinary Tweaker: Weapons adapters load after the
+selected baseline. The eight-operation boundary owns no damage profile, RPC,
+asset, or global root. The official boundary is [Patch 6.11.0](https://forums.fatsharkgames.com/t/weapon-balance-update-patch-6-11-0-patch-notes/121528).
 
 ### Hotfix 6.11.2 boundary
 
