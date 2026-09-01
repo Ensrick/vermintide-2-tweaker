@@ -118,6 +118,7 @@ local suites = {
     "test_mp_loot_diag",
     "test_mp_fresh_profile_census",
     "test_modded_realm_authority",
+    "test_gt_level_control_backend_guard",
     "test_wt_passive_charge",
     "test_wt_deepwood_runtime",
     "test_wt_energy_seed",
