@@ -443,8 +443,8 @@ Tuskgor Spear slices. It proves the adjacent `max_ammo` change from `12` to
 guards, excludes the current-only Versus template, independently reproduces
 both evaluator lanes, and regenerates byte-identical public/dev
 catalogs. It also pins the byte-identical machine-readable completeness ledger:
-12 catalogs, 24 unique families, 36 family/state rows, 14 distinct states, and
-232 scalar operations, with every exposed row classified as an adjacent delta
+13 catalogs, 25 unique families, 37 family/state rows, 15 distinct states, and
+234 scalar operations, with every exposed row classified as an adjacent delta
 or complete direct historical baseline. The blocking
 `run_wt_history_patch_3_1_host_matrix.ps1` repeats the gate and source-selection
 adversaries under PowerShell 7 and Windows PowerShell 5.1.
@@ -525,9 +525,9 @@ real-time correctness assertion. One real PS5.1 hanging-helper case retains
 exact PID/start-time cleanup and orphan detection.
 
 `check_wt_history_source_checkout.ps1` is the offline source-selection
-adversary. Under both PowerShell hosts it presents all twelve reproduction gates
+adversary. Under both PowerShell hosts it presents all thirteen reproduction gates
 for Patch 2.0.6, 2.0.9.1, 2.0.10, 3.1, 3.2, 4.1.1, 4.6, 5.2, 6.0, 6.6, 6.8,
-and Hotfix 6.11.2,
+6.11.0, and Hotfix 6.11.2,
 with an intentionally incomplete Git checkout, requires an ordinary visible
 skip and a `-RequireSource` failure from each, and restores its environment
 without fetch (including promisor lazy-fetch), network access, checkout
@@ -555,6 +555,14 @@ against the current 6.12.0 content anchor, and requires byte-exact primary evide
 exact-double agreement with the independent source oracle, byte-exact public
 and dev catalogs, and byte-exact catalog regeneration. Source-less CI retains
 the complete pinned-artifact gate and reports the regeneration skip.
+
+`run_wt_history_patch_6_11_0_host_matrix.ps1` is the blocking dual-host gate
+for the Patch 6.11.0 Kruber Longbow slice. It selects the exact automatic-zoom
+delay from the adjacent boundary on both gameplay and tutorial templates,
+rehydrates both current guards through the primary and independent evaluators,
+and regenerates byte-identical two-operation public/Dev catalogs. Source-less
+CI retains the complete pinned-artifact gate; strict
+`-SourceRepo ... -RequireSource` requires all three commit/path/blob proofs.
 
 `run_wt_history_patch_6_11_2_host_matrix.ps1` is the blocking dual-host gate
 for the Hotfix 6.11.2 Sienna Dagger H2 slice. It selects the exact one-route
@@ -584,10 +592,11 @@ gate; strict `-SourceRepo ... -RequireSource` requires every source proof.
 | `run_wt_history_patch_4_6_host_matrix.ps1` | ✅ OK (2026-08-29) | Issue #1436 blocking dual-host validator for the complete six-file/18-object Patch 4.6 source closure, one-DLC-blob-identity adversary, no-fetch/no-lock extraction and exact raw-environment restoration; strict `-RequireSource` performs and requires both regenerations, while source-less CI is explicitly pinned-only. |
 | `check_wt_history_patch_6_0_reproducibility.ps1` | ✅ OK (2026-08-29) | Issue #1436 full-QA gate for the bounded Patch 6.0 shield-scalar and Fireball-profile slice; exact primary/oracle reproduction and catalog generation pass from the complete pinned source checkout. |
 | `check_wt_history_source_freshness.ps1` | ✅ OK (2026-08-30) | Issues #1436/#540 central 6.12.0 semantic anchor plus separately observed canonical default tip; ordinary offline QA may visibly skip only unavailable network, while WT BuildOnly/release requires exact remote ref/tip freshness without fetch/FETCH_HEAD mutation. Injected 750/1687/563 ms deadline traces prove every programmed wait, including the 5763 ms resume adversary; scheduler/OS latency is diagnostic, and one real PS5.1 hanging-helper case retains exact cleanup proof. |
-| `check_wt_history_source_checkout.ps1` | ✅ OK (2026-09-01) | Offline PS7/PS5.1 adversary proves that stale/partial Git trees visibly skip ordinary regeneration and fail closed under `-RequireSource` for the Patch 2.0.6, 2.0.9.1, 2.0.10, 3.1, 3.2, 4.1.1, 4.6, 5.2, 6.0, 6.6, 6.8, and Hotfix 6.11.2 gates. |
+| `check_wt_history_source_checkout.ps1` | ✅ OK (2026-09-01) | Offline PS7/PS5.1 adversary proves that stale/partial Git trees visibly skip ordinary regeneration and fail closed under `-RequireSource` for the Patch 2.0.6, 2.0.9.1, 2.0.10, 3.1, 3.2, 4.1.1, 4.6, 5.2, 6.0, 6.6, 6.8, 6.11.0, and Hotfix 6.11.2 gates. |
 | `run_wt_history_source_host_matrix.ps1` | ✅ OK (2026-09-01) | Issue #540 blocking dual-host owner for the generic freshness and incomplete-checkout self-tests. Full QA invokes it exactly once; static coverage forbids patch-specific matrices and `run_selftests.ps1` from multiplying the same process fixtures. |
 | `run_wt_history_patch_6_6_host_matrix.ps1` | ✅ OK (2026-08-28) | Issue #1436 blocking dual-host gate for the exact Patch 6.6 Deepwood Staff adjacent boundary, 6.12.0 current guards, independent-oracle agreement, and byte-exact public/dev catalogs. |
 | `check_wt_history_patch_6_8_reproducibility.ps1` | ✅ OK (2026-08-28) | Issue #1436 full-QA gate for the source-adjacent Patch 6.8 Kerillian Greatsword boundary, current-anchor rehydration, independent oracle agreement, and byte-exact generated catalogs. |
+| `run_wt_history_patch_6_11_0_host_matrix.ps1` | ✅ OK (2026-09-01) | Issue #1436 blocking dual-host gate for the exact Patch 6.11.0 Kruber Longbow two-template automatic-zoom-delay boundary, current-route rehydration, independent-oracle agreement, and byte-exact public/dev catalogs. |
 | `run_wt_history_patch_6_11_2_host_matrix.ps1` | ✅ OK (2026-09-01) | Issue #1436 blocking dual-host gate for the exact Hotfix 6.11.2 Sienna Dagger Heavy Attack 2 one-route boundary, current-route rehydration, native profile/network-lookup proof, independent-oracle agreement, and byte-exact public/dev catalogs. |
 | `check_localization.ps1` | ⚠ 28 warnings | ct BOON_TREE category_ids; et_diff_ + mut_ false-positive prefixes |
 | `check_loc_tags.ps1` | ✅ OK (#694 migration) | Blocking scan covers every active stream, dynamic `en` construction, and obsolete decoration helpers; migration mode verifies key/order/count and value semantics against the merge base. |

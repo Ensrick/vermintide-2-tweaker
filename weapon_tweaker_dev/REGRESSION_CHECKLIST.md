@@ -4,7 +4,20 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-08-25.
+Last updated: 2026-09-01.
+
+---
+
+## #1436 - Patch 6.11.0 Kruber Longbow history
+
+| Field | Check |
+|---|---|
+| Candidate version | WT 0.12.327-beta / WT Dev 0.12.328-dev. |
+| Default | **Kruber's Longbow** history defaults to **Current (Game Version 6.12.0)** and performs zero gameplay writes. |
+| Historical | Select **Game Version 6.10.0**, restart, and confirm both `longbow_empire_template` and its tutorial clone use source-exact `aim_zoom_delay = 2`; no other Longbow leaf changes. |
+| Atomic refusal | A missing tutorial template or either non-`0.22` current guard refuses the whole family before the gameplay template changes. |
+| Restore/composition | Returning to Current restores both exact `0.22` leaves and original table identities. History installs before ordinary WT adapters, which continue to compose afterward. |
+| Automated | `test_wt_history_patch_6_11_0.lua`, the Longbow block in `test_wt_history_runtime.lua`, and `run_wt_history_patch_6_11_0_host_matrix.ps1` under PS7 + PS5.1. |
 
 ---
 

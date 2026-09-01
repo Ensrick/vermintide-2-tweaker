@@ -611,6 +611,210 @@ local function register(H, context)
         end)
     end)
 
+    H.test("WT #1436 Patch 6.10.0 changes and restores both Longbow routes atomically", function()
+        with_profile_globals(function()
+            local public_catalog = assert(loadfile(script_root
+                .. "_wt_history_6_11_0_catalog.lua"))()
+            local dev_root, replacements = script_root:gsub(
+                "weapon_tweaker/scripts/mods/weapon_tweaker/$",
+                "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/")
+            H.equal(replacements, 1)
+            local dev_catalog = assert(loadfile(dev_root
+                .. "_wt_history_6_11_0_catalog.lua"))()
+            H.deep_equal(dev_catalog, public_catalog,
+                "public and dev Patch 6.11.0 catalogs must be data-identical")
+
+            local function longbow_template(delay, marker)
+                local aim_sibling = { marker = marker .. " aim sibling" }
+                local action_sibling = { marker = marker .. " action sibling" }
+                local template_sibling = { marker = marker .. " template sibling" }
+                local aim = {
+                    aim_zoom_delay = delay,
+                    buffed_zoom_thresholds = { 0.75, 0.5 },
+                    kind = "aim",
+                    metadata = aim_sibling,
+                    zoom_thresholds = { 0.65 },
+                }
+                local action_two = {
+                    default = aim,
+                    metadata = action_sibling,
+                }
+                local actions = {
+                    action_one = { default = { kind = "bow" } },
+                    action_two = action_two,
+                }
+                local template = {
+                    actions = actions,
+                    metadata = template_sibling,
+                    weapon_type = "LONGBOW",
+                }
+                return template, {
+                    action_sibling = action_sibling,
+                    action_two = action_two,
+                    actions = actions,
+                    aim = aim,
+                    aim_sibling = aim_sibling,
+                    template = template,
+                    template_sibling = template_sibling,
+                }
+            end
+
+            local function roots_fixture(delays)
+                delays = delays or {}
+                local normal, normal_refs = longbow_template(
+                    delays.normal or 0.22, "normal")
+                local tutorial, tutorial_refs = longbow_template(
+                    delays.tutorial or 0.22, "tutorial")
+                local weapons = {
+                    longbow_empire_template = normal,
+                    longbow_empire_tutorial_template = tutorial,
+                    sentinel = { marker = "unrelated weapon" },
+                }
+                return { Weapons = weapons }, {
+                    normal = normal_refs,
+                    tutorial = tutorial_refs,
+                    weapons = weapons,
+                }
+            end
+
+            local function assert_identities(roots, refs, label)
+                H.equal(roots.Weapons, refs.weapons,
+                    label .. " must preserve Weapons identity")
+                for _, row in ipairs({
+                    { name = "normal", refs = refs.normal,
+                        template = "longbow_empire_template" },
+                    { name = "tutorial", refs = refs.tutorial,
+                        template = "longbow_empire_tutorial_template" },
+                }) do
+                    local template = roots.Weapons[row.template]
+                    H.equal(template, row.refs.template,
+                        label .. " must preserve " .. row.name .. " template identity")
+                    H.equal(template.actions, row.refs.actions,
+                        label .. " must preserve " .. row.name .. " actions identity")
+                    H.equal(template.actions.action_two, row.refs.action_two,
+                        label .. " must preserve " .. row.name .. " action identity")
+                    H.equal(template.actions.action_two.default, row.refs.aim,
+                        label .. " must preserve " .. row.name .. " aim identity")
+                    H.equal(row.refs.aim.metadata, row.refs.aim_sibling,
+                        label .. " must preserve " .. row.name .. " aim sibling")
+                    H.equal(row.refs.action_two.metadata, row.refs.action_sibling,
+                        label .. " must preserve " .. row.name .. " action sibling")
+                    H.equal(row.refs.template.metadata, row.refs.template_sibling,
+                        label .. " must preserve " .. row.name .. " template sibling")
+                end
+            end
+
+            for _, case in ipairs({
+                { catalog = public_catalog, label = "public" },
+                { catalog = dev_catalog, label = "dev" },
+            }) do
+                local family = case.catalog.families[1]
+                H.equal(family.id, "kruber_longbow")
+                H.equal(family.setting_id, "wt_history_kruber_longbow")
+                H.equal(#family.states["6_10_0"].operations, 2)
+
+                local current_roots, current_refs = roots_fixture()
+                local current_before = clone(current_roots)
+                local current_runtime = Runtime.install({
+                    catalog = case.catalog,
+                    mod = mod_fixture({ wt_history_kruber_longbow = "current" },
+                        { value = true }),
+                    policy = Policy,
+                    roots = current_roots,
+                })
+                H.equal(current_runtime.fatal_error, nil)
+                H.equal(current_runtime.last_error, nil)
+                H.equal(#(current_runtime.ledgers.kruber_longbow or {}), 0)
+                H.deep_equal(current_roots, current_before,
+                    case.label .. " Current must perform zero gameplay writes")
+                assert_identities(current_roots, current_refs,
+                    case.label .. " Current")
+                H.equal(assert(current_runtime:reapply()).changed, false)
+                H.equal(assert(current_runtime:restore()).changed, false)
+
+                local history_roots, history_refs = roots_fixture()
+                local history_before = clone(history_roots)
+                local history_runtime = Runtime.install({
+                    catalog = case.catalog,
+                    mod = mod_fixture({ wt_history_kruber_longbow = "6_10_0" },
+                        { value = true }),
+                    policy = Policy,
+                    roots = history_roots,
+                })
+                H.equal(history_runtime.fatal_error, nil)
+                H.equal(history_runtime.last_error, nil)
+                H.equal(#history_runtime.ledgers.kruber_longbow, 2,
+                    case.label .. " 6.10.0 must own both template writes")
+                H.equal(history_refs.normal.aim.aim_zoom_delay, 2)
+                H.equal(history_refs.tutorial.aim.aim_zoom_delay, 2)
+                H.equal(history_refs.normal.aim.zoom_thresholds[1], 0.65)
+                H.equal(history_refs.tutorial.aim.zoom_thresholds[1], 0.65)
+                assert_identities(history_roots, history_refs,
+                    case.label .. " 6.10.0")
+
+                local ledger = history_runtime.ledgers.kruber_longbow
+                local reapplied = assert(history_runtime:reapply())
+                H.equal(reapplied.changed, false)
+                H.equal(reapplied.writes, 2,
+                    case.label .. " no-op still reports both retained owned leaves")
+                H.equal(history_runtime.ledgers.kruber_longbow, ledger,
+                    case.label .. " repeated selection must retain ledger identity")
+                local restored = assert(history_runtime:restore())
+                H.equal(restored.refused, 0)
+                H.equal(restored.changed, true)
+                H.deep_equal(history_roots, history_before,
+                    case.label .. " restore must recover both exact current leaves")
+                H.equal(history_refs.normal.aim.aim_zoom_delay, 0.22)
+                H.equal(history_refs.tutorial.aim.aim_zoom_delay, 0.22)
+                assert_identities(history_roots, history_refs,
+                    case.label .. " restore")
+                H.equal(assert(history_runtime:restore()).changed, false)
+
+                local foreign_roots, foreign_refs = roots_fixture({
+                    tutorial = 0.23,
+                })
+                local foreign_before = clone(foreign_roots)
+                local foreign_runtime = Runtime.install({
+                    catalog = case.catalog,
+                    mod = mod_fixture({ wt_history_kruber_longbow = "6_10_0" },
+                        { value = true }),
+                    policy = Policy,
+                    roots = foreign_roots,
+                })
+                H.equal(foreign_runtime.fatal_error, nil)
+                H.truthy(foreign_runtime.last_error
+                    and foreign_runtime.last_error:find(
+                        "current guard mismatch", 1, true) ~= nil)
+                H.equal(#(foreign_runtime.ledgers.kruber_longbow or {}), 0)
+                H.deep_equal(foreign_roots, foreign_before,
+                    case.label .. " late foreign guard must leak zero first writes")
+                H.equal(foreign_refs.normal.aim.aim_zoom_delay, 0.22)
+                H.equal(foreign_refs.tutorial.aim.aim_zoom_delay, 0.23)
+                assert_identities(foreign_roots, foreign_refs,
+                    case.label .. " foreign refusal")
+
+                local missing_roots, missing_refs = roots_fixture()
+                missing_roots.Weapons.longbow_empire_tutorial_template = nil
+                local missing_before = clone(missing_roots)
+                local missing_runtime = Runtime.install({
+                    catalog = case.catalog,
+                    mod = mod_fixture({ wt_history_kruber_longbow = "6_10_0" },
+                        { value = true }),
+                    policy = Policy,
+                    roots = missing_roots,
+                })
+                H.equal(missing_runtime.fatal_error, nil)
+                H.truthy(missing_runtime.last_error
+                    and missing_runtime.last_error:find(
+                        "missing template", 1, true) ~= nil)
+                H.equal(#(missing_runtime.ledgers.kruber_longbow or {}), 0)
+                H.deep_equal(missing_roots, missing_before,
+                    case.label .. " missing clone must refuse before first write")
+                H.equal(missing_refs.normal.aim.aim_zoom_delay, 0.22)
+            end
+        end)
+    end)
+
     H.test("WT #1436 Hotfix 6.11.2 changes only Sienna Dagger H2 profile", function()
         with_profile_globals(function()
             local public_catalog = assert(loadfile(script_root
