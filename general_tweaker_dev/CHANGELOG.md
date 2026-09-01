@@ -1,5 +1,17 @@
 # General Tweaker Changelog
 
+## 0.2.273-dev (2026-08-31) -- suppress modded level-control backend challenge (#1509) [not-started]
+
+- A solo `/win` or `/fail` session launched with `eac-untrusted` reached
+  `generateEndOfLevelLoot` and PlayFab rejected its EAC challenge with reason
+  511. The log proves the immutable launch parameter was modded while the
+  end-screen cache behaved as official.
+- The existing `StateInGameRunning._award_end_of_level_rewards` hook now
+  reconciles that cache through the shared modded-realm authority. A modded run
+  restores vanilla's untrusted rewards-ready path and never delegates the
+  PlayFab request; official-realm reward generation remains untouched.
+- Named runtime check: `issue1509_modded_level_control_reward_guard`.
+
 ## 0.2.272-dev (2026-08-25) -- name chest-pickup diagnostic state by role (#499) [not-started]
 
 - Renamed the bounded closed-chest pickup state core to

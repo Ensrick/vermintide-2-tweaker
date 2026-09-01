@@ -1,4 +1,10 @@
 local mod = get_mod("gt_dev")
+local RealmAuthority = mod:dofile(
+    "scripts/mods/general_tweaker_dev/_lib_modded_realm_authority")
+local BackendGuard = mod:dofile(
+    "scripts/mods/general_tweaker_dev/_gt_level_control_backend_guard")
+mod._gt_modded_realm_authority = RealmAuthority
+mod._gt_level_control_backend_guard = BackendGuard
 
 -- _gt_level_control.lua — host/level control + reservation-side fixes.
 --
@@ -198,11 +204,53 @@ end
 -- completes (no nil crash; the score screen + experience lookups build). This only
 -- catches the genuinely-unresolvable case (no local player) -- skip rather than crash.
 mod:hook("StateInGameRunning", "_award_end_of_level_rewards", function(func, self, ...)
+    -- #1509: vanilla skips this method entirely in a modded run. If another
+    -- synchronous UI bracket cleared the raw EAC bit while StateInGameRunning
+    -- cached it, the stale false value reaches this hook and vanilla would send
+    -- generateEndOfLevelLoot with an EAC challenge. Reconcile from immutable
+    -- launch authority, set the same cached bit vanilla intended, and return so
+    -- StateInGameRunning.update takes its native untrusted rewards-ready path.
+    local skip_backend, corrected = BackendGuard.reconcile(
+        RealmAuthority, self, script_data, rawget(_G, "Development"))
+    if skip_backend then
+        if corrected and rawget(_G, "printf") then
+            printf("[gt:1509] corrected stale modded-realm reward state; PlayFab request suppressed")
+        end
+        return
+    end
+
     local ok, err = pcall(func, self, ...)
     if not ok then
         mod:warning("[gt] _award_end_of_level_rewards errored (profile unresolvable): %s", tostring(err))
     end
 end)
+
+-- Keep the feature's live invariant beside the hook it proves. This avoids
+-- growing the already-baselined umbrella regression module and ensures the
+-- named check cannot remain registered if this feature module stops loading.
+if type(mod._gt_rt_register) == "function" then
+    mod._gt_rt_register("issue1509_modded_level_control_reward_guard", function()
+        if type(BackendGuard) ~= "table" or type(BackendGuard.reconcile) ~= "function" then
+            return "level-control backend guard policy missing"
+        end
+        if type(RealmAuthority) ~= "table" or type(RealmAuthority.is_modded) ~= "function" then
+            return "shared modded-realm authority missing"
+        end
+
+        local state = { _booted_eac_untrusted = false }
+        local skip, corrected = BackendGuard.reconcile(
+            RealmAuthority,
+            state,
+            { ["eac-untrusted"] = false },
+            { application_parameter = { ["eac-untrusted"] = true } })
+        if skip ~= true or corrected ~= true then
+            return "launch-authoritative modded state did not suppress backend rewards"
+        end
+        if state._booted_eac_untrusted ~= true then
+            return "cached StateInGameRunning modded bit was not restored"
+        end
+    end)
+end
 
 -- Mirrors Hacks's EAC-secure guard: only allowed pre-round on official servers,
 -- unrestricted on untrusted (modded) realm. Vanilla bot_status_extension.set_dead
