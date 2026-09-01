@@ -1,5 +1,36 @@
 # General Tweaker Changelog
 
+## v0.2.178 (2026-09-01) -- Modded level-control reward guard
+
+### Why
+
+The official `v0.2.177` Workshop build could send a PlayFab end-of-level reward
+request after **Win Level** or **Fail Level** in a modded mission, producing
+`Backend rejected the challenge response -1`. Rain verified the isolated fix in
+Tweaker: General Dev `v0.2.273-dev` on both forced-ending paths.
+
+### Changed
+
+- `_gt_level_control.lua` now reconciles `StateInGameRunning`'s cached realm
+  from immutable launch authority before the existing reward hook can delegate
+  to PlayFab.
+- `_gt_level_control_backend_guard.lua` provides the engine-free, fail-closed
+  policy already verified in Dev; official-realm reward generation still
+  delegates unchanged.
+- `_lib_modded_realm_authority.lua` is now a manifest-managed stable consumer
+  of the canonical shared authority.
+- `test_gt_level_control_backend_guard.lua` and
+  `test_modded_realm_authority.lua` exercise the stable and Dev policies,
+  authority copies, and reward-hook contract together.
+- The stable regression runner now exports its registrar before feature modules
+  load, so `issue1509_modded_level_control_reward_guard` is installed and
+  exercises the live launch-authority invariant in-game.
+
+### Notes
+
+- This is the isolated stable promotion for issue #1509. It does not promote
+  unrelated Tweaker: General Dev settings, RPCs, diagnostics, or features.
+
 ## v0.2.177 (2026-07-19) -- #724 canonical public bundle reissue [diag]
 
 - Reissues stable General Tweaker from protected clean `master` under a fresh

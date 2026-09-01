@@ -1579,13 +1579,13 @@ boot-time containment completed in v0.2.333-dev)
 - Install the boot owner at the beginning of mod evaluation. Import the official snapshot with an empty verification set, suppress Adventure `fixCareerData` and `verifyCareerLoadouts` requests/responses when a snapshot already exists, and permit exactly one vanilla verification bootstrap only when no official snapshot exists. Keep Versus and official sessions on vanilla behavior.
 - Ship an OFFICIAL-realm repair command (report-only default; apply replaces only already-broken slots with an owned resolvable id; refuses in the modded realm) covering weapons AND frame/cosmetic slots.
 - Regression: assert all five ordinary write seams plus all five boot request/writer seams stay hooked (`native_loadouts_official_write_chokepoint`) so a dropped boundary fails the gate.
-- Consumers that cache the realm must reconcile from immutable launch-parameter
-  presence before an official-only backend call. Restoring the cache and taking
-  vanilla's own modded branch is preferable to swallowing the later backend
-  error.
+- General Tweaker's `StateInGameRunning` reward consumer must reconcile its
+  cached realm from immutable launch-parameter presence before the
+  official-only end-of-level backend call. Restoring that cache and taking
+  vanilla's own modded branch is preferable to swallowing the later error.
 
 ### Related Issues / commits
-- gut_dev v0.2.215-dev (ordinary writes) and v0.2.333-dev (boot request/writer containment), #402. General Tweaker v0.2.273-dev applies the inverse cache guard at the end-screen reward seam (#1509). Related: class 31 (wire safety — same "modded value must not reach a context that can't handle it" root, persistence axis vs wire axis); #174 (the original isolation this regression breached).
+- gut_dev v0.2.215-dev (ordinary writes) and v0.2.333-dev (boot request/writer containment), #402. General Tweaker v0.2.273-dev verified the inverse cache guard at the end-screen reward seam; official v0.2.178 carries the isolated promotion (#1509). Related: class 31 (wire safety — same "modded value must not reach a context that can't handle it" root, persistence axis vs wire axis); #174 (the original isolation this regression breached).
 
 ### Read-only mod-owned instance exception (#287)
 `Use non-modded loadouts` must not turn a receiver-local mod-owned equip into a snap-back loop. Preserve cosmetics and exact mod-owned backend instances in a modded-only overlay while leaving the official row untouched; do not classify by slot alone. For CWV the closed identity is `^cwv_.+_%d%d%d$`, covering native and CIM-crafted variant instances without accepting arbitrary official IDs. Reads and writes must share the same predicate, including whole-loadout preview reads. Choosing an ordinary weapon clears the mod-owned overlay value and falls through to official rather than persisting the attempted ordinary ID. Regression-test modded preservation and `MODE_OFF` official inertness together.
