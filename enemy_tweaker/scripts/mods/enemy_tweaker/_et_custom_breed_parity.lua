@@ -147,6 +147,66 @@ local function _hot_join_log(format, ...)
     end
 end
 
+-- The pre-roster fence is for remote hot joins only. Vanilla creates a peer
+-- state machine for the listen server's own peer too, but never adds that peer
+-- through the remote-only GameSession.add_peer branch. Holding the local peer
+-- here therefore deadlocks WaitingForEnterGame. NetworkServer.my_peer_id is
+-- the source-qualified authority; Network.peer_id is only a guarded fallback
+-- for the earlier GameNetworkManager seam when its server is unavailable.
+local function _current_local_server_peer_id(server)
+    local own_peer_id = type(server) == "table"
+        and rawget(server, "my_peer_id") or nil
+    if type(own_peer_id) == "string" and own_peer_id ~= "" then
+        return own_peer_id
+    end
+
+    local network = rawget(_G, "Network")
+    local peer_id_fn = type(network) == "table"
+        and rawget(network, "peer_id") or nil
+    if type(peer_id_fn) ~= "function" then return nil end
+
+    local ok, fallback_peer_id = pcall(peer_id_fn)
+    if ok and type(fallback_peer_id) == "string" and fallback_peer_id ~= "" then
+        return fallback_peer_id
+    end
+end
+
+local function _is_local_server_peer(peer_id, server)
+    if type(peer_id) ~= "string" or peer_id == "" then return false end
+    return peer_id == _current_local_server_peer_id(server)
+end
+
+-- A peer that was conservatively classified as remote before the server owner
+-- id became readable may already exist in BOTH state owners: this module's
+-- synchronous fence and the canonical parity instance's pre-roster `_pending`
+-- set. Clearing only the fence leaves all_peers_have() false forever because
+-- the listen server is intentionally absent from the other-human roster.
+-- `forget_peer` is the canonical, idempotent proof retirement operation: it
+-- clears pending/acked/roster state and retires exact transport proof without
+-- sending or logging. Run it at every local ingress because a delayed response
+-- to a pre-cleanup challenge can make the canonical receiver reject and
+-- reintroduce `_pending` without recreating this module's fence row. Repeated
+-- clean calls do not grow retired history or emit traffic. Keep native admission
+-- independent of retirement success so a defensive cleanup error can never
+-- recreate the local-host deadlock.
+
+local function _current_parity_instance()
+    return type(ET) == "table" and rawget(ET, "CustomBreedParity") or nil
+end
+
+local function _retire_local_server_peer(peer_id, server)
+    if not _is_local_server_peer(peer_id, server) then return false, false end
+
+    local instance = _current_parity_instance()
+    hot_join_peers[peer_id] = nil
+    local forget_peer = type(instance) == "table"
+        and rawget(instance, "forget_peer") or nil
+    if type(forget_peer) ~= "function" then return true, false end
+    local ok = pcall(forget_peer, instance, peer_id)
+    if not ok then return true, false end
+    return true, true
+end
+
 -- The engine census is the authority for whether a live OR already-queued
 -- custom game object could enter after hot-join. spawn_queued_unit stores its
 -- breed in ConflictDirector.spawn_queue, and the drain consumes that stored
@@ -237,9 +297,38 @@ local function _advance_pending(record)
     end
 end
 
-mod:hook("GameNetworkManager", "set_peer_synchronizing",
-    function(func, self, peer_id)
+-- Runtime evidence is retained from the two callbacks actually handed to VMF,
+-- and each observed bit is written only inside that callback's local branch.
+-- The #1497 check therefore fails if either hook is disconnected or its bypass
+-- is relocated; detached classifier/constant checks are not sufficient proof.
+local local_bypass_provenance = {
+    set_peer_synchronizing = {
+        callback = nil, observed = false, retirement_observed = false,
+        last_local_peer_id = nil,
+    },
+    fully_synced_for_peer = {
+        callback = nil, observed = false, retirement_observed = false,
+        last_local_peer_id = nil,
+    },
+}
+
+local function _set_peer_synchronizing_hook(func, self, peer_id)
         if type(peer_id) ~= "string" or peer_id == "" then
+            return func(self, peer_id)
+        end
+        local server = type(self) == "table"
+            and rawget(self, "network_server") or nil
+        local is_local, retired = _retire_local_server_peer(peer_id, server)
+        if is_local then
+            local evidence = local_bypass_provenance.set_peer_synchronizing
+            evidence.observed = true
+            evidence.last_local_peer_id = peer_id
+            if retired then
+                evidence.retirement_observed = true
+            end
+            -- Also recovers a stale row after a live dofile or a previously
+            -- unreadable owner id, including canonical parity proof state.
+            -- Preserve the complete prior VMF hook chain.
             return func(self, peer_id)
         end
         local record = hot_join_peers[peer_id]
@@ -275,10 +364,27 @@ mod:hook("GameNetworkManager", "set_peer_synchronizing",
             "[et:451] hot-join sync HELD peer=%s reason=%s/%s",
             tostring(peer_id), tostring(reason), tostring(live_reason))
         -- First false is pending. Hold only; never kick here.
-    end)
+end
+mod:hook("GameNetworkManager", "set_peer_synchronizing",
+    _set_peer_synchronizing_hook)
+local_bypass_provenance.set_peer_synchronizing.callback =
+    _set_peer_synchronizing_hook
 mod._et_custom_breed_hot_join_fence = true
-mod:hook("NetworkServer", "is_network_state_fully_synced_for_peer",
-    function(func, self, peer_id)
+
+local function _fully_synced_for_peer_hook(func, self, peer_id)
+        local is_local, retired = _retire_local_server_peer(peer_id, self)
+        if is_local then
+            local evidence = local_bypass_provenance.fully_synced_for_peer
+            evidence.observed = true
+            evidence.last_local_peer_id = peer_id
+            if retired then
+                evidence.retirement_observed = true
+            end
+            -- Independent recovery is required because a stale pending/kicked
+            -- row or canonical pending proof would otherwise keep returning
+            -- false without re-entering the GameNetworkManager seam.
+            return func(self, peer_id)
+        end
         local record = type(peer_id) == "string" and hot_join_peers[peer_id]
         if record then
             if record.phase == "pending" then _advance_pending(record) end
@@ -301,7 +407,12 @@ mod:hook("NetworkServer", "is_network_state_fully_synced_for_peer",
             end
         end
         return func(self, peer_id)
-    end)
+end
+mod:hook("NetworkServer", "is_network_state_fully_synced_for_peer",
+    _fully_synced_for_peer_hook)
+local_bypass_provenance.fully_synced_for_peer.callback =
+    _fully_synced_for_peer_hook
+mod._et_custom_breed_local_host_provenance = local_bypass_provenance
 mod._et_custom_breed_rejected_peer_hold = true
 ET.CUSTOM_BREED_HOT_JOIN_LOG_CAP = HOT_JOIN_LOG_CAP
 ET.CUSTOM_BREED_HOT_JOIN_TIMEOUT = HOT_JOIN_TIMEOUT
@@ -346,3 +457,179 @@ ET.rt_register("issue451_exact_custom_breed_parity", function()
         return "disconnect epoch retirement missing"
     end
 end)
+
+-- Retained evidence from the two installed callbacks. The check itself is
+-- observation-only: it neither invokes a network hook nor mutates peer state.
+-- This issue check is intentionally SOLO: with no remote humans,
+-- all_peers_have()==true plus peer_has(local)==false independently proves the
+-- local id is absent from canonical `_pending` as well as `_acked`.
+local function _local_retirement_postcondition(evidence, label)
+    local peer_id = type(evidence) == "table"
+        and rawget(evidence, "last_local_peer_id") or nil
+    if type(peer_id) ~= "string" or peer_id == "" then
+        return label .. " local peer evidence missing"
+    end
+    if hot_join_peers[peer_id] ~= nil then
+        return label .. " local fence state retained"
+    end
+    local instance = _current_parity_instance()
+    local peer_has = type(instance) == "table"
+        and rawget(instance, "peer_has") or nil
+    local all_peers_have = type(instance) == "table"
+        and rawget(instance, "all_peers_have") or nil
+    if type(peer_has) ~= "function" or type(all_peers_have) ~= "function" then
+        return label .. " parity postcondition reader missing"
+    end
+    local ok_peer, acknowledged = pcall(peer_has, instance, peer_id)
+    if not ok_peer or type(acknowledged) ~= "boolean" then
+        return label .. " peer acknowledgement unreadable"
+    end
+    if acknowledged then return label .. " local acknowledgement retained" end
+    local ok_all, all_exact = pcall(all_peers_have, instance)
+    if not ok_all or type(all_exact) ~= "boolean" then
+        return label .. " parity consensus unreadable"
+    end
+    if all_exact ~= true then
+        return label .. " canonical pending state retained or check is not solo"
+    end
+end
+
+-- The postcondition below is intentionally meaningful only on a stable listen
+-- server with no remote human present or still joining. Source ownership:
+-- PlayerManager:human_players() returns the live human-player table, while
+-- NetworkServer.peer_state_machines includes the local server state machine and
+-- any pre-roster remote state machines. Require both independent surfaces so a
+-- joining peer cannot be mistaken for solo merely because it is not visible in
+-- PlayerManager yet. Any unavailable, throwing, or malformed surface skips the
+-- diagnostic rather than turning an uncertain roster into a false PASS/FAIL.
+local function _issue1497_stable_solo_precondition()
+    local managers = rawget(_G, "Managers")
+    local state = type(managers) == "table" and rawget(managers, "state") or nil
+    local network_manager = type(state) == "table"
+        and rawget(state, "network") or nil
+    if type(network_manager) ~= "table"
+            or rawget(network_manager, "is_server") ~= true then
+        return false, "listen-server network state unavailable"
+    end
+
+    local server = rawget(network_manager, "network_server")
+    local peer_state_machines = type(server) == "table"
+        and rawget(server, "peer_state_machines") or nil
+    if type(peer_state_machines) ~= "table" then
+        return false, "peer-state-machine roster unavailable"
+    end
+
+    local network = rawget(_G, "Network")
+    local peer_id_fn = type(network) == "table"
+        and rawget(network, "peer_id") or nil
+    if type(peer_id_fn) ~= "function" then
+        return false, "local peer identity unavailable"
+    end
+    local id_ok, local_peer_id = pcall(peer_id_fn)
+    if not id_ok or type(local_peer_id) ~= "string" or local_peer_id == "" then
+        return false, "local peer identity unreadable"
+    end
+    if rawget(server, "my_peer_id") ~= local_peer_id then
+        return false, "listen-server peer identity unstable"
+    end
+
+    local player_manager = type(managers) == "table"
+        and rawget(managers, "player") or nil
+    if type(player_manager) ~= "table" then
+        return false, "human-player roster unavailable"
+    end
+    -- PlayerManager methods live on its class lookup rather than necessarily
+    -- as raw instance fields, so guard the source-owned method resolution too.
+    local lookup_ok, human_players_fn = pcall(function()
+        return player_manager.human_players
+    end)
+    if not lookup_ok or type(human_players_fn) ~= "function" then
+        return false, "human-player roster unavailable"
+    end
+    local players_ok, human_players = pcall(human_players_fn, player_manager)
+    if not players_ok or type(human_players) ~= "table" then
+        return false, "human-player roster unreadable"
+    end
+
+    local inspect_ok, present, reason = pcall(function()
+        local human_count = 0
+        for _, player in pairs(human_players) do
+            if type(player) ~= "table" then
+                return false, "human-player roster malformed"
+            end
+            local player_peer_id = rawget(player, "peer_id")
+            if type(player_peer_id) ~= "string" or player_peer_id == "" then
+                return false, "human-player identity malformed"
+            end
+            human_count = human_count + 1
+            if player_peer_id ~= local_peer_id then
+                return false, "remote human player visible"
+            end
+        end
+        if human_count ~= 1 then
+            return false, "stable solo human roster not established"
+        end
+
+        for peer_id, machine in pairs(peer_state_machines) do
+            if type(peer_id) ~= "string" or peer_id == ""
+                    or type(machine) ~= "table" then
+                return false, "peer-state-machine roster malformed"
+            end
+            if peer_id ~= local_peer_id then
+                return false, "remote peer still joining"
+            end
+        end
+        if type(rawget(peer_state_machines, local_peer_id)) ~= "table" then
+            return false, "local peer state machine not established"
+        end
+        return true
+    end)
+    if not inspect_ok then return false, "solo roster traversal failed" end
+    return present, reason
+end
+
+ET.rt_register("issue1497_local_host_hot_join_bypass", function()
+    local evidence = rawget(mod, "_et_custom_breed_local_host_provenance")
+    if evidence ~= local_bypass_provenance then
+        return "local-host bypass provenance missing"
+    end
+    local set_evidence = rawget(evidence, "set_peer_synchronizing")
+    if type(set_evidence) ~= "table"
+            or rawget(set_evidence, "callback") ~= _set_peer_synchronizing_hook then
+        return "set_peer_synchronizing bypass hook disconnected"
+    end
+    local synced_evidence = rawget(evidence, "fully_synced_for_peer")
+    if type(synced_evidence) ~= "table"
+            or rawget(synced_evidence, "callback") ~= _fully_synced_for_peer_hook then
+        return "fully-synced bypass hook disconnected"
+    end
+    if rawget(set_evidence, "observed") ~= true then
+        return "set_peer_synchronizing local bypass not observed"
+    end
+    if rawget(synced_evidence, "observed") ~= true then
+        return "fully-synced local bypass not observed"
+    end
+    if rawget(set_evidence, "last_local_peer_id") ~=
+            rawget(synced_evidence, "last_local_peer_id") then
+        return "local peer evidence disagrees across bypass hooks"
+    end
+    local managers = rawget(_G, "Managers")
+    local state = type(managers) == "table" and rawget(managers, "state") or nil
+    local network_manager = type(state) == "table"
+        and rawget(state, "network") or nil
+    local server = type(network_manager) == "table"
+        and rawget(network_manager, "network_server") or nil
+    local current_peer_id = _current_local_server_peer_id(server)
+    if type(current_peer_id) ~= "string" or current_peer_id == "" then
+        return "current local peer identity unavailable"
+    end
+    if rawget(set_evidence, "last_local_peer_id") ~= current_peer_id
+            or rawget(synced_evidence, "last_local_peer_id") ~= current_peer_id then
+        return "local peer evidence stale for current listen server"
+    end
+    if rawget(set_evidence, "retirement_observed") ~= true
+            and rawget(synced_evidence, "retirement_observed") ~= true then
+        return "canonical parity retirement not observed"
+    end
+    return _local_retirement_postcondition(set_evidence, "local-host")
+end, { precondition = _issue1497_stable_solo_precondition })

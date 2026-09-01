@@ -1,5 +1,25 @@
 # Enemy Tweaker Changelog
 
+## 0.7.61-dev (2026-08-31): local-host custom-breed fence recovery (#1497, #451) [verify-fix]
+
+- Restricted the pre-roster custom-breed parity fence to actual remote hot
+  joins. The listen server's own peer now follows the vanilla
+  `WaitingForEnterGame` path instead of being held and kicked when the live
+  custom-breed census is unavailable during keep startup.
+- Local admission clears both Enemy Tweaker's synchronous fence and the
+  canonical parity proof state. Cleanup is idempotent at both vanilla ingress
+  hooks, remains retryable after errors, and also heals a delayed reply that
+  recreates pending proof after an earlier retirement.
+- Added an observation-only solo runtime check bound to both installed hooks,
+  the current source-authoritative local peer, the vanilla peer-state-machine
+  roster, and retained parity state. Co-op, joining, dedicated-server, and
+  unreadable roster contexts explicitly skip instead of producing false
+  verdicts.
+- Added adversarial coverage for source-owner/fallback identity, stale-owner
+  recovery, pending-without-fence state, delayed replies, cleanup failures,
+  full native return tuples, remote proof isolation/reuse, and the exact
+  vanilla `WaitingForEnterGame` conjunction.
+
 ## 0.7.60-dev (2026-08-29): Chosen boss contract and custom-breed parity (#451) [diagnostics-armed]
 
 - Classified the greataxe Chosen as a genuine boss while preserving its Chaos
