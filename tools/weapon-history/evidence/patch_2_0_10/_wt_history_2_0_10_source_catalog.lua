@@ -8,10 +8,10 @@
 return {
     artifacts = {
         _wt_history_2_0_10_routes_oracle =
-            "7e706777183dbd854f8edd6351bef95df58840b392c35cdc63e0d59f9999a694",
+            "b7b29d80d5f3688f08b0e528e00b2d3a56cb72598026954e9fac689241207bde",
         _wt_history_profiles_2_0_9_1_to_2_0_10_generated =
             "b8e7a4e42c68dbfddd9b20564fbae5851bd7201a93689b8a669f799889d8afba",
-        _wt_history_profiles_current_6_12_0_generated =
+        _wt_history_profiles_current_6_12_1_generated =
             "7eb51fc267d42212bef2ab5bd07211288d9256e4dd7783094e714550dc88aeb2",
         _wt_history_profiles_post_2_0_10_generated =
             "f40fc0505834a1e15bbe43d298cef97486ab35d1adb4d8bd144ac6c453b22678",
@@ -21,7 +21,7 @@ return {
         post_revision = "67d593c4f98653e1d511105b6adeebb5d6619c58",
     },
     current = {
-        revision = "038498af2b565bcb10bf5ed225638293a7640c83",
+        revision = "25fd7b8433e839b678d1c98a7a9af80918cbc252",
     },
     exclusions = {
         {

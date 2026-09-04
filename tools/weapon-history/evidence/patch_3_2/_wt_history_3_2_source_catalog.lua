@@ -19,7 +19,7 @@ return {
     },
     current = {
         blob = "25c9ac9c38d51cb7b588c20d46e2773ca67149eb",
-        revision = "038498af2b565bcb10bf5ed225638293a7640c83",
+        revision = "25fd7b8433e839b678d1c98a7a9af80918cbc252",
     },
     family = {
         display_name = "Kerillian's One-handed Axe",

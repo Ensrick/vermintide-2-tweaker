@@ -85,16 +85,16 @@ try {
     $pinned = [ordered]@{
         $extractor = 'ae916ba306e0f5933f71e9b41ed0c0e7df46c28585da4fb92b5e2cc03199b15a'
         $oracleExtractor = '767c73dd8f2caf35575324aae7ac09e2460a3506f9ad6c8296d2bee6e973a2d5'
-        $generator = '9b223410b4d03af688374cef9fb6682cdf837fa5e0a04d0f13e773629fb043ed'
-        $sourceCatalog = 'bd2acfd683e72ba465a4c9822f938dfface833bb0cce0af7eb5984bcdf678646'
+        $generator = '4012d029bbde9ac53f8175e483f8986108d97756cc0541d4479f4538b655e866'
+        $sourceCatalog = '2dea214e15bf6b7a07930bb8e376195c1385da2e4aa85657baa352046dce9335'
         $adjacentEvidence = '87b6f190c7beade349cbcb96a869c8bb43c2eba645849b4811bf670230739841'
         $rehydratedEvidence = '40a209e92700b23f39dea9ec0597a023ad9a78b97415d82baff8b55eaa5c3251'
         $hammerAdjacentEvidence = '8d1eb9ecc1466a8fa8aed558b74bf4a034cfc57157744ae482caadffd58bffa1'
         $hammerRehydratedEvidence = '2f496f368a86f76467eb343c504981f009e5e9865ea5d5cfa224027b5073d6fa'
         $priestAdjacentEvidence = '78c82bed0bc8104360d18aaba020df87d639307ee868b46b39ad558acd003d8f'
         $priestRehydratedEvidence = '8f5ced37c8bf71f9b50d5e119340ab65e03fce7f398b835e3e45e6692b51e11d'
-        $generatedCatalog = '26c745d3ea3e8af3e3c707a30151b5b09b43101ec5d44911f74d66bf07ab4370'
-        $devCatalog = '26c745d3ea3e8af3e3c707a30151b5b09b43101ec5d44911f74d66bf07ab4370'
+        $generatedCatalog = 'd52ee5719f0b8abf50e7ee9efad79adb475dd920da80110e52dbd83781900c43'
+        $devCatalog = 'd52ee5719f0b8abf50e7ee9efad79adb475dd920da80110e52dbd83781900c43'
     }
     foreach ($entry in $pinned.GetEnumerator()) {
         if (-not (Test-Path -LiteralPath $entry.Key -PathType Leaf)) {

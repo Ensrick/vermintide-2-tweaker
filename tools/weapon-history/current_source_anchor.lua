@@ -1,17 +1,17 @@
 -- Canonical current-source identity for every generated weapon-history catalog.
 --
 -- content_revision is the semantic game-source commit. observed_default_tip is
--- recorded separately because the canonical default branch currently has one
--- later README-only commit. Release freshness checks compare the live remote
--- HEAD with observed_default_tip without fetching into any repository.
+-- recorded separately so release freshness checks can compare the live remote
+-- HEAD without fetching into any repository. Schema 2 records the common case
+-- where the semantic content revision is itself the observed default tip.
 return {
     canonical_url = "https://github.com/Aussiemon/Vermintide-2-Source-Code",
-    content_revision = "038498af2b565bcb10bf5ed225638293a7640c83",
+    content_revision = "25fd7b8433e839b678d1c98a7a9af80918cbc252",
     default_ref = "refs/heads/master",
-    game_version = "6.12.0",
-    observed_at_utc = "2026-08-28T23:45:18Z",
-    observed_default_tip = "fd46866fe4d9aad8a1f1480fad4be6b960d4f83e",
-    observed_tip_content_relation = "direct_parent",
-    observed_tip_metadata_paths = { "README.md" },
-    schema = 1,
+    game_version = "6.12.1",
+    observed_at_utc = "2026-09-03T22:09:45Z",
+    observed_default_tip = "25fd7b8433e839b678d1c98a7a9af80918cbc252",
+    observed_tip_content_relation = "same_commit",
+    observed_tip_metadata_paths = {},
+    schema = 2,
 }

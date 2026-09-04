@@ -45,7 +45,7 @@ local function register(H, repo_root)
         H.equal(valid, true)
         H.equal(catalog.catalog_id, "wt_history_patch_4_6_hagbane_v1")
         H.equal(catalog.current_source.revision,
-            "038498af2b565bcb10bf5ed225638293a7640c83")
+            "25fd7b8433e839b678d1c98a7a9af80918cbc252")
         H.deep_equal(catalog.generation, {
             adjacent_operation_count = 2,
             excluded_operation_count = 2,

@@ -14,8 +14,8 @@ onto the current decompiled-source anchor:
 | Game version 5.1.1 | `8224b4436e20905a6ba463cb28fa2d7771bb2330` |
 | Game version 5.2.0 | `4f496970e2e7514bef7d612ab91331aa065d5e52` |
 | Game version 5.2.3 | `cdc0a86e24e017119e6d6998870bf76f6e76e868` |
-| Current content anchor (6.12.0) | `038498af2b565bcb10bf5ed225638293a7640c83` |
-| Observed canonical default tip (README-only child) | `fd46866fe4d9aad8a1f1480fad4be6b960d4f83e` |
+| Current content anchor (6.12.1) | `25fd7b8433e839b678d1c98a7a9af80918cbc252` |
+| Observed canonical default tip (same commit) | `25fd7b8433e839b678d1c98a7a9af80918cbc252` |
 
 The inert Lua modules in `evidence/patch_5_2/` preserve the semantic snapshots,
 damage profiles, family ownership, explicit exclusions, official patch-note
@@ -48,7 +48,7 @@ Handguns:
 |---|---|
 | Game version 2.0.5 | `b5a93414e883825f69c61eb3e90e73f52d6c2e80` |
 | Post-boundary Patch 2.0.6 | `750fa8f8a393d807f2f7205dfed4b60b6abe3c46` |
-| Current content anchor (6.12.0) | `038498af2b565bcb10bf5ed225638293a7640c83` |
+| Current content anchor (6.12.1) | `25fd7b8433e839b678d1c98a7a9af80918cbc252` |
 
 The adjacent source diff selects exactly three gameplay leaves on the former
 shared Handgun template: hipfire and aimed `ignore_shield_hit` are absent, while
@@ -68,7 +68,7 @@ Patch 2.0.9.1 uses an adjacent-boundary contract for Kruber's Halberd:
 |---|---|
 | Game version 2.0.9 | `6d41bab482ac64ebebc5c8bba2c3a47954952af9` |
 | Post-boundary Patch 2.0.9.1 | `90c7c21adb7aa2b7de5fcdca5094727895fbeb1a` |
-| Current content anchor (6.12.0) | `038498af2b565bcb10bf5ed225638293a7640c83` |
+| Current content anchor (6.12.1) | `25fd7b8433e839b678d1c98a7a9af80918cbc252` |
 
 The official fix restored the missing overhead after the Halberd push attack.
 The adjacent evaluator selects exactly 20 leaves under
@@ -90,7 +90,7 @@ Dagger:
 |---|---|
 | Game version 2.0.9.1 | `90c7c21adb7aa2b7de5fcdca5094727895fbeb1a` |
 | Post-boundary Patch 2.0.10 | `67d593c4f98653e1d511105b6adeebb5d6619c58` |
-| Current content anchor (6.12.0) | `038498af2b565bcb10bf5ed225638293a7640c83` |
+| Current content anchor (6.12.1) | `25fd7b8433e839b678d1c98a7a9af80918cbc252` |
 
 The adjacent damage-profile diff contains exactly two scalar changes:
 `light_slashing_linesman_dual_medium.melee_boost_override` changes from `4`
@@ -113,7 +113,7 @@ Tuskgor Spear:
 |---|---|
 | Pre-Patch 3.1 source | `c96aa3858011ecd557d55d80b66fe3bb8342eeb2` |
 | Post-boundary Patch 3.1 source | `3f0e3ba442d8dcafb8b5f829ff6c2a95ae24ae63` |
-| Current content anchor (6.12.0) | `038498af2b565bcb10bf5ed225638293a7640c83` |
+| Current content anchor (6.12.1) | `25fd7b8433e839b678d1c98a7a9af80918cbc252` |
 
 The adjacent source diff contains exactly two catalogued gameplay leaves:
 `blunderbuss_template_1.ammo_data.max_ammo`, from `12` to `16`, and
@@ -128,7 +128,7 @@ The runtime completeness ledger classifies this and every other exposed
 family/state as either `adjacent_delta` or
 `complete_direct_historical_baseline`. It records declared scope, official
 coverage, later-same-leaf/cumulative policy, explicit exclusions, and the
-exact `12 / 24 / 36 / 14 / 232` catalog/family/family-state/state/operation
+exact `13 / 26 / 38 / 15 / 236` catalog/family/family-state/state/operation
 census. Default catalog loading refuses any missing, extra, duplicate,
 malformed, or count-drifted declaration; public and Dev ledger bytes must be
 identical.
@@ -141,7 +141,7 @@ Patch 3.2 uses an adjacent-boundary contract for Kerillian's One-Handed Axe:
 |---|---|
 | Game version 3.1.0 | `3f0e3ba442d8dcafb8b5f829ff6c2a95ae24ae63` |
 | Post-boundary 3.2 scripts | `98965ca6e57e46d5a161f7262471b2124e0d0823` |
-| Current content anchor (6.12.0) | `038498af2b565bcb10bf5ed225638293a7640c83` |
+| Current content anchor (6.12.1) | `25fd7b8433e839b678d1c98a7a9af80918cbc252` |
 
 The adjacent evidence selects exactly one operation: the push-follow-up
 `additional_critical_strike_chance`, from historical `0.1` to post-boundary
@@ -161,7 +161,7 @@ Patch 4.1.1 uses an adjacent-boundary contract for the Masterwork Pistol:
 |---|---|
 | Game version 4.0.1 | `872027662e076477451c8c4bf077473d8ab9e27d` |
 | Post-boundary 4.1.1 | `d5f1fa23c97e0e324db047cabb21faeffa9819bf` |
-| Current content anchor (6.12.0) | `038498af2b565bcb10bf5ed225638293a7640c83` |
+| Current content anchor (6.12.1) | `25fd7b8433e839b678d1c98a7a9af80918cbc252` |
 
 The adjacent evidence selects exactly one operation on
 `heavy_steam_pistol_template_1.ammo_data.reload_on_ammo_pickup`: historical
@@ -180,7 +180,7 @@ approved Hagbane payload against the current profile schema:
 |---|---|
 | Game version 4.5.1 | `0cec9547152a395c4f35f75288f29d8b18b8294f` |
 | Post-boundary 4.6 scripts | `b38754a3bd61983118215359845d5b4fe5005014` |
-| Current content anchor (6.12.0) | `038498af2b565bcb10bf5ed225638293a7640c83` |
+| Current content anchor (6.12.1) | `25fd7b8433e839b678d1c98a7a9af80918cbc252` |
 
 The declared source closure is six files at all three revisions: the base
 power/profile files, the Morris/Cog/Woods profile contributors loaded during
@@ -191,7 +191,7 @@ every extractor, oracle, route, and catalog read.
 The profile evaluator finds exactly two adjacent leaves: Patch 4.6 adds
 `allow_dot_finesse_hit = true` to `shortbow_hagbane` and
 `shortbow_hagbane_charged`. The historical selector registers two deterministic
-private profiles cloned from the current 6.12.0 payloads with only those flags
+private profiles cloned from the current 6.12.1 payloads with only those flags
 removed, then parity-gates the two source-proven current template routes. It
 never mutates the shared native profiles. Current is a zero-write state; a
 missing route refuses the complete two-route plan before any write.
@@ -214,7 +214,7 @@ owners:
 |---|---|
 | Game version 6.5.4 | `5a74a378502353b075cbe0c3abe37da07f1d9bc9` |
 | Post-boundary 6.6.0 scripts | `877aa9b2720d297e0594f7039773eca610324f5b` |
-| Current content anchor (6.12.0) | `038498af2b565bcb10bf5ed225638293a7640c83` |
+| Current content anchor (6.12.1) | `25fd7b8433e839b678d1c98a7a9af80918cbc252` |
 
 The adjacent evidence selects exactly three absent historical leaves: the
 `chaos_bulwark` row in `staff_life` and `staff_life_vs` prioritized breeds, and
@@ -242,11 +242,11 @@ file cannot leak into the historical selector:
 |---|---|
 | Game version 6.7.2 | `b7c15fc61a3b34fae7d1e2de47f52198e26851ce` |
 | Post-boundary 6.8.1 | `447f4eb49921ba08fbbbb945609ce2b9891f4898` |
-| Current content anchor (6.12.0) | `038498af2b565bcb10bf5ed225638293a7640c83` |
+| Current content anchor (6.12.1) | `25fd7b8433e839b678d1c98a7a9af80918cbc252` |
 
 The adjacent 6.7.2-to-6.8.1 evidence selects exactly one operation: Kerillian's
 Greatsword first-heavy `range_mod`, `1.55` to historical `1.45`. A second
-evidence file re-reads only that selected path at 6.7.2 and 6.12.0 to establish
+evidence file re-reads only that selected path at 6.7.2 and 6.12.1 to establish
 the runtime guard. Both primary and independent exact-double evaluators must
 agree. The official boundary is [Patch 6.8.0 / Hotfix 6.8.1](https://forums.fatsharkgames.com/t/geheimnisnacht-and-the-skull-of-blosphoros-return-patch-6-8-0-hotfix-6-8-1/113884).
 
@@ -259,7 +259,7 @@ shared one-handed Hammer/Mace templates used by Kruber, Bardin, and Saltzpyre:
 |---|---|
 | Game version 6.10.0 | `5ff26df11311ba011f3313b9b232ed0d8b64b921` |
 | Post-boundary 6.11.0 | `abe82ab4ba3e00c22d912093b37234c59f8a00d9` |
-| Current content anchor (6.12.0) | `038498af2b565bcb10bf5ed225638293a7640c83` |
+| Current content anchor (6.12.1) | `25fd7b8433e839b678d1c98a7a9af80918cbc252` |
 
 The Longbow evidence selects the same exact scalar leaf on both evaluated
 templates: `actions.action_two.default.aim_zoom_delay`, from current/post
@@ -292,7 +292,7 @@ Attack 2 and Saltzpyre's Axe & Falchion Heavy Attacks 1 and 2:
 |---|---|
 | Game version 6.11.1 | `1a0a4e0caf5c119bfe8d42a4d1bc23b34a7b005e` |
 | Post-boundary 6.11.2 | `9fbf92c11acfaca5c49f5e40d565b0743a2bdf43` |
-| Current content anchor (6.12.0) | `038498af2b565bcb10bf5ed225638293a7640c83` |
+| Current content anchor (6.12.1) | `25fd7b8433e839b678d1c98a7a9af80918cbc252` |
 
 The Dagger evidence selects exactly one operation:
 `one_handed_daggers_template_1.actions.action_one.heavy_attack_right.damage_profile`,
@@ -403,8 +403,10 @@ Then run the non-mutating exact-output gate:
 ```
 
 `current_source_anchor.lua` is the single identity consumed by all thirteen
-generators and their PowerShell checks. It separates the semantic 6.12.0
-content commit from the later README-only default-branch tip. Ordinary QA runs
+generators and their PowerShell checks. Schema 2 records the semantic 6.12.1
+content commit as the observed default-branch tip with an empty metadata gap;
+the strict reader retains schema-1 support for historical direct-parent/
+README-only receipts. Ordinary QA runs
 `check_wt_history_source_freshness.ps1` opportunistically: an unreachable
 remote reports a visible skip while all pinned offline evidence remains
 blocking, but a reachable mismatched or malformed remote fails. Canonical
@@ -428,6 +430,10 @@ matrices do not repeat them. The probe never fetches or writes `FETCH_HEAD`.
 
 The Patch 5.2 gate verifies the pinned evidence extractor, generator, source catalog,
 independent oracle/spec/routes, evidence hashes, and generated public catalog.
+It also derives all 36 referenced source paths from the thirteen checked-in
+source catalogs/specifications and proves their Git blob identities are equal
+between the retired 6.12.0 and current 6.12.1 anchors, making the refresh a
+provenance-only transition.
 When the source checkout is present it rehydrates all nine evidence artifacts
 through both evaluators, requires byte-exact primary output and exact-double
 semantic agreement with the independent oracle, regenerates the route/blob

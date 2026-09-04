@@ -1,11 +1,11 @@
 # Weapon Tweaker Changelog
 
-## 0.12.329-beta (2026-09-01) -- source-exact Patch 6.11.0 one-handed Hammer/Mace history (#1436) [not-started]
+## 0.12.330-beta (2026-09-03) -- Patch 6.11.0 Hammer/Mace history and 6.12.1 provenance (#1436, #1529) [not-started]
 
 - Extends **One-handed Hammer/Mace (Kruber, Bardin, and Saltzpyre)** with
   **Game Version 6.10.0**. The historical state restores source-exact
   `block_angle = 90` and `dodge_count = 3` on all three shared templates;
-  **Current (Game Version 6.12.0)** remains the zero-write default at `120`
+  **Current (Game Version 6.12.1)** remains the zero-write default at `120`
   and `4`.
 - Treats all six leaves as one atomic family plan. A missing or foreign guard
   refuses the whole Hammer/Mace state before mutation, and returning to
@@ -14,6 +14,12 @@
   files. The expanded eight-route Patch 6.11.0 catalog reproduces byte-exactly
   through independent evaluators under PowerShell 7 and 5.1 and remains
   byte-identical with Dev.
+- Advances the canonical current-source anchor to exact Game Version 6.12.1
+  commit `25fd7b8433e839b678d1c98a7a9af80918cbc252` after proving that all 36
+  weapon-history input blobs are unchanged and none of the seven upstream
+  changed paths intersects them. Schema 2 records the same-commit anchor;
+  strict, case-sensitive schema-1 compatibility remains covered for old
+  release evidence.
 - #1436 remains open and outside the live-test queue because this is one
   bounded slice of the requested all-weapons history catalog.
 

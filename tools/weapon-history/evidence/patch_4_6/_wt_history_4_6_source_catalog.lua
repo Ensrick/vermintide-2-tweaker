@@ -8,12 +8,12 @@
 return {
     artifacts = {
         _wt_history_4_6_routes_oracle =
-            "52902d86ef11f1da7fcf1d10e25f36b1bcbdfe7881221ab863a28f0b75f2e179",
+            "0d7d484ec390af9b286577ac040d3e2cf280335a960a45ac0b950c053a9621b6",
         _wt_history_profiles_4_5_1_rehydrated_generated =
             "c3a0167e80e4980c660b203f0b9aebb62a4672f55ec122f4426f6d7339c2b377",
         _wt_history_profiles_4_5_1_to_4_6_generated =
             "c4fb71879225b85e4021b541206536134b1a943c2112a43c590025bea33973b0",
-        _wt_history_profiles_current_6_12_0_generated =
+        _wt_history_profiles_current_6_12_1_generated =
             "b37a67604422766c07a71c675c47d2f6ffeccd1710ca97d7320c50aaf723e3fb",
         _wt_history_profiles_post_4_6_generated =
             "877cb30430d9bb9ffc28903586b9b4d483502790e2c557624da32585864a2351",
@@ -27,7 +27,7 @@ return {
         post_revision = "b38754a3bd61983118215359845d5b4fe5005014",
     },
     current = {
-        revision = "038498af2b565bcb10bf5ed225638293a7640c83",
+        revision = "25fd7b8433e839b678d1c98a7a9af80918cbc252",
     },
     family = {
         display_name = "Kerillian's Hagbane Shortbow",

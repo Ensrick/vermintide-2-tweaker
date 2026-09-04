@@ -20,7 +20,7 @@ return {
         post_revision = "9fbf92c11acfaca5c49f5e40d565b0743a2bdf43",
     },
     current = {
-        revision = "038498af2b565bcb10bf5ed225638293a7640c83",
+        revision = "25fd7b8433e839b678d1c98a7a9af80918cbc252",
     },
     families = {
         {

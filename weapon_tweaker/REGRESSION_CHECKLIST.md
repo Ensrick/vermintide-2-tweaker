@@ -5,7 +5,7 @@
 | Field | Check |
 |---|---|
 | Candidate version | WT 0.12.328-beta / WT Dev 0.12.329-dev. |
-| Default | **Sienna's Dagger** and **Saltzpyre's Axe and Falchion** default to **Current (Game Version 6.12.0)** and perform zero gameplay writes. |
+| Default | **Sienna's Dagger** and **Saltzpyre's Axe and Falchion** default to **Current (Game Version 6.12.1)** and perform zero gameplay writes. |
 | Historical | Select **Game Version 6.11.1**. Dagger Heavy Attack 2 restores `dagger_h1_medium_smiter_diag`; Axe & Falchion Heavy Attacks 1 and 2 restore `axe_falcion_heavy_smiter_vertical_right` on the right-hand route only. |
 | Atomic refusal | A missing or foreign Axe & Falchion H1/H2 current guard refuses both family writes before mutation. |
 | Restore/isolation | Returning to Current restores all three exact native routes and original table identities. Dagger and Axe & Falchion selections remain independent. |
@@ -17,8 +17,8 @@
 
 | Field | Check |
 |---|---|
-| Candidate version | WT 0.12.329-beta / WT Dev 0.12.330-dev. |
-| Default | **Kruber's Longbow** and **One-handed Hammer/Mace (Kruber, Bardin, and Saltzpyre)** default to **Current (Game Version 6.12.0)** and perform zero gameplay writes. |
+| Candidate version | WT 0.12.330-beta / WT Dev 0.12.331-dev. |
+| Default | **Kruber's Longbow** and **One-handed Hammer/Mace (Kruber, Bardin, and Saltzpyre)** default to **Current (Game Version 6.12.1)** and perform zero gameplay writes. |
 | Historical | Select **Game Version 6.10.0**. Longbow restores source-exact `aim_zoom_delay = 2` on gameplay and tutorial templates. Hammer/Mace restores `block_angle = 90` and `dodge_count = 3` on all three shared templates. |
 | Atomic refusal | A missing or foreign Longbow guard refuses both Longbow writes. A missing or foreign Hammer/Mace guard refuses all six family writes before mutation. |
 | Restore/composition | Returning to Current restores Longbow `0.22`, Hammer/Mace `120`/`4`, and all original table identities. The two family selections remain independent and ordinary WT adapters compose afterward. |

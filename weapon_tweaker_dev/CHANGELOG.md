@@ -1,8 +1,8 @@
 # Weapon Tweaker Changelog
 
-## 0.12.330-dev (2026-09-01) -- mirror Patch 6.11.0 one-handed Hammer/Mace history (#1436) [not-started]
+## 0.12.331-dev (2026-09-03) -- mirror Hammer/Mace history and 6.12.1 provenance (#1436, #1529) [not-started]
 
-- Mirrors public beta `0.12.329`: **One-handed Hammer/Mace (Kruber, Bardin,
+- Mirrors public beta `0.12.330`: **One-handed Hammer/Mace (Kruber, Bardin,
   and Saltzpyre)** gains the source-exact **Game Version 6.10.0** state for
   `block_angle = 90` and `dodge_count = 3` across all three shared templates;
   Current remains inert at `120` and `4`.
@@ -10,6 +10,10 @@
   restore, independent source oracle, and dual-host reproduction as public.
 - Public and Dev carry byte-identical generated Patch 6.11.0 data. This state
   adds no profile, RPC, wire schema, global root, or asset.
+- Mirrors the public source-provenance advance to exact Game Version 6.12.1
+  commit `25fd7b8433e839b678d1c98a7a9af80918cbc252`. All 36 weapon-history
+  source blobs are unchanged, the seven upstream changed paths have zero
+  intersection, and strict schema-1 compatibility remains case-sensitive.
 - #1436 remains open and outside the live-test queue because this is one
   bounded slice of the requested all-weapons history catalog.
 

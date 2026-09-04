@@ -5,7 +5,7 @@
 -- objects and to decide which source-exact family/state rows are admissible.
 
 local revisions = {
-    current = "038498af2b565bcb10bf5ed225638293a7640c83",
+    current = "25fd7b8433e839b678d1c98a7a9af80918cbc252",
     ["5_1_1"] = "8224b4436e20905a6ba463cb28fa2d7771bb2330",
     ["5_2_0"] = "4f496970e2e7514bef7d612ab91331aa065d5e52",
     ["5_2_3"] = "cdc0a86e24e017119e6d6998870bf76f6e76e868",

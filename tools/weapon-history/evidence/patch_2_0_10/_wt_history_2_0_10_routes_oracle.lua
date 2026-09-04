@@ -1,6 +1,6 @@
 -- Regenerated from immutable decompiled-source Git objects; do not hand-edit.
 return {
-    current_revision = "038498af2b565bcb10bf5ed225638293a7640c83",
+    current_revision = "25fd7b8433e839b678d1c98a7a9af80918cbc252",
     oracle_id = "wt_patch_2_0_10_sword_and_dagger_source_oracle_v1",
     routes = {
         sword_and_dagger = {
@@ -50,7 +50,7 @@ return {
     },
     schema = 1,
     source_blobs = {
-        ["038498af2b565bcb10bf5ed225638293a7640c83"] = {
+        ["25fd7b8433e839b678d1c98a7a9af80918cbc252"] = {
             ["scripts/settings/equipment/damage_profile_templates.lua"] = "e8330328d0085f6aee09e0495ba88fdc0211d5aa",
             ["scripts/settings/equipment/power_level_templates.lua"] = "6eba753d985ea80057947ed1ae1a25214204783e",
             ["scripts/settings/equipment/weapon_templates/dual_wield_sword_dagger.lua"] = "62d57cc3537ef6c7f78a40a8988027f0b527c8d9",

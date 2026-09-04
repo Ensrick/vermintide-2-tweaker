@@ -2,18 +2,15 @@
 # Keep the data in the Lua module so generators and PowerShell gates consume
 # one identity. This reader accepts only that module's narrow literal grammar.
 
-function Read-WtHistorySourceAnchor {
+function ConvertFrom-WtHistorySourceAnchorLiteral {
     [CmdletBinding()]
-    param([Parameter(Mandatory)][string]$RepoRoot)
-
-    $path = Join-Path $RepoRoot 'tools\weapon-history\current_source_anchor.lua'
-    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
-        throw "Weapon-history source anchor not found: $path"
-    }
-    $text = [System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8)
+    param(
+        [Parameter(Mandatory)][string]$Text,
+        [string]$Path = '<literal>'
+    )
 
     function Read-OneLiteral([string]$Name, [string]$Pattern) {
-        $matches = [regex]::Matches($text, $Pattern)
+        $matches = [regex]::Matches($Text, $Pattern)
         if ($matches.Count -ne 1) {
             throw "Weapon-history source anchor must contain exactly one literal $Name."
         }
@@ -34,13 +31,36 @@ function Read-WtHistorySourceAnchor {
     $observedTip = Read-OneLiteral 'observed_default_tip' `
         '(?m)^\s*observed_default_tip\s*=\s*"([0-9a-f]{40})",\s*$'
     $relation = Read-OneLiteral 'observed_tip_content_relation' `
-        '(?m)^\s*observed_tip_content_relation\s*=\s*"(direct_parent)",\s*$'
-    $metadataPath = Read-OneLiteral 'observed_tip_metadata_paths' `
-        '(?m)^\s*observed_tip_metadata_paths\s*=\s*\{\s*"(README\.md)"\s*\},\s*$'
+        '(?m)^\s*observed_tip_content_relation\s*=\s*"(direct_parent|same_commit)",\s*$'
+    $metadataLiteral = Read-OneLiteral 'observed_tip_metadata_paths' `
+        '(?ms)^\s*observed_tip_metadata_paths\s*=\s*\{(.*?)\},\s*$'
 
-    if ($schema -ne '1') { throw "Unsupported weapon-history source anchor schema $schema." }
-    if ($contentRevision -ceq $observedTip) {
-        throw 'Weapon-history semantic revision and observed README-only tip must remain distinct.'
+    $metadataPaths = @()
+    switch ($schema) {
+        '1' {
+            if ($relation -cne 'direct_parent') {
+                throw 'Weapon-history schema 1 requires a direct_parent tip relation.'
+            }
+            if ($metadataLiteral -cnotmatch '^\s*"README\.md"\s*$') {
+                throw 'Weapon-history schema 1 requires the README.md metadata gap.'
+            }
+            if ($contentRevision -ceq $observedTip) {
+                throw 'Weapon-history schema 1 semantic revision and observed tip must remain distinct.'
+            }
+            $metadataPaths = @('README.md')
+        }
+        '2' {
+            if ($relation -cne 'same_commit') {
+                throw 'Weapon-history schema 2 requires a same_commit tip relation.'
+            }
+            if (-not [string]::IsNullOrWhiteSpace($metadataLiteral)) {
+                throw 'Weapon-history schema 2 requires an empty metadata gap.'
+            }
+            if ($contentRevision -cne $observedTip) {
+                throw 'Weapon-history schema 2 semantic revision must equal the observed tip.'
+            }
+        }
+        default { throw "Unsupported weapon-history source anchor schema $schema." }
     }
     try {
         $null = [DateTime]::ParseExact($observedAt, 'yyyy-MM-ddTHH:mm:ssZ',
@@ -50,7 +70,7 @@ function Read-WtHistorySourceAnchor {
     catch { throw "Invalid weapon-history anchor observation time: $observedAt" }
 
     return [pscustomobject]@{
-        Path = $path
+        Path = $Path
         Schema = [int]$schema
         CanonicalUrl = $canonicalUrl
         ContentRevision = $contentRevision
@@ -59,8 +79,20 @@ function Read-WtHistorySourceAnchor {
         ObservedAtUtc = $observedAt
         ObservedDefaultTip = $observedTip
         ObservedTipContentRelation = $relation
-        ObservedTipMetadataPaths = @($metadataPath)
+        ObservedTipMetadataPaths = @($metadataPaths)
     }
+}
+
+function Read-WtHistorySourceAnchor {
+    [CmdletBinding()]
+    param([Parameter(Mandatory)][string]$RepoRoot)
+
+    $path = Join-Path $RepoRoot 'tools\weapon-history\current_source_anchor.lua'
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        throw "Weapon-history source anchor not found: $path"
+    }
+    $text = [System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8)
+    return ConvertFrom-WtHistorySourceAnchorLiteral -Text $text -Path $path
 }
 
 function Invoke-WtHistoryReadOnlyGit {
