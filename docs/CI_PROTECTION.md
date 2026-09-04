@@ -20,7 +20,16 @@ required PR status. It is a `pull_request_target` workflow loaded from protected
 `master`, checks out only that base revision, and uses read-only metadata access.
 It never executes incoming PR code. Ordinary PRs pass it without a grant; stable
 promotion PRs must satisfy the version- and SHA-bound maintainer process in
-`docs/PROMOTION_PROCESS.md`.
+`docs/PROMOTION_PROCESS.md`. A successful grant exports exact authorized
+`directory@version` records plus an explicit (possibly empty) suffixed subset.
+The validation step reconciles those records with the checked tree immediately
+before each directory's gate and sets `VT2_SUFFIX_OK` only for that one exact
+suffixed pair. Missing, duplicate, stale, foreign, or clean-version records and
+ambient overrides fail closed. Missing and present-empty suffix records are
+distinct: only a proven-present empty record represents an authorized all-clean
+set. Authorization and the gate share one Lua-aware canonical `MOD_VERSION`
+reader, which ignores comments and strings, requires exactly one top-level local
+assignment, rejects reassignment/ambiguity, and preserves the full suffix.
 
 `PR auto-close authorization / pr-autoclose-authorization` is the third
 required PR status. It also runs protected default-branch code under

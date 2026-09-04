@@ -17,7 +17,8 @@ function Test-CiContract {
         [string]$TrustedWorkflow,
         [string]$AutoCloseAuthWorkflow,
         [string]$AutoCloseAuditWorkflow,
-        [string]$ProtectionTool
+        [string]$ProtectionTool,
+        [string]$PromotionAuthorizationTool
     )
     $errors = @()
 
@@ -69,8 +70,26 @@ function Test-CiContract {
     if ($Workflow -notmatch 'check_promotion_authorization\.ps1\s+-WriteGitHubEnv' -or
             $Workflow -notmatch "if:\s*github\.event_name\s*==\s*'pull_request'" -or
             $Workflow -notmatch 'if:\s*env\.VT2_PROMOTION\s*==\s*''1''' -or
-            $Workflow -notmatch 'check_promotion\.ps1\s+-Mod\s+\$dir') {
-        $errors += "stable promotion PRs must pass trusted authorization and exact per-dir promotion QA"
+            $Workflow -notmatch 'git diff --name-only\s+"origin/\$\{\{\s*github\.base_ref\s*\}\}\.\.\.HEAD"') {
+        $errors += "stable promotion PRs must pass trusted authorization and resolve the exact checked-tree change set"
+    }
+    $checkedValidationRefs = [regex]::Matches(
+        $Workflow,
+        'check_promotion_authorization\.ps1\s+-ValidateAuthorizedEnvironment\s+-ChangedPath\s+\$changed'
+    )
+    if ($checkedValidationRefs.Count -ne 1 -or
+            $Workflow -match '\$env:VT2_SUFFIX_OK' -or
+            $Workflow -match 'VT2_PROMOTION_SUFFIX_AUTHORIZED(?:\s|=)') {
+        $errors += "suffixed stable promotion permission must use one exact checked-tree per-directory validator with no workflow-wide override"
+    }
+    if ($PromotionAuthorizationTool -notmatch '\[switch\]\$ValidateAuthorizedEnvironment' -or
+            $PromotionAuthorizationTool -notmatch 'VT2_PROMOTION_AUTHORIZED_REQUESTS=\$\(\$pairs -join ''\;''\)' -or
+            $PromotionAuthorizationTool -notmatch 'VT2_PROMOTION_SUFFIX_AUTHORIZED_REQUESTS=\$\(\$suffixPairs -join ''\;''\)' -or
+            $PromotionAuthorizationTool -notmatch 'Get-StablePromotionRequests -Paths @\("\$dir/__authorized_validation__"\)' -or
+            $PromotionAuthorizationTool -notmatch '\$env:VT2_SUFFIX_OK = if \(\$suffixAuthorized\.ContainsKey\(\$dir\)\) \{ ''1'' \} else \{ '''' \}' -or
+            $PromotionAuthorizationTool -notmatch '& \$InvokeGate \$dir \$Paths' -or
+            $PromotionAuthorizationTool -notmatch '(?s)finally\s*\{\s*\$env:VT2_SUFFIX_OK = ''''\s*\}') {
+        $errors += "promotion authorization tool must emit exact and empty-safe records, re-read each checked-tree version, and isolate suffix permission per gate"
     }
     if ($Workflow -notmatch 'check_pr_autoclose\.ps1') {
         $errors += "ordinary pull-request QA must run the auto-close keyword guard"
@@ -158,6 +177,55 @@ function Test-CiContract {
     }
     if ($ProtectionTool -notmatch 'pr-autoclose-authorization') {
         $errors += "branch protection must require the base-owned PR auto-close authorization status"
+    }
+    return $errors
+}
+
+function Test-PromotionVersionAuthorityContract {
+    param(
+        [string]$PromotionAuthorizationTool,
+        [string]$PromotionGateTool,
+        [string]$VersionReaderTool
+    )
+
+    $errors = @()
+    $sharedImport = "Join-Path `$PSScriptRoot 'promotion_version_reader.ps1'"
+    if ($PromotionAuthorizationTool -notmatch [regex]::Escape($sharedImport) -or
+            $PromotionGateTool -notmatch [regex]::Escape($sharedImport)) {
+        $errors += 'authorization and promotion gate must dot-source the same canonical MOD_VERSION reader'
+    }
+    if ($PromotionAuthorizationTool -notmatch 'Get-CanonicalPromotionModVersion -Text \$text -SourceLabel \$relativeMain' -or
+            $PromotionGateTool -notmatch 'Get-CanonicalPromotionModVersion -Text \$luaTxt -SourceLabel \$luaPath') {
+        $errors += 'authorization and promotion gate must both consume the shared source-qualified MOD_VERSION result'
+    }
+    if ($PromotionAuthorizationTool -notmatch "Test-Path -LiteralPath 'Env:VT2_PROMOTION_SUFFIX_AUTHORIZED_REQUESTS'" -or
+            $PromotionAuthorizationTool -notmatch '-AuthorizedSuffixRequestsPresent \$authorizedSuffixRequestsPresent' -or
+            $PromotionAuthorizationTool -notmatch 'if \(-not \$AuthorizedSuffixRequestsPresent\)') {
+        $errors += 'suffix authorization must distinguish a missing environment record from an explicitly present empty record'
+    }
+    if ($PromotionGateTool -notmatch '\$modVersion -cne \$topVersion' -or
+            $PromotionGateTool -notmatch "Groups\['version'\]\.Value") {
+        $errors += 'promotion gate must compare the exact full canonical MOD_VERSION with the exact full top CHANGELOG version'
+    }
+    if ($VersionReaderTool -notmatch 'function Get-PromotionLuaTokens' -or
+            $VersionReaderTool -notmatch 'function Test-PromotionLuaLabelEndingAt' -or
+            $VersionReaderTool -notmatch 'function Test-PromotionLuaMemberIdentifier' -or
+            $VersionReaderTool -notmatch 'function Test-PromotionLuaPotentialAssignmentLhs' -or
+            $VersionReaderTool -notmatch 'function Test-PromotionLuaNamedBinding' -or
+            $VersionReaderTool -notmatch 'function Test-PromotionLuaFunctionParameterBinding' -or
+            $VersionReaderTool -notmatch 'function Test-PromotionLuaAssignmentTail' -or
+            $VersionReaderTool -notmatch 'function Get-CanonicalPromotionModVersion' -or
+            $VersionReaderTool -notmatch 'Lua comments: -- line comments' -or
+            $VersionReaderTool -notmatch 'Long-bracket strings are data' -or
+            $VersionReaderTool -notmatch '\$directAssignments\.Count -ne 1' -or
+            $VersionReaderTool -notmatch '\$isMember = Test-PromotionLuaMemberIdentifier' -or
+            $VersionReaderTool -notmatch 'Test-PromotionLuaAssignmentTail -Tokens \$tokens -VersionIndex \$i' -or
+            $VersionReaderTool -notmatch '\$isFunctionBinding' -or
+            $VersionReaderTool -notmatch '\$isNamedBinding' -or
+            $VersionReaderTool -notmatch '\$isParameterBinding' -or
+            $VersionReaderTool -match '\$isTableField' -or
+            $VersionReaderTool -notmatch '\$blockDepth -eq 0') {
+        $errors += 'canonical MOD_VERSION reader must lexically exclude comments/strings and fail closed on non-top-level reassignment or ambiguity'
     }
     return $errors
 }
@@ -677,7 +745,9 @@ jobs:
         run: ./qa/check_promotion_authorization.ps1 -WriteGitHubEnv
       - if: env.VT2_PROMOTION == '1'
         shell: pwsh
-        run: ./qa/check_promotion.ps1 -Mod $dir
+        run: |
+          $changed = @(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
+          ./qa/check_promotion_authorization.ps1 -ValidateAuthorizedEnvironment -ChangedPath $changed
       - shell: powershell
         run: ./qa/check_promotion.ps1 -SelfTest
       - shell: powershell
@@ -744,8 +814,109 @@ jobs:
 '@
     $goodTool = 'enforce_admins = $true; allow_force_pushes = $false; allow_deletions = $false; Test-GreenConclusion; Refusing branch protection while latest QA'
     $goodTool += '; stable-promotion-authorization; pr-autoclose-authorization'
-    $good = @(Test-CiContract $goodWorkflow $goodTrustedWorkflow $goodAutoCloseAuthWorkflow $goodAutoCloseAuditWorkflow $goodTool)
+    $goodPromotionAuthorizationTool = @'
+param([switch]$ValidateAuthorizedEnvironment)
+. (Join-Path $PSScriptRoot 'promotion_version_reader.ps1')
+"VT2_PROMOTION_AUTHORIZED_REQUESTS=$($pairs -join ';')"
+"VT2_PROMOTION_SUFFIX_AUTHORIZED_REQUESTS=$($suffixPairs -join ';')"
+$version = Get-CanonicalPromotionModVersion -Text $text -SourceLabel $relativeMain
+$current = @(Get-StablePromotionRequests -Paths @("$dir/__authorized_validation__") -Root $Root)
+$authorizedSuffixRequestsPresent = Test-Path -LiteralPath 'Env:VT2_PROMOTION_SUFFIX_AUTHORIZED_REQUESTS'
+if (-not $AuthorizedSuffixRequestsPresent) { throw 'missing' }
+Invoke-AuthorizedPromotionValidation -AuthorizedSuffixRequestsPresent $authorizedSuffixRequestsPresent
+$env:VT2_SUFFIX_OK = if ($suffixAuthorized.ContainsKey($dir)) { '1' } else { '' }
+try { $code = & $InvokeGate $dir $Paths } finally { $env:VT2_SUFFIX_OK = '' }
+'@
+    $goodPromotionGateTool = @'
+. (Join-Path $PSScriptRoot 'promotion_version_reader.ps1')
+$modVersion = Get-CanonicalPromotionModVersion -Text $luaTxt -SourceLabel $luaPath
+$topVersion = $hdrs[0].Groups['version'].Value
+if ($modVersion -cne $topVersion) { throw 'mismatch' }
+'@
+    $goodVersionReaderTool = @'
+function Get-PromotionLuaTokens {}
+function Test-PromotionLuaLabelEndingAt {}
+function Test-PromotionLuaMemberIdentifier {}
+function Test-PromotionLuaPotentialAssignmentLhs {}
+function Test-PromotionLuaNamedBinding {}
+function Test-PromotionLuaFunctionParameterBinding {}
+function Test-PromotionLuaAssignmentTail {}
+function Get-CanonicalPromotionModVersion {}
+# Lua comments: -- line comments
+# Long-bracket strings are data
+if ($directAssignments.Count -ne 1) { throw 'reassigned' }
+$isMember = Test-PromotionLuaMemberIdentifier -Tokens $tokens -IdentifierIndex $i
+if (Test-PromotionLuaAssignmentTail -Tokens $tokens -VersionIndex $i) { throw 'list assignment' }
+$isFunctionBinding = $true
+$isNamedBinding = $true
+$isParameterBinding = $true
+if ($blockDepth -eq 0) { return $version }
+'@
+    $good = @(Test-CiContract $goodWorkflow $goodTrustedWorkflow $goodAutoCloseAuthWorkflow $goodAutoCloseAuditWorkflow $goodTool $goodPromotionAuthorizationTool)
     if ($good.Count -ne 0) { throw ("valid CI contract was rejected: " + ($good -join '; ')) }
+    $goodVersionAuthority = @(Test-PromotionVersionAuthorityContract $goodPromotionAuthorizationTool $goodPromotionGateTool $goodVersionReaderTool)
+    if ($goodVersionAuthority.Count -ne 0) { throw ("valid promotion-version authority contract was rejected: " + ($goodVersionAuthority -join '; ')) }
+
+    $splitReaderGate = $goodPromotionGateTool -replace 'Get-CanonicalPromotionModVersion -Text \$luaTxt -SourceLabel \$luaPath', '[regex]::Match($luaTxt, ''local MOD_VERSION'').Value'
+    if (-not (@(Test-PromotionVersionAuthorityContract $goodPromotionAuthorizationTool $splitReaderGate $goodVersionReaderTool) -match 'both consume')) {
+        throw 'split authorization/gate MOD_VERSION reader was not detected'
+    }
+    $missingPresenceProof = $goodPromotionAuthorizationTool -replace "Test-Path -LiteralPath 'Env:VT2_PROMOTION_SUFFIX_AUTHORIZED_REQUESTS'", '$authorizedSuffixRequestsPresent = $true'
+    if (-not (@(Test-PromotionVersionAuthorityContract $missingPresenceProof $goodPromotionGateTool $goodVersionReaderTool) -match 'missing environment record')) {
+        throw 'missing-vs-empty suffix record collapse was not detected'
+    }
+    $baseOnlyChangelog = $goodPromotionGateTool -replace '\$modVersion -cne \$topVersion', '$verBase -ne $topBase'
+    if (-not (@(Test-PromotionVersionAuthorityContract $goodPromotionAuthorizationTool $baseOnlyChangelog $goodVersionReaderTool) -match 'exact full')) {
+        throw 'numeric-base-only CHANGELOG comparison was not detected'
+    }
+    $ambiguousReader = $goodVersionReaderTool -replace '\$directAssignments\.Count -ne 1', '$directAssignments.Count -lt 1'
+    if (-not (@(Test-PromotionVersionAuthorityContract $goodPromotionAuthorizationTool $goodPromotionGateTool $ambiguousReader) -match 'fail closed')) {
+        throw 'ambiguous/reassigned MOD_VERSION reader was not detected'
+    }
+    $labelBlindReader = $goodVersionReaderTool -replace 'function Test-PromotionLuaLabelEndingAt \{\}', ''
+    if (-not (@(Test-PromotionVersionAuthorityContract $goodPromotionAuthorizationTool $goodPromotionGateTool $labelBlindReader) -match 'fail closed')) {
+        throw 'missing Lua statement-label boundary was not detected'
+    }
+    $memberBlindReader = $goodVersionReaderTool -replace '\$isMember = Test-PromotionLuaMemberIdentifier -Tokens \$tokens -IdentifierIndex \$i', '$isMember = $true'
+    if (-not (@(Test-PromotionVersionAuthorityContract $goodPromotionAuthorizationTool $goodPromotionGateTool $memberBlindReader) -match 'fail closed')) {
+        throw 'unqualified member-filter regression was not detected'
+    }
+
+    $badSuffixWorkflow = $goodWorkflow -replace '\./qa/check_promotion_authorization\.ps1 -ValidateAuthorizedEnvironment -ChangedPath \$changed', "`$env:VT2_SUFFIX_OK = '1'; ./qa/check_promotion.ps1 -Mod `$dir"
+    $badSuffix = @(Test-CiContract $badSuffixWorkflow $goodTrustedWorkflow $goodAutoCloseAuthWorkflow $goodAutoCloseAuditWorkflow $goodTool $goodPromotionAuthorizationTool)
+    if (-not ($badSuffix -match 'per-directory validator')) {
+        throw "workflow-wide stable suffix override was not detected"
+    }
+
+    $duplicateSuffixValidator = $goodWorkflow -replace '(\./qa/check_promotion_authorization\.ps1 -ValidateAuthorizedEnvironment -ChangedPath \$changed)', '$1; $1'
+    $duplicateSuffixErrors = @(Test-CiContract $duplicateSuffixValidator $goodTrustedWorkflow $goodAutoCloseAuthWorkflow $goodAutoCloseAuditWorkflow $goodTool $goodPromotionAuthorizationTool)
+    if (-not ($duplicateSuffixErrors -match 'per-directory validator')) {
+        throw "duplicate checked-tree suffix validators were not detected"
+    }
+
+    $missingChangedPath = $goodWorkflow -replace ' -ChangedPath \$changed', ''
+    $missingChangedErrors = @(Test-CiContract $missingChangedPath $goodTrustedWorkflow $goodAutoCloseAuthWorkflow $goodAutoCloseAuditWorkflow $goodTool $goodPromotionAuthorizationTool)
+    if (-not ($missingChangedErrors -match 'per-directory validator')) {
+        throw "checked-tree validator without the exact changed paths was not detected"
+    }
+
+    $badPromotionTool = $goodPromotionAuthorizationTool -replace '\$env:VT2_SUFFIX_OK = if \(\$suffixAuthorized\.ContainsKey\(\$dir\)\) \{ ''1'' \} else \{ '''' \}', "`$env:VT2_SUFFIX_OK = '1'"
+    $badPromotionToolErrors = @(Test-CiContract $goodWorkflow $goodTrustedWorkflow $goodAutoCloseAuthWorkflow $goodAutoCloseAuditWorkflow $goodTool $badPromotionTool)
+    if (-not ($badPromotionToolErrors -match 'isolate suffix permission')) {
+        throw "authorization tool's workflow-wide suffix capability was not detected"
+    }
+
+    $staleTreeTool = $goodPromotionAuthorizationTool -replace 'Get-StablePromotionRequests -Paths @\("\$dir/__authorized_validation__"\)', 'Get-StablePromotionRequests -Paths $Paths'
+    $staleTreeErrors = @(Test-CiContract $goodWorkflow $goodTrustedWorkflow $goodAutoCloseAuthWorkflow $goodAutoCloseAuditWorkflow $goodTool $staleTreeTool)
+    if (-not ($staleTreeErrors -match 're-read each checked-tree version')) {
+        throw "authorization tool without immediate per-directory tree revalidation was not detected"
+    }
+
+    $missingEmptyRecordTool = $goodPromotionAuthorizationTool -replace '"VT2_PROMOTION_SUFFIX_AUTHORIZED_REQUESTS=\$\(\$suffixPairs -join ''\;''\)"', ''
+    $missingEmptyRecordErrors = @(Test-CiContract $goodWorkflow $goodTrustedWorkflow $goodAutoCloseAuthWorkflow $goodAutoCloseAuditWorkflow $goodTool $missingEmptyRecordTool)
+    if (-not ($missingEmptyRecordErrors -match 'empty-safe records')) {
+        throw "authorization tool without explicit suffix record emission was not detected"
+    }
 
     $goodIssueLifecycleWorkflow = @'
 permissions:
@@ -797,7 +968,7 @@ jobs:
     $badTrustedWorkflow = $goodTrustedWorkflow -replace 'repository\.default_branch', 'pull_request.head.sha'
     $badAutoCloseAuthWorkflow = $goodAutoCloseAuthWorkflow -replace 'repository\.default_branch', 'pull_request.head.sha'
     $badAutoCloseAuditWorkflow = $goodAutoCloseAuditWorkflow -replace 'repository\.default_branch', 'pull_request.head.sha'
-    $bad = @(Test-CiContract $badWorkflow $badTrustedWorkflow $badAutoCloseAuthWorkflow $badAutoCloseAuditWorkflow $badTool)
+    $bad = @(Test-CiContract $badWorkflow $badTrustedWorkflow $badAutoCloseAuthWorkflow $badAutoCloseAuditWorkflow $badTool $goodPromotionAuthorizationTool)
     if ($bad.Count -lt 4) { throw "planted CI/protection failures were not detected" }
     if (-not ($bad -match 'immutable')) { throw "mutable action pin was not detected" }
     if (-not ($bad -match 'path filters')) { throw "fragile push path filter was not detected" }
@@ -1035,9 +1206,14 @@ $autoCloseAuthWorkflowPath = Join-Path $root '.github\workflows\pr-autoclose-aut
 $autoCloseAuditWorkflowPath = Join-Path $root '.github\workflows\pr-autoclose-audit.yml'
 $issueLifecycleWorkflowPath = Join-Path $root '.github\workflows\issue-lifecycle.yml'
 $protectionPath = Join-Path $root 'tools\github\protect-master.ps1'
+$promotionAuthorizationPath = Join-Path $root 'qa\check_promotion_authorization.ps1'
+$promotionGatePath = Join-Path $root 'qa\check_promotion.ps1'
+$promotionVersionReaderPath = Join-Path $root 'qa\promotion_version_reader.ps1'
 if (-not (Test-Path $workflowPath) -or -not (Test-Path $trustedWorkflowPath) -or
         -not (Test-Path $autoCloseAuthWorkflowPath) -or -not (Test-Path $autoCloseAuditWorkflowPath) -or
-        -not (Test-Path $issueLifecycleWorkflowPath) -or -not (Test-Path $protectionPath)) {
+        -not (Test-Path $issueLifecycleWorkflowPath) -or -not (Test-Path $protectionPath) -or
+        -not (Test-Path $promotionAuthorizationPath) -or -not (Test-Path $promotionGatePath) -or
+        -not (Test-Path $promotionVersionReaderPath)) {
     Write-Host "[check_ci_hardening] ERROR - QA/trusted/lifecycle workflows or protection tool missing." -ForegroundColor Red
     exit 2
 }
@@ -1048,7 +1224,11 @@ $autoCloseAuthWorkflow = [System.IO.File]::ReadAllText($autoCloseAuthWorkflowPat
 $autoCloseAuditWorkflow = [System.IO.File]::ReadAllText($autoCloseAuditWorkflowPath, [System.Text.Encoding]::UTF8)
 $issueLifecycleWorkflow = [System.IO.File]::ReadAllText($issueLifecycleWorkflowPath, [System.Text.Encoding]::UTF8)
 $protection = [System.IO.File]::ReadAllText($protectionPath, [System.Text.Encoding]::UTF8)
-$errors = @(Test-CiContract $workflow $trustedWorkflow $autoCloseAuthWorkflow $autoCloseAuditWorkflow $protection)
+$promotionAuthorization = [System.IO.File]::ReadAllText($promotionAuthorizationPath, [System.Text.Encoding]::UTF8)
+$promotionGate = [System.IO.File]::ReadAllText($promotionGatePath, [System.Text.Encoding]::UTF8)
+$promotionVersionReader = [System.IO.File]::ReadAllText($promotionVersionReaderPath, [System.Text.Encoding]::UTF8)
+$errors = @(Test-CiContract $workflow $trustedWorkflow $autoCloseAuthWorkflow $autoCloseAuditWorkflow $protection $promotionAuthorization)
+$errors += @(Test-PromotionVersionAuthorityContract $promotionAuthorization $promotionGate $promotionVersionReader)
 $errors += @(Test-IssueLifecycleCheckoutContract $issueLifecycleWorkflow)
 if ($errors.Count -gt 0) {
     Write-Host "[check_ci_hardening] ERRORS:" -ForegroundColor Red
