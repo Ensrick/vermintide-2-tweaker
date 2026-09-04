@@ -156,14 +156,29 @@ public static class VtLiveCardLuaLexerV2 {
         string suffix=signature.Substring(close+1).TrimStart();
         return suffix.StartsWith("v%s loaded",StringComparison.Ordinal)?tag:null;
     }
+    private static bool ValidCommandName(string name) {
+        bool valid=!String.IsNullOrEmpty(name)&&Char.IsLetter(name[0])&&Char.IsLower(name[0]);
+        for(int i=1;valid&&i<name.Length;i++){char c=name[i];valid=(c>='a'&&c<='z')||(c>='0'&&c<='9')||c=='_'||c==':'||c=='-';}
+        return valid;
+    }
+    private static bool TryCommandCall(VtLiveCardLuaTokenV2[] a, int at, out int open, out int close, out int name) {
+        open=-1;close=-1;name=-1;
+        if(T(a,at,"mod","Identifier")&&T(a,at+1,":")&&T(a,at+2,"command","Identifier")&&T(a,at+3,"(")&&T(a,at+4,null,"String")&&T(a,at+5,",")) {
+            open=at+3;name=at+4;
+        } else if(!T(a,at-1,".")&&!T(a,at-1,":")&&T(a,at,"pcall","Identifier")&&T(a,at+1,"(")&&
+            T(a,at+2,"mod","Identifier")&&T(a,at+3,".")&&T(a,at+4,"command","Identifier")&&T(a,at+5,",")&&
+            T(a,at+6,"mod","Identifier")&&T(a,at+7,",")&&T(a,at+8,null,"String")&&T(a,at+9,",")) {
+            open=at+1;name=at+8;
+        } else return false;
+        close=MatchClose(a,open);return close>=0;
+    }
     public static VtLiveCardLuaRouteV2[] ScanDirect(VtLiveCardLuaTokenV2[] a) {
         var routes=new List<VtLiveCardLuaRouteV2>();if(a==null)return routes.ToArray();
         bool raw=RawPrintfUnshadowed(a);
         for(int i=0;i<a.Length;i++) {
-            if(i+4<a.Length&&T(a,i,"mod","Identifier")&&T(a,i+1,":")&&T(a,i+2,"command","Identifier")&&T(a,i+3,"(")&&T(a,i+4,null,"String")) {
-                string name=a[i+4].Value;bool valid=!String.IsNullOrEmpty(name)&&Char.IsLetter(name[0])&&Char.IsLower(name[0]);
-                for(int j=1;valid&&j<name.Length;j++){char c=name[j];valid=(c>='a'&&c<='z')||(c>='0'&&c<='9')||c=='_'||c==':'||c=='-';}
-                if(valid)routes.Add(new VtLiveCardLuaRouteV2 { RouteKind="command",Command="/"+name,Line=a[i].Line,TokenIndex=i });
+            int commandOpen,commandClose,commandName;
+            if(TryCommandCall(a,i,out commandOpen,out commandClose,out commandName)&&ValidCommandName(a[commandName].Value)) {
+                routes.Add(new VtLiveCardLuaRouteV2 { RouteKind="command",Command="/"+a[commandName].Value,Line=a[i].Line,TokenIndex=i });
             }
             if(raw&&i+2<a.Length&&Standalone(a,i)&&T(a,i+1,"(")&&T(a,i+2,null,"String"))AddReceipt(routes,a,i,i+2,"printf");
             else if(raw&&i+4<a.Length&&T(a,i,"pcall","Identifier")&&T(a,i+1,"(")&&T(a,i+2,"printf","Identifier")&&T(a,i+3,",")&&T(a,i+4,null,"String"))AddReceipt(routes,a,i,i+4,"pcall-printf");
@@ -246,17 +261,17 @@ public static class VtLiveCardLuaLexerV2 {
     public static VtLiveCardLuaSpanV2[] ScanCommandCallbacks(VtLiveCardLuaTokenV2[] a, VtLiveCardLuaSpanV2[] functions) {
         var spans=new List<VtLiveCardLuaSpanV2>();if(a==null||functions==null)return spans.ToArray();
         for(int i=0;i+4<a.Length;i++) {
-            if(!(T(a,i,"mod","Identifier")&&T(a,i+1,":")&&T(a,i+2,"command","Identifier")&&T(a,i+3,"(")&&T(a,i+4,null,"String")))continue;
-            int close=MatchClose(a,i+3);if(close<0)continue;
-            int depth=0,lastStart=i+4;
-            for(int j=i+4;j<close;j++) {
+            int open,close,name;
+            if(!TryCommandCall(a,i,out open,out close,out name)||!ValidCommandName(a[name].Value))continue;
+            int depth=0,lastStart=open+1;
+            for(int j=open+1;j<close;j++) {
                 string text=a[j].Text;
                 if(text=="("||text=="{"||text=="[")depth++;
                 else if(text==")"||text=="}"||text=="]")depth--;
                 else if(text==","&&depth==0)lastStart=j+1;
             }
             for(int j=0;j<functions.Length;j++)if(functions[j].Start==lastStart&&functions[j].End==close-1) {
-                spans.Add(new VtLiveCardLuaSpanV2 { Kind="command",Start=functions[j].Start,End=functions[j].End,Command="/"+a[i+4].Value,CommandTokenIndex=i });break;
+                spans.Add(new VtLiveCardLuaSpanV2 { Kind="command",Start=functions[j].Start,End=functions[j].End,Command="/"+a[name].Value,CommandTokenIndex=i });break;
             }
             i=close;
         }
@@ -658,7 +673,7 @@ function Get-VtDeployedLuaDocuments {
             # all-mod census bounded without trusting the working tree.
             $candidate=$requiredSet.Contains($path) -or
                 $path -match '(?i)_(?:data|localization)\.lua$' -or
-                $content -match '(?i)MOD_VERSION|printf|\bmod\s*:|deps\.|dofile|v%s\s+loaded|\b(?:getfenv|setfenv|rawset)\b'
+                $content -match '(?i)MOD_VERSION|printf|\bmod\s*(?::|\.\s*command\b)|deps\.|dofile|v%s\s+loaded|\b(?:getfenv|setfenv|rawset)\b'
             if(-not$candidate){continue}
             $documents.Add([pscustomobject][ordered]@{
                 RelativePath=$path;Content=$content;Tokens=@(Get-VtLuaTokens -Content $content)
@@ -1618,7 +1633,7 @@ function Get-VtCardSourceAuthority {
         $loadRoutes=New-Object System.Collections.Generic.List[object]
         $bannerRoutes=New-Object System.Collections.Generic.List[object]
         foreach($document in $reachableDocuments){
-            if([string]$document.Content -notmatch '(?i)\bprintf\b|\bmod\s*:\s*(?:command|info|echo|warning|error)\b|v%s\s+loaded'){continue}
+            if([string]$document.Content -notmatch '(?i)\bprintf\b|\bmod\s*(?::\s*(?:command|info|echo|warning|error)|\.\s*command)\b|v%s\s+loaded'){continue}
             $scan=Get-VtDirectLuaCallRoutes -Document $document
             foreach($x in @($scan.CommandRoutes)){$commandRoutes.Add($x)}
             foreach($x in @($scan.ReceiptRoutes)){$receiptRoutes.Add($x)}
