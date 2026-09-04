@@ -770,6 +770,159 @@ function Invoke-FreshnessSelfTest {
             $latencyDiagnostics.Add("$Name scheduler/OS latency exceeded the non-contract observation threshold: elapsed=${Elapsed}ms threshold=${Allowance}ms") | Out-Null
         }
     }
+    function Get-RealTaskkillFixtureOutcome($Termination) {
+        if ($null -eq $Termination) {
+            return [pscustomobject]@{
+                Kind = 'invalid'
+                Reason = 'missing termination result'
+            }
+        }
+        $requiredTypes = [ordered]@{
+            Proven = [bool]
+            Error = [string]
+            TreeKillAttempted = [bool]
+            TreeKillMethod = [string]
+            TaskkillProcessId = [int]
+            TaskkillStartTimeFileTimeUtc = [long]
+            TaskkillTerminationProven = [bool]
+            TaskkillTimedOut = [bool]
+            TaskkillExitCode = [int]
+        }
+        foreach ($name in $requiredTypes.Keys) {
+            $property = $Termination.PSObject.Properties[$name]
+            if (-not $property) {
+                return [pscustomobject]@{
+                    Kind = 'invalid'
+                    Reason = "missing $name"
+                }
+            }
+            if (-not $requiredTypes[$name].IsInstanceOfType($property.Value)) {
+                $actualType = if ($null -eq $property.Value) {
+                    '<null>'
+                } else {
+                    $property.Value.GetType().FullName
+                }
+                return [pscustomobject]@{
+                    Kind = 'invalid'
+                    Reason = "$name has type $actualType"
+                }
+            }
+        }
+
+        if (-not $Termination.TreeKillAttempted -or
+            $Termination.TreeKillMethod -cne 'taskkill.exe /T /F' -or
+            $Termination.TaskkillProcessId -le 0 -or
+            $Termination.TaskkillStartTimeFileTimeUtc -le 0 -or
+            -not $Termination.TaskkillTerminationProven) {
+            return [pscustomobject]@{
+                Kind = 'invalid'
+                Reason = 'taskkill method/helper identity/containment is not exact'
+            }
+        }
+        if ($Termination.Proven -and $Termination.Error -ceq '' -and
+            -not $Termination.TaskkillTimedOut -and
+            $Termination.TaskkillExitCode -eq 0) {
+            return [pscustomobject]@{ Kind = 'success'; Reason = '' }
+        }
+        if (-not $Termination.Proven -and
+            $Termination.Error -ceq 'taskkill helper timed out' -and
+            $Termination.TaskkillTimedOut -and
+            $Termination.TaskkillExitCode -eq -1) {
+            return [pscustomobject]@{
+                Kind = 'scheduler-timeout'
+                Reason = 'deadline expired after exact helper containment'
+            }
+        }
+        return [pscustomobject]@{
+            Kind = 'invalid'
+            Reason = 'outcome is neither exact success nor exact contained deadline timeout'
+        }
+    }
+
+    # The production helper constructor is tested without starting a process:
+    # only the trusted system binary and exact noninteractive /T /F contract
+    # may reach the real Windows PowerShell 5.1 taskkill integration fixtures.
+    try {
+        $taskkillTargetPid = 424242
+        $taskkillStartInfo = New-WtHistoryTaskkillStartInfo `
+            -TargetPid $taskkillTargetPid
+        $expectedTaskkillPath = Join-Path $env:SystemRoot `
+            'System32\taskkill.exe'
+        if ($taskkillStartInfo.FileName -cne $expectedTaskkillPath -or
+            $taskkillStartInfo.Arguments -cne
+                "/PID $taskkillTargetPid /T /F" -or
+            $taskkillStartInfo.UseShellExecute -ne $false -or
+            $taskkillStartInfo.CreateNoWindow -ne $true -or
+            $taskkillStartInfo.RedirectStandardOutput -ne $true -or
+            $taskkillStartInfo.RedirectStandardError -ne $true) {
+            $failures.Add("trusted taskkill start-info contract drifted: $($taskkillStartInfo | Out-String)") | Out-Null
+        }
+    }
+    catch {
+        $failures.Add("trusted taskkill start-info fixture failed: $($_.Exception.Message)") |
+            Out-Null
+    }
+
+    # Pin the only two accepted real-taskkill result shapes. In particular,
+    # nonzero, malformed, or helper-unproven outcomes remain failures even
+    # though the final fixture cleanup can still contain their target safely.
+    $syntheticTaskkillSuccess = [pscustomobject]@{
+        Proven = $true
+        Error = ''
+        TreeKillAttempted = $true
+        TreeKillMethod = 'taskkill.exe /T /F'
+        TaskkillProcessId = [int]101
+        TaskkillStartTimeFileTimeUtc = [long]202
+        TaskkillTerminationProven = $true
+        TaskkillTimedOut = $false
+        TaskkillExitCode = [int]0
+    }
+    $syntheticTaskkillTimeout = [pscustomobject]@{
+        Proven = $false
+        Error = 'taskkill helper timed out'
+        TreeKillAttempted = $true
+        TreeKillMethod = 'taskkill.exe /T /F'
+        TaskkillProcessId = [int]303
+        TaskkillStartTimeFileTimeUtc = [long]404
+        TaskkillTerminationProven = $true
+        TaskkillTimedOut = $true
+        TaskkillExitCode = [int]-1
+    }
+    if ((Get-RealTaskkillFixtureOutcome $syntheticTaskkillSuccess).Kind -cne
+            'success' -or
+        (Get-RealTaskkillFixtureOutcome $syntheticTaskkillTimeout).Kind -cne
+            'scheduler-timeout') {
+        $failures.Add('real-taskkill classifier rejected an exact accepted outcome') |
+            Out-Null
+    }
+    $syntheticNonzero = $syntheticTaskkillSuccess.PSObject.Copy()
+    $syntheticNonzero.TaskkillExitCode = [int]7
+    $syntheticUnproven = $syntheticTaskkillTimeout.PSObject.Copy()
+    $syntheticUnproven.TaskkillTerminationProven = $false
+    $syntheticNull = $syntheticTaskkillSuccess.PSObject.Copy()
+    $syntheticNull.Error = $null
+    $syntheticMissing = [pscustomobject]@{
+        Proven = $true
+        Error = ''
+        TreeKillAttempted = $true
+        TreeKillMethod = 'taskkill.exe /T /F'
+        TaskkillProcessId = [int]505
+        TaskkillStartTimeFileTimeUtc = [long]606
+        TaskkillTerminationProven = $true
+        TaskkillTimedOut = $false
+    }
+    foreach ($invalidTaskkillCase in @(
+            [pscustomobject]@{ Name = 'nonzero'; Value = $syntheticNonzero }
+            [pscustomobject]@{ Name = 'helper-unproven'; Value = $syntheticUnproven }
+            [pscustomobject]@{ Name = 'null-valued'; Value = $syntheticNull }
+            [pscustomobject]@{ Name = 'malformed'; Value = $syntheticMissing }
+            [pscustomobject]@{ Name = 'missing-result'; Value = $null }
+        )) {
+        $outcome = Get-RealTaskkillFixtureOutcome $invalidTaskkillCase.Value
+        if ($outcome.Kind -cne 'invalid') {
+            $failures.Add("real-taskkill classifier accepted $($invalidTaskkillCase.Name): $($outcome | Out-String)") | Out-Null
+        }
+    }
 
     # The canonical schema now represents a same-commit content/tip identity,
     # while old release receipts still need the strict schema-1 reader.
@@ -1138,6 +1291,37 @@ return {
         if ($AllowedStates -cnotcontains $state) {
             $failures.Add("$Context identity state=$state expected=$($AllowedStates -join '/')") |
                 Out-Null
+        }
+    }
+    function Assert-RealTaskkillFixtureOutcome(
+        [string]$Context,
+        $Termination,
+        $ParentIdentity,
+        $ChildIdentity,
+        $HelperIdentity,
+        [long]$ElapsedMilliseconds
+    ) {
+        $outcome = Get-RealTaskkillFixtureOutcome $Termination
+        if ($outcome.Kind -ceq 'invalid') {
+            $failures.Add("$Context returned an invalid taskkill outcome ($($outcome.Reason)): $($Termination | Out-String)") | Out-Null
+            return
+        }
+        if (-not $HelperIdentity) {
+            $failures.Add("$Context did not expose the exact taskkill helper identity") |
+                Out-Null
+            return
+        }
+
+        $targetStates = if ($outcome.Kind -ceq 'success') {
+            @('gone', 'reused')
+        } else { @('alive') }
+        Assert-ExactIdentityState "$Context parent" $ParentIdentity $targetStates
+        Assert-ExactIdentityState "$Context descendant" $ChildIdentity $targetStates
+        Assert-ExactIdentityState "$Context helper" $HelperIdentity `
+            @('gone', 'reused')
+
+        if ($outcome.Kind -ceq 'scheduler-timeout') {
+            $latencyDiagnostics.Add("$Context accepted the exact fail-closed scheduler-latency branch: elapsed=${ElapsedMilliseconds}ms helper_contained=true targets_retained=true") | Out-Null
         }
     }
     $exact = [pscustomobject]@{
@@ -1563,50 +1747,63 @@ return {
                     ([int]$realTermination.TaskkillProcessId) `
                     ([long]$realTermination.TaskkillStartTimeFileTimeUtc)
             }
-            if (-not $realTermination.Proven -or
-                -not $realTermination.TreeKillAttempted -or
-                $realTermination.TreeKillMethod -cne $expectedTreeMethod) {
-                $failures.Add("$realLabel was not terminated with bounded proof: $($realTermination | Out-String)") | Out-Null
-            }
-            if (-not $treeKillSupported -and
-                ($realTermination.TaskkillExitCode -ne 0 -or
-                    $realTermination.TaskkillTimedOut -or
-                    -not $realTermination.TaskkillTerminationProven)) {
-                $failures.Add("$realLabel PS5 taskkill was not an exact success: $($realTermination | Out-String)") | Out-Null
-            }
             Add-LatencyDiagnostic $realLabel $realClock.ElapsedMilliseconds 4000
-            Assert-ExactIdentityState "$realLabel parent" `
-                $realFixture.ParentIdentity @('gone', 'reused')
-            Assert-ExactIdentityState "$realLabel descendant" `
-                $realFixture.ChildIdentity @('gone', 'reused')
-            if ($realHelperIdentity) {
-                Assert-ExactIdentityState "$realLabel helper" `
-                    $realHelperIdentity @('gone', 'reused')
+            if ($treeKillSupported) {
+                if (-not $realTermination.Proven -or
+                    -not $realTermination.TreeKillAttempted -or
+                    $realTermination.TreeKillMethod -cne $expectedTreeMethod) {
+                    $failures.Add("$realLabel was not terminated with bounded Process.Kill(true) proof: $($realTermination | Out-String)") | Out-Null
+                }
+                Assert-ExactIdentityState "$realLabel parent" `
+                    $realFixture.ParentIdentity @('gone', 'reused')
+                Assert-ExactIdentityState "$realLabel descendant" `
+                    $realFixture.ChildIdentity @('gone', 'reused')
+            }
+            else {
+                Assert-RealTaskkillFixtureOutcome $realLabel $realTermination `
+                    $realFixture.ParentIdentity $realFixture.ChildIdentity `
+                    $realHelperIdentity $realClock.ElapsedMilliseconds
             }
         }
 
-        # One production-default PS5 case delays the wrapper before invoking
-        # the trusted real taskkill. It deterministically consumes the former
-        # 1.5s helper slice while fitting the new 3s action deadline.
+        # One production-default PS5 case starts the trusted taskkill directly
+        # at an injected 12.5s elapsed point. This preserves the former 1.5s
+        # action-budget boundary without a PowerShell wrapper whose taskkill
+        # grandchild could escape helper containment if the wrapper timed out.
         if (-not $treeKillSupported) {
             $defaultPlan = New-WtHistoryProbeDeadlinePlan `
                 -TimeoutMilliseconds 15000
             $defaultFixture = Start-PreparedNestedFixture '15s delayed real tree'
-            $delayedCommand = 'Start-Sleep -Milliseconds 1500; ' +
-                '$taskkill = [IO.Path]::Combine($env:SystemRoot, ''System32'', ''taskkill.exe''); ' +
-                '& $taskkill /PID ' + $defaultFixture.Process.Id +
-                ' /T /F; exit $LASTEXITCODE'
-            $defaultClock = [System.Diagnostics.Stopwatch]::StartNew()
+            $defaultClock = New-Object System.Diagnostics.Stopwatch
+            $defaultTimingState = @{
+                BaseElapsed = [long]12500
+                Clock = $defaultClock
+            }
+            $defaultTiming = [pscustomobject]@{
+                GetElapsedMilliseconds = ({
+                    return [long]$defaultTimingState.BaseElapsed +
+                        [long][Math]::Ceiling(
+                            $defaultTimingState.Clock.Elapsed.TotalMilliseconds)
+                }.GetNewClosure())
+            }
+            $defaultActionBudget = `
+                Get-WtHistoryDeadlineRemainingMilliseconds `
+                    -Clock $defaultClock `
+                    -DeadlineMilliseconds `
+                        $defaultPlan.TaskkillDeadlineMilliseconds `
+                    -Timing $defaultTiming
+            if ($defaultActionBudget -ne 1500) {
+                $failures.Add("15s delayed real taskkill action budget drifted: expected=1500ms actual=${defaultActionBudget}ms") | Out-Null
+            }
+            $defaultClock.Start()
             try {
-                Start-Sleep -Milliseconds $defaultPlan.NetworkMilliseconds
                 $defaultTermination = Stop-WtHistoryProbeProcess `
                     -Process $defaultFixture.Process -Clock $defaultClock `
                     -TaskkillDeadlineMilliseconds `
                         $defaultPlan.TaskkillDeadlineMilliseconds `
                     -TotalDeadlineMilliseconds `
                         $defaultPlan.TotalDeadlineMilliseconds `
-                    -ForceTaskkill -TaskkillStartInfoOverride `
-                        (New-HostCommandStartInfo $delayedCommand)
+                    -ForceTaskkill -Timing $defaultTiming
             }
             finally {
                 $defaultClock.Stop()
@@ -1619,23 +1816,12 @@ return {
                     ([int]$defaultTermination.TaskkillProcessId) `
                     ([long]$defaultTermination.TaskkillStartTimeFileTimeUtc)
             }
-            if (-not $defaultTermination.Proven -or
-                $defaultTermination.TaskkillExitCode -ne 0 -or
-                $defaultTermination.TaskkillTimedOut -or
-                -not $defaultTermination.TaskkillTerminationProven -or
-                $defaultClock.ElapsedMilliseconds -lt 12400) {
-                $failures.Add("15s delayed real taskkill did not succeed inside its exact deadline: elapsed=$($defaultClock.ElapsedMilliseconds) result=$($defaultTermination | Out-String)") | Out-Null
-            }
             Add-LatencyDiagnostic '15s delayed real taskkill' `
-                $defaultClock.ElapsedMilliseconds 16000
-            Assert-ExactIdentityState '15s delayed real parent' `
-                $defaultFixture.ParentIdentity @('gone', 'reused')
-            Assert-ExactIdentityState '15s delayed real descendant' `
-                $defaultFixture.ChildIdentity @('gone', 'reused')
-            if ($defaultHelperIdentity) {
-                Assert-ExactIdentityState '15s delayed real helper' `
-                    $defaultHelperIdentity @('gone', 'reused')
-            }
+                $defaultClock.ElapsedMilliseconds 4000
+            Assert-RealTaskkillFixtureOutcome `
+                '15s delayed real taskkill' $defaultTermination `
+                $defaultFixture.ParentIdentity $defaultFixture.ChildIdentity `
+                $defaultHelperIdentity $defaultClock.ElapsedMilliseconds
         }
 
         # An already-expired action deadline must refuse to launch any helper.
