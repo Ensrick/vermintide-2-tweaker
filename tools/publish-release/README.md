@@ -141,7 +141,10 @@ mutate anything while release identity is uncertain.
 Once resolved, `manifest.json` and carry-forward zips download through their asset IDs. Existing
 filtered assets are deleted by exact name/asset ID and uploaded through the numeric release ID,
 with `manifest.json` last. The broken tag route is never reused, sibling assets remain untouched,
-and staged provenance/hash validation still runs before mutation. Offline coverage:
+and staged provenance/hash validation still runs before mutation. Download timeout budgets use the
+resolved asset metadata's declared byte size with the same 30-second floor, 256-KiB-per-second
+curve, and one-hour cap as uploads. Missing, malformed, negative, or unsupported sizes fail before
+the request, and the returned byte count must equal the declaration. Offline coverage:
 
 ```powershell
 .\qa\check_github_release_fallback.ps1 -SelfTest

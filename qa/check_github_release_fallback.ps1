@@ -37,6 +37,16 @@ function global:New-Issue651FixtureResponse {
 $repo = 'Owner/Repo'
 $tag = 'mods-2026-07-16'
 
+# Transfer budgets keep metadata and small payloads at the established 30 s
+# floor, while uploads and downloads share the established size-based curve.
+Assert-ReleaseFixture ((Get-GitHubReleaseRequestTimeoutSeconds) -eq 30) 'metadata request keeps 30-second timeout floor'
+Assert-ReleaseFixture ((Get-GitHubReleaseRequestTimeoutSeconds -ExpectedResponseBytes 60184623) -eq 230) '60 MB asset download timeout scales from declared size'
+$uploadFixtureBytes = [byte[]]::new(8388608)
+Assert-ReleaseFixture ((Get-GitHubReleaseRequestTimeoutSeconds -InputBytes $uploadFixtureBytes) -eq 32) 'asset upload timeout keeps existing input-byte scaling'
+Assert-ReleaseFixture ((Get-GitHubReleaseRequestTimeoutSeconds -InputBytes $uploadFixtureBytes -ExpectedResponseBytes 10485760) -eq 40) 'request timeout uses larger transfer direction when both sizes are known'
+$uploadFixtureBytes = $null
+Assert-ReleaseFixture ((Get-GitHubReleaseRequestTimeoutSeconds -ExpectedResponseBytes ([int]::MaxValue)) -eq 3600) 'large valid download timeout retains one-hour cap'
+
 # Canonical success never touches the list fallback.
 $normalCalls = [System.Collections.Generic.List[string]]::new()
 $normalRequest = {
@@ -127,11 +137,12 @@ $ambiguous = Resolve-GitHubReleaseByTag -Repo $repo -Tag $tag -Request $ambiguou
 Assert-ReleaseFixture ($ambiguous.State -eq 'Unavailable' -and $ambiguous.Message -match 'multiple exact') 'ambiguous exact matches block mutation'
 
 # Asset selection is case-sensitive, unique, and asset-id based for downloads.
+$downloadFixtureBytes = [System.Text.Encoding]::UTF8.GetBytes('{"ok":true}')
 $assetRelease = [pscustomobject]@{
     id = 404
     assets = @(
-        [pscustomobject]@{ id = 501; name = 'manifest.json'; url = 'https://api.github.com/repos/Owner/Repo/releases/assets/501' },
-        [pscustomobject]@{ id = 502; name = 'Manifest.json'; url = 'https://api.github.com/repos/Owner/Repo/releases/assets/502' }
+        [pscustomobject]@{ id = 501; name = 'manifest.json'; url = 'https://api.github.com/repos/Owner/Repo/releases/assets/501'; size = $downloadFixtureBytes.LongLength },
+        [pscustomobject]@{ id = 502; name = 'Manifest.json'; url = 'https://api.github.com/repos/Owner/Repo/releases/assets/502'; size = 0 }
     )
 }
 $selected = Get-GitHubReleaseAsset -Release $assetRelease -Name 'manifest.json'
@@ -143,18 +154,87 @@ $tempRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("vt2-release-651-" + [g
 try {
     $downloadPath = Join-Path $tempRoot 'manifest.json'
     $downloadUris = [System.Collections.Generic.List[string]]::new()
+    $downloadExpectedSizes = [System.Collections.Generic.List[long]]::new()
     $downloadRequest = {
         param($Method, $Uri, $Accept)
         $downloadUris.Add($Uri)
+        # Keep the original three-parameter fixture signature: optional request
+        # hints remain compatible and arrive in the ordinary extra-argument bag.
+        if ($args.Count -eq 2 -and $args[0] -eq '-ExpectedResponseBytes') {
+            $downloadExpectedSizes.Add([long]$args[1])
+        }
         return [pscustomobject]@{
             StatusCode = 200
             Content = '{"ok":true}'
-            Bytes = [System.Text.Encoding]::UTF8.GetBytes('{"ok":true}')
+            Bytes = $downloadFixtureBytes
             Error = $null
         }
     }.GetNewClosure()
     Save-GitHubReleaseAsset -Repo $repo -Asset $selected -Destination $downloadPath -Request $downloadRequest
     Assert-ReleaseFixture ((Test-Path -LiteralPath $downloadPath) -and $downloadUris[0] -match '/releases/assets/501$' -and $downloadUris[0] -notmatch '/tags/') 'asset download uses resolved asset id, never tag route'
+    Assert-ReleaseFixture ($downloadExpectedSizes.Count -eq 1 -and $downloadExpectedSizes[0] -eq $downloadFixtureBytes.LongLength) 'asset download forwards trusted metadata size without breaking injected fixture'
+
+    $invalidSizeCases = @(
+        [pscustomobject]@{ Label = 'malformed'; Value = 'sixty-megabytes'; Pattern = 'non-negative integer' },
+        [pscustomobject]@{ Label = 'negative'; Value = -1; Pattern = 'non-negative integer' },
+        [pscustomobject]@{ Label = 'excessive'; Value = ([long][int]::MaxValue + [long]1); Pattern = 'exceeds the supported' }
+    )
+    foreach ($case in $invalidSizeCases) {
+        $invalidCalls = [System.Collections.Generic.List[string]]::new()
+        $invalidRequest = {
+            param($Method, $Uri, $Accept)
+            $invalidCalls.Add("$Method $Uri")
+            return (New-Issue651FixtureResponse 200 $null)
+        }.GetNewClosure()
+        $invalidAsset = [pscustomobject]@{
+            id = 590
+            name = "$($case.Label).zip"
+            url = 'https://api.github.com/repos/Owner/Repo/releases/assets/590'
+            size = $case.Value
+        }
+        $invalidError = $null
+        try { $null = Get-GitHubReleaseAssetBytes -Repo $repo -Asset $invalidAsset -Request $invalidRequest }
+        catch { $invalidError = $_.Exception.Message }
+        Assert-ReleaseFixture ($invalidError -match $case.Pattern -and $invalidCalls.Count -eq 0) "$($case.Label) asset size fails closed before request"
+    }
+
+    $missingSizeCalls = [System.Collections.Generic.List[string]]::new()
+    $missingSizeRequest = {
+        param($Method, $Uri, $Accept)
+        $missingSizeCalls.Add("$Method $Uri")
+        return (New-Issue651FixtureResponse 200 $null)
+    }.GetNewClosure()
+    $missingSizeAsset = [pscustomobject]@{ id = 591; name = 'missing-size.zip' }
+    $missingSizeError = $null
+    try { $null = Get-GitHubReleaseAssetBytes -Repo $repo -Asset $missingSizeAsset -Request $missingSizeRequest }
+    catch { $missingSizeError = $_.Exception.Message }
+    Assert-ReleaseFixture ($missingSizeError -match 'size is missing' -and $missingSizeCalls.Count -eq 0) 'missing asset size fails closed before request'
+
+    $lengthMismatchAsset = [pscustomobject]@{ id = 592; name = 'truncated.zip'; size = 4 }
+    $lengthMismatchRequest = {
+        param($Method, $Uri, $Accept)
+        return [pscustomobject]@{ StatusCode = 200; Content = ''; Bytes = [byte[]](1, 2, 3); Error = $null }
+    }
+    $lengthMismatchError = $null
+    try { $null = Get-GitHubReleaseAssetBytes -Repo $repo -Asset $lengthMismatchAsset -Request $lengthMismatchRequest }
+    catch { $lengthMismatchError = $_.Exception.Message }
+    Assert-ReleaseFixture ($lengthMismatchError -match 'returned 3 bytes.*declared 4') 'downloaded bytes must match trusted metadata size'
+
+    $transportFailureAsset = [pscustomobject]@{ id = 593; name = 'timeout.zip'; size = 4 }
+    $transportFailureRequest = {
+        param($Method, $Uri, $Accept)
+        return [pscustomobject]@{
+            StatusCode = 0
+            Content = ''
+            Bytes = [byte[]]@()
+            Error = "request canceled`r`nBearer fixture-secret"
+        }
+    }
+    $transportFailureError = $null
+    try { $null = Get-GitHubReleaseAssetBytes -Repo $repo -Asset $transportFailureAsset -Request $transportFailureRequest }
+    catch { $transportFailureError = $_.Exception.Message }
+    Assert-ReleaseFixture ($transportFailureError -match 'HTTP 0: request canceled Bearer \[REDACTED\]' -and
+        $transportFailureError -notmatch 'fixture-secret') 'HTTP 0 surfaces bounded transport detail without bearer token'
 
     $zipPath = Join-Path $tempRoot 'WOC.zip'
     $manifestPath = Join-Path $tempRoot 'manifest.json'

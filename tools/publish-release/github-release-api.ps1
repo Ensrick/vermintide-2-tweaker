@@ -22,6 +22,77 @@ function Get-GitHubReleaseToken {
     return $token
 }
 
+function ConvertTo-GitHubReleaseTransferByteCount {
+    param(
+        [AllowNull()][AllowEmptyString()]$Value,
+        [Parameter(Mandatory = $true)][string]$Context
+    )
+
+    if ($null -eq $Value) { throw "$Context is missing." }
+    $text = [Convert]::ToString($Value, [System.Globalization.CultureInfo]::InvariantCulture)
+    if ($text -notmatch '^(0|[1-9][0-9]*)$') {
+        throw "$Context must be a non-negative integer byte count."
+    }
+    try {
+        $bytes = [long]::Parse(
+            $text,
+            [System.Globalization.NumberStyles]::None,
+            [System.Globalization.CultureInfo]::InvariantCulture
+        )
+    }
+    catch {
+        throw "$Context must be a non-negative integer byte count."
+    }
+    # This client buffers each response into one byte array before its immutable
+    # hash verification, so metadata outside its signed 32-bit support boundary
+    # must fail closed before any network request.
+    if ($bytes -gt [int]::MaxValue) {
+        throw "$Context exceeds the supported release-asset maximum of $([int]::MaxValue) bytes."
+    }
+    return $bytes
+}
+
+function ConvertTo-GitHubReleaseSafeErrorText {
+    param([AllowNull()][AllowEmptyString()]$Value)
+
+    $text = [Convert]::ToString($Value, [System.Globalization.CultureInfo]::InvariantCulture).Trim()
+    if (-not $text) { return '' }
+    foreach ($secret in @($script:GitHubReleaseToken, $env:GH_TOKEN, $env:GITHUB_TOKEN)) {
+        if ($null -ne $secret -and "$secret".Length -ge 8) {
+            $text = $text.Replace("$secret", '[REDACTED]')
+        }
+    }
+    $text = $text -replace '(?i)\bBearer\s+\S+', 'Bearer [REDACTED]'
+    $text = ($text -replace '[\r\n]+', ' ').Trim()
+    if ($text.Length -gt 512) { $text = $text.Substring(0, 512) + '...' }
+    return $text
+}
+
+function Get-GitHubReleaseRequestTimeoutSeconds {
+    param(
+        [byte[]]$InputBytes,
+        [AllowNull()][AllowEmptyString()]$ExpectedResponseBytes
+    )
+
+    $hasExpectedResponseBytes = $PSBoundParameters.ContainsKey('ExpectedResponseBytes')
+    $transferBytes = [long]0
+    if ($null -ne $InputBytes) {
+        $transferBytes = [long]$InputBytes.LongLength
+    }
+    if ($hasExpectedResponseBytes) {
+        $responseBytes = ConvertTo-GitHubReleaseTransferByteCount `
+            -Value $ExpectedResponseBytes -Context 'ExpectedResponseBytes'
+        if ($responseBytes -gt $transferBytes) { $transferBytes = $responseBytes }
+    }
+
+    # 30 s floor for metadata, then one second per 256 KiB (about 2 Mbit/s
+    # of headroom), capped at one hour.
+    $timeoutSeconds = [Math]::Ceiling($transferBytes / 262144.0)
+    if ($timeoutSeconds -lt 30) { $timeoutSeconds = 30 }
+    if ($timeoutSeconds -gt 3600) { $timeoutSeconds = 3600 }
+    return [int]$timeoutSeconds
+}
+
 function Invoke-GitHubReleaseApiRequest {
     param(
         [Parameter(Mandatory = $true)][string]$Method,
@@ -29,18 +100,18 @@ function Invoke-GitHubReleaseApiRequest {
         [string]$Accept = 'application/vnd.github+json',
         [string]$InputPath,
         [byte[]]$InputBytes,
+        [AllowNull()][AllowEmptyString()]$ExpectedResponseBytes,
         [string]$ContentType = 'application/octet-stream',
         [string]$OutputPath
     )
 
     Add-Type -AssemblyName System.Net.Http
     $client = New-Object System.Net.Http.HttpClient
-    # The timeout is set below, once the payload size is known. A flat 30 s is
-    # right for metadata calls but silently truncates large asset uploads: the
-    # 75 MB character_weapon_variants zip cancelled mid-POST and surfaced as
-    # HTTP 0 (the catch block reports StatusCode 0), which fails the ship
-    # BEFORE the Workshop upload. Observed 2026-08-06 on cwv 0.1.497-dev, while
-    # the 60 MB cosmetics zip fit under the old budget.
+    # The timeout is set below, once transfer size is known. A flat 30 s is
+    # right for metadata calls but silently truncates large transfers: a 75 MB
+    # upload cancelled mid-POST on 2026-08-06, then a 60 MB carry-forward GET
+    # cancelled twice on 2026-09-03 because upload-only sizing left downloads
+    # at the floor. Both surfaced as HTTP 0 before Workshop mutation.
     $request = New-Object System.Net.Http.HttpRequestMessage(
         [System.Net.Http.HttpMethod]::new($Method.ToUpperInvariant()),
         $Uri
@@ -67,15 +138,19 @@ function Invoke-GitHubReleaseApiRequest {
             $request.Content.Headers.ContentType = New-Object System.Net.Http.Headers.MediaTypeHeaderValue($ContentType)
         }
 
-        # Scale the budget with the payload: 30 s floor for metadata, then one
-        # second per 256 KiB (about 2 Mbit/s of headroom), capped at one hour.
+        if ($PSBoundParameters.ContainsKey('ExpectedResponseBytes') -and
+            $Method.ToUpperInvariant() -ne 'GET') {
+            throw 'ExpectedResponseBytes is valid only for GET requests.'
+        }
+        $timeoutArguments = @{}
+        if ($null -ne $InputBytes) { $timeoutArguments.InputBytes = $InputBytes }
+        if ($PSBoundParameters.ContainsKey('ExpectedResponseBytes')) {
+            $timeoutArguments.ExpectedResponseBytes = $ExpectedResponseBytes
+        }
         # HttpClient.Timeout must be assigned before the first send, which has
-        # not happened yet on this per-call client.
-        $payloadLength = 0
-        if ($null -ne $InputBytes) { $payloadLength = $InputBytes.Length }
-        $timeoutSeconds = [Math]::Ceiling($payloadLength / 262144.0)
-        if ($timeoutSeconds -lt 30) { $timeoutSeconds = 30 }
-        if ($timeoutSeconds -gt 3600) { $timeoutSeconds = 3600 }
+        # not happened yet on this per-call client. Uploads use their immutable
+        # input bytes; asset downloads use the trusted release metadata size.
+        $timeoutSeconds = Get-GitHubReleaseRequestTimeoutSeconds @timeoutArguments
         $client.Timeout = [TimeSpan]::FromSeconds($timeoutSeconds)
 
         try {
@@ -96,7 +171,7 @@ function Invoke-GitHubReleaseApiRequest {
                 StatusCode = 0
                 Content    = ''
                 Bytes      = [byte[]]@()
-                Error      = $_.Exception.Message
+                Error      = ConvertTo-GitHubReleaseSafeErrorText -Value $_.Exception.Message
             }
         }
         finally {
@@ -258,17 +333,31 @@ function Get-GitHubReleaseAssetBytes {
         [scriptblock]$Request = ${function:Invoke-GitHubReleaseApiRequest}
     )
     if ("$($Asset.id)" -notmatch '^\d+$') { throw "Asset '$($Asset.name)' has no numeric release asset id." }
+    $sizeProperty = $Asset.PSObject.Properties['size']
+    $expectedBytes = ConvertTo-GitHubReleaseTransferByteCount `
+        -Value $(if ($null -ne $sizeProperty) { $sizeProperty.Value } else { $null }) `
+        -Context "Release asset '$($Asset.name)' (id $($Asset.id)) size"
     $uri = if ("$($Asset.url)" -match '/releases/assets/\d+$') {
         "$($Asset.url)"
     } else {
         "https://api.github.com/repos/$Repo/releases/assets/$($Asset.id)"
     }
-    $response = & $Request -Method GET -Uri $uri -Accept 'application/octet-stream'
+    $response = & $Request -Method GET -Uri $uri -Accept 'application/octet-stream' `
+        -ExpectedResponseBytes $expectedBytes
     if ($response.StatusCode -lt 200 -or $response.StatusCode -ge 300) {
-        throw "Download of release asset '$($Asset.name)' (id $($Asset.id)) failed with HTTP $($response.StatusCode)."
+        $errorText = ConvertTo-GitHubReleaseSafeErrorText -Value $response.Error
+        $errorSuffix = if ($response.StatusCode -eq 0 -and $errorText) { ": $errorText" } else { '' }
+        throw "Download of release asset '$($Asset.name)' (id $($Asset.id)) failed with HTTP $($response.StatusCode)$errorSuffix."
     }
-    if ($null -ne $response.Bytes) { return [byte[]]$response.Bytes }
-    return [System.Text.Encoding]::UTF8.GetBytes([string]$response.Content)
+    $bytes = if ($null -ne $response.Bytes) {
+        [byte[]]$response.Bytes
+    } else {
+        [System.Text.Encoding]::UTF8.GetBytes([string]$response.Content)
+    }
+    if ([long]$bytes.LongLength -ne $expectedBytes) {
+        throw "Download of release asset '$($Asset.name)' (id $($Asset.id)) returned $($bytes.LongLength) bytes; release metadata declared $expectedBytes."
+    }
+    return $bytes
 }
 
 function New-GitHubReleaseAssetSnapshots {
