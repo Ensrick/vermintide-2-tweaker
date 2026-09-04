@@ -41,7 +41,7 @@ local mod = get_mod("ct")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.131-beta"
+local MOD_VERSION = "0.7.132-beta"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -2559,6 +2559,8 @@ mod:hook("DeusPowerUpUtils", "generate_random_power_ups", function(func, ...)
 
     local function _should_strip(name)
         if not name then return false end
+        if type(mod._ct_power_up_wire_allowed) ~= "function"
+                or not mod._ct_power_up_wire_allowed(name) then return true end
         -- v0.7.200-dev (#211): disable check routed through the shared mod._ct_boon_disabled
         -- helper (behavior-identical for boolean checkbox values).
         if mod._ct_boon_disabled(name) then return true end
@@ -6579,7 +6581,9 @@ mod:hook_safe("DeusRunController", "_add_initial_power_ups", function(self, peer
     local extra = {}
     for _, entry in ipairs(DeusPowerUpsArray) do
         local name = entry.name
-        if name and mod:get("start_boon_" .. name) then
+        if name and mod:get("start_boon_" .. name)
+                and type(mod._ct_power_up_wire_allowed) == "function"
+                and mod._ct_power_up_wire_allowed(name) then
             extra[#extra + 1] = DeusPowerUpUtils.generate_specific_power_up(name, entry.rarity)
         end
     end
@@ -6721,15 +6725,18 @@ mod:hook("DeusRunController", "add_power_ups", function(func, self, new_power_up
     -- Pre-grant disable gate. Skip while the bot-mirror loop is granting (those entries
     -- are freshly materialized from a pool we already control, and re-filtering bot grants
     -- here is redundant; the guard also prevents touching the recursive set-reward grants).
-    if not _ct_bot_mirror_active and type(new_power_ups) == "table" then
+    if type(new_power_ups) == "table" then
         for i = #new_power_ups, 1, -1 do
             local pu = new_power_ups[i]
             local name = pu and pu.name
+            local wire_blocked = name and (type(mod._ct_power_up_wire_allowed) ~= "function"
+                or not mod._ct_power_up_wire_allowed(name))
             -- v0.7.200-dev (#211): shared helper (was an inline effective_setting == true check).
-            if name and mod._ct_boon_disabled(name) then
+            if wire_blocked or (not _ct_bot_mirror_active
+                    and name and mod._ct_boon_disabled(name)) then
                 table.remove(new_power_ups, i)
-                _dbg("[boon-trace] BLOCKED disabled boon at grant: %s (disable_boon_<name>=true) — stripped before add_power_ups",
-                    tostring(name))
+                _dbg("[boon-trace] BLOCKED boon at grant: %s reason=%s",
+                    tostring(name), wire_blocked and "wire-parity" or "disabled-setting")
                 -- Raw printf so the block is visible on the logging-OFF host too (#211).
                 pcall(printf, "[boon-trace] BLOCKED disabled boon at grant: %s source=%s (issue #211)",
                     tostring(name), tostring(mod._ct_grant_source or "untagged"))
@@ -6893,7 +6900,9 @@ mod:hook("DeusRunController", "add_power_ups", function(func, self, new_power_up
         for i = 1, #bucket do
             local entry = bucket[i]
             local nm = entry and entry.name
-            if nm and not mod._ct_boon_disabled(nm) then
+            if nm and not mod._ct_boon_disabled(nm)
+                    and type(mod._ct_power_up_wire_allowed) == "function"
+                    and mod._ct_power_up_wire_allowed(nm) then
                 eligible[#eligible + 1] = nm
             end
         end
@@ -6932,7 +6941,9 @@ mod:hook("DeusRunController", "add_power_ups", function(func, self, new_power_up
                 -- bot, whatever the pick/mirror source. The random picker is now
                 -- disabled-aware and mirror-mode names already passed the pre-grant gate,
                 -- so this firing means a new bypass — printf it (host runs logging OFF).
-                if mod._ct_boon_disabled(bot_name) then
+                if mod._ct_boon_disabled(bot_name)
+                        or type(mod._ct_power_up_wire_allowed) ~= "function"
+                        or not mod._ct_power_up_wire_allowed(bot_name) then
                     pcall(printf, "[bot-boon] SKIPPED disabled boon for bot: %s (disable_boon_<name>=true, issue #211)",
                         tostring(bot_name))
                 else
@@ -8996,21 +9007,41 @@ local DORMANT_BOON_RARITY = {
 -- DORMANT_BOON_RARITY directly.
 local _injected_dormants = {}
 
--- v0.7.38/v0.7.40: Register a name in a NetworkLookup table. Vanilla builds these
--- lookups at boot from their backing global tables (BuffTemplates,
--- DeusPowerUpTemplates, etc.). Entries we add post-boot are NOT in the lookups, and
--- the lookup's __index metatable errors on unknown keys (network_lookup.lua:2354).
--- Append index→name and set the reverse name→index. rawget bypasses the
--- error-on-unknown-key metatable when checking for existing registration.
+-- #426 atomically reserves historical public rows before any feature builder.
+(function()
+    local ok_bootstrap, bootstrap = pcall(mod.dofile, mod,
+        "scripts/mods/chaos_wastes_tweaker/_ct_wire_bootstrap")
+    local ok_install, installed = pcall(function()
+        return ok_bootstrap and type(bootstrap) == "table"
+            and type(rawget(bootstrap, "install")) == "function"
+            and bootstrap.install(mod, _G, printf, _dbg) == true
+    end)
+    if not ok_install or not installed then
+        local function owned_power(name)
+            return type(name) == "string" and name:find("^ct_") ~= nil
+        end
+        local function owned_buff(name)
+            return type(name) == "string" and (name:find("^ct_") ~= nil
+                or name:find("^power_up_ct_") ~= nil)
+        end
+        mod._ct_wire_policy, mod._ct_network_lookup_lib = nil, nil
+        mod._ct_wire_reservation, mod._ct_wire_reservation_ready = nil, false
+        mod._ct_wire_reservation_error = "wire-bootstrap-owner-unavailable"
+        mod._ct_register_network_name = nil
+        mod._ct_wire_safe = function() return false end
+        mod._ct_sender_wire_safe = function() return false end
+        mod._ct_is_modded_power_up = owned_power
+        mod._ct_is_ct_buff_template = owned_buff
+        mod._ct_power_up_wire_allowed = function(name) return not owned_power(name) end
+        mod._ct_buff_wire_allowed = function(name) return not owned_buff(name) end
+        pcall(printf, "[ct:426] exact public wire reservation refused (%s); custom boons and miracles remain inert",
+            tostring(mod._ct_wire_reservation_error))
+    end
+end)()
+
 local function _register_in_network_lookup(lookup_key, name)
-    if type(name) ~= "string" then return end
-    local nl = rawget(_G, "NetworkLookup")
-    local t = nl and nl[lookup_key]
-    if not t then return end
-    if rawget(t, name) then return end
-    local idx = #t + 1
-    t[idx] = name
-    t[name] = idx
+    local register = rawget(mod, "_ct_register_network_name")
+    if type(register) == "function" then pcall(register, lookup_key, name) end
 end
 
 local function register_buff_in_network_lookup(buff_name)
@@ -9023,6 +9054,10 @@ end
 
 local function inject_dormant_boon(power_up_name, rarity)
     if _injected_dormants[power_up_name] then return end
+    if mod._ct_is_modded_power_up(power_up_name)
+            and mod._ct_wire_reservation_ready ~= true then
+        return
+    end
 
     -- v0.7.40: Register in NetworkLookup.deus_power_up_templates immediately. Vanilla
     -- code at deus_run_state_spec.lua:60, deus_run_controller.lua:1198 (and similar)
@@ -9155,6 +9190,8 @@ end
 local _added_to_pool = {}
 local function _add_dormant_to_pool(power_up_name, rarity)
     if _added_to_pool[power_up_name] then return end
+    if type(mod._ct_power_up_wire_allowed) ~= "function"
+            or not mod._ct_power_up_wire_allowed(power_up_name) then return end
     local record = _injected_dormants[power_up_name]
     if not record then
         _dbg("[dormant] _add_dormant_to_pool: " .. tostring(power_up_name) .. " not yet registered; skipping pool insert")
@@ -9231,165 +9268,9 @@ pre_register_dormant_lookups()
 sync_dormant_boons()
 --]]
 
--- ============================================================
--- v0.7.93: Khorne's Skulls Event Boons in non-Skulls CW (dormant-injection)
--- ============================================================
--- 2026-05-23 v0.7.98-dev DISABLED: full Skulls event boon implementation block-commented per
--- user request after Chest-of-Trials crash. The SKULLS_EVENT_BOONS constant + the
--- pre_register_skulls_event_lookups / _set_skulls_mutators_active / sync_skulls_event_boons
--- functions all live inside the block-comment below; nothing in this file references them once
--- this block is wrapped (the regression check that walked SKULLS_EVENT_BOONS is also disabled).
--- To re-enable, delete the wrapping `--[[` / `--]]` markers AND restore the VMF widget +
--- localization entries AND the disabled regression check.
---[[
--- The 10 Skulls boons (boon_skulls_01..08 + 2 set bonuses) are vanilla-registered
--- in DeusPowerUpTemplates at game boot — their templates, buffs, and NetworkLookup
--- entries already exist on every peer regardless of toggle state. Vanilla also
--- populates DeusPowerUps.event[boon_skulls_*], DeusPowerUpsArray, and
--- DeusPowerUpsArrayByRarity.event (via the boot-time DeusPowerUpRarityPool walk at
--- deus_power_up_settings.lua:7121-7176). The created buff variants are
--- `power_up_boon_skulls_01_event` etc., which is exactly the name the set-bonus
--- amplifier closures hard-code (`buff_extension:num_buff_stacks(
--- "power_up_boon_skulls_set_bonus_01_event")` at lines 462/487/516/etc.). So leaving
--- the vanilla "event" rarity records in place keeps the set bonuses functional.
---
--- All vanilla cares about for the seasonal gate is the per-record `mutators` field
--- ({"skulls_2023"} on every Skulls boon entry), checked by
--- deus_power_up_utils.lua:146 `compatible_mutator_active(power_up.mutators)` during
--- offering generation. To make the boons roll outside the event, we clear that
--- field at mod load — peer-safe because the array structure / network indices
--- aren't touched (only mutator semantics, which are evaluated host-side at roll
--- time on the existing record).
---
--- v0.7.85 attempted an "append to DeusPowerUpRarityPool" approach. That was a
--- no-op: DeusPowerUpRarityPool is read ONCE at boot to populate the runtime
--- arrays. The offering generator (deus_power_up_utils.lua:138-146) scans
--- DeusPowerUpsArrayByRarity, not the source pool. Replaced 2026-05-23 with this
--- direct-mutator-clear approach.
---
--- Why not the full inject_dormant_boon pattern (ct's 9 dormants + 11 trait boons)?
--- Because vanilla already did all of that for these boons at boot — every step of
--- inject_dormant_boon's registration is idempotent against vanilla's existing
--- writes, EXCEPT the unconditional `table.insert(DeusPowerUpsArray, ...)` and
--- ditto for ArrayByRarity / Lookup. Calling it would duplicate every Skulls boon
--- in the runtime arrays. Mutator-field clearing on the existing vanilla record
--- achieves the same gameplay outcome (boon becomes rollable) without the
--- duplication risk, and preserves the existing buff_name → set-bonus-amplifier
--- linkage intact. We still pre-register NetworkLookup names defensively (they're
--- already vanilla-registered but the call is idempotent).
---
--- Boons 06/07/08 (the 2025 variants) are functionally inert outside the Skulls
--- mutator: they fire on `on_mutator_skull_picked_up` (daemon-skull pickups don't
--- spawn outside the Skulls mutator) and check `num_buff_stacks("skulls_2023_buff")`
--- which is the mutator's own buff (always 0 stacks outside the mutator). They will
--- not crash — buff_func nil-checks and 0-stack multiplier=0 are vanilla-safe — but
--- a roll on one of them is largely wasted. Documented in tooltip. Boons 01-05 +
--- both set bonuses are fully functional outside the event.
-local SKULLS_EVENT_BOONS = {
-    "boon_skulls_01",
-    "boon_skulls_02",
-    "boon_skulls_03",
-    "boon_skulls_04",
-    "boon_skulls_05",
-    "boon_skulls_06",
-    "boon_skulls_07",
-    "boon_skulls_08",
-    "boon_skulls_set_bonus_01",
-    "boon_skulls_set_bonus_02",
-}
-
--- Cache the original `mutators` arrays (vanilla {"skulls_2023"} etc.) so we can
--- restore them on toggle-off. Indexed by power-up name. Captured at first mod-load
--- per peer; not persisted across game restart, so the restore always re-reads from
--- the live record.
-local _skulls_original_mutators = {}
-
--- v0.7.93: pre-register the Skulls boon names in NetworkLookup unconditionally
--- (idempotent; vanilla already wrote them at boot, but cover the case of a future
--- vanilla change that defers them). Sorted iteration per
--- feedback_vt2_gated_registration_diverges. The set-bonus amplifier closures look up
--- the `power_up_boon_skulls_set_bonus_<NN>_event` buff names by string at runtime,
--- so they don't introduce additional NetworkLookup requirements beyond what vanilla
--- already provides.
-local function pre_register_skulls_event_lookups()
-    local templates = rawget(_G, "DeusPowerUpTemplates")
-    local global_bt = rawget(_G, "BuffTemplates")
-    local deus_bt = rawget(_G, "DeusPowerUpBuffTemplates")
-    if not (templates and global_bt and deus_bt) then
-        _dbg("[skulls-event] pre-register skipped: DeusPowerUp* tables not yet loaded")
-        return
-    end
-    local sorted = {}
-    for _, name in ipairs(SKULLS_EVENT_BOONS) do sorted[#sorted + 1] = name end
-    table.sort(sorted)
-    local registered = 0
-    for _, power_up_name in ipairs(sorted) do
-        if templates[power_up_name] then
-            -- Defensive: re-register the NetworkLookup entries even though vanilla
-            -- already did so. _register_in_network_lookup is idempotent (rawget
-            -- guard at top), zero cost when already present.
-            register_power_up_in_network_lookup(power_up_name)
-            -- Vanilla's bootstrap (deus_power_up_settings.lua:7146-7161) created
-            -- `power_up_<name>_event` buff variants and registered them in
-            -- DeusPowerUpBuffTemplates. Mirror to _G.BuffTemplates per
-            -- feedback_vt2_dormant_buff_template_dual_register — vanilla's DLCUtils
-            -- merge runs at boot BEFORE mods load, so the Skulls buffs ARE already
-            -- in global_bt for "event" rarity. But re-mirror defensively in case a
-            -- future vanilla change defers the merge.
-            local buff_name = "power_up_" .. power_up_name .. "_event"
-            local buff_template = deus_bt[buff_name]
-            if buff_template then
-                global_bt[buff_name] = buff_template
-                register_buff_in_network_lookup(buff_name)
-            end
-            registered = registered + 1
-        else
-            _dbg("[skulls-event] template %s not present in this game version — skipping (probably pre-2025 build)", tostring(power_up_name))
-        end
-    end
-    _dbg("[skulls-event] pre-registered %d skulls boons for client compat (idempotent overlay on vanilla)", registered)
-end
-
--- Toggle-on: clear the mutators array on each Skulls boon's runtime record so the
--- offering roller (deus_power_up_utils.lua:146) lets them through outside the
--- Skulls 2023 mutator. Toggle-off: restore the cached original {"skulls_2023"}
--- array so the boons revert to event-gated behaviour. Idempotent in both directions.
-local function _set_skulls_mutators_active(enabled)
-    local templates = rawget(_G, "DeusPowerUpTemplates")
-    local deus_power_ups = rawget(_G, "DeusPowerUps")
-    if not (templates and deus_power_ups) then
-        _dbg("[skulls-event] _set_skulls_mutators_active(%s): DeusPowerUp* tables not loaded yet; skipping", tostring(enabled))
-        return
-    end
-    local count_modified = 0
-    for _, power_up_name in ipairs(SKULLS_EVENT_BOONS) do
-        local record = deus_power_ups.event and deus_power_ups.event[power_up_name]
-        if record then
-            if _skulls_original_mutators[power_up_name] == nil then
-                -- First touch — snapshot the vanilla mutators array. Even if vanilla
-                -- happens to have `mutators = nil` (it doesn't, but defend), capture
-                -- the empty-table marker so restore is unambiguous.
-                _skulls_original_mutators[power_up_name] = record.mutators or {}
-            end
-            if enabled then
-                record.mutators = {}
-            else
-                record.mutators = _skulls_original_mutators[power_up_name]
-            end
-            count_modified = count_modified + 1
-        end
-    end
-    _dbg("[skulls-event] %s mutator gate on %d skulls boons (toggle=%s)",
-        enabled and "cleared" or "restored", count_modified, tostring(enabled))
-end
-
-local function sync_skulls_event_boons()
-    _set_skulls_mutators_active(effective_setting("enable_skulls_event_boons") == true)
-end
-
-pre_register_skulls_event_lookups()
-sync_skulls_event_boons()
---]] -- 2026-05-23 v0.7.98-dev DISABLED: end Skulls event boon block (opened ~L4984)
+-- Khorne's Skulls event-boon experiment remains intentionally absent. It was
+-- removed in v0.7.98 after the Chest-of-Trials crash and has no live setting,
+-- lookup reservation, template mutation, or runtime producer in this stream.
 
 -- ============================================================
 -- Miracle of Ulric / Miracle of Isha (alternative blessing behaviors, v0.7.65)
@@ -9570,6 +9451,16 @@ end
 -- Single consolidated hook for both blessing overrides — VMF silently shadows
 -- duplicate mod:hook on the same Class+method (feedback_vmf_hook_safe_no_chain.md).
 mod:hook("DeusRunController", "_try_buy_blessing", function(func, self, buyer, blessing_name)
+    -- A custom miracle must not mutate buffs, currency, or run bookkeeping
+    -- until the exact public catalog is proven for the complete live roster.
+    -- Unsafe clicks retain vanilla behavior rather than buying a no-op.
+    local custom_miracle = blessing_name == "blessing_of_power"
+            and effective_setting("tweak_miracle_of_ulric_persistent")
+        or blessing_name == "blessing_of_isha" and _get_isha_mode() ~= "vanilla"
+    if custom_miracle and (type(mod._ct_wire_safe) ~= "function"
+            or not mod._ct_wire_safe()) then
+        return func(self, buyer, blessing_name)
+    end
     -- v0.7.67 diagnostic: log every blessing_of_power entry regardless of toggle.
     -- The 2026-05-20 session showed zero entries despite the user reporting
     -- "Ulric wasn't purchaseable" — meaning the click was rejected at the UI
@@ -9693,6 +9584,14 @@ mod:hook_safe("DeusSpawning", "_apply_initial_buffs", function(self, player)
     local rc = self._deus_run_controller
     if not rc then return end
 
+    if type(mod._ct_wire_safe) ~= "function" or not mod._ct_wire_safe() then
+        -- A purchased pending mode is retained and may arm after parity returns;
+        -- already-active custom state is one-way cleared on parity loss.
+        rc._ct_isha_active = nil
+        rc._ct_isha_active_level = nil
+        return
+    end
+
     -- Current mission identity. get_current_node_key is the run controller's
     -- authoritative position field (same value the mission-start diagnostic
     -- reads); each combat mission is a distinct graph node.
@@ -9761,7 +9660,8 @@ do
     if server_tbl and type(server_tbl.start_function) == "function" then
         mod:hook(server_tbl, "start_function", function(func, context, data, unit)
             func(context, data, unit)
-            local current_mode = _get_isha_mode()
+            local current_mode = type(mod._ct_wire_safe) == "function"
+                    and mod._ct_wire_safe() and _get_isha_mode() or "vanilla"
             if current_mode ~= "vanilla" then
                 data.hero_side = nil
                 _dbg("[isha] mode=%s, applying alternative (vanilla mutator neutralized at server.start_function)", current_mode)
@@ -9930,6 +9830,13 @@ local CT_META_BOONS = {
 local function _make_meta_proc(stack_name)
     local stack_key = stack_name .. "_1"
     return function(unit, buff, params)
+        -- This path writes straight to BuffExtension (it does not pass through
+        -- the BuffSystem producer hooks owned by #426).  Close it at the final
+        -- pre-mutation boundary so a parity-loss race cannot recreate a custom
+        -- stack between host strip attempts.
+        if type(mod._ct_wire_safe) ~= "function" or not mod._ct_wire_safe() then
+            return
+        end
         local player = Managers.player and Managers.player:owner(unit)
         if not player then return end
         local buff_extension = ScriptUnit.extension(unit, "buff_system")
@@ -10718,6 +10625,43 @@ pre_register_trait_boon_lookups()
 for _, spec in ipairs(CT_TRAIT_BOONS) do
     register_trait_boon(spec)
 end
+
+-- Install the public #426 owner only after every frozen catalog template has
+-- been built, but before host-setting re-sync can put a custom row back into a
+-- pool. The installer owns its own Lua function scope to protect this already
+-- large entry chunk from Lua 5.1's 200-local limit.
+(function()
+    if mod._ct_wire_reservation_ready ~= true then
+        _dbg("[ct:426] public wire owner remains inert: %s",
+            tostring(mod._ct_wire_reservation_error))
+        return
+    end
+    local ok_owner, owner = pcall(mod.dofile, mod,
+        "scripts/mods/chaos_wastes_tweaker/_ct_peer_parity_owner")
+    if not ok_owner or type(owner) ~= "function" then
+        _dbg("[ct:426] public wire owner unavailable; custom content remains inert: %s",
+            tostring(owner))
+        return
+    end
+    local ok_byte_array, byte_array = pcall(require, "scripts/utils/byte_array")
+    local ok_lib_deflate, lib_deflate = pcall(require, "scripts/utils/lib_deflate")
+    local ok_install, install_result = pcall(owner, mod, {
+        rt_register = _rt_register,
+        collect_setting_ids = _collect_setting_ids,
+        rpc_schema = CT_RPC_SCHEMA,
+        add_dormant_to_pool = _add_dormant_to_pool,
+        remove_dormant_from_pool = _remove_dormant_from_pool,
+        injected_dormants = _injected_dormants,
+        trait_boons = CT_TRAIT_BOONS,
+        register_trait_boon = register_trait_boon,
+        byte_array = ok_byte_array and byte_array or nil,
+        lib_deflate = ok_lib_deflate and lib_deflate or nil,
+    })
+    if not ok_install or install_result ~= true then
+        _dbg("[ct:426] public wire owner install failed; custom content remains inert: %s",
+            tostring(install_result))
+    end
+end)()
 
 -- Assignment to the forward-declared `sync_host_dependent_state` (see top of file).
 -- Called by the ct_sync_host_settings RPC handler immediately after a client
@@ -11971,6 +11915,9 @@ end)
 -- cooldowns) so toggling the mod off via VMF doesn't leave them in a tweaked state until restart.
 -- All other mutations in this mod are scoped (save-and-restore inside hooks).
 mod.on_disabled = function()
+    if type(mod._ct_force_wire_inert) == "function" then
+        pcall(mod._ct_force_wire_inert, "mod-disabled")
+    end
     revert_reckless_swings_tweak()
     revert_bomb_cooldown_tweak()
     revert_boon_movespeed_tweak()
