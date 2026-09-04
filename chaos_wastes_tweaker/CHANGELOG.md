@@ -17,6 +17,7 @@
 - Vanilla and foreign rows pass through unchanged, including Pusfume-owned
   state. The public catalog deliberately excludes the two Dev-only power-ups
   and their two buff rows, so this promotion does not import Dev-only content.
+- VT2-Bundle-Retirement: `e7852992f40eb619.mod_bundle`
 
 ## 0.7.131-beta (2026-07-07) — HOTFIX: promote issue 406 client heal-crash gate [verify-fix] [crash] [0-critical]
 
