@@ -1,6 +1,6 @@
 local mod = get_mod("gut")
 
-local MOD_VERSION = "0.2.288"
+local MOD_VERSION = "0.2.289"
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -1369,22 +1369,10 @@ local ok_settings_inject, settings_inject_err = pcall(function()
         return
     end
     settings.transitions.mod_tweaker_view = function(self)
-        -- BUILD 2 ROUTING (v0.2.57-dev). The ESC "Mod Tweaker" button has TWO targets:
-        --
-        --   * IN THE KEEP/INN -> open the HeroView SUB-STATE (gut_mod_tweaker,
-        --     _mod_tweaker_state.lua). A sub-state stays INSIDE the already-open
-        --     hero_view and never recreates its renderer, so it eliminates BOTH the
-        --     deprecated bare-IngameView look on exit AND the LA armoury_atlas
-        --     renderer-recreation crash (42c81d84) that the leave/re-enter
-        --     standalone-view path triggered. This is the proper fix the old TODO
-        --     described.
-        --
-        --   * IN A MISSION -> there is NO hero_view, so we KEEP the existing standalone
-        --     ModTweakerView path (the pre-build-2 behaviour). In a mission the
-        --     standalone view's exit routes to "ingame_menu" (never crashed there; no
-        --     hero_view to recreate), preserving in-mission access exactly as before.
-        --
-        -- Keep/inn detection matches _ba_heroview_inject: ingame_ui_context.is_in_inn.
+        -- CURRENT ROUTING: keep, mission, hotkey, and /mod_tweaker all use the standalone
+        -- ModTweakerView. The guarded HeroView sub-state branch below is retained only as
+        -- dormant source until its historical keep bounce is root-caused and a deliberate
+        -- re-enable is reviewed. Keep/inn detection matches _ba_heroview_inject.
         local ctx = self.ingame_ui_context
         local in_keep = not (ctx and ctx.is_in_inn == false)
         -- v0.2.62-dev REVERT: the keep HeroView sub-state (build 2) reliably OPENED (rows
@@ -1395,9 +1383,10 @@ local ok_settings_inject, settings_inject_err = pcall(function()
         -- always did in-mission), and build-3's origin-capture exit (below) returns to the
         -- modern hero_view menu rather than the deprecated bare one, so the sub-state is no
         -- longer needed to avoid the deprecated look. Route the KEEP through the standalone
-        -- view too. (HeroViewStateModTweaker + _ba_heroview_inject stay registered for the
-        -- /mod_tweaker command.) Flip _USE_KEEP_SUBSTATE back only after the sub-state
-        -- bounce is root-caused.
+        -- view too. HeroViewStateModTweaker stays registered only as a dormant parity
+        -- surface; the canonical /mod_tweaker command below also uses this standalone
+        -- transition. Flip _USE_KEEP_SUBSTATE back only after the sub-state bounce is
+        -- root-caused.
         local _USE_KEEP_SUBSTATE = false
         if _USE_KEEP_SUBSTATE and in_keep and self.transition_with_fade and rawget(_G, "HeroViewStateModTweaker") then
             _dbg("[mt] ESC entry in keep -> hero_view sub-state gut_mod_tweaker")
@@ -1664,6 +1653,7 @@ mod:dofile("scripts/mods/gui_tweaker/_gut_mod_tweaker_contracts").install({
     register = _rt_register,
     src_read = _rt_src_read,
 })
+mod:dofile("scripts/mods/gui_tweaker/_gut_issue389_verifier").install(_RT_CHECKS)
 local _gut_ui_tweaks = mod:dofile("scripts/mods/gui_tweaker/_gut_ui_tweaks_integration").install({
     register = _rt_register,
     src_read = _rt_src_read,

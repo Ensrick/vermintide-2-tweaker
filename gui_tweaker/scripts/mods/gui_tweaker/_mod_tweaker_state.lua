@@ -2,12 +2,13 @@ local mod = get_mod("gut")
 local _printf = rawget(_G, "printf") or function() end
 
 -- ============================================================================
--- Mod Tweaker — HeroView SUB-STATE (KEEP path)
+-- Mod Tweaker — dormant HeroView SUB-STATE implementation
 -- ============================================================================
--- A second presentation of the Mod Tweaker that lives INSIDE the already-open
--- hero_view as a sub-state (modeled on HeroViewStateCompendium / the old Armory
--- mod's HeroViewStateArmory), instead of as a standalone IngameUI view reached by
--- leaving + re-entering hero_view.
+-- A second presentation of the Mod Tweaker that can live INSIDE hero_view as a
+-- sub-state (modeled on HeroViewStateCompendium / the old Armory mod's
+-- HeroViewStateArmory). The current ESC button, hotkey, and /mod_tweaker command
+-- all use the standalone view; this class remains registered as a dormant parity
+-- surface until its keep transition is deliberately re-enabled.
 --
 -- WHY THIS EXISTS (build 2, v0.2.57-dev). The standalone ModTweakerView
 -- (_mod_tweaker_view.lua) exited via ingame_ui:transition_with_fade(...), which
@@ -18,8 +19,8 @@ local _printf = rawget(_G, "printf") or function() end
 -- it kills BOTH symptoms. The standalone view STAYS as the in-mission path (there
 -- is no hero_view in a mission); this sub-state is the keep/inn path only.
 --
--- The DATA / REGISTRY / DRAW / INPUT substance is ported verbatim from
--- _mod_tweaker_view.lua — only the lifecycle shell changes to the sub-state
+-- The DATA / REGISTRY / DRAW / INPUT substance tracks _mod_tweaker_view.lua —
+-- only the lifecycle shell changes to the sub-state
 -- contract (renderer borrowed from ctx, input read from the parent's shared
 -- service, exit via parent:close_menu, no self-made input service / cursor push).
 
@@ -98,7 +99,8 @@ end
 -- (#389) Keep-substate twin of the standalone Mod Tweaker slider registry.
 local STEP_OVERRIDES = {
     cim = { base_power_level = 25 }, cim_dev = { base_power_level = 25 },
-    ct = { starting_coins = 25 }, ct_dev = { starting_coins = 25 },
+    ct = { starting_coins = 25, cot_cost_amount = 25 },
+    ct_dev = { starting_coins = 25, cot_cost_amount = 25 },
 }
 
 local function _resolve_step(node, mod_id, setting_id, dec)
@@ -167,6 +169,28 @@ local function _owner(category, setting_id)
         if o then return o.mod_obj, o.mod_id end
     end
     return category and category.mod_obj, category and category.mod_id
+end
+
+-- (#389) Keep-state twin of the standalone owner-aware step seam. The Equipment tab is
+-- synthetic, so its category id cannot identify the foreign mod that owns this setting.
+local function _resolve_owner_step(node, category, setting_id, dec)
+    local effective_setting_id = setting_id or _nf(node, "setting_id")
+    local _, owner_mod_id = _owner(category, effective_setting_id)
+    return _resolve_step(node, owner_mod_id, effective_setting_id, dec)
+end
+
+local function _issue389_step_receipt(category, setting_id, step)
+    if setting_id ~= "base_power_level" or (category and category._contract_probe) then return end
+    local receipts = rawget(mod, "_issue389_step_receipts")
+    if type(receipts) ~= "table" then
+        receipts = {}
+        rawset(mod, "_issue389_step_receipts", receipts)
+    end
+    if receipts.hero_state then return end
+    receipts.hero_state = true
+    local _, owner_mod_id = _owner(category, setting_id)
+    _printf("[gut:issue389] route=hero_state category=%s owner=%s setting=%s step=%s",
+        tostring(category and category.mod_id), tostring(owner_mod_id), tostring(setting_id), tostring(step))
 end
 
 local function _cat_get(category, setting_id)
@@ -1143,11 +1167,12 @@ function HeroViewStateModTweaker:_build_node_row(w, category, base_offset, depth
             row.content.min, row.content.max, row.content.num_decimals = min, max, dec
             row.content.value = val
             row.content.internal_value = (max > min) and math.clamp((val - min) / (max - min), 0, 1) or 0
-            -- ±step for the [<]/[>] glyphs: ~range/40 (coarse), at least the natural
-            -- increment. The track gives fine/continuous control; after a commit we
-            -- re-read the value so any mod-side snapping (ct rounds starting_coins to
-            -- 25 in its on_setting_changed) is reflected — matching VMF's own slider.
-            local step = _resolve_step(w, category and category.mod_id, setting_id, dec)
+            -- (#164/#389) Use the setting owner's explicit/registered step, falling back to
+            -- its natural numeric increment. The input adapter applies the same min-anchored
+            -- snap for typed values, arrows, and drag commits; off-grid stored values remain
+            -- visible until the user moves the control.
+            local step = _resolve_owner_step(w, category, setting_id, dec)
+            _issue389_step_receipt(category, setting_id, step)
             row.content.step = step
             mod:debug("[mt:num] '%s' bounds=%s..%s dec=%s step=%s val=%s",
                 tostring(setting_id), tostring(min), tostring(max), tostring(dec), tostring(step), tostring(val))
@@ -1795,8 +1820,8 @@ end
 -- those are suppressed only while THIS row is the active editor. Only ONE row edits at
 -- a time (self._editing_row). Filter mirrors VMF (vmf_options_view.lua:4532-4556):
 -- digits capped at num_decimals after the dot, "-" gated on min<0, "." once when
--- decimals>0, Backspace, 16-char cap. PORTED VERBATIM from _mod_tweaker_view.lua so the
--- standalone view (in-mission) and this HeroView sub-state (keep) behave identically.
+-- decimals>0, Backspace, 16-char cap. Kept behaviorally aligned with the active standalone
+-- view so this dormant HeroView state cannot revive an old input contract if re-enabled.
 local Interaction = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_state_interaction")
 Interaction.install(HeroViewStateModTweaker, {
     defs = defs,
@@ -1808,4 +1833,5 @@ Interaction.install(HeroViewStateModTweaker, {
     play_click = _play_click,
     play_hover = _play_hover,
 })
+HeroViewStateModTweaker._resolve_owner_step = _resolve_owner_step
 return { class_name = "HeroViewStateModTweaker" }

@@ -193,12 +193,10 @@ function mod._gut_open_mod_tweaker()
     end
 end
 
--- Chat opener mirroring /armory. Lets the user open the Mod Tweaker sub-state
--- from the keep without the ESC menu (useful for testing the no-deprecated-look /
--- no-LA-crash path directly).
-mod:command("mod_tweaker", "Open the Mod Tweaker (hero-menu sub-state, keep only)", function()
-    if mod._gut_open_mod_tweaker then mod._gut_open_mod_tweaker()
-    else mod:echo("Mod Tweaker sub-state not ready (inject module didn't load).") end
-end)
+-- Do not register /mod_tweaker here. gui_tweaker.lua already owns that global command and
+-- routes it through the current standalone transition; VT2 command registration is
+-- first-wins, so a second registration cannot expose this dormant Hero-state path.
+-- `_gut_open_mod_tweaker` remains an internal transition helper for a future deliberate
+-- re-enable after the keep sub-state bounce is root-caused.
 
 return {}

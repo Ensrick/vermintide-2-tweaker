@@ -1,5 +1,62 @@
 # Tweaker: GUI — Changelog
 
+## 0.2.289 (2026-09-03) — owner-aware Mod Tweaker slider steps (#389)
+
+### Why
+
+- Official v0.2.288 retained the 25-point Base Power Level contract, but both
+  Mod Tweaker presentation paths looked it up through the synthetic
+  `gut_equipment` category instead of the setting's CIM owner. Per-node
+  Equipment ownership (#208) and step policy (#164) each worked in isolation,
+  but their merged configuration seam was not exercised. The detached resolver
+  check therefore passed while the live row fell back to one-point steps.
+
+### Changed
+
+- Resolves numeric steps through the setting-qualified owner in the active
+  standalone view and the dormant Keep hero-view implementation. Normal
+  categories, explicit widget steps, and natural decimal increments keep their
+  existing precedence and behavior.
+- Restores the shared stable registry's `ct`/`ct_dev` Trial Chest Cost entries,
+  retaining the closed #826 consumer as a control alongside Starting Coins.
+- Adds `issue389_mod_tweaker_owner_aware_step` to `/gut_regression_test`. It
+  drives the real Equipment synthesizer, the active standalone row builder,
+  real owner-qualified staging, and the installed typed-edit and arrow
+  callbacks with a non-mutating local sink. It proves the arrow release latch,
+  rejects a missing owner, and retains normal-category and explicit-step
+  controls. When the dormant Keep twin is loaded, the check builds its real row
+  and drives its installed arrow handler; offline QA also drives the installed
+  state drag handler with an off-grid value.
+- Emits at most one `[gut:issue389]` receipt per presentation and game process
+  when the real Base Power Level row is built, recording route, category,
+  resolved owner, and step without requiring mod logging.
+
+### Verification
+
+- In Equipment > Crafting, Base Power Level must move in 25-point increments
+  with arrows, track clicks, and drag commits on the official standalone Mod
+  Tweaker route. Reopening the menu must retain the selected value.
+- Click the Base Power number, type `324`, and commit with Enter (then repeat by
+  clicking away): it must stage `325`. Pressing Escape during another edit must
+  cancel without moving or saving the value. Crafting afterward must use the
+  selected power; `950` is the authored maximum, so an entered `1000` tests only
+  clamping to `950`.
+- Starting Coins, Trial Chest Cost (when CT Dev is present), and an unrelated
+  numeric setting remain controls, and `/verify_gut_slider_step` and
+  `/gut_regression_test` must pass
+  `issue389_mod_tweaker_owner_aware_step`.
+- The session log must contain one standalone receipt with
+  `category=gut_equipment owner=cim` (or `cim_dev`) and `step=25`.
+
+### Notes
+
+- This is a selective stable promotion of the narrow owner-aware resolver from
+  GUI Dev. It excludes every unrelated GUI Dev feature.
+- `_USE_KEEP_SUBSTATE = false` keeps the HeroView substate dormant. The ESC
+  button, hotkey, and canonical `/mod_tweaker` command all use the standalone
+  view. The dormant implementation remains source-covered so its owner lookup
+  and min-anchored typed/arrow/drag grid cannot regress if it is re-enabled.
+
 ## 0.2.288 (2026-08-30) — verified Damage Taken award promotion (#1151)
 
 ### Why
