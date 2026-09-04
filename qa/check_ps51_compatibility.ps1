@@ -23,6 +23,8 @@ $ps51Targets = @(
     "qa/check_in_progress.ps1",
     "qa/check_published_ids.ps1",
     "qa/check_promotion.ps1",
+    "qa/check_promotion_authorization.ps1",
+    "qa/promotion_version_reader.ps1",
     "qa/check_mod_inventory.ps1",
     "qa/check_ci_hardening.ps1",
     "qa/check_diff_whitespace.ps1",

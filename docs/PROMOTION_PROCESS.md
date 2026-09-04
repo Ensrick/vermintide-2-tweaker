@@ -139,8 +139,19 @@ maintenance (Markdown other than `CHANGELOG.md`) remains authorization-bound
 but does not pretend to be a release, so version/suffix/monotonicity checks are
 not applicable. Any runtime, cfg, localization, changelog, bundle, or other
 stable-file change still runs the full promotion gate. CI exports promotion mode
-only to the remaining read-only QA steps. It never builds, deploys, uploads, or
-publishes merely because QA passed.
+only to the remaining read-only QA steps. It emits exact authorized
+`directory@version` records and an explicit, possibly empty, subset of the
+suffixed records. Before every directory's promotion gate, QA re-reads that
+checked tree's `MOD_VERSION`, requires an exact authorized pair, and sets or
+clears `VT2_SUFFIX_OK` for that invocation alone. Missing, duplicate, stale,
+foreign, mismatched, and ambient capabilities fail closed. An absent suffix
+record is not an empty suffix set; the latter is valid only when the environment
+provider proves that the explicitly empty record exists. Both authorization and
+the gate use the same Lua-aware canonical reader: comments, quoted or long-bracket
+strings, nested/dead declarations, duplicate assignments, and reassignment cannot
+provide version authority. The gate compares the exact full version, including
+its suffix, with the exact full top CHANGELOG version. It never builds, deploys,
+uploads, or publishes merely because QA passed.
 
 Approval is therefore separate from every later boundary: build the exact root
 bundle before opening the PR; merge only after the protected `qa-gate` passes;
@@ -171,11 +182,11 @@ rewriting the published version or relying on an older bundle.
   `qa/check_promotion.ps1` BLOCKING for the five stable split dirs — hard fail on
   (a) any forbidden lifecycle/status tag in the stable localization (defense in depth), (b) a pre-release
   suffix on the stable MOD_VERSION (override with `VT2_SUFFIX_OK=1` when the USER
-  named a suffixed stable version, issue #328 ruling), (c) MOD_VERSION not equal
-  to the top stable CHANGELOG entry, or that entry not increasing over the previous
+  named a suffixed stable version, issue #328 ruling), (c) the exact full
+  MOD_VERSION (including suffix) not equal to the top stable CHANGELOG entry, or
+  that entry not increasing over the previous
   one. Authorization-bound documentation-only maintenance (Markdown other than
   `CHANGELOG.md`) skips these release invariants because no releasable surface
-  changed. Self-test: `qa/check_promotion.ps1 -SelfTest` (12 cases, pwsh 7 +
-  PS 5.1).
+  changed. Self-test: `qa/check_promotion.ps1 -SelfTest` (pwsh 7 + PS 5.1).
 - **Verify the ship**: `workshop_log.txt` must show `Uploaded new content`; `ship.ps1`
   hash-verifies the deploy. `ugc_tool` prints success even on failure.

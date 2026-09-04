@@ -48,6 +48,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 if (-not $RepoRoot) { $RepoRoot = Split-Path -Parent $PSScriptRoot }
+. (Join-Path $PSScriptRoot 'promotion_version_reader.ps1')
 
 # The five unsuffixed _dev siblings (keep in sync with
 # tools/promote/promote.ps1 and qa/check_loc_tags.ps1).
@@ -129,10 +130,10 @@ function Invoke-PromotionGate([string]$repo, [string]$modName) {
         return $fails
     }
     $luaTxt = [System.IO.File]::ReadAllText($luaPath, [System.Text.Encoding]::UTF8)
-    if ($luaTxt -match 'local\s+MOD_VERSION\s*=\s*"([^"]+)"') {
-        $modVersion = $matches[1]
-    } else {
-        $fails += "no MOD_VERSION in $luaPath"
+    try {
+        $modVersion = Get-CanonicalPromotionModVersion -Text $luaTxt -SourceLabel $luaPath
+    } catch {
+        $fails += "invalid MOD_VERSION authority in ${luaPath}: $($_.Exception.Message)"
         return $fails
     }
 
@@ -160,17 +161,21 @@ function Invoke-PromotionGate([string]$repo, [string]$modName) {
         $fails += "no CHANGELOG.md in $modDir (cannot verify version monotonicity)"
     } else {
         $clTxt = [System.IO.File]::ReadAllText($clPath, [System.Text.Encoding]::UTF8)
-        $hdrs = [regex]::Matches($clTxt, '(?m)^##\s+v?(\d+\.\d+\.\d+)(-[A-Za-z0-9.]+)?\b')
+        $hdrs = [regex]::Matches(
+            $clTxt,
+            '(?m)^##\s+v?(?<version>\d+\.\d+\.\d+(?:-[A-Za-z0-9.+-]+)?)(?=\s|$)'
+        )
         if ($hdrs.Count -eq 0) {
             $fails += "no version headers in $clPath (cannot verify monotonicity)"
         } else {
-            $topBase = $hdrs[0].Groups[1].Value
+            $topVersion = $hdrs[0].Groups['version'].Value
+            $topBase = ($topVersion -split '-')[0]
             $verBase = ($modVersion -split '-')[0]
-            if ($verBase -ne $topBase) {
-                $fails += "CHANGELOG MISMATCH: MOD_VERSION $modVersion vs top CHANGELOG entry $topBase (bump + entry land together, CLAUDE.md non-negotiable 5)."
+            if ($modVersion -cne $topVersion) {
+                $fails += "CHANGELOG MISMATCH: MOD_VERSION $modVersion vs top CHANGELOG entry $topVersion (the full version, including suffix, must match; CLAUDE.md non-negotiable 5)."
             }
             if ($hdrs.Count -ge 2) {
-                $prevBase = $hdrs[1].Groups[1].Value
+                $prevBase = ($hdrs[1].Groups['version'].Value -split '-')[0]
                 if ([System.Version]$topBase -le [System.Version]$prevBase) {
                     $fails += "NOT MONOTONIC: top CHANGELOG version $topBase does not increase over previous $prevBase."
                 }
@@ -198,6 +203,10 @@ function Invoke-GateSelfTest {
         [System.IO.File]::WriteAllText((Join-Path $root "$mod\CHANGELOG.md"), $cl)
         return $mod
     }
+    function Set-MainLua([string]$root, [string]$modName, [string]$text) {
+        $path = Join-Path $root "$modName\scripts\mods\$modName\$modName.lua"
+        [System.IO.File]::WriteAllText($path, $text)
+    }
     function Assert([bool]$cond, [string]$name) {
         $script:t++
         if ($cond) { $script:p++; Write-Host "  ok  $name" -ForegroundColor Green }
@@ -211,6 +220,75 @@ function Invoke-GateSelfTest {
         $env:VT2_SUFFIX_OK = $null
         $mod = New-Fixture $fx '0.8.34' 'Clean Option Title' @('0.8.34', '0.8.33')
         Assert ((Invoke-PromotionGate $fx $mod).Count -eq 0)                                    'clean stable passes'
+
+        Set-MainLua $fx $mod "-- local MOD_VERSION = `"9.9.9-beta`"`nlocal bait = [=[local MOD_VERSION = `"9.9.8-beta`"]=]`nmod.MOD_VERSION = `"9.9.7-beta`"`nlocal MOD_VERSION = `"0.8.34`""
+        Assert ((Invoke-PromotionGate $fx $mod).Count -eq 0)                                    'shared lexical reader ignores comment, long-string, and member decoys'
+
+        Set-MainLua $fx $mod "local MOD_VERSION = `"0.8.34`"`nMOD_VERSION = `"0.8.35`""
+        Assert (@((Invoke-PromotionGate $fx $mod) -match 'invalid MOD_VERSION authority').Count -eq 1) 'MOD_VERSION reassignment fails closed'
+
+        Set-MainLua $fx $mod "local MOD_VERSION = `"0.8.34`"`nMOD_VERSION, x = `"0.8.35`", 1"
+        Assert (@((Invoke-PromotionGate $fx $mod) -match 'invalid MOD_VERSION authority').Count -eq 1) 'multiple-assignment MOD_VERSION rebinding fails closed'
+
+        Set-MainLua $fx $mod "local MOD_VERSION = `"0.8.34`"`nlocal x, MOD_VERSION = 1, `"0.8.35`""
+        Assert (@((Invoke-PromotionGate $fx $mod) -match 'invalid MOD_VERSION authority').Count -eq 1) 'multiple-local MOD_VERSION rebinding fails closed'
+
+        Set-MainLua $fx $mod "local MOD_VERSION=`"0.8.34`"`nlocal t={run=function() local y=1; MOD_VERSION=`"0.8.35`" end}; t.run()"
+        Assert (@((Invoke-PromotionGate $fx $mod) -match 'invalid MOD_VERSION authority').Count -eq 1) 'table-owned closure MOD_VERSION rebinding fails closed'
+
+        Set-MainLua $fx $mod "local MOD_VERSION = `"0.8.34`"`nlocal t = {}`nMOD_VERSION, (t).x = `"0.8.35`", 1"
+        Assert (@((Invoke-PromotionGate $fx $mod) -match 'invalid MOD_VERSION authority').Count -eq 1) 'parenthesized-lvalue MOD_VERSION rebinding fails closed'
+
+        Set-MainLua $fx $mod "local MOD_VERSION = `"0.8.34`"`nlocal function f() return {} end`nMOD_VERSION, f().x = `"0.8.35`", 1"
+        Assert (@((Invoke-PromotionGate $fx $mod) -match 'invalid MOD_VERSION authority').Count -eq 1) 'call-result-lvalue MOD_VERSION rebinding fails closed'
+
+        Set-MainLua $fx $mod "local MOD_VERSION = `"0.8.34`"`nfunction MOD_VERSION() end"
+        Assert (@((Invoke-PromotionGate $fx $mod) -match 'invalid MOD_VERSION authority').Count -eq 1) 'function MOD_VERSION rebinding fails closed'
+
+        Set-MainLua $fx $mod "local MOD_VERSION = `"0.8.34`"`nlocal function MOD_VERSION() end"
+        Assert (@((Invoke-PromotionGate $fx $mod) -match 'invalid MOD_VERSION authority').Count -eq 1) 'local function MOD_VERSION shadow fails closed'
+
+        Set-MainLua $fx $mod "local MOD_VERSION = `"0.8.34`"`nlocal function f(x, MOD_VERSION) return x end"
+        Assert (@((Invoke-PromotionGate $fx $mod) -match 'invalid MOD_VERSION authority').Count -eq 1) 'named-function parameter MOD_VERSION shadow fails closed'
+
+        Set-MainLua $fx $mod "local MOD_VERSION = `"0.8.34`"`nlocal f = function(x, MOD_VERSION) return x end"
+        Assert (@((Invoke-PromotionGate $fx $mod) -match 'invalid MOD_VERSION authority').Count -eq 1) 'anonymous-function parameter MOD_VERSION shadow fails closed'
+
+        Set-MainLua $fx $mod "local MOD_VERSION = `"0.8.34`"`nlocal x, MOD_VERSION"
+        Assert (@((Invoke-PromotionGate $fx $mod) -match 'invalid MOD_VERSION authority').Count -eq 1) 'initializer-free local MOD_VERSION shadow fails closed'
+
+        Set-MainLua $fx $mod "local MOD_VERSION = `"0.8.34`"`nfor x, MOD_VERSION in pairs({}) do return x end"
+        Assert (@((Invoke-PromotionGate $fx $mod) -match 'invalid MOD_VERSION authority').Count -eq 1) 'generic-for MOD_VERSION shadow fails closed'
+
+        Set-MainLua $fx $mod "local MOD_VERSION=`"0.8.34`"`n::again:: MOD_VERSION=`"0.8.35`""
+        Assert (@((Invoke-PromotionGate $fx $mod) -match 'invalid MOD_VERSION authority').Count -eq 1) 'label-adjacent immediate MOD_VERSION rebinding fails closed'
+
+        Set-MainLua $fx $mod "local MOD_VERSION=`"0.8.34`"`nlocal t={}`n::again:: MOD_VERSION,(t).x=`"0.8.35`",1"
+        Assert (@((Invoke-PromotionGate $fx $mod) -match 'invalid MOD_VERSION authority').Count -eq 1) 'label-adjacent parenthesized-lvalue rebinding fails closed'
+
+        Set-MainLua $fx $mod "local MOD_VERSION=`"0.8.34`"`nlocal function f() return {} end`n::again:: MOD_VERSION,f().x=`"0.8.35`",1"
+        Assert (@((Invoke-PromotionGate $fx $mod) -match 'invalid MOD_VERSION authority').Count -eq 1) 'label-adjacent call-result-lvalue rebinding fails closed'
+
+        Set-MainLua $fx $mod "local MOD_VERSION=`"0.8.34`"`nlocal t={}`n::again:: t.x,MOD_VERSION,(t).y=1,`"0.8.35`",2"
+        Assert (@((Invoke-PromotionGate $fx $mod) -match 'invalid MOD_VERSION authority').Count -eq 1) 'label-adjacent middle-slot rebinding fails closed'
+
+        Set-MainLua $fx $mod "local MOD_VERSION=`"0.8.34`"`n::again:: function MOD_VERSION() end"
+        Assert (@((Invoke-PromotionGate $fx $mod) -match 'invalid MOD_VERSION authority').Count -eq 1) 'label-adjacent function MOD_VERSION rebinding fails closed'
+
+        Set-MainLua $fx $mod "local MOD_VERSION=`"0.8.34`"`n::again:: local x,MOD_VERSION"
+        Assert (@((Invoke-PromotionGate $fx $mod) -match 'invalid MOD_VERSION authority').Count -eq 1) 'label-adjacent local MOD_VERSION shadow fails closed'
+
+        Set-MainLua $fx $mod "local MOD_VERSION=`"0.8.34`"`nlocal t={run=function() ::again:: MOD_VERSION=`"0.8.35`" end}; t.run()"
+        Assert (@((Invoke-PromotionGate $fx $mod) -match 'invalid MOD_VERSION authority').Count -eq 1) 'label-adjacent closure MOD_VERSION rebinding fails closed'
+
+        Set-MainLua $fx $mod "local MOD_VERSION=`"0.8.34`"`nlocal mod={}`n::again:: mod.MOD_VERSION=`"member`""
+        Assert ((Invoke-PromotionGate $fx $mod).Count -eq 0) 'label-adjacent member assignment remains unrelated'
+
+        Set-MainLua $fx $mod "local MOD_VERSION = `"0.8.34`"`nlocal a = { MOD_VERSION, `"x`" }`nlocal b = string.format(`"%s:%s`", MOD_VERSION, `"x`")`nlocal c, d = MOD_VERSION, `"x`""
+        Assert ((Invoke-PromotionGate $fx $mod).Count -eq 0)                                    'ordinary comma-separated MOD_VERSION reads remain valid'
+
+        Set-MainLua $fx $mod "local MOD_VERSION = `"0.8.34`"`nlocal MOD_VERSION = `"0.8.34`""
+        Assert (@((Invoke-PromotionGate $fx $mod) -match 'invalid MOD_VERSION authority').Count -eq 1) 'duplicate canonical MOD_VERSION fails closed'
 
         New-Fixture $fx '0.8.34' '[untested] Leaked Option' @('0.8.34', '0.8.33') | Out-Null
         $f = Invoke-PromotionGate $fx $mod
@@ -227,6 +305,16 @@ function Invoke-GateSelfTest {
 
         $env:VT2_SUFFIX_OK = '1'
         Assert (@((Invoke-PromotionGate $fx $mod) -match 'SUFFIX').Count -eq 0)                 'VT2_SUFFIX_OK=1 overrides (b)'
+        $env:VT2_SUFFIX_OK = $null
+
+        New-Fixture $fx '0.8.35-evil' 'Clean' @('0.8.35-beta', '0.8.34') | Out-Null
+        Set-MainLua $fx $mod "-- MOD_VERSION = `"0.8.35-beta`"`nlocal MOD_VERSION = `"0.8.35-evil`""
+        $env:VT2_SUFFIX_OK = '1'
+        Assert (@((Invoke-PromotionGate $fx $mod) -match 'CHANGELOG MISMATCH').Count -eq 1)      'full suffix must exactly match top CHANGELOG version'
+
+        New-Fixture $fx '0.8.35-evil' 'Clean' @('0.8.35-evil', '0.8.34') | Out-Null
+        Set-MainLua $fx $mod "-- MOD_VERSION = `"0.8.35-beta`"`nlocal MOD_VERSION = `"0.8.35-evil`""
+        Assert ((Invoke-PromotionGate $fx $mod).Count -eq 0)                                    'authorization and gate resolve the same real full version'
         $env:VT2_SUFFIX_OK = $null
 
         New-Fixture $fx '0.8.34' 'Clean' @('0.8.34', '0.8.35') | Out-Null
