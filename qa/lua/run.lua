@@ -327,6 +327,8 @@ local suites = {
     "test_peer_parity_transition",
     "test_peer_parity_install_transaction",
     "test_ct_426_exact_catalog",
+    "test_ct_public_426_wire_contract",
+    "test_ct_public_426_owner",
     "test_ct_boon_catalog",
     "test_ct_boon_split",
     "test_ct_boon_preview_helpers",

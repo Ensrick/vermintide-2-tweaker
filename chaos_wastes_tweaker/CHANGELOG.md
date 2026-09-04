@@ -1,5 +1,23 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.132-beta (2026-09-03) — exact public boon/miracle wire parity (#426) [untested] [crash] [0-critical]
+
+- Freezes the existing public catalog at exactly 29 bidirectional
+  `NetworkLookup` rows (10 power-ups and 19 buff templates) in its observed
+  registration order. The reservation, composite identity, integrity snapshot,
+  peer-parity owner, receiver floors, and hook publication commit as one
+  fail-closed transaction; partial or malformed state cannot publish a usable
+  catalog.
+- CT-owned boons and miracles remain inert until every live human peer proves
+  the same exact catalog. Writers, shop/grant/buff receivers, host relays,
+  SharedState replay, active buffs, and hot-join admission all enforce that
+  boundary; parity loss strips synchronized CT state transactionally before
+  native numeric decode, and terminal admission failure rejects the joining
+  peer instead of exposing mismatched ids.
+- Vanilla and foreign rows pass through unchanged, including Pusfume-owned
+  state. The public catalog deliberately excludes the two Dev-only power-ups
+  and their two buff rows, so this promotion does not import Dev-only content.
+
 ## 0.7.131-beta (2026-07-07) — HOTFIX: promote issue 406 client heal-crash gate [verify-fix] [crash] [0-critical]
 
 Mode-A cherry-pick promotion (docs/PROMOTION_PROCESS.md) of the issue 406 fix from
