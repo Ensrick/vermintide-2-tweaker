@@ -309,33 +309,51 @@ function Invoke-MachineTransactionLeaseSelfTest {
         $repeatOwner = Start-Worker $repeatMutex $repeatRecord 'ship' 'mod-a' 5000 $repeatOwnerMarker $repeatCrash '' 'Crash'
         $children += $repeatOwner
         Wait-Marker $repeatOwnerMarker $repeatOwner
-        Assert-Fixture ((Test-Path -LiteralPath $repeatRecord) -and (Test-Path -LiteralPath $repeatOwnerMarker)) 'repeat-abandoned fixture leaves a stale durable record'
-        Remove-Item -LiteralPath $repeatRecord -Force
+        $repeatKeeper = $null
+        try {
+            # ReadyPath is written before a contender opens/waits on the named
+            # mutex. Retain a non-owning parent handle so owner death cannot
+            # destroy the object before either queued fixture reaches WaitOne.
+            $repeatKeeper = [Threading.Mutex]::OpenExisting($repeatMutex)
+            Assert-Fixture ((Test-Path -LiteralPath $repeatRecord) -and (Test-Path -LiteralPath $repeatOwnerMarker)) 'repeat-abandoned fixture leaves a stale durable record'
+            Remove-Item -LiteralPath $repeatRecord -Force
 
-        $firstRecoveryMarker = Join-Path $temp 'repeat-abandoned-first.marker'
-        $firstReady = $firstRecoveryMarker + '.ready'
-        $firstRecovery = Start-Worker $repeatMutex $repeatRecord 'deploy' 'mod-b' 5000 $firstRecoveryMarker '' '' 'Success' '' $firstReady
-        $children += $firstRecovery
-        $secondRecoveryMarker = Join-Path $temp 'repeat-abandoned-second.marker'
-        $secondReady = $secondRecoveryMarker + '.ready'
-        $secondRecovery = Start-Worker $repeatMutex $repeatRecord 'upload' 'mod-c' 5000 $secondRecoveryMarker '' '' 'Success' '' $secondReady
-        $children += $secondRecovery
-        Wait-Marker $firstReady $firstRecovery
-        Wait-Marker $secondReady $secondRecovery
-        Start-Sleep -Milliseconds 150
-        Assert-Fixture (-not (Test-Path -LiteralPath $firstRecoveryMarker) -and
-            -not (Test-Path -LiteralPath $secondRecoveryMarker)) 'both recovery contenders queue behind the live owner before mutation'
-        [IO.File]::WriteAllText($repeatCrash, 'crash')
-        $repeatOwner.WaitForExit()
-        $firstRecovery.WaitForExit()
-        $secondRecovery.WaitForExit()
-        $firstRecovery.Refresh()
-        $secondRecovery.Refresh()
-        Assert-Fixture ((Read-WorkerError $firstRecoveryMarker) -match 'Refusing abandoned transaction recovery' -and
-            -not (Test-Path -LiteralPath $firstRecoveryMarker)) 'first failed abandoned recovery stays fail-closed before mutation'
-        Assert-Fixture ((Read-WorkerError $secondRecoveryMarker) -match 'Refusing abandoned transaction recovery' -and
-            -not (Test-Path -LiteralPath $secondRecoveryMarker) -and
-            -not (Test-Path -LiteralPath $repeatRecord)) 'second contender still sees abandoned recovery instead of overwriting stale authority'
+            $firstRecoveryMarker = Join-Path $temp 'repeat-abandoned-first.marker'
+            $firstReady = $firstRecoveryMarker + '.ready'
+            $firstRecovery = Start-Worker $repeatMutex $repeatRecord 'deploy' 'mod-b' 5000 $firstRecoveryMarker '' '' 'Success' '' $firstReady
+            $children += $firstRecovery
+            $secondRecoveryMarker = Join-Path $temp 'repeat-abandoned-second.marker'
+            $secondReady = $secondRecoveryMarker + '.ready'
+            $secondRecovery = Start-Worker $repeatMutex $repeatRecord 'upload' 'mod-c' 5000 $secondRecoveryMarker '' '' 'Success' '' $secondReady
+            $children += $secondRecovery
+            Wait-Marker $firstReady $firstRecovery
+            Wait-Marker $secondReady $secondRecovery
+            Start-Sleep -Milliseconds 150
+            Assert-Fixture (-not (Test-Path -LiteralPath $firstRecoveryMarker) -and
+                -not (Test-Path -LiteralPath $secondRecoveryMarker)) 'both recovery contenders queue behind the live owner before mutation'
+            [IO.File]::WriteAllText($repeatCrash, 'crash')
+            $repeatOwner.WaitForExit()
+            $firstRecovery.WaitForExit()
+            $secondRecovery.WaitForExit()
+            $firstRecovery.Refresh()
+            $secondRecovery.Refresh()
+            $firstRecoveryError = Read-WorkerError $firstRecoveryMarker
+            $secondRecoveryError = Read-WorkerError $secondRecoveryMarker
+            $firstRecoveryMarkerExists = Test-Path -LiteralPath $firstRecoveryMarker
+            $secondRecoveryMarkerExists = Test-Path -LiteralPath $secondRecoveryMarker
+            $repeatRecordExists = Test-Path -LiteralPath $repeatRecord
+            $repeatTerminalState = "first_exit=$($firstRecovery.ExitCode) first_stderr=[$firstRecoveryError] second_exit=$($secondRecovery.ExitCode) second_stderr=[$secondRecoveryError] first_marker=$firstRecoveryMarkerExists second_marker=$secondRecoveryMarkerExists record=$repeatRecordExists"
+            Assert-Fixture ($firstRecovery.ExitCode -ne 0 -and
+                $firstRecoveryError -match 'Refusing abandoned transaction recovery' -and
+                -not $firstRecoveryMarkerExists) "first failed abandoned recovery stays fail-closed before mutation; $repeatTerminalState"
+            Assert-Fixture ($secondRecovery.ExitCode -ne 0 -and
+                $secondRecoveryError -match 'Refusing abandoned transaction recovery' -and
+                -not $secondRecoveryMarkerExists -and
+                -not $repeatRecordExists) "second contender still sees abandoned recovery instead of overwriting stale authority; $repeatTerminalState"
+        }
+        finally {
+            if ($null -ne $repeatKeeper) { $repeatKeeper.Dispose() }
+        }
 
         # Queue the contender before owner death: abandoned Mutex ownership
         # must transfer instead of preserving a permanently unavailable count.
