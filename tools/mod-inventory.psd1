@@ -64,7 +64,18 @@
                 }
             )
         }
-        @{ Dir = 'chaos_wastes_tweaker';       ModId = 'ct';                         WorkshopId = '3712929235'; Visibility = 'public';       Stream = 'stable'; Public = $true;  Name = 'Chaos Wastes Tweaker'; BundleAuthority = 'tracked'; RootBundle = 'c37627d549d8ce88.mod_bundle' }
+        @{
+            Dir = 'chaos_wastes_tweaker'; ModId = 'ct'; WorkshopId = '3712929235';
+            Visibility = 'public'; Stream = 'stable'; Public = $true;
+            Name = 'Chaos Wastes Tweaker'; BundleAuthority = 'tracked'; RootBundle = 'c37627d549d8ce88.mod_bundle';
+            BuildArtifactExclusions = @(
+                @{
+                    Name = 'e7852992f40eb619.mod_bundle';
+                    Sha256 = 'e1a04e500f8255ebedcaffb4e35e829adbd99ebf46c2b8b4cd89d26dca4735e2';
+                    Reason = 'SDK tool-only BUNDLE=false LUT-generator sidecar emitted by clean Stingray builds'
+                }
+            )
+        }
         @{
             Dir = 'chaos_wastes_tweaker_dev'; ModId = 'ct_dev'; WorkshopId = '3733366926';
             Visibility = 'friends_only'; Stream = 'dev'; Public = $false;
