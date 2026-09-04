@@ -2163,6 +2163,8 @@ release-existence decision.
 - `GET /releases/tags/<exact-tag>` and `gh release view <tag>` return HTTP 503.
 - `GET /releases?per_page=N` still returns that exact tag, its release ID, and
   all assets, including `manifest.json`.
+- A resolved carry-forward asset GET returns HTTP 0 at the 30-second metadata
+  floor even though its release metadata declares a much larger byte size.
 - Source, bundle, local deploy, and Workshop hashes are current; only the
   filtered GitHub asset update aborts or is misclassified as a missing release.
 
@@ -2174,6 +2176,9 @@ release-existence decision.
 - Download through resolved release-asset IDs. Replace only requested assets by
   exact asset ID and upload through the numeric release ID, with the merged
   manifest last. Do not reuse the failed tag route.
+- Budget a download from the resolved asset's validated declared size, retain
+  the metadata floor and hard cap, and require the returned byte count to match.
+  Missing, malformed, negative, or unsupported sizes fail before the request.
 - Preserve staged bundle/provenance/hash checks before mutation. Test normal,
   404, transient fallback, exact match, pagination/exhaustion, ambiguity, asset
   selection, asset-ID download, and release-ID upload entirely offline.
