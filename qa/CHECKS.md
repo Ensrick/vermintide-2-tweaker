@@ -504,8 +504,14 @@ tip, lag, default-branch movement, malformed/ambiguous output, timeout, and the
 optional-versus-required unavailability split under both PowerShell hosts. The
 1--60 second total budget includes bounded tree-termination proof: PS7 uses
 `Process.Kill(true)`, while PS5.1 uses trusted system `taskkill.exe /T /F` with
-captured status plus bounded helper containment. Nonzero, timed-out, or
-unproven termination returns immediately as unavailable. Real nested
+captured status plus bounded helper containment. A non-launching assertion pins
+the trusted `%SystemRoot%\System32\taskkill.exe` path, exact `/PID <pid> /T /F`
+arguments, redirected output, disabled shell execution, and hidden window.
+Nonzero, timed-out, or unproven termination returns immediately as unavailable.
+The real PS5.1 integrations accept either exact taskkill success or the exact
+fail-closed deadline branch where the helper is contained and the unchanged
+target tree remains alive until final exact-identity cleanup. Malformed,
+nonzero, and helper-unproven results remain failures. Real nested
 parent/descendant and taskkill failure/timeout fixtures prove the policy split,
 cleanup, and no root, descendant, or helper orphan. One
 monotonic stopwatch allocates smooth, positive network/action/proof phases and
@@ -516,7 +522,10 @@ final proof phase is conditional: a timed-out helper uses it for containment,
 while a successful taskkill reserves it for root proof. An early successful
 taskkill may donate unused action time forward, but no phase moves the total
 deadline. Exhaustive allocator, root-exit output, expired-deadline, 1-second
-fail-closed, and delayed-real-taskkill fixtures pin the contract. Injected
+fail-closed, and delayed-real-taskkill fixtures pin the contract. The delayed
+real fixture injects the 12.5-second elapsed boundary, explicitly proves the
+remaining 1.5-second action budget, and launches the trusted helper directly so
+there is no untracked wrapper grandchild. Injected
 elapsed-time and wait/kill observers prove the exact programmed waits at every
 phase boundary, including a host resume at 5763 ms: later waits are zero, the
 hung helper is contained once, root proof is skipped, and output fails closed.
@@ -591,7 +600,7 @@ gate; strict `-SourceRepo ... -RequireSource` requires every source proof.
 | `check_wt_history_patch_4_6_reproducibility.ps1` | ✅ OK (2026-08-29) | Issue #1436 source-exact Hagbane-only Patch 4.6 gate: two finesse-DoT profile leaves, two current routes, current-schema private rehydration, Ricochet/weapon-diagram/refactor exclusions, primary/oracle agreement, and byte-exact public/dev catalogs. |
 | `run_wt_history_patch_4_6_host_matrix.ps1` | ✅ OK (2026-08-29) | Issue #1436 blocking dual-host validator for the complete six-file/18-object Patch 4.6 source closure, one-DLC-blob-identity adversary, no-fetch/no-lock extraction and exact raw-environment restoration; strict `-RequireSource` performs and requires both regenerations, while source-less CI is explicitly pinned-only. |
 | `check_wt_history_patch_6_0_reproducibility.ps1` | ✅ OK (2026-08-29) | Issue #1436 full-QA gate for the bounded Patch 6.0 shield-scalar and Fireball-profile slice; exact primary/oracle reproduction and catalog generation pass from the complete pinned source checkout. |
-| `check_wt_history_source_freshness.ps1` | ✅ OK (2026-09-03) | Issues #1529/#1436/#540 central 6.12.1 schema-2 semantic anchor equals the observed canonical default tip with an empty metadata gap; the strict reader retains schema-1 direct-parent/README-only compatibility. Ordinary offline QA may visibly skip only unavailable network, while WT BuildOnly/release requires exact remote ref/tip freshness without fetch/FETCH_HEAD mutation. Injected 750/1687/563 ms deadline traces prove every programmed wait, including the 5763 ms resume adversary; scheduler/OS latency is diagnostic, and one real PS5.1 hanging-helper case retains exact cleanup proof. |
+| `check_wt_history_source_freshness.ps1` | ✅ OK (2026-09-04) | Issues #1529/#1436/#540 central 6.12.1 schema-2 semantic anchor equals the observed canonical default tip with an empty metadata gap; the strict reader retains schema-1 direct-parent/README-only compatibility. Ordinary offline QA may visibly skip only unavailable network, while WT BuildOnly/release requires exact remote ref/tip freshness without fetch/FETCH_HEAD mutation. Injected 750/1687/563 ms deadline traces prove every programmed wait, including the 5763 ms resume adversary. Real PS5.1 taskkill integrations accept exact success or exact helper-contained deadline timeout with target retention through final cleanup; malformed/nonzero/unproven results fail, the delayed 12.5-second case pins its 1.5-second budget without a wrapper child, scheduler/OS latency remains diagnostic, and one real hanging-helper case retains exact cleanup proof. |
 | `check_wt_history_source_checkout.ps1` | ✅ OK (2026-09-01) | Offline PS7/PS5.1 adversary proves that stale/partial Git trees visibly skip ordinary regeneration and fail closed under `-RequireSource` for the Patch 2.0.6, 2.0.9.1, 2.0.10, 3.1, 3.2, 4.1.1, 4.6, 5.2, 6.0, 6.6, 6.8, 6.11.0, and Hotfix 6.11.2 gates. |
 | `run_wt_history_source_host_matrix.ps1` | ✅ OK (2026-09-01) | Issue #540 blocking dual-host owner for the generic freshness and incomplete-checkout self-tests. Full QA invokes it exactly once; static coverage forbids patch-specific matrices and `run_selftests.ps1` from multiplying the same process fixtures. |
 | `run_wt_history_patch_6_6_host_matrix.ps1` | ✅ OK (2026-09-03) | Issues #1529/#1436 blocking dual-host gate for the exact Patch 6.6 Deepwood Staff adjacent boundary, 6.12.1 current guards, independent-oracle agreement, and byte-exact public/dev catalogs. |
