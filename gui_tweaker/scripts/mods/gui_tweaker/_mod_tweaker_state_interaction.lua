@@ -537,8 +537,8 @@ function HeroViewStateModTweaker:_handle_input(input_service)
                     self:_begin_edit(row, click_x)
                     return
                 else
-                -- Draggable track. During the HOLD we only move the VISUAL; we COMMIT
-                -- (mod:set -> the mod's on_setting_changed) ONLY on release. Some
+                -- Draggable track. During the HOLD we only move the VISUAL; we STAGE
+                -- the min-anchored grid value ONLY on release. Some
                 -- handlers are heavy — ct's `starting_coins` broadcasts the entire
                 -- ~18KB config to clients — so firing it every drag frame floods the
                 -- network and crashes. One commit on release matches VMF's behaviour.
@@ -550,15 +550,15 @@ function HeroViewStateModTweaker:_handle_input(input_service)
                         local cx = UIInverseScaleVectorToResolution(cursor)[1]
                         local frac = math.clamp((cx - (anchor[1] + (c.track_x or 0))) / math.max(1, c.track_w), 0, 1)
                         cur = (c.min or 0) + frac * ((c.max or 1) - (c.min or 0))
-                        local nd = c.num_decimals or 0
-                        local m = (nd > 0) and (10 ^ nd) or 1
-                        cur = math.floor(cur * m + 0.5) / m
+                        -- (#164/#389) The dormant Hero-state adapter must use the same
+                        -- min-anchored step grid as typed edits and the active standalone view.
+                        cur = _snap_and_clamp(c, cur)
                         moved = true
                         if ths.on_left_release then commit = true end  -- drag ended
                     end
                 end
-                if c.dec and (c.dec.on_release or c.dec.on_left_release) then cur = math.clamp(cur - (c.step or 1), c.min, c.max); moved = true; commit = true end
-                if c.inc and (c.inc.on_release or c.inc.on_left_release) then cur = math.clamp(cur + (c.step or 1), c.min, c.max); moved = true; commit = true end
+                if c.dec and (c.dec.on_release or c.dec.on_left_release) then cur = _snap_and_clamp(c, cur - (c.step or 1)); moved = true; commit = true end
+                if c.inc and (c.inc.on_release or c.inc.on_left_release) then cur = _snap_and_clamp(c, cur + (c.step or 1)); moved = true; commit = true end
                 -- Visual tracks the value every frame (smooth drag); persistence waits.
                 if moved and cur ~= c.value then
                     c.value = cur

@@ -47,8 +47,8 @@ local math = math
 local STEP_OVERRIDES = {
     cim     = { base_power_level = 25 },  -- crafting starting power level (range 0-950)
     cim_dev = { base_power_level = 25 },
-    ct      = { starting_coins   = 25 },  -- CW starting pilgrim's coins (range 0-3000)
-    ct_dev  = { starting_coins   = 25 },
+    ct      = { starting_coins = 25, cot_cost_amount = 25 }, -- CW coin settings
+    ct_dev  = { starting_coins = 25, cot_cost_amount = 25 },
 }
 
 local SERVICE = "gut_mod_tweaker"
@@ -336,6 +336,32 @@ local function _owner(category, setting_id)
         if o then return o.mod_obj, o.mod_id end
     end
     return category and category.mod_obj, category and category.mod_id
+end
+
+-- (#389) Numeric presentation must resolve registry overrides through the setting owner,
+-- not the synthetic merged category id (for example gut_equipment -> cim). Keep this as
+-- one shared seam so row construction and /gut_regression_test exercise the same logic.
+local function _resolve_owner_step(node, category, setting_id, dec)
+    local effective_setting_id = setting_id or _nf(node, "setting_id")
+    local _, owner_mod_id = _owner(category, effective_setting_id)
+    return _resolve_step(node, owner_mod_id, effective_setting_id, dec)
+end
+
+local function _issue389_step_receipt(category, setting_id, step)
+    if setting_id ~= "base_power_level" or (category and category._contract_probe) then return end
+    -- /gut_regression_test intentionally dofiles this presentation more than once. Keep the
+    -- evidence latch on the persistent mod table so module re-execution cannot reset it and
+    -- turn a one-shot receipt into unbounded session-log spam.
+    local receipts = rawget(mod, "_issue389_step_receipts")
+    if type(receipts) ~= "table" then
+        receipts = {}
+        rawset(mod, "_issue389_step_receipts", receipts)
+    end
+    if receipts.standalone then return end
+    receipts.standalone = true
+    local _, owner_mod_id = _owner(category, setting_id)
+    _printf("[gut:issue389] route=standalone category=%s owner=%s setting=%s step=%s",
+        tostring(category and category.mod_id), tostring(owner_mod_id), tostring(setting_id), tostring(step))
 end
 
 local function _cat_get(category, setting_id)
@@ -1256,7 +1282,8 @@ function ModTweakerView:_build_node_row(w, category, base_offset, depth, display
             -- value to the grid (anchored at range min). A pre-existing off-step value (e.g. a
             -- 324-coin value dialed in VMF's own fine-grained menu) is shown as-is here and
             -- only snaps once the user moves it. #152: this replaced the old ~range/40 over-jump.
-            local step = _resolve_step(w, category and category.mod_id, setting_id or _nf(w, "setting_id"), dec)
+            local step = _resolve_owner_step(w, category, setting_id, dec)
+            _issue389_step_receipt(category, setting_id, step)
             row.content.step = step
             mod:debug("[mt:num] '%s' bounds=%s..%s dec=%s step=%s val=%s",
                 tostring(setting_id), tostring(min), tostring(max), tostring(dec), tostring(step), tostring(val))
@@ -2440,4 +2467,6 @@ Interaction.install(ModTweakerView, {
     play_hover = _play_hover,
     printf = _printf,
 })
+ModTweakerView._resolve_owner_step = _resolve_owner_step
+ModTweakerView._synthesize_equipment = _synthesize_equipment
 return ModTweakerView
