@@ -20,7 +20,7 @@ return {
     },
     current = {
         blob = "547f75e51dbf656184ed351ecd261714db4f25fe",
-        revision = "038498af2b565bcb10bf5ed225638293a7640c83",
+        revision = "25fd7b8433e839b678d1c98a7a9af80918cbc252",
     },
     exclusions = {
         {

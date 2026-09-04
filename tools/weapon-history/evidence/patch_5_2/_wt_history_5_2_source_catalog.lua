@@ -9,7 +9,7 @@
 -- every generated snapshot/profile module projects that state directly over the
 -- current source anchor instead of depending on another historical state.
 
-local current_revision = "038498af2b565bcb10bf5ed225638293a7640c83"
+local current_revision = "25fd7b8433e839b678d1c98a7a9af80918cbc252"
 
 local snapshot_modules = {
 	["5_1_1"] = {
@@ -469,20 +469,20 @@ return {
 				{ old_revision = "8224b443", new_revision = "4f496970", patch = "5.2.0" },
 				{ old_revision = "4f496970", new_revision = "cdc0a86e", patch = "5.2.3" },
 			},
-			direct_projection_target = "038498af",
+			direct_projection_target = "25fd7b84",
 			decompiler_rewrite_revision = "9239fe14",
 			spread_surface_5_2_3 = "semantic_equal_across_decompiler_rewrite",
 		},
 		artifact_sha256 = {
-			_wt_history_profiles_5_1_1_dlc_generated = "e7732661917d1c97fd3aa9f6be10cf0901ca6f60f86f58b289487521a9b24b91",
-			_wt_history_profiles_5_1_1_generated = "3b97e99e59fe69944d4ae97cda369faa052e2b06810b3b62d6623153ac0858da",
-			_wt_history_profiles_5_2_0_dlc_generated = "6a1a5c937465c34c4f353836abb472c8a4ebde859706557f7fd6b0ab21dac2c1",
-			_wt_history_profiles_5_2_0_generated = "f474c6ae30eb14be8c14722826159ee78c5baa2107cfc5a2aa2884180845e680",
-			_wt_history_snapshot_5_1_1_part_1_generated = "053ac18e31ea263e694c5bd1559135249ecd31a6cbd18660620208a53716d38c",
-			_wt_history_snapshot_5_1_1_part_2_generated = "2259e0328ce726554b6a3ffa5e27ac90b4f7a5c13b53cc91195aea8ae1dd34cd",
-			_wt_history_snapshot_5_2_0_part_1_generated = "516fc41a07d86925ab23d3409fa02637e054b6132c199f90c9189cf27c1ca114",
-			_wt_history_snapshot_5_2_0_part_2_generated = "8eb23cc93427cefa49c86499a3f2440f25c4d7e7c05b7ae04bf8dac415989e64",
-			_wt_history_snapshot_5_2_3_generated = "8a9e7e25a4bb40362c809a613b6fd0b147870ba466526f5e03420a5633e9ca0f",
+			_wt_history_profiles_5_1_1_dlc_generated = "a608765e34a96411d4122754670061583205eb19d63c81153964dc5a05364468",
+			_wt_history_profiles_5_1_1_generated = "57053025025299ed530d28e91fe7577dcd6b9ec744689fb8407b01712dd5ccaa",
+			_wt_history_profiles_5_2_0_dlc_generated = "43afb721f4354c9c7bd5f08d65493cc1e01dcd57ac82be864a8301e529872d1d",
+			_wt_history_profiles_5_2_0_generated = "070c52e482d66bc0d3c876947a77e9f420fa7dbb839b35ca95620c4ed4bd54d4",
+			_wt_history_snapshot_5_1_1_part_1_generated = "09158148ef828df373ce75a00ebb3abd971a6ed6e59800d1479aad7c0447d46b",
+			_wt_history_snapshot_5_1_1_part_2_generated = "71edcbf4a32b6056e3de045dc2b4b76a8d96c7302b2bafcc9d474611e1278809",
+			_wt_history_snapshot_5_2_0_part_1_generated = "4a5db6aee097e826bfe049573fde317abef8e22402ba9c2d83ecf131be7b296f",
+			_wt_history_snapshot_5_2_0_part_2_generated = "6d1c05ebf6040062c6c70e74dfdedf0f77e6a9e7651439995209989b802ce398",
+			_wt_history_snapshot_5_2_3_generated = "27d717fcc435e6db9d34b40824f74dd05db62e494d3f358385fad223992c5ab5",
 		},
 	},
 	completeness = {

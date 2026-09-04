@@ -1,4 +1,5 @@
 local register_runtime = require("test_wt_history_runtime")
+local register_ui = require("test_wt_history_ui")
 
 local function register(H, repo_root)
     local script_root = repo_root
@@ -349,6 +350,52 @@ local function register(H, repo_root)
         return counts
     end
 
+    H.test("WT #1529 provenance refresh preserves the post-#1436 gameplay census", function()
+        local by_path = generated_catalogs(CatalogUI, script_root)
+        local totals = {
+            catalogs = #CatalogUI.GENERATED_MODULES,
+            families = 0,
+            family_states = 0,
+            operations = 0,
+            states = 0,
+        }
+        local family_ids = {}
+        local state_ids = {}
+        for _, path in ipairs(CatalogUI.GENERATED_MODULES) do
+            local catalog = assert(by_path[path])
+            local valid, validation_error = Policy.validate(catalog)
+            H.equal(validation_error, nil)
+            H.equal(valid, true)
+            H.equal(catalog.current_source.revision,
+                "25fd7b8433e839b678d1c98a7a9af80918cbc252")
+            H.equal(catalog.current_source.display_name,
+                "Current (Game Version 6.12.1)")
+            H.equal(catalog.current_source.label, "6.12.1 source anchor")
+            local counts = catalog_counts(catalog)
+            totals.family_states = totals.family_states + counts.family_states
+            totals.operations = totals.operations + counts.operations
+            for _, family in ipairs(catalog.families) do
+                family_ids[family.id] = true
+            end
+            for state_id in pairs(catalog.states) do state_ids[state_id] = true end
+        end
+        for _ in pairs(family_ids) do totals.families = totals.families + 1 end
+        for _ in pairs(state_ids) do totals.states = totals.states + 1 end
+
+        H.deep_equal(totals, {
+            catalogs = 13,
+            families = 26,
+            family_states = 39,
+            operations = 242,
+            states = 15,
+        })
+        local ledger = assert(by_path[CatalogUI.COMPLETENESS_LEDGER_MODULE])
+        H.equal(ledger.current_revision,
+            "25fd7b8433e839b678d1c98a7a9af80918cbc252")
+        H.deep_equal(ledger.totals, totals,
+            "provenance refresh must not alter the post-#1436 gameplay census")
+    end)
+
     H.test("WT #1436 generated Patch 5.2 catalog passes strict schema validation", function()
         local catalog = assert(loadfile(script_root .. "_wt_history_5_2_catalog.lua"))()
         local valid, validation_error = Policy.validate(catalog)
@@ -365,7 +412,7 @@ local function register(H, repo_root)
         H.equal(valid, true)
         H.equal(catalog.catalog_id, "wt_history_patch_6_0_v1")
         H.equal(catalog.current_source.revision,
-            "038498af2b565bcb10bf5ed225638293a7640c83")
+            "25fd7b8433e839b678d1c98a7a9af80918cbc252")
         H.equal(#catalog.families, 3)
         H.equal(next(catalog.derived_profiles), nil)
         H.deep_equal(catalog.generation, {
@@ -555,7 +602,7 @@ local function register(H, repo_root)
         H.equal(catalog.schema, 2)
         H.equal(catalog.catalog_id, "wt_history_patch_6_6_v1")
         H.equal(catalog.current_source.revision,
-            "038498af2b565bcb10bf5ed225638293a7640c83")
+            "25fd7b8433e839b678d1c98a7a9af80918cbc252")
         H.equal(#catalog.families, 1)
         H.equal(next(catalog.profile_specs), nil)
         H.equal(next(catalog.derived_profiles), nil)
@@ -626,7 +673,7 @@ local function register(H, repo_root)
         H.equal(catalog.schema, 2)
         H.equal(catalog.catalog_id, "wt_history_patch_6_8_v1")
         H.equal(catalog.current_source.revision,
-            "038498af2b565bcb10bf5ed225638293a7640c83")
+            "25fd7b8433e839b678d1c98a7a9af80918cbc252")
         H.equal(#catalog.families, 1)
         H.equal(next(catalog.profile_specs), nil)
         H.equal(next(catalog.derived_profiles), nil)
@@ -687,20 +734,20 @@ local function register(H, repo_root)
             "wt_history_patch_3_1_v1", "wt_history_patch_3_2_v1",
             "wt_history_patch_5_2_v1", "wt_history_patch_6_0_v1",
             "wt_history_patch_6_6_v1", "wt_history_patch_6_8_v1",
-            "wt_history_patch_6_11_0_kruber_longbow_v1",
+            "wt_history_patch_6_11_0_v2",
             "wt_history_patch_6_11_2_reversions_v2",
             "wt_history_patch_4_1_1_v1", "wt_history_patch_4_6_hagbane_v1",
         })
         H.deep_equal(catalog_counts(catalog), {
             derived_profiles = 1,
             families = 26,
-            family_states = 38,
-            operations = 236,
+            family_states = 39,
+            operations = 242,
             profiles = 18,
             states = 15,
         })
-        local axe_falchion, elf_axe, halberd, handgun, kruber, longbow, masterwork,
-            sword_dagger, tuskgor
+        local axe_falchion, elf_axe, halberd, hammer, handgun, kruber, longbow,
+            masterwork, sword_dagger, tuskgor
         for _, family in ipairs(catalog.families) do
             if family.id == "elf_one_handed_axe" then elf_axe = family end
             if family.id == "kruber_sword_and_shield" then kruber = family end
@@ -709,6 +756,7 @@ local function register(H, repo_root)
             if family.id == "handgun_shared" then handgun = family end
             if family.id == "kruber_halberd" then halberd = family end
             if family.id == "kruber_longbow" then longbow = family end
+            if family.id == "one_handed_hammer_shared" then hammer = family end
             if family.id == "sword_and_dagger" then sword_dagger = family end
             if family.id == "axe_and_falchion" then axe_falchion = family end
         end
@@ -719,6 +767,8 @@ local function register(H, repo_root)
         H.deep_equal(assert(handgun).state_order, { "2_0_5" })
         H.deep_equal(assert(halberd).state_order, { "2_0_9" })
         H.deep_equal(assert(longbow).state_order, { "6_10_0" })
+        H.deep_equal(assert(hammer).state_order,
+            { "5_1_1", "5_2_0", "6_10_0" })
         H.deep_equal(assert(sword_dagger).state_order, { "2_0_9_1", "5_2_0" })
         H.deep_equal(assert(axe_falchion).state_order, { "6_11_1" })
         local valid, validation_error = Policy.validate(catalog)
@@ -1296,7 +1346,7 @@ local function register(H, repo_root)
             end
         end
         H.equal(pinned, 0.2866666666666667,
-            "current 6.12.0 source literal must survive evidence and catalog generation")
+            "current 6.12.1 source literal must survive evidence and catalog generation")
         H.truthy(pinned ~= 0.28666666666667,
             "the former Lua 5.1 tostring truncation must remain detectable")
     end)
@@ -1436,113 +1486,15 @@ local function register(H, repo_root)
         H.equal(validation_error, nil)
     end)
 
-    H.test("WT #1436 menu and localization share the composite family catalog", function()
-        local catalog = load_default_catalog(CatalogUI, script_root)
-        local group = assert(CatalogUI.build_widgets(catalog))
-        local loc = assert(CatalogUI.build_localization(catalog))
-        H.equal(group.setting_id, "wt_history_patch_versions")
-        H.equal(#group.sub_widgets, #catalog.families)
-        H.truthy(loc.wt_history_patch_versions_description.en
-            :find("historical balance projection", 1, true) ~= nil)
-        H.truthy(loc.wt_history_state_3_1_0.en
-            :find("bounded patch delta", 1, true) ~= nil)
-        H.truthy(loc.wt_history_state_5_1_1.en
-            :find("bounded patch delta", 1, true) == nil,
-            "complete direct historical baseline must not be mislabeled as adjacent")
-        for index, family in ipairs(catalog.families) do
-            local widget = group.sub_widgets[index]
-            H.equal(widget.setting_id, family.setting_id)
-            H.equal(widget.default_value, "current")
-            H.equal(widget.options[1].value, "current")
-            H.equal(widget.options[1].text, "wt_history_state_current")
-            H.equal(#widget.options, #family.state_order + 1)
-            H.equal(loc[family.setting_id].en, family.display_name)
-            H.truthy(loc[family.setting_id .. "_description"].en
-                :find("restart", 1, true) ~= nil)
-            if family.id == "deepwood_staff" then
-                H.truthy(loc[family.setting_id .. "_description"].en
-                    :find("hosting or playing solo", 1, true) ~= nil)
-            end
-        end
-    end)
-
-    H.test("WT #1436 data decoration inserts one history group and fails closed", function()
-        local by_path = generated_catalogs(CatalogUI, script_root)
-        local loads = 0
-        local mod = {}
-        function mod:dofile(path)
-            loads = loads + 1
-            return assert(by_path[path], "unexpected generated module " .. tostring(path))
-        end
-        local first = { setting_id = "first" }
-        local second = { setting_id = "second" }
-        local data = { options = { widgets = { first, second } } }
-
-        H.equal(CatalogUI.decorate_menu(mod, data), data)
-        H.equal(data.options.widgets[1], first)
-        H.equal(data.options.widgets[2].setting_id, "wt_history_patch_versions")
-        H.equal(#data.options.widgets[2].sub_widgets, 26)
-        H.equal(data.options.widgets[3], second)
-        H.equal(loads, 14)
-        H.equal(CatalogUI.decorate_menu(mod, data), data)
-        H.equal(#data.options.widgets, 3)
-        H.equal(loads, 14, "re-decoration must not reload or duplicate the group")
-
-        local malformed = { options = {} }
-        H.equal(CatalogUI.decorate_menu(mod, malformed), malformed)
-        H.equal(loads, 14, "malformed menu data must not load generated catalogs")
-    end)
-
-    H.test("WT #1436 public and dev data surfaces return one index-two history group", function()
-        local streams = {
-            {
-                namespace = "weapon_tweaker",
-                root = repo_root .. "/weapon_tweaker/scripts/mods/weapon_tweaker/",
-            },
-            {
-                namespace = "weapon_tweaker_dev",
-                root = repo_root .. "/weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/",
-            },
-        }
-        for _, stream in ipairs(streams) do
-            local data_path = stream.root .. stream.namespace .. "_data.lua"
-            local source = read_file(data_path)
-            local module_path = "scripts/mods/" .. stream.namespace
-                .. "/_wt_history_catalog"
-            local exact_return = "return mod:dofile(\"" .. module_path
-                .. "\").decorate_menu(mod, data)"
-            H.equal(count_plain(source, exact_return), 1,
-                stream.namespace .. " must delegate its final return exactly once")
-            H.truthy(source:match(exact_return:gsub("([^%w])", "%%%1") .. "%s*$") ~= nil,
-                stream.namespace .. " history decoration must remain the final return")
-
-            local catalog_ui = assert(loadfile(stream.root
-                .. "_wt_history_catalog.lua"))()
-            local by_path = generated_catalogs(catalog_ui, stream.root)
-            local loads = 0
-            local mod = {}
-            function mod:dofile(path)
-                loads = loads + 1
-                return assert(by_path[path],
-                    "unexpected generated module " .. tostring(path))
-            end
-            local availability = { setting_id = "weapon_availability" }
-            local overrides = { setting_id = "weapon_overrides" }
-            local data = { options = { widgets = { availability, overrides } } }
-            H.equal(catalog_ui.decorate_menu(mod, data), data)
-            H.equal(data.options.widgets[1], availability)
-            H.equal(data.options.widgets[2].setting_id,
-                "wt_history_patch_versions")
-            H.equal(#data.options.widgets[2].sub_widgets, 26)
-            H.equal(data.options.widgets[3], overrides)
-            H.equal(loads, 14)
-            H.equal(catalog_ui.decorate_menu(mod, data), data)
-            H.equal(#data.options.widgets, 3,
-                stream.namespace .. " must not duplicate its history group")
-            H.equal(loads, 14,
-                stream.namespace .. " must reuse its generated-catalog cache")
-        end
-    end)
+    register_ui(H, {
+        CatalogUI = CatalogUI,
+        count_plain = count_plain,
+        generated_catalogs = generated_catalogs,
+        load_default_catalog = load_default_catalog,
+        read_file = read_file,
+        repo_root = repo_root,
+        script_root = script_root,
+    })
 
     register_runtime(H, {
         AxeBalance = AxeBalance,

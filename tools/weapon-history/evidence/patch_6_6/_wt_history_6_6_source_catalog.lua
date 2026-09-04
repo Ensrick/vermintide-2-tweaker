@@ -2,7 +2,7 @@
 --
 -- The adjacent 6.5.4 -> 6.6.0 source comparison selects only the three
 -- Chaos Warrior with Shield leaves added by the official fix. Those paths
--- are then rehydrated against the 6.12.0 anchor so later Deepwood additions
+-- are then rehydrated against the 6.12.1 anchor so later Deepwood additions
 -- remain outside this historical projection.
 return {
     artifacts = {
@@ -16,7 +16,7 @@ return {
         post_revision = "877aa9b2720d297e0594f7039773eca610324f5b",
     },
     current = {
-        revision = "038498af2b565bcb10bf5ed225638293a7640c83",
+        revision = "25fd7b8433e839b678d1c98a7a9af80918cbc252",
     },
     family = {
         authority = "server",

@@ -69,12 +69,12 @@ try {
 
     $pinned = [ordered]@{
         $extractor = 'ae916ba306e0f5933f71e9b41ed0c0e7df46c28585da4fb92b5e2cc03199b15a'
-        $generator = 'd1fc8d4a8b1100b11326c81acd85fa6e20cc32c425fcf038eba61aa929588507'
-        $sourceCatalog = 'fdfa169606d9eb7c4893e8e6be3fe8e727d2b63c6c7a91894e050a1ffcb5fa65'
-        $generatedCatalog = 'bd01a4cb28d9e58bbf073b9c4ebe5ad97541d9a20f4880908229671b0620f66c'
+        $generator = '8d5a643fce288e5b7be0ef0518796d200bfdb0ebab969862019abbbbb71420dd'
+        $sourceCatalog = 'ba5c9c7f68f45890fc43849f5abedbc14d31f533a0c1c82edfffe9b646bb1456'
+        $generatedCatalog = '041d02125a8e05a3347cc2c1640d092f1a77f75502ae19c57a47bffa41d0ce10'
         $oracleExtractor = '767c73dd8f2caf35575324aae7ac09e2460a3506f9ad6c8296d2bee6e973a2d5'
-        $oracleSpec = 'a85a92267033246b175315f2935ebbc56dd5002d7722975e460e516758036e26'
-        $oracleRoutes = '5cfe899ef388217f0947572fe9cd2aef0d011f9f4feadb679757912d82c56a27'
+        $oracleSpec = 'd5e32fde9031772dcd5ee8e380fe0b949535c60774d91e450aad598a04fa2dee'
+        $oracleRoutes = 'aae106b4c24bf5e865ac614ae3cad9d4821828b5a7ffab4ee118f707463eebe8'
     }
     foreach ($entry in $pinned.GetEnumerator()) {
         if (-not (Test-Path -LiteralPath $entry.Key -PathType Leaf)) {
@@ -135,6 +135,46 @@ try {
     }
 
     $currentRevision = $anchor.ContentRevision
+
+    # Issue #1529 is provenance-only: every source path referenced by any of
+    # the thirteen history families must resolve to the same Git blob at the
+    # retired 6.12.0 anchor and the canonical 6.12.1 anchor. Derive the scope
+    # from the checked-in source catalogs/specifications so a newly referenced
+    # input cannot silently escape this transition proof.
+    $previousContentRevision = '038498af2b565bcb10bf5ed225638293a7640c83'
+    $transitionInputs = @(
+        Get-ChildItem (Join-Path $toolRoot 'evidence') -Recurse -File `
+            -Filter '*source_catalog.lua'
+        Get-ChildItem $oracleRoot -File -Filter '*source_spec.lua'
+    )
+    $transitionPaths = New-Object 'System.Collections.Generic.HashSet[string]' `
+        ([StringComparer]::Ordinal)
+    foreach ($transitionInput in $transitionInputs) {
+        $transitionText = [IO.File]::ReadAllText($transitionInput.FullName,
+            [Text.Encoding]::UTF8)
+        foreach ($match in [regex]::Matches($transitionText,
+                '"(scripts/[A-Za-z0-9_./-]+\.lua)"')) {
+            $null = $transitionPaths.Add($match.Groups[1].Value)
+        }
+    }
+    if ($transitionPaths.Count -ne 36) {
+        throw "#1529 current-source transition scope drift: expected=36 actual=$($transitionPaths.Count)"
+    }
+    foreach ($sourcePath in @($transitionPaths | Sort-Object)) {
+        $before = Invoke-WtHistoryReadOnlyGit -Repository $source -Arguments @(
+            'rev-parse', '--verify', "${previousContentRevision}:$sourcePath")
+        $after = Invoke-WtHistoryReadOnlyGit -Repository $source -Arguments @(
+            'rev-parse', '--verify', "$currentRevision`:$sourcePath")
+        $beforeBlobs = @($before.Output | Where-Object { $_ -match '^[0-9a-f]{40}$' })
+        $afterBlobs = @($after.Output | Where-Object { $_ -match '^[0-9a-f]{40}$' })
+        if ($before.ExitCode -ne 0 -or $after.ExitCode -ne 0 -or
+            $beforeBlobs.Count -ne 1 -or $afterBlobs.Count -ne 1) {
+            throw "#1529 source transition object is unavailable: $sourcePath"
+        }
+        if ($beforeBlobs[0] -cne $afterBlobs[0]) {
+            throw "#1529 gameplay source blob changed across 6.12.0/6.12.1: $sourcePath"
+        }
+    }
     $rehydration = @(
         [pscustomobject]@{ Name = '_wt_history_snapshot_5_1_1_part_1_generated.lua'; Mode = '--rehydrate-snapshot'; Revision = '8224b4436e20905a6ba463cb28fa2d7771bb2330' },
         [pscustomobject]@{ Name = '_wt_history_snapshot_5_1_1_part_2_generated.lua'; Mode = '--rehydrate-snapshot'; Revision = '8224b4436e20905a6ba463cb28fa2d7771bb2330' },

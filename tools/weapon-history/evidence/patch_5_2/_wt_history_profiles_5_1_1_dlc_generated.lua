@@ -1,6 +1,6 @@
 -- Rehydrated from immutable source revisions; do not hand-edit.
 return {
-    new_revision = "038498af",
+    new_revision = "25fd7b84",
     old_revision = "8224b443",
     profile_sources = {
         geiser_magma = "scripts/settings/dlcs/morris/damage_profile_templates_dlc_morris.lua",

@@ -1,6 +1,6 @@
 -- Regenerated from immutable decompiled-source Git objects; do not hand-edit.
 return {
-    current_revision = "038498af2b565bcb10bf5ed225638293a7640c83",
+    current_revision = "25fd7b8433e839b678d1c98a7a9af80918cbc252",
     oracle_id = "wt_patch_5_2_source_oracle_v1",
     routes = {
         coruscation_staff = {
@@ -266,7 +266,7 @@ return {
     },
     schema = 1,
     source_blobs = {
-        ["038498af2b565bcb10bf5ed225638293a7640c83"] = {
+        ["25fd7b8433e839b678d1c98a7a9af80918cbc252"] = {
             ["scripts/settings/dlcs/morris/damage_profile_templates_dlc_morris.lua"] = "a7f6e9e9fd9eb3e862c4c7a1ea5babfc5c43a733",
             ["scripts/settings/dlcs/morris/morris_buff_settings.lua"] = "d1ba9b93e8787d164d45ed95f4117e1b9fee3920",
             ["scripts/settings/dlcs/morris/player_unit_status_settings_morris.lua"] = "be62b18a4031d35c14b7a3e958e9600f99c346b2",
