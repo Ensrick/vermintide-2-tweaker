@@ -1652,43 +1652,46 @@ return {
             $failures.Add("expired taskkill deadline did not refuse before helper launch: $($refusal | Out-String)") | Out-Null
         }
 
-        # A quick successful helper may donate unused action time forward. The
-        # target exits naturally after the action deadline but before the total
-        # deadline; root proof must observe that exit without moving the total.
-        $donationMarker = New-FixturePidPath
-        $donationCommand = '[IO.File]::WriteAllText(''' +
-            $donationMarker.Replace("'", "''") +
-            ''', ''ready''); Start-Sleep -Milliseconds 2600'
+        function New-FiniteHelperTiming([hashtable]$State) {
+            return [pscustomobject]@{
+                GetElapsedMilliseconds = ({ return [long]$State.Elapsed }.GetNewClosure())
+                WaitForExit = ({
+                    param($Process, [int]$Milliseconds, [string]$Phase)
+                    if (@('network-probe', 'taskkill-action', 'root-proof') -cnotcontains $Phase) { throw "unexpected finite-helper process wait: $Phase/${Milliseconds}ms" }
+                    $State.Trace += "|process:$Phase=$Milliseconds"
+                    if ($Phase -ceq 'network-probe') { $State.Elapsed = [long]750; return $false }
+                    if ($Phase -ceq 'taskkill-action') { [IO.File]::WriteAllText($State.ReleasePath, 'go'); return [bool]$Process.WaitForExit($Milliseconds) }
+                    $State.Elapsed = [long]2438; if (-not $Process.HasExited) { $Process.Kill() }
+                    return [bool]$Process.WaitForExit($Milliseconds)
+                }.GetNewClosure())
+                WaitForTask = ({
+                    param($Task, [int]$Milliseconds, [string]$Phase)
+                    if (@('taskkill-output-stdout', 'taskkill-output-stderr') -cnotcontains $Phase) { throw "unexpected finite-helper task wait: $Phase/${Milliseconds}ms" }
+                    $State.Trace += "|task:$Phase=$Milliseconds"; return [bool]$Task.Wait($Milliseconds)
+                }.GetNewClosure())
+            }
+        }
+
+        # Inject time to prove helper action budget donation without moving the total deadline.
+        $donationTimingState = @{ Elapsed = [long]750; Trace = ''; ReleasePath = New-FixturePidPath }
         $donationProcess = New-Object System.Diagnostics.Process
         try {
-            $donationProcess.StartInfo = New-HostCommandStartInfo $donationCommand
+            $donationProcess.StartInfo = New-HostCommandStartInfo 'Start-Sleep -Seconds 30'
             if (-not $donationProcess.Start()) {
                 throw 'unused-taskkill donation target did not start'
             }
             $donationIdentity = Register-FixtureIdentity $fixtureIdentities `
                 'unused-taskkill donation target' $donationProcess.Id `
                 ([long]$donationProcess.StartTime.ToFileTimeUtc())
-            $readyClock = [System.Diagnostics.Stopwatch]::StartNew()
-            while ($readyClock.ElapsedMilliseconds -lt 5000 -and
-                -not (Test-Path -LiteralPath $donationMarker -PathType Leaf)) {
-                Start-Sleep -Milliseconds 25
-            }
-            $readyClock.Stop()
-            if (-not (Test-Path -LiteralPath $donationMarker -PathType Leaf)) {
-                throw 'unused-taskkill donation target did not become ready'
-            }
-
-            $donationClock = [System.Diagnostics.Stopwatch]::StartNew()
-            Start-Sleep -Milliseconds $threeSecondPlan.NetworkMilliseconds
             $donationTermination = Stop-WtHistoryProbeProcess `
-                -Process $donationProcess -Clock $donationClock `
+                -Process $donationProcess -Clock $injectedClock `
                 -TaskkillDeadlineMilliseconds `
                     $threeSecondPlan.TaskkillDeadlineMilliseconds `
                 -TotalDeadlineMilliseconds `
                     $threeSecondPlan.TotalDeadlineMilliseconds `
                 -ForceTaskkill -TaskkillStartInfoOverride `
-                    (New-HostCommandStartInfo 'exit 0')
-            $donationClock.Stop()
+                    (New-HostCommandStartInfo ("while (-not [IO.File]::Exists('" + $donationTimingState.ReleasePath.Replace("'", "''") + "')) { Start-Sleep -Milliseconds 10 }; exit 0")) `
+                -Timing (New-FiniteHelperTiming $donationTimingState)
         }
         finally { $donationProcess.Dispose() }
         $donationHelperIdentity = $null
@@ -1700,12 +1703,10 @@ return {
         }
         if (-not $donationTermination.Proven -or
             $donationTermination.TaskkillExitCode -ne 0 -or
-            $donationClock.ElapsedMilliseconds -lt
-                $threeSecondPlan.TaskkillDeadlineMilliseconds) {
-            $failures.Add("unused taskkill time was not donated within the immutable total deadline: elapsed=$($donationClock.ElapsedMilliseconds) result=$($donationTermination | Out-String)") | Out-Null
+            $donationTimingState.Trace -cne '|process:taskkill-action=1687|task:taskkill-output-stdout=1687|task:taskkill-output-stderr=1687|process:root-proof=2250' -or
+            $donationTimingState.Elapsed -ne 2438) {
+            $failures.Add("unused taskkill time was not donated within the immutable total deadline: trace=$($donationTimingState.Trace) elapsed=$($donationTimingState.Elapsed) result=$($donationTermination | Out-String)") | Out-Null
         }
-        Add-LatencyDiagnostic 'unused taskkill donation' `
-            $donationClock.ElapsedMilliseconds 4000
         Assert-ExactIdentityState 'unused-taskkill donation target' `
             $donationIdentity @('gone', 'reused')
         if ($donationHelperIdentity) {
@@ -1713,14 +1714,14 @@ return {
                 $donationHelperIdentity @('gone', 'reused')
         }
 
-        # Nonzero taskkill fails closed, preserves the exact target identity,
-        # and never spends the conditional proof bucket on an unrelated wait.
-        $failureClock = [System.Diagnostics.Stopwatch]::StartNew()
+        # Hold virtual time steady to prove fail-closed exit-7 capture independent of startup.
+        $failureTimingState = @{ Elapsed = [long]0; Trace = ''; ReleasePath = New-FixturePidPath }
         $taskkillFailure = Invoke-WtHistoryBoundedProcessProbe `
             -StartInfo (New-HostCommandStartInfo 'Start-Sleep -Seconds 30') `
             -TimeoutMs 3000 -ForceTaskkill `
-            -TaskkillStartInfoOverride (New-HostCommandStartInfo 'exit 7')
-        $failureClock.Stop()
+            -TaskkillStartInfoOverride `
+                (New-HostCommandStartInfo ("while (-not [IO.File]::Exists('" + $failureTimingState.ReleasePath.Replace("'", "''") + "')) { Start-Sleep -Milliseconds 10 }; exit 7")) `
+            -Timing (New-FiniteHelperTiming $failureTimingState)
         $failureParentIdentity = Register-FixtureIdentity $fixtureIdentities `
             'failed-taskkill target' ([int]$taskkillFailure.ProcessId) `
             ([long]$taskkillFailure.ProcessStartTimeFileTimeUtc)
@@ -1736,12 +1737,11 @@ return {
             $taskkillFailure.TaskkillExitCode -ne 7 -or
             $taskkillFailure.TaskkillTimedOut -or
             -not $taskkillFailure.TaskkillTerminationProven -or
+            $failureTimingState.Trace -cne '|process:network-probe=750|process:taskkill-action=1687|task:taskkill-output-stdout=1687|task:taskkill-output-stderr=1687' -or
             $taskkillFailure.TerminationError.IndexOf('exited 7',
                 [StringComparison]::Ordinal) -lt 0) {
             $failures.Add("injected taskkill failure was not captured and fail-closed: $($taskkillFailure | Out-String)") | Out-Null
         }
-        Add-LatencyDiagnostic 'injected taskkill failure' `
-            $failureClock.ElapsedMilliseconds 4000
         Assert-State 'optional taskkill failure' $taskkillFailure $false 'skip'
         Assert-State 'required taskkill failure' $taskkillFailure $true 'fail'
         Assert-ExactIdentityState 'failed-taskkill target' `
