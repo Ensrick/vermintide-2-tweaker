@@ -277,6 +277,11 @@ for _, klass in ipairs({ "HeroWindowItemCustomization", "HeroWindowCrafting", "H
         return unpack(results, 1, results.n)
     end)
     mod:hook_safe(klass, "on_exit", function(self)
+        local owner = mod._cim_illusion_apply_presentation_owner
+        if class_for_dump == "HeroWindowItemCustomization"
+                and type(owner) == "table" and type(owner.release) == "function" then
+            owner.release(self, "window-exit")
+        end
         mod._cim_standard_forge_active = false
     end)
 end

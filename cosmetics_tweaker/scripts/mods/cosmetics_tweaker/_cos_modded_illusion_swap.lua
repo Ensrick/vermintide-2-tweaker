@@ -5,6 +5,11 @@
 -- entry-point registration from splitting selection, crafting, and completion.
 
 local M = {}
+local _unpack = unpack
+
+local function _pack(...)
+    return { n = select("#", ...), ... }
+end
 
 M.HOOK_COUNT = 8
 
@@ -14,6 +19,17 @@ function M.install(mod, deps)
     end
 
     local get_mod = assert(deps.get_mod)
+    local _with_eac_off = deps.with_eac_off
+    if not _with_eac_off then
+        local authority = mod:dofile(
+            "scripts/mods/cosmetics_tweaker/_lib_modded_realm_authority")
+        _with_eac_off = function(func, self, ...)
+            return authority.with_eac_off(
+                script_data, nil, func, self, nil, ...)
+        end
+    end
+    assert(type(_with_eac_off) == "function",
+        "modded-realm authority callback required")
     local _skin_requires_unowned_dlc = assert(deps.skin_requires_unowned_dlc)
     local _custom_skin_keys = assert(deps.custom_skin_keys)
     local GlowPicker = assert(deps.glow_picker)
@@ -25,20 +41,45 @@ function M.install(mod, deps)
     local _fake_skin_backend_ids = {}
     local _pending_local_craft
 
+    local function _provider_owns(mod_id)
+        local got_mod, candidate = pcall(get_mod, mod_id)
+        if not got_mod or type(candidate) ~= "table" then return false end
+        local provider = rawget(candidate, "_cim_illusion_swap_provider")
+        if type(provider) ~= "table" or rawget(provider, "schema") ~= 1 then
+            return false
+        end
+        local owns = rawget(provider, "owns_illusion_swap")
+        if type(owns) ~= "function" then return false end
+        local called, result = pcall(owns)
+        return called and result == true
+    end
+
+    local function _legacy_public_cim_present()
+        -- Public CIM 0.8.92 predates the capability provider. Preserve its
+        -- established presence-based yield for backward compatibility; Dev
+        -- must opt in through the explicit provider.
+        local got_mod, candidate = pcall(get_mod, "cim")
+        return got_mod and candidate ~= nil
+    end
+
     local function _cim_owns_illusion_swap()
-        return get_mod("cim") ~= nil
+        return _legacy_public_cim_present() or _provider_owns("cim_dev")
     end
 
     mod:hook("BackendInterfaceItemPlayfab", "get_weapon_skin_from_skin_key", function(func, self, skin_key)
         local id, item = func(self, skin_key)
         if id then return id, item end
 
+        -- A published CIM owner must create and remember its own synthetic
+        -- identity.  Returning Cosmetics' private `ct_fake_*` id here would
+        -- leave CIM unable to resolve that material when its hook is outermost.
+        if _cim_owns_illusion_swap() then return nil, item end
+
         -- ItemMasterList.__index Crashifies on unknown keys. Illusion grids can
         -- hand us LA or CT keys which are not ItemMasterList members.
         local iml_entry = rawget(ItemMasterList, skin_key)
         local handle_vanilla_eac = script_data["eac-untrusted"] and iml_entry
             and not _skin_requires_unowned_dlc(skin_key)
-            and not _cim_owns_illusion_swap()
         if _custom_skin_keys[skin_key] or handle_vanilla_eac then
             local fake_id = "ct_fake_" .. skin_key
             _fake_skin_backend_ids[fake_id] = skin_key
@@ -60,13 +101,9 @@ function M.install(mod, deps)
                 tostring(self._skin_dirty), tostring(script_data["eac-untrusted"]))
         end
         if enable and script_data["eac-untrusted"] and self._current_recipe_name == "apply_weapon_skin" then
-            local saved = script_data["eac-untrusted"]
-            script_data["eac-untrusted"] = false
-            func(self, enable, disable_edges)
-            script_data["eac-untrusted"] = saved
-            return
+            return _with_eac_off(func, self, enable, disable_edges)
         end
-        func(self, enable, disable_edges)
+        local results = _pack(func(self, enable, disable_edges))
         if not enable and self._current_recipe_name == "apply_weapon_skin" then
             local widget = self._widgets_by_name and self._widgets_by_name.craft_button
             if widget and widget.content and widget.content.button_hotspot then
@@ -74,6 +111,7 @@ function M.install(mod, deps)
                 widget.content.button_hotspot.input_pressed = false
             end
         end
+        return _unpack(results, 1, results.n)
     end)
 
     mod:hook("HeroWindowItemCustomization", "_on_illusion_index_pressed", function(func, self, index, ignore_item_spawn, mark_as_equipped)
@@ -146,11 +184,7 @@ function M.install(mod, deps)
     mod:hook("HeroWindowItemCustomization", "_update_state_craft_button", function(func, self, recipe_name, ...)
         if _cim_owns_illusion_swap() then return func(self, recipe_name, ...) end
         if script_data["eac-untrusted"] and recipe_name == "apply_weapon_skin" then
-            local saved = script_data["eac-untrusted"]
-            script_data["eac-untrusted"] = false
-            local result = func(self, recipe_name, ...)
-            script_data["eac-untrusted"] = saved
-            return result
+            return _with_eac_off(func, self, recipe_name, ...)
         end
         return func(self, recipe_name, ...)
     end)

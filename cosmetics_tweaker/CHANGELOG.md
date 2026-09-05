@@ -1,5 +1,34 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.220-dev (2026-09-05) -- yield illusion Apply to the explicit CIM Dev owner (#1465) [verify-fix]
+
+- Symptom: on the equipped weapon's gear-icon Illusions page, selecting a
+  different owned illusion left no Apply button and the selection could not be
+  applied. Rain reproduced this on Crafting in Modded Dev 0.8.131-dev with
+  Modded Progression disabled and again with it enabled.
+- Root cause: the ownership boundary between Cosmetics' modded-realm illusion
+  swap and CIM recognized only public `cim` by presence. The friends-only
+  `cim_dev` stream was never identified, so both mods drove the Apply-button
+  presentation from separate hooks and could cancel each other's writes.
+- Fix: Cosmetics yields to CIM Dev only through the explicit
+  `_cim_illusion_swap_provider` capability (schema 1 plus a live
+  `owns_illusion_swap` check) and keeps the legacy presence-based yield for
+  public Crafting in Modded 0.8.92. While a CIM owner is published, the
+  skin-key backend hook no longer returns Cosmetics' private synthetic id, so
+  the outermost CIM hook can resolve its own material.
+- Replaced the raw realm-flag writes around the Apply-button hooks with the
+  shared modded-realm authority bracket (new `_lib_modded_realm_authority.lua`
+  copy registered in the shared-library manifest). It preserves nil-hole
+  returns and restores the exact prior state on success or error; the official
+  realm remains vanilla-owned and fail-closed.
+- Adds composition coverage for both hook orders against the real CIM Dev
+  callbacks, malformed or absent providers, and the legacy public CIM yield.
+
+**Test:** With Tweaker: Cosmetics v0.9.220-dev and Crafting in Modded Dev
+v0.8.132-dev loaded in the Modded Realm, select an equipped weapon, open its
+gear icon > Illusions, pick a different owned illusion, and confirm **Apply**
+appears and the change persists after reopening the page.
+
 ## 0.9.219-dev (2026-09-01) -- transactional Loremaster registration (#428, #2) [offline/tooling]
 
 - Moves Loremaster's Armoury discovery and publication into one Cosmetics-owned

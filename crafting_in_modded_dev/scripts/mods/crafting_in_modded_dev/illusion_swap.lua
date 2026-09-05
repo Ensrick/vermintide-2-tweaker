@@ -2,10 +2,11 @@
 illusion_swap.lua — modded-realm weapon illusion swap.
 
 Migrated from cosmetics_tweaker v0.8.49 so cim ships its own copy of the
-"change cosmetics in modded realm" UI. cosmetics_tweaker yields when the
-release `cim` mod is present. Its ownership check does not identify the
-friends-only `cim_dev` id, so persistence must also observe vanilla's shared
-Apply Skin completion seam instead of assuming this module owned the craft.
+"change cosmetics in modded realm" UI. cosmetics_tweaker preserves its legacy
+yield when public `cim` is present and recognizes this friends-only stream by
+the explicit `_cim_illusion_swap_provider` below. Persistence still observes
+vanilla's shared Apply Skin completion seam instead of assuming which mod
+owned the craft.
 
 Differences from cosmetics_tweaker's version:
   * No `_custom_skin_keys` registry — cim doesn't ship custom illusions of
@@ -274,41 +275,35 @@ mod:hook("BackendInterfaceItemPlayfab", "get_weapon_skin_from_skin_key", functio
 end)
 
 -- ============================================================
--- 2-4. Customization UI button hooks
+-- 2-4. Exact customization Apply presentation owner (#1465)
 -- ============================================================
-mod:hook("HeroWindowItemCustomization", "_enable_craft_button", function(func, self, enable, disable_edges)
-    if enable and _is_modded_realm() and self._current_recipe_name == "apply_weapon_skin" then
-        _with_eac_off(func, self, enable, disable_edges)
-        return
-    end
-    func(self, enable, disable_edges)
-    if not enable and self._current_recipe_name == "apply_weapon_skin" then
-        local widget = self._widgets_by_name and self._widgets_by_name.craft_button
-        if widget and widget.content and widget.content.button_hotspot then
-            widget.content.button_hotspot.is_held = false
-            widget.content.button_hotspot.input_pressed = false
+local _APPLY_PRESENTATION = mod:dofile(
+    "scripts/mods/crafting_in_modded_dev/_cim_illusion_apply_presentation")
+local _apply_owner = _APPLY_PRESENTATION.new({
+    is_modded_realm = _is_modded_realm,
+    with_eac_off = _with_eac_off,
+    skin_exists = function(skin_key)
+        return type(skin_key) == "string" and WeaponSkins and WeaponSkins.skins
+            and rawget(WeaponSkins.skins, skin_key) ~= nil
+    end,
+    skin_requires_unowned_dlc = _skin_requires_unowned_dlc,
+    get_current_item = function(window)
+        return window:_get_item(window._item_backend_id)
+    end,
+    default_skin_for = function(item)
+        return item and item.key and WeaponSkins and WeaponSkins.default_skins
+            and WeaponSkins.default_skins[item.key] or nil
+    end,
+    resolve_skin_backend_id = function(skin_key)
+        local items = Managers and Managers.backend
+            and Managers.backend:get_interface("items")
+        if not items or type(items.get_weapon_skin_from_skin_key) ~= "function" then
+            return nil
         end
-    end
-end)
-
-mod:hook("HeroWindowItemCustomization", "_on_illusion_index_pressed", function(func, self, index, ignore_item_spawn, mark_as_equipped)
-    local widget = self._illusion_widgets and self._illusion_widgets[index]
-    if _is_modded_realm() and not ignore_item_spawn then
-        if widget and widget.content then
-            local skin_key = widget.content.skin_key
-            if skin_key and not _skin_requires_unowned_dlc(skin_key) then
-                widget.content.locked = false
-                -- Selection is preview-only, so do not persist here. Retain the
-                -- latest intent on this window instance and consume it only if
-                -- Apply completes. This also protects against a mirror-ready
-                -- callback overwriting the live mirror between craft start and
-                -- UI completion: completion commits the user's B, not stale A.
-                self._cim563_pending_explicit_skin = skin_key
-            end
-        end
-    end
-    return func(self, index, ignore_item_spawn, mark_as_equipped)
-end)
+        return items:get_weapon_skin_from_skin_key(skin_key)
+    end,
+    log = function(fmt, ...) printf(fmt, ...) end,
+})
 
 -- NOTE: `_update_state_craft_button` is hooked in `standard_forge.lua`
 -- (loaded before this file). The eac-clearing wrap for the
@@ -400,8 +395,13 @@ end)
 -- cosmetics_tweaker local-mirror bypass seen in the reopened #563 log.
 mod:hook_safe("HeroWindowItemCustomization", "_apply_weapon_skin_craft_complete", function(self, result)
     if not _is_modded_realm() then return end
-    local pending_skin = self and self._cim563_pending_explicit_skin
-    if self then self._cim563_pending_explicit_skin = nil end
+    local pending_skin
+    if type(_apply_owner.complete) == "function" then
+        pending_skin = _apply_owner.complete(self, "craft-complete")
+    elseif self then
+        pending_skin = self._cim563_pending_explicit_skin
+        self._cim563_pending_explicit_skin = nil
+    end
     local backend_id = self and self._item_backend_id
     local item = backend_id and self._get_item and self:_get_item(backend_id)
     if type(item) ~= "table" then return end
@@ -606,3 +606,9 @@ mod:command("mirror_dump", "Dump every saved cim craft and its mirror state", fu
     mod:info(string.format("[mirror_dump] saved=%d in_mirror=%d in_items_iface=%d",
         n_saved, n_in_mirror, n_in_items_iface))
 end)
+
+-- Register the UI hooks and publish cross-mod ownership only after the entire
+-- module above has registered. The entry loads this file under pcall; any
+-- earlier registration/load error therefore leaves Cosmetics on its own
+-- fail-closed fallback instead of advertising a partial CIM owner.
+_APPLY_PRESENTATION.install(mod, _apply_owner, mod._cim_rt_register)
