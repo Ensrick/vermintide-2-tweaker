@@ -59,6 +59,21 @@ pcall(printf, "[fx:LOAD] v%s enabled fp=test OK", MOD_VERSION)
 mod:command("fx_probe", "Fixture probe", function()
     pcall(printf, "[fx:probe] status=OK")
 end)
+local pcall_ok, pcall_value = pcall(mod.command, mod,
+    "fx_pcall_probe", "Protected fixture probe",
+    function()
+        pcall(printf, "[fx:pcall-probe] status=OK")
+    end)
+local dynamic_command_name = "fx_dynamic_name"
+pcall(mod.command, mod, dynamic_command_name, "Dynamic-name bait", function() end)
+pcall(mod.command, mod, "fx_" .. dynamic_command_name, "Concatenated-name bait", function() end)
+pcall(other.command, mod, "fx_foreign_callable", "Foreign-callable bait", function() end)
+pcall(mod.command, other, "fx_foreign_self", "Foreign-self bait", function() end)
+pcall(mod.commands, mod, "fx_near_member", "Near-member bait", function() end)
+xpcall(mod.command, mod, "fx_near_wrapper", "Near-wrapper bait", function() end)
+helper.pcall(mod.command, mod, "fx_member_pcall", "Member-pcall bait", function() end)
+pcall(mod.command, mod, ("fx_parenthesized"), "Parenthesized-name bait", function() end)
+pcall(mod.command, mod, "Fx_uppercase", "Invalid-name bait", function() end)
 mod:command([=[fx_long_probe]=], [=[Long-bracket fixture probe]=], function()
     pcall(printf, [=[[fx:long-argument] status=OK]=])
 end)
@@ -68,6 +83,9 @@ if false then
     mod:info("[dead] v%s loaded", MOD_VERSION)
     mod:command("dead_probe", "Unreachable command", function()
         printf("[dead:receipt] status=impossible")
+    end)
+    pcall(mod.command, mod, "dead_pcall_probe", "Unreachable protected command", function()
+        printf("[dead:pcall-receipt] status=impossible")
     end)
 end
 mod:command("fx_goto", "Backward-goto fixture", function()
@@ -106,6 +124,7 @@ end
 mod:dofile("scripts/mods/fixture_mod/_helper").install(mod, { log = printf })
 mod:dofile("scripts/mods/fixture_mod/_early").install(mod, { log = printf })
 pcall(mod.dofile, mod, "scripts/mods/fixture_mod/_pcall_helper")
+pcall(mod.dofile, mod, "scripts/mods/fixture_mod/_pcall_command_only")
 '@, $utf8)
         [IO.File]::WriteAllText((Join-Path $luaRoot '_helper.lua'), @'
 local M = {}
@@ -127,6 +146,9 @@ return M
 '@, $utf8)
         [IO.File]::WriteAllText((Join-Path $luaRoot '_pcall_helper.lua'), @'
 printf("[fx:pcall-reachable] status=loaded")
+'@, $utf8)
+        [IO.File]::WriteAllText((Join-Path $luaRoot '_pcall_command_only.lua'), @'
+pcall(mod.command, mod, "fx_pcall_only", "Protected-only fixture probe", function() end)
 '@, $utf8)
         [IO.File]::WriteAllText((Join-Path $luaRoot '_shadow.lua'), @'
 local printf = mod.debug
@@ -224,10 +246,16 @@ end)
         Assert-VtContractFixture (@($record.ExactBannerRoutes.Tag) -notcontains '[dead]') 'Literal-false exact banner was accepted.'
         Assert-VtContractFixture (@($record.ExactBannerRoutes.Tag) -notcontains '[unreachable]') 'Unloaded-document exact banner was accepted.'
         Assert-VtContractFixture (@($record.CommandRoutes.Command) -contains '/fx_probe') 'Exact command registration was not recovered.'
+        Assert-VtContractFixture (@($record.CommandRoutes.Command) -contains '/fx_pcall_probe') 'Literal pcall(mod.command, mod, ...) registration was not recovered.'
+        Assert-VtContractFixture (@($record.CommandRoutes.Command) -contains '/fx_pcall_only') 'Protected command registration in a printf-free reachable document was not recovered.'
         Assert-VtContractFixture (@($record.CommandRoutes.Command) -contains '/fx_long_probe') 'Long-bracket command argument was not recovered.'
         Assert-VtContractFixture (@($record.CommandRoutes.Command) -notcontains '/phantom') 'String-only phantom command was accepted.'
         Assert-VtContractFixture (@($record.CommandRoutes.Command) -notcontains '/dead_probe') 'Literal-false command registration was accepted.'
+        Assert-VtContractFixture (@($record.CommandRoutes.Command) -notcontains '/dead_pcall_probe') 'Literal-false protected command registration was accepted.'
         Assert-VtContractFixture (@($record.CommandRoutes.Command) -notcontains '/unreachable_probe') 'Unloaded-document command registration was accepted.'
+        foreach ($forbiddenCommand in '/fx_dynamic_name','/fx_','/fx_foreign_callable','/fx_foreign_self','/fx_near_member','/fx_near_wrapper','/fx_member_pcall','/fx_parenthesized','/Fx_uppercase') {
+            Assert-VtContractFixture (@($record.CommandRoutes.Command) -notcontains $forbiddenCommand) "Ambiguous or near-match protected command registration was accepted: $forbiddenCommand"
+        }
 
         $routes = @($record.ReceiptRoutes)
         Assert-VtContractFixture (@($routes.Signature) -contains '[fx:probe] status=OK') 'Direct printf receipt was not recovered.'
@@ -236,7 +264,11 @@ end)
         Assert-VtContractFixture (@($routes | Where-Object {
             $_.Signature -eq '[fx:probe] status=OK' -and @($_.ActionCommands) -contains '/fx_probe'
         }).Count -eq 1) 'Explicit-command receipt was not bound to its exact action command.'
+        Assert-VtContractFixture (@($routes | Where-Object {
+            $_.Signature -eq '[fx:pcall-probe] status=OK' -and $_.Bound -and @($_.ActionCommands) -contains '/fx_pcall_probe'
+        }).Count -eq 1) 'Protected explicit-command receipt was not bounded and bound to its exact action command.'
         Assert-VtContractFixture (@($routes.Signature) -notcontains '[dead:receipt] status=impossible') 'Literal-false receipt route was accepted.'
+        Assert-VtContractFixture (@($routes.Signature) -notcontains '[dead:pcall-receipt] status=impossible') 'Literal-false protected-command receipt route was accepted.'
         Assert-VtContractFixture (@($routes.Signature) -notcontains '[unreachable:receipt] status=impossible') 'Unloaded-document receipt route was accepted.'
         Assert-VtContractFixture (@($routes | Where-Object {
             $_.Signature -eq '[fx:goto-cycle] status=unbounded' -and -not $_.Bound -and @($_.ActionCommands) -contains '/fx_goto'
