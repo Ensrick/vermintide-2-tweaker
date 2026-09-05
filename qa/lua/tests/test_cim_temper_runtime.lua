@@ -2,6 +2,15 @@ return function(H, repo_root)
     local root = repo_root
         .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/"
     local install = assert(loadfile(root .. "_cim_temper_runtime.lua"))()
+    local synthetic_contract = assert(loadfile(
+        root .. "_cim_synthetic_item_contract.lua"))()
+
+    local function read(path)
+        local file = assert(io.open(path, "rb"))
+        local value = file:read("*a")
+        file:close()
+        return value
+    end
 
     local function make_mod()
         local mod = { hooks = {}, safe_hooks = {}, messages = {} }
@@ -17,6 +26,7 @@ return function(H, repo_root)
         return {
             mod = mod,
             is_active = overrides.is_active or function() return true end,
+            contract = overrides.contract or synthetic_contract,
             transaction = overrides.transaction or {
                 action_for = function(item)
                     return item.rarity == "default" and "craft" or "apply"
@@ -36,12 +46,13 @@ return function(H, repo_root)
         }
     end
 
-    local function with_globals(item, body)
+    local function with_globals(item, body, printer)
         local old = {
             Managers = rawget(_G, "Managers"),
             Application = rawget(_G, "Application"),
             ItemMasterList = rawget(_G, "ItemMasterList"),
             Localize = rawget(_G, "Localize"),
+            printf = rawget(_G, "printf"),
         }
         rawset(_G, "Managers", {
             backend = {
@@ -54,12 +65,14 @@ return function(H, repo_root)
         rawset(_G, "Application", { guid = function() return "new-bid" end })
         rawset(_G, "ItemMasterList", {})
         rawset(_G, "Localize", function(key) return key end)
+        if printer ~= nil then rawset(_G, "printf", printer) end
         local ok, err = pcall(body)
         for key, value in pairs(old) do rawset(_G, key, value) end
         if old.Managers == nil then rawset(_G, "Managers", nil) end
         if old.Application == nil then rawset(_G, "Application", nil) end
         if old.ItemMasterList == nil then rawset(_G, "ItemMasterList", nil) end
         if old.Localize == nil then rawset(_G, "Localize", nil) end
+        rawset(_G, "printf", old.printf)
         if not ok then error(err, 0) end
     end
 
@@ -241,5 +254,71 @@ return function(H, repo_root)
         end)
         H.equal(applied, 0)
         H.equal(injected, 1)
+    end)
+
+    H.test("CIM #1141 Blacksmith Craft preserves CWV identity over vanilla alias", function()
+        local mod = make_mod()
+        local registered, injected, receipt, noted, receipt_count
+        receipt_count = 0
+        mod._cim_register_craft = function(_, data)
+            registered = data.item_key
+            return true
+        end
+        mod._cim_base_power = function() return 300 end
+        mod._cim_note_craft_bid = function(backend_id) noted = backend_id end
+        install(context(mod, {
+            loadout = {
+                apply_item_draft = function() error("CWV template must Craft") end,
+                discard_item_draft = function() end,
+                item_draft_payload = function()
+                    return { properties = { crit_chance = 1 }, traits = { "trait" } }
+                end,
+            },
+            inject_item = function(data)
+                injected = data.item_key
+                return true
+            end,
+        }))
+        local window = {
+            _career_name = "es_mercenary",
+            _params = { selected_slot_name = "slot_melee" },
+            _selected_item = function()
+                return { data = { key = "we_dual_wield_swords" } },
+                    "cwv_es_dual_swords_001"
+            end,
+        }
+        -- This is the live failure shape from Rain's log: the engine-facing key
+        -- is Kerillian's donor, while the Blacksmith backend id owns Kruber's
+        -- exact Imperial Dual Swords identity.
+        with_globals({
+            rarity = "default",
+            key = "we_dual_wield_swords",
+            ItemId = "we_dual_wield_swords",
+        }, function()
+            for _ = 1, 10 do
+                mod.hooks._upgrade_magic_level(function() error("vanilla") end, window)
+            end
+        end, function(format, ...)
+            receipt_count = receipt_count + 1
+            receipt = string.format(format, ...)
+        end)
+        H.equal(injected, "cwv_es_dual_swords")
+        H.equal(registered, "cwv_es_dual_swords")
+        H.equal(noted, "new-bid")
+        H.truthy(receipt:find(
+            "raw=we_dual_wield_swords canonical=cwv_es_dual_swords result=registered",
+            1, true))
+        H.equal(receipt_count, 8)
+    end)
+
+    H.test("CIM #1141 entry injects the shared identity contract", function()
+        local entry = read(root .. "crafting_in_modded_dev.lua")
+        H.truthy(entry:find("contract = mod._cim_synthetic_item_contract,", 1, true))
+        local runtime = read(root .. "_cim_temper_runtime.lua")
+        H.truthy(runtime:find("state.contract.canonical_item_key(live_item, backend_id)",
+            1, true))
+        H.equal(runtime:find("live_item and (live_item.key or live_item.ItemId)\n                or item_data", 1, true), nil)
+        H.truthy(runtime:find("[cim:1141] temper_craft backend=", 1, true))
+        H.truthy(runtime:find("state.issue1141_receipts < 8", 1, true))
     end)
 end

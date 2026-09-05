@@ -36,6 +36,9 @@ local function install(ctx)
 
     state.is_active = assert(ctx.is_active, "active accessor required")
     state.transaction = assert(ctx.transaction, "transaction policy required")
+    state.contract = assert(ctx.contract, "synthetic item contract required")
+    assert(type(state.contract.canonical_item_key) == "function",
+        "canonical item-key resolver required")
     state.loadout = assert(ctx.loadout, "loadout owner required")
     state.bulk_accessory_craft = assert(ctx.bulk_accessory_craft,
         "bulk accessory policy required")
@@ -43,6 +46,7 @@ local function install(ctx)
         "accessory craft callback required")
     state.inject_item = assert(ctx.inject_item, "item injector required")
     state.set_accessory_button_presentation = set_accessory_button_presentation
+    state.issue1141_receipts = tonumber(state.issue1141_receipts) or 0
 
     if state.installed then return state end
     state.installed = true
@@ -105,9 +109,14 @@ local function install(ctx)
                 return
             end
 
-            local item_data = item.data
-            local item_key = live_item and (live_item.key or live_item.ItemId)
-                or item_data and (item_data.key or item_data.name)
+            -- #1141: CWV's real 5-power Blacksmith row deliberately retains its
+            -- vanilla donor in `.key`/`.name` for engine fallback. Vanilla
+            -- PlayFabMirrorBase._update_data also overwrites `item.key` from
+            -- ItemId; the exact CWV identity survives in this seed's backend id.
+            -- Resolve through CIM's shared contract, whose exact fields and
+            -- `cwv_<key>_NNN` backend-id band outrank that donor.
+            local raw_item_key = live_item and (live_item.key or live_item.ItemId)
+            local item_key = state.contract.canonical_item_key(live_item, backend_id)
             if not item_key then
                 mod:echo("[cim] Temper Item: no selected item")
                 return
@@ -164,6 +173,18 @@ local function install(ctx)
                 mod:warning("[cim] Craft persistence rejected: "
                     .. tostring(register_error))
                 return
+            end
+            if mod._cim_note_craft_bid then
+                mod._cim_note_craft_bid(new_backend_id)
+            end
+
+            -- Exact live-test evidence without turning repeated Temper crafts
+            -- into unbounded session-log traffic.
+            if type(printf) == "function" and state.issue1141_receipts < 8 then
+                state.issue1141_receipts = state.issue1141_receipts + 1
+                pcall(printf,
+                    "[cim:1141] temper_craft backend=%s raw=%s canonical=%s result=registered",
+                    tostring(backend_id), tostring(raw_item_key), tostring(item_key))
             end
 
             local slot_name = self._params and self._params.selected_slot_name

@@ -1470,7 +1470,7 @@ mod._cim_amulet_craft_one_slot = _cim_amulet_craft_one_slot
 mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_temper_runtime")({
     mod = mod,
     is_active = function() return _custom_forge_active end,
-    transaction = mod._cim_temper_transaction,
+    transaction = mod._cim_temper_transaction, contract = mod._cim_synthetic_item_contract,
     loadout = _WEAVE_LOADOUT_OWNER,
     bulk_accessory_craft = _BULK_ACCESSORY_CRAFT,
     craft_accessory = _cim_amulet_craft_one_slot,
