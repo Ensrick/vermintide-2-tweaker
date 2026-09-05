@@ -1814,7 +1814,7 @@ _rt_register("issue592_bounded_blacksmith_acquisition", function()
 	if ownership.should_remove("cwv_es_musket_old_100", legacy, function() return false end) ~= false then
 		return "#592 CIM craft range was captured by migration"
 	end
-	local seeds = mod._cwv_blacksmith_seed_ids
+	local seeds = _om._cwv_blacksmith_seed_ids
 	if type(seeds) ~= "table" then return "#592 seed ledger missing" end
 	local expected, observed = 0, 0
 	for _ in pairs(seeds) do observed = observed + 1 end
@@ -1844,9 +1844,9 @@ _rt_register("issue592_bounded_blacksmith_acquisition", function()
 			end
 		end
 	end
-	if observed ~= expected or mod._cwv_blacksmith_seed_count ~= expected then
+	if observed ~= expected or _om._cwv_blacksmith_seed_count ~= expected then
 		return string.format("#592 seed cardinality drift expected=%d ledger=%d built=%s",
-			expected, observed, tostring(mod._cwv_blacksmith_seed_count))
+			expected, observed, tostring(_om._cwv_blacksmith_seed_count))
 	end
 end)
 

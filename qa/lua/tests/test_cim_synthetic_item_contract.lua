@@ -131,6 +131,856 @@ return function(H, repo_root)
         H.equal(normalized.backend_id, record.backend_id)
     end)
 
+    H.test("CIM #1141 Temper-Craft accepts only provider-proven CWV seeds", function()
+        local cwv = dofile(repo_root
+            .. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_acquisition.lua")
+        local key = "cwv_es_dual_swords"
+        local donor_key = "we_dual_wield_swords"
+        local row = master("cwv_variant")
+        row.cwv_key = key
+        row.cwv_definition = true
+        row.key = donor_key
+        row.name = donor_key
+        local item_master_list = { [key] = row }
+        local ledger = {}
+        local live
+        local function seed(backend_id)
+            local entry = {
+                key = donor_key, name = donor_key, cwv_variant = true,
+                cwv_definition = false, cwv_key = key,
+                rarity = "default",
+                mod_data = {
+                    backend_id = backend_id, ItemInstanceId = backend_id,
+                    rarity = "default", power_level = 5,
+                    traits = {}, properties = {},
+                    CustomData = { rarity = "default", power_level = "5",
+                        traits = "[]", properties = "{}" },
+                },
+            }
+            live = {
+                IsModItem = true, CreatedBy = "character_weapon_variants",
+                backend_id = backend_id, ItemInstanceId = backend_id,
+                key = donor_key, ItemId = donor_key,
+                rarity = "default", power_level = 5,
+                traits = {}, properties = {},
+                CustomData = { rarity = "default", power_level = "5",
+                    traits = "[]", properties = "{}" },
+                data = entry,
+            }
+            ledger = { [backend_id] = assert(cwv.protect_seed_identity(
+                backend_id, key, entry, row)) }
+        end
+        local provider = cwv.new_seed_identity_provider({
+            registered_keys = { [key] = row },
+            get_protected_seed_ids = function() return ledger end,
+            get_item_master_list = function() return item_master_list end,
+            get_backend_item = function() return live end,
+        })
+
+        for _, suffix in ipairs({ "000", "001" }) do
+            local backend_id = key .. "_" .. suffix
+            seed(backend_id)
+            local source, reason = contract.resolve_temper_craft_source(
+                { data = { key = donor_key } }, live,
+                backend_id, provider)
+            H.equal(reason, nil)
+            H.equal(source.item_key, key)
+            H.equal(source.proof.backend_id, backend_id)
+
+            -- BackendInterfaceItemPlayfab recursively clones the raw mirror
+            -- row for UI presentation.  The provider must authenticate its
+            -- private raw source while the consumer accepts an equivalent,
+            -- independently allocated projection.
+            local function clone(value)
+                if type(value) ~= "table" then return value end
+                local result = {}
+                for child_key, child in pairs(value) do
+                    result[child_key] = clone(child)
+                end
+                return result
+            end
+            local projected = clone(live)
+            H.truthy(projected ~= live and projected.data ~= live.data)
+            source, reason = contract.resolve_temper_craft_source(
+                projected, projected, backend_id, provider)
+            H.equal(reason, nil)
+            H.equal(source.item_key, key)
+            H.equal(source.proof.backend_id, backend_id)
+
+            local matching = {
+                key = "we_dual_wield_swords",
+                cwv_key = key,
+                backend_id = backend_id,
+                data = { key = donor_key },
+            }
+            source = contract.resolve_temper_craft_source(
+                matching, live, backend_id, provider)
+            H.equal(source.item_key, key)
+
+            local method_provider = {
+                schema = provider.schema,
+                owner = provider.owner,
+                capability = provider.capability,
+            }
+            method_provider.resolve = function(self, id)
+                H.equal(self, method_provider)
+                return provider:resolve(id)
+            end
+            source = contract.resolve_temper_craft_source(
+                matching, live, backend_id, method_provider)
+            H.equal(source.item_key, key)
+        end
+
+        local backend_id = key .. "_001"
+        seed(backend_id)
+        local conflicting = {
+            key = donor_key,
+            cwv_key = "cwv_es_longsword",
+            data = { key = donor_key },
+        }
+        local resolved, reason = contract.resolve_temper_craft_source(
+            conflicting, live, backend_id, provider)
+        H.equal(resolved, nil)
+        H.equal(reason, "cwv_source_stamp_conflict")
+
+        for _, backend_id in ipairs({
+            key .. "_002", key .. "_100", key .. "_999", "foreign_001",
+        }) do
+            resolved, reason = contract.resolve_temper_craft_source({
+                cwv_key = key,
+                key = "we_dual_wield_swords",
+                data = row,
+            }, live, backend_id, provider)
+            H.equal(resolved, nil)
+            H.truthy(reason:find("cwv_provider:", 1, true))
+        end
+
+        resolved, reason = contract.resolve_temper_craft_source(
+            live, live, key .. "_001", nil)
+        H.equal(resolved, nil)
+        H.equal(reason, "cwv_provider_unavailable")
+        local throwing = {
+            schema = contract.CWV_SEED_IDENTITY_SCHEMA,
+            owner = contract.CWV_SEED_IDENTITY_OWNER,
+            capability = contract.CWV_SEED_IDENTITY_CAPABILITY,
+            resolve = function() error("provider failure") end,
+        }
+        resolved, reason = contract.resolve_temper_craft_source(
+            live, live, key .. "_001", throwing)
+        H.equal(resolved, nil)
+        H.equal(reason, "cwv_provider_exception")
+
+        seed(key .. "_001")
+        local hidden = {
+            backend_id = key .. "_001", key = donor_key, cwv_key = key,
+            data = { key = donor_key,
+                CustomData = { cwv_key = "cwv_es_longsword" } },
+        }
+        resolved, reason = contract.resolve_temper_craft_source(
+            hidden, live, key .. "_001", provider)
+        H.equal(resolved, nil)
+        H.equal(reason, "cwv_source_stamp_conflict")
+        hidden.data.CustomData.cwv_key = false
+        resolved, reason = contract.resolve_temper_craft_source(
+            hidden, live, key .. "_001", provider)
+        H.equal(resolved, nil)
+        H.equal(reason, "cwv_selected_semantic_stamp_conflict")
+
+        local mixed_donor = {
+            backend_id = key .. "_001",
+            key = "bw_1h_sword",
+            cwv_key = key,
+        }
+        resolved, reason = contract.resolve_temper_craft_source(
+            mixed_donor, live, key .. "_001", provider)
+        H.equal(resolved, nil)
+        H.equal(reason, "cwv_selected_semantic_key_conflict")
+
+        resolved, reason = contract.resolve_temper_craft_source(
+            hidden, nil, key .. "_001", provider)
+        H.equal(resolved, nil)
+        H.equal(reason, "cwv_live_item_unavailable")
+    end)
+
+    H.test("CIM #1141 Temper source leaves non-CWV providers unchanged", function()
+        local cases = {
+            { bid = "vanilla-bid", item = { key = "es_1h_sword" },
+              expected = "es_1h_sword" },
+            { bid = "pusfume-bid", item = { ItemId = "pusfume_claw" },
+              expected = "pusfume_claw" },
+            { bid = "external-bid", item = { item_key = "community_halberd" },
+              expected = "community_halberd" },
+            { bid = "donor-only", item = { key = "we_dual_wield_swords" },
+              expected = "we_dual_wield_swords" },
+        }
+        for _, case in ipairs(cases) do
+            local resolved, reason = contract.resolve_temper_craft_source(
+                case.item, case.item, case.bid, nil)
+            H.equal(reason, nil)
+            H.equal(resolved.item_key, case.expected)
+        end
+        local woc, woc_reason = contract.resolve_temper_craft_source(
+            { key = "woc_blightreaper" }, { key = "woc_blightreaper" },
+            "woc-bid", nil)
+        H.equal(woc, nil)
+        H.equal(woc_reason, "immutable_relic")
+
+        local tampered = {
+            schema = contract.CWV_SEED_IDENTITY_SCHEMA,
+            owner = contract.CWV_SEED_IDENTITY_OWNER,
+            capability = contract.CWV_SEED_IDENTITY_CAPABILITY,
+            resolve = function(_, backend_id)
+                return {
+                    schema = contract.CWV_SEED_IDENTITY_SCHEMA,
+                    owner = contract.CWV_SEED_IDENTITY_OWNER,
+                    capability = contract.CWV_SEED_IDENTITY_CAPABILITY,
+                    backend_id = backend_id,
+                    item_key = "cwv_es_dual_swords",
+                    fingerprint = "forged",
+                }, nil
+            end,
+        }
+        local resolved, reason = contract.resolve_temper_craft_source({
+            cwv_key = "cwv_es_dual_swords",
+        }, { cwv_key = "cwv_es_dual_swords" },
+            "cwv_es_dual_swords_001", tampered)
+        H.equal(resolved, nil)
+        H.equal(reason, "cwv_provider_proof_mismatch")
+    end)
+
+    H.test("CIM #1141 mirror ownership contains partial writes and exact rollback", function()
+        local master_ref = {}
+        local function payload(backend_id, item_key)
+            return {
+                ItemId = item_key,
+                ItemInstanceId = backend_id,
+                CustomData = {
+                    cim_acquisition_key = item_key,
+                    cim_provider = "cwv",
+                    cwv_key = item_key,
+                    rarity = "modded",
+                    power_level = "300",
+                    traits = "[]",
+                    properties = "{}",
+                },
+            }
+        end
+        local function record(backend_id, item_key)
+            return {
+                backend_id = backend_id,
+                item_key = item_key,
+                rarity = "modded",
+                power_level = 300,
+                traits = {},
+                properties = {},
+                provider = "cwv",
+                _mirror_master = master_ref,
+            }
+        end
+        local function hydrate(item, backend_id)
+            item.backend_id, item.key, item.data = backend_id, item.ItemId,
+                master_ref
+            item.rarity, item.power_level = "modded", 300
+            item.traits, item.properties = {}, {}
+        end
+        local mirror = { _inventory_items = {} }
+        function mirror:add_item(backend_id, item)
+            self._inventory_items[backend_id] = item
+            hydrate(item, backend_id)
+        end
+        function mirror:remove_item(backend_id)
+            self._inventory_items[backend_id] = nil
+        end
+
+        local backend_id, item_key = "new-guid", "cwv_es_dual_swords"
+        local added, reason, token, _, rollback = contract.inject_mirror_item(
+            mirror, backend_id, payload(backend_id, item_key),
+            function() return "nonce-one" end, record(backend_id, item_key))
+        H.equal(reason, nil)
+        H.truthy(added)
+        H.truthy(contract.validate_mirror_ownership_token(
+            token, backend_id, item_key))
+        H.truthy(rollback())
+        H.equal(mirror._inventory_items[backend_id], nil)
+
+        local owned_payload = payload(backend_id, item_key)
+        added, reason, token, _, rollback = contract.inject_mirror_item(
+            mirror, backend_id, owned_payload,
+            function() return "nonce-replacement" end,
+            record(backend_id, item_key))
+        H.truthy(added)
+        local replacement = payload(backend_id, item_key)
+        replacement.CustomData.cim_injection_owner = "cim"
+        replacement.CustomData.cim_injection_schema = tostring(
+            contract.MIRROR_OWNERSHIP_SCHEMA)
+        replacement.CustomData.cim_injection_nonce = "nonce-replacement"
+        hydrate(replacement, backend_id)
+        mirror._inventory_items[backend_id] = replacement
+        local replacement_removed, replacement_reason = rollback()
+        H.equal(replacement_removed, false)
+        H.equal(replacement_reason, "mirror_identity_mismatch")
+        H.equal(mirror._inventory_items[backend_id], replacement)
+
+        mirror._inventory_items[backend_id] = {
+            ItemId = "foreign_item", ItemInstanceId = backend_id,
+        }
+        added, reason = contract.inject_mirror_item(
+            mirror, backend_id, payload(backend_id, item_key),
+            function() return "nonce-two" end, record(backend_id, item_key))
+        H.equal(added, nil)
+        H.equal(reason, "backend_id_exists")
+        local forged_token = {
+            schema = contract.MIRROR_OWNERSHIP_SCHEMA,
+            owner = contract.OWNER,
+            capability = contract.MIRROR_OWNERSHIP_CAPABILITY,
+            backend_id = backend_id,
+            item_key = item_key,
+            nonce = "forged-nonce",
+            payload = mirror._inventory_items[backend_id],
+            fingerprint = "cim-mirror-item-v2|" .. backend_id .. "|"
+                .. item_key .. "|forged-nonce",
+        }
+        local removed, remove_reason = contract.rollback_mirror_item(
+            mirror, backend_id, forged_token)
+        H.equal(removed, false)
+        H.equal(remove_reason, "ownership_token")
+        H.equal(mirror._inventory_items[backend_id].ItemId, "foreign_item")
+
+        mirror._inventory_items[backend_id] = nil
+        function mirror:add_item(id, item)
+            self._inventory_items[id] = item
+            hydrate(item, id)
+            error("post-store callback failed")
+        end
+        local cleaned
+        added, reason, token, cleaned = contract.inject_mirror_item(
+            mirror, backend_id, payload(backend_id, item_key),
+            function() return "nonce-three" end, record(backend_id, item_key))
+        H.equal(added, nil)
+        H.truthy(reason:find("post-store callback failed", 1, true))
+        H.equal(token, nil)
+        H.equal(cleaned, true)
+        H.equal(mirror._inventory_items[backend_id], nil)
+
+        -- A normal return is not evidence that the native remover performed
+        -- its side effect.  Failed injection cleanup must still raw-delete the
+        -- exact object CIM just issued.
+        function mirror:remove_item() end
+        function mirror:add_item(id, item)
+            self._inventory_items[id] = item
+            hydrate(item, id)
+            error("add failed after no-op remover store")
+        end
+        added, reason, token, cleaned = contract.inject_mirror_item(
+            mirror, backend_id, payload(backend_id, item_key),
+            function() return "nonce-noop-cleanup" end,
+            record(backend_id, item_key))
+        H.equal(added, nil)
+        H.truthy(reason:find("no-op remover", 1, true))
+        H.equal(token, nil)
+        H.equal(cleaned, true)
+        H.equal(mirror._inventory_items[backend_id], nil)
+
+        -- The same postcondition applies to a later explicit rollback.
+        function mirror:add_item(id, item)
+            self._inventory_items[id] = item
+            hydrate(item, id)
+        end
+        added, reason, token, _, rollback = contract.inject_mirror_item(
+            mirror, backend_id, payload(backend_id, item_key),
+            function() return "nonce-noop-rollback" end,
+            record(backend_id, item_key))
+        H.truthy(added)
+        H.equal(reason, nil)
+        H.truthy(rollback())
+        H.equal(mirror._inventory_items[backend_id], nil)
+
+        -- An engine add callback may store the exact row, then throw, while
+        -- its paired remove callback also throws before deletion.  Exact
+        -- object identity remains sufficient to contain only our own write.
+        function mirror:remove_item()
+            error("remove failed before delete")
+        end
+        function mirror:add_item(id, item)
+            self._inventory_items[id] = item
+            hydrate(item, id)
+            error("add failed after store")
+        end
+        added, reason, token, cleaned = contract.inject_mirror_item(
+            mirror, backend_id, payload(backend_id, item_key),
+            function() return "nonce-double-throw" end,
+            record(backend_id, item_key))
+        H.equal(added, nil)
+        H.truthy(reason:find("add failed after store", 1, true))
+        H.equal(token, nil)
+        H.equal(cleaned, true)
+        H.equal(mirror._inventory_items[backend_id], nil)
+
+        -- A delete-then-throw callback is successful containment because the
+        -- exact owned row is already absent at the postcondition boundary.
+        function mirror:add_item(id, item)
+            self._inventory_items[id] = item
+            hydrate(item, id)
+        end
+        function mirror:remove_item(id)
+            self._inventory_items[id] = nil
+            error("remove failed after delete")
+        end
+        added, reason, token, _, rollback = contract.inject_mirror_item(
+            mirror, backend_id, payload(backend_id, item_key),
+            function() return "nonce-delete-throw" end,
+            record(backend_id, item_key))
+        H.truthy(added)
+        local removed_after_throw, delete_throw_reason = rollback()
+        H.equal(removed_after_throw, true)
+        H.equal(delete_throw_reason, nil)
+        H.equal(mirror._inventory_items[backend_id], nil)
+
+        function mirror:add_item(id, item)
+            self._inventory_items[id] = item
+            hydrate(item, id)
+            item.CustomData.cim_injection_nonce = nil
+            error("marker stripped after store")
+        end
+        added, reason, token, cleaned = contract.inject_mirror_item(
+            mirror, backend_id, payload(backend_id, item_key),
+            function() return "nonce-stripped" end,
+            record(backend_id, item_key))
+        H.equal(added, nil)
+        H.truthy(reason:find("marker stripped after store", 1, true))
+        H.equal(cleaned, true)
+        H.equal(mirror._inventory_items[backend_id], nil)
+
+        function mirror:add_item(id, item)
+            self._inventory_items[id] = item
+        end
+        added, reason, token, cleaned = contract.inject_mirror_item(
+            mirror, backend_id, payload(backend_id, item_key),
+            function() return "nonce-unhydrated" end,
+            record(backend_id, item_key))
+        H.equal(added, nil)
+        H.truthy(reason:find("mirror_postcondition", 1, true))
+        H.equal(cleaned, true)
+        H.equal(mirror._inventory_items[backend_id], nil)
+
+        function mirror:add_item(id, item)
+            self._inventory_items[id] = item
+            hydrate(item, id)
+            item.data = {}
+        end
+        added, reason, token, cleaned = contract.inject_mirror_item(
+            mirror, backend_id, payload(backend_id, item_key),
+            function() return "nonce-wrong-master" end,
+            record(backend_id, item_key))
+        H.equal(added, nil)
+        H.truthy(reason:find("mirror_postcondition", 1, true))
+        H.equal(cleaned, true)
+        H.equal(mirror._inventory_items[backend_id], nil)
+
+        function mirror:add_item(id, item)
+            self._inventory_items[id] = {
+                ItemId = item.ItemId, ItemInstanceId = id,
+                CustomData = {
+                    cim_acquisition_key = item.ItemId,
+                    cim_injection_owner = "cim",
+                    cim_injection_schema = tostring(
+                        contract.MIRROR_OWNERSHIP_SCHEMA),
+                    cim_injection_nonce = "foreign-nonce",
+                },
+            }
+        end
+        added, reason, token, cleaned = contract.inject_mirror_item(
+            mirror, backend_id, payload(backend_id, item_key),
+            function() return "nonce-four" end, record(backend_id, item_key))
+        H.equal(added, nil)
+        H.truthy(reason:find("mirror_postcondition", 1, true))
+        H.equal(cleaned, false)
+        H.equal(mirror._inventory_items[backend_id].CustomData.cim_injection_nonce,
+            "foreign-nonce")
+
+        mirror._inventory_items[backend_id] = nil
+        function mirror:add_item(id, item)
+            self._inventory_items[id] = item
+            hydrate(item, id)
+            item.data = { CustomData = { cim_acquisition_key = "foreign" } }
+        end
+        added, reason, token, cleaned = contract.inject_mirror_item(
+            mirror, backend_id, payload(backend_id, item_key),
+            function() return "nonce-five" end, record(backend_id, item_key))
+        H.equal(added, nil)
+        H.truthy(reason:find("mirror_postcondition", 1, true))
+        H.equal(cleaned, true)
+        H.equal(mirror._inventory_items[backend_id], nil)
+    end)
+
+    H.test("CIM #1141 failed mirror adds contain row and cache as one transaction", function()
+        local backend_id, item_key = "failed-add-guid", "cwv_es_dual_swords"
+        local master_ref = master("cwv_variant")
+        master_ref.cwv_key = item_key
+        local normalized = assert(contract.normalize_record(backend_id, {
+            item_key = item_key, rarity = "modded", power_level = 300,
+            traits = {}, properties = {}, via_mirror = true,
+        }, master_ref))
+        local nonce_index = 0
+        local function build_payload()
+            local payload, payload_error, mirror_record =
+                contract.build_mirror_payload(normalized, master_ref,
+                    function() return "{}" end)
+            H.equal(payload_error, nil)
+            return payload, mirror_record
+        end
+        local function nonce()
+            nonce_index = nonce_index + 1
+            return "failed-add-nonce-" .. nonce_index
+        end
+        local function hydrate(item)
+            item.backend_id, item.key, item.data = backend_id, item.ItemId,
+                master_ref
+            item.rarity, item.power_level = "modded", 300
+            item.traits, item.properties = {}, {}
+        end
+
+        local function run(add_item, refresh)
+            local mirror = { _inventory_items = {}, add_item = add_item }
+            function mirror:remove_item(id) self._inventory_items[id] = nil end
+            local payload, mirror_record = build_payload()
+            local added, reason = contract.inject_and_refresh_mirror_item(
+                mirror, backend_id, payload, nonce, mirror_record, refresh)
+            return added, reason, mirror
+        end
+
+        local refreshes = 0
+        local added, reason, mirror = run(function(self, id, item)
+            self._inventory_items[id] = item
+            hydrate(item)
+            error("stored then threw")
+        end, function()
+            refreshes = refreshes + 1
+            return true
+        end)
+        H.equal(added, nil)
+        H.truthy(reason:find("stored then threw", 1, true))
+        H.equal(refreshes, 1)
+        H.equal(mirror._inventory_items[backend_id], nil)
+
+        refreshes = 0
+        added, reason, mirror = run(function(self, id, item)
+            self._inventory_items[id] = item
+            hydrate(item)
+            error("stored before rejected refresh")
+        end, function()
+            refreshes = refreshes + 1
+            return false, "cache rejected"
+        end)
+        H.equal(added, nil)
+        H.truthy(reason:find(
+            "post-cleanup-refresh=failed:cache rejected", 1, true))
+        H.equal(refreshes, 1)
+        H.equal(mirror._inventory_items[backend_id], nil)
+
+        refreshes = 0
+        added, reason, mirror = run(function(self, id, item)
+            self._inventory_items[id] = item
+            hydrate(item)
+            error("stored before throwing refresh")
+        end, function()
+            refreshes = refreshes + 1
+            error("cache exploded")
+        end)
+        H.equal(added, nil)
+        H.truthy(reason:find(
+            "post-cleanup-refresh=failed:", 1, true))
+        H.truthy(reason:find("cache exploded", 1, true))
+        H.equal(refreshes, 1)
+        H.equal(mirror._inventory_items[backend_id], nil)
+
+        refreshes = 0
+        added, reason, mirror = run(function()
+            error("threw before store")
+        end, function()
+            refreshes = refreshes + 1
+            return true
+        end)
+        H.equal(added, nil)
+        H.truthy(reason:find("threw before store", 1, true))
+        H.equal(refreshes, 1)
+        H.equal(mirror._inventory_items[backend_id], nil)
+
+        local replacement = { owner = "foreign" }
+        refreshes = 0
+        added, reason, mirror = run(function(self, id)
+            self._inventory_items[id] = replacement
+            error("foreign replacement won")
+        end, function()
+            refreshes = refreshes + 1
+            return true
+        end)
+        H.equal(added, nil)
+        H.truthy(reason:find("cleanup=failed", 1, true))
+        H.equal(refreshes, 0)
+        H.equal(mirror._inventory_items[backend_id], replacement)
+    end)
+
+    H.test("CIM #1141 owned Temper rows require exact persisted and injection identity", function()
+        local backend_id, item_key = "owned-cwv", "cwv_dr_dawi_mace"
+        local row = master("cwv_variant")
+        row.cwv_key = item_key
+        local input = {
+            item_key = item_key,
+            rarity = "modded",
+            power_level = 300,
+            traits = {},
+            properties = {},
+            via_mirror = true,
+        }
+        local normalized = assert(contract.normalize_record(
+            backend_id, input, row))
+        local payload, payload_error, mirror_record =
+            contract.build_mirror_payload(normalized, row,
+                function() return "{}" end)
+        H.equal(payload_error, nil)
+        local mirror = { _inventory_items = {} }
+        function mirror:add_item(id, item)
+            self._inventory_items[id] = item
+            item.backend_id, item.key, item.data = id, item.ItemId, row
+            item.rarity, item.power_level = "modded", 300
+            item.traits, item.properties = {}, {}
+        end
+        function mirror:remove_item(id) self._inventory_items[id] = nil end
+        local added = contract.inject_mirror_item(mirror, backend_id, payload,
+            function() return "owned-temper-nonce" end, mirror_record)
+        H.truthy(added)
+        local live = mirror._inventory_items[backend_id]
+        local valid, reason = contract.validate_temper_owned_instance(
+            live, backend_id, normalized, row)
+        H.equal(valid, true)
+        H.equal(reason, nil)
+
+        local saved_nonce = live.CustomData.cim_injection_nonce
+        live.CustomData.cim_injection_nonce = nil
+        valid, reason = contract.validate_temper_owned_instance(
+            live, backend_id, normalized, row)
+        H.equal(valid, false)
+        H.equal(reason, "owned_injection_proof")
+        live.CustomData.cim_injection_nonce = saved_nonce
+
+        live.data.CustomData = { cwv_key = "cwv_es_longsword" }
+        valid, reason = contract.validate_temper_owned_instance(
+            live, backend_id, normalized, row)
+        H.equal(valid, false)
+        H.equal(reason, "owned_semantic_stamp")
+        live.data.CustomData = nil
+
+        local foreign_record = {}
+        for key, value in pairs(normalized) do foreign_record[key] = value end
+        foreign_record.owner = "foreign"
+        valid, reason = contract.validate_temper_owned_instance(
+            live, backend_id, foreign_record, row)
+        H.equal(valid, false)
+        H.equal(reason, "owned_schema")
+
+        -- Copied CIM stamps cannot turn a differently hydrated native item
+        -- into the persisted instance.
+        local saved_item_id, saved_key, saved_data = live.ItemId, live.key,
+            live.data
+        live.ItemId = "cwv_es_longsword"
+        valid, reason = contract.validate_temper_owned_instance(
+            live, backend_id, normalized, row)
+        H.equal(valid, false)
+        H.equal(reason, "owned_native_identity")
+        live.ItemId = saved_item_id
+        live.key = "cwv_es_longsword"
+        valid, reason = contract.validate_temper_owned_instance(
+            live, backend_id, normalized, row)
+        H.equal(valid, false)
+        H.equal(reason, "owned_native_identity")
+        live.key = saved_key
+        live.data = master("cwv_variant")
+        valid, reason = contract.validate_temper_owned_instance(
+            live, backend_id, normalized, row)
+        H.equal(valid, false)
+        H.equal(reason, "owned_master_identity")
+        live.data = saved_data
+
+    end)
+
+    H.test("CIM #1141 legacy MIL Apply authenticates the real builder/backend shape", function()
+        local function deep_clone(value, seen)
+            if type(value) ~= "table" then return value end
+            seen = seen or {}
+            if seen[value] then return seen[value] end
+            local copy = {}
+            seen[value] = copy
+            for key, child in pairs(value) do
+                copy[deep_clone(key, seen)] = deep_clone(child, seen)
+            end
+            return copy
+        end
+        local saved = {
+            get_mod = rawget(_G, "get_mod"),
+            ItemMasterList = rawget(_G, "ItemMasterList"),
+            WeaponSkins = rawget(_G, "WeaponSkins"),
+            printf = rawget(_G, "printf"),
+            clone = table.clone,
+        }
+        local backend_id, item_key = "legacy-cwv", "cwv_dr_dawi_mace"
+        local registered = master("cwv_variant")
+        registered.key, registered.name = "dr_1h_hammer", "dr_1h_hammer"
+        registered.cwv_key = item_key
+        registered.can_wield = { "dr_ranger", "dr_slayer" }
+        local fake_mod = {
+            _cim_synthetic_item_contract = contract,
+            echo = function() end,
+        }
+        local ok, failure = pcall(function()
+            rawset(_G, "get_mod", function() return fake_mod end)
+            rawset(_G, "ItemMasterList", { [item_key] = registered })
+            rawset(_G, "WeaponSkins", { skins = {} })
+            rawset(_G, "printf", function() end)
+            table.clone = function(value) return deep_clone(value) end
+            local build = assert(loadfile(root .. "_cim_mil_entry_builder.lua"))()
+            local entry = assert(build({
+                item_key = item_key,
+                rarity = "modded",
+                power_level = 300,
+                traits = {},
+                properties = {},
+                via_mirror = false,
+            }, backend_id))
+
+            -- Exact production algorithm from MoreItemsLibrary.lua:317-351.
+            local backend = { CustomData = {} }
+            local mod_data = entry.mod_data or {}
+            for key in pairs(backend) do
+                if mod_data[key] then backend[key] = mod_data[key] end
+            end
+            backend.IsModItem = true
+            backend.CreatedBy = "crafting_in_modded_dev"
+            backend.backend_id = mod_data.backend_id
+            backend.ItemInstanceId = mod_data.ItemInstanceId
+            backend.ItemId = mod_data.ItemId or entry.key or entry.name
+            backend.key = mod_data.key or entry.key or entry.name
+            backend.data = entry
+            backend.CustomData.rarity = "modded"
+            backend.rarity = "modded"
+
+            local record = assert(contract.normalize_record(backend_id, {
+                item_key = item_key,
+                rarity = "modded",
+                via_mirror = false,
+            }, registered))
+            local presented = deep_clone(backend)
+            local valid, reason = contract.validate_temper_owned_instance(
+                presented, backend_id, record, registered, backend)
+            H.equal(valid, true)
+            H.equal(reason, nil)
+            H.equal(backend.ItemId, registered.key)
+            H.equal(backend.key, registered.key)
+            H.equal(backend.data == registered, false)
+
+            -- WT legitimately edits this mutable compatibility field in place.
+            registered.can_wield = { "dr_slayer", "dr_ranger", "dr_ironbreaker" }
+            valid, reason = contract.validate_temper_owned_instance(
+                presented, backend_id, record, registered, backend)
+            H.equal(valid, true)
+            H.equal(reason, nil)
+
+            local replacement_master = deep_clone(registered)
+            valid, reason = contract.validate_temper_owned_instance(
+                presented, backend_id, record, replacement_master, backend)
+            H.equal(valid, false)
+            H.equal(reason, "owned_legacy_issuance")
+
+            local copied = deep_clone(backend)
+            valid, reason = contract.validate_temper_owned_instance(
+                copied, backend_id, record, registered, copied)
+            H.equal(valid, false)
+            H.equal(reason, "owned_legacy_issuance")
+
+            local saved_key = backend.key
+            backend.key = item_key
+            valid, reason = contract.validate_temper_owned_instance(
+                backend, backend_id, record, registered, backend)
+            H.equal(valid, false)
+            H.equal(reason, "owned_native_identity")
+            backend.key = saved_key
+
+            local saved_cwv_key = entry.cwv_key
+            entry.cwv_key = "cwv_foreign"
+            valid, reason = contract.validate_temper_owned_instance(
+                backend, backend_id, record, registered, backend)
+            H.equal(valid, false)
+            H.equal(reason, "owned_semantic_stamp")
+            entry.cwv_key = saved_cwv_key
+        end)
+        rawset(_G, "get_mod", saved.get_mod)
+        rawset(_G, "ItemMasterList", saved.ItemMasterList)
+        rawset(_G, "WeaponSkins", saved.WeaponSkins)
+        rawset(_G, "printf", saved.printf)
+        table.clone = saved.clone
+        if not ok then error(failure) end
+    end)
+
+    H.test("CIM #1141 failed post-add refresh clears raw row and partial UI cache", function()
+        local backend_id, item_key = "refresh-guid", "cwv_es_dual_swords"
+        local master_ref = master("cwv_variant")
+        master_ref.cwv_key = item_key
+        local normalized = assert(contract.normalize_record(backend_id, {
+            item_key = item_key, rarity = "modded", power_level = 300,
+            traits = {}, properties = {}, via_mirror = true,
+        }, master_ref))
+        local payload, _, mirror_record = contract.build_mirror_payload(
+            normalized, master_ref, function() return "{}" end)
+        local mirror = { _inventory_items = {} }
+        function mirror:add_item(id, item)
+            self._inventory_items[id] = item
+            item.backend_id, item.key, item.data = id, item.ItemId, master_ref
+            item.rarity, item.power_level = "modded", 300
+            item.traits, item.properties = {}, {}
+        end
+        function mirror:remove_item(id) self._inventory_items[id] = nil end
+        local added, _, _, _, rollback = contract.inject_mirror_item(
+            mirror, backend_id, payload,
+            function() return "refresh-nonce" end, mirror_record)
+        H.truthy(added)
+
+        local cache, calls = {}, 0
+        local completed, reason = contract.complete_mirror_injection_refresh(
+            function()
+                calls = calls + 1
+                cache[backend_id] = mirror._inventory_items[backend_id]
+                if calls == 1 then error("partial cache rebuild") end
+                return true
+            end,
+            rollback)
+        H.equal(completed, nil)
+        H.truthy(reason:find("partial cache rebuild", 1, true))
+        H.truthy(reason:find("rollback=complete", 1, true))
+        H.truthy(reason:find("post-cleanup-refresh=complete", 1, true))
+        H.equal(calls, 2)
+        H.equal(mirror._inventory_items[backend_id], nil)
+        H.equal(cache[backend_id], nil)
+
+        payload, _, mirror_record = contract.build_mirror_payload(
+            normalized, master_ref, function() return "{}" end)
+        added, _, _, _, rollback = contract.inject_mirror_item(
+            mirror, backend_id, payload,
+            function() return "refresh-reject-nonce" end, mirror_record)
+        H.truthy(added)
+        calls = 0
+        completed, reason = contract.complete_mirror_injection_refresh(
+            function()
+                calls = calls + 1
+                if calls == 1 then return false, "explicit rejection" end
+                return true
+            end,
+            rollback)
+        H.equal(completed, nil)
+        H.truthy(reason:find("explicit rejection", 1, true))
+        H.truthy(reason:find("post-cleanup-refresh=complete", 1, true))
+        H.equal(mirror._inventory_items[backend_id], nil)
+    end)
+
     H.test("CIM #628 salvage eligibility preserves every vanilla exclusion", function()
         local row = master("cwv_variant")
         local record = assert(contract.normalize_record("owned_1", {
@@ -533,8 +1383,10 @@ return function(H, repo_root)
         local selector = read("_cim_template_selector.lua")
         local contract_source = read("_cim_synthetic_item_contract.lua")
         H.truthy(entry:find("contract.build_mirror_payload(normalized", 1, true))
-        H.truthy(forge:find("contract.build_mirror_payload(record", 1, true))
-        H.truthy(importer:find("contract.build_mirror_payload(record", 1, true))
+        H.truthy(forge:find("_direct_craft_owner.commit(", 1, true))
+        H.truthy(importer:find("_direct_craft_owner.commit(", 1, true))
+        H.equal(forge:find("self._backend_mirror.add_item", 1, true), nil)
+        H.equal(importer:find("mirror:remove_item", 1, true), nil)
         H.truthy(forge:find(
             "delete_owned_ids = mod._cim277_delete_owned_ids", 1, true))
         H.truthy(filter:find("contract.recover_salvage_items", 1, true))

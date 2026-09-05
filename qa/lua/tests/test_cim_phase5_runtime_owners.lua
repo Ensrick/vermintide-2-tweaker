@@ -146,6 +146,35 @@ return function(H, repo_root)
         H.equal(athanor_calls, 1)
         H.equal(restore_calls, 1)
 
+        -- #1141 single Temper-Craft registration uses the same candidate-state
+        -- persistence boundary as batch import: no ghost is published when the
+        -- settings write throws, and an existing exact ID is never replaced.
+        set_calls = 0
+        local single_ok = mod._cim_register_craft("temper-one", {
+            item_key = "es_1h_sword", slot_type = "melee",
+        })
+        H.equal(single_ok, true)
+        H.equal(set_calls, 1)
+        H.equal(owner.get_forged_weapons()["temper-one"].item_key,
+            "es_1h_sword")
+        single_ok = mod._cim_register_craft("temper-one", {
+            item_key = "es_handgun", slot_type = "ranged",
+        })
+        H.equal(single_ok, false)
+        H.equal(owner.get_forged_weapons()["temper-one"].item_key,
+            "es_1h_sword")
+
+        fail_set = true
+        local failed_single, failed_reason = mod._cim_register_craft(
+            "temper-rejected", {
+                item_key = "es_1h_sword", slot_type = "melee",
+            })
+        H.equal(failed_single, false)
+        H.truthy(failed_reason:find("save:", 1, true))
+        H.equal(owner.get_forged_weapons()["temper-rejected"], nil)
+        H.equal(mod.settings.forged_weapons["temper-rejected"], nil)
+        fail_set = false
+
         -- #1360's five-item import uses one candidate-state persistence
         -- boundary. A rejected settings write must publish neither a partial
         -- in-memory registry nor a partial persisted registry.

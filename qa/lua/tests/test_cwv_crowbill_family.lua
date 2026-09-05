@@ -271,7 +271,7 @@ return function(H, repo_root)
         H.truthy(main:find("entry.crowbill_mode_family = def.crowbill_mode_family", 1, true))
         H.truthy(main:find("mod._cwv_crowbill_hammer_mode = _om.crowbill_hammer_mode", 1, true))
         H.truthy(main:find("mod._cwv_acquisition.register_seed_interfaces(", 1, true))
-		H.truthy(main:find('#entries, mil, backend_items, "character_weapon_variants"', 1, true))
+		H.truthy(main:find('#entries, mil, backend_items, backend_mirror,', 1, true))
     end)
 
     H.test("WT owns all-career Crowbill controls with exact defaults", function()

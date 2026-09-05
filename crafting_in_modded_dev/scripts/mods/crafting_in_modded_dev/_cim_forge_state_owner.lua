@@ -137,6 +137,7 @@ return function(context)
     end
 
     mod._cim_register_craft = function(backend_id, weapon_data)
+        if forged_weapons[backend_id] then return false, "backend_id_exists" end
         local contract = mod._cim_synthetic_item_contract
         local item_key = type(weapon_data) == "table" and weapon_data.item_key
         local item_master_list = get_item_master_list()
@@ -152,8 +153,15 @@ return function(context)
         entry.external_traits = type(weapon_data) == "table"
             and weapon_data.external_traits or nil
         partition_external_traits(entry)
-        forged_weapons[backend_id] = entry
-        save()
+        -- #1141: publish one candidate state only after its settings write
+        -- succeeds. The old mutate-then-save order left a ghost in memory when
+        -- persistence threw, while the mirror rollback removed the live item.
+        local candidate = {}
+        for id, existing in pairs(forged_weapons) do candidate[id] = existing end
+        candidate[backend_id] = entry
+        local saved, save_err = pcall(save, candidate)
+        if not saved then return false, "save:" .. tostring(save_err) end
+        forged_weapons = candidate
         return true, entry
     end
 

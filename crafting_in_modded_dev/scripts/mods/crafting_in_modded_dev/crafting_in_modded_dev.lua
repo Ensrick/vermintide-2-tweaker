@@ -281,7 +281,6 @@ local _forge_state = mod:dofile(
     })
 local _forge_create_item = _forge_state.create_item
 local _forge_detect_mil = _forge_state.detect_mil
-local _forge_inject_item = _forge_state.inject_item
 local _forge_load = _forge_state.load
 local _forge_save = _forge_state.save
 -- ============================================================
@@ -696,6 +695,11 @@ local _WEAVE_LOADOUT_OWNER = _install_weave_loadout_owner({
     get_amulet_dirty = function() return _amulet_dirty end,
     forge_save = _forge_save,
     temper_transaction = mod._cim_temper_transaction,
+    get_raw_mirror_item = function(backend_id)
+        local mirror = Managers.backend and Managers.backend:get_backend_mirror()
+        local items = mirror and mirror._inventory_items
+        return type(items) == "table" and rawget(items, backend_id) or nil
+    end,
 })
 -- Bind the forward-declared local `_cim_weave_economy`'s cost hook closes over.
 _bubble_cap = _WEAVE_LOADOUT_OWNER.bubble_cap
@@ -851,129 +855,6 @@ mod:hook("HeroWindowWeaveForgeWeapons", "_setup_weapon_list", function(func, sel
     end
 end)
 
--- Keep the level/power fields blank — vanilla `_sync_backend_loadout` repopulates them every refresh.
--- _cim703_consolidated_sync_backend_loadout_hook: single hook on this (Class, method); #703 CWV lock-clear rides this body.
-mod:hook("HeroWindowWeaveForgeWeapons", "_sync_backend_loadout", function(func, self)
-    func(self)
-    if not _custom_forge_active then return end
-    local scrollbar_data = self._scrollbars and self._scrollbars.weapons
-    local list_widgets = scrollbar_data and scrollbar_data.list_widgets
-    if list_widgets then
-        for _, widget in ipairs(list_widgets) do
-            local c = widget.content
-            c.level_title = ""
-            c.power_text = ""
-            c.power_title = ""
-            -- #703: only rows vanilla just locked, and only cwv-provider keys.
-            if c.locked and mod._cim_synthetic_item_contract.is_cwv_provider_key(c.key) then c.locked = false end
-        end
-    end
-end)
-
--- --- Weapon select: present item without locked/essence state ---
-
-mod:hook("HeroWindowWeaveForgeWeapons", "_present_item", function(func, self, item_key, activate_spin)
-    if not _custom_forge_active then return func(self, item_key, activate_spin) end
-
-    local viewport_data = self._viewport_data
-    if viewport_data and viewport_data.item_previewer then
-        viewport_data.item_previewer:destroy()
-        viewport_data.item_previewer = nil
-    end
-
-    local backend_items = Managers.backend:get_interface("items")
-    local item = backend_items:get_item_from_key(item_key)
-    local display_item = item
-
-    if not display_item then
-        local entry = rawget(ItemMasterList, item_key)
-        if entry then
-            local item_data = table.clone(entry)
-            item_data.key = item_key
-            display_item = { data = item_data, key = item_key }
-        end
-    end
-
-    local viewport_widget = viewport_data.widget
-    local item_previewer = self:_create_item_previewer(viewport_widget, display_item, activate_spin)
-    viewport_data.item_previewer = item_previewer
-    viewport_data.item = display_item
-
-    local item_data = display_item.data
-    -- Power preview always shows the WILL-BE power (= the base_power_level
-    -- slider). The input item's own power doesn't matter once you click Craft;
-    -- the new item is created at base_power_level. Feedback #9: pre-v0.7.24
-    -- the preview showed the input's power (often 5 for blacksmith templates)
-    -- and confused users into thinking the crafted item would be 5 power.
-    local base_power = (mod._cim_base_power and mod._cim_base_power()) or 300
-    local input_power = display_item.power_level or base_power
-    local power_text = tostring(base_power)
-    if input_power ~= base_power then
-        power_text = tostring(input_power) .. " > " .. tostring(base_power)
-    end
-
-    local widgets_by_name = self._widgets_by_name
-    widgets_by_name.viewport_level_value.content.visible = false
-    widgets_by_name.viewport_level_title.content.visible = false
-    widgets_by_name.viewport_power_value.content.text = power_text
-    widgets_by_name.viewport_power_title.content.visible = true
-    widgets_by_name.viewport_power_value.content.visible = true
-    widgets_by_name.viewport_title.content.text = Localize(item_data.display_name)
-    widgets_by_name.viewport_sub_title.content.text = Localize(item_data.item_type)
-
-    self:_set_presentation_locked_state(false)
-    self._selected_item_locked = false
-    self:_setup_weapon_stats(display_item)
-
-    return item_key
-end)
-
--- --- Weapon select: never show locked/unlock UI in custom forge ---
-
-mod:hook("HeroWindowWeaveForgeWeapons", "_set_presentation_locked_state", function(func, self, locked)
-    if not _custom_forge_active then return func(self, locked) end
-    func(self, false)
-end)
-
--- --- Weapon select: "CRAFT" button instead of "Equip" ---
-
-mod:hook("HeroWindowWeaveForgeWeapons", "_update_equip_button_status", function(func, self, equipable_item, is_item_equipped)
-    if not _custom_forge_active then return func(self, equipable_item, is_item_equipped) end
-
-    local viewport_data = self._viewport_data
-    if viewport_data then
-        local equip_button = viewport_data.equip_button
-        equip_button.content.button_hotspot.disable_button = not self._selected_item_id
-        equip_button.content.title_text = "CRAFT"
-    end
-end)
-
--- --- Weapon select: on_list_index_selected — always enable craft button ---
-
-mod:hook("HeroWindowWeaveForgeWeapons", "_on_list_index_selected", function(func, self, index)
-    if not _custom_forge_active then return func(self, index) end
-
-    local scrollbars = self._scrollbars
-    local scrollbar_data = scrollbars.weapons
-    local list_widgets = scrollbar_data.list_widgets
-
-    for i, widget in ipairs(list_widgets) do
-        local content = widget.content
-        local hotspot = content.button_hotspot
-        local is_selected = i == index
-
-        hotspot.is_selected = is_selected
-
-        if is_selected then
-            self._selected_backend_id = self:_present_item(content.key)
-            self._selected_item_id = content.key
-        end
-    end
-
-    self._selected_list_index = index
-    self:_update_equip_button_status(true, false)
-end)
-
 -- Build an Athanor-crafted item via the PlayFab backend mirror so it shows up
 -- as a real inventory item (purple `promo` rarity, eligible for cosmetic skin
 -- changes). Unlike MoreItemsLibrary's `add_mod_items_to_local_backend`, this
@@ -1067,49 +948,35 @@ local function _athanor_inject_item(weapon_data, backend_id)
             tostring(backend_id), tostring(item_key), tostring(normalize_err))
         return nil, normalize_err
     end
-    local cjson_mod = rawget(_G, "cjson")
-    local encoder = cjson_mod and cjson_mod.encode
-    local item, payload_err = contract.build_mirror_payload(normalized, master, encoder)
+    local cjson_mod = rawget(_G, "cjson"); local encoder = cjson_mod and cjson_mod.encode
+    local item, payload_err, mirror_record = contract.build_mirror_payload(normalized, master, encoder)
     if not item then return nil, payload_err end
 
-    local ok, err = pcall(backend_mirror.add_item, backend_mirror, backend_id, item)
-    if not ok then return nil, err end
-
-    -- v0.7.59-dev: mark backend interfaces dirty so the inventory UI re-queries
-    -- and surfaces the newly-added item. mirror:add_item updates the underlying
-    -- table but does NOT bump the interface dirty bit — the inventory grid
-    -- keeps showing its cached pre-add state until something else triggers a
-    -- refresh. This is why user reports "I crafted X but it's not in
-    -- inventory" while every cim probe shows the item IS in the mirror:
-    -- the UI is querying stale data.
-    --
-    -- standard_forge.lua's craft hook calls dirtify_interfaces after its own
-    -- synth runs. The Athanor path (_equip_item → _athanor_inject_item) was
-    -- missing it; so was the properties-view jewelry path
-    -- (_cim_amulet_craft_one_slot → _athanor_inject_item). Putting the call
-    -- HERE catches all 5 callers in one place: `_athanor_retry_pending` (3051),
-    -- `_athanor_inject_all` (3074), `_equip_item` (3145),
-    -- `_cim_amulet_craft_one_slot` (3313), and the weapon/jewelry branch of
-    -- `_upgrade_magic_level` (3391). (saveweapon_import.lua injects via its own
-    -- mirror:add_item and gets the equivalent dirtify call inline — v0.7.60.)
-    --
-    -- Idempotent + cheap. Boot-time `_athanor_inject_all` calls fire before
-    -- the UI is even open, which is fine — the flag is just a "next query
-    -- should hit fresh data" hint.
-    if Managers.backend and Managers.backend.dirtify_interfaces then
-        pcall(Managers.backend.dirtify_interfaces, Managers.backend)
+    local function refresh_backend()
+        local backend = Managers and Managers.backend
+        if not backend then return false, "backend_unavailable" end
+        if type(backend.dirtify_interfaces) == "function" then
+            backend:dirtify_interfaces()
+        end
+        if type(backend.get_interface) ~= "function" then
+            return false, "items_interface_unavailable"
+        end
+        local items_iface = backend:get_interface("items")
+        if type(items_iface) ~= "table"
+                or type(items_iface._refresh) ~= "function" then
+            return false, "items_refresh_unavailable"
+        end
+        items_iface:_refresh()
+        return true
     end
-    -- v0.7.60-dev (Way 2 second belt): dirtify_interfaces marks the interface
-    -- dirty so the NEXT query re-fetches, but force an explicit re-fetch too so
-    -- an already-built filtered list (e.g. an inventory grid open in another
-    -- panel) rebuilds immediately rather than waiting for its own refresh tick.
-    -- Redundant with dirtify on purpose — the missed-refresh failure is silent.
-    local items_iface = Managers.backend and Managers.backend:get_interface("items")
-    if items_iface and items_iface._refresh then
-        pcall(items_iface._refresh, items_iface)
-    end
-    return backend_id
+    local added, add_error, ownership_token, rollback =
+        contract.inject_and_refresh_mirror_item(backend_mirror, backend_id,
+            item, Application.guid, mirror_record, refresh_backend)
+    if not added then return nil, add_error end
+    return backend_id, nil, ownership_token, rollback
 end
+
+local _DIRECT_CRAFT_OWNER = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_direct_craft_owner")({ mod = mod, contract = mod._cim_synthetic_item_contract })
 
 -- Install the atomic community-build importer only after the canonical mirror
 -- injection function exists. Every dependency is late-bound or owner-provided;
@@ -1176,9 +1043,22 @@ _athanor_inject_all = function()
             -- If the item is already in the mirror (a previous _create_interfaces
             -- call already injected it), skip the re-add. add_item is idempotent
             -- but logging extra "restored" lines is misleading.
-            local already_in = mirror and mirror._inventory_items and mirror._inventory_items[bid]
+            local mirror_items = mirror and mirror._inventory_items
+            local already_in = type(mirror_items) == "table"
+                and rawget(mirror_items, bid) or nil
             if already_in then
-                count = count + 1
+                local master = type(ItemMasterList) == "table"
+                    and rawget(ItemMasterList, w.item_key) or nil
+                local exact, exact_reason = _DIRECT_CRAFT_OWNER
+                    .validate_saved_occupant(already_in, bid, w, master)
+                if exact then
+                    count = count + 1
+                else
+                    skipped = skipped + 1
+                    _pending_inject[bid] = w
+                    mod:info("Rejected occupied saved craft %s at %s: %s",
+                        tostring(w.item_key), tostring(bid), tostring(exact_reason))
+                end
             else
                 local ok, err = _athanor_inject_item(w, bid)
                 if ok then
@@ -1314,8 +1194,9 @@ mod:hook("HeroWindowWeaveForgeWeapons", "_equip_item", function(func, self, back
         career_name = career_name,  -- persisted provenance; no can_wield mutation
     }
 
-    local injected, err = _athanor_inject_item(weapon_data, new_backend_id)
-    if not injected then
+    local committed, err = _DIRECT_CRAFT_OWNER.commit(weapon_data, new_backend_id,
+        { source_backend_id = self._selected_item_id, raw_item_key = item_key })
+    if not committed then
         mod:warning("[cim] Craft failed: " .. tostring(err))
         -- v0.7.52-dev: probe the failure path too — capture what state we
         -- attempted with, so failed crafts are diagnosable from the log.
@@ -1325,14 +1206,6 @@ mod:hook("HeroWindowWeaveForgeWeapons", "_equip_item", function(func, self, back
         end
         return
     end
-
-    local registered, register_err = mod._cim_register_craft(new_backend_id, weapon_data)
-    if not registered then
-        Managers.backend:get_backend_mirror():remove_item(new_backend_id)
-        mod:warning("[cim] Craft persistence rejected: " .. tostring(register_err))
-        return
-    end
-    if mod._cim_note_craft_bid then mod._cim_note_craft_bid(new_backend_id) end
 
     -- Issue #562: default-on auto-equip targets the forge button's exact slot
     -- (`slot_melee` / `slot_ranged`) and the exact newly-created backend id.
@@ -1447,19 +1320,12 @@ local function _cim_amulet_craft_one_slot(properties_win, slot_index, slot_name)
         via_mirror = true,
         career_name = career_name,  -- persisted provenance; no can_wield mutation
     }
-    local injected, err = _athanor_inject_item(weapon_data, new_bid)
-    if not injected then
+    local committed, err = _DIRECT_CRAFT_OWNER.commit(weapon_data, new_bid,
+        { source_backend_id = src_bid, raw_item_key = src_key })
+    if not committed then
         mod:warning("[cim] Craft " .. slot_name .. " failed: " .. tostring(err))
         return false
     end
-    local registered, register_err = mod._cim_register_craft(new_bid, weapon_data)
-    if not registered then
-        Managers.backend:get_backend_mirror():remove_item(new_bid)
-        mod:warning("[cim] Craft " .. slot_name .. " persistence rejected: "
-            .. tostring(register_err))
-        return false
-    end
-    if mod._cim_note_craft_bid then mod._cim_note_craft_bid(new_bid) end
     -- Craft only — see issue #12. Player equips from inventory.
     _amulet_dirty[slot_index] = false
     mod:echo("[cim] Crafted new " .. slot_name:gsub("^slot_", ""):gsub("_1$", "") .. " — equip from inventory")
@@ -1471,10 +1337,16 @@ mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_temper_runtime")({
     mod = mod,
     is_active = function() return _custom_forge_active end,
     transaction = mod._cim_temper_transaction,
+    contract = mod._cim_synthetic_item_contract, rt_register = _rt_register,
     loadout = _WEAVE_LOADOUT_OWNER,
+    get_forged_record = mod._cim_get_craft,
     bulk_accessory_craft = _BULK_ACCESSORY_CRAFT,
     craft_accessory = _cim_amulet_craft_one_slot,
     inject_item = _athanor_inject_item,
+})
+mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_athanor_seed_owner")({
+    mod = mod, is_active = function() return _custom_forge_active end,
+    contract = mod._cim_synthetic_item_contract,
 })
 
 -- Console commands let the user pick which slot the amulet click edits.
@@ -1503,7 +1375,7 @@ _install_command_owner({
     get_forged_weapons = _forge_state.get_forged_weapons,
     get_modded_loadout = _LOADOUT_OWNER.get_modded_loadout,
     get_more_items_lib = _forge_state.get_more_items_lib,
-    forge_inject_item = _forge_inject_item,
+    commit_craft = _DIRECT_CRAFT_OWNER.commit,
     forge_create_item = _forge_create_item,
     forge_detect_mil = _forge_detect_mil,
     forge_save = _forge_save,

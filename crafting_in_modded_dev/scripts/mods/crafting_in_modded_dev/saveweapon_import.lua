@@ -16,6 +16,11 @@ SaveWeapon writes every property at value=1.0 on recreation
 ]]
 
 local mod = get_mod("cim_dev")
+local _direct_craft_owner = mod:dofile(
+    "scripts/mods/crafting_in_modded_dev/_cim_direct_craft_owner")({
+        mod = mod,
+        contract = mod._cim_synthetic_item_contract,
+    })
 
 local SAVEWEAPON_MOD_ID = "SaveWeapon"
 
@@ -120,7 +125,6 @@ mod._cim_saveweapon_import = function()
     end
 
     local seen = _existing_signatures()
-    local cjson_mod = rawget(_G, "cjson")
     local imported, skipped_dup, skipped_dlc, skipped_bad = 0, 0, 0, 0
 
     for save_id, savestring in pairs(saved_items) do
@@ -144,7 +148,6 @@ mod._cim_saveweapon_import = function()
                 -- property/trait tables. SaveWeapon's predecessor (GiveWeapon)
                 -- doesn't enforce this — drop mismatched entries with a log
                 -- line instead of refusing the whole import.
-                local master = rawget(ItemMasterList, item_key)
                 local WP = rawget(_G, "WeaponProperties")
                 local WT = rawget(_G, "WeaponTraits")
                 local valid_props = {}
@@ -173,56 +176,32 @@ mod._cim_saveweapon_import = function()
                 end
 
                 local backend_id = Application.guid()
-                local contract = mod._cim_synthetic_item_contract
-                local master = rawget(ItemMasterList, item_key)
-                -- issue 682: `contract and contract.normalize_record(...)`
-                -- collapsed the multi-return (Lua and/or truncation), so a
-                -- rejection logged a nil reason. gate_record classifies every
-                -- rejection; the import writes into the same mirror boundary.
-                local record, record_err
-                if contract then
-                    record, record_err = contract.gate_record("mirror_injection", backend_id, {
-                        item_key = item_key,
-                        properties = valid_props,
-                        traits = valid_traits,
-                        trait = valid_traits[1],
-                        skin = parsed.skin,
-                        power_level = 300,
-                        rarity = "modded",
-                        via_mirror = true,
-                    }, master)
-                else
-                    record_err = "contract_unavailable"
-                end
-                local encoder = cjson_mod and cjson_mod.encode
-                -- issue 682: same and/or multi-return collapse class as above
-                -- (`record and contract.build_mirror_payload(...)` truncated
-                -- payload_err to nil). Branch explicitly.
-                local item, payload_err
-                if record then
-                    item, payload_err = contract.build_mirror_payload(record, master, encoder)
-                end
-                if not item then
+                local weapon_data = {
+                    item_key = item_key,
+                    properties = valid_props,
+                    traits = valid_traits,
+                    trait = valid_traits[1],
+                    skin = parsed.skin,
+                    power_level = 300,
+                    rarity = "modded",
+                    via_mirror = true,
+                }
+                -- #1141: import through the same exact-owner transaction as
+                -- Athanor/standard crafts. A persistence rejection now invokes
+                -- the injector's token-bound rollback rather than deleting by
+                -- backend id and risking a foreign replacement.
+                local committed, commit_error = _direct_craft_owner.commit(
+                    weapon_data, backend_id, {
+                        source_backend_id = save_id,
+                        raw_item_key = item_key,
+                    })
+                if not committed then
                     skipped_bad = skipped_bad + 1
-                    mod:info("[saveweapon-import] contract rejected %s: %s",
-                        item_key, tostring(record_err or payload_err))
+                    mod:info("[saveweapon-import] transaction rejected %s: %s",
+                        item_key, tostring(commit_error))
                 else
-                local add_ok, add_err = pcall(mirror.add_item, mirror, backend_id, item)
-                if not add_ok then
-                    skipped_bad = skipped_bad + 1
-                    mod:info("[saveweapon-import] add_item failed for %s: %s", item_key, tostring(add_err))
-                else
-                    local registered, register_err = mod._cim_register_craft(backend_id, record)
-                    if not registered then
-                        mirror:remove_item(backend_id)
-                        skipped_bad = skipped_bad + 1
-                        mod:info("[saveweapon-import] persistence rejected %s: %s",
-                            item_key, tostring(register_err))
-                    else
-                        seen[sig] = true
-                        imported = imported + 1
-                    end
-                end
+                    seen[sig] = true
+                    imported = imported + 1
                 end
             end
         end
@@ -233,10 +212,8 @@ mod._cim_saveweapon_import = function()
     -- run the import).
     local items_iface = Managers.backend and Managers.backend:get_interface("items")
     if items_iface and items_iface._refresh then pcall(items_iface._refresh, items_iface) end
-    -- v0.7.60-dev: this path injects via its own mirror:add_item (NOT
-    -- _athanor_inject_item), so it did not inherit the v0.7.59 fix. Mark the
-    -- backend interfaces dirty so the open inventory UI re-queries — same fix
-    -- that made Athanor/standard-forge crafts appear without a menu re-open.
+    -- Keep one final refresh for the whole import so the open inventory UI
+    -- re-queries after all canonical per-item transactions complete.
     if Managers.backend and Managers.backend.dirtify_interfaces then
         pcall(Managers.backend.dirtify_interfaces, Managers.backend)
     end

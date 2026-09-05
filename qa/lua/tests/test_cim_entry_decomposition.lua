@@ -110,7 +110,7 @@ return function(H, repo_root)
             get_forged_weapons = function() return {} end,
             get_modded_loadout = function() return {} end,
             get_more_items_lib = function() return {} end,
-            forge_inject_item = noop,
+            commit_craft = noop,
             forge_create_item = noop,
             forge_detect_mil = noop,
             forge_save = noop,
@@ -126,13 +126,77 @@ return function(H, repo_root)
         H.truthy(type(mod._cim277_delete_owned_ids) == "function")
     end)
 
+    H.test("CIM #1141 forge_confirm uses the exact mirror transaction", function()
+        local install = assert(loadfile(root .. "_cim_command_owner.lua"))()
+        local commands, messages, commits = {}, {}, {}
+        local accept = true
+        local mod = {
+            command = function(_, name, _, callback) commands[name] = callback end,
+            dofile = function()
+                return function() end
+            end,
+            echo = function(_, message) messages[#messages + 1] = message end,
+            warning = function(_, message) messages[#messages + 1] = message end,
+            info = function() end,
+            _cim_base_power = function() return 300 end,
+        }
+        local noop = function() end
+        local old_master, old_localize = rawget(_G, "ItemMasterList"),
+            rawget(_G, "Localize")
+        rawset(_G, "ItemMasterList", {
+            cwv_es_dual_swords = { display_name = "cwv_dual_swords_name" },
+        })
+        rawset(_G, "Localize", function(key) return key end)
+        local ok, failure = pcall(function()
+            install({
+                mod = mod,
+                is_custom_forge_active = function() return false end,
+                get_forged_weapons = function() return {} end,
+                get_modded_loadout = function() return {} end,
+                get_more_items_lib = function() return {} end,
+                commit_craft = function(data, backend_id, evidence)
+                    commits[#commits + 1] = {
+                        data = data, backend_id = backend_id,
+                        evidence = evidence,
+                    }
+                    return accept, accept and "registered" or "save rejected"
+                end,
+                forge_create_item = noop,
+                forge_detect_mil = noop,
+                forge_save = noop,
+                modded_loadout_save = noop,
+            })
+            commands.forge("cwv_es_dual_swords")
+            commands.forge_confirm()
+            H.equal(#commits, 1)
+            H.equal(commits[1].data.item_key, "cwv_es_dual_swords")
+            H.equal(commits[1].data.via_mirror, true)
+            H.equal(commits[1].data.rarity, "modded")
+            H.equal(commits[1].evidence.source_backend_id,
+                "console:forge_confirm")
+            commands.forge_confirm()
+            H.equal(#commits, 1, "successful transaction must clear pending state")
+
+            accept = false
+            commands.forge("cwv_es_dual_swords")
+            commands.forge_confirm()
+            commands.forge_confirm()
+            H.equal(#commits, 3,
+                "failed transaction must retain the pending draft for retry")
+            H.truthy(messages[#messages]:find("transaction rejected", 1, true))
+        end)
+        rawset(_G, "ItemMasterList", old_master)
+        rawset(_G, "Localize", old_localize)
+        if not ok then error(failure) end
+    end)
+
     H.test("CIM-dev command owner retains accessor-backed mutable state", function()
         local install_first = assert(entry:find("_install_command_owner({", 1, true))
         local install_last = assert(entry:find("\n})", install_first, true))
         local install = entry:sub(install_first, install_last + 2)
         for _, dependency in ipairs({
             "is_custom_forge_active", "get_forged_weapons",
-            "get_modded_loadout", "get_more_items_lib", "forge_inject_item",
+            "get_modded_loadout", "get_more_items_lib", "commit_craft",
             "forge_create_item", "forge_detect_mil", "forge_save",
             "modded_loadout_save",
         }) do

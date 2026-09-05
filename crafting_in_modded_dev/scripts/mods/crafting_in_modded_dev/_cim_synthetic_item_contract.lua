@@ -10,6 +10,11 @@ local M = {}
 
 M.SCHEMA_VERSION = 1
 M.OWNER = "cim"
+M.CWV_SEED_IDENTITY_SCHEMA = 2
+M.CWV_SEED_IDENTITY_OWNER = "character_weapon_variants"
+M.CWV_SEED_IDENTITY_CAPABILITY = "cwv.blacksmith-seed.identity.v2"
+M.MIRROR_OWNERSHIP_SCHEMA = 2
+M.MIRROR_OWNERSHIP_CAPABILITY = "cim.mirror-item.ownership.v2"
 
 -- ============================================================
 -- issues 628/682/793: the REGISTERED provider gate
@@ -334,6 +339,7 @@ function M.build_mirror_payload(record, master, json_encode)
     end
     if normalized.skin then custom_data.skin = normalized.skin end
 
+    normalized._mirror_master = master
     return {
         ItemId = normalized.item_key,
         ItemInstanceId = normalized.backend_id,
@@ -386,6 +392,783 @@ _canonical_item_key = function(item, backend_id_override)
 end
 
 M.canonical_item_key = _canonical_item_key
+
+-- #1141: Temper-Craft consumes a provider-owned Blacksmith selector, not an
+-- arbitrary cwv-shaped instance or the vanilla donor identity retained by the
+-- provider clone. Any CWV evidence moves resolution onto this stricter path.
+-- Ordinary vanilla, Pusfume, WOC, and unknown external rows keep the existing -- pusfume-compat-reviewed: non-CWV rows stay on the unchanged canonical path.
+-- canonical ladder and never depend on CWV being installed.
+local function _row_has_cwv_evidence(row)
+    if type(row) ~= "table" then return false end
+    if row.cwv_variant == true or row.cwv_definition == true then return true end
+    for _, field in ipairs({
+        "item_key", "cim_acquisition_key", "cwv_key", "ItemId", "key",
+    }) do
+        local value = row[field]
+        if type(value) == "string" and value:sub(1, 4) == "cwv_" then
+            return true
+        end
+    end
+    return false
+end
+
+local function _visit_item_rows(item, visit)
+    if type(item) ~= "table" or type(visit) ~= "function" then return end
+    local data = type(item.data) == "table" and item.data or nil
+    local top_custom = type(item.CustomData) == "table" and item.CustomData or nil
+    local data_custom = data and type(data.CustomData) == "table"
+        and data.CustomData or nil
+    local top_mod = type(item.mod_data) == "table" and item.mod_data or nil
+    local data_mod = data and type(data.mod_data) == "table" and data.mod_data or nil
+    visit(item, "item")
+    if data then visit(data, "data") end
+    if top_custom then visit(top_custom, "CustomData") end
+    if data_custom then visit(data_custom, "data.CustomData") end
+    if top_mod then visit(top_mod, "mod_data") end
+    if data_mod then visit(data_mod, "data.mod_data") end
+    if top_mod and type(top_mod.CustomData) == "table" then
+        visit(top_mod.CustomData, "mod_data.CustomData")
+    end
+    if data_mod and type(data_mod.CustomData) == "table" then
+        visit(data_mod.CustomData, "data.mod_data.CustomData")
+    end
+end
+
+local function _item_has_cwv_evidence(item)
+    local found = false
+    _visit_item_rows(item, function(row)
+        if _row_has_cwv_evidence(row) then found = true end
+    end)
+    return found
+end
+
+function M.temper_source_requires_cwv_provider(selected_item, live_item,
+        backend_id)
+    return type(backend_id) == "string" and backend_id:sub(1, 4) == "cwv_"
+        or _item_has_cwv_evidence(selected_item)
+        or _item_has_cwv_evidence(live_item)
+end
+
+local function _collect_semantic_cwv_stamps(item, stamps)
+    _visit_item_rows(item, function(row)
+        for _, field in ipairs({
+            "item_key", "cim_acquisition_key", "cwv_key",
+        }) do
+            local value = row[field]
+            if type(value) == "string" and value:sub(1, 4) == "cwv_" then
+                stamps[value] = true
+            end
+        end
+    end)
+end
+
+local function _cwv_observation_conflict(item, backend_id, item_key,
+        donor_key, require_backend)
+    local backend_seen, stamp_seen, conflict = false, false, nil
+    _visit_item_rows(item, function(row)
+        if conflict then return end
+        for _, field in ipairs({ "backend_id", "ItemInstanceId" }) do
+            local value = row[field]
+            if value ~= nil then
+                backend_seen = true
+                if type(value) ~= "string" or value ~= backend_id then
+                    conflict = "backend_id"
+                    return
+                end
+            end
+        end
+        for _, field in ipairs({ "ItemId", "key" }) do
+            local value = row[field]
+            if value ~= nil and (type(value) ~= "string"
+                    or value ~= item_key and value ~= donor_key) then
+                conflict = "semantic_key"
+                return
+            end
+        end
+        for _, field in ipairs({
+            "item_key", "cim_acquisition_key", "cwv_key",
+        }) do
+            local value = row[field]
+            if value ~= nil then
+                stamp_seen = true
+                if type(value) ~= "string" or value ~= item_key then
+                    conflict = "semantic_stamp"
+                    return
+                end
+            end
+        end
+    end)
+    if conflict then return conflict, stamp_seen end
+    if require_backend and not backend_seen then
+        return "backend_id_missing", stamp_seen
+    end
+    return nil, stamp_seen
+end
+
+function M.resolve_temper_craft_source(selected_item, live_item, backend_id,
+        provider)
+    if type(selected_item) ~= "table" and type(live_item) ~= "table" then
+        return nil, "source_item"
+    end
+    local source_item = type(live_item) == "table" and live_item or selected_item
+    local ordinary_key = type(live_item) == "table"
+        and _canonical_item_key(live_item, backend_id) or nil
+    ordinary_key = ordinary_key or _canonical_item_key(selected_item, backend_id)
+    local has_cwv_evidence = M.temper_source_requires_cwv_provider(
+        selected_item, live_item, backend_id)
+    if not has_cwv_evidence then
+        if type(ordinary_key) ~= "string" or ordinary_key == "" then
+            return nil, "item_key"
+        end
+        if M.is_immutable_relic_identity(
+                ordinary_key, source_item, backend_id) then
+            return nil, "immutable_relic"
+        end
+        return {
+            owner = "source",
+            item_key = ordinary_key,
+            backend_id = backend_id,
+            fingerprint = "ordinary|" .. tostring(backend_id)
+                .. "|" .. ordinary_key,
+        }, nil
+    end
+
+    if type(provider) ~= "table"
+            or provider.schema ~= M.CWV_SEED_IDENTITY_SCHEMA
+            or provider.owner ~= M.CWV_SEED_IDENTITY_OWNER
+            or provider.capability ~= M.CWV_SEED_IDENTITY_CAPABILITY
+            or type(provider.resolve) ~= "function" then
+        return nil, "cwv_provider_unavailable"
+    end
+    if type(live_item) ~= "table" then
+        return nil, "cwv_live_item_unavailable"
+    end
+
+    local called, proof, reason = pcall(
+        provider.resolve, provider, backend_id)
+    if not called then return nil, "cwv_provider_exception" end
+    if type(proof) ~= "table" then
+        return nil, "cwv_provider:" .. tostring(reason or "rejected")
+    end
+    local item_key = proof.item_key
+    local donor_key = proof.donor_key
+    if type(item_key) ~= "string" or item_key == ""
+            or type(donor_key) ~= "string" or donor_key == "" then
+        return nil, "cwv_provider_proof_mismatch"
+    end
+    local expected_fingerprint = "cwv-blacksmith-seed-v2|"
+        .. tostring(backend_id) .. "|" .. item_key .. "|" .. donor_key
+    if type(proof) ~= "table"
+            or proof.schema ~= M.CWV_SEED_IDENTITY_SCHEMA
+            or proof.owner ~= M.CWV_SEED_IDENTITY_OWNER
+            or proof.capability ~= M.CWV_SEED_IDENTITY_CAPABILITY
+            or proof.backend_id ~= backend_id
+            or proof.item_key ~= item_key
+            or proof.donor_key ~= donor_key
+            or proof.fingerprint ~= expected_fingerprint then
+        return nil, "cwv_provider_proof_mismatch"
+    end
+
+    local stamps = {}
+    _collect_semantic_cwv_stamps(selected_item, stamps)
+    _collect_semantic_cwv_stamps(live_item, stamps)
+    for stamp in pairs(stamps) do
+        if stamp ~= item_key then return nil, "cwv_source_stamp_conflict" end
+    end
+    local selected_conflict = _cwv_observation_conflict(
+        selected_item, backend_id, item_key, donor_key, false)
+    if selected_conflict then
+        return nil, "cwv_selected_" .. selected_conflict .. "_conflict"
+    end
+    local live_conflict, live_stamp = _cwv_observation_conflict(
+        live_item, backend_id, item_key, donor_key, true)
+    if live_conflict then
+        return nil, "cwv_live_" .. live_conflict .. "_conflict"
+    end
+    if not live_stamp then return nil, "cwv_live_stamp_missing" end
+    return {
+        owner = M.CWV_SEED_IDENTITY_OWNER,
+        item_key = item_key,
+        backend_id = backend_id,
+        fingerprint = proof.fingerprint,
+        proof = proof,
+    }, nil
+end
+
+-- MoreItemsLibrary backendifies the exact entry CIM supplies, but deliberately
+-- keeps a CWV clone's vanilla donor key in ItemId/key.  Retain that entry by
+-- object identity: copied stamps or another row with the same backend id cannot
+-- impersonate a legacy craft, while saved legacy records still survive because
+-- `_cim_mil_entry_builder` reissues them on every backend bootstrap.
+local _issued_legacy_mil_entries = setmetatable({}, { __mode = "k" })
+
+local LEGACY_DEFINITION_FIELDS = {
+    "key", "name", "slot_type", "template", "item_type", "inventory_icon",
+    "display_name", "description", "right_hand_unit", "left_hand_unit",
+    "cwv_key", "cwv_variant", "cwv_definition",
+}
+
+local function _legacy_definition_matches(entry, master)
+    for i = 1, #LEGACY_DEFINITION_FIELDS do
+        local field = LEGACY_DEFINITION_FIELDS[i]
+        if entry[field] ~= master[field] then return false end
+    end
+    local left, right = entry.can_wield, master.can_wield
+    if type(left) ~= "table" or type(right) ~= "table" or #left ~= #right then
+        return false
+    end
+    for i = 1, #right do
+        if left[i] ~= right[i] then return false end
+    end
+    return true
+end
+
+function M.register_legacy_mil_entry(record, master, entry)
+    if type(record) ~= "table" or record.owner ~= M.OWNER
+            or record.schema_version ~= M.SCHEMA_VERSION
+            or record.via_mirror ~= false
+            or type(master) ~= "table" or type(entry) ~= "table"
+            or entry == master then
+        return false, "legacy_issuance_contract"
+    end
+    local provider_ok = M.validate_provider(record.item_key, master)
+    if not provider_ok
+            or record.provider ~= M.provider_for(record.item_key, master)
+            or not _legacy_definition_matches(entry, master) then
+        return false, "legacy_issuance_provider"
+    end
+    local mod_data = type(entry.mod_data) == "table" and entry.mod_data or nil
+    local custom = mod_data and type(mod_data.CustomData) == "table"
+        and mod_data.CustomData or nil
+    if entry.cim_acquisition_key ~= record.item_key
+            or not mod_data or not custom
+            or mod_data.backend_id ~= record.backend_id
+            or mod_data.ItemInstanceId ~= record.backend_id
+            or mod_data.cim_acquisition_key ~= record.item_key
+            or custom.cim_acquisition_key ~= record.item_key
+            or custom.cim_provider ~= record.provider then
+        return false, "legacy_issuance_identity"
+    end
+    if record.provider == "cwv" then
+        if entry.cwv_key ~= record.item_key
+                or mod_data.cwv_key ~= record.item_key
+                or custom.cwv_key ~= record.item_key then
+            return false, "legacy_issuance_cwv"
+        end
+    elseif entry.cwv_key ~= nil or mod_data.cwv_key ~= nil
+            or custom.cwv_key ~= nil then
+        return false, "legacy_issuance_foreign_cwv"
+    end
+    local native_key = entry.key or entry.name
+    if type(native_key) ~= "string" or native_key == "" then
+        return false, "legacy_issuance_native_identity"
+    end
+    _issued_legacy_mil_entries[entry] = {
+        backend_id = record.backend_id,
+        item_key = record.item_key,
+        provider = record.provider,
+        native_key = native_key,
+        master = master,
+    }
+    return true, nil
+end
+
+local function _validate_legacy_mil_authority(authority, data, backend_id,
+        record, master)
+    local issued = type(data) == "table" and _issued_legacy_mil_entries[data]
+        or nil
+    if type(issued) ~= "table"
+            or issued.backend_id ~= backend_id
+            or issued.item_key ~= record.item_key
+            or issued.provider ~= record.provider
+            or issued.master ~= master then
+        return false, "owned_legacy_issuance"
+    end
+    if authority.IsModItem ~= true
+            or authority.CreatedBy ~= "crafting_in_modded_dev"
+            or authority.ItemId ~= issued.native_key
+            or authority.key ~= issued.native_key then
+        return false, "owned_native_identity"
+    end
+    return true, nil
+end
+
+-- A non-default CWV-looking row is not automatically an editable instance.
+-- Apply authority comes from CIM's exact persisted record plus the live row
+-- reconstructed from that record. Mirror rows use their private injection
+-- marker; legacy MIL rows use the private exact-entry issuance above.
+function M.validate_temper_owned_instance(item, backend_id, record, master,
+        raw_item)
+    if type(item) ~= "table" or type(record) ~= "table" then
+        return false, "owned_item"
+    end
+    local authority = raw_item or item
+    local valid, reason = M.validate_instance(authority, record)
+    if not valid then return false, "owned_" .. tostring(reason) end
+    local data = type(authority.data) == "table" and authority.data or nil
+    if type(master) ~= "table" then return false, "owned_master_identity" end
+    if record.via_mirror ~= false then
+        if data ~= master then return false, "owned_master_identity" end
+        -- PlayFabMirrorBase._update_data hydrates these exact fields from
+        -- ItemId. Stamps cannot authorize a differently hydrated native row.
+        if authority.key ~= record.item_key
+                or authority.ItemId ~= record.item_key then
+            return false, "owned_native_identity"
+        end
+    else
+        local legacy_ok, legacy_reason = _validate_legacy_mil_authority(
+            authority, data, backend_id, record, master)
+        if not legacy_ok then return false, legacy_reason end
+    end
+    local provider_ok = M.validate_provider(record.item_key, master)
+    if not provider_ok
+            or record.provider ~= M.provider_for(record.item_key, master) then
+        return false, "owned_provider"
+    end
+    local conflict
+    local function inspect(observed)
+        _visit_item_rows(observed, function(row)
+            if conflict then return end
+            for _, field in ipairs({ "backend_id", "ItemInstanceId" }) do
+                local value = row[field]
+                if value ~= nil and (type(value) ~= "string"
+                        or value ~= backend_id) then
+                    conflict = "backend_id"
+                    return
+                end
+            end
+            for _, field in ipairs({
+                "item_key", "cim_acquisition_key", "cwv_key",
+            }) do
+                local value = row[field]
+                if value ~= nil and (type(value) ~= "string"
+                        or value ~= record.item_key) then
+                    conflict = "semantic_stamp"
+                    return
+                end
+            end
+            if row.cim_provider ~= nil
+                    and row.cim_provider ~= record.provider then
+                conflict = "provider_stamp"
+            end
+        end)
+    end
+    inspect(authority)
+    if item ~= authority and not conflict then
+        local observed_valid, observed_reason = M.validate_instance(item, record)
+        if not observed_valid then
+            return false, "owned_ui_" .. tostring(observed_reason)
+        end
+        local expected_native = record.item_key
+        if record.via_mirror == false then
+            expected_native = _issued_legacy_mil_entries[data].native_key
+        end
+        if item.key ~= expected_native
+                or item.ItemId ~= nil and item.ItemId ~= expected_native then
+            return false, "owned_ui_native_identity"
+        end
+        inspect(item)
+    end
+    if conflict then return false, "owned_" .. conflict end
+    if record.via_mirror ~= false then
+        local custom = type(authority.CustomData) == "table"
+            and authority.CustomData or nil
+        if not custom
+                or custom.cim_injection_owner ~= M.OWNER
+                or custom.cim_injection_schema
+                    ~= tostring(M.MIRROR_OWNERSHIP_SCHEMA)
+                or type(custom.cim_injection_nonce) ~= "string"
+                or custom.cim_injection_nonce == ""
+                or custom.cim_acquisition_key ~= record.item_key
+                or custom.cim_provider ~= record.provider then
+            return false, "owned_injection_proof"
+        end
+        if record.provider == "cwv" then
+            if custom.cwv_key ~= record.item_key then
+                return false, "owned_cwv_stamp"
+            end
+        elseif custom.cwv_key ~= nil then
+            return false, "owned_foreign_cwv_stamp"
+        end
+    end
+    return true, nil
+end
+
+local _issued_mirror_tokens = setmetatable({}, { __mode = "k" })
+
+local function _same_array(left, right)
+    if type(left) ~= "table" or type(right) ~= "table" then return false end
+    if #left ~= #right then return false end
+    for index = 1, #left do
+        if left[index] ~= right[index] then return false end
+    end
+    for key in pairs(left) do
+        if type(key) ~= "number" or key < 1 or key > #left
+                or key % 1 ~= 0 then
+            return false
+        end
+    end
+    return true
+end
+
+local function _same_map(left, right)
+    if type(left) ~= "table" or type(right) ~= "table" then return false end
+    for key, value in pairs(left) do
+        if right[key] ~= value then return false end
+    end
+    for key, value in pairs(right) do
+        if left[key] ~= value then return false end
+    end
+    return true
+end
+
+local function _mirror_expectation(backend_id, item_key, payload, record)
+    local custom = type(payload) == "table"
+        and type(payload.CustomData) == "table" and payload.CustomData or nil
+    if type(record) ~= "table" or not custom
+            or record.backend_id ~= backend_id or record.item_key ~= item_key
+            or type(record.rarity) ~= "string" or record.rarity == ""
+            or type(record.power_level) ~= "number"
+            or type(record.traits) ~= "table"
+            or type(record.properties) ~= "table"
+            or type(record.provider) ~= "string" or record.provider == ""
+            or type(record._mirror_master) ~= "table"
+            or type(custom.power_level) ~= "string"
+            or tonumber(custom.power_level) ~= record.power_level
+            or custom.rarity ~= record.rarity
+            or type(custom.traits) ~= "string"
+            or type(custom.properties) ~= "string"
+            or custom.cim_acquisition_key ~= item_key
+            or custom.cim_provider ~= record.provider
+            or custom.skin ~= record.skin then
+        return nil
+    end
+    if record.provider == "cwv" then
+        if custom.cwv_key ~= item_key then return nil end
+    elseif custom.cwv_key ~= nil then
+        return nil
+    end
+    return {
+        backend_id = backend_id,
+        item_key = item_key,
+        rarity = record.rarity,
+        power_level = record.power_level,
+        skin = record.skin,
+        traits = copy_array(record.traits),
+        properties = copy_map(record.properties),
+        provider = record.provider,
+        master = record._mirror_master,
+        custom_power_level = custom.power_level,
+        custom_traits = custom.traits,
+        custom_properties = custom.properties,
+    }
+end
+
+local function _mirror_token_fingerprint(backend_id, item_key, nonce, expected)
+    return table.concat({
+        "cim-mirror-item-v2", backend_id, item_key, nonce,
+        expected.provider, expected.rarity, expected.custom_power_level,
+        expected.skin or "<nil>", expected.custom_traits,
+        expected.custom_properties,
+    }, "|")
+end
+
+function M.mirror_ownership_token(backend_id, item_key, nonce, payload, record)
+    if type(backend_id) ~= "string" or backend_id == ""
+            or type(item_key) ~= "string" or item_key == ""
+            or type(nonce) ~= "string" or nonce == ""
+            or type(payload) ~= "table" then
+        return nil
+    end
+    local expected = _mirror_expectation(
+        backend_id, item_key, payload, record)
+    if not expected then return nil end
+    local token = {
+        schema = M.MIRROR_OWNERSHIP_SCHEMA,
+        owner = M.OWNER,
+        capability = M.MIRROR_OWNERSHIP_CAPABILITY,
+        backend_id = backend_id,
+        item_key = item_key,
+        nonce = nonce,
+        payload = payload,
+        fingerprint = _mirror_token_fingerprint(
+            backend_id, item_key, nonce, expected),
+    }
+    _issued_mirror_tokens[token] = {
+        payload = payload,
+        expected = expected,
+    }
+    return token
+end
+
+function M.validate_mirror_ownership_token(token, backend_id, item_key)
+    local issued = type(token) == "table" and _issued_mirror_tokens[token] or nil
+    return type(issued) == "table"
+        and token.schema == M.MIRROR_OWNERSHIP_SCHEMA
+        and token.owner == M.OWNER
+        and token.capability == M.MIRROR_OWNERSHIP_CAPABILITY
+        and token.backend_id == backend_id
+        and token.item_key == item_key
+        and type(token.nonce) == "string" and token.nonce ~= ""
+        and token.payload == issued.payload
+        and token.fingerprint == _mirror_token_fingerprint(
+            backend_id, item_key, token.nonce, issued.expected)
+end
+
+local function _mirror_row_owned_by_token(row, token)
+    local issued = type(token) == "table" and _issued_mirror_tokens[token] or nil
+    if type(row) ~= "table" or type(issued) ~= "table"
+            or not M.validate_mirror_ownership_token(
+                token, token.backend_id, token.item_key)
+            or row ~= issued.payload then
+        return false
+    end
+    local custom = type(row.CustomData) == "table" and row.CustomData or nil
+    if row.ItemInstanceId ~= token.backend_id
+            or row.ItemId ~= token.item_key
+            or not custom
+            or custom.cim_injection_owner ~= M.OWNER
+            or custom.cim_injection_schema ~= tostring(M.MIRROR_OWNERSHIP_SCHEMA)
+            or custom.cim_injection_nonce ~= token.nonce then
+        return false
+    end
+    return true
+end
+
+local function _mirror_row_matches(row, token)
+    if not _mirror_row_owned_by_token(row, token) then return false end
+    local issued = _issued_mirror_tokens[token]
+    local expected = issued and issued.expected
+    if type(expected) ~= "table" then return false end
+    local custom = row.CustomData
+    if row.backend_id ~= token.backend_id or row.key ~= token.item_key
+            or row.data ~= expected.master
+            or row.rarity ~= expected.rarity
+            or row.power_level ~= expected.power_level
+            or row.skin ~= expected.skin
+            or not _same_array(row.traits, expected.traits)
+            or not _same_map(row.properties, expected.properties)
+            or custom.cim_acquisition_key ~= token.item_key
+            or custom.cim_provider ~= expected.provider
+            or custom.rarity ~= expected.rarity
+            or custom.power_level ~= expected.custom_power_level
+            or custom.skin ~= expected.skin
+            or custom.traits ~= expected.custom_traits
+            or custom.properties ~= expected.custom_properties then
+        return false
+    end
+    if expected.provider == "cwv" then
+        if custom.cwv_key ~= token.item_key then return false end
+    elseif custom.cwv_key ~= nil then
+        return false
+    end
+    local valid = true
+    _visit_item_rows(row, function(candidate)
+        for _, field in ipairs({
+            "item_key", "cim_acquisition_key", "cwv_key",
+        }) do
+            local stamp = candidate[field]
+            if stamp ~= nil and stamp ~= token.item_key then valid = false end
+        end
+        local provider = candidate.cim_provider
+        if provider ~= nil and provider ~= expected.provider then valid = false end
+        for _, field in ipairs({ "backend_id", "ItemInstanceId" }) do
+            local value = candidate[field]
+            if value ~= nil and value ~= token.backend_id then valid = false end
+        end
+    end)
+    return valid
+end
+
+-- During the synchronous add/postcondition boundary, exact object identity is
+-- the strongest ownership proof available.  If an engine callback damages our
+-- marker and then throws, remove that exact object; never remove a replacement.
+local function _cleanup_injected_payload(mirror, backend_id, token)
+    local issued = type(token) == "table" and _issued_mirror_tokens[token] or nil
+    if type(issued) ~= "table" then return false, "ownership_token" end
+    local current = rawget(mirror._inventory_items, backend_id)
+    if current == nil then
+        _issued_mirror_tokens[token] = nil
+        return true, nil
+    end
+    if current ~= issued.payload then return false, "mirror_replaced" end
+    local removed, remove_error = pcall(mirror.remove_item, mirror, backend_id)
+    local absent = rawget(mirror._inventory_items, backend_id) == nil
+    -- A callback that returns normally is not proof that it removed anything.
+    -- Contain the exact object we issued after every callback outcome, while
+    -- preserving any replacement installed by engine/user code.
+    if not absent
+            and rawget(mirror._inventory_items, backend_id) == issued.payload then
+        rawset(mirror._inventory_items, backend_id, nil)
+        absent = true
+    end
+    if not removed and not absent then return false, tostring(remove_error) end
+    if not absent then
+        return false, "mirror_remove_postcondition"
+    end
+    _issued_mirror_tokens[token] = nil
+    return true, nil
+end
+
+local function _cleanup_owned_mirror_row(mirror, backend_id, token)
+    local current = rawget(mirror._inventory_items, backend_id)
+    if not _mirror_row_owned_by_token(current, token) then
+        return false, "mirror_identity_mismatch"
+    end
+    local removed, remove_error = pcall(mirror.remove_item, mirror, backend_id)
+    local absent = rawget(mirror._inventory_items, backend_id) == nil
+    local issued = _issued_mirror_tokens[token]
+    -- Treat remove_item as a request, not a postcondition.  A normal-returning
+    -- no-op implementation must not strand our exact owned mirror row.
+    if not absent and type(issued) == "table"
+            and rawget(mirror._inventory_items, backend_id) == issued.payload then
+        rawset(mirror._inventory_items, backend_id, nil)
+        absent = true
+    end
+    if not removed and not absent then return false, tostring(remove_error) end
+    if not absent then
+        return false, "mirror_remove_postcondition"
+    end
+    _issued_mirror_tokens[token] = nil
+    return true, nil
+end
+
+function M.inject_mirror_item(mirror, backend_id, payload, nonce_factory, record)
+    if type(mirror) ~= "table" or type(mirror.add_item) ~= "function"
+            or type(mirror.remove_item) ~= "function"
+            or type(mirror._inventory_items) ~= "table" then
+        return nil, "mirror_contract_unavailable"
+    end
+    if type(backend_id) ~= "string" or backend_id == "" then
+        return nil, "backend_id"
+    end
+    local custom = type(payload) == "table"
+        and type(payload.CustomData) == "table" and payload.CustomData or nil
+    if type(payload) ~= "table" or payload.ItemInstanceId ~= backend_id
+            or type(payload.ItemId) ~= "string" or payload.ItemId == ""
+            or not custom then
+        return nil, "payload_identity"
+    end
+    if rawget(mirror._inventory_items, backend_id) ~= nil then
+        return nil, "backend_id_exists"
+    end
+
+    if custom.cim_injection_owner ~= nil
+            or custom.cim_injection_schema ~= nil
+            or custom.cim_injection_nonce ~= nil then
+        return nil, "payload_injection_marker_exists"
+    end
+    if type(nonce_factory) ~= "function" then
+        return nil, "nonce_factory"
+    end
+    local nonce_ok, nonce = pcall(nonce_factory)
+    local token = nonce_ok and M.mirror_ownership_token(
+        backend_id, payload.ItemId, nonce, payload, record) or nil
+    if not token then return nil, "nonce" end
+    custom.cim_injection_owner = M.OWNER
+    custom.cim_injection_schema = tostring(M.MIRROR_OWNERSHIP_SCHEMA)
+    custom.cim_injection_nonce = nonce
+    local added, add_error = pcall(mirror.add_item, mirror, backend_id, payload)
+    if not added then
+        local cleaned, cleanup_error = _cleanup_injected_payload(
+            mirror, backend_id, token)
+        local detail = tostring(add_error) .. "|cleanup="
+            .. (cleaned and "complete" or tostring(cleanup_error))
+        return nil, detail, nil, cleaned
+    end
+    local matched_call, matched = pcall(_mirror_row_matches,
+        rawget(mirror._inventory_items, backend_id), token)
+    if not matched_call or not matched then
+        local cleaned, cleanup_error = _cleanup_injected_payload(
+            mirror, backend_id, token)
+        return nil, "mirror_postcondition:"
+            .. tostring(matched_call and "mismatch" or matched) .. "|cleanup="
+            .. (cleaned and "complete" or tostring(cleanup_error)), nil, cleaned
+    end
+    local rollback = function()
+        return M.rollback_mirror_item(mirror, backend_id, token)
+    end
+    return true, nil, token, false, rollback
+end
+
+function M.rollback_mirror_item(mirror, backend_id, token)
+    if type(mirror) ~= "table" or type(mirror.remove_item) ~= "function"
+            or type(mirror._inventory_items) ~= "table" then
+        return false, "mirror_contract_unavailable"
+    end
+    if not M.validate_mirror_ownership_token(
+            token, backend_id, token and token.item_key) then
+        return false, "ownership_token"
+    end
+    return _cleanup_owned_mirror_row(mirror, backend_id, token)
+end
+
+-- Finish the only throwable work that follows a successful mirror add.  If a
+-- native refresh partially rebuilds its cache and then throws, remove the exact
+-- owned row and force one second dirtify/refresh so that partial cache cannot
+-- survive the failed craft.
+function M.complete_mirror_injection_refresh(refresh_backend, rollback)
+    if type(refresh_backend) ~= "function" or type(rollback) ~= "function" then
+        return nil, "post-injection refresh contract unavailable"
+    end
+    local refresh_called, refresh_result, refresh_error = pcall(refresh_backend)
+    if refresh_called and refresh_result == true then return true, nil end
+    local initial_error = refresh_called
+        and (refresh_error or refresh_result or "refresh_rejected")
+        or refresh_result
+    local called, removed, rollback_error = pcall(rollback)
+    local contained = called and removed == true
+    local cleanup_refreshed, cleanup_error = false, "rollback_incomplete"
+    if contained then
+        local cleanup_called, cleanup_result, cleanup_reason = pcall(refresh_backend)
+        cleanup_refreshed = cleanup_called and cleanup_result == true
+        cleanup_error = cleanup_called
+            and (cleanup_reason or cleanup_result or "refresh_rejected")
+            or cleanup_result
+    end
+    return nil, "post-injection refresh failed: " .. tostring(initial_error)
+        .. "|rollback=" .. (contained and "complete" or "failed:"
+            .. tostring(called and rollback_error or removed))
+        .. "|post-cleanup-refresh=" .. (cleanup_refreshed and "complete"
+            or "failed:" .. tostring(cleanup_error))
+end
+
+-- One canonical add/cleanup/cache transaction for every modern craft path.
+-- `inject_mirror_item` owns exact row identity; this wrapper additionally owns
+-- the engine caches that an add callback may partially rebuild before it
+-- throws.  A removed row is not contained until those caches refresh too.
+function M.inject_and_refresh_mirror_item(mirror, backend_id, payload,
+        nonce_factory, record, refresh_backend)
+    if type(refresh_backend) ~= "function" then
+        return nil, "mirror_refresh_contract_unavailable"
+    end
+    local added, add_error, ownership_token, cleaned, rollback =
+        M.inject_mirror_item(mirror, backend_id, payload, nonce_factory, record)
+    if not added then
+        local failure = tostring(add_error or "mirror_injection_failed")
+        if cleaned == true then
+            local called, refreshed, refresh_error = pcall(refresh_backend)
+            if not called or refreshed ~= true then
+                local reason = called
+                    and (refresh_error or refreshed or "refresh_rejected")
+                    or refreshed
+                failure = failure .. "|post-cleanup-refresh=failed:"
+                    .. tostring(reason)
+            end
+        elseif cleaned == false then
+            failure = failure .. "|cleanup=failed"
+        end
+        return nil, failure
+    end
+
+    local rollback_fn = type(rollback) == "function" and rollback or function()
+        return M.rollback_mirror_item(mirror, backend_id, ownership_token)
+    end
+    local refreshed, refresh_error = M.complete_mirror_injection_refresh(
+        refresh_backend, rollback_fn)
+    if not refreshed then return nil, refresh_error end
+    return true, nil, ownership_token, rollback_fn
+end
 
 -- The native `can_craft_with` result is an acquisition-selector surface, not
 -- an inventory surface.  Keep this classification beside canonical identity
