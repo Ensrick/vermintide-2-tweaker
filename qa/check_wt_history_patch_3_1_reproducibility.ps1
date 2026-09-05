@@ -75,16 +75,16 @@ try {
     $pinned = [ordered]@{
         $extractor = 'ae916ba306e0f5933f71e9b41ed0c0e7df46c28585da4fb92b5e2cc03199b15a'
         $oracleExtractor = '767c73dd8f2caf35575324aae7ac09e2460a3506f9ad6c8296d2bee6e973a2d5'
-        $generator = '2c43825624591c3f22d2827ec98dd594c2113e2088c7d929b8101321469c4b7b'
-        $sourceCatalog = '722a152e021b2e4d9953b31a959894dd9b990f66c630e0f5db1117301c5a91cd'
+        $generator = '8c2f967f344709af286a76eb4f0990701d3f6735df5eba89e90456e8332d276c'
+        $sourceCatalog = '12d428c0aeaad8d461fd97804dcff88a8009fc8b2762f52812b94d60521f0db2'
         $adjacentEvidence = '63047d1c57551eca5cb46763d91ada62e9ae2d0a945232e591c7e4500dde5d76'
         $rehydratedEvidence = '7563d45d92bafbcc8be35cc8b5130ed59a8520b8fc4a7aa1e9f372aac9020c14'
         $tuskgorAdjacentEvidence = '1670075b4ba9072a0f1226152575d1c598d7efb572929680edc3e8b8271c6c95'
         $tuskgorRehydratedEvidence = '6b5030dc1316a6080f1ae579d3beed3cff637d64d621d8d10701c6add6f9f5d3'
-        $generatedCatalog = '60539707496e9ecb1e77aa3d6b4168aca96d271c2ff92a7267d0637d544018ad'
-        $devCatalog = '60539707496e9ecb1e77aa3d6b4168aca96d271c2ff92a7267d0637d544018ad'
-        $ledger = '21aab4a7576afe21214304099cca4e388de0f554679e52f56ffeaf5ff1e46f03'
-        $devLedger = '21aab4a7576afe21214304099cca4e388de0f554679e52f56ffeaf5ff1e46f03'
+        $generatedCatalog = 'e9f26b58583de3f8d81bdc4d404ff2f8bfc56a18c7d83ef1f85cc68420d62df3'
+        $devCatalog = 'e9f26b58583de3f8d81bdc4d404ff2f8bfc56a18c7d83ef1f85cc68420d62df3'
+        $ledger = '1653f1affe4c3f547394b7920cf3867edee1eda7a4c0b2d84488b7feb8deaf7a'
+        $devLedger = '1653f1affe4c3f547394b7920cf3867edee1eda7a4c0b2d84488b7feb8deaf7a'
     }
     foreach ($entry in $pinned.GetEnumerator()) {
         if (-not (Test-Path -LiteralPath $entry.Key -PathType Leaf)) {

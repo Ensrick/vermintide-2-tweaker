@@ -73,7 +73,7 @@ function Test-WtHistoryRemoteProbe {
             "canonical default tip moved: pinned=$($Anchor.ObservedDefaultTip) remote=$remoteTip"
     }
     return New-FreshnessResult 'pass' `
-        "canonical default tip matches $remoteTip (semantic 6.12.0 content $($Anchor.ContentRevision))"
+        "canonical default tip matches $remoteTip (semantic $($Anchor.GameVersion) content $($Anchor.ContentRevision))"
 }
 
 function New-WtHistoryTaskkillStartInfo {
@@ -744,6 +744,7 @@ function Invoke-FreshnessSelfTest {
         DefaultRef = 'refs/heads/master'
         ObservedDefaultTip = ('a' * 40)
         ContentRevision = ('b' * 40)
+        GameVersion = '9.9.9'
     }
     function Assert-State([string]$Name, $Probe, [bool]$Required, [string]$Expected) {
         $result = Test-WtHistoryRemoteProbe -Anchor $anchor -Probe $Probe -Required:$Required
@@ -768,6 +769,80 @@ function Invoke-FreshnessSelfTest {
         if ($Elapsed -gt $Allowance) {
             $latencyDiagnostics.Add("$Name scheduler/OS latency exceeded the non-contract observation threshold: elapsed=${Elapsed}ms threshold=${Allowance}ms") | Out-Null
         }
+    }
+
+    # The canonical schema now represents a same-commit content/tip identity,
+    # while old release receipts still need the strict schema-1 reader.
+    try {
+        $schema2Text = @"
+return {
+    canonical_url = "https://github.com/Aussiemon/Vermintide-2-Source-Code",
+    content_revision = "$('a' * 40)",
+    default_ref = "refs/heads/master",
+    game_version = "6.12.1",
+    observed_at_utc = "2026-09-03T22:09:45Z",
+    observed_default_tip = "$('a' * 40)",
+    observed_tip_content_relation = "same_commit",
+    observed_tip_metadata_paths = {},
+    schema = 2,
+}
+"@
+        $schema1Text = @"
+return {
+    canonical_url = "https://github.com/Aussiemon/Vermintide-2-Source-Code",
+    content_revision = "$('b' * 40)",
+    default_ref = "refs/heads/master",
+    game_version = "6.12.0",
+    observed_at_utc = "2026-08-28T23:45:18Z",
+    observed_default_tip = "$('c' * 40)",
+    observed_tip_content_relation = "direct_parent",
+    observed_tip_metadata_paths = { "README.md" },
+    schema = 1,
+}
+"@
+        $parsedSchema2 = ConvertFrom-WtHistorySourceAnchorLiteral -Text $schema2Text
+        if ($parsedSchema2.Schema -ne 2 -or
+            $parsedSchema2.ObservedTipContentRelation -cne 'same_commit' -or
+            $parsedSchema2.ContentRevision -cne $parsedSchema2.ObservedDefaultTip -or
+            @($parsedSchema2.ObservedTipMetadataPaths).Count -ne 0) {
+            $failures.Add('canonical schema-2 same-commit anchor did not parse exactly') | Out-Null
+        }
+        $parsedSchema1 = ConvertFrom-WtHistorySourceAnchorLiteral -Text $schema1Text
+        if ($parsedSchema1.Schema -ne 1 -or
+            $parsedSchema1.ObservedTipContentRelation -cne 'direct_parent' -or
+            $parsedSchema1.ContentRevision -ceq $parsedSchema1.ObservedDefaultTip -or
+            @($parsedSchema1.ObservedTipMetadataPaths).Count -ne 1 -or
+            $parsedSchema1.ObservedTipMetadataPaths[0] -cne 'README.md') {
+            $failures.Add('legacy schema-1 direct-parent anchor compatibility failed') | Out-Null
+        }
+
+        foreach ($invalid in @(
+                $schema2Text.Replace('observed_tip_metadata_paths = {},',
+                    'observed_tip_metadata_paths = { "README.md" },'),
+                $schema2Text.Replace('observed_tip_content_relation = "same_commit",',
+                    'observed_tip_content_relation = "direct_parent",'),
+                $schema2Text.Replace('content_revision = "' + ('a' * 40) + '",',
+                    'content_revision = "' + ('b' * 40) + '",'),
+                $schema1Text.Replace('observed_default_tip = "' + ('c' * 40) + '",',
+                    'observed_default_tip = "' + ('b' * 40) + '",'),
+                $schema1Text.Replace('observed_tip_content_relation = "direct_parent",',
+                    'observed_tip_content_relation = "same_commit",'),
+                $schema1Text.Replace(
+                    'observed_tip_metadata_paths = { "README.md" },',
+                    'observed_tip_metadata_paths = {},'),
+                $schema1Text.Replace('"README.md"', '"CHANGELOG.md"')
+            )) {
+            $rejected = $false
+            try { $null = ConvertFrom-WtHistorySourceAnchorLiteral -Text $invalid }
+            catch { $rejected = $true }
+            if (-not $rejected) {
+                $failures.Add('cross-schema source-anchor fixture was accepted') | Out-Null
+            }
+        }
+    }
+    catch {
+        $failures.Add("source-anchor schema compatibility fixture failed: $($_.Exception.Message)") |
+            Out-Null
     }
 
     # Generic source guards have one full-QA owner. This fixture fails if a
@@ -1785,7 +1860,7 @@ function Invoke-FreshnessSelfTest {
         $failures | ForEach-Object { Write-Host "  X $_" -ForegroundColor Red }
         exit 2
     }
-    Write-Host '[check_wt_history_source_freshness:selftest] OK - injected programmed-wait deadlines, exact process containment, shared-matrix ownership, and no-orphan cleanup pass.' -ForegroundColor Green
+    Write-Host '[check_wt_history_source_freshness:selftest] OK - schema-2/current and schema-1/legacy anchors, injected programmed-wait deadlines, exact process containment, shared-matrix ownership, and no-orphan cleanup pass.' -ForegroundColor Green
     exit 0
 }
 

@@ -19,7 +19,7 @@ return {
     },
     current = {
         blob = "9d95add8cf0f06d1c52042e13d5f83912b7f3dd9",
-        revision = "038498af2b565bcb10bf5ed225638293a7640c83",
+        revision = "25fd7b8433e839b678d1c98a7a9af80918cbc252",
     },
     family = {
         display_name = "Kerillian's Greatsword",

@@ -349,6 +349,52 @@ local function register(H, repo_root)
         return counts
     end
 
+    H.test("WT #1529 6.12.1 provenance refresh preserves the gameplay census", function()
+        local by_path = generated_catalogs(CatalogUI, script_root)
+        local totals = {
+            catalogs = #CatalogUI.GENERATED_MODULES,
+            families = 0,
+            family_states = 0,
+            operations = 0,
+            states = 0,
+        }
+        local family_ids = {}
+        local state_ids = {}
+        for _, path in ipairs(CatalogUI.GENERATED_MODULES) do
+            local catalog = assert(by_path[path])
+            local valid, validation_error = Policy.validate(catalog)
+            H.equal(validation_error, nil)
+            H.equal(valid, true)
+            H.equal(catalog.current_source.revision,
+                "25fd7b8433e839b678d1c98a7a9af80918cbc252")
+            H.equal(catalog.current_source.display_name,
+                "Current (Game Version 6.12.1)")
+            H.equal(catalog.current_source.label, "6.12.1 source anchor")
+            local counts = catalog_counts(catalog)
+            totals.family_states = totals.family_states + counts.family_states
+            totals.operations = totals.operations + counts.operations
+            for _, family in ipairs(catalog.families) do
+                family_ids[family.id] = true
+            end
+            for state_id in pairs(catalog.states) do state_ids[state_id] = true end
+        end
+        for _ in pairs(family_ids) do totals.families = totals.families + 1 end
+        for _ in pairs(state_ids) do totals.states = totals.states + 1 end
+
+        H.deep_equal(totals, {
+            catalogs = 13,
+            families = 26,
+            family_states = 38,
+            operations = 236,
+            states = 15,
+        })
+        local ledger = assert(by_path[CatalogUI.COMPLETENESS_LEDGER_MODULE])
+        H.equal(ledger.current_revision,
+            "25fd7b8433e839b678d1c98a7a9af80918cbc252")
+        H.deep_equal(ledger.totals, totals,
+            "provenance refresh must not alter the pinned gameplay census")
+    end)
+
     H.test("WT #1436 generated Patch 5.2 catalog passes strict schema validation", function()
         local catalog = assert(loadfile(script_root .. "_wt_history_5_2_catalog.lua"))()
         local valid, validation_error = Policy.validate(catalog)
@@ -365,7 +411,7 @@ local function register(H, repo_root)
         H.equal(valid, true)
         H.equal(catalog.catalog_id, "wt_history_patch_6_0_v1")
         H.equal(catalog.current_source.revision,
-            "038498af2b565bcb10bf5ed225638293a7640c83")
+            "25fd7b8433e839b678d1c98a7a9af80918cbc252")
         H.equal(#catalog.families, 3)
         H.equal(next(catalog.derived_profiles), nil)
         H.deep_equal(catalog.generation, {
@@ -555,7 +601,7 @@ local function register(H, repo_root)
         H.equal(catalog.schema, 2)
         H.equal(catalog.catalog_id, "wt_history_patch_6_6_v1")
         H.equal(catalog.current_source.revision,
-            "038498af2b565bcb10bf5ed225638293a7640c83")
+            "25fd7b8433e839b678d1c98a7a9af80918cbc252")
         H.equal(#catalog.families, 1)
         H.equal(next(catalog.profile_specs), nil)
         H.equal(next(catalog.derived_profiles), nil)
@@ -626,7 +672,7 @@ local function register(H, repo_root)
         H.equal(catalog.schema, 2)
         H.equal(catalog.catalog_id, "wt_history_patch_6_8_v1")
         H.equal(catalog.current_source.revision,
-            "038498af2b565bcb10bf5ed225638293a7640c83")
+            "25fd7b8433e839b678d1c98a7a9af80918cbc252")
         H.equal(#catalog.families, 1)
         H.equal(next(catalog.profile_specs), nil)
         H.equal(next(catalog.derived_profiles), nil)
@@ -1296,7 +1342,7 @@ local function register(H, repo_root)
             end
         end
         H.equal(pinned, 0.2866666666666667,
-            "current 6.12.0 source literal must survive evidence and catalog generation")
+            "current 6.12.1 source literal must survive evidence and catalog generation")
         H.truthy(pinned ~= 0.28666666666667,
             "the former Lua 5.1 tostring truncation must remain detectable")
     end)

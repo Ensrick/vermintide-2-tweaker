@@ -19,7 +19,7 @@ return {
     },
     current = {
         blob = "d68819bb59bdece50b69c9401a9feb5ae238b3cb",
-        revision = "038498af2b565bcb10bf5ed225638293a7640c83",
+        revision = "25fd7b8433e839b678d1c98a7a9af80918cbc252",
     },
     family = {
         display_name = "Bardin's Masterwork Pistol",

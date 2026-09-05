@@ -18,7 +18,7 @@ return {
     },
     current = {
         blob = "68256d553f364ca97a7dabccb617020afe5a0064",
-        revision = "038498af2b565bcb10bf5ed225638293a7640c83",
+        revision = "25fd7b8433e839b678d1c98a7a9af80918cbc252",
     },
     family = {
         display_name = "Kruber's Halberd",

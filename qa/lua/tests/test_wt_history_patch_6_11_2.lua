@@ -24,7 +24,7 @@ local function register(H, repo_root)
             "wt_history_patch_6_11_2_reversions_v2")
         H.equal(catalog.current_id, "current")
         H.equal(catalog.current_source.revision,
-            "038498af2b565bcb10bf5ed225638293a7640c83")
+            "25fd7b8433e839b678d1c98a7a9af80918cbc252")
         H.equal(#catalog.families, 2)
         H.equal(next(catalog.profile_specs), nil)
         H.equal(next(catalog.derived_profiles), nil)

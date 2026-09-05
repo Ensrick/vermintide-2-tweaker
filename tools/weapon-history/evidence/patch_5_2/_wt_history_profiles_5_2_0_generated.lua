@@ -1,6 +1,6 @@
 -- Rehydrated from immutable source revisions; do not hand-edit.
 return {
-    new_revision = "038498af",
+    new_revision = "25fd7b84",
     old_revision = "4f496970",
     profiles = {
         light_slashing_smiter_stab_dual = {

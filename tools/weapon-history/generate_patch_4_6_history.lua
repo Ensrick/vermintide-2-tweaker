@@ -19,7 +19,8 @@ end
 local normalized_script = tostring(arg[0] or ""):gsub("\\", "/")
 local script_dir = normalized_script:match("^(.*)/[^/]+$") or "."
 local current_anchor = load_data(script_dir .. "/current_source_anchor.lua")
-assert(current_anchor.schema == 1, "unsupported current source anchor")
+assert(current_anchor.schema == 1 or current_anchor.schema == 2,
+    "unsupported current source anchor")
 
 local function shell_quote(value)
     return '"' .. tostring(value):gsub('"', '\\"') .. '"'
@@ -138,7 +139,7 @@ local historical = load_data(evidence_dir
 local post = load_data(evidence_dir
     .. "/_wt_history_profiles_post_4_6_generated.lua")
 local current = load_data(evidence_dir
-    .. "/_wt_history_profiles_current_6_12_0_generated.lua")
+    .. "/_wt_history_profiles_current_6_12_1_generated.lua")
 for _, snapshot in ipairs({ adjacent, historical, post, current }) do
     assert(snapshot.old_revision == source_catalog.boundary.historical_revision
             and snapshot.new_revision == source_catalog.boundary.post_revision,

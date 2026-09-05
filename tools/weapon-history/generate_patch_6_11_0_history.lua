@@ -25,7 +25,8 @@ end
 local normalized_script = tostring(arg[0] or ""):gsub("\\", "/")
 local script_dir = normalized_script:match("^(.*)/[^/]+$") or "."
 local current_anchor = load_data(script_dir .. "/current_source_anchor.lua")
-assert(current_anchor.schema == 1, "unsupported current source anchor")
+assert(current_anchor.schema == 1 or current_anchor.schema == 2,
+    "unsupported current source anchor")
 
 local function shell_quote(value)
     return '"' .. tostring(value):gsub('"', '\\"') .. '"'

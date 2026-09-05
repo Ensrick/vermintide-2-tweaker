@@ -51,7 +51,8 @@ end
 
 local script_dir = slash(tostring(arg[0] or "")):match("^(.*)/[^/]+$") or "."
 local current_anchor = load_module(script_dir .. "/current_source_anchor.lua")
-assert(current_anchor.schema == 1, "unsupported current source anchor")
+assert(current_anchor.schema == 1 or current_anchor.schema == 2,
+    "unsupported current source anchor")
 
 local source_catalog = load_module(evidence_dir
     .. "/_wt_history_5_2_source_catalog.lua")

@@ -135,11 +135,11 @@ try {
     $pins = [ordered]@{
         $extractor = 'ae916ba306e0f5933f71e9b41ed0c0e7df46c28585da4fb92b5e2cc03199b15a'
         $oracle = '767c73dd8f2caf35575324aae7ac09e2460a3506f9ad6c8296d2bee6e973a2d5'
-        $generator = '27a406f45632d85e80a72e839f8c642e51a7f379d66b12e795424f7c5d5d7b7d'
-        $spec = '69f2a7df8e5b1e6dac681b684e67ddefa55eace25ffe7eee0d4095422313913e'
-        $sourceCatalog = 'ee34d0026406343e3b5800f72d63da7cfb4c950aef0abb3a1b5dda8f911b2940'
-        $catalog = 'e52809188121fd2ec81add1c3cffe0b9c7598c6ecac9c80d1d3e75bb78d40ad0'
-        $devCatalog = 'e52809188121fd2ec81add1c3cffe0b9c7598c6ecac9c80d1d3e75bb78d40ad0'
+        $generator = 'da4e619b400275eafca9a5fe0c31cb5595f7b9039f96199c63419cbaa14193c5'
+        $spec = '86a1873f5309e4f9c97dbe8eac65d34c935d42dc922bbeba8aebc378b2d9d7f0'
+        $sourceCatalog = '8068383390760e4dde30191d275306878dfb0bc30b681048e0286b4e56bc138c'
+        $catalog = 'a045c0702204ef1910490552ae6f7bc105e9aa384571081beb5b6362927fa53f'
+        $devCatalog = 'a045c0702204ef1910490552ae6f7bc105e9aa384571081beb5b6362927fa53f'
     }
     foreach ($pin in $pins.GetEnumerator()) {
         if (-not (Test-Path -LiteralPath $pin.Key -PathType Leaf) -or
@@ -152,10 +152,10 @@ try {
     }
 
     $ledger = [ordered]@{
-        '_wt_history_4_6_routes_oracle.lua' = '52902d86ef11f1da7fcf1d10e25f36b1bcbdfe7881221ab863a28f0b75f2e179'
+        '_wt_history_4_6_routes_oracle.lua' = '0d7d484ec390af9b286577ac040d3e2cf280335a960a45ac0b950c053a9621b6'
         '_wt_history_profiles_4_5_1_rehydrated_generated.lua' = 'c3a0167e80e4980c660b203f0b9aebb62a4672f55ec122f4426f6d7339c2b377'
         '_wt_history_profiles_4_5_1_to_4_6_generated.lua' = 'c4fb71879225b85e4021b541206536134b1a943c2112a43c590025bea33973b0'
-        '_wt_history_profiles_current_6_12_0_generated.lua' = 'b37a67604422766c07a71c675c47d2f6ffeccd1710ca97d7320c50aaf723e3fb'
+        '_wt_history_profiles_current_6_12_1_generated.lua' = 'b37a67604422766c07a71c675c47d2f6ffeccd1710ca97d7320c50aaf723e3fb'
         '_wt_history_profiles_post_4_6_generated.lua' = '877cb30430d9bb9ffc28903586b9b4d483502790e2c557624da32585864a2351'
         '_wt_history_snapshot_4_5_1_rehydrated_generated.lua' = '048cfd627e4e894277d030615cb3a31f84c5c6d43615270d02dd2fba52846e98'
         '_wt_history_snapshot_4_5_1_to_4_6_generated.lua' = 'd26d7fdc14928639d9ea224783a4f5157a8af505ed8b12871996d68c34765945'
@@ -262,7 +262,7 @@ try {
             [pscustomobject]@{ Name = 'profile-a'; Arguments = @('--profiles', $old, $post, $power, $damage); Evidence = '_wt_history_profiles_4_5_1_to_4_6_generated.lua' },
             [pscustomobject]@{ Name = 'profile-h'; Arguments = @('--rehydrate-profiles', $old, $current, $adjacentProfiles); Evidence = '_wt_history_profiles_4_5_1_rehydrated_generated.lua' },
             [pscustomobject]@{ Name = 'profile-p'; Arguments = @('--rehydrate-profiles', $post, $post, $adjacentProfiles); Evidence = '_wt_history_profiles_post_4_6_generated.lua' },
-            [pscustomobject]@{ Name = 'profile-c'; Arguments = @('--rehydrate-profiles', $current, $current, $adjacentProfiles); Evidence = '_wt_history_profiles_current_6_12_0_generated.lua' }
+            [pscustomobject]@{ Name = 'profile-c'; Arguments = @('--rehydrate-profiles', $current, $current, $adjacentProfiles); Evidence = '_wt_history_profiles_current_6_12_1_generated.lua' }
         )
         foreach ($job in $jobs) {
             $primaryOut = Join-Path $tmp ($job.Name + '-primary.lua')

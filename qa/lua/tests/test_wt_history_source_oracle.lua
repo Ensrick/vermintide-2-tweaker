@@ -372,7 +372,7 @@ local function register(H, repo_root)
         H.equal(patch_2_0_6_source_catalog.boundary.post_blob,
             "a04a5e7579702c75f7ccbfc4dde33363b1e13c84")
         H.equal(patch_2_0_6_source_catalog.current.revision,
-            "038498af2b565bcb10bf5ed225638293a7640c83")
+            "25fd7b8433e839b678d1c98a7a9af80918cbc252")
         H.equal(patch_2_0_6_source_catalog.current.blob,
             "547f75e51dbf656184ed351ecd261714db4f25fe")
         H.deep_equal(patch_2_0_6_source_catalog.family.templates, {
@@ -440,7 +440,7 @@ local function register(H, repo_root)
         H.equal(patch_4_1_1_source_catalog.boundary.post_blob,
             "b705e7b247242d60a6177682a2c2a89ae5164b2a")
         H.equal(patch_4_1_1_source_catalog.current.revision,
-            "038498af2b565bcb10bf5ed225638293a7640c83")
+            "25fd7b8433e839b678d1c98a7a9af80918cbc252")
         H.equal(patch_4_1_1_source_catalog.current.blob,
             "d68819bb59bdece50b69c9401a9feb5ae238b3cb")
 

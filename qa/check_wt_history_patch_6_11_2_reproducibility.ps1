@@ -82,14 +82,14 @@ try {
     $pinned = [ordered]@{
         $extractor = 'ae916ba306e0f5933f71e9b41ed0c0e7df46c28585da4fb92b5e2cc03199b15a'
         $oracleExtractor = '767c73dd8f2caf35575324aae7ac09e2460a3506f9ad6c8296d2bee6e973a2d5'
-        $generator = '811409f567fbeb6e1594a481f5a8c1204077d36e224f083c7fcbf806d2cac026'
-        $sourceCatalog = '3a5c9675f415bc31668521ad6e9373ef475eceb797c275bbdc584b7d63161f37'
+        $generator = '1ee9a000df651e75e4394bb66da4dfd9b7cd2c01904d94a58b3390d1286673b9'
+        $sourceCatalog = '3883738aa011377721031d48247ffd58d3368e7d708f953df407b928c0dff0c7'
         $adjacentEvidence = 'c73b84364a83038ccdd60522b19d654e08519fe706289174253acab74e6716c6'
         $rehydratedEvidence = '5479c3a8d57e60d6716182923731087088d9146394a39674f943a7b21d4405b2'
         $axeAdjacentEvidence = '8e3fbd667f3503a5d27bdd3b7588f0b5405ceddc6f3545db85cf8b1d5ad0c3c3'
         $axeRehydratedEvidence = 'e12c444ba28ec368ce44823150ee6496f24d0ed6cbbd3dfc08c4f114bf1c0ff8'
-        $generatedCatalog = '47797bf35cd07679d2517f213a29c729829a29b96ef4ea02c746f7c1a84e3efc'
-        $devCatalog = '47797bf35cd07679d2517f213a29c729829a29b96ef4ea02c746f7c1a84e3efc'
+        $generatedCatalog = 'ce7462e62267d7998b52589b8698ba25ade6283cd1c1bc5cff320ebadfbe59d3'
+        $devCatalog = 'ce7462e62267d7998b52589b8698ba25ade6283cd1c1bc5cff320ebadfbe59d3'
     }
     foreach ($entry in $pinned.GetEnumerator()) {
         if (-not (Test-Path -LiteralPath $entry.Key -PathType Leaf)) {

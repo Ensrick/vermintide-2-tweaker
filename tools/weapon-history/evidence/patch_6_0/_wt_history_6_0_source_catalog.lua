@@ -6,7 +6,7 @@
 -- function-body, and later penetrating changes remain excluded.
 return {
     artifacts = {
-        _wt_history_profiles_current_6_12_0_generated =
+        _wt_history_profiles_current_6_12_1_generated =
             "3c593a19fb8fd7ff8c8c0c35e2105a1ebdf46d2600dee98d971a89dc3cfddd95",
         _wt_history_profiles_5_6_1_rehydrated_generated =
             "e7d7c5c14526b2e09c0c74827a4e1760d1aaab65751273fe1386d8b337968943",
@@ -26,7 +26,7 @@ return {
         post_revision = "da0bbdaf6af1ca7e8c96e7892a3416a4aa8a7f87",
     },
     current = {
-        revision = "038498af2b565bcb10bf5ed225638293a7640c83",
+        revision = "25fd7b8433e839b678d1c98a7a9af80918cbc252",
     },
     families = {
         bretonnian_sword_and_shield = {
