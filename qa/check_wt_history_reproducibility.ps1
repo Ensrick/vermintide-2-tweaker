@@ -92,11 +92,11 @@ try {
     $lua = Join-Path $root 'qa\lua\vendor\lua-5.1.5-win64\lua5.1.exe'
 
     $pinned = [ordered]@{
-        $extractor = 'c0a2775e5c3f52e9b11ca701e7ed9e916287cc78b39e1c5edc5caf52d6468e46'
+        $extractor = '76e6e9b05d1945c94022e94ed6190b079b5320dae7a5f0797000cd5a098e338f'
         $generator = 'bb2e366992226a9ffb1acc223dee99fa944264d02e3ad96be410e8d660a6f523'
         $sourceCatalog = '4d346e1b5f0f79f8ddc06e9d58d2e8345257ed24d30ac02fb53373ea96d34dd4'
         $generatedCatalog = '95cc058d5fc32751859f1c4fe913a93d7d31553dea91edd834d700bcafb9ae43'
-        $oracleExtractor = '6c8ae7ef0dee07e93632e20427600cab15046aadcb0ad4bbe082d15a95ea5bdf'
+        $oracleExtractor = '3f4c3f2d630c261a3b0037a42e41ebafd560d8050afd49bc67c67259b406f311'
         $oracleSpec = 'df8976bdfbd6bf182fae88dededd00554a9352eabf2fc9413a59184d846bdc1d'
         $oracleRoutes = '07e2dd48b667b1c26550299ca60d02658aebc29804bf8caa3a57081353af99c4'
     }

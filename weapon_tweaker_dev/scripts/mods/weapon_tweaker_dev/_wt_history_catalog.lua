@@ -8,6 +8,7 @@ local M = {}
 
 local GENERATED_MODULES = {
     "scripts/mods/weapon_tweaker_dev/_wt_history_5_2_catalog",
+    "scripts/mods/weapon_tweaker_dev/_wt_history_6_6_catalog",
     "scripts/mods/weapon_tweaker_dev/_wt_history_6_8_catalog",
 }
 local GENERATED_MODULE = GENERATED_MODULES[1]
@@ -279,6 +280,11 @@ function M.build_localization(catalog)
             en = "Choose the native balance state for " .. family.display_name
                 .. ". Historical choices require a game restart. Other Weapon Tweaks compose on top of this baseline.",
         }
+        if family.authority == "server" then
+            entries[family.setting_id .. "_description"].en =
+                entries[family.setting_id .. "_description"].en
+                .. " This selector applies only while hosting or playing solo."
+        end
     end
     return entries
 end

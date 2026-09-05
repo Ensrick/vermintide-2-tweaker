@@ -401,6 +401,15 @@ decompiled source checkout exists, it additionally regenerates to a temporary
 file and requires byte-exact equality; source-less CI keeps the pinned ledger
 active and emits a visible regeneration skip.
 
+`run_wt_history_patch_6_6_host_matrix.ps1` is the blocking dual-host gate for
+the Patch 6.6 Deepwood Staff slice. Under both PowerShell 7 and Windows
+PowerShell 5.1 it runs the pinned-artifact gate, regenerates the adjacent
+6.5.4-to-6.6.0 evidence and current-anchor guards when source is available,
+requires independent-oracle agreement, and regenerates the byte-exact public
+and dev catalogs. Its three-operation transaction covers both staff templates
+and the server-owned spirit-storm vortex leaf; the runtime refuses the
+historical state on a client.
+
 `check_wt_history_patch_6_8_reproducibility.ps1` is the corresponding blocking
 gate for the Patch 6.8 Kerillian Greatsword slice. It selects the operation from
 the exact adjacent 6.7.2-to-6.8.1 diff, rehydrates only that selected path
@@ -419,6 +428,7 @@ the complete pinned-artifact gate and reports the regeneration skip.
 | `check_vmf_widget_types.ps1` | ✅ OK | all 23 active `*_data.lua` clean post-gt v0.2.60-dev `text_input` fix (2026-05-25) |
 | `check_event_register_signature.ps1` | ✅ OK | clean post-gt v0.2.61 → .64 fix cycle (2026-05-25). This static check is the live gate; the former `bt:safe_event_register` runtime safety net (buff_tweaker v0.1.10-alpha+) is RETIRED (bt archived 2026-06). |
 | `check_wt_history_reproducibility.ps1` | ✅ OK (2026-08-28) | Issue #1436 full-QA gate for the pinned Patch 5.2 evidence ledger and byte-exact generated catalog; exact regeneration runs wherever `Vermintide-2-Source-Code` is available. |
+| `run_wt_history_patch_6_6_host_matrix.ps1` | ✅ OK (2026-08-28) | Issue #1436 blocking dual-host gate for the exact Patch 6.6 Deepwood Staff adjacent boundary, 6.11.3 current guards, independent-oracle agreement, and byte-exact public/dev catalogs. |
 | `check_wt_history_patch_6_8_reproducibility.ps1` | ✅ OK (2026-08-28) | Issue #1436 full-QA gate for the source-adjacent Patch 6.8 Kerillian Greatsword boundary, current-anchor rehydration, independent oracle agreement, and byte-exact generated catalogs. |
 | `check_localization.ps1` | ⚠ 28 warnings | ct BOON_TREE category_ids; et_diff_ + mut_ false-positive prefixes |
 | `check_loc_tags.ps1` | ✅ OK (#694 migration) | Blocking scan covers every active stream, dynamic `en` construction, and obsolete decoration helpers; migration mode verifies key/order/count and value semantics against the merge base. |

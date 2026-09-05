@@ -38,6 +38,34 @@ Official scope references:
 - [Patch 5.2.0](https://www.vermintide.com/news/gifts-of-the-wolf-father-and-patch-520)
 - [Hotfix 5.2.3](https://forums.fatsharkgames.com/t/hotfix-megathread-5-2-x-current-5-2-3/91155)
 
+### Patch 6.6 boundary
+
+Patch 6.6 uses an adjacent-boundary contract across both Deepwood Staff source
+owners:
+
+| Role | Source revision |
+|---|---|
+| Game version 6.5.4 | `5a74a378502353b075cbe0c3abe37da07f1d9bc9` |
+| Post-boundary 6.6.0 scripts | `877aa9b2720d297e0594f7039773eca610324f5b` |
+| Current anchor (6.11.3) | `c5e4968b1fbb00c49884e56d640ef990a9c04dd0` |
+
+The adjacent evidence selects exactly three absent historical leaves: the
+`chaos_bulwark` row in `staff_life` and `staff_life_vs` prioritized breeds, and
+the matching `spirit_storm.reduce_duration_per_breed` row. Current values are
+`1`, `1`, and `0.5`. Removing all three recreates the pre-6.6 behavior while
+leaving later rows such as `chaos_tether_sorcerer` untouched. The evaluator's
+`table.set` implementation and its capture of the side-effect assignment to
+`DLCSettings.woods.vortex_templates` are covered by byte-exact regeneration in
+both source evaluators. The official boundary is [Patch 6.6.0 / Hotfix 6.6.1](https://forums.fatsharkgames.com/t/new-map-the-well-of-dreams-live-now-skulls-in-game-event-patch-6-6-0-hotfix-6-6-1/108063).
+
+This family is deliberately host/solo only. Vanilla
+`ActionSpiritStorm.fire` sends `rpc_summon_vortex` to the server, the server
+spawns the network vortex, and `SummonedVortexExtension` reads the vortex
+template's breed-duration multiplier. A client-side selector could therefore
+present a selected state without owning the authoritative behavior. The
+runtime refuses the historical state on a client and transactionally applies
+or restores all three leaves on the host.
+
 ### Patch 6.8 boundary
 
 Patch 6.8 uses an adjacent-boundary contract so later edits to the same source
@@ -67,6 +95,11 @@ $source = 'C:\path\to\Vermintide-2-Source-Code'
     '.\tools\weapon-history\evidence\patch_5_2' `
     '.\weapon_tweaker\scripts\mods\weapon_tweaker\_wt_history_5_2_catalog.lua'
 
+& $lua '.\tools\weapon-history\generate_patch_6_6_history.lua' `
+    $source `
+    '.\tools\weapon-history\evidence\patch_6_6' `
+    '.\weapon_tweaker\scripts\mods\weapon_tweaker\_wt_history_6_6_catalog.lua'
+
 & $lua '.\tools\weapon-history\generate_patch_6_8_history.lua' `
     $source `
     '.\tools\weapon-history\evidence\patch_6_8' `
@@ -77,6 +110,7 @@ Then run the non-mutating exact-output gate:
 
 ```powershell
 .\qa\check_wt_history_reproducibility.ps1 -SourceRepo $source -RequireSource
+.\qa\run_wt_history_patch_6_6_host_matrix.ps1
 .\qa\check_wt_history_patch_6_8_reproducibility.ps1 -SourceRepo $source -RequireSource
 ```
 
@@ -89,6 +123,9 @@ oracle, then requires byte-exact catalog equality. In source-less CI it still
 enforces every pinned artifact and reports source regeneration as a visible
 skip. The Patch 6.8 gate applies the same fail-closed policy to its adjacent
 boundary, current-anchor rehydration, two evaluators, and generated catalogs.
+The Patch 6.6 host matrix applies that policy under both PowerShell 7 and
+Windows PowerShell 5.1, including both source paths and the server-authority
+runtime contract.
 `qa/check_wt_stream_parity.ps1` separately proves that the dev stream
 carries the namespace-normalized catalog.
 

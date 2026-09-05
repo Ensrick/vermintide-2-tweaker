@@ -28,6 +28,11 @@ function M.install(config)
     if catalog then
         owner.runtime = runtime_module.install({
             catalog = catalog,
+            is_server = function()
+                local managers = rawget(_G, "Managers")
+                local player = type(managers) == "table" and managers.player
+                return type(player) == "table" and player.is_server == true
+            end,
             mod = mod,
             policy = policy,
             roots = function()
@@ -35,6 +40,7 @@ function M.install(config)
                     BuffTemplates = rawget(_G, "BuffTemplates"),
                     ExplosionTemplates = rawget(_G, "ExplosionTemplates"),
                     PlayerUnitStatusSettings = rawget(_G, "PlayerUnitStatusSettings"),
+                    VortexTemplates = rawget(_G, "VortexTemplates"),
                     Weapons = rawget(_G, "Weapons"),
                 }
             end,
