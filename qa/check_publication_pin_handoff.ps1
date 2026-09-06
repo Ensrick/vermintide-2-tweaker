@@ -81,7 +81,36 @@ try {
         }
         Write-Host "[publication-pin-handoff] PASS $case"
     }
-    Write-Host "[publication-pin-handoff] PASS $script:passed assertions across $($confirmed.Count + $unconfirmed.Count + 3) cases."
+    # Source inventory is canonical: a manifest ModId is not a lowercase folder
+    # slug. In particular Weapons of Chaos has always published as uppercase WOC.
+    $inventory = Import-PowerShellDataFile -LiteralPath (Join-Path $repo 'tools\mod-inventory.psd1')
+    foreach ($row in $inventory.Mods) {
+        $context = New-VtPublishedPinContext -RepoRoot $root -Mod $row.Dir -ModId $row.ModId `
+            -SourceCommit ('c' * 40) -ModTree ('b' * 40) -Version '0.1.2-dev' `
+            -PublishedId $row.WorkshopId -ReleaseTag 'mods-2026-09-06'
+        $decoded = ConvertFrom-VtPublishedPinContext -Json $context
+        Assert ($decoded.Mod -ceq $row.Dir -and $decoded.ModId -ceq $row.ModId) "Canonical inventory identity $($row.Dir) changed case or was rejected."
+        Assert-VtPinPublicationHandoff -Handoff @{ PreparedJson = $context; PublishedJson = $null } -ExpectedJson $context
+        Assert ($decoded.PublishedId -ceq [string]$row.WorkshopId) "Canonical inventory Workshop identity $($row.Dir) changed."
+    }
+    $woc = @($inventory.Mods | Where-Object { $_.Dir -ceq 'weapons_of_chaos' })
+    Assert ($woc.Count -eq 1 -and $woc[0].ModId -ceq 'WOC') 'The uppercase WOC integration control is no longer canonical; update this explicit fixture.'
+    $wocContext = New-VtPublishedPinContext -RepoRoot $root -Mod $woc[0].Dir -ModId $woc[0].ModId `
+        -SourceCommit ('c' * 40) -ModTree ('b' * 40) -Version '0.1.2-dev' `
+        -PublishedId $woc[0].WorkshopId -ReleaseTag 'mods-2026-09-06'
+    foreach ($case in @('ExistingSuccess','NewReceiptFailure','WrongModIdCase')) {
+        $result = Invoke-VtPublicationHandoffFixture -RepoRoot $repo -FixtureRoot $root -PreparedJson $wocContext -Case $case -Program $program
+        if ($case -eq 'WrongModIdCase') {
+            Assert ($result.Requests.Count -eq 0 -and $null -eq $result.ImportedJson -and
+                $result.Error.Contains("publisher-owned 'ModId'")) 'A lowercase alias was accepted for canonical WOC.'
+        }
+        else {
+            Assert ($result.PublishedJson -ceq $wocContext -and $result.ImportedJson -ceq $wocContext) "WOC $case lost its exact case-preserved identity."
+            Assert (($case -eq 'ExistingSuccess' -and [string]::IsNullOrEmpty($result.Error)) -or
+                ($case -eq 'NewReceiptFailure' -and $result.Error.Contains('WriteAllBytes'))) "WOC $case did not exercise its intended outcome."
+        }
+    }
+    Write-Host "[publication-pin-handoff] PASS $script:passed assertions across $($confirmed.Count + $unconfirmed.Count + 3) baseline cases, $($inventory.Mods.Count) inventory identities and 3 WOC cases."
 }
 finally {
     Remove-VtPublicationHandoffFixtureDirectory -Path $root -ParentRoot ([IO.Path]::GetTempPath()) -LeafPattern '^vt2-handoff-suite-[0-9a-f]{32}$'

@@ -174,7 +174,7 @@ function ConvertFrom-VtPublishedPinContext {
     if ($record.Purpose -cne 'github-source-pins-v1' -or
         $record.Repository -cne 'Ensrick/vermintide-2-tweaker' -or
         $record.Mod -cnotmatch '^[a-z][a-z0-9_]*$' -or
-        $record.ModId -cnotmatch '^[a-z][a-z0-9_]*$' -or
+        $record.ModId -cnotmatch '^[A-Za-z][A-Za-z0-9_]*$' -or
         $record.SourceCommit -cnotmatch '^[0-9a-f]{40}$' -or
         $record.ModTree -cnotmatch '^[0-9a-f]{40}$' -or
         $record.Version -cnotmatch '^\d+\.\d+\.\d+(?:-[a-zA-Z0-9.-]+)?$' -or

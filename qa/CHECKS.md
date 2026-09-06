@@ -748,7 +748,10 @@ unpublished drafts, bootstrap and DryRun. The process finalization suite also
 composes those publisher failures with its real lease, locked residual child,
 and competing owner. No test substitutes caller intent for publication proof.
 Hard process death and ambiguous server acceptance still need durable recovery;
-neither is claimed fixed by this in-memory handoff.
+neither is claimed fixed by this in-memory handoff. The context census covers
+every canonical inventory identity, including uppercase `WOC` (distinct from
+the lowercase `weapons_of_chaos` folder), plus actual WOC success/failure handoffs
+and rejection of a case-changed alias before publication.
 
 ## How to add a check
 

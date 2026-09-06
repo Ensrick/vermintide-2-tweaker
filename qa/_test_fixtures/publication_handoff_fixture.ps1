@@ -180,7 +180,8 @@ function Invoke-VtPublicationHandoffFixture {
         $wrongFields = @{
             WrongPurpose = @('Purpose','other'); WrongRepository = @('Repository','other/repo')
             WrongRoot = @('RepoRoot',(Join-Path $fixtureBase 'foreign')); WrongMod = @('Mod','other_mod')
-            WrongModId = @('ModId','other'); WrongCommit = @('SourceCommit',('d' * 40))
+            WrongModId = @('ModId','other'); WrongModIdCase = @('ModId', $canonical.ModId.ToLowerInvariant())
+            WrongCommit = @('SourceCommit',('d' * 40))
             WrongTree = @('ModTree',('e' * 40)); WrongVersion = @('Version','9.9.9-dev')
             WrongPublishedId = @('PublishedId','999'); WrongReleaseTag = @('ReleaseTag','mods-2000-01-01')
         }
