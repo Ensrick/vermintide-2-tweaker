@@ -70,7 +70,12 @@ Start-Sleep -Seconds 30
                 Start-Sleep -Milliseconds 25
             }
         }
-        [Environment]::FailFast('planted transaction crash')
+        # This fixture needs abrupt owner death, not Windows Error Reporting's
+        # dump-generation latency. Kill ONLY this worker; production Job cleanup
+        # must still kill/drain any child and grandchild without our assistance.
+        [IO.File]::WriteAllText($MarkerPath + '.hard-death', "$PID")
+        [Diagnostics.Process]::GetCurrentProcess().Kill()
+        throw 'fixture self-termination unexpectedly returned'
     }
     if ($Mode -in @('Wait', 'SuccessWithResidue')) {
         $deadline = [DateTime]::UtcNow.AddSeconds(20)
@@ -81,5 +86,6 @@ Start-Sleep -Seconds 30
     }
 }
 finally {
+    [IO.File]::WriteAllText($MarkerPath + '.finally', "$PID")
     if ($null -ne $lease) { Exit-VmbMachineTransactionLease -Lease $lease }
 }

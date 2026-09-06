@@ -76,10 +76,242 @@ function Invoke-MachineTransactionLeaseSelfTest {
         return [System.IO.File]::ReadAllText($path)
     }
 
+    function Wait-RecoveryFixtureOwnerExit {
+        param(
+            [Parameter(Mandatory = $true)][scriptblock]$SignalExit,
+            [Parameter(Mandatory = $true)][scriptblock]$WaitForExit,
+            [Parameter(Mandatory = $true)][scriptblock]$HasExited,
+            [ValidateRange(1, 60000)][int]$SetupTimeoutMilliseconds = 20000
+        )
+        # This is fixture setup, not a lease-acquisition/recovery budget. A
+        # contender must not spend its semantic wait while its supposed dead
+        # owner is still starting/terminating (including crash-report latency).
+        $null = & $SignalExit
+        $finished = & $WaitForExit $SetupTimeoutMilliseconds
+        if ($finished -isnot [bool] -or -not $finished) {
+            throw 'repeat-recovery fixture owner did not exit within the setup ceiling'
+        }
+        $exited = & $HasExited
+        if ($exited -isnot [bool] -or -not $exited) {
+            throw 'repeat-recovery fixture owner exit postcondition failed'
+        }
+    }
+
+    function Read-FixtureEvidence {
+        param(
+            [string]$Path,
+            [ValidateRange(1, 16384)][int]$Limit = 4096,
+            [scriptblock]$OpenReader = {
+                param($file)
+                New-Object IO.StreamReader([IO.File]::Open($file, [IO.FileMode]::Open,
+                    [IO.FileAccess]::Read, ([IO.FileShare]::ReadWrite -bor [IO.FileShare]::Delete)))
+            }
+        )
+        $reader = $null
+        try {
+            $reader = & $OpenReader $Path
+            $buffer = New-Object char[] ($Limit + 1)
+            $count = $reader.ReadBlock($buffer, 0, $buffer.Length)
+            if ($count -eq 0) { return '' }
+            $text = -join $buffer[0..($count - 1)]
+            if ($count -gt $Limit) { return $text.Substring(0, $Limit) + '<truncated>' }
+            return $text
+        }
+        catch [IO.FileNotFoundException] { return '' }
+        catch [IO.DirectoryNotFoundException] { return '' }
+        catch {
+            $message = $_.Exception.Message
+            return '<unreadable: ' + $message.Substring(0, [Math]::Min(1024, $message.Length)) + '>'
+        }
+        finally { if ($null -ne $reader) { try { $reader.Dispose() } catch { } } }
+    }
+
+    function Wait-FixtureTerminal {
+        param(
+            [string]$Name,
+            [scriptblock]$WaitForExit,
+            [scriptblock]$ReadState,
+            [scriptblock]$ReadElapsed,
+            [long]$DeadlineMilliseconds
+        )
+        # Both workers share one observation ceiling. This never changes their
+        # 5000ms lease wait or turns a semantic failure into a successful test.
+        $remaining = [int][Math]::Max(0, $DeadlineMilliseconds - (& $ReadElapsed))
+        $waited = $false
+        $errorText = ''
+        try {
+            $result = & $WaitForExit $remaining
+            $waited = $result -is [bool] -and $result
+            if (-not $waited) { $errorText = 'terminal wait incomplete' }
+        }
+        catch { $errorText = 'terminal wait error: ' + $_.Exception.Message }
+        $observed = & $ReadElapsed
+        $state = @{ Pid = 'unavailable'; HasExited = $false; ExitCode = 'unavailable' }
+        try { $state = & $ReadState }
+        catch { $errorText += '; state read error: ' + $_.Exception.Message }
+        $exited = $null -ne $state -and $state.HasExited -is [bool] -and $state.HasExited
+        $errorText = $errorText.Substring(0, [Math]::Min(2048, $errorText.Length))
+        $exitCode = if ($null -eq $state.ExitCode -or [string]::IsNullOrWhiteSpace([string]$state.ExitCode)) {
+            'unavailable'
+        } else { [string]$state.ExitCode }
+        [pscustomobject]@{
+            Complete = $waited -and $exited
+            Detail = "$Name pid=$($state.Pid) exited=$($state.HasExited) exit=$exitCode observed_ms=$observed remaining_ms=$remaining wait_complete=$waited error=[$errorText]"
+        }
+    }
+
+    function Assert-WorkerExitPath {
+        param([string]$Marker, [Diagnostics.Process]$Process, [bool]$HardDeath)
+        $hardDeathPath = $Marker + '.hard-death'
+        $finallyPath = $Marker + '.finally'
+        $hardDeathExists = Test-Path -LiteralPath $hardDeathPath
+        $finallyExists = Test-Path -LiteralPath $finallyPath
+        $expectedPid = [string]$Process.Id
+        if ($HardDeath) {
+            Assert-Fixture ($hardDeathExists -and -not $finallyExists -and
+                (Read-FixtureEvidence $hardDeathPath) -eq $expectedPid) "worker $expectedPid explicitly hard-terminates without running finally"
+        }
+        else {
+            Assert-Fixture (-not $hardDeathExists -and $finallyExists -and
+                (Read-FixtureEvidence $finallyPath) -eq $expectedPid) "ordinary worker $expectedPid executes finally without hard termination"
+        }
+    }
+
     $script:__transactionPassed = 0
     $children = @()
     try {
         $helperText = [System.IO.File]::ReadAllText($helper, [System.Text.Encoding]::UTF8)
+        $workerText = [IO.File]::ReadAllText($worker, [Text.Encoding]::UTF8)
+        Assert-Fixture ($workerText.Contains('[Diagnostics.Process]::GetCurrentProcess().Kill()') -and
+            [regex]::Matches($workerText, '\.Kill\s*\(').Count -eq 1 -and
+            -not $workerText.Contains('::FailFast(') -and
+            $workerText.Contains("[IO.File]::WriteAllText(`$MarkerPath + '.finally',")) 'hard-death injection kills only the worker, avoids FailFast, and retains an observable finally control'
+        # Exercise only the sequencing policy here, without real delays or
+        # additional processes. A slow successful setup is distinct from a
+        # live-owner timeout; the latter must never pass the recovery fixture.
+        foreach ($case in @('late-exit', 'wait-timeout', 'false-exit', 'wait-throws')) {
+            $state = @{ Trace = @(); NextStep = 0; Budget = 0; Elapsed = 0 }
+            $errorText = ''
+            try {
+                Wait-RecoveryFixtureOwnerExit -SignalExit {
+                    $state.Trace += 'signal'
+                } -WaitForExit {
+                    param($budget)
+                    $state.Trace += 'wait'
+                    $state.Budget = $budget
+                    # Model termination beyond a contender's unchanged 5s
+                    # wait, but within this independent 20s setup ceiling.
+                    $state.Elapsed = 6000
+                    if ($case -eq 'wait-throws') { throw 'planted owner wait failure' }
+                    return $case -ne 'wait-timeout'
+                } -HasExited {
+                    $state.Trace += 'exit-postcondition'
+                    return $case -ne 'false-exit'
+                }
+                $state.NextStep++
+            }
+            catch { $errorText = $_.Exception.Message }
+            if ($case -eq 'late-exit') {
+                Assert-Fixture ($state.NextStep -eq 1 -and $state.Budget -eq 20000 -and
+                    $state.Elapsed -gt 5000 -and $state.Elapsed -lt $state.Budget -and
+                    ($state.Trace -join ',') -eq 'signal,wait,exit-postcondition' -and
+                    $errorText -eq '') 'late owner termination completes setup before a fresh contender wait begins'
+            }
+            else {
+                $expectedError = switch ($case) {
+                    'wait-timeout' { 'setup ceiling' }
+                    'false-exit' { 'exit postcondition' }
+                    'wait-throws' { 'planted owner wait failure' }
+                }
+                $expectedTrace = if ($case -eq 'false-exit') { 'signal,wait,exit-postcondition' } else { 'signal,wait' }
+                Assert-Fixture ($state.NextStep -eq 0 -and $state.Budget -eq 20000 -and
+                    ($state.Trace -join ',') -eq $expectedTrace -and
+                    $errorText -match $expectedError) "$case cannot start a recovery contender"
+            }
+        }
+        # Pure observation checks: no workers, sleeps, or timing injection.
+        $observation = @{ Elapsed = 0; Budgets = @() }
+        $firstTerminal = Wait-FixtureTerminal 'owner' -DeadlineMilliseconds 20000 -ReadElapsed {
+            $observation.Elapsed
+        } -WaitForExit {
+            param($budget)
+            $observation.Budgets += $budget
+            $observation.Elapsed = 17000
+            return $true
+        } -ReadState { @{ Pid = 1; HasExited = $true; ExitCode = -1 } }
+        $secondTerminal = Wait-FixtureTerminal 'contender' -DeadlineMilliseconds 20000 -ReadElapsed {
+            $observation.Elapsed
+        } -WaitForExit {
+            param($budget)
+            $observation.Budgets += $budget
+            $observation.Elapsed = 20000
+            return $false
+        } -ReadState { @{ Pid = 2; HasExited = $false; ExitCode = 'unavailable' } }
+        Assert-Fixture ($firstTerminal.Complete -and -not $secondTerminal.Complete -and
+            ($observation.Budgets -join ',') -eq '20000,3000' -and
+            $firstTerminal.Detail.Contains('exit=-1') -and
+            $secondTerminal.Detail.Contains('terminal wait incomplete')) 'terminal evidence preserves failure and shares one aggregate observation ceiling'
+        foreach ($case in @('expired', 'wait-throws', 'state-throws', 'false-exit', 'nonboolean-wait')) {
+            $observation.Elapsed = 21000
+            $terminal = Wait-FixtureTerminal $case -DeadlineMilliseconds 20000 -ReadElapsed {
+                $observation.Elapsed
+            } -WaitForExit {
+                param($budget)
+                $observation.Budgets += $budget
+                if ($case -eq 'wait-throws') { throw 'planted wait failure' }
+                if ($case -eq 'nonboolean-wait') { return 'true' }
+                return $case -ne 'expired'
+            } -ReadState {
+                if ($case -eq 'state-throws') { throw 'planted state failure' }
+                @{ Pid = 3; HasExited = $case -ne 'false-exit'; ExitCode = 7 }
+            }
+            Assert-Fixture (-not $terminal.Complete -and
+                $observation.Budgets[-1] -eq 0 -and $terminal.Detail.Contains($case)) "$case retains terminal failure without an unbounded wait"
+        }
+        $terminal = Wait-FixtureTerminal 'blank-exit' -DeadlineMilliseconds 20000 -ReadElapsed { 0 } `
+            -WaitForExit { $true } -ReadState { @{ Pid = 4; HasExited = $true; ExitCode = $null } }
+        Assert-Fixture ($terminal.Complete -and $terminal.Detail.Contains('exit=unavailable')) 'unavailable PowerShell exit codes are not rendered as known empty values'
+        $readEvidence = @{ Disposed = 0; Requested = 0; Text = 'Refusing abandoned transaction recovery' }
+        $fakeReader = New-Object PSObject
+        $fakeReader | Add-Member ScriptMethod ReadBlock {
+            param($buffer, $offset, $count)
+            $readEvidence.Requested = $count
+            $take = [Math]::Min($count, $readEvidence.Text.Length)
+            $readEvidence.Text.CopyTo(0, $buffer, $offset, $take)
+            return $take
+        }
+        $fakeReader | Add-Member ScriptMethod Dispose { $readEvidence.Disposed++ }
+        foreach ($message in @('Refusing abandoned transaction recovery', 'machine mutex held beyond 5000 ms')) {
+            $readEvidence.Text = $message
+            $captured = Read-FixtureEvidence 'fake' -Limit 64 -OpenReader { $fakeReader }
+            Assert-Fixture ($captured -eq $message -and $readEvidence.Requested -eq 65) 'terminal diagnostics retain exact recovery-refusal and timeout evidence'
+        }
+        $readEvidence.Text = 'x' * 100
+        $captured = Read-FixtureEvidence 'fake' -Limit 16 -OpenReader { $fakeReader }
+        Assert-Fixture ($captured -eq (('x' * 16) + '<truncated>') -and
+            $readEvidence.Requested -eq 17 -and $readEvidence.Disposed -eq 3) 'diagnostic reads are bounded and readers always close'
+        $captured = Read-FixtureEvidence 'fake' -OpenReader { throw 'planted unreadable diagnostic' }
+        Assert-Fixture ($captured.Contains('planted unreadable diagnostic')) 'diagnostic read errors remain evidence rather than masking the fixture failure'
+        $failingReader = New-Object PSObject
+        $failingReader | Add-Member ScriptMethod ReadBlock { throw 'planted reader failure' }
+        $failingReader | Add-Member ScriptMethod Dispose { $readEvidence.Disposed++ }
+        $captured = Read-FixtureEvidence 'fake' -OpenReader { $failingReader }
+        Assert-Fixture ($captured.Contains('planted reader failure') -and
+            $readEvidence.Disposed -eq 4) 'diagnostic readers close even when an opened stream fails'
+        $fixtureText = [IO.File]::ReadAllText($PSCommandPath, [Text.Encoding]::UTF8)
+        $repeatBlockStart = $fixtureText.LastIndexOf("`$repeatMutex = 'Global\Ensrick.VMBLauncher.Tests.'")
+        $repeatBlockEnd = $fixtureText.LastIndexOf("`$queuedMutex = 'Global\Ensrick.VMBLauncher.Tests.'")
+        $repeatBlock = $fixtureText.Substring($repeatBlockStart, $repeatBlockEnd - $repeatBlockStart)
+        $keeperOpen = $repeatBlock.IndexOf('[Threading.Mutex]::OpenExisting($repeatMutex)')
+        $ownerExit = $repeatBlock.IndexOf('Wait-RecoveryFixtureOwnerExit -SignalExit')
+        $firstStart = $repeatBlock.IndexOf('$firstRecovery = Start-Worker')
+        $secondStart = $repeatBlock.IndexOf('$secondRecovery = Start-Worker')
+        $keeperDispose = $repeatBlock.IndexOf('$repeatKeeper.Dispose()')
+        Assert-Fixture ($keeperOpen -ge 0 -and $ownerExit -gt $keeperOpen -and
+            $firstStart -gt $ownerExit -and $secondStart -gt $firstStart -and
+            $keeperDispose -gt $secondStart -and
+            $repeatBlock.Contains('$repeatOwner.WaitForExit($budget)') -and
+            $repeatBlock.Contains('$repeatOwner.HasExited')) 'repeat-recovery fixture preserves the mutex and proves owner death before starting either contender'
         Assert-Fixture ($helperText.Contains("'Global\Ensrick.VMBLauncher.Transaction.v1'")) 'production mutex uses the machine-global namespace'
         Assert-Fixture ($helperText.Contains('[System.IO.FileOptions]::WriteThrough') -and $helperText.Contains('$stream.Flush($true)')) 'owner record is flushed durably before the transaction proceeds'
         $shipText = [System.IO.File]::ReadAllText((Join-Path $repoRoot 'tools\ship\ship.ps1'), [System.Text.Encoding]::UTF8)
@@ -192,6 +424,7 @@ function Invoke-MachineTransactionLeaseSelfTest {
         $a.Refresh()
         $aError = Read-WorkerError $aMarker
         Assert-Fixture ((Test-Path -LiteralPath $aMarker) -and [string]::IsNullOrWhiteSpace($aError)) "first BuildOnly owner releases normally (exit $($a.ExitCode): $aError)"
+        Assert-WorkerExitPath $aMarker $a $false
 
         $retryMarker = Join-Path $temp 'retry.marker'
         $retry = Start-Worker $sem $record 'build-only' 'mod-b' 2000 $retryMarker '' $artifact 'Success'
@@ -229,6 +462,7 @@ function Invoke-MachineTransactionLeaseSelfTest {
         $failure.WaitForExit()
         $failure.Refresh()
         Assert-Fixture ((Read-WorkerError $failureMarker) -match 'planted transaction failure') 'planted failure is observable'
+        Assert-WorkerExitPath $failureMarker $failure $false
         $afterFailureMarker = Join-Path $temp 'after-failure.marker'
         $afterFailure = Start-Worker $failureSem $failureRecord 'upload' 'mod-b' 1000 $afterFailureMarker '' '' 'Success'
         $children += $afterFailure
@@ -247,6 +481,7 @@ function Invoke-MachineTransactionLeaseSelfTest {
         $crash.WaitForExit()
         $crash.Refresh()
         Assert-Fixture ((Test-Path -LiteralPath $crashRecord) -and (Test-Path -LiteralPath $crashMarker)) 'hard crash leaves only a stale diagnostic owner record'
+        Assert-WorkerExitPath $crashMarker $crash $true
         $afterCrashMarker = Join-Path $temp 'after-crash.marker'
         $afterCrash = Start-Worker $crashSem $crashRecord 'ship' 'mod-b' 1000 $afterCrashMarker '' '' 'Success'
         $children += $afterCrash
@@ -263,6 +498,7 @@ function Invoke-MachineTransactionLeaseSelfTest {
         $freshOwner = Start-Worker $freshMutex $freshRecord 'ship' 'mod-a' 1000 $freshOwnerMarker '' '' 'Crash'
         $children += $freshOwner
         $freshOwner.WaitForExit()
+        Assert-WorkerExitPath $freshOwnerMarker $freshOwner $true
         [IO.File]::WriteAllText($freshRecord, '{ malformed durable authority')
         $freshLaterMarker = Join-Path $temp 'fresh-object-later.marker'
         $freshLater = Start-Worker $freshMutex $freshRecord 'deploy' 'mod-b' 1000 $freshLaterMarker '' '' 'Success'
@@ -285,6 +521,7 @@ function Invoke-MachineTransactionLeaseSelfTest {
         Remove-Item -LiteralPath $sameRecord -Force
         [IO.File]::WriteAllText($sameCrash, 'crash')
         $sameOwner.WaitForExit()
+        Assert-WorkerExitPath $sameOwnerMarker $sameOwner $true
         $baselineThreads = [VmbTransactionMutexHolder]::ActiveThreadCount
         $sameFirstError = ''
         try { $null = Enter-VmbMachineTransactionLease -Action 'same-first' -Mod 'mod-b' -ProjectRoot $temp -TimeoutMilliseconds 1000 -MutexName $sameMutex -RecordPath $sameRecord }
@@ -311,12 +548,23 @@ function Invoke-MachineTransactionLeaseSelfTest {
         Wait-Marker $repeatOwnerMarker $repeatOwner
         $repeatKeeper = $null
         try {
-            # ReadyPath is written before a contender opens/waits on the named
-            # mutex. Retain a non-owning parent handle so owner death cannot
-            # destroy the object before either queued fixture reaches WaitOne.
+            # Retain a non-owning parent handle across confirmed owner death,
+            # so Windows cannot destroy/recreate the abandoned kernel object.
+            # This fixture tests repeated recovery refusal, not live contention
+            # (the separate queued-owner and timeout fixtures cover that).
             $repeatKeeper = [Threading.Mutex]::OpenExisting($repeatMutex)
             Assert-Fixture ((Test-Path -LiteralPath $repeatRecord) -and (Test-Path -LiteralPath $repeatOwnerMarker)) 'repeat-abandoned fixture leaves a stale durable record'
             Remove-Item -LiteralPath $repeatRecord -Force
+            Wait-RecoveryFixtureOwnerExit -SignalExit {
+                [IO.File]::WriteAllText($repeatCrash, 'crash')
+            } -WaitForExit {
+                param($budget)
+                $repeatOwner.WaitForExit($budget)
+            } -HasExited {
+                $repeatOwner.Refresh()
+                $repeatOwner.HasExited
+            }
+            Assert-WorkerExitPath $repeatOwnerMarker $repeatOwner $true
 
             $firstRecoveryMarker = Join-Path $temp 'repeat-abandoned-first.marker'
             $firstReady = $firstRecoveryMarker + '.ready'
@@ -328,11 +576,6 @@ function Invoke-MachineTransactionLeaseSelfTest {
             $children += $secondRecovery
             Wait-Marker $firstReady $firstRecovery
             Wait-Marker $secondReady $secondRecovery
-            Start-Sleep -Milliseconds 150
-            Assert-Fixture (-not (Test-Path -LiteralPath $firstRecoveryMarker) -and
-                -not (Test-Path -LiteralPath $secondRecoveryMarker)) 'both recovery contenders queue behind the live owner before mutation'
-            [IO.File]::WriteAllText($repeatCrash, 'crash')
-            $repeatOwner.WaitForExit()
             $firstRecovery.WaitForExit()
             $secondRecovery.WaitForExit()
             $firstRecovery.Refresh()
@@ -366,15 +609,37 @@ function Invoke-MachineTransactionLeaseSelfTest {
         Wait-Marker $queuedMarker $queuedOwner
         $queuedContenderMarker = Join-Path $temp 'queued-contender.marker'
         $queuedReady = $queuedContenderMarker + '.ready'
+        $queuedWatch = [Diagnostics.Stopwatch]::StartNew()
         $queuedContender = Start-Worker $queuedMutex $queuedRecord 'deploy' 'mod-b' 5000 $queuedContenderMarker '' '' 'Success' '' $queuedReady
         $children += $queuedContender
         Wait-Marker $queuedReady $queuedContender
+        $queuedReadyElapsed = $queuedWatch.ElapsedMilliseconds
         Start-Sleep -Milliseconds 150
         Assert-Fixture (-not (Test-Path -LiteralPath $queuedContenderMarker)) 'pre-existing PowerShell waiter remains blocked before owner death'
+        $queuedTriggerElapsed = $queuedWatch.ElapsedMilliseconds
         [IO.File]::WriteAllText($queuedTrigger, 'crash')
-        $queuedOwner.WaitForExit()
-        $queuedContender.WaitForExit()
-        Assert-Fixture ((Test-Path -LiteralPath $queuedContenderMarker) -and [string]::IsNullOrWhiteSpace((Read-WorkerError $queuedContenderMarker))) 'pre-existing PowerShell waiter takes abandoned mutex after owner death'
+        $queuedDeadline = $queuedTriggerElapsed + 20000
+        $ownerTerminal = Wait-FixtureTerminal 'owner' -DeadlineMilliseconds $queuedDeadline -ReadElapsed {
+            $queuedWatch.ElapsedMilliseconds
+        } -WaitForExit { param($budget) $queuedOwner.WaitForExit($budget) } -ReadState {
+            $queuedOwner.Refresh()
+            @{ Pid = $queuedOwner.Id; HasExited = $queuedOwner.HasExited;
+                ExitCode = $(if ($queuedOwner.HasExited) { $queuedOwner.ExitCode } else { 'unavailable' }) }
+        }
+        $contenderTerminal = Wait-FixtureTerminal 'contender' -DeadlineMilliseconds $queuedDeadline -ReadElapsed {
+            $queuedWatch.ElapsedMilliseconds
+        } -WaitForExit { param($budget) $queuedContender.WaitForExit($budget) } -ReadState {
+            $queuedContender.Refresh()
+            @{ Pid = $queuedContender.Id; HasExited = $queuedContender.HasExited;
+                ExitCode = $(if ($queuedContender.HasExited) { $queuedContender.ExitCode } else { 'unavailable' }) }
+        }
+        $queuedError = Read-FixtureEvidence ($queuedContenderMarker + '.stderr.txt')
+        $queuedEvidence = "$($ownerTerminal.Detail); $($contenderTerminal.Detail); ready_ms=$queuedReadyElapsed trigger_ms=$queuedTriggerElapsed ready=$(Test-Path -LiteralPath $queuedReady) trigger=$(Test-Path -LiteralPath $queuedTrigger) owner_marker=$(Test-Path -LiteralPath $queuedMarker) contender_marker=$(Test-Path -LiteralPath $queuedContenderMarker) record=$(Test-Path -LiteralPath $queuedRecord)"
+        $queuedEvidence += "; owner_stderr=[$(Read-FixtureEvidence ($queuedMarker + '.stderr.txt'))] owner_stdout=[$(Read-FixtureEvidence ($queuedMarker + '.stdout.txt'))] contender_stderr=[$queuedError] contender_stdout=[$(Read-FixtureEvidence ($queuedContenderMarker + '.stdout.txt'))] record_text=[$(Read-FixtureEvidence $queuedRecord)]"
+        $queuedEvidence += "; owner_hard_death=$(Test-Path -LiteralPath ($queuedMarker + '.hard-death')) owner_finally=$(Test-Path -LiteralPath ($queuedMarker + '.finally'))"
+        Assert-Fixture ($ownerTerminal.Complete -and $contenderTerminal.Complete -and
+            (Test-Path -LiteralPath $queuedContenderMarker) -and [string]::IsNullOrWhiteSpace($queuedError)) "pre-existing PowerShell waiter takes abandoned mutex after owner death; $queuedEvidence"
+        Assert-WorkerExitPath $queuedMarker $queuedOwner $true
 
         # The wrapper itself owns a process-lifetime KILL_ON_JOB_CLOSE job.
         # Its child and grandchild must both be dead before the waiting
@@ -395,6 +660,7 @@ function Invoke-MachineTransactionLeaseSelfTest {
         $treeOwner.WaitForExit()
         $treeContender.WaitForExit()
         Assert-Fixture ((Test-Path -LiteralPath $treeContenderMarker) -and [string]::IsNullOrWhiteSpace((Read-WorkerError $treeContenderMarker))) 'wrapper child/grandchild are dead before contender mutation begins'
+        Assert-WorkerExitPath $treeMarker $treeOwner $true
 
         $normalMutex = 'Global\Ensrick.VMBLauncher.Tests.' + [guid]::NewGuid().ToString('N')
         $normalRecord = Join-Path $temp 'normal-owner.json'
@@ -413,6 +679,7 @@ function Invoke-MachineTransactionLeaseSelfTest {
         $normalOwner.WaitForExit()
         $normalContender.WaitForExit()
         Assert-Fixture ((Test-Path -LiteralPath $normalContenderMarker) -and [string]::IsNullOrWhiteSpace((Read-WorkerError $normalContenderMarker))) 'normal release drains lingering child/grandchild before contender mutation'
+        Assert-WorkerExitPath $normalMarker $normalOwner $false
 
         Write-Host "[check_machine_transaction_lease -SelfTest] PASS $script:__transactionPassed assertions ($($PSVersionTable.PSVersion))" -ForegroundColor Green
         return 0
