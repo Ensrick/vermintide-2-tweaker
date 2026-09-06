@@ -1160,7 +1160,9 @@ function Invoke-ShipSelfTest {
     Assert ($pubTxt -match 'Resolve-ApprovedVmbLauncherPath') "publish-release.ps1 revalidates the shared approved-launcher contract (issue #683)"
     Assert (-not ($pubTxt -cmatch '(?m)^\s*\$mods\s*=')) "publish-release.ps1 never assigns lowercase `$mods (param-stomp guard, 2026-07-13)"
     Assert ($pubTxt -match 'Resolve-GitHubReleaseByTag' -and $pubTxt -match 'Publish-GitHubReleaseAssetsById') "publish-release owns exact-tag fallback and release-id mutation (issue #651)"
-    Assert ($pubTxt -match 'Global\\VT2_GitHubReleaseMutation' -and
+    $releaseLockText = [IO.File]::ReadAllText((Join-Path $PSScriptRoot '..\publish-release\release-mutation-lock.ps1'))
+    Assert ($releaseLockText -match 'Global\\VT2_GitHubReleaseMutation' -and
+        $pubTxt -match 'Enter-VtGitHubReleaseMutationMutex' -and
         $pubTxt -match 'ReleaseMutex\(\)') "shared daily GitHub release lookup/manifest/mutation is serialized across different-mod ships"
     $publisherCapabilityPos = $pubTxt.IndexOf('Assert-VmbLauncherPublicationCapability')
     $publisherLookupPos = $pubTxt.IndexOf('Resolve-GitHubReleaseByTag -Repo $ghRepo')
@@ -1870,6 +1872,19 @@ if (-not $BuildOnly) {
         Fail "Publication authorization FAILED: $($publicationAuthorization.Message). Workshop upload requires exact clean live default-branch HEAD, its merged PR, and successful hosted qa-gate."
     }
     Write-Host ("  OK -- publication authorization: {0}" -f $publicationAuthorization.Message) -ForegroundColor Green
+
+    # Current-server recovery follows exact source/claim/hosted authorization,
+    # precedes build, and cannot convert metadata repair into publication proof.
+    . (Join-Path $PSScriptRoot 'current-source-pin-recovery.ps1')
+    try {
+        $currentPinResult = Invoke-VtCurrentSourcePinReconciliation -RepoRoot $repoRoot `
+            -SourceCommit $sourceCommit -TransactionLease $transactionLease
+    }
+    catch { Fail "Current GitHub source-pin recovery failed before build: $($_.Exception.Message)" }
+    Write-Host ("  Source-pin preflight: {0}" -f $currentPinResult.Summary) -ForegroundColor Yellow
+    if ($currentPinResult.RequiresMetadataPR) {
+        Fail 'Current source pins require a reviewed metadata PR before this ship can continue. No build or Workshop upload was attempted; the claim is retained.'
+    }
 }
 
 # ---------------------------------------------------------------------------

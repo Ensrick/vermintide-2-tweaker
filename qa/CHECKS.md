@@ -747,8 +747,8 @@ warning-as-error, wrong identity/holder/staged row, ambiguous HTTP results,
 unpublished drafts, bootstrap and DryRun. The process finalization suite also
 composes those publisher failures with its real lease, locked residual child,
 and competing owner. No test substitutes caller intent for publication proof.
-Hard process death and ambiguous server acceptance still need durable recovery;
-neither is claimed fixed by this in-memory handoff. The context census covers
+Hard process death and ambiguous server acceptance are covered separately by
+current-server recovery below, not this in-memory handoff. The context census covers
 every canonical inventory identity, including uppercase `WOC` (distinct from
 the lowercase `weapons_of_chaos` folder), plus actual WOC success/failure handoffs
 and rejection of a case-changed alias before publication.
@@ -757,6 +757,29 @@ production cleanup, not console-rendered stderr (which wraps differently across
 hosts). Workers still rethrow and must retain the failure exit code. The handoff
 check explicitly returns success after cleanup so in-process self-test dispatch
 cannot inherit a preceding test's failed exit status.
+
+`check_current_source_pin_recovery.ps1 -SelfTest` exercises the actual recovery
+entry using real isolated Git commits, an owning machine-transaction fixture,
+a subordinate release mutex, and fresh hidden processes. Cases include hard
+termination before server acceptance, after acceptance and after atomic pin
+replacement; changed current server state; deletion of the original checkout
+followed by an intervening lease; all-three-structure/multiple-mod planning;
+invalid later-row all-or-nothing rejection; missing manifest; borrowed or altered
+lease and stale source rejection; write failure; primary dirty/candidate conflicts;
+and linked-checkout line endings. AST assertions bind recovery to the actual
+authorized pre-build non-BuildOnly ship path and mandatory metadata-PR stop.
+Run on PS7 and PS5.1 (139 assertions on each); fixture worktree create/close runs
+through the canonical wrapper in PS7, while recovery workers use the tested host.
+There is no live API, launcher, Steam, game, upload or ready-card mutation.
+
+`check_deployed_source_proof.ps1 -SelfTest` covers the shared immutable source
+proof used by full live-card authority and current-pin recovery: canonical case
+and Workshop identity, clean real commit objects, derived mod trees, tokenized
+exact versions, explicit legacy root-to-mod-tree proof, selected prefetch, and
+published-release/asset metadata. Its 88 assertions run on PS7 and PS5.1; the
+existing full source-authority selftest retains receipt-policy and partial-clone
+hydration coverage. Both new checks are automatically discovered in full QA.
+These checks establish GitHub source provenance only, not Workshop delivery.
 
 ## How to add a check
 

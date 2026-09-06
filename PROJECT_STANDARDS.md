@@ -1208,10 +1208,22 @@ and version claim remain; no labels, cards, or readiness banner are emitted.
 Writes are staged beside the authority file, replaced atomically, and read back.
 Carry the resulting metadata-only change through a reviewed PR. The successful
 path invokes the same helper before constructing live-test authority.
-This bounded repair does not cover an ambiguous server outcome or hard process
-death; neither may be inferred successful. Durable authenticated recovery
-remains tracked under #1328. GitHub provenance alone never confirms
-Workshop transfer or permits refreshing held test cards.
+After hard process death or an ambiguous server outcome, the next canonical
+ship performs current-source-pin recovery after its clean exact-source,
+claim, merged-PR and hosted-QA authorization, before build. Under the owning
+machine transaction and subordinate release-mutation lock it fetches the
+current published GitHub manifest and proves every consumed pin's source
+identity, immutable subtree and version before any write. Current server state
+is authoritative; no old intent journal, version ordering, removed worktree or
+previous lease record is needed or replayed. A changed invoking pin set always
+stops for a reviewed metadata PR, including when the freshly discovered primary
+already holds that candidate. Conflicting primary edits are preserved. A clean
+current primary receives one atomic, read-back-verified candidate, retaining its
+line endings. An unavailable current manifest grants no recovery authority and
+changes no pins; the existing publisher still owns its bounded release fallback
+and all publication gates. Missing-manifest reconstruction is separate from pin
+recovery (#1434). GitHub provenance alone never confirms Workshop transfer or
+permits refreshing held test cards.
 
 **Pinned-card refresh is stream-specific, not load-tag-specific.** A runtime
 tag such as `[wt:LOAD]` may be intentionally shared by public and development

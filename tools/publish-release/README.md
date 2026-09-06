@@ -77,9 +77,17 @@ draft is confirmed published, it records that identity before copying the
 receipt or reporting success. Ship consumes the reference even on publisher
 exceptions and performs any pin reconciliation under its still-held owning
 transaction. Bootstrap, DryRun, ambiguous HTTP outcomes and unpublished drafts
-never arm the reference. This closes receipt-copy/cleanup failure, not hard
-process death; #1328 still owns durable recovery. GitHub provenance alone cannot
-release claims, refresh test cards, or certify Workshop transfer.
+never arm the reference. This in-memory handoff closes receipt-copy/cleanup
+failure. After hard process death, canonical ship separately fetches and proves
+the current published manifest under the same subordinate release-mutation lock,
+after exact-source publication authorization and before build. It reconciles all
+consumed source pins against current server state, never an old intent journal.
+Any changed invoking pins require a reviewed metadata PR before retry, even if
+the primary already contains the candidate. Conflicting primary edits remain
+untouched. An unavailable manifest changes no pins and does not bypass the
+publisher's existing fallback or authorization; reconstructing a missing release
+manifest is separate work (#1434). GitHub provenance alone cannot release claims,
+refresh test cards, or certify Workshop transfer.
 
 First Workshop item creation stays inside canonical ship with a distinct
 `workshop_bootstrap` receipt over the exact reviewed commit carrying

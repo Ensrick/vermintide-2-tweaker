@@ -3668,8 +3668,21 @@ See `PROJECT_STANDARDS.md` section 6.6 and
 the publisher's independently derived, confirmed published-release identity
 before receipt copying; caller intent and uploaded-but-unpublished drafts never
 arm it. The ship import `finally` must do no fallible validation or reporting.
-Ambiguous HTTP outcomes and hard owner death still require durable authenticated
-recovery under #1328.
+For ambiguous HTTP outcomes and hard owner death, canonical-entry recovery uses
+a fresh authenticated current published manifest, not a pending-intent journal.
+Such a journal can deadlock retry when the process dies before server acceptance
+and the old valid manifest remains current. Prove all consumed mod identities,
+immutable subtrees and versions before writing any pin, under the owning ship
+lease and shared release lock after exact-source authorization. Derive the primary
+from the current Git common directory; do not depend on the old worktree or owner
+record. A stale invoking pin set always stops for a metadata PR, even when the
+primary already has the candidate. Preserve primary dirt and line endings.
+`qa/check_current_source_pin_recovery.ps1` kills real workers before/after server
+acceptance and after pin replacement, then retries in fresh processes; it also
+removes the original checkout and passes through an intervening lease. The shared
+immutable proof is covered by `qa/check_deployed_source_proof.ps1`. Missing release
+manifest reconstruction remains a separate authority problem (#1434); failure to
+fetch it changes no pins and cannot create publication or test-readiness evidence.
 
 ## 88. Imported asset basis is mistaken for an attachment-pose defect
 
