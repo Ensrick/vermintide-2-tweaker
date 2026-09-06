@@ -320,6 +320,7 @@ function Get-VtBundleAuthorityDownstreamPolicy {
         Normalize = $true
         Publish = $true
         Deploy = $tracked
+        ReceiptLocalDeploy = (-not $tracked)
         Update = $tracked
         Recover = $tracked
     }

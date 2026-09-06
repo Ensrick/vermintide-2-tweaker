@@ -113,6 +113,8 @@ if (-not (Test-Path -LiteralPath $publicationReceiptHelpers -PathType Leaf)) {
 }
 . $publicationReceiptHelpers
 
+. (Join-Path $PSScriptRoot 'local-deployment-receipt.ps1')
+
 $buildOutputNormalizationHelpers = Join-Path $PSScriptRoot 'build-output-normalization.ps1'
 if (-not (Test-Path -LiteralPath $buildOutputNormalizationHelpers -PathType Leaf)) {
     throw "Build-output normalization policy not found: $buildOutputNormalizationHelpers"
@@ -238,7 +240,8 @@ function Get-ShipDeploymentPolicy {
         [Parameter(Mandatory = $true)][string]$PublishedId,
         [Parameter(Mandatory = $true)][bool]$DeployDirectoryExists,
         [ValidateSet('tracked', 'receipt')][string]$BundleAuthority = 'tracked',
-        [switch]$NoRemote
+        [switch]$NoRemote,
+        [switch]$BuildOnly
     )
 
     if ($PublishedId -notmatch '^\d+$') {
@@ -253,11 +256,23 @@ function Get-ShipDeploymentPolicy {
         }
     }
     if ($BundleAuthority -ceq 'receipt') {
+        if ($DeployDirectoryExists -and -not $BuildOnly) {
+            if (-not $NoRemote) {
+                throw 'Receipt-authority local deployment requires explicit -NoRemote; remote exact-set deployment is unsupported.'
+            }
+            return [pscustomobject]@{
+                Mode = 'subscribed'
+                ShouldDeploy = $true
+                RemoteDeploy = $false
+                RequiresDeploymentReceipt = $true
+                Reason = 'local subscription uses hosted receipt-bound exact-set deployment'
+            }
+        }
         return [pscustomobject]@{
             Mode = 'publication-only'
             ShouldDeploy = $false
             RemoteDeploy = $false
-            Reason = 'receipt authority permits publication but forbids deployment'
+            Reason = if ($BuildOnly) { 'artifact-only build does not deploy' } else { 'receipt authority has no existing local subscription to deploy' }
         }
     }
     if (-not $DeployDirectoryExists) {
@@ -944,8 +959,14 @@ function Invoke-ShipSelfTest {
     Assert ($subscribedLocalOnlyPolicy.Mode -eq 'subscribed' -and $subscribedLocalOnlyPolicy.ShouldDeploy -and -not $subscribedLocalOnlyPolicy.RemoteDeploy) "-NoRemote preserves subscribed local deploy while skipping remote"
     $unsubscribedPolicy = Get-ShipDeploymentPolicy -PublishedId '3733366851' -DeployDirectoryExists $false
     Assert ($unsubscribedPolicy.Mode -eq 'publication-only' -and -not $unsubscribedPolicy.ShouldDeploy -and -not $unsubscribedPolicy.RemoteDeploy) "unsubscribed existing item selects publication-only with no deploy target"
-    $receiptSubscribedPolicy = Get-ShipDeploymentPolicy -PublishedId '3733366851' -DeployDirectoryExists $true -BundleAuthority receipt
-    Assert ($receiptSubscribedPolicy.Mode -eq 'publication-only' -and -not $receiptSubscribedPolicy.ShouldDeploy -and -not $receiptSubscribedPolicy.RemoteDeploy) "receipt authority remains publication-only even when a local subscription exists"
+    $receiptSubscribedPolicy = Get-ShipDeploymentPolicy -PublishedId '3733366851' -DeployDirectoryExists $true -BundleAuthority receipt -NoRemote
+    Assert ($receiptSubscribedPolicy.ShouldDeploy -and $receiptSubscribedPolicy.RequiresDeploymentReceipt -and -not $receiptSubscribedPolicy.RemoteDeploy) "receipt authority uses a separate hosted local-only deployment receipt"
+    $receiptRemoteRejected = $false
+    try { $null = Get-ShipDeploymentPolicy -PublishedId '3733366851' -DeployDirectoryExists $true -BundleAuthority receipt }
+    catch { $receiptRemoteRejected = $_.Exception.Message -match 'explicit -NoRemote' }
+    Assert $receiptRemoteRejected "receipt local deployment never silently substitutes for remote deployment"
+    $receiptBuildOnlyPolicy = Get-ShipDeploymentPolicy -PublishedId '3733366851' -DeployDirectoryExists $true -BundleAuthority receipt -BuildOnly
+    Assert (-not $receiptBuildOnlyPolicy.ShouldDeploy) "receipt artifact-only build does not acquire deployment authority"
     $bootstrapPolicy = Get-ShipDeploymentPolicy -PublishedId '0' -DeployDirectoryExists $false
     Assert ($bootstrapPolicy.Mode -eq 'bootstrap' -and -not $bootstrapPolicy.ShouldDeploy -and -not $bootstrapPolicy.RemoteDeploy) "first upload remains a separate no-deploy bootstrap"
     $invalidPublishedIdRejected = $false
@@ -1699,7 +1720,7 @@ $deploymentPolicy = Get-ShipDeploymentPolicy `
     -PublishedId $publishedId `
     -DeployDirectoryExists ([bool]($deployDir -and (Test-Path -LiteralPath $deployDir -PathType Container))) `
     -BundleAuthority ([string]$bundleAuthorityPolicy.Authority) `
-    -NoRemote:$NoRemote
+    -NoRemote:$NoRemote -BuildOnly:$BuildOnly
 if ($deploymentPolicy.Mode -eq 'publication-only') {
     Write-Host ("  NOTICE -- Workshop item {0} uses exact receipt-gated publication-only mode and will skip every deploy target: {1}." -f $publishedId, $deploymentPolicy.Reason) -ForegroundColor Yellow
 }
@@ -1949,7 +1970,8 @@ try {
     $launcherCapability = Assert-VmbLauncherPublicationCapability `
         -LauncherExecutableLease $launcherExecutableLease `
         -WorkingDirectory $repoRoot `
-        -RequireReceiptAuthority:(-not $BuildOnly -and [string]$bundleAuthorityPolicy.Authority -ceq 'receipt')
+        -RequireReceiptAuthority:(-not $BuildOnly -and [string]$bundleAuthorityPolicy.Authority -ceq 'receipt') `
+        -RequireLocalDeployment:([bool]$deploymentPolicy.RequiresDeploymentReceipt)
 }
 catch {
     Fail $_.Exception.Message
@@ -2262,9 +2284,16 @@ if ($deploymentPolicy.ShouldDeploy) {
     $deployArgs = @('deploy', $Mod)
     if ($NoRemote) { $deployArgs += '--no-remote' }
     $deployArgs += @('--config', $launcherSettings)
-    Write-Host ""
-    Write-Host "==> VMBLauncher $($deployArgs -join ' ')" -ForegroundColor Cyan
+    $deploymentReceiptPath = $null
     try {
+        if ($deploymentPolicy.RequiresDeploymentReceipt) {
+            $localDeploymentEvidence = New-VtHostedLocalDeploymentReceipt -RepoRoot $repoRoot -Mod $Mod -Version $modVersion `
+                -SourceCommit $sourceCommit -PublishedId $publishedId -ExpectedBuilderVersion $buildBuilderVersion -TransactionLease $transactionLease
+            $deploymentReceiptPath = Write-VtLocalDeploymentReceiptHandoff -Bytes $localDeploymentEvidence.Bytes
+            $deployArgs += @('--deployment-receipt', $deploymentReceiptPath)
+        }
+        Write-Host ""
+        Write-Host "==> VMBLauncher $($deployArgs -join ' ')" -ForegroundColor Cyan
         Invoke-WithShipVmbRc -RepoRoot $repoRoot -Resolution $vmbRcResolution -Action {
             $deployRun = Invoke-ShipLauncherNoWindow -LauncherExecutableLease $launcherExecutableLease -ArgumentList $deployArgs -ReplayOutput
             if ($deployRun.ExitCode -ne 0) {
@@ -2274,6 +2303,9 @@ if ($deploymentPolicy.ShouldDeploy) {
     }
     catch {
         Fail $_.Exception.Message
+    }
+    finally {
+        if ($deploymentReceiptPath) { Remove-Item -LiteralPath $deploymentReceiptPath -Force -ErrorAction SilentlyContinue }
     }
 }
 elseif ($deploymentPolicy.Mode -eq 'bootstrap') {
@@ -2305,6 +2337,15 @@ if ($cfgTxtAfter -match 'published_id\s*=\s*(\d+)L' -and $matches[1] -ne $publis
 $bundleDir = Join-Path $modDir 'bundleV2'
 if (-not (Test-Path $bundleDir)) { Fail "bundleV2 missing at $bundleDir (build did not produce output)" }
 if ($deploymentPolicy.ShouldDeploy) {
+    if ($deploymentPolicy.RequiresDeploymentReceipt) {
+        try {
+            $exactDeploy = Assert-VtReceiptLocalDeploymentOutput -Snapshot $localDeploymentEvidence.Snapshot -DeployDirectory $deployDir -Mod $Mod
+            $deployOk = $true
+            Write-Host "  OK -- $($exactDeploy.Count) receipt-bound local files; exact names, lengths and SHA-256 (including descriptor)." -ForegroundColor Green
+        }
+        catch { Fail "Receipt local deploy verification failed: $($_.Exception.Message)" }
+    }
+    else {
     Write-Host ""
     Write-Host "==> Verifying deploy (SHA256 bundleV2 vs Workshop content folder)" -ForegroundColor Cyan
     if (-not (Test-Path $deployDir)) {
@@ -2344,6 +2385,7 @@ if ($deploymentPolicy.ShouldDeploy) {
         "; $normalizedDescriptors textual .mod descriptor(s) line-ending-equivalent"
     } else { '' }
     Write-Host ("  OK -- {0} file(s) verified (bundles byte-exact{1})." -f $checked, $normalizationNote) -ForegroundColor Green
+    }
 }
 
 # ---------------------------------------------------------------------------

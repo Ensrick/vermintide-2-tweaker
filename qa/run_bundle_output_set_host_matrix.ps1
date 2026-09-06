@@ -12,6 +12,7 @@ $checks = @(
     [pscustomobject]@{ Name = 'check_build_receipts'; Path = (Join-Path $PSScriptRoot 'check_build_receipts.ps1') }
     [pscustomobject]@{ Name = 'check_publication_snapshot'; Path = (Join-Path $PSScriptRoot 'check_publication_snapshot.ps1') }
     [pscustomobject]@{ Name = 'check_publication_receipt'; Path = (Join-Path $PSScriptRoot 'check_publication_receipt.ps1') }
+    [pscustomobject]@{ Name = 'check_local_deployment_receipt'; Path = (Join-Path $PSScriptRoot 'check_local_deployment_receipt.ps1') }
     [pscustomobject]@{ Name = 'check_release_recovery_record'; Path = (Join-Path $PSScriptRoot 'check_release_recovery_record.ps1') }
 )
 foreach ($check in $checks) {

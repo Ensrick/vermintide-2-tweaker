@@ -1058,7 +1058,9 @@ Workshop ID / mod_id mapping. **[Corrected 2026-07-07: `gui_tweaker`/`gut` was a
    and machine-global version claim before any mutation. It clean-builds and
    proves the complete output equals the merge commit's tracked blobs or
    committed schema-3 receipt. Tracked authority may then deploy and upload;
-   receipt authority is publication-only. It records the authorization in the
+   receipt authority may deploy locally only through the separate hosted
+   `local_deploy` receipt boundary with explicit `-NoRemote` (see section 6.6).
+   It records the publication authorization in the
    GitHub release manifest.
 8. **Smoke-test the hash-verified deployed stable bundle.** A disabled remote is
    intentionally out of scope and must not be reported as updated. The dev
@@ -1121,10 +1123,24 @@ bumping, not after; a bump chosen first usually has to be redone.
    `tools\ship\ship.ps1 -Mod <name>`. It re-runs hosted authorization, clean
    build, authority parity, authorization-backed GitHub release, Workshop
    upload, and transfer verification in that order. Tracked authority deploys
-   first when a target is enabled; receipt authority never deploys. Recording
+   first when a target is enabled. Receipt authority with an existing local
+   subscription requires explicit `-NoRemote`, approved launcher 0.6.2 or newer
+   with `receipt-authority-local-deploy-v1`, and a separate short-lived schema-3
+   `local_deploy` receipt hosted as `deployment-receipt-<folder>.json` on an
+   already-published canonical GitHub release. This scoped asset is constructed
+   from the exact committed build/source/output proof under the owning machine
+   lease and subordinate release mutex; independent byte readback precedes
+   launcher `deploy --no-remote --deployment-receipt`. It does not create a
+   release or change its manifest, publication receipt, or source pins. The
+   launcher owns recovery-before-fresh-authorization and exact-set replacement;
+   ship then verifies every expected local filename, length, and SHA-256,
+   including the descriptor, with no extra files. A missing subscription stays
+   publication-only; no Steam directory is created. Receipt remote deployment,
+   bootstrap, and updater/recovery consumption remain disabled. Recording
    authorization before Workshop mutation is mandatory. Add `-AllowPublic`
    when `itemV2.cfg` is public.
-   Use `-NoRemote` only to skip an otherwise-enabled remote for that invocation,
+   Use `-NoRemote` to skip an otherwise-enabled remote for that invocation
+   (mandatory for receipt-authority local deployment),
    and identify the skipped target in the report.
 
 There is no pre-merge or hosted-QA publication override. `-SkipGitHub` and
