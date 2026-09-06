@@ -265,6 +265,7 @@ Run-Check "check_publication_doctrine"         { & (Join-Path $here "check_publi
 Run-Check "check_ps51_compatibility"          { & (Join-Path $here "check_ps51_compatibility.ps1")          -Quiet:$Quiet }
 Run-Check "check_pr_autoclose"                { & (Join-Path $here "check_pr_autoclose.ps1")                -Quiet:$Quiet }
 Run-Check "check_public_release_closure_policy" { & (Join-Path $here "check_public_release_closure_policy.ps1") -Quiet:$Quiet }
+Run-Check "check_public_release_closure_collector" { & (Join-Path $here "check_public_release_closure_collector.ps1") -Quiet:$Quiet }
 Run-Check "check_cross_mod_deps"              { & (Join-Path $here "check_cross_mod_deps.ps1")              -Quiet:$Quiet }
 Run-Check "check_pusfume_compatibility"       { & (Join-Path $here "check_pusfume_compatibility.ps1")       -Quiet:$Quiet }
 Run-Check "check_shared_lib_drift"            { & (Join-Path $here "check_shared_lib_drift.ps1")            -Quiet:$Quiet }
