@@ -66,6 +66,7 @@ function Write-Warning {
     Microsoft.PowerShell.Utility\Write-Warning @PSBoundParameters
 }
 if ($Mode -eq 'WarningsStop') { $WarningPreference = 'Stop' }
+$runWorker = {
 try {
     $lease = Enter-VmbMachineTransactionLease -Action ship -Mod fixture -ProjectRoot $FixtureRoot `
         -RecordPath (Join-Path $FixtureRoot 'owner.json') -SemaphoreName $SemaphoreName
@@ -148,4 +149,12 @@ finally {
         if ($lock) { $lock.Dispose() }
         if ($child) { $child.Dispose() }
     }
+}
+}
+try { & $runWorker }
+catch {
+    # Observe the error AFTER the unchanged production finally has executed.
+    # Console wrapping/ANSI rendering is not a semantic exception contract.
+    [IO.File]::WriteAllText((Join-Path $FixtureRoot 'escaping-error.txt'), $_.Exception.Message)
+    throw
 }

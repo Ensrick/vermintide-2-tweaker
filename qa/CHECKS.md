@@ -752,6 +752,11 @@ neither is claimed fixed by this in-memory handoff. The context census covers
 every canonical inventory identity, including uppercase `WOC` (distinct from
 the lowercase `weapons_of_chaos` folder), plus actual WOC success/failure handoffs
 and rejection of a case-changed alias before publication.
+Exception preservation compares the exact escaping `Exception.Message` after
+production cleanup, not console-rendered stderr (which wraps differently across
+hosts). Workers still rethrow and must retain the failure exit code. The handoff
+check explicitly returns success after cleanup so in-process self-test dispatch
+cannot inherit a preceding test's failed exit status.
 
 ## How to add a check
 

@@ -115,3 +115,6 @@ try {
 finally {
     Remove-VtPublicationHandoffFixtureDirectory -Path $root -ParentRoot ([IO.Path]::GetTempPath()) -LeafPattern '^vt2-handoff-suite-[0-9a-f]{32}$'
 }
+# run_selftests invokes checks in-process. Successful assertions must report
+# their own outcome, not inherit the preceding check's native exit status.
+exit 0

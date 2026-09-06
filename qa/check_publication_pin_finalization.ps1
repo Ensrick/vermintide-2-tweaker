@@ -95,10 +95,9 @@ try {
             if ($mode -eq 'Throw') { Assert ($stderr.Contains('original-upload-failure')) 'Cleanup replaced the original upload exception.' }
             if ($isHandoff) {
                 $publisherError = [IO.File]::ReadAllText((Join-Path $folder 'publisher-error.txt'))
-                # PS7 prefixes wrapped message lines with a display-only pipe;
-                # PS5 uses ordinary wrapping. Retain every actual message word.
-                $unwrappedError = $stderr -replace '(?m)^[ \t]*\|[ \t]?', ''
-                Assert (($unwrappedError -replace '\s+', '').Contains(($publisherError -replace '\s+', ''))) 'Ship finalization replaced the original publisher exception.'
+                $escapingError = [IO.File]::ReadAllText((Join-Path $folder 'escaping-error.txt'))
+                Assert ($escapingError -ceq $publisherError) "Worker $mode replaced the publisher exception. Expected: $publisherError; escaping: $escapingError"
+                Assert ($stderr.Contains('publish-release.ps1')) "Worker $mode did not rethrow the escaping publisher error."
                 Assert ($events.Contains('published-before-handoff-failure')) 'Real publisher tail never supplied confirmed provenance.'
             }
         }
