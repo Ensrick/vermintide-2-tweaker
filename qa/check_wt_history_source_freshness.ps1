@@ -1839,23 +1839,112 @@ return {
         }
 
         function New-FiniteHelperTiming([hashtable]$State) {
+            # These cases test programmed deadlines, not host scheduling. One
+            # separate setup ceiling synchronizes the real helper and BOTH
+            # output tasks. Never spend a simulated 1687ms as an OS deadline,
+            # restart the setup clock per wait, or report an incomplete task as
+            # ready (production reads .Result only after this returns true).
+            $State.ReadinessClock = [System.Diagnostics.Stopwatch]::StartNew()
+            $waitReady = ({
+                param($Waitable, [string]$Kind, [string]$Phase)
+                $elapsed = if ($State.ContainsKey('ReadinessElapsed')) {
+                    & $State.ReadinessElapsed
+                } else { $State.ReadinessClock.Elapsed.TotalMilliseconds }
+                $remaining = [Math]::Max(0, 10000 - [int][Math]::Ceiling($elapsed))
+                if ($remaining -le 0) {
+                    throw "finite-helper fixture readiness expired before $Phase"
+                }
+                $ready = if ($State.ContainsKey('ReadinessWait')) {
+                    & $State.ReadinessWait $Waitable $Kind $remaining
+                } elseif ($Kind -ceq 'process') {
+                    $Waitable.WaitForExit($remaining)
+                } else { $Waitable.Wait($remaining) }
+                if (-not $ready) {
+                    throw "finite-helper fixture readiness incomplete at $Phase"
+                }
+                return $true
+            }.GetNewClosure())
             return [pscustomobject]@{
                 GetElapsedMilliseconds = ({ return [long]$State.Elapsed }.GetNewClosure())
                 WaitForExit = ({
                     param($Process, [int]$Milliseconds, [string]$Phase)
                     if (@('network-probe', 'taskkill-action', 'root-proof') -cnotcontains $Phase) { throw "unexpected finite-helper process wait: $Phase/${Milliseconds}ms" }
+                    $expected = switch ($Phase) { 'network-probe' { 750 }; 'taskkill-action' { 1687 }; 'root-proof' { 2250 } }
+                    if ($Milliseconds -ne $expected) { throw "wrong finite-helper programmed budget: $Phase/${Milliseconds}ms expected=${expected}ms" }
                     $State.Trace += "|process:$Phase=$Milliseconds"
                     if ($Phase -ceq 'network-probe') { $State.Elapsed = [long]750; return $false }
-                    if ($Phase -ceq 'taskkill-action') { [IO.File]::WriteAllText($State.ReleasePath, 'go'); return [bool]$Process.WaitForExit($Milliseconds) }
+                    if ($Phase -ceq 'taskkill-action') {
+                        [IO.File]::WriteAllText($State.ReleasePath, 'go')
+                        return [bool](& $waitReady $Process 'process' $Phase)
+                    }
                     $State.Elapsed = [long]2438; if (-not $Process.HasExited) { $Process.Kill() }
-                    return [bool]$Process.WaitForExit($Milliseconds)
+                    return [bool](& $waitReady $Process 'process' $Phase)
                 }.GetNewClosure())
                 WaitForTask = ({
                     param($Task, [int]$Milliseconds, [string]$Phase)
                     if (@('taskkill-output-stdout', 'taskkill-output-stderr') -cnotcontains $Phase) { throw "unexpected finite-helper task wait: $Phase/${Milliseconds}ms" }
-                    $State.Trace += "|task:$Phase=$Milliseconds"; return [bool]$Task.Wait($Milliseconds)
+                    if ($Milliseconds -ne 1687) { throw "wrong finite-helper programmed budget: $Phase/${Milliseconds}ms expected=1687ms" }
+                    $State.Trace += "|task:$Phase=$Milliseconds"
+                    return [bool](& $waitReady $Task 'task' $Phase)
                 }.GetNewClosure())
             }
+        }
+
+        # An injected scheduler delay may exceed the virtual action slice;
+        # actual synchronization still consumes ONE independent setup budget.
+        $readyTrace = New-Object 'System.Collections.Generic.List[int]'
+        $readyState = @{ Elapsed = [long]750; Trace = ''; ReleasePath = New-FixturePidPath; ReadyElapsed = [long]5763 }
+        $readyState.ReadinessElapsed = ({ return $readyState.ReadyElapsed }.GetNewClosure())
+        $readyState.ReadinessWait = ({
+            param($Waitable, $Kind, [int]$Milliseconds)
+            $readyTrace.Add($Milliseconds)
+            if ($Kind -ceq 'process') { $readyState.ReadyElapsed = [long]7000 }
+            else { $readyState.ReadyElapsed = [long]10000 }
+            return $true
+        }.GetNewClosure())
+        $readyTiming = New-FiniteHelperTiming $readyState
+        $readyProcessWait = $readyTiming.WaitForExit
+        $readyTaskWait = $readyTiming.WaitForTask
+        $null = & $readyProcessWait $null 1687 'taskkill-action'
+        $null = & $readyTaskWait $null 1687 'taskkill-output-stdout'
+        $expiredRejected = $false
+        try { $null = & $readyTaskWait $null 1687 'taskkill-output-stderr' }
+        catch { $expiredRejected = $_.Exception.Message -like '*readiness expired*' }
+        if (-not $expiredRejected -or ($readyTrace -join ',') -cne '4237,3000') {
+            $failures.Add("finite-helper setup restarted or charged virtual time: waits=$($readyTrace -join ',') expiredRejected=$expiredRejected") | Out-Null
+        }
+        foreach ($invalidWait in @(
+                @{ Kind = 'task'; Phase = 'taskkill-output-stdout'; Budget = 1686; Message = '*wrong finite-helper programmed budget*' }
+                @{ Kind = 'task'; Phase = 'network-output-stdout'; Budget = 1687; Message = '*unexpected finite-helper task wait*' }
+                @{ Kind = 'process'; Phase = 'taskkill-action'; Budget = 1686; Message = '*wrong finite-helper programmed budget*' }
+                @{ Kind = 'process'; Phase = 'taskkill-containment'; Budget = 1687; Message = '*unexpected finite-helper process wait*' }
+            )) {
+            $rejected = $false
+            $invalidCallback = if ($invalidWait.Kind -ceq 'task') { $readyTaskWait } else { $readyProcessWait }
+            try { $null = & $invalidCallback $null $invalidWait.Budget $invalidWait.Phase }
+            catch { $rejected = $_.Exception.Message -like $invalidWait.Message }
+            if (-not $rejected) { $failures.Add('finite-helper callback accepted an invalid phase/budget') | Out-Null }
+        }
+        # A genuinely incomplete task must throw, not return a fake successful
+        # wait that lets the caller block forever on Task.Result.
+        $pendingTask = New-Object 'System.Threading.Tasks.TaskCompletionSource[string]'
+        $stalledState = @{ Elapsed = [long]750; Trace = ''; ReadinessElapsed = { return 9999 } }
+        $stalledTiming = New-FiniteHelperTiming $stalledState
+        $stalledTaskWait = $stalledTiming.WaitForTask
+        $stallRejected = $false
+        try { $null = & $stalledTaskWait $pendingTask.Task 1687 'taskkill-output-stdout' }
+        catch { $stallRejected = $_.Exception.Message -like '*readiness incomplete*' }
+        if (-not $stallRejected -or $pendingTask.Task.IsCompleted) {
+            $failures.Add('finite-helper incomplete task escaped as ready before Result readback') | Out-Null
+        }
+        $stalledState.ReleasePath = New-FixturePidPath
+        $stalledState.ReadinessWait = { return $false }
+        $stalledProcessWait = $stalledTiming.WaitForExit
+        $processStallRejected = $false
+        try { $null = & $stalledProcessWait $null 1687 'taskkill-action' }
+        catch { $processStallRejected = $_.Exception.Message -like '*readiness incomplete*' }
+        if (-not $processStallRejected) {
+            $failures.Add('finite-helper incomplete process escaped as ready') | Out-Null
         }
 
         # Inject time to prove helper action budget donation without moving the total deadline.
@@ -1936,6 +2025,38 @@ return {
             Assert-ExactIdentityState 'failed taskkill helper' `
                 $failureHelperIdentity @('gone', 'reused')
         }
+
+        # A setup failure is not an accepted termination outcome. Exercise the
+        # real production catch/identity path after helper exit but before any
+        # output Result read, then retain both identities for final cleanup.
+        $setupFailureState = @{ Elapsed = [long]0; Trace = ''; ReleasePath = New-FixturePidPath }
+        $setupFailureState.ReadinessWait = {
+            param($Waitable, $Kind, [int]$Milliseconds)
+            if ($Kind -ceq 'task') { return $false }
+            return [bool]$Waitable.WaitForExit($Milliseconds)
+        }
+        $setupFailure = Invoke-WtHistoryBoundedProcessProbe `
+            -StartInfo (New-HostCommandStartInfo 'Start-Sleep -Seconds 30') `
+            -TimeoutMs 3000 -ForceTaskkill `
+            -TaskkillStartInfoOverride `
+                (New-HostCommandStartInfo ("while (-not [IO.File]::Exists('" + $setupFailureState.ReleasePath.Replace("'", "''") + "')) { Start-Sleep -Milliseconds 10 }; exit 7")) `
+            -Timing (New-FiniteHelperTiming $setupFailureState)
+        $setupParentIdentity = Register-FixtureIdentity $fixtureIdentities `
+            'setup-failed taskkill target' ([int]$setupFailure.ProcessId) `
+            ([long]$setupFailure.ProcessStartTimeFileTimeUtc)
+        $setupHelperIdentity = Register-FixtureIdentity $helperIdentities `
+            'setup-failed taskkill helper' ([int]$setupFailure.TaskkillProcessId) `
+            ([long]$setupFailure.TaskkillStartTimeFileTimeUtc)
+        if (-not $setupFailure.TimedOut -or $setupFailure.TerminationProven -or
+            -not $setupFailure.TaskkillTerminationProven -or
+            $setupFailure.TerminationError -notlike '*readiness incomplete at taskkill-output-stdout*' -or
+            $setupFailureState.Trace -cne '|process:network-probe=750|process:taskkill-action=1687|task:taskkill-output-stdout=1687') {
+            $failures.Add("finite-helper setup failure escaped or reached output/root proof: $($setupFailure | Out-String)") | Out-Null
+        }
+        Assert-State 'optional setup failure' $setupFailure $false 'skip'
+        Assert-State 'required setup failure' $setupFailure $true 'fail'
+        Assert-ExactIdentityState 'setup-failed taskkill target' $setupParentIdentity @('alive')
+        Assert-ExactIdentityState 'setup-failed taskkill helper' $setupHelperIdentity @('gone', 'reused')
 
         # Keep one real Windows PowerShell 5.1 hanging-helper containment case
         # for exact PID/start cleanup and orphan detection. PS7 exercises the

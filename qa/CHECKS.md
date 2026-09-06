@@ -532,6 +532,15 @@ hung helper is contained once, root proof is skipped, and output fails closed.
 Raw scheduler and synchronous OS-call latency is diagnostic rather than a hard
 real-time correctness assertion. One real PS5.1 hanging-helper case retains
 exact PID/start-time cleanup and orphan detection.
+The finite-helper donation and exit-7 semantic fixtures synchronize their real
+process/output readiness under one separate ten-second setup ceiling, never
+under the injected 1,687 ms action slice. The exact virtual phase/budget trace
+is still mandatory. Setup expiration or incomplete output throws instead of
+pretending a task is complete before reading `Result`; a real catch-path
+adversary proves fail-closed policy and exact helper/target cleanup. Injected
+readiness tests prove aggregate process/stdout/stderr consumption, rejected
+phase/budget drift, and an incomplete task cannot escape as ready. Production
+timeouts, process logic, and the independent real containment cases are unchanged.
 
 `check_wt_history_source_checkout.ps1` is the offline source-selection
 adversary. Under both PowerShell hosts it presents all thirteen reproduction gates
