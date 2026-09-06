@@ -141,6 +141,66 @@ authority records. Caller truncation or exceeding these bounds is Unavailable.
 
 ## Offline verification
 
+### Read-only GitHub collection
+
+`tools/github/public-release-closure-collector.ps1` now supplies
+`Get-VtGitHubPublicReleaseClosureAudit`. It is a library, not a workflow or an
+autonomous issue-action adapter. Dot-sourcing it performs no collection. Call
+it with the exact `Repository`, `IssueNumber`, `AttestationId`, configured
+`EnforceFromUtc`, and the same trusted retained `AuthoritySnapshot` described
+above. Optional `TrustedVerifier` retains the policy defaults. Missing or
+mismatched closure-time authority remains Unavailable; the collector never
+downloads today's release to manufacture a historical snapshot.
+
+Its mandatory trusted `Request` scriptblock accepts `(Query, Variables)` and
+returns the complete authenticated GitHub GraphQL envelope, including `data`
+and any `errors`. The query is fixed and read-only. The transport must bind
+authentication and HTTPS to GitHub, retain raw string timestamps/body text,
+bound each request's duration and response bytes, and surface failures rather
+than truncate or invent metadata. Do not source this callback, rollout date,
+verifier list or authority from issue content. No shell/network transport is
+installed by this slice; a later trusted caller owns that boundary.
+
+One issue is collected twice, each time including all comments, author
+association, raw bodies/revision times and Boolean pin states. Every page also
+reads the issue identity/state/revision, complete labels, comment total and
+the latest Closed/Reopened timeline event. A closed issue requires the last
+event to be ClosedEvent with its immutable ID and matching closure time.
+Partial responses, duplicate IDs, non-progressing cursors, metadata movement
+during pagination, and any difference between complete passes are Unavailable.
+Only identical passes become `Complete=true` inputs to the unchanged strict
+policy. This detects observed races; GraphQL does not provide a cross-request
+atomic snapshot and a mutation after collection remains possible. The future
+action adapter still requires fresh state checks and generation-bound handling.
+
+Bounds: 100 labels (reject if truncated), 100 comments per requested page,
+2,048 comments, 1 MiB per body and 16 MiB aggregate per pass, 512-character
+cursors, and 44 requests across both passes. The default 30-second request
+budget may be reduced or raised up to 60 seconds with
+`DeadlineMilliseconds`. It refuses further requests after a transport overrun;
+it cannot forcibly interrupt a caller's scriptblock. Transport-level timeout
+and response-size enforcement therefore remain mandatory for a live caller.
+
+The returned object includes `Issue`, `CommentSnapshot`, `Decision` and a
+read-only `Collection` record (source, request count and elapsed time). Both
+the wrapper and policy decision always carry literal `MayMutate=false`.
+Authenticated API availability is not inferred from any user-supplied Boolean.
+No attestation is selected from PASS prose, no authority snapshot is archived,
+and no issue/comment/pin/label/release mutation occurs. In particular, a later
+harmless unpin can currently produce a read-only rejection; it is not authority
+to reopen an accepted closure. Preserving closure-time pin evidence and
+reconciling it with current revisions remain explicit future adapter work.
+
+`qa/check_public_release_closure_collector.ps1` exercises the actual pagination
+and double-read orchestration through a stubbed authenticated request seam,
+then the real strict card/closure policy. It covers multi-page acceptance,
+incomplete/truncated data, Boolean coercion, bounded loops, metadata/body/pin
+races, trusted author metadata, absent historical authority, and historical
+non-enforcement. Its request stub permits only the exact issue coordinates and
+read-only query. No fixtures contact GitHub.
+
+### Policy fixtures
+
 `qa/check_public_release_closure_policy.ps1` runs in Quick/full QA and can be run
 directly with `-Quiet`. It invokes the actual shared strict selector and covers
 public/Dev/mixed targets, raw body edits, creation-versus-edit chronology,
