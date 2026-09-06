@@ -33,6 +33,8 @@ trailing `-- cross-mod-ok` comment.
 
 | Consumer | Requires | Feature | Degrades to (when absent) |
 |---|---|---|---|
+| gut_dev | character_dialogue | Optional Dialogue browser and schema-1 staged audio-isolation owner (#998) | Browser reports unavailable without CD; old isolation protocol omits the toggle. No immediate or shadow-setting fallback. |
+| character_dialogue | gut_dev | Optional custom Dialogue tab registration (intentional Dev-only integration; stable GUI lacks this browser) | Standalone commands, keybind and natural dialogue policy remain functional. |
 | wt · wt_dev · ct · ct_dev · crt · enemy_tweaker | **bt** *(retired)* | Big Rebalance master gate (`is_br_active`) + `net_replay` diagnostics | BR sub-features inert — `if not (bt and bt.is_br_active) then return false`. bt is retired, so permanently inert by design (not stripped). |
 | **character_weapon_variants** | **MoreItemsLibrary** | Register CWV variant items into the local backend (CWV's core) | ⚠️ Warns + registers **zero** variants (no crash). **Non-functional standalone** unless MIL is provided by cosmetics_tweaker's embed or standalone MIL. See *Known gap*, [#82]. |
 | wt · wt_dev | character_weapon_variants | Presence flag (#368): wt + CWV are **independent** (overlap allowed). wt flips overlapping cross-char availability defaults **ON** when CWV is present and covers CWV's `cwv_variant` items with its own toggles. The old `cwv_managed` dedup/cede is being removed. | wt applies its standalone cross-char defaults (ports OFF) |
@@ -47,6 +49,7 @@ Per-edge file:line citations live in the 2026-06-22 audit + `docs/CROSS_MOD_ARCH
 
 | Provider | API surface | Consumed by |
 |---|---|---|
+| character_dialogue | `character_dialogue_api` v6: additive `isolation_setting={version=1, setting_id="auto_isolation"}`; existing get/set/playback methods unchanged. Exact owner supports VMF `get/set`, `on_setting_changed(id)` and `on_settings_batch_changed(ids)` for this key only. Silent writes persist; successful batch completion reconciles once. | gut_dev custom browser; feature-detect descriptor and owner callback, use owner-qualified pending state, never GUT's `mt::` storage. |
 | **gut** | `get_mod("gut").mod_tweaker:{register_category, get, set, list_categories, …}` | self only so far — designed for other mods to register settings categories |
 | **mp** | `get_mod("mp").{is_unlocked, spend, credit, grant_item, has_currency, …}` | none wired yet (CWV/cosmetics are the designed consumers) |
 | **bt** *(retired)* | `get_mod("bt"):is_br_active()` / `:net_replay()` | wt · wt_dev · ct · ct_dev · et · crt (guarded → inert) |

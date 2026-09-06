@@ -1,5 +1,12 @@
 # Character Dialogue Regression Checklist
 
+- #998: Click Isolate Audio During Playback: Apply enables but no setting/audio
+  changes until Apply. Close without Apply, reopen, and confirm the old value.
+- Apply ON and OFF while a preview plays; restart and confirm persistence.
+  Manual `/cd_isolate` remains independent and exact volumes restore on release.
+- GUI `/gut_regression_test` includes `issue998_dialogue_staged_isolation`.
+  CD's ownership-only self-check cannot prove GUI staging by itself.
+
 - `/cd_regression_test` reports zero failures and 34,327 unique catalogue entries.
 - Dialogue tab opens without loading the catalogue before first use.
 - Search/select a resident line. Its one media button shows a play triangle,

@@ -665,7 +665,7 @@ function ModTweakerView:_handle_input(input_service)
     -- polled in update() via _check_reset_popup.
     do
         local rh = self._reset and self._reset.content.button_hotspot
-        if rh and (rh.on_release or rh.on_left_release) then
+        if not self._dialogue_category and rh and (rh.on_release or rh.on_left_release) then
             local search_cleared = self:_search_finish()
             if search_cleared then
                 self._scroll_y = 0
@@ -681,7 +681,7 @@ function ModTweakerView:_handle_input(input_service)
     -- restore the selected slot as one bounded per-owner transaction.
     for i = 1, #(self._profile_buttons or {}) do
         local ph = self._profile_buttons[i].content.hotspot
-        if ph and (ph.on_release or ph.on_left_release) then
+        if not self._dialogue_category and ph and (ph.on_release or ph.on_left_release) then
             self:_search_finish()
             self:_switch_profile(i)
             return
@@ -1375,10 +1375,10 @@ function ModTweakerView:_draw(dt, input_service)
     -- so it's never culled by the list_mask (it lives outside the scrolling list).
     if self._apply then UIRenderer.draw_widget(renderer, self._apply) end
     -- (v0.2.148-dev) RESTORE DEFAULTS button (to the LEFT of Apply). Same render path.
-    if self._reset then UIRenderer.draw_widget(renderer, self._reset) end
-    if self._profiles_label then UIRenderer.draw_widget(renderer, self._profiles_label) end
+    if self._reset and not self._dialogue_category then UIRenderer.draw_widget(renderer, self._reset) end
+    if self._profiles_label and not self._dialogue_category then UIRenderer.draw_widget(renderer, self._profiles_label) end
     for i = 1, #(self._profile_buttons or {}) do
-        UIRenderer.draw_widget(renderer, self._profile_buttons[i])
+        if not self._dialogue_category then UIRenderer.draw_widget(renderer, self._profile_buttons[i]) end
     end
 
     -- (#497) SEARCH box: update its text (query + blink caret, or the placeholder) + focus

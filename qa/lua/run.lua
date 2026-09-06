@@ -484,6 +484,7 @@ local suites = {
     "test_gut_cosmetics_mission_mount",
     "test_gut_module_extraction",
     "test_character_dialogue",
+    "test_dialogue_staged_isolation",
     "test_appearance_descriptor",
     "test_appearance_census",
     "test_appearance_name_authority",

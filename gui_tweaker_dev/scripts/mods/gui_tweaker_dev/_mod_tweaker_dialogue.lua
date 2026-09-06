@@ -50,20 +50,33 @@ local function group_key(id) return "character_dialogue:" .. tostring(id) end
 -- #998 One fixed control row above the group list: the automatic-isolation
 -- Yes/No toggle. It lives in THIS custom renderer because normal VMF widgets
 -- do not render inside the Dialogue tab. Feature-detected so an older
--- Character Dialogue api (v4, no isolation surface) renders exactly as before.
+-- Character Dialogue without the v6 staged-owner capability omits this row.
 local ISOLATION_ROW_ID = group_key("auto_isolation")
 
 local function isolation_lead(value)
-    return (value and value.get_auto_isolation and value.set_auto_isolation) and 1 or 0
+    local setting = value and value.isolation_setting
+    return (type(setting) == "table" and setting.version == 1
+        and setting.setting_id == "auto_isolation"
+        and type(value.get_auto_isolation) == "function") and 1 or 0
 end
 
 local function toggle_isolation(view, row, value)
-    local next_value = not (value.get_auto_isolation() == true)
-    value.set_auto_isolation(next_value)
-    row.content.flag = value.get_auto_isolation() == true
+    local current = view:get_staged(row._category, row._setting_id,
+        value.get_auto_isolation() == true)
+    row.content.flag = not current
+    view:stage_set(row._category, row._setting_id, row.content.flag)
     view._dialogue_focus_id = ISOLATION_ROW_ID
     view._dialogue_focus_sequence, view._dialogue_focus_control = row._dialogue_sequence, 1
-    printf("[gut:998] auto_isolation_click value=%s", tostring(row.content.flag))
+    printf("[gut:998] auto_isolation_staged value=%s", tostring(row.content.flag))
+end
+DialogueUI.stage_isolation = toggle_isolation
+
+function DialogueUI.can_apply(category)
+    local cd = get_mod("character_dialogue")
+    local value = cd and cd.character_dialogue_api
+    local owner = category and category._owners and category._owners.auto_isolation
+    return isolation_lead(value) == 1 and owner and owner.mod_obj == cd
+        and type(cd.set) == "function" and type(cd.on_settings_batch_changed) == "function"
 end
 
 -- Lua's `condition and value_if_true or value_if_false` idiom cannot represent
@@ -114,7 +127,20 @@ function DialogueUI.build(view, category, defs)
         end
     end
     -- #998 the isolation toggle occupies logical row 1; groups shift down one.
+    local owner = get_mod("character_dialogue")
     local lead = isolation_lead(value)
+    if not owner or type(owner.get) ~= "function" or type(owner.set) ~= "function"
+        or type(owner.on_settings_batch_changed) ~= "function" then lead = 0 end
+    -- The registered browser has no VMF owner by default. Without this exact
+    -- route, Apply would write GUT's mt:: shadow namespace instead of CD.
+    if lead == 1 then
+        category._owners = category._owners or {}
+        category._owners[value.isolation_setting.setting_id] = {
+            mod_id = "character_dialogue", mod_obj = owner,
+        }
+    elseif category._owners then
+        category._owners.auto_isolation = nil
+    end
     local window = value.browser_window(groups, expanded, line_count,
         view._scroll_y or 0, view._visible_h or 680, 2, lead)
     view._dialogue_virtual_first, view._dialogue_virtual_last = window.first, window.last
@@ -161,7 +187,9 @@ function DialogueUI.build(view, category, defs)
             local label = (value.auto_isolation_label and value.auto_isolation_label())
                 or "Isolate Audio During Playback"
             local row = defs.create_checkbox(label, base, 0)
-            row.content.flag = value.get_auto_isolation() == true
+            row._setting_id = value.isolation_setting.setting_id
+            row.content.flag = view:get_staged(category, row._setting_id,
+                value.get_auto_isolation() == true)
             row._is_dialogue_line = true -- routes clicks through DialogueUI.handle_row
             row._dialogue_isolation = true
             row._dialogue_row_id = ISOLATION_ROW_ID
@@ -417,8 +445,9 @@ function DialogueUI.refresh_row(row, view)
     if row._dialogue_isolation then
         local value = api()
         if value and value.get_auto_isolation then
-            -- Follow external flips too (/cd command surface, another session).
-            row.content.flag = value.get_auto_isolation() == true
+            -- Live changes are visible only when this view has no draft.
+            row.content.flag = view:get_staged(row._category, row._setting_id,
+                value.get_auto_isolation() == true)
         end
         local color = row.style and row.style.label and row.style.label.text_color
         if color then

@@ -621,10 +621,11 @@ and dev catalogs, and byte-exact catalog regeneration. Source-less CI retains
 the complete pinned-artifact gate and reports the regeneration skip.
 
 `run_wt_history_patch_6_11_0_host_matrix.ps1` is the blocking dual-host gate
-for the Patch 6.11.0 Kruber Longbow slice. It selects the exact automatic-zoom
-delay from the adjacent boundary on both gameplay and tutorial templates,
-rehydrates both current guards through the primary and independent evaluators,
-and regenerates byte-identical two-operation public/Dev catalogs. Source-less
+for the Patch 6.11.0 Longbow, shared Hammer/Mace and Swiftbow ammunition
+slices. It selects two exact automatic-zoom leaves, six block/dodge leaves and
+one maximum-ammunition leaf from the adjacent boundary, then rehydrates all
+nine current guards through the primary and independent evaluators,
+and regenerates byte-identical nine-operation public/Dev catalogs. Source-less
 CI retains the complete pinned-artifact gate; strict
 `-SourceRepo ... -RequireSource` requires every pinned commit/path/blob proof.
 
@@ -660,7 +661,7 @@ gate; strict `-SourceRepo ... -RequireSource` requires every source proof.
 | `run_wt_history_source_host_matrix.ps1` | ✅ OK (2026-09-01) | Issue #540 blocking dual-host owner for the generic freshness and incomplete-checkout self-tests. Full QA invokes it exactly once; static coverage forbids patch-specific matrices and `run_selftests.ps1` from multiplying the same process fixtures. |
 | `run_wt_history_patch_6_6_host_matrix.ps1` | ✅ OK (2026-09-03) | Issues #1529/#1436 blocking dual-host gate for the exact Patch 6.6 Deepwood Staff adjacent boundary, 6.12.1 current guards, independent-oracle agreement, and byte-exact public/dev catalogs. |
 | `check_wt_history_patch_6_8_reproducibility.ps1` | ✅ OK (2026-08-28) | Issue #1436 full-QA gate for the source-adjacent Patch 6.8 Kerillian Greatsword boundary, current-anchor rehydration, independent oracle agreement, and byte-exact generated catalogs. |
-| `run_wt_history_patch_6_11_0_host_matrix.ps1` | ✅ OK (2026-09-01) | Issue #1436 blocking dual-host gate for the exact Patch 6.11.0 Kruber Longbow two-template automatic-zoom-delay boundary, current-route rehydration, independent-oracle agreement, and byte-exact public/dev catalogs. |
+| `run_wt_history_patch_6_11_0_host_matrix.ps1` | ✅ OK (2026-09-06) | Issue #1436 blocking dual-host gate for Patch 6.11.0 Longbow automatic zoom, shared Hammer/Mace block/dodge and Swiftbow ammunition-only history: four source files, eight evidence artifacts, nine guarded leaves, independent-oracle agreement and byte-exact public/Dev catalogs. |
 | `run_wt_history_patch_6_11_2_host_matrix.ps1` | ✅ OK (2026-09-01) | Issue #1436 blocking dual-host gate for the exact Hotfix 6.11.2 Dagger H2 and Axe & Falchion H1/H2 three-route boundary, current-route rehydration, native profile/network-lookup proof, independent-oracle agreement, and byte-exact public/dev catalogs. |
 | `check_localization.ps1` | ⚠ 28 warnings | ct BOON_TREE category_ids; et_diff_ + mut_ false-positive prefixes |
 | `check_loc_tags.ps1` | ✅ OK (#694 migration) | Blocking scan covers every active stream, dynamic `en` construction, and obsolete decoration helpers; migration mode verifies key/order/count and value semantics against the merge base. |

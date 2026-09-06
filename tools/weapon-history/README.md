@@ -128,7 +128,7 @@ The runtime completeness ledger classifies this and every other exposed
 family/state as either `adjacent_delta` or
 `complete_direct_historical_baseline`. It records declared scope, official
 coverage, later-same-leaf/cumulative policy, explicit exclusions, and the
-exact `13 / 26 / 38 / 15 / 236` catalog/family/family-state/state/operation
+exact `13 / 27 / 40 / 16 / 243` catalog/family/family-state/state/operation
 census. Default catalog loading refuses any missing, extra, duplicate,
 malformed, or count-drifted declaration; public and Dev ledger bytes must be
 identical.
@@ -253,7 +253,8 @@ agree. The official boundary is [Patch 6.8.0 / Hotfix 6.8.1](https://forums.fats
 ### Patch 6.11.0 boundary
 
 Patch 6.11.0 uses adjacent-boundary contracts for Kruber's Longbow and the
-shared one-handed Hammer/Mace templates used by Kruber, Bardin, and Saltzpyre:
+shared one-handed Hammer/Mace templates used by Kruber, Bardin, and Saltzpyre,
+and Kerillian's Swiftbow ammunition capacity:
 
 | Role | Source revision |
 |---|---|
@@ -278,9 +279,17 @@ state because the same setting already owns the three templates at the Patch
 5.2 boundary. Any missing or foreign current guard refuses all six writes
 before mutation.
 
-For both families, Current performs no writes, exact restore preserves table
+Swiftbow's `shortbow_template_1.ammo_data.max_ammo` changes from historical
+`50` to post/current `60` at exactly the same boundary. Its separate state is
+**Game Version 6.10.0 (Ammunition Only)**, with internal identity
+`6_10_0_swiftbow_ammunition`; the shared `6_10_0` choice on Longbow and
+Hammer/Mace is unchanged. The official Swiftbow cleave/headshot changes are
+explicitly excluded because this slice owns no damage/power profiles. It must
+not be described as a full historical Swiftbow balance recreation.
+
+For all three families, Current performs no writes, exact restore preserves table
 and sibling identities, and ordinary Tweaker: Weapons adapters load after the
-selected baseline. The eight-operation boundary owns no damage profile, RPC,
+selected baseline. The nine-operation boundary owns no damage profile, RPC,
 asset, or global root. The official boundary is [Patch 6.11.0](https://forums.fatsharkgames.com/t/weapon-balance-update-patch-6-11-0-patch-notes/121528).
 
 ### Hotfix 6.11.2 boundary
@@ -430,7 +439,7 @@ matrices do not repeat them. The probe never fetches or writes `FETCH_HEAD`.
 
 The Patch 5.2 gate verifies the pinned evidence extractor, generator, source catalog,
 independent oracle/spec/routes, evidence hashes, and generated public catalog.
-It also derives all 36 referenced source paths from the thirteen checked-in
+It also derives all 37 referenced source paths from the thirteen checked-in
 source catalogs/specifications and proves their Git blob identities are equal
 between the retired 6.12.0 and current 6.12.1 anchors, making the refresh a
 provenance-only transition.
@@ -463,3 +472,11 @@ carries the namespace-normalized catalog.
 Do not hand-edit the generated catalog. A deliberate evidence or generator
 revision must be regenerated from immutable source, reviewed, and accompanied
 by an explicit update to the pinned hashes in the reproducibility gate.
+The Patch 3.1 gate also pins the entire shared completeness ledger in both
+streams. Adding any other patch's family therefore requires reviewing that
+ledger delta and refreshing both exact ledger pins; the Patch 3.1 payload and
+its own source evidence must remain unchanged. Run
+`qa/run_wt_history_source_host_matrix.ps1` and
+`qa/run_wt_history_patch_3_1_host_matrix.ps1` before submitting a catalogue
+extension, in addition to that extension's own reproduction gate. Quick QA
+alone does not exercise these full-gate checks.

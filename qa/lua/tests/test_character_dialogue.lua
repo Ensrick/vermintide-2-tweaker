@@ -554,7 +554,13 @@ return function(Harness, repo_root)
             _rows = {}, _search_str = "", _scroll_y = 0,
             _visible_h = ROW_H * 8,
             _dialogue_localize = localize,
+            _pending = {},
         }
+        function view:get_staged(_, id, live)
+            if self._pending[id] ~= nil then return self._pending[id] end
+            return live
+        end
+        function view:stage_set(_, id, value) self._pending[id] = value end
         function view:_recompute_scroll_bounds() self._max_scroll = 1000000000 end
         return view
     end
@@ -564,8 +570,10 @@ return function(Harness, repo_root)
     local function with_build_env(api, body)
         local saved_get_mod = rawget(_G, "get_mod")
         local saved_clamp = math.clamp
+        local owner = { character_dialogue_api = api, get = function() end,
+            set = function() end, on_settings_batch_changed = function() end }
         _G.get_mod = function(id)
-            if id == "character_dialogue" then return { character_dialogue_api = api } end
+            if id == "character_dialogue" then return owner end
             if id == "gut_dev" then
                 return { dofile = function(_, path)
                     return dofile(repo_root .. "/gui_tweaker_dev/" .. path .. ".lua")
@@ -830,7 +838,8 @@ return function(Harness, repo_root)
     local function make_isolation_api(entries)
         local api = make_api(entries)
         local store = { value = false, sets = 0 }
-        api.version = 5
+        api.version = 6
+        api.isolation_setting = { version = 1, setting_id = "auto_isolation" }
         api.get_auto_isolation = function() return store.value end
         api.set_auto_isolation = function(v)
             store.value = v == true
@@ -853,7 +862,7 @@ return function(Harness, repo_root)
             "an absent lead count keeps the pre-998 planner")
     end)
 
-    Harness.test("cd 998 Dialogue tab renders one isolation control that drives the api", function()
+    Harness.test("cd 998 Dialogue tab renders one draft-only isolation control", function()
         local entries = make_entries(6)
         local api, store = make_isolation_api(entries)
         local saved_printf = rawget(_G, "printf")
@@ -885,26 +894,26 @@ return function(Harness, repo_root)
                 Harness.equal(6, line_rows)
                 Harness.equal(1 + 1 + 6, view._dialogue_logical_count)
 
-                -- Whole-row click toggles once per press (latched), persists
-                -- through the api, and reflects back into the control.
+                -- Whole-row click stages once per press; it never calls the
+                -- persistent API. Actual Apply composition has its own suite.
                 control.content.hotspot.on_release = true
                 Harness.equal(true, dialogue_ui.handle_row(view, control))
-                Harness.equal(1, store.sets)
-                Harness.equal(true, store.value)
+                Harness.equal(0, store.sets)
+                Harness.equal(false, store.value)
                 Harness.equal(true, control.content.flag)
                 Harness.equal(false, dialogue_ui.handle_row(view, control),
                     "a held press must not re-toggle")
-                Harness.equal(1, store.sets)
+                Harness.equal(0, store.sets)
                 control.content.hotspot.on_release = nil
                 dialogue_ui.handle_row(view, control)
                 control.content.hotspot.on_release = true
                 Harness.equal(true, dialogue_ui.handle_row(view, control))
                 Harness.equal(false, store.value, "second press toggles back to No")
 
-                -- refresh_row follows external flips (command surface).
+                -- Draft false wins over an external live flip.
                 store.value = true
                 dialogue_ui.refresh_row(control, view)
-                Harness.equal(true, control.content.flag)
+                Harness.equal(false, control.content.flag)
 
                 -- An empty search keeps the control and appends the notice.
                 store.value = false
