@@ -78,3 +78,11 @@ ready-issue comments through GitHub GraphQL and reads `IssueComment.isPinned`.
 It runs during code QA and in a lightweight issue/label/comment-event workflow,
 plus manual and daily checks. GitHub has no comment-pin workflow activity, so a
 pin-only change is caught by the next manual/daily run.
+
+## Public-release closure policy (offline only)
+
+`public_release_closure_policy.ps1` validates a trusted structured attestation
+against exact card/evidence revisions, closure generation and public artifact
+authority. See [PUBLIC_RELEASE_CLOSURE.md](PUBLIC_RELEASE_CLOSURE.md) for its
+caller trust boundary and schema. It does not run a close-event audit or reopen
+issues; that adapter remains separate work under #1527.
