@@ -1,0 +1,137 @@
+# Public-release closure attestation policy (#1527)
+
+This is an **offline policy component**, not a live close-event audit. No issue
+is closed/reopened/commented on, and no workflow or retrospective enforcement
+is installed by this change. The existing open lifecycle guard and PR closure
+authorization remain unchanged. The future event adapter is still required.
+
+## Trust boundary and API
+
+Dot-source `public_release_closure_policy.ps1`, then call
+`Get-VtPublicReleaseClosureDecision` with these explicit arguments:
+
+- `Repository`: the trusted workflow's exact `owner/repository` coordinate.
+- `Issue`: complete authenticated GitHub state, normalized to `Complete = true`,
+  `repository`, positive `number`, `state`, `labels` (objects with `name`),
+  `closedAt`, and `closureEventId`. The latter is the immutable ClosedEvent ID,
+  not an issue number, delivery ID, mutable update time, or guessed counter.
+- `CommentSnapshot`: `Complete = true`, `PinsComplete = true`, `ObservedAt`
+  (UTC), and `Comments`, including the attestation, evidence, and every exact
+  test card. Each comment has its API `databaseId`, raw `body`, `createdAt`,
+  `updatedAt`; every exact card also needs boolean `isPinned`. The attestation
+  needs authenticated `author.login` and `authorAssociation` metadata.
+- `AttestationId`: the exact comment carrying the trusted structured decision.
+  The caller chooses it explicitly; the policy never infers success from prose.
+- `AuthoritySnapshot`: a trusted persisted **closure-time** record with
+  `Source = 'deployed-source-contract/v1'`, `Complete = true`, `Repository`,
+  `ClosedEventId`, `ClosedAt`, `PolicySourceCommit`, and `Authority`. The latter
+  is the complete output of the existing deployed-source contract resolver,
+  including its canonical inventory `Public` facts and source-derived routes.
+  Generation, repository and time must match the issue. The policy does not
+  download current releases or manufacture that historical authority.
+- `EnforceFromUtc`: an explicitly configured rollout boundary. There is no
+  hardcoded retrospective start date. `TrustedVerifier` defaults to Ensrick and
+  RainReligion, additionally requiring OWNER, MEMBER or COLLABORATOR association.
+
+**Authentication belongs to the caller.** Do not deserialize issue bodies into
+these trusted API/authority metadata objects, accept `Complete` or `Public`
+flags from commenters, execute PR-head policy in a privileged workflow, or
+substitute a caller-supplied `PASS` result for the source-authority resolver.
+The pure function validates bindings and completeness, not network signatures.
+All input data must be read-only snapshots (not getters with external effects).
+Completeness, pin, and Public flags require actual Boolean values, not strings,
+numbers, or other truthy objects. Canonical artifact identities must be well
+formed and unique by ModId, directory, and Workshop ID across the snapshot.
+
+The attestation is necessarily prepared for an observed closure generation;
+its comment cannot predate that ClosedEvent. A later event adapter must handle
+this protocol deliberately, rather than immediately reopening an issue while
+its trusted attestation is still being recorded. That orchestration, retry,
+state reread, and idempotent mutation policy are not implemented here.
+
+## Exact attestation body
+
+The whole comment is the heading `## PUBLIC RELEASE CLOSURE ATTESTATION`,
+followed by one fenced `json` object. Its flat schema contains exactly:
+
+| Fields | Meaning |
+|---|---|
+| `Schema` (integer 1), `Repository`, `IssueNumber` (positive integer) | Exact schema and issue scope |
+| `ClosedEventId`, `ClosedAt`, `VerifiedAt` | Exact closure generation and actual observed verification time |
+| `VerifierLogin`, `VerifierAssociation` | Must match the trusted attestation comment's authenticated author metadata |
+| `CardId`, `CardSha256`, `EvidenceId`, `EvidenceSha256` | Distinct exact comments and SHA-256 of their raw UTF-8 bodies, with no newline/whitespace normalization |
+| `Outcome` | Exactly `public-artifact-verified`; arbitrary PASS prose and older receipt formats are not authorization |
+| `ModId`, `Dir`, `Stream`, `WorkshopId`, `Version` | The specific actually-verified target, not merely a public sibling elsewhere on the card |
+| `SourceCommit`, `RootBundle`, `RootBundleSha256`, `AssetFilename`, `AssetSha256` | Exact canonical deployed source and artifact identity |
+
+Every value except the two integer fields is a nonempty JSON string. IDs are
+positive decimal strings, digests are lowercase hexadecimal, and times are
+explicit UTC ISO-8601 ending in `Z`. Unknown, duplicate or escaped property
+names, nested/array values, and attestations larger than 16 KiB of strict UTF-8
+bytes are rejected. Invalid Unicode in any snapshot body is Unavailable; it is
+never silently replaced before byte counting or evidence hashing.
+
+The verifier attests their interpretation of the bound human evidence; the
+evidence author need not be a maintainer (ordinary public users can verify).
+The policy does not classify the evidence's prose. It requires the newest exact
+test card to be the one and only pinned exact card, using the existing strict
+`Get-VtLiveTestCardSelection` and deployed authority. The open-ready lifecycle
+decision is deliberately not called: a Rain result consumes an open invitation
+but is legitimate input to closure verification.
+
+Chronology is based on **both creation and revision times**: the card's latest
+revision cannot follow evidence creation; the evidence's latest revision cannot
+follow `VerifiedAt`; verification cannot follow closure; the attestation cannot
+precede closure. A later card/evidence edit cannot borrow an old creation time,
+even when its body was changed back to the same text/digest.
+
+## Results and persistence
+
+`Status` is one of `Accepted`, `Rejected`, `Unavailable`, `NotApplicable`, or
+`LegacyReviewRequired`. `Valid` is true only for Accepted. Every result has
+`MayMutate = false`: this component never authorizes live mutations by itself.
+Unavailable (partial comments/pins, missing authority or metadata, exceptions)
+is an infrastructure condition, **not proof of a bad fix or permission to
+reopen**. A complete non-public or already-open issue is NotApplicable.
+
+Accepted returns the bound proof and a deterministic `ClosureKey` containing
+repository, issue and ClosedEvent ID. Duplicate delivery of identical inputs
+returns the same key/proof identity; a new closure generation needs a new
+attestation. The future trusted adapter must persist authority provenance and
+deduplicate on this generation, then reread issue state before any mutation.
+
+Retain the authenticated closure-time authority snapshot after acceptance.
+Do not replace it with the next release's authority: later publication does not
+invalidate a previously verified artifact. Revalidation must still use complete
+current comment metadata to detect edits/deletions, while retaining the original
+closure-time artifact authority. Accepted proof is not an unsigned shortcut
+which untrusted callers can submit instead of those inputs.
+
+Future adapter integration must also retain the accepted closure-time card/pin
+evidence: later harmless unpinning of a closed issue is not itself a regression
+or permission to reopen. The current offline component strictly validates the
+supplied card/pin snapshot; the adapter must deliberately reconcile preserved
+acceptance evidence with current body-revision metadata before enforcement.
+This consideration does not grant automatic reopening authority.
+
+Historical closures before rollout return LegacyReviewRequired, not Rejected.
+#1509 is legitimately verified/closed through an upstream VT2 correction; its
+pre-schema evidence needs deliberate legacy migration, not automated reversal.
+There is no requirement that the mod version increase after a report: the exact
+public artifact must be verified. Conversely #1465's reviewed Dev code/build
+alone cannot close a public-release issue. Public promotion authorization remains
+an independent gate and is never granted by this policy.
+
+Bounds: 2,048 comments; 1 MiB per comment; 16 MiB total comment bodies; 256
+authority records. Caller truncation or exceeding these bounds is Unavailable.
+
+## Offline verification
+
+`qa/check_public_release_closure_policy.ps1` runs in Quick/full QA and can be run
+directly with `-Quiet`. It invokes the actual shared strict selector and covers
+public/Dev/mixed targets, raw body edits, creation-versus-edit chronology,
+association forgery, scope/artifact mismatch, incomplete snapshots, ambiguous
+pins, duplicate JSON fields, duplicate/new closure generations, historical #1509,
+UTF-8 byte boundaries, comment/authority limits, invalid Unicode/hash containment,
+and retaining closure-time authority across later publication. Run it under
+PowerShell 7 and Windows PowerShell 5.1. No fixtures call GitHub or mutate issues.
