@@ -34,6 +34,19 @@ Last updated: 2026-09-01.
 
 ---
 
+## #1436 - Swiftbow ammunition-only history
+
+| Field | Check |
+|---|---|
+| Candidate version | WT 0.12.331-beta / WT Dev 0.12.332-dev; in-game verification remains outstanding. |
+| Menu | **Pre-Patch Weapon Versions > Kerillian's Swiftbow** offers **Current (Game Version 6.12.1)** and **Game Version 6.10.0 (Ammunition Only) - bounded patch delta**. Longbow and Hammer/Mace keep their existing labels. |
+| Scope | Only maximum ammunition changes: 60 to 50 before career/talent bonuses. Cleave, headshot damage, reload, profiles and other weapons remain current. |
+| Restart | Changing the selection does not hot-apply. Restart with the ammunition preset, then restart with Current and compare maximum arrows using the same career/talents. |
+| Safety | Missing template/ammo table/capacity or a foreign capacity refuses without writes. Repeated apply does not stack; restore retains exact table identities and unrelated ordinary tweaks. |
+| Automated | `test_wt_history_patch_6_11_0.lua` covers runtime apply/refusal/restore/composition; `test_wt_history_ui.lua` checks the qualified composite menu choice. Dual-host source reproduction checks both evaluators, all eight artifacts and public/Dev parity. |
+
+---
+
 ## #943 - Fire Sword heavy attack tweaks
 
 | Field | Check |
