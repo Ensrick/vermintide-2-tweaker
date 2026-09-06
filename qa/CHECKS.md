@@ -723,6 +723,23 @@ preflight; that would mirror the `QaScriptGate.RunAsync(mod, ...)` pattern in
    instrumented in-game commands that auto-verify state after every load.
    Tracked in PROJECT_STANDARDS §11 as future work.
 
+## Publication failure finalization (#1328)
+
+`check_publication_pin_finalization.ps1 -SelfTest` is automatically discovered
+by `run_selftests.ps1` in full QA. Actual hidden PowerShell workers exercise
+explicit exit and throw failures through the actual AST-selected shipping
+cleanup block, authenticated residual-child drain before replacing its locked
+file, a contender held outside the owner's job and succeeding after release,
+idempotent successful reconciliation, warning-as-error and observer failures,
+claim retention, malformed/foreign context, zero-ID bootstrap rejection,
+unresolved formatting, read/replace/drain failures, and source-byte preservation.
+Run under both PowerShell 7 and Windows PowerShell 5.1. No VMB, SDK, Steam,
+game, network, deploy, or Workshop operation runs. Successful fixtures delete
+only their own individually verified temporary paths; failures retain evidence.
+`ship.ps1 -SelfTest` also checks actual dispatch ordering and retains the
+three-structure/sibling/historical/array pin-planner matrix. Hard process death
+and publisher-before-handoff recovery are not covered or claimed fixed.
+
 ## How to add a check
 
 When a new bug class is discovered:

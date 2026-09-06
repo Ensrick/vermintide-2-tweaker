@@ -876,137 +876,7 @@ function Get-ShipIssueTransitionDecision {
     }
 }
 
-# Issue #1328: pure planner for the step-5b exception-pin repoint. Takes the
-# CURRENT text of tools/verify/live_test_contract_exceptions.psd1, the shipped
-# mod's exception ModId, and the freshly deployed scripts/mods subtree hash
-# (the exact value live_test_source_authority.ps1 compares pins against), and
-# returns the rewritten text plus a change report. Semantics:
-#   * Only the three CONSUMED structures are rewritten: ReceiptFamilyOverrides
-#     (per-mod ModTrees hashtable values), ReceiptRouteOverrides
-#     (ModTree scalar / ModTrees array), ReceiptDiscoveryOverrides (ModTree).
-#   * LegacyMarkerFamilyModTrees (reviewer context, deliberately unconsumed)
-#     and LegacySourceTrees (carried-forward promotion pins) are NEVER touched:
-#     their whole top-level sections are excluded from the rewrite.
-#   * The stale-value set is computed SEMANTICALLY (Import-PowerShellDataFile)
-#     from entries pinning this exact ModId, then replaced TEXTUALLY so every
-#     comment, ordering, and unrelated pin survives byte-identical. A pinned
-#     multi-tree array collapses to the single deployed tree: only one deployed
-#     record exists per mod, so any other member is stale by construction.
-#   * The rewrite is verified by re-parsing: any pin for this mod that still
-#     lacks the deployed tree is returned in .Unresolved for a loud warning.
-function Get-VtExceptionPinRepointPlan {
-    param(
-        [Parameter(Mandatory=$true)][string]$ExceptionsText,
-        [Parameter(Mandatory=$true)][string]$ModId,
-        [Parameter(Mandatory=$true)][string]$DeployedTree
-    )
-    if ($DeployedTree -notmatch '^[0-9a-f]{40}$') { throw "Deployed tree must be a full 40-hex hash, got '$DeployedTree'." }
-    if ($ModId -notmatch '^[A-Za-z0-9_]+$') { throw "Exception ModId must be a bare identifier, got '$ModId'." }
-
-    function Get-PinTuples {
-        param([string]$Text)
-        $tmp = Join-Path ([IO.Path]::GetTempPath()) ('vt2-pin-repoint-' + [guid]::NewGuid().ToString('N') + '.psd1')
-        try {
-            [IO.File]::WriteAllText($tmp, $Text, (New-Object System.Text.UTF8Encoding($false)))
-            $data = Import-PowerShellDataFile -LiteralPath $tmp
-        }
-        finally { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
-        $tuples = @()
-        foreach ($o in @($data.ReceiptFamilyOverrides)) {
-            if ($o -and $o.ModTrees -and $o.ModTrees.ContainsKey($ModId)) {
-                $tuples += [pscustomobject]@{ Structure = 'ReceiptFamilyOverrides'; Marker = [string]$o.Marker; Trees = @($o.ModTrees[$ModId]) }
-            }
-        }
-        foreach ($o in @($data.ReceiptRouteOverrides)) {
-            if ($o -and [string]$o.ModId -ceq $ModId) {
-                $trees = if ($o.ContainsKey('ModTrees')) { @($o.ModTrees) } else { @([string]$o.ModTree) }
-                $tuples += [pscustomobject]@{ Structure = 'ReceiptRouteOverrides'; Marker = [string]$o.Marker; Trees = @($trees) }
-            }
-        }
-        foreach ($o in @($data.ReceiptDiscoveryOverrides)) {
-            if ($o -and [string]$o.ModId -ceq $ModId) {
-                $tuples += [pscustomobject]@{ Structure = 'ReceiptDiscoveryOverrides'; Marker = [string]$o.Marker; Trees = @([string]$o.ModTree) }
-            }
-        }
-        return @($tuples)
-    }
-
-    $pins = @(Get-PinTuples -Text $ExceptionsText)
-    $stale = @{}
-    foreach ($pin in $pins) {
-        foreach ($tree in @($pin.Trees)) {
-            $t = ([string]$tree).Trim()
-            if ($t -match '^[0-9a-f]{40}$' -and $t -cne $DeployedTree) { $stale[$t] = $true }
-        }
-    }
-    $result = [ordered]@{
-        PinCount = $pins.Count; StaleTrees = @($stale.Keys | Sort-Object)
-        Changed = $false; RewriteCount = 0; NewText = $ExceptionsText; Unresolved = @()
-    }
-    if ($pins.Count -eq 0 -or $stale.Count -eq 0) { return [pscustomobject]$result }
-
-    $modEsc = [regex]::Escape($ModId)
-    $staleAlt = @($stale.Keys | ForEach-Object { [regex]::Escape($_) }) -join '|'
-    $rewrites = 0
-    # Replace a quoted-sha array with the single deployed tree, but ONLY when
-    # it actually contains a stale pin for this mod; anything else is returned
-    # unchanged. Shared by the hashtable-value and route-override array forms.
-    $arrayEvaluator = [System.Text.RegularExpressions.MatchEvaluator]{
-        param($m)
-        $body = $m.Groups['body'].Value
-        $shas = @([regex]::Matches($body, "'([0-9a-f]{40})'") | ForEach-Object { $_.Groups[1].Value })
-        $hasStale = $false
-        foreach ($sha in $shas) { if ($stale.ContainsKey($sha)) { $hasStale = $true } }
-        if ($shas.Count -eq 0 -or -not $hasStale) { return $m.Value }
-        $script:__pinRewrites++
-        return ($m.Groups['key'].Value + "@('" + $DeployedTree + "')")
-    }
-    $scalarEvaluator = [System.Text.RegularExpressions.MatchEvaluator]{
-        param($m)
-        $script:__pinRewrites++
-        return ($m.Groups['key'].Value + "'" + $DeployedTree + "'")
-    }
-
-    # Line-based pass so the two deliberately-historical top-level sections can
-    # be excluded wholesale. A top-level section starts at 4-space indent.
-    # NOTE: no -split limit -- pwsh 7 treats a NEGATIVE limit as right-to-left
-    # splitting (returning the whole string for -1), while 5.1 treats it as 0.
-    $lines = $ExceptionsText -split "`n"
-    $section = ''
-    $script:__pinRewrites = 0
-    for ($i = 0; $i -lt $lines.Count; $i++) {
-        $line = $lines[$i]
-        if ($line -match '^\s{4}(\w+)\s*=') { $section = $matches[1] }
-        if ($section -eq 'LegacyMarkerFamilyModTrees' -or $section -eq 'LegacySourceTrees') { continue }
-        # Family-override hashtable values keyed by this mod: scalar and array.
-        $line = [regex]::Replace($line, "(?<key>\b$modEsc\s*=\s*)'(?:$staleAlt)'", $scalarEvaluator)
-        $line = [regex]::Replace($line, "(?<key>\b$modEsc\s*=\s*)@\((?<body>[^)]*)\)", $arrayEvaluator)
-        # Route/discovery scalar and array pins: entry-scoped by the inline
-        # ModId literal so another mod's identical tree can never be rewritten.
-        if ($line -match "\bModId\s*=\s*'$modEsc'") {
-            $line = [regex]::Replace($line, "(?<key>\bModTrees?\s*=\s*)'(?:$staleAlt)'", $scalarEvaluator)
-            $line = [regex]::Replace($line, "(?<key>\bModTrees\s*=\s*)@\((?<body>[^)]*)\)", $arrayEvaluator)
-        }
-        $lines[$i] = $line
-    }
-    $rewrites = [int]$script:__pinRewrites
-    Remove-Variable -Name __pinRewrites -Scope Script -ErrorAction SilentlyContinue
-    $newText = $lines -join "`n"
-
-    # Honest-verification pass: re-parse the rewritten text and surface any pin
-    # for this mod that still lacks the deployed tree (unexpected formatting).
-    $unresolved = @()
-    foreach ($pin in @(Get-PinTuples -Text $newText)) {
-        if (@($pin.Trees) -cnotcontains $DeployedTree) {
-            $unresolved += ("{0} {1}" -f $pin.Structure, $pin.Marker)
-        }
-    }
-    $result.Changed = ($newText -cne $ExceptionsText)
-    $result.RewriteCount = $rewrites
-    $result.NewText = $newText
-    $result.Unresolved = @($unresolved)
-    return [pscustomobject]$result
-}
+. (Join-Path $PSScriptRoot 'exception-pin-finalization.ps1')
 
 # Offline self-test of the step-6 logic + the issue-#489 native-probe guard
 # (qa-script convention: exit 0 = OK, exit 2 = regression). Runnable standalone
@@ -1738,7 +1608,12 @@ function Invoke-ShipSelfTest {
     $pinStepPos = $selfTxt.IndexOf('==> Repointing deployed-source exception pins', $mainDispatchPos)
     $pinAuthorityPos = $selfTxt.IndexOf('$shipDeploymentManifest = Get-VtCardDeploymentManifest', $mainDispatchPos)
     $pinUploadVerifyPos = $selfTxt.IndexOf("`$uploadStatus = 'NONE'", $mainDispatchPos)
-    Assert ($pinUploadVerifyPos -ge 0 -and $pinUploadVerifyPos -lt $pinStepPos) "pin repoint runs only after the workshop_log upload verification"
+    Assert ($pinUploadVerifyPos -ge 0 -and $pinUploadVerifyPos -lt $pinStepPos) "successful-path pin repoint follows Workshop verification"
+    $pinArmPos = $selfTxt.IndexOf('$publishedPinContext = $preparedPinContext', $mainDispatchPos)
+    $pinFinallyPos = $selfTxt.LastIndexOf('if ($publishedPinContext -and -not $pinFinalizationAttempted)')
+    Assert ($receiptHandoffPos -lt $pinArmPos -and $pinArmPos -lt $finalAuthorizationPos) "only successful publisher receipt handoff arms failure finalization"
+    Assert ($pinFinallyPos -gt $statusLabelPos -and $pinFinallyPos -lt $transactionLeaseExitPos) "outer failure finalization remains inside the owning transaction lease"
+    Assert ($selfTxt.IndexOf('Invoke-VtPublishedPinFinalization -PublicationJson $publishedPinContext', $pinFinallyPos) -ge 0) "failure path invokes the same pin helper without entering live-test authority"
     Assert ($pinStepPos -ge 0 -and $pinAuthorityPos -ge 0 -and $pinStepPos -lt $pinAuthorityPos) "pin repoint runs BEFORE the deployed-source authority resolution so this ship's labels already benefit"
     Assert ($pinAuthorityPos -lt $statusLabelPos) "authority resolution still precedes status labeling"
     Assert ($selfTxt.IndexOf('rev-parse "$sourceCommit`:$Mod/scripts/mods"', $mainDispatchPos) -ge 0) "pin repoint resolves the exact scripts/mods subtree the authority compares"
@@ -1793,6 +1668,9 @@ catch {
 $transactionLease = $null
 $privateLauncherSettings = $null
 $launcherExecutableLease = $null
+$publishedPinContext = $null
+$pinFinalizationAttempted = $false
+$pinSummary = 'not run'
 try {
     $transactionLease = Enter-VmbMachineTransactionLease `
         -Action $(if ($BuildOnly) { 'build-only' } else { 'ship' }) `
@@ -2479,6 +2357,21 @@ $pubScript = Join-Path $repoRoot 'tools\publish-release\publish-release.ps1'
 if (-not (Test-Path $pubScript)) { Fail "publish-release.ps1 not found at $pubScript" }
 $publicationAuthorizationJson = $publicationAuthorization.Evidence | ConvertTo-Json -Depth 10 -Compress
 $receiptPath = Join-Path ([System.IO.Path]::GetTempPath()) ("vt2-workshop-receipt-" + [guid]::NewGuid().ToString('N') + '.json')
+$preparedPinContext = $null
+if (-not $isFirstUploadBootstrap) {
+    # Prepare exact identity BEFORE mutation; arm only after a successful
+    # publisher handoff. An intent/prepared receipt is not publication proof.
+    $pinInventory = Import-PowerShellDataFile -LiteralPath (Join-Path $repoRoot 'tools\mod-inventory.psd1')
+    $pinEntry = @($pinInventory.Mods | Where-Object { [string]$_.Dir -ceq $Mod })
+    if ($pinEntry.Count -ne 1) { Fail "Cannot resolve one exception-pin ModId for $Mod." }
+    $pinTreeCapture = Invoke-NativeCapture { & git -C $repoRoot rev-parse "$sourceCommit`:$Mod/scripts/mods" }
+    if ($pinTreeCapture.ExitCode -ne 0 -or $pinTreeCapture.Lines.Count -ne 1) {
+        Fail "Cannot resolve the exact published scripts/mods tree for $Mod."
+    }
+    $preparedPinContext = New-VtPublishedPinContext -RepoRoot $repoRoot -Mod $Mod -ModId $pinEntry[0].ModId `
+        -SourceCommit $sourceCommit -ModTree ([string]$pinTreeCapture.Lines[0]).Trim() `
+        -Version $modVersion -PublishedId $publishedId -ReleaseTag $tag
+}
 
 Write-Host ""
 Write-Host "==> Recording authorized GitHub release (tag $tag) -- THIS mod only (issues #436/#493/#724)" -ForegroundColor Cyan
@@ -2501,6 +2394,7 @@ if (-not (Test-Path -LiteralPath $receiptPath -PathType Leaf)) {
     Fail "publish-release.ps1 did not return the exact GitHub-hosted publication receipt. No Workshop upload was attempted."
 }
 $githubStatus = "OK ($tag)"
+$publishedPinContext = $preparedPinContext
 
 # The release-recording call can take long enough for default HEAD to move.
 # Close that final window after the record exists and immediately before upload.
@@ -2643,71 +2537,19 @@ if ($isFirstUploadBootstrap) {
 }
 
 # ---------------------------------------------------------------------------
-# Step 5b: repoint deployed-source exception pins (issue #1328)
+# Step 5b: reconcile GitHub source provenance before live-test authority.
+# Failure finalization calls the SAME helper, but never reaches readiness.
 # ---------------------------------------------------------------------------
-# The ModTree pins in tools/verify/live_test_contract_exceptions.psd1 are
-# provenance, not policy: each records the exact deployed scripts/mods subtree
-# a reviewed finite-output proof was audited against, and the publication
-# authorization gate has already validated the tree this ship just published.
-# Without a repoint, every later authority resolution (step 6 below,
-# refresh-cards, and each subsequent ship of ANY mod) fails closed on
-# "immutable-tree drift" until a manual repoint PR lands - the 2026-08-16 wave
-# stranded [wt:661] this way and forced 11 hand-labeled ships. Repointing the
-# tree never grants an unreviewed proof: the per-override emitter/guard token
-# anchors still fail closed if the audited code itself changed. Ship cannot
-# commit to master (PR-only), so the rewrite lands in the WORKING TREE - the
-# same file every authority consumer reads, so labeling in THIS run already
-# benefits - and the next PR to master carries it (replacing the manual
-# repoint PR, e.g. #1323). Like steps 6/6b this step NEVER fails the ship.
 Write-Host ""
 Write-Host "==> Repointing deployed-source exception pins (issue #1328)" -ForegroundColor Cyan
-$pinSummary = 'not run'
 try {
-    $pinExceptionsPath = Join-Path $repoRoot 'tools\verify\live_test_contract_exceptions.psd1'
-    $pinInventoryPath = Join-Path $repoRoot 'tools\mod-inventory.psd1'
-    if (-not (Test-Path -LiteralPath $pinExceptionsPath -PathType Leaf)) { throw "exceptions file missing: $pinExceptionsPath" }
-    if (-not (Test-Path -LiteralPath $pinInventoryPath -PathType Leaf)) { throw "mod inventory missing: $pinInventoryPath" }
-    $pinInventory = Import-PowerShellDataFile -LiteralPath $pinInventoryPath
-    $pinEntry = @($pinInventory.Mods | Where-Object { [string]$_.Dir -ceq $Mod })
-    if ($pinEntry.Count -ne 1) { throw "mod inventory does not resolve directory '$Mod' to exactly one ModId" }
-    $pinModId = [string]$pinEntry[0].ModId
-    # The authority pins the tree of <Dir>/scripts/mods at the recorded
-    # source_commit (live_test_source_authority.ps1), which this ship published
-    # as $sourceCommit; resolve the SAME value the drift check will compare.
-    $pinTreeCapture = Invoke-NativeCapture { & git -C $repoRoot rev-parse "$sourceCommit`:$Mod/scripts/mods" }
-    if ($pinTreeCapture.ExitCode -ne 0 -or $pinTreeCapture.Lines.Count -eq 0) {
-        throw "cannot resolve deployed tree $sourceCommit`:$Mod/scripts/mods"
-    }
-    $pinDeployedTree = ([string]$pinTreeCapture.Lines[-1]).Trim()
-    $pinText = [System.IO.File]::ReadAllText($pinExceptionsPath, [System.Text.Encoding]::UTF8)
-    $pinPlan = Get-VtExceptionPinRepointPlan -ExceptionsText $pinText -ModId $pinModId -DeployedTree $pinDeployedTree
-    if ($pinPlan.PinCount -eq 0) {
-        Write-Host ("  no exception pins reference '{0}' -- nothing to repoint." -f $pinModId) -ForegroundColor DarkGray
-        $pinSummary = "none for $pinModId"
-    }
-    elseif (-not $pinPlan.Changed) {
-        Write-Host ("  all {0} exception pin group(s) for '{1}' already record deployed tree {2}." -f $pinPlan.PinCount, $pinModId, $pinDeployedTree.Substring(0, 12)) -ForegroundColor DarkGray
-        $pinSummary = "current ($($pinPlan.PinCount) pin group(s))"
-    }
-    else {
-        [System.IO.File]::WriteAllText($pinExceptionsPath, $pinPlan.NewText, (New-Object System.Text.UTF8Encoding($false)))
-        foreach ($staleTree in @($pinPlan.StaleTrees)) {
-            Write-Host ("  + {0}: {1} -> {2}" -f $pinModId, $staleTree, $pinDeployedTree) -ForegroundColor Green
-        }
-        Write-Host ("  {0} pin value(s) across {1} pin group(s) repointed." -f $pinPlan.RewriteCount, $pinPlan.PinCount) -ForegroundColor Green
-        foreach ($pinMiss in @($pinPlan.Unresolved)) {
-            Write-Host ("  ! still stale after rewrite (unrecognized formatting) -- repoint by hand: {0}" -f $pinMiss) -ForegroundColor Yellow
-        }
-        Write-Host "  NOTE: tools\verify\live_test_contract_exceptions.psd1 now differs from HEAD." -ForegroundColor Yellow
-        Write-Host "  Ship cannot commit to master; this working-tree repoint MUST ride the next" -ForegroundColor Yellow
-        Write-Host "  PR to master (it replaces the manual repoint PR). Do not discard it." -ForegroundColor Yellow
-        $pinSummary = ("repointed {0} value(s) -> {1} (working tree; carry in next PR)" -f $pinPlan.RewriteCount, $pinDeployedTree.Substring(0, 12))
-        if (@($pinPlan.Unresolved).Count -gt 0) { $pinSummary += "; $(@($pinPlan.Unresolved).Count) UNRESOLVED -- repoint by hand" }
-    }
+    $pinFinalizationAttempted = $true
+    $pinResult = Invoke-VtPublishedPinFinalization -PublicationJson $publishedPinContext -TransactionLease $transactionLease
+    $pinSummary = $pinResult.Summary
 }
 catch {
-    Write-Host ("  WARNING: exception-pin repoint errored ({0}) -- repoint the pins by hand (issue #1328)." -f $_.Exception.Message) -ForegroundColor Yellow
-    $pinSummary = 'ERRORED -- repoint by hand'
+    Write-VtPinFinalizationWarning ("Exception-pin reconciliation failed: {0}. Preserve this provenance for a reviewed repair: {1}" -f $_.Exception.Message, $publishedPinContext)
+    $pinSummary = 'ERRORED -- reconcile source pins in a reviewed PR'
 }
 
 # Resolve immutable deployed-source authority before any tracker mutation.
@@ -3051,6 +2893,23 @@ if (-not $NoClaim) {
 exit 0
 }
 finally {
+    # An SDK/upload/verification failure must not strand GitHub source pins.
+    # Keep the original failure/claim and never enter readiness/label paths.
+    # The helper drains authenticated descendants while we still own the
+    # machine transaction; Exit below retains its defensive second drain.
+    try {
+        if ($publishedPinContext -and -not $pinFinalizationAttempted) {
+            $pinFinalizationAttempted = $true
+            try {
+                $pinResult = Invoke-VtPublishedPinFinalization -PublicationJson $publishedPinContext -TransactionLease $transactionLease
+                Write-VtPinFinalizationWarning ("Workshop publication remains incomplete; GitHub source-pin finalization: {0}." -f $pinResult.Summary)
+            }
+            catch {
+                Write-VtPinFinalizationWarning ("Publication failure retained; source-pin finalization also failed: {0}. Pending provenance: {1}" -f $_.Exception.Message, $publishedPinContext)
+            }
+        }
+    }
+    finally {
     try {
         try {
             if ($privateLauncherSettings -and (Test-Path -LiteralPath $privateLauncherSettings)) {
@@ -3070,5 +2929,6 @@ finally {
         if ($null -ne $transactionLease) {
             Exit-VmbMachineTransactionLease -Lease $transactionLease
         }
+    }
     }
 }
