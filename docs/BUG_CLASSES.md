@@ -3653,6 +3653,19 @@ VMB, Stingray, upload tools, or grandchildren can outlive it.
   and crash-safe ACL journal. #647/#683 own exact worktree/dependency identity;
   #724 owns reviewed publication provenance.
 
+### Partial-publication counterpart (#1328/#1548)
+
+A successfully recorded GitHub manifest can survive an SDK crash while the
+success-only pin reconciliation never runs. Global source authority then rejects
+stale exception pins for unrelated mod cards. Reconcile confirmed GitHub
+provenance after authenticated descendants drain, even on an upload failure,
+while preserving that failure, the version claim, and the readiness prohibition.
+Use atomic replacement and persisted-byte readback; carry the resulting source
+metadata through protected PR review. Never infer Workshop transfer from it.
+See `PROJECT_STANDARDS.md` section 6.6 and
+`qa/check_publication_pin_finalization.ps1`. Publisher-before-handoff failures
+and hard owner death remain separate recovery boundaries under #1328.
+
 ## 88. Imported asset basis is mistaken for an attachment-pose defect
 
 **First confirmed:** 2026-08-21 (Old Musket issue #1155).
