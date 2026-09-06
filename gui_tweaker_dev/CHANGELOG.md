@@ -1,5 +1,21 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.345-dev (2026-09-06) - stage Dialogue audio isolation (#998)
+
+- "Isolate Audio During Playback" now edits the existing pending buffer.
+  Apply writes CD's authoritative setting once; closing discards the draft.
+  Rebuilding/searching cannot overwrite a staged false value with live state.
+- Requires CD's additive staged-setting capability (0.1.12-dev). Older owners
+  omit the control; disappearance or commit failures retain pending changes,
+  never write a GUT shadow setting or invoke the old immediate-click setter.
+- Hides unsupported profile/default controls for the custom browser and guards
+  direct entry points, preventing capture of another tab's build/profile state.
+- `/gut_regression_test` adds `issue998_dialogue_staged_isolation`, an isolated
+  non-mutating staging/owner/commit check. Offline composition tests execute
+  the installed view, renderer, CD setter and audio lifecycle.
+- Source candidate only: needs coordinated CD/GUI publication and solo live
+  Apply/cancel/reopen/restart verification before #998 is ready to test.
+
 ## 0.2.344-dev (2026-08-31) -- source-authoritative screen-particle diagnostics (#209) [diagnostics-armed]
 
 - Routes both bounded `[gut:209]` lifecycle signatures directly through

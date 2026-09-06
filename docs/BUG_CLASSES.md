@@ -1719,6 +1719,16 @@ commit canceled edits; keying only by weapon type merges inventory instances or
 illusions; assuming one spawn callback reaches every surface leaves previews,
 husks, swaps, or hot joins at vanilla state.
 
+Custom Mod Tweaker controls need the same transaction boundary (#998): use
+`stage_set/get_staged` for input and refresh, plus an exact `_owners` route to
+the provider's real persisted setting. Registered custom categories otherwise
+fall through to GUT's `mt::` namespace. The owning mod must reconcile the
+committed setting through its VMF/batch completion callback, not only through
+an immediate API setter. Tests must drive the installed row and Apply path and
+assert mutation counts; a setter-spy test expecting writes on click protects
+the defect. Custom browsers without profile/default semantics must not inherit
+the previous tab's profile or flattened-node state.
+
 Use an explicit transaction: clone committed state into preview state, mark dirty
 on edits, persist at the successful Apply completion edge, emit only after Apply,
 make repeated Apply a no-op, and restore the committed snapshot on close. A later

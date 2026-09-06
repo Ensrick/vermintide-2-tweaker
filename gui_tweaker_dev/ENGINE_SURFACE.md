@@ -223,6 +223,17 @@ texture id cannot create an uncompiled Stingray UI resource.
 
 ### 5. View / window injection (owner: `docs/engine/09`)
 
+Dialogue audio isolation (#998) uses the existing view pending buffer and
+`_mod_tweaker_transaction`, not a new engine hook. `_mod_tweaker_dialogue`
+feature-detects CD API v6's schema-1 setting descriptor and binds its exact
+`auto_isolation` key through `_owners` to the live CD object. The custom browser
+does not support the generic profile/DEFAULT controls; both presentation and
+method entry guards prevent foreign-node capture. `_gut_dialogue_contract`
+registers its isolated runtime staging/transaction check. The paired CD owner
+uses VMF's `set(..., false)` persistence then one batch completion notification
+(VMF `modules/core/settings.lua:27-43`); ordinary notifications dispatch through
+`modules/core/events.lua:44-49`. No GUT `mt::` shadow setting is created.
+
 `IngameUI.setup_views` [src: `ingame_ui.lua:145`] builds `self.views` from `view_settings.views_function(ctx)` [src: `:146`] and is called from `IngameUI.init` with the context passed as an ARGUMENT [src: `:107`] - `self.ingame_ui_context` is not stored until later [src: `:138`]. Vanilla registers DLC-provided views by mapping over the DLC `ui_views` lists at the top of the same file [src: `DLCUtils.map_list("ui_views", ...)`, `:33`]. gut does NOT go through that DLC path - it injects `mod_tweaker_view` (and the `gut_compendium` / `gut_mod_tweaker` HeroView sub-states) directly into the built `self.views` / HeroView screen list, capturing the context ARG at the `setup_views` post-hook (reading `self.ingame_ui_context` there is nil and crashed the view construction, so the transition-time lazy `_attach_view` is the guaranteed path). The Mod Tweaker view is a `class()` that BORROWS the IngameUI renderer (never creates one), registers a modal input service, and exits via `transition_with_fade("ingame_menu")`. The per-tab
 label policy is engine-free presentation data shared by both presentations through
 `_mod_tweaker_tab_labels.lua`; its `mp` to `PROGRESSION` mapping (#525) changes neither

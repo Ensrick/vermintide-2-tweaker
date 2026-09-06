@@ -972,6 +972,7 @@ end
 -- slot starts from the tab's declared defaults.
 function ModTweakerView:_profile_snapshot(category, defaults)
     local out = {}
+    if DialogueUI.is_category(category) then return out end
     for i = 1, #(self._build_nodes or {}) do
         local node = self._build_nodes[i]
         local sid = _nf(node, "setting_id")
@@ -992,7 +993,7 @@ function ModTweakerView:_profile_snapshot(category, defaults)
 end
 
 function ModTweakerView:_profile_ensure(category)
-    if not category then return end
+    if not category or DialogueUI.is_category(category) then return end
     local tab_id = _cat_key(category)
     self._profile_slot = profiles.get_active(mod, tab_id)
     local ready_key = tab_id .. ":" .. tostring(self._profile_slot)
@@ -1029,7 +1030,7 @@ function ModTweakerView:_profile_ensure(category)
 end
 
 function ModTweakerView:_profile_capture(category)
-    if not category then return end
+    if not category or DialogueUI.is_category(category) then return end
     local tab_id = _cat_key(category)
     local slot = profiles.get_active(mod, tab_id)
     profiles.save(mod, tab_id, slot, self:_profile_snapshot(category, false))
@@ -1039,7 +1040,7 @@ end
 
 function ModTweakerView:_switch_profile(slot)
     local category = self._categories and self._categories[self._selected]
-    if not category then return end
+    if not category or DialogueUI.is_category(category) then return end
     local tab_id = _cat_key(category)
     local current = profiles.get_active(mod, tab_id)
     if slot == current then return end
@@ -1147,6 +1148,11 @@ end
 -- routes to its owner's mod_obj via _cat_set -> _owners), re-register any keybinds across
 -- the committed settings, then clear them all.
 function ModTweakerView:apply_pending(category)
+    -- Missing/replaced CD retains the draft; never use shadow persistence.
+    if DialogueUI.is_category(category) and not DialogueUI.can_apply(category) then
+        _printf("[gut:998] apply_deferred owner_unavailable")
+        return
+    end
     local MT = _mt()
     local ids = category._owner_mod_ids
     if MT and MT.prune_runtime_gated_pending and MT:prune_runtime_gated_pending(self._pending, ids or { _cat_key(category) }) > 0 then self:_update_apply_button() end
@@ -1239,7 +1245,7 @@ end
 function ModTweakerView:reset_to_defaults()
     local nodes    = self._build_nodes
     local category = self._build_category
-    if not nodes or not category then return end
+    if not nodes or not category or DialogueUI.is_category(category) then return end
     local n = 0
     for i = 1, #nodes do
         local node = nodes[i]
@@ -1265,6 +1271,7 @@ end
 -- runs reset_to_defaults (current tab only). Falls back to an immediate reset if the popup
 -- manager is unavailable, so the button never dead-ends.
 function ModTweakerView:_queue_reset_popup()
+    if self._dialogue_category then return end
     _play_click()
     if self._reset_popup_id then return end   -- already showing
     if not (Managers and Managers.popup and Managers.popup.queue_popup) then

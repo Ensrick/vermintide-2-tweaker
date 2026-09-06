@@ -15,6 +15,7 @@ function M.install(api)
     local _rt_register = assert(api.register, "Mod Tweaker contracts require register")
     local _rt_src_read = assert(api.src_read, "Mod Tweaker contracts require src_read")
     local math = math
+    mod:dofile("scripts/mods/gui_tweaker_dev/_gut_dialogue_contract").install(_rt_register)
 
 _rt_register("issue605_dialogue_collapse_and_tristate", function()
     local dialogue = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_dialogue")
