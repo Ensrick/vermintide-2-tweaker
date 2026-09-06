@@ -472,3 +472,11 @@ carries the namespace-normalized catalog.
 Do not hand-edit the generated catalog. A deliberate evidence or generator
 revision must be regenerated from immutable source, reviewed, and accompanied
 by an explicit update to the pinned hashes in the reproducibility gate.
+The Patch 3.1 gate also pins the entire shared completeness ledger in both
+streams. Adding any other patch's family therefore requires reviewing that
+ledger delta and refreshing both exact ledger pins; the Patch 3.1 payload and
+its own source evidence must remain unchanged. Run
+`qa/run_wt_history_source_host_matrix.ps1` and
+`qa/run_wt_history_patch_3_1_host_matrix.ps1` before submitting a catalogue
+extension, in addition to that extension's own reproduction gate. Quick QA
+alone does not exercise these full-gate checks.
