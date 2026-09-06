@@ -1,5 +1,18 @@
 # Regression Checklist — gui_tweaker_dev
 
+## Dialogue staged isolation (#998)
+
+- With the coordinated CD build, mouse/arrows/controller edits enable Apply
+  without changing audio. Draft false survives refresh/search and tab switching.
+- Apply persists once; repeated Apply is inert. Exit without Apply discards.
+  Reopen/restart preserves only committed choices; manual isolation still works.
+- Dialogue hides unsupported profile/default controls. Visiting it after another
+  tab cannot write that tab's settings or capture its profile into Dialogue.
+- Offline installed-view tests cover DEFAULT's transaction-owner delegate:
+  unsupported or absent category/nodes cause no staging/reseed/repaint; normal
+  tabs preserve false defaults, keybind exclusion and zero-setting reseeds.
+- `/gut_regression_test`: `issue998_dialogue_staged_isolation` must pass.
+
 ## Authoritative teammate ammo (#249)
 
 - [ ] With Numeric UI enabled, obtain **Quiver Cascade** and enough additional

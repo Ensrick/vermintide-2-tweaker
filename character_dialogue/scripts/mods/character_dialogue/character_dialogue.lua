@@ -1,5 +1,5 @@
 local mod = get_mod("character_dialogue")
-local MOD_VERSION = "0.1.11-dev"
+local MOD_VERSION = "0.1.12-dev"
 -- Fatshark keeps DialogueQueries local to dialogue_system.lua; it is not a
 -- global like TagQueryDatabase.  Resolve the canonical module before asking
 -- VMF to install the hook, otherwise VMF receives nil and emits a startup
@@ -9,6 +9,7 @@ local Policy = mod:dofile("scripts/mods/character_dialogue/_cd_policy")
 local Browser = mod:dofile("scripts/mods/character_dialogue/_cd_browser")
 local PreviewPolicy = mod:dofile("scripts/mods/character_dialogue/_cd_preview_policy")
 local PreviewResidency = mod:dofile("scripts/mods/character_dialogue/_cd_preview_residency")
+local IsolationSetting = mod:dofile("scripts/mods/character_dialogue/_cd_isolation_setting")
 
 local function log(fmt, ...)
     mod:debug("[cd:dbg] " .. fmt, ...)
@@ -37,7 +38,7 @@ local preview = {
 -- transition): a mute with no restore is the one failure mode this feature
 -- must never ship, so mod.update retries until the engine accepts the write.
 local isolation = { owners = PreviewPolicy.isolation_new(), saved = nil, pending_restore = false }
-local AUTO_ISOLATION_SETTING = "auto_isolation"
+local AUTO_ISOLATION_SETTING = IsolationSetting.ID
 local apply_preview_isolation -- forward: defined with the isolation engine below
 
 local function auto_isolation_enabled()
@@ -396,7 +397,9 @@ mod.character_dialogue_api = {
     -- instead of speaker, and page items carry a resolved `transcript` field.
     -- v5 (#998): adds get/set_auto_isolation + auto_isolation_label, assigned
     -- below the isolation engine because their upvalues are defined there.
-    version = 5,
+    -- v6 (#998): adds a source-owned staged-setting descriptor and batch
+    -- completion capability; legacy setters remain best-effort compatible.
+    version = 6,
     catalogue = catalogue,
     -- #605 Groups are CONVERSATIONS (event stems), not the eight speakers. A
     -- group id is therefore a stem like pbw_level_skaven_stronghold_taunt_warlord
@@ -509,24 +512,25 @@ local function apply_isolation(owner, edge)
 end
 
 apply_preview_isolation = function(event)
-    apply_isolation(PreviewPolicy.PREVIEW_OWNER,
+    return apply_isolation(PreviewPolicy.PREVIEW_OWNER,
         PreviewPolicy.isolation_edge(event, auto_isolation_enabled()))
 end
 
--- #998 UI setter behind the Dialogue-tab Yes/No control. Enabling mid-session
+-- #998 Shared reconciliation behind the Dialogue-tab committed setting.
+-- Enabling mid-session
 -- starts isolating the already-playing preview; disabling releases ONLY the
 -- preview token, so a live manual /cd_isolate keeps its ownership untouched.
-local function set_auto_isolation(value)
-    value = value == true
-    mod:set(AUTO_ISOLATION_SETTING, value)
+local isolation_setting = IsolationSetting.install(mod, function(value)
     printf("[cd:998] auto_isolation=%s", tostring(value))
     if value then
-        if preview.playing_id then apply_preview_isolation("play") end
+        if preview.playing_id then
+            return apply_preview_isolation("play")
+        end
     else
         apply_preview_isolation("disable")
     end
-    return value
-end
+    return true
+end)
 
 function mod.toggle_audio_isolation()
     local manual = PreviewPolicy.MANUAL_OWNER
@@ -553,12 +557,13 @@ local function shutdown_isolation()
     restore_buses()
 end
 
--- #998 API v5 additions: the custom Dialogue tab renders the automatic-
--- isolation Yes/No control through these (normal VMF widgets do not render in
--- that tab). Assigned here because set_auto_isolation is defined above this
--- line but below the api table literal.
+-- #998 Keep v5 immediate APIs compatible; v6 adds the staged owner capability.
+-- Assigned after the audio callbacks exist to avoid forward-reference capture.
 mod.character_dialogue_api.get_auto_isolation = auto_isolation_enabled
-mod.character_dialogue_api.set_auto_isolation = set_auto_isolation
+mod.character_dialogue_api.set_auto_isolation = isolation_setting.set
+mod.character_dialogue_api.isolation_setting = {
+    version = IsolationSetting.VERSION, setting_id = IsolationSetting.ID,
+}
 mod.character_dialogue_api.auto_isolation_label = function()
     -- The custom renderer draws final strings, not VMF loc keys, so localize
     -- at the surface and keep the English fallback for missing rows.

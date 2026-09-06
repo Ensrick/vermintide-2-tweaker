@@ -1,5 +1,19 @@
 # Character Dialogue Changelog
 
+## 0.1.12-dev (2026-09-06) - staged audio-isolation owner (#998)
+
+- Adds the additive API v6 `isolation_setting` capability. GUI Dev stages this
+  setting under CD's actual VMF owner, with one silent write and one batch
+  completion callback; direct API and ordinary VMF notification reuse the same
+  reconciliation logic without double persistence.
+- Preserves manual audio ownership, exact saved volumes, and the existing
+  preview lifecycle. Failed writes/completion retain the GUI draft for retry.
+- Coordinated candidate with GUI Dev 0.2.345-dev; not yet live. Verify through
+  `/gut_regression_test` (`issue998_dialogue_staged_isolation`) and
+  `/cd_regression_test`, then solo Apply/cancel/reopen/restart testing.
+- Offline tests execute the real CD entry and installed GUI view methods;
+  source preparation is not Workshop publication or in-game verification.
+
 ## 0.1.11-dev (2026-08-26) - tracked schema-3 receipt reconciliation (#1428)
 
 - Runtime behavior is unchanged. This build gives the receipt-authority pilot

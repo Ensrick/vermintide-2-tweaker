@@ -33,6 +33,26 @@ function M.arm(view, category)
     return true
 end
 
+-- Stage DEFAULT through the view's existing owner-qualified pending buffer.
+-- Custom-tab refusal happens before reading nodes, staging or arming a reseed.
+-- Return nil for refusal and a count (including zero) for an accepted reset;
+-- repaint/click/log remain presentation responsibilities. Never persist here.
+function M.stage_defaults(view, category, nodes, node_field, disallows_reset)
+    if not nodes or not category or disallows_reset(category) then return nil end
+    local count = 0
+    for i = 1, #nodes do
+        local node = nodes[i]
+        local sid = node_field(node, "setting_id")
+        local value = node_field(node, "default_value")
+        if sid and value ~= nil and node_field(node, "type") ~= "keybind" then
+            view:stage_set(category, sid, value)
+            count = count + 1
+        end
+    end
+    M.arm(view, category)
+    return count
+end
+
 function M.is_armed(view, category)
     local pending = type(view) == "table" and view._official_reseed_pending
     return type(pending) == "table" and pending[category_key(category)] == true
