@@ -1801,6 +1801,10 @@ end)
 _rt_register("issue592_bounded_blacksmith_acquisition", function()
 	local ownership = mod._cwv_acquisition
 	if type(ownership) ~= "table" then return "#592 acquisition helper missing" end
+	if ownership.owner_probe(nil, { _cim_get_craft = function() return {} end })("issue592") ~= true
+			or ownership.owner_probe({}, { _cim_get_craft = 17 })("issue592") ~= nil then
+		return "#592 public CIM ledger or unreadable owner proof drifted"
+	end
 	local legacy = ownership.legacy_auto_grant_ids(_variant_definitions)
 	if not legacy.cwv_es_musket_old_001 or not legacy.cwv_es_musket_old_002 then
 		return "#592 historical multi-instance migration ledger incomplete"
@@ -1808,8 +1812,10 @@ _rt_register("issue592_bounded_blacksmith_acquisition", function()
 	if ownership.should_remove("cwv_es_musket_old_001", legacy, function() return false end) ~= true then
 		return "#592 exact historical auto-grant was not removable"
 	end
-	if ownership.should_remove("cwv_es_musket_old_001", legacy, function() return true end) ~= false then
-		return "#592 exact CIM-owned craft was not preserved"
+	if ownership.should_remove("cwv_es_musket_old_001", legacy, function() return true end) ~= false
+			or ownership.should_remove("cwv_es_musket_old_001", legacy, function() return nil end) ~= false
+			or ownership.should_remove("cwv_es_musket_old_001", legacy, function() error("unreadable") end) ~= false then
+		return "#592 owned or unreadable CIM craft was not preserved"
 	end
 	if ownership.should_remove("cwv_es_musket_old_100", legacy, function() return false end) ~= false then
 		return "#592 CIM craft range was captured by migration"
@@ -1822,17 +1828,11 @@ _rt_register("issue592_bounded_blacksmith_acquisition", function()
 	for _, def in ipairs(_variant_definitions) do
 		if ownership.is_seed_eligible(def) and _registered_keys[def.item_key] then
 			expected = expected + 1
-			-- The runtime ledger is authoritative when a CIM-owned _001 forced
-			-- the collision fallback; accept exactly one of the two bounded ids.
-			if not seeds[def.item_key .. "_001"] and not seeds[def.item_key .. "_000"] then
-				return "#592 Blacksmith seed missing: " .. tostring(def.item_key)
-			end
-			local seed_id = seeds[def.item_key .. "_001"] and def.item_key .. "_001"
-				or def.item_key .. "_000"
+			local primary, fallback = def.item_key .. "_001", def.item_key .. "_000"
+			local seed_id = seeds[primary] and primary or fallback
+			if not seeds[seed_id] then return "#592 Blacksmith seed missing: " .. tostring(def.item_key) end
 			local item
-			if backend_items then
-				pcall(function() item = backend_items:get_item_from_id(seed_id) end)
-			end
+			if backend_items then pcall(function() item = backend_items:get_item_from_id(seed_id) end) end
 			if not item then return "#592 live Blacksmith item missing: " .. tostring(seed_id) end
 			if item.rarity ~= "default" or tonumber(item.power_level) ~= 5
 					or item.skin ~= nil then

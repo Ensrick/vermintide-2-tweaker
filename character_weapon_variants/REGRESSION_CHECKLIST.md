@@ -21,6 +21,15 @@ Any new or relocated check updates this source map and its exact order fixture
 in the same change. A module-load or child-schema failure must leave the public
 runner with zero registrations from the identity family.
 
+## #592 Public CIM ownership survives absent Dev
+
+| Field | Details |
+|---|---|
+| Scope | Optional CIM owner tuple and finite Blacksmith acquisition/cleanup; public-only, Dev-only, both, and neither. WOC relics and arbitrary crafted IDs remain outside this migration. |
+| Failure | `ipairs({ cim_dev, cim_public })` skipped the public ledger after a nil first slot. A loaded owner missing a readable getter was incorrectly treated as absent. A companion cleanup predicate treated indeterminate ownership as permission to remove. |
+| Detection | `test_cwv_acquisition.lua` checks nullable arity, present-but-unreadable owners, positive-owner precedence, and explicit-false deletion authority. `test_cwv_acquisition_runtime.lua` executes the production `StateInGameRunning.on_enter` registration callback, real seed builder/registration/migration, exact `_000`/`_001` collisions, both stream positions, missing/non-function/throwing getter lookups, throwing ledgers before and after seed registration, finite cleanup, and repeat-entry idempotence. The existing `issue592_bounded_blacksmith_acquisition` runtime check rejects planted nullable-owner, unreadable-owner, and unsafe-cleanup regressions. |
+| Live verification | After the exact reviewed build is deployed, test public CIM first with CIM Dev disabled, then the Dev-only control: one unskinned 5-power Blacksmith seed, exact crafted copies preserved through restart/salvage, and `/cwv_regression_test` passes. The pinned GitHub card owns the current version and player-facing steps. No readiness is implied by this source checklist. |
+
 ## #1204 Deus identity uses committed parity
 
 - [ ] Restart both clients with CWV 0.1.513-dev, join the same modded-realm lobby, and start a Chaos Wastes expedition with at least one CWV weapon eligible as a starting weapon.

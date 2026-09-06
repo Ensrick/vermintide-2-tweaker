@@ -39,13 +39,24 @@ end
 
 function M.owner_probe(...)
 	local owners = { ... }
+	local owner_count = select("#", ...)
 	return function(backend_id)
 		local indeterminate = false
-		for _, owner in ipairs(owners) do
-			if owner and type(owner._cim_get_craft) == "function" then
-				local ok, craft = pcall(owner._cim_get_craft, backend_id)
-				if ok and craft ~= nil then return true end
-				if not ok then indeterminate = true end
+		-- #592: stable CIM occupies slot two when CIM Dev is absent. This is
+		-- a nullable argument tuple, not a dense array; every supplied slot counts.
+		for index = 1, owner_count do
+			local owner = owners[index]
+			if owner ~= nil then
+				-- A loaded owner without its reader is not an absent consumer.
+				-- Protect lookup too: mod proxies can throw through __index.
+				local readable, getter = pcall(function() return owner._cim_get_craft end)
+				if not readable or type(getter) ~= "function" then
+					indeterminate = true
+				else
+					local ok, craft = pcall(getter, backend_id)
+					if ok and craft ~= nil then return true end
+					if not ok then indeterminate = true end
+				end
 			end
 		end
 		if indeterminate then return nil end
@@ -77,8 +88,11 @@ function M.should_remove(backend_id, legacy_ids, is_cim_owned, protected_ids)
 	end
 	-- Exact CIM persistence always wins, even if an old/manual craft happened to
 	-- reuse a historical CWV id. Never infer ownership from a cwv_ prefix.
-	if type(is_cim_owned) == "function" and is_cim_owned(backend_id) == true then
-		return false
+	if type(is_cim_owned) == "function" then
+		local ok, owned = pcall(is_cim_owned, backend_id)
+		-- Registration proof can become stale before cleanup. Only explicit
+		-- unowned evidence authorizes deletion; nil/error is not permission.
+		if not ok or owned ~= false then return false end
 	end
 	return true
 end
