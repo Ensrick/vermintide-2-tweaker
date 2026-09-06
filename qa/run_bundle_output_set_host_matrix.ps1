@@ -13,6 +13,7 @@ $checks = @(
     [pscustomobject]@{ Name = 'check_publication_snapshot'; Path = (Join-Path $PSScriptRoot 'check_publication_snapshot.ps1') }
     [pscustomobject]@{ Name = 'check_publication_receipt'; Path = (Join-Path $PSScriptRoot 'check_publication_receipt.ps1') }
     [pscustomobject]@{ Name = 'check_release_recovery_record'; Path = (Join-Path $PSScriptRoot 'check_release_recovery_record.ps1') }
+    [pscustomobject]@{ Name = 'check_workshop_upload_evidence'; Path = (Join-Path $PSScriptRoot 'check_workshop_upload_evidence.ps1') }
 )
 foreach ($check in $checks) {
     if (-not (Test-Path -LiteralPath $check.Path -PathType Leaf)) {

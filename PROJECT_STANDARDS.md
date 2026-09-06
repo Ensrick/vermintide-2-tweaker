@@ -1368,10 +1368,18 @@ deliberate public beta) ships the full pipeline with no ask. Never infer,
 says `public`. There is no suffix-vs-visibility contradiction to tie-break.
 
 **Post-ship checks (both streams):**
-- Confirm one fresh item-specific result in `workshop_log.txt`. Normally this is
-  `Uploaded new content`. A receipt-gated `No content change` is also valid when
-  canonical `ship.ps1` proved the exact reviewed staged bytes; the launcher's
-  generic "Upload finished" text is never evidence by itself.
+- Confirm one exact AppID 552500/item transaction in bytes appended to the same
+  `workshop_log.txt` file after canonical launcher invocation begins: start,
+  exactly one `Uploaded new content` or `No content change detected`, then
+  `Upload finished ... : OK`. Uploaded followed by Timeout is failure (#1307).
+  The retained read-only observer verifies native file identity and prefix
+  continuity, with 16 MiB prefix / 1 MiB append / 8 KiB line bounds. Rotation,
+  truncation, rewriting, partial lines, retries, and growth during the final
+  verification snapshot fail closed; never fall back to recent/tail lines or
+  the previous log. A receipt-gated NoChange still requires the existing exact
+  staged-byte/deploy policy and has no new ManifestID. This producer check is
+  not the durable authenticated content tuple/card-authority consumer still
+  required by #1307, nor proof against malicious byte-identical log rewriting.
 - **Publication-only mode (#1376/#1426):** canonical `ship.ps1` enters this mode
   when an existing item's real Steam-managed content directory is absent, or
   whenever its bundle authority is `receipt`. It must not create or write a
@@ -2711,7 +2719,7 @@ BEFORE shipping:
   - Approval axis checked: -dev/-alpha/-beta = ship with NO ask; clean version = fresh per-build signal (sec. 6.6)
 
 AFTER shipping:
-  - workshop_log.txt shows "Uploaded new content" for the item
+  - workshop_log.txt proves the bounded exact start/content/finish-OK transaction for the item
   - CURRENT LIVE TEST card posted AND pinned; every older exact card unpinned
     (CI cardinality guard fails the whole repo's qa-gate otherwise)
   - Do not add a post-upload source commit or push; the uploaded bytes must remain bound to the already reviewed and merged source commit
