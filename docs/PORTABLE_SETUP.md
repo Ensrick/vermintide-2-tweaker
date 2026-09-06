@@ -1,8 +1,9 @@
 # Portable Maintainer Setup
 
 This document owns machine-local repository configuration. Build, deploy, and
-upload doctrine remains in `CLAUDE.md`; launcher implementation guidance lives
-in the separately maintained VMBLauncher repository.
+upload doctrine is owned by [PROJECT_STANDARDS.md section 6.6](../PROJECT_STANDARDS.md#66-ship-doctrine-keyed-off-the-mod_version-suffix-canonical-2026-07-01);
+launcher implementation guidance lives in the separately maintained
+VMBLauncher repository.
 
 ## Repository-only work
 
@@ -53,8 +54,9 @@ Launcher resolution is deterministic: `VT2_SHIP_VMB_LAUNCHER` when explicitly
 set, then the invoking worktree, the ProjectRoot recorded in VMBLauncher
 settings, and the primary git worktree. An explicitly configured missing or
 empty launcher is a hard failure; the wrapper does not silently ignore a bad
-override. The launcher is invoked with the exact `--config` path that the
-wrapper temporarily binds.
+override. Launcher configuration isolation follows the section 6.6 owner
+contract: each launcher child receives the same transaction-private `--config`
+bound to the invoking worktree.
 
 If the invoking worktree already has `.vmbrc`, that file wins and is never
 overwritten. Otherwise the wrapper checks `VT2_SHIP_VMBRC`, the configured
@@ -80,20 +82,14 @@ repository at `%APPDATA%\VMBLauncher\settings.json`. Set its ProjectRoot to the
 usual clone directory containing `.vmbrc`. Use `VMBLauncher.exe doctor` to
 validate VMB, SDK, Steam, Workshop, and project paths.
 
-`tools/ship/ship.ps1` does not trust that global ProjectRoot during a ship.
-Multiple git worktrees share the same launcher settings, so the wrapper
-temporarily binds ProjectRoot to the repository containing the invoked script,
-asks VMBLauncher to report the resolved mod folder, and compares the root,
-`MOD_VERSION`, git commit, and `published_id` with that invoking checkout. Any
-mismatch aborts before the canonical launcher build/deploy/publication actions.
-The
-original settings file is restored byte-for-byte in a `finally` block on both
-success and failure. A named OS mutex covers binding, validation, the complete
-launcher action, and restoration so parallel worktree ships cannot race the
-shared file (issue #647). VMBLauncher's final publication boundary additionally
-requires a short-lived receipt whose exact bytes it independently downloads
-from the canonical GitHub release. It then verifies live authorization and the
-byte-exact SDK staging set immediately before invoking `ugc_tool`.
+For shipping from another worktree, do not retarget or restore this shared
+settings file. Canonical ship uses it as discovery input, then creates a
+separate private configuration for the exact invoking checkout. The private
+file, not the shared settings file, is removed during cleanup. See
+[PROJECT_STANDARDS.md section 6.6](../PROJECT_STANDARDS.md#66-ship-doctrine-keyed-off-the-mod_version-suffix-canonical-2026-07-01)
+for the single transaction owner, identity validation, cleanup/recovery, and
+publication-receipt requirements (issues #647/#1180). This setup guide does
+not define an alternative binding or restoration procedure.
 
 Remote hosts are also local settings. Configure `RemoteDeployTargets` in the
 launcher settings and SSH aliases in `~/.ssh/config`; never place hostnames,

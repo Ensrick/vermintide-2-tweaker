@@ -1,6 +1,7 @@
 # check_publication_doctrine.ps1 -- rejects active documentation that teaches
 # direct launcher publication, post-upload source landing, or stale restart
-# guidance. PROJECT_STANDARDS.md section 6.6 is the one owner.
+# guidance, including the setup guide's superseded shared-settings procedure.
+# PROJECT_STANDARDS.md section 6.6 is the one owner.
 
 [CmdletBinding()]
 param(
@@ -30,6 +31,31 @@ function Get-DoctrineViolations {
     $violations = @()
     foreach ($document in $Documents) {
         if (Test-IsHistoricalDocument $document.Path) { continue }
+
+        # #1025: this is a current setup-guide contract, not a global phrase
+        # blacklist. Historical incident/recovery descriptions remain evidence.
+        if ($document.Path.Replace('\', '/') -ieq 'docs/PORTABLE_SETUP.md') {
+            $setup = (@($document.Lines) -join "`n") -replace '\s+', ' '
+            if ($setup -match '(?i)upload doctrine (?:remains|is) in `?CLAUDE\.md') {
+                $violations += "$($document.Path): publication doctrine points to a non-owner"
+            }
+            foreach ($sentence in ($setup -split '(?<=[.!?])\s+')) {
+                # Negated instructions and the private-config replacement are
+                # valid. Check sentence-by-sentence so a correct prohibition
+                # cannot mask a separate affirmative restoration instruction.
+                if ($sentence -match "(?i)\b(?:never|do not|does not|must not|no longer|forbidden)\b") { continue }
+                $shared = '(?:shared|global|original)\s+(?:(?:VMBLauncher|launcher)\s+)?settings(?:\s+file|\.json)?'
+                $mutation = '(?:rewrit\w*|rewrot\w*|restor\w*|retarget\w*)'
+                $sharedMutation = $sentence -match "(?i)\b$shared\b.{0,120}\b$mutation\b" -or
+                    $sentence -match "(?i)\b$mutation\b.{0,120}\b$shared\b"
+                $oldBinding = $sentence -match '(?i)\bwrapper\s+temporarily\s+binds\b' -and
+                    $sentence -notmatch '(?i)\bprivate\b'
+                if ($sharedMutation -or $oldBinding) {
+                    $violations += "$($document.Path): shared launcher settings mutation advice"
+                    break
+                }
+            }
+        }
 
         $lineNumber = 0
         foreach ($line in @($document.Lines)) {
@@ -127,6 +153,50 @@ if ($SelfTest) {
     })
     if ((Get-DoctrineViolations $history).Count -ne 0) {
         throw "historical evidence was scanned as live doctrine"
+    }
+
+    $privateSetup = @([pscustomobject]@{
+        Path = 'docs/PORTABLE_SETUP.md'
+        Lines = @(
+            'Upload doctrine is owned by PROJECT_STANDARDS.md section 6.6.',
+            'Canonical ship never rewrites shared launcher settings.',
+            'Do not retarget or restore the shared settings file.',
+            'Each launcher child receives the same private --config bound to the invoking worktree.',
+            'The private file is removed during cleanup.'
+        )
+    })
+    if ((Get-DoctrineViolations $privateSetup).Count -ne 0) {
+        throw 'private-config setup instructions were rejected'
+    }
+    foreach ($badSettingsAdvice in @(
+        @('The launcher is invoked with the exact --config path that the', 'wrapper temporarily binds.'),
+        @('Multiple git worktrees share the same launcher settings, so the wrapper', 'temporarily binds ProjectRoot to the repository containing the invoked script.'),
+        @('The', 'original settings file is restored byte-for-byte in a finally block on both', 'success and failure.'),
+        @('The wrapper temporarily rewrites the shared launcher settings file.'),
+        @('Canonical ship never rewrites shared launcher settings.', 'The original settings file is restored after success or failure.')
+    )) {
+        $fixture = @([pscustomobject]@{ Path = 'docs/PORTABLE_SETUP.md'; Lines = $badSettingsAdvice })
+        if ((Get-DoctrineViolations $fixture) -notcontains
+            'docs/PORTABLE_SETUP.md: shared launcher settings mutation advice') {
+            throw "planted shared-settings advice was not rejected: $($badSettingsAdvice -join ' ')"
+        }
+    }
+    $wrongOwner = @([pscustomobject]@{
+        Path = 'docs/PORTABLE_SETUP.md'
+        Lines = @('Build, deploy, and upload doctrine remains in `CLAUDE.md`.')
+    })
+    if ((Get-DoctrineViolations $wrongOwner) -notcontains
+        'docs/PORTABLE_SETUP.md: publication doctrine points to a non-owner') {
+        throw 'planted non-owner setup pointer was not rejected'
+    }
+    foreach ($referencePath in @('mod/CHANGELOG.md', 'docs/BUG_CLASSES.md', '_archive/PORTABLE_SETUP.md')) {
+        $reference = @([pscustomobject]@{
+            Path = $referencePath
+            Lines = @('The original settings file is restored byte-for-byte.')
+        })
+        if ((Get-DoctrineViolations $reference).Count -ne 0) {
+            throw "setup-only guard leaked into reference evidence: $referencePath"
+        }
     }
 
     if (-not $Quiet) {
