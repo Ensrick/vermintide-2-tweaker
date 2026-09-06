@@ -34,6 +34,7 @@ param(
     [string[]]$Mods,
     [string]$PublicationAuthorizationJson,
     [string]$PublicationReceiptOutputPath,
+    [hashtable]$SourcePinHandoff,
     [string]$LauncherPath,
     [string]$LauncherSource,
     [string]$LauncherApprovalAnchor,
@@ -72,6 +73,8 @@ if (-not (Test-Path -LiteralPath $publicationSnapshotHelpers -PathType Leaf)) {
     throw "Publication snapshot helpers not found at $publicationSnapshotHelpers."
 }
 . $publicationSnapshotHelpers
+$pinFinalizationHelpers = Join-Path $repoRoot 'tools\ship\exception-pin-finalization.ps1'
+. $pinFinalizationHelpers
 $githubReleaseHelpers = Join-Path $PSScriptRoot 'github-release-api.ps1'
 if (-not (Test-Path -LiteralPath $githubReleaseHelpers)) {
     throw "GitHub release helpers not found at $githubReleaseHelpers."
@@ -798,6 +801,28 @@ foreach ($snapshot in $assetSnapshots) {
 }
 
 Write-Host ""
+# Independently derive the narrow handoff identity from this publisher's
+# source-qualified staged row, not from caller intent or a receipt file. This
+# remains unarmed through DryRun, HTTP ambiguity and unpublished drafts.
+$publisherPinContext = $null
+if ($null -ne $SourcePinHandoff) {
+    if ($receiptInputs.Count -ne 1) { throw 'Source-pin handoff requires exactly one staged mod.' }
+    $pinInput = $receiptInputs[0]
+    $pinRows = @($manifestMods | Where-Object { [string]$_.mod_id -ceq [string]$pinInput.ModId })
+    if ($pinRows.Count -ne 1 -or [string]$pinRows[0].source_commit -cne $sourceCommit -or
+        [string]$pinRows[0].version -cne [string]$pinInput.Version) {
+        throw 'Source-pin handoff has no exact publisher-owned staged manifest entry.'
+    }
+    if ([string]$pinRows[0].workshop_id -cne '0') {
+        $pinTree = @(git -C $repoRoot rev-parse "$sourceCommit`:$($pinInput.Folder)/scripts/mods" 2>$null)
+        if ($LASTEXITCODE -ne 0 -or $pinTree.Count -ne 1) { throw 'Publisher cannot resolve the source-qualified pin tree.' }
+        $publisherPinContext = New-VtPublishedPinContext -RepoRoot $repoRoot -Mod $pinInput.Folder -ModId $pinInput.ModId `
+            -SourceCommit $sourceCommit -ModTree ([string]$pinTree[0]).Trim() -Version $pinInput.Version `
+            -PublishedId ([string]$pinRows[0].workshop_id) -ReleaseTag $Tag
+    }
+    Assert-VtPinPublicationHandoff -Handoff $SourcePinHandoff -ExpectedJson $publisherPinContext
+}
+
 Write-Host "Manifest:" -ForegroundColor Green
 Get-Content $manifestPath
 
@@ -826,9 +851,11 @@ function Copy-PublicationReceiptOutput {
 if ($filterActive -and $releaseExists) {
     # Filtered update of an existing release: replace ONLY the staged zip(s) +
     # the merged manifest. Sibling assets on the release are never touched.
+    Assert-VtPublishedReleaseIdentity -Release $targetRelease -Tag $Tag
     Write-Host ""
     Write-Host "==> GitHub release-id upload/clobber $($targetRelease.id) ($($assetPaths.Count) asset(s))" -ForegroundColor Cyan
     $null = Publish-GitHubReleaseAssetsById -Repo $ghRepo -Release $targetRelease -AssetSnapshots $assetSnapshots
+    if ($null -ne $SourcePinHandoff) { $SourcePinHandoff.PublishedJson = $publisherPinContext }
     Copy-PublicationReceiptOutput
     Write-Host ""
     Write-Host "Release updated: https://github.com/$ghRepo/releases/tag/$Tag" -ForegroundColor Green
@@ -840,7 +867,9 @@ Write-Host "==> GitHub draft release create $Tag" -ForegroundColor Cyan
 $notes = "Pre-built mod bundles for vt2-mod-updater.`n`nUpdater app: https://github.com/Ensrick/vt2-mod-updater/releases/latest"
 $newRelease = New-GitHubDraftRelease -Repo $ghRepo -Tag $Tag -Title "Mod bundles $Tag" -Notes $notes
 $null = Publish-GitHubReleaseAssetsById -Repo $ghRepo -Release $newRelease -AssetSnapshots $assetSnapshots
-$null = Publish-GitHubDraftRelease -Repo $ghRepo -Release $newRelease
+$publishedRelease = Publish-GitHubDraftRelease -Repo $ghRepo -Release $newRelease
+Assert-VtPublishedReleaseIdentity -Release $publishedRelease -Tag $Tag
+if ($null -ne $SourcePinHandoff) { $SourcePinHandoff.PublishedJson = $publisherPinContext }
 Copy-PublicationReceiptOutput
 
 Write-Host ""

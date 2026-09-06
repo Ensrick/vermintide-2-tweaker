@@ -3663,8 +3663,13 @@ while preserving that failure, the version claim, and the readiness prohibition.
 Use atomic replacement and persisted-byte readback; carry the resulting source
 metadata through protected PR review. Never infer Workshop transfer from it.
 See `PROJECT_STANDARDS.md` section 6.6 and
-`qa/check_publication_pin_finalization.ps1`. Publisher-before-handoff failures
-and hard owner death remain separate recovery boundaries under #1328.
+`qa/check_publication_pin_finalization.ps1` and
+`qa/check_publication_pin_handoff.ps1`. A private reference holder carries only
+the publisher's independently derived, confirmed published-release identity
+before receipt copying; caller intent and uploaded-but-unpublished drafts never
+arm it. The ship import `finally` must do no fallible validation or reporting.
+Ambiguous HTTP outcomes and hard owner death still require durable authenticated
+recovery under #1328.
 
 ## 88. Imported asset basis is mistaken for an attachment-pose defect
 

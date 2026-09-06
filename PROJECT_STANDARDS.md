@@ -1195,17 +1195,22 @@ release-ID mutation; removing or narrowing that transaction revives lost
 manifest updates.
 
 **Partial publication does not mean test-ready (#1328/#1548).** After the
-publisher returns its exact hosted receipt, ship retains an immutable in-memory
-GitHub source-pin context. On a later authorization/upload/verification failure,
+publisher confirms the exact published GitHub release, it arms an immutable
+in-memory source-pin context in a private shared holder before copying its
+hosted receipt to ship. The publisher independently matches the prepared
+identity to its source-qualified staged entry; intent, an ambiguous HTTP result,
+and an unpublished draft do not arm it. Ship imports that outcome even when
+receipt copying, reporting, or publisher cleanup fails. On those failures or a
+later authorization/upload/verification failure,
 outer finalization drains authenticated descendants and reconciles consumed
 exception pins before releasing the machine transaction. The original failure
 and version claim remain; no labels, cards, or readiness banner are emitted.
 Writes are staged beside the authority file, replaced atomically, and read back.
 Carry the resulting metadata-only change through a reviewed PR. The successful
 path invokes the same helper before constructing live-test authority.
-This bounded repair does not cover a publisher failure before receipt handoff
-or hard process death; neither may be inferred successful. Those recovery
-boundaries remain tracked under #1328. GitHub provenance alone never confirms
+This bounded repair does not cover an ambiguous server outcome or hard process
+death; neither may be inferred successful. Durable authenticated recovery
+remains tracked under #1328. GitHub provenance alone never confirms
 Workshop transfer or permits refreshing held test cards.
 
 **Pinned-card refresh is stream-specific, not load-tag-specific.** A runtime

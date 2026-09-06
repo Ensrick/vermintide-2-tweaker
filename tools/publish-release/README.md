@@ -69,6 +69,18 @@ by one machine-global mutex. Per-mod claims do not serialize two different mods,
 so this prevents concurrent ships from reading the same daily manifest and
 silently erasing one another's new entry.
 
+The private `SourcePinHandoff` reference is source-provenance bookkeeping, not
+an operator option or upload receipt. Before mutation the publisher independently
+matches its prepared identity to the single staged mod and exact source tree.
+After the existing published release accepts the immutable assets, or a new
+draft is confirmed published, it records that identity before copying the
+receipt or reporting success. Ship consumes the reference even on publisher
+exceptions and performs any pin reconciliation under its still-held owning
+transaction. Bootstrap, DryRun, ambiguous HTTP outcomes and unpublished drafts
+never arm the reference. This closes receipt-copy/cleanup failure, not hard
+process death; #1328 still owns durable recovery. GitHub provenance alone cannot
+release claims, refresh test cards, or certify Workshop transfer.
+
 First Workshop item creation stays inside canonical ship with a distinct
 `workshop_bootstrap` receipt over the exact reviewed commit carrying
 `published_id = 0L`. VMBLauncher keeps content files/directories, preview, and
