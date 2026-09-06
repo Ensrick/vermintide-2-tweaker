@@ -27,12 +27,22 @@ first, then captures the exact materialized output under restrictive handles
 and proves it against the committed schema-3 source/output/policy/builder map.
 Missing, forged, stale, emergency, or contradictory evidence fails closed.
 
-Receipt authority is publication-only. Its hosted Workshop receipt carries the
+Receipt-authority publication uses a hosted Workshop receipt carrying the
 committed build-receipt proof and exact output map without fabricating bundle
 Git blobs; VMBLauncher must advertise `receipt-authority-publication-v1` and
 independently reconstruct the proof before comparing locked SDK-staging bytes.
-Local/remote deployment, updater/recovery consumption, and first-upload
-bootstrap remain disabled for receipt authority. The publisher may emit the
+The separate canonical-ship LOCAL deployment boundary requires `-NoRemote`,
+an existing subscription, approved launcher 0.6.2 or newer advertising
+`receipt-authority-local-deploy-v1`, and a separately hosted schema-3
+`local_deploy` receipt named `deployment-receipt-<folder>.json`. The helper
+`tools/ship/local-deployment-receipt.ps1` uses the same owning ship lease and
+subordinate GitHub release mutex, validates an existing published release,
+uploads only that scoped asset, and independently reads back exact bytes
+before the launcher accepts it. No manifest, ZIP, publication receipt, or pin
+is changed by this step; it cannot create or publish a new release. Missing
+subscriptions remain publication-only. Remote deployment, updater/recovery
+consumption, and first-upload bootstrap remain disabled for receipt authority.
+The publisher may emit the
 producer-only durable recovery record described below; it grants no restore
 authority. Tracked publication retains its established Git-blob receipt path.
 

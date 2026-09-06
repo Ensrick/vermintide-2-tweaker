@@ -10,7 +10,8 @@ function Test-VmbLauncherPublicationCapabilityOutput {
     param(
         [string[]]$Lines,
         [version]$MinimumVersion = ([version]'0.6.0'),
-        [switch]$RequireReceiptAuthority
+        [switch]$RequireReceiptAuthority,
+        [switch]$RequireLocalDeployment
     )
 
     $values = @{}
@@ -44,6 +45,17 @@ function Test-VmbLauncherPublicationCapabilityOutput {
         $capabilities -notcontains 'receipt-authority-publication-v1') {
         $problems += 'missing capability receipt-authority-publication-v1'
     }
+    if ($RequireLocalDeployment) {
+        if ($null -eq $reported -or $reported -lt [version]'0.6.2') {
+            $problems += 'receipt local deployment requires approved launcher 0.6.2 or newer'
+        }
+        if ("$($values.deployment_receipt_schema)" -cne '3') {
+            $problems += 'deployment_receipt_schema must be 3'
+        }
+        if ($capabilities -cnotcontains 'receipt-authority-local-deploy-v1') {
+            $problems += 'missing capability receipt-authority-local-deploy-v1'
+        }
+    }
     return [pscustomobject]@{
         Ok = ($problems.Count -eq 0)
         Version = $reported
@@ -57,7 +69,8 @@ function Assert-VmbLauncherPublicationCapability {
         [Parameter(Mandatory = $true)]$LauncherExecutableLease,
         [Parameter(Mandatory = $true)][string]$WorkingDirectory,
         [version]$MinimumVersion = ([version]'0.6.0'),
-        [switch]$RequireReceiptAuthority
+        [switch]$RequireReceiptAuthority,
+        [switch]$RequireLocalDeployment
     )
 
     $run = Invoke-VmbLauncherProcess `
@@ -69,7 +82,7 @@ function Assert-VmbLauncherPublicationCapability {
     }
     $verdict = Test-VmbLauncherPublicationCapabilityOutput `
         -Lines @($run.Lines) -MinimumVersion $MinimumVersion `
-        -RequireReceiptAuthority:$RequireReceiptAuthority
+        -RequireReceiptAuthority:$RequireReceiptAuthority -RequireLocalDeployment:$RequireLocalDeployment
     if (-not $verdict.Ok) {
         throw "VMBLauncher publication capability probe failed: $($verdict.Problems -join '; '). " +
             'Land/install a launcher with every required publication capability before shipping.'
@@ -499,7 +512,8 @@ function New-WorkshopPublicationReceipt {
         [Parameter(Mandatory = $true)][object]$PublicationSnapshot,
         [object]$AuthorizationEvidence,
         [datetime]$IssuedAtUtc = ([datetime]::UtcNow),
-        [timespan]$Lifetime = ([timespan]::FromMinutes(5))
+        [timespan]$Lifetime = ([timespan]::FromMinutes(5)),
+        [switch]$LocalDeployment
     )
 
     if ($Lifetime.TotalSeconds -le 0 -or $Lifetime.TotalMinutes -gt 5) {
@@ -508,9 +522,15 @@ function New-WorkshopPublicationReceipt {
     if ($Repository -ne 'Ensrick/vermintide-2-tweaker') {
         throw "Workshop publication receipt repository must be Ensrick/vermintide-2-tweaker."
     }
+    $assetPrefix = if ($LocalDeployment) { 'deployment-receipt-' } else { 'publication-receipt-' }
     if ([string]::IsNullOrWhiteSpace($ReleaseTag) -or
-        $ReceiptAssetName -cnotmatch '^publication-receipt-[a-z0-9_-]+\.json$') {
+        $ReceiptAssetName -cnotmatch ('\A' + $assetPrefix + '[a-z0-9_-]+\.json\z')) {
         throw 'Workshop publication receipt requires an exact release tag and canonical asset name.'
+    }
+    if ($LocalDeployment -and ($Mod -cnotmatch '\A[a-z][a-z0-9_]*\z' -or
+        $ReceiptAssetName -cne "deployment-receipt-$Mod.json" -or
+        $ReleaseTag -cnotmatch '\Amods-[0-9]{4}-[0-9]{2}-[0-9]{2}\z')) {
+        throw 'Local deployment requires exact canonical mod/asset/release coordinates.'
     }
     if (-not $AuthorizationEvidence -or [string]$AuthorizationEvidence.mode -ne 'hosted_qa') {
         throw 'Workshop publication receipt requires independently queried hosted_qa evidence.'
@@ -601,6 +621,13 @@ function New-WorkshopPublicationReceipt {
     if ($authority -ceq 'receipt' -and "$($snapshot.PublishedId)" -eq '0') {
         throw 'Receipt authority does not support first-upload bootstrap.'
     }
+    if ($LocalDeployment) {
+        [uint64]$deploymentId = 0
+        if ($authority -cne 'receipt' -or "$($snapshot.PublishedId)" -cnotmatch '\A[1-9][0-9]*\z' -or
+            -not [uint64]::TryParse("$($snapshot.PublishedId)", [ref]$deploymentId)) {
+            throw 'Local deployment receipt requires receipt authority and a positive canonical Workshop ID.'
+        }
+    }
     if ("$($snapshot.Version)" -ne "$Version") {
         throw "Receipt version '$Version' does not match source-commit MOD_VERSION '$($snapshot.Version)'."
     }
@@ -609,7 +636,9 @@ function New-WorkshopPublicationReceipt {
 
     $result = [ordered]@{
         schema = 3
-        purpose = if ("$($snapshot.PublishedId)" -eq '0') {
+        purpose = if ($LocalDeployment) {
+            'local_deploy'
+        } elseif ("$($snapshot.PublishedId)" -eq '0') {
             'workshop_bootstrap'
         } else {
             'workshop_upload'

@@ -221,7 +221,8 @@ try {
         "$($firstUploadReceipt.item_cfg_git_blob)" -match '^[0-9a-f]{40}$') 'first-upload receipt keeps exact blob authority and uses the constrained bootstrap purpose'
 }
 finally {
-    if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Recurse -Force }
+    . (Join-Path $PSScriptRoot '_test_fixtures/publication_handoff_fixture.ps1')
+    Remove-VtPublicationHandoffFixtureDirectory -Path $temp -ParentRoot ([IO.Path]::GetTempPath()) -LeafPattern '\Avt2-publication-receipt-[0-9a-f]{32}\z'
 }
 
 if ($script:failed -gt 0) {

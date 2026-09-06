@@ -112,3 +112,19 @@ publication, GUI publication, the SDK uploader, SSH, or SCP directly.
 When migrating an existing checkout, preserve the old `.vmbrc` before updating,
 then restore it as the ignored local file. Existing `%APPDATA%` launcher settings
 and remote targets require no migration.
+
+### Receipt-local deployment rollout and builder identity
+
+All current inventory rows remain `tracked`; the receipt-local branch is dormant
+until a separately reviewed authority migration. The approved side-by-side
+launcher 0.6.2 does not replace the existing default 0.6.1 installation. A
+schema-3 build receipt binds the exact builder informational version: pending
+0.6.1 claims/artifacts must finish their existing publications before any
+mutating 0.6.2 operation can introduce a newer-format local deployment journal.
+Do not reinterpret or rewrite those receipts, mix launchers across one ship, or
+replace the global default to bypass a builder mismatch. After serialization,
+a new claimed build may select the approved side-by-side executable through the
+existing explicit launcher override, then follow the normal BuildOnly/review/
+merge/publication sequence. Source-only integration requires none of those
+mutations. See PROJECT_STANDARDS section 6.6 for the separate hosted
+`local_deploy` receipt and mandatory `-NoRemote` policy.
