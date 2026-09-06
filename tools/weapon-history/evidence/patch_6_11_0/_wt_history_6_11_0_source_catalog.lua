@@ -1,9 +1,11 @@
--- Source-exact metadata for the bounded Patch 6.11.0 Longbow and shared
--- one-handed Hammer/Mace boundary.
+-- Source-exact metadata for the bounded Patch 6.11.0 Longbow, shared
+-- one-handed Hammer/Mace, and Kerillian Swiftbow boundary.
 --
 -- The adjacent evaluator exposes the authored aim_zoom_delay change through
 -- both evaluated Longbow templates. They are one gameplay family and must be
 -- selected atomically so the tutorial clone cannot drift from the normal bow.
+-- The Swiftbow source exports exactly one template whose adjacent delta is the
+-- single ammo_data.max_ammo leaf named by the official patch note.
 return {
     artifacts = {
         _wt_history_snapshot_6_10_0_hammer_priest_rehydrated_generated =
@@ -16,6 +18,10 @@ return {
             "8d1eb9ecc1466a8fa8aed558b74bf4a034cfc57157744ae482caadffd58bffa1",
         _wt_history_snapshot_6_10_0_rehydrated_generated =
             "40a209e92700b23f39dea9ec0597a023ad9a78b97415d82baff8b55eaa5c3251",
+        _wt_history_snapshot_6_10_0_swiftbow_rehydrated_generated =
+            "baab8cbfa8b5c1b30a388a35273429fcfbb2717d64f7ed2f557535ef8b75f3e1",
+        _wt_history_snapshot_6_10_0_swiftbow_to_6_11_0_generated =
+            "a68dec5573e30ec9aa23dc42ff9d8da997fa17cd8883249bc42d9c21b19dcaef",
         _wt_history_snapshot_6_10_0_to_6_11_0_generated =
             "87b6f190c7beade349cbcb96a869c8bb43c2eba645849b4811bf670230739841",
     },
@@ -91,5 +97,32 @@ return {
         display_name = "Game Version 6.10.0",
         id = "6_10_0",
         label_key = "wt_history_state_6_10_0",
+    },
+    swiftbow_family = {
+        display_name = "Kerillian's Swiftbow",
+        id = "kerillian_swiftbow",
+        label_key = "wt_history_family_kerillian_swiftbow",
+        setting_id = "wt_history_kerillian_swiftbow",
+        templates = {
+            "shortbow_template_1",
+        },
+    },
+    swiftbow_official_change_id = "P6110-KERILLIAN-SWIFTBOW-MAX-AMMO",
+    swiftbow_official_summary =
+        "Patch 6.11.0 increased the maximum ammunition of Kerillian's Swiftbow.",
+    swiftbow_source = {
+        current_blob = "67e3fa824500fb0129591d0ec698c8a872974623",
+        evidence_stem = "swiftbow",
+        historical_blob = "8e2a9fc4338e456e8f40d4c1d4578d2b2ecd185e",
+        path = "scripts/settings/equipment/weapon_templates/shortbows.lua",
+        post_blob = "67e3fa824500fb0129591d0ec698c8a872974623",
+        templates = {
+            "shortbow_template_1",
+        },
+    },
+    swiftbow_state = {
+        display_name = "Game Version 6.10.0 (Ammunition Only)",
+        id = "6_10_0_swiftbow_ammunition",
+        label_key = "wt_history_state_6_10_0_swiftbow_ammunition",
     },
 }

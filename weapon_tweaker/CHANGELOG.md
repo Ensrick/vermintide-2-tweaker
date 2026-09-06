@@ -1,5 +1,20 @@
 # Weapon Tweaker Changelog
 
+## 0.12.331-beta (2026-09-06) -- Swiftbow ammunition history (#1436)
+
+- Adds **Kerillian's Swiftbow** with **Game Version 6.10.0 (Ammunition
+  Only)**. This bounded preset restores maximum ammunition from 60 to 50;
+  it deliberately leaves the later cleave and headshot changes unchanged.
+- Uses a separate, qualified historical choice without changing Longbow or
+  Hammer/Mace labels. Current remains zero-write, selections require a game
+  restart, and ordinary Weapon Tweaks layer after the historical baseline.
+- Pins the adjacent and current Swiftbow source blobs, both evaluator outputs,
+  and the generated public/Dev catalog. Covers absent/foreign guards,
+  exact-reference restoration, idempotence and independent family selection.
+- Adds no hooks, damage profiles, RPCs, assets or wire identities. #1436
+  remains an incomplete all-weapons history umbrella; this is an ammunition
+  slice, not a full recreation of Game Version 6.10.0 Swiftbow balance.
+
 ## 0.12.330-beta (2026-09-03) -- Patch 6.11.0 Hammer/Mace history and 6.12.1 provenance (#1436, #1529) [not-started]
 
 - Extends **One-handed Hammer/Mace (Kruber, Bardin, and Saltzpyre)** with

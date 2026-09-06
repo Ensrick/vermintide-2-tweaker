@@ -1,13 +1,15 @@
--- Generate the bounded Patch 6.11.0 Longbow and shared Hammer/Mace history
--- catalog (#1436).
+-- Generate the bounded Patch 6.11.0 Longbow, shared Hammer/Mace, and
+-- Kerillian Swiftbow history catalog (#1436).
 --
 -- Usage:
 --   lua5.1 generate_patch_6_11_0_history.lua <source-repo> <evidence-dir> <output.lua>
 --
 -- Both Longbow templates own the same adjacent aim_zoom_delay leaf. The two
 -- Hammer/Mace source files expose the same block-angle and dodge-count leaves
--- across three templates. Each family is emitted atomically over independently
--- rehydrated current guards; later changes elsewhere remain current.
+-- across three templates. The Swiftbow source exports one template whose only
+-- adjacent delta is the ammo_data.max_ammo leaf. Each family is emitted
+-- atomically over independently rehydrated current guards; later changes
+-- elsewhere remain current.
 
 local source_repo = assert(arg[1], "source repository path required")
 local evidence_dir = assert(arg[2], "evidence directory required")
@@ -187,6 +189,56 @@ local function validate_hammer_snapshot(snapshot, rehydrated, catalog, source)
     return operations
 end
 
+local swiftbow_path = { "ammo_data", "max_ammo" }
+local swiftbow_historical_value = 50
+local swiftbow_current_value = 60
+
+local function validate_swiftbow_snapshot(snapshot, rehydrated, catalog, source)
+    exact_keys(snapshot, { "new_revision", "old_revision", "records" },
+        rehydrated and "rehydrated Swiftbow snapshot"
+            or "adjacent Swiftbow snapshot")
+    assert(snapshot.old_revision == catalog.boundary.historical_revision,
+        "Swiftbow historical revision drift")
+    assert(snapshot.new_revision == catalog.boundary.post_revision,
+        "Swiftbow boundary revision drift")
+    assert(array_length(snapshot.records) == #source.templates,
+        "Swiftbow snapshot record budget drift")
+    local operations = {}
+    for index, expected_template in ipairs(source.templates) do
+        local record = snapshot.records[index]
+        exact_keys(record, { "ops", "source_path", "template", "unsupported" },
+            "Swiftbow snapshot record " .. index)
+        assert(record.source_path == source.path, "Swiftbow source path drift")
+        assert(record.template == expected_template,
+            "Swiftbow template order or identity drift at record " .. index)
+        assert(count_keys(record.unsupported) == 0,
+            "unsupported Swiftbow source delta at record " .. index)
+        assert(array_length(record.ops) == 1,
+            "Swiftbow operation budget drift at record " .. index)
+        local operation = record.ops[1]
+        local operation_keys = rehydrated
+            and { "expected_current", "expected_current_unset", "path", "unset", "value" }
+            or { "path", "unset", "value" }
+        exact_keys(operation, operation_keys, "Swiftbow snapshot operation " .. index)
+        assert(array_length(operation.path) == #swiftbow_path,
+            "Swiftbow operation path length drift at record " .. index)
+        for path_index, key in ipairs(swiftbow_path) do
+            assert(operation.path[path_index] == key,
+                "Swiftbow operation path drift at record " .. index .. "/" .. path_index)
+        end
+        assert(operation.unset == false
+                and operation.value == swiftbow_historical_value,
+            "historical Swiftbow maximum ammunition drift at record " .. index)
+        if rehydrated then
+            assert(operation.expected_current_unset == false
+                    and operation.expected_current == swiftbow_current_value,
+                "current Swiftbow maximum ammunition guard drift at record " .. index)
+        end
+        operations[index] = operation
+    end
+    return operations
+end
+
 local source_catalog = load_data(evidence_dir
     .. "/_wt_history_6_11_0_source_catalog.lua")
 assert(source_catalog.schema == 2, "unsupported Patch 6.11.0 source catalog")
@@ -268,6 +320,64 @@ end
 assert(hammer_template_index == 3 and #hammer_operations == 6,
     "Hammer/Mace emitted operation budget drift")
 
+local swiftbow_source = source_catalog.swiftbow_source
+local swiftbow_state = source_catalog.swiftbow_state
+assert(type(swiftbow_state) == "table"
+        and swiftbow_state.id == "6_10_0_swiftbow_ammunition"
+        and swiftbow_state.label_key == "wt_history_state_6_10_0_swiftbow_ammunition"
+        and swiftbow_state.display_name == "Game Version 6.10.0 (Ammunition Only)",
+    "Swiftbow ammunition-only state identity drift")
+assert(type(swiftbow_source) == "table", "Swiftbow source declaration missing")
+assert(swiftbow_source.evidence_stem == "swiftbow",
+    "Swiftbow evidence stem drift")
+assert(array_length(swiftbow_source.templates) == 1
+        and array_length(source_catalog.swiftbow_family.templates) == 1
+        and swiftbow_source.templates[1]
+            == source_catalog.swiftbow_family.templates[1],
+    "Swiftbow family/source template budget drift")
+assert(git_blob(source_catalog.boundary.historical_revision, swiftbow_source.path)
+        == swiftbow_source.historical_blob,
+    "Swiftbow historical source blob drift")
+assert(git_blob(source_catalog.boundary.post_revision, swiftbow_source.path)
+        == swiftbow_source.post_blob,
+    "Swiftbow post-boundary source blob drift")
+assert(git_blob(source_catalog.current.revision, swiftbow_source.path)
+        == swiftbow_source.current_blob,
+    "Swiftbow current source blob drift")
+local swiftbow_adjacent = load_data(evidence_dir
+    .. "/_wt_history_snapshot_6_10_0_" .. swiftbow_source.evidence_stem
+    .. "_to_6_11_0_generated.lua")
+local swiftbow_rehydrated = load_data(evidence_dir
+    .. "/_wt_history_snapshot_6_10_0_" .. swiftbow_source.evidence_stem
+    .. "_rehydrated_generated.lua")
+validate_swiftbow_snapshot(swiftbow_adjacent, false, source_catalog,
+    swiftbow_source)
+local swiftbow_evaluated = validate_swiftbow_snapshot(swiftbow_rehydrated, true,
+    source_catalog, swiftbow_source)
+local swiftbow_operations = {}
+for template_index, template in ipairs(swiftbow_source.templates) do
+    local operation = swiftbow_evaluated[template_index]
+    swiftbow_operations[template_index] = {
+        change_class = "official_weapon_balance",
+        current_source_blob = swiftbow_source.current_blob,
+        expected_current = operation.expected_current,
+        expected_present = true,
+        family_id = source_catalog.swiftbow_family.id,
+        official_change_id = source_catalog.swiftbow_official_change_id,
+        official_summary = source_catalog.swiftbow_official_summary,
+        path = operation.path,
+        result = operation.value,
+        result_present = true,
+        root = "Weapons",
+        source_blob = swiftbow_source.historical_blob,
+        source_path = swiftbow_source.path,
+        source_revision = source_catalog.boundary.historical_revision,
+        state_id = swiftbow_state.id,
+        template = template,
+    }
+end
+assert(#swiftbow_operations == 1, "Swiftbow emitted operation budget drift")
+
 local family = source_catalog.family
 local state = source_catalog.state
 local operations = {}
@@ -294,8 +404,9 @@ for index, template in ipairs(family.templates) do
 end
 
 local hammer_family = source_catalog.hammer_family
+local swiftbow_family = source_catalog.swiftbow_family
 local catalog = {
-    catalog_id = "wt_history_patch_6_11_0_v2",
+    catalog_id = "wt_history_patch_6_11_0_v3",
     current_id = "current",
     current_source = {
         display_name = "Current (Game Version " .. current_anchor.game_version .. ")",
@@ -334,9 +445,24 @@ local catalog = {
             },
             templates = hammer_family.templates,
         },
+        {
+            display_name = swiftbow_family.display_name,
+            id = swiftbow_family.id,
+            label_key = swiftbow_family.label_key,
+            setting_id = swiftbow_family.setting_id,
+            state_order = { swiftbow_state.id },
+            states = {
+                [swiftbow_state.id] = {
+                    direct_profile_names = {},
+                    operations = swiftbow_operations,
+                    profile_names = {},
+                },
+            },
+            templates = swiftbow_family.templates,
+        },
     },
     generation = {
-        adjacent_operation_count = 8,
+        adjacent_operation_count = 9,
         global_operations = 0,
         profile_route_count = 0,
         unsupported_count = 0,
@@ -344,6 +470,13 @@ local catalog = {
     profile_specs = {},
     schema = 2,
     states = {
+        [swiftbow_state.id] = {
+            change_class = "official_weapon_balance",
+            display_name = swiftbow_state.display_name,
+            label_key = swiftbow_state.label_key,
+            official_patch_notes = source_catalog.official_patch_notes,
+            source_revision = source_catalog.boundary.historical_revision,
+        },
         [state.id] = {
             change_class = "official_weapon_balance",
             display_name = state.display_name,
@@ -405,4 +538,4 @@ file:write("-- AUTO-GENERATED by tools/weapon-history/generate_patch_6_11_0_hist
 file:write("return ", serialize(catalog), "\n")
 file:close()
 
-print("generated " .. output_path .. " families=2 operations=8 profiles=0 globals=0")
+print("generated " .. output_path .. " families=3 operations=9 profiles=0 globals=0")

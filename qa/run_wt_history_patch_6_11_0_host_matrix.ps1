@@ -1,7 +1,7 @@
 # Blocking dual-host provenance gate for issue #1436's Patch 6.11.0 Kruber
-# Longbow and shared one-handed Hammer/Mace slices. Both supported PowerShell
-# hosts independently validate all three source files, five template guards,
-# and byte-exact catalog reproduction.
+# Longbow, shared one-handed Hammer/Mace, and Kerillian Swiftbow slices. Both
+# supported PowerShell hosts independently validate all four source files, six
+# template guards, and byte-exact catalog reproduction.
 
 [CmdletBinding()]
 param(

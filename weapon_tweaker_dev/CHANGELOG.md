@@ -1,5 +1,17 @@
 # Weapon Tweaker Changelog
 
+## 0.12.332-dev (2026-09-06) -- mirror Swiftbow ammunition history (#1436)
+
+- Mirrors public beta `0.12.331`: **Kerillian's Swiftbow** gains **Game
+  Version 6.10.0 (Ammunition Only)**, restoring maximum ammunition from 60
+  to 50 without reverting the later cleave/headshot balance changes.
+- Preserves Current's zero-write default, restart-only selection, guarded
+  apply/restore, exact identities, all other historical families and the
+  established Dev tuning/diagnostic overlay.
+- Public and Dev use identical source-proven catalogs and completeness
+  ledgers. No hooks, profiles, RPCs, assets or wire identities are added.
+- #1436 remains incomplete; this is one explicitly qualified ammunition slice.
+
 ## 0.12.331-dev (2026-09-03) -- mirror Hammer/Mace history and 6.12.1 provenance (#1436, #1529) [not-started]
 
 - Mirrors public beta `0.12.330`: **One-handed Hammer/Mace (Kruber, Bardin,
