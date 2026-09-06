@@ -133,6 +133,46 @@ return function(H, repo_root)
 		H.equal(malformed_live.power_level, 300)
     end)
 
+	H.test("CWV CIM owner probe preserves nullable argument count", function()
+		local reads = 0
+		local owner = { _cim_get_craft = function(id)
+			reads = reads + 1
+			return id == "owned" and {} or nil
+		end }
+		H.equal(helper.owner_probe()("owned"), false)
+		H.equal(helper.owner_probe(nil, nil)("owned"), false)
+		H.equal(helper.owner_probe(nil, owner)("owned"), true)
+		H.equal(helper.owner_probe(nil, nil, owner, nil)("owned"), true)
+		H.equal(helper.owner_probe({}, nil, owner)("unowned"), nil)
+		H.equal(reads, 3)
+	end)
+
+	H.test("CWV present owner without a readable getter is indeterminate", function()
+		local healthy = { _cim_get_craft = function(id)
+			return id == "owned" and {} or nil
+		end }
+		local inaccessible = setmetatable({}, { __index = function() error("getter lookup failed") end })
+		for _, owner in ipairs({ {}, { _cim_get_craft = 17 }, inaccessible, false, 17 }) do
+			local probe = helper.owner_probe(nil, owner)
+			H.equal(probe("owned"), nil)
+			H.equal(helper.blacksmith_seed_id({ item_key = "cwv_one" }, probe), nil)
+			H.equal(helper.should_remove("exact", { exact = true }, probe), false)
+			H.equal(helper.owner_probe(owner, healthy)("unowned"), nil)
+			H.equal(helper.owner_probe(healthy, owner)("unowned"), nil)
+			H.equal(helper.owner_probe(owner, healthy)("owned"), true)
+			H.equal(helper.owner_probe(healthy, owner)("owned"), true)
+		end
+	end)
+
+	H.test("CWV migration requires explicit unowned evidence", function()
+		local legacy = { exact = true }
+		H.equal(helper.should_remove("exact", legacy, function() return false end), true)
+		H.equal(helper.should_remove("exact", legacy, function() return nil end), false)
+		H.equal(helper.should_remove("exact", legacy, function() error("ledger failed") end), false)
+		H.equal(#helper.plan_removals({}, legacy, function() return nil end), 0)
+		H.equal(#helper.plan_removals({}, legacy, function() error("ledger failed") end), 0)
+	end)
+
 	H.test("CWV CIM owner probe fails closed when a store throws", function()
 		local probe = helper.owner_probe({
 			_cim_get_craft = function() error("store unavailable") end,

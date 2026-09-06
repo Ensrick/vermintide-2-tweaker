@@ -189,6 +189,17 @@ Full mechanic + canonical 4-return example: `VMF_RECIPES.md § 2a`.
 Short-form engine bullet: `CLAUDE.md § High-frequency engine quirks`.
 Anti-pattern citation: `PROJECT_STANDARDS.md § 9.9`.
 
+The same tuple trap applies to `ipairs({ ... })`: iteration stops at the first
+nil, even if later arguments are present. In #592, CWV passed `(cim_dev, cim)`
+and silently missed public CIM's exact ownership ledger when Dev was absent.
+Capture `select("#", ...)` and iterate numerically through that count; do not
+use `#owners` as a substitute. Exercise the installed registration/migration
+caller with public-only, Dev-only, both, and neither, not just a dense helper
+fixture. A present owner whose reader is missing, non-function, or throws on
+lookup is unknown, not absent; only nil means no consumer. If an ownership
+reader becomes unavailable after selection, deletion must still require explicit
+unowned evidence; nil/error preserves player state.
+
 ### Related Issues / commits
 - Issue [#36](https://github.com/Ensrick/vermintide-2-tweaker/issues/36) — proposes `qa/check_unpack_safety.ps1` static check
 - weapon_tweaker v0.12.77 (Issue #26 fix introduced the collapse)

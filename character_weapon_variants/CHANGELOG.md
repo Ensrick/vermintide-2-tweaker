@@ -1,5 +1,28 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.537-dev (2026-09-06) -- preserve exact CIM ownership during seed registration (#592) [not-started]
+
+- Fixed the nullable owner tuple skipping public Crafting in Modded whenever
+  CIM Dev was absent. Every supplied owner is now inspected before choosing
+  the single 5-power Blacksmith seed identity.
+- A loaded CIM owner with an unavailable, malformed, or throwing craft reader
+  now means ownership is unknown, not that a saved identity is free. Positive
+  ownership from another readable owner still protects the exact instance.
+- Legacy cleanup requires explicit unowned evidence and preserves instances
+  when a reader becomes unavailable between registration and cleanup.
+- Added real registration/migration-hook coverage for public-only, Dev-only,
+  both, and absent CIM; identity collisions; late reader failure; repeated Keep
+  entry; and unrelated/Weapons of Chaos inventory controls. The existing
+  `issue592_bounded_blacksmith_acquisition` runtime check now covers nullable
+  owner and fail-closed cleanup behavior too.
+- No weapon definition, model, transform, moveset, network payload, or CIM
+  runtime source changes. In-game verification remains pending after deployment.
+
+**DoD:** Acquisition-only repair; G-BLACKSMITH ownership, bounded seed identity,
+and exact saved-instance preservation are covered offline. Existing variant
+presentation and template definitions are unchanged. Deferral: live public-CIM
+forge and restart checks remain required under #592; no runtime completion claim.
+
 ## 0.1.536-dev (2026-08-30) -- reconcile the canonical registrar release (#428) [not-started]
 
 - Reissued the already-reviewed `0.1.535-dev` CWV registrar child under a fresh

@@ -179,6 +179,18 @@ IDs derived from authored `instances` counts, while protecting the selected
 seed and every exact CIM-owned ID. Broad prefix or numeric-range deletion is
 forbidden.
 
+The CIM-owner input is a nullable tuple, not a dense list: registration passes
+Dev then public, and public-only play therefore has a nil first slot.
+`_cwv_acquisition.owner_probe` retains `select("#", ...)` and checks every
+position numerically. When neither owner is present, the probe yields explicit
+`false`. Only nil means an absent consumer: a loaded owner with a missing,
+non-function, or throwing getter (including getter lookup) yields `nil` unless
+another owner positively proves the exact ID. A readable empty owner cannot
+turn another owner's unknown state into unowned evidence.
+Both seed selection and cleanup preserve indeterminate ownership. Cleanup must
+re-read the live ledger and require explicit `false`, because a ledger that was
+readable during seed selection can become unavailable before migration (#592).
+
 Private template clones also require an explicit career-action ownership
 boundary. Vanilla writes canonical career actions onto parsed weapon templates
 before CWV registers (`scripts/settings/equipment/weapons.lua:238-267`), and a
