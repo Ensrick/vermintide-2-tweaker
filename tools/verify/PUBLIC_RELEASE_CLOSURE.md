@@ -42,6 +42,20 @@ All input data must be read-only snapshots (not getters with external effects).
 Completeness, pin, and Public flags require actual Boolean values, not strings,
 numbers, or other truthy objects. Canonical artifact identities must be well
 formed and unique by ModId, directory, and Workshop ID across the snapshot.
+ModId case is preserved, including canonical `WOC`; case-colliding ModIds are
+rejected and an attested lowercase alias cannot select an uppercase target.
+Folder slugs remain lowercase. A source-resolver-authenticated unrelated legacy
+row may carry an explicit `SourceCommit = null` with full `RootTree` and
+`ModTree` provenance (the resolver validates its exact legacy pin). Omitted,
+empty or malformed source identities are not legacy evidence. Such a row never
+needs invented root-bundle metadata: when it predates that metadata, both
+`RootBundle` and `RootBundleSha256` must be present and literally null together.
+One null field, an omitted field, or malformed non-null data is unavailable;
+modern commit-qualified rows retain both required exact root-bundle fields.
+An unrelated legacy row never
+qualifies as the actually verified target: the attestation still requires the
+exact full source commit, and a tree hash cannot substitute for it. This is not
+authority to synthesize legacy rows or bypass the deployed-source resolver.
 
 The attestation is necessarily prepared for an observed closure generation;
 its comment cannot predate that ClosedEvent. A later event adapter must handle
@@ -133,5 +147,7 @@ public/Dev/mixed targets, raw body edits, creation-versus-edit chronology,
 association forgery, scope/artifact mismatch, incomplete snapshots, ambiguous
 pins, duplicate JSON fields, duplicate/new closure generations, historical #1509,
 UTF-8 byte boundaries, comment/authority limits, invalid Unicode/hash containment,
-and retaining closure-time authority across later publication. Run it under
+and retaining closure-time authority across later publication.
+Canonical WOC, case aliases and unrelated source-pinned legacy rows are covered,
+including refusal to borrow a legacy public sibling for a Dev-only pass. Run it under
 PowerShell 7 and Windows PowerShell 5.1. No fixtures call GitHub or mutate issues.
