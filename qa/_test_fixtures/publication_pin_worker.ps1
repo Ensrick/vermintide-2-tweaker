@@ -2,7 +2,7 @@ param(
     [Parameter(Mandatory)][string]$RepoRoot,
     [Parameter(Mandatory)][string]$FixtureRoot,
     [Parameter(Mandatory)][string]$SemaphoreName,
-    [ValidateSet('Exit', 'Throw', 'Success', 'NoPublication', 'ReadFailure', 'WriteFailure', 'WrongOwner', 'WrongRoot', 'Malformed', 'Unresolved', 'DrainFailure', 'WarningsStop', 'ObserverFailure')]
+    [ValidateSet('Exit', 'Throw', 'Success', 'NoPublication', 'ReadFailure', 'WriteFailure', 'WrongOwner', 'WrongRoot', 'Malformed', 'Unresolved', 'DrainFailure', 'WarningsStop', 'ObserverFailure', 'HandoffExistingReceiptFailure', 'HandoffNewReceiptFailure', 'HandoffExistingReportFailure', 'HandoffExistingCleanupFailure', 'HandoffExistingWarningStop')]
     [string]$Mode
 )
 $ErrorActionPreference = 'Stop'
@@ -12,6 +12,9 @@ $lease = $null
 $lock = $null
 $publication = $null
 $attempted = $false
+$isHandoff = $Mode.StartsWith('Handoff', [StringComparison]::Ordinal)
+$holdsForContender = $isHandoff -or $Mode -in @('Exit','Throw','WarningsStop','ObserverFailure')
+$locksPins = $holdsForContender -or $Mode -eq 'Success'
 $path = Join-Path $FixtureRoot 'tools\verify\live_test_contract_exceptions.psd1'
 $events = Join-Path $FixtureRoot 'events.txt'
 function Event([string]$Name) { [IO.File]::AppendAllText($events, $Name + "`n") }
@@ -43,7 +46,7 @@ function Invoke-VtPublishedPinFinalization {
         if ($child -and -not $child.WaitForExit(1000)) { throw 'Residual child survived pin finalization.' }
         if (-not (Test-Path -LiteralPath $TransactionLease.RecordPath)) { throw 'Lease released before pin finalization.' }
         Event 'reconciled-child-dead-lease-held'
-        if ($Mode -in @('Exit','Throw','WarningsStop','ObserverFailure')) {
+        if ($holdsForContender) {
             [IO.File]::WriteAllText((Join-Path $FixtureRoot 'reconciled.txt'), 'ready')
             $deadline = [DateTime]::UtcNow.AddSeconds(15)
             while (-not (Test-Path -LiteralPath (Join-Path $FixtureRoot 'release.txt'))) {
@@ -70,7 +73,7 @@ try {
     $publication = New-VtPublishedPinContext -RepoRoot $FixtureRoot -Mod fixture -ModId fixture `
         -SourceCommit ('c' * 40) -ModTree ('b' * 40) -Version '0.1.2-dev' -PublishedId '12345' -ReleaseTag 'mods-2026-09-06'
     if ($Mode -eq 'NoPublication') { $publication = $null; exit 1 }
-    Event 'published'
+    if ($isHandoff) { Event 'prepared' } else { Event 'published' }
     $before = [IO.File]::ReadAllText($path)
     if (-not $before.Contains(('a' * 40))) { throw 'Pins were written before the uploader clean-root boundary.' }
     Event 'uploader-saw-original-pins'
@@ -78,7 +81,7 @@ try {
     # production drain, not this fixture, owns its termination.
     $childReady = Join-Path $FixtureRoot 'child-locked.txt'
     $command = 'Start-Sleep -Seconds 30'
-    if ($Mode -in @('Exit','Throw','Success','WarningsStop','ObserverFailure')) {
+    if ($locksPins) {
         # No-delete handle makes replacement impossible until real drain kills
         # this process; merely observing death AFTER the write is insufficient.
         $command = '$h=[IO.File]::Open(''' + $path.Replace("'","''") + ''',''Open'',''Read'',''Read'');[IO.File]::WriteAllText(''' +
@@ -87,7 +90,7 @@ try {
     $encoded = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes($command))
     $child = Start-Process -FilePath (Get-Process -Id $PID).Path -ArgumentList @('-NoProfile','-NonInteractive','-EncodedCommand',$encoded) -WindowStyle Hidden -PassThru
     $null = $child.Handle
-    if ($Mode -in @('Exit','Throw','Success','WarningsStop','ObserverFailure')) {
+    if ($locksPins) {
         $deadline = [DateTime]::UtcNow.AddSeconds(10)
         while (-not (Test-Path -LiteralPath $childReady)) {
             if ($child.HasExited -or [DateTime]::UtcNow -gt $deadline) { throw 'Residual child did not acquire pin lock.' }
@@ -95,6 +98,20 @@ try {
         }
     }
     [IO.File]::WriteAllText((Join-Path $FixtureRoot 'child.txt'), [string]$child.Id)
+    if ($isHandoff) {
+        . (Join-Path $RepoRoot 'qa\_test_fixtures\publication_handoff_fixture.ps1')
+        $prepared = $publication
+        $publication = $null
+        $handoffResult = Invoke-VtPublicationHandoffFixture -RepoRoot $RepoRoot -FixtureRoot $FixtureRoot `
+            -PreparedJson $prepared -Case $Mode.Substring('Handoff'.Length)
+        $publication = $handoffResult.ImportedJson
+        if ([string]::IsNullOrWhiteSpace($handoffResult.Error) -or $publication -cne $prepared) {
+            throw 'Publisher handoff did not retain its confirmed identity through the planted failure.'
+        }
+        Event 'published-before-handoff-failure'
+        [IO.File]::WriteAllText((Join-Path $FixtureRoot 'publisher-error.txt'), [string]$handoffResult.Error)
+        throw $handoffResult.Error
+    }
     if ($Mode -eq 'ReadFailure') { $lock = [IO.File]::Open($path, 'Open', 'Read', 'None') }
     if ($Mode -eq 'WriteFailure') { $lock = [IO.File]::Open($path, 'Open', 'Read', 'Read') }
     if ($Mode -eq 'WrongOwner') { $lease.Mod = 'foreign' }

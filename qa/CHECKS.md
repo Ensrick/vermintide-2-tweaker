@@ -737,8 +737,18 @@ Run under both PowerShell 7 and Windows PowerShell 5.1. No VMB, SDK, Steam,
 game, network, deploy, or Workshop operation runs. Successful fixtures delete
 only their own individually verified temporary paths; failures retain evidence.
 `ship.ps1 -SelfTest` also checks actual dispatch ordering and retains the
-three-structure/sibling/historical/array pin-planner matrix. Hard process death
-and publisher-before-handoff recovery are not covered or claimed fixed.
+three-structure/sibling/historical/array pin-planner matrix.
+
+`check_publication_pin_handoff.ps1 -SelfTest` executes the actual publisher's
+preparation/mutation statements and both cleanup blocks with offline API
+fixtures, plus the actual ship reference-import `finally`. It covers existing
+and new releases, actual receipt-file failure, reporting/cleanup failure,
+warning-as-error, wrong identity/holder/staged row, ambiguous HTTP results,
+unpublished drafts, bootstrap and DryRun. The process finalization suite also
+composes those publisher failures with its real lease, locked residual child,
+and competing owner. No test substitutes caller intent for publication proof.
+Hard process death and ambiguous server acceptance still need durable recovery;
+neither is claimed fixed by this in-memory handoff.
 
 ## How to add a check
 

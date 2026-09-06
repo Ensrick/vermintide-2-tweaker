@@ -20,7 +20,9 @@ function Start-Hidden([string[]]$Arguments, [string]$LogPrefix) {
     return $process
 }
 try {
-    foreach ($mode in @('Exit','Throw','Success','NoPublication','ReadFailure','WriteFailure','WrongOwner','WrongRoot','Malformed','Unresolved','DrainFailure','WarningsStop','ObserverFailure')) {
+    foreach ($mode in @('Exit','Throw','Success','NoPublication','ReadFailure','WriteFailure','WrongOwner','WrongRoot','Malformed','Unresolved','DrainFailure','WarningsStop','ObserverFailure','HandoffExistingReceiptFailure','HandoffNewReceiptFailure','HandoffExistingReportFailure','HandoffExistingCleanupFailure','HandoffExistingWarningStop')) {
+        $isHandoff = $mode.StartsWith('Handoff', [StringComparison]::Ordinal)
+        $holdsForContender = $isHandoff -or $mode -in @('Exit','Throw','WarningsStop','ObserverFailure')
         $folder = Join-Path $root $mode
         $parent = Join-Path $folder 'tools\verify'
         [IO.Directory]::CreateDirectory($parent) | Out-Null
@@ -37,7 +39,7 @@ try {
             (Join-Path $PSScriptRoot '_test_fixtures\publication_pin_worker.ps1'),
             '-RepoRoot',$repo,'-FixtureRoot',$folder,'-SemaphoreName',$semaphore,'-Mode',$mode) -LogPrefix (Join-Path $folder 'worker')
         try {
-            if ($mode -in @('Exit','Throw','WarningsStop','ObserverFailure')) {
+            if ($holdsForContender) {
                 $marker = Join-Path $folder 'reconciled.txt'
                 $deadline = [DateTime]::UtcNow.AddSeconds(20)
                 while (-not (Test-Path -LiteralPath $marker)) {
@@ -64,7 +66,7 @@ try {
             Assert ($worker.WaitForExit(20000)) "Worker $mode exceeded bounded wait."
             $expectedCode = if ($mode -eq 'Success') { 0 } else { 1 }
             Assert ($worker.ExitCode -eq $expectedCode) "Worker $mode lost original exit ($($worker.ExitCode))."
-            if ($mode -in @('Exit','Throw','WarningsStop','ObserverFailure')) {
+            if ($holdsForContender) {
                 $retry = Start-Hidden -Arguments $contenderArguments -LogPrefix (Join-Path $folder 'contender-retry')
                 try {
                     Assert ($retry.WaitForExit(15000)) 'Post-release contender exceeded bounded wait.'
@@ -74,7 +76,7 @@ try {
             }
             $actual = [IO.File]::ReadAllText($path)
             $events = [IO.File]::ReadAllText((Join-Path $folder 'events.txt'))
-            if ($mode -in @('Exit','Throw','Success','WarningsStop','ObserverFailure')) {
+            if ($holdsForContender -or $mode -eq 'Success') {
                 Assert ($actual.Contains("fixture='$new'") -and $actual.Contains("sibling='$stale'")) "Worker $mode did not persist only intended pins."
                 Assert ($events.IndexOf('uploader-saw-original-pins') -lt $events.IndexOf('reconciled')) 'Pins changed before uploader clean-root boundary.'
                 Assert ($events.IndexOf('reconciled') -lt $events.IndexOf('lease-released')) 'Pin write ran after lease release.'
@@ -91,6 +93,14 @@ try {
             $stderr = [IO.File]::ReadAllText((Join-Path $folder 'worker.err'))
             Assert (-not ($stdout + $stderr).Contains('TEST BUILD READY')) 'Actual production output announced test readiness.'
             if ($mode -eq 'Throw') { Assert ($stderr.Contains('original-upload-failure')) 'Cleanup replaced the original upload exception.' }
+            if ($isHandoff) {
+                $publisherError = [IO.File]::ReadAllText((Join-Path $folder 'publisher-error.txt'))
+                # PS7 prefixes wrapped message lines with a display-only pipe;
+                # PS5 uses ordinary wrapping. Retain every actual message word.
+                $unwrappedError = $stderr -replace '(?m)^[ \t]*\|[ \t]?', ''
+                Assert (($unwrappedError -replace '\s+', '').Contains(($publisherError -replace '\s+', ''))) 'Ship finalization replaced the original publisher exception.'
+                Assert ($events.Contains('published-before-handoff-failure')) 'Real publisher tail never supplied confirmed provenance.'
+            }
         }
         finally {
             if (-not $worker.HasExited) { $worker.Kill(); $worker.WaitForExit(5000) | Out-Null }

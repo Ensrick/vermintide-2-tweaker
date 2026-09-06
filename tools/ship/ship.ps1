@@ -1609,9 +1609,9 @@ function Invoke-ShipSelfTest {
     $pinAuthorityPos = $selfTxt.IndexOf('$shipDeploymentManifest = Get-VtCardDeploymentManifest', $mainDispatchPos)
     $pinUploadVerifyPos = $selfTxt.IndexOf("`$uploadStatus = 'NONE'", $mainDispatchPos)
     Assert ($pinUploadVerifyPos -ge 0 -and $pinUploadVerifyPos -lt $pinStepPos) "successful-path pin repoint follows Workshop verification"
-    $pinArmPos = $selfTxt.IndexOf('$publishedPinContext = $preparedPinContext', $mainDispatchPos)
+    $pinArmPos = $selfTxt.IndexOf('$publishedPinContext = $sourcePinHandoff.PublishedJson', $mainDispatchPos)
     $pinFinallyPos = $selfTxt.LastIndexOf('if ($publishedPinContext -and -not $pinFinalizationAttempted)')
-    Assert ($receiptHandoffPos -lt $pinArmPos -and $pinArmPos -lt $finalAuthorizationPos) "only successful publisher receipt handoff arms failure finalization"
+    Assert ($receiptHandoffPos -lt $pinArmPos -and $pinArmPos -lt $finalAuthorizationPos) "publisher-owned reference handoff is consumed before final authorization, including on exceptions"
     Assert ($pinFinallyPos -gt $statusLabelPos -and $pinFinallyPos -lt $transactionLeaseExitPos) "outer failure finalization remains inside the owning transaction lease"
     Assert ($selfTxt.IndexOf('Invoke-VtPublishedPinFinalization -PublicationJson $publishedPinContext', $pinFinallyPos) -ge 0) "failure path invokes the same pin helper without entering live-test authority"
     Assert ($pinStepPos -ge 0 -and $pinAuthorityPos -ge 0 -and $pinStepPos -lt $pinAuthorityPos) "pin repoint runs BEFORE the deployed-source authority resolution so this ship's labels already benefit"
@@ -2360,7 +2360,7 @@ $receiptPath = Join-Path ([System.IO.Path]::GetTempPath()) ("vt2-workshop-receip
 $preparedPinContext = $null
 if (-not $isFirstUploadBootstrap) {
     # Prepare exact identity BEFORE mutation; arm only after a successful
-    # publisher handoff. An intent/prepared receipt is not publication proof.
+    # publisher confirmation. An intent/prepared receipt is not publication proof.
     $pinInventory = Import-PowerShellDataFile -LiteralPath (Join-Path $repoRoot 'tools\mod-inventory.psd1')
     $pinEntry = @($pinInventory.Mods | Where-Object { [string]$_.Dir -ceq $Mod })
     if ($pinEntry.Count -ne 1) { Fail "Cannot resolve one exception-pin ModId for $Mod." }
@@ -2375,10 +2375,12 @@ if (-not $isFirstUploadBootstrap) {
 
 Write-Host ""
 Write-Host "==> Recording authorized GitHub release (tag $tag) -- THIS mod only (issues #436/#493/#724)" -ForegroundColor Cyan
+$sourcePinHandoff = @{ PreparedJson = $preparedPinContext; PublishedJson = $null }
 try {
     & $pubScript -Tag $tag -Mods $Mod -SkipBuild `
         -PublicationAuthorizationJson $publicationAuthorizationJson `
         -PublicationReceiptOutputPath $receiptPath `
+        -SourcePinHandoff $sourcePinHandoff `
         -LauncherPath $launcherResolution.Path `
         -LauncherSource $launcherResolution.Source `
         -LauncherApprovalAnchor $launcherResolution.ApprovalAnchor `
@@ -2390,11 +2392,18 @@ catch {
     }
     Fail "publish-release.ps1 failed before Workshop upload: $($_.Exception.Message)"
 }
+finally {
+    # Reference handoff survives receipt-copy/reporting/publisher-cleanup failure.
+    # Do not validate or report here: that could replace the primary exception.
+    $publishedPinContext = $sourcePinHandoff.PublishedJson
+}
 if (-not (Test-Path -LiteralPath $receiptPath -PathType Leaf)) {
     Fail "publish-release.ps1 did not return the exact GitHub-hosted publication receipt. No Workshop upload was attempted."
 }
 $githubStatus = "OK ($tag)"
-$publishedPinContext = $preparedPinContext
+if (-not $isFirstUploadBootstrap -and -not $publishedPinContext) {
+    Fail 'Publisher returned without confirmed GitHub source-pin provenance. No Workshop upload was attempted.'
+}
 
 # The release-recording call can take long enough for default HEAD to move.
 # Close that final window after the record exists and immediately before upload.

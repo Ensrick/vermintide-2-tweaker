@@ -133,7 +133,8 @@ function Get-VtExceptionPinRepointPlan {
 }
 
 # This record is private, in-memory provenance prepared before publication and
-# armed only after the publisher returns its hosted receipt. It is not an
+# armed by the publisher after confirmed GitHub publication, before receipt
+# handoff. It is not an
 # upload receipt, restart journal, or permission to publish/label anything.
 function New-VtPublishedPinContext {
     param(
@@ -187,6 +188,41 @@ function ConvertFrom-VtPublishedPinContext {
 
 function Invoke-VtPinDescendantDrain {
     [VmbTransactionProcessTreeGuard]::TerminateAndWaitForResidualDescendants(10000)
+}
+
+# A private reference shared with the internal publisher, not a CLI receipt or
+# durable journal. Validate before the first remote mutation; after success the
+# publisher performs only one non-throwing field assignment before handoff.
+function Assert-VtPinPublicationHandoff {
+    param(
+        [Parameter(Mandatory)][hashtable]$Handoff,
+        [AllowNull()][string]$ExpectedJson
+    )
+    if ($Handoff.Count -ne 2 -or @($Handoff.Keys) -cnotcontains 'PreparedJson' -or
+        @($Handoff.Keys) -cnotcontains 'PublishedJson' -or $null -ne $Handoff.PublishedJson) {
+        throw 'Publication pin handoff must be a fresh, closed two-field holder.'
+    }
+    if ([string]::IsNullOrEmpty($ExpectedJson)) {
+        if ($null -ne $Handoff.PreparedJson) { throw 'Bootstrap cannot carry publication pin provenance.' }
+        return
+    }
+    if ($Handoff.PreparedJson -isnot [string]) { throw 'Publication pin handoff has no prepared identity.' }
+    $prepared = ConvertFrom-VtPublishedPinContext -Json $Handoff.PreparedJson
+    $expected = ConvertFrom-VtPublishedPinContext -Json $ExpectedJson
+    foreach ($field in $expected.PSObject.Properties.Name) {
+        if ([string]$prepared.$field -cne [string]$expected.$field) {
+            throw "Publication pin handoff disagrees with publisher-owned '$field'."
+        }
+    }
+}
+
+function Assert-VtPublishedReleaseIdentity {
+    param([Parameter(Mandatory)]$Release, [Parameter(Mandatory)][string]$Tag)
+    if ([string]$Release.id -cnotmatch '^[1-9][0-9]*$' -or
+        [string]$Release.tag_name -cne $Tag -or
+        $Release.draft -isnot [bool] -or $Release.draft) {
+        throw 'Source-pin provenance requires the exact confirmed published release, not an absent/ambiguous draft flag.'
+    }
 }
 
 function Write-VtPinFinalizationWarning {
