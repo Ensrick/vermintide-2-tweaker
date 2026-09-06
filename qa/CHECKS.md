@@ -41,6 +41,20 @@ immediately before `ugc_tool`. There is no emergency publication bypass.
 
 ## Gate semantics (run_all exit codes)
 
+`check_workshop_upload_evidence.ps1` guards #1307's upload producer. Its ordinary
+mode checks the installed canonical upload block; `-SelfTest` adds strict exact
+AppID/item/UInt64 grammar, start/outcome/finish-OK ordering, the observed July 13
+Uploaded-then-Timeout negative, bounded unrelated interleaving, and real native
+temporary-file append/rotation/truncation/regrowth/read-sharing/handle cleanup.
+The real ship upload try/catch/finally executes with only launcher/configuration
+boundaries replaced. Both PowerShell hosts run it in the bundle-output host
+matrix. No Steam, launcher, SDK, upload, or existing log mutation occurs. A
+complete read snapshot is required: ordinary growth during final verification
+is conservatively unavailable. NoChange never manufactures a ManifestID;
+bootstrap resolves its new positive ID using the original capture. Durable
+authenticated transfer tuples and live-card consumption remain separate #1307
+work, not established by this plaintext-log producer.
+
 Individual checks follow a **0 / 1 / 2 convention**: `0` = clean, `1` = advisory
 WARNINGS, `2` (or higher) = ERRORS. `run_all.ps1` aggregates these so that:
 
