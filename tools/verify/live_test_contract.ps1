@@ -610,16 +610,7 @@ rawset(_G, "printf", mod.debug)
         Write-Host '[live-test-contract -SelfTest] OK'
     }
     finally {
-        $resolvedBase = [IO.Path]::GetFullPath($tempBase).TrimEnd([char[]]@('\', '/'))
-        $resolvedTarget = [IO.Path]::GetFullPath($tmp)
-        if ($resolvedTarget.StartsWith($resolvedBase + [IO.Path]::DirectorySeparatorChar,
-                [StringComparison]::OrdinalIgnoreCase) -and
-            [IO.Path]::GetFileName($resolvedTarget) -like 'vt2-live-card-contract-*' -and
-            [IO.Directory]::Exists($resolvedTarget)) {
-            foreach ($file in [IO.Directory]::EnumerateFiles($resolvedTarget, '*', [IO.SearchOption]::AllDirectories)) {
-                [IO.File]::SetAttributes($file, [IO.FileAttributes]::Normal)
-            }
-            [IO.Directory]::Delete($resolvedTarget, $true)
-        }
+        Remove-VtSourceProofTemporaryDirectory -Path $tmp `
+            -ExpectedParent $tempBase -NamePrefix 'vt2-live-card-contract-'
     }
 }

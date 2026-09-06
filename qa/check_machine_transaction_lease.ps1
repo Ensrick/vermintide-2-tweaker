@@ -10,6 +10,7 @@ function Invoke-MachineTransactionLeaseSelfTest {
     $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
     $helper = Join-Path $repoRoot 'tools\ship\transaction-lease.ps1'
     . $helper
+    . (Join-Path $repoRoot 'qa\_test_fixtures\publication_handoff_fixture.ps1')
     $worker = Join-Path $PSScriptRoot '_test_fixtures\machine_transaction_worker.ps1'
     $hostPath = (Get-Process -Id $PID).Path
     $temp = Join-Path ([System.IO.Path]::GetTempPath()) ('vt2-transaction-fixture-' + [guid]::NewGuid().ToString('N'))
@@ -323,7 +324,7 @@ function Invoke-MachineTransactionLeaseSelfTest {
         $shipClaimRelease = $shipText.LastIndexOf('& $claimScript -Mod $Mod -Release -Quiet')
         Assert-Fixture ($shipEnter -ge 0 -and $shipEnter -lt $shipLauncher -and $shipExit -gt $shipClaimRelease) 'ship owns one continuous lease across launcher actions, parity, release, upload proof, cards, and claim finalization'
         $publisherEnter = $publisherText.IndexOf('Enter-VmbMachineTransactionLease')
-        $publisherReleaseMutex = $publisherText.IndexOf("'Global\VT2_GitHubReleaseMutation'")
+        $publisherReleaseMutex = $publisherText.IndexOf('Enter-VtGitHubReleaseMutationMutex')
         $publisherBuild = $publisherText.IndexOf('$buildRun = Invoke-VmbLauncherProcess')
         Assert-Fixture ($publisherEnter -ge 0 -and $publisherEnter -lt $publisherReleaseMutex -and $publisherEnter -lt $publisherBuild) 'standalone publisher takes transaction before release mutex and optional launcher build'
         Assert-Fixture ($reproText.IndexOf('Enter-VmbMachineTransactionLease') -lt $reproText.IndexOf('$buildRun = Invoke-VmbLauncherProcess')) 'reproducibility caller takes transaction before leased launcher build'
@@ -693,7 +694,8 @@ function Invoke-MachineTransactionLeaseSelfTest {
             try { if (-not $child.HasExited) { $child.Kill() } } catch { }
             try { $child.Dispose() } catch { }
         }
-        if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Recurse -Force }
+        Remove-VtPublicationHandoffFixtureDirectory -Path $temp -ParentRoot ([IO.Path]::GetTempPath()) `
+            -LeafPattern '^vt2-transaction-fixture-[0-9a-f]{32}$'
     }
 }
 

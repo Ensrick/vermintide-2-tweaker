@@ -80,6 +80,7 @@ if (-not (Test-Path -LiteralPath $githubReleaseHelpers)) {
     throw "GitHub release helpers not found at $githubReleaseHelpers."
 }
 . $githubReleaseHelpers
+. (Join-Path $PSScriptRoot 'release-mutation-lock.ps1')
 $launcherSettings = Join-Path $env:APPDATA 'VMBLauncher\settings.json'
 $configuredProjectRoot = Get-VmbLauncherConfiguredProjectRoot -SettingsPath $launcherSettings
 $primaryWorktreeRoot = Get-VmbLauncherPrimaryWorktreeRoot -RepoRoot $repoRoot
@@ -164,19 +165,8 @@ $releaseTransactionLease = Enter-VmbMachineTransactionLease `
 $releaseMutationMutex = $null
 $releaseMutationLockHeld = $false
 try {
-    $releaseMutationMutex = New-Object System.Threading.Mutex(
-        $false,
-        'Global\VT2_GitHubReleaseMutation')
-    try {
-        $releaseMutationLockHeld = $releaseMutationMutex.WaitOne(
-            [TimeSpan]::FromMinutes(15))
-    }
-    catch [System.Threading.AbandonedMutexException] {
-        $releaseMutationLockHeld = $true
-    }
-    if (-not $releaseMutationLockHeld) {
-        throw 'Timed out waiting for the machine-global GitHub release mutation lock. Another ship is still preparing or updating the shared release manifest.'
-    }
+    $releaseMutationMutex = Enter-VtGitHubReleaseMutationMutex
+    $releaseMutationLockHeld = $true
     Write-Host 'GitHub release mutation lock: acquired' -ForegroundColor DarkGray
 
 # The release set is source-commit data. A mutable worktree inventory must not

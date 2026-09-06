@@ -681,16 +681,8 @@ function Get-VtDeployedLuaDocuments {
         }
         return @($documents.ToArray())
     }finally{
-        $resolvedBase=[IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd([char[]]@('\','/'))
-        $resolvedTarget=[IO.Path]::GetFullPath($temporaryRoot)
-        if($resolvedTarget.StartsWith($resolvedBase+[IO.Path]::DirectorySeparatorChar,[StringComparison]::OrdinalIgnoreCase)-and
-           [IO.Path]::GetFileName($resolvedTarget) -like 'vt-card-source-*' -and
-           [IO.Directory]::Exists($resolvedTarget)){
-            foreach($file in [IO.Directory]::EnumerateFiles($resolvedTarget,'*',[IO.SearchOption]::AllDirectories)){
-                [IO.File]::SetAttributes($file,[IO.FileAttributes]::Normal)
-            }
-            [IO.Directory]::Delete($resolvedTarget,$true)
-        }
+        Remove-VtSourceProofTemporaryDirectory -Path $temporaryRoot `
+            -ExpectedParent ([IO.Path]::GetTempPath()) -NamePrefix 'vt-card-source-'
     }
 }
 
@@ -1455,9 +1447,24 @@ function Get-VtCardDeploymentManifest {
     if (-not (Get-Command gh -ErrorAction SilentlyContinue)) { throw 'GitHub CLI (gh) is required to load the authoritative deployment manifest.' }
     $releaseRaw = Invoke-VtAuthorityGhRead -Arguments @('api',"repos/$Repository/releases/latest") -Description 'Unable to read latest GitHub release'
     $release = $releaseRaw | ConvertFrom-Json
+    if (($release.id -isnot [int] -and $release.id -isnot [long]) -or $release.id -le 0) {
+        throw 'Latest release must have a positive numeric id.'
+    }
+    if ([string]$release.tag_name -cnotmatch '^mods-[0-9]{4}-[0-9]{2}-[0-9]{2}$') {
+        throw 'Latest release must have an exact mods-YYYY-MM-DD tag.'
+    }
+    if ($release.draft -isnot [bool] -or $release.draft) {
+        throw 'Latest release must explicitly be published (boolean draft=false).'
+    }
     $assets = @($release.assets)
-    $manifestAssets = @($assets | Where-Object { [string]$_.name -eq 'manifest.json' })
-    if ($manifestAssets.Count -ne 1) { throw "Latest release '$($release.tag_name)' must contain exactly one manifest.json asset." }
+    $manifestAssets = @($assets | Where-Object { [string]$_.name -ieq 'manifest.json' })
+    if ($manifestAssets.Count -ne 1 -or [string]$manifestAssets[0].name -cne 'manifest.json') {
+        throw "Latest release '$($release.tag_name)' must contain exactly one case-exact manifest.json asset."
+    }
+    $assetId=$manifestAssets[0].id
+    if (($assetId -isnot [int] -and $assetId -isnot [long]) -or $assetId -le 0) {
+        throw 'Latest release manifest asset must have a positive numeric id.'
+    }
     $manifestRaw = Invoke-VtAuthorityGhRead -Arguments @('api',"repos/$Repository/releases/assets/$($manifestAssets[0].id)",'-H','Accept: application/octet-stream') -Description 'Unable to download latest release manifest.json'
     $manifest = $manifestRaw | ConvertFrom-Json
     if ([string]$manifest.release_tag -cne [string]$release.tag_name) {
@@ -1467,105 +1474,18 @@ function Get-VtCardDeploymentManifest {
     return $manifest
 }
 
+. (Join-Path $PSScriptRoot 'deployed_source_proof.ps1')
+
 function Get-VtCardSourceAuthority {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory=$true)][string]$RepoRoot,
         [Parameter(Mandatory=$true)]$DeploymentManifest
     )
-    if ([int]$DeploymentManifest.manifest_schema -lt 2) { throw 'Deployment manifest schema 2 or newer is required.' }
-    if ($DeploymentManifest.PSObject.Properties['_authority_release_tag'] -and
-        [string]$DeploymentManifest._authority_release_tag -cne [string]$DeploymentManifest.release_tag) {
-        throw "Release tag mismatch: fetched=$($DeploymentManifest._authority_release_tag), manifest=$($DeploymentManifest.release_tag)."
-    }
-    if ([string]::IsNullOrWhiteSpace([string]$DeploymentManifest.release_tag)) { throw 'Deployment manifest has no release_tag.' }
-    $inventoryPath=Join-Path $RepoRoot 'tools/mod-inventory.psd1'
-    $exceptionsPath=Join-Path $RepoRoot 'tools/verify/live_test_contract_exceptions.psd1'
-    if(-not(Test-Path -LiteralPath $inventoryPath)){throw "Canonical mod inventory is missing: $inventoryPath"}
-    if(-not(Test-Path -LiteralPath $exceptionsPath)){throw "Live-test card authority exceptions are missing: $exceptionsPath"}
-    $inventory=Import-PowerShellDataFile -LiteralPath $inventoryPath
-    $exceptions=Import-PowerShellDataFile -LiteralPath $exceptionsPath
-
-    $inventoryById=@{}; $inventoryByWorkshop=@{}
-    foreach($entry in @($inventory.Mods)){
-        $id=[string]$entry.ModId; $item=[string]$entry.WorkshopId
-        if([string]::IsNullOrWhiteSpace($id)-or$inventoryById.ContainsKey($id)){throw "Canonical mod inventory contains a missing or duplicate ModId '$id'."}
-        if([string]::IsNullOrWhiteSpace($item)-or$inventoryByWorkshop.ContainsKey($item)){throw "Canonical mod inventory contains a missing or duplicate WorkshopId '$item'."}
-        $inventoryById[$id]=$entry; $inventoryByWorkshop[$item]=$entry
-    }
-    $deployedById=@{}; $deployedByWorkshop=@{}
-    foreach($row in @($DeploymentManifest.mods)){
-        $id=[string]$row.mod_id; $item=[string]$row.workshop_id
-        if([string]::IsNullOrWhiteSpace($id)-or$deployedById.ContainsKey($id)){throw "Deployment manifest contains a missing or duplicate mod_id '$id'."}
-        if([string]::IsNullOrWhiteSpace($item)-or$deployedByWorkshop.ContainsKey($item)){throw "Deployment manifest contains a missing or duplicate workshop_id '$item'."}
-        if(-not$inventoryById.ContainsKey($id)){throw "Deployment manifest contains non-inventory mod '$id'."}
-        $deployedById[$id]=$row; $deployedByWorkshop[$item]=$row
-    }
-    foreach($id in @($inventoryById.Keys)){if(-not$deployedById.ContainsKey($id)){throw "Deployment manifest is missing inventory mod '$id'."}}
-    # Fail cheap release-row defects before opening hundreds of immutable Lua
-    # blobs. Legacy no-commit rows are validated against pinned trees below.
-    foreach($id in @($deployedById.Keys)){
-        $row=$deployedById[$id];$commit=[string]$row.source_commit
-        $assetFilename=[string]$row.asset_filename
-        $assetSha256=[string]$row.sha256
-        if([string]::IsNullOrWhiteSpace($assetFilename)-or
-           [IO.Path]::GetFileName($assetFilename) -cne $assetFilename -or
-           $assetFilename -notmatch '(?i)\.zip$'){
-            throw "Deployed mod '$id' asset_filename must be one ZIP basename."
-        }
-        if($assetSha256 -notmatch '^[0-9a-f]{64}$'){
-            throw "Deployed mod '$id' ZIP sha256 is not a full lowercase 64-hex digest."
-        }
-        $rootBundle=[string]$row.root_bundle
-        if(-not[string]::IsNullOrWhiteSpace($rootBundle)){
-            if([IO.Path]::GetFileName($rootBundle) -cne $rootBundle -or
-               $rootBundle -notmatch '(?i)\.mod_bundle$'){
-                throw "Deployed mod '$id' root_bundle must be one mod_bundle basename."
-            }
-            $rootRows=@($row.bundle_files|Where-Object{[string]$_.filename -ceq $rootBundle})
-            if($rootRows.Count -ne 1){
-                throw "Deployed mod '$id' root_bundle '$rootBundle' must resolve to exactly one bundle_files row."
-            }
-            if([string]$rootRows[0].sha256 -notmatch '^[0-9a-f]{64}$'){
-                throw "Deployed mod '$id' root bundle sha256 is not a full lowercase 64-hex digest."
-            }
-        }
-        if([string]::IsNullOrWhiteSpace($commit)){continue}
-        if($commit -notmatch '^[0-9a-f]{40}$'){throw "Deployed mod '$id' source_commit is not a full 40-hex commit."}
-        if([string]$row.source_state -cne 'clean'){throw "Deployed mod '$id' source_state must be clean, got '$($row.source_state)'."}
-    }
-
-    $legacyByKey=@{}
-    foreach($legacy in @($exceptions.LegacySourceTrees)){
-        $key=([string]$legacy.ModId)+"`n"+([string]$legacy.Version)
-        if($legacyByKey.ContainsKey($key)){throw "Duplicate legacy source-tree exception '$key'."}
-        if([string]$legacy.RootTree -notmatch '^[0-9a-f]{40}$' -or [string]$legacy.ModTree -notmatch '^[0-9a-f]{40}$' -or [string]::IsNullOrWhiteSpace([string]$legacy.Reason)){
-            throw "Malformed legacy source-tree exception '$key'."
-        }
-        $legacyByKey[$key]=$legacy
-    }
-
-    # Hydrate every deployed Lua blob this pass will read in a few batched
-    # fetches before the per-mod archive transactions begin (#750). Targets are
-    # resolved leniently here; the record loop below is the authority on a
-    # malformed or unreachable deployed tree.
-    $prefetchTargets=@()
-    foreach($entry in @($inventory.Mods)){
-        $id=[string]$entry.ModId
-        if(-not$deployedById.ContainsKey($id)){continue}
-        $row=$deployedById[$id]
-        $treeish=[string]$row.source_commit
-        if([string]::IsNullOrWhiteSpace($treeish)){
-            $legacyKey=$id+"`n"+([string]$row.version)
-            if(-not$legacyByKey.ContainsKey($legacyKey)){continue}
-            $treeish=[string]$legacyByKey[$legacyKey].RootTree
-        }
-        $prefetchTargets+=[pscustomobject]@{
-            Commit=$treeish
-            Root=(([string]$entry.Dir).TrimEnd([char[]]'\/') -replace '\\','/') + '/scripts/mods'
-        }
-    }
-    Invoke-VtContractDeployedBlobPrefetch -RepoRoot $RepoRoot -DeployedTrees @($prefetchTargets)
+    $sourceInputs=Get-VtDeploymentSourceInputs -RepoRoot $RepoRoot -DeploymentManifest $DeploymentManifest
+    $inventory=$sourceInputs.Inventory; $exceptions=$sourceInputs.Exceptions
+    $deployedById=$sourceInputs.DeployedById; $legacyByKey=$sourceInputs.LegacyByKey
+    Invoke-VtDeploymentSourcePrefetch -RepoRoot $RepoRoot -SourceInputs $sourceInputs
 
     $records=New-Object System.Collections.Generic.List[object]
     $documentsByMod=@{}
@@ -1573,52 +1493,11 @@ function Get-VtCardSourceAuthority {
         $recordWatch=[Diagnostics.Stopwatch]::StartNew()
         $id=[string]$entry.ModId; $row=$deployedById[$id]
         Write-Verbose "Indexing immutable deployed source for $id..."
-        if([string]$row.workshop_id -cne [string]$entry.WorkshopId){throw "Workshop identity drift for '$id': inventory=$($entry.WorkshopId), deployed=$($row.workshop_id)."}
-        if([string]::IsNullOrWhiteSpace([string]$row.version)){throw "Deployed mod '$id' has no version."}
-        $relativeRoot=(([string]$entry.Dir).TrimEnd([char[]]'\/') -replace '\\','/') + '/scripts/mods'
-        $commit=[string]$row.source_commit
-        $rootTree=$null; $modTree=$null; $treeish=$null
-        if(-not[string]::IsNullOrWhiteSpace($commit)){
-            if($commit -notmatch '^[0-9a-f]{40}$'){throw "Deployed mod '$id' source_commit is not a full 40-hex commit."}
-            if([string]$row.source_state -cne 'clean'){throw "Deployed mod '$id' source_state must be clean, got '$($row.source_state)'."}
-            $type=Get-VtGitScalar -RepoRoot $RepoRoot -Arguments @('cat-file','-t',$commit) -Description "Source object for '$id'"
-            if($type -cne 'commit'){throw "Deployed mod '$id' source_commit is not a commit object."}
-            $rootTree=Get-VtGitScalar -RepoRoot $RepoRoot -Arguments @('rev-parse',"$commit^{tree}") -Description "Root tree for '$id'"
-            $modTree=Get-VtGitScalar -RepoRoot $RepoRoot -Arguments @('rev-parse',"$commit`:$relativeRoot") -Description "Mod subtree for '$id'"
-            if($rootTree -notmatch '^[0-9a-f]{40}$' -or $modTree -notmatch '^[0-9a-f]{40}$'){throw "Deployed source tree resolution failed for '$id'."}
-            $treeish=$commit
-        }else{
-            $legacyKey=$id+"`n"+([string]$row.version)
-            if(-not$legacyByKey.ContainsKey($legacyKey)){throw "Deployed mod '$id' has no source_commit and no exact legacy tree exception for '$($row.version)'."}
-            $legacy=$legacyByKey[$legacyKey]; $rootTree=[string]$legacy.RootTree; $modTree=[string]$legacy.ModTree
-            $type=Get-VtGitScalar -RepoRoot $RepoRoot -Arguments @('cat-file','-t',$rootTree) -Description "Legacy root tree for '$id'"
-            if($type -cne 'tree'){throw "Legacy root tree for '$id' is not a tree object."}
-            $derived=Get-VtGitScalar -RepoRoot $RepoRoot -Arguments @('rev-parse',"$rootTree`:$relativeRoot") -Description "Legacy mod subtree for '$id'"
-            if($derived -cne $modTree){throw "Legacy source-tree exception drift for '$id': pinned=$modTree, actual=$derived."}
-            $treeish=$rootTree
-        }
         $requiredSources=@(Get-VtExceptionSourcePaths -Exceptions $exceptions -ModId $id)
-        $documents=@(Get-VtDeployedLuaDocuments -RepoRoot $RepoRoot -Treeish $treeish `
-            -RelativeRoot $relativeRoot -RequiredRelativePaths $requiredSources)
-        if($documents.Count -eq 0){throw "Deployed mod '$id' has no Lua source under '$relativeRoot'."}
-        $documentsByMod[$id]=@($documents)
-        $declaredVersions=New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
-        foreach($document in $documents){
-            if([string]$document.Content -notmatch '(?i)MOD_VERSION'){continue}
-            $tokens=@($document.Tokens)
-            for($versionIndex=0;$versionIndex+3 -lt $tokens.Count;$versionIndex++){
-                if((Test-VtLuaToken $tokens[$versionIndex] 'local' 'Identifier') -and
-                    (Test-VtLuaToken $tokens[$versionIndex+1] 'MOD_VERSION' 'Identifier') -and
-                    (Test-VtLuaToken $tokens[$versionIndex+2] '=') -and
-                    [string]$tokens[$versionIndex+3].Kind -eq 'String'){
-                    $null=$declaredVersions.Add(([string]$tokens[$versionIndex+3].Value).TrimStart('v'))
-                }
-            }
-        }
-        $releaseVersion=([string]$row.version).TrimStart('v')
-        if($declaredVersions.Count -ne 1 -or -not$declaredVersions.Contains($releaseVersion)){
-            throw "Deployed mod '$id' MOD_VERSION drift: source=$(@($declaredVersions) -join ','), release=$releaseVersion."
-        }
+        $proof=Get-VtDeployedModSourceProof -RepoRoot $RepoRoot -InventoryEntry $entry `
+            -ManifestRow $row -LegacyByKey $legacyByKey -RequiredRelativePaths $requiredSources
+        $commit=$proof.SourceCommit; $rootTree=$proof.RootTree; $modTree=$proof.ModTree
+        $documents=@($proof.Documents); $documentsByMod[$id]=@($documents)
         $reachablePaths=Get-VtLoadTimeReachableLuaPaths -ModDir ([string]$entry.Dir) -Documents $documents
         $reachableDocuments=@($documents | Where-Object {$reachablePaths.Contains([string]$_.RelativePath)})
         if($reachableDocuments.Count -eq 0){throw "Deployed mod '$id' exposes no statically reachable Lua entry document."}

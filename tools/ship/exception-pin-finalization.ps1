@@ -236,6 +236,37 @@ function Write-VtPinFinalizationWarning {
     }
 }
 
+# Internal byte writer shared by the individually authorized live finalizer and
+# canonical-entry recovery. It grants no lease, source, or publication authority.
+function Write-VtExceptionPinBytes {
+    param(
+        [Parameter(Mandatory)][string]$Path,
+        [Parameter(Mandatory)][byte[]]$OriginalBytes,
+        [Parameter(Mandatory)][string]$NewText
+    )
+    $file = Get-Item -LiteralPath $Path -ErrorAction Stop
+    if ($file.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Exception pins cannot be a reparse point.' }
+    $encoding = New-Object Text.UTF8Encoding($false)
+    $bytes = $encoding.GetBytes($NewText)
+    $temporary = $Path + '.' + [guid]::NewGuid().ToString('N') + '.pending'
+    try {
+        [IO.File]::WriteAllBytes($temporary, $bytes)
+        if ([Convert]::ToBase64String([IO.File]::ReadAllBytes($temporary)) -cne [Convert]::ToBase64String($bytes)) {
+            throw 'Exception-pin staged bytes failed readback.'
+        }
+        if ([Convert]::ToBase64String([IO.File]::ReadAllBytes($Path)) -cne [Convert]::ToBase64String($OriginalBytes)) {
+            throw 'Exception pins changed during reconciliation; preserving the newer file.'
+        }
+        [IO.File]::Replace($temporary, $Path, [NullString]::Value)
+        if ([Convert]::ToBase64String([IO.File]::ReadAllBytes($Path)) -cne [Convert]::ToBase64String($bytes)) {
+            throw 'Exception-pin persisted bytes failed readback.'
+        }
+    }
+    finally {
+        if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force }
+    }
+}
+
 function Invoke-VtPublishedPinFinalization {
     [CmdletBinding()]
     param(
@@ -271,27 +302,7 @@ function Invoke-VtPublishedPinFinalization {
         throw "Exception pins remain unresolved; original bytes retained: $($plan.Unresolved -join ', ')"
     }
     if ($plan.Changed) {
-        $encoding = New-Object Text.UTF8Encoding($false)
-        $bytes = $encoding.GetBytes($plan.NewText)
-        # Stage beside the target and replace atomically, so a write exception
-        # cannot truncate the authority file used by all other mod cards.
-        $temporary = $path + '.' + [guid]::NewGuid().ToString('N') + '.pending'
-        try {
-            [IO.File]::WriteAllBytes($temporary, $bytes)
-            if ([Convert]::ToBase64String([IO.File]::ReadAllBytes($temporary)) -cne [Convert]::ToBase64String($bytes)) {
-                throw 'Exception-pin staged bytes failed readback.'
-            }
-            if ([Convert]::ToBase64String([IO.File]::ReadAllBytes($path)) -cne [Convert]::ToBase64String($original)) {
-                throw 'Exception pins changed during reconciliation; preserving the newer file.'
-            }
-            [IO.File]::Replace($temporary, $path, [NullString]::Value)
-            if ([Convert]::ToBase64String([IO.File]::ReadAllBytes($path)) -cne [Convert]::ToBase64String($bytes)) {
-                throw 'Exception-pin persisted bytes failed readback.'
-            }
-        }
-        finally {
-            if (Test-Path -LiteralPath $temporary) { Remove-Item -LiteralPath $temporary -Force }
-        }
+        Write-VtExceptionPinBytes -Path $path -OriginalBytes $original -NewText $plan.NewText
         Write-Host ("  GitHub source pins: {0} value(s) for {1} -> {2}." -f $plan.RewriteCount, $record.ModId, $record.ModTree) -ForegroundColor Yellow
         Write-Host '  Carry the working-tree pin change in the next reviewed PR; this is NOT Workshop/test-readiness evidence.' -ForegroundColor Yellow
     }

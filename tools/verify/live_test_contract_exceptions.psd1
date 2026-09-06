@@ -8,15 +8,17 @@
 # CONSUMED structures (ReceiptFamilyOverrides / ReceiptRouteOverrides /
 # ReceiptDiscoveryOverrides) are provenance, not policy - they name the exact
 # deployed <mod>/scripts/mods subtree the finite-output proof was audited
-# against. Every ship of a pinned mod therefore strands them. Step 5b of
-# tools/ship/ship.ps1 repoints the shipped mod's values to the new deployed
-# tree automatically after a confirmed upload (the per-override token anchors
-# still fail closed if the audited code itself changed, so the repoint never
-# grants an unreviewed proof). Ship cannot commit to master, so the rewrite is
-# left in the WORKING TREE and reported in the ship summary ("Pins" row); the
-# next PR to master carries it. LegacyMarkerFamilyModTrees (reviewer context)
-# and LegacySourceTrees (carried-forward promotion pins) are deliberately
-# NEVER rewritten by that step.
+# against. A changed deployed subtree therefore requires repointing. Canonical
+# ship reconciles confirmed GitHub publication even if later Workshop work
+# fails. After hard process death, its next authorized pre-build entry proves
+# all consumed pins against the fresh current published manifest, without
+# replaying an old intent journal. Changed invoking pins stop for a metadata
+# PR; an already prepared primary candidate does not bypass that stop. The
+# per-override token anchors still fail closed if audited code changed, so a
+# provenance repoint never grants an unreviewed finite-output proof. Ship
+# cannot commit to master: any rewrite remains a working-tree candidate for
+# review. LegacyMarkerFamilyModTrees (reviewer context) and LegacySourceTrees
+# (carried-forward promotion pins) are deliberately NEVER rewritten.
 # These pins establish source provenance only. A partial GitHub publication
 # does not establish Workshop transfer or make a new build ready for testing.
 
