@@ -33,9 +33,10 @@
 #  * ugc_tool prints "Upload finished" and exits 0 EVEN WHEN NOTHING TRANSFERRED.
 #    "Upload finished" tells you nothing. The SOURCE OF TRUTH is
 #    `C:\Program Files (x86)\Steam\logs\workshop_log.txt`:
-#       "Uploaded new content ( ManifestID <N> ) for item <id>"  = real push
-#       "No content change detected for item <id>"               = server already had it
-#    (acceptable only when the local deploy hashes already match the server bundle).
+#    Require one exact start -> Uploaded/NoChange -> finish OK transaction from
+#    bytes appended to the same retained file after the launcher boundary.
+#    Uploaded followed by Timeout is NOT success. NoChange has no ManifestID
+#    and remains subject to the existing receipt/deploy policy below.
 #
 #  * `published_id` lives in `<mod>\itemV2.cfg` as `published_id = <N>L;`.
 #
@@ -43,7 +44,7 @@
 #    When the real content folder is absent, ship enters a receipt-gated
 #    publication-only lane: no local/remote deploy is attempted, VMBLauncher
 #    still proves the exact commit/bundle/staging bytes, and workshop_log must
-#    report either Uploaded new content or No content change for the exact id.
+#    report a complete successful transaction for the exact id.
 #    Never create the missing real Workshop folder by hand (issue #1376).
 #
 #  * Step 3 releases ONLY the shipped mod to GitHub (issues #436/#493):
@@ -114,6 +115,7 @@ if (-not (Test-Path -LiteralPath $publicationReceiptHelpers -PathType Leaf)) {
 . $publicationReceiptHelpers
 
 . (Join-Path $PSScriptRoot 'local-deployment-receipt.ps1')
+. (Join-Path $PSScriptRoot 'workshop-upload-evidence.ps1')
 
 $buildOutputNormalizationHelpers = Join-Path $PSScriptRoot 'build-output-normalization.ps1'
 if (-not (Test-Path -LiteralPath $buildOutputNormalizationHelpers -PathType Leaf)) {
@@ -1563,7 +1565,8 @@ function Invoke-ShipSelfTest {
     Assert ($selfTxt.IndexOf("Mode = 'publication-only'", $mainDispatchPos) -lt 0) "publication-only mode is produced only by the tested deployment-policy helper"
     Assert ($selfTxt.IndexOf('New-Item', $deploymentPolicyPos) -lt 0) "canonical ship never creates a Steam-managed Workshop content directory"
     Assert ($selfTxt.IndexOf('Test-ShipUploadEvidencePolicy', $uploadActionPos) -gt $uploadActionPos) "upload result is checked through the receipt-aware evidence policy"
-    Assert ($selfTxt.IndexOf('constrained bootstrap did not write one nonzero published_id', $uploadActionPos) -ge 0) "first-upload bootstrap requires a nonzero ID-only write-back after ugc_tool"
+    Assert ($selfTxt.IndexOf('Bootstrap did not write exactly one positive published_id', $mainDispatchPos) -ge 0 -and
+        $selfTxt.IndexOf('-ResolveBootstrapId $bootstrapIdResolver', $uploadActionPos) -ge 0) "first-upload bootstrap supplies the tested post-launch assigned-ID resolver"
     Assert ($publisherSource.IndexOf('published_id=0 is accepted only for a one-mod canonical first-upload receipt handoff') -ge 0) "publisher constrains zero-ID release mutation to the exact receipt handoff"
     Assert ($selfTxt.IndexOf('BOOTSTRAP COMPLETE - NOT TEST READY', $uploadActionPos) -ge 0) "first-upload bootstrap stops before live-test labeling and readiness output"
     Assert ($selfTxt.IndexOf('The machine-global claim remains held', $uploadActionPos) -ge 0) "first-upload bootstrap retains its claim until the ID-only reconciliation merges"
@@ -1630,7 +1633,7 @@ function Invoke-ShipSelfTest {
     Assert $pinRejected "a malformed deployed tree is rejected before any rewrite"
     $pinStepPos = $selfTxt.IndexOf('==> Repointing deployed-source exception pins', $mainDispatchPos)
     $pinAuthorityPos = $selfTxt.IndexOf('$shipDeploymentManifest = Get-VtCardDeploymentManifest', $mainDispatchPos)
-    $pinUploadVerifyPos = $selfTxt.IndexOf("`$uploadStatus = 'NONE'", $mainDispatchPos)
+    $pinUploadVerifyPos = $selfTxt.IndexOf('$uploadStatus = $receiptAcceptance.Status', $mainDispatchPos)
     Assert ($pinUploadVerifyPos -ge 0 -and $pinUploadVerifyPos -lt $pinStepPos) "successful-path pin repoint follows Workshop verification"
     $pinArmPos = $selfTxt.IndexOf('$publishedPinContext = $sourcePinHandoff.PublishedJson', $mainDispatchPos)
     $pinFinallyPos = $selfTxt.LastIndexOf('if ($publishedPinContext -and -not $pinFinalizationAttempted)')
@@ -2492,15 +2495,30 @@ Write-Host ""
 Write-Host "==> VMBLauncher $($uploadArgs -join ' ')" -ForegroundColor Cyan
 $uploadFailure = $null
 $publicationReceiptAccepted = $false
+$bootstrapIdResolver = $null
+if ($isFirstUploadBootstrap) {
+    $bootstrapIdResolver = {
+        $cfgAfterBootstrap = [System.IO.File]::ReadAllText($cfgPath, [System.Text.Encoding]::UTF8)
+        $assigned = [regex]::Matches($cfgAfterBootstrap, 'published_id\s*=\s*([1-9][0-9]*)L')
+        if ($assigned.Count -ne 1) {
+            throw 'Bootstrap did not write exactly one positive published_id to itemV2.cfg.'
+        }
+        return $assigned[0].Groups[1].Value
+    }
+}
 try {
     $receiptAcceptance = Invoke-WithShipVmbRc -RepoRoot $repoRoot -Resolution $vmbRcResolution -Action {
-        $uploadRun = Invoke-ShipLauncherNoWindow -LauncherExecutableLease $launcherExecutableLease -ArgumentList $uploadArgs -ReplayOutput
-        if ($uploadRun.ExitCode -ne 0) {
-            throw "VMBLauncher 'upload $Mod' exited $($uploadRun.ExitCode) (see output above)."
+        # Capture is inside the canonical configuration boundary, immediately
+        # before the one existing launcher invocation. Finally closes the
+        # read-only observer on launcher, bootstrap, parser, and success paths.
+        return Invoke-VtWorkshopUploadEvidence -Path $workshopLog -PublishedId $publishedId -ResolveBootstrapId $bootstrapIdResolver -UploadAction {
+            $uploadRun = Invoke-ShipLauncherNoWindow -LauncherExecutableLease $launcherExecutableLease -ArgumentList $uploadArgs -ReplayOutput
+            if ($uploadRun.ExitCode -ne 0) {
+                throw "VMBLauncher 'upload $Mod' exited $($uploadRun.ExitCode) (see output above)."
+            }
         }
-        return [pscustomobject]@{ Accepted = $true }
     }
-    $publicationReceiptAccepted = [bool]$receiptAcceptance.Accepted
+    $publicationReceiptAccepted = $true
 }
 catch {
     $uploadFailure = $_.Exception.Message
@@ -2514,40 +2532,19 @@ if ($uploadFailure) {
     Fail $uploadFailure
 }
 if ($isFirstUploadBootstrap) {
-    $cfgAfterBootstrap = [System.IO.File]::ReadAllText($cfgPath, [System.Text.Encoding]::UTF8)
-    if ($cfgAfterBootstrap -notmatch 'published_id\s*=\s*([1-9]\d*)L') {
-        Fail "ugc_tool returned success but the constrained bootstrap did not write one nonzero published_id to itemV2.cfg."
-    }
-    $publishedId = $matches[1]
+    $publishedId = $receiptAcceptance.PublishedId
     $deployDir = Join-Path $workshopRoot $publishedId
     Write-Host "  Bootstrap assigned Workshop ID $publishedId. Commit the ID-only itemV2.cfg change before the next ship." -ForegroundColor Yellow
 }
 
 # ---------------------------------------------------------------------------
-# Step 5: VERIFY UPLOAD -- scan recent workshop_log.txt for this published_id
+# Step 5: VERIFY UPLOAD -- consume the bounded terminal transaction evidence
 # ---------------------------------------------------------------------------
 Write-Host ""
 Write-Host "==> Verifying upload (workshop_log.txt)" -ForegroundColor Cyan
-$uploadStatus = 'NONE'   # NONE | UPLOADED | NOCHANGE
-$matchedLine  = ''
-if (-not (Test-Path $workshopLog)) {
-    Fail "workshop_log.txt not found at $workshopLog -- cannot confirm the upload transferred."
-}
-$cutoff = (Get-Date).AddMinutes(-5)
-$tail   = Get-Content $workshopLog -Tail 40
-foreach ($line in $tail) {
-    if ($line -notmatch '^\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})\]') { continue }
-    $ts = $null
-    try { $ts = [datetime]::ParseExact($matches[1], 'yyyy-MM-dd HH:mm:ss', $null) } catch { continue }
-    if ($ts -lt $cutoff) { continue }
-    if ($line -notmatch [regex]::Escape($publishedId)) { continue }
-    if ($line -match 'Uploaded new content') {
-        $uploadStatus = 'UPLOADED'; $matchedLine = $line   # strongest signal -- keep scanning, UPLOADED wins
-    }
-    elseif ($line -match 'No content change' -and $uploadStatus -ne 'UPLOADED') {
-        $uploadStatus = 'NOCHANGE'; $matchedLine = $line
-    }
-}
+$uploadStatus = $receiptAcceptance.Status
+$matchedLine = $receiptAcceptance.OutcomeLine
+Write-Host "    $($receiptAcceptance.FinishLine)"
 
 $uploadEvidence = Test-ShipUploadEvidencePolicy `
     -UploadStatus $uploadStatus `
@@ -2573,7 +2570,7 @@ switch ($uploadStatus) {
         Write-Host "    $matchedLine"
     }
     default {
-        Fail "No fresh (<5 min) workshop_log line for item $publishedId. Upload may not have transferred -- inspect $workshopLog."
+        Fail "No complete bounded Workshop transaction for item $publishedId -- inspect $workshopLog."
     }
 }
 
@@ -2852,12 +2849,13 @@ try {
                 Write-Host "  WARNING: all-stream card reconciliation exited $reconcileExit -- continuing with the exact shipped-stream pass." -ForegroundColor Yellow
             }
 
-            # Manifest: only a confirmed 'Uploaded new content' line carries a
-            # fresh ManifestID. On NOCHANGE the server manifest did not move,
-            # so existing card manifests are still current -- leave them.
+            # Only the complete successful Uploaded transaction supplies a new
+            # ManifestID. NOCHANGE supplies none; preserve the existing field
+            # under current policy, without claiming fresh manifest authority.
+            # Durable authenticated tuple/card consumption remains #1307 work.
             $shipManifestId = $null
-            if ($uploadStatus -eq 'UPLOADED' -and $matchedLine -match 'ManifestID\s+(\d+)') {
-                $shipManifestId = $matches[1]
+            if ($uploadStatus -eq 'UPLOADED') {
+                $shipManifestId = $receiptAcceptance.ManifestId
             }
             # Hashtable splat, NOT an array of '-Name'/value strings: array
             # splatting a script path binds every element POSITIONALLY (the
