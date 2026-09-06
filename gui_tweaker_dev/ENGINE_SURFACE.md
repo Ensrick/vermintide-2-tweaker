@@ -228,7 +228,11 @@ Dialogue audio isolation (#998) uses the existing view pending buffer and
 feature-detects CD API v6's schema-1 setting descriptor and binds its exact
 `auto_isolation` key through `_owners` to the live CD object. The custom browser
 does not support the generic profile/DEFAULT controls; both presentation and
-method entry guards prevent foreign-node capture. `_gut_dialogue_contract`
+method entry guards prevent foreign-node capture. Standalone DEFAULT delegates
+node filtering, owner-qualified staging and loadout-reseed intent to the existing
+`_mod_tweaker_default_reset` owner; its injected custom-tab refusal runs before
+any node read, staging or arming. Apply remains the sole persistence boundary.
+`_gut_dialogue_contract`
 registers its isolated runtime staging/transaction check. The paired CD owner
 uses VMF's `set(..., false)` persistence then one batch completion notification
 (VMF `modules/core/settings.lua:27-43`); ordinary notifications dispatch through

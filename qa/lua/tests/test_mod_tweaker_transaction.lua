@@ -380,8 +380,13 @@ return function(H, repo_root)
             H.truthy(source:find(
                 "pending transaction incomplete",
                 1, true), paths[i] .. " diagnoses a deferred profile switch once")
-            H.truthy(source:find("default_reset.arm(self, category)", 1, true),
-                paths[i] .. " does not retain DEFAULT's loadout reseed intent")
+            if paths[i] == "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view.lua" then
+                H.truthy(source:find("default_reset.stage_defaults(self, category, self._build_nodes,", 1, true),
+                    "standalone view must delegate DEFAULT to its transaction owner")
+            else
+                H.truthy(source:find("default_reset.arm(self, category)", 1, true),
+                    paths[i] .. " does not retain DEFAULT's loadout reseed intent")
+            end
             H.truthy(source:find("default_reset.is_armed(self, cat)", 1, true),
                 paths[i] .. " cannot enable Apply for a reseed-only transaction")
             H.truthy(source:find("default_reset.finish(", 1, true),

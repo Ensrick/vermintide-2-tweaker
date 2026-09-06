@@ -75,6 +75,88 @@ return function(H, root)
         f.view:_build_rows(f.category)
         H.equal(0, #f.view._build_nodes)
     end)
+    H.test("998 installed DEFAULT refuses custom policy before nodes or reseed", function()
+        local f = fixture(root)
+        f:click()
+        local pending = f.view._pending.character_dialogue
+        -- A stale merged-owner list would arm a reseed if the policy ran late.
+        f.category._owner_mod_ids = { "wt_dev" }
+        f.view._build_nodes = { setmetatable({}, { __index = function()
+            error("custom-tab nodes must not be read")
+        end }) }
+        f.view._build_rows = function() error("refusal must not repaint") end
+        f.view:reset_to_defaults()
+        H.equal(pending, f.view._pending.character_dialogue)
+        H.equal(true, pending.auto_isolation)
+        H.equal(nil, f.view._official_reseed_pending)
+        H.equal(0, f.writes)
+        H.equal(0, f.gut_writes)
+    end)
+    H.test("998 installed DEFAULT refuses absent category or nodes without mutation", function()
+        local f = fixture(root)
+        local pending = f.view._pending
+        f.view.stage_set = function() error("incomplete build must not stage") end
+        f.view._build_rows = function() error("incomplete build must not repaint") end
+        f.view._build_category = nil
+        f.view:reset_to_defaults()
+        f.view._build_category = { mod_id = "wt_dev" }
+        f.view._build_nodes = nil
+        f.view:reset_to_defaults()
+        H.equal(pending, f.view._pending)
+        H.equal(nil, next(pending))
+        H.equal(nil, f.view._official_reseed_pending)
+        H.equal(0, f.writes)
+        H.equal(0, f.gut_writes)
+    end)
+    H.test("998 installed DEFAULT delegates normal owner-qualified staging", function()
+        local f = fixture(root)
+        local category = { mod_id = "equipment", _owner_mod_ids = { "wt_dev", "cosmetics_tweaker" },
+            _owners = { false_default = { mod_id = "wt_dev" },
+                zero_default = { mod_id = "cosmetics_tweaker" } } }
+        f.view._build_category, f.view._categories = category, { category }
+        f.view._build_nodes = {
+            { setting_id = "false_default", type = "checkbox", default_value = false },
+            { content = { setting_id = "zero_default", type = "numeric", default_value = 0 } },
+            { setting_id = "binding", type = "keybind", default_value = {} },
+            { setting_id = "no_default", type = "checkbox" },
+            { type = "group" },
+        }
+        local reset = f.env.get_mod("gut_dev"):dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_default_reset")
+        local stage, delegated, repaints = reset.stage_defaults, 0, 0
+        reset.stage_defaults = function(...)
+            delegated = delegated + 1
+            return stage(...)
+        end
+        f.view._build_rows = function(_, value)
+            H.equal(category, value); repaints = repaints + 1
+        end
+        f.view:reset_to_defaults()
+        H.equal(1, delegated)
+        H.equal(1, repaints)
+        H.equal(false, f.view._pending.wt_dev.false_default)
+        H.equal(0, f.view._pending.cosmetics_tweaker.zero_default)
+        H.equal(nil, f.view._pending.equipment, "no keybind or empty-default draft")
+        H.equal(true, reset.is_armed(f.view, category))
+        H.equal(false, f.view._apply.content.disabled)
+        H.equal(nil, f.view._dirty, "staging is not a live write")
+        H.equal(0, f.writes)
+        H.equal(0, f.gut_writes)
+    end)
+    H.test("998 installed DEFAULT accepts zero-setting loadout reseed", function()
+        local f = fixture(root)
+        local category = { mod_id = "wt_dev" }
+        f.view._build_category, f.view._categories = category, { category }
+        f.view._build_nodes = {}
+        local repaints = 0
+        f.view._build_rows = function() repaints = repaints + 1 end
+        f.view:reset_to_defaults()
+        H.equal(1, repaints)
+        H.equal(nil, next(f.view._pending))
+        H.equal(true, f.view._official_reseed_pending.wt_dev)
+        H.equal(false, f.view._apply.content.disabled)
+        H.equal(0, f.writes)
+        H.equal(0, f.gut_writes)
+    end)
     H.test("998 actual CD entry reconciles active preview only after Apply and preserves manual owner", function()
         local f = fixture(root)
         f:load_live_cd()
@@ -181,5 +263,22 @@ return function(H, root)
         H.equal(0, f.writes)
         H.equal(0, f.gut_writes)
         H.equal(true, f.view._pending.character_dialogue.auto_isolation)
+    end)
+    H.test("998 replaced live owner cannot consume another owner's draft", function()
+        local f = fixture(root)
+        f:click()
+        local original = f.env.get_mod
+        local replacement = { character_dialogue_api = f.cd.character_dialogue_api,
+            set = function() error("replacement must not write") end,
+            on_settings_batch_changed = function() error("replacement must not notify") end }
+        f.env.get_mod = function(id)
+            if id == "character_dialogue" then return replacement end
+            return original(id)
+        end
+        f.view:apply_pending(f.category)
+        H.equal(true, f.view._pending.character_dialogue.auto_isolation)
+        H.equal(false, f.view._apply.content.disabled)
+        H.equal(0, f.writes)
+        H.equal(0, f.gut_writes)
     end)
 end

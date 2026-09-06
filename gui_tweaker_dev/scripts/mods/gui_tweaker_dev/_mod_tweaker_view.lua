@@ -1243,20 +1243,10 @@ end
 -- Skips groups/headers (no setting_id), settings with no default_value, and keybinds
 -- (type=="keybind", whose default_value is an empty table).
 function ModTweakerView:reset_to_defaults()
-    local nodes    = self._build_nodes
     local category = self._build_category
-    if not nodes or not category or DialogueUI.is_category(category) then return end
-    local n = 0
-    for i = 1, #nodes do
-        local node = nodes[i]
-        local sid  = _nf(node, "setting_id")
-        local dv   = _nf(node, "default_value")
-        if sid and dv ~= nil and _nf(node, "type") ~= "keybind" then
-            self:stage_set(category, sid, dv)
-            n = n + 1
-        end
-    end
-    default_reset.arm(self, category)
+    local n = default_reset.stage_defaults(self, category, self._build_nodes,
+        _nf, DialogueUI.is_category)
+    if n == nil then return end
     self:_update_apply_button()
     self:_build_rows(category)
     _play_click()

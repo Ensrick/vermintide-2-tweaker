@@ -10,6 +10,9 @@
   never write a GUT shadow setting or invoke the old immediate-click setter.
 - Hides unsupported profile/default controls for the custom browser and guards
   direct entry points, preventing capture of another tab's build/profile state.
+- DEFAULT staging now belongs to the existing reset transaction owner, keeping
+  its custom-tab refusal ahead of mutation and the standalone view within its
+  decomposition ratchet. Apply remains the only persistence boundary.
 - `/gut_regression_test` adds `issue998_dialogue_staged_isolation`, an isolated
   non-mutating staging/owner/commit check. Offline composition tests execute
   the installed view, renderer, CD setter and audio lifecycle.
