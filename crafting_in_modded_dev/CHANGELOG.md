@@ -1,5 +1,36 @@
 # Crafting in Modded Changelog
 
+## 0.8.132-dev (2026-09-05) -- exact illusion Apply owner and Cosmetics capability (#1465) [verify-fix]
+
+- Symptom: on the equipped weapon's gear-icon Illusions page, selecting a
+  different owned illusion showed no Apply button and holding the confirm key
+  did not apply it. Rain reproduced this on 0.8.131-dev with Modded Progression
+  disabled and again with it enabled.
+- Root cause: vanilla writes selection, material identity, button presentation,
+  and input eligibility separately, and Tweaker: Cosmetics' presence-based
+  yield did not identify the friends-only `cim_dev` stream. Two mods drove
+  those writes from separate hooks, so a real different-skin selection could
+  end with an invisible or disabled Apply button.
+- Fix: `_cim_illusion_apply_presentation.lua` owns one transaction for
+  selection, material, requirements, and Apply-button presentation in the
+  customization window, releasing on craft completion and on window exit. It
+  installs the two UI hooks and the named runtime check
+  `issue1465_illusion_apply_presentation`, then publishes the explicit
+  `_cim_illusion_swap_provider` capability (schema 1) that Tweaker: Cosmetics
+  0.9.220-dev consumes. A partial install cannot advertise ownership, which
+  leaves Cosmetics on its own fail-closed fallback.
+- #563 pending-skin persistence and #84 DLC denial are unchanged; the physical
+  Keep forge and the standard forge keep their existing paths.
+- Adds adversarial Lua coverage for the transaction, both hook orders with the
+  real Cosmetics callbacks, release on window exit, and provider publication
+  order.
+
+**Test:** Load `Crafting in Modded v0.8.132-dev` with Tweaker: Cosmetics
+v0.9.220-dev in the Modded Realm. Select an equipped weapon, open its gear
+icon > Illusions, pick a different owned illusion, and confirm **Apply**
+appears and the change persists after reopening the page. Repeat once with
+Modded Progression enabled, then run `/cim_regression_test`.
+
 ## 0.8.131-dev (2026-08-29) -- restore modded-realm illusion authority (#1465) [verify-fix]
 
 - Replaced temporary raw realm-flag writes in the illusion Apply paths with a
