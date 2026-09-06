@@ -108,6 +108,89 @@ try {
     $selection = Get-VtLiveTestCardSelection -Comments $f.Snapshot.Comments -RequirePinnedCard -Authority $f.Authority.Authority -EnforceAuthority
     if (-not $selection.Valid) { throw 'fixture did not exercise strict card authority' }
 
+    # Full source authority includes canonical uppercase WOC and pinned legacy
+    # records. Neither unrelated identity may strand a modern verified target.
+    $f=New-ClosureFixture
+    $woc=($f.Authority.Authority.Records[0] | ConvertTo-Json -Depth 8 | ConvertFrom-Json)
+    $woc.ModId='WOC';$woc.Dir='weapons_of_chaos';$woc.WorkshopId='3753880932'
+    $woc.AssetFilename='weapons_of_chaos.zip';$woc.LoadRoutes=@([pscustomobject]@{Marker='[WOC:LOAD]'})
+    $f.Authority.Authority.Records += $woc
+    $null=Assert-ClosureDecision 'canonical WOC sibling does not strand modern closure' $f 'Accepted'
+    $f.Card.body=$f.Card.body.Replace('[wt:LOAD]','[WOC:LOAD]')
+    $f.Receipt.CardSha256=Get-VtClosureBodySha256 $f.Card.body
+    foreach ($field in @('ModId','Dir','Stream','WorkshopId','Version','SourceCommit',
+            'RootBundle','RootBundleSha256','AssetFilename','AssetSha256')) { $f.Receipt[$field]=$woc.$field }
+    Set-FixtureAttestation $f
+    $null=Assert-ClosureDecision 'canonical uppercase WOC is an exact verified target' $f 'Accepted'
+    $f.Receipt.ModId='woc';Set-FixtureAttestation $f
+    $null=Assert-ClosureDecision 'case-changed WOC attestation is not an alias' $f 'Rejected' 'verified-artifact-not-public-card-target'
+    $f=New-ClosureFixture
+    $f.Authority.Authority.Records[1].ModId='WT'
+    $null=Assert-ClosureDecision 'case-colliding authority records are incomplete' $f 'Unavailable' 'authority-record'
+
+    $legacyPins=Import-PowerShellDataFile -LiteralPath (Join-Path $PSScriptRoot '../tools/verify/live_test_contract_exceptions.psd1')
+    foreach ($pin in @($legacyPins.LegacySourceTrees)) {
+        $f=New-ClosureFixture
+        $legacy=($f.Authority.Authority.Records[0] | ConvertTo-Json -Depth 8 | ConvertFrom-Json)
+        $legacy.ModId=[string]$pin.ModId;$legacy.Dir=if($pin.ModId -ceq 'ct'){'chaos_wastes_tweaker'}else{'verminious_dreams_lighting'}
+        $legacy.Version=[string]$pin.Version;$legacy.WorkshopId='9999999998';$legacy.AssetFilename=$legacy.Dir+'.zip'
+        $legacy.SourceCommit=$null
+        $legacy | Add-Member -NotePropertyName RootTree -NotePropertyValue ([string]$pin.RootTree)
+        $legacy | Add-Member -NotePropertyName ModTree -NotePropertyValue ([string]$pin.ModTree)
+        $legacy.LoadRoutes=@([pscustomobject]@{Marker=('['+$legacy.ModId+':LOAD]')})
+        $f.Authority.Authority.Records += $legacy
+        $null=Assert-ClosureDecision "unrelated pinned legacy $($pin.ModId) retains modern verification" $f 'Accepted'
+        foreach ($field in @('RootTree','ModTree')) {
+            $original=$legacy.$field;$legacy.$field='../not-a-tree'
+            $null=Assert-ClosureDecision "legacy $($pin.ModId) requires immutable $field" $f 'Unavailable' 'authority-record'
+            $legacy.$field=$original
+        }
+        foreach ($badCommit in @('', ' ', 42, 'not-a-commit')) {
+            $legacy.SourceCommit=$badCommit
+            $null=Assert-ClosureDecision "legacy $($pin.ModId) accepts only literal null, not $badCommit" $f 'Unavailable' 'authority-record'
+        }
+        $legacy.PSObject.Properties.Remove('SourceCommit')
+        $null=Assert-ClosureDecision "legacy $($pin.ModId) cannot omit source identity field" $f 'Unavailable' 'authority-record'
+        $legacy | Add-Member -NotePropertyName SourceCommit -NotePropertyValue $null
+
+        $rootName=$legacy.RootBundle;$rootHash=$legacy.RootBundleSha256
+        $legacy.RootBundle=$null;$legacy.RootBundleSha256=$null
+        $null=Assert-ClosureDecision "legacy $($pin.ModId) may predate root-bundle metadata" $f 'Accepted'
+        foreach ($field in @('RootBundle','RootBundleSha256')) {
+            foreach ($bad in @('',42,'malformed')) {
+                $legacy.$field=$bad
+                $null=Assert-ClosureDecision "legacy $($pin.ModId) rejects partial/noncanonical $field" $f 'Unavailable' 'authority-record'
+            }
+            $legacy.PSObject.Properties.Remove($field)
+            $null=Assert-ClosureDecision "legacy $($pin.ModId) cannot omit $field" $f 'Unavailable' 'authority-record'
+            $legacy | Add-Member -NotePropertyName $field -NotePropertyValue $null
+        }
+        $legacy.RootBundle=$rootName
+        $null=Assert-ClosureDecision "legacy $($pin.ModId) cannot borrow a root name without a digest" $f 'Unavailable' 'authority-record'
+        $legacy.RootBundle=$null;$legacy.RootBundleSha256=$rootHash
+        $null=Assert-ClosureDecision "legacy $($pin.ModId) cannot borrow a digest without a root name" $f 'Unavailable' 'authority-record'
+        $legacy.RootBundle=$rootName
+
+        # A public legacy sibling never lends public credit to a Dev pass.
+        $f.Card.body=$f.Card.body.Replace('v1.2.2-beta','v1.2.3-dev')
+        $f.Receipt.CardSha256=Get-VtClosureBodySha256 $f.Card.body
+        foreach ($field in @('ModId','Dir','Stream','WorkshopId','Version','SourceCommit',
+                'RootBundle','RootBundleSha256','AssetFilename','AssetSha256')) { $f.Receipt[$field]=$f.Authority.Authority.Records[1].$field }
+        Set-FixtureAttestation $f
+        $null=Assert-ClosureDecision "legacy $($pin.ModId) cannot lend public identity to Dev evidence" $f 'Rejected' 'verified-artifact-not-public-card-target'
+
+        $f.Card.body=$f.Card.body.Replace('v1.2.3-dev',('v'+$legacy.Version)).Replace('[wt:LOAD]',('['+$legacy.ModId+':LOAD]'))
+        $f.Receipt.CardSha256=Get-VtClosureBodySha256 $f.Card.body
+        foreach ($field in @('ModId','Dir','Stream','WorkshopId','Version',
+                'RootBundle','RootBundleSha256','AssetFilename','AssetSha256')) { $f.Receipt[$field]=$legacy.$field }
+        $f.Receipt.SourceCommit=$legacy.RootTree # A tree is not a commit substitute.
+        Set-FixtureAttestation $f
+        $null=Assert-ClosureDecision "legacy $($pin.ModId) cannot fabricate an attested source commit" $f 'Rejected' 'verified-artifact-source-commit-unavailable'
+    }
+    $f=New-ClosureFixture
+    $f.Authority.Authority.Records[1].RootBundle=$null;$f.Authority.Authority.Records[1].RootBundleSha256=$null
+    $null=Assert-ClosureDecision 'modern unrelated source cannot borrow legacy root-metadata exemption' $f 'Unavailable' 'authority-record'
+
     $cases = @(
         @{Name='non-public no-op';Status='NotApplicable';Reason='not-public';Mutate={param($f) $f.Issue.labels=@()}},
         @{Name='missing issue labels cannot grant no-op';Status='Unavailable';Reason='issue-snapshot';Mutate={param($f) $f.Issue.labels=$null}},

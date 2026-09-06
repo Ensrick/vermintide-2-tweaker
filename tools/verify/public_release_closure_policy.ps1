@@ -158,12 +158,14 @@ function Get-VtPublicReleaseClosureDecision {
                 @($AuthoritySnapshot.Authority.Records).Count -eq 0 -or @($AuthoritySnapshot.Authority.Records).Count -gt 256) {
             return New-VtClosureDecision 'Unavailable' 'closure-time-authority-unavailable' $key
         }
-        $authorityIds = New-Object 'Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+        # Canonical case is preserved (including WOC), but two case aliases
+        # cannot coexist: the upstream source/inventory resolver rejects them.
+        $authorityIds = New-Object 'Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
         $authorityDirs = New-Object 'Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
         $authorityWorkshopIds = New-Object 'Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
         foreach ($record in @($AuthoritySnapshot.Authority.Records)) {
-            foreach ($field in @('ModId','Dir','Stream','WorkshopId','Version','SourceCommit',
-                    'RootBundle','RootBundleSha256','AssetFilename','AssetSha256')) {
+            foreach ($field in @('ModId','Dir','Stream','WorkshopId','Version',
+                    'AssetFilename','AssetSha256')) {
                 if ($record.$field -isnot [string] -or [string]::IsNullOrWhiteSpace($record.$field)) {
                     return New-VtClosureDecision 'Unavailable' 'authority-record-incomplete' $key
                 }
@@ -173,16 +175,44 @@ function Get-VtPublicReleaseClosureDecision {
                     return New-VtClosureDecision 'Unavailable' 'authority-routes-incomplete' $key
                 }
             }
-            if ($record.Public -isnot [bool] -or $record.ModId -cnotmatch '^[a-z][a-z0-9_]*$' -or
+            # A complete trusted source snapshot can include unrelated carried
+            # legacy assets. Its resolver already authenticated their exact
+            # LegacySourceTrees identity/version and root->mod tree mapping.
+            # Null is explicit legacy provenance, never a fabricated commit;
+            # missing, empty or malformed modern source identities still fail.
+            $sourceProperty=$record.PSObject.Properties['SourceCommit']
+            if ($null -eq $sourceProperty) {
+                return New-VtClosureDecision 'Unavailable' 'authority-record-incomplete' $key
+            }
+            if ($null -eq $record.SourceCommit) {
+                foreach ($field in @('RootTree','ModTree')) {
+                    if ($record.$field -isnot [string] -or $record.$field -cnotmatch '^[0-9a-f]{40}$') {
+                        return New-VtClosureDecision 'Unavailable' 'authority-record-incomplete' $key
+                    }
+                }
+            } elseif ($record.SourceCommit -isnot [string] -or $record.SourceCommit -cnotmatch '^[0-9a-f]{40}$') {
+                return New-VtClosureDecision 'Unavailable' 'authority-record-incomplete' $key
+            }
+            # Old pinned ZIPs can predate root-bundle metadata as well. Preserve
+            # their explicit null pair; never fill it from a newer release.
+            if ($null -eq $record.PSObject.Properties['RootBundle'] -or
+                    $null -eq $record.PSObject.Properties['RootBundleSha256']) {
+                return New-VtClosureDecision 'Unavailable' 'authority-record-incomplete' $key
+            }
+            $legacyWithoutRoot=$null -eq $record.SourceCommit -and
+                $null -eq $record.RootBundle -and $null -eq $record.RootBundleSha256
+            if (-not $legacyWithoutRoot -and
+                    ($record.RootBundle -isnot [string] -or $record.RootBundle -cnotmatch '^[0-9a-f]{16}\.mod_bundle$' -or
+                     $record.RootBundleSha256 -isnot [string] -or $record.RootBundleSha256 -cnotmatch '^[0-9a-f]{64}$')) {
+                return New-VtClosureDecision 'Unavailable' 'authority-record-incomplete' $key
+            }
+            if ($record.Public -isnot [bool] -or $record.ModId -cnotmatch '^[A-Za-z][A-Za-z0-9_]*$' -or
                     $record.Dir -cnotmatch '^[a-z][a-z0-9_]*$' -or
                     -not (Test-VtClosureDecimalId $record.WorkshopId) -or
                     -not $authorityIds.Add($record.ModId) -or -not $authorityDirs.Add($record.Dir) -or
                     -not $authorityWorkshopIds.Add($record.WorkshopId) -or
                     $record.Version -cnotmatch '^\d+\.\d+\.\d+(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?$' -or
-                    $record.RootBundle -cnotmatch '^[0-9a-f]{16}\.mod_bundle$' -or
                     $record.AssetFilename -cnotmatch '^[A-Za-z0-9][A-Za-z0-9_.-]*\.zip$' -or
-                    $record.SourceCommit -cnotmatch '^[0-9a-f]{40}$' -or
-                    $record.RootBundleSha256 -cnotmatch '^[0-9a-f]{64}$' -or
                     $record.AssetSha256 -cnotmatch '^[0-9a-f]{64}$') {
                 return New-VtClosureDecision 'Unavailable' 'authority-record-incomplete' $key
             }
@@ -246,6 +276,9 @@ function Get-VtPublicReleaseClosureDecision {
             return New-VtClosureDecision 'Rejected' 'verified-artifact-not-public-card-target' $key
         }
         $artifact = $targets[0]
+        if ($null -eq $artifact.SourceCommit) {
+            return New-VtClosureDecision 'Rejected' 'verified-artifact-source-commit-unavailable' $key
+        }
         foreach ($field in @('ModId','Dir','Stream','WorkshopId','Version','SourceCommit',
                 'RootBundle','RootBundleSha256','AssetFilename','AssetSha256')) {
             if ($artifact.$field -isnot [string] -or $artifact.$field -cne $receipt.$field) {
