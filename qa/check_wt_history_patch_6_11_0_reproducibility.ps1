@@ -1,7 +1,8 @@
 # Blocking offline provenance/reproduction gate for issue #1436's Patch
-# 6.11.0 Longbow and shared one-handed Hammer/Mace slice. Independent
-# evaluators select two Longbow routes plus six block/dodge leaves across the
-# three Hammer/Mace templates. All generated scratch output stays outside repo.
+# 6.11.0 Longbow, shared one-handed Hammer/Mace, and Kerillian Swiftbow slice.
+# Independent evaluators select two Longbow routes, six block/dodge leaves
+# across the three Hammer/Mace templates, and one Swiftbow maximum-ammunition
+# leaf. All generated scratch output stays outside repo.
 
 [CmdletBinding()]
 param(
@@ -76,6 +77,10 @@ try {
         '_wt_history_snapshot_6_10_0_hammer_priest_to_6_11_0_generated.lua'
     $priestRehydratedEvidence = Join-Path $evidenceRoot `
         '_wt_history_snapshot_6_10_0_hammer_priest_rehydrated_generated.lua'
+    $swiftbowAdjacentEvidence = Join-Path $evidenceRoot `
+        '_wt_history_snapshot_6_10_0_swiftbow_to_6_11_0_generated.lua'
+    $swiftbowRehydratedEvidence = Join-Path $evidenceRoot `
+        '_wt_history_snapshot_6_10_0_swiftbow_rehydrated_generated.lua'
     $generatedCatalog = Join-Path $root `
         'weapon_tweaker\scripts\mods\weapon_tweaker\_wt_history_6_11_0_catalog.lua'
     $devCatalog = Join-Path $root `
@@ -85,16 +90,18 @@ try {
     $pinned = [ordered]@{
         $extractor = 'ae916ba306e0f5933f71e9b41ed0c0e7df46c28585da4fb92b5e2cc03199b15a'
         $oracleExtractor = '767c73dd8f2caf35575324aae7ac09e2460a3506f9ad6c8296d2bee6e973a2d5'
-        $generator = '4012d029bbde9ac53f8175e483f8986108d97756cc0541d4479f4538b655e866'
-        $sourceCatalog = '2dea214e15bf6b7a07930bb8e376195c1385da2e4aa85657baa352046dce9335'
+        $generator = '20086343bd4c1e967ccc60fb30c7feb1d8b18a1936c7d3fbb6b56a4b14ca50ea'
+        $sourceCatalog = 'd1f9236a7bde34f3f43c15028a9641da66a00b21f546366797037702e1c8365a'
         $adjacentEvidence = '87b6f190c7beade349cbcb96a869c8bb43c2eba645849b4811bf670230739841'
         $rehydratedEvidence = '40a209e92700b23f39dea9ec0597a023ad9a78b97415d82baff8b55eaa5c3251'
         $hammerAdjacentEvidence = '8d1eb9ecc1466a8fa8aed558b74bf4a034cfc57157744ae482caadffd58bffa1'
         $hammerRehydratedEvidence = '2f496f368a86f76467eb343c504981f009e5e9865ea5d5cfa224027b5073d6fa'
         $priestAdjacentEvidence = '78c82bed0bc8104360d18aaba020df87d639307ee868b46b39ad558acd003d8f'
         $priestRehydratedEvidence = '8f5ced37c8bf71f9b50d5e119340ab65e03fce7f398b835e3e45e6692b51e11d'
-        $generatedCatalog = 'd52ee5719f0b8abf50e7ee9efad79adb475dd920da80110e52dbd83781900c43'
-        $devCatalog = 'd52ee5719f0b8abf50e7ee9efad79adb475dd920da80110e52dbd83781900c43'
+        $swiftbowAdjacentEvidence = 'a68dec5573e30ec9aa23dc42ff9d8da997fa17cd8883249bc42d9c21b19dcaef'
+        $swiftbowRehydratedEvidence = 'baab8cbfa8b5c1b30a388a35273429fcfbb2717d64f7ed2f557535ef8b75f3e1'
+        $generatedCatalog = '66fcd26071c06746efc4ae1cab0eacb615be2a8bc7b665f0616939f5123e24de'
+        $devCatalog = '66fcd26071c06746efc4ae1cab0eacb615be2a8bc7b665f0616939f5123e24de'
     }
     foreach ($entry in $pinned.GetEnumerator()) {
         if (-not (Test-Path -LiteralPath $entry.Key -PathType Leaf)) {
@@ -116,8 +123,8 @@ try {
     }
     $artifactMatches = [regex]::Matches($sourceText,
         '(?m)^\s*(_wt_history_snapshot_[A-Za-z0-9_]+)\s*=\s*"([0-9a-f]{64})"')
-    if ($artifactMatches.Count -ne 6) {
-        throw "Patch 6.11.0 evidence ledger must contain exactly 6 artifacts; got $($artifactMatches.Count)"
+    if ($artifactMatches.Count -ne 8) {
+        throw "Patch 6.11.0 evidence ledger must contain exactly 8 artifacts; got $($artifactMatches.Count)"
     }
     foreach ($match in $artifactMatches) {
         $evidencePath = Join-Path $evidenceRoot ($match.Groups[1].Value + '.lua')
@@ -137,6 +144,8 @@ try {
         '_wt_history_snapshot_6_10_0_hammers_rehydrated_generated.lua',
         '_wt_history_snapshot_6_10_0_hammers_to_6_11_0_generated.lua',
         '_wt_history_snapshot_6_10_0_rehydrated_generated.lua',
+        '_wt_history_snapshot_6_10_0_swiftbow_rehydrated_generated.lua',
+        '_wt_history_snapshot_6_10_0_swiftbow_to_6_11_0_generated.lua',
         '_wt_history_snapshot_6_10_0_to_6_11_0_generated.lua'
     ) | Sort-Object
     $actualEvidence = @(Get-ChildItem -LiteralPath $evidenceRoot -File `
@@ -154,6 +163,8 @@ try {
         'scripts/settings/equipment/weapon_templates/1h_hammers.lua'
     $priestPath = `
         'scripts/settings/equipment/weapon_templates/1h_hammers_priest.lua'
+    $swiftbowPath = `
+        'scripts/settings/equipment/weapon_templates/shortbows.lua'
     $sourceRequirements = @(
         [pscustomobject]@{ Revision = $historicalRevision; Path = $longbowPath; Blob = '6408a36495e3c78e9a9ed2dbc91a913c512d9aed' },
         [pscustomobject]@{ Revision = $postRevision; Path = $longbowPath; Blob = 'b4e374e2d9a2dbc0c25537617163901eeca1fc03' },
@@ -163,12 +174,16 @@ try {
         [pscustomobject]@{ Revision = $currentRevision; Path = $hammerPath; Blob = 'a67eb83ad27bcb86f0b88f52dcf8d4a5c8650c6d' },
         [pscustomobject]@{ Revision = $historicalRevision; Path = $priestPath; Blob = 'abc4699a266616fda0d5f9bbb81a665efac7c7e5' },
         [pscustomobject]@{ Revision = $postRevision; Path = $priestPath; Blob = 'dbea759457f3949b685e9e98dfd98cf4063de488' },
-        [pscustomobject]@{ Revision = $currentRevision; Path = $priestPath; Blob = 'dbea759457f3949b685e9e98dfd98cf4063de488' }
+        [pscustomobject]@{ Revision = $currentRevision; Path = $priestPath; Blob = 'dbea759457f3949b685e9e98dfd98cf4063de488' },
+        [pscustomobject]@{ Revision = $historicalRevision; Path = $swiftbowPath; Blob = '8e2a9fc4338e456e8f40d4c1d4578d2b2ecd185e' },
+        [pscustomobject]@{ Revision = $postRevision; Path = $swiftbowPath; Blob = '67e3fa824500fb0129591d0ec698c8a872974623' },
+        [pscustomobject]@{ Revision = $currentRevision; Path = $swiftbowPath; Blob = '67e3fa824500fb0129591d0ec698c8a872974623' }
     )
     $sourceSlices = @(
         [pscustomobject]@{ Label = 'longbow'; Path = $longbowPath; Adjacent = $adjacentEvidence; Rehydrated = $rehydratedEvidence },
         [pscustomobject]@{ Label = 'hammers'; Path = $hammerPath; Adjacent = $hammerAdjacentEvidence; Rehydrated = $hammerRehydratedEvidence },
-        [pscustomobject]@{ Label = 'hammer-priest'; Path = $priestPath; Adjacent = $priestAdjacentEvidence; Rehydrated = $priestRehydratedEvidence }
+        [pscustomobject]@{ Label = 'hammer-priest'; Path = $priestPath; Adjacent = $priestAdjacentEvidence; Rehydrated = $priestRehydratedEvidence },
+        [pscustomobject]@{ Label = 'swiftbow'; Path = $swiftbowPath; Adjacent = $swiftbowAdjacentEvidence; Rehydrated = $swiftbowRehydratedEvidence }
     )
     $sourceSelection = Find-WtHistorySourceRepo -Root $root `
         -Explicit $SourceRepo -Requirements $sourceRequirements
@@ -282,7 +297,7 @@ try {
         }
     }
 
-    Write-Detail "[check_wt_history_patch_6_11_0_reproducibility] OK - eight scalar routes, current guards, independent oracle, and catalog reproduced from $source" 'Green'
+    Write-Detail "[check_wt_history_patch_6_11_0_reproducibility] OK - nine scalar routes, current guards, independent oracle, and catalog reproduced from $source" 'Green'
     exit 0
 }
 catch {

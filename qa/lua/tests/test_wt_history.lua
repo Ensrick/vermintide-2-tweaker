@@ -384,10 +384,10 @@ local function register(H, repo_root)
 
         H.deep_equal(totals, {
             catalogs = 13,
-            families = 26,
-            family_states = 39,
-            operations = 242,
-            states = 15,
+            families = 27,
+            family_states = 40,
+            operations = 243,
+            states = 16,
         })
         local ledger = assert(by_path[CatalogUI.COMPLETENESS_LEDGER_MODULE])
         H.equal(ledger.current_revision,
@@ -734,17 +734,17 @@ local function register(H, repo_root)
             "wt_history_patch_3_1_v1", "wt_history_patch_3_2_v1",
             "wt_history_patch_5_2_v1", "wt_history_patch_6_0_v1",
             "wt_history_patch_6_6_v1", "wt_history_patch_6_8_v1",
-            "wt_history_patch_6_11_0_v2",
+            "wt_history_patch_6_11_0_v3",
             "wt_history_patch_6_11_2_reversions_v2",
             "wt_history_patch_4_1_1_v1", "wt_history_patch_4_6_hagbane_v1",
         })
         H.deep_equal(catalog_counts(catalog), {
             derived_profiles = 1,
-            families = 26,
-            family_states = 39,
-            operations = 242,
+            families = 27,
+            family_states = 40,
+            operations = 243,
             profiles = 18,
-            states = 15,
+            states = 16,
         })
         local axe_falchion, elf_axe, halberd, hammer, handgun, kruber, longbow,
             masterwork, sword_dagger, tuskgor

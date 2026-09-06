@@ -157,8 +157,8 @@ try {
             $null = $transitionPaths.Add($match.Groups[1].Value)
         }
     }
-    if ($transitionPaths.Count -ne 36) {
-        throw "#1529 current-source transition scope drift: expected=36 actual=$($transitionPaths.Count)"
+    if ($transitionPaths.Count -ne 37) {
+        throw "#1529 current-source transition scope drift: expected=37 actual=$($transitionPaths.Count)"
     }
     foreach ($sourcePath in @($transitionPaths | Sort-Object)) {
         $before = Invoke-WtHistoryReadOnlyGit -Repository $source -Arguments @(
