@@ -1,9 +1,11 @@
 # Public-release closure attestation policy (#1527)
 
-This is an **offline policy component**, not a live close-event audit. No issue
-is closed/reopened/commented on, and no workflow or retrospective enforcement
-is installed by this change. The existing open lifecycle guard and PR closure
-authorization remain unchanged. The future event adapter is still required.
+This is a **read-only policy/collection library**, not a live close-event audit.
+The policy is offline; an explicitly invoked trusted transport can collect one
+issue from GitHub. No issue is closed/reopened/commented on, and no workflow or
+retrospective enforcement is installed. The existing open lifecycle guard and
+PR closure authorization remain unchanged. The future event adapter is still
+required.
 
 ## Trust boundary and API
 
@@ -158,8 +160,9 @@ and any `errors`. The query is fixed and read-only. The transport must bind
 authentication and HTTPS to GitHub, retain raw string timestamps/body text,
 bound each request's duration and response bytes, and surface failures rather
 than truncate or invent metadata. Do not source this callback, rollout date,
-verifier list or authority from issue content. No shell/network transport is
-installed by this slice; a later trusted caller owns that boundary.
+verifier list or authority from issue content. The optional trusted HTTPS
+wrapper below now owns that boundary without changing this callback-based
+collector; arbitrary callbacks remain the caller's responsibility.
 
 One issue is collected twice, each time including all comments, author
 association, raw bodies/revision times and Boolean pin states. Every page also
@@ -198,6 +201,84 @@ incomplete/truncated data, Boolean coercion, bounded loops, metadata/body/pin
 races, trusted author metadata, absent historical authority, and historical
 non-enforcement. Its request stub permits only the exact issue coordinates and
 read-only query. No fixtures contact GitHub.
+
+### Trusted bounded HTTPS transport
+
+Import `tools/github/public-release-closure-transport.psm1`, then explicitly call
+its only export, `Get-VtAuthenticatedGitHubPublicReleaseClosureAudit`. Importing
+the module performs no request. Supply `Repository`, positive `IssueNumber`,
+`AuthToken` as a trusted `SecureString`, and the same explicit `AttestationId`,
+retained historical `AuthoritySnapshot`, and `EnforceFromUtc` required above.
+`TrustedVerifier` retains the policy defaults. No ambient token, `gh` login,
+current release authority, attestation selection, or rollout date is inferred.
+Use a least-privilege read credential obtained by the trusted caller; never take
+these configuration values from issue content or log the token. The wrapper
+copies/disposes its token; the caller still owns and must dispose its original.
+
+The internal C# owner sends only POST to the literal
+`https://api.github.com/graphql` with the unchanged collector query and exactly
+the trusted owner/name/issue plus an opaque cursor. The first cursor is literal
+JSON null, not an empty string. A pinned query digest permits only checkout
+CRLF/LF differences and does not normalize the transmitted query. The exported
+API has no endpoint, query, request callback, handler or factory parameter. The
+in-memory test handler is accessible only through a private constructor used by
+offline QA, not a live issue-controlled input.
+
+The live handler disables redirects, cookies, default credentials and automatic
+decompression; it retains platform TLS certificate validation. Authorization is
+explicit Bearer authentication. Responses require HTTP 200 and JSON content
+type, with absent or UTF-8 charset and no content encoding. Authentication
+failures, redirects and other HTTP failures are never retried or body-parsed.
+Response headers are capped at 32 KiB and request JSON at 8 KiB. Body reads use
+`ResponseHeadersRead`, not pre-buffering or `ReadAsByteArrayAsync`.
+
+| Limit | Default | Maximum |
+|---|---:|---:|
+| `DeadlineMilliseconds`, shared across all requests/passes | 30,000 | 60,000 |
+| `MaxResponseBytes`, each response | 4 MiB | 16 MiB |
+| `MaxTotalResponseBytes`, both passes combined | 32 MiB | 64 MiB |
+| `MaxRequests`, physical requests without retries | 44 | 44 |
+
+Limits may be reduced. Declared Content-Length is only an early rejection hint:
+each body is still streamed and counted. An unknown/lying length can consume at
+most one excess byte to prove oversize; that byte is not accepted or parsed.
+One cancellation source/deadline covers headers, stream acquisition, streaming
+reads and every subsequent page, including cancellation-ignoring asynchronous
+fixture operations. Late response/stream ownership is observed and disposed.
+Bounded synchronous JSON/policy work is checked against the same total deadline
+before returning, but is not preempted mid-call. Client, request, content, stream,
+response, cancellation and copied-secret ownership are cleaned up on failure.
+
+Strict UTF-8 decoding occurs only after byte bounds. A small lexical preflight
+rejects escaped lone surrogates before host parsing: both supported hosts would
+otherwise silently replace them. It also rejects non-JSON comment, single-quote,
+trailing/missing-element comma, unquoted-key and scalar extensions accepted by
+their parsers. Nesting is capped at 32, structural/scalar tokens at 131,072 and
+unquoted scalar length at 64; the host still owns full JSON structural parsing.
+PowerShell 5.1 preserves timestamp strings directly; PowerShell 7.6 uses
+`ConvertFrom-Json -DateKind String`. An older coercing host without this option
+fails the collector's string checks rather than reconstructing timestamps.
+Raw comment bodies, Unicode and newlines are not normalized before hashing.
+
+The wrapper invokes the unchanged collector and policy, always returning
+`MayMutate=false` on the wrapper, decision and added `Transport` metadata. The
+latter records a fixed source identifier, request count, consumed response bytes
+and elapsed milliseconds, never credentials. Transport failures return
+Unavailable with closed-vocabulary reasons; no exception details, raw error
+body, headers or token escape. Accepted comment snapshots intentionally retain
+their authenticated raw bodies; failure results do not publish partial snapshots.
+Missing historical authority remains Unavailable, not a request to substitute
+today's release or reopen the issue.
+
+`qa/check_public_release_closure_transport.ps1` runs in Quick/full QA. Its private
+HTTP handler/streams exercise the actual transport and exported orchestration,
+including cancellation-ignoring slow headers/body/stream acquisition, shared
+multi-page budgets, cleanup, credential/error non-disclosure, exact null cursors,
+invalid UTF-8 and the demonstrated PS5/PS7 JSON extensions. The fixtures execute
+on both Windows PowerShell 5.1 and PowerShell 7; they never contact GitHub.
+This source verification is not deployed workflow or live-API evidence. Event
+delivery, authority/card-pin archival, historical migration, fresh pre-mutation
+state checks and idempotent action policy remain unimplemented future work.
 
 ### Policy fixtures
 
