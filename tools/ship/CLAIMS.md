@@ -2,15 +2,27 @@
 
 ## Permanent reservations: prospective migration (#724)
 
-The permanent-burn requirement is implemented in `claim-allocation.ps1`, but
-**no live mod is activated by this source change**. The source-owned
-`claim-allocation-policy.psd1` starts with an empty `EnabledMods` array. The
-legacy behavior described below remains in effect for an unactivated mod with
-no allocation state. It does NOT preserve abandoned numbers. Do not allocate
+The permanent-burn requirement is implemented in `claim-allocation.ps1`.
+The source-owned `claim-allocation-policy.psd1` activates only
+`character_weapon_variants`; every other mod still requires its own reviewed
+initialization and activation. The legacy behavior below remains for an
+unactivated mod with no allocation state. It does NOT preserve abandoned numbers. Do not allocate
 protected queued versions through that legacy lane while migration is pending.
 The September 6 private reproduction established reuse after ordinary release
 and stale takeover; older claims already deleted cannot be reconstructed from
 the current directory. Source-plus-one is not historical reconciliation.
+
+CWV's scoped initialization was performed from merged source
+`3e6f0256fa0a5937cbb6d34da588b844aab81c13` after exact-master QA passed,
+under [the reviewed migration plan](https://github.com/Ensrick/vermintide-2-tweaker/issues/724#issuecomment-5590689291).
+The adopted numeric floor is `0.1.537`; the unchanged claim SHA-256 is
+`d93055949007d0095bb40758b45aa0d1e210450e4068fcdd9ece578ae8636621` and
+its original timestamp is September 6, 2026 at `05:38:37Z`. The initial ledger
+SHA-256 is `b3ee71024f1ac9717fb9794485db5f0f62773030f15b7d947933278613a42550`.
+These are migration-event evidence, not permanent current-state pins: future
+authorized allocations change the ledger. They do not authorize copying these
+files, bypassing age checks, or reusing the stale `.537` artifacts. Activation
+of this one mod does not complete #724's remaining scoped migrations.
 
 An activated mod has one `<mod>.allocation` file beside its unchanged four-field
 `<mod>.claim`. Its numeric floor survives release, stale takeover and failure;
@@ -91,8 +103,9 @@ not allocators and do not understand the sidecar. Canonical activated Verify
 rejects unbound old-broker claims or replayed retired claims before publication
 authorization. Very old checkouts can still run their old allocator; they are
 not a supported way to bypass migration. Canonical publication's clean current
-default-head and hosted-receipt gates remain unchanged. No live claim,
-allocation state, version, artifact or launcher is changed by this source PR.
+default-head and hosted-receipt gates remain unchanged. Changing the source
+activation list does not itself mutate a live claim or ledger, allocate a new
+version, renew an artifact, or switch the approved launcher.
 
 `qa/check_permanent_claim_allocation.ps1 -SelfTest` exercises real private
 broker dispatch, explicit initialization, stale adoption, release/reclaim,
