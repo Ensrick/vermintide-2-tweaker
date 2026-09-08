@@ -811,6 +811,24 @@ When a new bug class is discovered:
 4. **If PRE-SHIP**: update PROJECT_STANDARDS §5.3 review template.
 5. **If MANUAL**: ensure CLAUDE.md or PROJECT_STANDARDS surface the rule.
 
+## Permanent claim allocation (#724)
+
+`check_permanent_claim_allocation.ps1 -SelfTest` is auto-discovered by the full
+QA self-test runner. Run it under both PowerShell 7 and Windows PowerShell 5.1
+when changing the broker. It exercises actual canonical CLI dispatch in private
+copied tools, exact claim adoption, dormant/activated policy, release and stale
+floor retention, lost/corrupt history, old-writer refusal, native held-handle
+write/delete exclusion, two-process ownership, hard owner death after real
+durable reservation/retirement, and failed atomic writes. Fixture cleanup deletes
+only individually validated owned files and empty directories. No launcher,
+Steam, shared claim/ledger, or pending artifact is mutated.
+
+The old `claim.ps1 -SelfTest` remains a compatibility check for the dormant
+legacy lane. Its source-plus-one stale test is not permanent-retention proof.
+The new protocol's source/test success does not activate any mod or complete
+#724 migration; explicit reviewed floors and per-mod policy activation remain
+required by `tools/ship/CLAIMS.md`.
+
 ## When this doc is wrong
 
 If a check name doesn't match the script, fix one or the other. If a bug class
