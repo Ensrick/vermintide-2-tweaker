@@ -23,11 +23,12 @@ function Refuses([scriptblock]$Action,[string]$Message) {
     $threw=$false; try { & $Action | Out-Null } catch { $threw=$true }
     Assert $threw $Message
 }
-function New-Case([string]$Name,[string]$Version='0.2.177') {
+function New-Case([string]$Name,[string]$Version='0.2.177',[string]$Mod='fixture_mod') {
     $dir=Join-Path $root $Name
-    [IO.Directory]::CreateDirectory((Join-Path $dir 'fixture_mod\scripts\mods\fixture_mod')) | Out-Null
+    $sourceDir=Join-Path $dir "$Mod\scripts\mods\$Mod"
+    [IO.Directory]::CreateDirectory($sourceDir) | Out-Null
     [IO.Directory]::CreateDirectory((Join-Path $dir 'claims')) | Out-Null
-    [IO.File]::WriteAllText((Join-Path $dir 'fixture_mod\scripts\mods\fixture_mod\fixture_mod.lua'),('local MOD_VERSION = "'+$Version+'"'),$utf8)
+    [IO.File]::WriteAllText((Join-Path $sourceDir "$Mod.lua"),('local MOD_VERSION = "'+$Version+'"'),$utf8)
     return $dir
 }
 function Init([string]$Dir,[string]$Floor='0.2.177',[string]$Hash='absent') {
@@ -251,6 +252,58 @@ try {
     $output=& $privateCli -Mod fixture_mod -RepoRoot $dir -ClaimsDir $claims -Session cli-next -Quiet *>&1
     Assert ($LASTEXITCODE -eq 2) 'lost active history cannot fall back to legacy Acquire'
     Assert ([IO.File]::ReadAllText((Join-Path $claims 'fixture_mod.claim')).Contains('0.2.179')) 'lost history preserves pending claim'
+
+    # Exercise the actual committed CWV policy using only a private source and
+    # synthetic claim. Never copy a real claim/ledger or renew its timestamp.
+    $cwv='character_weapon_variants'
+    $dir=New-Case cwv '0.1.537-dev' $cwv
+    $toolDir=Join-Path $dir 'tools\ship'; [IO.Directory]::CreateDirectory($toolDir) | Out-Null
+    foreach ($name in @('claim.ps1','claim-allocation.ps1','claim-allocation-policy.psd1','build-output-normalization.ps1','bundle-authority.ps1')) {
+        [IO.File]::Copy((Join-Path $repo ('tools\ship\'+$name)),(Join-Path $toolDir $name))
+    }
+    $policyPath=Join-Path $toolDir 'claim-allocation-policy.psd1'
+    Assert (Get-AllocationPolicy $policyPath $cwv) 'committed policy activates exact CWV identity'
+    Assert (-not (Get-AllocationPolicy $policyPath fixture_mod)) 'CWV activation does not enable unrelated fixture mod'
+    $privateCli=Join-Path $toolDir 'claim.ps1'; $claims=Join-Path $dir 'claims'
+    $claimPath=Join-Path $claims "$cwv.claim"; $statePath=Join-Path $claims "$cwv.allocation"
+    $oldRaw=Format-ClaimContent $cwv '0.1.537-dev' 'fixture-cwv-retained' ([datetime]::UtcNow.AddHours(-25))
+    [IO.File]::WriteAllText($claimPath,$oldRaw,$utf8)
+    $oldHash=Get-AllocationHash ([IO.File]::ReadAllBytes($claimPath))
+    $oldCreated=(Read-ClaimFile $claimPath).CreatedUtc
+    $foreignPath=Join-Path $claims 'doomrocket.claim'
+    [IO.File]::WriteAllText($foreignPath,'foreign fixture record; not a migration target',$utf8)
+    $cliArgs=@{Mod=$cwv;RepoRoot=$dir;ClaimsDir=$claims;Session='fixture-cwv-retained';Quiet=$true}
+    foreach ($operation in @('Acquire','Verify','Release')) {
+        $operationArgs=@{}
+        if ($operation -ceq 'Verify') { $operationArgs=@{Verify=$true;ExpectedVersion='0.1.537-dev'} }
+        if ($operation -ceq 'Release') { $operationArgs=@{Release=$true} }
+        $output=& $privateCli @cliArgs @operationArgs *>&1
+        Assert ($LASTEXITCODE -eq 2) "CWV $operation refuses missing history without legacy fallback"
+        Assert ([IO.File]::ReadAllText($claimPath) -ceq $oldRaw -and -not [IO.File]::Exists($statePath)) 'missing CWV history neither mutates claim nor bootstraps ledger'
+    }
+    $output=& $privateCli @cliArgs -InitializeAllocation -ReviewedFloor '0.1.537' -ExpectedClaimSha256 $oldHash -ReviewReference $review *>&1
+    Assert ($LASTEXITCODE -eq 0) 'actual CWV initializer adopts reviewed synthetic stale reservation'
+    $adopted=Read-AllocationState $statePath $cwv
+    Assert ($adopted.Floor -ceq '0.1.537' -and $adopted.ClaimHash -ceq $oldHash -and $adopted.Status -ceq 'active') 'CWV floor and binding match exact retained reservation'
+    Assert ([IO.File]::ReadAllText($claimPath) -ceq $oldRaw -and (Read-ClaimFile $claimPath).CreatedUtc -eq $oldCreated) 'CWV adoption preserves original bytes and stale timestamp'
+    $output=& $privateCli @cliArgs -Verify -ExpectedVersion '0.1.537-dev' *>&1
+    Assert ($LASTEXITCODE -eq 5) 'actual CWV Verify still rejects adopted stale reservation'
+    Assert ([IO.File]::ReadAllText($claimPath) -ceq $oldRaw -and [IO.File]::ReadAllText($statePath) -ceq $adopted.Raw) 'stale CWV Verify is nonmutating'
+    $cliArgs.Session='fixture-cwv-fresh'
+    $output=& $privateCli @cliArgs *>&1
+    Assert ($LASTEXITCODE -eq 0 -and (Read-ClaimFile $claimPath).Version -ceq '0.1.538-dev') 'CWV stale takeover allocates a fresh higher dev version'
+    $freshRaw=[IO.File]::ReadAllText($claimPath)
+    $fresh=Read-AllocationState $statePath $cwv
+    Assert ($fresh.Floor -ceq '0.1.538' -and $fresh.ClaimRaw -ceq $freshRaw -and (Read-ClaimFile $claimPath).Session -ceq 'fixture-cwv-fresh') 'CWV fresh claim has exact new owner and permanent binding'
+    $output=& $privateCli @cliArgs -Verify -ExpectedVersion '0.1.538-dev' *>&1
+    Assert ($LASTEXITCODE -eq 0) 'actual CWV Verify accepts new exact live reservation'
+    $output=& $privateCli @cliArgs *>&1
+    Assert ($LASTEXITCODE -eq 0 -and [IO.File]::ReadAllText($claimPath) -ceq $freshRaw -and [IO.File]::ReadAllText($statePath) -ceq $fresh.Raw) 'CWV live same-owner reclaim preserves reservation exactly'
+    $output=& $privateCli @cliArgs -Release *>&1
+    Assert ($LASTEXITCODE -eq 0 -and -not [IO.File]::Exists($claimPath) -and (Read-AllocationState $statePath $cwv).Floor -ceq '0.1.538') 'CWV normal release keeps its permanent floor'
+    $output=& $privateCli @cliArgs *>&1
+    Assert ($LASTEXITCODE -eq 0 -and (Read-ClaimFile $claimPath).Version -ceq '0.1.539-dev') 'CWV release/reclaim cannot recycle the unshipped fresh version'
+    Assert ([IO.File]::ReadAllText($foreignPath) -ceq 'foreign fixture record; not a migration target') 'CWV migration and allocation never touch foreign project records'
     Write-Host "[permanent-claims] PASS $script:passed assertions; $($PSVersionTable.PSVersion)."
 }
 finally {

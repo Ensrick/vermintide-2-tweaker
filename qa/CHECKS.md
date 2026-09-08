@@ -823,11 +823,19 @@ durable reservation/retirement, and failed atomic writes. Fixture cleanup delete
 only individually validated owned files and empty directories. No launcher,
 Steam, shared claim/ledger, or pending artifact is mutated.
 
+The CWV activation case copies the committed policy into a private broker and
+uses a synthetic `0.1.537-dev` claim. Actual CLI paths must refuse missing
+history for Acquire/Verify/Release, preserve exact stale bytes on adoption,
+return stale exit 5, allocate `0.1.538-dev` only as a fresh reservation, retain
+the floor through release, and allocate `.539-dev` next. An unrelated mod stays
+on its existing fixture path and a foreign project's sentinel remains intact.
+These are private protocol checks, not live claim or artifact verification.
+
 The old `claim.ps1 -SelfTest` remains a compatibility check for the dormant
 legacy lane. Its source-plus-one stale test is not permanent-retention proof.
-The new protocol's source/test success does not activate any mod or complete
-#724 migration; explicit reviewed floors and per-mod policy activation remain
-required by `tools/ship/CLAIMS.md`.
+Protocol test success does not initialize a live ledger or complete #724
+migration. Explicit reviewed floors and per-mod source-policy activation remain
+required by `tools/ship/CLAIMS.md`; CWV is the first scoped activation.
 
 ## When this doc is wrong
 
