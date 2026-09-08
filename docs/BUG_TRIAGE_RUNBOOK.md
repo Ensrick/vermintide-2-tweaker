@@ -253,8 +253,11 @@ shipping. Agent publication is headless and opens no interactive window.
   The claim broker is machine-global
   (`%APPDATA%\VMBLauncher\ship_claims\<mod>.claim`), shared across every worktree
   and every concurrent session on the machine. The number it allocates can be
-  HIGHER than master's newest + 1, because prior claims burned numbers that never
-  shipped. Always renumber to the broker's answer; never assume master+1 and
+  HIGHER than master's newest + 1 under the activated permanent-floor protocol.
+  Until the exact mod's reviewed #724 migration is activated, the legacy broker
+  does not preserve abandoned allocations: do not reclaim protected queued
+  numbers through it. Follow `tools/ship/CLAIMS.md`, including fresh higher
+  versions for stale claims, not timestamp renewal. Always renumber to the broker's answer; never assume master+1 and
   never re-use a number the broker did not hand you.
 - [ ] **Bump `MOD_VERSION` to the claimed number** in
   `<mod>/scripts/mods/<mod>/<mod>.lua`. Three-segment semver plus track suffix

@@ -48,6 +48,10 @@ param(
     [string]$Session,
     [double]$StaleHours = 24,
     [switch]$Quiet,
+    [switch]$InitializeAllocation,
+    [string]$ReviewedFloor,
+    [string]$ExpectedClaimSha256,
+    [string]$ReviewReference,
     [switch]$ConditionalDeleteRaceWorker,
     [string]$RaceClaimPath,
     [string]$RaceReadyPath,
@@ -55,6 +59,7 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+. (Join-Path $PSScriptRoot 'claim-allocation.ps1')
 
 # ---------------------------------------------------------------------------
 # Pure helpers, hoisted so -SelfTest exercises the SAME code the live broker
@@ -574,12 +579,19 @@ function Invoke-ClaimSelfTest {
         $raceDir = Join-Path $tmp 'race'
         $selfPath = $PSCommandPath
         $fmt = '-NoProfile -ExecutionPolicy Bypass -File "{0}" -Mod {1} -RepoRoot "{2}" -ClaimsDir "{3}" -Session {4} -Quiet'
-        $p1 = Start-Process powershell.exe -PassThru -WindowStyle Hidden -ArgumentList ($fmt -f $selfPath, $fixMod, $fixRepo, $raceDir, 'race-a')
-        $p2 = Start-Process powershell.exe -PassThru -WindowStyle Hidden -ArgumentList ($fmt -f $selfPath, $fixMod, $fixRepoB, $raceDir, 'race-b')
+        $p1 = Start-Process powershell.exe -PassThru -WindowStyle Hidden -ArgumentList ($fmt -f $selfPath, $fixMod, $fixRepo, $raceDir, 'race-a') `
+            -RedirectStandardOutput (Join-Path $tmp 'race-a.out') -RedirectStandardError (Join-Path $tmp 'race-a.err')
+        $null = $p1.Handle # PS5 retains ExitCode only with a handle captured before short child exit.
+        $p2 = Start-Process powershell.exe -PassThru -WindowStyle Hidden -ArgumentList ($fmt -f $selfPath, $fixMod, $fixRepoB, $raceDir, 'race-b') `
+            -RedirectStandardOutput (Join-Path $tmp 'race-b.out') -RedirectStandardError (Join-Path $tmp 'race-b.err')
+        $null = $p2.Handle
         $p1.WaitForExit(); $p2.WaitForExit()
         $codes = @($p1.ExitCode, $p2.ExitCode)
         $acquired = @($codes | Where-Object { $_ -eq 0 }).Count
         $contended = @($codes | Where-Object { $_ -eq 1 }).Count
+        if ($acquired -ne 1 -or $contended -ne 1) {
+            foreach ($name in @('race-a.out','race-a.err','race-b.out','race-b.err')) { Write-Host ([IO.File]::ReadAllText((Join-Path $tmp $name))) }
+        }
         Assert ($acquired -eq 1) ("exactly one cross-worktree racing process acquires (exit codes: {0})" -f ($codes -join ','))
         Assert ($contended -eq 1) ("the other cross-worktree process reports contention exit 1 (exit codes: {0})" -f ($codes -join ','))
     }
@@ -621,13 +633,41 @@ if (-not $Mod) {
     exit 2
 }
 
+# Permanent history is prospective and deliberately dormant until a reviewed
+# policy migration. Never infer activation from an absent file (lost history
+# must not silently fall back to the legacy source-plus-one allocator).
+try {
+    $allocationEnabled = Get-AllocationPolicy -Path (Join-Path $PSScriptRoot 'claim-allocation-policy.psd1') -Mod $Mod
+    if ($InitializeAllocation) {
+        if ($Release -or $Verify -or -not $ReviewedFloor -or -not $ExpectedClaimSha256 -or -not $ReviewReference) {
+            throw 'InitializeAllocation requires ReviewedFloor, ExpectedClaimSha256 and ReviewReference; it cannot release/verify.'
+        }
+        $result = Initialize-PermanentAllocation -ClaimsDir $ClaimsDir -Mod $Mod -RepoRoot $RepoRoot `
+            -ReviewedFloor $ReviewedFloor -ExpectedClaimSha256 $ExpectedClaimSha256 -ReviewReference $ReviewReference
+        Write-Host "Initialized reviewed permanent floor $($result.Floor); claim timestamp unchanged. Activation is a separate source-policy review."
+        exit 0
+    }
+    if ($ReviewedFloor -or $ExpectedClaimSha256 -or $ReviewReference) { throw 'Migration arguments require InitializeAllocation.' }
+    if (-not $allocationEnabled -and (Test-Path -LiteralPath (Join-Path $ClaimsDir "$Mod.allocation"))) {
+        throw 'Permanent allocation history exists but this checkout has not activated it; legacy operations refused.'
+    }
+}
+catch { Write-Host "CLAIM POLICY ERROR: $($_.Exception.Message)" -ForegroundColor Red; exit 2 }
+
 # --- verify (ship.ps1 gate hook) ---
 if ($Verify) {
     if (-not $ExpectedVersion) {
         Write-Host "claim.ps1 -Verify requires -ExpectedVersion <MOD_VERSION>." -ForegroundColor Red
         exit 2
     }
-    $state = Test-ShipClaimState -ClaimsDir $ClaimsDir -Mod $Mod -ExpectedVersion $ExpectedVersion -ExpectedSession $sessionId -NowUtc $nowUtc -StaleHours $StaleHours
+    try {
+        $state = if ($allocationEnabled) {
+            Invoke-PermanentClaim -Operation Verify -ClaimsDir $ClaimsDir -Mod $Mod -RepoRoot $RepoRoot `
+                -Session $sessionId -ExpectedVersion $ExpectedVersion -NowUtc $nowUtc -StaleHours $StaleHours
+        } else {
+            Test-ShipClaimState -ClaimsDir $ClaimsDir -Mod $Mod -ExpectedVersion $ExpectedVersion -ExpectedSession $sessionId -NowUtc $nowUtc -StaleHours $StaleHours
+        }
+    } catch { Write-Host "CLAIM VERIFY ERROR: $($_.Exception.Message)" -ForegroundColor Red; exit 2 }
     switch ($state.State) {
         'ok' {
             if (-not $Quiet) { Write-Host "OK -- live claim for '$Mod' matches v$ExpectedVersion." -ForegroundColor Green }
@@ -649,12 +689,17 @@ if ($Verify) {
             if (-not $Quiet) { Write-Host "Claim for '$Mod' belongs to '$($state.Claim.Session)'; current owner is '$sessionId'." -ForegroundColor Red }
             exit 6
         }
+        default { Write-Host 'Unknown claim verification state; refusing mutation.' -ForegroundColor Red; exit 2 }
     }
 }
 
 # --- release ---
 if ($Release) {
-    $r = Invoke-ClaimRelease -ClaimsDir $ClaimsDir -Mod $Mod -Session $sessionId
+    try {
+        $r = if ($allocationEnabled) {
+            Invoke-PermanentClaim -Operation Release -ClaimsDir $ClaimsDir -Mod $Mod -RepoRoot $RepoRoot -Session $sessionId -NowUtc $nowUtc
+        } else { Invoke-ClaimRelease -ClaimsDir $ClaimsDir -Mod $Mod -Session $sessionId }
+    } catch { Write-Host "CLAIM RELEASE ERROR: $($_.Exception.Message)" -ForegroundColor Red; exit 2 }
     if ($r.Removed) {
         if (-not $Quiet) {
             Write-Host "Released claim for '$Mod'." -ForegroundColor Green
@@ -678,7 +723,9 @@ if ($Release) {
 
 # --- default: acquire ---
 try {
-    $r = Invoke-ClaimAcquire -ClaimsDir $ClaimsDir -Mod $Mod -RepoRoot $RepoRoot -Session $sessionId -NowUtc $nowUtc -StaleHours $StaleHours
+    $r = if ($allocationEnabled) {
+        Invoke-PermanentClaim -Operation Acquire -ClaimsDir $ClaimsDir -Mod $Mod -RepoRoot $RepoRoot -Session $sessionId -NowUtc $nowUtc -StaleHours $StaleHours
+    } else { Invoke-ClaimAcquire -ClaimsDir $ClaimsDir -Mod $Mod -RepoRoot $RepoRoot -Session $sessionId -NowUtc $nowUtc -StaleHours $StaleHours }
 }
 catch {
     Write-Host ""

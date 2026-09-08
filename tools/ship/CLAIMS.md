@@ -1,5 +1,104 @@
 # Ship / version claim broker
 
+## Permanent reservations: prospective migration (#724)
+
+The permanent-burn requirement is implemented in `claim-allocation.ps1`, but
+**no live mod is activated by this source change**. The source-owned
+`claim-allocation-policy.psd1` starts with an empty `EnabledMods` array. The
+legacy behavior described below remains in effect for an unactivated mod with
+no allocation state. It does NOT preserve abandoned numbers. Do not allocate
+protected queued versions through that legacy lane while migration is pending.
+The September 6 private reproduction established reuse after ordinary release
+and stale takeover; older claims already deleted cannot be reconstructed from
+the current directory. Source-plus-one is not historical reconciliation.
+
+An activated mod has one `<mod>.allocation` file beside its unchanged four-field
+`<mod>.claim`. Its numeric floor survives release, stale takeover and failure;
+the next patch is above both that floor and the current source numeric version,
+using the source's release suffix. Its current reservation binds the exact
+claim bytes/SHA-256, owner, version and original timestamp. Same-owner LIVE
+reclaim is idempotent. Stale adoption never renews a timestamp; replacing stale
+work requires a new higher version and regenerated artifacts/receipts.
+
+### Explicit reviewed migration (separate authorization)
+
+This operation is available for a reviewed migration, not run by builds or
+implicitly by Acquire/Verify. Source merge alone does not complete #724.
+
+1. Quiesce older broker writers for the exact mod. Review the current source,
+   retained claims, pending artifacts and known historical reservations. Choose
+   a conservative numeric floor at least as high as all known allocations,
+   documenting any irrecoverable historical uncertainty. Never sweep the shared
+   directory: other projects, including Doomrocket/Pusfume, own their records.
+2. Record the exact current claim's SHA-256 (raw UTF-8 bytes), or the literal
+   `absent` only when review established that absence. A review reference is an
+   audit link, not itself an authorization credential. The operator must have
+   explicit migration approval; do not infer it from a stale claim.
+3. Run the canonical broker initialization for ONLY that mod:
+
+   ```powershell
+   .\tools\ship\claim.ps1 -Mod <mod> -InitializeAllocation `
+       -ReviewedFloor <major.minor.patch> `
+       -ExpectedClaimSha256 <exact-sha256-or-absent> `
+       -ReviewReference <reviewed-issue-or-PR-URL>
+   ```
+
+   It refuses an existing ledger, a changed/malformed claim, or a floor below
+   source/claim. It adopts existing bytes without rewriting them, renewing them,
+   releasing ownership, or asserting their artifact validity. A newly appearing
+   old-writer claim causes failure with the floor retained. Initialization
+   never recovers unknown past history by guessing.
+4. Activate ONLY that mod in `claim-allocation-policy.psd1` through a reviewed
+   protected source PR. Between initialization and activation, the new broker
+   refuses ordinary operations for that mod. Once activated, missing/corrupt
+   history refuses operations rather than falling back. If initialization or
+   activation is interrupted, preserve all files and reconcile explicitly;
+   never delete a ledger or lower its floor to unblock work.
+5. Verify the adopted claim. A stale result remains stale under both the broker
+   and approved launcher's existing 24-hour check. Acquire a NEW higher version
+   for stale/abandoned work; bump, rebuild, review, merge and publish normally.
+   Pending artifacts bound to approved launcher 0.6.1 are not reinterpreted by
+   0.6.2 or by this migration. There is no same-allocation renewal command.
+
+### Serialization, interruption and old clients
+
+Strict operations take a path-qualified `Global` per-mod mutex, then the legacy
+`Local` mutex. These are bounded leaf locks: they acquire no machine/release
+lease and return before callers proceed. An existing ship may nest this leaf
+below its machine/release ownership; never hold it while starting a ship. The
+global lock serializes new brokers across Windows sessions. It does NOT make
+an older cross-session broker participate.
+
+Existing claim proof/deletion therefore uses the existing native exact-delete
+handle owner: read+DELETE access, share READ only, single-link regular-file
+proof, same-handle hash/read, and delete-on-close. The handle stays held while
+the ledger is durably retired. An old writer cannot replace/delete/write the
+claim between proof and deletion even if it ignores the new mutex. Absence is
+not a lock: if an old writer wins `CREATE_NEW` after the new floor was persisted,
+the new operation fails and retains the burned floor and foreign claim.
+
+State writes flush a unique same-directory pending file to disk, atomically
+move/replace it under the Global owner, then read back. The byte comparison is
+drift detection, not a claim of lock-free CAS. Reserve is persisted BEFORE claim
+creation; retire is persisted BEFORE exact deletion. A hard process death may
+burn an extra number; it may not permit reuse. A partial/corrupt claim or state
+stops for explicit reconciliation. Orphan `.pending` files are not authority.
+These fixtures establish process-interruption behavior, not storage-device or
+power-loss guarantees beyond Windows filesystem semantics.
+
+Approved launcher 0.6.1/0.6.2 still read the original four-field wire; they are
+not allocators and do not understand the sidecar. Canonical activated Verify
+rejects unbound old-broker claims or replayed retired claims before publication
+authorization. Very old checkouts can still run their old allocator; they are
+not a supported way to bypass migration. Canonical publication's clean current
+default-head and hosted-receipt gates remain unchanged. No live claim,
+allocation state, version, artifact or launcher is changed by this source PR.
+
+`qa/check_permanent_claim_allocation.ps1 -SelfTest` exercises real private
+broker dispatch, explicit initialization, stale adoption, release/reclaim,
+native cross-mutex-domain exclusion, two processes, hard owner death, corruption
+and interrupted writes. It is auto-discovered by `qa/run_selftests.ps1`.
+
 `tools/ship/claim.ps1` is an atomic mutual-exclusion lock over a mod's next
 build. It stops parallel Claude sessions on this machine from allocating the
 **same** next `MOD_VERSION` and uploading competing bundles.
@@ -41,7 +140,7 @@ session = <explicit/Claude/Codex owner id, or deterministic worktree id>
 created = 2026-07-18T04:12:33Z
 ```
 
-`version` is the allocated **next** patch version: the mod's current
+In the legacy/unactivated lane, `version` is the allocated **next** patch version: the mod's current
 `MOD_VERSION` with `PATCH + 1`, preserving the `-dev` / `-beta` / `-alpha` /
 `-rc` suffix. 4-segment versions are rejected (normalize per the `CLAUDE.md`
 "Format: 3-segment semver only" rule before claiming).
@@ -126,7 +225,9 @@ publication, and caller-authored JSON cannot publish on a claim alone.
 
 ## Stale policy
 
-A claim older than **24 hours** (`-StaleHours`) is stale. This covers a normal
+A claim older than **24 hours** (`-StaleHours`) is stale. Activated allocation
+retains its floor and allocates a fresh higher version; it never renews the old
+timestamp. The remaining paragraph describes legacy ownership behavior. This covers a normal
 feature-branch review and hosted-QA cycle without releasing the reserved
 version. A new claimant will
 break a stale claim (deleting it and taking its own), and says so in the output.

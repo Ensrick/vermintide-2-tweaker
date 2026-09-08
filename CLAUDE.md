@@ -322,7 +322,11 @@ fail-closed recovery gate.
 
 Claim BEFORE bumping: the broker owns the number and it can exceed master+1
 (see `PROJECT_STANDARDS.md` section 6.6 "The claim broker owns the version
-number"). If the change touches TWO mods, `-BuildOnly` BOTH before committing -
+number"). Permanent retention is prospective per-mod migration under #724;
+an unactivated legacy broker still forgets released/stale allocations. Do not
+reuse protected queued numbers through it. Explicit reviewed initialization,
+unchanged claim adoption and fresh higher versions for stale work are documented
+in `tools/ship/CLAIMS.md`; no timestamp renewal is authorized. If the change touches TWO mods, `-BuildOnly` BOTH before committing -
 `qa/check_release_bundle_atomicity.ps1` (issues #724/#1412) requires each mod's
 source change and exact authority proof in the same commit: the root
 `.mod_bundle` for `tracked`, or the schema-3 receipt and typed output transition
