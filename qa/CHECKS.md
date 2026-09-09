@@ -812,6 +812,32 @@ When a new bug class is discovered:
 4. **If PRE-SHIP**: update PROJECT_STANDARDS §5.3 review template.
 5. **If MANUAL**: ensure CLAUDE.md or PROJECT_STANDARDS surface the rule.
 
+## Permanent claim allocation (#724)
+
+`check_permanent_claim_allocation.ps1 -SelfTest` is auto-discovered by the full
+QA self-test runner. Run it under both PowerShell 7 and Windows PowerShell 5.1
+when changing the broker. It exercises actual canonical CLI dispatch in private
+copied tools, exact claim adoption, dormant/activated policy, release and stale
+floor retention, lost/corrupt history, old-writer refusal, native held-handle
+write/delete exclusion, two-process ownership, hard owner death after real
+durable reservation/retirement, and failed atomic writes. Fixture cleanup deletes
+only individually validated owned files and empty directories. No launcher,
+Steam, shared claim/ledger, or pending artifact is mutated.
+
+The CWV activation case copies the committed policy into a private broker and
+uses a synthetic `0.1.537-dev` claim. Actual CLI paths must refuse missing
+history for Acquire/Verify/Release, preserve exact stale bytes on adoption,
+return stale exit 5, allocate `0.1.538-dev` only as a fresh reservation, retain
+the floor through release, and allocate `.539-dev` next. An unrelated mod stays
+on its existing fixture path and a foreign project's sentinel remains intact.
+These are private protocol checks, not live claim or artifact verification.
+
+The old `claim.ps1 -SelfTest` remains a compatibility check for the dormant
+legacy lane. Its source-plus-one stale test is not permanent-retention proof.
+Protocol test success does not initialize a live ledger or complete #724
+migration. Explicit reviewed floors and per-mod source-policy activation remain
+required by `tools/ship/CLAIMS.md`; CWV is the first scoped activation.
+
 ## When this doc is wrong
 
 If a check name doesn't match the script, fix one or the other. If a bug class

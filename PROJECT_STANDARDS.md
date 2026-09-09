@@ -1112,7 +1112,14 @@ full pipeline is:
 machine-global claim at `%APPDATA%\VMBLauncher\ship_claims\<mod>.claim`, shared
 across every worktree and every concurrent session on the machine. The number it
 returns can be HIGHER than the newest version on `master` + 1: prior claims that
-never shipped burn their numbers permanently. Always renumber `MOD_VERSION`, the
+never shipped must burn their numbers permanently. **Migration status (#724):**
+the prospective durable-floor implementation remains dormant until each exact
+mod's reviewed initialization/adoption and source-policy activation. The legacy
+unactivated broker does not retain released/stale allocations; do not use that
+lane to reclaim protected queued versions. Follow `tools/ship/CLAIMS.md` for
+explicit floor review, exact-claim adoption, old-broker exclusion and fresh
+higher versions for stale work. Missing history is not reconstructed from
+source-plus-one. Always renumber `MOD_VERSION`, the
 newest CHANGELOG heading, and any version reference to the broker's answer —
 never to master+1 by inspection, and never re-use a burned number. Claim BEFORE
 bumping, not after; a bump chosen first usually has to be redone.
