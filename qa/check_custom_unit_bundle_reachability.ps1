@@ -45,15 +45,12 @@ if (-not $CompressionDictionary) {
 }
 
 if (-not $Unpacker -or -not (Test-Path -LiteralPath $Unpacker -PathType Leaf)) {
-    if (-not $Quiet) {
-        Write-Host '[check_custom_unit_bundle_reachability] SKIP - VT2 bundle unpacker unavailable (set VT2_BUNDLE_UNPACKER).' -ForegroundColor DarkYellow
-    }
+    # Optional dependency absence is not verification, including in quiet QA.
+    Write-Host '[check_custom_unit_bundle_reachability] SKIP - VT2 bundle unpacker unavailable (set VT2_BUNDLE_UNPACKER).' -ForegroundColor DarkYellow
     exit 0
 }
 if (-not $CompressionDictionary -or -not (Test-Path -LiteralPath $CompressionDictionary -PathType Leaf)) {
-    if (-not $Quiet) {
-        Write-Host '[check_custom_unit_bundle_reachability] SKIP - VT2 compression.dictionary unavailable (set VT2_COMPRESSION_DICTIONARY).' -ForegroundColor DarkYellow
-    }
+    Write-Host '[check_custom_unit_bundle_reachability] SKIP - VT2 compression.dictionary unavailable (set VT2_COMPRESSION_DICTIONARY).' -ForegroundColor DarkYellow
     exit 0
 }
 
@@ -280,7 +277,9 @@ if ($errors.Count -gt 0) {
     exit 2
 }
 
-if (-not $Quiet) {
-    Write-Host "[check_custom_unit_bundle_reachability] OK - $checkedUnits custom unit resource(s) are resident from explicit .mod package roots" -ForegroundColor Green
+if ($checkedUnits -eq 0) {
+    Write-Host '[check_custom_unit_bundle_reachability] NOT APPLICABLE - no authored custom unit resources in the inventory.' -ForegroundColor DarkYellow
+} elseif (-not $Quiet) {
+    Write-Host "[check_custom_unit_bundle_reachability] PASS - $checkedUnits custom unit resource(s) are resident from explicit .mod package roots" -ForegroundColor Green
 }
 exit 0

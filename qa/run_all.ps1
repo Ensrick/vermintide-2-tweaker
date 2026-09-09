@@ -298,6 +298,7 @@ elseif (-not $Quiet) {
     Write-Host "[check_custom_unit_bundle_reachability] SKIP - build-only pipeline compiles new unit resources, then runs this gate." -ForegroundColor DarkYellow
     Write-Host ""
 }
+Run-Check "check_custom_unit_gate_reporting" { & (Join-Path $here "check_custom_unit_gate_reporting.ps1") -Quiet:$Quiet }
 Run-Check "check_appearance_contracts"          { & (Join-Path $here "check_appearance_contracts.ps1")          -Quiet:$Quiet }
 # The enumerated 660 backlog is regenerated from the censuses, so a census edit
 # without a regenerate leaves a committed report that lies about the gap count.

@@ -2223,7 +2223,9 @@ if ($BuildOnly) {
     if (-not (Test-Path -LiteralPath $unitReachabilityGate -PathType Leaf)) {
         Fail "Post-build custom-unit reachability gate not found: $unitReachabilityGate"
     }
-    & $unitReachabilityGate -Quiet
+    # Exit zero also includes optional dependency SKIP. Keep the owner's verdict
+    # visible and do not convert it into a verified-resource claim in the footer.
+    & $unitReachabilityGate
     if ($LASTEXITCODE -ne 0) {
         Fail "Build completed, but one or more custom unit resources are still absent from the compiled bundle. No deploy or upload was attempted."
     }
@@ -2238,7 +2240,7 @@ if ($BuildOnly) {
         }
     }
     Write-Host ""
-    Write-Host "BUILD-ONLY COMPLETE -- bundle and exact schema-3 source/output receipt generated; receipt, atomicity, custom-unit reachability, and applicable compiled contracts verified; no deploy, upload, GitHub release, or lifecycle edit was attempted." -ForegroundColor Green
+    Write-Host "BUILD-ONLY COMPLETE -- bundle and exact schema-3 source/output receipt generated; receipt, atomicity, and applicable compiled contracts verified; custom-unit reachability status is reported above (SKIP is not verification); no deploy, upload, GitHub release, or lifecycle edit was attempted." -ForegroundColor Green
     exit 0
 }
 
