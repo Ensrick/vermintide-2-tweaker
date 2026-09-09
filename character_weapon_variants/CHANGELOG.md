@@ -1,5 +1,24 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.538-dev (2026-09-09) -- fresh claim for the reviewed seed-ownership release (#592, #1548) [not-started]
+
+- Reissue the reviewed `.537-dev` seed-ownership fix under a fresh permanent
+  allocation. Its original claim expired after the SDK uploader failed before
+  Workshop transfer; `.537` remains burned and is not renewed or reused.
+- Runtime behavior is unchanged apart from version reporting. No weapon model,
+  transform, moveset, registry, network payload, or inventory policy changed.
+- This release permits one canonical publication attempt against the current
+  Steam client after its observed restart/login. It is not a diagnosed fix for
+  the native SDK initialization failure; #1548 remains open until exact-item
+  transfer is observed. No launcher/DLL/Steam configuration workaround is used.
+- #592 still requires the public-CIM solo forge/Keep/restart checks after actual
+  deployment. Existing CWV acceptance holds must not be lifted before transfer.
+
+**DoD:** Release-only reissue of the acquisition repair below. Existing offline
+G-BLACKSMITH coverage and exact-instance preservation remain applicable;
+presentation and template definitions are unchanged. Deferral: publication
+evidence and live #592 verification, not new gameplay completion.
+
 ## 0.1.537-dev (2026-09-06) -- preserve exact CIM ownership during seed registration (#592) [not-started]
 
 - Fixed the nullable owner tuple skipping public Crafting in Modded whenever
