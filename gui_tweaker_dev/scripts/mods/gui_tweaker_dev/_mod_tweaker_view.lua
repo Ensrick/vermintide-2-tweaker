@@ -423,7 +423,8 @@ local function _cat_get(category, setting_id)
     local mod_obj, mod_id = _owner(category, setting_id)
     if mod_obj then
         local ok, v = pcall(mod_obj.get, mod_obj, setting_id)
-        return ok and v or nil
+        if ok then return v end -- false is an owned setting, not absence
+        return nil
     end
     local MT = _mt()
     return MT and MT:get(mod_id, setting_id)
@@ -946,6 +947,7 @@ end
 -- merged Equipment category buffers under EACH member mod_id, so it's dirty if ANY member's
 -- buffer is non-empty; a normal category checks its single _cat_key buffer as before.
 function ModTweakerView:_active_category_dirty()
+    if self._profile_replay then return true end
     local cat = self._categories and self._categories[self._selected]
     if not cat then return false end
     if default_reset.is_armed(self, cat) then return true end
@@ -981,7 +983,8 @@ function ModTweakerView:_profile_snapshot(category, defaults)
         -- profile state; VMF also requires a separate binding registration path.
         if sid and kind ~= "group" and kind ~= "keybind" then
             local _, owner_id = _owner(category, sid)
-            local value = defaults and _nf(node, "default_value") or _cat_get(category, sid)
+            local value
+            if defaults then value = _nf(node, "default_value") else value = _cat_get(category, sid) end
             if value == nil and defaults then value = _cat_get(category, sid) end
             local excluded = category._profile_excluded_owners
             if owner_id and not (excluded and excluded[owner_id]) and value ~= nil then
@@ -989,110 +992,55 @@ function ModTweakerView:_profile_snapshot(category, defaults)
             end
         end
     end
-    return out
+    return profiles.capture_owners(out, category, _owner, defaults)
 end
 
 function ModTweakerView:_profile_ensure(category)
     if not category or DialogueUI.is_category(category) then return end
-    local tab_id = _cat_key(category)
-    self._profile_slot = profiles.get_active(mod, tab_id)
-    local ready_key = tab_id .. ":" .. tostring(self._profile_slot)
-    if self._profile_ready[ready_key] then return end
-    if not profile_runtime.migrate(profiles, mod, _printf) then
-        self._profile_ready[ready_key] = true
-        return
-    end
-    local values = profiles.load(mod, tab_id, self._profile_slot)
-    if not values then
-        local use_defaults = self._profile_slot ~= 1
-        profiles.save(mod, tab_id, self._profile_slot,
-            self:_profile_snapshot(category, use_defaults))
-        _printf("[gut:561] initialized tab=%s profile=%d source=%s",
-            tostring(tab_id), self._profile_slot, use_defaults and "defaults" or "live")
-    else
-        local merged, _, added, applied_ok, applied, failures, apply_err =
-            profile_runtime.reconcile_and_apply({
-                profiles = profiles, transactions = transactions,
-                values = values, defaults = self:_profile_snapshot(category, true),
-                category = category, owner = _owner, set_one = _cat_set })
-        if added > 0 and not applied_ok then
-            _printf("[gut:828] reconciliation deferred tab=%s profile=%d added=%d applied=%d failures=%d error=%s",
-                tostring(tab_id), self._profile_slot, added, applied, failures, tostring(apply_err or "none"))
-            self._profile_ready[ready_key] = true
-            return
-        end
-        if added > 0 then
-            profiles.save(mod, tab_id, self._profile_slot, merged)
-            _printf("[gut:828] reconciled tab=%s profile=%d added=%d applied=%d", tostring(tab_id), self._profile_slot, added, applied)
-        end
-    end
-    self._profile_ready[ready_key] = true
+    if self._profile_replay then return end
+    return profile_runtime.ensure_profile(self, {
+        category = category, tab_id = _cat_key(category), profiles = profiles, store = mod,
+        transactions = transactions, owner = _owner, set_one = _cat_set, log = _printf,
+    })
 end
 
 function ModTweakerView:_profile_capture(category)
     if not category or DialogueUI.is_category(category) then return end
     local tab_id = _cat_key(category)
     local slot = profiles.get_active(mod, tab_id)
-    profiles.save(mod, tab_id, slot, self:_profile_snapshot(category, false))
+    local values, err = self:_profile_snapshot(category, false)
+    if not values then
+        _printf("[gut:221] profile capture deferred tab=%s error=%s", tostring(tab_id), tostring(err))
+        return false
+    end
+    local ok, finished, saved = pcall(profile_runtime.finish_replay,
+        self, category, profiles, mod, tab_id, values)
+    if not ok or not finished then return false end
+    slot = profiles.get_active(mod, tab_id)
+    if not saved then profiles.save(mod, tab_id, slot, values) end
     self._profile_ready[tab_id .. ":" .. tostring(slot)] = true
     self._profile_slot = slot
+    self:_update_apply_button()
+    return true
 end
 
 function ModTweakerView:_switch_profile(slot)
     local category = self._categories and self._categories[self._selected]
     if not category or DialogueUI.is_category(category) then return end
     local tab_id = _cat_key(category)
-    local current = profiles.get_active(mod, tab_id)
-    if slot == current then return end
-
-    -- Profile switches are an explicit commit boundary: staged edits are applied
-    -- to the profile they were made under before another profile is restored.
-    if self:_active_category_dirty() then
-        self:apply_pending(category)
-        if self:_active_category_dirty() then _printf("[gut:1002] profile switch deferred tab=%s profile=%d pending transaction incomplete", tostring(tab_id), slot); return end
+    local ok, err = profile_runtime.switch_profile(self, slot, {
+        category = category, tab_id = tab_id, profiles = profiles, store = mod,
+        transactions = transactions, owner = _owner, log = _printf,
+        on_complete = function(id)
+            local mt = _mt()
+            if mt and mt.emit_profile_diagnostic then mt:emit_profile_diagnostic(id, "profile_switch") end
+        end,
+    })
+    if not ok then
+        _printf("[gut:221] profile switch deferred tab=%s profile=%d error=%s",
+            tostring(tab_id), slot, tostring(err))
+        return
     end
-    self:_profile_capture(category)
-
-    if not profile_runtime.migrate(profiles, mod, _printf) then return end
-    local values = profiles.load(mod, tab_id, slot)
-    local reconciled_additions = {}
-    if not values then
-        values = self:_profile_snapshot(category, true)
-        profiles.save(mod, tab_id, slot, values)
-    else
-        local reconciled, additions, added, applied_ok, applied, failures, apply_err =
-            profile_runtime.reconcile_and_apply({
-                profiles = profiles, transactions = transactions,
-                values = values, defaults = self:_profile_snapshot(category, true),
-                category = category, owner = _owner, set_one = _cat_set })
-        if not applied_ok then
-            _printf("[gut:828] profile switch deferred tab=%s profile=%d added=%d applied=%d failures=%d error=%s",
-                tostring(tab_id), slot, added, applied, failures, tostring(apply_err or "none"))
-            return
-        end
-        values = reconciled
-        reconciled_additions = additions
-        if added > 0 then profiles.save(mod, tab_id, slot, values) end
-    end
-    profiles.set_active(mod, tab_id, slot)
-    self._profile_ready[tab_id .. ":" .. tostring(slot)] = true
-    self._profile_slot = slot
-
-    local staged = 0
-    for member, value in pairs(values) do
-        local owner_id, sid = profiles.split_member_key(member)
-        local _, actual_owner = _owner(category, sid)
-        local excluded = category._profile_excluded_owners
-        if owner_id and sid and actual_owner == owner_id
-                and reconciled_additions[member] == nil
-                and not (excluded and excluded[owner_id]) then
-            self:stage_set(category, sid, value)
-            staged = staged + 1
-        end
-    end
-    if staged > 0 then self:apply_pending(category) else self:_build_rows(category) end
-    _printf("[gut:561] switched tab=%s profile=%d settings=%d", tostring(tab_id), slot, staged)
-    local mt = _mt(); if mt and mt.emit_profile_diagnostic then mt:emit_profile_diagnostic(tab_id, "profile_switch") end
     _play_click()
 end
 
@@ -1153,6 +1101,13 @@ function ModTweakerView:apply_pending(category)
         _printf("[gut:998] apply_deferred owner_unavailable")
         return
     end
+    if self._profile_replay then
+        local pending = false
+        for mid in pairs(self._profile_replay.contexts) do
+            if next(self._pending[mid] or {}) then pending = true end
+        end
+        if not pending then self:_profile_capture(category); self:_update_apply_button(); return end
+    end
     local MT = _mt()
     local ids = category._owner_mod_ids
     if MT and MT.prune_runtime_gated_pending and MT:prune_runtime_gated_pending(self._pending, ids or { _cat_key(category) }) > 0 then self:_update_apply_button() end
@@ -1163,7 +1118,7 @@ function ModTweakerView:apply_pending(category)
             local mid = ids[i]
             local p = self._pending[mid]
             if p and next(p) ~= nil then
-                local count, batched, batch_err, complete = transactions.commit(category, p, _owner, _cat_set)
+                local count, batched, batch_err, complete = transactions.commit(category, p, _owner, _cat_set, profile_runtime.transaction_context(self, category, p, _owner))
                 wrote = wrote or count > 0
                 if batched then
                     printf("[gut:560] owner=%s settings=%d notifications=%d complete=%s error=%s", tostring(mid), count, batch_err and 0 or 1, tostring(complete), tostring(batch_err or "none"))
@@ -1209,7 +1164,7 @@ function ModTweakerView:apply_pending(category)
         _play_click()
         return
     end
-    local count, batched, batch_err, complete = transactions.commit(category, p, _owner, _cat_set)
+    local count, batched, batch_err, complete = transactions.commit(category, p, _owner, _cat_set, profile_runtime.transaction_context(self, category, p, _owner))
     if batched then
         printf("[gut:560] owner=%s settings=%d notifications=%d complete=%s error=%s", tostring(key), count, batch_err and 0 or 1, tostring(complete), tostring(batch_err or "none"))
     end
@@ -2297,6 +2252,7 @@ function ModTweakerView:on_exit()
     -- model), so discard = drop the buffer — no native apply_changes(original_*) re-apply
     -- is needed (that exists only for native's live video-preview). Unapplied edits vanish.
     self._pending = {}
+    self._profile_replay = nil -- explicit discard; never reuse a prepared plan
     default_reset.clear(self)
     -- #605: preview playback belongs to the Dialogue view session. Stop it on
     -- every close path without touching natural in-game dialogue.

@@ -489,6 +489,7 @@ return {
                             { setting_id = "rework_master_ensrick", type = "checkbox", default_value = false },
                             { setting_id = "rework_master_tourney", type = "checkbox", default_value = false },
                             { setting_id = "rework_master_all", type = "checkbox", default_value = false },
+                            { setting_id = "rework_master_armor", type = "checkbox", default_value = false, tooltip = "rework_master_armor_description" },
                         },
                     },
                     -- General (cross-career)

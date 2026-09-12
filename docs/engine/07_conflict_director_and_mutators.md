@@ -140,6 +140,7 @@ Getting this wrong shifts every argument by one (see 4.5).
 | `HordeSpawner.compose_blob_horde_spawn_list` / `spawn_horde` / `spawn_unit` (horde_spawner.lua:241/…/1228) | method | full wrapper; keep `loaded_probs` intact when touching compositions | et enemy_tweaker.lua:1468/1626/1554 |
 | `TerrorEventMixer.start_event` (terror_event_mixer.lua:1757) | STATIC (dot-called at :1898) | hook WITHOUT self | ct _ct_combat_hooks.lua:491 (correct) |
 | `TerrorEventMixer.init_functions[...]` / `run_functions[...]` (:65/:624) | STATIC dispatch tables | table-form hook, no self; args `(event, element, t[, dt])` | ct _ct_combat_hooks.lua:297 |
+| `ConflictDirector._post_spawn_unit` (:2029) | method | full wrapper: call vanilla FIRST (its mutator pass and enhancement apply, :2034-2041, have then run), then do per-unit work through the unit or a PRIVATE table. Fresh and breed-freezer spawns both finish here (:1859-1868, :2024). Never write `optional_data` (see 4.6 shared payloads) | ct _ct_progressive_elite_runtime.lua (#323) |
 | `MutatorHandler.initialize_mutators` (mutator_handler.lua:85) | method | `hook_safe` AFTER: every `server.initialize_function` has run, so breed-table writes have landed - the place to repair data holes | ct chaos_wastes_tweaker_dev.lua:3264 (470 backfill) |
 | `MutatorHandler._activate_mutator` (:652) | method | full wrapper. Fires on host (activate_mutators) AND on every client (rpc receiver :771-783) - the single chokepoint for both peers. Early-return only for symmetric, host-synced conditions | ct chaos_wastes_tweaker_dev.lua:3220 (host-synced `effective_setting`, :2329-2335); evt _evt_cursed_adventure.lua:93 (package preload) |
 | `MutatorHandler.conflict_director_updated_settings` (:567) | method | `hook_safe` AFTER: sanitize what `update_conflict_settings` wrote into `Current*`, still before `ConflictDirector.init:219` reads it | evt _evt_guard386_pacing.lua:119 |
@@ -254,6 +255,21 @@ Related BUG_CLASSES: none yet (candidate for a new entry); closest is section 1b
   difficulty_settings.lua:412-418) then compares with the nil result -> CTD at cata_2/3. Clamp only
   the RECORDED difficulty (ct chaos_wastes_tweaker_dev.lua:2442-2453; memory
   `reference_vt2_journey_stat_cataclysm_ceiling_crash`).
+- **`post_ai_spawned` drops `ai_unit` on the way to mutators**: `GameModeManager.post_ai_spawned`
+  forwards `(breed, optional_data)` (game_mode_manager.lua:234-236) to
+  `MutatorHandler.post_ai_spawned(self, ai_unit, breed, optional_data)` (mutator_handler.lua:422-439),
+  so every mutator callback receives `breed` in its `ai_unit` slot and `optional_data` in its
+  `breed` slot. Geheimnisnacht Hard Mode declares only `(context, data, breed, optional_data)` and
+  therefore lines up by accident (mutator_geheimnisnacht_2021_hard_mode.lua:125). Never read
+  `ai_unit` in a mutator `post_ai_spawned_function` (issue 323).
+- **Spawn `optional_data` is a shared payload, not per-unit state**: `HordeSpawner.spawn_unit`
+  passes one `horde.optional_data` table to every unit of the horde (horde_spawner.lua:1236-1242),
+  and the enemy recycler stores `blackboard.optional_spawn_data` to re-spawn deactivated units
+  (enemy_recycler.lua:662,708). A field written for one unit (for example `enhancements`, which
+  `_post_spawn_unit` applies whenever present, conflict_director.lua:2040-2041) leaks to every
+  later unit spawned from that table. Apply per-unit changes after vanilla through a private
+  table, as `TerrorEventUtils.apply_breed_enhancements(unit, breed, { enhancements = ... })`
+  (issue 323).
 - **Zone mutator churn**: `check_update_mutators` DEACTIVATES mutators that leave the zone list and
   initializes+activates newcomers every zone boundary (conflict_director.lua:795-842) - any
   once-only assumption in a wrapped `start_function` must be idempotent.
