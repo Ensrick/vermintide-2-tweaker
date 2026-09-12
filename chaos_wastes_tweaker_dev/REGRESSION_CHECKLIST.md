@@ -915,15 +915,25 @@ Falsifiable fallback paths if the live pass fails:
 
 ---
 
-### #323 progressive elite modifier diagnostics
+### #323 progressive elite enhancements (0.7.350-dev)
 
-- [ ] Complete one pilgrimage with host and client logs; require `[ct:323]`
-  rates 0/5/10/15/20 at the matching mission depths.
-- [ ] Require `activation=disabled` and catalog counts
-  `15/15/13/2/0` for catalog/templates/boss-only/elite-proven/missing.
-- [ ] Run `/ct_progressive_elite_audit`; confirm the elite/special census is
-  bounded and no ordinary enemy receives an enhancement.
+- [ ] Option off (default): a full pilgrimage reports `activation=disabled` and
+  `applied=0`; no `[ct:323] apply` row and no extra `[grudge-spawn]` row for
+  ordinary elites.
+- [ ] Option on, step 5: `[ct:323]` rates are 0/5/10/15/20 at completed maps
+  0/1/2/3/4+; the first map never marks an elite.
+- [ ] Option on, step 25, second map: roughly a quarter of ordinary elites are
+  marked; every `[grudge-spawn]` row for them lists `elite_base` plus exactly one
+  of `shockwave`/`ignore_death_aura`; `applied_special=0`.
+- [ ] Specials, monsters and horde trash never gain a CT list; terror-event and
+  cursed-chest enemies keep their own vanilla marks with no second `elite_base`.
+- [ ] Catalog counts stay `15/15/13/2/0` for
+  catalog/templates/boss-only/elite-proven/missing.
+- [ ] Co-op after solo: a client sees the same marked elites; a client that
+  hot-joins mid-mission sees elites marked before it joined (server-controlled
+  buffs and attributes replay, `buff_system.lua:66-96`, `ai_system.lua:1654-1686`).
 - [ ] Run `/ct_regression_test`; require
+  `PASS: issue323_progressive_elite_runtime` and
   `PASS: issue323_progressive_elite_feasibility`.
 
 ---

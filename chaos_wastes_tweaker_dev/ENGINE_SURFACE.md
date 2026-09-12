@@ -372,16 +372,35 @@ Distilled from `DEVELOPMENT.md`, `AUDIT_FINDINGS.md`, `CODE_REVIEW.md`, and
 
 ## Doc maintenance
 
-#323 adds one observation-only `hook_safe` on
-`ConflictDirector._post_spawn_unit`. It counts non-boss elites/specials after
-vanilla's enhancement application boundary and never changes `optional_data`,
-so it cannot add a buff. Vanilla calls `apply_breed_enhancements` only when the
-spawn payload already has `enhancements` [src: `conflict_director.lua:2029-2042`].
-The 13 general entries are explicitly `BossGrudgeMarks`, while the only source-
-proven ordinary-elite recipe uses `elite_base` with `shockwave` or
-`ignore_death_aura` [src: `grudge_mark_settings.lua:108-140,191-195`;
-`geheimnisnacht_2021_generic_terror_events.lua:9-22`]. The compatibility and
-progression gate is documented in `PROGRESSIVE_ELITE_FEASIBILITY_323.md`.
+#323 (0.7.350-dev) owns one full `mod:hook` on `ConflictDirector._post_spawn_unit`
+(`_ct_progressive_elite_runtime.lua`, marker
+`_ct_consolidated_post_spawn_unit_hook`); fresh and breed-freezer spawns both
+finish there [src: `conflict_director.lua:1859-1868,2024`]. It runs vanilla
+FIRST, so vanilla's own `apply_breed_enhancements` for any pre-spawn or
+`post_ai_spawned` list has already happened [src: `conflict_director.lua:2029-2042`].
+Then, host-only and default-off, it marks a non-boss elite that has neither a
+payload list nor a `grudge_marked.name_index` attribute with `elite_base` plus
+`shockwave` or `ignore_death_aura`, the Geheimnisnacht recipe
+[src: `geheimnisnacht_2021_generic_terror_events.lua:9-22`;
+`mutator_geheimnisnacht_2021_hard_mode.lua:3-12,125-155`]. The 13 general entries
+stay boss-only `BossGrudgeMarks` [src: `grudge_mark_settings.lua:126-140`].
+Paid-for traps on this seam, all found while building #323: (1) **never write
+`optional_data`**: `HordeSpawner.spawn_unit` hands one `horde.optional_data` table
+to every horde unit [src: `horde_spawner.lua:1236-1242`] and the recycler re-spawns
+deactivated units from the stored table [src: `enemy_recycler.lua:662,708`], so a
+list written for one elite marks later trash; CT calls the vanilla apply with a
+private per-unit table instead; (2) a pre-vanilla write would also let Hard
+Mode's `post_ai_spawned_function` append onto it, stacking two `elite_base`
+entries; (3) `GameModeManager.post_ai_spawned` forwards `(breed, optional_data)`
+without `ai_unit` [src: `game_mode_manager.lua:234-236`], so mutator callbacks see
+shifted arguments and the 4-argument Hard Mode callback only re-aligns by
+accident [src: `mutator_handler.lua:422-439`; `mutator_templates.lua:392-401`];
+(4) without a `name_index` vanilla draws the grudge name from the terror-event
+RNG [src: `terror_event_utils.lua:80-84`], so CT supplies it; (5) a frozen unit
+keeps an emptied `grudge_marked` table [src: `ai_system.lua:648-664,1574-1590`], so
+test the `name_index` key, not the table. The audit
+(`_ct_progressive_elite_audit.lua`) attaches as an observer and adds no hook.
+The progression gate is documented in `PROGRESSIVE_ELITE_FEASIBILITY_323.md`.
 
 #289 is observation-only. `_ct_modifier_stack_audit.lua` reads the live Deus run
 controller, current node, `GameModeDeus.mutators()`, and the mutator handler's

@@ -732,6 +732,7 @@ local function read(name)
             "_ct_pickup_population_owner", "_ct_pickup_spawn_owner",
             "_ct_pilgrimage_context", "_ct_profile_snapshot", "_ct_progressive_difficulty",
             "_ct_progressive_elite_audit", "_ct_progressive_elite_policy",
+            "_ct_progressive_elite_runtime",
             "_ct_regression", "_ct_regression_resource_safety",
             "_ct_replacement_compensation", "_ct_replacement_runtime",
             "_ct_resume_audit", "_ct_resume_policy", "_ct_spawn_eligibility_owner",
