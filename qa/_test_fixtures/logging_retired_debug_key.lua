@@ -61,6 +61,27 @@ local function safe_identifier_call(mod)
     return mod:get(__VT_RETIRED_DEBUG_KEY__)
 end
 
+-- Lua skips the line break right after a long-bracket opener, so both literals
+-- below equal the retired key; the second call also pins exact line numbers.
+local function retired_leading_break(mod)
+    mod:get([[
+enable_debug_logging]])
+    mod:set([==[
+enable_debug_logging]==], false)
+end
+
+local retired_bracket_widget = {
+    ["setting_id"] = "enable_debug_logging",
+    type = "checkbox",
+}
+
+local safe_bracket_widget = {
+    ["setting_id"] = "some_other_setting",
+    tooltip = "enable_debug_logging",
+}
+local bracket_prose = '["setting_id"] = "enable_debug_logging" is not executable'
+
 return retired_read, retired_widget, retired_multiline_read, retired_multiline_widget,
     retired_write, retired_dot_calls, retired_literal_calls, safe_identifier_call,
-    prose, long_prose, escaped_prose, dot_prose, marker_prose
+    retired_leading_break, retired_bracket_widget, safe_bracket_widget,
+    prose, long_prose, escaped_prose, dot_prose, marker_prose, bracket_prose

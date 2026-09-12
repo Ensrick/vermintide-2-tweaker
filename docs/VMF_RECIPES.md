@@ -997,14 +997,17 @@ local function _dbg(fmt, ...)
 end
 
 local function _dbg_alert(fmt, ...)
-    -- allow-warn-chat: actionable anomaly is intentionally player-visible
-    mod:warning("[<mod_id>] " .. fmt, ...)
+    if not pcall(printf, "[<mod_id>:dbg] " .. fmt, ...) then
+        pcall(printf, "[<mod_id>:dbg] (alert format error: %s)", tostring(fmt))
+    end
 end
 ```
 
-Do not use `_dbg_alert` for routine guards or confirmations: VMF warnings are
-chat-visible by default. A mod that needs log-only anomaly evidence may use a
-bounded, `pcall`-guarded `printf` helper.
+VMF warnings are chat-visible by default (#240), so the canonical `_dbg_alert`
+is log-only. A genuine player-actionable anomaly that must reach chat calls
+`mod:warning` with an explicit `-- allow-warn-chat: <reason>` annotation;
+`qa/check_logging.ps1` rejects any unannotated warning-backed diagnostic helper
+(#427).
 
 Expensive probes may mirror VMF's own debug-emission predicate so their capture
 cost is paid only when output can surface:
@@ -1037,8 +1040,9 @@ emission owner.
 - Sending routine diagnostics through `mod:echo` or `mod:warning`.
 - Suppressing required load/version/runtime receipts behind VMF debug state.
 
-Historical changelogs may retain retired key names as provenance. Production
-code and current guidance may mention them only to prohibit their use.
+Changelogs and comments may retain retired key names as history; stale code
+comments that still describe the retired gate are documentation debt, not
+behavior. Current guidance mentions the key only to prohibit its use.
 
 ## 10. RPC schema versioning — explicit version + drop-on-mismatch
 

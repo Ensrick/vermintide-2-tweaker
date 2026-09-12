@@ -327,11 +327,11 @@ that dumps current state in a copy-pasteable form. Examples:
 >   severity-scoped log methods directly (no `mod:get` gate of our own):
 >   - `_dbg(fmt, ...)` → `mod:debug(...)` — emits only when VMF's **debug** log
 >     level is on. File only.
->   - `_dbg_alert(fmt, ...)` → `mod:warning(...)` — emits only when VMF's
->     **warning** log level is on. File AND in-game chat.
->   So "as long as VMF logging is on, it happens" — specifically, `_dbg` rides
->   VMF's debug channel and `_dbg_alert` rides VMF's warning channel. The user
->   never touches a toggle on OUR side.
+>   - `_dbg_alert(fmt, ...)` → pcall-guarded raw `printf(...)` — log only,
+>     always captured (see the #240 caution below). Only a genuine
+>     player-actionable anomaly may use `mod:warning` instead, with an explicit
+>     `-- allow-warn-chat: <reason>` annotation.
+>   The user never touches a toggle on OUR side.
 >   **CAUTION (Issue #240, 2026-07-02):** because VMF defaults `warning` to
 >   mode 3 (`send_to_chat = mode >= 2`, upstream `logging.lua`
 >   `load_logging_settings()`), a `mod:warning`-routed alert helper posts to
@@ -350,9 +350,10 @@ that dumps current state in a copy-pasteable form. Examples:
 >   `[populate_pickups]` Horn-of-Magnus census) uses **raw `printf`**, which
 >   bypasses ALL toggles (VMF's included) and always lands in `console_logs\`.
 >   Reserve this for load-bearing diagnostics, not routine noise.
-> - **Reference implementation:** `chaos_wastes_tweaker_dev` (#169, v0.7.186-dev).
->   `_dbg`/`_dbg_alert` route through `mod:debug`/`mod:warning`; zero live reads
->   of any `enable_debug_logging` key; no menu widget.
+> - **Reference implementation:** `chaos_wastes_tweaker_dev` (#169, v0.7.186-dev;
+>   alert route moved to log-only later). `_dbg` routes through `mod:debug`,
+>   `_dbg_alert` through pcall-guarded `printf`; zero live reads of any
+>   `enable_debug_logging` key; no menu widget.
 >
 > **Source contract.** The per-mod setting is retired. Active data
 > files expose no `enable_debug_logging` widget, and production code must not
@@ -360,9 +361,10 @@ that dumps current state in a copy-pasteable form. Examples:
 > when their `mod:debug` output can surface use a small fail-closed predicate
 > matching VMF's own settings: `logging_mode == "custom"` and
 > `output_mode_debug > 0`. Always-required bounded telemetry uses raw `printf`.
-> Repository tests must strip comments and reject any executable resurrection;
-> historical changelogs may retain the old key as provenance.
-> `qa/check_logging.ps1` enforces this repository-wide as the hard
+> Repository tests must strip comments and reject any executable resurrection.
+> Changelogs and comments may still name the old key as history; stale code
+> comments that describe the retired gate are documentation debt, not behavior.
+> `qa/check_logging.ps1` enforces this across its active-mod Lua scan scope as the hard
 > `retired-debug-key` category (#169, `qa/CHECKS.md` row 58e). Exactly one
 > executable site is pinned as promotion debt, the same way the #427 warn-chat
 > floor pins its three stable helpers: General Tweaker STABLE's `_dbg_on` read
@@ -413,8 +415,8 @@ hand. Debug Logging ON = the user is granting a data-collection window — use i
    of re-deriving.
 
 **Migration:** never create, read, write, or migrate a replacement per-mod
-debug key. Historical key names may remain in changelogs only. Remove obsolete
-saved-key cleanup writes; VMF owns logging configuration.
+debug key. Historical key names may remain in changelogs and comments only.
+Remove obsolete saved-key cleanup writes; VMF owns logging configuration.
 
 Cross-ref: `docs/VMF_RECIPES.md` § 9. For Layer 3 `mod:traced_hook`, which
 emits structured `[<mod>:trace] event=enter|exit class=<C> method=<m>
@@ -431,7 +433,7 @@ enable switch and no saved setting to inspect or mutate.
 | Case | Helper | Lands in |
 |---|---|---|
 | Confirmation / dump / expected behavior | `_dbg` | VMF debug channel; file/chat routing follows VMF's selected debug output |
-| Unexpected / wrong / mismatch / error condition | `_dbg_alert` | VMF warning channel; chat only when VMF routes warnings there |
+| Unexpected / wrong / mismatch / error condition | `_dbg_alert` | console log via pcall-guarded raw `printf`; chat only for a player-actionable anomaly routed through `mod:warning` with an explicit `-- allow-warn-chat:` reason |
 | User-operational (chat command reply, `/verify_*` output) | bare `mod:echo` | chat (not gated) |
 | Permanent operational log (`[wt] enabled vX.Y.Z`) | bare `mod:info` | log file (not gated) |
 | Critical bounded capture required with VMF off | raw `printf` | console log |
@@ -445,15 +447,17 @@ local function _dbg(fmt, ...)
 end
 
 local function _dbg_alert(fmt, ...)
-    -- allow-warn-chat: actionable anomaly is intentionally player-visible
-    mod:warning("[<mod_id>] " .. fmt, ...)
+    if not pcall(printf, "[<mod_id>:dbg] " .. fmt, ...) then
+        pcall(printf, "[<mod_id>:dbg] (alert format error: %s)", tostring(fmt))
+    end
 end
 ```
 
-Because VMF warning output is chat-visible by default, `_dbg_alert` is reserved
-for genuine actionable anomalies. Expected guards, timing states, and routine
-captures remain `_dbg`. A mod that requires log-only anomaly telemetry may use
-a bounded, `pcall`-guarded `printf` helper instead of `mod:warning`.
+VMF warning output is chat-visible by default (#240), so the canonical
+`_dbg_alert` is log-only. Expected guards, timing states, and routine captures
+remain `_dbg`. A genuine player-actionable anomaly that must reach chat calls
+`mod:warning` with an explicit `-- allow-warn-chat: <reason>` annotation; the
+#427 floor rejects any unannotated warning-backed diagnostic helper.
 
 If an expensive probe should not execute unless its debug output can surface,
 mirror VMF's predicate and fail closed:

@@ -252,7 +252,9 @@ return function(H, repo_root)
 
     if not spec.vmf_predicate then
         H.test(stream .. " #169 promotion tripwire keeps the stable predicate flag honest", function()
-            local source = read_file(base .. spec.pinned_owner .. ".lua")
+            -- Strip comments first: a commented-out copy of the old read must not
+            -- keep the stable predicate locks disabled.
+            local source = strip_comments(read_file(base .. spec.pinned_owner .. ".lua"))
             H.truthy(source:find(PINNED_READ, 1, true),
                 stream .. " no longer carries the pinned retired read: set vmf_predicate = true for it here"
                 .. " and delete its $legacyRetiredDebugKeyDebt entry in qa/check_logging.ps1")
