@@ -462,8 +462,12 @@ return function(H, repo_root)
         local file = assert(io.open(path, "rb"))
         local source = file:read("*a"):gsub("\r\n", "\n")
         file:close()
-        local block = assert(source:match('(mod:command%("cos_485_diag".-\nend%))\n'))
-        H.equal(block:find("for ", 1, true), nil, "summary emitter stays loop-free")
+        local block = assert(source:match('(local function _issue485_gap_summary%(%).-\nmod:command%("cos_485_diag".-\nend%))\n'))
+        local callback = assert(block:match('\nmod:command%("cos_485_diag".-\nend%)$'))
+        H.equal(callback:find("for ", 1, true), nil, "summary emitter stays loop-free")
+        -- The live-test authority only recognizes a command-owned receipt when
+        -- the callback body has no top-level comma (for example a multi-name local).
+        H.equal(callback:find("\n%s*local%s+[%w_]+%s*,"), nil, "callback keeps a simple body")
         local registered, logs, flushed, echoed = {}, {}, 0, 0
         local env = {
             pcall = pcall, type = type, tonumber = tonumber, tostring = tostring,
