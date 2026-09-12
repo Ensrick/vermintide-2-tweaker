@@ -90,6 +90,13 @@ return function(H, repo_root)
         fake_mod._gut_boss_damage_sync = {
             current_scores = function() return state.boss_scores end,
         }
+        fake_mod._gut_custom_stats = {
+            current_scores = function(players)
+                state.custom_calls = (state.custom_calls or 0) + 1
+                state.custom_players = players
+                return state.custom_scores
+            end,
+        }
         function fake_mod:dofile(path)
             return assert(loadfile(mod_root .. path .. ".lua"))()
         end
@@ -343,6 +350,65 @@ return function(H, repo_root)
             end
             H.truthy(tab_fp ~= nil)
             H.equal(end_fp, tab_fp)
+        end)
+    end)
+
+    H.test("GUT #1570-#1572 opt-in host rows share Tab and end-screen presentation", function()
+        live_harness(function(env)
+            local list_ui = { _ui_top_renderer = {} }
+            env.state.custom_scores = {
+                host = {
+                    friendly_fire_damage = 12, melee_damage_dealt = 340.4,
+                    ranged_damage_dealt = 91, permanent_health_restored = 55,
+                },
+            }
+            env.tab_draw(list_ui, 0.016)
+            H.equal(env.state.custom_calls, nil,
+                "custom rows are off by default and never query the ledger")
+            H.equal(env.state.last_widget.content.label_3, "",
+                "the default page two keeps exactly Aidings and Times Revived")
+
+            env.mod.settings.gut_scoreboard_custom_stats = true
+            env.state.now = 10
+            env.tab_draw(list_ui, 0.016)
+            local content = env.state.last_widget.content
+            H.equal(content.label_3, "gut_scoreboard_topic_friendly_fire_damage")
+            H.equal(content.label_6, "gut_scoreboard_topic_permanent_health_restored")
+            H.equal(content.player_1_row_3, "12")
+            H.equal(content.player_1_row_4, "340")
+            H.equal(content.player_1_row_6, "55")
+            H.equal(content.player_2_row_3, "—",
+                "a player without a host value renders unavailable, never zero")
+
+            env.mod.on_game_state_changed("exit", "StateIngame", {
+                statistics_db = env.database,
+                profile_synchronizer = {},
+            })
+            env.state.custom_scores = nil
+            env.mod.on_game_state_changed("enter", "StateIngame", {
+                parent = { loading_context = { level_end_view_wrappers = { {} } } },
+            })
+            local calls_before_end = env.state.custom_calls
+            env.end_draw({
+                _context = { players_session_score = env.state.grouped },
+                game_mode_key = "adventure",
+                ui_renderer = {},
+            }, {}, 0.016)
+            H.equal(env.state.custom_calls, calls_before_end,
+                "the end screen consumes the sidecar without reading the retired ledger")
+            H.equal(env.state.last_widget.content.player_1_row_3, "12")
+            H.equal(env.state.last_widget.content.player_1_row_5, "91")
+
+            env.mod.on_game_state_changed("enter", "StateIngame", {
+                parent = { loading_context = {} },
+            })
+            env.end_draw({
+                _context = { players_session_score = env.state.grouped },
+                game_mode_key = "adventure",
+                ui_renderer = {},
+            }, {}, 0.016)
+            H.equal(env.state.last_widget.content.player_1_row_3, "—",
+                "an ordinary mission enter clears the custom sidecar")
         end)
     end)
 

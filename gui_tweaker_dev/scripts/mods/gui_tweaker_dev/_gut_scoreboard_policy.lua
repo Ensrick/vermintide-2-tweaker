@@ -1,7 +1,8 @@
 -- _gut_scoreboard_policy.lua - engine-free scoreboard model and retention policy.
 --
 -- Owns detached topic validation, paging, visibility, sorting, fingerprints,
--- supplemental scalar reads, and bounded statistic path copies for #272/#1414.
+-- supplemental scalar reads, and bounded statistic path copies for #272/#1414,
+-- plus the optional detached host custom-row overlay for #1570-#1572.
 -- Owned by: gui_tweaker_dev.lua. Consumed via: mod:dofile from scoreboard modules.
 local M = {}
 M.ROWS_PER_PAGE = 11
@@ -41,6 +42,7 @@ local function _copy_topic(topic)
         display_text = topic.display_text,
         stat_type = topic.stat_type,
         supplemental = topic.supplemental == true,
+        custom = topic.custom == true,
         mod_localized = topic.mod_localized == true,
     }
     if type(topic.stat_types) == "table" then
@@ -54,12 +56,17 @@ end
 
 -- Construct a private catalog. ScoreboardHelper remains byte-for-byte vanilla:
 -- no topic is appended to its catalog and num_stats_per_player stays eleven.
-function M.build_topic_registry(native_topics)
+-- Optional extra topics (#1570-#1572 host custom rows) follow the supplemental
+-- rows only when the caller passes them; the default registry is unchanged.
+function M.build_topic_registry(native_topics, extra_topics)
     local registry = {}
     for _, topic in ipairs(type(native_topics) == "table" and native_topics or {}) do
         registry[#registry + 1] = _copy_topic(topic)
     end
     for _, topic in ipairs(M.SUPPLEMENTAL_TOPICS) do
+        registry[#registry + 1] = _copy_topic(topic)
+    end
+    for _, topic in ipairs(type(extra_topics) == "table" and extra_topics or {}) do
         registry[#registry + 1] = _copy_topic(topic)
     end
     return registry
@@ -262,8 +269,13 @@ local function _detached_row(rows, stats_id)
         and (rawget(rows, tostring(stats_id)) or rawget(rows, stats_id)) or nil
 end
 
+local function _nonnegative(value)
+    return type(value) == "number" and value == value
+        and value < math.huge and value >= 0
+end
+
 local function _score_map(player, supplemental_scores, boss_scores, stats_id,
-        boss_score_mode)
+        boss_score_mode, custom_scores, custom_names)
     local scores = {}
     for _, group in pairs(type(player) == "table" and player.group_scores or {}) do
         for _, entry in ipairs(type(group) == "table" and group or {}) do
@@ -294,6 +306,18 @@ local function _score_map(player, supplemental_scores, boss_scores, stats_id,
             scores.damage_dealt_bosses = math.max(native, boss)
         else
             scores.damage_dealt_bosses = boss
+        end
+    end
+    -- #1570-#1572 host custom rows have no native value. Only a detached,
+    -- finite, non-negative value for a registered custom topic may fill the
+    -- cell; a missing row stays missing so the presenter shows it unavailable.
+    local custom = _detached_row(custom_scores, stats_id)
+    if type(custom) == "table" and type(custom_names) == "table" then
+        for name in pairs(custom_names) do
+            local value = rawget(custom, name)
+            if scores[name] == nil and _nonnegative(value) then
+                scores[name] = value
+            end
         end
     end
     return scores
@@ -421,6 +445,7 @@ function M.build_native_model(players, topics, options)
                     display_text = topic.display_text,
                     visible = rawget(visibility, topic.name) ~= false,
                     mod_localized = topic.mod_localized == true,
+                    custom = topic.custom == true,
                 }
                 model.topics[#model.topics + 1] = copy
                 if copy.visible then
@@ -438,6 +463,14 @@ function M.build_native_model(players, topics, options)
     model.effective_sort = visible_names[model.preferred_sort]
         and model.preferred_sort or "player_name"
 
+    local custom_names
+    for _, topic in ipairs(model.topics) do
+        if topic.custom then
+            custom_names = custom_names or {}
+            custom_names[topic.name] = true
+        end
+    end
+
     for stats_id, player in pairs(type(players) == "table" and players or {}) do
         if type(player) == "table" and type(player.name) == "string" then
             local source_id = player.stats_id ~= nil and player.stats_id or stats_id
@@ -446,7 +479,8 @@ function M.build_native_model(players, topics, options)
                 stats_key = tostring(source_id),
                 name = player.name,
                 scores = _score_map(player, options.supplemental_scores,
-                    options.boss_scores, source_id, options.boss_score_mode),
+                    options.boss_scores, source_id, options.boss_score_mode,
+                    options.custom_scores, custom_names),
             }
         end
     end
