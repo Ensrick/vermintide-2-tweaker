@@ -493,6 +493,27 @@ local data = {
                 },
             },
             -- ============================================================
+            -- Progressive Elite Enhancements (#323): sibling of Progressive
+            -- Difficulty, same top-of-list placement. Host-authoritative,
+            -- default-off; owner is _ct_progressive_elite_runtime.lua.
+            -- ============================================================
+            {
+                setting_id = "progressive_elite_enhancements",
+                type = "checkbox",
+                default_value = false,
+                tooltip = "progressive_elite_enhancements_tooltip",
+                sub_widgets = {
+                    {
+                        setting_id = "progressive_elite_step_percent",
+                        type = "numeric",
+                        default_value = 5,
+                        range = { 0, 25 },
+                        decimals_number = 0,
+                        tooltip = "progressive_elite_step_percent_tooltip",
+                    },
+                },
+            },
+            -- ============================================================
             -- Buy Starting Boons (#458): top-level like Progressive Difficulty
             -- (a run-start modifier, not one of the A-Z groups). The advanced
             -- sub-options tune this shrine independently of normal ones.

@@ -3900,3 +3900,45 @@ the server, especially chained cooldowns whose expiry creates the next stack.
   multi-table custom-breed registration and capacity/dependency preflight.
 - Adjacent classes: 4 (strict lookup reads), 31 (cross-peer lookup wire safety),
   64 (numeric parity), and 75 (keyed versus dense collection semantics).
+
+## 92. Per-unit field written into a shared spawn payload
+
+**First confirmed:** 2026-09-12 (CT #323 design review, caught before ship).
+**Lives in:** any hook that marks one AI unit by writing `optional_data` (the
+spawn payload) around `ConflictDirector._post_spawn_unit`.
+
+### Symptoms
+- A horde, patrol or respawned pack shows a modifier on units that were never
+  selected: trash and specials carry an elite's grudge marks, or every unit
+  after the first shares one grudge name.
+- A per-spawn rate measures far above its setting once hordes spawn.
+- Marks reappear on units the recycler re-activates later in the level.
+
+### Diagnosis pattern
+1. `HordeSpawner.spawn_unit` passes one `horde.optional_data` table to every
+   unit of that horde [src: `scripts/managers/conflict_director/horde_spawner.lua:1236-1242`].
+2. `EnemyRecycler` stores `blackboard.optional_spawn_data` and re-spawns
+   deactivated units from it [src: `scripts/managers/conflict_director/enemy_recycler.lua:662,708`].
+3. `_post_spawn_unit` applies `optional_data.enhancements` whenever the field is
+   present [src: `scripts/managers/conflict_director/conflict_director.lua:2040-2041`],
+   so a field left on the table is applied to every later unit spawned from it.
+4. Confirm by spawning the same horde twice with the feature forced to 100
+   percent for one breed: any other breed that gains the change is this class.
+
+### Fix template
+- Call vanilla `_post_spawn_unit` FIRST, then apply the per-unit change through
+  the unit or a PRIVATE table, e.g.
+  `TerrorEventUtils.apply_breed_enhancements(unit, breed, { enhancements = list, name_index = n })`.
+- Detect an already-marked unit from per-unit state (the
+  `grudge_marked.name_index` attribute), not from the shared payload; a frozen
+  unit keeps an emptied category table [src: `scripts/entity_system/systems/ai/ai_system.lua:648-664`].
+- Lock it with an offline test that drives several spawns through one payload
+  table and asserts the table gains no keys.
+
+### Related issues / evidence
+- #323 (`chaos_wastes_tweaker_dev/_ct_progressive_elite_runtime.lua`,
+  `qa/lua/tests/test_ct_progressive_elite_runtime_owner.lua`).
+- Vanilla Geheimnisnacht Hard Mode writes the same field from
+  `post_ai_spawned_function` [src: `scripts/settings/mutators/mutator_geheimnisnacht_2021_hard_mode.lua:144-152`].
+- Adjacent classes: 1 (duplicate hooks on the shared seam) and 46 (hook timing
+  relative to what vanilla has already consumed).
