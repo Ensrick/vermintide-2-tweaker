@@ -385,6 +385,7 @@ local suites = {
     "test_ct_weave_curse_policy",
     "test_ct_modifier_stack_policy",
     "test_ct_progressive_elite_policy",
+    "test_ct_progressive_elite_runtime_owner",
     "test_ct_resume_policy",
     "test_cos_offhand_preload_lifecycle",
     "test_cos_offhand_catalog",
