@@ -3,7 +3,7 @@ local mod = get_mod("crt")
 -- concern module and this entry's lifecycle callbacks read/write it.
 mod._crt = mod._crt or {}
 
-local MOD_VERSION = "0.4.28-beta"
+local MOD_VERSION = "0.4.30-beta"
 mod._crt.MOD_VERSION = MOD_VERSION
 
 -- VMF mod-to-mod RPC schema (VMF_RECIPES section 10). Issue #776 appends the
@@ -163,7 +163,9 @@ else
     rework_master_module = {
         MASTER_ENSRICK = "rework_master_ensrick",
         MASTER_TOURNEY = "rework_master_tourney",
+        MASTER_ARMOR = "rework_master_armor",
         MASTER_ALL = "rework_master_all",
+        FAMILIES = {},
         apply_bounded_master = function(policy, family, enabled, current,
                                         write_changes, reconcile, reconcile_live_state)
             local changes = policy:plan(family, enabled, current)
@@ -174,9 +176,12 @@ else
         end,
     }
     rework_master_policy = {
-        ensrick_ids = {}, tourney_ids = {},
+        ensrick_ids = {}, tourney_ids = {}, cluster_ids = {},
         is_member = function() return nil end,
+        cluster_for_leaf = function() return nil end,
+        cluster_for_master = function() return nil end,
         plan = function() return {} end,
+        plan_cluster_custom = function() return {} end,
         derive_masters = function() return {} end,
     }
 end
@@ -197,10 +202,13 @@ local function _reconcile_rework_engines()
 end
 
 -- #221's remaining Career Tweaker subgroup proposal crosses independent
--- template-patch and live-hook owners. Re-arm the existing observation-only
--- census instead of exposing a master whose OFF state cannot yet promise one
--- complete reversible owner. It reads settings once at startup or on command,
--- performs no mod:set/table mutation, and emits one bounded engine-log row.
+-- template-patch and live-hook owners. The armor cluster is now a registered
+-- cluster family in the rework-master policy (a bounded snapshot/restore
+-- transaction over two live hook-read leaves); Unchained, Engineer, and
+-- per-career clusters remain deferred. This observation-only census reads
+-- settings once at startup or on command, performs no mod:set/table
+-- mutation, and emits one bounded engine-log row whose cluster_gates count
+-- is derived from the registered families rather than a literal.
 local ok_umbrella, umbrella_audit = pcall(mod.dofile, mod,
     "scripts/mods/career_tweaker/_crt_umbrella_audit_policy")
 if ok_umbrella and type(umbrella_audit) == "table"
@@ -211,7 +219,8 @@ if ok_umbrella and type(umbrella_audit) == "table"
         local snapshot = umbrella_audit.snapshot(
             rework_master_policy.ensrick_ids,
             rework_master_policy.tourney_ids,
-            function(id) return mod:get(id) and true or false end)
+            function(id) return mod:get(id) and true or false end,
+            rework_master_module.FAMILIES)
         pcall(printf, "%s", umbrella_audit.format(snapshot))
         return snapshot
     end
@@ -235,6 +244,10 @@ local function _rework_master_snapshot()
     state[rework_master_module.MASTER_ALL] = mod:get(rework_master_module.MASTER_ALL) and true or false
     local catalog = tourney and tourney.CATALOG
     for _, id in ipairs(catalog and catalog.MASTER_IDS or {}) do
+        state[id] = mod:get(id) and true or false
+    end
+    -- #221 cluster masters: leaves, master flag, snapshot flag, saved values.
+    for _, id in ipairs(rework_master_policy.cluster_ids or {}) do
         state[id] = mod:get(id) and true or false
     end
     return state
@@ -277,6 +290,47 @@ local function _apply_rework_master(family, enabled)
     pcall(printf, "[crt:445] family=%s enabled=%s writes=%d ensrick=%d tourney=%d",
         tostring(family), tostring(enabled), #changes,
         #(rework_master_policy.ensrick_ids or {}), #(rework_master_policy.tourney_ids or {}))
+end
+
+-- Issue #221 cluster master (armor slice). The armor leaves are live
+-- `mod:get` reads inside the two unconditional armor/overcharge hooks, so the
+-- bounded setting batch alone gates every entry point: there is no template
+-- owner to apply or restore, and the reconcilers are deliberate no-ops. ON
+-- snapshots the exact leaf values; OFF restores them once and releases the
+-- snapshot. Saved leaf choices are never rewritten by a bare master flip.
+local function _apply_cluster_master(family, enabled)
+    local snapshot = _rework_master_snapshot()
+    local metadata = rework_master_module.FAMILIES and rework_master_module.FAMILIES[family]
+    local held = metadata and snapshot[metadata.snapshot_id] and true or false
+    local applied, changes = rework_master_module.apply_bounded_master(
+        rework_master_policy, family, enabled, snapshot,
+        _write_rework_master_changes,
+        function() end,
+        function() end)
+    if not applied then return end
+    pcall(printf, "[crt:221] cluster=%s enabled=%s writes=%d held=%s",
+        tostring(family), tostring(enabled), #changes, tostring(held))
+end
+
+-- A hand edit of a cluster leaf closes the open transaction (master and
+-- snapshot flag off, no leaf write) so the indicator reflects a custom state.
+local function _mark_cluster_custom(family)
+    local changes = rework_master_policy:plan_cluster_custom(family, _rework_master_snapshot())
+    if #changes == 0 then return end
+    if _write_rework_master_changes(changes) then
+        pcall(printf, "[crt:221] cluster=%s custom=true writes=%d", tostring(family), #changes)
+    end
+end
+
+mod._crt.ISSUE221_ARMOR_MASTER_ARMED = ok_rmp
+    and rework_master_module.MASTER_ARMOR == "rework_master_armor"
+    and type(rework_master_policy.cluster_for_master) == "function"
+    and rework_master_policy:cluster_for_master("rework_master_armor") == "armor"
+
+if mod._crt.ISSUE221_ARMOR_MASTER_ARMED then
+    local armor_owner = mod:dofile("scripts/mods/career_tweaker/_crt_armor_settings_owner")
+    mod._crt.armor_settings_owner_factory = armor_owner
+    mod.mod_tweaker_settings_owner = armor_owner(mod, rework_master_policy, rework_master_module.FAMILIES.armor)
 end
 
 local function _sync_rework_master_indicators()
@@ -701,6 +755,14 @@ mod.on_setting_changed = function(setting_id)
         return
     end
 
+    -- #221 cluster masters (armor slice): one bounded snapshot/restore
+    -- transaction over live hook-read leaves; no engine reconcile is needed.
+    local cluster_family = rework_master_policy:cluster_for_master(setting_id)
+    if cluster_family then
+        _apply_cluster_master(cluster_family, mod:get(setting_id) and true or false)
+        return
+    end
+
     -- Mutex enforcement runs BEFORE the apply dispatch. If `setting_id` is a
     -- member of a declared cluster and was just toggled on, the enforcer
     -- programmatically unchecks its siblings (which re-fires on_setting_changed
@@ -740,6 +802,10 @@ mod.on_setting_changed = function(setting_id)
     end
     if tourney and tourney.CATALOG and tourney.CATALOG.is_leaf(setting_id) then
         _sync_tourney_career_master_indicators()
+    end
+    local edited_cluster = rework_master_policy:cluster_for_leaf(setting_id)
+    if edited_cluster then
+        _mark_cluster_custom(edited_cluster)
     end
 
     -- Career-select lock state is baked at populate. Refresh both independent

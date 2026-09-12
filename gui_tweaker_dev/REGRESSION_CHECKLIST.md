@@ -13,6 +13,31 @@
   tabs preserve false defaults, keybind exclusion and zero-setting reseeds.
 - `/gut_regression_test`: `issue998_dialogue_staged_isolation` must pass.
 
+## Owner-qualified profile preimages (#221, 0.2.346-dev)
+
+- Both actual `_profile_ensure` entrypoints reject malformed/foreign active
+  owner metadata before schema or settings writes, with and without missing
+  members. Keep the slot unready, stored profile and drafts intact on rejection.
+  Valid modern/legacy profiles apply additions only; unrelated provider batching
+  and migration/owner-commit/persistence failure retries remain covered.
+- A missing legacy Armor Master must not dispatch an ordinary OFF cascade.
+  Both entrypoints preserve existing live/stored leaves across all preimages
+  and partial writes; rejected addition preparation precedes schema writes.
+- Both view implementations use `_mod_tweaker_profile_runtime.switch_profile`;
+  validate all owner metadata and prepare all owner work before persistence.
+- False live values and false declared defaults must survive capture (bug
+  class 26). An unused profile must not adopt an enabled live value as default.
+- `test_crt_rework_master_policy.lua` drives both installed views and the real
+  CRT owner through all four Boolean preimages, switch/restart/OFF, repeated
+  ON, legacy custom profiles, hostile envelopes and partial-write retries.
+- Preparation failure writes neither live settings nor profile bookkeeping.
+  Commit failure retains its original input/context and old active slot; retry
+  persists target state before selection and emits one completion diagnostic.
+  A changed draft cannot reuse the old prepared plan.
+- Keep #1002 / bug class 79 controls green for unrelated owners, merged tabs,
+  DEFAULT and failed profile switches. No runtime changes to stable GUT are
+  included; compatible consumer publication is a separate release gate.
+
 ## Authoritative teammate ammo (#249)
 
 - [ ] With Numeric UI enabled, obtain **Quiver Cascade** and enough additional
@@ -219,7 +244,7 @@ If this candidate fails, use exactly one evidence-selected fallback:
 
 Subset of the monorepo [REGRESSION_CHECKLIST.md](../docs/REGRESSION_CHECKLIST.md) for Tweaker: GUI dev.
 
-Last updated: 2026-08-28.
+Last updated: 2026-09-12.
 
 ## Floating damage numbers above the network maximum (#938)
 

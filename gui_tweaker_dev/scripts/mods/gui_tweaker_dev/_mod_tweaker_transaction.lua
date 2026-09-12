@@ -10,7 +10,43 @@
 
 local Transaction = {}
 
-function Transaction.commit(category, pending, owner, set_one)
+-- A provider may consume a bounded subset before the legacy notification path.
+-- Preparation is read-only; its commit closure owns private state and ordering.
+function Transaction.prepare(category, pending, owner, context)
+    local provider, owner_id
+    for id in pairs(pending) do
+        assert(type(id) == "string", "invalid pending setting")
+        local candidate, mid = owner(category, id)
+        if provider and provider ~= candidate then return nil end
+        provider, owner_id = candidate, mid
+    end
+    local api = provider and provider.mod_tweaker_settings_owner
+    if api == nil then
+        assert(not (context and context.metadata ~= nil), "profile owner protocol unavailable")
+        return nil
+    end
+    assert(type(api) == "table" and api.version == 1 and type(api.prepare) == "function"
+        and type(api.capture) == "function", "unsupported settings-owner protocol")
+    local input = {}
+    for id, value in pairs(pending) do input[id] = value end
+    local plan = api.prepare(input, {
+        kind = context and context.kind or "edit", owner_id = owner_id,
+        metadata = context and context.metadata,
+    })
+    if plan == nil then return nil end
+    assert(type(plan) == "table" and type(plan.handled) == "table"
+        and type(plan.commit) == "function", "invalid settings-owner plan")
+    local handled, count = {}, 0
+    for id, accepted in pairs(plan.handled) do
+        assert(type(id) == "string" and accepted == true and pending[id] ~= nil,
+            "settings-owner plan escaped pending set")
+        handled[id], count = true, count + 1
+    end
+    assert(count > 0, "empty settings-owner plan")
+    return { handled = handled, count = count, commit = plan.commit, input = input }
+end
+
+local function commit_legacy(category, pending, owner, set_one)
     if type(pending) ~= "table" or next(pending) == nil then
         return 0, false, nil, true
     end
@@ -60,6 +96,29 @@ function Transaction.commit(category, pending, owner, set_one)
         return #ids, true, tostring(err), false
     end
     return #ids, true, nil, true
+end
+
+function Transaction.commit(category, pending, owner, set_one, context)
+    if type(pending) ~= "table" or next(pending) == nil then return 0, false, nil, true end
+    local ok, plan
+    if context and context.prepared then ok, plan = true, context.plan
+    else ok, plan = pcall(Transaction.prepare, category, pending, owner, context) end
+    if not ok then return 0, true, tostring(plan), false end
+    if not plan then return commit_legacy(category, pending, owner, set_one) end
+    for id, value in pairs(pending) do
+        if plan.input[id] ~= value then return 0, true, "prepared profile draft changed", false end
+    end
+    for id in pairs(plan.input) do
+        if pending[id] == nil then return 0, true, "prepared profile draft changed", false end
+    end
+    local committed, err = pcall(plan.commit)
+    if not committed or err == false then
+        return 0, true, tostring(err or "owner commit rejected"), false
+    end
+    local remainder = {}
+    for id, value in pairs(pending) do if not plan.handled[id] then remainder[id] = value end end
+    local count, _, failure, complete = commit_legacy(category, remainder, owner, set_one)
+    return plan.count + count, true, failure, complete
 end
 
 return Transaction
