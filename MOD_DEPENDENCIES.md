@@ -51,7 +51,7 @@ Per-edge file:line citations live in the 2026-06-22 audit + `docs/CROSS_MOD_ARCH
 |---|---|---|
 | character_dialogue | `character_dialogue_api` v6: additive `isolation_setting={version=1, setting_id="auto_isolation"}`; existing get/set/playback methods unchanged. Exact owner supports VMF `get/set`, `on_setting_changed(id)` and `on_settings_batch_changed(ids)` for this key only. Silent writes persist; successful batch completion reconciles once. | gut_dev custom browser; feature-detect descriptor and owner callback, use owner-qualified pending state, never GUT's `mt::` storage. |
 | **gut** | `get_mod("gut").mod_tweaker:{register_category, get, set, list_categories, …}` | self only so far — designed for other mods to register settings categories |
-| **crt** | Optional `mod.mod_tweaker_settings_owner` v1: `capture(visible, defaults)` and `prepare(pending, context)`; armor-only provider | GUT development profile/transaction owners; absent providers retain legacy setting notifications |
+| **crt** | Optional `mod.mod_tweaker_settings_owner` v1: `capture(visible, defaults)` and `prepare(pending, context)`; armor preimage provider that also owns the derived family masters and Tourney career presets in Mod Tweaker transactions (#1575) | GUT development profile/transaction owners; absent providers retain legacy setting notifications |
 | **mp** | `get_mod("mp").{is_unlocked, spend, credit, grant_item, has_currency, …}` | none wired yet (CWV/cosmetics are the designed consumers) |
 | **bt** *(retired)* | `get_mod("bt"):is_br_active()` / `:net_replay()` | wt · wt_dev · ct · ct_dev · et · crt (guarded → inert) |
 | **cim** | presence flag (`get_mod("cim") ~= nil`) — owns modded-realm vanilla-illusion swap | cosmetics_tweaker · gt · gt_dev |
@@ -88,6 +88,13 @@ preserves present live armor leaves and only applies absent leaf defaults,
 clearing master/held ownership as custom. A missing master must default false;
 no held preimage is restored or invented. Providers without this reconcile
 mode fail closed; consumer and provider land and publish as a pair.
+
+CRT's provider is a composite (#1575) that also owns the derived
+`rework_master_ensrick` / `rework_master_tourney` / `rework_master_all` flags
+and the Tourney career presets. `profile` and `reconcile` consume them without
+writes; `edit` classifies each staged flag against its live value during
+prepare and commits changed family presets, then career presets (OFF before
+ON), before GUT commits the remaining staged leaves.
 
 CRT owns schema/cluster semantics and its private armor keys; GUT knows none
 of them. CRT without GUT still supports native single-setting master edits.

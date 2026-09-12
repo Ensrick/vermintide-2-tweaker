@@ -1,5 +1,33 @@
 # Career Tweaker Changelog
 
+## 0.4.31-beta (2026-09-12) - keep rework selections through profile switches (#1575) [not-started]
+
+- Switching Mod Tweaker profiles on the Careers tab could turn off enabled
+  reworks or Tourney ports: the replay delivered the unchanged family masters
+  (`rework_master_ensrick`, `rework_master_tourney`, `rework_master_all`) and
+  the Tourney career presets as ordinary setting changes, so each ran its
+  preset and cleared leaves restored earlier in the same batch (bug class 79).
+- CRT's one Mod Tweaker settings-owner provider (`_crt_settings_owner.lua`) now
+  composes the armor preimage owner with ownership of those preset flags.
+  During profile replay and automatic profile additions it consumes them
+  without writing; the leaves replay normally and every indicator re-derives.
+- The same provider fixes the order of a mixed Apply: before any write it
+  classifies each staged preset flag whose value differs from its live value
+  as one command, then runs family presets before career presets, OFF before
+  ON, all before the staged leaves, so explicitly staged leaves win. Unchanged
+  staged flags are no-ops. One `[crt:1575] transaction=...` line per commit.
+- Derived family and career indicators now sync before engine reconciliation in
+  a leaf callback, so an engine failure cannot leave them stale.
+- Offline coverage on both installed menus under four forced iteration orders:
+  round trips under a derived Tourney indicator, between two custom profiles
+  and with a partial Tourney career; automatic additions of missing preset
+  flags; a staged family choice; family-before-career and staged-leaf-wins
+  Applies; stock single clicks; provider classification. `/crt_regression_test`
+  adds `issue1575_profile_indicator_owner` (isolated owner, no player writes).
+- Stock VMF option clicks are unchanged. Older Mod Tweaker consumers without
+  the owner protocol (public Tweaker: GUI 0.2.289) keep the previous
+  per-setting behavior until that protocol is promoted.
+
 ## 0.4.30-beta (2026-09-12) - armor cluster master with profile ownership (#221) [not-started]
 
 - Added **Enable all Armor Controls** to `Talent Reworks > Master Toggles`,

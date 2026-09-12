@@ -73,8 +73,9 @@ return function(root, initial, vmf_settings_path, options)
         .. slice(main, "local function _rework_master_snapshot()", "-- One exact presentation catalog for issue #776.")
         .. slice(main, "mod.on_setting_changed = function(setting_id)", "mod.on_disabled = function()"), {
             mod = mod, ok_rmp = true, rework_master_module = module,
-            rework_master_policy = module.new({ rework_a = {} }, { "trn_a" }),
-            tourney = {}, balance = {}, mutex = { enforce = noop }, _dbg = noop, printf = noop,
+            rework_master_policy = module.new(options.ensrick or { rework_a = {} }, options.tourney or { "trn_a" }),
+            tourney = options.tourney_engine or {}, balance = {}, mutex = { enforce = noop }, _dbg = noop,
+            printf = options.printf or noop,
             foot_knight = { apply_settings = function() calls.foot_knight = calls.foot_knight + 1 end },
             _reconcile_rework_engines = function() calls.engines = calls.engines + 1 end,
         }, "actual-crt-armor-callback")

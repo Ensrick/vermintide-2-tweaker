@@ -56,6 +56,16 @@ Last updated: 2026-09-12.
 | Detection | Offline `test_crt_rework_master_policy.lua` + `test_gut_exclusive_radio.lua`; runtime `/crt_regression_test` checks `issue445_rework_family_masters` and `crt_mod_tweaker_exclusive_groups_registered`; solo UI walk in CHANGELOG 0.4.8-beta plus #446 radio verification. |
 
 ---
+## Profile replay keeps rework selections (#1575)
+
+| Field | Value |
+|-------|-------|
+| Scope | Mod Tweaker profile switches and automatic profile additions on the Careers tab; the three family masters and the 17 Tourney career presets. |
+| Expected | Enable one Ensrick rework and one Tourney port (or a partial Tourney career), switch to another profile and back: every leaf returns exactly as saved and each master/preset shows the state derived from its leaves. A mixed Apply runs each changed family preset, then each changed career preset (OFF before ON), then the staged leaves; stock menu clicks keep their presets. |
+| Boundary | GUI Dev 0.2.346-dev routes these flags to CRT's settings-owner provider (`[crt:1575] transaction=<kind> derived_indicators=N presets=M`). Classification happens in prepare, before writes. Older consumers without the protocol keep per-setting delivery and its order dependence until promotion. |
+| Detection | Offline `test_crt_profile_indicator_replay.lua` (both installed menus, four forced `pairs` orders); runtime `/crt_regression_test` check `issue1575_profile_indicator_owner`. |
+
+---
 ## Subgroup-master census and armor cluster master (#221)
 
 The armor checkbox ships in 0.4.30-beta with its profile-owner provider; the
