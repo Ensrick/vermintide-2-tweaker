@@ -375,10 +375,10 @@ return function(H, repo_root)
                 "if complete then self:_profile_capture(category) end",
                 1, true), paths[i] .. " cannot capture a failed single-owner profile")
             H.truthy(source:find(
-                "self:apply_pending(category)\n        if self:_active_category_dirty() then",
-                1, true), paths[i] .. " aborts a profile switch after an incomplete commit")
+                "profile_runtime.switch_profile(self, slot",
+                1, true), paths[i] .. " delegates switch failure retention to shared owner")
             H.truthy(source:find(
-                "pending transaction incomplete",
+                "profile switch deferred",
                 1, true), paths[i] .. " diagnoses a deferred profile switch once")
             if paths[i] == "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view.lua" then
                 H.truthy(source:find("default_reset.stage_defaults(self, category, self._build_nodes,", 1, true),

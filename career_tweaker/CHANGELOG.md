@@ -1,5 +1,50 @@
 # Career Tweaker Changelog
 
+## 0.4.30-beta (2026-09-12) - armor cluster master with profile ownership (#221) [not-started]
+
+- Added **Enable all Armor Controls** to `Talent Reworks > Master Toggles`,
+  the first subgroup master: an explicit-list cluster family
+  (`armor_gromril_ignore_chip`, `armor_specials_dont_break_gromril`) registered
+  in the rework-master policy beside the issue 445 authorship families, with no
+  `[Ensrick]`/`[TB]` prefix and no membership in the family radio group.
+- Master ON snapshots both armor leaves into private
+  `rework_master_armor_saved_*` rows only when it opens a transaction, then
+  enables both leaves in one bounded batch; repeated ON (including OFF-then-ON
+  staged before one Apply) keeps the first preimage. Master OFF restores that
+  snapshot once and releases it; OFF without a held snapshot writes only the
+  master flag. A hand edit of either leaf closes the transaction without
+  writing any leaf.
+- Both leaves are live `mod:get` reads inside the two unconditional
+  armor/overcharge hooks, so the setting batch gates every entry point;
+  `apply_bounded_master` runs with no-op engine reconcilers and emits one
+  `[crt:221] cluster=armor ...` receipt per flip.
+- Added the optional `mod.mod_tweaker_settings_owner` v1 provider
+  (`_crt_armor_settings_owner.lua`), consumed by Tweaker: GUI Dev 0.2.346-dev
+  profiles. Validated owner metadata carries both original choices across
+  profile switches, restart and OFF; legacy profiles keep their visible leaves
+  as a custom state; malformed or foreign metadata is rejected before any
+  write; a missing master added by automatic profile initialization retires
+  ownership as custom without restoring present leaves.
+- `/crt_umbrella_audit` derives `cluster_gates` from the registered cluster
+  families (`cluster_gates=1/4`) and reads the armor catalog from the policy;
+  the census stays observation-only (`mutation=false`).
+- Fixed a latent label defect: every `rework_master_` control is excluded from
+  authorship-prefix matching, so the Tourney master row renders as
+  **Enable all Tourney Balance Reworks** instead of inheriting `[Ensrick]`.
+- Offline coverage: policy, actual CRT callback and GUT Apply suites for
+  ON/OFF/repeated ON, both real profile menus with all four Boolean preimages,
+  restart/OFF, partial-write retry, legacy/malformed metadata and missing-member
+  initialization. `/crt_regression_test` adds
+  `issue221_armor_master_transaction` and `issue221_armor_profile_owner` and
+  requires `cluster_gates=1/4` in `issue221_umbrella_audit_armed`.
+- Version note: `0.4.29-beta` was claimed on 2026-09-05 for the unbuilt draft
+  that failed review; it stays burned and no artifact carries it.
+
+Armor slice only: Unchained, Outcast Engineer and per-career subgroup masters
+remain deferred, so no live-test readiness is claimed. Public Tweaker: GUI
+0.2.289 profiles predate the owner protocol: they do not carry the saved armor
+choices, so after a profile switch there a later OFF cannot restore them.
+
 ## 0.4.28-beta (2026-08-29) - extract Engineer balance catalogue (#2) [not-started]
 
 - Moved the three Outcast Engineer balance definitions into the bounded,

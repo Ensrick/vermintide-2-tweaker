@@ -1,5 +1,37 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.346-dev (2026-09-12) - owner-qualified Mod Tweaker profiles (#221) [not-started]
+
+- Both profile menus share one pre-write replay coordinator
+  (`_mod_tweaker_profile_runtime.switch_profile`) and an optional
+  settings-owner v1 protocol (`mod_tweaker_settings_owner`: `capture`,
+  `prepare`). Owner data travels in a bounded, data-only
+  `__mt_owner_state_v1` profile envelope and is never replayed as hidden
+  setting IDs. Every owner is validated and prepared before any setting,
+  active-slot or profile write; failures retain drafts, the prepared context
+  and the prior active slot, and a changed draft cannot reuse an old plan.
+- Automatic initialization (`ensure_profile`) validates the stored envelope
+  and its provider before migration, persistence or live writes, including
+  zero-addition profiles. Only missing members are applied, through the
+  provider's `reconcile` context rather than a user ON/OFF edit; existing live
+  choices and pending drafts stay untouched, and a rejected profile stays
+  unready and retryable without replacing its stored data.
+- False live values and false declared defaults now survive profile capture
+  through explicit branches (bug class 26), including newly selected inactive
+  profiles. Owners without the protocol keep their existing batch or
+  per-setting notification contracts (issue 1002, bug class 79).
+- First provider: Tweaker: Careers 0.4.30-beta **Enable all Armor Controls**
+  carries its saved armor choices through profile switches, restart and OFF.
+- Actual installed-view and CRT tests cover both presentations, all four armor
+  preimages, restart/OFF, malformed and legacy data, partial-write retry and
+  explicit mixed edits; issue 998 Dialogue guards and Apply boundaries stay
+  green.
+- This build also carries the reviewed 0.2.345-dev Dialogue staged-isolation
+  change below, which was merged but never published.
+
+Stable Tweaker: GUI is unchanged; public profile support for this protocol
+needs a separate promotion.
+
 ## 0.2.345-dev (2026-09-06) - stage Dialogue audio isolation (#998)
 
 - "Isolate Audio During Playback" now edits the existing pending buffer.
