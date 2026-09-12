@@ -40,7 +40,7 @@ end
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.346-dev"
+local MOD_VERSION = "0.2.347-dev"
 local GUT_RPC_SCHEMA = 1 -- Bump only when a GUT positional wire shape changes.
 mod._GUT_RPC_SCHEMA = GUT_RPC_SCHEMA
 
@@ -2455,6 +2455,7 @@ do
         printf("[gut:1448] boss snapshot module failed: %s", tostring(boss_sync))
     end
 end
+do local ok, err = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_custom_stats"); if not ok then printf("[gut:272] custom statistics module failed: %s", tostring(err)) end end -- #1570-#1572, self-registers after the owners above
 
 -- (#281) Confirm the absorbed UI Tweaks (HideBuffs) fork actually booted: it used to
 -- abort at load on a missing Penlight resource (hb_data.lua required a pl.* module

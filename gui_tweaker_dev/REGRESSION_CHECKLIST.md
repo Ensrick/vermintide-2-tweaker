@@ -235,6 +235,18 @@ If this candidate fails, use exactly one evidence-selected fallback:
 - [ ] No damage/hit hook, parallel boss ledger, vanilla `players_session_score`/statistics RPC change, `StatisticsDefinitions` mutation, or `NetworkLookup` identity exists; the only mod channel is exact `gut_boss_damage_snapshot_v1` schema 1.
 - [ ] Mission change, canonical current-host change, host-role migration, setting disable, and teardown clear the applicable snapshot/retry/chunk/cache state; VMF's early bot `on_user_left` callback does not clear it, and raw receipts never exceed 24 per process.
 
+## Host custom scoreboard rows (#1570 friendly fire, #1571 melee/ranged damage, #1572 Permanent Health Restored)
+
+- [ ] With **Host Statistics** off, the expanded scoreboard keeps exactly thirteen rows and never queries the custom ledger; with it on, page two adds Friendly Fire Damage, Melee Damage, Ranged Damage and Permanent Health Restored after Times Revived.
+- [ ] Solo host on Veteran or higher: shooting a bot ally raises only your Friendly Fire Damage; hitting enemies raises Melee Damage for light/heavy attacks and Ranged Damage for other weapon attacks; self damage and damage-over-time sources add to neither.
+- [ ] Melee Damage plus Ranged Damage never exceeds the Damage Dealt row for the same player.
+- [ ] A healing draught while wounded credits the drinker's Permanent Health Restored with the permanent health actually gained; bandaging an ally credits the healer; temporary-health gains add nothing.
+- [ ] The end screen shows the same custom values as the last held-Tab snapshot; the next mission starts every custom row at zero.
+- [ ] A non-host peer shows every custom row as unavailable (a dash), never zero, until #1573 synchronizes them.
+- [ ] #437: a departed client's custom rows survive a rejoin only when native retention kept that player; eviction or disabling retention drops them.
+- [ ] Wrappers forward every vanilla return, let vanilla errors propagate, and add no statistic definition, lookup, RPC, or vanilla payload change; credit receipts stay at six per family and refusal receipts at eight per process.
+- [ ] `/gut_regression_test` passes `issue1570_host_friendly_fire_statistic`, `issue1571_host_melee_ranged_damage_statistic`, and `issue1572_host_permanent_health_statistic`; offline `test_gut_custom_stats.lua` and the scoreboard live-adapter suite pass.
+
 ## On Yer Feet revive attribution (#438)
 
 - [ ] Mercenary with `markus_mercenary_activated_ability_revive` revives one downed bot by Morale Boost and gains exactly one scoreboard revive.

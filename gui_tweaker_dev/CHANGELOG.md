@@ -1,5 +1,39 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.347-dev (2026-09-12) - host custom scoreboard rows (#1570, #1571, #1572)
+
+- Adds the opt-in **Host Statistics** option under Expanded Scoreboard. When
+  enabled, Friendly Fire Damage, Melee Damage, Ranged Damage and Permanent
+  Health Restored follow Times Revived on held Tab and the end screen. It is
+  off by default, so the default page model stays thirteen rows.
+- `_gut_custom_stats.lua` wraps `StatisticsUtil.register_damage` on the
+  Adventure host and accepts exactly one positive `damage_dealt` delta per
+  call, inheriting vanilla's attacker resolution, breed-victim, live-health and
+  clamp gates (`statistics_util.lua:520-593`). A different player-owned hero on
+  the attacker's side is friendly fire (#1570); enemy-side damage is split by
+  the verbatim kill classifier (`statistics_util.lua:227-257`) into melee or
+  ranged, excluding self damage and leaving non-item sources such as
+  `dot_debuff` unclassified (#1571).
+- Wraps `PlayerUnitHealthExtension.add_heal` on the host and credits the
+  positive server `current_health` delta to the healer, or to the healed
+  player when the healer is not a player (#1572). Temporary health is never
+  counted.
+- One mission-local ledger keyed by `stats_id` (16 rows, 1,000,000 per event,
+  saturating totals) resets on StateIngame enter/exit. #437 retention now
+  notifies keep/evict/discard decisions so custom rows never outlive native
+  rows, and #1414's exit sidecar copies the host rows for the end screen.
+- Non-host peers show the rows unavailable until #1573 synchronizes them. No
+  statistic definition, lookup, RPC or vanilla payload is added; both wrappers
+  forward every argument and return value and let vanilla errors propagate.
+- `/gut_regression_test` adds `issue1570_host_friendly_fire_statistic`,
+  `issue1571_host_melee_ranged_damage_statistic` and
+  `issue1572_host_permanent_health_statistic`. Offline
+  `test_gut_custom_stats.lua` covers ledger bounds, attribution, classifier
+  parity, heal credit, retention mirroring, adapter lifecycle, self-registration
+  and load order; the live-adapter suite covers Tab/end-screen parity.
+- The entry point gains one self-registering load line and stays within its
+  file-size ceiling.
+
 ## 0.2.346-dev (2026-09-12) - owner-qualified Mod Tweaker profiles (#221) [not-started]
 
 - Both profile menus share one pre-write replay coordinator

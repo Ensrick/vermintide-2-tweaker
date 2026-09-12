@@ -156,14 +156,42 @@ views cannot disagree.
    bot `on_user_left` callback only schedules roster reconciliation. The
    vanilla fixed-count score RPC,
    `StatisticsDefinitions`, and `NetworkLookup` remain untouched.
-6. **Other custom statistics.** Add one field family at a time with an
-   authoritative owner, bounded wire schema, hot-join state, and two-player
-   regression matrix.
+6. **Host custom statistics (implemented in source for #1570/#1571/#1572).**
+   The three remaining families share one Adventure-host ledger keyed by
+   `stats_id` and one opt-in **Host Statistics** setting that appends four rows
+   after Times Revived (the default registry stays thirteen rows).
+   Damage is observed, not re-derived: `StatisticsUtil.register_damage` is the
+   single host call per applied hit (`generic_health_extension.lua:351`,
+   `player_unit_health_extension.lua:660-662`), and the wrapper accepts exactly
+   one positive `damage_dealt` delta across the registered players, inheriting
+   vanilla's attacker resolution, breed-victim gate, live-health check and clamp
+   (`statistics_util.lua:520-593`). Vanilla `damage_dealt` has no side or self
+   check, so Friendly Fire Damage is the delta for a different player-owned
+   hero on the attacker's side; Melee Damage and Ranged Damage are the delta
+   for an enemy-side victim, classified by the kill classifier
+   (`statistics_util.lua:227-257`). Because the damage table always carries
+   `attack_type or "n/a"` (`generic_health_extension.lua:268`), every
+   non-light/heavy item attack (pushes, abilities, ranged shots) classifies as
+   ranged, exactly as vanilla kill counts do; non-item sources such as
+   `dot_debuff` stay unclassified. **Permanent Health Restored** brackets the
+   server permanent-health write in `PlayerUnitHealthExtension.add_heal`
+   (`player_unit_health_extension.lua:856-872`) and credits the positive
+   `current_health` delta to the healer's owner (the healed player for
+   non-player healers; draught self-heals arrive as healer == healed,
+   `health_system.lua:578`). Temporary health, revive restoration and max-health
+   rescales never pass through that write and are not counted.
+   The ledger resets per StateIngame, mirrors #437's keep/evict/discard
+   decisions, and is copied into #1414's end-screen sidecar. Non-host peers
+   show the rows unavailable.
+7. **Custom statistic synchronization (#1573, not started).** New statistics
+   cannot use vanilla hot-join sync (frozen path lookup,
+   `network_lookup.lua:2251-2281`; 65535 value cap,
+   `statistics_database.lua:210-221`). A separate schema-versioned channel must
+   reuse #1448's bounded request/snapshot policy before clients may show the
+   host rows.
 
-The issue remains open after the native presentation slice. Friendly-fire
-damage, healing amount, and melee/ranged
-damage require separately specified host-authoritative accumulation before they
-may appear. Boss damage now has source-only late-join parity through #1448 but
-remains unclaimed live behavior until an exact reviewed Dev artifact completes
-the issue's Solo-first acceptance. The shared page and visibility policy applies
-identically to the Tab and end-screen presenters.
+The issue remains open after the native presentation slice. Boss damage has
+source-only late-join parity through #1448, and the host custom families exist
+in source for #1570-#1572; each remains unclaimed live behavior until an exact
+reviewed Dev artifact completes its Solo-first acceptance. The shared page and
+visibility policy applies identically to the Tab and end-screen presenters.
