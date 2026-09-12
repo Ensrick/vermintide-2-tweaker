@@ -1,5 +1,19 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.539-dev (2026-09-12) -- resume the reviewed seed-ownership release (#592, #1548) [not-started]
+
+- Reissue the already-reviewed seed-ownership fix after the `.538-dev` claim
+  expired. The permanent claim broker allocated `.539`; no old number or
+  timestamp is reused. Runtime behavior is unchanged apart from version reporting.
+- Use the existing approved launcher and canonical publication pipeline after
+  the documented graceful Steam restart restored matching normal-user context.
+  This is release recovery, not a new weapon, inventory, or rendering change.
+- Keep #592 and dependent acceptance cards held until exact Workshop transfer
+  is confirmed. #592 still requires its public-CIM solo forge/Keep/restart test.
+
+**DoD:** Release-only reissue; existing acquisition and exact-instance preservation
+coverage applies. No gameplay completion is claimed before in-game verification.
+
 ## 0.1.538-dev (2026-09-09) -- fresh claim for the reviewed seed-ownership release (#592, #1548) [not-started]
 
 - Reissue the reviewed `.537-dev` seed-ownership fix under a fresh permanent

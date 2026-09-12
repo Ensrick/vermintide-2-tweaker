@@ -82,6 +82,37 @@ repository at `%APPDATA%\VMBLauncher\settings.json`. Set its ProjectRoot to the
 usual clone directory containing `.vmbrc`. Use `VMBLauncher.exe doctor` to
 validate VMB, SDK, Steam, Workshop, and project paths.
 
+### SDK prerequisites and exceptional Steam recovery
+
+The SDK and the installed game are separate dependencies. The SDK supplies the
+compiler and uploader; some optional compiled-resource checks also require the
+game's `bundle/compression.dictionary`. If that file is absent, report the
+affected check as skipped, not passed. An old game directory by itself does not
+prove the game is installed. Neither an uninstall nor a hidden library entry
+alone establishes the cause of an uploader failure.
+
+A signed-in client and green `doctor` do not prove native SDK initialization.
+For `ugc_tool.exe+0x4169` / null-interface crashes, compare the actual Steam and
+publisher/uploader Windows user and privilege contexts. First cross-reference
+recent successful uploads, including relevant sibling-project records; do not
+turn an old failed attempt into a permanent or project-wide Steam blocker.
+The September 8 Doomrocket publication record documented this same crash and
+recovery: graceful `steam.exe -shutdown`, normal non-elevated relaunch, matching
+contexts and completed login, then successful upload of unchanged packages.
+See [#1548's evidence](https://github.com/Ensrick/vermintide-2-tweaker/issues/1548#issuecomment-5647856379).
+
+Only perform a Steam restart with explicit user permission, when it will not
+interrupt their activity. Do not use desktop input or steal focus during their
+gameplay. Do not elevate the publisher, force-kill Steam, edit registry/SDK
+files, or substitute a sibling project's older launcher/publication route.
+Recheck the relevant context and claim validity, then follow this repository's
+canonical ship transaction. A stale claim still needs a fresh broker allocation,
+not a timestamp renewal. This is exceptional initialization recovery, not a
+routine test-refresh requirement: PC-A normally tests the hash-verified local
+deploy without restarting Steam.
+
+### Worktree configuration and remote targets
+
 For shipping from another worktree, do not retarget or restore this shared
 settings file. Canonical ship uses it as discovery input, then creates a
 separate private configuration for the exact invoking checkout. The private
