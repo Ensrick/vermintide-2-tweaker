@@ -1,5 +1,12 @@
 # Tweaker: Events — Changelog
 
+## 0.4.52-dev (2026-09-12) -- annotate the solo-only launch refusal echo (#727) [tooling]
+
+- The Prologue solo-only Play refusal in `_evt_missions.lua` (#941) answers the
+  player's own Play click, so it keeps its chat line with an explicit
+  `allow-echo` reason. No behavior change.
+- `qa/check_logging.ps1` census: Events echo findings 1 -> 0.
+
 ## 0.4.51-dev (2026-08-24) -- name Tzeentch Twins diagnostic by role (#499) [not-started]
 
 - Renames the active Tzeentch Twins session classifier to
