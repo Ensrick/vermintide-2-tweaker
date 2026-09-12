@@ -18,6 +18,10 @@ local COS = mod._cos
 local U = COS.U
 local _skin_requires_unowned_dlc = COS.skin_requires_unowned_dlc
 
+-- #1000: publish the data-only Weave Season 5-10 frame provider (api_version 1)
+-- from the portrait-frame owner. It registers nothing; /cos_1000_diag reads it.
+COS.weave_frames = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_weave_frame_catalog")
+
 -- ============================================================
 -- Cosmetic unlocks (per-career within character)
 -- ============================================================

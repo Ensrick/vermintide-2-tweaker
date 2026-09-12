@@ -7,6 +7,13 @@ Walk every entry below before any release that touches the relevant subsystem. P
 Last updated: 2026-09-12.
 
 ---
+## Weave Season 5-10 frame provider (#1000)
+
+- `_cos_weave_frame_catalog.lua` stays data-only: 24 keys (six seasons x quickplay/tier_1/tier_2/tier_3), snapshot copies, no engine-table, fake-inventory or `NetworkLookup` write. Offline `test_cos_weave_frame_catalog.lua` pins keys, order, snapshots, all three censuses and the command line.
+- `/cos_1000_diag` prints exactly one `[cos:1000:diag] census` line per run. Until registration ships, the four `unregistered_*` counts stay 24; a lower count is a collision to investigate, never a key to overwrite.
+- Registration, replay, per-player surfaces and Modded Progression consumption are not implemented (see `WEAVE_FRAME_PROVIDER.md`); do not treat a census pass as feature verification.
+
+---
 ## Registered custom-illusion descriptions (#913)
 
 - First built in 0.9.221-dev; walk this after any change to `_cos_illusions.lua`,
