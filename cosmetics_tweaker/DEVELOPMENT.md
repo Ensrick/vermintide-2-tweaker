@@ -2,6 +2,33 @@
 
 Detailed technical reference for the `cosmetics_tweaker` mod. Read alongside `CHANGELOG.md` (version-by-version history) and `TODO.md` (open work).
 
+## Registered illusion descriptions (#913)
+
+`_cos_illusions.lua` owns the single global `Localize` hook for registered
+custom illusions. Its exact catalog-derived description allowlist additionally
+requires the skin's live registration flag. Each lookup calls VMF's private
+`mod:localize` at read time; no English string or formatted result is cached.
+VMF owns language selection, English fallback and formatting. Missing, empty,
+non-string, placeholder or throwing private results continue through the
+existing presentation, Loremaster and native fallbacks with original varargs.
+Names, hats and independently selected component metadata keep their existing
+owners and precedence; do not intercept a broad `ct_*` prefix or add a hook.
+
+This source correction exposes the already-authored **Prologue Wooden Mallet**
+and **Mace & Bretonnian Shield** descriptions. The three
+`ct_es_heavy_spear_deus_01/02/03_description` entries have no authored copy and
+remain unavailable; that content gap is not filled with another weapon's text.
+The wider vanilla item-description census requested on #913 is separate.
+
+The named `issue913_custom_illusion_descriptions` check calls the live global
+hook and validates both registered item/skin description fields against the
+two authored private texts. It runs through `/cos_regression_test`; the bounded
+install receipt is `[cos:913] applied: registered custom-description bridge`.
+Offline `test_cos_custom_descriptions.lua` drives the installed callback and
+checks that disconnecting the hook fails the named check. Optional local VMF
+and native LocalizationManager sources strengthen language/hook provenance;
+required CI cases do not depend on those external checkouts.
+
 ## Module map (#1159 structural phase complete)
 
 `cosmetics_tweaker.lua` is the composition root ratcheted by
