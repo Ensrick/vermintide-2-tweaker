@@ -5,7 +5,7 @@
 -- cross-character shield/weapon illusions (_custom_illusions) and the LA shield
 -- skin specs (_la_shield_skin_specs; its registration call is intentionally
 -- disabled, kept for reference). Also owns the get_unlocked_weapon_skins unlock
--- hook and the _G.Localize display-name hook for these keys. Split out of the god
+-- hook and the _G.Localize name/description hook for these keys. Split out of the god
 -- file in v0.9.77-dev Phase 1; no behavior change.
 --
 -- Owned by: cosmetics_tweaker.lua entry point. Consumed via: mod:dofile.
@@ -330,6 +330,7 @@ mod:hook_safe("BackendInterfaceCraftingPlayfab", "get_unlocked_weapon_skins", fu
 end)
 
 local _custom_loc = {}
+local _custom_description_keys = {}
 -- Item UI calls the game's global Localize(), not VMF's per-mod localizer.
 -- Fold custom-hat strings into this module's existing single Localize owner;
 -- a second hook would create order-dependent localization and fails lint.
@@ -344,11 +345,7 @@ for _, spec in ipairs(_la_shield_skin_specs) do
 end
 for _, illusion in ipairs(_custom_illusions) do
     _custom_loc[illusion.skin_key .. "_name"] = illusion.display_name
-    -- Don't shadow the `_description` entries written in
-    -- cosmetics_tweaker_localization.lua. Letting that key fall through
-    -- to the vanilla localizer means tooltips show the descriptive text
-    -- (e.g. "An Empire mace paired with a Bretonnian shield.") rather
-    -- than the title repeated.
+    _custom_description_keys[illusion.skin_key .. "_description"] = illusion.skin_key
 end
 
 mod:hook(_G, "Localize", function(func, key, ...)
@@ -358,12 +355,52 @@ mod:hook(_G, "Localize", function(func, key, ...)
     -- the illusion wins. Today there's no overlap (ct_* vs *_LA_*).
     local custom = _custom_loc[key]
     if custom then return custom end
+    -- #913: vanilla Localize cannot read VMF's private localization table.
+    -- Only registered catalog descriptions cross this boundary, at call time
+    -- (no cached English). Missing/malformed text keeps the existing chain;
+    -- unrelated ct_* keys and component-owned presentation are not intercepted.
+    local description_skin = _custom_description_keys[key]
+    if description_skin and _custom_skin_keys[description_skin] then
+        local ok, text = pcall(mod.localize, mod, key, ...)
+        if ok and type(text) == "string" and text ~= "" and text ~= key
+            and text:sub(1, 1) ~= "<" then
+            return text
+        end
+    end
     local presentation = COS.presentation_localization
         and COS.presentation_localization[key]
     if presentation then return presentation end
     local la_loc = LA_BRIDGE.localization[key]
     if la_loc then return la_loc end
     return func(key, ...)
+end)
+
+if type(printf) == "function" then
+    printf("[cos:913] applied: registered custom-description bridge catalog_rows=%d",
+        #_custom_illusions)
+end
+
+mod._cos_command_owner.register("issue913_custom_illusion_descriptions", function()
+    -- The two existing authored texts are this repair's acceptance scope. The
+    -- three custom spear descriptions remain absent content, not invented copy.
+    for _, skin_key in ipairs({ "ct_es_mace_gk_shield_01", "ct_es_2h_hammer_tut_01" }) do
+        local key = skin_key .. "_description"
+        local item = ItemMasterList and rawget(ItemMasterList, skin_key)
+        local skin = WeaponSkins and WeaponSkins.skins and rawget(WeaponSkins.skins, skin_key)
+        if not (_custom_skin_keys[skin_key] and item and skin
+            and item.description == key and skin.description == key) then
+            return "registered description identity missing: " .. skin_key
+        end
+        local ok, expected = pcall(mod.localize, mod, key)
+        if not ok or type(expected) ~= "string" or expected == ""
+            or expected == key or expected:sub(1, 1) == "<" then
+            return "authored private description unavailable: " .. key
+        end
+        local live_ok, actual = pcall(Localize, key)
+        if not live_ok or actual ~= expected then
+            return "global description differs from authored private text: " .. key
+        end
+    end
 end)
 
 -- Shared with the entry's _force_load_all_offhand_packages (offhand preload),
