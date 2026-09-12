@@ -15,6 +15,8 @@ local localization = {
     rework_master_tourney_description = { en = "Enables every active Tourney Balance career port and disables every native Career Tweaker rework. Turn it off to clear that family; individual edits return the controls to a custom state." },
     rework_master_all = { en = "Enable All Reworks" },
     rework_master_all_description = { en = "Enables both Ensrick and Tourney Balance changes. Turn it off to clear both families; individual edits return the controls to a custom state." },
+    rework_master_armor = { en = "Enable all Armor Controls" },
+    rework_master_armor_description = { en = "Turns on both Gromril armor controls under Armor & Overcharge and remembers the choices you had before. Turn it off to restore those exact choices. Changing either armor control by hand returns this to a custom state." },
     rework_family_master_choice_radio_group = { en = "Rework Family" },
     zealot_thp_conversions_radio_group = { en = "Zealot THP Conversions" },
     rework_choice_none_default = { en = "None [Default]" },

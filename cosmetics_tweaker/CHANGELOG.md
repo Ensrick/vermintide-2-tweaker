@@ -1,5 +1,38 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.221-dev (2026-09-12) -- registered illusion descriptions reach the item tooltip (#913) [verify-fix]
+
+- Symptom: Rain's 0.9.213-dev test confirmed the **Prologue Wooden Mallet**
+  name and model in inventory, first person and third person, but its
+  description rendered as the raw `<ct_es_2h_hammer_tut_01_description>` key.
+- Root cause: item UI reads descriptions through the game's global `Localize`.
+  The existing hook in `_cos_illusions.lua` bridged custom illusion names only
+  and deliberately let descriptions fall through to vanilla, which cannot read
+  VMF's private localization table (`docs/VMF_RECIPES.md` section 7).
+- Fix: that same singleton hook now routes only the exact catalog-derived,
+  live-registered custom-illusion description keys to `mod:localize` at call
+  time. This exposes the already-authored Prologue Wooden Mallet and Mace &
+  Bretonnian Shield descriptions; no new hook, RPC, material or asset is added.
+  Missing, empty, placeholder or throwing private results keep the existing
+  presentation, Loremaster and native fallbacks with the original arguments.
+  Names, hats and component-owned descriptions are unchanged.
+- The three custom Spear & Shield Spear description rows have no authored text
+  and still fall back; that content gap belongs to the separate item
+  description parity request, not this bridge.
+- Adds the installed-hook offline suite `test_cos_custom_descriptions.lua`
+  (15 cases, including the optional actual VMF/native localizer fixture) and
+  the live `issue913_custom_illusion_descriptions` check in
+  `/cos_regression_test`; the bounded install receipt is
+  `[cos:913] applied: registered custom-description bridge catalog_rows=5`.
+- First Workshop publication after 0.9.219-dev, so it also carries the merged
+  but unpublished 0.9.220-dev Cosmetics change below. Without the matching
+  Crafting in Modded Dev capability, that change keeps the prior behavior.
+
+**Test:** In the Modded Realm keep as Kruber, open a Great Hammer's
+Illusions page, select **Prologue Wooden Mallet** and read its description,
+then do the same for **Mace & Bretonnian Shield** on a Mace and Shield. Run
+`/cos_regression_test`; `issue913_custom_illusion_descriptions` passes.
+
 ## 0.9.220-dev (2026-09-05) -- yield illusion Apply to the explicit CIM Dev owner (#1465) [verify-fix]
 
 - Symptom: on the equipped weapon's gear-icon Illusions page, selecting a

@@ -62,10 +62,11 @@ return function(H, repo_root)
             local switch_at = assert(string.find(source, ":_switch_profile(slot)", 1, true))
             local switch_end = assert(string.find(source, "\nfunction ", switch_at + 1, true))
             local block = string.sub(source, switch_at, switch_end - 1)
-            local apply_at = assert(string.find(block, "self:apply_pending(category)", 1, true))
-            local emit_at = assert(string.find(block,
-                'mt:emit_profile_diagnostic(tab_id, "profile_switch")', 1, true))
-            H.truthy(apply_at < emit_at, name .. " must emit after applying the target profile")
+            H.truthy(block:find("profile_runtime.switch_profile(self, slot", 1, true))
+            H.truthy(block:find("on_complete = function(id)", 1, true))
+            H.truthy(block:find('mt:emit_profile_diagnostic(id, "profile_switch")', 1, true))
+            -- Both real presentation callbacks are additionally executed by the
+            -- armor fixture across failure/retry, proving zero early emissions.
         end
     end)
 

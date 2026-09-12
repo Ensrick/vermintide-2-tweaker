@@ -133,13 +133,12 @@ return function(H, repo_root)
             local profiles = assert(loadfile(root .. "_mod_tweaker_profiles.lua"))()
             local runtime = assert(loadfile(root .. "_mod_tweaker_profile_runtime.lua"))()
             local member = profiles.member_key("ct_dev", "new_default")
-            local category = { _owners = { ct_dev = {} } }
+            local provider = { set = function() end, on_settings_batch_changed = function() end }
+            local category = { _owners = { ct_dev = provider } }
             local owner = function(_, setting_id)
                 if setting_id == "new_default" then return category._owners.ct_dev, "ct_dev" end
             end
-            local success_tx = { commit = function(_, pending)
-                return pending.new_default ~= nil and 1 or 0, true
-            end }
+            local success_tx = assert(loadfile(root .. "_mod_tweaker_transaction.lua"))()
             local merged, additions, added, applied_ok, applied, failures =
                 runtime.reconcile_and_apply({
                     profiles = profiles, transactions = success_tx,
@@ -153,54 +152,30 @@ return function(H, repo_root)
             H.equal(applied, 1)
             H.equal(failures, 0)
 
-            local failed_tx = { commit = function() return 1, true, "callback failed" end }
+            provider.on_settings_batch_changed = function() error("callback failed") end
             local _, _, _, failed_ok, failed_applied, failed_count, failed_err =
                 runtime.reconcile_and_apply({
-                    profiles = profiles, transactions = failed_tx,
+                    profiles = profiles, transactions = success_tx,
                     values = {}, defaults = { [member] = false },
                     category = category, owner = owner, set_one = function() end,
                 })
             H.equal(failed_ok, false)
             H.equal(failed_applied, 1)
             H.equal(failed_count, 1)
-            H.equal(failed_err, "callback failed")
+            H.truthy(failed_err:find("callback failed", 1, true))
         end
     end)
-    H.test("both dev Mod Tweaker presentations apply defaults before saving", function()
-        for _, spec in ipairs({
-            { "gui_tweaker_dev", "gui_tweaker_dev" },
-        }) do
-          for _, name in ipairs({ "_mod_tweaker_view.lua", "_mod_tweaker_state.lua" }) do
-            local file = assert(io.open(repo_root
-                .. "/" .. spec[1] .. "/scripts/mods/" .. spec[2] .. "/" .. name, "rb"))
-            local source = file:read("*a")
-            file:close()
-            H.truthy(string.find(source, "function ", 1, true))
-            H.truthy(string.find(source, ":_switch_profile(slot)", 1, true))
-            H.truthy(string.find(source, "self:apply_pending(category)", 1, true))
-            H.truthy(string.find(source, "profiles.member_key(owner_id, sid)", 1, true))
-            H.truthy(string.find(source, "profile_runtime.reconcile_and_apply", 1, true))
-            H.truthy(string.find(source,
-                "profile_runtime.migrate(profiles, mod", 1, true))
-            local switch_start = assert(string.find(source, ":_switch_profile(slot)", 1, true))
-            local switch_end = assert(string.find(source, "\nfunction ",
-                switch_start + 1, true))
-            local block = string.sub(source, switch_start, switch_end - 1)
-            local apply_at = assert(string.find(block,
-                "profile_runtime.reconcile_and_apply", 1, true))
-            local save_at = assert(string.find(block,
-                "if added > 0 then profiles.save(mod, tab_id, slot, values) end", 1, true))
-            local active_at = assert(string.find(block,
-                "profiles.set_active(mod, tab_id, slot)", 1, true))
-            H.truthy(apply_at < save_at,
-                "reconciled defaults must apply before the target profile is saved")
-            H.truthy(save_at < active_at,
-                "the target profile must be durable before it becomes active")
-            H.truthy(string.find(block,
-                "reconciled_additions[member] == nil", 1, true),
-                "reconciled defaults must not be applied twice")
-          end
+    H.test("both dev Mod Tweaker presentations use the shared pre-write replay owner", function()
+        for _, name in ipairs({ "_mod_tweaker_view.lua", "_mod_tweaker_state.lua" }) do
+            local file = assert(io.open(repo_root .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/" .. name, "rb"))
+            local source = file:read("*a"); file:close()
+            H.truthy(source:find("profile_runtime.switch_profile(self, slot", 1, true))
+            H.truthy(source:find("profile_runtime.ensure_profile(self,", 1, true))
+            H.truthy(source:find("profiles.capture_owners(out, category, _owner, defaults)", 1, true))
+            H.truthy(source:find("profile_runtime.transaction_context(self, category, p, _owner)", 1, true))
         end
+        -- Behavioral capture/replay/failed-prepare checks execute BOTH installed
+        -- presentations with the actual owner in test_crt_rework_master_policy.
     end)
     H.test("standalone search and profile transactions coexist", function()
         local root = repo_root .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/"

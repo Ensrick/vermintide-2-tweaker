@@ -6,7 +6,7 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 > **Suite location:** `/crt_regression_test` lives in `scripts/mods/career_tweaker/_crt_regression.lua`. It locks the casting/transposition and retired #440 probe exclusion boundaries while requiring the read-only #221 census.
 
-Last updated: 2026-08-23.
+Last updated: 2026-09-12.
 
 ---
 ## Foot Knight feature suite (#619)
@@ -56,14 +56,25 @@ Last updated: 2026-08-23.
 | Detection | Offline `test_crt_rework_master_policy.lua` + `test_gut_exclusive_radio.lua`; runtime `/crt_regression_test` checks `issue445_rework_family_masters` and `crt_mod_tweaker_exclusive_groups_registered`; solo UI walk in CHANGELOG 0.4.8-beta plus #446 radio verification. |
 
 ---
-## Deferred subgroup-master census (#221)
+## Subgroup-master census and armor cluster master (#221)
+
+The armor checkbox ships in 0.4.30-beta with its profile-owner provider; the
+issue stays out of the live-test queue until the remaining subgroups exist.
+The first held preimage survives repeated ON and staged OFF/ON Apply, and
+Tweaker: GUI Dev 0.2.346-dev profiles carry it through the settings-owner
+protocol. See `MENU_UMBRELLA_AUDIT_221.md` for the pre-write transaction
+contract. The actual CRT callback/GUT Apply fixture in
+`qa/lua/tests/_crt_armor_runtime_fixture.lua` exercises both installed menus.
 
 | Field | Value |
 |-------|-------|
-| Scope | Remaining Unchained, Engineer, armor, per-career, and Tourney subgroup-master proposal after GT #297, CT's deployed umbrellas, and CRT #445's complete family controls. |
-| Boundary | Native/Tourney template owners and live armor/overcharge hook reads do not share one reversible lifecycle. No subgroup checkbox is exposed until an exact owner can preserve child choices while master-off and apply/restore each owner once. |
-| Expected | Startup and `/crt_umbrella_audit` each emit one bounded `[crt:221]` row with `whole_family=present`, `cluster_gates=0/4`, and `mutation=false`. No setting changes and no gameplay hooks originate from the census. |
-| Detection | Offline `test_crt_umbrella_audit.lua`; beta contract `career_tweaker/tests/check_public_beta.ps1`; runtime `/crt_regression_test` check `issue221_umbrella_audit_armed`. |
+| Scope | Four proposed subgroup masters after GT #297, CT's deployed umbrellas, and CRT #445's complete family controls. The armor cluster (`armor_gromril_ignore_chip`, `armor_specials_dont_break_gromril`) is implemented as **Enable all Armor Controls** under `Talent Reworks > Master Toggles`; Unchained, Engineer, and per-career clusters remain deferred. |
+| Boundary | The armor leaves are live `mod:get` reads inside the two unconditional armor/overcharge hooks, so the bounded VMF setting batch alone gates every entry point and no template owner is applied or restored. Native/Tourney template owners and the Unchained runtime reads still do not share one reversible lifecycle; those clusters expose no checkbox. |
+| Expected | Master ON snapshots the exact current values of both armor leaves into private `rework_master_armor_saved_*` rows, then enables both leaves in one batch (`[crt:221] cluster=armor enabled=true writes=N held=false`). Master OFF restores that snapshot once and releases it; both leaves read exactly as before the round trip. OFF with no held snapshot writes only the master flag. A hand edit of either armor leaf closes the transaction (master and snapshot flag off) without writing any leaf. Startup and `/crt_umbrella_audit` each emit one bounded `[crt:221]` row with `whole_family=present`, `cluster_gates=1/4`, and `mutation=false`; the gate count derives from the registered cluster families. |
+| Detection | Offline `test_crt_rework_master_policy.lua` (actual standalone/embedded capture, replay, restart/OFF for four Boolean preimages; repeated ON, mixed explicit leaves, legacy/malformed metadata, partial writes and failure-retained context) and `test_crt_umbrella_audit.lua`; beta contract `career_tweaker/tests/check_public_beta.ps1`; runtime `/crt_regression_test` checks `issue221_umbrella_audit_armed`, `issue221_armor_master_transaction` and `issue221_armor_profile_owner`. |
+| Automatic profile initialization | Both actual menu entrypoints reject malformed active metadata before migration/live/profile writes, even with missing members or zero additions. Valid modern/legacy profiles apply missing members only. Failures retain drafts/profile and leave initialization retryable. |
+| Missing legacy master | Both entrypoints retire master/held ownership as custom without restoring present leaves. Cover all four held preimages, stored/live leaf disagreement, addition-prepare rejection and partial master/held-write retry. Explicit user OFF retains ordinary restore semantics. |
+| Release boundary | Careers 0.4.30-beta and GUI Dev 0.2.346-dev build and land together (independent review freeze `66b73a91`, #998 GUT guards retained). Legacy GUT consumers, including public Tweaker: GUI 0.2.289, do not preserve the new metadata, so a later OFF after a profile switch there cannot restore the pre-toggle choices. Unchained/Engineer/per-career subgroup work remains deferred. |
 
 ---
 ## Bardin disabler dodge investigation (#440)

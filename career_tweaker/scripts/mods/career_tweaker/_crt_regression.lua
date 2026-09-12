@@ -759,18 +759,81 @@ _rt_register("issue221_umbrella_audit_armed", function()
         or type(mod._crt.umbrella_audit) ~= "function" then
         return "#221 bounded ownership census is not armed"
     end
+    local families = mod._crt.rework_master_module and mod._crt.rework_master_module.FAMILIES
     local snapshot = audit.snapshot(
         mod._crt.rework_master_policy.ensrick_ids,
         mod._crt.rework_master_policy.tourney_ids,
-        function() return false end)
+        function() return false end,
+        families)
     local line = audit.format(snapshot)
+    -- One registered cluster gate (armor) out of the four proposed subgroups;
+    -- the count is derived from the registered families, not a literal.
     if type(line) ~= "string"
         or not line:find("[crt:221]", 1, true)
-        or not line:find("cluster_gates=0/4", 1, true)
+        or not line:find("cluster_gates=1/4", 1, true)
+        or not line:find("armor=0/2", 1, true)
         or not line:find("mutation=false", 1, true) then
-        return "#221 census receipt lost its bounded observation-only contract"
+        return "#221 census receipt lost its bounded observation-only contract: " .. tostring(line)
     end
 end)
+
+_rt_register("issue221_armor_master_transaction", function()
+    -- The armor cluster master is a bounded snapshot/restore transaction over
+    -- the two live hook-read armor leaves. Prove the live policy plans the
+    -- exact round trip without rewriting the untouched leaf, and that the
+    -- runtime wired the master control (marker set beside the dispatcher).
+    if mod._crt.ISSUE221_ARMOR_MASTER_ARMED ~= true then
+        return "#221 armor master is not armed in the runtime dispatcher"
+    end
+    local policy = mod._crt.rework_master_policy
+    local module = mod._crt.rework_master_module
+    if type(policy) ~= "table" or type(policy.plan) ~= "function"
+            or type(policy.plan_cluster_custom) ~= "function"
+            or type(module) ~= "table" or module.MASTER_ARMOR ~= "rework_master_armor" then
+        return "#221 armor cluster policy surface missing"
+    end
+    local armor = module.FAMILIES and module.FAMILIES.armor
+    if type(armor) ~= "table" or type(armor.ids) ~= "table" or #armor.ids ~= 2
+            or armor.ids[1] ~= "armor_gromril_ignore_chip"
+            or armor.ids[2] ~= "armor_specials_dont_break_gromril" then
+        return "#221 armor cluster leaf catalog drifted"
+    end
+    local label = mod:localize(module.MASTER_ARMOR)
+    if type(label) ~= "string" or label == module.MASTER_ARMOR or label:find("^%[") then
+        return "#221 armor master label missing or decorated: " .. tostring(label)
+    end
+
+    local state = { armor_gromril_ignore_chip = false, armor_specials_dont_break_gromril = true }
+    local function apply(changes)
+        for i = 1, #changes do state[changes[i].id] = changes[i].value end
+    end
+    local on = policy:plan("armor", true, state)
+    apply(on)
+    if state.armor_gromril_ignore_chip ~= true or state.armor_specials_dont_break_gromril ~= true
+            or state[armor.master_id] ~= true or state[armor.snapshot_id] ~= true then
+        return "#221 armor master ON did not enable both leaves under a held snapshot"
+    end
+    local repeated_on = policy:plan("armor", true, state)
+    if #repeated_on ~= 0 then
+        return "#221 repeated armor master ON would replace its held preimage"
+    end
+    local off = policy:plan("armor", false, state)
+    apply(off)
+    if state.armor_gromril_ignore_chip ~= false or state.armor_specials_dont_break_gromril ~= true
+            or state[armor.master_id] ~= false or state[armor.snapshot_id] ~= false then
+        return "#221 armor master OFF did not restore the exact pre-toggle snapshot"
+    end
+    for i = 1, #off do
+        if off[i].id == "armor_specials_dont_break_gromril" then
+            return "#221 armor master OFF rewrote an unchanged saved leaf"
+        end
+    end
+    local bare = policy:plan("armor", false, { armor_gromril_ignore_chip = true, [armor.master_id] = true })
+    if #bare ~= 1 or bare[1].id ~= armor.master_id then
+        return "#221 armor master OFF without a snapshot must touch only the master flag"
+    end
+end)
+
 
 _rt_register("issue405_heal_network_is_server_gated", function()
     -- Issue 405 (client CTD on Fires-from-Ash THP heal): the heal_from_proc
@@ -1320,3 +1383,30 @@ _rt_register("crt_tourney_leaf_catalog_936", function()
         return "Warrior Priest movement-speed leaf lost peer-parity gate"
     end
 end)
+
+_rt_register("issue221_armor_profile_owner", function()
+    local factory = mod._crt.armor_settings_owner_factory
+    local api = mod.mod_tweaker_settings_owner
+    local policy, module = mod._crt.rework_master_policy, mod._crt.rework_master_module
+    if type(factory) ~= "function" or type(api) ~= "table" or api.version ~= 1 then
+        return "#221 armor profile owner unavailable"
+    end
+    local armor = module.FAMILIES.armor
+    local a, b, master = armor.ids[1], armor.ids[2], armor.master_id
+    for _, first in ipairs({ false, true }) do
+        for _, second in ipairs({ false, true }) do
+            local state = { [a] = first, [b] = second }
+            local isolated = { get = function(_, id) return state[id] end,
+                set = function(_, id, value) state[id] = value end }
+            local owner = factory(isolated, policy, armor)
+            owner.prepare({ [master] = true }, { owner_id = "crt", kind = "edit" }).commit()
+            local visible = { [a] = true, [b] = true, [master] = true }
+            local metadata = owner.capture(visible, false)
+            owner.prepare({ [master] = false }, { owner_id = "crt", kind = "edit" }).commit()
+            owner.prepare(visible, { owner_id = "crt", kind = "profile", metadata = metadata }).commit()
+            owner.prepare({ [master] = false }, { owner_id = "crt", kind = "edit" }).commit()
+            if state[a] ~= first or state[b] ~= second then return "#221 profile preimage was lost" end
+        end
+    end
+end)
+-- #221 profile-owner check end

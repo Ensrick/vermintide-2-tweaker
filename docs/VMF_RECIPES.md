@@ -860,6 +860,16 @@ Likely to recur for: any new pickup, custom interaction prompt text, custom
 item display names, custom buff names, custom hat/skin names — anything
 vanilla reads from a data field via `Localize`.
 
+Recurred for custom illusion descriptions, cosmetics_tweaker v0.9.213-dev
+(issue 913, 2026-08-16): the hook bridged `ct_*_name` but let
+`ct_*_description` fall through, so the tooltip showed
+`<ct_es_2h_hammer_tut_01_description>`. v0.9.221-dev routes only the exact
+registered description keys to `mod:localize` at call time inside the same
+singleton hook (VMF registers `mod_localization` before `mod_script`
+[src: Vermintide-Mod-Framework `vmf/scripts/mods/vmf/modules/vmf_mod_manager.lua:118-120`],
+so the call-time read is not the § 14 early-registration trap), and keeps the vanilla
+fallback for missing text instead of intercepting a broad prefix.
+
 ---
 
 ## 8. `custom_gui_textures` — nested table format and ui_renderer_creator keys

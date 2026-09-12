@@ -6,6 +6,80 @@
 -- This module is engine-free so its key and copy contracts can be tested offline.
 
 local Profiles = { MAX_SLOTS = 10, SCHEMA_VERSION = 1 }
+Profiles.OWNER_STATE_KEY = "__mt_owner_state_v1"
+
+-- Optional profile state is data, never a list of hidden settings to replay.
+-- Bound the entire envelope before invoking any provider or writer.
+local function copy_state(value, depth, seen, budget)
+    local kind = type(value)
+    if kind == "boolean" then return value end
+    if kind == "number" then
+        assert(value == value and math.abs(value) < math.huge, "invalid owner-state number")
+        return value
+    end
+    if kind == "string" then assert(#value <= 256, "owner-state string too long"); return value end
+    assert(kind == "table" and depth < 5 and getmetatable(value) == nil,
+        "invalid owner-state value")
+    assert(not seen[value], "cyclic owner state")
+    seen[value] = true
+    local result = {}
+    for key, item in pairs(value) do
+        budget.n = budget.n + 1
+        assert(budget.n <= 128 and type(key) == "string" and #key > 0 and #key <= 128,
+            "invalid owner-state key/bound")
+        result[key] = copy_state(item, depth + 1, seen, budget)
+    end
+    seen[value] = nil
+    return result
+end
+
+function Profiles.owner_protocol(owner)
+    local api = owner and owner.mod_tweaker_settings_owner
+    if api == nil then return nil end
+    assert(type(api) == "table" and api.version == 1
+        and type(api.capture) == "function" and type(api.prepare) == "function",
+        "unsupported settings-owner protocol")
+    return api
+end
+
+function Profiles.owner_states(values)
+    local raw = values and values[Profiles.OWNER_STATE_KEY]
+    if raw == nil then return {} end -- legacy profile, not an invented snapshot
+    local envelope = copy_state(raw, 0, {}, { n = 0 })
+    assert(envelope.schema == 1 and type(envelope.owners) == "table", "invalid owner-state envelope")
+    for key in pairs(envelope) do
+        assert(key == "schema" or key == "owners", "unknown owner-state envelope field")
+    end
+    return envelope.owners
+end
+
+function Profiles.capture_owners(values, category, owner, defaults)
+    local ok, result = pcall(function()
+        local grouped, providers = {}, {}
+        for member, value in pairs(values) do
+            local mid, sid = Profiles.split_member_key(member)
+            local provider, actual = owner(category, sid)
+            assert(mid and mid == actual, "unowned captured setting")
+            grouped[mid] = grouped[mid] or {}
+            grouped[mid][sid] = value
+            providers[mid] = provider
+        end
+        local states = {}
+        for mid, visible in pairs(grouped) do
+            local api = Profiles.owner_protocol(providers[mid])
+            if api then
+                local state = api.capture(visible, defaults == true)
+                if state ~= nil then states[mid] = state end
+            end
+        end
+        if next(states) then
+            values[Profiles.OWNER_STATE_KEY] = copy_state({ schema = 1, owners = states }, 0, {}, { n = 0 })
+        end
+        return values
+    end)
+    if not ok then return nil, tostring(result) end
+    return result
+end
 
 local CT_PROFILE_TABS = { "ct", "ct_dev" }
 local CT_PROFILE_OWNERS = { "ct", "ct_dev" }
@@ -92,7 +166,7 @@ function Profiles.reconcile(values, defaults)
     local count = 0
     if type(defaults) == "table" then
         for key, value in pairs(defaults) do
-            if merged[key] == nil and value ~= nil then
+            if key ~= Profiles.OWNER_STATE_KEY and merged[key] == nil and value ~= nil then
                 merged[key] = value
                 additions[key] = value
                 count = count + 1
