@@ -4,9 +4,26 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-08-16.
+Last updated: 2026-09-12.
 
 ---
+## Registered custom-illusion descriptions (#913)
+
+- First built in 0.9.221-dev; walk this after any change to `_cos_illusions.lua`,
+  the custom illusion catalog, or `cosmetics_tweaker_localization.lua`.
+- In Kruber's Great Hammer illusion picker, **Prologue Wooden Mallet** keeps
+  its existing model/name and shows the already-authored training-mallet text.
+  **Mace & Bretonnian Shield** shows its existing mace/shield description.
+- `/cos_regression_test` includes `issue913_custom_illusion_descriptions`, which
+  checks real registered item/skin fields and the live global Localize result.
+  A disconnected hook or missing private authored text must fail this check.
+- Offline `test_cos_custom_descriptions.lua` covers exact-key registration,
+  missing/malformed/throwing private results, unmodified name/hat/component/LA
+  precedence, fresh lookup, single formatting and nil-hole passthrough.
+- The three `ct_es_heavy_spear_deus_01/02/03_description` rows still need
+  authored content. A pass for the two retained descriptions is not a complete
+  all-item flavor-text parity claim or a new asset/rendering verification.
+
 ## Athanor exact offhand preview ownership (#481)
 
 | Field | Value |
