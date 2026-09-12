@@ -58,6 +58,60 @@ function Policy.decide(setting_on, untrusted_realm, rows)
     return "authored"
 end
 
+-- #485: unsupported-parent evidence ledger. Each parent is recorded at most
+-- once, and one ledger never records more than MAX_UNSUPPORTED_RECORDS parents;
+-- later distinct parents are only counted as suppressed. Nothing resets a
+-- ledger (option flips, realm changes and wheel rebuilds keep it), so the
+-- bound holds per loaded Cosmetics module generation.
+Policy.MAX_UNSUPPORTED_RECORDS = 32
+
+function Policy.new_unsupported_ledger(cap)
+    local limit = Policy.MAX_UNSUPPORTED_RECORDS
+    if type(cap) == "number" and cap >= 0 and cap < limit and cap == math.floor(cap) then
+        limit = cap
+    end
+    return { seen = {}, order = {}, recorded = 0, suppressed = 0, cap = limit }
+end
+
+-- Returns "record" for a new parent under the cap, "duplicate" for a parent
+-- already recorded or suppressed, "capped" for a new parent past the cap, and
+-- "invalid" for a malformed ledger or parent key.
+function Policy.record_unsupported(ledger, parent_item)
+    if type(ledger) ~= "table" or type(ledger.seen) ~= "table"
+        or type(ledger.order) ~= "table" or type(ledger.recorded) ~= "number"
+        or type(ledger.suppressed) ~= "number" or type(ledger.cap) ~= "number"
+        or type(parent_item) ~= "string" or parent_item == "" then
+        return "invalid"
+    end
+    if ledger.seen[parent_item] ~= nil then return "duplicate" end
+    if ledger.recorded >= ledger.cap then
+        ledger.seen[parent_item] = "suppressed"
+        ledger.suppressed = ledger.suppressed + 1
+        return "capped"
+    end
+    ledger.recorded = ledger.recorded + 1
+    ledger.seen[parent_item] = ledger.recorded
+    ledger.order[ledger.recorded] = parent_item
+    return "record"
+end
+
+-- Recorded parents in first-seen order; never includes suppressed parents.
+function Policy.unsupported_summary(ledger)
+    if type(ledger) ~= "table" or type(ledger.order) ~= "table" then
+        return { recorded = 0, suppressed = 0, cap = Policy.MAX_UNSUPPORTED_RECORDS, parents = "" }
+    end
+    local parents = {}
+    for index = 1, math.min(ledger.recorded or 0, ledger.cap or 0) do
+        parents[index] = tostring(ledger.order[index])
+    end
+    return {
+        recorded = #parents,
+        suppressed = ledger.suppressed or 0,
+        cap = ledger.cap or Policy.MAX_UNSUPPORTED_RECORDS,
+        parents = table.concat(parents, ","),
+    }
+end
+
 -- #485: exactly one armed wheel rebuild per option flip. Arms (returns true)
 -- only when the live enable state CHANGED since the holder last saw it; a
 -- steady state defers to vanilla's own dirty logic.
