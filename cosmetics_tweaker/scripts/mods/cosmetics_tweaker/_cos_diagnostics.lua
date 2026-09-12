@@ -2,10 +2,11 @@
 --
 -- Owns the pure-diagnostic commands split out of the god file in the v0.9.77-dev
 -- Phase 1 OOP decomposition: /flush_log, /dump_glows, /dump_skin_rarities,
--- /dump_all_names, /check_vmf, /probe_hat, /probe_cosmetics, and #641's
--- /cos_offhand_name_inventory. All read engine globals (WeaponSkins /
--- ItemMasterList / MaterialSettingsTemplates / Managers) or immutable picker
--- catalogues and never mutate saved/equipped cosmetic state.
+-- /dump_all_names, /check_vmf, /probe_hat, /probe_cosmetics, #641's
+-- /cos_offhand_name_inventory, and #485's /cos_485_diag heroic-pose gap
+-- summary. All read engine globals (WeaponSkins / ItemMasterList /
+-- MaterialSettingsTemplates / Managers), immutable picker catalogues, or the
+-- bounded pose evidence ledger, and never mutate saved/equipped cosmetic state.
 --
 -- Owned by: cosmetics_tweaker.lua entry point. Consumed via: mod:dofile.
 -- Shared state: reads mod._cos.flush_log (the entry keeps _flush_log because the
@@ -288,6 +289,34 @@ mod:command("cos_421_diag", "Audit custom illusion wire safety", function()
         restore_ok and "PASS" or "FAIL", live_custom)
     _flush_log()
     mod:echo("[cosmetics] #421 wire audit written to the console log")
+end)
+
+-- #485: one bounded summary of the weapons whose social wheel stayed vanilla
+-- because they have no authored heroic pose catalog. The ledger is filled by
+-- _cos_weapon_poses.lua (at most 32 parents per module generation); this
+-- command only reads it, so repeated runs print the same finite list.
+local function _issue485_gap_summary()
+    local evidence = mod._cos_weapon_pose_evidence
+    local ok, summary = pcall(function() return evidence.summary() end)
+    if not ok or type(summary) ~= "table" then
+        return { recorded = 0, suppressed = 0, cap = 0, parents = "unavailable" }
+    end
+    return {
+        recorded = tonumber(summary.recorded) or 0,
+        suppressed = tonumber(summary.suppressed) or 0,
+        cap = tonumber(summary.cap) or 0,
+        parents = tostring(summary.parents),
+    }
+end
+
+-- Keep the callback body free of top-level commas: the live-test authority
+-- recognizes a command-owned receipt only through a direct, simple callback.
+mod:command("cos_485_diag", "Summarize weapons without authored heroic poses seen this session", function()
+    local summary = _issue485_gap_summary()
+    pcall(printf, "[cos:485:diag] summary recorded=%d suppressed=%d cap=%d parents=%s",
+        summary.recorded, summary.suppressed, summary.cap, summary.parents)
+    _flush_log()
+    mod:echo("[cosmetics] heroic pose gap summary written to the console log")
 end)
 
 -- #641: emit the live, deduplicated offhand-weapon and shield naming queue. Runtime
