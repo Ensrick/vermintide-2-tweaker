@@ -1,5 +1,37 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.222-dev (2026-09-12) -- bounded heroic pose gap evidence (#485) [diagnostics-armed]
+
+- Symptom: the strict live-test authority rejected the previous Unlock Heroic
+  Weapon Poses card. The unsupported-weapon evidence was deduplicated per weapon
+  but had no total cap, and the card named a command that does not exist.
+- Fix: `_cos_weapon_pose_policy.lua` now owns a pure unsupported-parent ledger.
+  Each weapon without an authored pose catalog is recorded once, and one ledger
+  records at most 32 weapons; later weapons are only counted as suppressed.
+  Option flips, realm changes and wheel rebuilds never reset it, so the bound
+  holds per loaded Cosmetics module generation. Each recorded weapon emits
+  `[cos:485] no authored pose catalog parent=<key> fallback=deferred record=<n>/32`.
+- New `/cos_485_diag` in `_cos_diagnostics.lua` prints one
+  `[cos:485:diag] summary recorded=<n> suppressed=<m> cap=32 parents=<keys>`
+  line from the same ledger without recording anything.
+- The `issue485_authored_weapon_poses_local_only` check moved into
+  `_cos_weapon_poses.lua` (registered through `install_checks`). It proves the
+  cap on a scratch ledger instead of writing a probe weapon into the live
+  evidence, and checks that the live ledger stays within its cap.
+  `_cos_runtime_checks.lua` shrank by 104 lines; its size baseline is lowered.
+- Offline `test_cos_weapon_pose_policy.lua` adds cap exhaustion, no-reset,
+  fresh-generation, command-summary and installed-check negative controls
+  (evidence cap, decision table, rebuild pulse, ownership write).
+- The donor-pose fallback stays unimplemented: unsupported weapons keep their
+  vanilla wheel until the captured identities prove a compatible donor.
+- Neither 0.9.220-dev nor 0.9.221-dev was published to the Workshop, so
+  publishing this build also delivers both, including the issue 913 illusion
+  description bridge.
+
+**Test:** In the Modded Realm enable **Unlock Heroic Weapon Poses**, open the
+social wheel on weapons with and without authored poses, then run
+`/cos_485_diag` and `/cos_regression_test`.
+
 ## 0.9.221-dev (2026-09-12) -- registered illusion descriptions reach the item tooltip (#913) [verify-fix]
 
 - Symptom: Rain's 0.9.213-dev test confirmed the **Prologue Wooden Mallet**
@@ -24,9 +56,9 @@
   the live `issue913_custom_illusion_descriptions` check in
   `/cos_regression_test`; the bounded install receipt is
   `[cos:913] applied: registered custom-description bridge catalog_rows=5`.
-- First Workshop publication after 0.9.219-dev, so it also carries the merged
-  but unpublished 0.9.220-dev Cosmetics change below. Without the matching
-  Crafting in Modded Dev capability, that change keeps the prior behavior.
+- Built on the merged but unpublished 0.9.220-dev Cosmetics change below.
+  Without the matching Crafting in Modded Dev capability, that change keeps
+  the prior behavior.
 
 **Test:** In the Modded Realm keep as Kruber, open a Great Hammer's
 Illusions page, select **Prologue Wooden Mallet** and read its description,
