@@ -1,5 +1,41 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.350-dev (2026-09-12) -- progressive elite enhancements (#323) [verify-fix]
+
+- Adds the host-controlled, default-off **Progressive Elite Enhancements**
+  option with **Elite Enhancement Chance per Completed Map** (0-25, default 5).
+  During a Chaos Wastes run each ordinary elite (non-boss `breed.elite`) rolls
+  against 0/5/10/15/20 percent for 0/1/2/3/4+ completed maps; a hit marks it with
+  the Geheimnisnacht Chaos Warrior recipe, `elite_base` plus `shockwave` or
+  `ignore_death_aura`. Specials, monsters, horde enemies and the 13 boss-only
+  grudge marks are never selected.
+- New owner `_ct_progressive_elite_runtime.lua` holds the single CT hook on
+  `ConflictDirector._post_spawn_unit`, where fresh and breed-freezer spawns
+  both finish. Vanilla runs first, so terror-event, cursed-chest and
+  Geheimnisnacht Hard Mode marks are already applied; a unit whose payload has
+  a list or whose `grudge_marked.name_index` attribute is set is left alone and
+  never gains a second `elite_base`.
+- CT marks through vanilla `TerrorEventUtils.apply_breed_enhancements` with a
+  private per-unit table and never writes the spawn's `optional_data`: one
+  table is shared by every unit of a horde and the enemy recycler re-spawns
+  from it, so a list left there would mark later trash. The private table also
+  carries a deterministic grudge name index, so vanilla draws nothing from the
+  terror-event RNG. Selection is a pure hash of the spawn queue id and breed
+  name. Buffs and attributes reach clients only through vanilla
+  `rpc_add_buff`/`rpc_set_attribute_*` identities with hot-join replay; no RPC,
+  lookup, package or setting transport is added.
+- `_ct_progressive_elite_audit.lua` keeps its bounded `[ct:323]` census, now
+  reporting `rates`, `step`, `applied`, `applied_special` and the live
+  `activation` state as an observer of the runtime; it registers no hook.
+- Adds `/ct_regression_test` check `issue323_progressive_elite_runtime`
+  (engine seams present, allowlist exclusivity over every depth/roll/pick,
+  default rate table, no select/apply errors or missing spawn ids) beside the
+  existing `issue323_progressive_elite_feasibility` catalog check, plus offline
+  suites for vanilla-first order, vanilla-mark preservation, shared horde
+  payloads, host/client gating, contained select/apply errors, deterministic
+  distribution per elite breed, bounded logs and the full-roster singleton
+  hook invariant.
+
 ## 0.7.349-dev (2026-09-01) -- preserve Manann display deadlines (#358) [not-started]
 
 - Keeps one weak, owner-local deadline per player unit and Manann source after

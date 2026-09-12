@@ -41,7 +41,7 @@ local mod = get_mod("ct_dev")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.349-dev"
+local MOD_VERSION = "0.7.350-dev"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -1584,9 +1584,9 @@ mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_weave_curse_audit")
 -- compatibility gate before any bounded ramp is exposed.
 mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_modifier_stack_audit")
 
--- #323 progressive elite modifiers: observation-only spawn census. The source
--- proves two elite-safe event enhancements but not the 13 boss grudge marks;
--- no enhancement payload is injected until the compatibility gate is complete.
+-- #323 progressive elite enhancements: host-authoritative, default-off owner of the
+-- singleton (ConflictDirector, _post_spawn_unit) hook; the audit below only observes it.
+mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_progressive_elite_runtime")({ mod = mod, effective_setting = function(id) return effective_setting(id) end })
 mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_progressive_elite_audit")
 mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_resume_audit")
 
