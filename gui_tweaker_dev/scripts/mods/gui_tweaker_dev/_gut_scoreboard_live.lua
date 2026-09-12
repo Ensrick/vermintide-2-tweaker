@@ -3,10 +3,12 @@
 -- Owns the two existing draw seams, the fixed 11-by-4 widget, detached native
 -- scalar reads, the exit-time end-screen sidecar, and the optional persisted
 -- page callback. #1448's sibling transport may supply one validated boss-cell
--- overlay; this presenter still owns no network registration or native write.
+-- overlay, and the opt-in #1570-#1572 host ledger may supply detached custom
+-- rows; this presenter still owns no network registration or native write.
 -- Owned by: gui_tweaker_dev.lua. Consumed via: mod:dofile from the entry point.
 local mod = get_mod("gut_dev")
 local Policy = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_scoreboard_policy")
+local CustomPolicy = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_custom_stats_policy")
 
 -- Issue #1414 / #272 phase 3: an opt-in paged presentation made from the
 -- vanilla eleven-row snapshot plus two detached native scalar reads. It owns
@@ -144,12 +146,19 @@ local mission_generation = 0
 local captured_generation
 local end_supplemental_scores
 local end_boss_scores
+local end_custom_scores
 local sidecar_evidence_count = 0
 local dummy_input = { get = function() return end, has = function() return end }
 local render_settings = { snap_pixel_positions = true }
 
 local function _enabled()
     return mod:get("gut_scoreboard_live_native") == true
+end
+
+-- #1570-#1572: the four host custom rows are opt-in, so the default registry
+-- (and #1414's thirteen-row page model) is unchanged while this is off.
+local function _custom_enabled()
+    return mod:get("gut_scoreboard_custom_stats") == true
 end
 
 -- (#272) An installed-but-DISABLED external scoreboard must not suppress gut's
@@ -202,14 +211,36 @@ local function _current_boss_scores()
     return ok and type(scores) == "table" and scores or nil
 end
 
+-- Only the host ledger answers; non-host peers get nil and the rows render
+-- unavailable instead of a fabricated zero.
+local function _current_custom_scores(model_players)
+    local api = rawget(mod, "_gut_custom_stats")
+    if type(api) ~= "table" or type(api.current_scores) ~= "function" then
+        return nil
+    end
+    local ok, scores = pcall(api.current_scores, model_players)
+    return ok and type(scores) == "table" and scores or nil
+end
+
+-- read_live_custom distinguishes the live Tab snapshot (read the host ledger
+-- for the provisional rows) from the end screen, which may only consume the
+-- captured sidecar because the ledger has already been retired.
 local function _build_model(players, helper, database, supplemental_scores,
-        boss_scores, boss_score_mode)
-    local topics = Policy.build_topic_registry(helper.scoreboard_topic_stats)
+        boss_scores, boss_score_mode, custom_scores, read_live_custom)
+    local custom = _custom_enabled()
+    local topics = Policy.build_topic_registry(helper.scoreboard_topic_stats,
+        custom and CustomPolicy.TOPICS or nil)
     local options = _model_options(topics)
     local provisional = Policy.build_native_model(players, topics, options)
     options.supplemental_scores = supplemental_scores
     options.boss_scores = boss_scores
     options.boss_score_mode = boss_score_mode
+    if custom then
+        options.custom_scores = custom_scores
+        if read_live_custom then
+            options.custom_scores = _current_custom_scores(provisional.players)
+        end
+    end
     if not supplemental_scores and database then
         options.supplemental_scores = Policy.read_supplemental_scores(
             provisional.players,
@@ -238,7 +269,7 @@ local function _snapshot(database, profile_synchronizer, boss_scores)
     local ok, players = pcall(helper.get_grouped_topic_statistics, db, synchronizer, nil)
     if not ok then return nil end
     if boss_scores == nil then boss_scores = _current_boss_scores() end
-    return _build_model(players, helper, db, nil, boss_scores)
+    return _build_model(players, helper, db, nil, boss_scores, nil, nil, true)
 end
 
 local function _copy_supplemental_scores(model)
@@ -281,6 +312,7 @@ local function _capture_end_sidecar(state_object)
     if not _enabled() or not _is_adventure() then
         end_supplemental_scores = nil
         end_boss_scores = nil
+        end_custom_scores = nil
         return
     end
     local database = type(state_object) == "table"
@@ -291,6 +323,10 @@ local function _capture_end_sidecar(state_object)
     local model = _snapshot(database, synchronizer, boss_scores)
     end_supplemental_scores = model and _copy_supplemental_scores(model) or nil
     end_boss_scores = _copy_boss_scores(boss_scores)
+    -- The host ledger is retired by its own later lifecycle owner, so copy the
+    -- four selected custom rows now; non-host peers capture nothing.
+    end_custom_scores = model and _custom_enabled()
+        and CustomPolicy.copy_scores(_current_custom_scores(model.players)) or nil
     if sidecar_evidence_count < SIDECAR_EVIDENCE_CAP then
         sidecar_evidence_count = sidecar_evidence_count + 1
         pcall(printf,
@@ -335,6 +371,7 @@ mod.on_game_state_changed = function(status, state_name, ...)
             if not _carries_end_view_wrapper(state_object) then
                 end_supplemental_scores = nil
                 end_boss_scores = nil
+                end_custom_scores = nil
             end
             cached_model = nil
             cached_at = -math.huge
@@ -346,6 +383,7 @@ mod.on_game_state_changed = function(status, state_name, ...)
             if not ok then
                 end_supplemental_scores = nil
                 end_boss_scores = nil
+                end_custom_scores = nil
                 if sidecar_evidence_count < SIDECAR_EVIDENCE_CAP then
                     sidecar_evidence_count = sidecar_evidence_count + 1
                     pcall(printf,
@@ -463,7 +501,7 @@ mod:hook_safe("EndViewStateScore", "draw", function(self, input_service, dt)
     local players = self._context and self._context.players_session_score
     if type(helper) ~= "table" or type(players) ~= "table" then return end
     local model = _build_model(players, helper, nil,
-        end_supplemental_scores, end_boss_scores, "max")
+        end_supplemental_scores, end_boss_scores, "max", end_custom_scores, false)
     _render_model(self.ui_renderer, input_service, dt, model, "end")
 end)
 

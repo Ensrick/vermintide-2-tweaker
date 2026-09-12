@@ -470,6 +470,7 @@ local suites = {
     "test_gut_scoreboard_paging",
     "test_gut_scoreboard_live_adapter",
     "test_gut_boss_damage_sync",
+    "test_gut_custom_stats",
     "test_gut_dev_printf_receipts",
     "test_gut_engine_ui_loc",
     "test_gut_hidden_passives",

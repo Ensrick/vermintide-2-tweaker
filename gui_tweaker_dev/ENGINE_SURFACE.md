@@ -380,6 +380,36 @@ and adds no RPC; progression/backend statistics are never copied. #1414 extends
 that exact path list with only Aidings and Times Revived so the two detached
 rows survive the same once-per-rejoin restore transaction.
 
+#1570/#1571/#1572 add two host-only observation wrappers and one mission-local
+ledger (`_gut_custom_stats.lua`; pure policy `_gut_custom_stats_policy.lua`).
+`StatisticsUtil.register_damage` [hook] runs once per applied hit on the host
+from `GenericHealthExtension.add_damage` and `PlayerUnitHealthExtension.add_damage`
+[src: `generic_health_extension.lua:351`; `player_unit_health_extension.lua:660-662`],
+before the host health write [src: `player_unit_health_extension.lua:780-811`];
+`rpc_add_damage` replays only on other peers [src: `network_transmit.lua:431-453`].
+The wrapper reads each registered player's `damage_dealt` immediately before and
+after the vanilla call and accepts exactly one positive delta, so it inherits
+vanilla's registered-attacker, breed-victim, live-health and clamp gates [src:
+`statistics_util.lua:549-593`] without re-resolving the attacker. A different
+player-owned hero on the attacker's side is friendly fire; an enemy-side victim is
+classified by the verbatim kill classifier [src: `statistics_util.lua:227-257`]
+over the damage table's source and always-present attack type [src:
+`generic_health_extension.lua:261,268`]; self damage, allied non-hero units and
+non-item sources stay uncredited. `PlayerUnitHealthExtension.add_heal` [hook]
+brackets the server permanent-health write [src:
+`player_unit_health_extension.lua:856-872`] with `current_health` game-object
+reads and credits a positive delta to the healer's owner, or to the healed player
+when the healer is not a player; `rpc_heal` goes only to clients [src: `:894`].
+Both wrappers forward every argument and return value, let vanilla errors
+propagate, and pcall-contain only GUT's observation. The ledger is keyed by
+stable `stats_id`, caps 16 rows and 1,000,000 per event, resets on StateIngame
+enter/exit and `on_disabled`, and mirrors #437's keep/evict/discard decisions
+through a notify-only retention listener. The presenter adds the four rows only
+when Host Statistics is enabled; #1414's exit sidecar copies them before the
+ledger retires, and non-host peers show them unavailable until #1573. No
+statistic definition, lookup, RPC or vanilla payload is added. `[gut:272] custom
+credit` receipts cap at six per family and `custom refusal` at eight per process.
+
 #1151 repairs vanilla's Damage Taken award at the accumulation seam.
 `EndViewStateScore._group_scores_by_player_and_topic` seeds `highscore` at zero,
 then computes `min(highscore, score)` for each positive damage value, so no

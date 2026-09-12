@@ -294,6 +294,12 @@ local options_data = {
                                 tooltip         = "gut_scoreboard_next_page_hotkey_tooltip",
                             },
                             {
+                                setting_id    = "gut_scoreboard_custom_stats",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "gut_scoreboard_custom_stats_tooltip",
+                            },
+                            {
                                 setting_id  = "gut_scoreboard_topic_visibility_group",
                                 type        = "group",
                                 tooltip     = "gut_scoreboard_topic_visibility_group_tooltip",
@@ -311,6 +317,10 @@ local options_data = {
                                     { setting_id = "gut_scoreboard_topic_revives_visible", type = "checkbox", default_value = true },
                                     { setting_id = "gut_scoreboard_topic_aidings_visible", type = "checkbox", default_value = true },
                                     { setting_id = "gut_scoreboard_topic_times_revived_visible", type = "checkbox", default_value = true },
+                                    { setting_id = "gut_scoreboard_topic_friendly_fire_damage_visible", type = "checkbox", default_value = true },
+                                    { setting_id = "gut_scoreboard_topic_melee_damage_dealt_visible", type = "checkbox", default_value = true },
+                                    { setting_id = "gut_scoreboard_topic_ranged_damage_dealt_visible", type = "checkbox", default_value = true },
+                                    { setting_id = "gut_scoreboard_topic_permanent_health_restored_visible", type = "checkbox", default_value = true },
                                 },
                             },
                         },
