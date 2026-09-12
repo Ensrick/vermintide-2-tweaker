@@ -2,7 +2,8 @@
 #
 # Encodes PROJECT_STANDARDS.md § 3.6 (Debug logging + "Chat-echo policy" matrix)
 # and docs/BUG_CLASSES.md § 17 (chat-echo spam + Variant B, Issue #240). Three
-# advisory sub-checks, each with a false-positive-safe suppression path:
+# advisory sub-checks (each with a false-positive-safe suppression path) plus
+# one hard retired-key contract:
 #
 #   (a) ECHO       — a `mod:echo(` call in one of the § 3.6 / BUG_CLASSES § 17
 #       "NEVER" contexts, i.e. the sites those docs say to audit against the
@@ -36,10 +37,19 @@
 #       NOT flagged — chat visibility is arguably wanted there. Suppress an
 #       intentional in-helper chat warning with `-- allow-warn-chat: <reason>`.
 #
+#   (d) RETIRED-DEBUG-KEY — executable `get`/`set` calls or a widget
+#       `setting_id` for `enable_debug_logging`. Comments and historical prose
+#       are allowed; production execution is a hard #169 regression. There is
+#       NO inline escape comment for this category: the only tolerated site is
+#       the exact General Tweaker STABLE promotion debt pinned in
+#       $legacyRetiredDebugKeyDebt below.
+#
 # Existing hygiene debt is advisory by result: ordinary findings exit 1, which
-# Standard policy reports without blocking. Issue #427's monotonic warn-chat
-# floor is blocking: any warning-backed diagnostic helper outside the exact
-# three public stable-stream promotion debts exits 2.
+# Standard policy reports without blocking. Two monotonic floors are blocking:
+# Issue #427's warn-chat floor (any warning-backed diagnostic helper outside the
+# exact three public stable-stream promotion debts exits 2) and Issue #169's
+# retired-key floor (any executable retired-key site outside the exact one
+# General Tweaker stable promotion debt exits 2).
 #
 # Detection scope mirrors check_unpack_safety.ps1: `*.lua` under each active mod's
 # `scripts/` subtree; skips tweaker/ (legacy), _archive, *_extract, bundleV2,
@@ -54,20 +64,22 @@
 # Exit codes:
 #   0 - no findings
 #   1 - one or more advisory findings (echo / per-frame / warn-chat)
-#   2 - hard error, self-test failure, or new #427 warn-chat regression
+#   2 - hard error, self-test failure, new #427 warn-chat regression, or a #169
+#       retired-key site outside the pinned General Tweaker stable debt
 #
 # Self-test: `-SelfTest` runs the synthetic fixtures under qa/_test_fixtures/ and
 # asserts per-category finding counts. Auto-discovered by qa/run_selftests.ps1.
 
 [CmdletBinding()]
 param(
-    [string]$RepoRoot = (Join-Path $PSScriptRoot ".."),
+    [string]$RepoRoot,
     [switch]$Quiet,
     [switch]$SelfTest,
     [switch]$WarnChatRegression
 )
 
 $ErrorActionPreference = "Stop"
+if (-not $RepoRoot) { $RepoRoot = Join-Path $PSScriptRoot ".." }
 $repoRoot = (Resolve-Path $RepoRoot).Path
 
 # Issue #427 migration floor. These are the three public stable-stream helpers
@@ -79,6 +91,19 @@ $legacyWarnChatDebt = @{
     'chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua|mod:warning("[ct:dbg] " .. fmt, ...)' = $true
     'general_tweaker/scripts/mods/general_tweaker/general_tweaker.lua|mod:warning("[gt:dbg] " .. fmt, ...)' = $true
     'verminious_dreams_lighting/scripts/mods/verminious_dreams_lighting/verminious_dreams_lighting.lua|mod:warning("[vdl:dbg] " .. fmt, ...)' = $true
+}
+
+# Issue #169 retired-key floor. Exactly one executable site of the retired
+# per-mod `enable_debug_logging` key is tolerated: General Tweaker STABLE's
+# `_dbg_on` predicate in _gt_debug_probes.lua. Its dev twin already carries the
+# VMF-native predicate (`logging_mode == "custom"` and `output_mode_debug > 0`).
+# The stable swap is a runtime-source change, so it rides the next
+# user-authorized General Tweaker stable promotion, never a tooling PR (stable
+# directories are read-only outside promotion). Keyed on relative path AND
+# exact source text, so a rewritten line or a second site in that file is not
+# grandfathered. Delete this entry when the promotion lands; removal is clean.
+$legacyRetiredDebugKeyDebt = @{
+    'general_tweaker/scripts/mods/general_tweaker/_gt_debug_probes.lua|return mod:get("enable_debug_logging") == true' = $true
 }
 
 function Read-FileUtf8([string]$path) {
@@ -98,6 +123,29 @@ $rxHookUpd   = [regex]'\bmod:hook\w*\s*\([^)]*["'']update["'']'
 # audit passes). The author's own :dbg tag is the intent signal -- it is a
 # diagnostic, so it must not reach chat, whatever scope it sits in.
 $rxWarnDbgTag = [regex]'\bmod:warning\s*\(\s*["'']\s*\[[A-Za-z_][\w\-]*:dbg\]|\bmod:warning\s*\(\s*["'']\s*\[dbg\]'
+# Colon calls pass the key first; Lua's equivalent dot call passes an explicit
+# self first. Cover direct identifier/member-path receivers without attempting
+# general Lua expression evaluation or constant folding of computed keys. Lua
+# also permits a lone string argument without parentheses. The @-delimited
+# marker cannot occur in valid executable Lua; prose containing it is blanked.
+$rxRetiredDebugCall = [regex]'(?ms)(?:[:\.]\s*[gs]et\s*(?:\(\s*)?|\.\s*[gs]et\s*\(\s*[A-Za-z_]\w*(?:\s*\.\s*[A-Za-z_]\w*)*\s*,\s*)@VT_RETIRED_DEBUG_KEY@'
+$rxRetiredDebugWidget = [regex]'(?ms)\bsetting_id\s*=\s*@VT_RETIRED_DEBUG_KEY@'
+# Lexical spans for this hard category only; keep the advisory scope scanner
+# unchanged. Long brackets and escaped quotes must not turn historical prose
+# into executable code (or hide a real call later on the same line).
+$rxRetiredLuaSpans = [regex]'(?s)--\[(=*)\[.*?\]\1\]|--[^\r\n]*|\[(=*)\[.*?\]\2\]|"(?:\\.|[^"\\])*"|''(?:\\.|[^''\\])*'''
+
+function Get-RetiredDebugKeyCode {
+    param([string]$Source)
+    return $rxRetiredLuaSpans.Replace($Source, [System.Text.RegularExpressions.MatchEvaluator]{
+        param($Match)
+        $value = $Match.Value
+        $retired = $value -ceq '"enable_debug_logging"' -or $value -ceq "'enable_debug_logging'" -or
+            $value -cmatch '\A\[(=*)\[enable_debug_logging\]\1\]\z'
+        if ($retired) { return '@VT_RETIRED_DEBUG_KEY@' }
+        return [regex]::Replace($value, '[^\r\n]', ' ')
+    })
+}
 
 # escape comments (accepted on the flagged line OR the line directly above)
 $rxAllowEcho = [regex]'--\s*allow-echo\s*:'
@@ -228,7 +276,8 @@ function Scan-LoggingFile {
         throw "I/O failure reading ${Path}: $_"
     }
     # fast bail — nothing to scan
-    if (-not ($rxEcho.IsMatch($text) -or $rxInfo.IsMatch($text) -or $rxWarning.IsMatch($text))) {
+    if (-not ($rxEcho.IsMatch($text) -or $rxInfo.IsMatch($text) -or $rxWarning.IsMatch($text) `
+            -or $text.Contains('enable_debug_logging'))) {
         return ,$findings
     }
 
@@ -301,13 +350,22 @@ function Scan-LoggingFile {
                 $findings += [pscustomobject]@{ File = $Path; Line = $i + 1; Category = 'warn-chat'; Text = $raw.Trim() }
             }
         }
-
         # ---- apply block-depth delta, then close any scope that has ended ----
         $depth += (Get-Delta -Code $code)
         if ($depth -lt 0) { $depth = 0 }   # never underflow on a stray/miscounted end
         if ($null -ne $neverFloor  -and $depth -le $neverFloor)  { $neverFloor  = $null }
         if ($null -ne $updateFloor -and $depth -le $updateFloor) { $updateFloor = $null }
         if ($null -ne $alertFloor  -and $depth -le $alertFloor)  { $alertFloor  = $null }
+    }
+
+    # Executable resurrection of the retired per-mod key may place the call,
+    # literal, and closing delimiter on separate lines. Scan the complete
+    # comment/string-normalized source so formatting cannot evade the guard.
+    $retiredCode = Get-RetiredDebugKeyCode -Source $text
+    foreach ($match in @($rxRetiredDebugCall.Matches($retiredCode)) + @($rxRetiredDebugWidget.Matches($retiredCode))) {
+        $line = 1 + [regex]::Matches($retiredCode.Substring(0, $match.Index), "`n").Count
+        $textAtLine = if ($line -le $lines.Count) { $lines[$line - 1].Trim() } else { '' }
+        $findings += [pscustomobject]@{ File = $Path; Line = $line; Category = 'retired-debug-key'; Text = $textAtLine }
     }
     return ,$findings
 }
@@ -323,17 +381,33 @@ function Get-ModName {
     return ($rel -split '/')[0]
 }
 
-function Get-UnexpectedWarnChatRows {
-    param([object[]]$Rows, [string]$Root)
+# Rows of one category whose `<relative path>|<exact trimmed source text>` key is
+# absent from the given monotonic floor table. Paths compare case-insensitively
+# (forward slashes); text is exact, so a rewritten line loses its grandfathering.
+# The root prefix is stripped case-insensitively too: Windows may enumerate a
+# directory with different casing than the caller's -RepoRoot/$PSScriptRoot,
+# and a case-sensitive prefix test would turn pinned debt into a false exit 2.
+function Get-RowsOutsideFloor {
+    param([object[]]$Rows, [string]$Root, [string]$Category, [hashtable]$Floor)
     $unexpected = @()
-    foreach ($row in @($Rows | Where-Object { $_.Category -eq 'warn-chat' })) {
+    foreach ($row in @($Rows | Where-Object { $_.Category -eq $Category })) {
         $rel = $row.File
-        if ($rel.StartsWith($Root)) { $rel = $rel.Substring($Root.Length).TrimStart('\','/') }
+        if ($rel.StartsWith($Root, [System.StringComparison]::OrdinalIgnoreCase)) { $rel = $rel.Substring($Root.Length).TrimStart('\','/') }
         $rel = $rel.Replace('\','/').ToLowerInvariant()
         $key = $rel + '|' + $row.Text.Trim()
-        if (-not $legacyWarnChatDebt.ContainsKey($key)) { $unexpected += $row }
+        if (-not $Floor.ContainsKey($key)) { $unexpected += $row }
     }
     return $unexpected
+}
+
+function Get-UnexpectedWarnChatRows {
+    param([object[]]$Rows, [string]$Root)
+    return Get-RowsOutsideFloor -Rows $Rows -Root $Root -Category 'warn-chat' -Floor $legacyWarnChatDebt
+}
+
+function Get-UnexpectedRetiredDebugKeyRows {
+    param([object[]]$Rows, [string]$Root)
+    return Get-RowsOutsideFloor -Rows $Rows -Root $Root -Category 'retired-debug-key' -Floor $legacyRetiredDebugKeyDebt
 }
 
 # ---- self-test ----
@@ -345,12 +419,13 @@ function Invoke-SelfTest {
     }
     # Expected finding counts per category per fixture.
     $cases = @(
-        @{ Path = "logging_echo_bad.lua";     Echo = 2; Frame = 0; Warn = 0; Desc = "hook-body + on_setting_changed echo flagged; command / dev-banner / annotated echo suppressed" },
-        @{ Path = "logging_perframe_bad.lua"; Echo = 0; Frame = 2; Warn = 0; Desc = "mod:info + mod:warning in update() flagged; annotated one suppressed" },
-        @{ Path = "logging_warn_helper_bad.lua"; Echo = 0; Frame = 0; Warn = 1; Desc = "mod:warning in _dbg_alert flagged; genuine-guard warning + annotated one suppressed" },
-        @{ Path = "logging_warn_dbgtag_bad.lua"; Echo = 0; Frame = 0; Warn = 1; Desc = "self-tagged [x:dbg] mod:warning outside any helper flagged; annotated one + untagged player-facing warning suppressed" },
-        @{ Path = "logging_string_dash.lua";  Echo = 1; Frame = 0; Warn = 0; Desc = "`--`-in-string with a `while` keyword must not desync scope; command echoes stay clean" },
-        @{ Path = "logging_clean.lua";        Echo = 0; Frame = 0; Warn = 0; Desc = "all sanctioned forms — zero findings" }
+        @{ Path = "logging_echo_bad.lua";     Echo = 2; Frame = 0; Warn = 0; Retired = 0; Desc = "hook-body + on_setting_changed echo flagged; command / dev-banner / annotated echo suppressed" },
+        @{ Path = "logging_perframe_bad.lua"; Echo = 0; Frame = 2; Warn = 0; Retired = 0; Desc = "mod:info + mod:warning in update() flagged; annotated one suppressed" },
+        @{ Path = "logging_warn_helper_bad.lua"; Echo = 0; Frame = 0; Warn = 1; Retired = 0; Desc = "mod:warning in _dbg_alert flagged; genuine-guard warning + annotated one suppressed" },
+        @{ Path = "logging_warn_dbgtag_bad.lua"; Echo = 0; Frame = 0; Warn = 1; Retired = 0; Desc = "self-tagged [x:dbg] mod:warning outside any helper flagged; annotated one + untagged player-facing warning suppressed" },
+        @{ Path = "logging_string_dash.lua";  Echo = 1; Frame = 0; Warn = 0; Retired = 0; Desc = "`--`-in-string with a `while` keyword must not desync scope; command echoes stay clean" },
+        @{ Path = "logging_retired_debug_key.lua"; Echo = 0; Frame = 0; Warn = 0; Retired = 14; Desc = "direct literal reads/writes/widgets, including no-parentheses and explicit-self dot calls, fail; comments, quoted prose and safe identifiers remain legal" },
+        @{ Path = "logging_clean.lua";        Echo = 0; Frame = 0; Warn = 0; Retired = 0; Desc = "all sanctioned forms — zero findings" }
     )
     $allPass = $true
     foreach ($c in $cases) {
@@ -364,11 +439,12 @@ function Invoke-SelfTest {
         $ge = @($rows | Where-Object { $_.Category -eq 'echo' }).Count
         $gf = @($rows | Where-Object { $_.Category -eq 'perframe' }).Count
         $gw = @($rows | Where-Object { $_.Category -eq 'warn-chat' }).Count
-        $ok = ($ge -eq $c.Echo) -and ($gf -eq $c.Frame) -and ($gw -eq $c.Warn)
+        $gr = @($rows | Where-Object { $_.Category -eq 'retired-debug-key' }).Count
+        $ok = ($ge -eq $c.Echo) -and ($gf -eq $c.Frame) -and ($gw -eq $c.Warn) -and ($gr -eq $c.Retired)
         $verdict = if ($ok) { "PASS" } else { "FAIL" }
         $colour  = if ($ok) { "Green" } else { "Red" }
-        Write-Host ("  [{0}] {1} -- echo={2}/{3} frame={4}/{5} warn={6}/{7}" -f `
-            $verdict, $c.Path, $ge, $c.Echo, $gf, $c.Frame, $gw, $c.Warn) -ForegroundColor $colour
+        Write-Host ("  [{0}] {1} -- echo={2}/{3} frame={4}/{5} warn={6}/{7} retired={8}/{9}" -f `
+            $verdict, $c.Path, $ge, $c.Echo, $gf, $c.Frame, $gw, $c.Warn, $gr, $c.Retired) -ForegroundColor $colour
         if (-not $ok) { Write-Host "        $($c.Desc)" -ForegroundColor DarkYellow; $allPass = $false }
     }
 
@@ -384,6 +460,60 @@ function Invoke-SelfTest {
         -and (@(Get-UnexpectedWarnChatRows -Rows @($known, $newText, $newPath) -Root $repoRoot).Count -eq 2)
     Write-Host ("  [{0}] warn-chat migration floor -- exact legacy accepted; removal accepted; new sites rejected" -f $(if ($floorOk) { 'PASS' } else { 'FAIL' })) -ForegroundColor $(if ($floorOk) { 'Green' } else { 'Red' })
     if (-not $floorOk) { $allPass = $false }
+
+    # Assert the new shapes independently: a false positive must not cancel a
+    # missed literal call and make the aggregate fixture count look correct.
+    $literalRows = @(Scan-LoggingFile -Path (Join-Path $fixDir 'logging_retired_debug_key.lua') |
+        Where-Object { $_.Category -eq 'retired-debug-key' })
+    $shortLiteralOk = @($literalRows | Where-Object { $_.Text -ceq 'mod:get "enable_debug_logging"' }).Count -eq 1
+    $longLiteralOk = @($literalRows | Where-Object { $_.Text -ceq 'mod:get [=[enable_debug_logging]=]' }).Count -eq 1
+    $safeIdentifierOk = @($literalRows | Where-Object { $_.Text -ceq 'return mod:get(__VT_RETIRED_DEBUG_KEY__)' }).Count -eq 0
+    foreach ($case in @(
+        @{ Name = 'short literal call without parentheses'; Ok = $shortLiteralOk },
+        @{ Name = 'long literal call without parentheses'; Ok = $longLiteralOk },
+        @{ Name = 'legal marker-shaped identifier is not a retired key'; Ok = $safeIdentifierOk }
+    )) {
+        Write-Host ("  [{0}] {1}" -f $(if ($case.Ok) { 'PASS' } else { 'FAIL' }), $case.Name)
+        if (-not $case.Ok) { $allPass = $false }
+    }
+
+    # The #169 floor is monotonic the same way: the exact General Tweaker STABLE
+    # `_dbg_on` read is tolerated until its authorized promotion, its removal is
+    # clean, and a rewritten line or any other path (the dev twin included) is
+    # blocking.
+    $gtProbesPath = Join-Path $repoRoot 'general_tweaker\scripts\mods\general_tweaker\_gt_debug_probes.lua'
+    $pinnedRetiredText = 'return mod:get("enable_debug_logging") == true'
+    $knownRetired   = [pscustomobject]@{ File = $gtProbesPath; Line = 91; Category = 'retired-debug-key'; Text = $pinnedRetiredText }
+    $retiredNewText = [pscustomobject]@{ File = $gtProbesPath; Line = 92; Category = 'retired-debug-key'; Text = 'mod:set("enable_debug_logging", false)' }
+    $retiredNewPath = [pscustomobject]@{ File = (Join-Path $repoRoot 'general_tweaker_dev\scripts\mods\general_tweaker_dev\_gt_debug_probes.lua'); Line = 91; Category = 'retired-debug-key'; Text = $pinnedRetiredText }
+    $knownRetiredOtherCase = [pscustomobject]@{ File = $gtProbesPath.ToUpperInvariant(); Line = 91; Category = 'retired-debug-key'; Text = $pinnedRetiredText }
+    $retiredFloorOk = (@(Get-UnexpectedRetiredDebugKeyRows -Rows @($knownRetired) -Root $repoRoot).Count -eq 0) `
+        -and (@(Get-UnexpectedRetiredDebugKeyRows -Rows @($knownRetiredOtherCase) -Root $repoRoot).Count -eq 0) `
+        -and (@(Get-UnexpectedRetiredDebugKeyRows -Rows @() -Root $repoRoot).Count -eq 0) `
+        -and (@(Get-UnexpectedRetiredDebugKeyRows -Rows @($knownRetired, $retiredNewText, $retiredNewPath) -Root $repoRoot).Count -eq 2)
+    Write-Host ("  [{0}] retired-debug-key floor (#169) -- exact GT stable debt accepted (any root casing); removal accepted; rewritten line + dev twin rejected" -f $(if ($retiredFloorOk) { 'PASS' } else { 'FAIL' })) -ForegroundColor $(if ($retiredFloorOk) { 'Green' } else { 'Red' })
+    if (-not $retiredFloorOk) { $allPass = $false }
+
+    # Live-source proof: the real scanner (sentinel + multiline pass) must see
+    # every executable retired-key site in the pinned stable file, and every one
+    # it sees must be inside the floor. While the exact pinned read is still in
+    # source the scanner must report exactly that one tolerated site, so a
+    # detection regression cannot pass as a silent zero; after the promotion
+    # removes it, zero sites are required. The file being absent is a self-test
+    # failure, not a skip, so a moved file cannot silently void the proof.
+    $liveOk = $false
+    $liveTolerated = -1
+    $liveUnexpected = -1
+    if (Test-Path $gtProbesPath) {
+        $liveRows = @(Scan-LoggingFile -Path $gtProbesPath | Where-Object { $_.Category -eq 'retired-debug-key' })
+        $liveUnexpected = @(Get-UnexpectedRetiredDebugKeyRows -Rows $liveRows -Root $repoRoot).Count
+        $liveTolerated = $liveRows.Count - $liveUnexpected
+        $pinnedStillPresent = @((Read-FileUtf8 $gtProbesPath) -split "`r?`n" | Where-Object { $_.Trim() -ceq $pinnedRetiredText }).Count -gt 0
+        $expectedTolerated = if ($pinnedStillPresent) { 1 } else { 0 }
+        $liveOk = ($liveUnexpected -eq 0 -and $liveTolerated -eq $expectedTolerated)
+    }
+    Write-Host ("  [{0}] live GT stable _gt_debug_probes.lua -- retired-key sites tolerated={1} unexpected={2}" -f $(if ($liveOk) { 'PASS' } else { 'FAIL' }), $liveTolerated, $liveUnexpected) -ForegroundColor $(if ($liveOk) { 'Green' } else { 'Red' })
+    if (-not $liveOk) { $allPass = $false }
     Write-Host ""
     if ($allPass) {
         Write-Host "[check_logging -SelfTest] OK -- all $($cases.Count) fixture verdicts match." -ForegroundColor Green
@@ -459,6 +589,25 @@ if ($hardError) {
 }
 
 $warnRows = @($all | Where-Object { $_.Category -eq 'warn-chat' })
+$retiredRows = @($all | Where-Object { $_.Category -eq 'retired-debug-key' })
+$unexpectedRetiredRows = @(Get-UnexpectedRetiredDebugKeyRows -Rows $retiredRows -Root $repoRoot)
+if ($unexpectedRetiredRows.Count -gt 0) {
+    Write-Host "[check_logging] FAILED -- $($unexpectedRetiredRows.Count) executable retired debug-key site(s) outside the #169 General Tweaker stable promotion debt." -ForegroundColor Red
+    foreach ($row in $unexpectedRetiredRows) {
+        $rel = $row.File
+        if ($rel.StartsWith($repoRoot)) { $rel = $rel.Substring($repoRoot.Length).TrimStart('\','/') }
+        Write-Host ("  ! {0}:{1}`n      {2}" -f $rel, $row.Line, $row.Text) -ForegroundColor Red
+    }
+    exit 2
+}
+if ($retiredRows.Count -gt 0) {
+    Write-Host "[check_logging] #169 retired-key floor: $($retiredRows.Count) pinned General Tweaker stable site tolerated until its user-authorized promotion." -ForegroundColor DarkYellow
+} else {
+    Write-Host '[check_logging] #169 retired-key floor: zero executable sites.' -ForegroundColor DarkGreen
+}
+# Tolerated floor rows are promotion debt, not advisory hygiene findings; keep
+# them out of the echo/per-frame/warn-chat census below.
+$all = @($all | Where-Object { $_.Category -ne 'retired-debug-key' })
 $unexpectedWarnRows = @(Get-UnexpectedWarnChatRows -Rows $warnRows -Root $repoRoot)
 if ($unexpectedWarnRows.Count -gt 0) {
     Write-Host "[check_logging] FAILED -- $($unexpectedWarnRows.Count) new warning-backed diagnostic helper(s) exceed the #427 migration floor." -ForegroundColor Red
