@@ -362,7 +362,7 @@
         }
         @{
             Marker='[ct:349]'; ModId='ct_dev'
-            ModTrees=@{ct_dev='d17f7cd1fc2ddb2337784fe7a728d9bf96fc6c71'}
+            ModTrees=@{ct_dev='3b9fb17debbf884994f1225e13a703ca9cb1023d'}
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_cursed_chest132.lua'}
             Signature='[ct:349] chest_count_audit level=%s mission_of_mercy=%s actual=%d cap=%s pickup_census=%s class=%s is_server=%s'
             Bound='Core.finalize returns no classification after the mission-generation finalized latch is set'
@@ -374,7 +374,7 @@
         }
         @{
             Marker='[ct:132]'; ModId='ct_dev'
-            ModTrees=@{ct_dev='d17f7cd1fc2ddb2337784fe7a728d9bf96fc6c71'}
+            ModTrees=@{ct_dev='3b9fb17debbf884994f1225e13a703ca9cb1023d'}
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_cursed_chest132.lua'}
             Signature='[ct:132] chest_of_trials #%d level=%s cap=%s census=%s is_server=%s%s'
             Bound='one receipt per actually constructed chest in the finite mission population'
@@ -386,7 +386,7 @@
         }
         @{
             Marker='[ct:132]'; ModId='ct_dev'
-            ModTrees=@{ct_dev='d17f7cd1fc2ddb2337784fe7a728d9bf96fc6c71'}
+            ModTrees=@{ct_dev='3b9fb17debbf884994f1225e13a703ca9cb1023d'}
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_cursed_chest132.lua'}
             Signature='[ct:132] reconcile level=%s alive=%d cap=%d over=%d pruned=%d unprunable=%d (issue 132 / issue 60 cross-path cap)'
             Bound='one over-cap reconciliation receipt from the mission-generation one-shot finalize path'
@@ -545,7 +545,7 @@
             GuardAnchors=@(@{Tokens=@('if','type','(','max_damage',')','~=','String:number','or','max_damage','<=','0','then')})
         }
         @{
-            Marker='[ct:919]';ModId='ct_dev';ModTrees=@{ct_dev='d17f7cd1fc2ddb2337784fe7a728d9bf96fc6c71'}
+            Marker='[ct:919]';ModId='ct_dev';ModTrees=@{ct_dev='3b9fb17debbf884994f1225e13a703ca9cb1023d'}
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_profile_snapshot.lua'}
             Signature='[ct:919] seq=%d phase=%s role=%s profile=%d effective_source=%s coins_local=%s coins_effective=%s miasma_disabled_local=%s miasma_disabled_effective=%s selected_curse="%s" selected_conflict=%s boon_local_count=%d boon_local=%s boon_effective_count=%d boon_effective=%s local_truncated=%d effective_truncated=%d'
             Bound='one terminal formatted snapshot or snapshot_error per explicit profile-snapshot transaction'
@@ -556,7 +556,7 @@
             GuardAnchors=@(@{Tokens=@('function','mod','.','_ct919_log_profile_snapshot','(','phase',',','profile_override',')')})
         }
         @{
-            Marker='[ct:919]';ModId='ct_dev';ModTrees=@{ct_dev='d17f7cd1fc2ddb2337784fe7a728d9bf96fc6c71'}
+            Marker='[ct:919]';ModId='ct_dev';ModTrees=@{ct_dev='3b9fb17debbf884994f1225e13a703ca9cb1023d'}
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_profile_snapshot.lua'}
             Signature='[ct:919] seq=%d snapshot_error=%s';Bound='one mutually exclusive error receipt per profile-snapshot transaction'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[ct:919] seq=%d snapshot_error=%s')})
@@ -609,7 +609,7 @@
             )
         }
         @{
-            Marker='[ct:571-native]';ModId='ct_dev';ModTrees=@{ct_dev='d17f7cd1fc2ddb2337784fe7a728d9bf96fc6c71'}
+            Marker='[ct:571-native]';ModId='ct_dev';ModTrees=@{ct_dev='3b9fb17debbf884994f1225e13a703ca9cb1023d'}
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_tab_native533.lua'}
             Signature='[ct:571-native] %s';Bound='signature-deduplicated native layout census under an absolute 64-row cap'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[ct:571-native] %s',',','line',')')})
@@ -688,14 +688,14 @@
             GuardAnchors=@(@{Tokens=@('function','M','.','dump','(',')')})
         }
         @{
-            Marker='[ct:288]';ModId='ct_dev';ModTrees=@{ct_dev='d17f7cd1fc2ddb2337784fe7a728d9bf96fc6c71'}
+            Marker='[ct:288]';ModId='ct_dev';ModTrees=@{ct_dev='3b9fb17debbf884994f1225e13a703ca9cb1023d'}
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_balance.lua'}
             Signature='[ct:288] %s';Bound='finite authored template/active-state census per explicit verify command invocation'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[ct:288] %s')})
             GuardAnchors=@(@{Tokens=@('mod',':','command','(','String:ct_verify_anath_raema')})
         }
         @{
-            Marker='[ct:288]';ModId='ct_dev';ModTrees=@{ct_dev='d17f7cd1fc2ddb2337784fe7a728d9bf96fc6c71'}
+            Marker='[ct:288]';ModId='ct_dev';ModTrees=@{ct_dev='3b9fb17debbf884994f1225e13a703ca9cb1023d'}
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_meta_trait_boons.lua'}
             Signature='[ct:288] add parent=%s child=%s stat=%s mult=%s event=%s n=%d';Bound='absolute eight-row add-boundary diagnostic cap'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[ct:288] add parent=%s child=%s stat=%s mult=%s event=%s n=%d')})
@@ -715,7 +715,7 @@
             )
         }
         @{
-            Marker='[ct:141]';ModId='ct_dev';ModTrees=@{ct_dev='d17f7cd1fc2ddb2337784fe7a728d9bf96fc6c71'}
+            Marker='[ct:141]';ModId='ct_dev';ModTrees=@{ct_dev='3b9fb17debbf884994f1225e13a703ca9cb1023d'}
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_resume_audit.lua'}
             Signature='[ct:141] audit=%d/%d reason=%s controller=%s run_state=%s server=%s config=%d/%d values=%d progress=%d/%d values=%d shared=%s full_sync=%s player_read=%s/%s/%s player_write=%s/%s/%s config_missing=%s progress_missing=%s mutation=false';Bound='absolute six-row session budget with two manual slots reserved'
             EmitterAnchors=@(@{Tokens=@('printf','(','String:[ct:141] audit=%d/%d reason=%s controller=%s run_state=%s server=%s config=%d/%d values=%d progress=%d/%d values=%d shared=%s full_sync=%s player_read=%s/%s/%s player_write=%s/%s/%s config_missing=%s progress_missing=%s mutation=false')})
@@ -745,14 +745,14 @@
             )
         }
         @{
-            Marker='[ct:919]';ModId='ct_dev';ModTrees=@{ct_dev='d17f7cd1fc2ddb2337784fe7a728d9bf96fc6c71'}
+            Marker='[ct:919]';ModId='ct_dev';ModTrees=@{ct_dev='3b9fb17debbf884994f1225e13a703ca9cb1023d'}
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_dev_mission.lua'}
             Signature='[ct:919] registered profile diagnostic with Mod Tweaker';Bound='one registration receipt from the once-per-load on_all_mods_loaded callback'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[ct:919] registered profile diagnostic with Mod Tweaker',')')})
             GuardAnchors=@(@{Tokens=@('mod','.','on_all_mods_loaded','=','function','(',')')})
         }
         @{
-            Marker='[ct:288]';ModId='ct_dev';ModTrees=@{ct_dev='d17f7cd1fc2ddb2337784fe7a728d9bf96fc6c71'}
+            Marker='[ct:288]';ModId='ct_dev';ModTrees=@{ct_dev='3b9fb17debbf884994f1225e13a703ca9cb1023d'}
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_balance.lua'}
             Signature='[ct:288] setting=%s template_child=%s stat=%s multiplier=%s event=%s';Bound='one template-setting census row per explicit verify command invocation'
             EmitterAnchors=@(
@@ -762,7 +762,7 @@
             GuardAnchors=@(@{Tokens=@('mod',':','command','(','String:ct_verify_anath_raema')})
         }
         @{
-            Marker='[ct:288]';ModId='ct_dev';ModTrees=@{ct_dev='d17f7cd1fc2ddb2337784fe7a728d9bf96fc6c71'}
+            Marker='[ct:288]';ModId='ct_dev';ModTrees=@{ct_dev='3b9fb17debbf884994f1225e13a703ca9cb1023d'}
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_balance.lua'}
             Signature='[ct:288] active[%d] child=%s stat=%s multiplier=%s event=%s';Bound='one row per finite active matching buff in an explicit verify command census'
             EmitterAnchors=@(
@@ -772,7 +772,7 @@
             GuardAnchors=@(@{Tokens=@('for','_',',','buff','in','pairs','(','be','.','_buffs','or','{','}',')','do')})
         }
         @{
-            Marker='[ct:288]';ModId='ct_dev';ModTrees=@{ct_dev='d17f7cd1fc2ddb2337784fe7a728d9bf96fc6c71'}
+            Marker='[ct:288]';ModId='ct_dev';ModTrees=@{ct_dev='3b9fb17debbf884994f1225e13a703ca9cb1023d'}
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_balance.lua'}
             Signature='[ct:288] active_count=%d total_reload_time_scale=%s expected_trait_scale=0.5';Bound='one terminal active-count row per explicit verify command invocation'
             EmitterAnchors=@(
@@ -782,7 +782,7 @@
             GuardAnchors=@(@{Tokens=@('mod',':','command','(','String:ct_verify_anath_raema')})
         }
         @{
-            Marker='[ct:288]';ModId='ct_dev';ModTrees=@{ct_dev='d17f7cd1fc2ddb2337784fe7a728d9bf96fc6c71'}
+            Marker='[ct:288]';ModId='ct_dev';ModTrees=@{ct_dev='3b9fb17debbf884994f1225e13a703ca9cb1023d'}
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_balance.lua'}
             Signature='[ct:288] active=unavailable (enter the keep/mission and wield the trait weapon)';Bound='one mutually exclusive early terminal row per explicit verify command invocation'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[ct:288] active=unavailable (enter the keep/mission and wield the trait weapon)',')')})
@@ -854,7 +854,7 @@
             )
         }
         @{
-            ModId='ct_dev'; ModTree='d17f7cd1fc2ddb2337784fe7a728d9bf96fc6c71'
+            ModId='ct_dev'; ModTree='3b9fb17debbf884994f1225e13a703ca9cb1023d'
             Source='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_gargoyle1124.lua'
             Marker='[ct:1124]'
             Signature='[ct:1124] %s'
@@ -1059,7 +1059,7 @@
             )
         }
         @{
-            ModId='ct_dev'; ModTree='d17f7cd1fc2ddb2337784fe7a728d9bf96fc6c71'
+            ModId='ct_dev'; ModTree='3b9fb17debbf884994f1225e13a703ca9cb1023d'
             Source='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_skull52.lua'
             Marker='[ct:skull52]'; AddRoute=$true
             Signature='[ct:skull52] %s'
@@ -1156,7 +1156,7 @@
             )
         }
         @{
-            ModId='ct_dev'; ModTree='d17f7cd1fc2ddb2337784fe7a728d9bf96fc6c71'
+            ModId='ct_dev'; ModTree='3b9fb17debbf884994f1225e13a703ca9cb1023d'
             Source='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_altar_reuse_owner.lua'
             Marker='[ct:xchar105]'
             Signature='[ct:xchar105] upgrade-altar slot=%s career=%s rarity=%s pre_key=%s post_key=%s %s'
