@@ -210,8 +210,8 @@ Last updated: 2026-09-12.
 | Catalog | Include only valid `ItemMasterList` rows with `item_type="weapon_pose"`, exact `parent`, numeric `pose_index`, and an authored animation event; sort deterministically. |
 | Backend boundary | Do not write `unlocked_weapon_poses`, fake inventory, equipped pose skins, or PlayFab read-only data. |
 | Live refresh | Changing the option makes `SocialWheelUI._is_dirty` rebuild the current weapon's page once. |
-| Missing catalog | Preserve vanilla behavior and emit one `[cos:485]` record per missing parent. Do not borrow another weapon's package yet. |
-| Detection | Offline `test_cos_weapon_pose_policy.lua`; `/cos_regression_test` passes `issue485_authored_weapon_poses_local_only`. |
+| Missing catalog | Preserve vanilla behavior. Record each missing parent once, at most 32 parents per loaded Cosmetics module generation (later parents are only counted as suppressed); option, realm and wheel changes never reset the ledger. Each recorded parent emits one `[cos:485] no authored pose catalog` row; `/cos_485_diag` prints one `[cos:485:diag] summary` of the same ledger. Do not borrow another weapon's package yet. |
+| Detection | Offline `test_cos_weapon_pose_policy.lua` (ledger cap, no-reset, fresh generation, installed-check negative controls, command summary); `/cos_regression_test` passes `issue485_authored_weapon_poses_local_only`, now registered by `_cos_weapon_poses.lua` and using a scratch ledger so the live evidence stays untouched. |
 | Lifecycle | `diagnostics-armed` until at least one no-catalog weapon establishes a safe donor-animation and icon-package policy. |
 
 ---

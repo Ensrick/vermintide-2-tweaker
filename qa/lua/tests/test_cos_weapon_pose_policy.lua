@@ -283,4 +283,217 @@ return function(H, repo_root)
             H.equal(vanilla_calls, 3)
         end)
     end)
+
+    H.test("Cosmetics unsupported-parent ledger deduplicates under a hard cap", function()
+        H.equal(Policy.MAX_UNSUPPORTED_RECORDS, 32)
+        local ledger = Policy.new_unsupported_ledger(2)
+        H.equal(ledger.cap, 2)
+        H.equal(Policy.record_unsupported(ledger, "a"), "record")
+        H.equal(Policy.record_unsupported(ledger, "a"), "duplicate")
+        H.equal(Policy.record_unsupported(ledger, "b"), "record")
+        H.equal(Policy.record_unsupported(ledger, "c"), "capped")
+        H.equal(Policy.record_unsupported(ledger, "c"), "duplicate")
+        H.equal(Policy.record_unsupported(ledger, "d"), "capped")
+        H.equal(Policy.record_unsupported(ledger, "b"), "duplicate")
+        H.deep_equal(Policy.unsupported_summary(ledger),
+            { recorded = 2, suppressed = 2, cap = 2, parents = "a,b" })
+        for _, value in ipairs({ false, 7, {}, "" }) do
+            H.equal(Policy.record_unsupported(ledger, value), "invalid")
+        end
+        H.equal(Policy.record_unsupported(nil, "a"), "invalid")
+        H.equal(Policy.record_unsupported({ seen = {} }, "a"), "invalid")
+        H.equal(ledger.recorded, 2)
+        H.equal(ledger.suppressed, 2)
+        -- A requested cap can only lower the absolute bound.
+        for _, requested in ipairs({ nil, 32, 33, 1000, -1, 1.5, "8" }) do
+            H.equal(Policy.new_unsupported_ledger(requested).cap, 32)
+        end
+        H.equal(Policy.new_unsupported_ledger(0).cap, 0)
+        H.equal(Policy.record_unsupported(Policy.new_unsupported_ledger(0), "a"), "capped")
+    end)
+
+    H.test("Cosmetics default ledger records at most 32 of 40 distinct parents", function()
+        local ledger = Policy.new_unsupported_ledger()
+        local outcomes = { record = 0, capped = 0 }
+        for index = 1, 40 do
+            local outcome = Policy.record_unsupported(ledger, "parent_" .. index)
+            outcomes[outcome] = (outcomes[outcome] or 0) + 1
+        end
+        H.equal(outcomes.record, 32)
+        H.equal(outcomes.capped, 8)
+        for index = 1, 40 do
+            H.equal(Policy.record_unsupported(ledger, "parent_" .. index), "duplicate")
+        end
+        local summary = Policy.unsupported_summary(ledger)
+        H.equal(summary.recorded, 32)
+        H.equal(summary.suppressed, 8)
+        H.truthy(summary.parents:find("parent_32", 1, true))
+        H.equal(summary.parents:find("parent_33", 1, true), nil)
+        H.deep_equal(Policy.unsupported_summary(nil),
+            { recorded = 0, suppressed = 0, cap = 32, parents = "" })
+    end)
+
+    H.test("Cosmetics pose gather caps unsupported evidence without any reset", function()
+        isolated(authored_master(), function(module, hooks, state, script_data, logs)
+            local gather = hooks._gather_weapon_poses_by_parent_item
+            local dirty = hooks._is_dirty
+            local vanilla_calls = 0
+            local vanilla = function(_, parent_item)
+                vanilla_calls = vanilla_calls + 1
+                return "vanilla:" .. tostring(parent_item)
+            end
+            local wheel = {}
+            for index = 1, 20 do
+                H.equal(gather(vanilla, wheel, "unsupported_" .. index), "vanilla:unsupported_" .. index)
+            end
+            -- Option and realm flips arm rebuilds but never reset the evidence.
+            state.setting = false
+            dirty(vanilla, wheel, "unsupported_1")
+            state.setting = true
+            dirty(vanilla, wheel, "unsupported_1")
+            script_data["eac-untrusted"] = false
+            gather(vanilla, wheel, "unsupported_21")
+            script_data["eac-untrusted"] = true
+            for index = 1, 40 do
+                H.equal(gather(vanilla, wheel, "unsupported_" .. index), "vanilla:unsupported_" .. index)
+            end
+            H.equal(#logs, 32)
+            for index = 1, 32 do
+                H.equal(logs[index], string.format(
+                    "[cos:485] no authored pose catalog parent=unsupported_%d fallback=deferred record=%d/32",
+                    index, index))
+            end
+            local summary = module.unsupported_summary()
+            H.equal(summary.recorded, 32)
+            H.equal(summary.suppressed, 8)
+            H.equal(module.note_unsupported("unsupported_40"), false)
+            H.equal(module.note_unsupported("unsupported_41"), false)
+            H.equal(#logs, 32)
+        end)
+        -- A new module generation owns a new ledger.
+        isolated(authored_master(), function(module, hooks, _, _, logs)
+            local gather = hooks._gather_weapon_poses_by_parent_item
+            gather(function() return "vanilla" end, {}, "unsupported_1")
+            H.equal(#logs, 1)
+            H.equal(module.unsupported_summary().recorded, 1)
+        end)
+    end)
+
+    -- Execute the installed #485 regression check against fixture engine state,
+    -- then prove it fails when the evidence cap or the catalog contract regresses.
+    local function run_installed_check(mutate)
+        local result
+        isolated(authored_master(), function(module, hooks)
+            local saved_wheel, saved_data = _G.SocialWheelUI, package.loaded[
+                "scripts/mods/cosmetics_tweaker/cosmetics_tweaker_data"]
+            _G.SocialWheelUI = { _gather_weapon_poses_by_parent_item = function() end }
+            package.loaded["scripts/mods/cosmetics_tweaker/cosmetics_tweaker_data"] = {
+                options = { widgets = { { sub_widgets = { { setting_id = "cos_unlock_weapon_poses" } } } } },
+            }
+            local checks = {}
+            module.install_checks(function(name, fn)
+                H.equal(checks[name], nil, "duplicate check registration")
+                checks[name] = fn
+            end)
+            if mutate then mutate(module, hooks) end
+            local ok, err = pcall(checks.issue485_authored_weapon_poses_local_only)
+            _G.SocialWheelUI = saved_wheel
+            package.loaded["scripts/mods/cosmetics_tweaker/cosmetics_tweaker_data"] = saved_data
+            if ok then
+                result = err
+            else
+                result = "check raised: " .. tostring(err)
+            end
+        end)
+        return result
+    end
+
+    H.test("Cosmetics installed #485 check passes on the production policy", function()
+        H.equal(run_installed_check(), nil)
+    end)
+
+    H.test("Cosmetics installed #485 check fails when the evidence cap regresses", function()
+        local failure = run_installed_check(function(module)
+            local policy = module.policy
+            policy.record_unsupported = function(ledger, parent_item)
+                if ledger.seen[parent_item] ~= nil then return "duplicate" end
+                ledger.recorded = ledger.recorded + 1
+                ledger.seen[parent_item] = ledger.recorded
+                ledger.order[ledger.recorded] = parent_item
+                return "record"
+            end
+        end)
+        H.truthy(failure and failure:find("hard cap", 1, true), tostring(failure))
+        failure = run_installed_check(function(module)
+            module.policy.new_unsupported_ledger = function()
+                return { seen = {}, order = {}, recorded = 0, suppressed = 0, cap = 1000000 }
+            end
+        end)
+        H.truthy(failure and failure:find("hard cap", 1, true), tostring(failure))
+        failure = run_installed_check(function(module)
+            module.policy.MAX_UNSUPPORTED_RECORDS = 1000
+        end)
+        H.truthy(failure and failure:find("cap is missing or unbounded", 1, true), tostring(failure))
+        failure = run_installed_check(function(module)
+            module.unsupported_summary = function()
+                return { recorded = 33, suppressed = 0, cap = 32, parents = "" }
+            end
+        end)
+        H.truthy(failure and failure:find("exceeds its cap", 1, true), tostring(failure))
+    end)
+
+    H.test("Cosmetics installed #485 check fails when catalog or rebuild contracts regress", function()
+        local failure = run_installed_check(function(module)
+            module.policy.decide = function() return "authored" end
+        end)
+        H.truthy(failure and failure:find("not distinct", 1, true), tostring(failure))
+        failure = run_installed_check(function(module)
+            module.policy.rebuild_armed = function() return true end
+        end)
+        H.truthy(failure and failure:find("exactly one wheel rebuild", 1, true), tostring(failure))
+        failure = run_installed_check(function()
+            _G.ItemMasterList.es_2h_hammer_pose_02.backend_id = "leaked"
+        end)
+        H.truthy(failure and failure:find("ownership write", 1, true), tostring(failure))
+    end)
+
+    H.test("Cosmetics #485 diagnostic command prints one finite ledger summary", function()
+        local path = repo_root .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_diagnostics.lua"
+        local file = assert(io.open(path, "rb"))
+        local source = file:read("*a"):gsub("\r\n", "\n")
+        file:close()
+        local block = assert(source:match('(mod:command%("cos_485_diag".-\nend%))\n'))
+        H.equal(block:find("for ", 1, true), nil, "summary emitter stays loop-free")
+        local registered, logs, flushed, echoed = {}, {}, 0, 0
+        local env = {
+            pcall = pcall, type = type, tonumber = tonumber, tostring = tostring,
+            _flush_log = function() flushed = flushed + 1 end,
+            printf = function(format, ...) logs[#logs + 1] = string.format(format, ...) end,
+        }
+        env.mod = {
+            command = function(_, name, description, callback)
+                registered[name] = { description = description, callback = callback }
+            end,
+            echo = function() echoed = echoed + 1 end,
+        }
+        setfenv(assert(loadstring(block)), env)()
+        local command = assert(registered.cos_485_diag)
+        H.equal(command.description, "Summarize weapons without authored heroic poses seen this session")
+        local ledger = Policy.new_unsupported_ledger()
+        Policy.record_unsupported(ledger, "cwv_es_sword_and_mace")
+        Policy.record_unsupported(ledger, "wh_1h_axe")
+        env.mod._cos_weapon_pose_evidence = {
+            summary = function() return Policy.unsupported_summary(ledger) end,
+        }
+        command.callback()
+        command.callback()
+        H.equal(#logs, 2)
+        H.equal(logs[1], "[cos:485:diag] summary recorded=2 suppressed=0 cap=32 parents=cwv_es_sword_and_mace,wh_1h_axe")
+        H.equal(logs[2], logs[1])
+        env.mod._cos_weapon_pose_evidence = nil
+        command.callback()
+        H.equal(logs[3], "[cos:485:diag] summary recorded=0 suppressed=0 cap=0 parents=unavailable")
+        H.equal(flushed, 3)
+        H.equal(echoed, 3)
+    end)
 end
