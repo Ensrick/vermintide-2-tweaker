@@ -51,12 +51,49 @@ Per-edge file:line citations live in the 2026-06-22 audit + `docs/CROSS_MOD_ARCH
 |---|---|---|
 | character_dialogue | `character_dialogue_api` v6: additive `isolation_setting={version=1, setting_id="auto_isolation"}`; existing get/set/playback methods unchanged. Exact owner supports VMF `get/set`, `on_setting_changed(id)` and `on_settings_batch_changed(ids)` for this key only. Silent writes persist; successful batch completion reconciles once. | gut_dev custom browser; feature-detect descriptor and owner callback, use owner-qualified pending state, never GUT's `mt::` storage. |
 | **gut** | `get_mod("gut").mod_tweaker:{register_category, get, set, list_categories, …}` | self only so far — designed for other mods to register settings categories |
+| **crt** | Optional `mod.mod_tweaker_settings_owner` v1: `capture(visible, defaults)` and `prepare(pending, context)`; armor-only provider | GUT development profile/transaction owners; absent providers retain legacy setting notifications |
 | **mp** | `get_mod("mp").{is_unlocked, spend, credit, grant_item, has_currency, …}` | none wired yet (CWV/cosmetics are the designed consumers) |
 | **bt** *(retired)* | `get_mod("bt"):is_br_active()` / `:net_replay()` | wt · wt_dev · ct · ct_dev · et · crt (guarded → inert) |
 | **cim** | presence flag (`get_mod("cim") ~= nil`) — owns modded-realm vanilla-illusion swap | cosmetics_tweaker · gt · gt_dev |
 | **cwv** | presence flag — owns its cross-character variant items (`cwv_variant`); wt reads it to flip overlapping availability defaults ON + expose toggles for CWV's items (#368) | wt · wt_dev |
 
 Most cross-mod contracts are **presence-flag** checks, not method APIs.
+
+### Settings-owner profile protocol v1 (#221; GUI Dev 0.2.346-dev, Careers 0.4.30-beta)
+
+GUT discovers the optional protocol on the actual category setting owner, not
+by naming CRT internals. The exact table has `version = 1`, `capture` and
+`prepare` functions (dot calls). `capture(visible, defaults)` receives that
+owner's visible setting map and returns nil or opaque data. GUT stores it in
+`__mt_owner_state_v1 = { schema = 1, owners = { [owner_id] = data } }` alongside
+the ordinary flat profile. The whole envelope is cloned/validated: no
+metatables, cycles, functions/userdata, non-finite numbers; at most 128 entries,
+depth five, 128-byte string keys and 256-byte string values. Metadata is never
+treated as VMF setting IDs. False and missing values remain distinct.
+
+`prepare(pending, {kind="edit"|"profile"|"reconcile", owner_id=..., metadata=...})` must not
+write. It returns nil or `{handled={ [pending_id]=true }, commit=function}`.
+Only IDs actually present in that owner's pending buffer may be handled.
+Commit owns private writes/reconciliation and must throw or return false on
+failure. Remaining IDs retain existing batch/per-setting behavior. Both menus
+use one shared replay coordinator; all owner preparation precedes persistence.
+Failed prepared replay retains the exact input/context and cannot borrow it for
+a modified draft. Unsupported protocol revisions and unavailable metadata
+providers reject rather than reinterpret data as legacy state.
+
+Automatic initialization validates the full profile, then prepares a separate
+`reconcile` plan for absent members before any migration/write. It does not
+execute the full profile plan. This context is not a user master toggle: CRT
+preserves present live armor leaves and only applies absent leaf defaults,
+clearing master/held ownership as custom. A missing master must default false;
+no held preimage is restored or invented. Providers without this reconcile
+mode fail closed; consumer and provider land and publish as a pair.
+
+CRT owns schema/cluster semantics and its private armor keys; GUT knows none
+of them. CRT without GUT still supports native single-setting master edits.
+An old GUT consumer cannot preserve this new metadata, so coordinated consumer
+publication (including deliberate public promotion where applicable) is a
+release requirement, not a hard mod dependency or a claim of completed #221.
 
 Compatibility rules for these surfaces (never-break-consumers, additive-only
 evolution, retirement path) are binding per `PROJECT_STANDARDS.md` §9a; retirement
