@@ -159,19 +159,21 @@ return {
             projection_kind = "adjacent_delta",
         },
         {
-            catalog_id = "wt_history_patch_6_11_0_v3",
+            catalog_id = "wt_history_patch_6_11_0_v4",
             cumulative_backfill = false,
-            declared_scope = "Patch 6.11.0 Kruber Longbow automatic-zoom delay, shared one-handed Hammer/Mace block-angle and dodge-count leaves, and Kerillian Swiftbow maximum-ammunition leaf",
+            declared_scope = "Patch 6.11.0 Kruber Longbow automatic-zoom delay, shared one-handed Hammer/Mace block-angle and dodge-count leaves, and Swiftbow plus normal/Versus Grudge-Raker maximum-ammunition leaves",
             exclusions = {
                 { id = "outside_declared_patch_6_11_0_families", reason = "all other Patch 6.11.0 changes are outside these independently proven scalar families" },
                 { id = "swiftbow_profile_changes", reason = "the Swiftbow cleave and headshot changes live in shared damage/power profiles outside the ammo-capacity template leaf" },
+                { id = "grudge_raker_non_ammunition_changes", reason = "the separate armored/monster damage adjustment, pellets, reload timing, clip size, career bonuses, sounds, and presentation are outside this maximum-ammunition-only state" },
             },
             family_states = {
                 { family_id = "kruber_longbow", operations = 2, profiles = 0, state_id = "6_10_0" },
                 { family_id = "one_handed_hammer_shared", operations = 6, profiles = 0, state_id = "6_10_0" },
                 { family_id = "kerillian_swiftbow", operations = 1, profiles = 0, state_id = "6_10_0_swiftbow_ammunition" },
+                { family_id = "bardin_grudge_raker", operations = 2, profiles = 0, state_id = "6_10_0_grudge_raker_ammunition" },
             },
-            later_same_leaf_policy = "only the adjacent Longbow timing, shared Hammer/Mace block/dodge, and Swiftbow maximum-ammunition leaves are projected over exact current guards",
+            later_same_leaf_policy = "only the adjacent Longbow timing, shared Hammer/Mace block/dodge, and Swiftbow/Grudge-Raker maximum-ammunition leaves are projected over exact current guards; Grudge-Raker post/current complete source blobs are identical",
             official_coverage = "complete_for_declared_scope",
             projection_kind = "adjacent_delta",
         },
@@ -224,9 +226,9 @@ return {
     stream_identity = "public_dev_byte_identical",
     totals = {
         catalogs = 13,
-        families = 27,
-        family_states = 40,
-        operations = 243,
-        states = 16,
+        families = 28,
+        family_states = 41,
+        operations = 245,
+        states = 17,
     },
 }

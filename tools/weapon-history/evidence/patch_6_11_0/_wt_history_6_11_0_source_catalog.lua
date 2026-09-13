@@ -1,13 +1,19 @@
 -- Source-exact metadata for the bounded Patch 6.11.0 Longbow, shared
--- one-handed Hammer/Mace, and Kerillian Swiftbow boundary.
+-- one-handed Hammer/Mace, Kerillian Swiftbow, and Bardin Grudge-Raker boundary.
 --
 -- The adjacent evaluator exposes the authored aim_zoom_delay change through
 -- both evaluated Longbow templates. They are one gameplay family and must be
 -- selected atomically so the tutorial clone cannot drift from the normal bow.
 -- The Swiftbow source exports exactly one template whose adjacent delta is the
 -- single ammo_data.max_ammo leaf named by the official patch note.
+-- Grudge-Raker exports normal and Versus templates at both boundary revisions;
+-- both maximum-ammunition leaves belong to the same atomic family state.
 return {
     artifacts = {
+        _wt_history_snapshot_6_10_0_grudge_raker_rehydrated_generated =
+            "a4398fdc8c82d088346eeb661e69e407fda57428260d9056b827ada0c9830165",
+        _wt_history_snapshot_6_10_0_grudge_raker_to_6_11_0_generated =
+            "93daf862f7812f07cfe29bd9222332480f9e88b8b0038d5ba124a72ffbbbafa6",
         _wt_history_snapshot_6_10_0_hammer_priest_rehydrated_generated =
             "8f5ced37c8bf71f9b50d5e119340ab65e03fce7f398b835e3e45e6692b51e11d",
         _wt_history_snapshot_6_10_0_hammer_priest_to_6_11_0_generated =
@@ -44,6 +50,35 @@ return {
             "longbow_empire_template",
             "longbow_empire_tutorial_template",
         },
+    },
+    grudge_raker_family = {
+        display_name = "Bardin's Grudge-Raker",
+        id = "bardin_grudge_raker",
+        label_key = "wt_history_family_bardin_grudge_raker",
+        setting_id = "wt_history_bardin_grudge_raker",
+        templates = {
+            "grudge_raker_template_1",
+            "grudge_raker_template_1_vs",
+        },
+    },
+    grudge_raker_official_change_id = "P6110-BARDIN-GRUDGE-RAKER-MAX-AMMO",
+    grudge_raker_official_summary =
+        "Patch 6.11.0 increased the maximum ammunition of Bardin's Grudge-Raker.",
+    grudge_raker_source = {
+        current_blob = "baf9ae9ffeeaee58a72aa4404ea4bb1b56287782",
+        evidence_stem = "grudge_raker",
+        historical_blob = "3625331e9c096d32783b27eaf18f2b13b1eb9512",
+        path = "scripts/settings/equipment/weapon_templates/grudge_raker.lua",
+        post_blob = "baf9ae9ffeeaee58a72aa4404ea4bb1b56287782",
+        templates = {
+            "grudge_raker_template_1",
+            "grudge_raker_template_1_vs",
+        },
+    },
+    grudge_raker_state = {
+        display_name = "Game Version 6.10.0 (Ammunition Only)",
+        id = "6_10_0_grudge_raker_ammunition",
+        label_key = "wt_history_state_6_10_0_grudge_raker_ammunition",
     },
     hammer_family = {
         display_name =
