@@ -1,5 +1,20 @@
 # General Tweaker Changelog
 
+## 0.2.274-dev (2026-09-12) -- keep the boot-time disable warning out of chat (#727) [tooling]
+
+- VMF calls `on_disabled` at boot with `initial_call = true` for a mod the player
+  left disabled, the usual setup beside stable General Tweaker. General Tweaker
+  Dev then printed "Disable does not fully unwind active mutations. Restart the
+  game..." on every start, although no disable happened and a restart cannot
+  change it (`modules/core/toggling.lua` `initialize_mod_state`).
+- `on_disabled` now takes `initial_call` and shows the Issue #15 warning only
+  after a user toggle; the restore calls before it are unchanged.
+- The AI Takeover toggle confirmation and refusal replies stay in chat with
+  explicit `allow-echo` reasons (PROJECT_STANDARDS 3.6 high-impact toggle row).
+- `qa/check_logging.ps1` census: General Tweaker Dev echo findings 3 -> 0. The
+  entry file stays at its 1,910-line ratchet ceiling.
+  `qa/rt_textual_invariants.psd1` pins the `initial_call` gate.
+
 ## 0.2.273-dev (2026-08-31) -- suppress modded level-control backend challenge (#1509) [not-started]
 
 - A solo `/win` or `/fail` session launched with `eac-untrusted` reached
