@@ -28,6 +28,17 @@ Last updated: 2026-08-13.
 - Detection: offline `test_gt_dev_heal.lua`; native seams documented in
   `ENGINE_SURFACE.md` Surface 4c.
 
+## Lifecycle chat notices (#727, #15)
+
+- [ ] With General Tweaker Dev left disabled (for example beside stable General
+  Tweaker), restart the game: no "Disable does not fully unwind" chat line.
+  VMF's boot call passes `initial_call = true` (`modules/core/toggling.lua`).
+- [ ] Disable the enabled mod in the VMF menu: exactly one Issue #15 warning line.
+- [ ] Toggle AI Takeover: the "AI ON/OFF (requested from host)" confirmation or
+  the refusal reply still appears once.
+- Detection: `qa/rt_textual_invariants.psd1` pins the `initial_call` gate;
+  `qa/check_logging.ps1` reports no General Tweaker Dev echo finding.
+
 ## Runtime regression module boundaries
 
 - `general_tweaker_dev.lua` owns the runtime registry and command lifecycle;
