@@ -144,7 +144,11 @@ ET.rt_register("issue560_settings_reapply_coalesced", function()
     end
 end)
 
-mod.on_disabled = function()
+-- VMF also runs these callbacks once at boot with initial_call = true
+-- (modules/core/toggling.lua initialize_mod_state -> set_mod_state(mod, state,
+-- true)). Only a user toggle in the VMF menu gets the chat notice; the boot
+-- call restores or applies silently (#727).
+mod.on_disabled = function(initial_call)
     _settings_queue.clear()
     if ET.personal_handicap_clear then ET.personal_handicap_clear() end
     _safe("on_disabled:restore_compositions",      _restore_compositions)
@@ -171,10 +175,13 @@ mod.on_disabled = function()
     if mod._et_apply_health_multipliers then
         _safe("on_disabled:health_multiplier", mod._et_apply_health_multipliers)
     end
-    mod:echo("Enemy Tweaker disabled — compositions restored")
+    if not initial_call then
+        -- allow-echo: reply to the user's own VMF menu disable; confirms what unwound (PROJECT_STANDARDS 3.6 on_disabled row, #727)
+        mod:echo("Enemy Tweaker disabled: compositions restored")
+    end
 end
 
-mod.on_enabled = function()
+mod.on_enabled = function(initial_call)
     if ET.personal_handicap_setting_changed then ET.personal_handicap_setting_changed() end
     if not _original_compositions_pacing_ref() then
         _dbg_alert("on_enabled: _original_compositions_pacing nil — mod loaded but ConflictDirector.init hasn't fired yet; will apply on next mission load")
@@ -199,7 +206,10 @@ mod.on_enabled = function()
                 mod:info("[et:on_enabled] reseeded threat-values via refresh_conflict_director_patches (%s)", os.date())
             end
         end)
-        mod:echo("Enemy Tweaker enabled")
+        if not initial_call then
+            -- allow-echo: reply to the user's own VMF menu enable; confirms the live re-apply (PROJECT_STANDARDS 3.6 on_enabled row, #727)
+            mod:echo("Enemy Tweaker enabled")
+        end
     end
     -- Outside the guard: re-assert the Champion retune per its saved toggle.
     _safe("on_enabled:champion", _apply_champion_breed_overrides)

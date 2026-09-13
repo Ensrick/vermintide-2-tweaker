@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.273-dev"
+local MOD_VERSION = "0.2.274-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -660,10 +660,10 @@ mod.on_setting_changed = function(setting_id)
             -- The emergency gate already emits its specific refusal; do not
             -- stack the generic line in that case.
             if not mod._gt_ai_takeover_disabled then
-                mod:echo("AI toggle: " .. err)
+                mod:echo("AI toggle: " .. err) -- allow-echo: refusal reply to the user's own AI Takeover toggle (PROJECT_STANDARDS 3.6 high-impact toggle row, #727)
             end
         else
-            mod:echo("AI " .. (want_bot and "ON" or "OFF") .. " (requested from host).")
+            mod:echo("AI " .. (want_bot and "ON" or "OFF") .. " (requested from host).") -- allow-echo: confirms the user's own AI Takeover toggle (3.6 high-impact toggle row, #727)
         end
     elseif setting_id == "gt_bots_in_keep" then
         -- The mod.update consumer below will tick a fill once a second when
@@ -693,7 +693,7 @@ mod.on_setting_changed = function(setting_id)
     end
 end
 
-mod.on_disabled = function()
+mod.on_disabled = function(initial_call)
     -- (3rd-Person Camera offset restore MIGRATED to gui_tweaker / gut 2026-06-29,
     -- #191 — gut's _gut_camera.lua restores its own camera offset on_disabled.)
     -- (Main Menu & Startup on-disable restore MIGRATED to gui_tweaker / gut
@@ -719,9 +719,9 @@ mod.on_disabled = function()
     -- PlayerUnitMovementSettings.move_speed (plus the closed-upvalue per-unit
     -- copy), InventorySettings, DamageUtils.is_in_inn, ESC-menu inventory entry.
     -- A full snapshot-on-enable + restore-on-disable refactor is significant
-    -- effort; for now we honestly warn the user. This warning fires regardless
-    -- This warning is user-facing operational guidance, not debug spam.
-    mod:echo("[gt] Disable does not fully unwind active mutations. Restart the game for a clean vanilla state.")
+    -- effort; for now we honestly warn after a user-toggled disable. VMF's boot-time
+    -- initial_call only restores a saved disabled state (no user action, #727).
+    if not initial_call then mod:echo("[gt] Disable does not fully unwind active mutations. Restart the game for a clean vanilla state.") end -- allow-echo: user-toggled disable, Issue #15 documented limitation
 end
 
 -- ============================================================
