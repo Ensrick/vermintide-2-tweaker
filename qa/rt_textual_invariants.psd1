@@ -135,6 +135,13 @@
     @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_aid_owner.lua'; needle='pcall(printf, "[gt:bot-rescue]'; literal=$true; polarity='present'; minCount=4; issueRef='#300'; note='all four bot-rescue evidence lines in the bot-aid owner route through pcall(printf, ...) (visible with mod logging OFF).' }
     @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_aid_owner.lua'; needle='mod:debug("[gt:bot-rescue]'; literal=$true; polarity='absent'; issueRef='#300'; note='no bot-rescue evidence line may regress to the invisible mod:debug channel.' }
 
+    # -- #727: VMF runs on_disabled once at boot with initial_call = true
+    #    (modules/core/toggling.lua initialize_mod_state). The Issue #15 chat
+    #    warning must stay behind that flag so a mod left disabled beside stable
+    #    General Tweaker does not print it on every game start.
+    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/general_tweaker_dev.lua'; needle='mod.on_disabled = function(initial_call)'; literal=$true; polarity='present'; maxCount=1; issueRef='#727'; note='on_disabled must receive VMF initial_call to tell boot from a user toggle.' }
+    @{ mod='gt_dev'; file='general_tweaker_dev/scripts/mods/general_tweaker_dev/general_tweaker_dev.lua'; needle='if not initial_call then mod:echo("[gt] Disable does not fully unwind'; literal=$true; polarity='present'; maxCount=1; issueRef='#727'; note='the Issue #15 disable warning stays out of chat on the boot-time initial call.' }
+
     # ============================ wt ============================
     # #218: the CW trait widget groups were removed in a7012f3. Keep the stale
     # CIM strip/detection scaffold absent, while preserving three hidden,
@@ -689,6 +696,14 @@
     # for wt_dev and was not already pinned above (a re-declared template
     # patcher in the entry would re-run the brace rewrite outside the owner).
     @{ mod='wt_dev'; file='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/weapon_tweaker_dev.lua'; needle='local function _patch_brace_template_for_kruber'; literal=$true; polarity='absent'; issueRef='#1159'; note='mirror stream entry must stay free of the moved cross-character template patcher.' }
+
+    # ============================ enemy_tweaker #727 lifecycle chat ============================
+    # VMF runs on_disabled/on_enabled once at boot with initial_call = true
+    # (modules/core/toggling.lua initialize_mod_state). Their chat confirmations
+    # must fire only for a user toggle in the VMF menu.
+    @{ mod='enemy_tweaker'; file='enemy_tweaker/scripts/mods/enemy_tweaker/_et_lifecycle.lua'; needle='mod.on_disabled = function(initial_call)'; literal=$true; polarity='present'; maxCount=1; issueRef='#727'; note='on_disabled must receive VMF initial_call to tell boot from a user toggle.' }
+    @{ mod='enemy_tweaker'; file='enemy_tweaker/scripts/mods/enemy_tweaker/_et_lifecycle.lua'; needle='mod.on_enabled = function(initial_call)'; literal=$true; polarity='present'; maxCount=1; issueRef='#727'; note='on_enabled must receive VMF initial_call to tell boot from a user toggle.' }
+    @{ mod='enemy_tweaker'; file='enemy_tweaker/scripts/mods/enemy_tweaker/_et_lifecycle.lua'; needle='(?s)if not initial_call then\s*(?:--[^\n]*\n\s*)?mod:echo\("Enemy Tweaker (?:disabled|enabled)'; literal=$false; polarity='present'; minCount=2; maxCount=2; issueRef='#727'; note='both lifecycle chat confirmations stay behind the initial_call gate.' }
 
   )
 }

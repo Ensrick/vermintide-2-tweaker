@@ -304,6 +304,7 @@ mod:hook("StartGameStateSettingsOverview", "play", function(func, self, t, vote_
 
     if verdict == "blocked_not_solo" then
         _solo_blocked_calls = _solo_blocked_calls + 1
+        -- allow-echo: reply to the player's own Play click; explains why the solo-only Prologue launch was refused (#941, #727)
         mod:echo(mod:localize("event_mission_solo_only_blocked"))
         pcall(printf, "[event-missions:941] launch refused: %s", _last_solo_proof)
         return
