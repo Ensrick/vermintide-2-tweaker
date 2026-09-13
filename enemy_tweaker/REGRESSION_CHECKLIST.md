@@ -139,6 +139,16 @@ Last updated: 2026-08-28.
 | Detection | Offline `test_et_settings_queue`; in-game `/et_regression_test` check `issue560_settings_reapply_coalesced`; `[et:560]` prints one applied count per drain. |
 | Repro | In a mission, open the Enemy Tweaker Mod Tweaker tab, press DEFAULT, confirm, and Apply. Defaults persist without a heap crash. |
 
+### lifecycle-notice-user-toggle-only -- boot initial_call stays out of chat
+
+| Field | Detail |
+|---|---|
+| Symptom | With Enemy Tweaker left disabled, every game start printed "Enemy Tweaker disabled ... compositions restored" in chat. |
+| Root cause | VMF runs `on_disabled`/`on_enabled` once at boot with `initial_call = true` (`modules/core/toggling.lua` `initialize_mod_state`); the callbacks ignored it (#727). |
+| Expected post-fix | Boot never adds a lifecycle chat line; toggling the mod off or on in the VMF menu prints exactly one confirmation. Restore/apply chains are unchanged. |
+| Detection | `qa/rt_textual_invariants.psd1` pins both `initial_call` signatures and gates; `qa/check_logging.ps1` reports no Enemy Tweaker echo finding. |
+| Repro | Disable Enemy Tweaker, restart: no chat line. In a mission, enable it: one "Enemy Tweaker enabled" line (it stays silent until the director snapshot exists); disable it again: one disabled line. |
+
 ### et-bodvarr-runtime-breed-key -- boss features target War Camp's registered breed
 
 | Field | Detail |
@@ -564,6 +574,7 @@ Last updated: 2026-08-28.
 - feedback-workshop-upload-without-deploy
 - gated-registration-divergence
 - hook-multi-return-collapse
+- lifecycle-notice-user-toggle-only
 - lua-forward-reference
 - ps5-getcontent-utf8
 - ugc-tool-forward-slashes
