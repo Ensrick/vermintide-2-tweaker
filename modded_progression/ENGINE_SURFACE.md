@@ -21,20 +21,23 @@ is NOT one master gate: the PlayFab commit-suppression sites keep the real
 account safe and must stay live, while a separate set of UI sites merely grey out
 buttons and skip reward popups. `mp` therefore flips the flag to nil only inside
 a bracketed window around each vanilla UI/progression call, restores it on every
-exit path, and leaves the commit-suppression gate untouched. As of v0.2.35-dev,
+exit path, and leaves the commit-suppression gate untouched. As of v0.2.38-dev,
 simulated daily claims and Silver Shilling Emporium purchases have fully local
-backend interceptions, and issue #607 has bounded layer diagnostics; the
-remaining routes in `PLAN.md` are not yet wired.
+backend interceptions, issue #607 has bounded layer diagnostics, and the Fresh
+profile's items/loadouts slice (#840) is served by an MP-owned interface route;
+the remaining routes in `PLAN.md` are not yet wired.
 
 ## Hook table
 
-45 registration sites, all `mod:hook` (full wrapper). `[hook]` =
-full wrapper (can rewrite args/returns). Eight route through the shared
-`_with_eac_off` wrapper, one (`IngameUI.not_in_modded`) is a flat return-true
-override, and the remainder own local progression/read/claim boundaries. There are no
-`hook_safe` sites and no table-form hooks. The
-`_with_eac_off` wrapper is a single load-bearing row-of-concern (issue 434) called
-out below and shared by all eight of its callers.
+66 registration sites, all `mod:hook` (full wrapper). `[hook]` =
+full wrapper (can rewrite args/returns). Three route through the shared
+`_with_eac_off` wrapper directly and five through its Fresh-aware sibling
+`_with_eac_off_unless_fresh` (or an inline equivalent), one
+(`IngameUI.not_in_modded`) is a flat return-true override, 21 form the #840
+items/loadouts route in `_mp_fresh_profile_runtime.lua`, and the remainder own
+local progression/read/claim boundaries. There are no `hook_safe` sites and no
+table-form hooks. The `_with_eac_off` wrapper is a single load-bearing
+row-of-concern (issue 434) called out below and shared by all of its callers.
 
 ### The EAC-window bracket - shared wrapper (row-of-concern: issue 434) (owner doc: `docs/engine/11`)
 
@@ -102,7 +105,19 @@ Silver Shillings use the same native wording and layout.
 | `BackendInterfacePeddlerPlayFab.exchange_chips` [hook] | Enqueues `PurchaseItem`; its success callback adds returned items to the mirror, debits chips, then enqueues `storePurchaseMade` [src: `backend_interface_peddler_playfab.lua:661-707`] | For a modded-realm SM offer, validate the live stock row and atomically persist the local debit, exact item, unlock, and duplicate markers before calling the native callback contract | No PlayFab call is made; deterministic transaction/item ids make duplicate callbacks idempotent; official and non-SM calls delegate unchanged |
 | `BackendInterfacePeddlerPlayFab.get_peddler_stock` / `.get_filtered_items` [hooks] | Native stock rows derive `owned` from the official mirror [src: `backend_interface_peddler_playfab.lua:152-191`] | Clone plain SM rows and project ownership from the durable MP unlock/inventory state | Native stock is never mutated; platform, bundle, and non-SM rows retain official ownership |
 | `HeroViewStateStore._populate_item_widget` / `._populate_pose_item`, `StoreWindowFeatured._get_default_featured_grid_content`, `StoreWindowItemPreview._sync_presentation_item`, `StoreWindowItemList._update_item_list`, `StoreItemPurchasePopup._populate_item_widget` [hooks] | These synchronous presentation paths re-query `BackendInterfaceItemPlayfab.has_item` / `.has_weapon_illusion` after reading stock [src: `hero_view_state_store.lua:1844-1974,2123-2143`; `store_window_featured.lua:608-659`; `store_window_item_preview.lua:883-964`; `store_window_item_list.lua:280-317`; `store_item_purchase_popup.lua:1612-1688`] | Bracket only these calls with a local-ownership facade for eligible SM keys | The bracket restores after success or error; inventory, crafting, loadouts, and official play never consume the facade |
-| `mod.update` (revision-gated overlay, not a hook) | Vanilla callbacks classify returned item data through the mirror's normal item/cosmetic/weapon-skin/weapon-pose mutators [src: `playfab_mirror_base.lua:2494-2544`] | Reapply persisted MP grants when the mirror becomes ready or its local revision changes, so existing store/inventory consumers see native-shaped records | Unchanged frames compare one scalar and allocate no tables; a failed overlay retries, and official transition removes only tracked MP instance ids |
+| `mod.update` (revision-gated overlay, not a hook) | Vanilla callbacks classify returned item data through the mirror's normal item/cosmetic/weapon-skin/weapon-pose mutators [src: `playfab_mirror_base.lua:2494-2544`] | Reapply persisted MP grants when the mirror becomes ready or its local revision changes, so existing store/inventory consumers see native-shaped records | Unchanged frames compare one scalar and allocate no tables; a failed overlay retries, and official transition removes only tracked MP instance ids. #840: while the Fresh items route is active the overlay is skipped (`fresh_routed`) and any applied rows are cleaned up; the Fresh view carries the durable Emporium grants itself |
+
+### Isolated Fresh profile: items/loadouts route (issue 840; owner doc: `docs/engine/11`)
+
+`_mp_fresh_profile_runtime.lua` owns all 21 hooks; the entry point has one
+`install` call and never hooks a routed method itself (offline
+`test_mp_fresh_profile_routing.lua` locks both).
+
+| Class.method (kind) | Vanilla behavior at the seam | Why mp hooks it | Trap / invariant |
+|---|---|---|---|
+| `BackendInterfaceItemPlayfab.get_all_backend_items` / `.get_all_fake_backend_items` / `.get_loadout` / `.get_bot_loadout` / `.get_career_loadouts` / `.get_selected_career_loadout` / `.get_default_loadouts` / `.get_default_override` / `.get_loadout_item_id` / `.get_backend_id_from_cosmetic_item` / `.get_unlocked_weapon_poses` / `.get_equipped_weapon_pose_skins` / `.get_equipped_weapon_pose_skin` / `.sum_best_power_levels` / `.equipped_by_loadout` / `.is_equipped_by_any_loadout` [hooks] | The root reads of the items interface refresh from and return the canonical mirror's inventory, fake cosmetic rows, and per-career character data [src: `backend_interface_item_playfab.lua:37-160,384-544,760-800,894-902`]; every consumer reaches this one object through `get_interface("items")` or the loadout override registry [src: `backend_manager_playfab.lua:201-209,329-341`] | Serve the MP-owned Fresh view (seeded once per profile generation) only when modded realm + `starting_state == "fresh"` + boot-time resolution + no fault all hold; otherwise delegate to the original method | Per-call decision, no native mutation, so every exit path (setting, realm, disable, fault, re-enable) is a restore. Derived methods (`get_item_from_id`, `get_filtered_items`, `has_item`, `equipped_by`, `get_cosmetic_loadout`, ...) follow through `self:` and are NOT hooked (the two existing `has_item` / `has_weapon_illusion` hooks from #577 stay the only entry-point hooks on this class). A handler throw latches `official:fault` and delegates; mechanism default loadouts (versus) return nil under Fresh |
+| `BackendInterfaceItemPlayfab.set_loadout_item` / `.set_loadout_index` / `.add_loadout` / `.delete_loadout` / `.set_weapon_pose_skin` [hooks] | Validate against the item map, then write the mirror's character data / loadout index / pose skin [src: `backend_interface_item_playfab.lua:257-276,587-602,635-670`; `playfab_mirror_base.lua:1928-1942,1968-2068,2253-2255`] | Commit copy-on-write to the persisted profile with vanilla's validation (unknown item, `magic` rarity, cosmetic slots store the item key) and never touch the native mirror | A failed persist discards the copy and returns the vanilla failure value (`false` / nil) without delegating, so official state stays byte-identical and the route stays active; `mp840_fresh_route_write_never_touches_native` checks this in-game |
+| `_with_eac_off_unless_fresh` + inline `_create_entries` / `_handle_claim_all_challenges` variants (wrapper, not a hook) | The level-end reward reel, Okri's achievement `completed` flag / claim-all visibility, and the keep bench craft button are gated on `eac-untrusted` [src: `level_end_view_base.lua:59`; `hero_view_state_achievements.lua:646,2992`; `hero_window_item_customization.lua:1878,1928`] | While the Fresh route is active these un-routed slices run vanilla's modded body with the flag intact (greyed / skipped) instead of being silently official-backed; daily quest rows (`entry_type == "quest"`) keep the #434 bracket | `mp840_fresh_unavailable_slices_gated` asserts the flag is intact inside the wrapper only when the route is active |
 
 ### Achievement progress tracking (row-of-concern) (owner doc: `docs/engine/11`)
 
