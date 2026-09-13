@@ -705,5 +705,13 @@
     @{ mod='enemy_tweaker'; file='enemy_tweaker/scripts/mods/enemy_tweaker/_et_lifecycle.lua'; needle='mod.on_enabled = function(initial_call)'; literal=$true; polarity='present'; maxCount=1; issueRef='#727'; note='on_enabled must receive VMF initial_call to tell boot from a user toggle.' }
     @{ mod='enemy_tweaker'; file='enemy_tweaker/scripts/mods/enemy_tweaker/_et_lifecycle.lua'; needle='(?s)if not initial_call then\s*(?:--[^\n]*\n\s*)?mod:echo\("Enemy Tweaker (?:disabled|enabled)'; literal=$false; polarity='present'; minCount=2; maxCount=2; issueRef='#727'; note='both lifecycle chat confirmations stay behind the initial_call gate.' }
 
+    # ============================ enemy_tweaker #451 registrar contract ============================
+    # The DLC weapon_kills_per_breed families are incremented by killed breed
+    # name (achievement_templates_cog.lua:1047, achievement_templates_lake.lua:108);
+    # a custom breed without its rows is the statistics_database.lua:302 ferror.
+    @{ mod='enemy_tweaker'; file='enemy_tweaker/scripts/mods/enemy_tweaker/_et_custom_breed_registrar.lua'; needle='local WEAPON_STAT_FAMILY = "weapon_kills_per_breed"'; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#451'; note='DLC per-(weapon, breed) kill rows stay a mandatory registrar family.' }
+    @{ mod='enemy_tweaker'; file='enemy_tweaker/scripts/mods/enemy_tweaker/_et_custom_breed_registrar.lua'; needle='local function validate_health_sync(runtime, breed)'; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#451'; note='candidate health is proven below damage_hotjoin_sync.max before any write (network_constants.lua:76-86).' }
+    @{ mod='enemy_tweaker'; file='enemy_tweaker/scripts/mods/enemy_tweaker/_et_boss_ideas.lua'; needle='ET.rt_register("issue451_custom_breed_registrar"'; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#451'; note='readiness-coherence contract check stays registered in the Chosen owner.' }
+
   )
 }

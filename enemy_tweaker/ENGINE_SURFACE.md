@@ -132,9 +132,17 @@ missing from all three, and each miss is a distinct crash
 ferror on first kill). A defensive HOOK is NOT sufficient, because VMF still executes
 a disabled mod's module-level code (so `Breeds[name] = ...` sticks) but skips its hook
 registrations. `_et_custom_breed_registrar` therefore runs eagerly and plans
-breed/actions, statistics, already-live performance state, package aliases,
-dismemberment, faction/elite membership, hit zones, presentation, and all three
-wire axes before any real write. Those wire surfaces are
+breed/actions, statistics (the six base per-breed families and every DLC
+`weapon_kills_per_breed[weapon]` family that the cog/lake kill-register
+achievements increment by killed breed name [src:
+`scripts/managers/backend/statistics_definitions_cog.lua:79-89`,
+`statistics_definitions_lake.lua:21-27`,
+`scripts/managers/achievements/achievement_templates_cog.lua:1047`,
+`achievement_templates_lake.lua:108`]), already-live performance state,
+package aliases, dismemberment, faction/elite membership, hit zones,
+presentation, and all three wire axes before any real write. It also re-proves
+the boot-time hot-join health assert for the candidate [src:
+`scripts/network_lookup/network_constants.lua:20,76-86`]. Those wire surfaces are
 `NetworkLookup.breeds`, `.damage_sources`, and `.statistics_path_names`; the
 last is what lets `StatisticsDatabase` encode and decode the custom breed name
 inside a hot-join statistics path [src:
