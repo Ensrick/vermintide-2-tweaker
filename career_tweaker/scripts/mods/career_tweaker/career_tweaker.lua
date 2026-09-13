@@ -3,7 +3,7 @@ local mod = get_mod("crt")
 -- concern module and this entry's lifecycle callbacks read/write it.
 mod._crt = mod._crt or {}
 
-local MOD_VERSION = "0.4.30-beta"
+local MOD_VERSION = "0.4.31-beta"
 mod._crt.MOD_VERSION = MOD_VERSION
 
 -- VMF mod-to-mod RPC schema (VMF_RECIPES section 10). Issue #776 appends the
@@ -384,6 +384,42 @@ local function _migrate_tourney_career_masters()
     end
     _sync_tourney_career_master_indicators()
     _sync_rework_master_indicators()
+end
+
+-- #1575: Mod Tweaker transactions deliver the derived family masters and
+-- Tourney career presets through one composite settings-owner provider. Replay
+-- consumes them as derived state; an Apply runs each changed preset once, in a
+-- fixed order, before the staged leaves. Stock single-setting clicks still use
+-- on_setting_changed below.
+if mod._crt.ISSUE221_ARMOR_MASTER_ARMED then
+    local settings_owner = mod:dofile("scripts/mods/career_tweaker/_crt_settings_owner")
+    local family_by_id = {
+        [rework_master_module.MASTER_ENSRICK] = "ensrick",
+        [rework_master_module.MASTER_TOURNEY] = "tourney",
+        [rework_master_module.MASTER_ALL] = "all",
+    }
+    local family_ids = { rework_master_module.MASTER_ENSRICK,
+        rework_master_module.MASTER_TOURNEY, rework_master_module.MASTER_ALL }
+    local career_ids = {}
+    for _, id in ipairs(tourney and tourney.CATALOG and tourney.CATALOG.MASTER_IDS or {}) do
+        career_ids[#career_ids + 1] = id
+    end
+    mod._crt.settings_owner_factory = settings_owner
+    mod._crt.profile_family_ids, mod._crt.profile_career_ids = family_ids, career_ids
+    mod.mod_tweaker_settings_owner = settings_owner(mod.mod_tweaker_settings_owner, family_ids, career_ids, {
+        get = function(id) return mod:get(id) and true or false end,
+        apply_family = function(id, enabled)
+            _apply_rework_master(family_by_id[id], enabled)
+            _sync_tourney_career_master_indicators()
+        end,
+        apply_career = function(id, enabled) _apply_tourney_career_master(id, enabled) end,
+        finish = function(kind, derived, commands)
+            _sync_rework_master_indicators()
+            _sync_tourney_career_master_indicators()
+            pcall(printf, "[crt:1575] transaction=%s derived_indicators=%d presets=%d",
+                tostring(kind), derived, commands)
+        end,
+    })
 end
 
 mod._crt.rework_master_policy = rework_master_policy
@@ -772,6 +808,16 @@ mod.on_setting_changed = function(setting_id)
     -- bounded to one level.
     mutex.enforce(setting_id)
 
+    -- Derived family/career indicators depend only on the stored leaves, so
+    -- sync them before any engine work. #1575: profile replay consumes those
+    -- flags, and a failed engine reconcile must not leave them stale.
+    if rework_master_policy:is_member(setting_id) then
+        _sync_rework_master_indicators()
+    end
+    if tourney and tourney.CATALOG and tourney.CATALOG.is_leaf(setting_id) then
+        _sync_tourney_career_master_indicators()
+    end
+
     -- #472 configuration consensus is edge-driven, not polled. Publish the new
     -- two setting bits before rebuilding the balance tables, so a local change
     -- immediately fails closed until every peer reports the same value.
@@ -797,12 +843,6 @@ mod.on_setting_changed = function(setting_id)
         if tourney and tourney.apply then tourney.apply() end
     end
 
-    if rework_master_policy:is_member(setting_id) then
-        _sync_rework_master_indicators()
-    end
-    if tourney and tourney.CATALOG and tourney.CATALOG.is_leaf(setting_id) then
-        _sync_tourney_career_master_indicators()
-    end
     local edited_cluster = rework_master_policy:cluster_for_leaf(setting_id)
     if edited_cluster then
         _mark_cluster_custom(edited_cluster)

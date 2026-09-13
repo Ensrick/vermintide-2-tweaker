@@ -71,6 +71,12 @@ registered visible setting members. The armor provider alone knows its private
 setting IDs. A post-write `on_settings_batch_changed(ids)` cannot reconstruct
 an overwritten preimage and is deliberately not used for this cluster.
 
+Since 0.4.31-beta (#1575) CRT exposes that protocol through one composite
+provider (`_crt_settings_owner.lua`): the armor owner plus ownership of the
+derived family masters and Tourney career presets (consumed during replay,
+ordered preset commands during Apply). Later cluster owners join the same
+composite, because GUT reads one provider per mod.
+
 - New armor metadata binds schema 1, owner `crt`, cluster `armor`, an exact
   Boolean held flag and both Boolean saved leaf values. Held profiles must also
   carry master ON and both visible leaves ON. Capture includes explicit false.

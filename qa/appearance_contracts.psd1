@@ -1,6 +1,6 @@
 @{
     SchemaVersion = 1
-    Includes = @('appearance_contracts.issue613.psd1')
+    Includes = @('appearance_contracts.issue613.psd1', 'appearance_contracts.issue598.psd1')
 
     # Closed vocabulary. Canonical surface and edge NAMES are owned by
     # tools/shared_lib/_lib_appearance_descriptor.lua (M.CELLS / M.EDGES) and

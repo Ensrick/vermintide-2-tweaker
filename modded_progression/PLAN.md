@@ -74,6 +74,33 @@ with restoration postconditions on every official-realm transition. The
 existing `apply_mirror_overlay` stub stays disabled, never seeds `fresh`, and
 never marks the profile seeded.
 
+### Implemented slice 1 of 4: items/loadouts (v0.2.38-dev)
+
+Path 3 from the issue: independently reversible slices behind one
+profile-generation transaction. `_mp_fresh_profile_state.lua` owns the
+persisted profile (`mp_profile_v1`: schema, generation, per-slice state) and
+`_mp_fresh_profile_runtime.lua` routes the `BackendInterfaceItemPlayfab`
+class methods. Because `get_interface("items")` and
+`get_loadout_interface_by_slot` return the same object
+(`backend_manager_playfab.lua:201-209,329-341`), routing the class methods
+covers every consumer without replacing the interface table. Only the 16 root
+reads that touch the mirror and 5 writes are hooked; derived methods reach
+them through `self:`.
+
+Routing predicate, evaluated per call so every exit restores official reads:
+modded realm AND `starting_state == "fresh"` AND every routed method resolved
+at boot AND no latched fault. Writes are copy-on-write commits to the profile;
+the native mirror is never called while routed. The seed is client-data only
+(`DeusDefaultLoadout` reverse-mapped through `DeusStartingWeaponTypeMapping`,
+career `base_skin`, plentiful career hat, default frame, plentiful jewellery,
+item power `MIN_POWER_LEVEL_CAP - level-1 hero power`). Vanilla's real
+starting gear is server-side (`playfab_mirror_base.lua:3292-3313`).
+
+While the route is active, un-routed slices keep vanilla's modded-realm
+disabled presentation (level-end popups, Okri's achievement rows/claim-all,
+keep bench craft button) rather than being silently official-backed. Remaining
+slices, in order: XP/talents, currencies/store, crafting/loot/decorations.
+
 ## Vanilla data flow (verified)
 
 ```

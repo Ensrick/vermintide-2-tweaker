@@ -1,5 +1,19 @@
 # Weapon Tweaker Changelog
 
+## 0.12.332-beta (2026-09-12) -- Grudge-Raker ammunition history; reissues unpublished 0.12.331-beta (#1436) [not-started]
+
+- Adds **Bardin's Grudge-Raker: Game Version 6.10.0 (Ammunition Only)** to
+  the source catalog. Both normal and Versus maximum-ammunition leaves
+  restore 16 from current 20 as one guarded atomic family state.
+- Current remains zero-write. Missing/foreign guards refuse both writes;
+  restore preserves exact template/ammo identities, unrelated ordinary
+  tweaks and each template's distinct damage profile.
+- Excludes the separate armored/monster damage adjustment, pellets, reload,
+  clip size, career bonuses, sounds and presentation. This is not a complete
+  historical Grudge-Raker recreation or completion of #1436.
+- Reissues the never-published 0.12.331-beta Swiftbow ammunition content
+  under this version; in-game verification of both slices remains outstanding.
+
 ## 0.12.331-beta (2026-09-06) -- Swiftbow ammunition history (#1436)
 
 - Adds **Kerillian's Swiftbow** with **Game Version 6.10.0 (Ammunition
@@ -14,6 +28,8 @@
 - Adds no hooks, damage profiles, RPCs, assets or wire identities. #1436
   remains an incomplete all-weapons history umbrella; this is an ammunition
   slice, not a full recreation of Game Version 6.10.0 Swiftbow balance.
+- Never published to the Workshop: its version claim went stale, and this
+  content is superseded by 0.12.332-beta.
 
 ## 0.12.330-beta (2026-09-03) -- Patch 6.11.0 Hammer/Mace history and 6.12.1 provenance (#1436, #1529) [not-started]
 

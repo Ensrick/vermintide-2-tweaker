@@ -1410,3 +1410,55 @@ _rt_register("issue221_armor_profile_owner", function()
     end
 end)
 -- #221 profile-owner check end
+
+_rt_register("issue1575_profile_indicator_owner", function()
+    -- Mod Tweaker transactions own the derived family masters and Tourney
+    -- career presets: replay consumes them, an Apply runs each changed preset
+    -- once (family before career, OFF before ON). Isolated owners and an
+    -- inspected live plan only: no player setting is written.
+    local factory = mod._crt.settings_owner_factory
+    local families, careers = mod._crt.profile_family_ids, mod._crt.profile_career_ids
+    local api = mod.mod_tweaker_settings_owner
+    local catalog = mod._crt.tourney and mod._crt.tourney.CATALOG
+    if type(factory) ~= "function" or type(families) ~= "table" or #families ~= 3
+            or type(careers) ~= "table" or #careers ~= #(catalog and catalog.MASTER_IDS or {})
+            or type(api) ~= "table" or api.version ~= 1 then
+        return "#1575 transaction indicator owner unavailable or incomplete"
+    end
+    local ids, pending = {}, {}
+    for _, list in ipairs({ families, careers }) do
+        for i = 1, #list do ids[#ids + 1] = list[i]; pending[list[i]] = false end
+    end
+    local live, applied = {}, {}
+    local runtime = {
+        get = function(id) return live[id] == true end,
+        apply_family = function(id, value) applied[#applied + 1] = "family:" .. id .. "=" .. tostring(value) end,
+        apply_career = function(id, value) applied[#applied + 1] = "career:" .. id .. "=" .. tostring(value) end,
+        finish = function() end,
+    }
+    local isolated = factory({ capture = function() return nil end,
+        prepare = function() return nil end }, families, careers, runtime)
+    for _, owner in ipairs({ isolated, api }) do
+        for _, kind in ipairs({ "profile", "reconcile", "edit" }) do
+            local plan = owner.prepare(pending, { owner_id = "crt", kind = kind })
+            if type(plan) ~= "table" then return "#1575 " .. kind .. " left indicators unowned" end
+            for i = 1, #ids do
+                if plan.handled[ids[i]] ~= true then return "#1575 " .. kind .. " left " .. ids[i] end
+            end
+        end
+    end
+    live[families[1]] = true
+    if careers[1] then pending[careers[1]] = true end
+    for _, kind in ipairs({ "profile", "reconcile", "edit" }) do
+        applied = {}
+        isolated.prepare(pending, { owner_id = "crt", kind = kind }).commit()
+        local expected = kind == "edit" and (careers[1] and 2 or 1) or 0
+        if #applied ~= expected then
+            return string.format("#1575 %s ran %d presets, expected %d", kind, #applied, expected)
+        end
+    end
+    if applied[1] ~= "family:" .. families[1] .. "=false" then
+        return "#1575 family OFF must run before career presets: " .. tostring(applied[1])
+    end
+end)
+-- #1575 profile-indicator check end

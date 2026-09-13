@@ -442,14 +442,16 @@ Run-Check "check_rt_textual_invariants" { & (Join-Path $here "check_rt_textual_i
 # (and, in CI PRs, GITHUB_BASE_REF) view; pre-commit runs the -Staged variant.
 Run-Check "check_dev_only_edits" { & (Join-Path $here "check_dev_only_edits.ps1") -Quiet:$Quiet }
 
-# check_logging uses Standard 0/1/2 policy (issues #429/#427): logging-hygiene scan encoding
+# check_logging uses Standard 0/1/2 policy (issues #429/#427/#169): logging-hygiene scan encoding
 # PROJECT_STANDARDS section 3.6 + BUG_CLASSES section 17 - (a) mod:echo in a section 3.6 "NEVER"
 # context (module-load banner / on_setting_changed / on_enabled|on_disabled /
 # hook body), (b) mod:info|warning in a per-frame update() body, (c) mod:warning
-# in a dbg/alert helper (the Issue #240 chat-spam class). Nonzero by design -
-# ordinary findings remain exit 1 warnings, while infrastructure failure or a
-# new `_dbg_alert -> mod:warning` route exits 2 and blocks. Escapes: -- allow-echo /
-# -- allow-perframe / -- allow-warn-chat. See qa/CHECKS.md rows 58a/58b/58c/58d.
+# in a dbg/alert helper (the Issue #240 chat-spam class), (d) executable use of
+# the retired enable_debug_logging key. Nonzero by design - ordinary findings
+# remain exit 1 warnings, while infrastructure failure, a new
+# `_dbg_alert -> mod:warning` route, or a retired-key site outside the pinned
+# GT stable promotion debt exits 2 and blocks. Escapes: -- allow-echo /
+# -- allow-perframe / -- allow-warn-chat (none for (d)). See qa/CHECKS.md rows 58a-58e.
 Run-Check "check_logging" { & (Join-Path $here "check_logging.ps1") -Quiet:$Quiet }
 
 # check_hook_test_coverage is Advisory (issue #429): if the diff (HEAD~1..HEAD by

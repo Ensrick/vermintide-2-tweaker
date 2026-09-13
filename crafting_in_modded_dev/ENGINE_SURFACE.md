@@ -266,6 +266,63 @@ IDs clear this separate vanilla map because their craft record is authoritative.
 |---|---|---|---|
 | `IngamePlayerListUI._update_dynamic_widget_information` [safe] `_cim_tab_preview.lua` | Hold-Tab renders `Managers.player:player_loadouts()` and calls `UIUtils.get_ui_information_from_item(item)`; remote items were reconstructed by `rpc_sync_loadout_slot`, whose payload has no skin id [src: `ingame_player_list_ui_v2.lua:1444-1539`, `loadout_utils.lua:4-42,72-91`] | After vanilla refresh, copy only melee/ranged skin identity and icon from the same player's live `inventory_system:equipment().slots[slot]`; `rpc_add_equipment` already synchronized the exact `weapon_skin_id` into `slot.skin`. Resolve rarity from the exact local boolean state and repair `slot_name .. "_rarity_texture"` in the same post-hook cycle (#598) [src: `simple_inventory_extension.lua:252-266`, `simple_husk_inventory_extension.lua:181-221`] | No custom resource identity is networked. Missing equipment/slot/skin registry fails closed; unknown exact skin logs once per key. The loadout item receives `skin` so vanilla's existing hover tooltip resolves the same illusion (#246). Rarity changes only when an exact boolean is known; absent state preserves vanilla. |
 
+The bounded #598 owner-only Cursed candidate shares that same installed callback;
+it does not broaden the boolean channel. Its direct read APIs are source-checked
+against engine commit `c5e4968b1fbb00c49884e56d640ef990a9c04dd0`:
+
+- Local human is the current `Managers.player:local_player()` object and
+  `Managers.player:owner(player.player_unit)` returns that same object. These
+  colon methods take zero and one explicit argument respectively
+  [`scripts/managers/player/player_manager.lua:580,341`]. `local_player` and
+  `bot_player` are **fields**, not methods
+  [`scripts/managers/player/bulldozer_player.lua:9`, `player_bot.lua:23`].
+  `:player_loadouts()` and the row player's `:unique_id()` are zero-explicit-
+  argument methods [`player_manager.lua:65-67`, `bulldozer_player.lua:475-477`];
+  vanilla uses the same id-to-loadout pairing in
+  `scripts/ui/views/ingame_player_list_ui_v2.lua:1504-1507`.
+- The live `inventory_system:equipment()` method returns `_equipment`; its
+  `_career_name` is a **field**. The initial equipment path clones `item.data`
+  and adds the exact instance `backend_id` before constructing slot equipment
+  [`scripts/unit_extensions/default_player_unit/inventory/simple_inventory_extension.lua:47,390-392,504-505,874-877`;
+  `scripts/unit_extensions/default_player_unit/inventory/gear_utils.lua:82-87`].
+- `Managers.backend:get_loadout_interface_by_slot(slot_name)` selects the
+  current mode's slot owner. It must be the identical object returned by
+  `Managers.backend:get_interface("items")` (one explicit argument; optional
+  player id omitted); Deus, Weaves and unknown/foreign
+  owners reject rather than looking up their id in Adventure inventory
+  [`scripts/managers/backend_playfab/backend_manager_playfab.lua:201,329-340`].
+- That proven items owner receives `:get_loadout_item_id(career_name, slot_name,
+  false)` (three explicit arguments) and must return the exact live equipment
+  id, then `:get_item_from_id(backend_id)` (one argument). Only the returned
+  instance's own `backend_id` and `rarity == "cursed"` are accepted
+  [`scripts/managers/backend_playfab/backend_interface_item_playfab.lua:384-388,512-525`].
+  There is no name/definition lookup or `BackendUtils.get_loadout_item`
+  fallback: that latter helper reads `items` even with a foreign slot owner
+  [`scripts/managers/backend/backend_utils.lua:30-46`].
+- WOC must be present and enabled via the VMF `:is_enabled()` capability
+  (zero explicit arguments, `VMFMod:is_enabled` returns `_data.is_enabled` in
+  `vmf/scripts/mods/vmf/modules/vmf_mod_data.lua:78-80`, VMF source commit
+  `81bb4ce0d84e0060cc8a848f48aa7e6e635c2168`). The
+  registered `UISettings.item_rarity_textures.cursed` value must pass the static
+  dot call `UIAtlasHelper.has_texture_by_name(texture)` (one argument)
+  [`scripts/helpers/ui_atlas_helper.lua:613`]. No resource identity is sent.
+
+Only the current row's melee/ranged `*_rarity_texture` field receives Cursed.
+The exact pre-override widget value is kept in a weak-key ledger. Every callback
+restores a still-owned value **before** any fallible context read; a newer value
+written by vanilla/another adapter is not overwritten. Missing/throwing provider,
+instance, owner or resource therefore clears stale custom chrome on the next
+callback. New Cursed logic never writes the backend instance, equipment, shared
+loadout item or boolean cache. Existing Modded/skin behavior remains separate.
+The `[cim:598] owner_frame` receipt reads the retained widget field, is change-
+triggered and capped at 24 lines; it is not a renderer/acceptance verdict.
+
+This is an Adventure/items-only, source-tested candidate, not a remote Cursed or
+Deus/Weaves implementation. CIM disable stops its hook; live disable restoration
+before a native refresh is unverified. The synthetic runtime policy check is
+not proof that a real frame rendered; installed-hook offline tests and the
+conditional live checklist have distinct roles.
+
 ### Surface 7 - Ranald's Gift read and local build import (owner: `docs/engine/09`, `/11`; `_cim_ranalds_*.lua`)
 
 | Engine/API contact | Vanilla behavior | cim use | Guard / invariant |

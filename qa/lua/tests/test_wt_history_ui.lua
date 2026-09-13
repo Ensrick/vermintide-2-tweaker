@@ -48,6 +48,13 @@ local function register(H, context)
                     "Game Version 6.10.0 - bounded patch delta",
                     "Swiftbow qualification must not alter existing family labels")
             end
+            if family.id == "bardin_grudge_raker" then
+                H.equal(#widget.options, 2)
+                H.equal(widget.options[2].value, "6_10_0_grudge_raker_ammunition")
+                H.equal(loc[widget.options[2].text].en,
+                    "Game Version 6.10.0 (Ammunition Only) - bounded patch delta")
+                H.equal(loc[family.setting_id].en, "Bardin's Grudge-Raker")
+            end
         end
     end)
 
@@ -66,7 +73,7 @@ local function register(H, context)
         H.equal(CatalogUI.decorate_menu(mod, data), data)
         H.equal(data.options.widgets[1], first)
         H.equal(data.options.widgets[2].setting_id, "wt_history_patch_versions")
-        H.equal(#data.options.widgets[2].sub_widgets, 27)
+        H.equal(#data.options.widgets[2].sub_widgets, 28)
         H.equal(data.options.widgets[3], second)
         H.equal(loads, 14)
         H.equal(CatalogUI.decorate_menu(mod, data), data)
@@ -118,7 +125,7 @@ local function register(H, context)
             H.equal(data.options.widgets[1], availability)
             H.equal(data.options.widgets[2].setting_id,
                 "wt_history_patch_versions")
-            H.equal(#data.options.widgets[2].sub_widgets, 27)
+            H.equal(#data.options.widgets[2].sub_widgets, 28)
             H.equal(data.options.widgets[3], overrides)
             H.equal(loads, 14)
             H.equal(catalog_ui.decorate_menu(mod, data), data)

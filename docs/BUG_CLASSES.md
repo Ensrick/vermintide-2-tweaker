@@ -3201,9 +3201,21 @@ tables.
   completion notification per owner, mixed-default preservation, and
   master-only cascade semantics.
 
+**Second instance (issue #1575, 2026-09-12):** Career Tweaker's family masters
+and Tourney career presets are indicators derived from their leaves, but a
+profile replay delivered them as ordinary changes, so each unchanged flag ran
+its preset and cleared leaves restored earlier in `pairs` order. The owner now
+consumes derived indicators in replay contexts; in an ordinary Apply it
+classifies changed flags before any write and runs presets in a fixed order
+before the staged leaves. A per-notification guard that compares a flag with
+state derived from current leaves was rejected in review: an earlier command in
+the same batch moves that state and real commands get skipped. Treat any
+aggregate control that a transaction can carry as owner-classified intent,
+never as an order-dependent command.
+
 **Related:** issue #560 (Enemy Tweaker's verified one-owner implementation),
-class 11 (Lua 5.1 limits), and class 51 (a completed branch is not a shipped
-fix).
+issue #1575 (derived preset indicators in profile replay), class 11 (Lua 5.1
+limits), and class 51 (a completed branch is not a shipped fix).
 
 ---
 
