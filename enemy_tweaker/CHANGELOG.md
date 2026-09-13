@@ -1,5 +1,19 @@
 # Enemy Tweaker Changelog
 
+## 0.7.63-dev (2026-09-12): keep boot-time lifecycle notices out of chat (#727) [tooling]
+
+- VMF runs `on_disabled`/`on_enabled` once at boot with `initial_call = true`
+  (`modules/core/toggling.lua` `initialize_mod_state`). A player who left Enemy
+  Tweaker disabled saw "Enemy Tweaker disabled - compositions restored" in chat
+  on every game start although nothing was toggled.
+- `_et_lifecycle.lua`: both callbacks now take `initial_call`, and their chat
+  confirmations fire only for a user toggle in the VMF menu. The restore and
+  apply chains are unchanged. Each echo carries a precise `allow-echo` reason
+  (PROJECT_STANDARDS 3.6 lifecycle rows); the disable notice drops its em dash.
+- `qa/check_logging.ps1` census: Enemy Tweaker echo findings 2 -> 0.
+  `qa/rt_textual_invariants.psd1` pins both signatures and gates;
+  REGRESSION_CHECKLIST slug `lifecycle-notice-user-toggle-only`.
+
 ## 0.7.62-dev (2026-09-01): parity-absent local-host evidence (#1497) [not-started]
 
 - Corrected the #1497 runtime diagnostic for sessions where custom-breed
