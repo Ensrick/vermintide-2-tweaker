@@ -1,5 +1,44 @@
 # Crafting in Modded Changelog
 
+## 0.8.133-dev (2026-09-12) -- owner Cursed Hold-Tab frame (#598); reissues unpublished 0.8.132-dev (#1465) [not-started]
+
+- Symptom: with Weapons of Chaos installed, the local owner's Hold-Tab row for
+  an equipped Cursed Blightreaper showed the promo frame. The loadout wire and
+  the Tab adapter only carried a Modded/non-Modded boolean, and WOC deliberately
+  sends a safe promo shadow on the wire, so the owner's own Cursed frame was
+  never restored.
+- Fix: the existing Hold-Tab post-hook resolves the local human's exact current
+  equipped backend instance and selects its locally registered Cursed texture on
+  that Tab widget only. Backend, wire, equipment and loadout objects are not
+  written; remote rows, bots and mixed-mod fallbacks keep their existing
+  boolean/wire policy.
+- Fails closed: absent or disabled WOC, unknown ownership, a slot owner that is
+  not the current human/unit, an equipped ID that does not match the live
+  instance, or an unregistered texture leaves the existing vanilla/Modded
+  presentation untouched.
+- A weak-key widget ledger restores the prior widget value before any fallible
+  lookup, so stale Cursed chrome clears on the next existing callback after
+  death, replacement, mission transition or provider loss.
+- Adds the `issue598_owner_cursed_frame_is_widget_only` regression check and
+  offline Tab coverage through the real installed `IngamePlayerListUI`
+  callback: first refresh, Modded/Cursed/ordinary swaps, mission and slot
+  recreation, missing or mismatched instance, missing resource, throwing API
+  boundaries, and unchanged remote/bot/network behavior. This is synthetic
+  policy/restoration coverage, not proof that a frame rendered in-game.
+- Not in scope: remote-peer Cursed parity, Deus/Weaves ownership, a negotiated
+  presentation enum, or any new RPC.
+- 0.8.132-dev (#1465 illusion Apply owner) was merged but never published; this
+  build supersedes it and carries that change unchanged.
+
+**Test:** Load `Crafting in Modded v0.8.133-dev` with Weapons of Chaos in the
+Modded Realm, Adventure. Equip an owned Blightreaper whose instance rarity is
+Cursed, hold Tab, and confirm the owner's row uses the Cursed frame rather than
+promo or Modded. Swap to a vanilla weapon and hold Tab again: the frame must be
+the ordinary rarity with no leftover Cursed chrome. Repeat after death/respawn
+and one mission transition, then run `/cim_regression_test` and check
+`issue598_owner_cursed_frame_is_widget_only`. Also confirm the 0.8.132-dev
+illusion Apply steps below still pass.
+
 ## 0.8.132-dev (2026-09-05) -- exact illusion Apply owner and Cosmetics capability (#1465) [verify-fix]
 
 - Symptom: on the equipped weapon's gear-icon Illusions page, selecting a

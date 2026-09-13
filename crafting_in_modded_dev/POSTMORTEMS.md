@@ -1,5 +1,32 @@
 # Crafting in Modded Postmortems
 
+## 2026-09-12 - #598 owner Cursed frame: source-only candidate, not acceptance
+
+The Modded boolean side channel cannot express a third rarity. WOC's current
+Blightreaper instance is Cursed but its loadout wire shadow uses vanilla-safe
+promo, so repairing the sender-local boolean did not repair this owner's frame.
+The original report explicitly included Blightreaper
+([owner report](https://github.com/Ensrick/vermintide-2-tweaker/issues/598#issuecomment-4998872905));
+remote/no-WOC promo compatibility does not redefine that owner acceptance.
+
+The bounded candidate reuses the existing Tab post-hook and resolves only the
+actual live local human's exact equipped instance after proving that the current
+slot owner is the Adventure items interface. It paints Cursed only in the local
+widget after checking enabled WOC and the local texture registry. It neither
+extends the wire schema nor mutates backend/equipment/shared loadout identity.
+Deus/Weaves and remote Cursed remain outside this slice. Missing or throwing
+context restores a still-owned old widget override before any attempted lookup;
+false/nil prior values and a later writer's value are preserved exactly.
+
+Prevention: installed-hook behavioral tests exercise the real adapter rather
+than a copied policy or source-string-only proxy, including immutable snapshots,
+first refresh, swaps, respawn/career, wrong owner, missing/throwing dependencies
+and resource loss. The runtime synthetic check and bounded retained-field log
+are deliberately not renderer PASS claims. Engine method arity and field versus
+method evidence is recorded under `ENGINE_SURFACE.md`, Surface 6. Appearance
+census claim remains `structural-only`; publication and actual host/client
+observations are still required.
+
 ## 2026-08-01 — #959 accessory properties displayed independently but did not apply
 
 ### Impact
