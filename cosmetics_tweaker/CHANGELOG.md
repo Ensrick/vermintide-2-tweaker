@@ -1,5 +1,29 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.223-dev (2026-09-12) -- Weave Season 5-10 frame provider and census (#1000) [diagnostics-armed]
+
+- Why: the game atlases declare 24 Weave Season 5-10 portrait-frame sprites
+  (inventory and HUD) that vanilla never registers as items. Registering them
+  depends on two facts the decompile cannot give: whether the live build still
+  carries every sprite, and whether vanilla localization already names them.
+- New data-only provider `_cos_weave_frame_catalog.lua`, published by the
+  portrait-frame owner `_cos_unlocks.lua` as `mod._cos.weave_frames` (API
+  version 1): 24 keys (Ghyran, Azyr, Ulgu, Shyish, Ghur, Chamon; Quickplay, 40,
+  80, 120), snapshot copies for consumers such as Modded Progression, plus
+  registration-gap, atlas and vanilla-localization censuses. It registers
+  nothing and never touches `NetworkLookup`.
+- New `/cos_1000_diag` in `_cos_diagnostics.lua` prints one
+  `[cos:1000:diag] census frames=24 inventory_atlas=<n> hud_atlas=<n> vanilla_names=<n> ...`
+  line. The callback body stays comma-free so the receipt is command-owned.
+- Offline `test_cos_weave_frame_catalog.lua` (10 cases, one optional check
+  against the decompiled atlases) pins keys, order, snapshots, all three
+  censuses and the exact command output, including the unavailable fallback.
+- Not implemented yet: local registration, per-career selection, peer replay,
+  per-player surfaces and Modded Progression earning. See
+  `WEAVE_FRAME_PROVIDER.md`.
+
+**Test:** Wait in the Keep, run `/cos_1000_diag`, and attach the newest log.
+
 ## 0.9.222-dev (2026-09-12) -- bounded heroic pose gap evidence (#485) [diagnostics-armed]
 
 - Symptom: the strict live-test authority rejected the previous Unlock Heroic

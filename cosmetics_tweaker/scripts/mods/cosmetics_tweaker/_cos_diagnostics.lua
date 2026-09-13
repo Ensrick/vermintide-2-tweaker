@@ -3,10 +3,11 @@
 -- Owns the pure-diagnostic commands split out of the god file in the v0.9.77-dev
 -- Phase 1 OOP decomposition: /flush_log, /dump_glows, /dump_skin_rarities,
 -- /dump_all_names, /check_vmf, /probe_hat, /probe_cosmetics, #641's
--- /cos_offhand_name_inventory, and #485's /cos_485_diag heroic-pose gap
--- summary. All read engine globals (WeaponSkins / ItemMasterList /
--- MaterialSettingsTemplates / Managers), immutable picker catalogues, or the
--- bounded pose evidence ledger, and never mutate saved/equipped cosmetic state.
+-- /cos_offhand_name_inventory, #485's /cos_485_diag heroic-pose gap summary, and
+-- #1000's /cos_1000_diag Weave frame census. All read engine globals
+-- (WeaponSkins / ItemMasterList / MaterialSettingsTemplates / Managers / atlas
+-- settings), immutable picker catalogues, the bounded pose evidence ledger, or
+-- the data-only frame provider, and never mutate saved/equipped cosmetic state.
 --
 -- Owned by: cosmetics_tweaker.lua entry point. Consumed via: mod:dofile.
 -- Shared state: reads mod._cos.flush_log (the entry keeps _flush_log because the
@@ -837,4 +838,54 @@ mod:command("probe_cosmetics", "Dump all hat/skin items by character + career to
     dump_names(hats)
     dump_names(skins)
     mod:echo("Probe complete — exit to keep so log flushes, send [PROBE] lines.")
+end)
+
+-- #1000: one bounded census of the 24 resident Weave Season 5-10 frames. It
+-- answers the two unknowns the registration design depends on: whether the live
+-- build still declares every inventory/HUD atlas sprite (otherwise the missing
+-- sprites need packaging) and whether vanilla localization already names them
+-- (otherwise names need authoring). Read-only: nothing is registered here.
+local function _issue1000_frame_census()
+    local catalog = COS.weave_frames
+    if type(catalog) ~= "table" or type(catalog.census) ~= "function" then
+        return nil
+    end
+    local helper = rawget(_G, "UIAtlasHelper")
+    local has_entry = helper and helper.has_atlas_settings_by_texture_name
+    local lookup = rawget(_G, "NetworkLookup")
+    local gaps = catalog.census(rawget(_G, "ItemMasterList"), rawget(_G, "Cosmetics"),
+        rawget(_G, "UIPlayerPortraitFrameSettings"), lookup and lookup.cosmetics)
+    local atlas = catalog.atlas_census(has_entry)
+    local names = catalog.localization_census(rawget(_G, "Localize"))
+    return {
+        total = gaps.total,
+        inventory = atlas.inventory_present,
+        hud = atlas.hud_present,
+        names = names.names_resolved,
+        descriptions = names.descriptions_resolved,
+        item_missing = gaps.item_master_missing,
+        cosmetic_missing = gaps.cosmetics_missing,
+        template_missing = gaps.frame_settings_missing,
+        lookup_missing = gaps.network_lookup_missing,
+    }
+end
+
+local function _issue1000_census_or_unavailable()
+    local ok, census = pcall(_issue1000_frame_census)
+    if ok and type(census) == "table" then
+        return census
+    end
+    return { total = 0, inventory = 0, hud = 0, names = 0, descriptions = 0,
+        item_missing = -1, cosmetic_missing = -1, template_missing = -1, lookup_missing = -1 }
+end
+
+-- Keep the callback body free of top-level commas: the live-test authority
+-- recognizes a command-owned receipt only through a direct, simple callback.
+mod:command("cos_1000_diag", "Census the resident Weave Season 5-10 portrait frames", function()
+    local census = _issue1000_census_or_unavailable()
+    pcall(printf, "[cos:1000:diag] census frames=%d inventory_atlas=%d hud_atlas=%d vanilla_names=%d vanilla_descriptions=%d unregistered_items=%d unregistered_cosmetics=%d unregistered_templates=%d unregistered_lookup=%d",
+        census.total, census.inventory, census.hud, census.names, census.descriptions,
+        census.item_missing, census.cosmetic_missing, census.template_missing, census.lookup_missing)
+    _flush_log()
+    mod:echo("[cosmetics] Weave frame census written to the console log")
 end)
