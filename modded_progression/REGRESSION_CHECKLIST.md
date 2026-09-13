@@ -4,6 +4,11 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
+- [ ] #840: with `Fresh (level 1)` selected in the modded realm, every career's inventory and loadout comes from the MP profile (starter weapons, default hat/skin/frame, plentiful jewellery, power 5); the log has one `[mp:fresh] seed generation=N` line per generation and one `route state=active` line, never `route state=official:fault`.
+- [ ] #840: switching the starting state away from Fresh, leaving the modded realm, or disabling the mod restores official reads immediately with one `route state=official:<reason>` line; switching back re-routes without a second seed.
+- [ ] #840: equipping, adding/deleting custom loadouts, and pose skins under Fresh persist across restart and never enqueue a PlayFab request or change the official inventory; `/mp_regression_test` passes all four `mp840_fresh_*` checks and offline `test_mp_fresh_profile_routing.lua` passes.
+- [ ] #840: while Fresh is active the keep bench craft button, level-end reward popups, and Okri's achievement claims stay in vanilla's modded-realm unavailable state; MP-owned daily quests remain claimable; the #577 Emporium purchase still grants and shows the item.
+
 - [ ] #607: completing one ordinary modded Adventure mission emits bounded `[mp:607]` `end_level`, `pre_request`, and `local_ledger` events without the diagnostic adding a request or mutating loot; an EAC/API refusal emits `rejection` without requiring a successful `FunctionResult`.
 - [ ] #607: `/mp_loot_diag` reports `first_missing=local_container_award`, at most 12 sanitized events, no backend/player ids, and honest `award_capable=false` / `open_capable=false`; reset clears only diagnostic evidence.
 - [ ] #607: an existing ordinary mission chest opened through Spoils of War emits the bounded `open` flow; `/mp_regression_test` passes `issue607_local_loot_layer_diagnostic_contract`; engine-free `test_mp_loot_diag.lua` passes.
@@ -18,10 +23,22 @@ Walk every entry below before any release that touches the relevant subsystem. P
 - [ ] #589: the modded login-reward button remains disabled and no caller reaches `claimStoreRewards`; `/mp_regression_test` passes both `mp589_store_login_claim_*` checks. Official-realm claim remains vanilla.
 - [ ] #573: modded `get_quests` exposes only MP-owned daily rows with empty weekly/event slices, and modded refresh never calls backend `update_quests`; official read/refresh delegates unchanged.
 
-Last updated: 2026-08-13.
+Last updated: 2026-09-12.
 
 ---
 ## Backend isolation
+
+### mp840-fresh-items-route - Fresh profile items/loadouts must be MP-owned and fully reversible
+
+| Field | Value |
+|-------|-------|
+| Symptom | Selecting `Fresh (level 1)` stored a setting and nothing else; inventory and loadouts still read the official PlayFab-backed mirror (#840, log #940). |
+| Root cause | `apply_mirror_overlay` was an unwired no-op and every items consumer reads the canonical mirror through the same interface object; there was no MP-owned state to serve. |
+| Fix version(s) | mp v0.2.38-dev |
+| Category | INTEGRATION / CRITICAL |
+| Repro | Modded realm, `Fresh (level 1)`, open the inventory; equip an item; restart; switch the setting to `Level 35, default inventory`; switch back. |
+| Expected post-fix | Fresh shows the seeded starter profile and persists edits; every exit path (setting, realm, disable, fault) delegates to official reads with one bounded `[mp:fresh] route state=` receipt; official inventory and loadouts are never changed; no PlayFab request is added. |
+| Detection | `/mp_regression_test` passes `mp840_fresh_route_methods_resolved`, `mp840_fresh_profile_envelope_valid`, `mp840_fresh_route_write_never_touches_native`, `mp840_fresh_unavailable_slices_gated`; offline `test_mp_fresh_profile_routing.lua` proves seed-once, per-condition routing/restoration, boot-time resolution failure, write commits, failure injection with byte-identical official state, and single-hook wiring. |
 
 ### mp607-local-loot-layer-diagnostic - rejected requests must still name the first missing layer
 

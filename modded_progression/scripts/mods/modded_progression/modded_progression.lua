@@ -5,9 +5,11 @@ via VMF settings; the real PlayFab account is never written to.
 
 Full design: modded_progression/PLAN.md.
 
-Status (v0.2.36-dev): selected local quest/Emporium paths and bounded runtime
+Status (v0.2.38-dev): selected local quest/Emporium paths and bounded runtime
 diagnostics are wired; the complete local mission-loot feature is not. No
 mission chest is awarded or opened locally by the issue #607 instrumentation.
+The Fresh profile routes ONE slice (items/loadouts) to MP-owned state (#840);
+XP/talents, currencies/store, and crafting/loot remain pending slices.
 
 Major sections (search by name to jump):
   * Settings / schema versioning      — VMF settings access + migration hook
@@ -28,7 +30,7 @@ local RealmAuthority = mod:dofile(
 -- at the bottom of this same chunk, so no _G or cross-file exposure is needed.
 local _MEM_PROBE_T0_MP = collectgarbage("count")
 
-local MOD_VERSION = "0.2.36-dev"
+local MOD_VERSION = "0.2.38-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([mp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -310,6 +312,10 @@ end
 -- Hook target TBD — needs a callback when Managers.backend:ready() flips
 -- or when PlayFabMirrorBase finishes _verify_account_data. For now, the
 -- function is callable but no-ops.
+--
+-- #840: this destructive mirror overlay stays DISABLED. The Fresh profile's
+-- items/loadouts slice is served by `_mp_fresh_profile_runtime` as a routed
+-- interface facade that never writes the native mirror; do not wire this stub.
 local _overlay_applied = false
 
 local function apply_mirror_overlay()
@@ -516,6 +522,59 @@ local function _is_mp_realm()
     return mod.is_modded_realm()
 end
 
+-- ============================================================
+-- #840: isolated Fresh profile, items/loadouts slice
+-- ============================================================
+-- Routing conditions (all evaluated per call, so every exit path restores
+-- official reads): modded realm, `starting_state == "fresh"`, every routed
+-- method resolved on the live class at boot, no runtime fault. The MP profile
+-- seeds exactly once per generation; `/mp_reset` starts a new generation.
+-- Slices not yet routed (XP/talents, currencies/store, crafting/loot) keep
+-- their native modded-realm "unavailable" presentation while the Fresh route
+-- is active instead of being silently official-backed (see the un-gate hooks).
+local FreshProfileState = mod:dofile("scripts/mods/modded_progression/_mp_fresh_profile_state")
+local FreshProfile = mod:dofile("scripts/mods/modded_progression/_mp_fresh_profile_runtime").install(mod, {
+    state = FreshProfileState,
+    rt_register = _rt_register,
+    print_log = printf,
+    is_modded_realm = _is_mp_realm,
+    starting_state = get_starting_state,
+    global = function(name) return rawget(_G, name) end,
+    managers = function() return rawget(_G, "Managers") end,
+    emporium_inventory = Dailies.emporium_inventory,
+    emporium_revision = Dailies.ui_revision,
+})
+
+-- VMF disables a disabled mod's hooks itself; the flag is belt-and-suspenders
+-- so the route predicate also reports `official:disabled` on the way out.
+function mod.on_enabled() FreshProfile.set_enabled(true) end
+function mod.on_disabled() FreshProfile.set_enabled(false) end
+
+-- Un-gate wrapper for progression surfaces whose slice is NOT yet routed.
+-- With the Fresh route active the vanilla modded-realm body runs with the flag
+-- intact (button greyed / popup skipped), which is the mod's existing
+-- "unavailable" presentation (#589 pattern); otherwise the #434 bracket runs.
+local function _with_eac_off_unless_fresh(func, self, ...)
+    if FreshProfile.active() then return func(self, ...) end
+    return _with_eac_off(func, self, ...)
+end
+
+_rt_register("mp840_fresh_unavailable_slices_gated", function()
+    local saved = rawget(script_data, "eac-untrusted")
+    local seen
+    script_data["eac-untrusted"] = true
+    local ok, err = pcall(function()
+        _with_eac_off_unless_fresh(function() seen = rawget(script_data, "eac-untrusted") end, nil)
+    end)
+    script_data["eac-untrusted"] = saved
+    if not ok then return "fresh-aware un-gate wrapper raised: " .. tostring(err) end
+    if FreshProfile.active() then
+        if seen ~= true then return "unrouted slice was un-gated while the Fresh route is active" end
+    elseif seen ~= nil then
+        return "official/non-fresh path did not clear the flag inside the bracket"
+    end
+end)
+
 -- #577: persisted Emporium grants are overlaid onto the native mirror only in
 -- the modded realm. The durable transaction lives in mp_daily_v2; this table
 -- tracks reversible presentation mutations for the current mirror instance.
@@ -601,6 +660,13 @@ local function _mp577_sync_overlay(peddler)
     if not _is_mp_realm() then
         if _mp577_runtime.mirror then _mp577_cleanup_overlay() end
         return false, "official_realm"
+    end
+    -- #840: with the Fresh route active the items interface never reads the
+    -- native mirror, so the overlay would only mutate official state for
+    -- nothing. The Fresh view carries the durable Emporium grants itself.
+    if FreshProfile.active() then
+        if _mp577_runtime.mirror then _mp577_cleanup_overlay() end
+        return false, "fresh_routed"
     end
     if not peddler then
         local backend = Managers and Managers.backend
@@ -1140,13 +1206,30 @@ end)
 -- Level-end reward popups (level-up, deed, deus, keep-decoration,
 -- event, win-track, versus-level-up — all skipped in init when
 -- is_untrusted is true; flipping the flag during init runs the body).
-mod:hook("LevelEndViewBase", "init", _with_eac_off)
+-- #840: XP/loot rewards are official-backed until their slices land, so the
+-- Fresh route keeps vanilla's modded-realm skip.
+mod:hook("LevelEndViewBase", "init", _with_eac_off_unless_fresh)
 
 -- Okri's Challenges UI:
 --   _create_entries (line 646)  — `completed` flag on each entry
 --   _handle_claim_all_challenges (line 2992) — claim-all button visibility
-mod:hook("HeroViewStateAchievements", "_create_entries", _with_eac_off)
-mod:hook("HeroViewStateAchievements", "_handle_claim_all_challenges", _with_eac_off)
+-- #840: achievement rows/claims are official-backed (loot slice pending), so
+-- the Fresh route leaves them greyed; MP-owned daily quest rows (#573) keep
+-- the bracket because their claim path is fully local.
+mod:hook("HeroViewStateAchievements", "_create_entries", function(func, self, entries, entry_type, ...)
+    if entry_type ~= "quest" and FreshProfile.active() then
+        return func(self, entries, entry_type, ...)
+    end
+    return _with_eac_off(func, self, entries, entry_type, ...)
+end)
+mod:hook("HeroViewStateAchievements", "_handle_claim_all_challenges", function(func, self, ...)
+    -- [src: hero_view_state_achievements.lua:2961] the layout type names the
+    -- active claim-all surface; only the achievements surface stays gated.
+    if self._achievement_layout_type == "achievements" and FreshProfile.active() then
+        return func(self, ...)
+    end
+    return _with_eac_off(func, self, ...)
+end)
 
 -- Lohner's Emporium:
 --   _set_unlock_button_states (line 1873) — buy button enable
@@ -1177,8 +1260,10 @@ end)
 -- Vanilla keep crafting bench:
 --   _enable_craft_button (line 1878)        — flips `enable` arg to false
 --   _update_state_craft_button (line 1928)  — button-hotspot disable flag
-mod:hook("HeroWindowItemCustomization", "_enable_craft_button", _with_eac_off)
-mod:hook("HeroWindowItemCustomization", "_update_state_craft_button", _with_eac_off)
+-- #840: the crafting slice is not routed, so the Fresh route keeps the bench
+-- button in vanilla's modded-realm disabled state.
+mod:hook("HeroWindowItemCustomization", "_enable_craft_button", _with_eac_off_unless_fresh)
+mod:hook("HeroWindowItemCustomization", "_update_state_craft_button", _with_eac_off_unless_fresh)
 
 -- Generic in-game UI guard. The function literally returns
 -- `not script_data["eac-untrusted"]`; we want it always true.
@@ -1227,6 +1312,7 @@ mod:command("mp_dump", "Modded Progression: dump current state", function()
     local n_inv = 0
     for _ in pairs(get_inventory_store()) do n_inv = n_inv + 1 end
     mod:echo(string.format("currency kinds=%d, unlocks=%d, inventory=%d", n_currency, n_unlocks, n_inv))
+    mod:echo(FreshProfile.status())
     for k, v in pairs(cur) do
         if type(v) == "number" then
             mod:echo(string.format("  %s = %d", k, v))
@@ -1279,6 +1365,8 @@ mod:command("mp_reset", "Modded Progression: wipe local store (does NOT touch Pl
     Dailies.reset()
     mod:set("seeded", false, false)
     set_schema_version(0)
+    -- #840: a new profile generation; the Fresh items slice re-seeds once.
+    FreshProfile.reset()
     mod:echo("Modded Progression: local store wiped. Restart the game to re-seed.")
 end)
 
@@ -1295,6 +1383,7 @@ end
 -- the ledger UI revision and reverses exact local additions on official-realm
 -- transition; unchanged frames allocate nothing.
 function mod.update(dt)
+    FreshProfile.tick()
     _mp577_sync_overlay()
     _mp840_capture_when_backend_ready()
 end
