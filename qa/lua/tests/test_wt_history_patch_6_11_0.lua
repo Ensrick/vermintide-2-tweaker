@@ -1,5 +1,5 @@
 -- Patch 6.11.0 source-exact Longbow, shared Hammer/Mace, and Kerillian
--- Swiftbow coverage (#1436).
+-- Swiftbow and Bardin Grudge-Raker coverage (#1436).
 
 local function read_file(path)
     local file = assert(io.open(path, "rb"))
@@ -88,18 +88,18 @@ local function register(H, repo_root)
         }, references
     end
 
-    H.test("WT #1436 Patch 6.11.0 catalog pins three bounded families", function()
+    H.test("WT #1436 Patch 6.11.0 catalog pins four bounded families", function()
         local catalog = assert(loadfile(script_root
             .. "_wt_history_6_11_0_catalog.lua"))()
         local valid, validation_error = Policy.validate(catalog)
         H.equal(validation_error, nil)
         H.equal(valid, true)
         H.equal(catalog.schema, 2)
-        H.equal(catalog.catalog_id, "wt_history_patch_6_11_0_v3")
+        H.equal(catalog.catalog_id, "wt_history_patch_6_11_0_v4")
         H.equal(catalog.current_id, "current")
         H.equal(catalog.current_source.revision,
             "25fd7b8433e839b678d1c98a7a9af80918cbc252")
-        H.equal(#catalog.families, 3)
+        H.equal(#catalog.families, 4)
         H.equal(next(catalog.profile_specs), nil)
         H.equal(next(catalog.derived_profiles), nil)
 
@@ -190,14 +190,14 @@ local function register(H, repo_root)
             end
         end
         H.deep_equal(catalog.generation, {
-            adjacent_operation_count = 9,
+            adjacent_operation_count = 11,
             global_operations = 0,
             profile_route_count = 0,
             unsupported_count = 0,
         })
 
         local group = assert(CatalogUI.build_widgets(catalog))
-        H.equal(#group.sub_widgets, 3)
+        H.equal(#group.sub_widgets, 4)
         for index, widget in ipairs(group.sub_widgets) do
             H.equal(widget.default_value, "current")
             H.deep_equal(widget.options, {
@@ -205,6 +205,9 @@ local function register(H, repo_root)
                 index == 3 and {
                     text = "wt_history_state_6_10_0_swiftbow_ammunition",
                     value = "6_10_0_swiftbow_ammunition",
+                } or index == 4 and {
+                    text = "wt_history_state_6_10_0_grudge_raker_ammunition",
+                    value = "6_10_0_grudge_raker_ammunition",
                 } or { text = "wt_history_state_6_10_0", value = "6_10_0" },
             })
         end
@@ -218,6 +221,10 @@ local function register(H, repo_root)
         H.equal(localization.wt_history_family_kerillian_swiftbow.en,
             "Kerillian's Swiftbow")
         H.equal(localization.wt_history_state_6_10_0_swiftbow_ammunition.en,
+            "Game Version 6.10.0 (Ammunition Only)")
+        H.equal(localization.wt_history_family_bardin_grudge_raker.en,
+            "Bardin's Grudge-Raker")
+        H.equal(localization.wt_history_state_6_10_0_grudge_raker_ammunition.en,
             "Game Version 6.10.0 (Ammunition Only)")
         local swiftbow = catalog.families[3]
         H.equal(swiftbow.id, "kerillian_swiftbow")
@@ -455,7 +462,181 @@ local function register(H, repo_root)
         end)
     end)
 
-    H.test("WT #1436 Swiftbow composes independently with both existing families", function()
+    local grudge_templates = {
+        "grudge_raker_template_1", "grudge_raker_template_1_vs",
+    }
+    local grudge_state_id = "6_10_0_grudge_raker_ammunition"
+
+    local function add_grudge_templates(roots)
+        local references = {}
+        for index, name in ipairs(grudge_templates) do
+            local ammo = { max_ammo = 20, ammo_per_clip = 2, reload_time = 2 }
+            local action = {
+                damage_profile = index == 1 and "shot_shotgun"
+                    or "shot_shotgun_vs",
+                pellet_count = 9,
+            }
+            local template = {
+                ammo_data = ammo, actions = { action_one = { default = action } },
+                sound_event = "unchanged_sound",
+            }
+            roots.Weapons[name] = template
+            references[name] = { template = template, ammo = ammo, action = action }
+        end
+        return references
+    end
+
+    local function grudge_fixture(state, mutate)
+        local roots = hammer_roots()
+        local references = add_grudge_templates(roots)
+        roots.Weapons.unrelated_shotgun = { ammo_data = { max_ammo = 88 } }
+        if mutate then mutate(roots) end
+        local before = clone(roots)
+        local mod = mod_fixture("current")
+        function mod:get(setting_id)
+            return setting_id == "wt_history_bardin_grudge_raker" and state or "current"
+        end
+        local runtime = Runtime.install({
+            catalog = assert(loadfile(script_root .. "_wt_history_6_11_0_catalog.lua"))(),
+            mod = mod, policy = Policy, roots = roots,
+        })
+        return runtime, roots, before, references, mod
+    end
+
+    H.test("WT #1436 Grudge-Raker catalog is exactly two guarded ammunition leaves", function()
+        local catalog = assert(loadfile(script_root .. "_wt_history_6_11_0_catalog.lua"))()
+        local family = catalog.families[4]
+        H.equal(family.id, "bardin_grudge_raker")
+        H.equal(family.setting_id, "wt_history_bardin_grudge_raker")
+        H.deep_equal(family.templates, grudge_templates)
+        H.deep_equal(family.state_order, { grudge_state_id })
+        H.equal(family.states["6_10_0"], nil)
+        local state = family.states[grudge_state_id]
+        H.deep_equal(state.profile_names, {})
+        H.deep_equal(state.direct_profile_names, {})
+        H.equal(#state.operations, 2)
+        for index, template in ipairs(grudge_templates) do
+            H.deep_equal(state.operations[index], {
+                change_class = "official_weapon_balance",
+                current_source_blob = "baf9ae9ffeeaee58a72aa4404ea4bb1b56287782",
+                expected_current = 20,
+                expected_present = true,
+                family_id = "bardin_grudge_raker",
+                official_change_id = "P6110-BARDIN-GRUDGE-RAKER-MAX-AMMO",
+                official_summary = "Patch 6.11.0 increased the maximum ammunition of Bardin's Grudge-Raker.",
+                path = { "ammo_data", "max_ammo" },
+                result = 16,
+                result_present = true,
+                root = "Weapons",
+                source_blob = "3625331e9c096d32783b27eaf18f2b13b1eb9512",
+                source_path = "scripts/settings/equipment/weapon_templates/grudge_raker.lua",
+                source_revision = "5ff26df11311ba011f3313b9b232ed0d8b64b921",
+                state_id = grudge_state_id,
+                template = template,
+            })
+        end
+    end)
+
+    H.test("WT #1436 Grudge-Raker Current is a zero-write state", function()
+        with_empty_profile_globals(function()
+            local runtime, roots, before, references = grudge_fixture("current")
+            H.equal(runtime.fatal_error, nil)
+            H.equal(runtime.last_error, nil)
+            H.equal(#(runtime.ledgers.bardin_grudge_raker or {}), 0)
+            H.deep_equal(roots, before)
+            for name, refs in pairs(references) do
+                H.equal(roots.Weapons[name], refs.template)
+                H.equal(refs.template.ammo_data, refs.ammo)
+                H.equal(refs.template.actions.action_one.default, refs.action)
+            end
+            H.deep_equal(DamageProfileTemplates, {})
+            H.deep_equal(NetworkLookup.damage_profiles, {})
+        end)
+    end)
+
+    H.test("WT #1436 Grudge-Raker applies 16/16 and restores 20/20 with identities", function()
+        with_empty_profile_globals(function()
+            local runtime, roots, before, references = grudge_fixture(grudge_state_id)
+            H.equal(runtime.fatal_error, nil)
+            H.equal(runtime.last_error, nil)
+            H.equal(#runtime.ledgers.bardin_grudge_raker, 2)
+            local expected = clone(before)
+            for _, name in ipairs(grudge_templates) do
+                expected.Weapons[name].ammo_data.max_ammo = 16
+                H.equal(roots.Weapons[name].ammo_data.max_ammo, 16)
+            end
+            H.deep_equal(roots, expected,
+                "damage profiles, pellet count, reload, clip size and sound remain untouched")
+            local ledger = runtime.ledgers.bardin_grudge_raker
+            H.equal(assert(runtime:reapply()).changed, false)
+            H.equal(runtime.ledgers.bardin_grudge_raker, ledger)
+            H.deep_equal(roots, expected)
+            for name, refs in pairs(references) do
+                H.equal(roots.Weapons[name], refs.template)
+                H.equal(refs.template.ammo_data, refs.ammo)
+                H.equal(refs.template.actions.action_one.default, refs.action)
+            end
+            H.equal(assert(runtime:restore()).refused, 0)
+            H.deep_equal(roots, before)
+            for name, refs in pairs(references) do
+                H.equal(roots.Weapons[name], refs.template)
+                H.equal(refs.template.ammo_data, refs.ammo)
+                H.equal(refs.ammo.max_ammo, 20)
+                H.equal(refs.template.actions.action_one.default, refs.action)
+            end
+            H.deep_equal(DamageProfileTemplates, {})
+            H.deep_equal(NetworkLookup.damage_profiles, {})
+        end)
+    end)
+
+    for _, name in ipairs(grudge_templates) do
+        for _, case in ipairs({
+            { name = "missing template", mutate = function(roots, template_name)
+                roots.Weapons[template_name] = nil
+            end },
+            { name = "missing ammo table", mutate = function(roots, template_name)
+                roots.Weapons[template_name].ammo_data = nil
+            end },
+            { name = "missing capacity", mutate = function(roots, template_name)
+                roots.Weapons[template_name].ammo_data.max_ammo = nil
+            end },
+            { name = "foreign capacity", mutate = function(roots, template_name)
+                roots.Weapons[template_name].ammo_data.max_ammo = 99
+            end },
+        }) do
+            H.test("WT #1436 Grudge-Raker refuses both writes for " .. name .. " " .. case.name, function()
+                with_empty_profile_globals(function()
+                    local runtime, roots, before = grudge_fixture(grudge_state_id, function(value)
+                        case.mutate(value, name)
+                    end)
+                    H.equal(runtime.fatal_error, nil)
+                    H.truthy(runtime.last_error ~= nil)
+                    H.equal(#(runtime.ledgers.bardin_grudge_raker or {}), 0)
+                    H.deep_equal(roots, before)
+                    H.deep_equal(DamageProfileTemplates, {})
+                    H.deep_equal(NetworkLookup.damage_profiles, {})
+                end)
+            end)
+        end
+    end
+
+    H.test("WT #1436 Grudge-Raker is startup-only and rejects the unqualified state", function()
+        with_empty_profile_globals(function()
+            local runtime, roots, before, _, mod = grudge_fixture("current")
+            function mod:get(setting_id)
+                return setting_id == "wt_history_bardin_grudge_raker"
+                    and grudge_state_id or "current"
+            end
+            assert(runtime:reapply())
+            H.deep_equal(roots, before, "a changed preference waits for restart")
+            local invalid, invalid_roots, invalid_before = grudge_fixture("6_10_0")
+            H.equal(invalid.boot_selections.wt_history_bardin_grudge_raker, "current")
+            H.equal(#(invalid.ledgers.bardin_grudge_raker or {}), 0)
+            H.deep_equal(invalid_roots, invalid_before)
+        end)
+    end)
+
+    H.test("WT #1436 Grudge-Raker composes with Swiftbow Longbow and Hammer/Mace", function()
         with_empty_profile_globals(function()
             local roots = hammer_roots()
             for _, name in ipairs({ "longbow_empire_template", "longbow_empire_tutorial_template" }) do
@@ -466,9 +647,13 @@ local function register(H, repo_root)
             roots.Weapons.shortbow_template_1 = {
                 ammo_data = { max_ammo = 60, reload_time = 0.2 },
             }
+            local grudge_references = add_grudge_templates(roots)
             local before = clone(roots)
             local mod = mod_fixture("current")
             function mod:get(setting_id)
+                if setting_id == "wt_history_bardin_grudge_raker" then
+                    return grudge_state_id
+                end
                 return setting_id == "wt_history_kerillian_swiftbow"
                     and "6_10_0_swiftbow_ammunition" or "6_10_0"
             end
@@ -480,17 +665,36 @@ local function register(H, repo_root)
             H.equal(#runtime.ledgers.kruber_longbow, 2)
             H.equal(#runtime.ledgers.one_handed_hammer_shared, 6)
             H.equal(#runtime.ledgers.kerillian_swiftbow, 1)
+            H.equal(#runtime.ledgers.bardin_grudge_raker, 2)
             H.equal(roots.Weapons.shortbow_template_1.ammo_data.max_ammo, 50)
             H.equal(roots.Weapons.longbow_empire_template.actions.action_two.default.aim_zoom_delay, 2)
             H.equal(roots.Weapons.one_handed_hammer_template_1.block_angle, 90)
             -- An ordinary tweak applied after startup owns only its own leaf.
             -- Reconciliation must retain that overlay without re-stacking history.
             roots.Weapons.shortbow_template_1.ammo_data.reload_time = 0.1
+            for name, refs in pairs(grudge_references) do
+                H.equal(refs.ammo.max_ammo, 16)
+                refs.ammo.reload_time = 1.25
+                refs.action.unrelated_action_tweak = name
+            end
             assert(runtime:reapply())
             H.equal(roots.Weapons.shortbow_template_1.ammo_data.max_ammo, 50)
             H.equal(roots.Weapons.shortbow_template_1.ammo_data.reload_time, 0.1)
+            for name, refs in pairs(grudge_references) do
+                H.equal(refs.ammo.max_ammo, 16)
+                H.equal(refs.ammo.reload_time, 1.25)
+                H.equal(refs.action.unrelated_action_tweak, name)
+            end
             H.equal(assert(runtime:restore()).refused, 0)
             before.Weapons.shortbow_template_1.ammo_data.reload_time = 0.1
+            for name, refs in pairs(grudge_references) do
+                H.equal(refs.ammo.max_ammo, 20)
+                H.equal(roots.Weapons[name], refs.template)
+                H.equal(refs.template.ammo_data, refs.ammo)
+                H.equal(refs.template.actions.action_one.default, refs.action)
+                before.Weapons[name].ammo_data.reload_time = 1.25
+                before.Weapons[name].actions.action_one.default.unrelated_action_tweak = name
+            end
             H.deep_equal(roots, before,
                 "all history restores exactly without erasing a later independent tweak")
         end)

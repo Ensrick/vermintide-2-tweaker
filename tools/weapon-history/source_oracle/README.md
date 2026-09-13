@@ -36,10 +36,15 @@ from overwriting an earlier snapshot and hiding a real source change.
 Patch 6.11.0 independently selects and rehydrates Kruber Longbow's exact
 automatic-zoom delay on both source-evaluated templates, the six shared
 Hammer/Mace block/dodge leaves, and Swiftbow's maximum ammunition (`50`
-historically, `60` post-boundary/current). Both evaluator lanes must agree on
-all eight evidence artifacts and nine operations with zero unsupported template
+historically, `60` post-boundary/current), plus both normal/Versus Grudge-Raker
+maximum-ammunition leaves (`16` historically, `20` post-boundary/current).
+Both evaluator lanes must agree on all ten evidence artifacts and eleven
+operations with zero unsupported template
 deltas. The Swiftbow menu state explicitly says **Ammunition Only**; its
 separate cleave/headshot profile changes remain excluded, not silently inferred.
+Grudge-Raker is likewise explicitly ammunition-only: its separate
+armored/monster damage change is excluded, and post/current full source blobs
+must remain identical.
 Hotfix 6.11.2 independently selects Sienna Dagger Heavy Attack 2's route and
 Axe & Falchion Heavy Attacks 1 and 2's right-hand routes, rehydrates all three
 current native-profile guards, and agrees with the primary evaluator before

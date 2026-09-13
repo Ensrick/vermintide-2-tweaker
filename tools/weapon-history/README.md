@@ -128,7 +128,7 @@ The runtime completeness ledger classifies this and every other exposed
 family/state as either `adjacent_delta` or
 `complete_direct_historical_baseline`. It records declared scope, official
 coverage, later-same-leaf/cumulative policy, explicit exclusions, and the
-exact `13 / 27 / 40 / 16 / 243` catalog/family/family-state/state/operation
+exact `13 / 28 / 41 / 17 / 245` catalog/family/family-state/state/operation
 census. Default catalog loading refuses any missing, extra, duplicate,
 malformed, or count-drifted declaration; public and Dev ledger bytes must be
 identical.
@@ -254,7 +254,7 @@ agree. The official boundary is [Patch 6.8.0 / Hotfix 6.8.1](https://forums.fats
 
 Patch 6.11.0 uses adjacent-boundary contracts for Kruber's Longbow and the
 shared one-handed Hammer/Mace templates used by Kruber, Bardin, and Saltzpyre,
-and Kerillian's Swiftbow ammunition capacity:
+and Kerillian's Swiftbow plus Bardin's Grudge-Raker ammunition capacity:
 
 | Role | Source revision |
 |---|---|
@@ -287,9 +287,22 @@ Hammer/Mace is unchanged. The official Swiftbow cleave/headshot changes are
 explicitly excluded because this slice owns no damage/power profiles. It must
 not be described as a full historical Swiftbow balance recreation.
 
-For all three families, Current performs no writes, exact restore preserves table
+Bardin's Grudge-Raker has two source-evaluated exports,
+`grudge_raker_template_1` and `grudge_raker_template_1_vs`, at both adjacent
+revisions. Each changes only `ammo_data.max_ammo`, historical `16` versus
+post/current `20`. The normal and Versus values commit atomically under
+**Game Version 6.10.0 (Ammunition Only)**, internal identity
+`6_10_0_grudge_raker_ammunition`. Either missing or foreign guard refuses both
+writes. The post-boundary and current complete source blobs are identical:
+`baf9ae9ffeeaee58a72aa4404ea4bb1b56287782`; the historical blob is
+`3625331e9c096d32783b27eaf18f2b13b1eb9512`.
+`grudge_raker.lua:156` owns maximum ammunition; lines 239-240 export the two
+templates. The separate armored/monster damage adjustment, pellets, reload,
+clip size, career bonuses, sounds and presentation remain outside this state.
+
+For all four families, Current performs no writes, exact restore preserves table
 and sibling identities, and ordinary Tweaker: Weapons adapters load after the
-selected baseline. The nine-operation boundary owns no damage profile, RPC,
+selected baseline. The eleven-operation boundary owns no damage profile, RPC,
 asset, or global root. The official boundary is [Patch 6.11.0](https://forums.fatsharkgames.com/t/weapon-balance-update-patch-6-11-0-patch-notes/121528).
 
 ### Hotfix 6.11.2 boundary
@@ -439,7 +452,7 @@ matrices do not repeat them. The probe never fetches or writes `FETCH_HEAD`.
 
 The Patch 5.2 gate verifies the pinned evidence extractor, generator, source catalog,
 independent oracle/spec/routes, evidence hashes, and generated public catalog.
-It also derives all 37 referenced source paths from the thirteen checked-in
+It also derives all 38 referenced source paths from the thirteen checked-in
 source catalogs/specifications and proves their Git blob identities are equal
 between the retired 6.12.0 and current 6.12.1 anchors, making the refresh a
 provenance-only transition.

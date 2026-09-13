@@ -38,12 +38,23 @@ Last updated: 2026-09-01.
 
 | Field | Check |
 |---|---|
-| Candidate version | WT 0.12.331-beta / WT Dev 0.12.332-dev; in-game verification remains outstanding. |
+| Candidate version | WT 0.12.332-beta / WT Dev 0.12.333-dev (reissues the unpublished 0.12.331-beta / 0.12.332-dev pair); in-game verification remains outstanding. |
 | Menu | **Pre-Patch Weapon Versions > Kerillian's Swiftbow** offers **Current (Game Version 6.12.1)** and **Game Version 6.10.0 (Ammunition Only) - bounded patch delta**. Longbow and Hammer/Mace keep their existing labels. |
 | Scope | Only maximum ammunition changes: 60 to 50 before career/talent bonuses. Cleave, headshot damage, reload, profiles and other weapons remain current. |
 | Restart | Changing the selection does not hot-apply. Restart with the ammunition preset, then restart with Current and compare maximum arrows using the same career/talents. |
 | Safety | Missing template/ammo table/capacity or a foreign capacity refuses without writes. Repeated apply does not stack; restore retains exact table identities and unrelated ordinary tweaks. |
-| Automated | `test_wt_history_patch_6_11_0.lua` covers runtime apply/refusal/restore/composition; `test_wt_history_ui.lua` checks the qualified composite menu choice. Dual-host source reproduction checks both evaluators, all eight artifacts and public/Dev parity. |
+| Automated | `test_wt_history_patch_6_11_0.lua` covers runtime apply/refusal/restore/composition; `test_wt_history_ui.lua` checks the qualified composite menu choice. Dual-host source reproduction checks both evaluators, all ten artifacts and public/Dev parity. |
+
+## #1436 - Grudge-Raker ammunition-only history
+
+| Field | Check |
+|---|---|
+| Candidate version | WT 0.12.332-beta / WT Dev 0.12.333-dev; in-game verification remains outstanding. |
+| Menu | **Bardin's Grudge-Raker** offers **Current (Game Version 6.12.1)** and **Game Version 6.10.0 (Ammunition Only) - bounded patch delta**. Selection is startup-only. |
+| Scope | Only normal/Versus `ammo_data.max_ammo` changes from 20/20 to 16/16. Separate armored/monster damage, pellets, reload, clip size, career bonuses and presentation are excluded. |
+| Atomic refusal | Either missing template/ammo table/leaf or foreign capacity refuses both family writes. |
+| Restore/composition | Exact 20/20 restoration retains template/ammo/action identities and distinct normal/Versus damage profiles; reapply is idempotent. Swiftbow, Longbow and Hammer/Mace selections plus unrelated ordinary tweaks remain independent. |
+| Automated | `test_wt_history_patch_6_11_0.lua`, composite UI tests, exact source/oracle PS7 + PS5.1 reproduction, public/Dev parity, completeness ledger and both Patch 3.1 ledger pins. |
 
 ---
 

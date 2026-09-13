@@ -1,5 +1,5 @@
 -- Generate the bounded Patch 6.11.0 Longbow, shared Hammer/Mace, and
--- Kerillian Swiftbow history catalog (#1436).
+-- Kerillian Swiftbow and Bardin Grudge-Raker history catalog (#1436).
 --
 -- Usage:
 --   lua5.1 generate_patch_6_11_0_history.lua <source-repo> <evidence-dir> <output.lua>
@@ -10,6 +10,7 @@
 -- adjacent delta is the ammo_data.max_ammo leaf. Each family is emitted
 -- atomically over independently rehydrated current guards; later changes
 -- elsewhere remain current.
+-- Grudge-Raker has the same bounded leaf on its normal and Versus exports.
 
 local source_repo = assert(arg[1], "source repository path required")
 local evidence_dir = assert(arg[2], "evidence directory required")
@@ -189,50 +190,48 @@ local function validate_hammer_snapshot(snapshot, rehydrated, catalog, source)
     return operations
 end
 
-local swiftbow_path = { "ammo_data", "max_ammo" }
-local swiftbow_historical_value = 50
-local swiftbow_current_value = 60
+local ammunition_path = { "ammo_data", "max_ammo" }
 
-local function validate_swiftbow_snapshot(snapshot, rehydrated, catalog, source)
+local function validate_ammunition_snapshot(snapshot, rehydrated, catalog, source,
+        label, historical_value, current_value)
     exact_keys(snapshot, { "new_revision", "old_revision", "records" },
-        rehydrated and "rehydrated Swiftbow snapshot"
-            or "adjacent Swiftbow snapshot")
+        (rehydrated and "rehydrated " or "adjacent ") .. label .. " snapshot")
     assert(snapshot.old_revision == catalog.boundary.historical_revision,
-        "Swiftbow historical revision drift")
+        label .. " historical revision drift")
     assert(snapshot.new_revision == catalog.boundary.post_revision,
-        "Swiftbow boundary revision drift")
+        label .. " boundary revision drift")
     assert(array_length(snapshot.records) == #source.templates,
-        "Swiftbow snapshot record budget drift")
+        label .. " snapshot record budget drift")
     local operations = {}
     for index, expected_template in ipairs(source.templates) do
         local record = snapshot.records[index]
         exact_keys(record, { "ops", "source_path", "template", "unsupported" },
-            "Swiftbow snapshot record " .. index)
-        assert(record.source_path == source.path, "Swiftbow source path drift")
+            label .. " snapshot record " .. index)
+        assert(record.source_path == source.path, label .. " source path drift")
         assert(record.template == expected_template,
-            "Swiftbow template order or identity drift at record " .. index)
+            label .. " template order or identity drift at record " .. index)
         assert(count_keys(record.unsupported) == 0,
-            "unsupported Swiftbow source delta at record " .. index)
+            "unsupported " .. label .. " source delta at record " .. index)
         assert(array_length(record.ops) == 1,
-            "Swiftbow operation budget drift at record " .. index)
+            label .. " operation budget drift at record " .. index)
         local operation = record.ops[1]
         local operation_keys = rehydrated
             and { "expected_current", "expected_current_unset", "path", "unset", "value" }
             or { "path", "unset", "value" }
-        exact_keys(operation, operation_keys, "Swiftbow snapshot operation " .. index)
-        assert(array_length(operation.path) == #swiftbow_path,
-            "Swiftbow operation path length drift at record " .. index)
-        for path_index, key in ipairs(swiftbow_path) do
+        exact_keys(operation, operation_keys, label .. " snapshot operation " .. index)
+        assert(array_length(operation.path) == #ammunition_path,
+            label .. " operation path length drift at record " .. index)
+        for path_index, key in ipairs(ammunition_path) do
             assert(operation.path[path_index] == key,
-                "Swiftbow operation path drift at record " .. index .. "/" .. path_index)
+                label .. " operation path drift at record " .. index .. "/" .. path_index)
         end
         assert(operation.unset == false
-                and operation.value == swiftbow_historical_value,
-            "historical Swiftbow maximum ammunition drift at record " .. index)
+                and operation.value == historical_value,
+            "historical " .. label .. " maximum ammunition drift at record " .. index)
         if rehydrated then
             assert(operation.expected_current_unset == false
-                    and operation.expected_current == swiftbow_current_value,
-                "current Swiftbow maximum ammunition guard drift at record " .. index)
+                    and operation.expected_current == current_value,
+                "current " .. label .. " maximum ammunition guard drift at record " .. index)
         end
         operations[index] = operation
     end
@@ -350,10 +349,10 @@ local swiftbow_adjacent = load_data(evidence_dir
 local swiftbow_rehydrated = load_data(evidence_dir
     .. "/_wt_history_snapshot_6_10_0_" .. swiftbow_source.evidence_stem
     .. "_rehydrated_generated.lua")
-validate_swiftbow_snapshot(swiftbow_adjacent, false, source_catalog,
-    swiftbow_source)
-local swiftbow_evaluated = validate_swiftbow_snapshot(swiftbow_rehydrated, true,
-    source_catalog, swiftbow_source)
+validate_ammunition_snapshot(swiftbow_adjacent, false, source_catalog,
+    swiftbow_source, "Swiftbow", 50, 60)
+local swiftbow_evaluated = validate_ammunition_snapshot(swiftbow_rehydrated, true,
+    source_catalog, swiftbow_source, "Swiftbow", 50, 60)
 local swiftbow_operations = {}
 for template_index, template in ipairs(swiftbow_source.templates) do
     local operation = swiftbow_evaluated[template_index]
@@ -377,6 +376,69 @@ for template_index, template in ipairs(swiftbow_source.templates) do
     }
 end
 assert(#swiftbow_operations == 1, "Swiftbow emitted operation budget drift")
+
+local grudge_source = source_catalog.grudge_raker_source
+local grudge_family = source_catalog.grudge_raker_family
+local grudge_state = source_catalog.grudge_raker_state
+assert(type(grudge_state) == "table"
+        and grudge_state.id == "6_10_0_grudge_raker_ammunition"
+        and grudge_state.label_key == "wt_history_state_6_10_0_grudge_raker_ammunition"
+        and grudge_state.display_name == "Game Version 6.10.0 (Ammunition Only)",
+    "Grudge-Raker ammunition-only state identity drift")
+assert(type(grudge_source) == "table"
+        and grudge_source.evidence_stem == "grudge_raker",
+    "Grudge-Raker source declaration drift")
+assert(array_length(grudge_source.templates) == 2
+        and array_length(grudge_family.templates) == 2,
+    "Grudge-Raker normal/Versus template budget drift")
+for index, template in ipairs({
+    "grudge_raker_template_1", "grudge_raker_template_1_vs",
+}) do
+    assert(grudge_source.templates[index] == template
+            and grudge_family.templates[index] == template,
+        "Grudge-Raker normal/Versus identity drift")
+end
+assert(git_blob(source_catalog.boundary.historical_revision, grudge_source.path)
+        == grudge_source.historical_blob,
+    "Grudge-Raker historical source blob drift")
+assert(git_blob(source_catalog.boundary.post_revision, grudge_source.path)
+        == grudge_source.post_blob,
+    "Grudge-Raker post-boundary source blob drift")
+assert(git_blob(source_catalog.current.revision, grudge_source.path)
+        == grudge_source.current_blob
+        and grudge_source.current_blob == grudge_source.post_blob,
+    "Grudge-Raker complete post/current source blob drift")
+local grudge_adjacent = load_data(evidence_dir
+    .. "/_wt_history_snapshot_6_10_0_grudge_raker_to_6_11_0_generated.lua")
+local grudge_rehydrated = load_data(evidence_dir
+    .. "/_wt_history_snapshot_6_10_0_grudge_raker_rehydrated_generated.lua")
+validate_ammunition_snapshot(grudge_adjacent, false, source_catalog,
+    grudge_source, "Grudge-Raker", 16, 20)
+local grudge_evaluated = validate_ammunition_snapshot(grudge_rehydrated, true,
+    source_catalog, grudge_source, "Grudge-Raker", 16, 20)
+local grudge_operations = {}
+for index, template in ipairs(grudge_source.templates) do
+    local operation = grudge_evaluated[index]
+    grudge_operations[index] = {
+        change_class = "official_weapon_balance",
+        current_source_blob = grudge_source.current_blob,
+        expected_current = operation.expected_current,
+        expected_present = true,
+        family_id = grudge_family.id,
+        official_change_id = source_catalog.grudge_raker_official_change_id,
+        official_summary = source_catalog.grudge_raker_official_summary,
+        path = operation.path,
+        result = operation.value,
+        result_present = true,
+        root = "Weapons",
+        source_blob = grudge_source.historical_blob,
+        source_path = grudge_source.path,
+        source_revision = source_catalog.boundary.historical_revision,
+        state_id = grudge_state.id,
+        template = template,
+    }
+end
+assert(#grudge_operations == 2, "Grudge-Raker emitted operation budget drift")
 
 local family = source_catalog.family
 local state = source_catalog.state
@@ -406,7 +468,7 @@ end
 local hammer_family = source_catalog.hammer_family
 local swiftbow_family = source_catalog.swiftbow_family
 local catalog = {
-    catalog_id = "wt_history_patch_6_11_0_v3",
+    catalog_id = "wt_history_patch_6_11_0_v4",
     current_id = "current",
     current_source = {
         display_name = "Current (Game Version " .. current_anchor.game_version .. ")",
@@ -460,9 +522,24 @@ local catalog = {
             },
             templates = swiftbow_family.templates,
         },
+        {
+            display_name = grudge_family.display_name,
+            id = grudge_family.id,
+            label_key = grudge_family.label_key,
+            setting_id = grudge_family.setting_id,
+            state_order = { grudge_state.id },
+            states = {
+                [grudge_state.id] = {
+                    direct_profile_names = {},
+                    operations = grudge_operations,
+                    profile_names = {},
+                },
+            },
+            templates = grudge_family.templates,
+        },
     },
     generation = {
-        adjacent_operation_count = 9,
+        adjacent_operation_count = 11,
         global_operations = 0,
         profile_route_count = 0,
         unsupported_count = 0,
@@ -470,6 +547,13 @@ local catalog = {
     profile_specs = {},
     schema = 2,
     states = {
+        [grudge_state.id] = {
+            change_class = "official_weapon_balance",
+            display_name = grudge_state.display_name,
+            label_key = grudge_state.label_key,
+            official_patch_notes = source_catalog.official_patch_notes,
+            source_revision = source_catalog.boundary.historical_revision,
+        },
         [swiftbow_state.id] = {
             change_class = "official_weapon_balance",
             display_name = swiftbow_state.display_name,
@@ -538,4 +622,4 @@ file:write("-- AUTO-GENERATED by tools/weapon-history/generate_patch_6_11_0_hist
 file:write("return ", serialize(catalog), "\n")
 file:close()
 
-print("generated " .. output_path .. " families=3 operations=9 profiles=0 globals=0")
+print("generated " .. output_path .. " families=4 operations=11 profiles=0 globals=0")
