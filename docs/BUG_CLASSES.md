@@ -834,7 +834,7 @@ end
 ### Keep-criteria (do NOT remove)
 - Echoes inside `mod:command(...)` bodies — user invoked the command via chat.
 - Echoes in `mod.on_setting_changed` for explicit high-impact toggles (`bt`'s master, `gt`'s AI takeover).
-- Echoes in `mod.on_disabled` documenting limitations the user must know about (`gt`'s "Disable does not fully unwind active mutations" — Issue #15 canonical pattern).
+- Echoes in `mod.on_disabled` documenting limitations the user must know about (`gt`'s "Disable does not fully unwind active mutations" — Issue #15 canonical pattern), gated on `not initial_call` (Variant C).
 - Echoes in hook bodies giving user-operational feedback when something they triggered actually happened (e.g. `ct`'s "Granted N starting boon(s)" — the user is responsible for the toggle that caused it).
 
 ### Variant B: `mod:warning` believed log-only, actually posts to CHAT (Issue #240)
@@ -851,12 +851,35 @@ A mod routes "log-only" diagnostics through `mod:warning` on the assumption the 
 
 **Fix template (et v0.7.25-dev, Issue #240):** route log-only alert helpers through pcall-guarded raw engine `printf` (keeps grep-stable prefixes, survives mod-logging-OFF sessions); keep direct `mod:warning` only on genuine failure paths; guard with an `_rt_register` marker check (`et_alert_helpers_log_only_240`).
 
-**Watch list:** `ct_dev` is the § 3.6 reference implementation with the same `_dbg_alert -> mod:warning` routing — same chat spam when its alerts fire. Fold into #169's VMF-native logging sweep.
+**Watch list:** `ct_dev` has since moved its `_dbg_alert` to the same log-only `printf` route. `qa/check_logging.ps1` now finds warning-backed helpers only in the three stable streams pinned by the #427 floor.
+
+### Variant C: lifecycle notice fires on VMF's boot-time initial call (#727)
+
+**First seen:** 2026-09-12 (#727 logging census; source-derived, no user log yet)
+
+VMF calls `on_enabled(initial_call)` / `on_disabled(initial_call)` once at mod initialization with `initial_call = true` (Vermintide-Mod-Framework `vmf/scripts/mods/vmf/modules/core/toggling.lua:38-53` `initialize_mod_state` -> `set_mod_state(mod, state, true)` -> `events.lua:94-114` `mod_enabled_event`/`mod_disabled_event`). A callback that ignores the argument sends its "mod disabled/enabled" chat notice on every game start for every player who left that mod in that state, even though nobody toggled anything. Dev/stable pairs make this common: testers keep the other stream installed but disabled.
+
+**Diagnosis:** find `mod.on_enabled = function()` / `mod.on_disabled = function()` bodies (no parameter) that call `mod:echo`. An `-- allow-echo:` annotation marks intent only; the scanner cannot see the boot call.
+
+**Fix template:** take the parameter and keep the restore/apply work unconditional; only the chat notice is gated.
+
+```lua
+mod.on_disabled = function(initial_call)
+    restore_everything()
+    if not initial_call then
+        -- allow-echo: reply to the user's own VMF menu disable
+        mod:echo("<Mod> disabled: <what unwound>")
+    end
+end
+```
+
+**Instances (2026-09-12 census):** `enemy_tweaker` 0.7.63-dev and `general_tweaker_dev` 0.2.274-dev fixed; `general_tweaker` stable (promotion debt) and `career_tweaker` (`[crt] Balance reworks reverted ...`) still echo on the boot call. Regression lock: `qa/rt_textual_invariants.psd1` #727 needles.
 
 ### Related Issues / commits
 - 2026-05-25 monorepo-wide sweep — 14 mods bumped to remove load-time banner echoes + downgrade `mod:echo("Enemy Tweaker: settings updated")` (et) + delete `mod:echo("Setting changed: ...")` (crt). PROJECT_STANDARDS.md § 3.6 "Chat-echo policy" subsection added with the decision matrix.
 - See per-mod CHANGELOG entries dated 2026-05-25 titled "Remove startup banner echo + tidy on_setting_changed".
 - Issue #240 (2026-07-02) — et alert helpers rerouted to log-only printf (Variant B above).
+- Issue #727 (2026-09-12) — lifecycle notices gated on VMF `initial_call` in enemy_tweaker 0.7.63-dev and general_tweaker_dev 0.2.274-dev (Variant C above).
 
 ---
 

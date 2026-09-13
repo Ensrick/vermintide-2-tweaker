@@ -39,7 +39,9 @@
 #
 # Self-test: pass -SelfTest to exercise the pure scan logic against synthetic
 # fixture files in a temp dir (present pass, absent fail, missing-file fail,
-# minCount, and a comment-excluding regex). Offline, ~1s, no repo dependency.
+# minCount, and a comment-excluding regex) plus the literal-only manifest loader
+# (a 600-entry manifest, a one-entry manifest, and five rejected non-data
+# shapes). Offline, a few seconds, no repo dependency.
 
 [CmdletBinding()]
 param(
@@ -53,6 +55,64 @@ $ErrorActionPreference = "Stop"
 
 function Read-FileUtf8([string]$path) {
     return [System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8)
+}
+
+# Load the needle manifest as literal data. Import-PowerShellDataFile evaluates
+# the whole table in ONE safe-value pass, and that pass has a size ceiling: on
+# 2026-09-12 the 316-entry manifest sat exactly at it, so any additional entry,
+# even a duplicate of an existing row, failed to parse under PowerShell 7.6 and
+# 5.1 (issue #1577). Parse the same restricted grammar with the language parser
+# instead: exactly one `@{ entries = @( <hashtable literals> ) }` table, with
+# SafeGetValue validating each entry on its own. Nothing is executed.
+function Import-NeedleManifest {
+    param([string]$Path)
+    $tokens = $null
+    $errors = $null
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile($Path, [ref]$tokens, [ref]$errors)
+    if ($errors.Count -gt 0) {
+        throw ("line {0}: {1}" -f $errors[0].Extent.StartLineNumber, $errors[0].Message)
+    }
+    $statements = @($ast.EndBlock.Statements)
+    if ($ast.ParamBlock -or $ast.BeginBlock -or $ast.ProcessBlock -or $statements.Count -ne 1 -or
+        $statements[0] -isnot [System.Management.Automation.Language.PipelineAst] -or
+        $statements[0].PipelineElements.Count -ne 1 -or
+        $statements[0].PipelineElements[0] -isnot [System.Management.Automation.Language.CommandExpressionAst] -or
+        $statements[0].PipelineElements[0].Expression -isnot [System.Management.Automation.Language.HashtableAst]) {
+        throw 'manifest must be exactly one literal data table'
+    }
+    $pairs = @($statements[0].PipelineElements[0].Expression.KeyValuePairs)
+    if ($pairs.Count -ne 1 -or
+        $pairs[0].Item1 -isnot [System.Management.Automation.Language.StringConstantExpressionAst] -or
+        $pairs[0].Item1.Value -cne 'entries') {
+        throw 'manifest table must contain only the entries key'
+    }
+    $value = $pairs[0].Item2
+    $array = $null
+    if ($value -is [System.Management.Automation.Language.PipelineAst] -and
+        $value.PipelineElements.Count -eq 1 -and
+        $value.PipelineElements[0] -is [System.Management.Automation.Language.CommandExpressionAst]) {
+        $array = $value.PipelineElements[0].Expression
+    }
+    if ($array -isnot [System.Management.Automation.Language.ArrayExpressionAst]) {
+        throw 'manifest entries must be an @( ... ) array of hashtable literals'
+    }
+    $entries = New-Object System.Collections.Generic.List[object]
+    foreach ($statement in @($array.SubExpression.Statements)) {
+        if ($statement -isnot [System.Management.Automation.Language.PipelineAst] -or
+            $statement.PipelineElements.Count -ne 1 -or
+            $statement.PipelineElements[0] -isnot [System.Management.Automation.Language.CommandExpressionAst] -or
+            $statement.PipelineElements[0].Expression -isnot [System.Management.Automation.Language.HashtableAst]) {
+            throw ("line {0}: every entry must be one hashtable literal" -f $statement.Extent.StartLineNumber)
+        }
+        try {
+            $entries.Add($statement.PipelineElements[0].Expression.SafeGetValue())
+        } catch {
+            throw ("line {0}: entry is not literal data: {1}" -f $statement.Extent.StartLineNumber, $_.Exception.Message)
+        }
+    }
+    # Emit the rows unwrapped; callers collect them with @(...) so a one-entry
+    # manifest is still a one-row array.
+    return $entries.ToArray()
 }
 
 # Count occurrences of $needle in $text. Literal uses an ordinal IndexOf sweep
@@ -177,6 +237,41 @@ local n = FOO[bar]
         Assert ($rows[3].Status -eq 'PASS') "comment-excluding absence regex -> PASS (comment ignored)"
         Assert ($rows[4].Status -eq 'FAIL') "naive literal absence -> FAIL (matches the comment)"
         Assert ($rows[5].Status -eq 'FAIL') "missing file -> FAIL"
+
+        # Manifest loader (issue #1577): no whole-table size ceiling, literal data
+        # only. 600 rows is well above the 316-row point where the old
+        # Import-PowerShellDataFile load broke.
+        $row = "    @{ mod='self'; file='fixture_a.lua'; needle='MARK'; literal=`$true; polarity='present'; minCount=2; issueRef='#T7'; note='capacity' }"
+        $big = "@{`r`n  entries = @(`r`n" + ((1..600 | ForEach-Object { $row }) -join "`r`n") + "`r`n  )`r`n}`r`n"
+        $bigPath = Join-Path $tmp "big.psd1"
+        [System.IO.File]::WriteAllText($bigPath, $big, [System.Text.UTF8Encoding]::new($false))
+        $bigEntries = @(Import-NeedleManifest -Path $bigPath)
+        Assert ($bigEntries.Count -eq 600 -and $bigEntries[599].mod -eq 'self' -and $bigEntries[599].minCount -eq 2) "600-entry manifest loads every row as data"
+        $bigRows = Invoke-NeedleScan -Root $tmp -Entries $bigEntries
+        Assert (@($bigRows | Where-Object { $_.Status -eq 'PASS' }).Count -eq 600) "600-entry manifest scans every row"
+
+        $single = "@{ entries = @( @{ mod='self'; file='fixture_a.lua'; needle='MARK'; literal=`$true; polarity='present'; issueRef='#T8'; note='one' } ) }"
+        $singlePath = Join-Path $tmp "single.psd1"
+        [System.IO.File]::WriteAllText($singlePath, $single, [System.Text.UTF8Encoding]::new($false))
+        $singleEntries = @(Import-NeedleManifest -Path $singlePath)
+        Assert ($singleEntries.Count -eq 1 -and $singleEntries[0].issueRef -eq '#T8' -and $singleEntries[0].literal -eq $true) "single-entry manifest stays a one-row array"
+
+        $rejects = @(
+            @{ Name = 'dynamic expression value'; Text = "@{ entries = @( @{ mod='self'; file='x'; needle=(Get-Date); literal=`$true; polarity='present' } ) }" }
+            @{ Name = 'extra top-level key'; Text = "@{ entries = @( @{ mod='self'; file='x'; needle='x'; literal=`$true; polarity='present' } ); other = 1 }" }
+            @{ Name = 'non-hashtable entry'; Text = "@{ entries = @( 'x' ) }" }
+            @{ Name = 'script statement before the table'; Text = "Write-Output 'side effect'`r`n@{ entries = @( @{ mod='self'; file='x'; needle='x'; literal=`$true; polarity='present' } ) }" }
+            @{ Name = 'entries not an array expression'; Text = "@{ entries = @{ mod='self'; file='x'; needle='x'; literal=`$true; polarity='present' } }" }
+        )
+        $k = 0
+        foreach ($reject in $rejects) {
+            $k++
+            $rejectPath = Join-Path $tmp ("reject_{0}.psd1" -f $k)
+            [System.IO.File]::WriteAllText($rejectPath, $reject.Text, [System.Text.UTF8Encoding]::new($false))
+            $threw = $false
+            try { $null = Import-NeedleManifest -Path $rejectPath } catch { $threw = $true }
+            Assert $threw ("manifest loader rejects {0}" -f $reject.Name)
+        }
     } finally {
         Remove-Item -LiteralPath $tmp -Recurse -Force -ErrorAction SilentlyContinue
     }
@@ -203,13 +298,12 @@ if (-not (Test-Path -LiteralPath $ManifestPath)) {
 }
 
 try {
-    $manifest = Import-PowerShellDataFile -LiteralPath $ManifestPath
+    $entries = @(Import-NeedleManifest -Path $ManifestPath)
 } catch {
     Write-Host "[check_rt_textual_invariants] ERROR -- manifest failed to parse: $_" -ForegroundColor Red
     exit 2
 }
 
-$entries = @($manifest.entries)
 if ($entries.Count -eq 0) {
     Write-Host "[check_rt_textual_invariants] ERROR -- manifest has no entries." -ForegroundColor Red
     exit 2
