@@ -33,6 +33,7 @@ trailing `-- cross-mod-ok` comment.
 
 | Consumer | Requires | Feature | Degrades to (when absent) |
 |---|---|---|---|
+| cim_dev | WOC | Optional #598 owner-only Cursed Hold-Tab frame, gated by enabled provider, exact current items-owned instance and local texture availability; no new RPC | Existing vanilla/Modded boolean presentation. A prior owner-only widget override is cleared on the next existing Tab callback when WOC is absent, disabled or unavailable. |
 | gut_dev | character_dialogue | Optional Dialogue browser and schema-1 staged audio-isolation owner (#998) | Browser reports unavailable without CD; old isolation protocol omits the toggle. No immediate or shadow-setting fallback. |
 | character_dialogue | gut_dev | Optional custom Dialogue tab registration (intentional Dev-only integration; stable GUI lacks this browser) | Standalone commands, keybind and natural dialogue policy remain functional. |
 | wt · wt_dev · ct · ct_dev · crt · enemy_tweaker | **bt** *(retired)* | Big Rebalance master gate (`is_br_active`) + `net_replay` diagnostics | BR sub-features inert — `if not (bt and bt.is_br_active) then return false`. bt is retired, so permanently inert by design (not stripped). |
