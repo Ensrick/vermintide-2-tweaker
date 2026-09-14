@@ -55,7 +55,7 @@ return {
         en = "Base power level for new crafts",
     },
     base_power_level_description = {
-        en = "Power level given to every weapon and jewelry item you craft at the Athanor or the standard bench (0 to 950 in steps of 50, default 300). Normal weapons cap at 300, though Chaos Wastes pickups can push higher.",
+        en = "Power level given to every weapon and jewelry item you craft at the Athanor or the standard bench (0 to 950 in steps of 25 in Mod Tweaker, default 300). Normal weapons cap at 300, though Chaos Wastes pickups can push higher.",
     },
     prefill_random_properties = {
         en = "Pre-fill new crafts with random properties + trait",

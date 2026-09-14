@@ -1,7 +1,7 @@
 local mod = get_mod("gut_dev")
 local Policy = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_simple_ui_bounds_policy")
 
--- Simple UI (Workshop 1389872347) compatibility, #314 phase 1.
+-- Simple UI (Workshop 1389872347) compatibility, #314 phases 1-2.
 --
 -- Upstream's window template writes cursor-derived coordinates directly in
 -- `window.drag` and accepts them without a viewport clamp. The resize path can
@@ -10,11 +10,14 @@ local Policy = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_simple_ui_bounds_po
 -- only its documented/public runtime surface: SimpleUI.windows.list and each
 -- window's position/size fields. It mutates the existing position table in
 -- place, preserving references held by consumer mods.
+-- Phase 2 (fitted dropdown lists) lives in the child `_gut_simple_ui_dropdowns.lua`,
+-- loaded from this file's tail; `Compat.phase` is the highest phase wired.
 
 local Compat = {
     policy = Policy,
     source_workshop_id = "1389872347",
-    phase = 1,
+    phase = 2,
+    dropdowns = nil, -- #314 phase-2 owner, assigned by the tail loader below
 }
 
 local _reported = setmetatable({}, { __mode = "k" })
@@ -38,6 +41,13 @@ function Compat.tick()
 
     local screen_width, screen_height = _screen_size()
     if not screen_width then return 0 end
+
+    -- Phase 2 runs first so an open list's hit box is fitted before this
+    -- frame's hover/click; a child failure must never cost window recovery.
+    local dropdowns = Compat.dropdowns
+    if type(dropdowns) == "table" and type(dropdowns.tick) == "function" then
+        pcall(dropdowns.tick, windows)
+    end
 
     local corrected = 0
     for _, window in pairs(windows) do
@@ -75,5 +85,17 @@ end
 
 mod._gut_simple_ui_compat = Compat
 mod._gut_simple_ui_bounds_policy = Policy
+
+-- #314 phase 2: the dropdown owner is this module's child (the entry point is
+-- at its size ceiling). It self-registers `issue314_simple_ui_phase2`; a load
+-- failure leaves phase-1 window recovery intact and is reported once.
+do
+    local ok, api = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_simple_ui_dropdowns")
+    if ok and type(api) == "table" then
+        Compat.dropdowns = api
+    else
+        pcall(printf, "[gut:314] dropdown module failed: %s", tostring(api))
+    end
+end
 
 return Compat

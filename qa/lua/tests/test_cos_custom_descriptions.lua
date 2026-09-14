@@ -136,14 +136,16 @@ return function(H, repo_root)
         H.equal(f.prints[1], "[cos:913] applied: registered custom-description bridge catalog_rows=5")
     end)
 
-    H.test("Cosmetics leaves the three unauthored spear descriptions visibly unavailable", function()
+    H.test("Cosmetics three spear descriptions resolve through the installed hook (#1567)", function()
         local f = fixture()
         for index = 1, 3 do
             local key = "ct_es_heavy_spear_deus_0" .. index .. "_description"
-            H.equal(f.loc[key], nil, "do not invent or borrow unrelated flavor text")
-            H.equal(f.env.Localize(key), "<" .. key .. ">")
+            local text = f.loc[key] and f.loc[key].en
+            H.truthy(type(text) == "string" and #text > 0, "authored spear text: " .. key)
+            H.equal(f.env.Localize(key), text)
         end
-        H.equal(f.calls.native, 3)
+        H.equal(f.calls.private, 3)
+        H.equal(f.calls.native, 0)
     end)
 
     H.test("Cosmetics description allowlist excludes unregistered and neighboring private keys", function()

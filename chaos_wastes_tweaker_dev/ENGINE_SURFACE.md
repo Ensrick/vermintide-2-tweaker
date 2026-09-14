@@ -10,7 +10,7 @@ the named `chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/*.lua`
 module. `§N` = a `docs/BUG_CLASSES.md` class; `#N` / "issue N" = a GitHub issue.
 
 **Dev/stable relationship.** This documents `chaos_wastes_tweaker_dev` (`ct_dev`,
-MOD_VERSION `0.7.340-dev`, friends-only Workshop 3733366926), the ACTIVE working
+MOD_VERSION `0.7.351-dev`, friends-only Workshop 3733366926), the ACTIVE working
 stream. `chaos_wastes_tweaker/` (`ct`, public Workshop 3712929235) is its
 read-only public twin; per repo `CLAUDE.md` all in-flight work happens in the dev
 dir and promotion is a separate user-triggered action, so this doc cites only
@@ -24,7 +24,7 @@ the wire-safety core (`buff_system.lua:66-97`/`:302-308`/`:430-454`,
 `deus_run_state_spec.lua:60`/`:85`, `deus_spawning.lua:249`/`:277-278`), the
 `MutatorHandler.tweak_pack_spawning_settings` arity trap (call site
 `main_path_spawning_generator.lua:327` + def `:748`), `initialize_mutators`
-(`:48`/`:85`), and every ct hook signature (strict mod-lint confirmed, 133 sites).
+(`:48`/`:85`), and every ct hook signature (strict mod-lint confirmed, 134 sites).
 The remaining `[src:]` citations (DeusChestExtension internals, DeusMechanism node
 flow, pickup spawner, per-boon `deus_power_up_settings` lines) are carried from the
 cited `ct_dev` module comments + `DEVELOPMENT.md` + `CHANGELOG.md`, which cite the
@@ -51,7 +51,7 @@ getters and reports readiness; it does not invoke setters or `SharedState.full_s
 
 ## Hook table
 
-**133 hook sites** (`mod:hook`/`mod:hook_safe`, strict mod-lint) + **6 VMF RPC channels**
+**134 hook sites** (`mod:hook`/`mod:hook_safe`, strict mod-lint) + **6 VMF RPC channels**
 (`mod:network_register`) + a set of engine-**table** contacts (registration/pool
 injection, not hooks - see Surface 2/5 notes). Grouped below into rows-of-concern.
 `[hook]` = full wrapper (`mod:hook`); `[safe]` = `mod:hook_safe` (post-callback,
@@ -106,6 +106,7 @@ pair (repo `CLAUDE.md` NON-NEGOTIABLE 8), flagged in the trap column.
 | `GameNetworkManager.hot_join_sync` [hook] / `remove_peer` [hook] | The server synchronizes entity systems and game mode before `PeerStates` adds the remote player to `PlayerManager` [src: `game_network_manager.lua:838-851`; `peer_states.lua:432,450`]; real disconnect removes the peer [src: `game_network_manager.lua:814-830`] | #426 synchronously marks the pre-roster peer pending and requires a positive CT acknowledgement. Unknown/missing CT strips every synchronized CT power-up/persistent/live-buff row before vanilla sync; real leave invalidates the acknowledgement | No timeout: positive parity passes, unknown degrades immediately. Strip failure does not call unsafe native sync and requests `NetworkServer.kick_peer` [src: `network_server.lua:476-484`]. Saved settings remain unchanged. These are the only CT hooks on both exact pairs. |
 | `GameModeDeus.local_player_game_starts` [safe] (`_ct_level_load_owner.lua`) / `evaluate_end_conditions` [hook] `:10140` / `_get_coins_amount_and_type` [hook] `:7048` | CW game-mode: local start (applies theme light tint), end-condition eval, coin pickup amount/type | Curse light tinting on injected levels, end-condition tuning, coin economy | GameMode hooks need all three modes where relevant (memory `reference_vt2_mission_gamemode_hooks_three_modes`); `local_player_game_starts` iterates `Level.units` for reflection-probe tint [src: `game_mode_deus.lua:358-378`] |
 | `GameModeDeus.player_left_game_session` [hook] / `_add_bot` [safe] / `remove_bot` [hook]; `DeusRunController.rpc_deus_set_initial_setup` [hook] | Departure is the last point with the human's keyed Deus state; bot add creates a fresh profile row; `remove_bot` returns the exact bot selected for a joining player; the setup RPC is the authoritative target-career loadout initializer and can race bot selection [src: `game_mode_deus.lua:204-235,540-607`; `deus_spawning.lua:397-405`; `deus_run_controller.lua:386-393`] | #465 transfers boons, persistent buffs, coin, and both CW weapon tiers human->bot and bot->human; same-career weapons copy exactly, cross-career handoffs project the two tiers onto target-compatible weapons; #466 seeds a newly created bot's independent economy ledger | Host-only and setting-gated; joining coin is the host's live balance; pre-setup handoffs defer once instead of suppressing vanilla initialization; writes are read back/rolled back; bot backend/talent/live slots refresh through the canonical bot equip path; CT-only identifiers are parity-filtered; no custom RPC or polling |
+| `GameModeDeus.mutators` [hook] (`_ct_progressive_modifier_runtime.lua`) | Composes the mission's mutator list once per level: settings list (node curse, minor modifiers, theme/node mutators) + live-event + run event mutators with dedup [src: `game_mode_deus.lua:667-686`; `deus_mechanism.lua:781-808`]; read once by `GameModeManager` to build the handler [src: `game_mode_manager.lua:85-99`] | #289 progressive modifier stacking: host-only, default-off, appends ONE curated package-free extra (`curse_empathy`/`curse_abundance_of_life`) from the third map onto a cursed mission | Vanilla runs first with returns preserved; the singular `node.curse` is never written; transport is vanilla activation/hot-join RPCs keyed by `NetworkLookup.mutator_templates` (`mutator_handler.lua:148-170,697-702`); clients ignore their own list (`:49-55`); marker `_ct_consolidated_game_mode_deus_mutators_hook` |
 | `BulldozerPlayer.spawn` [safe] `:4211` | Local player spawn | Post-spawn re-apply hook for run-dependent state | `hook_safe`; local player only |
 
 ### Surface 2 - Buff system + boon/power-up registration (owner: `docs/engine/10`, `/03`; `_ct_boon_registry.lua`, `_ct_meta_trait_boons.lua`, `_ct_combat_hooks.lua`)
@@ -402,16 +403,32 @@ test the `name_index` key, not the table. The audit
 (`_ct_progressive_elite_audit.lua`) attaches as an observer and adds no hook.
 The progression gate is documented in `PROGRESSIVE_ELITE_FEASIBILITY_323.md`.
 
-#289 is observation-only. `_ct_modifier_stack_audit.lua` reads the live Deus run
-controller, current node, `GameModeDeus.mutators()`, and the mutator handler's
-active map. It records deterministic host/client signatures but adds no hook,
-RPC, lookup, package load, graph mutation, or mutator activation. Vanilla already
-composes a single `node.curse`, list-valued `minor_modifier_group`, theme mutators,
-and list-valued event mutators [src: `deus_mechanism.lua:781-799`;
-`game_mode_deus.lua:667-683`]. The handler initializes/activates the full list and
-hot-join syncs every active entry [src: `mutator_handler.lua:85-111,148-166`].
-The singular graph curse remains unchanged; the curated event-list adapter gate
-is documented in `MODIFIER_STACK_FEASIBILITY_289.md`.
+#289 (0.7.351-dev) owns one full `mod:hook` on `GameModeDeus.mutators`
+(`_ct_progressive_modifier_runtime.lua`, marker
+`_ct_consolidated_game_mode_deus_mutators_hook`). Vanilla composes a single
+`node.curse`, list-valued `minor_modifier_group`, theme and node mutators, then
+live-event and run event mutators with name dedup into one list there
+[src: `deus_mechanism.lua:781-808`; `game_mode_deus.lua:667-686`], and
+`GameModeManager` reads it once per mission to build the handler
+[src: `game_mode_manager.lua:85-99`]. Vanilla runs FIRST; host-only and
+default-off, once two levels are completed and only when the node's own curse is
+live in that list, the hook appends ONE extra from the curated package-free pair
+`curse_empathy`/`curse_abundance_of_life`. The handler initializes/activates the
+full list, activation rides `rpc_activate_mutator_client` keyed by the vanilla
+lookup, the initialized map is shared state, hot join replays every active entry,
+and teardown deactivates them [src: `mutator_handler.lua:45-48,60-83,85-111,
+148-170,697-702,795-797`; `network_lookup.lua:266`]; clients never consult their
+own composed list [src: `mutator_handler.lua:49-55`], so no CT RPC, lookup,
+package or setting transport is added and the singular graph curse is never
+written. Paid-for facts: (1) `GameModeMapDeus.mutators` also folds in event
+mutators on the map screen [src: `game_mode_map_deus.lua:170-186`], so the hook
+targets the in-mission class only; (2) CT's own `_activate_mutator` gate leaves a
+disabled curse initialized but never activated, so the selector rejects disabled
+names up front; (3) the automatic `StateIngame` audit row on a client fires
+before the activation RPCs land, which is what produced the earlier
+`effective=5 active=0` capture. `_ct_modifier_stack_audit.lua` stays
+observation-only (no hook) and reports the runtime state plus the parity rule.
+The gate is documented in `MODIFIER_STACK_FEASIBILITY_289.md`.
 
 #253 is currently observation-only. `_ct_weave_curse_audit.lua` reads
 `WindSettings`, `MutatorTemplates`, `NetworkLookup.mutator_templates`, and six

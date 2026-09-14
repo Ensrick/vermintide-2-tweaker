@@ -216,6 +216,8 @@ return {
     gut_uitweaks_sync_tooltip      = { en = "With UI Tweaks (HideBuffs) installed, the HUD editor moves the buff, boss health, overcharge, and energy bars through UI Tweaks so the two never conflict. Requires UI Tweaks." },
     gut_vanilla_numeric_ui         = { en = "Numeric Health, Ammo, Cooldown" },
     gut_vanilla_numeric_ui_tooltip = { en = "Mirrors the vanilla Gameplay > HUD Customization option. Shows numeric health, ammo, and cooldown on the unit frames. Takes effect immediately." },
+    gut_simple_ui_fit_dropdowns         = { en = "Fit Simple UI Dropdowns" },
+    gut_simple_ui_fit_dropdowns_tooltip = { en = "With the Simple UI mod installed (used by UI Tweaks and other mods for their pop-up windows), keeps its dropdown lists on screen: a list opens upward when there is no room below it, shows only the rows that fit, scrolls with the mouse wheel, and reveals the selected option each time it opens. Window positions are kept on screen either way." },
     gut_vanilla_persistent_ammo         = { en = "Always Show Ammo Counter" },
     gut_vanilla_persistent_ammo_tooltip = { en = "Mirrors the vanilla Gameplay > HUD Customization option. Keeps your own ammo counter always visible. Requires a game restart." },
 

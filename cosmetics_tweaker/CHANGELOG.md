@@ -1,5 +1,51 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.224-dev (2026-09-14) -- item description parity census and vanilla typo bridge (#1567) [verify-fix]
+
+- Symptom: Rain reported on #913 that Saltzpyre's Shyish griffon-foot
+  illusion shows `<wh_deus_skin_02_magic_02_description>` instead of the
+  Shyish text, and the three Spear & Shield Spear illusions on Kruber's
+  Tuskgor Spear still fell back to their raw
+  `ct_es_heavy_spear_deus_0N_description` keys after the #913 bridge.
+- Vanilla evidence: `item_master_list_versus_rewards.lua:1653` and
+  `weapon_skins_versus_rewards.lua:1186` spell the key
+  `wh_deus_skin_02_magic_02_desciption`; `weapon_skins_morris.lua:573,588`
+  spell `wh_deus_01_magic_desciption` while `item_master_list_morris.lua:994`
+  carries the correct `wh_deus_01_magic_description`. The item card reads the
+  skin row (`scripts/helpers/ui_utils.lua:219-231`), so the misspelled skin
+  keys are what players see. An offline scan of every description key in the
+  decompiled item, skin, cosmetic and pose tables finds no other misspelling.
+- Fix: new data-only `_cos_description_parity.lua` owns the two typo aliases,
+  the resolved-text predicate and a bounded census. The existing singleton
+  `Localize` hook in `_cos_illusions.lua` routes each typo key to the first
+  sibling key vanilla resolves: the corrected spelling first, then the
+  Saltzpyre Shyish reward sibling `wh_fencing_sword_skin_07_magic_02_description`;
+  the Weavebound typo goes to its own correctly spelled item key. When no
+  sibling resolves, vanilla's `<key>` stays visible. No second hook.
+- Authored `ct_es_heavy_spear_deus_01/02/03_description` in
+  `cosmetics_tweaker_localization.lua`; all five registered custom illusions
+  now cross the hook with authored text.
+- New `/cos_1567_diag` in `_cos_diagnostics.lua` prints one
+  `[cos:1567:diag] census items=<n> skins=<n> keys=<n> resolved=<n> unresolved=<n> bridged=<n> custom=<n> custom_unresolved=<n> skipped_test=<n> sample=<keys>`
+  line (sample capped at 12 sorted keys; vanilla `test_*` rows are counted
+  but never listed). The callback body stays comma-free so the receipt is
+  command-owned.
+- `/cos_regression_test` gains `issue1567_item_description_parity`: every
+  registered custom description resolves to its authored text through the
+  live hook, each vanilla typo row still exists and follows its sibling text,
+  and the bounded census reports zero unresolved keys.
+- Offline `test_cos_description_parity.lua` (9 cases): alias data, routing
+  order and fallback through the installed hook, census counting and capping,
+  every failure branch of the named check, the exact `/cos_1567_diag` line,
+  and an optional decompile scan pinning the four typo rows as the only
+  misspelled description keys. `test_cos_custom_descriptions.lua` now expects
+  the three spear texts to resolve.
+
+**Test:** In the Modded Realm keep, open Saltzpyre's Griffon-foot illusions
+and read the Shyish and Weavebound descriptions, then open Kruber's Tuskgor
+Spear illusions and read the three Spear & Shield Spear descriptions. Run
+`/cos_1567_diag` and `/cos_regression_test`, then attach the newest log.
+
 ## 0.9.223-dev (2026-09-12) -- Weave Season 5-10 frame provider and census (#1000) [diagnostics-armed]
 
 - Why: the game atlases declare 24 Weave Season 5-10 portrait-frame sprites

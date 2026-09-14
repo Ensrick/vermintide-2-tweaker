@@ -3,11 +3,13 @@
 -- Owns the pure-diagnostic commands split out of the god file in the v0.9.77-dev
 -- Phase 1 OOP decomposition: /flush_log, /dump_glows, /dump_skin_rarities,
 -- /dump_all_names, /check_vmf, /probe_hat, /probe_cosmetics, #641's
--- /cos_offhand_name_inventory, #485's /cos_485_diag heroic-pose gap summary, and
--- #1000's /cos_1000_diag Weave frame census. All read engine globals
+-- /cos_offhand_name_inventory, #485's /cos_485_diag heroic-pose gap summary,
+-- #1000's /cos_1000_diag Weave frame census, and #1567's /cos_1567_diag item
+-- description parity census. All read engine globals
 -- (WeaponSkins / ItemMasterList / MaterialSettingsTemplates / Managers / atlas
 -- settings), immutable picker catalogues, the bounded pose evidence ledger, or
--- the data-only frame provider, and never mutate saved/equipped cosmetic state.
+-- the data-only frame / parity providers, and never mutate saved/equipped
+-- cosmetic state.
 --
 -- Owned by: cosmetics_tweaker.lua entry point. Consumed via: mod:dofile.
 -- Shared state: reads mod._cos.flush_log (the entry keeps _flush_log because the
@@ -888,4 +890,48 @@ mod:command("cos_1000_diag", "Census the resident Weave Season 5-10 portrait fra
         census.item_missing, census.cosmetic_missing, census.template_missing, census.lookup_missing)
     _flush_log()
     mod:echo("[cosmetics] Weave frame census written to the console log")
+end)
+
+-- #1567: one bounded census of every item / illusion description key against
+-- the live global Localize, including the two vanilla typo keys the
+-- _cos_illusions.lua hook routes to sibling text. Read-only: nothing is
+-- registered or mutated. The provider is published by _cos_illusions.lua,
+-- which loads after this module, so it is read at command time.
+local function _issue1567_description_census()
+    local parity = COS.description_parity
+    if type(parity) ~= "table" or type(parity.census) ~= "function" then
+        return nil
+    end
+    local skins = rawget(_G, "WeaponSkins")
+    local custom_keys = {}
+    for _, illusion in ipairs(COS.custom_illusions or {}) do
+        custom_keys[illusion.skin_key .. "_description"] = true
+    end
+    local report = parity.census(rawget(_G, "ItemMasterList"), skins and skins.skins,
+        rawget(_G, "Localize"),
+        { is_custom = function(key) return custom_keys[key] == true end })
+    report.sample_text = parity.sample_text(report)
+    return report
+end
+
+local function _issue1567_census_or_unavailable()
+    local ok, report = pcall(_issue1567_description_census)
+    if ok and type(report) == "table" then
+        return report
+    end
+    return { item_rows = 0, skin_rows = 0, keys = 0, resolved = 0, unresolved = -1,
+        bridged = -1, custom = 0, custom_unresolved = -1, skipped_test = 0,
+        sample_text = "-" }
+end
+
+-- Keep the callback body free of top-level commas: the live-test authority
+-- recognizes a command-owned receipt only through a direct, simple callback.
+mod:command("cos_1567_diag", "Census item and illusion description keys against resolved text", function()
+    local census = _issue1567_census_or_unavailable()
+    pcall(printf, "[cos:1567:diag] census items=%d skins=%d keys=%d resolved=%d unresolved=%d bridged=%d custom=%d custom_unresolved=%d skipped_test=%d sample=%s",
+        census.item_rows, census.skin_rows, census.keys, census.resolved, census.unresolved,
+        census.bridged, census.custom, census.custom_unresolved, census.skipped_test,
+        census.sample_text)
+    _flush_log()
+    mod:echo("[cosmetics] description parity census written to the console log")
 end)
