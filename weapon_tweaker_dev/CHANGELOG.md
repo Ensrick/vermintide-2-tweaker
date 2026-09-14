@@ -1,5 +1,12 @@
 # Weapon Tweaker Changelog
 
+## 0.12.334-dev (2026-09-13) -- mirror 0.12.333-beta; reissues unpublished 0.12.333-dev (#1436) [not-started]
+
+- Mirrors public beta `0.12.333`: the 0.12.333-dev version claim went stale
+  before upload, so the Grudge-Raker and Swiftbow ammunition-history content
+  is carried unchanged under this version. Adds no gameplay, hook, asset or
+  wire changes; in-game verification of both slices remains outstanding.
+
 ## 0.12.333-dev (2026-09-12) -- mirror Grudge-Raker ammunition history; reissues unpublished 0.12.332-dev (#1436) [not-started]
 
 - Mirrors public beta `0.12.332`: adds **Bardin's Grudge-Raker: Game Version
@@ -14,6 +21,8 @@
   historical Grudge-Raker recreation or completion of #1436.
 - Reissues the never-published 0.12.332-dev Swiftbow mirror under this
   version; in-game verification of both slices remains outstanding.
+- Never published to the Workshop: its version claim went stale before
+  upload, and this content is carried unchanged into 0.12.334-dev.
 
 ## 0.12.332-dev (2026-09-06) -- mirror Swiftbow ammunition history (#1436)
 

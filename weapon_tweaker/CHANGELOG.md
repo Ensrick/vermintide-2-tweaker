@@ -1,5 +1,12 @@
 # Weapon Tweaker Changelog
 
+## 0.12.333-beta (2026-09-13) -- reissue of 0.12.332-beta so the dev mirror can republish (#1436) [not-started]
+
+- Reissues 0.12.332-beta unchanged: the paired dev mirror's version claim
+  went stale before it could upload, and the stream parity gate requires
+  both streams to move together. Adds no gameplay, hook, asset or wire
+  changes; in-game verification of both ammunition slices remains outstanding.
+
 ## 0.12.332-beta (2026-09-12) -- Grudge-Raker ammunition history; reissues unpublished 0.12.331-beta (#1436) [not-started]
 
 - Adds **Bardin's Grudge-Raker: Game Version 6.10.0 (Ammunition Only)** to
