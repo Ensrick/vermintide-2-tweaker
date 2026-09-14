@@ -50,6 +50,13 @@ return function(H, repo_root)
         local source_actions = { attack = { damage = 10 } }
         local player = {}
         for i = 1, #STAT_NAMES do player[STAT_NAMES[i]] = {} end
+        -- cog-shaped (weapon-prefixed) and lake-shaped (bare breed) DLC rows.
+        player.weapon_kills_per_breed = {
+            test_hammer = { [source_name] = { source = "player_data", value = 0,
+                database_name = "test_hammer_" .. source_name, name = source_name } },
+            test_blade = { [source_name] = { source = "player_data", value = 0,
+                database_name = source_name, name = source_name } },
+        }
         local readiness = { ready = false, breed_name = nil, threat_seeded = false }
         local localization, portraits, grudge_names = {}, {}, {}
         local threat = {}
@@ -61,10 +68,12 @@ return function(H, repo_root)
                 breeds = lookup(), damage_sources = lookup(),
                 statistics_path_names = statistics_lookup(),
             },
-            network_constants = { damage_source_id = { max = cap or 2 } },
+            network_constants = { damage_source_id = { max = cap or 2 },
+                damage_hotjoin_sync = { max = 4096 } },
             network = { type_info = function(kind)
                 if kind == "statistics_path_lookup" then return { max = cap or 2 } end
                 if kind == "damage_source_id" then return { max = cap or 2 } end
+                if kind == "damage_hotjoin_sync" then return { max = 4096 } end
                 error("unexpected network type: " .. tostring(kind))
             end },
             clone = clone,
@@ -137,6 +146,12 @@ return function(H, repo_root)
         H.equal(rawget(rt.network_lookup.statistics_path_names, 2), nil)
         for i = 1, #STAT_NAMES do
             H.equal(rawget(rt.statistics.player[STAT_NAMES[i]], name), nil)
+        end
+        local weapons = rt.statistics.player.weapon_kills_per_breed
+        for weapon, per_breed in next, type(weapons) == "table" and weapons or {} do
+            if type(per_breed) == "table" then
+                H.equal(rawget(per_breed, name), nil, "weapon row leaked: " .. weapon)
+            end
         end
         H.equal(rawget(rt.package_settings.alias_to_breed, name), nil)
         H.equal(rt.package_settings.breed_to_aliases[fx.source_name], fx.source_aliases)
@@ -349,6 +364,7 @@ return function(H, repo_root)
             runtime_check_order = {},
         }
         capture.validate_all = function() return true end
+        capture.validate_one = function() return nil, "capture_only" end
         local capture_registrar = {
             register = function(spec)
                 capture.specs[#capture.specs + 1] = spec
@@ -357,6 +373,9 @@ return function(H, repo_root)
             validate_all_registered = function()
                 return capture.validate_all()
             end,
+            validate_registered = function(spec) return capture.validate_one(spec) end,
+            declared_specs = function() return { unpack(capture.specs) } end,
+            marker_key = "_et_custom_breed_registration",
         }
         local ET = {
             BossIdeasCore = Core,
@@ -450,6 +469,18 @@ return function(H, repo_root)
         local chosen_aliases = { "chosen_source_alias" }
         local player = {}
         for i = 1, #STAT_NAMES do player[STAT_NAMES[i]] = {} end
+        local function dlc_rows(prefix)
+            local rows = {}
+            for _, source in next, { warlord_spec.source_breed, chosen_spec.source_breed } do
+                rows[source] = { source = "player_data", value = 0, name = source,
+                    database_name = prefix and (prefix .. "_" .. source) or source }
+            end
+            return rows
+        end
+        player.weapon_kills_per_breed = {
+            dr_2h_cog_hammer = dlc_rows("dr_2h_cog_hammer"),
+            markus_questingknight_career_skill_weapon = dlc_rows(nil),
+        }
         local events, threat = {}, {}
         local runtime = {
             breeds = {
@@ -464,10 +495,12 @@ return function(H, repo_root)
                 breeds = lookup(), damage_sources = lookup(),
                 statistics_path_names = statistics_lookup(),
             },
-            network_constants = { damage_source_id = { max = 3 } },
+            network_constants = { damage_source_id = { max = 3 },
+                damage_hotjoin_sync = { max = 8191.75 } },
             network = { type_info = function(kind)
                 if kind == "statistics_path_lookup" then return { max = 3 } end
                 if kind == "damage_source_id" then return { max = 3 } end
+                if kind == "damage_hotjoin_sync" then return { max = 8191.75 } end
                 error("unexpected network type: " .. tostring(kind))
             end },
             clone = clone,
@@ -542,7 +575,7 @@ return function(H, repo_root)
         H.equal(warlord_spec.source_breed, "skaven_storm_vermin_champion")
         H.equal(warlord_spec.race, "skaven")
         H.equal(warlord_spec.fingerprint,
-            "et-custom-breed:v3:skaven-warlord:champion-pristine")
+            "et-custom-breed:v4:skaven-warlord:champion-pristine")
         H.equal(#warlord_spec.presentations, 15)
         H.equal(warlord_spec.presentations[1].target,
             capture.mod._et_warlord2_loc_strings)
@@ -560,7 +593,7 @@ return function(H, repo_root)
         H.equal(chosen_spec.source_breed, "chaos_warrior")
         H.equal(chosen_spec.race, "chaos")
         H.equal(chosen_spec.fingerprint,
-            "et-custom-breed:v4:chosen-greataxe:boss-parity")
+            "et-custom-breed:v5:chosen-greataxe:boss-parity")
         H.equal(#chosen_spec.presentations, 1)
         H.equal(chosen_spec.presentations[1].target,
             capture.mod._et_warlord2_loc_strings)
@@ -1489,8 +1522,8 @@ return function(H, repo_root)
         fallback.runtime.network = {
             type_info = function(kind)
                 H.truthy(kind == "damage_source_id"
-                    or kind == "statistics_path_lookup")
-                return { max = 2 }
+                    or kind == "statistics_path_lookup" or kind == "damage_hotjoin_sync")
+                return { max = kind == "damage_hotjoin_sync" and 4096 or 2 }
             end,
         }
         H.equal(Registrar.register(fallback.spec, fallback.runtime), true)
@@ -1503,11 +1536,14 @@ return function(H, repo_root)
             "exact existing rows must not require capacity authority")
     end)
 
-    require("test_et_custom_breed_registrar_adversarial")(H, {
+    local context = {
         fixture = fixture, Registrar = Registrar,
         assert_unpublished = assert_unpublished, STAT_NAMES = STAT_NAMES,
         clone = clone, Lookup = Lookup, STRICT = STRICT, repo_root = repo_root,
         capture_actual_owner_specs = capture_actual_owner_specs,
+        actual_consumer_runtime = actual_consumer_runtime,
         with_raw_bindings = with_raw_bindings,
-    })
+    }
+    require("test_et_custom_breed_registrar_adversarial")(H, context)
+    require("test_et_custom_breed_registrar_contract")(H, context)
 end

@@ -406,9 +406,33 @@ stable `stats_id`, caps 16 rows and 1,000,000 per event, resets on StateIngame
 enter/exit and `on_disabled`, and mirrors #437's keep/evict/discard decisions
 through a notify-only retention listener. The presenter adds the four rows only
 when Host Statistics is enabled; #1414's exit sidecar copies them before the
-ledger retires, and non-host peers show them unavailable until #1573. No
+ledger retires, and non-host peers answer through the #1573 transport below. No
 statistic definition, lookup, RPC or vanilla payload is added. `[gut:272] custom
 credit` receipts cap at six per family and `custom refusal` at eight per process.
+
+#1573 adds a second VMF transport owner (`_gut_custom_stat_sync.lua`, policy
+`_gut_custom_stat_sync_policy.lua`) and no engine hook. New statistics cannot
+ride vanilla hot-join sync: the synced path lookup is frozen at load [src:
+`scripts/network_lookup/network_lookup.lua:2251-2281`], synced values are capped
+at 65535 [src: `scripts/managers/backend/statistics_database.lua:210-221`], and
+an unknown definition errors on receive [src: `:301-305`]. The transport binds
+#1448's wire policy module unchanged (envelope, chunking, per-peer host
+sessions, readiness pull, ordering) to the separate exact channel
+`gut_custom_stat_snapshot_v1` (schema 1) and refuses to load if the two
+contracts drift. Only the payload differs: a sorted roster of at most four
+stable `stats_id` values plus up to four positional topic rows, bounded so the
+worst case fits the existing 1024-byte/eight-chunk plan. The host builds its
+answer from the #1570-#1572 ledger owner's detached read for the same grouped
+roster the presenter uses [src: `scripts/helpers/scoreboard_helper.lua:344-436`];
+the client validates host identity, generation, sequence, the current grouped
+roster, topic/player caps, values and payload size, then exposes only
+acknowledged cells to the ledger owner's presenter API, which routes every
+non-host read to that snapshot (nil until one is valid, so unavailable rows
+stay a dash). VMF delivers a mod RPC only to a peer whose own dictionary
+carries this mod and channel [src: VMF `network.lua:40-51,186-189`], so no-GUT
+peers never receive it. The ledger owner loads this child last, so its
+StateIngame clear runs after the presenter capture and the ledger reset.
+`[gut:1573] raw` receipts have a 24-line process cap.
 
 #1151 repairs vanilla's Damage Taken award at the accumulation seam.
 `EndViewStateScore._group_scores_by_player_and_topic` seeds `highscore` at zero,

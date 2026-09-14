@@ -296,7 +296,7 @@
         }
         @{
             Marker='[wt:282]'; ModIds=@('wt','wt_dev')
-            ModTrees=@{wt='18c3700aeb91f929006afdbc04adf92c4a1056bb';wt_dev='3f261ee1ad6727f803c90431e4502fb5429ec04a'}
+            ModTrees=@{wt='72f74ff7376bb99497bf97747a716d1e141957e8';wt_dev='923195754d59907fdd88b32ef6a9b9691c528bff'}
             SourcesByMod=@{
                 wt='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_deepwood_runtime.lua'
                 wt_dev='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_deepwood_runtime.lua'
@@ -399,7 +399,7 @@
         }
         @{
             Marker='[gt:753]'; ModId='gt_dev'
-            ModTrees=@{gt_dev='37ef77d0002279689044477d93bf859137b2ee69'}
+            ModTrees=@{gt_dev='89dbdd11cf804967d171b76b3cee7f082e484cb1'}
             SourcesByMod=@{gt_dev='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_diag_disconnect_failure.lua'}
             Signature='[gt:753] edge=steam_check steam_connected=%s backend_disconnected=%s observed=%s'
             Bound='one receipt per observed Steam connection-state edge; unchanged title-network checks are silent'
@@ -411,7 +411,7 @@
         }
         @{
             Marker='[gt:753]'; ModId='gt_dev'
-            ModTrees=@{gt_dev='37ef77d0002279689044477d93bf859137b2ee69'}
+            ModTrees=@{gt_dev='89dbdd11cf804967d171b76b3cee7f082e484cb1'}
             SourcesByMod=@{gt_dev='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_diag_disconnect_failure.lua'}
             Signature='[gt:753] edge=playfab_disconnect steam_connected=%s backend_disconnected=%s last_reason=%s observed=%s'
             Bound='one receipt per observed backend false-to-true disconnected edge'
@@ -423,7 +423,7 @@
         }
         @{
             Marker='[gt:753]'; ModId='gt_dev'
-            ModTrees=@{gt_dev='37ef77d0002279689044477d93bf859137b2ee69'}
+            ModTrees=@{gt_dev='89dbdd11cf804967d171b76b3cee7f082e484cb1'}
             SourcesByMod=@{gt_dev='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_diag_disconnect_failure.lua'}
             Signature='[gt:753] edge=network_client reason=%s channel_before=%s channel_after=%s steam_connected=%s backend_disconnected=%s observed=%s'
             Bound='one receipt per observed network-client failure edge; unchanged update frames are silent'
@@ -435,7 +435,7 @@
         }
         @{
             Marker='[gt:753]'; ModId='gt_dev'
-            ModTrees=@{gt_dev='37ef77d0002279689044477d93bf859137b2ee69'}
+            ModTrees=@{gt_dev='89dbdd11cf804967d171b76b3cee7f082e484cb1'}
             SourcesByMod=@{gt_dev='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_diag_disconnect_failure.lua'}
             Signature='[gt:753] armed: steam_check=1 playfab_disconnect=1 network_client=1 transition_only=yes'
             Bound='one terminal armed receipt during module evaluation'
@@ -447,7 +447,7 @@
         }
         @{
             Marker='[gut:630]'; ModId='gut_dev'
-            ModTrees=@{gut_dev=@('a19bc8eb88064f106db72a36cae3a0978648c6f2')}
+            ModTrees=@{gut_dev=@('69751bcfc07eb9e536dc8b7b157e9c93fb382d76')}
             SourcesByMod=@{gut_dev='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_dx12_fence630.lua'}
             Signature='[gut:630] frame_evidence draw=%d visible_rows=%s resource_candidates=%s'
             Bound='focus/tab/Weapons-expansion edge evidence under one absolute 48-row probe budget'
@@ -465,7 +465,7 @@
         }
         @{
             Marker='[gt:347]'; ModId='gt_dev'
-            ModTrees=@{gt_dev='37ef77d0002279689044477d93bf859137b2ee69'}
+            ModTrees=@{gt_dev='89dbdd11cf804967d171b76b3cee7f082e484cb1'}
             SourcesByMod=@{gt_dev='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_pickups.lua'}
             Signature='[gt:347] phase=%s '
             Bound='one signature-deduplicated phase row under the explicit probe 16-record cap'
@@ -477,7 +477,7 @@
         }
         @{
             Marker='[gt:347]'; ModId='gt_dev'
-            ModTrees=@{gt_dev='37ef77d0002279689044477d93bf859137b2ee69'}
+            ModTrees=@{gt_dev='89dbdd11cf804967d171b76b3cee7f082e484cb1'}
             SourcesByMod=@{gt_dev='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_pickups.lua'}
             Signature='[gt:347] trace complete records=%d classifications=%d'
             Bound='one terminal cap row when the explicit probe reaches its 16-record budget'
@@ -489,7 +489,7 @@
         }
         @{
             Marker='[gt:347]'; ModId='gt_dev'
-            ModTrees=@{gt_dev='37ef77d0002279689044477d93bf859137b2ee69'}
+            ModTrees=@{gt_dev='89dbdd11cf804967d171b76b3cee7f082e484cb1'}
             SourcesByMod=@{gt_dev='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_pickups.lua'}
             Signature='[gt:347] ARMED max_records=%d max_classifications=%d instant_pickup=%s greedy_pickup=%s'
             Bound='one armed receipt per explicit /gt_chest_pickup_probe invocation'
@@ -501,7 +501,7 @@
         }
         @{
             Marker='[gt:1143]'; ModId='gt_dev'
-            ModTrees=@{gt_dev='37ef77d0002279689044477d93bf859137b2ee69'}
+            ModTrees=@{gt_dev='89dbdd11cf804967d171b76b3cee7f082e484cb1'}
             SourcesByMod=@{gt_dev='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_dev_heal.lua'}
             Signature='[gt:1143] heal result=%s route=%s before=%s after=%s max=%s wounded_before=%s wounded_after=%s elapsed=%.3f reason=%s record=%d'
             Bound='one terminal success, rejection, timeout, or lifecycle-cancel receipt per explicit /heal request transaction'
@@ -537,7 +537,7 @@
             GuardAnchors=@(@{Tokens=@('if','drained','>','0','then')})
         }
         @{
-            Marker='[gut:938]';ModId='gut_dev';ModTrees=@{gut_dev=@('a19bc8eb88064f106db72a36cae3a0978648c6f2')}
+            Marker='[gut:938]';ModId='gut_dev';ModTrees=@{gut_dev=@('69751bcfc07eb9e536dc8b7b157e9c93fb382d76')}
             SourcesByMod=@{gut_dev='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_damage_numbers.lua'}
             Signature='[gut:938] rt skip: NetworkConstants.damage.max unavailable; policy checked against fallback %.2f'
             Bound='at most one fallback notice per explicit issue938 regression-check invocation'
@@ -619,7 +619,7 @@
             )
         }
         @{
-            Marker='[event-inject:393]';ModId='event_tweaker';ModTrees=@{event_tweaker='4d509704323308c24e3ad00929159b1abeb7330c'}
+            Marker='[event-inject:393]';ModId='event_tweaker';ModTrees=@{event_tweaker='f52b1ff5d8347414b65687cc35fe4925c4ee5e72'}
             SourcesByMod=@{event_tweaker='event_tweaker/scripts/mods/event_tweaker/_evt_diagnostics.lua'}
             Signature='[event-inject:393] settled verdict=%s evidence=%s | injected=[%s] max_intensity=%s decay_per_second=%s decay_delay=%s add_per_pct_dmg=%s delay_horde=%s delay_specials=%s delay_mini_patrol=%s cached_horde=%s cached_specials=%s cached_mini_patrol=%s'
             Bound='one settled receipt per weak-key Pacing instance'
@@ -630,7 +630,7 @@
             )
         }
         @{
-            Marker='[wt:388]';ModIds=@('wt','wt_dev');ModTrees=@{wt='18c3700aeb91f929006afdbc04adf92c4a1056bb';wt_dev='3f261ee1ad6727f803c90431e4502fb5429ec04a'}
+            Marker='[wt:388]';ModIds=@('wt','wt_dev');ModTrees=@{wt='72f74ff7376bb99497bf97747a716d1e141957e8';wt_dev='923195754d59907fdd88b32ef6a9b9691c528bff'}
             SourcesByMod=@{wt='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_overcharge_presentation.lua';wt_dev='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_overcharge_presentation.lua'}
             Signature='[wt:388] Deepwood overcharge HUD hook installed';Bound='one HUD-hook installation receipt per module lifetime'
             EmitterAnchors=@(@{Tokens=@('printf','(','String:[wt:388] Deepwood overcharge HUD hook installed',')')})
@@ -640,7 +640,7 @@
             )
         }
         @{
-            Marker='[wt:388]';ModIds=@('wt','wt_dev');ModTrees=@{wt='18c3700aeb91f929006afdbc04adf92c4a1056bb';wt_dev='3f261ee1ad6727f803c90431e4502fb5429ec04a'}
+            Marker='[wt:388]';ModIds=@('wt','wt_dev');ModTrees=@{wt='72f74ff7376bb99497bf97747a716d1e141957e8';wt_dev='923195754d59907fdd88b32ef6a9b9691c528bff'}
             SourcesByMod=@{wt='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_overcharge_presentation.lua';wt_dev='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_overcharge_presentation.lua'}
             Signature='[wt:388] Deepwood overcharge profile applied career=%s transport=owner-authoritative';Bound='one apply receipt per inactive-to-active extension transition'
             EmitterAnchors=@(@{Tokens=@('printf','(','String:[wt:388] Deepwood overcharge profile applied career=%s transport=owner-authoritative')})
@@ -650,7 +650,7 @@
             )
         }
         @{
-            Marker='[wt:388]';ModIds=@('wt','wt_dev');ModTrees=@{wt='18c3700aeb91f929006afdbc04adf92c4a1056bb';wt_dev='3f261ee1ad6727f803c90431e4502fb5429ec04a'}
+            Marker='[wt:388]';ModIds=@('wt','wt_dev');ModTrees=@{wt='72f74ff7376bb99497bf97747a716d1e141957e8';wt_dev='923195754d59907fdd88b32ef6a9b9691c528bff'}
             SourcesByMod=@{wt='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_overcharge_presentation.lua';wt_dev='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_overcharge_presentation.lua'}
             Signature='[wt:388] Deepwood overcharge profile restored';Bound='one restore receipt per active-to-inactive extension transition'
             EmitterAnchors=@(@{Tokens=@('printf','(','String:[wt:388] Deepwood overcharge profile restored',')')})
@@ -705,7 +705,7 @@
             )
         }
         @{
-            Marker='[gut:250]';ModId='gut_dev';ModTrees=@{gut_dev=@('a19bc8eb88064f106db72a36cae3a0978648c6f2')}
+            Marker='[gut:250]';ModId='gut_dev';ModTrees=@{gut_dev=@('69751bcfc07eb9e536dc8b7b157e9c93fb382d76')}
             SourcesByMod=@{gut_dev='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_tab_talent_refresh.lua'}
             Signature='[gut:250] career=%s active=%s tiers=%s duplicates=%d unmapped=%d repair=%d/%d';Bound='signature-deduplicated talent repairs under the policy absolute log cap'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[gut:250] career=%s active=%s tiers=%s duplicates=%d unmapped=%d repair=%d/%d')})
@@ -725,7 +725,7 @@
             )
         }
         @{
-            Marker='[gut:257]';ModId='gut_dev';ModTrees=@{gut_dev=@('a19bc8eb88064f106db72a36cae3a0978648c6f2')}
+            Marker='[gut:257]';ModId='gut_dev';ModTrees=@{gut_dev=@('69751bcfc07eb9e536dc8b7b157e9c93fb382d76')}
             SourcesByMod=@{gut_dev='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_cutscenes.lua'}
             Signature='[gut:257] seq=%s phase=%s level=%s disposition=%s skip_next=%s guard=%s active_camera=%s on_activate=%s on_skip=%s hud=%s letterbox=%s fade_in=%s hold=%s fade_out=%s auto=%s capped=%s';Bound='absolute 32-event cap plus one terminal cap row per cutscene-system generation'
             EmitterAnchors=@(@{Tokens=@('_printf','(','String:[gut:257] seq=%s phase=%s level=%s disposition=%s skip_next=%s guard=%s active_camera=%s on_activate=%s on_skip=%s hud=%s letterbox=%s fade_in=%s hold=%s fade_out=%s auto=%s capped=%s')})
@@ -735,7 +735,7 @@
             )
         }
         @{
-            Marker='[gut:245]';ModId='gut_dev';ModTrees=@{gut_dev=@('a19bc8eb88064f106db72a36cae3a0978648c6f2')}
+            Marker='[gut:245]';ModId='gut_dev';ModTrees=@{gut_dev=@('69751bcfc07eb9e536dc8b7b157e9c93fb382d76')}
             SourcesByMod=@{gut_dev='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_tab_property_refresh.lua'}
             Signature='[gut:245] slot=%s backend_id=%s properties=%s refresh=%d/%d';Bound='shared absolute live-loadout refresh log cap'
             EmitterAnchors=@(@{Tokens=@('_printf','(','String:[gut:245] slot=%s backend_id=%s properties=%s refresh=%d/%d')})
@@ -836,7 +836,7 @@
     # siblings.
     ReceiptRouteOverrides = @(
         @{
-            ModId='gut_dev'; ModTrees=@('a19bc8eb88064f106db72a36cae3a0978648c6f2')
+            ModId='gut_dev'; ModTrees=@('69751bcfc07eb9e536dc8b7b157e9c93fb382d76')
             Source='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_camera.lua'
             Marker='[gut:209]'
             Signature='[gut:209] %s | effect=%s id=%s tp=%s callsite=%s%s'
@@ -867,7 +867,7 @@
             )
         }
         @{
-            ModId='gut_dev'; ModTrees=@('a19bc8eb88064f106db72a36cae3a0978648c6f2')
+            ModId='gut_dev'; ModTrees=@('69751bcfc07eb9e536dc8b7b157e9c93fb382d76')
             Source='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_ba_compendium_tabs.lua'
             Marker='[gut:217]'
             Signature='[gut:217] compendium tabs injected into HeroWindowPanelConsole definitions (Armory, Bestiary)'
@@ -881,7 +881,7 @@
             )
         }
         @{
-            ModId='gut_dev'; ModTrees=@('a19bc8eb88064f106db72a36cae3a0978648c6f2')
+            ModId='gut_dev'; ModTrees=@('69751bcfc07eb9e536dc8b7b157e9c93fb382d76')
             Source='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_native_loadouts.lua'
             Marker='[gut_dev:NATIVE_LOADOUTS]'
             Signature='[gut_dev:NATIVE_LOADOUTS] #375 selected-read career=%s caller=%s requested=%s resolved=%s selected=%s row=[melee=%s ranged=%s] canonical=[melee=%s ranged=%s] served=[slot=%s value=%s source=%s]'
@@ -895,7 +895,7 @@
             )
         }
         @{
-            ModId='wt_dev'; ModTree='3f261ee1ad6727f803c90431e4502fb5429ec04a'
+            ModId='wt_dev'; ModTree='923195754d59907fdd88b32ef6a9b9691c528bff'
             Source='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_weapon_action_lifecycle.lua'
             Marker='[wt:661]'
             Signature='[wt:661] wield-boundary item=%s career=%s template=%s result=%s trace=%d/%d'
@@ -1076,7 +1076,7 @@
             )
         }
         @{
-            ModId='gt_dev'; ModTree='37ef77d0002279689044477d93bf859137b2ee69'
+            ModId='gt_dev'; ModTree='89dbdd11cf804967d171b76b3cee7f082e484cb1'
             Source='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_hazard_resistance.lua'
             Marker='[gt:488]'; AddRoute=$true
             Signature='[gt:488] bot-hazard type=%s milestone=%s active_before=%d active_after=%d damage_in=%.3f damage_out=%.3f record=%d/%d'
@@ -1092,7 +1092,7 @@
             )
         }
         @{
-            ModId='gt_dev'; ModTree='37ef77d0002279689044477d93bf859137b2ee69'
+            ModId='gt_dev'; ModTree='89dbdd11cf804967d171b76b3cee7f082e484cb1'
             Source='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_improved_bot_combat.lua'
             Marker='[gt:488]'; AddRoute=$true
             Signature='[gt:488] ratling-shield state=%d/%d wielded=%s wielded_template=%s wielded_shield=%s melee_template=%s melee_shield=%s blocking=%s projectile_hit=%s victim_self=%s taking_cover=%s input=%s mutation=0'
@@ -1171,7 +1171,7 @@
             )
         }
         @{
-            ModId='enemy_tweaker'; ModTree='33a4ff60f9d4eabd1b20c6a281f7fb21a6ae95f9'
+            ModId='enemy_tweaker'; ModTree='7ae383938e2791c8eb1b2af01168b1004e855796'
             Source='enemy_tweaker/scripts/mods/enemy_tweaker/_et_enemy_modifiers.lua'
             Marker='[et:453]'; AddRoute=$true
             Signature='[et:453] modifier-audit reason=%s modifiers=%d template_missing=%d wire_missing=%d enhancement_missing=%d child_missing=%d child_wire_missing=%d function_missing=%d special=%d boss=%d elite=%d lord=%d behavior_changes=0'
@@ -1186,7 +1186,7 @@
             )
         }
         @{
-            ModId='enemy_tweaker'; ModTree='33a4ff60f9d4eabd1b20c6a281f7fb21a6ae95f9'
+            ModId='enemy_tweaker'; ModTree='7ae383938e2791c8eb1b2af01168b1004e855796'
             Source='enemy_tweaker/scripts/mods/enemy_tweaker/_et_enemy_modifiers.lua'
             Marker='[et:453]'; AddRoute=$true
             Signature='[et:453] %s family=%s enhancement=%s buff=%s template=%s wire=%s enhancement_contains=%s chain_templates=%d chain_functions=%d chain_gaps=%d capped=%s'
@@ -1202,7 +1202,7 @@
             )
         }
         @{
-            ModId='enemy_tweaker'; ModTree='33a4ff60f9d4eabd1b20c6a281f7fb21a6ae95f9'
+            ModId='enemy_tweaker'; ModTree='7ae383938e2791c8eb1b2af01168b1004e855796'
             Source='enemy_tweaker/scripts/mods/enemy_tweaker/_et_enemy_modifiers.lua'
             Marker='[et:453]'; AddRoute=$true
             Signature='[et:453] live category=%s breed=%s sample=%d/%d eligible=%d eligible_sample=%s rejected_banned=%d rejected_buff=%d rejected_prereq=%d buff=%s health=%s blackboard=%s nav=%s position=%s side=%s race=%s go_id=%s existing_enhancements=%d mutation=0'
@@ -1218,7 +1218,7 @@
             )
         }
         @{
-            ModId='enemy_tweaker'; ModTree='33a4ff60f9d4eabd1b20c6a281f7fb21a6ae95f9'
+            ModId='enemy_tweaker'; ModTree='7ae383938e2791c8eb1b2af01168b1004e855796'
             Source='enemy_tweaker/scripts/mods/enemy_tweaker/_et_enemy_modifiers.lua'
             Marker='[et:453]'; AddRoute=$true
             Signature='[et:453] modifier-audit ready modifiers=%d gaps=%d command=/et_modifier_audit behavior_changes=0'
@@ -1375,7 +1375,7 @@
             )
         }
         @{
-            ModId='enemy_tweaker'; ModTree='33a4ff60f9d4eabd1b20c6a281f7fb21a6ae95f9'
+            ModId='enemy_tweaker'; ModTree='7ae383938e2791c8eb1b2af01168b1004e855796'
             Source='enemy_tweaker/scripts/mods/enemy_tweaker/_et_skaven_warlord_breed.lua'
             Marker='[et:324]'; AddRoute=$true
             Signature='[et:324] spawn#%d t=+%ss %s'
@@ -1389,7 +1389,7 @@
             )
         }
         @{
-            ModId='event_tweaker'; ModTree='4d509704323308c24e3ad00929159b1abeb7330c'
+            ModId='event_tweaker'; ModTree='f52b1ff5d8347414b65687cc35fe4925c4ee5e72'
             Source='event_tweaker/scripts/mods/event_tweaker/_evt_diag_tzeentch_twins.lua'
             Marker='[et:1149t]'; AddRoute=$true
             Signature='[et:1149t] %s'

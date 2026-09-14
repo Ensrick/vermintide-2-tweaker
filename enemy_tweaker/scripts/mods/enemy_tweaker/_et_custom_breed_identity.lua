@@ -10,13 +10,13 @@ M.SPECS = {
     {
         name = "et_chosen_greataxe",
         owner = "enemy_tweaker.chosen_greataxe",
-        fingerprint = "et-custom-breed:v4:chosen-greataxe:boss-parity",
+        fingerprint = "et-custom-breed:v5:chosen-greataxe:boss-parity",
         donor = "chaos_warrior",
     },
     {
         name = "et_skaven_warlord",
         owner = "enemy_tweaker.skaven_warlord",
-        fingerprint = "et-custom-breed:v3:skaven-warlord:champion-pristine",
+        fingerprint = "et-custom-breed:v4:skaven-warlord:champion-pristine",
         donor = "skaven_storm_vermin_champion",
     },
 }

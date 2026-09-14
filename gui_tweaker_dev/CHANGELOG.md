@@ -1,5 +1,39 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.348-dev (2026-09-13) - synchronize host custom statistics to clients (#1573) [verify-fix]
+
+- Non-host peers with **Expanded Scoreboard** and **Host Statistics** enabled
+  now pull the host's Friendly Fire Damage, Melee Damage, Ranged Damage and
+  Permanent Health Restored rows over one separate exact channel,
+  `gut_custom_stat_snapshot_v1` (schema 1). The channel binds issue 1448's wire
+  policy unchanged: the same eight-field envelope, 144-byte chunks under the
+  400-byte packed ceiling, per-peer host sessions with replay and rate floors,
+  the four-attempt readiness pull with VMF re-handshake, and host/generation/
+  sequence ordering (`_gut_custom_stat_sync.lua`, policy
+  `_gut_custom_stat_sync_policy.lua`). Only the payload differs: a sorted
+  roster of at most four `stats_id` values and up to four positional topic
+  rows.
+- The host answers from the issues 1570-1572 ledger owner's own detached read, so a
+  known player without a ledger row travels as a real zero and no second
+  ledger exists. The client authenticates the current host, validates
+  generation, sequence, the current grouped roster, topic and player caps,
+  every value and the total payload size, then replaces only acknowledged
+  detached cells; an unacknowledged player or topic, an expired snapshot, a
+  host migration, or a mixed/no-GUT host keeps the rows unavailable. The
+  ledger owner's presenter API routes non-host reads to that snapshot, so
+  issue 1414's end-screen sidecar copies the synced rows unchanged.
+- The ledger owner loads the transport child last (the entry point is at its
+  size ceiling); vanilla statistics, lookups, RPCs and payloads stay untouched.
+  `[gut:1573] raw` receipts cap at 24 per process.
+- `/gut_regression_test` adds `issue1573_client_custom_statistics_sync`.
+  Offline `test_gut_custom_stat_sync.lua` covers channel/schema/cap parity,
+  worst-case payload size, host projection, validator rejections, acknowledged
+  cell replacement with native fallback, the real client adapter (forged host,
+  stale generation, out-of-order sequence, unknown roster, chunk conflict and
+  reordering, retry cap, expiry, setting gating, host migration), the real
+  host adapter (authentication, replay, floods, ledger unavailability,
+  non-Adventure), the owner's non-host routing, and source invariants.
+
 ## 0.2.347-dev (2026-09-12) - host custom scoreboard rows (#1570, #1571, #1572)
 
 - Adds the opt-in **Host Statistics** option under Expanded Scoreboard. When
