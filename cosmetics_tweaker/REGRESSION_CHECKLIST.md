@@ -4,9 +4,18 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-09-12.
+Last updated: 2026-09-14.
 
 ---
+## Item description parity (#1567)
+
+- First built in 0.9.224-dev; walk this after any change to `_cos_illusions.lua`, `_cos_description_parity.lua`, the custom illusion catalog, or `cosmetics_tweaker_localization.lua`.
+- Saltzpyre's Shyish griffon-foot illusion (`wh_deus_skin_02_magic_02`) shows the Shyish reward text, not `<wh_deus_skin_02_magic_02_desciption>`; the two Weavebound griffon-foot illusions show the Weavebound text. Both are vanilla key typos routed to sibling text inside the existing singleton `Localize` hook; never add a second hook or edit the vanilla rows.
+- The three **Spear & Shield Spear** illusions on Kruber's Tuskgor Spear show their authored descriptions. All five registered custom illusions now have authored text.
+- `/cos_1567_diag` prints exactly one `[cos:1567:diag] census` line per run: `unresolved=0` and `sample=-` is parity; a listed key is a gap to author or alias, never a reason to widen the alias table blindly. Vanilla `test_*` rows are counted under `skipped_test` and never listed.
+- `/cos_regression_test` includes `issue1567_item_description_parity`, which fails when an authored custom description is missing, the hook is disconnected, a vanilla typo row was respelled (retire the alias), no sibling resolves, or the census finds any unresolved key.
+- Offline `test_cos_description_parity.lua` pins the alias table, routing order, census counting/capping, the named check's failure branches, the exact receipt line, and (when the decompile is present) that the four cited rows are the only misspelled description keys.
+
 ## Weave Season 5-10 frame provider (#1000)
 
 - `_cos_weave_frame_catalog.lua` stays data-only: 24 keys (six seasons x quickplay/tier_1/tier_2/tier_3), snapshot copies, no engine-table, fake-inventory or `NetworkLookup` write. Offline `test_cos_weave_frame_catalog.lua` pins keys, order, snapshots, all three censuses and the command line.
