@@ -179,6 +179,13 @@ return function(H, repo_root)
             self:hook(class_name, method_name, callback)
         end
         function fake_mod:get(id) return self.settings[id] end
+        -- #1573: the ledger owner loads its transport child, which registers
+        -- one channel and self-registers one runtime check.
+        function fake_mod:network_register(channel, callback)
+            assert(state.channel == nil, "duplicate channel " .. tostring(channel))
+            state.channel, state.receiver = channel, callback
+        end
+        function fake_mod:network_send() end
         fake_mod.registered = {}
         fake_mod._gut_rt_register = function(name) fake_mod.registered[#fake_mod.registered + 1] = name end
         fake_mod._gut_scoreboard_retention = {
@@ -486,8 +493,13 @@ return function(H, repo_root)
                 "issue1571_host_melee_ranged_damage_statistic",
                 "issue1572_host_permanent_health_statistic",
             })
-            H.deep_equal(env.mod.registered, names, "the module self-registers every check once")
+            H.deep_equal(env.mod.registered, {
+                names[1], names[2], names[3], "issue1573_client_custom_statistics_sync",
+            }, "the module self-registers every check once, then its #1573 child registers its own")
             H.equal(env.mod._gut_custom_stats, env.api, "the presenter API is self-published")
+            H.equal(env.state.channel, "gut_custom_stat_snapshot_v1",
+                "the #1573 transport child is loaded by the ledger owner")
+            H.equal(type(env.mod._gut_custom_stat_sync), "table")
             H.equal(env.state.listener, env.api.on_retention_event,
                 "the #437 retention listener is self-wired")
             local receipts = 0

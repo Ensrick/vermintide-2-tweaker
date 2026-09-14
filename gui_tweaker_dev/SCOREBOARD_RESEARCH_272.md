@@ -183,12 +183,14 @@ views cannot disagree.
    The ledger resets per StateIngame, mirrors #437's keep/evict/discard
    decisions, and is copied into #1414's end-screen sidecar. Non-host peers
    show the rows unavailable.
-7. **Custom statistic synchronization (#1573, not started).** New statistics
-   cannot use vanilla hot-join sync (frozen path lookup,
+7. **Custom statistic synchronization (#1573, source landed in 0.2.348-dev).**
+   New statistics cannot use vanilla hot-join sync (frozen path lookup,
    `network_lookup.lua:2251-2281`; 65535 value cap,
-   `statistics_database.lua:210-221`). A separate schema-versioned channel must
-   reuse #1448's bounded request/snapshot policy before clients may show the
-   host rows.
+   `statistics_database.lua:210-221`). `_gut_custom_stat_sync.lua` binds
+   #1448's bounded request/snapshot policy to the separate exact channel
+   `gut_custom_stat_snapshot_v1`; clients replace only acknowledged detached
+   cells, and mixed/no-GUT lobbies keep the rows unavailable. Live behaviour
+   remains unclaimed until the Solo/co-op cards pass.
 
 The issue remains open after the native presentation slice. Boss damage has
 source-only late-join parity through #1448, and the host custom families exist

@@ -5,9 +5,11 @@
 -- damage_dealt credit vanilla makes inside StatisticsUtil.register_damage, and
 -- Permanent Health Restored from the server permanent-health write inside
 -- PlayerUnitHealthExtension.add_heal. The ledger resets per StateIngame and
--- follows #437 retention. Non-host peers expose no values (the presenter shows
--- them unavailable) until the #1573 transport child exists. No vanilla
--- statistic, lookup, RPC or payload is added or changed.
+-- follows #437 retention. Non-host peers answer through the #1573 transport
+-- child (`_gut_custom_stat_sync.lua`, loaded last below): a validated host
+-- snapshot fills only acknowledged cells, and a mixed or no-GUT lobby keeps
+-- the rows unavailable. No vanilla statistic, lookup, RPC or payload is added
+-- or changed.
 -- The entry point loads this after the #1414 presenter, #437 retention and
 -- #1448 boss owners, so this StateIngame reset runs after the presenter's
 -- end-screen capture. The module self-registers (presenter API, retention
@@ -284,9 +286,19 @@ function M.on_retention_event(event, stats_id, retained)
     end
 end
 
+-- The recording host answers from its ledger. Every other peer answers only
+-- from the #1573 child's accepted host snapshot (nil until one is valid), so
+-- a client never fabricates a zero the host did not acknowledge.
 function M.current_scores(players)
-    if not _recording() then return nil end
-    return Policy.scores_for_players(ledger, players, Policy.SCORE_PLAYER_LIMIT)
+    if _recording() then
+        return Policy.scores_for_players(ledger, players, Policy.SCORE_PLAYER_LIMIT)
+    end
+    local sync = rawget(mod, "_gut_custom_stat_sync")
+    if type(sync) ~= "table" or type(sync.current_scores) ~= "function" then
+        return nil
+    end
+    local ok, scores = pcall(sync.current_scores, players)
+    return ok and type(scores) == "table" and scores or nil
 end
 
 local previous_state_changed = mod.on_game_state_changed
@@ -441,6 +453,18 @@ end
 local register = rawget(mod, "_gut_rt_register")
 if type(register) == "function" then
     for _, check in ipairs(M.rt_checks) do register(check.name, check.fn) end
+end
+
+-- #1573: the client transport is this ledger's child. It loads last so its
+-- StateIngame clear runs after the presenter capture and this ledger reset,
+-- and it self-registers its own runtime check. A load failure leaves the
+-- host ledger intact and keeps non-host rows unavailable.
+do
+    local ok, err = pcall(mod.dofile, mod,
+        "scripts/mods/gui_tweaker_dev/_gut_custom_stat_sync")
+    if not ok then
+        printf("[gut:1573] custom statistics sync module failed: %s", tostring(err))
+    end
 end
 
 return M
