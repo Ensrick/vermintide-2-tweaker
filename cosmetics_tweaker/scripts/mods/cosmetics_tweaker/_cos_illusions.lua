@@ -5,7 +5,9 @@
 -- cross-character shield/weapon illusions (_custom_illusions) and the LA shield
 -- skin specs (_la_shield_skin_specs; its registration call is intentionally
 -- disabled, kept for reference). Also owns the get_unlocked_weapon_skins unlock
--- hook and the _G.Localize name/description hook for these keys. Split out of the god
+-- hook and the _G.Localize name/description hook for these keys, which also
+-- routes vanilla's misspelled description keys to sibling text (#1567; data
+-- and census in _cos_description_parity.lua). Split out of the god
 -- file in v0.9.77-dev Phase 1; no behavior change.
 --
 -- Owned by: cosmetics_tweaker.lua entry point. Consumed via: mod:dofile.
@@ -18,6 +20,12 @@ local mod = get_mod("cosmetics_tweaker")
 local COS = mod._cos
 local LA_BRIDGE = COS.LA_BRIDGE
 local _skin_requires_unowned_dlc = COS.skin_requires_unowned_dlc
+-- #1567: data-only description-parity provider (vanilla typo aliases, the
+-- resolved-text predicate and the bounded census). Published for the
+-- /cos_1567_diag receipt in _cos_diagnostics.lua, which loads first and reads
+-- it at command time.
+local PARITY = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_description_parity")
+COS.description_parity = PARITY
 
 -- ============================================================
 -- Custom Weapon Illusions (shield/weapon model combos)
@@ -367,6 +375,12 @@ mod:hook(_G, "Localize", function(func, key, ...)
             return text
         end
     end
+    -- #1567: vanilla misspells two Saltzpyre griffon-foot description keys
+    -- (rows cited in _cos_description_parity.lua). Route each to the first
+    -- sibling key the native chain resolves; when none resolves, vanilla's own
+    -- "<key>" result stays visible instead of borrowing unrelated prose.
+    local sibling = PARITY.alias_route(key, func)
+    if sibling then return func(sibling, ...) end
     local presentation = COS.presentation_localization
         and COS.presentation_localization[key]
     if presentation then return presentation end
@@ -400,6 +414,48 @@ mod._cos_command_owner.register("issue913_custom_illusion_descriptions", functio
         if not live_ok or actual ~= expected then
             return "global description differs from authored private text: " .. key
         end
+    end
+end)
+
+-- #1567: item description parity. Every registered custom illusion now carries
+-- authored text the global hook must surface; each vanilla typo row must still
+-- exist and follow its sibling text; and the bounded census over every item
+-- and illusion description key must report nothing unresolved.
+mod._cos_command_owner.register("issue1567_item_description_parity", function()
+    for _, illusion in ipairs(_custom_illusions) do
+        local key = illusion.skin_key .. "_description"
+        local ok, expected = pcall(mod.localize, mod, key)
+        if not ok or not PARITY.resolved(expected, key) then
+            return "authored private description unavailable: " .. key
+        end
+        local live_ok, actual = pcall(Localize, key)
+        if not live_ok or actual ~= expected then
+            return "global description differs from authored private text: " .. key
+        end
+    end
+    for _, row in ipairs(PARITY.VANILLA_TYPO_ROWS) do
+        local source = row.table == "items" and ItemMasterList
+            or (WeaponSkins and WeaponSkins.skins)
+        local data = source and rawget(source, row.key)
+        data = type(data) == "table" and (data.data or data) or nil
+        if not data or data.description ~= row.description_key then
+            return "vanilla typo row changed, retire its alias: " .. row.key
+        end
+        local sibling = PARITY.alias_route(row.description_key, Localize)
+        if not sibling then
+            return "no sibling text resolves for vanilla typo key: " .. row.description_key
+        end
+        local routed_ok, routed = pcall(Localize, row.description_key)
+        if not routed_ok or routed ~= Localize(sibling) then
+            return "typo key does not follow its sibling text: " .. row.description_key
+        end
+    end
+    local report = PARITY.census(ItemMasterList, WeaponSkins and WeaponSkins.skins, Localize, {
+        is_custom = function(key) return _custom_description_keys[key] ~= nil end,
+    })
+    if report.unresolved > 0 then
+        return string.format("%d unresolved description keys: %s",
+            report.unresolved, PARITY.sample_text(report))
     end
 end)
 

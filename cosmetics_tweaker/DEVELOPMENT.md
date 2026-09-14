@@ -16,9 +16,38 @@ owners and precedence; do not intercept a broad `ct_*` prefix or add a hook.
 
 This source correction exposes the already-authored **Prologue Wooden Mallet**
 and **Mace & Bretonnian Shield** descriptions. The three
-`ct_es_heavy_spear_deus_01/02/03_description` entries have no authored copy and
-remain unavailable; that content gap is not filled with another weapon's text.
-The wider vanilla item-description census requested on #913 is separate.
+`ct_es_heavy_spear_deus_01/02/03_description` entries were authored under
+#1567 (0.9.224-dev), so all five registered custom illusions now cross the
+hook. The wider vanilla item-description census requested on #913 lives in the
+#1567 section below.
+
+## Item description parity (#1567)
+
+`_cos_description_parity.lua` is a data-only provider: the two vanilla typo
+aliases, the resolved-text predicate, and a bounded census over every
+`ItemMasterList` and `WeaponSkins.skins` description key. Vanilla spells
+`wh_deus_skin_02_magic_02_desciption` (Saltzpyre's Shyish griffon-foot,
+`item_master_list_versus_rewards.lua:1653` and
+`weapon_skins_versus_rewards.lua:1186`) and `wh_deus_01_magic_desciption`
+(Weavebound griffon-foot, `weapon_skins_morris.lua:573,588`, whose item row at
+`item_master_list_morris.lua:994` is spelled correctly). The item card reads the
+skin row (`scripts/helpers/ui_utils.lua:219-231`), so those are the keys
+players see. The same singleton `Localize` hook in `_cos_illusions.lua` routes
+each typo key to the first sibling candidate the native chain resolves
+(corrected spelling first, then `wh_fencing_sword_skin_07_magic_02_description`
+for the Shyish row; `wh_deus_01_magic_description` for the Weavebound rows). An
+alias whose siblings all miss keeps vanilla's `<key>` so a gap stays visible.
+
+`/cos_1567_diag` prints one `[cos:1567:diag] census ...` line: distinct keys,
+resolved/unresolved counts, bridged typo keys, custom-key counts, skipped
+vanilla `test_*` rows and a sorted sample capped at 12 unresolved keys. The
+named `issue1567_item_description_parity` check requires every registered
+custom description to resolve to its authored private text through the live
+hook, every typo row to still exist and follow its sibling, and the census to
+report nothing unresolved. Offline `test_cos_description_parity.lua` drives the
+provider, the installed hook, the named check's failure branches and the exact
+receipt line; its optional decompile scan pins the four cited rows as the only
+misspelled description keys across the item, skin, cosmetic and pose tables.
 
 The named `issue913_custom_illusion_descriptions` check calls the live global
 hook and validates both registered item/skin description fields against the

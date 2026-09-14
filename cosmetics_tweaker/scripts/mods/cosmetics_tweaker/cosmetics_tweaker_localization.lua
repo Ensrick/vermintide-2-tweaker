@@ -174,6 +174,16 @@ local loc = {
         en = "An Empire mace paired with a Bretonnian shield.",
     },
 
+    ct_es_heavy_spear_deus_01_description = {
+        en = "The Empire spear from Kruber's Spear and Shield, wielded two-handed without its shield. A plain state-troop haft that reaches as far as any Tuskgor Spear.",
+    },
+    ct_es_heavy_spear_deus_02_description = {
+        en = "The ornate Empire spear from Kruber's Spear and Shield, wielded two-handed without its shield. Its gilded fittings were made for the parade ground, but the point is as keen as ever.",
+    },
+    ct_es_heavy_spear_deus_03_description = {
+        en = "The plumed Empire spear from Kruber's Spear and Shield, wielded two-handed without its shield. The plume marks a sergeant of the state troops, a rank Kruber earned twice over.",
+    },
+
     ct_we_spear_shield_es_01_name = {
         en = "Empire Spear & Shield",
     },
