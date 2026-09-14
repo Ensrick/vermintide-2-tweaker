@@ -1,5 +1,48 @@
 # Enemy Tweaker Changelog
 
+## 0.7.64-dev (2026-09-13): declarative custom-breed registrar and Chosen contract (#451) [verify-fix]
+
+- Re-audited the shipped #1413 registrar against every boot-time
+  `pairs(Breeds)` snapshot in the decompile and found two uncovered surfaces.
+  The registrar now seeds the DLC `weapon_kills_per_breed` rows that the
+  Engineer and Grail Knight kill-register achievements increment by killed
+  breed name (`statistics_definitions_cog.lua:79-89`,
+  `statistics_definitions_lake.lua:21-27`, `achievement_templates_cog.lua:1047`,
+  `achievement_templates_lake.lua:108`). Without them a crank-gun, cog-hammer,
+  steam-pistol, or Blessed Blade kill on the Skaven Warlord or Chaos Chosen was
+  the `statistics_database.lua:302` ferror class, latent since the Warlord
+  shipped. Each row derives from the source breed's own row with the source
+  name substituted exactly once, so the cog (weapon-prefixed) and lake (bare
+  breed) shapes both reproduce; a missing family, malformed weapon table,
+  ambiguous or foreign source row, residue, aliasing, or reload drift fails
+  closed before threat or any raw write.
+- Registration now proves every candidate health step below the runtime
+  `damage_hotjoin_sync` capacity and on its 0.25 network grid, mirroring the
+  boot assert a post-boot breed never met (`network_constants.lua:20,76-86`;
+  `breed_tweaks.lua:129-136`). The authority is read from `NetworkConstants`
+  with a guarded `Network.type_info` fallback and fails closed when absent,
+  like the two lookup capacities; exact reload still reads no capacity.
+- Greataxe Chosen contract decided and recorded with engine citations in
+  `BOSS_IDEA_FEASIBILITY.md`: it is a boss, never an elite. Its health array
+  now fills all nine vanilla `health_steps` slots because difficulty ranks run
+  2..9 and the spawn path indexes by rank (`breed_tweaks.lua:138-149`,
+  `difficulty_settings.lua` `versus_base`, `conflict_director.lua:1947-1948`);
+  ranks 1-8 stay 2000 HP.
+- Registrar identity fingerprints advanced (Chosen v5, Warlord v4) so a breed
+  row registered under the previous contract is rejected on reload rather than
+  trusted. New `/et_regression_test` check `issue451_custom_breed_registrar`:
+  exactly the two declared owners in manifest order, each validating its
+  complete contract, readiness rows published only under a validated contract,
+  and both vanilla donors unmarked. `Registrar.declared_specs()` exposes the
+  declaration-order copy it reads.
+- Offline: new `test_et_custom_breed_registrar_contract` covers DLC-row
+  seeding and every fail-closed shape, the health capacity boundary, grid,
+  fallback, unavailable, and reload cases, the declared-spec accessor, and the
+  real Warlord/Chosen owners driven through the new runtime check. The
+  existing registrar suites gained the new mandatory surface, capacity
+  authority, and residue rows. No spawn route, command, or parity behavior
+  changed; `/et_spawn_chosen` still refuses unproven peers.
+
 ## 0.7.63-dev (2026-09-12): keep boot-time lifecycle notices out of chat (#727) [tooling]
 
 - VMF runs `on_disabled`/`on_enabled` once at boot with `initial_call = true`

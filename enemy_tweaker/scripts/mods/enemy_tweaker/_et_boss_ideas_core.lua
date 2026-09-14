@@ -20,7 +20,10 @@ M.CANDIDATES = {
 -- breed.boss_staggers (damage_utils.lua:791-793 + 918-920: every stagger
 -- below explosion resolves to none), matching skaven_storm_vermin_champion
 -- (breed_skaven_storm_vermin_champion.lua:16) and chaos_troll
--- (breed_chaos_troll.lua:61).
+-- (breed_chaos_troll.lua:61). The health array mirrors vanilla's nine
+-- health_steps slots (breed_tweaks.lua:138-149): difficulty ranks run 2..9
+-- (difficulty_settings.lua, versus_base = 9) and conflict_director.lua:1947-1948
+-- indexes max_health by rank, so an eight-slot array leaves rank 9 nil.
 M.CHOSEN = {
     name = "et_chosen_greataxe",
     source_breed = "chaos_warrior",
@@ -28,7 +31,7 @@ M.CHOSEN = {
     display_name_en = "Chaos Chosen",
     inventory_template = "warrior_axe",
     max_health = 2000,
-    difficulty_count = 8,
+    difficulty_count = 9,
     threat_value = 32,
 }
 

@@ -124,8 +124,9 @@ return function(H, repo_root)
         H.equal(out.threat_value, 32)
         H.equal(out.infighting, boss_infighting)
         H.equal(out.category_mask, 67)
-        H.equal(#out.max_health, 8)
-        for i = 1, 8 do H.equal(out.max_health[i], 2000) end
+        -- Nine slots: vanilla health_steps fills ranks 1..9 (versus_base = 9).
+        H.equal(#out.max_health, 9)
+        for i = 1, 9 do H.equal(out.max_health[i], 2000) end
         H.equal(out.default_inventory_template, "warrior_axe")
         -- Unrelated fields survive; the vanilla donor remains byte-for-byte
         -- untouched while only the clone receives boss classification.

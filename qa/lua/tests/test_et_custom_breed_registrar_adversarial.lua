@@ -430,6 +430,8 @@ return function(H, C)
             function(rt) rt.lookup_lib = {} end,
             function(rt) rt.statistics = nil end,
             function(rt) rt.statistics.player.kills_per_breed = nil end,
+            function(rt) rt.statistics.player.weapon_kills_per_breed = nil end,
+            function(rt) rt.network_constants = nil; rt.network = nil end,
             function(rt) rt.difficulties = nil end,
             function(rt) rt.package_settings = nil end,
             function(rt) rt.package_settings.alias_to_breed = nil end,
@@ -898,6 +900,14 @@ return function(H, C)
             {
                 label = "statistics", mutate = function(fx)
                     local target = fx.runtime.statistics.player[STAT_NAMES[1]]
+                    rawset(target, fx.name, false)
+                    return target, fx.name, false
+                end,
+            },
+            {
+                label = "weapon_statistics", mutate = function(fx)
+                    local target = fx.runtime.statistics.player
+                        .weapon_kills_per_breed.test_blade
                     rawset(target, fx.name, false)
                     return target, fx.name, false
                 end,

@@ -241,8 +241,13 @@ local chosen_ok, chosen_reason = Registrar.register({
                 or breed.run_on_despawn == source.run_on_despawn then
             return nil, "chosen_lifecycle_wrapper_mismatch"
         end
-        for i = 1, 8 do
-            if breed.max_health[i] ~= 2000 then return nil, "chosen_health_mismatch" end
+        if #breed.max_health ~= CHOSEN.difficulty_count then
+            return nil, "chosen_health_mismatch"
+        end
+        for i = 1, CHOSEN.difficulty_count do
+            if breed.max_health[i] ~= CHOSEN.max_health then
+                return nil, "chosen_health_mismatch"
+            end
         end
         local captured_mask = breed.category_mask
         local category_ok = pcall(chosen_services.inject_breed_category_mask, breed)
@@ -272,6 +277,50 @@ end
 ET.rt_register("issue1413_atomic_custom_breed_registration", function()
     local ok, reason = Registrar.validate_all_registered()
     if not ok then return tostring(reason) end
+end)
+
+-- #451 registrar contract: exactly the two declared owners, in manifest order,
+-- each validating its complete contract, with every readiness row published
+-- if and only if that contract validates. A readiness flag or breed row that
+-- outlived its transaction is the partial-publication class the registrar
+-- exists to prevent: a spawn route or the parity identity would trust state
+-- the registrar no longer owns. Both vanilla donors must stay unmarked.
+ET.rt_register("issue451_custom_breed_registrar", function()
+    if type(Registrar.declared_specs) ~= "function" then
+        return "registrar declared_specs accessor missing"
+    end
+    local specs = Registrar.declared_specs()
+    local expected_order = { "et_skaven_warlord", CHOSEN_BREED }
+    if #specs ~= #expected_order then
+        return string.format("expected %d declared custom breeds, got %d",
+            #expected_order, #specs)
+    end
+    local breeds = rawget(_G, "Breeds")
+    if type(breeds) ~= "table" then return "Breeds missing" end
+    for i = 1, #expected_order do
+        local spec = specs[i]
+        if type(spec) ~= "table" or spec.name ~= expected_order[i] then
+            return string.format("declaration %d drifted: expected %s, got %s",
+                i, expected_order[i], tostring(type(spec) == "table" and spec.name))
+        end
+        local valid, reason = Registrar.validate_registered(spec)
+        local readiness = spec.readiness or {}
+        for r = 1, #readiness do
+            local row = readiness[r]
+            local live = type(row.target) == "table" and rawget(row.target, row.key)
+            if not valid and live == row.value then
+                return string.format("%s readiness %s published without a validated contract (%s)",
+                    spec.name, tostring(row.key), tostring(reason))
+            end
+        end
+        if not valid then return spec.name .. ": " .. tostring(reason) end
+        local donor = breeds[spec.source_breed]
+        if type(donor) ~= "table" or donor.name ~= spec.source_breed
+                or rawget(donor, Registrar.marker_key) ~= nil then
+            return "vanilla donor " .. tostring(spec.source_breed)
+                .. " carries registrar state or lost its identity"
+        end
+    end
 end)
 
 -- Test-only spawn command (host, in-mission, residency-gated). Spawns ONE
@@ -347,8 +396,9 @@ ET.rt_register("issue451_chosen_greataxe_prototype", function()
     if not probe_ok or breed.category_mask ~= category_before then
         return "breed category mask is stale"
     end
-    if type(breed.max_health) ~= "table" or breed.max_health[1] ~= 2000
-            or breed.max_health[8] ~= 2000 then
+    if type(breed.max_health) ~= "table" or #breed.max_health ~= CHOSEN.difficulty_count
+            or breed.max_health[1] ~= 2000
+            or breed.max_health[CHOSEN.difficulty_count] ~= 2000 then
         return "2000 HP stat block drifted"
     end
     if breed.default_inventory_template ~= CHOSEN.inventory_template then

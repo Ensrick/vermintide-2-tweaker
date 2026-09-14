@@ -132,6 +132,8 @@ file-load time to build per-breed lookup tables, then never re-scan:
 | `scripts/managers/conflict_director/conflict_director.lua` | ~2295 | local `threat_values = {}` | `calculate_threat_value` → `nil * amount` arithmetic crash at live line 2479 |
 | `scripts/managers/performance/performance_manager.lua` | ~84 | `self._activated_per_breed` (in `init`) | `event_ai_unit_activated` → `nil + 1` on first activate |
 | `scripts/managers/backend/statistics_definitions.lua` | ~615 | `StatisticsDefinitions.player.{kills,damage_dealt,...}_per_breed[name]` | `StatisticsDatabase._create_stat` → ferror "No statistics definition found with path" on first damage/kill |
+| `scripts/managers/backend/statistics_definitions_cog.lua` / `_lake.lua` | 79 / 21 | `StatisticsDefinitions.player.weapon_kills_per_breed[weapon][name]` (four Engineer weapons, one Grail Knight weapon) | `achievement_templates_cog.lua:1047` / `achievement_templates_lake.lua:108` increment that exact path for the killed breed → the same `statistics_database.lua:302` ferror (found 2026-09-13, #451) |
+| `scripts/network_lookup/network_constants.lua` | 78 | none (boot-only assert `health < damage_hotjoin_sync.max`, `:76-86`) | A post-boot breed never meets the assert; an over-cap health desyncs hot-join damage replay |
 
 Each table is keyed by breed name. Mods that add breeds to `Breeds`
 after game-boot miss all three snapshots. **Hooks alone don't fix it**
@@ -265,14 +267,21 @@ adversarial tests must cover:
 2. the hidden threat value via the exact static setter, seeded only from the
    canonical marker value rather than a presently live breed field;
 3. all six `StatisticsDefinitions.player.*_per_breed` families, including
-   named per-difficulty leaves;
+   named per-difficulty leaves, plus every DLC
+   `weapon_kills_per_breed[weapon]` family, each row derived from the source
+   breed's own row with the source name substituted exactly once (cog prefixes
+   the weapon in `database_name`, lake uses the bare breed name);
 4. an already-live `PerformanceManager._activated_per_breed` row whose dynamic
    value remains a finite, nonnegative integer (future managers see the breed
    because `PerformanceManager.init` scans `Breeds`);
 5. all three strict, dense, bidirectional wire axes planned together on shadows and
    their first committed numeric identities pinned for reload;
 6. the runtime-authoritative damage-source and statistics-path capacity
-   boundaries, with exact existing rows revalidated without inventing capacity;
+   boundaries, with exact existing rows revalidated without inventing capacity,
+   and every candidate `max_health` step proven a dense array on the 0.25
+   network grid below `damage_hotjoin_sync.max` (`NetworkConstants` first,
+   guarded `Network.type_info` fallback, fail closed when absent; exact reload
+   pins health through the detached snapshot and reads no capacity);
 7. forward package alias and an off-table replacement reverse-alias array;
 8. canonical dismemberment identity/content, faction, elite/category, and
    hit-zone identity/content;
@@ -290,6 +299,26 @@ Then re-audit `grep -n 'pairs(Breeds)'` in the current source decompile for any
 new file-load snapshots. New surfaces extend the single registrar; they do not
 create a second registration path.
 
+#### `pairs(Breeds)` re-audit (2026-09-13, every site in the decompile)
+
+| Site | Snapshot | Coverage |
+|---|---|---|
+| `conflict_director.lua:2297` | file-local `threat_values` | registrar: exact `set_threat_value` first commit step |
+| `performance_manager.lua:86` | `_activated_per_breed` in `init` | registrar: seeds an already-live table; later instances scan the published breed |
+| `statistics_definitions.lua:615` | six `player.*_per_breed` families | registrar: `stat_values` |
+| `statistics_definitions_cog.lua:79`, `statistics_definitions_lake.lua:21` | `player.weapon_kills_per_breed[weapon][name]` | registrar: `weapon_stat_rows` (added #451) |
+| `network_constants.lua:78` | boot assert only | registrar: `validate_health_sync` (added #451) |
+| `network_lookup.lua:267` | `NetworkLookup.breeds` | registrar: strict `breeds` axis |
+| `network_lookup.lua:277,1644` | ragdoll actor and sound-event VALUE sets, not keyed by breed | shared with the donor by cloning; nothing to seed |
+| `breeds.lua:111,305` | hit-zone lookup binding, category mask, `name`/`is_ai`, nav layers, `ELITES` (`:348`) | registrar: clone carries the baked fields; `hit_zones`, `category_mask`, and `ELITES` are validated or written explicitly |
+| `hit_reactions_template_compiler.lua:175` | `Dismemberments[name]` | registrar: dismemberment row |
+| `conflict_director.lua:297,305,317`, `dialogue_system.lua:272` | per-instance counters built in `init`/reset | see the published breed at level start; no seed needed |
+| `conflict_director.lua:2606` | debug spawn-all list | reads live `Breeds` at call time |
+| `breed_unit_flow_event_overrides.lua:290` | per-breed flow override keyed by base unit name | the clone shares the donor's base unit; absence only skips optional overrides |
+| `spawner_system.lua:258` | file-local horde exchange order | benign: custom breeds never enter exchange order |
+| `achievement_templates_cog.lua:952`, `achievement_templates_lake.lua:47` | file-local elite/boss kill lists | benign: custom kills do not count toward those DLC challenges |
+| `conflict_director_testify.lua:10` | test harness | not shipped gameplay |
+
 This source lane deliberately does not version, build, bundle, deploy, or
 publish. The serialized integration owner must regenerate the exact Enemy root
 bundle and current receipt from the reviewed commit before any release claim.
@@ -302,6 +331,11 @@ bundle and current receipt from the reviewed commit before any release claim.
 - enemy_tweaker v0.3.6: per-breed statistics crash
   (`damage_dealt_per_breed.et_ghost_skeleton_hammer`) — mirror the
   full vanilla seed loop directly on `StatisticsDefinitions.player`.
+- enemy_tweaker v0.7.64-dev (#451, source audit, no live report): the DLC
+  `weapon_kills_per_breed` families were never seeded, so an Engineer or Grail
+  Knight career-weapon kill on the Warlord or Chosen would have hit the same
+  ferror class. Found by re-walking every `pairs(Breeds)` site; the registrar
+  now derives those rows from the source breed's own rows.
 
 ---
 

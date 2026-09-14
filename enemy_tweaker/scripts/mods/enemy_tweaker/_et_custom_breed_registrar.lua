@@ -14,11 +14,17 @@
 -- breed marker: full breed/actions content, original identities, threat/elite,
 -- all three numeric wire ids, dismemberment, and hit zones. Owner callbacks receive
 -- detached views, so validation cannot mutate a live source or existing breed.
+--
+-- #451 contract additions: the DLC per-(weapon, breed) kill families that the
+-- cog/lake kill-register achievements increment by killed breed name, and the
+-- boot-time hot-join health capacity assert, are preflighted like every other
+-- pairs(Breeds) snapshot. Both are cited at their helpers below.
 
 local M = {}
 
 local MARKER_KEY = "_et_custom_breed_registration"
 local SCHEMA = 3
+local WEAPON_STAT_FAMILY = "weapon_kills_per_breed"
 local RACE_NAMES = { "beastmen", "chaos", "critter", "skaven", "undead" }
 local TERMINAL = {}
 local DECLARED, DECLARATION_ORDER = {}, {}
@@ -51,6 +57,13 @@ end
 
 local function valid_count(value)
     return valid_number(value) and value % 1 == 0
+end
+
+-- Network float capacities (damage_hotjoin_sync) are finite positive numbers
+-- but not necessarily integers, unlike lookup-id capacities.
+local function valid_cap(value)
+    return type(value) == "number" and value > 0 and value == value
+        and value ~= math.huge
 end
 
 local function dense_row_count(rows, label)
@@ -523,6 +536,54 @@ local function read_statistics_path_cap(runtime)
     return nil, "statistics_path_cap_unavailable"
 end
 
+-- network_constants.lua:20 binds NetworkConstants.damage_hotjoin_sync and the
+-- :76-86 boot loop asserts every Breeds max_health step below its max, because
+-- a hot-joining peer receives each unit's damage through that quantized field.
+-- A breed published after boot never met that assert, so the registrar
+-- re-proves it from the same runtime authority (never a guessed constant).
+local function read_health_sync_cap(runtime)
+    local constants = runtime.network_constants
+    if type(constants) == "table" then
+        local info = rawget(constants, "damage_hotjoin_sync")
+        local cap = type(info) == "table" and rawget(info, "max")
+        if valid_cap(cap) then return cap end
+    end
+    local network = runtime.network
+    local type_info = type(network) == "table" and rawget(network, "type_info")
+    if type(type_info) == "function" then
+        local ok, info = pcall(type_info, "damage_hotjoin_sync")
+        local cap = ok and type(info) == "table" and rawget(info, "max")
+        if valid_cap(cap) then return cap end
+    end
+    return nil, "health_sync_cap_unavailable"
+end
+
+-- Vanilla health steps are dense 1..9 arrays (breed_tweaks.lua:138-149) whose
+-- values pass networkify_health (:129-136, 0.25 grid below the sync clamp);
+-- conflict_director.lua:1947-1948 indexes the array by difficulty rank. A
+-- breed without max_health is skipped exactly as the boot loop skips it.
+local function validate_health_sync(runtime, breed)
+    local health = rawget(breed, "max_health")
+    if health == nil then return true end
+    if type(health) ~= "table" then return nil, "max_health_invalid" end
+    local count, maximum = 0, 0
+    for key, value in next, health do
+        if not valid_index(key) or not valid_number(value) then
+            return nil, "max_health_invalid"
+        end
+        if value % 0.25 ~= 0 then return nil, "health_not_network_representable" end
+        count = count + 1
+        if key > maximum then maximum = key end
+    end
+    if count == 0 or count ~= maximum then return nil, "max_health_invalid" end
+    local cap, cap_reason = read_health_sync_cap(runtime)
+    if not cap then return nil, cap_reason end
+    for i = 1, maximum do
+        if rawget(health, i) >= cap then return nil, "health_sync_cap_exceeded" end
+    end
+    return true
+end
+
 local function stat_values(name, difficulties)
     local kills_difficulty, assists_difficulty = {}, {}
     for difficulty_name in next, difficulties do
@@ -554,6 +615,49 @@ local STAT_NAMES = {
     "kill_assists_per_breed", "damage_dealt_per_breed",
     "kills_per_breed_difficulty", "kill_assists_per_breed_difficulty",
 }
+
+-- statistics_definitions_cog.lua:79-89 and statistics_definitions_lake.lua:21-27
+-- seed one persistent row per (tracked weapon, breed) at file load, and the
+-- cog/lake kill-register achievements increment that exact path for the killed
+-- breed name (achievement_templates_cog.lua:1047, achievement_templates_lake.lua:108).
+-- A custom breed without its row is the statistics_database.lua:302 ferror class.
+-- The two DLCs shape database_name differently (cog prefixes the weapon, lake
+-- uses the bare breed name), so every custom row is derived from the source
+-- breed's own row with the source name substituted exactly once in each string
+-- identity field; an ambiguous or foreign shape fails closed instead of guessing.
+local function substitute_once(text, source_name, name)
+    if type(text) ~= "string" then return nil end
+    local start, stop = string.find(text, source_name, 1, true)
+    if not start or string.find(text, source_name, stop + 1, true) then return nil end
+    return string.sub(text, 1, start - 1) .. name .. string.sub(text, stop + 1)
+end
+
+local function weapon_stat_rows(player, name, source_name)
+    local family = rawget(player, WEAPON_STAT_FAMILY)
+    local rows = {}
+    for weapon, per_breed in next, family do
+        if not valid_string(weapon) or type(per_breed) ~= "table" then
+            return nil, "statistics_" .. WEAPON_STAT_FAMILY .. "_invalid"
+        end
+        local shape_reason = "statistics_" .. WEAPON_STAT_FAMILY .. "_shape:" .. weapon
+        local source_row = rawget(per_breed, source_name)
+        if type(source_row) ~= "table" then return nil, shape_reason end
+        local copy_ok, expected = pcall(detached_copy, source_row)
+        if not copy_ok or type(expected) ~= "table"
+            or rawget(expected, "value") ~= 0 then
+            return nil, shape_reason
+        end
+        local database_name = substitute_once(
+            rawget(expected, "database_name"), source_name, name)
+        local stat_name = substitute_once(rawget(expected, "name"), source_name, name)
+        if not database_name or not stat_name then return nil, shape_reason end
+        rawset(expected, "database_name", database_name)
+        rawset(expected, "name", stat_name)
+        rows[#rows + 1] = { weapon = weapon, target = per_breed, expected = expected }
+    end
+    table.sort(rows, function(left, right) return left.weapon < right.weapon end)
+    return rows
+end
 
 local function add_write(plan, target, key, value, label)
     if type(target) ~= "table" then return nil, label .. "_missing" end
@@ -710,6 +814,9 @@ local function mandatory_context(runtime, spec)
             return nil, "statistics_" .. STAT_NAMES[i] .. "_missing"
         end
     end
+    if type(rawget(player, WEAPON_STAT_FAMILY)) ~= "table" then
+        return nil, "statistics_" .. WEAPON_STAT_FAMILY .. "_missing"
+    end
     local aliases = rawget(runtime.package_settings, "alias_to_breed")
     local reverse = rawget(runtime.package_settings, "breed_to_aliases")
     if type(aliases) ~= "table" then return nil, "alias_to_breed_missing" end
@@ -861,6 +968,8 @@ local function build_plan(spec, runtime)
     local stats_player = rawget(runtime.statistics, "player")
     local expected_stats, stats_reason = stat_values(name, runtime.difficulties)
     if not expected_stats then return nil, stats_reason end
+    local weapon_rows, weapon_reason = weapon_stat_rows(stats_player, name, source_name)
+    if not weapon_rows then return nil, weapon_reason end
     local alias_to = rawget(runtime.package_settings, "alias_to_breed")
     local breed_to_aliases = rawget(runtime.package_settings, "breed_to_aliases")
     local source_aliases = rawget(breed_to_aliases, source_name)
@@ -945,6 +1054,12 @@ local function build_plan(spec, runtime)
                 return nil, "statistics_" .. stat_name .. "_mismatch"
             end
         end
+        for i = 1, #weapon_rows do
+            local row = weapon_rows[i]
+            if not deep_equal(rawget(row.target, name), row.expected) then
+                return nil, "statistics_" .. WEAPON_STAT_FAMILY .. "_mismatch:" .. row.weapon
+            end
+        end
         if rawget(alias_to, name) ~= source_name
             or alias_total ~= 1 or expected_aliases ~= 1 then
             return nil, "package_alias_mismatch"
@@ -996,6 +1111,8 @@ local function build_plan(spec, runtime)
         if not ok then return nil, reason end
         canonical_threat = rawget(breed, "threat_value")
         if not valid_number(canonical_threat) then return nil, "threat_value_invalid" end
+        ok, reason = validate_health_sync(runtime, breed)
+        if not ok then return nil, reason end
         local breed_snapshot_ok, breed_snapshot = pcall(
             detached_copy_root_except, breed, MARKER_KEY)
         if not breed_snapshot_ok or type(breed_snapshot) ~= "table"
@@ -1048,6 +1165,12 @@ local function build_plan(spec, runtime)
                 return nil, "statistics_" .. STAT_NAMES[i] .. "_residue"
             end
         end
+        for i = 1, #weapon_rows do
+            if rawget(weapon_rows[i].target, name) ~= nil then
+                return nil, "statistics_" .. WEAPON_STAT_FAMILY .. "_residue:"
+                    .. weapon_rows[i].weapon
+            end
+        end
         if rawget(alias_to, name) ~= nil or alias_total ~= 0 then
             return nil, "package_alias_residue"
         end
@@ -1073,6 +1196,12 @@ local function build_plan(spec, runtime)
             write_ok, write_reason = add_write(
                 plan, rawget(stats_player, stat_name), name,
                 expected_stats[stat_name], "statistics_" .. stat_name)
+            if not write_ok then return nil, write_reason end
+        end
+        for i = 1, #weapon_rows do
+            local row = weapon_rows[i]
+            write_ok, write_reason = add_write(plan, row.target, name, row.expected,
+                "statistics_" .. WEAPON_STAT_FAMILY .. ":" .. row.weapon)
             if not write_ok then return nil, write_reason end
         end
         if performance then
@@ -1255,6 +1384,18 @@ function M.validate_all_registered(injected_runtime)
         if not ok then return nil, name .. ":" .. tostring(reason) end
     end
     return true
+end
+
+-- Declaration-order copy of every spec this module load has been asked to own,
+-- including specs whose transaction was rejected. Runtime checks pair each
+-- spec's readiness rows with validate_registered so a readiness flag can never
+-- outlive the contract that published it.
+function M.declared_specs()
+    local out = {}
+    for i = 1, #DECLARATION_ORDER do
+        out[i] = DECLARED[DECLARATION_ORDER[i]]
+    end
+    return out
 end
 
 function M._reset_terminal_for_tests(name)
