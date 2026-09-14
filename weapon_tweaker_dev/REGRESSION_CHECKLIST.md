@@ -38,7 +38,7 @@ Last updated: 2026-09-01.
 
 | Field | Check |
 |---|---|
-| Candidate version | WT 0.12.332-beta / WT Dev 0.12.333-dev (reissues the unpublished 0.12.331-beta / 0.12.332-dev pair); in-game verification remains outstanding. |
+| Candidate version | WT 0.12.333-beta / WT Dev 0.12.334-dev (reissues the unpublished 0.12.331-beta / 0.12.332-dev pair); in-game verification remains outstanding. |
 | Menu | **Pre-Patch Weapon Versions > Kerillian's Swiftbow** offers **Current (Game Version 6.12.1)** and **Game Version 6.10.0 (Ammunition Only) - bounded patch delta**. Longbow and Hammer/Mace keep their existing labels. |
 | Scope | Only maximum ammunition changes: 60 to 50 before career/talent bonuses. Cleave, headshot damage, reload, profiles and other weapons remain current. |
 | Restart | Changing the selection does not hot-apply. Restart with the ammunition preset, then restart with Current and compare maximum arrows using the same career/talents. |
@@ -49,7 +49,7 @@ Last updated: 2026-09-01.
 
 | Field | Check |
 |---|---|
-| Candidate version | WT 0.12.332-beta / WT Dev 0.12.333-dev; in-game verification remains outstanding. |
+| Candidate version | WT 0.12.333-beta / WT Dev 0.12.334-dev; in-game verification remains outstanding. |
 | Menu | **Bardin's Grudge-Raker** offers **Current (Game Version 6.12.1)** and **Game Version 6.10.0 (Ammunition Only) - bounded patch delta**. Selection is startup-only. |
 | Scope | Only normal/Versus `ammo_data.max_ammo` changes from 20/20 to 16/16. Separate armored/monster damage, pellets, reload, clip size, career bonuses and presentation are excluded. |
 | Atomic refusal | Either missing template/ammo table/leaf or foreign capacity refuses both family writes. |
