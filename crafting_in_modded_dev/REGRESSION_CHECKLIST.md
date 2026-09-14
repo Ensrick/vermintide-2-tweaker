@@ -4,7 +4,19 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-08-23.
+Last updated: 2026-09-14.
+
+### issue1530-base-power-step-wording - step ownership stays in Mod Tweaker
+
+| Field | Value |
+|---|---|
+| Symptom | The Base Power Level tooltip, the data-widget comment and the craft-time reader comment claimed the value moves in steps of 50; Mod Tweaker has stepped it by 25 since #164/#389. |
+| Root cause | Copy written for the original 50-point slider was never revisited when the GUI stream adopted the 25-point step policy. CIM itself only clamps to 0..950 and never quantized. |
+| Fix version(s) | cim_dev 0.8.134-dev (#1530) |
+| Category | STATIC / UI COPY |
+| Repro | In the Keep, open Mod Tweaker, select Crafting in Modded, and hover **Base power level for new crafts**. Step the value once. |
+| Expected post-fix | The tooltip reads "0 to 950 in steps of 25 in Mod Tweaker, default 300" and the value moves by exactly 25. The craft-time reader still preserves any in-range value and clamps outside 0..950; the widget's integer granularity is not a second craft-time quantizer. |
+| Detection | `test_mod_tweaker_slider_steps.lua` loads the real Dev localization table, checks both source comments, and compiles the exact production `_cim_base_power` body (1, 24, 324 and 949 preserved; clamps outside 0..950; nonnumeric default 300). `/cim_regression_test` runs `issue1530_base_power_step_wording` against the installed localization and reader. `/verify_gut_slider_step` remains #389's GUI-owned behavioral check. Public acceptance still requires promoting all three matching `crafting_in_modded` sites and verifying that separately authorized official build. |
 
 ### issue1360-ranalds-build-import - external builds commit atomically
 

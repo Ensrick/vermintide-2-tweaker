@@ -1,5 +1,35 @@
 # Crafting in Modded Changelog
 
+## 0.8.134-dev (2026-09-14) -- Base Power description says 25-point Mod Tweaker steps (#1530) [verify-fix]
+
+- Symptom: the Base Power Level tooltip, the data-widget comment and the
+  craft-time reader comment all said the value moves in steps of 50. Mod
+  Tweaker has stepped this setting by 25 since #164/#389, so the claim was
+  stale in both streams.
+- Fix: the tooltip now reads "0 to 950 in steps of 25 in Mod Tweaker, default
+  300", naming Mod Tweaker so it does not claim VMF's own input uses that grid.
+  The two source comments now distinguish GUI stepping from CIM's craft-time
+  0..950 clamp. VMF's individual-value input, the default of 300 and the reader
+  clamp are unchanged; there is no craft-time quantization.
+- Adds the `issue1530_base_power_step_wording` runtime check
+  (`/cim_regression_test`) and two offline cases in
+  `qa/lua/tests/test_mod_tweaker_slider_steps.lua`: the wording case loads the
+  real Dev localization table and both source files; the reader case compiles
+  the exact production `_cim_base_power` body and proves off-grid values such
+  as 24 and 324 survive, out-of-range values clamp to 0..950, and nonnumeric
+  input defaults to 300.
+- Not in scope: public `crafting_in_modded` keeps its three stale sites until a
+  user-triggered promotion. A Dev pass does not complete the public-release
+  acceptance for #1530.
+
+**Test:** Load `Crafting in Modded v0.8.134-dev` in the Modded Realm keep.
+1. Open Mod Tweaker, select Crafting in Modded, and hover "Base power level
+   for new crafts": the tooltip must read "0 to 950 in steps of 25 in Mod
+   Tweaker, default 300".
+2. Step the value once in Mod Tweaker and confirm it moves by exactly 25.
+3. Run `/cim_regression_test` and confirm `issue1530_base_power_step_wording`
+   passes.
+
 ## 0.8.133-dev (2026-09-12) -- owner Cursed Hold-Tab frame (#598); reissues unpublished 0.8.132-dev (#1465) [not-started]
 
 - Symptom: with Weapons of Chaos installed, the local owner's Hold-Tab row for

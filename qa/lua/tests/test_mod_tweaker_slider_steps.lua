@@ -213,4 +213,48 @@ return function(Harness, repo_root)
             Harness.equal(s:find("range and range[3]", 1, true), nil, stable_files[i])
         end
     end)
+
+    Harness.test("issue 1530 CIM Dev copy attributes the 25-point grid to Mod Tweaker", function()
+        local root = "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/"
+        local localization = assert(loadfile(repo_root .. "/" .. root
+            .. "crafting_in_modded_dev_localization.lua"))()
+        local description = localization.base_power_level_description.en
+        Harness.truthy(description:find("steps of 25 in Mod Tweaker", 1, true))
+        Harness.equal(description:find("steps of 50", 1, true), nil)
+        Harness.equal(string.format(description), description)
+        local data = read(root .. "crafting_in_modded_dev_data.lua")
+        local forge = read(root .. "standard_forge.lua")
+        Harness.equal(data:find("in steps of 50", 1, true), nil)
+        Harness.equal(forge:find("0-950 step 50", 1, true), nil)
+        Harness.truthy(data:find("Mod Tweaker steps by 25", 1, true))
+        Harness.truthy(forge:find("Mod Tweaker steps by 25", 1, true))
+    end)
+
+    Harness.test("issue 1530 CIM base-power reader clamps without GUI quantization", function()
+        local source = read("crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/standard_forge.lua")
+            :gsub("\r\n", "\n")
+        -- Compile the exact published production function in its complete,
+        -- two-name environment; no engine hooks or copied clamp implementation.
+        local body = assert(source:match("local function (_cim_base_power%(%).-\nend)\nmod%._cim_base_power = _cim_base_power"))
+        local value
+        local chunk = assert(loadstring("local function " .. body .. "\nreturn _cim_base_power"))
+        setfenv(chunk, {
+            type = type,
+            mod = { get = function(_, key)
+                Harness.equal(key, "base_power_level")
+                return value
+            end },
+        })
+        local read_power = chunk()
+        for _, row in ipairs({
+            { 0, 0 }, { 1, 1 }, { 24, 24 }, { 25, 25 }, { 324, 324 },
+            { 949, 949 }, { 950, 950 }, { -1, 0 }, { 951, 950 },
+            { 324.5, 324.5 }, { false, 300 }, { "324", 300 }, { {}, 300 },
+        }) do
+            value = row[1]
+            Harness.equal(read_power(), row[2])
+        end
+        value = nil
+        Harness.equal(read_power(), 300)
+    end)
 end
