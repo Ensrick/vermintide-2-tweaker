@@ -1,7 +1,14 @@
 # General Tweaker Changelog
 
+## 0.2.275-dev (2026-09-13) -- reissue unpublished 0.2.274-dev (#727, #1509) [tooling]
+
+- 0.2.274-dev was merged on 2026-09-12 (PR #1580) but never uploaded to the
+  Workshop because its ship claim went stale before the release ran. This
+  release carries it unchanged; no source changes.
+
 ## 0.2.274-dev (2026-09-12) -- keep the boot-time disable warning out of chat (#727) [tooling]
 
+- Never published: superseded unchanged by 0.2.275-dev before any Workshop upload.
 - VMF calls `on_disabled` at boot with `initial_call = true` for a mod the player
   left disabled, the usual setup beside stable General Tweaker. General Tweaker
   Dev then printed "Disable does not fully unwind active mutations. Restart the

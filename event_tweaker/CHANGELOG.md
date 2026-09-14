@@ -1,7 +1,14 @@
 # Tweaker: Events — Changelog
 
+## 0.4.53-dev (2026-09-13) -- reissue unpublished 0.4.52-dev (#727) [tooling]
+
+- 0.4.52-dev was merged on 2026-09-12 (PR #1580) but never uploaded to the
+  Workshop because its ship claim went stale before the release ran. This
+  release carries it unchanged; no source changes.
+
 ## 0.4.52-dev (2026-09-12) -- annotate the solo-only launch refusal echo (#727) [tooling]
 
+- Never published: superseded unchanged by 0.4.53-dev before any Workshop upload.
 - The Prologue solo-only Play refusal in `_evt_missions.lua` (#941) answers the
   player's own Play click, so it keeps its chat line with an explicit
   `allow-echo` reason. No behavior change.
