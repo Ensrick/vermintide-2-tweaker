@@ -74,7 +74,7 @@ with restoration postconditions on every official-realm transition. The
 existing `apply_mirror_overlay` stub stays disabled, never seeds `fresh`, and
 never marks the profile seeded.
 
-### Implemented slice 1 of 4: items/loadouts (v0.2.38-dev)
+### Implemented slice 1 of 4: items/loadouts (v0.2.39-dev)
 
 Path 3 from the issue: independently reversible slices behind one
 profile-generation transaction. `_mp_fresh_profile_state.lua` owns the

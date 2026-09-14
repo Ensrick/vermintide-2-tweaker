@@ -34,7 +34,7 @@ Last updated: 2026-09-12.
 |-------|-------|
 | Symptom | Selecting `Fresh (level 1)` stored a setting and nothing else; inventory and loadouts still read the official PlayFab-backed mirror (#840, log #940). |
 | Root cause | `apply_mirror_overlay` was an unwired no-op and every items consumer reads the canonical mirror through the same interface object; there was no MP-owned state to serve. |
-| Fix version(s) | mp v0.2.38-dev |
+| Fix version(s) | mp v0.2.39-dev |
 | Category | INTEGRATION / CRITICAL |
 | Repro | Modded realm, `Fresh (level 1)`, open the inventory; equip an item; restart; switch the setting to `Level 35, default inventory`; switch back. |
 | Expected post-fix | Fresh shows the seeded starter profile and persists edits; every exit path (setting, realm, disable, fault) delegates to official reads with one bounded `[mp:fresh] route state=` receipt; official inventory and loadouts are never changed; no PlayFab request is added. |

@@ -1,5 +1,9 @@
 # Modded Progression — Changelog
 
+## 0.2.39-dev (2026-09-13) - reissue of unpublished 0.2.38-dev (#840) [not-started]
+
+- 0.2.38-dev was merged to master on 2026-09-13 (PR #1586) but never uploaded to the Workshop: its version claim went stale before the ship could run. This release carries the 0.2.38-dev items/loadouts slice unchanged; no source changes.
+
 ## 0.2.38-dev (2026-09-12) - isolated Fresh profile: items/loadouts slice (#840) [not-started]
 
 - Added a durable MP-owned profile (`mp_profile_v1`, generation-keyed). The items/loadouts slice seeds exactly once per generation from client data only: Chaos Wastes default weapons reverse-mapped to adventure keys (`deus_weapons.lua:1428-1571`), the career `base_skin`, the plentiful career hat, the default frame, and plentiful jewellery; item power derives from `MIN_POWER_LEVEL_CAP` minus level-1 hero power (`power_level_settings.lua:3-5,268-271`, `backend_utils.lua:84-90`). `/mp_reset` starts a new generation.
@@ -9,6 +13,7 @@
 - The destructive `apply_mirror_overlay` stub remains disabled and `seeded`/`mark_seeded` remain untouched, so the sibling unlock API is unchanged.
 - Runtime checks: `mp840_fresh_route_methods_resolved`, `mp840_fresh_profile_envelope_valid`, `mp840_fresh_route_write_never_touches_native`, `mp840_fresh_unavailable_slices_gated`. Offline `test_mp_fresh_profile_routing.lua` (10 tests) covers seed-once, per-condition routing and restoration, boot-time resolution failure, write commits, failure injection with byte-identical official state, Emporium grants in the Fresh view, and the entry-point wiring.
 - Known boundary: XP/talents, currencies (VS and non-SM offers), crafting, and loot reads remain official-backed pending their slices; a Fresh hero therefore still shows the official level while carrying a level-1 loadout.
+- Never published: this version was merged but not uploaded (its ship claim went stale); the content ships unchanged as 0.2.39-dev.
 
 **Test (solo, modded realm):** select `Fresh (level 1)`, enter the keep, and open the inventory. Expected: each career shows only its starter loadout (Chaos Wastes default weapons, default hat/skin/frame, plentiful jewellery, power 5); the newest log contains one `[mp:fresh] seed generation=1 ...` line and one `[mp:fresh] route state=active ...` line and no `route state=official:fault`. Equip a different seeded or purchased item, restart, and confirm it persists. Run `/mp_regression_test` and expect the four `mp840_fresh_*` checks to pass. Switch the setting to `Level 35, default inventory`: the inventory must immediately show the official account again with one `route state=official:setting` line. The keep bench craft button and Okri's achievement claims must be greyed while Fresh is active.
 

@@ -21,7 +21,7 @@ is NOT one master gate: the PlayFab commit-suppression sites keep the real
 account safe and must stay live, while a separate set of UI sites merely grey out
 buttons and skip reward popups. `mp` therefore flips the flag to nil only inside
 a bracketed window around each vanilla UI/progression call, restores it on every
-exit path, and leaves the commit-suppression gate untouched. As of v0.2.38-dev,
+exit path, and leaves the commit-suppression gate untouched. As of v0.2.39-dev,
 simulated daily claims and Silver Shilling Emporium purchases have fully local
 backend interceptions, issue #607 has bounded layer diagnostics, and the Fresh
 profile's items/loadouts slice (#840) is served by an MP-owned interface route;
