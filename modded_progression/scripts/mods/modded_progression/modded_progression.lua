@@ -5,7 +5,7 @@ via VMF settings; the real PlayFab account is never written to.
 
 Full design: modded_progression/PLAN.md.
 
-Status (v0.2.38-dev): selected local quest/Emporium paths and bounded runtime
+Status (v0.2.39-dev): selected local quest/Emporium paths and bounded runtime
 diagnostics are wired; the complete local mission-loot feature is not. No
 mission chest is awarded or opened locally by the issue #607 instrumentation.
 The Fresh profile routes ONE slice (items/loadouts) to MP-owned state (#840);
@@ -30,7 +30,7 @@ local RealmAuthority = mod:dofile(
 -- at the bottom of this same chunk, so no _G or cross-file exposure is needed.
 local _MEM_PROBE_T0_MP = collectgarbage("count")
 
-local MOD_VERSION = "0.2.38-dev"
+local MOD_VERSION = "0.2.39-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([mp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
