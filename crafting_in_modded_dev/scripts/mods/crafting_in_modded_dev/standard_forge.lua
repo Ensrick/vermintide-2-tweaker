@@ -509,8 +509,8 @@ for i, r in ipairs(_RARITY_CHAIN) do _RARITY_INDEX[r] = i end
 local function _cim_base_power()
     local v = mod:get("base_power_level")
     if type(v) ~= "number" then return 300 end
-    -- Slider is 0-950 step 50; clamp belt-and-suspenders in case a stale config
-    -- ever held an out-of-range value.
+    -- Mod Tweaker steps by 25; this reader only clamps to 0-950, preserving
+    -- off-grid values entered through VMF rather than quantizing them here.
     if v < 0 then return 0 end
     if v > 950 then return 950 end
     return v
