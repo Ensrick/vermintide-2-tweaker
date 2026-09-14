@@ -310,6 +310,7 @@ local suites = {
     "test_gt_dummy_collision_policy",
     "test_gt_player_stat_snapshot_policy",
     "test_gut_simple_ui_bounds",
+    "test_gut_simple_ui_dropdowns",
     "test_gut_hud_drag_geometry",
     "test_gut_respawn_anchor",
     "test_mod_tweaker_slider_steps",

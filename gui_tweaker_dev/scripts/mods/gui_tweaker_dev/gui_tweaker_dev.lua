@@ -40,7 +40,7 @@ end
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.348-dev"
+local MOD_VERSION = "0.2.349-dev"
 local GUT_RPC_SCHEMA = 1 -- Bump only when a GUT positional wire shape changes.
 mod._GUT_RPC_SCHEMA = GUT_RPC_SCHEMA
 
@@ -436,7 +436,7 @@ _rt_register("issue314_simple_ui_window_confinement", function()
     if type(compat) ~= "table" or compat.source_workshop_id ~= "1389872347" then
         return "#314 Simple UI compatibility module/source identity is missing"
     end
-    if compat.phase ~= 1 or type(compat.tick) ~= "function" then
+    if (compat.phase or 0) < 1 or type(compat.tick) ~= "function" then -- phase 2+ keeps phase 1 wired
         return "#314 bounded phase-1 window recovery tick is not wired"
     end
     if type(policy) ~= "table" or type(policy.confine) ~= "function" then

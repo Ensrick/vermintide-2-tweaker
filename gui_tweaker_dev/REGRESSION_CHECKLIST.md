@@ -266,7 +266,7 @@ If this candidate fails, use exactly one evidence-selected fallback:
 
 Subset of the monorepo [REGRESSION_CHECKLIST.md](../docs/REGRESSION_CHECKLIST.md) for Tweaker: GUI dev.
 
-Last updated: 2026-09-13.
+Last updated: 2026-09-14.
 
 ## Floating damage numbers above the network maximum (#938)
 
@@ -377,8 +377,10 @@ Last updated: 2026-09-13.
 - [ ] With Simple UI and UI Tweaks enabled, drag fitted windows through every screen edge; each remains wholly visible.
 - [ ] Resize a window larger than the viewport; its left edge and top title/drag handle remain reachable.
 - [ ] Change resolution/UI scale; existing windows recover into the new bounds without replacing their position tables.
+- [ ] A dropdown near the bottom of the screen opens upward; one with more options than fit shows only the rows that fit, scrolls with the mouse wheel while the cursor is over the open list, reveals the selected option when reopened, and every visible row is clickable while hidden rows are not. No row extends past the screen.
+- [ ] With **Fit Simple UI Dropdowns** off, dropdown lists return to upstream placement and bounds at once.
 - [ ] Without Simple UI installed/enabled, GUT behavior and logs are unchanged.
-- [ ] `/gut_regression_test` passes `issue314_simple_ui_window_confinement`.
+- [ ] `/gut_regression_test` passes `issue314_simple_ui_window_confinement` and `issue314_simple_ui_phase2`; offline `test_gut_simple_ui_bounds.lua` and `test_gut_simple_ui_dropdowns.lua` pass.
 
 ## Native options
 

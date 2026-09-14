@@ -1,5 +1,52 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.349-dev (2026-09-14) - Simple UI compatibility phase 2 (#314) [verify-fix]
+
+- Simple UI dropdown lists now fit the screen. Upstream lays every option one
+  row below the previous one and extends the hit box by the whole list
+  (`simple_ui.lua:2128-2150`, `:2168-2176`), so a list near the bottom of the
+  screen or with many options ran off-screen and its lower rows could not be
+  clicked. The new `_gut_simple_ui_dropdowns.lua` owner (loaded from the
+  `_gut_simple_ui_compat.lua` tail because the entry point is at its size
+  ceiling) fits each live dropdown through the pure `dropdown_layout` policy
+  in `_gut_simple_ui_bounds_policy.lua`: a list opens downward when it fits
+  below, upward when it fits above, otherwise on the roomier side showing only
+  the rows that fit; rows keep reading order; a long list scrolls with the
+  mouse wheel while the cursor is over the open list (`Mouse.axis` wheel y,
+  `debug_manager.lua:289-296`) and reveals the selected option each time it
+  opens; the row gap follows `UIResolutionScale()` like upstream.
+- Wiring stays on Simple UI's public per-instance object model (prototype
+  functions are copied into each instance, `simple_ui.lua:862-884`,
+  `:1407-1432`): the instance's own `update` is wrapped for layout and scroll,
+  its `extended_bounds` is replaced with the fitted hit box (which upstream
+  also uses to draw the background, `:1527-1531`, and to route clicks,
+  `:2100-2126`), and each option's public `before_update` callback (first
+  inside the option's update, `:1433-1436`) is chained to place the row or to
+  hide, disable and park a scrolled-out row off-screen. No prototype is
+  touched, no hook is added, no upstream code is copied, consumer callbacks
+  and `disabled` flags are preserved, parked rows are restored the moment the
+  list closes, and a child failure never costs phase-1 window recovery.
+- New **Fit Simple UI Dropdowns** option under UI Tweaks > Sync & Vanilla
+  Mirrors (default on). Off, or without Simple UI, nothing is installed and the
+  upstream lists stay unchanged; switching mid-session takes effect at once.
+- `/gut_regression_test` adds `issue314_simple_ui_phase2` (one `[gut:314]
+  runtime phase=2` receipt). Offline `test_gut_simple_ui_dropdowns.lua`
+  covers the layout policy (down/up/roomier side, selection reveal, scroll
+  clamps, hit box equal to the rendered rows), the real owner against an
+  upstream-ordered object model (hidden rows unclickable, click resolution at
+  rendered rows, wheel gating, reopen reset, consumer flag/callback
+  preservation, option off/on mid-session, UI scale, sparse indices, engine
+  vector accessors), and the runtime check plus child-failure isolation.
+
+**Test (solo):** With Simple UI and UI Tweaks enabled, open a Simple UI
+dropdown near the bottom of the screen and one with more options than fit
+(e.g. UI Tweaks preset pickers). The first opens upward; the second shows only
+the rows that fit, scrolls with the mouse wheel while the cursor is over the
+list, and reopens on the selected option. Every visible row selects on click;
+no row extends past the screen. Turn **Fit Simple UI Dropdowns** off and
+confirm upstream placement returns. Run `/gut_regression_test` and confirm
+`issue314_simple_ui_phase2` passes.
+
 ## 0.2.348-dev (2026-09-13) - synchronize host custom statistics to clients (#1573) [verify-fix]
 
 - Non-host peers with **Expanded Scoreboard** and **Host Statistics** enabled

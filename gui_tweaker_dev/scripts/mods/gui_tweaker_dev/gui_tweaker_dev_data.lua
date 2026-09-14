@@ -256,6 +256,14 @@ local options_data = {
                                         default_value = false,
                                         tooltip       = "gut_vanilla_persistent_ammo_tooltip",
                                     },
+                                    -- (#314 phase 2) Simple UI dropdown fitting; inert
+                                    -- without Simple UI. See _gut_simple_ui_dropdowns.lua.
+                                    {
+                                        setting_id    = "gut_simple_ui_fit_dropdowns",
+                                        type          = "checkbox",
+                                        default_value = true,
+                                        tooltip       = "gut_simple_ui_fit_dropdowns_tooltip",
+                                    },
                                 },
                             },
                         },
