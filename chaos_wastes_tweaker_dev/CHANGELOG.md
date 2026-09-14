@@ -1,5 +1,55 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.351-dev (2026-09-14) -- progressive modifier stacking (#289) [verify-fix]
+
+- Adds the host-controlled, default-off **Progressive Modifier Stacking**
+  option: the bounded two-modifier proof the issue asks for. From the third map
+  of a pilgrimage (two completed levels, the documented ladder's second step) a
+  cursed mission also carries ONE extra modifier drawn from a fixed curated pair,
+  `curse_empathy` and `curse_abundance_of_life`. The extra is never the mission's
+  own curse, never a curse the host disabled, and never a template that declares
+  packages. Uncursed nodes, shrines, finales, the map screen and the keep are
+  untouched. Conservative readings stated here because the issue leaves them
+  open: the pair means a two-entry allowlist of which at most one is added; the
+  cap is fixed at two modifiers total with no rate or count knob; the 1/2/3
+  ladder beyond the proof stays closed until the falsifiers below are cleared.
+- New owner `_ct_progressive_modifier_runtime.lua` holds the single CT hook on
+  `GameModeDeus.mutators`, the seam where vanilla composes the node curse, minor
+  modifiers, theme, node, live-event and run event mutators into one list
+  (`game_mode_deus.lua:667-686`; `deus_mechanism.lua:781-808`) and which
+  `GameModeManager` reads once per mission to build the `MutatorHandler`
+  (`game_mode_manager.lua:85-99`). Vanilla runs first; host-only, the hook appends
+  the extra to the returned list. The singular graph `node.curse` and every UI,
+  reward and objective contract that reads it are unchanged.
+- Transport is vanilla end to end: the host handler initializes and activates
+  every list entry, activation sends `rpc_activate_mutator_client` keyed by the
+  vanilla `NetworkLookup.mutator_templates`, the initialized map is shared state
+  and hot join replays every active mutator (`mutator_handler.lua:45-48,85-111,
+  148-170,697-702,795-797`). Clients never consult their own composed list
+  (`mutator_handler.lua:49-55`), so the hook is inert on clients and no CT RPC,
+  lookup entry, package load or setting transport is added; mission teardown
+  deactivates every active entry (`mutator_handler.lua:60-83`) and nothing is
+  written to the run state or graph. Selection is a pure hash of run seed, node
+  key and completed level count, so it consumes no gameplay RNG and repeats
+  identically on every call.
+- `_ct_modifier_stack_audit.lua` stays observation-only but now reports the
+  runtime `activation`, the chosen `extra` and its reason, `proof_target`, and
+  the parity rule `unexpected_active`/`allowlisted`: any active modifier that
+  vanilla's composed list, the level's own mutators or a Twitch activation does
+  not explain must be an allowlist entry, and never more than one. The
+  `StateIngame` row is captured before vanilla's activation RPCs land on a
+  client, so peer parity is read from the mid-mission command, not that row.
+- Adds `/ct_regression_test` check `issue289_progressive_modifier_stack`
+  (seams present, both templates package-free and wire-registered, ladder
+  `1/1/2/2/3` and extras `0/0/1/1/1`, exhaustive deterministic selection that
+  never names a non-allowlisted curse, duplicates the node curse or fires below
+  the ladder, no session errors) and extends `issue289_modifier_stack_feasibility`
+  with the parity rule and the runtime-installed requirement. Offline suites cover
+  the pure policy, vanilla-first order with preserved returns, host/client and
+  toggle gating, disabled-curse and package exclusion, in-place append with
+  dedup, contained errors, bounded logs, the audit receipt, the data/localization
+  contract and the full-roster singleton hook invariant.
+
 ## 0.7.350-dev (2026-09-12) -- progressive elite enhancements (#323) [verify-fix]
 
 - Adds the host-controlled, default-off **Progressive Elite Enhancements**

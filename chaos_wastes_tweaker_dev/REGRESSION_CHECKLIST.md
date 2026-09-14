@@ -938,17 +938,45 @@ Falsifiable fallback paths if the live pass fails:
 
 ---
 
+### #289 progressive modifier stacking (0.7.351-dev)
+
+- [ ] Option off (default): a full pilgrimage reports `activation=disabled` and
+  `extra=none` on every `[ct:289]` row; no `[ct:289] stack` row and no
+  `Activating mutator` line for a curse other than the node's own.
+- [ ] Option on, maps 1 and 2 (zero or one completed level): `extra=none` with
+  `extra_reason=below_ladder` on a cursed mission.
+- [ ] Option on, map 3 onward, cursed mission: exactly one `[ct:289] stack` row
+  naming `curse_empathy` or `curse_abundance_of_life`, never the node's own
+  curse, never a curse disabled in Disabled Curses; the map screen, curse panel
+  and end-of-mission rewards still show only the node's own curse.
+- [ ] Option on, uncursed mission, shrine, finale arena and the map screen:
+  `extra=none` (`no_node_curse` or `node_curse_inactive`); nothing is appended.
+- [ ] Re-entering the same mission after a restart of the client or a reconnect
+  yields the same extra (selection is seeded by run seed, node key and depth).
+- [ ] Co-op after solo: run `/ct_modifier_stack_audit` mid-mission on host and
+  client; `active` signatures match exactly, `unexpected_active` is `1` with
+  `allowlisted=true` on the client and `0` on the host, and a client that
+  hot-joins mid-mission shows the same `active` signature. The automatic
+  `StateIngame` row on a client may still read `active=0:000017`; that row is
+  captured before vanilla's activation RPCs land and is not the parity evidence.
+- [ ] Leaving the mission deactivates the extra with no residue on the next node
+  (no `Trying to deactivate mutator` fassert, no doubled beams or drain on a
+  later uncursed map).
+- [ ] Run `/ct_regression_test`; require
+  `PASS: issue289_progressive_modifier_stack` and
+  `PASS: issue289_modifier_stack_feasibility`.
+
 ### #289 multiple-modifier composition diagnostics
 
 - [ ] Enter the same Chaos Wastes mission as host and client; confirm one bounded
   `[ct:289]` `StateIngame` census on each peer.
 - [ ] Run `/ct_modifier_stack_audit` on both peers and compare `effective` and
-  `active` signatures; require exact matches and zero missing template/wire names
-  or duplicates.
+  `active` signatures; with the option off require exact matches and zero missing
+  template/wire names or duplicates (with it on, see the stacking section above).
 - [ ] Run `/ct_regression_test`; require
   `PASS: issue289_modifier_stack_feasibility`.
-- [ ] Confirm no extra curse is activated and no graph, package, lookup, or RPC
-  state changes in this diagnostics build.
+- [ ] Confirm the audit itself activates no curse and changes no graph, package,
+  lookup, or RPC state.
 
 ---
 
