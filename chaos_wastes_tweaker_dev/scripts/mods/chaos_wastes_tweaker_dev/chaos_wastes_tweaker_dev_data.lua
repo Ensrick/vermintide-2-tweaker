@@ -514,6 +514,18 @@ local data = {
                 },
             },
             -- ============================================================
+            -- Progressive Modifier Stacking (#289): third progressive sibling,
+            -- same top-of-list placement. Host-authoritative, default-off;
+            -- owner is _ct_progressive_modifier_runtime.lua. Deliberately no
+            -- rate knob: the ladder is the documented feasibility gate.
+            -- ============================================================
+            {
+                setting_id = "progressive_modifier_stack",
+                type = "checkbox",
+                default_value = false,
+                tooltip = "progressive_modifier_stack_tooltip",
+            },
+            -- ============================================================
             -- Buy Starting Boons (#458): top-level like Progressive Difficulty
             -- (a run-start modifier, not one of the A-Z groups). The advanced
             -- sub-options tune this shrine independently of normal ones.
