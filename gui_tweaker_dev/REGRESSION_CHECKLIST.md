@@ -242,10 +242,20 @@ If this candidate fails, use exactly one evidence-selected fallback:
 - [ ] Melee Damage plus Ranged Damage never exceeds the Damage Dealt row for the same player.
 - [ ] A healing draught while wounded credits the drinker's Permanent Health Restored with the permanent health actually gained; bandaging an ally credits the healer; temporary-health gains add nothing.
 - [ ] The end screen shows the same custom values as the last held-Tab snapshot; the next mission starts every custom row at zero.
-- [ ] A non-host peer shows every custom row as unavailable (a dash), never zero, until #1573 synchronizes them.
+- [ ] A non-host peer shows every custom row as unavailable (a dash), never zero, until a valid #1573 host snapshot arrives.
 - [ ] #437: a departed client's custom rows survive a rejoin only when native retention kept that player; eviction or disabling retention drops them.
 - [ ] Wrappers forward every vanilla return, let vanilla errors propagate, and add no statistic definition, lookup, RPC, or vanilla payload change; credit receipts stay at six per family and refusal receipts at eight per process.
 - [ ] `/gut_regression_test` passes `issue1570_host_friendly_fire_statistic`, `issue1571_host_melee_ranged_damage_statistic`, and `issue1572_host_permanent_health_statistic`; offline `test_gut_custom_stats.lua` and the scoreboard live-adapter suite pass.
+
+## Host-synchronized custom statistics (#1573)
+
+- [ ] Solo first: with **Expanded Scoreboard** and **Host Statistics** enabled, the host's held-Tab and end-screen custom rows are unchanged, mission entry resets the sync generation, and no `[gut:1573]` request leaves a solo host.
+- [ ] `/gut_regression_test` passes `issue1573_client_custom_statistics_sync` and emits one bounded `[gut:1573] raw ... event=runtime-check ... verdict=PASS` receipt whose Tab/end fingerprints match.
+- [ ] After the exact Dev artifact passes Solo, two-player co-op covers: a client with both options on shows the host's four rows for every player within a few seconds of joining; later host credits refresh on held Tab; the end screen matches the last held-Tab values; disconnect/rejoin, reversed host/client roles, and host migration.
+- [ ] A client with **Host Statistics** off sends no request; turning it on starts a fresh generation at sequence one; turning it off retires the pull.
+- [ ] A mixed-version or no-GUT host produces at most four readiness attempts, the rows stay a dash, and delayed VMF pongs cannot rearm the pull; an accepted snapshot expires after ten seconds without a refresh.
+- [ ] Forged sender, stale/retired generation, duplicate/out-of-order/gapped sequence, same-tick floods, unknown/duplicate/oversized player, topic, value and payload inputs, and chunk conflicts remain rejected or rate-bounded by `test_gut_custom_stat_sync.lua`.
+- [ ] The only new mod channel is exact `gut_custom_stat_snapshot_v1` schema 1; no damage hook, second ledger, `StatisticsDefinitions` mutation, `NetworkLookup` identity, or vanilla payload change exists, and the host answers only from the #1570-#1572 ledger owner.
 
 ## On Yer Feet revive attribution (#438)
 
@@ -256,7 +266,7 @@ If this candidate fails, use exactly one evidence-selected fallback:
 
 Subset of the monorepo [REGRESSION_CHECKLIST.md](../docs/REGRESSION_CHECKLIST.md) for Tweaker: GUI dev.
 
-Last updated: 2026-09-12.
+Last updated: 2026-09-13.
 
 ## Floating damage numbers above the network maximum (#938)
 
