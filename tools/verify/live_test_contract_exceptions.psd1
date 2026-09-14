@@ -619,7 +619,7 @@
             )
         }
         @{
-            Marker='[event-inject:393]';ModId='event_tweaker';ModTrees=@{event_tweaker='4d509704323308c24e3ad00929159b1abeb7330c'}
+            Marker='[event-inject:393]';ModId='event_tweaker';ModTrees=@{event_tweaker='f52b1ff5d8347414b65687cc35fe4925c4ee5e72'}
             SourcesByMod=@{event_tweaker='event_tweaker/scripts/mods/event_tweaker/_evt_diagnostics.lua'}
             Signature='[event-inject:393] settled verdict=%s evidence=%s | injected=[%s] max_intensity=%s decay_per_second=%s decay_delay=%s add_per_pct_dmg=%s delay_horde=%s delay_specials=%s delay_mini_patrol=%s cached_horde=%s cached_specials=%s cached_mini_patrol=%s'
             Bound='one settled receipt per weak-key Pacing instance'
@@ -1389,7 +1389,7 @@
             )
         }
         @{
-            ModId='event_tweaker'; ModTree='4d509704323308c24e3ad00929159b1abeb7330c'
+            ModId='event_tweaker'; ModTree='f52b1ff5d8347414b65687cc35fe4925c4ee5e72'
             Source='event_tweaker/scripts/mods/event_tweaker/_evt_diag_tzeentch_twins.lua'
             Marker='[et:1149t]'; AddRoute=$true
             Signature='[et:1149t] %s'
