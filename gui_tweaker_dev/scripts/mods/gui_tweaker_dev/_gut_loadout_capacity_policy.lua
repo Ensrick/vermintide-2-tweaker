@@ -64,4 +64,48 @@ function Policy.inspect(loadouts, declared_cap, widget_count, icon_exists, title
     return result
 end
 
+-- Window-scoped expansion (#231). Rows share the vanilla shape
+-- (inventory_settings.lua:178-207 minus `loadout_icon`); appended rows carry
+-- EXPANSION_TAG so `contract` removes exactly what `expand` added.
+Policy.EXPANSION_TAG = "gut_231"
+
+function Policy.custom_count(loadouts)
+    local count = 0
+    for _, row in ipairs(loadouts or {}) do
+        if row and row.loadout_type == "custom" then count = count + 1 end
+    end
+    return count
+end
+
+-- Append custom rows until the table holds `target` custom slots. Idempotent;
+-- never touches existing rows. Returns the number of rows added.
+function Policy.expand(loadouts, target)
+    if type(loadouts) ~= "table" then return 0 end
+    target = tonumber(target) or Policy.TARGET
+    local added = 0
+    for index = Policy.custom_count(loadouts) + 1, target do
+        loadouts[#loadouts + 1] = {
+            loadout_index = index,
+            loadout_type = "custom",
+            [Policy.EXPANSION_TAG] = true,
+        }
+        added = added + 1
+    end
+    return added
+end
+
+-- Remove every row `expand` appended. Returns the number of rows removed.
+function Policy.contract(loadouts)
+    if type(loadouts) ~= "table" then return 0 end
+    local removed = 0
+    for i = #loadouts, 1, -1 do
+        local row = loadouts[i]
+        if type(row) == "table" and row[Policy.EXPANSION_TAG] == true then
+            table.remove(loadouts, i)
+            removed = removed + 1
+        end
+    end
+    return removed
+end
+
 return Policy

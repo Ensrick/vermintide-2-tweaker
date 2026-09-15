@@ -523,16 +523,29 @@ end)
 -- that aren't resident in the in-mission renderer -> UIRenderer_draw_texture C-fatal (uncatchable
 -- by pcall; same class as the #155 cosmetics gate). Block the context menu from OPENING when not
 -- in the keep -- basic loadout selection (viewing/picking) still works; only the right-click
--- rename/delete menu is suppressed mid-mission. gut hooks HeroWindowLoadoutSelectionConsole
--- NOWHERE else -> no duplicate hook.
+-- rename/delete menu is suppressed mid-mission.
+--
+-- _gut_consolidated_show_context_menu_hook (#231): this is the ONE hook on
+-- (HeroWindowLoadoutSelectionConsole, _show_context_menu) mod-wide. The paged loadout
+-- selector (_gut_loadout_paging.lua) needs a post-step here (vanilla raises the button whose
+-- PHYSICAL index equals the logical index, :778-780, and localizes a title that has no vanilla
+-- string past VI, :832-833), so it is called from this body instead of a second hook, which
+-- VMF would silently drop. Other gut hooks on this class target different methods
+-- (_save_bot_equipment, _populate_context_menu_loadout, and the paging owner's set).
 mod:hook("HeroWindowLoadoutSelectionConsole", "_show_context_menu", function(func, self, loadout_button_widget)
     local in_keep = rawget(_G, "DamageUtils") and DamageUtils.is_in_inn or false
     if not in_keep then
         mod:debug("[gut:loadout-guard] blocked HeroWindowLoadoutSelectionConsole:_show_context_menu mid-mission (context-menu textures not resident -> would C-fatal)")
         return
     end
-    return func(self, loadout_button_widget)
+    local result = func(self, loadout_button_widget)
+    local paging = mod._gut_loadout_paging
+    if type(paging) == "table" and type(paging.after_show_context_menu) == "function" then
+        paging.after_show_context_menu(self, loadout_button_widget)
+    end
+    return result
 end)
+mod._gut231_context_menu_merged = true   -- read by /gut_regression_test issue231_loadout_paging
 
 -- ============================================================
 -- Keep Menus in Missions (InventorySettings patch + ESC-menu entry)
@@ -633,3 +646,17 @@ mod._gut_apply_keep_menus = _patch_inventory_access
 -- Apply once at load (mirrors the original load-time call) so the ESC-menu entry +
 -- InventorySettings patch reflect the persisted setting before any state change fires.
 _patch_inventory_access()
+
+-- #231: the paged native loadout selector is this module's child (gui_tweaker_dev.lua and
+-- _gut_native_loadouts.lua are at their size ceilings; this file already owns the
+-- consolidated _show_context_menu hook it feeds). It self-registers
+-- `issue231_loadout_paging`; a load failure leaves the vanilla six-button bar intact and is
+-- reported once.
+do
+    local ok, api = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_loadout_paging")
+    if ok and type(api) == "table" then
+        mod._gut_loadout_paging = api
+    else
+        pcall(printf, "[gut:231] loadout paging module failed: %s", tostring(api))
+    end
+end

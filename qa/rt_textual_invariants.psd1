@@ -301,6 +301,15 @@
     # ============================ gut_dev ============================
     @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_native_loadout_policy.lua'; needle='backend_id:match("^cwv_.+_%d%d%d$")'; literal=$true; polarity='present'; issueRef='#287'; note='readonly overlay accepts only exact CWV backend-instance identity.' }
     @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_native_loadouts.lua'; needle='Policy.readonly_action(slot, v) == "preserve"'; literal=$true; polarity='present'; issueRef='#287'; note='whole-loadout reads use the same mod-owned predicate as single-slot reads/writes.' }
+    # -- #231 paged native loadout selector: the runtime owner must route every
+    #    physical-button access through the mapper and must never add a second hook
+    #    on the three (Class, method) pairs other gut modules own.
+    @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_loadout_paging.lua'; needle='_loadout_button_widgets[self._'; literal=$true; polarity='absent'; issueRef='#231'; note='direct logical index into the six physical buttons (vanilla :459/:500/:709 shape) is forbidden in the paging owner.' }
+    @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_loadout_paging.lua'; needle='_loadout_button_widgets[loadout_index]'; literal=$true; polarity='absent'; issueRef='#231'; note='direct logical index (vanilla :972 shape) is forbidden in the paging owner.' }
+    @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_loadout_paging.lua'; needle='_loadout_button_widgets[Mapper.slot_of(logical)]'; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#231'; note='the single mapper-routed physical lookup (_widget_for).' }
+    @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_loadout_paging.lua'; needle='"_show_context_menu"'; literal=$true; polarity='absent'; issueRef='#231'; note='_show_context_menu is hooked once, in _gut_mission_inventory.lua (consolidated site).' }
+    @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_mission_inventory.lua'; needle='_gut_consolidated_show_context_menu_hook'; literal=$true; polarity='present'; issueRef='#231'; note='consolidation banner on the single _show_context_menu hook that feeds the paging post-step.' }
+    @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_mission_inventory.lua'; needle='paging.after_show_context_menu(self, loadout_button_widget)'; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#231'; note='the consolidated hook calls the paging owner post-step exactly once.' }
     # Source: gui_tweaker_dev/CHANGELOG.md 0.2.220-dev (issue 511). The two
     # source-only checks: mission_map_preview_backdrop (#336) reads _gt module the
     # mission-map file; cutscene_postskip_fade_swallow (#140).

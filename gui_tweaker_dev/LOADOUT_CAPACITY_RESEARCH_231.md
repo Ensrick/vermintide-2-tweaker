@@ -2,12 +2,25 @@
 
 ## Current result
 
-GUT's modded-only native store is already capacity-agnostic and its separate chat
-commands accept slots 1–30. The native hero-view pipeline is not yet safe to raise
-to 30. The original pass added an automatic census rather than mutating the
-global inventory schema before the UI and asset boundaries were ready. That
-census has now been consumed and retired; the pure capacity policy and its host
-tests remain as the implementation boundary.
+Implemented in 0.2.350-dev as the paging contract below, text-numeral variant.
+`_gut_loadout_page_mapper.lua` is the pure page/physical-slot owner (bijection,
+strip geometry, Roman numerals, realm predicate), `_gut_loadout_paging.lua` the
+runtime owner that replaces every direct `_loadout_button_widgets[logical]`
+path on `HeroWindowLoadoutSelectionConsole`, and
+`_gut_loadout_capacity_policy.lua` `expand` / `contract` append rows 7-30 and
+raise `MAX_NUM_CUSTOM_LOADOUTS` only while a paged window is open in the modded
+STORE Adventure realm. Page controls: `<` left of the strip, `>` between the
+strip and `+`, `Page n/m` above `+`, Left/Right arrow keys, gamepad bumper cycling
+with auto-reveal. Regression check `issue231_loadout_paging`; host tests
+`test_gut_loadout_paging.lua` and `test_gut_loadout_capacity.lua`. Fallback path
+2 (a GUT-owned overlay selector) was not needed. The vanilla facts below remain
+the design record.
+
+GUT's modded-only native store is capacity-agnostic and its separate chat
+commands accept slots 1–30. The original pass added an automatic census rather
+than mutating the global inventory schema before the UI and asset boundaries
+were ready. That census has been consumed and retired; the pure capacity policy
+and its host tests remain the implementation boundary.
 
 Vanilla derives `InventorySettings.MAX_NUM_CUSTOM_LOADOUTS` from six custom rows
 in `inventory_settings.lua`. The loadout-selection definitions then create one

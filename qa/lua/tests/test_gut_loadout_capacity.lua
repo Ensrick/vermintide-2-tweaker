@@ -64,4 +64,33 @@ return function(H, repo_root)
         H.equal(source:find("_gut_loadout_capacity_probe", 1, true), nil)
         H.equal(source:find("gut_loadout_capacity_probe", 1, true), nil)
     end)
+
+    H.test("GUT #231 window-scoped expansion appends rows 7-30 and restores six", function()
+        local rows = vanilla_rows()
+        H.equal(Policy.custom_count(rows), 6)
+        H.equal(Policy.expand(rows, 30), 24)
+        H.equal(Policy.custom_count(rows), 30)
+        H.equal(#rows, 32)
+        H.equal(rows[9].loadout_index, 7)
+        H.equal(rows[9].loadout_type, "custom")
+        H.equal(rows[9].loadout_icon, nil)
+        H.equal(rows[9][Policy.EXPANSION_TAG], true)
+        H.equal(rows[32].loadout_index, 30)
+        H.equal(rows[8][Policy.EXPANSION_TAG], nil)
+        H.equal(Policy.expand(rows, 30), 0)
+        H.equal(#rows, 32)
+        local custom = {}
+        for _, row in ipairs(rows) do
+            if row.loadout_type == "custom" then custom[#custom + 1] = row.loadout_index end
+        end
+        for i = 1, 30 do H.equal(custom[i], i, "custom row order " .. i) end
+        H.equal(Policy.contract(rows), 24)
+        H.equal(Policy.custom_count(rows), 6)
+        H.equal(#rows, 8)
+        H.equal(rows[8].loadout_index, 6)
+        H.equal(Policy.contract(rows), 0)
+        H.equal(Policy.expand(nil, 30), 0)
+        H.equal(Policy.contract(nil), 0)
+        H.equal(Policy.expand({}, 2), 2)
+    end)
 end

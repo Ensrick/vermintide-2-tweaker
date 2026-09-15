@@ -1,5 +1,21 @@
 # Regression Checklist — gui_tweaker_dev
 
+## Thirty modded loadouts, paged selector (#231, 0.2.350-dev)
+
+- Modded realm, keep, "Use non-modded loadouts" OFF: open Equipment and press
+  `+` past VI. The strip pages, `<` / `>` and `Page n/m` appear above and
+  beside `+`, buttons read VII..XXX, `+` greys out only at XXX.
+- The `<` / `>` buttons and the Left/Right arrow keys flip pages; selecting a
+  slot on another page, LB/RB on a gamepad, and deleting all keep the selected
+  slot visible (auto-reveal). Paging away hides the selection frame.
+- Context menu on a slot past VI: header reads "Loadout VII" style, no icon,
+  delete and bot designation work, the hovered button is the raised one.
+- Official realm, "Use non-modded loadouts" ON, and Versus: vanilla six icon
+  buttons, no page controls, `+` disabled at VI, cap stays 6.
+- `/gut_regression_test`: `issue231_loadout_paging` must pass (cap reads 6
+  with no paged window open and 30 while one is open).
+- Host tests: `test_gut_loadout_paging.lua`, `test_gut_loadout_capacity.lua`.
+
 ## Dialogue staged isolation (#998)
 
 - With the coordinated CD build, mouse/arrows/controller edits enable Apply
