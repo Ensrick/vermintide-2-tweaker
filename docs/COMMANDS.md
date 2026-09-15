@@ -104,7 +104,9 @@ peers, dump_spawners, dump_potions, dump_boon_loc, dump_boons,
 dump_buffs, dump_mutators, dump_traits, dump_adventure_names,
 pool_status, force_inject_pool, cw_status,
 ct_426_diag,                   -- read-only modded-boon peer wire census
-ct_profile_audit               -- one bounded local/effective profile snapshot (#919)
+ct_profile_audit,              -- one bounded local/effective profile snapshot (#919)
+ct_weave_curse_audit,          -- bounded Weave-to-CW curse feasibility census (#253)
+ct_weave_metal                 -- Metal wind curse adapter: on | off | status | strength <1-5> (#253; host-owned, hidden from the curse menu)
 ```
 
 ### `crt` (career_tweaker)

@@ -51,3 +51,17 @@ Every implemented wind requires two-player verification: host/client activation,
 late join, level transition, death/respawn, curse stacking, resource residency,
 and exact cleanup. Metal also needs armored/unarmored enemies as controls. Until a
 wind passes that matrix, it remains absent from the selectable curse menu.
+
+## Status
+
+- **Metal (step 1):** adapter shipped in ct dev `0.7.352-dev`
+  (`_ct_weave_metal_runtime.lua` + `_ct_weave_metal_policy.lua`). Host-owned,
+  default-off, reached only through `/ct_weave_metal on | off | status |
+  strength <1-5>`; no curse-menu widget. The context bridge replaces the
+  template's global Weave-manager read at the wrapped server start with
+  `{ wind = "metal", wind_strength = N }`, the per-level append happens in the
+  `MutatorHandler.init` pre-hook so vanilla hot-join transport stays
+  authoritative, and the `MutatorHandler.destroy` safe hook proves armor
+  restoration. The whole matrix above is still open; see
+  `REGRESSION_CHECKLIST.md` ("Metal wind curse adapter").
+- **Fire, Heavens/Life/Shadow/Death, Light/Beasts:** not started.

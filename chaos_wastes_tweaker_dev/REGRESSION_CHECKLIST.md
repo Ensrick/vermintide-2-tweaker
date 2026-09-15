@@ -127,6 +127,20 @@ Interpret `/ct_426_diag` without changing the run:
 | Detection | Offline `test_ct_weave_curse_policy.lua`; `/ct_regression_test`: `issue253_weave_curse_feasibility`. |
 | Future verification | Each implemented wind is `verify-fix` + `coop-required` (the `verify-fix-coop` label was retired 2026-07-21 and has since been deleted); test host/client, hot join, transition, respawn, stacking and cleanup independently. |
 
+### Metal wind curse adapter - issue #253
+
+| Field | Value |
+|---|---|
+| Current scope | Host-owned, default-off adapter that appends the vanilla `metal` mutator to a host Deus level's mission list. Hidden from the curse menu (no widget, no localization) until the matrix below passes. |
+| Command | `/ct_weave_metal on \| off \| status \| strength <1-5>`; `on`/`off` are session-only, `strength` persists in `weave_metal_strength` (default 1). |
+| Authority | Only the host composes the list; vanilla `rpc_activate_mutator_client`, the shared initialized map and hot-join replay carry it to clients. No CT RPC, lookup entry, package load or setting transport. |
+| Context bridge | Table-form hook on the wrapped `MutatorTemplates.metal.server.start_function`: with a CT level armed the vanilla body (the only global Weave-manager read) is skipped and `data.wind_strength`/`data.buff_system` come from `{ wind, wind_strength }`. Real Weaves run vanilla. |
+| Cleanup | Armor category is applied/restored by vanilla's wrapped initialize/stop; the `MutatorHandler.destroy` safe hook proves the eleven breeds match the pre-init snapshot and drops the per-level context. |
+| Runtime evidence | One `[ct:253:diag] action=... result=... enabled=... strength=... server=... mechanism=... bridged=... level=...` receipt per command; at most 16 `[ct:253:metal]` rows (install, armed, start, teardown) and 4 error rows per session. |
+| Detection | Offline `test_ct_weave_metal_policy.lua` + `test_ct_weave_metal_runtime_owner.lua`; `qa/rt_textual_invariants.psd1` (#253 needles); `/ct_regression_test`: `issue253_metal_wind_adapter`. |
+| Lifecycle | `diagnostics-armed` solo first (command receipt, `[ct:253:metal] armed`/`teardown restored=11/11`, regression pass); then `coop-required`. |
+| Open matrix | Host/client activation, late join, level transition, death/respawn, stacking with a node curse, resource residency, exact cleanup, armored vs unarmored enemy controls. None exercised in-game yet. |
+
 ### dev-localization-status-sync - issue #345
 
 | Field | Value |
