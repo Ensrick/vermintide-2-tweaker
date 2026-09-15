@@ -24,6 +24,122 @@ function Assert-VtContractFixture {
     if (-not $Condition) { throw $Message }
 }
 
+function Get-VtGitObjectTypeOrNull {
+    # Best-effort offline object-type probe. Returns 'tree' / 'commit' / 'blob'
+    # / 'tag' when the checkout at RepoRoot can resolve ObjectId locally, and
+    # $null whenever it cannot (no git, not a work tree, absent object). Lazy
+    # promisor fetches are forbidden so an offline self-test never touches the
+    # network; native stderr is discarded under a Continue preference because
+    # a redirected stderr line is a terminating error on PS 5.1 under Stop.
+    param([string]$RepoRoot, [string]$ObjectId)
+    if ([string]::IsNullOrWhiteSpace($RepoRoot) -or -not (Test-Path -LiteralPath $RepoRoot -PathType Container)) { return $null }
+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) { return $null }
+    $previousPreference = $ErrorActionPreference
+    $previousNoLazyFetch = $env:GIT_NO_LAZY_FETCH
+    $ErrorActionPreference = 'Continue'
+    try {
+        $env:GIT_NO_LAZY_FETCH = '1'
+        $inside = @(& git -C $RepoRoot rev-parse --is-inside-work-tree 2>$null | ForEach-Object { ([string]$_).Trim() })
+        if ($LASTEXITCODE -ne 0 -or $inside.Count -eq 0 -or $inside[0] -cne 'true') { return $null }
+        $type = @(& git -C $RepoRoot cat-file -t $ObjectId 2>$null | ForEach-Object { ([string]$_).Trim() } | Where-Object { $_ })
+        if ($LASTEXITCODE -ne 0 -or $type.Count -ne 1) { return $null }
+        return $type[0]
+    }
+    catch { return $null }
+    finally {
+        $ErrorActionPreference = $previousPreference
+        if ($null -eq $previousNoLazyFetch) { Remove-Item Env:GIT_NO_LAZY_FETCH -ErrorAction SilentlyContinue }
+        else { $env:GIT_NO_LAZY_FETCH = $previousNoLazyFetch }
+    }
+}
+
+function Get-VtConsumedModTreePins {
+    # Every immutable-tree pin the source authority consumes for one mod:
+    # ReceiptFamilyOverrides (per-mod ModTrees hashtable), ReceiptRouteOverrides
+    # and ReceiptDiscoveryOverrides (ModTree scalar or ModTrees array). The
+    # unconsumed LegacyMarkerFamilyModTrees history is deliberately excluded,
+    # because the canonical ship never rewrites it.
+    param([Parameter(Mandatory=$true)]$Exceptions, [Parameter(Mandatory=$true)][string]$ModId)
+    $pins = @()
+    if ($Exceptions.ContainsKey('ReceiptFamilyOverrides')) {
+        foreach ($route in @($Exceptions.ReceiptFamilyOverrides)) {
+            if (-not $route) { continue }
+            $trees = $route.ModTrees
+            if ($trees -is [System.Collections.IDictionary] -and $trees.Contains($ModId)) {
+                $pins += [pscustomobject]@{
+                    Section='ReceiptFamilyOverrides'; Marker=[string]$route.Marker; Signature=[string]$route.Signature
+                    Trees=@($trees[$ModId] | ForEach-Object { [string]$_ })
+                }
+            }
+        }
+    }
+    foreach ($section in @('ReceiptRouteOverrides', 'ReceiptDiscoveryOverrides')) {
+        if (-not $Exceptions.ContainsKey($section)) { continue }
+        foreach ($route in @($Exceptions[$section])) {
+            if (-not $route -or [string]$route.ModId -cne $ModId) { continue }
+            $trees = if ($route.ContainsKey('ModTrees')) { @($route.ModTrees) } else { @($route.ModTree) }
+            $pins += [pscustomobject]@{
+                Section=$section; Marker=[string]$route.Marker; Signature=[string]$route.Signature
+                Trees=@($trees | ForEach-Object { [string]$_ })
+            }
+        }
+    }
+    return $pins
+}
+
+function Get-VtReceiptFamilyPinnedTree {
+    # Derives the one immutable tree a receipt family pins for its mod from the
+    # exception entries themselves, guarding route SHAPE rather than a literal
+    # deployed hash (#1609): the canonical ship repoints every consumed pin of
+    # the shipped mod to the newly deployed <merge>:<mod>/scripts/mods tree, so
+    # a fixture that names one hash rejects each legitimate pin PR.
+    #
+    # Every family route for Marker must be owned by ModId, pin exactly one
+    # lowercase 40-hex tree under that mod, and agree with each other; every
+    # other consumed pin for the mod must contain the same tree (they are
+    # repointed together); and, when the checkout at RepoRoot can resolve the
+    # object offline, it must be a git tree. An unresolvable object is skipped,
+    # never failed, so shallow or foreign checkouts stay green.
+    param(
+        [Parameter(Mandatory=$true)]$Exceptions,
+        [Parameter(Mandatory=$true)][string]$Marker,
+        [Parameter(Mandatory=$true)][string]$ModId,
+        [string]$RepoRoot
+    )
+    $routes = @($Exceptions.ReceiptFamilyOverrides | Where-Object { $_ -and [string]$_.Marker -ceq $Marker })
+    if ($routes.Count -eq 0) { throw "$Marker exposes no receipt-family route." }
+    $pins = @()
+    foreach ($route in $routes) {
+        $signature = [string]$route.Signature
+        $owners = @(@(if ($route.ModIds) { $route.ModIds } else { $route.ModId }) | ForEach-Object { ([string]$_).Trim() })
+        if ($owners -cnotcontains $ModId) { throw "$Marker route '$signature' is not owned by '$ModId'." }
+        $trees = $route.ModTrees
+        if (-not ($trees -is [System.Collections.IDictionary]) -or -not $trees.Contains($ModId)) {
+            throw "$Marker route '$signature' does not pin a '$ModId' tree."
+        }
+        $pinned = @($trees[$ModId])
+        if ($pinned.Count -ne 1) { throw "$Marker route '$signature' must pin exactly one '$ModId' tree, found $($pinned.Count)." }
+        $tree = [string]$pinned[0]
+        if ($tree -cnotmatch '^[0-9a-f]{40}$') {
+            throw "$Marker route '$signature' pins a malformed '$ModId' tree '$tree' (expected one lowercase 40-hex git tree id)."
+        }
+        $pins += $tree
+    }
+    $distinct = @($pins | Sort-Object -Unique -CaseSensitive)
+    if ($distinct.Count -ne 1) { throw "$Marker routes disagree on the '$ModId' tree: $($distinct -join ', ')." }
+    $expected = [string]$distinct[0]
+    foreach ($sibling in @(Get-VtConsumedModTreePins -Exceptions $Exceptions -ModId $ModId)) {
+        if (@($sibling.Trees) -cnotcontains $expected) {
+            throw "$Marker pins '$ModId' tree $expected but sibling pin $($sibling.Marker) '$($sibling.Signature)' ($($sibling.Section)) pins $(@($sibling.Trees) -join ','); the canonical ship repoints every consumed '$ModId' pin to one deployed tree."
+        }
+    }
+    $objectType = Get-VtGitObjectTypeOrNull -RepoRoot $RepoRoot -ObjectId $expected
+    if ($null -ne $objectType -and $objectType -cne 'tree') {
+        throw "$Marker pins '$ModId' object $expected which resolves to a git $objectType, not a tree."
+    }
+    return [pscustomobject]@{ Tree=$expected; Routes=$routes.Count; Resolved=($objectType -ceq 'tree') }
+}
+
 function Invoke-VtDeployedSourceContractSelfTest {
     $tempBase = [IO.Path]::GetTempPath()
     $tmp = Join-Path $tempBase ('vt2-live-card-contract-' + [guid]::NewGuid().ToString('N'))
@@ -524,8 +640,66 @@ rawset(_G, "printf", mod.debug)
         Assert-VtContractFixture ($mp577Reject.Count -eq 1 -and @($mp577Reject[0].EmitterAnchors).Count -eq 2 -and @($mp577Reject[0].GuardAnchors).Count -eq 4) '#577 rejection authority no longer binds both failure callsites and returns.'
         Assert-VtContractFixture ($mp577Commit.Count -eq 1 -and @($mp577Commit[0].EmitterAnchors).Count -eq 1 -and @($mp577Commit[0].GuardAnchors).Count -eq 5) '#577 committed authority no longer binds the successful transaction tail.'
         foreach($mp577Route in $mp577Routes){
-            Assert-VtContractFixture ([string]$mp577Route.ModTrees.mp -ceq 'd61fa15fd44fa7752b3e5fe84de0cec737dba76b') '#577 immutable MP tree pin drifted unexpectedly.'
             Assert-VtContractFixture ([string]$mp577Route.SourcesByMod.mp -ceq 'modded_progression/scripts/mods/modded_progression/modded_progression.lua') '#577 audited source path drifted unexpectedly.'
+        }
+        # #1609: the #577 mp pin is derived from the routes themselves, never a
+        # literal hash, because every canonical modded_progression ship repoints
+        # it to the newly deployed tree.
+        $liveRepoRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+        $mp577Pin = Get-VtReceiptFamilyPinnedTree -Exceptions $exceptions -Marker '[mp:577]' -ModId 'mp' -RepoRoot $liveRepoRoot
+        Assert-VtContractFixture ($mp577Pin.Routes -eq 2 -and $mp577Pin.Tree -cmatch '^[0-9a-f]{40}$') '#577 mp pin derivation lost the two-route family shape.'
+        if (-not $mp577Pin.Resolved) {
+            Write-Host "[live-test-contract -SelfTest] #577 mp tree $($mp577Pin.Tree) is not resolvable in this checkout; git object-type check skipped."
+        }
+        $exceptionsPath = Join-Path $PSScriptRoot 'live_test_contract_exceptions.psd1'
+        $fixtureBlob = (& git -C $tmp rev-parse "$commit`:fixture_mod/scripts/mods/fixture_mod/fixture_mod.lua").Trim()
+        $repointMp = {
+            # Mirrors exception-pin-finalization: every consumed mp pin moves to
+            # the one deployed tree together.
+            param($Exceptions, [string]$Tree)
+            foreach ($route in @($Exceptions.ReceiptFamilyOverrides)) {
+                if ($route.ModTrees -is [System.Collections.IDictionary] -and $route.ModTrees.Contains('mp')) { $route.ModTrees['mp'] = $Tree }
+            }
+            foreach ($section in @('ReceiptRouteOverrides', 'ReceiptDiscoveryOverrides')) {
+                foreach ($route in @($Exceptions[$section])) {
+                    if ([string]$route.ModId -cne 'mp') { continue }
+                    if ($route.ContainsKey('ModTrees')) { $route.ModTrees = @($Tree) } else { $route.ModTree = $Tree }
+                }
+            }
+        }
+        $invoke577Pin = {
+            # Re-imports the live exception file so each case mutates a private
+            # copy; returns the rejection message, or the derived pin on success.
+            param([scriptblock]$Mutate, [string]$Root)
+            $copy = Import-PowerShellDataFile $exceptionsPath
+            $family = @($copy.ReceiptFamilyOverrides | Where-Object { [string]$_.Marker -ceq '[mp:577]' })
+            & $Mutate $copy $family
+            try { return (Get-VtReceiptFamilyPinnedTree -Exceptions $copy -Marker '[mp:577]' -ModId 'mp' -RepoRoot $Root) }
+            catch { return [string]$_.Exception.Message }
+        }
+        $repointed = & $invoke577Pin { param($ex, $fam) & $repointMp $ex $fixtureModTree } $tmp
+        Assert-VtContractFixture ($repointed -isnot [string] -and $repointed.Tree -ceq $fixtureModTree -and $repointed.Routes -eq 2 -and $repointed.Resolved) "A canonically repointed #577 mp pin was rejected: $repointed"
+        $unresolvable = ('a' * 40)
+        $repointedAbsent = & $invoke577Pin { param($ex, $fam) & $repointMp $ex $unresolvable } $tmp
+        Assert-VtContractFixture ($repointedAbsent -isnot [string] -and $repointedAbsent.Tree -ceq $unresolvable -and -not $repointedAbsent.Resolved) "A well-formed #577 mp pin absent from the checkout was not skipped: $repointedAbsent"
+        $repointedNoRepo = & $invoke577Pin { param($ex, $fam) & $repointMp $ex $fixtureModTree } (Join-Path $tmp 'missing-checkout')
+        Assert-VtContractFixture ($repointedNoRepo -isnot [string] -and $repointedNoRepo.Tree -ceq $fixtureModTree -and -not $repointedNoRepo.Resolved) "A #577 mp pin without any checkout was not skipped: $repointedNoRepo"
+        Assert-VtContractFixture ($null -eq (Get-VtGitObjectTypeOrNull -RepoRoot (Join-Path $tmp '.git') -ObjectId $fixtureModTree)) 'A directory outside any git work tree resolved a git object.'
+        Assert-VtContractFixture ((Get-VtGitObjectTypeOrNull -RepoRoot $tmp -ObjectId $commit) -ceq 'commit') 'The fixture commit did not resolve as a commit.'
+        $pinRejections = @(
+            @{ Name='malformed'; Pattern='malformed'; Root=$tmp; Mutate={ param($ex, $fam) $fam[0].ModTrees['mp'] = 'not-a-tree' } }
+            @{ Name='uppercase'; Pattern='malformed'; Root=$tmp; Mutate={ param($ex, $fam) & $repointMp $ex $fixtureModTree; $fam[1].ModTrees['mp'] = $fixtureModTree.ToUpperInvariant() } }
+            @{ Name='multi-tree'; Pattern='exactly one'; Root=$tmp; Mutate={ param($ex, $fam) $fam[0].ModTrees['mp'] = @($fixtureModTree, ('b' * 40)) } }
+            @{ Name='missing'; Pattern='does not pin'; Root=$tmp; Mutate={ param($ex, $fam) $fam[1].ModTrees.Remove('mp') } }
+            @{ Name='foreign-owner'; Pattern='not owned'; Root=$tmp; Mutate={ param($ex, $fam) $fam[0].ModId = 'fixture' } }
+            @{ Name='disagreeing'; Pattern='disagree'; Root=$tmp; Mutate={ param($ex, $fam) & $repointMp $ex $fixtureModTree; $fam[1].ModTrees['mp'] = ('b' * 40) } }
+            @{ Name='sibling-drift'; Pattern='sibling pin'; Root=$tmp; Mutate={ param($ex, $fam) & $repointMp $ex ('b' * 40); foreach ($route in $fam) { $route.ModTrees['mp'] = $fixtureModTree } } }
+            @{ Name='commit-object'; Pattern='resolves to a git commit'; Root=$tmp; Mutate={ param($ex, $fam) & $repointMp $ex $commit } }
+            @{ Name='blob-object'; Pattern='resolves to a git blob'; Root=$tmp; Mutate={ param($ex, $fam) & $repointMp $ex $fixtureBlob } }
+        )
+        foreach ($case in $pinRejections) {
+            $verdict = & $invoke577Pin $case.Mutate $case.Root
+            Assert-VtContractFixture (($verdict -is [string]) -and $verdict -match [regex]::Escape([string]$case.Pattern)) "#577 mp pin case '$($case.Name)' was not rejected as expected: $verdict"
         }
         $requiredRoutes = @(
             # Seven exact routes the superseding audit proved were legitimate
