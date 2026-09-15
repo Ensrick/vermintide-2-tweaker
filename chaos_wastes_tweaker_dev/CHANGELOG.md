@@ -1,5 +1,72 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.352-dev (2026-09-14) -- Metal wind curse adapter, command-gated (#253) [diagnostics-armed]
+
+- First bounded slice of "Weave winds as Chaos Wastes curses", per
+  `WEAVE_CURSE_FEASIBILITY_253.md` ("Metal first"): a host-owned, default-off
+  adapter that runs the vanilla Metal wind mutator as an extra per-level mission
+  modifier. It is NOT exposed in the curse menu (no widget, no localization, no
+  `disable_curse_*` row) and stays hidden until the two-player verification
+  matrix passes. It is reached only through the chat command
+  `/ct_weave_metal on | off | status | strength <1-5>`: `on`/`off` are
+  session-only (every boot starts off), `strength` persists through the mod
+  setting `weave_metal_strength` (1-5, default 1; vanilla Weave templates use the
+  same range, `weaves/weave_10.lua:6`). The command is usable anywhere, but only
+  the host's state has any effect.
+- New owner `_ct_weave_metal_runtime.lua` (engine-free contract in
+  `_ct_weave_metal_policy.lua`) holds three singleton seams. (1) A pre-hook on
+  `MutatorHandler.init`: on a host Deus level with the adapter on it hands vanilla
+  a COPY of the composed mission list with `metal` appended, before the handler
+  initializes anything (`mutator_handler.lua:27-48`), so vanilla's own transport
+  stays authoritative: `rpc_activate_mutator_client` keyed by the existing
+  `NetworkLookup.mutator_templates.metal`, the shared initialized map, and
+  hot-join replay (`mutator_handler.lua:95-99,148-170,697-702`). No CT RPC,
+  lookup entry, package load or setting transport is added; the node curse, the
+  graph, the map/curse panel and the cursed-level reward counters are untouched
+  (Metal is an extra modifier here, not a counted curse). (2) A table-form hook
+  on the wrapped `MutatorTemplates.metal.server.start_function`
+  (`mutator_handler.lua:678-682`): while a CT level context is armed the vanilla
+  body is not called, so the template's only global Weave-manager read
+  (`mutator_metal.lua:58-63`) never runs in Chaos Wastes; `data.wind_strength`
+  and `data.buff_system` come from the explicit CT context
+  `{ wind = "metal", wind_strength = N }` instead. The global Weave manager is
+  never read, replaced or stubbed (textual invariant). The skipped default
+  wrapper only handles `remove_pickups` (`mutator_templates.lua:107-132,260-268`),
+  which Metal does not declare (asserted). Outside a CT level, real Weaves run
+  vanilla untouched. (3) A safe hook on `MutatorHandler.destroy`: the adapter
+  snapshots the eleven breeds' `primary_armor_category` before init and, after
+  vanilla's wrapped stop restores them (`mutator_templates.lua:36-73,134-138`;
+  driven by destroy at `mutator_handler.lua:60-83,705-746`), counts mismatches,
+  logs `[ct:253:metal] teardown started=<bool> restored=<n>/<total>` and drops
+  its per-level context. Metal stores `wind_strength` but never reads it
+  (`mutator_metal.lua:61` is the sole reference), so the strength knob is carried
+  for Weave-contract parity only; the Blade Dance buff and its explosion are
+  unchanged vanilla.
+- Diagnostics: every `/ct_weave_metal` invocation emits ONE bounded
+  command-owned receipt
+  `[ct:253:diag] action=<a> result=<r> enabled=<b> strength=<n> server=<b> mechanism=<m> bridged=<b> level=<armed|idle>`
+  through raw engine printf, plus at most 16 `[ct:253:metal]` runtime rows per
+  session (install, armed, start, teardown) and at most 4 error rows. The
+  existing `[ct:253]` feasibility census is unchanged.
+- Adds `/ct_regression_test` check `issue253_metal_wind_adapter`: the adapter is
+  the registered owner, off by default and not menu-exposed, the command is
+  `ct_weave_metal`, the context exposes exactly `wind` + `wind_strength` (also
+  checked on the live armed context), the Metal template is handler-wrapped,
+  declares no `packages` and no `remove_pickups`, keeps armor category 6 over 11
+  breeds and a wire entry, the start bridge is installed, composition appends
+  once and only on an enabled host Deus level, and no runtime error or armor
+  restoration fault occurred this session. Offline suites
+  `test_ct_weave_metal_policy.lua` and `test_ct_weave_metal_runtime_owner.lua`
+  cover the grammar, context, composition, armor proof, the singleton
+  registrations, vanilla pass-through with every argument and return, the
+  literal receipt, the straight-line command callback, the entry install and the
+  widget-tree absence; `qa/rt_textual_invariants.psd1` pins the hook singletons,
+  the receipt literal, the Weave-manager absence and the hidden widget.
+- Verification matrix still open (every item, none exercised yet): host/client
+  activation, late join, level transition, death/respawn, curse stacking with a
+  node curse, resource residency, exact cleanup, and the armored vs unarmored
+  enemy controls. Metal stays out of the selectable curse menu until they pass.
+
 ## 0.7.351-dev (2026-09-14) -- progressive modifier stacking (#289) [verify-fix]
 
 - Adds the host-controlled, default-off **Progressive Modifier Stacking**
