@@ -446,6 +446,15 @@ return {
     gut_use_non_modded_loadouts_tooltip = {
         en = "While in the modded realm, use the loadouts saved in your non-modded (official) game, read-only: the I to VI bar shows your official gameplay loadouts, and gear, talent, loadout-switch and bot-designation changes all snap back so your official saves are never touched. Cosmetics (weapon illusion, hat, portrait frame, victory pose) stay changeable and are kept modded-side only. Turn off (default) to keep fully separate modded loadouts that never touch your official ones.",
     },
+    -- #231 paged loadout bar (modded realm, thirty slots as five pages of six). The
+    -- context-menu header for slots past VI (vanilla has no custom_loadout_7..30_title)
+    -- and the page counter drawn above the add (+) button. %s = Roman numeral, %d = page.
+    gut_loadout_slot_title = {
+        en = "Loadout %s",
+    },
+    gut_loadout_page_label = {
+        en = "Page %d/%d",
+    },
 
     -- Original career-specific temporary-health talent names (#352).
     gut_talents_group = {

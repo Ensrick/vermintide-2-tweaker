@@ -486,6 +486,7 @@ local suites = {
     "test_gut_hidden_passives",
     "test_gut_original_thp_names",
     "test_gut_loadout_capacity",
+    "test_gut_loadout_paging",
     "test_gut_backend_commit",
     "test_gut_bot_pose",
     "test_gut_tab_property_refresh",

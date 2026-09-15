@@ -47,6 +47,8 @@ there is no copied implementation.
   numeric drift sensitivity, malformed lookup rejection, and payload-size coverage.
 - `tests/test_crt_wire_contract.lua`: CRT schema-3 integration plus the independent
   sender, hot-join, receiver, and timed-buff safety floors.
+- `tests/test_gut_loadout_paging.lua`: #231 page/slot bijection, strip geometry,
+  text Roman numerals and the modded-STORE-Adventure paging predicate.
 - `vendor/lua-5.1.5-win64/`: pinned Windows interpreter and provenance.
 
 Add a test file to the manifest in `run.lua`. The explicit list keeps ordering

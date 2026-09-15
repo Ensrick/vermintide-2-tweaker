@@ -1,5 +1,55 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.350-dev (2026-09-14) - Thirty modded loadouts via paged selector (#231) [verify-fix]
+
+- In the modded realm the hero view's loadout bar (Equipment and Talents tabs
+  of the keep inventory) now holds thirty saved loadouts per career, shown as
+  five pages of six. The six vanilla buttons are reused per page and labelled
+  with text Roman numerals I to XXX (no `loadout_icon_7..30` atlas request),
+  so the add (+) button keeps adding past VI up to XXX. Page controls appear
+  once a career has more than six loadouts: a `<` button left of the strip, a
+  `>` button between the strip and `+`, and a `Page 2/5` counter above `+`.
+  Left and Right arrow keys flip pages while the mouse is active
+  (`move_left_raw` / `move_right_raw`, `controller_settings.lua:5748-5757`);
+  on a gamepad LB/RB cycle loadouts one at a time exactly as before and the
+  page follows the selection. Selecting, hovering, the context menu, delete,
+  bot designation and the selection frame all reveal the selected slot's page
+  automatically; paging away hides the selection frame until that slot is
+  back on screen. The context-menu header for a slot past VI reads
+  "Loadout VII" style and the missing icon is hidden.
+- New pure owner `_gut_loadout_page_mapper.lua` (page/slot bijection, strip
+  geometry, numerals, realm predicate) and runtime owner
+  `_gut_loadout_paging.lua` (hooks on `HeroWindowLoadoutSelectionConsole`
+  methods no other GUT module touches; loaded from the
+  `_gut_mission_inventory.lua` tail because the entry point and
+  `_gut_native_loadouts.lua` are at their size ceilings). Every former direct
+  `_loadout_button_widgets[logical_index]` access
+  (`hero_window_loadout_selection_console.lua:186-202`, `:368-386`,
+  `:420-459`, `:500`, `:529`, `:709`, `:778-780`, `:972`, `:985-987`) now
+  goes through the mapper, and `qa/rt_textual_invariants.psd1` rejects any
+  direct logical index in the owner. The existing `_show_context_menu` hook in
+  `_gut_mission_inventory.lua` is the single consolidated site
+  (`_gut_consolidated_show_context_menu_hook`) and calls the owner's
+  post-step for the raised-button z order and the header/icon.
+- Capacity is window-scoped: while a paged window is open the capacity policy
+  (`_gut_loadout_capacity_policy.lua` `expand` / `contract`) appends custom
+  rows 7-30 to `InventorySettings.loadouts` and raises
+  `MAX_NUM_CUSTOM_LOADOUTS` to 30 (the mirror `add_loadout` hook and the
+  window's add gate both read it; vanilla cap check
+  `playfab_mirror_base.lua:2045`); on window exit the vanilla six-row table
+  and cap are restored. The official realm, the "Use non-modded loadouts"
+  read-only mode and the Versus mirror never see the expansion. Vanilla's
+  `on_exit` row persistence only runs for Versus game modes
+  (`inventory_settings.lua:222-225`), so no out-of-range row index can reach
+  `PlayerData.loadout_selection`.
+- Fallback path 2 from the issue (a GUT-owned overlay selector) was not
+  needed: the native definition rebinds button content per page.
+- Regression: `/gut_regression_test` `issue231_loadout_paging` proves realm
+  gating, the thirty-slot mapper bijection, the numerals, the cap, the
+  consolidated context-menu site and every hooked vanilla method. Host tests:
+  `qa/lua/tests/test_gut_loadout_paging.lua` (new) and
+  `test_gut_loadout_capacity.lua` (expand / contract).
+
 ## 0.2.349-dev (2026-09-14) - Simple UI compatibility phase 2 (#314) [verify-fix]
 
 - Simple UI dropdown lists now fit the screen. Upstream lays every option one
