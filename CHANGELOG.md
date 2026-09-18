@@ -1,5 +1,18 @@
 # Changelog
 
+## 2026-09-17 - Canonical ships require VMB Launcher 0.6.3 (#1548)
+
+The approved default launcher is now 0.6.3 (release asset SHA-256
+`5f9fb10f751238253b57ce3bf15db85336b2e8869e6a8307190d645a4ab4f040`), installed
+after the last 0.6.1 ship claims went stale, and `ship.ps1` refuses any
+launcher below 0.6.3 at its publication capability probe. 0.6.3 validates the
+x86 Steamworks `ActiveProcess` registration in `doctor`, upload preflight, and
+immediately before the SDK uploader boundary, so a live Steam process with
+stale registration fails closed with restart guidance instead of crashing
+`ugc_tool.exe` (`0xc0000005` at `+0x4169`) after build, deploy, and GitHub
+publication already ran. Fixtures cover the 0.6.2 rejection and 0.6.3
+acceptance, and the launcher-path contract pins the ship minimum.
+
 ## 2026-08-27 - Canonical immutable-review manifests (#1435)
 
 Implementation and review lanes now freeze candidate source through one

@@ -523,6 +523,8 @@ try {
         $shipRuntimeText.Contains('Invoke-ShipLauncherNoWindow -LauncherExecutableLease $launcherExecutableLease') -and
         $shipRuntimeText.Contains('-LauncherExecutableLease $launcherExecutableLease') -and
         $shipRuntimeText.Contains('Exit-VmbLauncherExecutableLease -Lease $launcherExecutableLease')) 'ship acquires one direct live lease before capability checks and reuses it through build, release, upload, and cleanup'
+    Assert-Contract ($shipRuntimeText.Contains("`$minimumShipLauncherVersion = [version]'0.6.3'") -and
+        $shipRuntimeText.Contains('-MinimumVersion $minimumShipLauncherVersion')) 'ship requires the Steamworks-readiness launcher 0.6.3 or newer at its capability probe (#1548)'
     Assert-Contract ($shipRuntimeText -notmatch 'Get-VmbLauncherVersion\b' -and
         $shipRuntimeText -notmatch '(?m)&\s*\$launcher(?=\s|$)') 'ship runtime has no obsolete version lookup or raw launcher invocation'
     Assert-Contract ($shipRuntimeText.Contains('-LauncherPath $launcherResolution.Path') -and
