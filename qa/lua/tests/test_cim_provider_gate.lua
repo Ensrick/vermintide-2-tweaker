@@ -222,8 +222,9 @@ return function(H, repo_root)
         -- The gate call sits inside the _setup_weapon_list hook body.
         local hook_start = entry:find('mod:hook("HeroWindowWeaveForgeWeapons", "_setup_weapon_list"', 1, true)
         H.truthy(hook_start, "_setup_weapon_list hook missing")
-        local hook_end = entry:find('mod:hook("HeroWindowWeaveForgeWeapons", "_sync_backend_loadout"', 1, true)
-        H.truthy(hook_end, "_sync_backend_loadout hook anchor missing")
+        local hook_end = entry:find('local function _ensure_item_adventure_visible',
+            hook_start, true)
+        H.truthy(hook_end, "post-list hook anchor missing")
         local hook_body = entry:sub(hook_start, hook_end)
         H.truthy(hook_body:find('gate_enumerated_row("athanor_list"', 1, true),
             "athanor_list gate call missing from _setup_weapon_list")
@@ -309,6 +310,7 @@ return function(H, repo_root)
                 name .. " still collapses build_mirror_payload")
         end
         local entry = read("crafting_in_modded_dev.lua")
+        local direct_owner = read("_cim_direct_craft_owner.lua")
         local forge_state = read("_cim_forge_state_owner.lua")
         H.truthy(forge_state:find('gate_record("mirror_injection"', 1, true),
             "mirror-injection boundary not routed through the record gate")
@@ -318,15 +320,21 @@ return function(H, repo_root)
                 or entry:find('register_enumerators("athanor_list", "mirror_restore", "mirror_injection")', 1, true),
             "entry does not declare its routed surfaces at install time")
         local forge = read("standard_forge.lua")
-        H.truthy(forge:find('gate_record("mirror_injection"', 1, true),
-            "standard-forge synth not routed through the record gate")
+        H.truthy(forge:find("_direct_craft_owner.commit(", 1, true),
+            "standard-forge synth not routed through the canonical transaction")
+        H.truthy(direct_owner:find("state.commit_craft", 1, true),
+            "direct craft owner does not late-bind the canonical transaction")
+        H.equal(forge:find("self._backend_mirror.add_item", 1, true), nil,
+            "standard-forge synth still writes the mirror directly")
         H.truthy(forge:find('gate_item("blacksmith_list"', 1, true),
             "blacksmith list not routed through the item gate")
         H.truthy(forge:find('gate_item("random_craft"', 1, true),
             "random-craft pool not routed through the item gate")
         local importer = read("saveweapon_import.lua")
-        H.truthy(importer:find('gate_record("mirror_injection"', 1, true),
-            "saveweapon import not routed through the record gate")
+        H.truthy(importer:find("_direct_craft_owner.commit(", 1, true),
+            "saveweapon import not routed through the canonical transaction")
+        H.equal(importer:find("mirror:remove_item", 1, true), nil,
+            "saveweapon import still uses identity-blind rollback")
         local mil = read("_cim_mil_entry_builder.lua")
         H.truthy(mil:find('gate_record("mirror_restore"', 1, true),
             "legacy MIL builder not routed through the record gate")

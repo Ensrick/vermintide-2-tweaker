@@ -17,8 +17,8 @@ return function(ctx)
         "CIM command owner requires loadout accessor")
     local _get_more_items_lib = assert(ctx.get_more_items_lib,
         "CIM command owner requires MoreItemsLibrary accessor")
-    local _forge_inject_item = assert(ctx.forge_inject_item,
-        "CIM command owner requires forge injection")
+    local _commit_craft = assert(ctx.commit_craft,
+        "CIM command owner requires craft transaction")
     local _forge_create_item = assert(ctx.forge_create_item,
         "CIM command owner requires legacy entry builder")
     local _forge_detect_mil = assert(ctx.forge_detect_mil,
@@ -458,20 +458,20 @@ mod:command("forge_confirm", "Create the forged weapon", function()
     local rnd = math.random(1000000)
     local backend_id = _forge_pending.item_key .. "_" .. rnd .. "_forged"
 
-    if _forge_inject_item(_forge_pending, backend_id) then
-        local registered, register_err = mod._cim_register_craft(backend_id, {
-            item_key = _forge_pending.item_key,
-            properties = _forge_pending.properties,
-            trait = _forge_pending.trait,
-            skin = _forge_pending.skin,
-            power_level = _forge_pending.power_level,
-            via_mirror = false,
-        })
-        if not registered then
-            mod:warning("Forge: persistence rejected: " .. tostring(register_err))
-            return
-        end
-
+    local weapon_data = {
+        item_key = _forge_pending.item_key,
+        properties = _forge_pending.properties,
+        trait = _forge_pending.trait,
+        skin = _forge_pending.skin,
+        power_level = _forge_pending.power_level,
+        rarity = "modded",
+        via_mirror = true,
+    }
+    local committed, commit_err = _commit_craft(weapon_data, backend_id, {
+        source_backend_id = "console:forge_confirm",
+        raw_item_key = _forge_pending.item_key,
+    })
+    if committed then
         local master = rawget(ItemMasterList, _forge_pending.item_key)
         local display = _forge_pending.item_key
         if master and master.display_name then
@@ -480,6 +480,8 @@ mod:command("forge_confirm", "Create the forged weapon", function()
         end
         mod:echo("Forge: created " .. display .. " [" .. backend_id .. "]")
         _forge_pending = nil
+    else
+        mod:warning("Forge: transaction rejected: " .. tostring(commit_err))
     end
 end)
 

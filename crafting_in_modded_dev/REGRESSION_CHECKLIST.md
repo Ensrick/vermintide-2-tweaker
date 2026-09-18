@@ -28,7 +28,7 @@ Last updated: 2026-09-14.
 | Category | SOLO / UI / TRANSACTION / EXTERNAL DATA |
 | Repro | In the Keep, open CIM's Athanor, choose **Community Builds**, switch career and Likes/Recent order, select one compatible build, and choose **Import Selected Build**. Restart and inspect the same career/loadout. |
 | Expected post-fix | The browser remains responsive and bounded. A compatible build creates exactly five Modded items and equips its five slots plus six talents on the selected loadout; the result persists. An unavailable DLC, illegal roll, malformed response, network failure, or failed mutation is rejected without changing any prior slot, talent, or persistent crafted row. |
-| Detection | `test_cim_ranalds_catalog.lua`, `test_cim_ranalds_import.lua`, `test_cim_ranalds_browser.lua`, and the forge-owner transaction case cover vocabulary, bounds, cursor paging, cancellation, live legality, all mutation exceptions, rollback, and modal input restoration. `/cim_regression_test` runs `issue1360_ranalds_build_import` against the installed services. |
+| Detection | `test_cim_ranalds_catalog.lua`, `test_cim_ranalds_import.lua`, `test_cim_ranalds_browser.lua`, and the forge-owner transaction case cover vocabulary, bounds, cursor paging, cancellation, live legality, all mutation exceptions, rollback, and modal input restoration. Slot-admission tests reject swapped ordinary weapon slots, absent/malformed career policies, and mismatched accessories before all writes, while accepting career-approved dual melee. `/cim_regression_test` runs `issue1360_ranalds_build_import` and `issue1141_ranald_slot_admission` against the installed owners. |
 
 ### issue1117-bulk-accessory-button-layout - long label does not share the upgrade arrow
 
@@ -52,7 +52,15 @@ Last updated: 2026-09-14.
 | Category | SOLO / TRANSACTION |
 | Repro | In the Keep, equip a crafted weapon, open CIM's Athanor, enter Temper Item, change one property and trait, back out, reopen, then repeat and press Apply. Repeat with a 5-power Blacksmith weapon. |
 | Expected post-fix | Backing out leaves the owned item unchanged. Apply modifies that exact owned instance once and does not add an inventory item. A Blacksmith template shows Craft, remains unchanged, and creates one new modded item carrying the staged choices. |
-| Detection | `test_cim_temper_transaction.lua` tests the pure policy; `test_cim_temper_runtime.lua` drives Apply/Craft routing and bounded hooks; `test_cim_weave_loadout_owner.lua` proves a weapon write remains draft-only until one Apply and persists only once. |
+| Detection | `test_cim_temper_transaction.lua` tests the pure policy; `test_cim_temper_runtime.lua` drives Apply/Craft routing and bounded hooks; `test_cim_weave_loadout_owner.lua` proves a weapon write remains draft-only until one Apply and persists only once. `test_cim_direct_craft.lua` drives the actual Standard Forge craft hook through post-commit interface/read/echo/probe/unit-trace exceptions plus a throwing error logger: exactly one persisted/live item, one completion row, one invalidation, and zero rollback must remain. Runtime `issue1141_postcommit_observation_boundary` proves observer failure cannot revoke the completion result; `issue1141_temper_blacksmith_exact_identity` checks the CWV source boundary. |
+
+The cross-mod integration fixture `test_cwv_acquisition_runtime.lua` drives
+the installed registration owner with the raw MIL mirror and exact producer
+fields. It preserves #592's nullable public/Dev ownership and cleanup rules,
+proves both seed bands through the published schema-2 capability, and rejects
+foreign or copied raw seed rows without cleanup. The named #592 check binds
+its real `_om` ledger independently of the mod facade. Preserve this coverage
+alongside #1465's Apply presentation composition and window-exit release.
 
 ### issue1122-1227-regression-instrument-ownership - live checks cannot hide drift
 

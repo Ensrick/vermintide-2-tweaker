@@ -27,6 +27,12 @@ return {
     ranalds_import_failed = { en = "Import failed safely: %s" },
     ranalds_import_rejected = { en = "Import rejected: %s" },
     ranalds_imported = { en = "Imported and equipped: %s" },
+    -- #1141 Athanor Temper Item / Weapon Select button labels. The runtime
+    -- falls back to the same exact text when localization is unavailable.
+    temper_button_apply = { en = "APPLY" },
+    temper_button_craft = { en = "CRAFT" },
+    temper_button_unavailable = { en = "UNAVAILABLE" },
+    temper_button_craft_accessories = { en = "CRAFT MODDED ACCESSORIES" },
     forge_group = {
         en = "Athanor (Mod Weapon Crafting)",
     },

@@ -1,8 +1,8 @@
 -- _cim_mil_entry_builder.lua -- legacy MoreItemsLibrary entry builder.
 --
 -- Builds the MIL `add_mod_items_to_local_backend` entry for a saved craft
--- flagged `via_mirror = false` (the legacy `cim forge_confirm` console path;
--- mirror-path crafts go through `_athanor_inject_item` instead). Extracted
+-- flagged `via_mirror = false` (saved crafts from the former console path;
+-- all new crafts go through the mirror transaction). Extracted
 -- verbatim from the entry's `_forge_create_item` (decomposition ceiling).
 --
 -- Owned by: crafting_in_modded_dev.lua entry point. Consumed via: mod:dofile.
@@ -22,7 +22,7 @@ return function(weapon_data, backend_id)
     end
 
     -- Surface `mirror_restore`: this MIL path serves legacy `via_mirror=false`
-    -- saves (plus the legacy `cim forge_confirm` console craft).
+    -- saves.
     local contract = mod._cim_synthetic_item_contract
     local normalized, normalize_err = contract.gate_record("mirror_restore",
         backend_id, weapon_data, master)
@@ -90,6 +90,14 @@ return function(weapon_data, backend_id)
         end
     end
     entry.rarity = rarity
+
+    local registered, register_reason = contract.register_legacy_mil_entry(
+        weapon_data, master, entry)
+    if not registered then
+        printf("[cim:1141] rejected MIL issuance bid=%s key=%s reason=%s",
+            tostring(backend_id), tostring(item_key), tostring(register_reason))
+        return nil
+    end
 
     return entry
 end

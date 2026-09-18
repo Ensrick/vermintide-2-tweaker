@@ -1,5 +1,55 @@
 # Crafting in Modded Changelog
 
+## 0.8.135-dev (2026-09-18) -- Temper Item stages behind Apply; Craft from Blacksmith copies (#1141) [verify-fix]
+
+- Symptom: with a 5-power Blacksmith weapon equipped, the Temper Item button
+  either did nothing or (Imperial Dual Swords, 2026-08-16) announced
+  Kerillian's donor weapon and left no usable Kruber item behind, because the
+  runtime selected the live vanilla alias instead of the CWV identity.
+- Fix: Temper Item stages property/trait changes and commits them only on an
+  explicit APPLY, updating that exact CIM-owned instance once. When the equipped
+  item is a raw Blacksmith template the button reads CRAFT and produces one new
+  Modded item; the Blacksmith copy is never modified. The seed identity is
+  resolved through CWV's schema-2 provider (`cwv.blacksmith-seed.identity.v2`)
+  inside the shared synthetic-item contract: exact backend id, authored item
+  key, donor key and provider fingerprint must agree, so `cwv_es_dual_swords_001`
+  resolves to `cwv_es_dual_swords`, never `we_dual_wield_swords`. Contradictory
+  stamp/provider evidence, malformed or foreign seed bands and unknown external
+  items fail closed: the button reads UNAVAILABLE and stays disabled.
+- Standard Forge and Temper publish `(true, normalized_entry)` after the durable
+  save. A post-commit observer failure (backend readback, echo, probe, unit
+  trace, throwing logger) cannot revoke a completed craft or hide its completion
+  request, while a rejected request still rolls back its mirror token. Ranald
+  imports validate the selected career's native `item_slot_types_by_slot_name`
+  before any write, keeping Slayer/Grail Knight dual melee.
+- Button labels APPLY, CRAFT, UNAVAILABLE and CRAFT MODDED ACCESSORIES now come
+  from the mod localization table with the same literal fallback; the Weapon
+  Select Craft handoff reads the same string.
+- Adds `issue1141_temper_blacksmith_exact_identity`,
+  `issue1141_postcommit_observation_boundary` and
+  `issue1141_ranald_slot_admission` to `/cim_regression_test`, the engine-free
+  `test_cim_direct_craft.lua` suite and `_cim_temper_fixture.lua`, and extended
+  Temper runtime, synthetic-contract, Ranald import, weave-loadout and CWV
+  acquisition cases (both `_000`/`_001` seed bands, donor-only rows, conflicting
+  stamps, foreign bands, registration failure, rollback, bounded receipts).
+- Preserves #592's nullable owner traversal and explicit-unowned cleanup in CWV
+  and #1465's customization-window presentation release in Standard Forge.
+- Requires Character Weapon Variants 0.1.540-dev for Blacksmith Temper-Craft;
+  exact CIM-owned Apply and vanilla crafting stay independent of CWV.
+
+**Test:** Load `Crafting in Modded v0.8.135-dev` with `Character Weapon Variants v0.1.540-dev` in the Modded Realm keep.
+1. Equip a CIM-crafted weapon, open the Athanor and Temper Item: the button
+   reads APPLY. Change one property and the trait, back out, reopen: the
+   weapon is unchanged.
+2. Repeat the change and press APPLY: that exact weapon changes and no extra
+   item appears. Press APPLY again without changes: nothing happens.
+3. Equip the 5-power Blacksmith Imperial Dual Swords and open Temper Item:
+   the button reads CRAFT. Choose a property and trait and press CRAFT.
+4. Confirm the Blacksmith weapon is unchanged and exactly one new Modded
+   Imperial Dual Swords appears with the chosen property and trait.
+5. Return to the Keep or restart: both items keep their changes. Run
+   `/cim_regression_test` and confirm the three `issue1141_*` checks pass.
+
 ## 0.8.134-dev (2026-09-14) -- Base Power description says 25-point Mod Tweaker steps (#1530) [verify-fix]
 
 - Symptom: the Base Power Level tooltip, the data-widget comment and the

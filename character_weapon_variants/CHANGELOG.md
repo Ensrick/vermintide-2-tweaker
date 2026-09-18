@@ -1,5 +1,36 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.540-dev (2026-09-18) -- publish the schema-2 Blacksmith seed identity provider (#1141, #592) [verify-fix]
+
+- Adds `_cwv_get_blacksmith_seed_identity_provider()` (schema 2, owner
+  `character_weapon_variants`, capability `cwv.blacksmith-seed.identity.v2`).
+  `facade:resolve(backend_id)` and `facade:sample(item_key)` return proofs
+  binding the exact backend id, authored item key, donor key and provider
+  fingerprint to the protected registration ledger and the live backend row.
+  Crafting in Modded Dev 0.8.135-dev consumes it so Temper-Craft on a
+  Blacksmith copy keeps the CWV identity (Imperial Dual Swords no longer
+  resolve to Kerillian's `we_dual_wield_swords`).
+- The capability is published only after the raw
+  `get_backend_mirror():get_all_inventory_items()` rows are authenticated:
+  missing ownership flags, foreign owners and copied definition pointers are
+  rejected without cleanup, and the getter reports
+  `seed_registration_incomplete` until then. Every getter returns a fresh
+  facade, so callers cannot mutate the private provider or ledger.
+- Preserves #592's nullable owner traversal and explicit-unowned cleanup. The
+  seed ledger and count now live on the registration owner, and
+  `issue592_bounded_blacksmith_acquisition` reads them there while keeping its
+  owner-probe assertions.
+- Engine-free coverage: `test_cwv_acquisition.lua` proves the provider admits
+  only exact registered seed identities, samples its live proven ledger, and
+  canonicalizes raw mirror authority; `test_cwv_acquisition_runtime.lua`
+  drives the installed registration owner against the raw MIL mirror with
+  exact producer fields. The CIM-side band/donor/stamp matrix lives in the
+  Crafting in Modded Dev suites.
+
+**DoD:** Cross-mod contract only; no weapon model, transform, moveset, or
+network payload changed. Live verification runs through #1141's CIM Dev card
+(Blacksmith CRAFT) and #592's public-CIM forge/Keep/restart checks.
+
 ## 0.1.539-dev (2026-09-12) -- resume the reviewed seed-ownership release (#592, #1548) [not-started]
 
 - Reissue the already-reviewed seed-ownership fix after the `.538-dev` claim

@@ -75,8 +75,15 @@ return function(H, repo_root)
             for _, entry in ipairs(rows) do
                 local id = entry.mod_data.backend_id
                 events.added[#events.added + 1] = id
-                live[id] = { backend_id = id, data = entry, CustomData = {},
+                -- Native MIL mirror provenance, not a shortcut around #1141's
+                -- private seed capability. Keep deliberately wrong cosmetic
+                -- fields so registration must still canonicalize the raw row.
+                live[id] = { backend_id = id, ItemInstanceId = id,
+                    ItemId = entry.key, key = entry.key,
+                    IsModItem = true, CreatedBy = name,
+                    data = entry, CustomData = {},
                     rarity = "modded", power_level = 300, skin = "MIL-default" }
+                if options.mutate_seed then options.mutate_seed(live[id]) end
             end
             after_seed = true
         end
@@ -105,9 +112,14 @@ return function(H, repo_root)
             printf = function() end,
             WeaponSkins = { skins = {}, skin_combinations = {},
                 matching_weapon_skin_item_key = function() return nil end },
-            Managers = { backend = { get_interface = function()
-                return { get_item_from_id = function(_, id) return live[id] end }
-            end } },
+            Managers = { backend = {
+                get_interface = function()
+                    return { get_item_from_id = function(_, id) return live[id] end }
+                end,
+                get_backend_mirror = function()
+                    return { get_all_inventory_items = function() return live end }
+                end,
+            } },
         }, { __index = _G })
         env._G = env
         local om = { infantry_spear = { ITEM_KEY = "cwv_es_infantry_spear" },
@@ -142,7 +154,7 @@ return function(H, repo_root)
                 H.deep_equal(live[id], snapshots[id], "exact CIM-owned fields were changed: " .. id)
             end
         end
-        return events, live, om, before
+        return events, live, om, before, mod
     end
 
     H.test("CWV #592 installed registration preserves both CIM streams across absent dev", function()
@@ -163,6 +175,37 @@ return function(H, repo_root)
             if options.stable then H.truthy((events.reads.stable or 0) > 0) end
             if options.dev then H.truthy((events.reads.dev or 0) > 0) end
             H.equal(live[key .. "_003"], nil, "finite unowned extra was not cleaned")
+        end
+    end)
+
+    H.test("CWV #592/#1141 installed registration publishes only its exact live seed capability", function()
+        for _, options in ipairs({ {}, { stable = true,
+                records = { stable = { [key .. "_001"] = {} } } } }) do
+            local events, live, _, _, mod = run_case(options)
+            local seed_id = events.added[1]
+            local provider = assert(mod._cwv_get_blacksmith_seed_identity_provider())
+            H.equal(provider.schema, 2)
+            H.equal(provider.owner, "character_weapon_variants")
+            local proof = assert(provider:resolve(seed_id))
+            H.equal(proof.item_key, key)
+            H.equal(proof.backend_id, seed_id)
+            live[seed_id].CreatedBy = "foreign_provider"
+            H.equal(provider:resolve(seed_id), nil,
+                "capability accepted a raw row whose producer changed")
+        end
+    end)
+
+    H.test("CWV #592/#1141 installed registration retains old rows when raw seed proof fails", function()
+        for _, mutate in ipairs({
+            function(row) row.IsModItem = nil end,
+            function(row) row.CreatedBy = "foreign_provider" end,
+            function(row) row.data = clone(row.data) end,
+        }) do
+            local events, _, om, _, mod = run_case({ mutate_seed = mutate })
+            H.equal(#events.added, 1, "fixture did not reach the actual MIL add")
+            H.equal(#events.removed, 0, "failed seed provenance authorized cleanup")
+            H.equal(om._cwv_blacksmith_seed_count, 0)
+            H.equal(mod._cwv_get_blacksmith_seed_identity_provider(), nil)
         end
     end)
 
@@ -244,11 +287,12 @@ return function(H, repo_root)
             local registered
             local env = setmetatable({ Managers = { backend = { get_interface = function() return {} end } },
                 ItemMasterList = {} }, { __index = _G })
-            local chunk = assert(loadstring("local _rt_register, mod, _variant_definitions, _registered_keys = ...\n" .. block))
+            local chunk = assert(loadstring("local _rt_register, mod, _variant_definitions, _registered_keys, _om = ...\n" .. block))
             setfenv(chunk, env)
             chunk(function(_, fn) registered = fn end,
-                { _cwv_acquisition = policy, _cwv_blacksmith_seed_ids = {}, _cwv_blacksmith_seed_count = 0 },
-                { { item_key = key, instances = 2, cwv_retired = true } }, {})
+                { _cwv_acquisition = policy },
+                { { item_key = key, instances = 2, cwv_retired = true } }, {},
+                { _cwv_blacksmith_seed_ids = {}, _cwv_blacksmith_seed_count = 0 })
             return registered()
         end
         H.equal(check(acquisition), nil)
