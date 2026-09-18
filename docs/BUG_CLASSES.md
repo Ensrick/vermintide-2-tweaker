@@ -1771,6 +1771,15 @@ and discards an uncommitted weapon draft on view exit. Test the mutation count,
 not merely the final values: zero writes before Apply, at most one persistence
 write at Apply, and no-op on a repeated unchanged Apply.
 
+After the durable craft commit succeeds, diagnostic readers and loggers are
+observers, not additional commit gates. A post-commit exception before the local
+craft request is published leaves a persisted weapon behind an apparent failure,
+so retrying can duplicate it (#1141). Contain the entire observer tail and publish
+the already-earned completion result; never compensate a successful transaction
+because an observational cache read or echo failed. Exercise the installed craft
+hook with a source read that succeeds and a post-commit read that throws, asserting
+one persisted item, one request result, one invalidation, and no rollback.
+
 The durable commit must also be independent of render/network liveness. A valid
 inventory Apply can carry an exact backend item and hand while `player_unit` is
 temporarily absent during a keep or mission transition. Persist that exact owner

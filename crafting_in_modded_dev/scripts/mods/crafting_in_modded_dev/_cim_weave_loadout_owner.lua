@@ -30,7 +30,7 @@
 -- the load-time `_patch_movespeed_buff()` call, and the
 -- `_cim_settings_runtime.install` registration all keep their original timing.
 --
--- THE NON-VERBATIM LINES (18, all the same mechanical cause)
+-- THE NON-VERBATIM BOUNDARIES
 -- Four entry locals the block reads are REASSIGNED after this seam, so a
 -- captured reference would go stale:
 --   * `_custom_forge_active` -- flipped by `mod.open_forge` and cleared by
@@ -44,7 +44,9 @@
 --     reset above this seam, so it is read through the same accessor
 --     convention for reload safety (2 lines -> `_get_amulet_dirty()`)
 -- `_forge_save` is a plain entry-local function that is never reassigned, so it
--- is injected directly and the moved call text is unchanged. Every accessor
+-- is injected directly. #1141's weapon Apply path passes it a detached candidate
+-- registry and publishes the live item/owner record only after persistence;
+-- amulet writes retain their existing current-registry call. Every accessor
 -- follows the convention the persisted-loadout owner, `_cim_command_owner`, and
 -- `_cim_regression_checks` already use, and it keeps the flat `mod._cim_*`
 -- public surface from widening.
@@ -116,6 +118,18 @@ local function install(ctx)
         "CIM weave loadout owner requires the forge save writer")
     state.temper_transaction = assert(ctx.temper_transaction,
         "CIM weave loadout owner requires the temper transaction policy")
+    assert(type(state.temper_transaction.apply_to_item) == "function"
+            and type(state.temper_transaction.copy_payload) == "function"
+            and type(state.temper_transaction.is_dirty) == "function",
+        "CIM weave loadout owner requires the complete temper transaction policy")
+    state.get_raw_mirror_item = ctx.get_raw_mirror_item or function(backend_id)
+        local managers = rawget(_G, "Managers")
+        local backend = managers and managers.backend
+        local mirror = backend and type(backend.get_backend_mirror) == "function"
+            and backend:get_backend_mirror() or nil
+        local items = mirror and mirror._inventory_items
+        return type(items) == "table" and rawget(items, backend_id) or nil
+    end
 
     -- mod:dofile is not a singleton. A second install would re-register all ten
     -- BackendInterfaceWeavesPlayFab hooks -- VMF drops the duplicates and warns,
@@ -139,8 +153,8 @@ local function install(ctx)
     local function _get_amulet_dirty()
         return state.get_amulet_dirty()
     end
-    local function _forge_save()
-        return state.forge_save()
+    local function _forge_save(source)
+        return state.forge_save(source)
     end
 
     -- Mirrors the entry's own forward declarations: the moved body ASSIGNS these
@@ -647,6 +661,104 @@ local function install(ctx)
         return existed
     end
 
+    local function _shallow_copy(source)
+        local copy = {}
+        if type(source) == "table" then
+            for key, value in pairs(source) do copy[key] = value end
+        end
+        return copy
+    end
+
+    -- Build a detached presentation candidate without touching either live
+    -- surface.  BackendInterfaceItemPlayfab may expose a deep-cloned cache
+    -- rather than PlayFabMirrorBase._inventory_items itself, so Apply must
+    -- prepare one candidate per distinct row.  CustomData keeps its table
+    -- identity on publication; only the two encoded payload fields change.
+    local function _item_apply_candidate(source, payload, encode)
+        if type(source) ~= "table" then return nil, nil, "item" end
+
+        local candidate = _shallow_copy(source)
+        if type(source.CustomData) == "table" then
+            candidate.CustomData = _shallow_copy(source.CustomData)
+        end
+
+        -- Retain the transaction policy's template/admission semantics, but do
+        -- not let it encode yet: encoding below is protected and performed
+        -- exactly once per distinct presentation surface.
+        local applied, ok, changed = pcall(
+            state.temper_transaction.apply_to_item,
+            candidate, payload, nil)
+        if not applied then
+            return nil, nil, "apply_exception:" .. tostring(ok)
+        end
+        if not ok then return nil, nil, changed end
+
+        local copied, normalized = pcall(
+            state.temper_transaction.copy_payload, payload)
+        if not copied then
+            return nil, nil, "copy_exception:" .. tostring(normalized)
+        end
+        if type(normalized) ~= "table"
+                or type(normalized.properties) ~= "table"
+                or type(normalized.traits) ~= "table" then
+            return nil, nil, "copy_rejected"
+        end
+
+        -- Always detach the published arrays/maps.  This prevents the mirror,
+        -- item-interface cache, forge draft and persisted record from sharing a
+        -- mutable table even when one of those surfaces was already up to date.
+        candidate.properties = normalized.properties
+        candidate.traits = normalized.traits
+
+        local custom_changed = false
+        if type(candidate.CustomData) == "table" then
+            if type(encode) ~= "function" then
+                return nil, nil, "json_encoder_unavailable"
+            end
+            local props_called, encoded_properties = pcall(
+                encode, normalized.properties)
+            if not props_called then
+                return nil, nil, "encode_properties_exception:"
+                    .. tostring(encoded_properties)
+            end
+            local traits_called, encoded_traits = pcall(
+                encode, normalized.traits)
+            if not traits_called then
+                return nil, nil, "encode_traits_exception:"
+                    .. tostring(encoded_traits)
+            end
+            custom_changed = source.CustomData.properties ~= encoded_properties
+                or source.CustomData.traits ~= encoded_traits
+            candidate.CustomData.properties = encoded_properties
+            candidate.CustomData.traits = encoded_traits
+        end
+
+        return candidate, changed == true or custom_changed, nil
+    end
+
+    local function _publish_item_candidate(target, candidate)
+        rawset(target, "properties", candidate.properties)
+        rawset(target, "traits", candidate.traits)
+        if type(target.CustomData) == "table"
+                and type(candidate.CustomData) == "table" then
+            rawset(target.CustomData, "properties",
+                candidate.CustomData.properties)
+            rawset(target.CustomData, "traits",
+                candidate.CustomData.traits)
+        end
+    end
+
+    -- `_forge_save(candidate)` only clones the detached registry into VMF's
+    -- settings store; it has no item-backend side effects.  On rejection or an
+    -- exception, leave mirror authority and the item-interface cache bit-for-bit
+    -- untouched.  Calling native `_refresh` here would rebuild/replace that
+    -- cache and violate the retry transaction instead of containing it.
+    local function _save_failure_reason(called, result, reason)
+        return called
+            and "save_rejected:" .. tostring(reason or result)
+            or "save_exception:" .. tostring(result)
+    end
+
     local function _forge_apply_to_item(career_name, item_backend_id)
         if not item_backend_id then
             _forge_apply_to_amulet(career_name)
@@ -656,26 +768,93 @@ local function install(ctx)
         local item = items_backend and items_backend:get_item_from_id(item_backend_id)
         if not item then return false, "item" end
 
+        local raw_called, raw_item = pcall(
+            state.get_raw_mirror_item, item_backend_id)
+        if not raw_called then
+            return false, "raw_mirror_accessor_exception:" .. tostring(raw_item)
+        end
+        if type(raw_item) ~= "table" then
+            return false, "raw_mirror_item"
+        end
+
         local payload = _forge_item_draft_payload(career_name, item_backend_id)
         if not payload then return false, "draft" end
 
+        local forged_weapons = _get_forged_weapons()
+        local saved = forged_weapons[item_backend_id]
+        if type(saved) ~= "table" then return false, "saved_record" end
+
         local cjson_mod = rawget(_G, "cjson")
         local encode = cjson_mod and cjson_mod.encode
-        local ok, changed = state.temper_transaction.apply_to_item(
-            item, payload, encode)
-        if not ok then return false, changed end
+
+        local candidate_item, item_changed, item_error =
+            _item_apply_candidate(item, payload, encode)
+        if not candidate_item then return false, item_error end
+
+        local candidate_raw, raw_changed
+        if raw_item == item then
+            candidate_raw, raw_changed = candidate_item, item_changed
+        else
+            local raw_error
+            candidate_raw, raw_changed, raw_error =
+                _item_apply_candidate(raw_item, payload, encode)
+            if not candidate_raw then return false, raw_error end
+        end
+
+        local copied, saved_payload = pcall(
+            state.temper_transaction.copy_payload, payload)
+        if not copied then
+            return false, "copy_exception:" .. tostring(saved_payload)
+        end
+        if type(saved_payload) ~= "table" then
+            return false, "copy_rejected"
+        end
+        local candidate_saved = _shallow_copy(saved)
+        candidate_saved.properties = saved_payload.properties
+        candidate_saved.traits = saved_payload.traits
+        candidate_saved.trait = saved_payload.traits[1]
+        candidate_saved.external_traits = {}
+
+        local dirty_called, saved_changed = pcall(
+            state.temper_transaction.is_dirty, saved, saved_payload)
+        if not dirty_called then
+            return false, "dirty_exception:" .. tostring(saved_changed)
+        end
+        saved_changed = saved_changed == true
+            or saved.trait ~= candidate_saved.trait
+            or (type(saved.external_traits) == "table"
+                and next(saved.external_traits) ~= nil)
+
+        if not item_changed and not raw_changed and not saved_changed then
+            return true, false
+        end
+
+        local candidate_registry = _shallow_copy(forged_weapons)
+        candidate_registry[item_backend_id] = candidate_saved
 
         -- One bounded persistence write at Apply, never one per bubble click.
-        local saved = _get_forged_weapons()[item_backend_id]
-        if saved and changed then
-            local saved_payload = state.temper_transaction.copy_payload(payload)
-            saved.properties = saved_payload.properties
-            saved.traits = saved_payload.traits
-            saved.trait = saved_payload.traits[1]
-            saved.external_traits = {}
-            _forge_save()
+        -- `save` accepts an alternate source, so the canonical owner store and
+        -- the live backend row are still byte-for-byte prior state here.
+        local save_called, save_result, save_reason = pcall(
+            _forge_save, candidate_registry)
+        if not save_called or save_result == false then
+            return false, _save_failure_reason(save_called, save_result,
+                save_reason)
         end
-        return true, changed
+
+        -- Publish the raw backend authority first and its item-interface cache
+        -- second.  Both rows retain their exact identity and ownership stamps;
+        -- only the normalized mutable payload changes.  A later native refresh
+        -- therefore reproduces, rather than reverts, the applied item.
+        _publish_item_candidate(raw_item, candidate_raw)
+        if item ~= raw_item then
+            _publish_item_candidate(item, candidate_item)
+        end
+        rawset(saved, "properties", candidate_saved.properties)
+        rawset(saved, "traits", candidate_saved.traits)
+        rawset(saved, "trait", candidate_saved.trait)
+        rawset(saved, "external_traits", candidate_saved.external_traits)
+        return true, true
     end
 
     mod:hook("BackendInterfaceWeavesPlayFab", "get_loadout_properties", function(func, self, career_name, item_backend_id)

@@ -37,6 +37,9 @@ return function(H, repo_root)
     local function load_owner()
         return assert(loadfile(root .. "_cim_weave_loadout_owner.lua"))()
     end
+    local function load_temper_runtime()
+        return assert(loadfile(root .. "_cim_temper_runtime.lua"))()
+    end
     local temper_transaction = assert(loadfile(
         root .. "_cim_temper_transaction.lua"))()
 
@@ -46,7 +49,7 @@ return function(H, repo_root)
     local function fake_mod(settings)
         local m = {
             hooks = {}, dofiles = {}, settings_installs = 0,
-            _settings = settings or {},
+            _settings = settings or {}, messages = {}, checks = {},
         }
         function m:hook(target, method)
             self.hooks[#self.hooks + 1] = { target = target, method = method, kind = "hook" }
@@ -57,9 +60,15 @@ return function(H, repo_root)
         function m:command(name) self.commands = self.commands or {}; self.commands[#self.commands + 1] = name end
         function m:get(key) return self._settings[key] end
         function m:set(key, value) self._settings[key] = value end
-        function m:info() end
-        function m:warning() end
-        function m:echo() end
+        function m:info(message)
+            self.messages[#self.messages + 1] = { kind = "info", text = message }
+        end
+        function m:warning(message)
+            self.messages[#self.messages + 1] = { kind = "warning", text = message }
+        end
+        function m:echo(message)
+            self.messages[#self.messages + 1] = { kind = "echo", text = message }
+        end
         function m:dofile(path)
             self.dofiles[#self.dofiles + 1] = path
             return {
@@ -82,6 +91,7 @@ return function(H, repo_root)
             get_amulet_dirty = stores.get_amulet_dirty or function() return { false, false, false } end,
             forge_save = stores.forge_save or function() end,
             temper_transaction = stores.temper_transaction or temper_transaction,
+            get_raw_mirror_item = stores.get_raw_mirror_item or function() return nil end,
         })
     end
 
@@ -107,6 +117,238 @@ return function(H, repo_root)
         local ok, err = pcall(body)
         rawset(_G, "Managers", saved)
         if not ok then error(err, 0) end
+    end
+
+    local function count_message(mod, kind, fragment)
+        local count = 0
+        for _, message in ipairs(mod.messages or {}) do
+            if message.kind == kind
+                    and (not fragment
+                        or tostring(message.text):find(fragment, 1, true)) then
+                count = count + 1
+            end
+        end
+        return count
+    end
+
+    -- Compose the real mutable-loadout owner with the real Temper button hook.
+    -- The contract adapter is deliberately narrow: this suite owns the Apply
+    -- publication transaction, while the identity validator's adversarial
+    -- matrix lives in test_cim_temper_runtime.lua.
+    local function run_apply_hook(options)
+        options = options or {}
+        local mod = fake_mod()
+        local hooked, safe_hooked = {}, {}
+        function mod:hook(_, method, fn) hooked[method] = fn end
+        function mod:hook_safe(_, method, fn) safe_hooked[method] = fn end
+
+        local old_item_properties = { power_vs_skaven = 0.4 }
+        local old_item_traits = { "old_trait" }
+        local old_custom_data = {
+            properties = options.noop and "encoded-properties" or "old-properties-json",
+            traits = options.noop and "encoded-traits" or "old-traits-json",
+            sentinel = "preserve-custom",
+        }
+        local item = {
+            rarity = "modded",
+            properties = old_item_properties,
+            traits = old_item_traits,
+            CustomData = old_custom_data,
+            cim_injection_owner = "crafting_in_modded",
+            sentinel = "preserve-cache",
+        }
+        -- The native item interface may hold a deep-cloned cache.  Keep the raw
+        -- mirror row deliberately distinct so the test catches cache-only Apply.
+        local old_raw_properties = { power_vs_skaven = 0.4 }
+        local old_raw_traits = { "old_trait" }
+        local old_raw_custom_data = {
+            properties = options.noop and "encoded-properties" or "old-properties-json",
+            traits = options.noop and "encoded-traits" or "old-traits-json",
+            sentinel = "preserve-raw-custom",
+        }
+        local raw_item = {
+            rarity = "modded",
+            properties = old_raw_properties,
+            traits = old_raw_traits,
+            CustomData = old_raw_custom_data,
+            cim_injection_owner = "crafting_in_modded",
+            sentinel = "preserve-raw",
+        }
+        local old_saved_properties = { power_vs_skaven = 0.4 }
+        local old_saved_traits = { "old_trait" }
+        local old_external_traits = options.noop and {} or { "parked_trait" }
+        local record = {
+            item_key = "es_sword",
+            properties = old_saved_properties,
+            traits = old_saved_traits,
+            trait = "old_trait",
+            external_traits = old_external_traits,
+            sentinel = "preserve-record",
+        }
+        local records = { bid = record }
+        local slot_count = options.noop and 2 or 3
+        local draft = {
+            properties = {
+                weave_power_vs_skaven = slot_count == 2
+                    and { 1, 2 } or { 1, 2, 3 },
+            },
+            traits = { weave_old_trait = 1 },
+        }
+        local drafts = { ["es_mercenary|bid"] = draft }
+        local saves, refreshes, candidate_seen = 0, 0, nil
+        local items_backend = {
+            get_item_from_id = function(_, backend_id)
+                return backend_id == "bid" and item or nil
+            end,
+            _refresh = function()
+                refreshes = refreshes + 1
+                -- Model the native cache rebuilding from raw mirror authority.
+                item.properties = {
+                    power_vs_skaven = raw_item.properties.power_vs_skaven,
+                }
+                item.traits = { raw_item.traits[1] }
+                item.CustomData.properties = raw_item.CustomData.properties
+                item.CustomData.traits = raw_item.CustomData.traits
+            end,
+        }
+        local exports = install_owner(mod, {
+            is_active = function() return true end,
+            get_forge_item_props = function() return drafts end,
+            get_forged_weapons = function() return records end,
+            forge_save = function(candidate)
+                saves = saves + 1
+                candidate_seen = candidate
+                H.equal(item.properties, old_item_properties,
+                    "live properties published before persistence")
+                H.equal(item.traits, old_item_traits,
+                    "live traits published before persistence")
+                H.equal(item.CustomData, old_custom_data,
+                    "CustomData published before persistence")
+                H.equal(raw_item.properties, old_raw_properties,
+                    "raw mirror properties published before persistence")
+                H.equal(raw_item.traits, old_raw_traits,
+                    "raw mirror traits published before persistence")
+                H.equal(raw_item.CustomData, old_raw_custom_data,
+                    "raw mirror CustomData published before persistence")
+                H.equal(record.properties, old_saved_properties,
+                    "saved properties published before persistence")
+                H.equal(record.traits, old_saved_traits,
+                    "saved traits published before persistence")
+                H.equal(record.external_traits, old_external_traits,
+                    "parked traits published before persistence")
+                if options.save_throw then error("save exploded") end
+                if options.save_reject then return false, "save denied" end
+            end,
+            get_raw_mirror_item = function(backend_id)
+                if options.raw_accessor_throw then
+                    error("raw mirror accessor exploded")
+                end
+                if options.raw_missing then return nil end
+                return backend_id == "bid" and raw_item or nil
+            end,
+        })
+
+        local applies, discards, apply_ok, apply_detail = 0, 0, nil, nil
+        local loadout = {}
+        for key, value in pairs(exports) do loadout[key] = value end
+        loadout.apply_item_draft = function(...)
+            applies = applies + 1
+            apply_ok, apply_detail = exports.apply_item_draft(...)
+            return apply_ok, apply_detail
+        end
+        loadout.discard_item_draft = function(...)
+            discards = discards + 1
+            return exports.discard_item_draft(...)
+        end
+
+        local contract = {
+            validate_temper_owned_instance = function() return true end,
+            temper_source_requires_cwv_provider = function() return false end,
+            resolve_temper_craft_source = function()
+                return nil, "craft path must remain unreachable"
+            end,
+            is_cwv_provider_key = function() return false end,
+            validate_mirror_ownership_token = function() return true end,
+            rollback_mirror_item = function() return true end,
+        }
+        local syncs, sounds = 0, 0
+        load_temper_runtime()({
+            mod = mod,
+            is_active = function() return true end,
+            transaction = temper_transaction,
+            contract = contract,
+            loadout = loadout,
+            get_forged_record = function(backend_id)
+                return records[backend_id]
+            end,
+            get_item_master = function() return { key = "es_sword" } end,
+            get_raw_mirror_item = function() return raw_item end,
+            bulk_accessory_craft = { craft_all = function() return 0 end },
+            craft_accessory = function() return false end,
+            inject_item = function() error("Apply must not inject") end,
+            rt_register = function(name, fn) mod.checks[name] = fn end,
+            print_line = function() end,
+        })
+        local window = {
+            _career_name = "es_mercenary",
+            _selected_item = function() return item, "bid" end,
+            _sync_backend_loadout = function() syncs = syncs + 1 end,
+            _play_sound = function() sounds = sounds + 1 end,
+        }
+
+        local saved_managers = rawget(_G, "Managers")
+        local saved_cjson = rawget(_G, "cjson")
+        rawset(_G, "Managers", {
+            backend = { get_interface = function() return items_backend end },
+        })
+        if options.cjson_missing then
+            rawset(_G, "cjson", nil)
+        else
+            rawset(_G, "cjson", {
+                encode = function(value)
+                    if options.encode_throw then error("encode exploded") end
+                    return #value > 0 and "encoded-traits" or "encoded-properties"
+                end,
+            })
+        end
+        local call_ok, call_error = pcall(
+            hooked._upgrade_magic_level,
+            function() error("vanilla Apply must not run") end, window)
+        rawset(_G, "Managers", saved_managers)
+        rawset(_G, "cjson", saved_cjson)
+
+        return {
+            mod = mod,
+            call_ok = call_ok,
+            call_error = call_error,
+            item = item,
+            raw_item = raw_item,
+            record = record,
+            records = records,
+            draft = draft,
+            drafts = drafts,
+            old_item_properties = old_item_properties,
+            old_item_traits = old_item_traits,
+            old_custom_data = old_custom_data,
+            old_raw_properties = old_raw_properties,
+            old_raw_traits = old_raw_traits,
+            old_raw_custom_data = old_raw_custom_data,
+            old_saved_properties = old_saved_properties,
+            old_saved_traits = old_saved_traits,
+            old_external_traits = old_external_traits,
+            saves = saves,
+            refreshes = refreshes,
+            refresh = function() return items_backend:_refresh() end,
+            get_refreshes = function() return refreshes end,
+            candidate_seen = candidate_seen,
+            applies = applies,
+            discards = discards,
+            apply_ok = apply_ok,
+            apply_detail = apply_detail,
+            syncs = syncs,
+            sounds = sounds,
+            safe_hooked = safe_hooked,
+        }
     end
 
     local MUTABLE_HOOKS = {
@@ -214,7 +456,7 @@ return function(H, repo_root)
         end
         for _, accessor in ipairs({
             "is_active", "get_forge_item_props", "get_forged_weapons",
-            "get_amulet_dirty", "forge_save",
+            "get_amulet_dirty", "forge_save", "get_raw_mirror_item",
         }) do
             H.truthy(owner:find("ctx." .. accessor, 1, true),
                 "owner consumes ctx." .. accessor)
@@ -223,6 +465,7 @@ return function(H, repo_root)
         H.truthy(entry:find("get_forge_item_props = function() return _forge_item_props end", 1, true))
         H.truthy(entry:find("get_forged_weapons = _forge_state.get_forged_weapons", 1, true))
         H.truthy(entry:find("get_amulet_dirty = function() return _amulet_dirty end", 1, true))
+        H.truthy(entry:find("get_raw_mirror_item = function(backend_id)", 1, true))
 
         -- Drive it: rebind the store and flip the flag AFTER install, then prove
         -- the hook body seeds into the NEW table, the way a second Athanor open
@@ -292,6 +535,7 @@ return function(H, repo_root)
             get_forge_item_props = function() return store end,
             get_forged_weapons = function() return { bid = persisted } end,
             forge_save = function() saves = saves + 1 end,
+            get_raw_mirror_item = function() return item end,
         })
 
         with_backend({
@@ -317,6 +561,201 @@ return function(H, repo_root)
             H.equal(changed, false)
             H.equal(saves, 1)
         end)
+    end)
+
+    H.test("CIM #1141 rejected or throwing Apply persistence is atomic and retryable", function()
+        local cases = {
+            { name = "save reject", save_reject = true,
+              save_reason = "save_rejected:save denied" },
+            { name = "save throw", save_throw = true,
+              save_reason = "save_exception:" },
+        }
+        for _, case in ipairs(cases) do
+            local result = run_apply_hook(case)
+            H.equal(result.call_ok, true,
+                case.name .. " must not escape the production button hook")
+            H.equal(result.applies, 1, case.name .. " apply count")
+            H.equal(result.saves, 1, case.name .. " save count")
+            H.equal(result.refreshes, 0,
+                case.name .. " must not rebuild the native item cache")
+            H.equal(result.apply_ok, false, case.name .. " owner result")
+            H.truthy(tostring(result.apply_detail):find(
+                case.save_reason, 1, true), case.name .. " save evidence")
+
+            -- The writer sees a detached candidate; neither the live item nor
+            -- the canonical forged record was published before persistence.
+            H.truthy(result.candidate_seen ~= result.records,
+                case.name .. " candidate registry must be detached")
+            H.truthy(result.candidate_seen.bid ~= result.record,
+                case.name .. " candidate record must be detached")
+            H.equal(result.item.properties, result.old_item_properties,
+                case.name .. " live properties identity")
+            H.equal(result.item.traits, result.old_item_traits,
+                case.name .. " live traits identity")
+            H.equal(result.item.CustomData, result.old_custom_data,
+                case.name .. " CustomData identity")
+            H.equal(result.item.CustomData.properties,
+                "old-properties-json", case.name .. " CustomData properties")
+            H.equal(result.item.CustomData.traits,
+                "old-traits-json", case.name .. " CustomData traits")
+            H.equal(result.item.sentinel, "preserve-cache",
+                case.name .. " unrelated cache field")
+            H.equal(result.raw_item.properties, result.old_raw_properties,
+                case.name .. " raw properties identity")
+            H.equal(result.raw_item.traits, result.old_raw_traits,
+                case.name .. " raw traits identity")
+            H.equal(result.raw_item.CustomData, result.old_raw_custom_data,
+                case.name .. " raw CustomData identity")
+            H.equal(result.raw_item.CustomData.properties,
+                "old-properties-json", case.name .. " raw CustomData properties")
+            H.equal(result.raw_item.CustomData.traits,
+                "old-traits-json", case.name .. " raw CustomData traits")
+            H.equal(result.raw_item.sentinel, "preserve-raw",
+                case.name .. " unrelated raw field")
+            H.equal(result.record.properties, result.old_saved_properties,
+                case.name .. " saved properties identity")
+            H.equal(result.record.traits, result.old_saved_traits,
+                case.name .. " saved traits identity")
+            H.equal(result.record.trait, "old_trait",
+                case.name .. " saved trait")
+            H.equal(result.record.external_traits,
+                result.old_external_traits,
+                case.name .. " parked-traits identity")
+            H.equal(result.record.sentinel, "preserve-record",
+                case.name .. " unrelated record field")
+
+            -- Returning false is the hook's retry contract: no draft discard,
+            -- UI resync, completion sound, or success/no-op echo may occur.
+            H.equal(result.drafts["es_mercenary|bid"], result.draft,
+                case.name .. " draft must remain retryable")
+            H.equal(result.discards, 0, case.name .. " discard count")
+            H.equal(result.syncs, 0, case.name .. " sync count")
+            H.equal(result.sounds, 0, case.name .. " sound count")
+            H.equal(count_message(result.mod, "echo"), 0,
+                case.name .. " success echo count")
+            H.equal(count_message(result.mod, "warning", "Apply failed:"), 1,
+                case.name .. " bounded failure warning")
+        end
+    end)
+
+    H.test("CIM #1141 Apply contains raw-authority and encoding failures", function()
+        local cases = {
+            { name = "missing raw authority", raw_missing = true,
+              reason = "raw_mirror_item" },
+            { name = "throwing raw authority", raw_accessor_throw = true,
+              reason = "raw_mirror_accessor_exception:" },
+            { name = "throwing JSON encoder", encode_throw = true,
+              reason = "encode_properties_exception:" },
+            { name = "missing JSON encoder", cjson_missing = true,
+              reason = "json_encoder_unavailable" },
+        }
+        for _, case in ipairs(cases) do
+            local result = run_apply_hook(case)
+            H.truthy(result.call_ok, case.name .. " must stay inside the hook")
+            H.equal(result.applies, 1, case.name .. " apply count")
+            H.equal(result.saves, 0, case.name .. " persistence count")
+            H.equal(result.refreshes, 0, case.name .. " refresh count")
+            H.equal(result.apply_ok, false, case.name .. " owner result")
+            H.truthy(tostring(result.apply_detail):find(
+                case.reason, 1, true), case.name .. " reason")
+            H.equal(result.item.properties, result.old_item_properties,
+                case.name .. " cache properties identity")
+            H.equal(result.item.traits, result.old_item_traits,
+                case.name .. " cache traits identity")
+            H.equal(result.item.CustomData, result.old_custom_data,
+                case.name .. " cache CustomData identity")
+            H.equal(result.raw_item.properties, result.old_raw_properties,
+                case.name .. " raw properties identity")
+            H.equal(result.raw_item.traits, result.old_raw_traits,
+                case.name .. " raw traits identity")
+            H.equal(result.raw_item.CustomData, result.old_raw_custom_data,
+                case.name .. " raw CustomData identity")
+            H.equal(result.record.properties, result.old_saved_properties,
+                case.name .. " record properties identity")
+            H.equal(result.record.traits, result.old_saved_traits,
+                case.name .. " record traits identity")
+            H.equal(result.drafts["es_mercenary|bid"], result.draft,
+                case.name .. " draft remains retryable")
+            H.equal(result.discards, 0, case.name .. " discard count")
+            H.equal(result.syncs, 0, case.name .. " UI sync count")
+            H.equal(result.sounds, 0, case.name .. " completion sound count")
+            H.equal(count_message(result.mod, "warning", "Apply failed:"), 1,
+                case.name .. " bounded warning")
+        end
+    end)
+
+    H.test("CIM #1141 successful and no-op Apply publish exactly once", function()
+        local success = run_apply_hook()
+        H.equal(success.call_ok, true)
+        H.equal(success.applies, 1)
+        H.equal(success.saves, 1)
+        H.equal(success.refreshes, 0)
+        H.equal(success.apply_ok, true)
+        H.equal(success.apply_detail, true)
+        H.deep_equal(success.item.properties, { power_vs_skaven = 0.6 })
+        H.deep_equal(success.item.traits, { "old_trait" })
+        H.equal(success.item.CustomData.properties, "encoded-properties")
+        H.equal(success.item.CustomData.traits, "encoded-traits")
+        H.deep_equal(success.raw_item.properties, { power_vs_skaven = 0.6 })
+        H.deep_equal(success.raw_item.traits, { "old_trait" })
+        H.equal(success.raw_item.CustomData.properties, "encoded-properties")
+        H.equal(success.raw_item.CustomData.traits, "encoded-traits")
+        H.equal(success.item.CustomData, success.old_custom_data,
+            "cache CustomData table identity must survive publication")
+        H.equal(success.raw_item.CustomData, success.old_raw_custom_data,
+            "raw CustomData table identity must survive publication")
+        H.truthy(success.item.properties ~= success.raw_item.properties,
+            "cache and raw properties must not alias")
+        H.truthy(success.item.traits ~= success.raw_item.traits,
+            "cache and raw traits must not alias")
+        H.deep_equal(success.record.properties, { power_vs_skaven = 0.6 })
+        H.deep_equal(success.record.traits, { "old_trait" })
+        H.equal(success.record.trait, "old_trait")
+        H.deep_equal(success.record.external_traits, {})
+        H.equal(success.record.sentinel, "preserve-record")
+        H.equal(success.drafts["es_mercenary|bid"], nil)
+        H.equal(success.discards, 1)
+        H.equal(success.syncs, 1)
+        H.equal(success.sounds, 1)
+        H.equal(count_message(success.mod, "echo",
+            "Applied staged properties and trait"), 1)
+        H.equal(count_message(success.mod, "warning"), 0)
+
+        -- A later native-style cache rebuild reads the raw mirror.  Because
+        -- Apply published the authority as well as the current cache, it must
+        -- preserve rather than revert the selected payload.
+        success.refresh()
+        H.equal(success.get_refreshes(), 1,
+            "the explicit test refresh must run exactly once")
+        H.deep_equal(success.item.properties, { power_vs_skaven = 0.6 })
+        H.deep_equal(success.item.traits, { "old_trait" })
+        H.equal(success.item.CustomData.properties, "encoded-properties")
+        H.equal(success.item.CustomData.traits, "encoded-traits")
+
+        local noop = run_apply_hook({ noop = true })
+        H.equal(noop.call_ok, true)
+        H.equal(noop.applies, 1)
+        H.equal(noop.saves, 0, "a no-op must not persist")
+        H.equal(noop.refreshes, 0)
+        H.equal(noop.apply_ok, true)
+        H.equal(noop.apply_detail, false)
+        H.equal(noop.item.properties, noop.old_item_properties)
+        H.equal(noop.item.traits, noop.old_item_traits)
+        H.equal(noop.item.CustomData, noop.old_custom_data)
+        H.equal(noop.raw_item.properties, noop.old_raw_properties)
+        H.equal(noop.raw_item.traits, noop.old_raw_traits)
+        H.equal(noop.raw_item.CustomData, noop.old_raw_custom_data)
+        H.equal(noop.raw_item.sentinel, "preserve-raw")
+        H.equal(noop.record.properties, noop.old_saved_properties)
+        H.equal(noop.record.traits, noop.old_saved_traits)
+        H.equal(noop.record.external_traits, noop.old_external_traits)
+        H.equal(noop.drafts["es_mercenary|bid"], nil)
+        H.equal(noop.discards, 1)
+        H.equal(noop.syncs, 1)
+        H.equal(noop.sounds, 0)
+        H.equal(count_message(noop.mod, "echo",
+            "No staged changes to apply"), 1)
+        H.equal(count_message(noop.mod, "warning"), 0)
     end)
 
     H.test("CIM weave-loadout owner install is idempotent", function()

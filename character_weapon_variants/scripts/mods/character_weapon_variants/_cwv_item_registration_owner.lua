@@ -80,7 +80,47 @@ local _career_action_owner = ctx.career_action_owner
 -- Item creation helper (shared by give command)
 -- ============================================================
 
+-- Keep the authoritative master references private.  Older command/regression
+-- consumers only need membership, so expose a scalar projection rather than a
+-- table through which another mod could replace or mutate a protected master.
 local _registered_keys = {}
+local _registered_key_flags = {}
+local _protected_seed_identity_ledger
+local _blacksmith_seed_identity
+
+-- #1141 cross-mod capability. The object is immutable after construction, but
+-- its accessors read the live registration ledgers. Consumers receive it only
+-- after the bounded seed transaction succeeds; a partial registration cannot
+-- be mistaken for an authoritative Temper-Craft identity source.
+local function _new_seed_identity_provider(ledger)
+	return mod._cwv_acquisition.new_seed_identity_provider({
+		registered_keys = _registered_keys,
+		get_protected_seed_ids = function() return ledger end,
+		get_item_master_list = function() return ItemMasterList end,
+		get_backend_item = function(backend_id)
+			local mirror = Managers and Managers.backend
+				and Managers.backend:get_backend_mirror()
+			local items = mirror and mirror:get_all_inventory_items()
+			return type(items) == "table" and rawget(items, backend_id) or nil
+		end,
+	})
+end
+mod._cwv_get_blacksmith_seed_identity_provider = function()
+	local protected = _protected_seed_identity_ledger
+	if type(protected) ~= "table" or next(protected) == nil
+			or type(_blacksmith_seed_identity) ~= "table" then
+		return nil, "seed_registration_incomplete"
+	end
+	-- Return a fresh scalar/function facade. Consumers cannot mutate the private
+	-- provider table later used to authenticate another transaction.
+	return {
+		schema = _blacksmith_seed_identity.schema,
+		owner = _blacksmith_seed_identity.owner,
+		capability = _blacksmith_seed_identity.capability,
+		resolve = _blacksmith_seed_identity.resolve,
+		sample = _blacksmith_seed_identity.sample,
+	}, nil
+end
 
 -- #482 legacy-instance compatibility. CIM persists the exact authored
 -- `item_key`, but crafts made before CWV stamped `entry.cwv_key` can re-enter
@@ -575,13 +615,23 @@ local function _auto_register_all()
 			n_built_ok = n_built_ok + 1
 			entries[#entries + 1] = entry
 			pending_defs[#pending_defs + 1] = { def = def, entry = entry }
-			_registered_keys[def.item_key] = def.item_key
+			_registered_keys[def.item_key] = entry
+			_registered_key_flags[def.item_key] = true
 
 			local seed_entry, seed_id, seed_error = mod._cwv_acquisition.build_seed(
 				def, _build_entry, function(value) return table.clone(value, true) end, is_cim_owned)
 			if seed_entry then
-				seed_entries[#seed_entries + 1] = seed_entry
-				protected_seed_ids[seed_id] = true
+				local protected, protect_error =
+					mod._cwv_acquisition.protect_seed_identity(
+						seed_id, def.item_key, seed_entry, entry)
+				if protected then
+					seed_entries[#seed_entries + 1] = seed_entry
+					protected_seed_ids[seed_id] = protected
+				else
+					n_seed_failed = n_seed_failed + 1
+					printf("[cwv:592] seed identity rejected for %s: %s",
+						tostring(def.item_key), tostring(protect_error))
+				end
 			else
 				n_seed_failed = n_seed_failed + 1
 				printf("[cwv:592] seed unavailable for %s; preserving old rows: %s", tostring(def.item_key), tostring(seed_error))
@@ -685,18 +735,31 @@ local function _auto_register_all()
 			end
 		end
 
-		local backend_items
+		local backend_items, backend_mirror
 		if Managers and Managers.backend then
-			pcall(function() backend_items = Managers.backend:get_interface("items") end)
+			pcall(function()
+				backend_items = Managers.backend:get_interface("items")
+				backend_mirror = Managers.backend:get_backend_mirror()
+			end)
 		end
 		local seed_report = mod._cwv_acquisition.register_seed_interfaces(seed_entries,
-			#entries, mil, backend_items, "character_weapon_variants")
-		seed_registration_ok = seed_report.ok and n_seed_failed == 0
+			#entries, mil, backend_items, backend_mirror,
+			"character_weapon_variants")
+		local candidate_provider = seed_report.ok and n_seed_failed == 0
+			and _new_seed_identity_provider(protected_seed_ids) or nil
+		local proven, proof_error = mod._cwv_acquisition.validate_seed_transaction(
+			candidate_provider, protected_seed_ids)
+		seed_registration_ok = seed_report.ok and n_seed_failed == 0 and proven
 		n_seed_failed = n_seed_failed + seed_report.failed
 		if not seed_report.ok then
 			printf("[cwv:592] Blacksmith seed registration incomplete; preserving old rows: %s",
 				tostring(seed_report.error))
+		elseif not proven then
+			n_seed_failed = n_seed_failed + 1
+			printf("[cwv:592] Blacksmith seed proof incomplete; preserving old rows: %s",
+				tostring(proof_error))
 		end
+		_blacksmith_seed_identity = seed_registration_ok and candidate_provider or nil
 
 		_dbg("Registered %d variant definitions and %d bounded Blacksmith seeds",
 			#entries, #seed_entries)
@@ -715,7 +778,14 @@ local function _auto_register_all()
 	end
 	mod:info("[cwv:592] definitions=%d blacksmith_seeds=%d seed_failed=%d legacy_ids_purged=%d cim_exact_ids_preserved=true",
 		#entries, #seed_entries, n_seed_failed, removed)
-	_om._cwv_blacksmith_seed_ids = seed_registration_ok and protected_seed_ids or {}
+	_protected_seed_identity_ledger = seed_registration_ok and protected_seed_ids or nil
+	local public_seed_ids = {}
+	if seed_registration_ok then
+		for seed_id, identity in pairs(protected_seed_ids) do
+			public_seed_ids[seed_id] = identity.item_key
+		end
+	end
+	_om._cwv_blacksmith_seed_ids = public_seed_ids
 	_om._cwv_blacksmith_seed_count = seed_registration_ok and #seed_entries or 0
 
 	_auto_registered = true
@@ -776,7 +846,7 @@ end
 -- at the bottom of the entry consume these three by reference; publishing the
 -- same table / function objects here keeps their identity unchanged.
 _om.item_registration = {
-	registered_keys = _registered_keys,
+	registered_keys = _registered_key_flags,
 	build_entry = _build_entry,
 	auto_register_all = _auto_register_all,
 }

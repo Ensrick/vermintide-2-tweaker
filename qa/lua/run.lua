@@ -243,6 +243,7 @@ local suites = {
     "test_cim_weave_loadout_owner",
     "test_cim_temper_transaction",
     "test_cim_temper_runtime",
+    "test_cim_direct_craft",
     "test_cim_bulk_cleanup",
     "test_cim_cwv_template_selector",
     "test_cim_cwv_template_catalog",
