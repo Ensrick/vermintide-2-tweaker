@@ -159,3 +159,13 @@ existing explicit launcher override, then follow the normal BuildOnly/review/
 merge/publication sequence. Source-only integration requires none of those
 mutations. See PROJECT_STANDARDS section 6.6 for the separate hosted
 `local_deploy` receipt and mandatory `-NoRemote` policy.
+
+As of 2026-09-17 the approved default installation is launcher 0.6.3 (release
+asset SHA-256 `5f9fb10f751238253b57ce3bf15db85336b2e8869e6a8307190d645a4ab4f040`),
+installed after the last 0.6.1 claims went stale under the 24-hour rule, and
+`ship.ps1` refuses any launcher below 0.6.3 at its capability probe: 0.6.3
+validates the x86 Steamworks `ActiveProcess` registration in `doctor`, upload
+preflight, and immediately before the SDK uploader boundary (#1548). The
+previous binary is retained beside it as `VMBLauncher.exe.bak.v0.6.1`; it is
+not an approved candidate and must not publish. Stale 0.6.1 claims are
+reissued higher and rebuilt, never reinterpreted.

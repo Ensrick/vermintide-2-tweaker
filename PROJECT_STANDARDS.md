@@ -1063,7 +1063,9 @@ bumping, not after; a bump chosen first usually has to be redone.
    bundle or receipt-mode schema 3), push a feature branch, and merge it through
    protected `master` only after `qa-gate` passes.
 3. From a clean worktree at the exact live default-branch commit, run
-   `tools\ship\ship.ps1 -Mod <name>`. It re-runs hosted authorization, clean
+   `tools\ship\ship.ps1 -Mod <name>`. Its capability probe requires approved
+   launcher 0.6.3 or newer (Steamworks readiness guard, #1548). It re-runs
+   hosted authorization, clean
    build, authority parity, authorization-backed GitHub release, Workshop
    upload, and transfer verification in that order. Tracked authority deploys
    first when a target is enabled. Receipt authority with an existing local

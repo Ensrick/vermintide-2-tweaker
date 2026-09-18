@@ -67,6 +67,25 @@ $receiptCapabilityPresent = Test-VmbLauncherPublicationCapabilityOutput `
         'capabilities=hosted-publication-receipt-v3,locked-upload-snapshot-v1,git-commit-blob-snapshot-v1,constrained-first-upload-bootstrap-v1,machine-transaction-lease-v1,crash-safe-upload-acl-journal-v1,receipt-authority-publication-v1'
     )
 Assert-PublicationFixture $receiptCapabilityPresent.Ok 'receipt publication accepts a launcher with its explicit capability'
+$readinessCapabilities = 'capabilities=hosted-publication-receipt-v3,locked-upload-snapshot-v1,git-commit-blob-snapshot-v1,constrained-first-upload-bootstrap-v1,machine-transaction-lease-v1,crash-safe-upload-acl-journal-v1,receipt-authority-publication-v1,receipt-authority-local-deploy-v1'
+$readinessMinimumRejected = Test-VmbLauncherPublicationCapabilityOutput `
+    -MinimumVersion ([version]'0.6.3') -RequireReceiptAuthority -RequireLocalDeployment -Lines @(
+        'capability_schema=1',
+        'version=0.6.2',
+        'publication_receipt_schema=3',
+        'deployment_receipt_schema=3',
+        $readinessCapabilities
+    )
+Assert-PublicationFixture (-not $readinessMinimumRejected.Ok) 'ship Steamworks-readiness minimum rejects launcher 0.6.2 even with every capability (#1548)'
+$readinessMinimumAccepted = Test-VmbLauncherPublicationCapabilityOutput `
+    -MinimumVersion ([version]'0.6.3') -RequireReceiptAuthority -RequireLocalDeployment -Lines @(
+        'capability_schema=1',
+        'version=0.6.3',
+        'publication_receipt_schema=3',
+        'deployment_receipt_schema=3',
+        $readinessCapabilities
+    )
+Assert-PublicationFixture $readinessMinimumAccepted.Ok 'ship Steamworks-readiness minimum accepts launcher 0.6.3 (#1548)'
 
 $wocReceiptAsset = Get-WorkshopPublicationReceiptAssetName -Mod 'weapons_of_chaos'
 Assert-PublicationFixture ($wocReceiptAsset -ceq 'publication-receipt-weapons_of_chaos.json') 'WOC receipt coordinate uses canonical lowercase source folder'

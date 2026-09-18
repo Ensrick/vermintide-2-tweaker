@@ -1967,12 +1967,19 @@ $privateLauncherSettings = New-ShipPrivateLauncherSettings `
     -SourceSettingsPath $globalLauncherSettings -ProjectRoot $repoRoot
 $launcherSettings = $privateLauncherSettings
 $launcher = $launcherResolution.Path
+# Issue #1548: launcher 0.6.3 validates the x86 Steamworks ActiveProcess
+# registration in doctor, upload preflight, and immediately before the SDK
+# uploader boundary. Older launchers crash inside ugc_tool.exe on stale
+# registration after build, deploy, and GitHub publication already ran, so
+# every canonical ship requires that readiness-capable build.
+$minimumShipLauncherVersion = [version]'0.6.3'
 try {
     $launcherExecutableLease = Enter-VmbLauncherExecutableLease `
         -LauncherPath $launcher -RequireDirectPath
     $launcherCapability = Assert-VmbLauncherPublicationCapability `
         -LauncherExecutableLease $launcherExecutableLease `
         -WorkingDirectory $repoRoot `
+        -MinimumVersion $minimumShipLauncherVersion `
         -RequireReceiptAuthority:(-not $BuildOnly -and [string]$bundleAuthorityPolicy.Authority -ceq 'receipt') `
         -RequireLocalDeployment:([bool]$deploymentPolicy.RequiresDeploymentReceipt)
 }
