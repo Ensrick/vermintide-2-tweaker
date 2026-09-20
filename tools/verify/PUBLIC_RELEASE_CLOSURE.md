@@ -280,6 +280,41 @@ This source verification is not deployed workflow or live-API evidence. Event
 delivery, authority/card-pin archival, historical migration, fresh pre-mutation
 state checks and idempotent action policy remain unimplemented future work.
 
+### Retained-evidence candidate and observe-only planner
+
+`public_release_closure_evidence.ps1` takes one complete collector result plus
+the exact closure-time authority supplied to that collection. It emits a
+deterministic candidate containing the full issue, comment/pin/revision,
+authority, decision, and proof snapshots. Its SHA-256 is over a strict canonical
+JSON representation with ordinal object keys, ordered arrays, strict Unicode,
+closed scalar types, and a depth bound. Reordering object properties is stable;
+changing a body, revision, authority record, decision, or closure generation is
+not. The candidate preserves evidence needed by a future durable owner without
+silently replacing it with today's release or pin state.
+
+The candidate explicitly carries `Authenticated=false` and `MayMutate=false`.
+Its digest is only an internal-integrity check, not a signature, trusted storage
+receipt, or permission to submit an old accepted proof in place of current API
+collection. `Test-VtPublicReleaseClosureEvidenceCandidate` detects accidental or
+hostile in-memory changes but cannot establish provenance.
+
+`Get-VtPublicReleaseClosureActionPlan` is likewise pure and always returns
+`Action=observe-only` and `MayMutate=false`. It makes the orchestration states
+explicit: an exact `missing-attestation` result is `Pending`; another complete
+bound rejection is `Rejected`; accepted, unavailable, legacy, and non-applicable
+results remain distinct. Its deterministic intent key is bound to closure key,
+decision, reason, and candidate digest, so duplicate delivery is stable and a
+new ClosedEvent cannot borrow the prior intent. This resolves the classification
+and idempotency model only. Authenticated durable storage, grace/deadline policy,
+fresh pre-write rereads, crash-recoverable action journals, and GitHub mutations
+remain deliberately unimplemented.
+
+`qa/check_public_release_closure_evidence.ps1` exercises the actual collector,
+policy, candidate, and planner entirely offline on PS7/PS5.1. It proves tamper
+detection, Pending-vs-Rejected behavior, generation separation, property-order
+stability, invalid-Unicode refusal, and the absence of authentication or issue
+mutation authority.
+
 ### Policy fixtures
 
 `qa/check_public_release_closure_policy.ps1` runs in Quick/full QA and can be run
