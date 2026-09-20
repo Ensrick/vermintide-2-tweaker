@@ -53,6 +53,12 @@ function Parse-Fixture {
 }
 $parsed = Parse-Fixture $good
 Assert-Evidence ($parsed.Status -ceq 'UPLOADED' -and $parsed.ManifestId -ceq $manifest) 'exact ordered upload parses UInt64 manifest as string'
+Assert-Evidence ($parsed.Schema -eq 1 -and $parsed.AppId -ceq '552500' -and
+    $parsed.StartLine -ceq $begin.TrimEnd([char]10) -and
+    $parsed.OutcomeLine -ceq $content.TrimEnd([char]10) -and
+    $parsed.FinishLine -ceq $finish.TrimEnd([char]10) -and
+    $parsed.EvidenceTextSha256 -cmatch '^[0-9a-f]{64}$') 'accepted result retains the exact bounded transaction identity'
+Assert-Evidence ($parsed.EvidenceTextSha256 -ceq (Get-VtWorkshopEvidenceSha256 $good)) 'result digest binds the complete observed append text'
 $parsed = Parse-Fixture ($begin + $noChange + $finish)
 Assert-Evidence ($parsed.Status -ceq 'NOCHANGE' -and $null -eq $parsed.ManifestId) 'observed NoChange grammar has no period and no manufactured manifest'
 Assert-Evidence ((Parse-Fixture ($good.Replace("`n", "`r`n"))).Status -ceq 'UPLOADED') 'CRLF accepted'

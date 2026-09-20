@@ -14,6 +14,16 @@ function Assert-VtWorkshopEvidenceId {
     }
 }
 
+function Get-VtWorkshopEvidenceSha256 {
+    param([Parameter(Mandatory)][AllowEmptyString()][string]$Text)
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $bytes = [System.Text.UTF8Encoding]::new($false, $true).GetBytes($Text)
+        return [BitConverter]::ToString($sha.ComputeHash($bytes)).Replace('-', '').ToLowerInvariant()
+    }
+    finally { $sha.Dispose() }
+}
+
 function Open-VtWorkshopEvidenceStream {
     param([string]$Path)
     # Buffer size 1 prevents a second continuity read from using cached bytes.
@@ -102,6 +112,7 @@ function ConvertFrom-VtWorkshopUploadTransaction {
     $state = 0
     $status = $null
     $manifest = $null
+    $startLine = $null
     $outcomeLine = $null
     $finishLine = $null
     $previousTime = $start
@@ -124,6 +135,7 @@ function ConvertFrom-VtWorkshopUploadTransaction {
         $previousTime = $stamp
         if ($message -ceq "Upload starting for workshop item $PublishedId by AppID 552500") {
             if ($state -ne 0) { throw 'Duplicate or retried Workshop upload start.' }
+            $startLine = $line
             $state = 1
         }
         elseif ($message -cmatch ('\AUploaded new content \( ManifestID ([1-9][0-9]*) \) for item ' + $PublishedId + '\.\z')) {
@@ -143,7 +155,13 @@ function ConvertFrom-VtWorkshopUploadTransaction {
         else { throw 'Workshop target event is malformed or reports an unsuccessful upload.' }
     }
     if ($state -ne 3) { throw 'No complete unique start/content/finish-OK Workshop transaction.' }
-    return [pscustomobject]@{ Status = $status; ManifestId = $manifest; PublishedId = $PublishedId; OutcomeLine = $outcomeLine; FinishLine = $finishLine }
+    return [pscustomobject]@{
+        Schema = 1; Status = $status; AppId = '552500'; ManifestId = $manifest
+        PublishedId = $PublishedId; StartLine = $startLine; OutcomeLine = $outcomeLine
+        FinishLine = $finishLine; EvidenceTextSha256 = (Get-VtWorkshopEvidenceSha256 $Text)
+        StartedAtLocal = $StartedAt.ToString('o', [cultureinfo]::InvariantCulture)
+        EndedAtLocal = $EndedAt.ToString('o', [cultureinfo]::InvariantCulture)
+    }
 }
 
 function Complete-VtWorkshopUploadEvidence {
