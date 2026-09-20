@@ -65,6 +65,18 @@ is deliberately named a candidate and always returns `Authenticated=false` and
 `MayMutate=false`: durable append-only persistence, trusted reread, NoChange
 reuse, and the live-card authority consumer remain unfinished #1307 work.
 
+`check_workshop_upload_result_release.ps1` guards the next durable #1307
+boundary. The content-qualified candidate is appended to the exact ordinary
+GitHub release without deleting or replacing any asset, then downloaded again
+through exact release/asset identities. Only byte-identical strict-UTF-8 JSON
+that still validates against the original schema-3 preauthorization returns an
+authenticated, mutation-capable in-memory proof. Exact replay and a concurrent
+exact append are idempotent; same-name/different-byte collisions, duplicate
+metadata, draft releases, changed preauthorization, destination mismatch, and
+corrupt rereads fail closed. The helper remains transport-injected and is not
+yet wired into `ship.ps1`; NoChange reuse and live-card consumption remain
+unfinished #1307 work.
+
 Individual checks follow a **0 / 1 / 2 convention**: `0` = clean, `1` = advisory
 WARNINGS, `2` (or higher) = ERRORS. `run_all.ps1` aggregates these so that:
 
