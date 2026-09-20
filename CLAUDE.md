@@ -256,9 +256,13 @@ git worktree. A set-but-invalid override is a hard failure, never a silent
 fallback. Full resolution doctrine: `docs/PORTABLE_SETUP.md`.
 
 ```powershell
-# Point the env var at the current published launcher once per machine/session:
-$env:VT2_SHIP_VMB_LAUNCHER = "C:\Users\danjo\source\repos\vmb-launcher-main-current-20260728\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe"
+# Optional explicit override: configure the current reviewed executable outside
+# this repository as documented in docs/PORTABLE_SETUP.md. Never paste a dated
+# checkout or machine-local executable path into tracked guidance.
 $exe = $env:VT2_SHIP_VMB_LAUNCHER
+if ([string]::IsNullOrWhiteSpace($exe)) {
+    throw "Use the canonical resolver; see docs/PORTABLE_SETUP.md."
+}
 & $exe list                                          # list discovered mods
 & $exe info   general_tweaker                        # cfg + bundle state
 & $exe doctor                                        # diagnostics
