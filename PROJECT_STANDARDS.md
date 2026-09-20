@@ -1341,17 +1341,22 @@ says `public`. There is no suffix-vs-visibility contradiction to tie-break.
   truncation, rewriting, partial lines, retries, and growth during the final
   verification snapshot fail closed; never fall back to recent/tail lines or
   the previous log. A receipt-gated NoChange still requires the existing exact
-  staged-byte/deploy policy and has no new ManifestID. This producer check is
-  not the durable authenticated content tuple/card-authority consumer still
-  required by #1307, nor proof against malicious byte-identical log rewriting.
-  A successful Uploaded result may be persisted only as a uniquely named,
-  append-only GitHub release asset: never delete or replace an existing result.
-  The exact ordinary release and asset must then be resolved again and the
-  downloaded bytes must equal the locally validated strict-UTF-8 candidate and
-  revalidate against the original schema-3 preauthorization. Only that trusted
-  reread can produce mutation-capable authority. The helper currently remains
-  unwired from `ship.ps1`; NoChange reuse and live-card consumption are not yet
-  established.
+  staged-byte/deploy policy and has no new ManifestID. The plaintext producer
+  result is never card authority. For `Uploaded new content`, `ship.ps1` binds
+  the exact transaction and ManifestID to the hosted schema-3 preauthorization.
+  For `No content change detected`, bounded credential-free Steam snapshots
+  immediately before and after that transaction must agree on the exact VT2
+  item/app/content-manifest/update-time/file-size identity; an unavailable or
+  changed snapshot fails closed. Each validated result is persisted under a
+  unique append-only GitHub release asset: never delete, replace, or borrow a
+  result from an earlier preauthorization. The exact ordinary release and asset
+  are then resolved again; downloaded bytes must equal the locally validated
+  strict-UTF-8 candidate and revalidate against the original preauthorization.
+  Only that trusted reread can authorize bootstrap completion, source-pin or
+  lifecycle mutation, and card refresh. The card consumes its ManifestID only
+  from the authenticated reread object, never mutable prose or the manifestless
+  NoChange log line. These checks do not claim protection against a malicious
+  process rewriting otherwise byte-identical trusted inputs.
 - **Publication-only mode (#1376/#1426):** canonical `ship.ps1` enters this mode
   when an existing item's real Steam-managed content directory is absent.
   Receipt authority with an existing local subscription instead requires the
