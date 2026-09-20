@@ -95,6 +95,7 @@ function Test-VtWorkshopUploadResultCandidate {
         [uint64]$id=0;if($v[$field] -cnotmatch '^[1-9][0-9]*$' -or -not[uint64]::TryParse($v[$field],[ref]$id)){$problems.Add("$field is not a canonical UInt64")}
     }
     if($v.mod_id -cnotmatch '^[A-Za-z][A-Za-z0-9_]*$'){$problems.Add('mod_id is noncanonical')}
+    elseif($v.release_asset_name -cne ($v.mod_id+'.zip')){$problems.Add('release asset name does not match mod_id')}
     if($v.app_id -cne '552500'){$problems.Add('app_id is not Vermintide 2')}
     foreach($field in @('publication_receipt_sha256','release_asset_sha256','transaction_evidence_sha256','start_line_sha256','outcome_line_sha256','finish_line_sha256')){
         if($v[$field] -cnotmatch '^[0-9a-f]{64}$'){$problems.Add("$field is not lowercase SHA-256")}
