@@ -7,7 +7,7 @@ function Check($Value,[string]$Message){if(-not$Value){throw $Message};$script:c
 function Copy-Result($Value){[Management.Automation.PSSerializer]::Deserialize([Management.Automation.PSSerializer]::Serialize($Value,12))}
 
 $commit='0123456789abcdef0123456789abcdef01234567';$item='3712896117';$manifest='6852607942336154153';$zipHash='b'*64
-$publication=[ordered]@{schema=3;purpose='workshop_upload';repository='Ensrick/vermintide-2-tweaker';release_tag='mods-2026-09-20';receipt_asset_name='publication-receipt-weapon_tweaker.json';source_commit=$commit;mod='weapon_tweaker';version='0.12.334-beta';bundle_files=@([ordered]@{path='wt.zip';length=123;sha256=$zipHash;git_blob='a'*40});authorization=[ordered]@{mode='hosted_qa'}}
+$publication=[ordered]@{schema=3;purpose='workshop_upload';repository='Ensrick/vermintide-2-tweaker';release_tag='mods-2026-09-20';receipt_asset_name='publication-receipt-weapon_tweaker.json';source_commit=$commit;mod='weapon_tweaker';version='0.12.334-beta';bundle_files=@([ordered]@{path='wt.zip';length=123;sha256=$zipHash;git_blob='a'*40});authorization=[ordered]@{mode='hosted_qa';source_commit=$commit;checked_at_utc='2026-09-20T12:00:00Z'}}
 $publicationBytes=[Text.UTF8Encoding]::new($false).GetBytes(($publication|ConvertTo-Json -Depth 8 -Compress))
 $t0=[datetime]'2026-07-13T11:59:20';$t1=[datetime]'2026-07-13T11:59:55'
 $text="[2026-07-13 11:59:20] [AppID 552500] Upload starting for workshop item $item by AppID 552500`n[2026-07-13 11:59:24] [AppID 552500] Uploaded new content ( ManifestID $manifest ) for item $item.`n[2026-07-13 11:59:54] [AppID 552500] Upload finished for workshop item $item : OK`n"
@@ -17,6 +17,21 @@ $verdict=Test-VtWorkshopUploadResultCandidate $candidate $publicationBytes
 Check ($verdict.Ok -and -not$verdict.Authenticated -and -not$verdict.MayMutate) 'valid candidate confused binding with authentication'
 Check ($candidate.recorded_at_utc -ceq '2026-09-20T12:34:56Z' -and $candidate.workshop_id -ceq $item -and $candidate.steam_manifest_id -ceq $manifest) 'constructor lost exact result coordinates'
 Check ($candidate.candidate_asset_name -ceq ("workshop-upload-result-weapon_tweaker-$commit-$($candidate.publication_receipt_sha256).json")) 'asset identity is not source/preauthorization-qualified'
+# Real schema-3 receipts repeat source_commit inside authorization; only a TOP-LEVEL duplicate is ambiguous.
+$nestedOk=$false;try{$null=ConvertFrom-VtWorkshopPublicationReceiptBytes $publicationBytes;$nestedOk=$true}catch{}
+Check $nestedOk 'nested authorization.source_commit was rejected as a top-level duplicate'
+$compactJson=[string]($publication|ConvertTo-Json -Depth 8 -Compress)
+$duplicatePrefix='{"source_commit":"'+('e'*40)+'",'
+$duplicateJson=[string]($compactJson -replace '^\{',$duplicatePrefix)
+Check ($duplicateJson -is [string] -and $duplicateJson.StartsWith($duplicatePrefix)) 'duplicate fixture was not constructed'
+$dupThrew=$false;try{$null=ConvertFrom-VtWorkshopPublicationReceiptBytes ([Text.UTF8Encoding]::new($false).GetBytes($duplicateJson))}catch{$dupThrew=$true}
+Check $dupThrew 'duplicate top-level source_commit was accepted'
+$topLevelKey='"source_commit":"'+$commit+'","mod"'
+$escapedKey='"source'+[char]92+'u005fcommit":"'+$commit+'","mod"'
+Check ($compactJson.Contains($topLevelKey)) 'escaped fixture anchor missing'
+$escapedJson=[string]$compactJson.Replace($topLevelKey,$escapedKey)
+$escThrew=$false;try{$null=ConvertFrom-VtWorkshopPublicationReceiptBytes ([Text.UTF8Encoding]::new($false).GetBytes($escapedJson))}catch{$escThrew=$true}
+Check $escThrew 'escaped top-level source_commit key was accepted'
 $bootstrapPublication=Copy-Result $publication;$bootstrapPublication.purpose='workshop_bootstrap'
 $bootstrapBytes=[Text.UTF8Encoding]::new($false).GetBytes(($bootstrapPublication|ConvertTo-Json -Depth 8 -Compress))
 $bootstrapCandidate=New-VtWorkshopUploadResultCandidate $bootstrapBytes $upload 'wt' 'wt.zip' $zipHash ([datetime]'2026-09-20T12:34:56Z')
