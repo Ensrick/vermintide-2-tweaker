@@ -1,7 +1,8 @@
 # Blocking tracker guard for the live-test queue doctrine.
 # Read-only: paginated GraphQL reads, never tracker mutation. Labels are read
-# for every open issue; complete comments (including isPinned) only for ready
-# issues so pin cardinality is authoritative without scanning irrelevant prose.
+# for every open issue; complete comments (including isPinned) for ready and
+# not-started issues so both required-card and stale-card pin cardinality are
+# authoritative without scanning irrelevant prose.
 
 [CmdletBinding()]
 param(
@@ -189,11 +190,17 @@ function Invoke-SelfTest {
         ) },
         [pscustomobject]@{ number=21; title='pin state unavailable'; labels=@(@{name='verify-fix'}); comments=@(
             [pscustomobject]@{body=$validSolo; createdAt='2026-07-22T00:00:00Z'}
+        ) },
+        [pscustomobject]@{ number=22; title='waiting with stale pinned card'; labels=@(@{name='not-started'}); comments=@(
+            (New-TestComment $validSolo $true '2026-07-22T00:00:00Z')
+        ) },
+        [pscustomobject]@{ number=23; title='blocked with stale pinned card'; labels=@(@{name='blocked'},@{name='not-started'}); comments=@(
+            (New-TestComment $validSolo $true '2026-07-22T00:00:00Z')
         ) }
     )
     $violations = @(Get-LifecycleViolations -Issues $fixture -RequirePinnedCard)
     $bad = @($violations.number | Sort-Object)
-    if (($bad -join ',') -ne '4,5,6,7,9,10,11,12,13,15,16,18,19,21') { throw "unexpected violations: $($bad -join ',')" }
+    if (($bad -join ',') -ne '4,5,6,7,9,10,11,12,13,15,16,18,19,21,22,23') { throw "unexpected violations: $($bad -join ',')" }
     foreach ($ok in 1,2,3,8,14,17,20) {
         if ($bad -contains $ok) { throw "valid fixture #$ok rejected" }
     }
@@ -207,6 +214,12 @@ function Invoke-SelfTest {
     if ($doublePinned.errors -notcontains 'live-card-pinned-current-live-test-card-count-2') { throw 'one-pinned-card cardinality gate missing' }
     $unknownPin = @($violations | Where-Object number -eq 21)[0]
     if ($unknownPin.errors -notcontains 'live-card-current-live-test-card-pin-state-unavailable') { throw 'unknown pin-state gate missing' }
+    foreach ($number in 22,23) {
+        $stalePinned = @($violations | Where-Object number -eq $number)[0]
+        if ($stalePinned.errors -notcontains 'not-started-forbids-pinned-current-live-test-card') {
+            throw "not-started pinned-card exclusion missing for fixture #$number"
+        }
+    }
 
     function Assert-PlaytesterWatermark {
         param([string]$Name, [object[]]$Comments, [bool]$Valid)
@@ -659,15 +672,16 @@ query($owner: String!, $name: String!, $after: String) {
         $after = if ($connection.pageInfo.hasNextPage) { [string]$connection.pageInfo.endCursor } else { $null }
     } while ($after)
 
-    $readyNumbers = @()
+    $commentNumbers = @()
     foreach ($node in $issueNodes) {
         if ([int]$node.labels.totalCount -gt 100) { throw "Issue #$($node.number) has more than 100 labels; refusing a partial lifecycle read." }
         $labelNames = @($node.labels.nodes | ForEach-Object { [string]$_.name })
-        if (@($labelNames | Where-Object { $script:VtReadyLifecycleLabels -contains $_ }).Count -gt 0) {
-            $readyNumbers += [int]$node.number
+        $hasReadyLifecycle = @($labelNames | Where-Object { $script:VtReadyLifecycleLabels -contains $_ }).Count -gt 0
+        if ($hasReadyLifecycle -or $labelNames -contains 'not-started') {
+            $commentNumbers += [int]$node.number
         }
     }
-    $commentsByNumber = Get-VtGitHubIssueCommentsBatch -Owner $owner -Name $name -Numbers $readyNumbers
+    $commentsByNumber = Get-VtGitHubIssueCommentsBatch -Owner $owner -Name $name -Numbers $commentNumbers
 
     $issues = @()
     foreach ($node in $issueNodes) {
@@ -747,5 +761,5 @@ foreach ($failure in $diagnosticFailures) {
     if ($env:GITHUB_ACTIONS -eq 'true') { Write-Host "::error::$failure" }
     Write-Host "  - $failure"
 }
-Write-Host '[check-lifecycle-cardinality] Required: exactly one of not-started/diagnostics-armed/verify-fix. Ready states require exactly one pinned exact CURRENT LIVE TEST card, and it must be the newest exact card. Fixed and verify-fix-coop are invalid while open. Pass -EnforceAuthority only after the report-only backlog is repaired.'
+Write-Host '[check-lifecycle-cardinality] Required: exactly one of not-started/diagnostics-armed/verify-fix. Ready states require exactly one pinned exact CURRENT LIVE TEST card, and it must be the newest exact card; not-started requires zero pinned exact cards. Fixed and verify-fix-coop are invalid while open. Pass -EnforceAuthority only after the report-only backlog is repaired.'
 exit 1
