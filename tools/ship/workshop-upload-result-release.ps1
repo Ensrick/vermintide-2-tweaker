@@ -150,3 +150,83 @@ function Publish-VtWorkshopUploadResultCandidate {
         -ExpectedBytes $bytes -PublicationReceiptBytes $PublicationReceiptBytes `
         -Disposition $disposition -Request $Request
 }
+
+function Get-VtWorkshopUploadResultRecordedAtUtc {
+    param([Parameter(Mandatory = $true)]$UploadResult)
+    $line = [string]$UploadResult.OutcomeLine
+    if ($line -cnotmatch '^\[([0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2})\] ') {
+        throw 'Workshop upload result has no canonical outcome timestamp.'
+    }
+    $local = [datetime]::ParseExact(
+        $matches[1], 'yyyy-MM-dd HH:mm:ss', [cultureinfo]::InvariantCulture,
+        [Globalization.DateTimeStyles]::None)
+    $local = [datetime]::SpecifyKind($local, [DateTimeKind]::Unspecified)
+    try {
+        $captureStart = [DateTimeOffset]::ParseExact(
+            [string]$UploadResult.StartedAtLocal, 'o', [cultureinfo]::InvariantCulture,
+            [Globalization.DateTimeStyles]::RoundtripKind)
+    }
+    catch { throw 'Workshop upload result has no canonical offset-bearing capture timestamp.' }
+    return [DateTimeOffset]::new($local, $captureStart.Offset).UtcDateTime
+}
+
+function Publish-VtShipWorkshopUploadProof {
+    param(
+        [Parameter(Mandatory = $true)][string]$Repo,
+        [Parameter(Mandatory = $true)][string]$ReleaseTag,
+        [Parameter(Mandatory = $true)][string]$Mod,
+        [Parameter(Mandatory = $true)][string]$ModInventoryPath,
+        [Parameter(Mandatory = $true)][byte[]]$PublicationReceiptBytes,
+        [Parameter(Mandatory = $true)]$UploadResult,
+        [scriptblock]$Request = ${function:Invoke-GitHubReleaseApiRequest}
+    )
+    if (-not (Test-Path -LiteralPath $ModInventoryPath -PathType Leaf)) {
+        throw "Mod inventory is unavailable: $ModInventoryPath"
+    }
+    $inventory = Import-PowerShellDataFile -LiteralPath $ModInventoryPath
+    $rows = @($inventory.Mods | Where-Object { [string]$_.Dir -ceq $Mod })
+    if ($rows.Count -ne 1) { throw "Cannot resolve one exact mod-inventory row for '$Mod'." }
+    $modId = [string]$rows[0].ModId
+    $releaseAssetName = "$modId.zip"
+    $publication = ConvertFrom-VtWorkshopPublicationReceiptBytes $PublicationReceiptBytes
+    $receipt = $publication.Receipt
+    $inventoryWorkshopId = [string]$rows[0].WorkshopId
+    $expectedPurpose = if ($inventoryWorkshopId -match '^[1-9][0-9]*$') {
+        'workshop_upload'
+    } else {
+        'workshop_bootstrap'
+    }
+    if ([string]$receipt.repository -cne $Repo -or [string]$receipt.release_tag -cne $ReleaseTag -or
+            [string]$receipt.mod -cne $Mod -or [string]$receipt.purpose -cne $expectedPurpose) {
+        throw 'Publication receipt does not match the requested ship coordinates.'
+    }
+    $bundleRows = @($receipt.bundle_files | Where-Object { [string]$_.path -ceq $releaseAssetName })
+    if ($bundleRows.Count -ne 1) {
+        throw "Publication receipt does not contain one exact '$releaseAssetName' bundle row."
+    }
+    $workshopId = [string]$UploadResult.PublishedId
+    if ($inventoryWorkshopId -match '^[1-9][0-9]*$' -and $inventoryWorkshopId -cne $workshopId) {
+        throw 'Workshop upload result does not match the canonical mod-inventory item.'
+    }
+    $authority = switch ([string]$UploadResult.Status) {
+        'UPLOADED' {
+            $candidate = New-VtWorkshopUploadResultCandidate `
+                -PublicationReceiptBytes $PublicationReceiptBytes `
+                -UploadResult $UploadResult `
+                -ModId $modId `
+                -ReleaseAssetName $releaseAssetName `
+                -ReleaseAssetSha256 ([string]$bundleRows[0].sha256) `
+                -RecordedAtUtc (Get-VtWorkshopUploadResultRecordedAtUtc $UploadResult)
+            Publish-VtWorkshopUploadResultCandidate `
+                -Repo $Repo -ReleaseTag $ReleaseTag -Candidate $candidate `
+                -PublicationReceiptBytes $PublicationReceiptBytes -Request $Request
+            break
+        }
+        'NOCHANGE' { throw 'NOCHANGE has no authenticated content-qualified prior-result index.' }
+        default { throw "Unsupported Workshop result status '$($UploadResult.Status)'." }
+    }
+    if (-not $authority.Ok -or -not $authority.Authenticated -or -not $authority.MayMutate) {
+        throw 'Workshop result did not produce authenticated mutation authority.'
+    }
+    return $authority
+}

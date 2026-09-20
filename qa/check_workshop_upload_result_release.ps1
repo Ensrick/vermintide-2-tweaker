@@ -17,7 +17,9 @@ $publication = [ordered]@{
 }
 $publicationBytes = [Text.UTF8Encoding]::new($false).GetBytes(($publication | ConvertTo-Json -Depth 8 -Compress))
 $text = "[2026-07-13 11:59:20] [AppID 552500] Upload starting for workshop item $item by AppID 552500`n[2026-07-13 11:59:24] [AppID 552500] Uploaded new content ( ManifestID $manifest ) for item $item.`n[2026-07-13 11:59:54] [AppID 552500] Upload finished for workshop item $item : OK`n"
-$upload = ConvertFrom-VtWorkshopUploadTransaction $text $item ([datetime]'2026-07-13T11:59:20') ([datetime]'2026-07-13T11:59:55')
+$startLocal = [datetime]::SpecifyKind(([datetime]'2026-07-13T11:59:20'), [DateTimeKind]::Local)
+$endLocal = [datetime]::SpecifyKind(([datetime]'2026-07-13T11:59:55'), [DateTimeKind]::Local)
+$upload = ConvertFrom-VtWorkshopUploadTransaction $text $item $startLocal $endLocal
 $candidate = New-VtWorkshopUploadResultCandidate $publicationBytes $upload 'wt' 'wt.zip' $zipHash ([datetime]'2026-09-20T12:34:56Z')
 $candidateBytes = ConvertTo-VtWorkshopUploadResultCandidateBytes $candidate $publicationBytes
 
@@ -69,6 +71,61 @@ Check ($created.Candidate.authenticated -eq $false -and $created.AssetSha256 -ce
 $existingState = New-FakeReleaseState -ExistingBytes $candidateBytes
 $existing = Publish-VtWorkshopUploadResultCandidate $existingState.Repo $existingState.Tag $candidate $publicationBytes $existingState.Request
 Check ($existing.Disposition -ceq 'ExistingExact' -and $existingState.Posts -eq 0 -and $existingState.Gets -eq 1) 'exact replay was not idempotent and read-only'
+
+$inventoryPath = Join-Path ([IO.Path]::GetTempPath()) ('vt2-result-inventory-' + [guid]::NewGuid().ToString('N') + '.psd1')
+try {
+    [IO.File]::WriteAllText($inventoryPath,
+        "@{ Mods = @(@{ Dir = 'weapon_tweaker'; ModId = 'wt'; WorkshopId = '$item' }) }", [Text.UTF8Encoding]::new($false))
+    $shipCreatedState = New-FakeReleaseState
+    $shipCreated = Publish-VtShipWorkshopUploadProof $shipCreatedState.Repo $shipCreatedState.Tag `
+        'weapon_tweaker' $inventoryPath $publicationBytes $upload $shipCreatedState.Request
+    $outcomeLocal = [datetime]::SpecifyKind(([datetime]'2026-07-13T11:59:24'), [DateTimeKind]::Unspecified)
+    $expectedRecorded = [DateTimeOffset]::new(
+        $outcomeLocal, [TimeZoneInfo]::Local.GetUtcOffset($startLocal)).UtcDateTime.ToString(
+            'yyyy-MM-ddTHH:mm:ssZ', [cultureinfo]::InvariantCulture)
+    Check ($shipCreated.Authenticated -and $shipCreated.Disposition -ceq 'CreatedAndReread' -and
+        $shipCreated.Candidate.recorded_at_utc -ceq $expectedRecorded) `
+        'ship UPLOADED path did not create authenticated deterministic-time authority'
+
+    $bootstrapPublication = Copy-Value $publication
+    $bootstrapPublication.purpose = 'workshop_bootstrap'
+    $bootstrapBytes = [Text.UTF8Encoding]::new($false).GetBytes(
+        ($bootstrapPublication | ConvertTo-Json -Depth 8 -Compress))
+    [IO.File]::WriteAllText($inventoryPath,
+        "@{ Mods = @(@{ Dir = 'weapon_tweaker'; ModId = 'wt'; WorkshopId = '' }) }", [Text.UTF8Encoding]::new($false))
+    $bootstrapState = New-FakeReleaseState
+    $bootstrapDigest = Get-VtWorkshopResultByteSha256 $bootstrapBytes
+    $bootstrapState.AssetName = Get-VtWorkshopUploadResultAssetName 'weapon_tweaker' $commit $bootstrapDigest
+    $bootstrapProof = Publish-VtShipWorkshopUploadProof $bootstrapState.Repo $bootstrapState.Tag `
+        'weapon_tweaker' $inventoryPath $bootstrapBytes $upload $bootstrapState.Request
+    Check ($bootstrapProof.Authenticated -and $bootstrapProof.Candidate.workshop_id -ceq $item) `
+        'first-upload bootstrap did not retain its assigned positive item result'
+    [IO.File]::WriteAllText($inventoryPath,
+        "@{ Mods = @(@{ Dir = 'weapon_tweaker'; ModId = 'wt'; WorkshopId = '$item' }) }", [Text.UTF8Encoding]::new($false))
+
+    $noChange = Copy-Value $upload
+    $noChange.Status = 'NOCHANGE'; $noChange.ManifestId = $null
+    $threw = $false
+    try {
+        $null = Publish-VtShipWorkshopUploadProof $shipCreatedState.Repo $shipCreatedState.Tag `
+            'weapon_tweaker' $inventoryPath $publicationBytes $noChange $shipCreatedState.Request
+    } catch { $threw = $true }
+    Check ($threw -and $shipCreatedState.Posts -eq 1) `
+        'NOCHANGE crossed a second mutation instead of failing for unavailable cross-receipt authority'
+
+    $wrongItem = Copy-Value $upload
+    $wrongItem.PublishedId = '3712896118'
+    $wrongItemState = New-FakeReleaseState
+    $threw = $false
+    try {
+        $null = Publish-VtShipWorkshopUploadProof $wrongItemState.Repo $wrongItemState.Tag `
+            'weapon_tweaker' $inventoryPath $publicationBytes $wrongItem $wrongItemState.Request
+    } catch { $threw = $true }
+    Check ($threw -and $wrongItemState.Posts -eq 0 -and $wrongItemState.Gets -eq 0) `
+        'wrong Workshop item crossed the mod-inventory preflight'
+} finally {
+    if (Test-Path -LiteralPath $inventoryPath) { Remove-Item -LiteralPath $inventoryPath -Force }
+}
 
 $raceState = New-FakeReleaseState -UploadRace
 $race = Publish-VtWorkshopUploadResultCandidate $raceState.Repo $raceState.Tag $candidate $publicationBytes $raceState.Request

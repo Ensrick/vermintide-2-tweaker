@@ -116,6 +116,7 @@ if (-not (Test-Path -LiteralPath $publicationReceiptHelpers -PathType Leaf)) {
 
 . (Join-Path $PSScriptRoot 'local-deployment-receipt.ps1')
 . (Join-Path $PSScriptRoot 'workshop-upload-evidence.ps1')
+. (Join-Path $PSScriptRoot 'workshop-upload-result-release.ps1')
 
 $buildOutputNormalizationHelpers = Join-Path $PSScriptRoot 'build-output-normalization.ps1'
 if (-not (Test-Path -LiteralPath $buildOutputNormalizationHelpers -PathType Leaf)) {
@@ -1511,6 +1512,8 @@ function Invoke-ShipSelfTest {
     $finalAuthorizationPos = $selfTxt.LastIndexOf('publicationAuthorization = Get-LivePublicationAuthorization')
     $authorizationRecordPos = $selfTxt.IndexOf('-PublicationAuthorizationJson $publicationAuthorizationJson', $mainDispatchPos)
     $receiptHandoffPos = $selfTxt.IndexOf('-PublicationReceiptOutputPath $receiptPath', $mainDispatchPos)
+    $receiptValidationPos = $selfTxt.IndexOf('ConvertFrom-VtWorkshopPublicationReceiptBytes $publicationReceiptBytes', $receiptHandoffPos)
+    $receiptPurposePos = $selfTxt.IndexOf('$expectedReceiptPurpose = if ($isFirstUploadBootstrap)', $receiptValidationPos)
     $uploadActionPos = $selfTxt.IndexOf("uploadArgs = @('upload', `$Mod)", $mainDispatchPos)
     Assert ($initialAuthorizationPos -ge 0 -and $initialAuthorizationPos -lt $cleanBuildPos) "publication authorization runs before the first build mutation"
     Assert ($sourceBeforePos -ge 0 -and $sourceBeforePos -lt $cleanBuildPos -and $cleanBuildPos -lt $sourceAfterPos) "BuildOnly fingerprints runtime source immediately before and after the clean build"
@@ -1531,6 +1534,8 @@ function Invoke-ShipSelfTest {
     Assert ($deployActionPos -lt $finalAuthorizationPos -and $finalAuthorizationPos -lt $uploadActionPos) "authorization is revalidated immediately before Workshop upload"
     Assert ($authorizationRecordPos -lt $finalAuthorizationPos -and $finalAuthorizationPos -lt $uploadActionPos) "authorization evidence is recorded before the last-moment upload gate"
     Assert ($authorizationRecordPos -lt $receiptHandoffPos -and $receiptHandoffPos -lt $finalAuthorizationPos) "publisher hosts the short-lived receipt before the last-moment upload gate"
+    Assert ($receiptHandoffPos -lt $receiptValidationPos -and $receiptValidationPos -lt $uploadActionPos) "ship validates the exact hosted receipt bytes before Workshop upload"
+    Assert ($receiptValidationPos -lt $receiptPurposePos -and $receiptPurposePos -lt $uploadActionPos) "ship binds upload/bootstrap receipt purpose to the canonical lane before Workshop upload"
     Assert ($selfTxt.IndexOf("'--publication-receipt', `$receiptPath", $mainDispatchPos) -ge 0) "launcher upload receives the GitHub-hosted publication receipt"
     Assert ($selfTxt.IndexOf("@('all', `$Mod)") -lt 0) "ship never uses the atomic all action that can upload before bundle parity"
     Assert ($authorizationRecordPos -ge 0) "release manifest receives publication authorization evidence"
@@ -1565,6 +1570,10 @@ function Invoke-ShipSelfTest {
     Assert ($selfTxt.IndexOf("Mode = 'publication-only'", $mainDispatchPos) -lt 0) "publication-only mode is produced only by the tested deployment-policy helper"
     Assert ($selfTxt.IndexOf('New-Item', $deploymentPolicyPos) -lt 0) "canonical ship never creates a Steam-managed Workshop content directory"
     Assert ($selfTxt.IndexOf('Test-ShipUploadEvidencePolicy', $uploadActionPos) -gt $uploadActionPos) "upload result is checked through the receipt-aware evidence policy"
+    $uploadEvidencePolicyPos = $selfTxt.IndexOf('Test-ShipUploadEvidencePolicy', $uploadActionPos)
+    $uploadProofPos = $selfTxt.IndexOf('Publish-VtShipWorkshopUploadProof', $uploadEvidencePolicyPos)
+    $bootstrapCompletePos = $selfTxt.IndexOf('BOOTSTRAP COMPLETE - NOT TEST READY', $uploadActionPos)
+    Assert ($uploadEvidencePolicyPos -lt $uploadProofPos -and $uploadProofPos -lt $bootstrapCompletePos) "authenticated upload-result persistence gates even bootstrap completion"
     Assert ($selfTxt.IndexOf('Bootstrap did not write exactly one positive published_id', $mainDispatchPos) -ge 0 -and
         $selfTxt.IndexOf('-ResolveBootstrapId $bootstrapIdResolver', $uploadActionPos) -ge 0) "first-upload bootstrap supplies the tested post-launch assigned-ID resolver"
     Assert ($publisherSource.IndexOf('published_id=0 is accepted only for a one-mod canonical first-upload receipt handoff') -ge 0) "publisher constrains zero-ID release mutation to the exact receipt handoff"
@@ -1635,6 +1644,7 @@ function Invoke-ShipSelfTest {
     $pinAuthorityPos = $selfTxt.IndexOf('$shipDeploymentManifest = Get-VtCardDeploymentManifest', $mainDispatchPos)
     $pinUploadVerifyPos = $selfTxt.IndexOf('$uploadStatus = $receiptAcceptance.Status', $mainDispatchPos)
     Assert ($pinUploadVerifyPos -ge 0 -and $pinUploadVerifyPos -lt $pinStepPos) "successful-path pin repoint follows Workshop verification"
+    Assert ($uploadProofPos -ge 0 -and $uploadProofPos -lt $pinStepPos) "authenticated upload-result persistence precedes successful-path pin and lifecycle mutation"
     $pinArmPos = $selfTxt.IndexOf('$publishedPinContext = $sourcePinHandoff.PublishedJson', $mainDispatchPos)
     $pinFinallyPos = $selfTxt.LastIndexOf('if ($publishedPinContext -and -not $pinFinalizationAttempted)')
     Assert ($receiptHandoffPos -lt $pinArmPos -and $pinArmPos -lt $finalAuthorizationPos) "publisher-owned reference handoff is consumed before final authorization, including on exceptions"
@@ -2469,6 +2479,18 @@ finally {
 if (-not (Test-Path -LiteralPath $receiptPath -PathType Leaf)) {
     Fail "publish-release.ps1 did not return the exact GitHub-hosted publication receipt. No Workshop upload was attempted."
 }
+$publicationReceiptBytes = [System.IO.File]::ReadAllBytes($receiptPath)
+try {
+    $publicationReceipt = ConvertFrom-VtWorkshopPublicationReceiptBytes $publicationReceiptBytes
+    $expectedReceiptPurpose = if ($isFirstUploadBootstrap) { 'workshop_bootstrap' } else { 'workshop_upload' }
+    if ([string]$publicationReceipt.Receipt.purpose -cne $expectedReceiptPurpose) {
+        throw "publication receipt purpose is '$($publicationReceipt.Receipt.purpose)', expected '$expectedReceiptPurpose'"
+    }
+}
+catch {
+    Remove-Item -LiteralPath $receiptPath -Force -ErrorAction SilentlyContinue
+    Fail "Publisher returned an invalid publication receipt. No Workshop upload was attempted: $($_.Exception.Message)"
+}
 $githubStatus = "OK ($tag)"
 if (-not $isFirstUploadBootstrap -and -not $publishedPinContext) {
     Fail 'Publisher returned without confirmed GitHub source-pin provenance. No Workshop upload was attempted.'
@@ -2563,6 +2585,28 @@ $uploadEvidence = Test-ShipUploadEvidencePolicy `
 if (-not $uploadEvidence.Ok) {
     Fail ($uploadEvidence.Problems -join '; ')
 }
+
+# Issue #1307: the plaintext Steam-log result is not tracker mutation
+# authority. Persist it append-only on the exact hosted release and trust it
+# only after a fresh GitHub reread. NOCHANGE fails closed until a separate
+# content-qualified prior-result index can cross the fresh receipt nonce. This
+# gate precedes bootstrap exit, the successful-path pin step, labels, and card
+# rewrites. The existing outer failure finalizer may still reconcile GitHub
+# source pins after a recorded release mutation; it cannot label or rewrite a
+# live-test card.
+Write-Host "==> Persisting authenticated Workshop upload result (issue #1307)" -ForegroundColor Cyan
+try {
+    $uploadResultAuthority = Publish-VtShipWorkshopUploadProof `
+        -Repo 'Ensrick/vermintide-2-tweaker' -ReleaseTag $tag -Mod $Mod `
+        -ModInventoryPath (Join-Path $repoRoot 'tools\mod-inventory.psd1') `
+        -PublicationReceiptBytes $publicationReceiptBytes -UploadResult $receiptAcceptance
+}
+catch {
+    Fail "Workshop upload succeeded but its authenticated result could not be established; lifecycle mutation is blocked: $($_.Exception.Message)"
+}
+Write-Host ("  OK -- {0}; ManifestID {1}; asset {2}." -f `
+    $uploadResultAuthority.Disposition, $uploadResultAuthority.Candidate.steam_manifest_id,
+    $uploadResultAuthority.AssetName) -ForegroundColor Green
 
 switch ($uploadStatus) {
     'UPLOADED' {
@@ -2858,13 +2902,13 @@ try {
                 Write-Host "  WARNING: all-stream card reconciliation exited $reconcileExit -- continuing with the exact shipped-stream pass." -ForegroundColor Yellow
             }
 
-            # Only the complete successful Uploaded transaction supplies a new
-            # ManifestID. NOCHANGE supplies none; preserve the existing field
-            # under current policy, without claiming fresh manifest authority.
-            # Durable authenticated tuple/card consumption remains #1307 work.
+            # The plaintext parser result cannot authorize a card mutation.
+            # Only the append-only GitHub asset reread above supplies the
+            # ManifestID consumed here. NOCHANGE does not reach this point
+            # until a content-qualified prior-result authority exists.
             $shipManifestId = $null
             if ($uploadStatus -eq 'UPLOADED') {
-                $shipManifestId = $receiptAcceptance.ManifestId
+                $shipManifestId = $uploadResultAuthority.Candidate.steam_manifest_id
             }
             # Hashtable splat, NOT an array of '-Name'/value strings: array
             # splatting a script path binds every element POSITIONALLY (the
