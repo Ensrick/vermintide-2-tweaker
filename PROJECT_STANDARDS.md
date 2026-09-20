@@ -44,9 +44,12 @@ Cross-reference: `CLAUDE.md` (technical) describes HOW things work. This doc
   universal across mods, but enforcement now exists: `qa/check_logging.ps1`
   (advisory, wired into `qa/run_all.ps1`) scans for chat-echo in NEVER contexts,
   per-frame `mod:info`/`mod:warning`, and level misuse, with an inline
-  `-- allow-echo: <reason>` suppression path. Under §11b every warning it emits
-  carries a one-week clock. Remaining work is the per-mod prefix sweep, not the
-  missing checker.
+  `-- allow-echo: <reason>` suppression path. Issue #727 also records the
+  reviewed standing exceptions inside that checker by exact relative path,
+  category, trimmed source text, and maximum occurrence count; changed text or
+  an added occurrence becomes visible again. Under §11b every warning it emits
+  carries a one-week clock. Remaining work is the per-mod prefix sweep and the
+  four explicit stable-promotion debts, not the missing checker.
 - **Error handling has tended toward reactive layering.** The v0.9.8.x chain
   (4 patches in 24h, each fixing the prior patch's side effect) is the
   canonical example. §4.4 codifies the corrective rule; the pattern still
