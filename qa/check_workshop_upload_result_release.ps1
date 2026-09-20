@@ -12,10 +12,12 @@ $item = '3712896117'; $manifest = '6852607942336154153'; $zipHash = 'b' * 64
 $publication = [ordered]@{
     schema=3; purpose='workshop_upload'; repository='Ensrick/vermintide-2-tweaker'; release_tag='mods-2026-09-20'
     receipt_asset_name='publication-receipt-weapon_tweaker.json'; source_commit=$commit; mod='weapon_tweaker'
-    version='0.12.334-beta'; bundle_files=@([ordered]@{path='wt.zip';length=123;sha256=$zipHash;git_blob='a'*40})
+    version='0.12.334-beta'; bundle_files=@([ordered]@{path='0e89c5285caab001.mod_bundle';length=123;sha256=$zipHash;git_blob='a'*40})
     authorization=[ordered]@{mode='hosted_qa'}
 }
 $publicationBytes = [Text.UTF8Encoding]::new($false).GetBytes(($publication | ConvertTo-Json -Depth 8 -Compress))
+$manifestValue = [ordered]@{manifest_schema=2;release_tag='mods-2026-09-20';mods=@([ordered]@{mod_id='wt';asset_filename='wt.zip';sha256=$zipHash;version='0.12.334-beta'})}
+$manifestBytes = [Text.UTF8Encoding]::new($false).GetBytes(($manifestValue | ConvertTo-Json -Depth 8 -Compress))
 $text = "[2026-07-13 11:59:20] [AppID 552500] Upload starting for workshop item $item by AppID 552500`n[2026-07-13 11:59:24] [AppID 552500] Uploaded new content ( ManifestID $manifest ) for item $item.`n[2026-07-13 11:59:54] [AppID 552500] Upload finished for workshop item $item : OK`n"
 $startLocal = [datetime]::SpecifyKind(([datetime]'2026-07-13T11:59:20'), [DateTimeKind]::Local)
 $endLocal = [datetime]::SpecifyKind(([datetime]'2026-07-13T11:59:55'), [DateTimeKind]::Local)
@@ -41,6 +43,7 @@ $noChangeBytes = ConvertTo-VtWorkshopUploadResultCandidateBytes $noChangeCandida
 function New-FakeReleaseState {
     param(
         [byte[]]$ExistingBytes,
+        [byte[]]$ManifestBytes = $script:manifestBytes,
         [switch]$Duplicate,
         [switch]$Draft,
         [switch]$UploadRace,
@@ -52,10 +55,11 @@ function New-FakeReleaseState {
         AssetName=[string]$CandidateObject.candidate_asset_name; Bytes=$ExistingBytes; Posts=0; Gets=0
         Duplicate=[bool]$Duplicate; Draft=[bool]$Draft; UploadRace=[bool]$UploadRace; CorruptReread=[bool]$CorruptReread
     }
-    $state.Request = {
-        param($Method, $Uri, $Accept, $InputPath, [byte[]]$InputBytes, $ExpectedResponseBytes, $ContentType, $OutputPath)
+    $state.ManifestBytes = $ManifestBytes
+    $state.Request = {        param($Method, $Uri, $Accept, $InputPath, [byte[]]$InputBytes, $ExpectedResponseBytes, $ContentType, $OutputPath)
         if ($Method -ceq 'GET' -and $Uri -match '/releases/tags/') {
             $assets = @()
+            $assets += [pscustomobject]@{id='82';name='manifest.json';size=[long]$state.ManifestBytes.Length;url="https://api.github.com/repos/$($state.Repo)/releases/assets/82"}
             if ($null -ne $state.Bytes) {
                 $asset = [pscustomobject]@{id=$state.AssetId;name=$state.AssetName;size=[long]$state.Bytes.Length;url="https://api.github.com/repos/$($state.Repo)/releases/assets/$($state.AssetId)"}
                 $assets += $asset
@@ -72,6 +76,9 @@ function New-FakeReleaseState {
             }
             $state.Bytes = [byte[]]$InputBytes.Clone()
             return [pscustomobject]@{StatusCode=201;Content='{}';Bytes=$null;Error=$null}
+        }
+        if ($Method -ceq 'GET' -and $Uri -match '/releases/assets/82$') {
+            return [pscustomobject]@{StatusCode=200;Content='';Bytes=([byte[]]$state.ManifestBytes.Clone());Error=$null}
         }
         if ($Method -ceq 'GET' -and $Uri -match '/releases/assets/') {
             $state.Gets++
@@ -169,6 +176,15 @@ try {
     } catch { $threw = $true }
     Check ($threw -and $wrongItemState.Posts -eq 0 -and $wrongItemState.Gets -eq 0) `
         'wrong Workshop item crossed the mod-inventory preflight'
+    # The zip digest is bound by the hosted release manifest, not the receipt: a manifest without the row must stop the proof.
+    $noRowBytes = [Text.UTF8Encoding]::new($false).GetBytes((([ordered]@{manifest_schema=2;release_tag='mods-2026-09-20';mods=@([ordered]@{mod_id='other';asset_filename='other.zip';sha256=$zipHash})}) | ConvertTo-Json -Depth 8 -Compress))
+    $noRowState = New-FakeReleaseState -ManifestBytes $noRowBytes
+    $threw = $false
+    try {
+        $null = Publish-VtShipWorkshopUploadProof $noRowState.Repo $noRowState.Tag `
+            'weapon_tweaker' $inventoryPath $publicationBytes $upload $noRowState.Request
+    } catch { $threw = $true }
+    Check ($threw -and $noRowState.Posts -eq 0) 'missing hosted manifest row did not stop the upload proof'
 } finally {
     if (Test-Path -LiteralPath $inventoryPath) { Remove-Item -LiteralPath $inventoryPath -Force }
 }

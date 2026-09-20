@@ -7,7 +7,7 @@ function Check($Value,[string]$Message){if(-not$Value){throw $Message};$script:c
 function Copy-Result($Value){[Management.Automation.PSSerializer]::Deserialize([Management.Automation.PSSerializer]::Serialize($Value,12))}
 
 $commit='0123456789abcdef0123456789abcdef01234567';$item='3712896117';$manifest='6852607942336154153';$zipHash='b'*64
-$publication=[ordered]@{schema=3;purpose='workshop_upload';repository='Ensrick/vermintide-2-tweaker';release_tag='mods-2026-09-20';receipt_asset_name='publication-receipt-weapon_tweaker.json';source_commit=$commit;mod='weapon_tweaker';version='0.12.334-beta';bundle_files=@([ordered]@{path='wt.zip';length=123;sha256=$zipHash;git_blob='a'*40});authorization=[ordered]@{mode='hosted_qa';source_commit=$commit;checked_at_utc='2026-09-20T12:00:00Z'}}
+$publication=[ordered]@{schema=3;purpose='workshop_upload';repository='Ensrick/vermintide-2-tweaker';release_tag='mods-2026-09-20';receipt_asset_name='publication-receipt-weapon_tweaker.json';source_commit=$commit;mod='weapon_tweaker';version='0.12.334-beta';bundle_files=@([ordered]@{path='0e89c5285caab001.mod_bundle';length=123;sha256=$zipHash;git_blob='a'*40});authorization=[ordered]@{mode='hosted_qa';source_commit=$commit;checked_at_utc='2026-09-20T12:00:00Z'}}
 $publicationBytes=[Text.UTF8Encoding]::new($false).GetBytes(($publication|ConvertTo-Json -Depth 8 -Compress))
 $t0=[datetime]'2026-07-13T11:59:20';$t1=[datetime]'2026-07-13T11:59:55'
 $text="[2026-07-13 11:59:20] [AppID 552500] Upload starting for workshop item $item by AppID 552500`n[2026-07-13 11:59:24] [AppID 552500] Uploaded new content ( ManifestID $manifest ) for item $item.`n[2026-07-13 11:59:54] [AppID 552500] Upload finished for workshop item $item : OK`n"
@@ -36,7 +36,7 @@ $bootstrapPublication=Copy-Result $publication;$bootstrapPublication.purpose='wo
 $bootstrapBytes=[Text.UTF8Encoding]::new($false).GetBytes(($bootstrapPublication|ConvertTo-Json -Depth 8 -Compress))
 $bootstrapCandidate=New-VtWorkshopUploadResultCandidate $bootstrapBytes $upload 'wt' 'wt.zip' $zipHash ([datetime]'2026-09-20T12:34:56Z')
 Check (Test-VtWorkshopUploadResultCandidate $bootstrapCandidate $bootstrapBytes).Ok 'first-upload bootstrap receipt cannot retain its assigned-item upload result'
-foreach($row in @(@{Field='authenticated';Value=$true},@{Field='workshop_id';Value='0'},@{Field='steam_manifest_id';Value='other'},@{Field='source_commit';Value='f'*40},@{Field='mod_id';Value='other'},@{Field='release_asset_sha256';Value='c'*64},@{Field='publication_receipt_sha256';Value='d'*64},@{Field='candidate_asset_name';Value='../receipt.json'},@{Field='recorded_at_utc';Value='2026-09-20T12:34:56.1Z'},@{Field='app_id';Value='480'})){
+foreach($row in @(@{Field='authenticated';Value=$true},@{Field='workshop_id';Value='0'},@{Field='steam_manifest_id';Value='other'},@{Field='source_commit';Value='f'*40},@{Field='mod_id';Value='other'},@{Field='publication_receipt_sha256';Value='d'*64},@{Field='candidate_asset_name';Value='../receipt.json'},@{Field='recorded_at_utc';Value='2026-09-20T12:34:56.1Z'},@{Field='app_id';Value='480'})){
     $copy=Copy-Result $candidate;$copy.($row.Field)=$row.Value
     Check (-not(Test-VtWorkshopUploadResultCandidate $copy $publicationBytes).Ok) ("tampered "+$row.Field+' accepted')
 }
