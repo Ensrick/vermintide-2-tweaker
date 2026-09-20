@@ -51,9 +51,9 @@ boundaries replaced. Both PowerShell hosts run it in the bundle-output host
 matrix. No Steam, launcher, SDK, upload, or existing log mutation occurs. A
 complete read snapshot is required: ordinary growth during final verification
 is conservatively unavailable. NoChange never manufactures a ManifestID;
-bootstrap resolves its new positive ID using the original capture. Durable
-authenticated transfer tuples and live-card consumption remain separate #1307
-work, not established by this plaintext-log producer.
+bootstrap resolves its new positive ID using the original capture. ManifestID
+authority is established only by the separate result owners below, never by
+this plaintext-log producer.
 
 `check_workshop_upload_result.ps1` guards the next pure #1307 boundary. It binds
 one successful producer result to the exact hosted schema-3 preauthorization,
@@ -63,11 +63,25 @@ NoChange, tampered/foreign receipts, unknown or missing fields, noncanonical
 coordinates, and result/line disagreement under PowerShell 7 and 5.1. The value
 is deliberately named a candidate and always returns `Authenticated=false` and
 `MayMutate=false`: durable append-only persistence, trusted reread, NoChange
-reuse, and the live-card authority consumer remain unfinished #1307 work.
+handling, and the live-card authority consumer remain separate boundaries.
 The same binding accepts the canonical first-upload bootstrap receipt so its
 newly assigned positive item/ManifestID result can be retained before the
 mandatory ID-only source reconciliation; bootstrap still cannot become test
 ready from that provisional source record.
+
+`check_workshop_published_file_snapshot.ps1` and
+`check_workshop_nochange_result.ps1` guard the manifestless success path.
+Immediately before an existing-item upload, ship performs one bounded,
+credential-free POST to Steam's fixed `GetPublishedFileDetails` endpoint. A
+`NOCHANGE` transaction requires a second successful POST after the exact
+start/outcome/finish-OK log transaction. The selected item, VT2 consumer AppID,
+`hcontent_file`, update generation, file size, and canonical tuple digest must
+remain identical across the two observations; unrelated presentation counters
+may change. Redirects, non-200 responses, malformed/duplicate/oversized JSON,
+foreign items/apps, invalid UInt64 values, changed content generations, stale
+windows, and unavailable observations fail closed. The resulting ManifestID is
+still only an unauthenticated candidate until the release owner appends and
+rereads its exact bytes. `UPLOADED` remains on its independent log-bound path.
 
 `check_workshop_upload_result_release.ps1` guards the next durable #1307
 boundary. The content-qualified candidate is appended to the exact ordinary
@@ -84,11 +98,11 @@ refresh. The existing failure finalizer may still reconcile source pins after
 the GitHub release was already recorded, but it cannot make an issue test-ready
   or rewrite a live card. An `UPLOADED` result creates the exact asset, and the
   card refresh consumes its ManifestID only from that authenticated reread.
-`NOCHANGE` fails closed before those live-test mutations because each hosted
-preauthorization carries a fresh nonce: safe reuse needs a separate
-content-qualified authenticated index and cannot substitute a prior
-receipt-qualified asset. That reuse and live-card consumption remain unfinished
-#1307 work.
+`NOCHANGE` creates a distinct receipt-qualified asset only after the unchanged
+pre/post Steam snapshots above, then follows the same append-only exact-byte
+reread boundary. Card refresh consumes its ManifestID from that authenticated
+object too. No historical receipt is reused, and neither path reads a ManifestID
+directly from mutable prose or the manifestless NoChange log line.
 
 Individual checks follow a **0 / 1 / 2 convention**: `0` = clean, `1` = advisory
 WARNINGS, `2` (or higher) = ERRORS. `run_all.ps1` aggregates these so that:

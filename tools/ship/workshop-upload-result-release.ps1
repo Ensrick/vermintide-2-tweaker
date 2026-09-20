@@ -3,6 +3,7 @@
 # asset.  The content-qualified name makes an exact replay idempotent while a
 # same-name/different-byte collision fails closed.
 . (Join-Path $PSScriptRoot 'workshop-upload-result.ps1')
+. (Join-Path $PSScriptRoot 'workshop-nochange-result.ps1')
 . (Join-Path $PSScriptRoot '../publish-release/github-release-api.ps1')
 
 function Get-VtWorkshopUploadResultBytesSha256 {
@@ -29,7 +30,16 @@ function ConvertTo-VtWorkshopUploadResultCandidateBytes {
         [Parameter(Mandatory = $true)]$Candidate,
         [Parameter(Mandatory = $true)][byte[]]$PublicationReceiptBytes
     )
-    $verdict = Test-VtWorkshopUploadResultCandidate $Candidate $PublicationReceiptBytes
+    $purpose = [string](Get-VtWorkshopResultProperty $Candidate 'purpose')
+    $verdict = if ($purpose -ceq $script:VtWorkshopResultPurpose) {
+        Test-VtWorkshopUploadResultCandidate $Candidate $PublicationReceiptBytes
+    }
+    elseif ($purpose -ceq $script:VtWorkshopNoChangePurpose) {
+        Test-VtWorkshopNoChangeResultCandidate $Candidate $PublicationReceiptBytes
+    }
+    else {
+        [pscustomobject]@{Ok=$false;Problems=@("Unknown Workshop result purpose '$purpose'.")}
+    }
     if (-not $verdict.Ok) {
         throw ('Invalid Workshop upload-result candidate: ' + ($verdict.Problems -join '; '))
     }
@@ -42,6 +52,9 @@ function ConvertFrom-VtWorkshopUploadResultCandidateBytes {
         [Parameter(Mandatory = $true)][byte[]]$Bytes,
         [Parameter(Mandatory = $true)][byte[]]$PublicationReceiptBytes
     )
+    if ($Bytes.Length -eq 0 -or $Bytes.Length -gt 65536) {
+        throw 'Workshop upload-result asset is empty or exceeds the 64-KiB schema budget.'
+    }
     try {
         $json = [Text.UTF8Encoding]::new($false, $true).GetString($Bytes)
         # PowerShell 7.5 otherwise promotes ISO-8601 JSON strings to DateTime,
@@ -51,10 +64,35 @@ function ConvertFrom-VtWorkshopUploadResultCandidateBytes {
         if ((Get-Command ConvertFrom-Json).Parameters.ContainsKey('DateKind')) {
             $jsonArgs.DateKind = 'String'
         }
+        $purposeMatches = [regex]::Matches($json, '"purpose"\s*:')
+        if ($purposeMatches.Count -ne 1) {
+            throw 'Workshop upload-result purpose is missing or duplicated.'
+        }
         $candidate = $json | ConvertFrom-Json @jsonArgs
     }
     catch { throw "Workshop upload-result asset is not strict UTF-8 JSON: $($_.Exception.Message)" }
-    $verdict = Test-VtWorkshopUploadResultCandidate $candidate $PublicationReceiptBytes
+    $purpose = [string](Get-VtWorkshopResultProperty $candidate 'purpose')
+    $expectedFields = if ($purpose -ceq $script:VtWorkshopResultPurpose) {
+        $script:VtWorkshopResultFields
+    }
+    elseif ($purpose -ceq $script:VtWorkshopNoChangePurpose) {
+        $script:VtWorkshopNoChangeFields
+    }
+    else { @() }
+    foreach ($field in @($expectedFields)) {
+        if ([regex]::Matches($json, '"' + [regex]::Escape($field) + '"\s*:').Count -ne 1) {
+            throw "Workshop upload-result field '$field' is missing or duplicated in persisted JSON."
+        }
+    }
+    $verdict = if ($purpose -ceq $script:VtWorkshopResultPurpose) {
+        Test-VtWorkshopUploadResultCandidate $candidate $PublicationReceiptBytes
+    }
+    elseif ($purpose -ceq $script:VtWorkshopNoChangePurpose) {
+        Test-VtWorkshopNoChangeResultCandidate $candidate $PublicationReceiptBytes
+    }
+    else {
+        [pscustomobject]@{Ok=$false;Problems=@("Unknown Workshop result purpose '$purpose'.")}
+    }
     if (-not $verdict.Ok) {
         throw ('Persisted Workshop upload-result candidate is invalid: ' + ($verdict.Problems -join '; '))
     }
@@ -178,7 +216,9 @@ function Publish-VtShipWorkshopUploadProof {
         [Parameter(Mandatory = $true)][string]$ModInventoryPath,
         [Parameter(Mandatory = $true)][byte[]]$PublicationReceiptBytes,
         [Parameter(Mandatory = $true)]$UploadResult,
-        [scriptblock]$Request = ${function:Invoke-GitHubReleaseApiRequest}
+        [scriptblock]$Request = ${function:Invoke-GitHubReleaseApiRequest},
+        $BeforeWorkshopSnapshot,
+        $AfterWorkshopSnapshot
     )
     if (-not (Test-Path -LiteralPath $ModInventoryPath -PathType Leaf)) {
         throw "Mod inventory is unavailable: $ModInventoryPath"
@@ -222,7 +262,24 @@ function Publish-VtShipWorkshopUploadProof {
                 -PublicationReceiptBytes $PublicationReceiptBytes -Request $Request
             break
         }
-        'NOCHANGE' { throw 'NOCHANGE has no authenticated content-qualified prior-result index.' }
+        'NOCHANGE' {
+            if ($null -eq $BeforeWorkshopSnapshot -or $null -eq $AfterWorkshopSnapshot) {
+                throw 'NOCHANGE has no complete pre/post Steam published-file snapshot pair.'
+            }
+            $candidate = New-VtWorkshopNoChangeResultCandidate `
+                -PublicationReceiptBytes $PublicationReceiptBytes `
+                -UploadResult $UploadResult `
+                -ModId $modId `
+                -ReleaseAssetName $releaseAssetName `
+                -ReleaseAssetSha256 ([string]$bundleRows[0].sha256) `
+                -BeforeSnapshot $BeforeWorkshopSnapshot `
+                -AfterSnapshot $AfterWorkshopSnapshot `
+                -RecordedAtUtc (Get-VtWorkshopUploadResultRecordedAtUtc $UploadResult)
+            Publish-VtWorkshopUploadResultCandidate `
+                -Repo $Repo -ReleaseTag $ReleaseTag -Candidate $candidate `
+                -PublicationReceiptBytes $PublicationReceiptBytes -Request $Request
+            break
+        }
         default { throw "Unsupported Workshop result status '$($UploadResult.Status)'." }
     }
     if (-not $authority.Ok -or -not $authority.Authenticated -or -not $authority.MayMutate) {
