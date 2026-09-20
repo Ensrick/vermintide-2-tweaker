@@ -29,13 +29,40 @@ function Get-VtWorkshopResultByteSha256([byte[]]$Bytes) {
     try{return [BitConverter]::ToString($sha.ComputeHash($Bytes)).Replace('-','').ToLowerInvariant()}
     finally{$sha.Dispose()}
 }
+function Get-VtWorkshopTopLevelKeyCount([string]$Json,[string]$Field) {
+    # Count exact, unescaped object keys at depth 1 of the root object only. Keys that
+    # legitimately recur inside child objects (for example authorization.source_commit in
+    # every schema-3 publication receipt) must not count as duplicates.
+    $count=0;$depth=0;$inString=$false;$escaped=$false;$token=$null;$i=0;$n=$Json.Length
+    while($i -lt $n){
+        $c=$Json[$i]
+        if($inString){
+            if($escaped){$escaped=$false;$token=$null}
+            elseif($c -eq [char]92){$escaped=$true;$token=$null}
+            elseif($c -eq [char]34){
+                $inString=$false
+                if($depth -eq 1 -and $null -ne $token){
+                    $j=$i+1
+                    while($j -lt $n -and [char]::IsWhiteSpace($Json[$j])){$j++}
+                    if($j -lt $n -and $Json[$j] -eq [char]58 -and $token -ceq $Field){$count++}
+                }
+                $token=$null
+            }
+            elseif($null -ne $token){$token+=$c}
+        }
+        elseif($c -eq [char]34){$inString=$true;$token=''}
+        elseif($c -eq [char]123 -or $c -eq [char]91){$depth++}
+        elseif($c -eq [char]125 -or $c -eq [char]93){$depth--}
+        $i++
+    }
+    return $count
+}
 function ConvertFrom-VtWorkshopPublicationReceiptBytes([byte[]]$Bytes) {
     if($null -eq $Bytes -or $Bytes.Length -eq 0 -or $Bytes.Length -gt 4194304){throw 'publication receipt bytes are empty or oversized'}
     $utf8=[Text.UTF8Encoding]::new($false,$true)
     try{$json=$utf8.GetString($Bytes)}catch{throw 'publication receipt is not strict UTF-8'}
     foreach($field in @('schema','purpose','repository','release_tag','receipt_asset_name','source_commit','mod','version','bundle_files','authorization')){
-        $matches=[regex]::Matches($json,'"'+[regex]::Escape($field)+'"\s*:')
-        if($matches.Count -ne 1){throw "publication receipt field '$field' is missing, duplicated, escaped, or nested ambiguously"}
+        if((Get-VtWorkshopTopLevelKeyCount -Json $json -Field $field) -ne 1){throw "publication receipt field '$field' is missing, duplicated, escaped, or nested ambiguously"}
     }
     try{$receipt=$json|ConvertFrom-Json -ErrorAction Stop}catch{throw 'publication receipt is not valid JSON'}
     if($null -eq $receipt -or $receipt -is [Array] -or $receipt.schema -ne 3 -or
