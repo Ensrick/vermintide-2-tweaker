@@ -55,6 +55,16 @@ bootstrap resolves its new positive ID using the original capture. Durable
 authenticated transfer tuples and live-card consumption remain separate #1307
 work, not established by this plaintext-log producer.
 
+`check_workshop_upload_result.ps1` guards the next pure #1307 boundary. It binds
+one successful producer result to the exact hosted schema-3 preauthorization,
+source commit, mod/version, Workshop item, Steam ManifestID, release ZIP/hash,
+complete observed append digest, and exact transaction-line digests. It rejects
+NoChange, tampered/foreign receipts, unknown or missing fields, noncanonical
+coordinates, and result/line disagreement under PowerShell 7 and 5.1. The value
+is deliberately named a candidate and always returns `Authenticated=false` and
+`MayMutate=false`: durable append-only persistence, trusted reread, NoChange
+reuse, and the live-card authority consumer remain unfinished #1307 work.
+
 Individual checks follow a **0 / 1 / 2 convention**: `0` = clean, `1` = advisory
 WARNINGS, `2` (or higher) = ERRORS. `run_all.ps1` aggregates these so that:
 
