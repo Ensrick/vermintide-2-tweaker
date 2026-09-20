@@ -103,6 +103,9 @@ pre/post Steam snapshots above, then follows the same append-only exact-byte
 reread boundary. Card refresh consumes its ManifestID from that authenticated
 object too. No historical receipt is reused, and neither path reads a ManifestID
 directly from mutable prose or the manifestless NoChange log line.
+The producer check also pins the canonical standards text to this completed
+wired authority boundary and rejects resurrection of the former unwired-phase
+claim.
 
 Individual checks follow a **0 / 1 / 2 convention**: `0` = clean, `1` = advisory
 WARNINGS, `2` (or higher) = ERRORS. `run_all.ps1` aggregates these so that:

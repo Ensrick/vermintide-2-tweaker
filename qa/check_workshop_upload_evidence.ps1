@@ -18,6 +18,7 @@ function Assert-Rejected {
 }
 
 $shipText = [IO.File]::ReadAllText((Join-Path $repoRoot 'tools/ship/ship.ps1'))
+$standardsText = [IO.File]::ReadAllText((Join-Path $repoRoot 'PROJECT_STANDARDS.md'))
 $tokens = $null; $errors = $null
 $shipAst = [Management.Automation.Language.Parser]::ParseInput($shipText, [ref]$tokens, [ref]$errors)
 Assert-Evidence ($errors.Count -eq 0) 'ship parses'
@@ -38,6 +39,12 @@ Assert-Evidence ($shipText.Contains("if (`$uploadStatus -ceq 'NOCHANGE')") -and
     'NOCHANGE alone requires the complete pre/post snapshot pair at the proof boundary'
 Assert-Evidence ($shipText.Contains('$beforeWorkshopSnapshotError = $_.Exception.Message')) `
     'pre-snapshot transport failure is retained without suppressing a real UPLOADED result'
+Assert-Evidence ($standardsText.Contains('The plaintext producer') -and
+    $standardsText.Contains('never delete, replace, or borrow a')) `
+    'canonical doctrine records authenticated UPLOADED and NOCHANGE result authority'
+Assert-Evidence (-not $standardsText.Contains('The helper currently remains') -and
+    -not $standardsText.Contains('NoChange reuse and live-card consumption are not yet')) `
+    'canonical doctrine does not resurrect the completed unwired-result phase'
 $uploadTries = @($shipAst.FindAll({param($node)
     $node -is [Management.Automation.Language.TryStatementAst] -and
     $node.Body.Extent.Text.Contains('$receiptAcceptance = Invoke-WithShipVmbRc')
