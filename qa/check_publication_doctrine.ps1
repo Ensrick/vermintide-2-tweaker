@@ -12,6 +12,82 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+# #1025: six receipt/promotion-bound mod documents still contain exact legacy
+# launcher paths. Freeze only those reviewed lines so removal is clean while a
+# new path, changed path, copied occurrence, or reintroduced root instruction
+# is blocking. Do not add rows here to make a failure disappear.
+$script:KnownLauncherPathDebt = @(
+    [pscustomobject]@{
+        Path = 'event_tweaker/DEVELOPMENT.md'
+        Line = '4. Build (`& $exe build event_tweaker`), deploy (`& $exe deploy event_tweaker`) where `$exe` is `tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe`, restart, test.'
+        Max = 1
+    },
+    [pscustomobject]@{
+        Path = 'event_tweaker/DEVELOPMENT.md'
+        Line = '$exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe"'
+        Max = 1
+    },
+    [pscustomobject]@{
+        Path = 'verminious_dreams_lighting_dev/DEVELOPMENT.md'
+        Line = '$exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe"'
+        Max = 1
+    },
+    [pscustomobject]@{
+        Path = 'verminious_dreams_lighting/DEVELOPMENT.md'
+        Line = '$exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe"'
+        Max = 1
+    },
+    [pscustomobject]@{
+        Path = 'dynamic_cosmetic_portraits/DEVELOPMENT.md'
+        Line = '$exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe"'
+        Max = 1
+    },
+    [pscustomobject]@{
+        Path = 'dynamic_cosmetic_portraits/CLAUDE.md'
+        Line = '$exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe"'
+        Max = 1
+    }
+)
+
+function Test-IsHardcodedLauncherPathLine {
+    param([AllowEmptyString()][string]$Line)
+
+    return $Line -match '(?i)vmb-launcher-main-current-[0-9]+' -or
+        $Line -match '(?i)\b[A-Z]:\\[^\r\n]*VMBLauncher\.exe' -or
+        $Line -match '(?i)(?:^|[\s`"''])tools[\\/]vmb-launcher[\\/][^\r\n]*VMBLauncher\.exe'
+}
+
+function Get-KnownLauncherPathDebtKey {
+    param([string]$Path, [string]$Line)
+    return $Path.Replace('\', '/') + "`n" + $Line.Trim()
+}
+
+function Get-KnownLauncherPathDebtMap {
+    $map = @{}
+    foreach ($row in $script:KnownLauncherPathDebt) {
+        $key = Get-KnownLauncherPathDebtKey $row.Path $row.Line
+        if ($map.ContainsKey($key)) { throw "duplicate launcher-path debt row: $($row.Path)" }
+        $map[$key] = [int]$row.Max
+    }
+    return $map
+}
+
+function Get-KnownLauncherPathDebtCount {
+    param([object[]]$Documents)
+
+    $known = Get-KnownLauncherPathDebtMap
+    $count = 0
+    foreach ($document in $Documents) {
+        if (Test-IsHistoricalDocument $document.Path) { continue }
+        foreach ($line in @($document.Lines)) {
+            if (-not (Test-IsHardcodedLauncherPathLine $line)) { continue }
+            $key = Get-KnownLauncherPathDebtKey $document.Path $line
+            if ($known.ContainsKey($key)) { $count++ }
+        }
+    }
+    return $count
+}
+
 function Test-IsHistoricalDocument {
     param([string]$RelativePath)
 
@@ -29,6 +105,8 @@ function Get-DoctrineViolations {
     param([object[]]$Documents)
 
     $violations = @()
+    $knownLauncherDebt = Get-KnownLauncherPathDebtMap
+    $launcherDebtCounts = @{}
     foreach ($document in $Documents) {
         if (Test-IsHistoricalDocument $document.Path) { continue }
 
@@ -60,6 +138,20 @@ function Get-DoctrineViolations {
         $lineNumber = 0
         foreach ($line in @($document.Lines)) {
             $lineNumber++
+
+            if (Test-IsHardcodedLauncherPathLine $line) {
+                $debtKey = Get-KnownLauncherPathDebtKey $document.Path $line
+                if ($knownLauncherDebt.ContainsKey($debtKey)) {
+                    $launcherDebtCounts[$debtKey] = 1 + [int]$launcherDebtCounts[$debtKey]
+                    if ($launcherDebtCounts[$debtKey] -gt $knownLauncherDebt[$debtKey]) {
+                        $violations += "$($document.Path):${lineNumber}: copied legacy launcher executable path"
+                    }
+                }
+                else {
+                    $violations += "$($document.Path):${lineNumber}: hardcoded launcher executable path"
+                }
+            }
+
             $command = $line -match "(?i)(?:VMBLauncher(?:\.exe)?|vmblauncher|&\s+\`?\$\w+)\s+(?:all|upload)\b"
             $standaloneAllAdvice = $line -match '(?i)(?:\bor\b|\buse\b|\brun\b|->)\s+(?:`all(?:\s|`|<)|all\s*<)'
             $explicitProhibition = $line -match "(?i)\b(?:do not|don't|never|prohibit|unsupported|not supported|cannot|can't|refus|reject|internal|without (?:the )?(?:hosted )?receipt|guard|only rewrites|called by|invokes)\b"
@@ -109,6 +201,33 @@ if ($SelfTest) {
     )
     if ((Get-DoctrineViolations $good).Count -ne 0) {
         throw "compliant publication doctrine fixture was rejected"
+    }
+
+    foreach ($badLauncherLine in @(
+        '$env:VT2_SHIP_VMB_LAUNCHER = "C:\Users\test\source\repos\vmb-launcher-main-current-20260728\bin\VMBLauncher.exe"',
+        '$exe = "tools\vmb-launcher\bin\Release\VMBLauncher.exe"'
+    )) {
+        $fixture = @([pscustomobject]@{ Path = 'CLAUDE.md'; Lines = @($badLauncherLine) })
+        if ((Get-DoctrineViolations $fixture) -notcontains
+            'CLAUDE.md:1: hardcoded launcher executable path') {
+            throw "planted hardcoded launcher path was not rejected: $badLauncherLine"
+        }
+    }
+    $knownDebtFixture = @([pscustomobject]@{
+        Path = 'event_tweaker/DEVELOPMENT.md'
+        Lines = @($script:KnownLauncherPathDebt[0].Line)
+    })
+    if ((Get-DoctrineViolations $knownDebtFixture).Count -ne 0 -or
+            (Get-KnownLauncherPathDebtCount $knownDebtFixture) -ne 1) {
+        throw 'exact frozen launcher-path debt was not isolated'
+    }
+    $copiedDebtFixture = @([pscustomobject]@{
+        Path = 'event_tweaker/DEVELOPMENT.md'
+        Lines = @($script:KnownLauncherPathDebt[0].Line, $script:KnownLauncherPathDebt[0].Line)
+    })
+    if ((Get-DoctrineViolations $copiedDebtFixture) -notcontains
+        'event_tweaker/DEVELOPMENT.md:2: copied legacy launcher executable path') {
+        throw 'copied frozen launcher-path debt was not rejected'
     }
 
     $direct = @([pscustomobject]@{
@@ -242,6 +361,7 @@ if ($violations.Count -gt 0) {
 }
 
 if (-not $Quiet) {
-    Write-Host "[check_publication_doctrine] OK -- active docs point at the noninteractive merge-first ship." -ForegroundColor Green
+    $remainingLauncherDebt = Get-KnownLauncherPathDebtCount $documents
+    Write-Host "[check_publication_doctrine] OK -- active docs point at the noninteractive merge-first ship; $remainingLauncherDebt exact legacy launcher-path row(s) remain frozen." -ForegroundColor Green
 }
 exit 0
