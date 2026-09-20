@@ -588,9 +588,8 @@ end
 -- ("Tried to wield default slot ... contained no weapon").
 -- Translation: pass nil, so vanilla resolves the official SELECTED row via
 -- `_career_loadouts[career]` (:1911) -- a row that exists whenever official data exists.
--- Last resort for WEAPON slots only: the career's default loadout
--- (get_default_loadouts :1955-1966; array of rows, backend_interface_item_playfab.lua
--- :207-222). If even that is nil we printf loudly and serve nil rather than invent an id --
+-- Last resort for WEAPON slots only: career default loadout (get_default_loadouts :1955-1966;
+-- backend_interface_item_playfab.lua:207-222). If nil, printf loudly rather than invent an id --
 -- never spawn from a guess. `read_official` is the wrapped vanilla get_character_data.
 -- ------------------------------------------------------------------
 local function _official_gear_fallback(read_official, mirror, career_name, key, store_idx)
@@ -610,50 +609,7 @@ local function _official_gear_fallback(read_official, mirror, career_name, key, 
     return nil
 end
 M.official_gear_fallback = _official_gear_fallback   -- exported for the /gut_regression_test translation check
-
--- Issue #1637: close the final time-of-check/time-of-use gap at the exact
--- BackendUtils.get_loadout_item consumer.  The mirror hook above can observe a
--- synthetic backend id during a refresh and serve it, yet a later refresh can
--- remove that item before SimpleInventoryExtension builds the player's slots.
--- `_gut_bot_pose.lua` already owns GUT's sole get_loadout_item hook, so it calls
--- this recovery function only after vanilla returns nil.  Recovery is bounded
--- to modded Adventure STORE mode and reads official/default ids without going
--- through the hooked mirror read.  It never edits the modded store.
-function M.recover_missing_weapon(career_name, slot_name, is_bot)
-    local backend = Managers and Managers.backend
-    local iface = backend and backend._interfaces and backend._interfaces.items
-    if not iface or _adventure_mode(iface) ~= MODE_STORE then return nil end
-    local mirror = iface._backend_mirror
-    local item, source, backend_id = Policy.recover_missing_weapon({
-        native_item = nil,
-        mode = MODE_STORE,
-        mode_store = MODE_STORE,
-        mirror = mirror,
-        career_name = career_name,
-        slot_name = slot_name,
-        is_bot = is_bot,
-        get_defaults = function(owner, career)
-            return owner:get_default_loadouts(career)
-        end,
-        resolve = function(id)
-            return iface:get_item_from_id(id)
-        end,
-    })
-    if item ~= nil then
-        local token = tostring(career_name) .. "\0" .. tostring(slot_name)
-            .. "\0" .. tostring(backend_id)
-        M._issue1637_recovery_seen = M._issue1637_recovery_seen or {}
-        if not M._issue1637_recovery_seen[token] then
-            M._issue1637_recovery_seen[token] = true
-            pcall(printf, "[gut:1637] recovered missing spawn weapon career=%s slot=%s bot=%s source=%s backend_id=%s",
-                tostring(career_name), tostring(slot_name), tostring(is_bot),
-                tostring(source), tostring(backend_id))
-        end
-    end
-    return item
-end
-mod._gut_recover_missing_weapon = M.recover_missing_weapon
-
+mod._gut_recover_missing_weapon = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_spawn_weapon_recovery").new(Policy, _adventure_mode, MODE_STORE)
 -- ------------------------------------------------------------------
 -- BackendUtils equip capture (v0.2.175). With Loremaster's Armoury installed, menu equips
 -- route through an LA-CLONED interface whose copied methods bypass class-level hooks, so
