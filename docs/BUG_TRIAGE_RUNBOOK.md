@@ -400,8 +400,10 @@ shipping. Agent publication is headless and opens no interactive window.
     co-op card records `Solo status: Passed/Completed/Exhausted`. Both fix and
     diagnostic co-op cards retain their ordinary lifecycle plus this qualifier.
   - Blocked, partial, tooling, docs, and otherwise unready work uses
-    `not-started`, without `coop-required`. Verify tooling/docs autonomously and
-    close directly; never put them in the live in-game queue.
+    `not-started`, without `coop-required`. Unpin every exact
+    `## CURRENT LIVE TEST` card in the same transition; an unready issue must
+    not retain a high-visibility stale test invitation. Verify tooling/docs
+    autonomously and close directly; never put them in the live in-game queue.
   - Remove every competing lifecycle in the same `gh issue edit`; `Fixed` and
     `verify-fix-coop` are invalid while open.
   - Never more than one status label at a time, never invent a new one. Every open

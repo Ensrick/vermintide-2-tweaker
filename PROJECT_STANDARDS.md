@@ -2250,7 +2250,10 @@ labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix
   the useful solo stage passed/completed or was exhausted. Do not add it while
   any useful solo test remains. A solo card must not carry `coop-required`.
 - **Blocked exclusion:** `blocked` requires `not-started` and forbids
-  `diagnostics-armed`, `verify-fix`, and `coop-required`.
+  `diagnostics-armed`, `verify-fix`, and `coop-required`. Every `not-started`
+  issue also has zero pinned exact `## CURRENT LIVE TEST` cards: unpin the old
+  invitation in the same transition so a blocked or source-only issue cannot
+  continue advertising a stale in-game test.
 - **Tooling exclusion:** documentation, QA, and repository-only work never use
   live-test labels. Keep them `not-started` while open, verify autonomously, and
   close directly with evidence.

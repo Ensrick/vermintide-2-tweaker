@@ -1188,6 +1188,11 @@ function Get-VtOpenIssueLifecycleDecision {
         if ($coop) { $errors.Add('blocked-forbids-coop-required') }
     }
 
+    $isNotStarted = $lifecycle.Count -eq 1 -and $lifecycle[0] -eq 'not-started'
+    if ($isNotStarted -and [int]$card.PinnedExactCardCount -gt 0) {
+        $errors.Add('not-started-forbids-pinned-current-live-test-card')
+    }
+
     if ($ready.Count -eq 1) {
         if ($labels -contains 'tooling') { $errors.Add('tooling-cannot-enter-live-test-queue') }
         foreach ($cardError in @($card.Errors)) { $errors.Add("live-card-$cardError") }
