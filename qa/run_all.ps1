@@ -277,6 +277,7 @@ Run-Check "check_public_release_closure_evidence" { & (Join-Path $here "check_pu
 Run-Check "check_cross_mod_deps"              { & (Join-Path $here "check_cross_mod_deps.ps1")              -Quiet:$Quiet }
 Run-Check "check_pusfume_compatibility"       { & (Join-Path $here "check_pusfume_compatibility.ps1")       -Quiet:$Quiet }
 Run-Check "check_shared_lib_drift"            { & (Join-Path $here "check_shared_lib_drift.ps1")            -Quiet:$Quiet }
+Run-Check "check_network_lookup_append_budget" { & (Join-Path $here "check_network_lookup_append_budget.ps1") -Quiet:$Quiet }
 Run-Check "check_wt_stream_parity"            { & (Join-Path $here "check_wt_stream_parity.ps1")            -Quiet:$Quiet }
 Run-Check "check_dofile_package_coverage"      { & (Join-Path $here "check_dofile_package_coverage.ps1")      -Quiet:$Quiet }
 # Issue #499: every production *probe* / _diag_* root must have a reviewed
