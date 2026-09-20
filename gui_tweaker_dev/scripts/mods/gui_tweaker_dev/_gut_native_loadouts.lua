@@ -588,9 +588,8 @@ end
 -- ("Tried to wield default slot ... contained no weapon").
 -- Translation: pass nil, so vanilla resolves the official SELECTED row via
 -- `_career_loadouts[career]` (:1911) -- a row that exists whenever official data exists.
--- Last resort for WEAPON slots only: the career's default loadout
--- (get_default_loadouts :1955-1966; array of rows, backend_interface_item_playfab.lua
--- :207-222). If even that is nil we printf loudly and serve nil rather than invent an id --
+-- Last resort for WEAPON slots only: career default loadout (get_default_loadouts :1955-1966;
+-- backend_interface_item_playfab.lua:207-222). If nil, printf loudly rather than invent an id --
 -- never spawn from a guess. `read_official` is the wrapped vanilla get_character_data.
 -- ------------------------------------------------------------------
 local function _official_gear_fallback(read_official, mirror, career_name, key, store_idx)
@@ -610,7 +609,7 @@ local function _official_gear_fallback(read_official, mirror, career_name, key, 
     return nil
 end
 M.official_gear_fallback = _official_gear_fallback   -- exported for the /gut_regression_test translation check
-
+mod._gut_recover_missing_weapon = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_spawn_weapon_recovery").new(Policy, _adventure_mode, MODE_STORE)
 -- ------------------------------------------------------------------
 -- BackendUtils equip capture (v0.2.175). With Loremaster's Armoury installed, menu equips
 -- route through an LA-CLONED interface whose copied methods bypass class-level hooks, so

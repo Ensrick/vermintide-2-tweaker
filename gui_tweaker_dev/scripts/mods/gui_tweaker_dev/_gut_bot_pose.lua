@@ -51,6 +51,12 @@ end
 -- BackendUtils.get_loadout_item hook callback: delegates the is_bot decision
 -- to the pure policy and forwards positionally (career_name, slot, resolved,
 -- ...) exactly as vanilla's signature expects (backend_utils.lua:30).
+--
+-- Issue #1637 shares this existing hook owner rather than registering a second
+-- callback on the same table/method pair.  Only after vanilla returns nil do we
+-- ask native-loadouts for a currently resolvable official/default weapon.  A
+-- valid native item, cosmetics, official/readonly realms, and an unavailable
+-- recovery owner all remain byte-for-byte on the original result path.
 local function _lookup_cb(func, career_name, slot_name, is_bot, ...)
     local resolved, repaired = Policy.resolve_is_bot(spawn_depth, slot_name, is_bot)
     if repaired then
@@ -61,7 +67,12 @@ local function _lookup_cb(func, career_name, slot_name, is_bot, ...)
                 tostring(career_name), repaired_count)
         end
     end
-    return func(career_name, slot_name, resolved, ...)
+    local item = func(career_name, slot_name, resolved, ...)
+    if item ~= nil then return item end
+    local recover = mod._gut_recover_missing_weapon
+    if type(recover) ~= "function" then return nil end
+    local ok, fallback = pcall(recover, career_name, slot_name, resolved)
+    return ok and fallback or nil
 end
 
 local spawn_hooked = false
@@ -170,6 +181,15 @@ return {
                 if not spawn_hooked then return "PlayerBot.spawn hook missing" end
                 if not lookup_hooked then return "BackendUtils.get_loadout_item hook missing" end
                 return _exec_chain_cases()
+            end,
+        },
+        {
+            name = "issue1637_spawn_weapon_consumer_guard",
+            fn = function()
+                if not lookup_hooked then return "BackendUtils.get_loadout_item hook missing" end
+                if type(mod._gut_recover_missing_weapon) ~= "function" then
+                    return "native-loadout recovery owner missing"
+                end
             end,
         },
     },
