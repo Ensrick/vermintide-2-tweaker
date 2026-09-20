@@ -265,6 +265,7 @@ Run-Check "check_publication_doctrine"         { & (Join-Path $here "check_publi
 Run-Check "check_local_deployment_receipt"     { & (Join-Path $here "check_local_deployment_receipt.ps1")     -Quiet:$Quiet }
 Run-Check "check_workshop_upload_evidence"     { & (Join-Path $here "check_workshop_upload_evidence.ps1")     -Quiet:$Quiet }
 Run-Check "check_workshop_upload_result"       { & (Join-Path $here "check_workshop_upload_result.ps1")        -Quiet:$Quiet }
+Run-Check "check_workshop_upload_result_release" { & (Join-Path $here "check_workshop_upload_result_release.ps1") -Quiet:$Quiet }
 Run-Check "check_ps51_compatibility"          { & (Join-Path $here "check_ps51_compatibility.ps1")          -Quiet:$Quiet }
 Run-Check "check_pr_autoclose"                { & (Join-Path $here "check_pr_autoclose.ps1")                -Quiet:$Quiet }
 Run-Check "check_public_release_closure_policy" { & (Join-Path $here "check_public_release_closure_policy.ps1") -Quiet:$Quiet }

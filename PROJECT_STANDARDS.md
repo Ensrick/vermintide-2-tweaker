@@ -1344,6 +1344,14 @@ says `public`. There is no suffix-vs-visibility contradiction to tie-break.
   staged-byte/deploy policy and has no new ManifestID. This producer check is
   not the durable authenticated content tuple/card-authority consumer still
   required by #1307, nor proof against malicious byte-identical log rewriting.
+  A successful Uploaded result may be persisted only as a uniquely named,
+  append-only GitHub release asset: never delete or replace an existing result.
+  The exact ordinary release and asset must then be resolved again and the
+  downloaded bytes must equal the locally validated strict-UTF-8 candidate and
+  revalidate against the original schema-3 preauthorization. Only that trusted
+  reread can produce mutation-capable authority. The helper currently remains
+  unwired from `ship.ps1`; NoChange reuse and live-card consumption are not yet
+  established.
 - **Publication-only mode (#1376/#1426):** canonical `ship.ps1` enters this mode
   when an existing item's real Steam-managed content directory is absent.
   Receipt authority with an existing local subscription instead requires the
