@@ -111,6 +111,42 @@ $legacyRetiredDebugKeyDebt = @{
     'general_tweaker/scripts/mods/general_tweaker/_gt_debug_probes.lua|return mod:get("enable_debug_logging") == true' = $true
 }
 
+# Issue #727 reviewed-intent floor. These are not ignored by a broad path or
+# message pattern: each row binds one relative file, category, exact trimmed
+# source line, and maximum occurrence count. Removal is clean; changed text,
+# another file, or an occurrence above the reviewed count becomes advisory
+# again. Runtime defects (CT's routine bot-boon echo and the three #427 stable
+# warning helpers) are deliberately absent and remain visible below.
+$approvedLoggingIntent = @{}
+function Add-ApprovedLoggingIntent {
+    param([string]$Path,[string]$Category,[string]$Text,[int]$Count,[string]$Reason)
+    $key=$Path.ToLowerInvariant().Replace('\','/')+'|'+$Category+'|'+$Text
+    if($approvedLoggingIntent.ContainsKey($key)){throw "Duplicate approved logging-intent key: $key"}
+    if($Count -lt 1 -or [string]::IsNullOrWhiteSpace($Reason)){throw "Invalid approved logging-intent row: $key"}
+    $approvedLoggingIntent[$key]=[pscustomobject]@{Count=$Count;Reason=$Reason}
+}
+Add-ApprovedLoggingIntent 'career_tweaker/scripts/mods/career_tweaker/career_tweaker.lua' 'echo' 'mod:echo("[crt] Balance reworks reverted. Buff registrations and hooks need a game restart for a fully clean vanilla state.")' 1 'High-impact disable limitation; the player must restart for a clean vanilla state.'
+Add-ApprovedLoggingIntent 'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_equipment_assembly.lua' 'echo' 'mod:echo("[cosmetics_tweaker] LA variant ''%s'' missing from your local LA install. Peer''s cosmetic won''t render. Enable Loremaster''s Armoury in launcher + restart, or update LA.",' 1 'Actionable compatibility failure shown once for the missing peer cosmetic asset.'
+Add-ApprovedLoggingIntent 'cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_modded_illusion_swap.lua' 'echo' 'mod:echo("Cannot apply illusion — requires DLC you don''t own.")' 1 'Immediate response to a rejected player illusion action.'
+Add-ApprovedLoggingIntent 'crafting_in_modded/scripts/mods/crafting_in_modded/crafting_in_modded.lua' 'echo' 'mod:echo("Crafted & saved: " .. tostring(Localize(_name)) .. " [" .. tostring(weapon_data.rarity) .. "]" .. _result_text)' 1 'Immediate confirmation of a player-requested craft.'
+Add-ApprovedLoggingIntent 'crafting_in_modded/scripts/mods/crafting_in_modded/crafting_in_modded.lua' 'echo' 'mod:echo("[cim] No accessory edits to craft (Apply auto-runs on bubble click)")' 1 'Immediate explanation for a player-requested no-op craft.'
+Add-ApprovedLoggingIntent 'crafting_in_modded/scripts/mods/crafting_in_modded/crafting_in_modded.lua' 'echo' 'mod:echo("[cim] Craft: no selected item")' 1 'Immediate explanation for a rejected player craft.'
+Add-ApprovedLoggingIntent 'crafting_in_modded/scripts/mods/crafting_in_modded/crafting_in_modded.lua' 'echo' 'mod:echo("[cim] Crafted new " .. tostring(slot_name and slot_name:gsub("^slot_", "") or "item")' 1 'Immediate confirmation of a player-requested craft.'
+Add-ApprovedLoggingIntent 'crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua' 'echo' 'mod:echo("Crafted & saved: " .. tostring(Localize(_name)) .. " [" .. tostring(weapon_data.rarity) .. "]" .. _result_text)' 1 'Immediate confirmation of a player-requested craft.'
+Add-ApprovedLoggingIntent 'general_tweaker/scripts/mods/general_tweaker/general_tweaker.lua' 'echo' 'mod:echo("AI toggle: " .. err)' 1 'Immediate failure response to a player AI-toggle request.'
+Add-ApprovedLoggingIntent 'general_tweaker/scripts/mods/general_tweaker/general_tweaker.lua' 'echo' 'mod:echo("AI " .. (want_bot and "ON" or "OFF") .. " (requested from host).")' 1 'Immediate success response to a player AI-toggle request.'
+Add-ApprovedLoggingIntent 'general_tweaker/scripts/mods/general_tweaker/general_tweaker.lua' 'echo' 'mod:echo("[gt] Disable does not fully unwind active mutations. Restart the game for a clean vanilla state.")' 1 'High-impact disable limitation; the player must restart for a clean vanilla state.'
+foreach($stream in @('gui_tweaker','gui_tweaker_dev')){
+    Add-ApprovedLoggingIntent "$stream/scripts/mods/$stream/_ba_compendium_tabs.lua" 'echo' 'mod:echo("Compendium not ready (inject module didn''t load).")' 1 'Immediate response to a player opening an unavailable compendium.'
+    Add-ApprovedLoggingIntent "$stream/scripts/mods/$stream/_gut_mission_inventory.lua" 'echo' 'mod:echo("The customize gear icon is disabled mid-mission unless Tweaker: Cosmetics is loaded. (Crafting in Modded users: use the Crafting tab / bench for illusions and re-rolls.)")' 1 'Immediate guidance after a player invokes the disabled mission customization action.'
+}
+foreach($stream in @('weapon_tweaker','weapon_tweaker_dev')){
+    Add-ApprovedLoggingIntent "$stream/scripts/mods/$stream/_wt_anim_remap.lua" 'echo' 'mod:echo("--- " .. tostring(s_key or s_tmpl) .. " ---")' 1 'Explicit animation-log mode emits a player-readable section header.'
+    Add-ApprovedLoggingIntent "$stream/scripts/mods/$stream/_wt_anim_remap.lua" 'echo' 'mod:echo(msg)' 5 'Explicit animation-log mode emits the requested remap trace; occurrence count is bounded.'
+    Add-ApprovedLoggingIntent "$stream/scripts/mods/$stream/weapon_tweaker_backend.lua" 'perframe' 'mod:info("[wt:368] deferred final availability + career-action reconciliation applied")' 1 'Per-frame owner clears its one-shot sentinel before this message.'
+    Add-ApprovedLoggingIntent "$stream/scripts/mods/$stream/weapon_tweaker_backend.lua" 'perframe' 'mod:info("[wt:593/597] CWV ownership transition active=%s axe_shield_ready=%s greataxe_ready=%s; native fallbacks reconciled",' 1 'Per-frame owner emits only after a three-axis ownership transition.'
+}
+
 function Read-FileUtf8([string]$path) {
     return [System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8)
 }
@@ -433,6 +469,20 @@ function Get-UnexpectedRetiredDebugKeyRows {
     return Get-RowsOutsideFloor -Rows $Rows -Root $Root -Category 'retired-debug-key' -Floor $legacyRetiredDebugKeyDebt
 }
 
+function Get-UnapprovedLoggingIntentRows {
+    param([object[]]$Rows,[string]$Root)
+    $seen=@{};$unapproved=@()
+    foreach($row in @($Rows)){
+        if($row.Category -notin @('echo','perframe')){$unapproved+=$row;continue}
+        $rel=$row.File
+        if($rel.StartsWith($Root,[StringComparison]::OrdinalIgnoreCase)){$rel=$rel.Substring($Root.Length).TrimStart('\','/')}
+        $key=$rel.ToLowerInvariant().Replace('\','/')+'|'+$row.Category+'|'+$row.Text.Trim()
+        $count=if($seen.ContainsKey($key)){$seen[$key]+1}else{1};$seen[$key]=$count
+        if(-not$approvedLoggingIntent.ContainsKey($key) -or $count -gt $approvedLoggingIntent[$key].Count){$unapproved+=$row}
+    }
+    return $unapproved
+}
+
 # ---- self-test ----
 function Invoke-SelfTest {
     $fixDir = Join-Path $PSScriptRoot "_test_fixtures"
@@ -527,6 +577,17 @@ function Invoke-SelfTest {
         -and (@(Get-UnexpectedRetiredDebugKeyRows -Rows @($knownRetired, $retiredNewText, $retiredNewPath) -Root $repoRoot).Count -eq 2)
     Write-Host ("  [{0}] retired-debug-key floor (#169) -- exact GT stable debt accepted once (any root casing); removal accepted; duplicate, rewritten line + dev twin rejected" -f $(if ($retiredFloorOk) { 'PASS' } else { 'FAIL' })) -ForegroundColor $(if ($retiredFloorOk) { 'Green' } else { 'Red' })
     if (-not $retiredFloorOk) { $allPass = $false }
+
+    $intentPath=Join-Path $repoRoot 'weapon_tweaker_dev\scripts\mods\weapon_tweaker_dev\_wt_anim_remap.lua'
+    $intent=[pscustomobject]@{File=$intentPath;Line=899;Category='echo';Text='mod:echo(msg)'}
+    $intentRows=@($intent,$intent,$intent,$intent,$intent)
+    $intentOk=@(Get-UnapprovedLoggingIntentRows -Rows $intentRows -Root $repoRoot).Count -eq 0
+    $overflowOk=@(Get-UnapprovedLoggingIntentRows -Rows @($intentRows+$intent) -Root $repoRoot).Count -eq 1
+    $changed=[pscustomobject]@{File=$intentPath;Line=899;Category='echo';Text='mod:echo(other_msg)'}
+    $changedOk=@(Get-UnapprovedLoggingIntentRows -Rows @($changed) -Root $repoRoot).Count -eq 1
+    $intentFloorOk=$intentOk -and $overflowOk -and $changedOk
+    Write-Host ("  [{0}] #727 reviewed intent -- exact count accepted; overflow/text drift reported" -f $(if($intentFloorOk){'PASS'}else{'FAIL'})) -ForegroundColor $(if($intentFloorOk){'Green'}else{'Red'})
+    if(-not$intentFloorOk){$allPass=$false}
 
     # Live-source proof: the real scanner (sentinel + multiline pass) must see
     # every executable retired-key site in the pinned stable file, and every one
@@ -652,6 +713,13 @@ if ($unexpectedWarnRows.Count -gt 0) {
         Write-Host ("  ! {0}:{1}`n      {2}" -f $rel, $row.Line, $row.Text) -ForegroundColor Red
     }
     exit 2
+}
+
+$beforeIntentCount=$all.Count
+$all=@(Get-UnapprovedLoggingIntentRows -Rows $all -Root $repoRoot)
+$approvedIntentCount=$beforeIntentCount-$all.Count
+if($approvedIntentCount -gt 0){
+    Write-Host "[check_logging] #727 reviewed intent: $approvedIntentCount exact echo/per-frame site(s) classified; source/count drift reappears." -ForegroundColor DarkGreen
 }
 
 if ($all.Count -eq 0) {
