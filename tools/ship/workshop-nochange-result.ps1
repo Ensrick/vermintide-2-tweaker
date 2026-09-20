@@ -75,9 +75,10 @@ function Test-VtWorkshopNoChangeResultCandidate {
     if ($v.publication_receipt_sha256 -cne $publication.Sha256) {
         $problems.Add('publication receipt digest mismatch')
     }
-    $bundles = @($receipt.bundle_files | Where-Object { $_.path -ceq $v.release_asset_name })
-    if ($bundles.Count -ne 1 -or [string]$bundles[0].sha256 -cne [string]$v.release_asset_sha256) {
-        $problems.Add('release asset is not the exact publication output')
+    # bundle_files lists staged Workshop bundles, never the GitHub release zip; the zip name is bound to
+    # mod_id above and its digest to the hosted release manifest by the release owner (#1307 follow-up).
+    if ($v.release_asset_sha256 -cnotmatch '^[0-9a-f]{64}$') {
+        $problems.Add('release asset digest is noncanonical')
     }
     foreach ($field in @('workshop_id','steam_manifest_id','app_id','steam_time_updated')) {
         [uint64]$id = 0

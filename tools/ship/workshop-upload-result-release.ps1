@@ -208,6 +208,30 @@ function Get-VtWorkshopUploadResultRecordedAtUtc {
     return [DateTimeOffset]::new($local, $captureStart.Offset).UtcDateTime
 }
 
+function Get-VtHostedReleaseAssetSha256 {
+    # The GitHub release zip is recorded only by the hosted release manifest (manifest.json on the
+    # same release); the publication receipt inventories staged Workshop bundles, never the zip.
+    param(
+        [Parameter(Mandatory = $true)][string]$Repo,
+        [Parameter(Mandatory = $true)][string]$ReleaseTag,
+        [Parameter(Mandatory = $true)][string]$AssetName,
+        [scriptblock]$Request = ${function:Invoke-GitHubReleaseApiRequest}
+    )
+    $resolution = Resolve-GitHubReleaseByTag -Repo $Repo -Tag $ReleaseTag -Request $Request
+    $release = Assert-VtWorkshopUploadResultRelease $resolution $ReleaseTag
+    $manifestAsset = Get-GitHubReleaseAsset -Release $release -Name 'manifest.json'
+    if ($null -eq $manifestAsset) { throw "GitHub release '$ReleaseTag' has no manifest.json asset." }
+    $bytes = Get-GitHubReleaseAssetBytes -Repo $Repo -Asset $manifestAsset -Request $Request
+    if ($null -eq $bytes -or $bytes.Length -eq 0 -or $bytes.Length -gt 4194304) { throw 'Hosted release manifest bytes are empty or oversized.' }
+    try { $manifest = [Text.UTF8Encoding]::new($false, $true).GetString($bytes) | ConvertFrom-Json -ErrorAction Stop }
+    catch { throw 'Hosted release manifest is not strict UTF-8 JSON.' }
+    $rows = @($manifest.mods | Where-Object { [string]$_.asset_filename -ceq $AssetName })
+    if ($rows.Count -ne 1) { throw "Hosted release manifest does not carry exactly one '$AssetName' row." }
+    $sha = [string]$rows[0].sha256
+    if ($sha -cnotmatch '^[0-9a-f]{64}$') { throw "Hosted release manifest digest for '$AssetName' is noncanonical." }
+    return $sha
+}
+
 function Publish-VtShipWorkshopUploadProof {
     param(
         [Parameter(Mandatory = $true)][string]$Repo,
@@ -218,7 +242,8 @@ function Publish-VtShipWorkshopUploadProof {
         [Parameter(Mandatory = $true)]$UploadResult,
         [scriptblock]$Request = ${function:Invoke-GitHubReleaseApiRequest},
         $BeforeWorkshopSnapshot,
-        $AfterWorkshopSnapshot
+        $AfterWorkshopSnapshot,
+        [string]$ReleaseAssetSha256
     )
     if (-not (Test-Path -LiteralPath $ModInventoryPath -PathType Leaf)) {
         throw "Mod inventory is unavailable: $ModInventoryPath"
@@ -240,9 +265,11 @@ function Publish-VtShipWorkshopUploadProof {
             [string]$receipt.mod -cne $Mod -or [string]$receipt.purpose -cne $expectedPurpose) {
         throw 'Publication receipt does not match the requested ship coordinates.'
     }
-    $bundleRows = @($receipt.bundle_files | Where-Object { [string]$_.path -ceq $releaseAssetName })
-    if ($bundleRows.Count -ne 1) {
-        throw "Publication receipt does not contain one exact '$releaseAssetName' bundle row."
+    if ([string]::IsNullOrWhiteSpace($ReleaseAssetSha256)) {
+        $ReleaseAssetSha256 = Get-VtHostedReleaseAssetSha256 -Repo $Repo -ReleaseTag $ReleaseTag -AssetName $releaseAssetName -Request $Request
+    }
+    if ($ReleaseAssetSha256 -cnotmatch '^[0-9a-f]{64}$') {
+        throw "Release asset digest for '$releaseAssetName' is noncanonical."
     }
     $workshopId = [string]$UploadResult.PublishedId
     if ($inventoryWorkshopId -match '^[1-9][0-9]*$' -and $inventoryWorkshopId -cne $workshopId) {
@@ -255,7 +282,7 @@ function Publish-VtShipWorkshopUploadProof {
                 -UploadResult $UploadResult `
                 -ModId $modId `
                 -ReleaseAssetName $releaseAssetName `
-                -ReleaseAssetSha256 ([string]$bundleRows[0].sha256) `
+                -ReleaseAssetSha256 $ReleaseAssetSha256 `
                 -RecordedAtUtc (Get-VtWorkshopUploadResultRecordedAtUtc $UploadResult)
             Publish-VtWorkshopUploadResultCandidate `
                 -Repo $Repo -ReleaseTag $ReleaseTag -Candidate $candidate `
@@ -271,7 +298,7 @@ function Publish-VtShipWorkshopUploadProof {
                 -UploadResult $UploadResult `
                 -ModId $modId `
                 -ReleaseAssetName $releaseAssetName `
-                -ReleaseAssetSha256 ([string]$bundleRows[0].sha256) `
+                -ReleaseAssetSha256 $ReleaseAssetSha256 `
                 -BeforeSnapshot $BeforeWorkshopSnapshot `
                 -AfterSnapshot $AfterWorkshopSnapshot `
                 -RecordedAtUtc (Get-VtWorkshopUploadResultRecordedAtUtc $UploadResult)

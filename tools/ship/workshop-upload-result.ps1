@@ -83,7 +83,8 @@ function ConvertFrom-VtWorkshopPublicationReceiptBytes([byte[]]$Bytes) {
     if($bundles.Count -eq 0 -or $bundles.Count -gt 64){throw 'publication receipt bundle inventory is empty or oversized'}
     $seen=New-Object 'Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
     foreach($bundle in $bundles){
-        if($bundle.path -isnot [string] -or $bundle.path -cnotmatch '^[A-Za-z0-9][A-Za-z0-9_.-]*\.zip$' -or
+        if($bundle.path -isnot [string] -or $bundle.path -cnotmatch '^[A-Za-z0-9][A-Za-z0-9_.-]*[.](?:mod_bundle|mod)$' -or
+                $bundle.length -isnot [long] -and $bundle.length -isnot [int] -or [long]$bundle.length -le 0 -or
                 $bundle.sha256 -isnot [string] -or $bundle.sha256 -cnotmatch '^[0-9a-f]{64}$' -or
                 -not$seen.Add($bundle.path)){throw 'publication receipt bundle inventory is malformed or ambiguous'}
     }
@@ -116,8 +117,11 @@ function Test-VtWorkshopUploadResultCandidate {
         if([string]$v[$pair[0]] -cne [string]$p.($pair[1])){$problems.Add("$($pair[0]) does not match exact publication receipt")}
     }
     if($v.publication_receipt_sha256 -cne $publication.Sha256){$problems.Add('publication receipt digest mismatch')}
-    $bundles=@($p.bundle_files|Where-Object{$_.path -ceq $v.release_asset_name})
-    if($bundles.Count -ne 1 -or [string]$bundles[0].sha256 -cne [string]$v.release_asset_sha256){$problems.Add('release asset is not the exact publication output')}
+    # The receipt's bundle_files inventory lists the staged Workshop bundles (*.mod_bundle + <mod>.mod),
+    # never the GitHub release zip, so the zip cannot be bound here; its name is bound to mod_id above and
+    # its digest to the hosted release manifest by the release owner. Binding the zip digest through the
+    # receipt itself remains #1307 follow-up work.
+    if($v.release_asset_sha256 -cnotmatch '^[0-9a-f]{64}$'){$problems.Add('release asset digest is noncanonical')}
     foreach($field in @('workshop_id','steam_manifest_id','app_id')){
         [uint64]$id=0;if($v[$field] -cnotmatch '^[1-9][0-9]*$' -or -not[uint64]::TryParse($v[$field],[ref]$id)){$problems.Add("$field is not a canonical UInt64")}
     }

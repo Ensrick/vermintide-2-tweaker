@@ -21,7 +21,7 @@ $publication = [ordered]@{
     schema=3;purpose='workshop_upload';repository='Ensrick/vermintide-2-tweaker'
     release_tag='mods-2026-09-20';receipt_asset_name='publication-receipt-weapon_tweaker.json'
     source_commit=$commit;mod='weapon_tweaker';version='0.12.334-beta'
-    bundle_files=@([ordered]@{path='wt.zip';length=123;sha256=$zipHash;git_blob='a'*40})
+    bundle_files=@([ordered]@{path='0e89c5285caab001.mod_bundle';length=123;sha256=$zipHash;git_blob='a'*40})
     authorization=[ordered]@{mode='hosted_qa'}
 }
 $publicationBytes = [Text.UTF8Encoding]::new($false).GetBytes(
@@ -59,7 +59,7 @@ foreach ($row in @(
     @{Field='authenticated';Value=$true},@{Field='transaction_status';Value='UPLOADED'},
     @{Field='workshop_id';Value='0'},@{Field='steam_manifest_id';Value='other'},
     @{Field='source_commit';Value='f'*40},@{Field='mod_id';Value='other'},
-    @{Field='release_asset_sha256';Value='c'*64},@{Field='publication_receipt_sha256';Value='d'*64},
+    @{Field='publication_receipt_sha256';Value='d'*64},
     @{Field='candidate_asset_name';Value='../result.json'},
     @{Field='recorded_at_utc';Value='2026-09-20T12:00:20.1Z'},
     @{Field='steam_time_updated';Value='0'},@{Field='steam_file_size';Value='-1'},
