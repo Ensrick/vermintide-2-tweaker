@@ -24,6 +24,20 @@ Assert-Evidence ($errors.Count -eq 0) 'ship parses'
 Assert-Evidence ($shipText -notmatch 'Get-Content \$workshopLog -Tail|\$cutoff\s*=\s*\(Get-Date\)\.AddMinutes') 'stale tail/time fallback removed'
 Assert-Evidence ($shipText.Contains('$shipManifestId = $uploadResultAuthority.Candidate.steam_manifest_id')) 'card refresh consumes only the authenticated reread manifest field without manufacturing NoChange ID'
 Assert-Evidence (-not $shipText.Contains('$shipManifestId = $receiptAcceptance.ManifestId')) 'card refresh does not consume the plaintext parser manifest field'
+$preSnapshotPos = $shipText.IndexOf('$beforeWorkshopSnapshot = Get-VtWorkshopPublishedFileSnapshot')
+$uploadBoundaryPos = $shipText.IndexOf('$receiptAcceptance = Invoke-WithShipVmbRc')
+$postSnapshotPos = $shipText.IndexOf('$afterWorkshopSnapshot = Get-VtWorkshopPublishedFileSnapshot')
+$proofPos = $shipText.IndexOf('$uploadResultAuthority = Publish-VtShipWorkshopUploadProof')
+Assert-Evidence ($preSnapshotPos -ge 0 -and $preSnapshotPos -lt $uploadBoundaryPos) `
+    'Steam published-file pre-snapshot encloses the launcher upload boundary'
+Assert-Evidence ($postSnapshotPos -gt $uploadBoundaryPos -and $postSnapshotPos -lt $proofPos) `
+    'Steam published-file post-snapshot precedes authenticated result persistence'
+Assert-Evidence ($shipText.Contains("if (`$uploadStatus -ceq 'NOCHANGE')") -and
+    $shipText.Contains('-BeforeWorkshopSnapshot $beforeWorkshopSnapshot') -and
+    $shipText.Contains('-AfterWorkshopSnapshot $afterWorkshopSnapshot')) `
+    'NOCHANGE alone requires the complete pre/post snapshot pair at the proof boundary'
+Assert-Evidence ($shipText.Contains('$beforeWorkshopSnapshotError = $_.Exception.Message')) `
+    'pre-snapshot transport failure is retained without suppressing a real UPLOADED result'
 $uploadTries = @($shipAst.FindAll({param($node)
     $node -is [Management.Automation.Language.TryStatementAst] -and
     $node.Body.Extent.Text.Contains('$receiptAcceptance = Invoke-WithShipVmbRc')

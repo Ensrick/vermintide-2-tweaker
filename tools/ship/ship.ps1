@@ -2519,6 +2519,21 @@ Assert-WtHistorySourceFreshness -Mod $Mod -RepoRoot $repoRoot -Phase 'pre-upload
 # mutable worktree hash/cleanliness precheck here: it would recreate the
 # check/use window this boundary exists to remove.
 
+# Capture a read-only Steam metadata snapshot immediately around the upload.
+# UPLOADED carries its ManifestID in the exact bounded log transaction and does
+# not depend on this query. NOCHANGE has no log ManifestID, so it may proceed to
+# tracker mutation only when an unchanged pre/post snapshot supplies the same
+# current hcontent_file. A transient query failure does not suppress a real
+# upload; it only makes a later NOCHANGE result fail closed.
+$beforeWorkshopSnapshot = $null
+$beforeWorkshopSnapshotError = $null
+if (-not $isFirstUploadBootstrap) {
+    try {
+        $beforeWorkshopSnapshot = Get-VtWorkshopPublishedFileSnapshot -PublishedId $publishedId
+    }
+    catch { $beforeWorkshopSnapshotError = $_.Exception.Message }
+}
+
 $uploadArgs = @('upload', $Mod)
 if ($AllowPublic) { $uploadArgs += '--allow-public' }
 $uploadArgs += @('--publication-receipt', $receiptPath, '--config', $launcherSettings)
@@ -2586,20 +2601,35 @@ if (-not $uploadEvidence.Ok) {
     Fail ($uploadEvidence.Problems -join '; ')
 }
 
+$afterWorkshopSnapshot = $null
+if ($uploadStatus -ceq 'NOCHANGE') {
+    if ($null -eq $beforeWorkshopSnapshot) {
+        Fail "Workshop returned NOCHANGE, but the pre-upload Steam published-file snapshot is unavailable: $beforeWorkshopSnapshotError"
+    }
+    try {
+        $afterWorkshopSnapshot = Get-VtWorkshopPublishedFileSnapshot -PublishedId $publishedId
+    }
+    catch {
+        Fail "Workshop returned NOCHANGE, but the post-upload Steam published-file snapshot is unavailable: $($_.Exception.Message)"
+    }
+}
+
 # Issue #1307: the plaintext Steam-log result is not tracker mutation
 # authority. Persist it append-only on the exact hosted release and trust it
-# only after a fresh GitHub reread. NOCHANGE fails closed until a separate
-# content-qualified prior-result index can cross the fresh receipt nonce. This
-# gate precedes bootstrap exit, the successful-path pin step, labels, and card
-# rewrites. The existing outer failure finalizer may still reconcile GitHub
-# source pins after a recorded release mutation; it cannot label or rewrite a
-# live-test card.
+# only after a fresh GitHub reread. NOCHANGE additionally requires unchanged
+# Steam published-file identity on both sides of the exact log transaction.
+# This gate precedes bootstrap exit, the successful-path pin step, labels, and
+# card rewrites. The existing outer failure finalizer may still reconcile
+# GitHub source pins after a recorded release mutation; it cannot label or
+# rewrite a live-test card.
 Write-Host "==> Persisting authenticated Workshop upload result (issue #1307)" -ForegroundColor Cyan
 try {
     $uploadResultAuthority = Publish-VtShipWorkshopUploadProof `
         -Repo 'Ensrick/vermintide-2-tweaker' -ReleaseTag $tag -Mod $Mod `
         -ModInventoryPath (Join-Path $repoRoot 'tools\mod-inventory.psd1') `
-        -PublicationReceiptBytes $publicationReceiptBytes -UploadResult $receiptAcceptance
+        -PublicationReceiptBytes $publicationReceiptBytes -UploadResult $receiptAcceptance `
+        -BeforeWorkshopSnapshot $beforeWorkshopSnapshot `
+        -AfterWorkshopSnapshot $afterWorkshopSnapshot
 }
 catch {
     Fail "Workshop upload succeeded but its authenticated result could not be established; lifecycle mutation is blocked: $($_.Exception.Message)"

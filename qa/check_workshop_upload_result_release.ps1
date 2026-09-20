@@ -22,12 +22,34 @@ $endLocal = [datetime]::SpecifyKind(([datetime]'2026-07-13T11:59:55'), [DateTime
 $upload = ConvertFrom-VtWorkshopUploadTransaction $text $item $startLocal $endLocal
 $candidate = New-VtWorkshopUploadResultCandidate $publicationBytes $upload 'wt' 'wt.zip' $zipHash ([datetime]'2026-09-20T12:34:56Z')
 $candidateBytes = ConvertTo-VtWorkshopUploadResultCandidateBytes $candidate $publicationBytes
+$noChangeText = $text.Replace(
+    "Uploaded new content ( ManifestID $manifest ) for item $item.",
+    "No content change detected for item $item")
+$noChange = ConvertFrom-VtWorkshopUploadTransaction $noChangeText $item $startLocal $endLocal
+$steamValue = [ordered]@{response=[ordered]@{result=1;resultcount=1;publishedfiledetails=@([ordered]@{
+    publishedfileid=$item;result=1;consumer_app_id=552500;file_size='123'
+    hcontent_file=$manifest;time_updated=1789361191
+})}}
+$steamBytes = [Text.UTF8Encoding]::new($false).GetBytes(
+    ($steamValue | ConvertTo-Json -Depth 8 -Compress))
+$beforeSnapshot = ConvertFrom-VtWorkshopPublishedFileResponse $steamBytes $item ([datetime]'2026-09-20T12:00:00Z')
+$afterSnapshot = ConvertFrom-VtWorkshopPublishedFileResponse $steamBytes $item ([datetime]'2026-09-20T12:01:00Z')
+$noChangeCandidate = New-VtWorkshopNoChangeResultCandidate $publicationBytes $noChange 'wt' 'wt.zip' `
+    $zipHash $beforeSnapshot $afterSnapshot ([datetime]'2026-09-20T12:34:56Z')
+$noChangeBytes = ConvertTo-VtWorkshopUploadResultCandidateBytes $noChangeCandidate $publicationBytes
 
 function New-FakeReleaseState {
-    param([byte[]]$ExistingBytes, [switch]$Duplicate, [switch]$Draft, [switch]$UploadRace, [switch]$CorruptReread)
+    param(
+        [byte[]]$ExistingBytes,
+        [switch]$Duplicate,
+        [switch]$Draft,
+        [switch]$UploadRace,
+        [switch]$CorruptReread,
+        $CandidateObject = $candidate
+    )
     $state = @{
         Repo='Ensrick/vermintide-2-tweaker'; Tag='mods-2026-09-20'; ReleaseId='42'; AssetId='81'
-        AssetName=[string]$candidate.candidate_asset_name; Bytes=$ExistingBytes; Posts=0; Gets=0
+        AssetName=[string]$CandidateObject.candidate_asset_name; Bytes=$ExistingBytes; Posts=0; Gets=0
         Duplicate=[bool]$Duplicate; Draft=[bool]$Draft; UploadRace=[bool]$UploadRace; CorruptReread=[bool]$CorruptReread
     }
     $state.Request = {
@@ -72,6 +94,17 @@ $existingState = New-FakeReleaseState -ExistingBytes $candidateBytes
 $existing = Publish-VtWorkshopUploadResultCandidate $existingState.Repo $existingState.Tag $candidate $publicationBytes $existingState.Request
 Check ($existing.Disposition -ceq 'ExistingExact' -and $existingState.Posts -eq 0 -and $existingState.Gets -eq 1) 'exact replay was not idempotent and read-only'
 
+$noChangeState = New-FakeReleaseState -CandidateObject $noChangeCandidate
+$noChangeAuthority = Publish-VtWorkshopUploadResultCandidate $noChangeState.Repo $noChangeState.Tag `
+    $noChangeCandidate $publicationBytes $noChangeState.Request
+Check ($noChangeAuthority.Authenticated -and $noChangeAuthority.MayMutate -and
+    $noChangeAuthority.Candidate.transaction_status -ceq 'NOCHANGE' -and
+    $noChangeAuthority.Candidate.steam_manifest_id -ceq $manifest) `
+    'NOCHANGE candidate did not authenticate only after append + exact reread'
+Check ($noChangeState.Posts -eq 1 -and $noChangeState.Gets -eq 1 -and
+    $noChangeAuthority.AssetSha256 -ceq (Get-VtWorkshopUploadResultBytesSha256 $noChangeBytes)) `
+    'NOCHANGE append/reread used the wrong bytes or boundary count'
+
 $inventoryPath = Join-Path ([IO.Path]::GetTempPath()) ('vt2-result-inventory-' + [guid]::NewGuid().ToString('N') + '.psd1')
 try {
     [IO.File]::WriteAllText($inventoryPath,
@@ -103,15 +136,28 @@ try {
     [IO.File]::WriteAllText($inventoryPath,
         "@{ Mods = @(@{ Dir = 'weapon_tweaker'; ModId = 'wt'; WorkshopId = '$item' }) }", [Text.UTF8Encoding]::new($false))
 
-    $noChange = Copy-Value $upload
-    $noChange.Status = 'NOCHANGE'; $noChange.ManifestId = $null
+    $shipNoChangeState = New-FakeReleaseState -CandidateObject $noChangeCandidate
+    $shipNoChange = Publish-VtShipWorkshopUploadProof $shipNoChangeState.Repo $shipNoChangeState.Tag `
+        'weapon_tweaker' $inventoryPath $publicationBytes $noChange $shipNoChangeState.Request `
+        $beforeSnapshot $afterSnapshot
+    Check ($shipNoChange.Authenticated -and $shipNoChange.MayMutate -and
+        $shipNoChange.Candidate.steam_manifest_id -ceq $manifest -and
+        $shipNoChange.Candidate.transaction_status -ceq 'NOCHANGE') `
+        'ship NOCHANGE path did not consume stable Steam snapshot authority'
+    Check ($shipNoChangeState.Posts -eq 1 -and $shipNoChangeState.Gets -eq 1) `
+        'ship NOCHANGE path did not append and reread exactly once'
+
+    $changedAfter = Copy-Value $afterSnapshot
+    $changedAfter.hcontent_file = '999999999999999999'
+    $changedState = New-FakeReleaseState -CandidateObject $noChangeCandidate
     $threw = $false
     try {
-        $null = Publish-VtShipWorkshopUploadProof $shipCreatedState.Repo $shipCreatedState.Tag `
-            'weapon_tweaker' $inventoryPath $publicationBytes $noChange $shipCreatedState.Request
+        $null = Publish-VtShipWorkshopUploadProof $changedState.Repo $changedState.Tag `
+            'weapon_tweaker' $inventoryPath $publicationBytes $noChange $changedState.Request `
+            $beforeSnapshot $changedAfter
     } catch { $threw = $true }
-    Check ($threw -and $shipCreatedState.Posts -eq 1) `
-        'NOCHANGE crossed a second mutation instead of failing for unavailable cross-receipt authority'
+    Check ($threw -and $changedState.Posts -eq 0 -and $changedState.Gets -eq 0) `
+        'changed Steam snapshot reached GitHub mutation'
 
     $wrongItem = Copy-Value $upload
     $wrongItem.PublishedId = '3712896118'
@@ -158,6 +204,17 @@ $invalidUtf8 = [byte[]](0xC3,0x28)
 $threw = $false
 try { $null = ConvertFrom-VtWorkshopUploadResultCandidateBytes $invalidUtf8 $publicationBytes } catch { $threw = $true }
 Check $threw 'invalid UTF-8 asset bytes were accepted'
+$candidateJson = [Text.UTF8Encoding]::new($false, $true).GetString($candidateBytes)
+$duplicateJson = $candidateJson.Replace(
+    '"steam_manifest_id":"' + $manifest + '"',
+    '"steam_manifest_id":"' + $manifest + '","steam_manifest_id":"' + $manifest + '"')
+$duplicateBytes = [Text.UTF8Encoding]::new($false, $true).GetBytes($duplicateJson)
+$threw = $false
+try { $null = ConvertFrom-VtWorkshopUploadResultCandidateBytes $duplicateBytes $publicationBytes } catch { $threw = $true }
+Check $threw 'duplicate persisted result field was accepted'
+$threw = $false
+try { $null = ConvertFrom-VtWorkshopUploadResultCandidateBytes (New-Object byte[] 65537) $publicationBytes } catch { $threw = $true }
+Check $threw 'oversized persisted result asset was accepted'
 
 if (-not $Quiet) { Write-Host "[check_workshop_upload_result_release] PASS $script:cases assertions; append-only exact-byte reread is authenticated." }
 exit 0
