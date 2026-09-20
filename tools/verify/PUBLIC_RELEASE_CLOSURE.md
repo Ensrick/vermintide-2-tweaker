@@ -303,17 +303,31 @@ hostile in-memory changes but cannot establish provenance.
 explicit: an exact `missing-attestation` result is `Pending`; another complete
 bound rejection is `Rejected`; accepted, unavailable, legacy, and non-applicable
 results remain distinct. Its deterministic intent key is bound to closure key,
-decision, reason, and candidate digest, so duplicate delivery is stable and a
-new ClosedEvent cannot borrow the prior intent. This resolves the classification
-and idempotency model only. Authenticated durable storage, grace/deadline policy,
-fresh pre-write rereads, crash-recoverable action journals, and GitHub mutations
-remain deliberately unimplemented.
+decision, reason, candidate digest, and any explicit deadline evaluation, so
+duplicate delivery is stable and a new ClosedEvent or deadline transition cannot
+borrow the prior intent.
+
+The planner optionally accepts `AttestationGraceSeconds`, bounded from one
+second through seven days. It never invents an operational duration. When a
+trusted caller supplies that reviewed value, the planner uses only the retained
+closure time and authenticated collection's `ObservedAt` time. Before the exact
+deadline, missing attestation remains `Pending`; at or after it, the plan becomes
+`Rejected` with `missing-attestation-after-grace`. A backwards or unavailable
+observation becomes `Unavailable`. Every branch remains observe-only. In
+particular, deadline expiry is not storage authentication and does not authorize
+an issue reopen. The output exposes the canonical UTC deadline, window state,
+and supplied duration, and binds them into the intent key.
+
+This resolves the explicit pure grace/deadline classification and idempotency
+model only. Authenticated durable storage, selection of an operational grace
+duration, fresh pre-write rereads, crash-recoverable action journals, and GitHub
+mutations remain deliberately unimplemented.
 
 `qa/check_public_release_closure_evidence.ps1` exercises the actual collector,
 policy, candidate, and planner entirely offline on PS7/PS5.1. It proves tamper
 detection, Pending-vs-Rejected behavior, generation separation, property-order
-stability, invalid-Unicode refusal, and the absence of authentication or issue
-mutation authority.
+stability, invalid-Unicode refusal, either side of the exact explicit deadline,
+and the absence of authentication or issue mutation authority.
 
 ### Policy fixtures
 

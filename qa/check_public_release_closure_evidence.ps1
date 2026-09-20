@@ -42,6 +42,48 @@ try {
     Assert-Evidence ($pending.Disposition -ceq 'Pending' -and $pending.RequiredNext -ceq 'record-structured-attestation-for-this-closure-generation' -and
         $pending.Action -ceq 'observe-only') 'missing attestation was treated as a proven bad closure'
 
+    $withinGrace=Copy-CollectorFixture $pendingAudit
+    $withinGrace.CommentSnapshot.ObservedAt='2026-09-06T09:20:59Z'
+    $openWindow=Get-VtPublicReleaseClosureActionPlan $withinGrace $null -AttestationGraceSeconds 60
+    Assert-Evidence ($openWindow.Disposition -ceq 'Pending' -and $openWindow.DeadlineState -ceq 'open' -and
+        $openWindow.DeadlineAt -ceq '2026-09-06T09:21:00.0000000Z' -and -not$openWindow.MayMutate) `
+        'explicit grace window did not preserve a pre-deadline pending closure'
+    $atDeadline=Copy-CollectorFixture $pendingAudit
+    $atDeadline.CommentSnapshot.ObservedAt='2026-09-06T09:21:00Z'
+    $expired=Get-VtPublicReleaseClosureActionPlan $atDeadline $null -AttestationGraceSeconds 60
+    Assert-Evidence ($expired.Disposition -ceq 'Rejected' -and $expired.DeadlineState -ceq 'expired' -and
+        $expired.EffectiveReason -ceq 'missing-attestation-after-grace' -and
+        $expired.RequiredNext -ceq 'persist-authenticated-deadline-rejection-before-any-reopen' -and
+        $expired.Action -ceq 'observe-only' -and -not$expired.MayMutate) `
+        'deadline expiry either stayed pending or granted mutation authority'
+    Assert-Evidence ($openWindow.IntentKey -cne $expired.IntentKey) `
+        'deadline transition did not create a distinct durable action intent'
+    $badWindow=Copy-CollectorFixture $pendingAudit
+    $badWindow.CommentSnapshot.ObservedAt='2026-09-06T09:19:59Z'
+    $unavailable=Get-VtPublicReleaseClosureActionPlan $badWindow $null -AttestationGraceSeconds 60
+    Assert-Evidence ($unavailable.Disposition -ceq 'Unavailable' -and
+        $unavailable.DeadlineState -ceq 'unavailable' -and -not$unavailable.MayMutate) `
+        'pre-closure observation became a deadline rejection'
+    $overflowWindow=Copy-CollectorFixture $pendingAudit
+    $overflowWindow.Issue.closedAt='9999-12-31T23:59:59Z'
+    $overflowWindow.CommentSnapshot.ObservedAt='9999-12-31T23:59:59Z'
+    $overflow=Get-VtPublicReleaseClosureActionPlan $overflowWindow $null -AttestationGraceSeconds 60
+    Assert-Evidence ($overflow.Disposition -ceq 'Unavailable' -and
+        $overflow.DeadlineState -ceq 'unavailable' -and -not$overflow.MayMutate) `
+        'overflowing deadline escaped containment or became a rejection'
+
+    $acceptedWithGrace=Get-VtPublicReleaseClosureActionPlan $audit $candidate -AttestationGraceSeconds 60
+    Assert-Evidence ($acceptedWithGrace.Disposition -ceq 'Accepted' -and
+        $acceptedWithGrace.DeadlineState -ceq 'not-evaluated' -and
+        $null -eq $acceptedWithGrace.AttestationGraceSeconds -and
+        $acceptedWithGrace.Action -ceq 'observe-only') `
+        'grace evaluation changed an accepted attestation into rejection or action'
+    foreach($invalidGrace in @(0,604801)){
+        $threw=$false
+        try{$null=Get-VtPublicReleaseClosureActionPlan $pendingAudit $null -AttestationGraceSeconds $invalidGrace}catch{$threw=$true}
+        Assert-Evidence $threw "out-of-contract grace value $invalidGrace was accepted"
+    }
+
     $f=New-CollectorFixture;$f.Attestation.body='PASS'
     $rejectedAudit=Invoke-CollectorFixture $f Rejected 'malformed-attestation'
     $rejected=Get-VtPublicReleaseClosureActionPlan $rejectedAudit

@@ -156,7 +156,8 @@ function Get-VtPublicReleaseClosureActionPlan {
     [CmdletBinding()]
     param(
         [Parameter(Mandatory=$true)]$Audit,
-        $EvidenceCandidate
+        $EvidenceCandidate,
+        [ValidateRange(1,604800)][int]$AttestationGraceSeconds
     )
     $decision=$Audit.Decision
     $status=[string]$decision.Status;$reason=[string]$decision.Reason
@@ -172,11 +173,44 @@ function Get-VtPublicReleaseClosureActionPlan {
         $candidateValid=$check.Valid
         if($candidateValid){$evidenceDigest=[string]$EvidenceCandidate.Digest}
     }
-    $identity=[ordered]@{Schema=1;ClosureKey=[string]$decision.ClosureKey;Status=$status;Reason=$reason;EvidenceDigest=$evidenceDigest}
+    $deadlineState='not-evaluated';$deadlineAt=$null;$effectiveReason=$reason;$appliedGrace=$null
+    if($PSBoundParameters.ContainsKey('AttestationGraceSeconds') -and
+            $status -ceq 'Rejected' -and $reason -ceq 'missing-attestation'){
+        $appliedGrace=$AttestationGraceSeconds
+        $closed=ConvertTo-VtClosureTime $Audit.Issue.closedAt
+        $observed=ConvertTo-VtClosureTime $Audit.CommentSnapshot.ObservedAt
+        if($null -eq $closed -or $null -eq $observed -or $observed -lt $closed){
+            $deadlineState='unavailable';$disposition='Unavailable'
+            $required='retry-complete-authenticated-collection'
+        } else {
+            try{$deadline=$closed.AddSeconds($AttestationGraceSeconds)}catch{$deadline=$null}
+            if($null -eq $deadline){
+                $deadlineState='unavailable';$disposition='Unavailable'
+                $required='retry-complete-authenticated-collection'
+            } else {
+                $deadlineAt=$deadline.ToUniversalTime().ToString(
+                    'yyyy-MM-ddTHH:mm:ss.fffffffZ',[cultureinfo]::InvariantCulture)
+                $deadlineState=if($observed -lt $deadline){'open'}else{'expired'}
+                if($deadlineState -ceq 'expired'){
+                    $disposition='Rejected';$effectiveReason='missing-attestation-after-grace'
+                    $required='persist-authenticated-deadline-rejection-before-any-reopen'
+                }
+            }
+        }
+    }
+    $identity=[ordered]@{
+        Schema=1;ClosureKey=[string]$decision.ClosureKey;Status=$status
+        Reason=$effectiveReason;EvidenceDigest=$evidenceDigest
+        DeadlineState=$deadlineState;DeadlineAt=$deadlineAt
+        AttestationGraceSeconds=$appliedGrace
+    }
     return [pscustomobject]@{
         Schema=1;Disposition=$disposition;RequiredNext=$required
         ClosureKey=[string]$decision.ClosureKey
         IntentKey=(Get-VtClosureCanonicalSha256 $identity)
+        EffectiveReason=$effectiveReason;DeadlineState=$deadlineState
+        DeadlineAt=$deadlineAt
+        AttestationGraceSeconds=$appliedGrace
         EvidenceCandidateValid=$candidateValid;EvidenceAuthenticated=$false
         Action='observe-only';MayMutate=$false
     }
