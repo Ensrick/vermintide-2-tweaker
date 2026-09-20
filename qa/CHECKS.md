@@ -64,6 +64,10 @@ coordinates, and result/line disagreement under PowerShell 7 and 5.1. The value
 is deliberately named a candidate and always returns `Authenticated=false` and
 `MayMutate=false`: durable append-only persistence, trusted reread, NoChange
 reuse, and the live-card authority consumer remain unfinished #1307 work.
+The same binding accepts the canonical first-upload bootstrap receipt so its
+newly assigned positive item/ManifestID result can be retained before the
+mandatory ID-only source reconciliation; bootstrap still cannot become test
+ready from that provisional source record.
 
 `check_workshop_upload_result_release.ps1` guards the next durable #1307
 boundary. The content-qualified candidate is appended to the exact ordinary
@@ -73,9 +77,18 @@ that still validates against the original schema-3 preauthorization returns an
 authenticated, mutation-capable in-memory proof. Exact replay and a concurrent
 exact append are idempotent; same-name/different-byte collisions, duplicate
 metadata, draft releases, changed preauthorization, destination mismatch, and
-corrupt rereads fail closed. The helper remains transport-injected and is not
-yet wired into `ship.ps1`; NoChange reuse and live-card consumption remain
-unfinished #1307 work.
+corrupt rereads fail closed. The canonical ship now validates the hosted receipt
+before upload, then requires this append-and-reread authority before bootstrap
+completion, the ordinary successful-path pin step, issue labels, or card
+refresh. The existing failure finalizer may still reconcile source pins after
+the GitHub release was already recorded, but it cannot make an issue test-ready
+  or rewrite a live card. An `UPLOADED` result creates the exact asset, and the
+  card refresh consumes its ManifestID only from that authenticated reread.
+`NOCHANGE` fails closed before those live-test mutations because each hosted
+preauthorization carries a fresh nonce: safe reuse needs a separate
+content-qualified authenticated index and cannot substitute a prior
+receipt-qualified asset. That reuse and live-card consumption remain unfinished
+#1307 work.
 
 Individual checks follow a **0 / 1 / 2 convention**: `0` = clean, `1` = advisory
 WARNINGS, `2` (or higher) = ERRORS. `run_all.ps1` aggregates these so that:

@@ -22,7 +22,8 @@ $tokens = $null; $errors = $null
 $shipAst = [Management.Automation.Language.Parser]::ParseInput($shipText, [ref]$tokens, [ref]$errors)
 Assert-Evidence ($errors.Count -eq 0) 'ship parses'
 Assert-Evidence ($shipText -notmatch 'Get-Content \$workshopLog -Tail|\$cutoff\s*=\s*\(Get-Date\)\.AddMinutes') 'stale tail/time fallback removed'
-Assert-Evidence ($shipText.Contains('$shipManifestId = $receiptAcceptance.ManifestId')) 'card refresh consumes validated manifest field without manufacturing NoChange ID'
+Assert-Evidence ($shipText.Contains('$shipManifestId = $uploadResultAuthority.Candidate.steam_manifest_id')) 'card refresh consumes only the authenticated reread manifest field without manufacturing NoChange ID'
+Assert-Evidence (-not $shipText.Contains('$shipManifestId = $receiptAcceptance.ManifestId')) 'card refresh does not consume the plaintext parser manifest field'
 $uploadTries = @($shipAst.FindAll({param($node)
     $node -is [Management.Automation.Language.TryStatementAst] -and
     $node.Body.Extent.Text.Contains('$receiptAcceptance = Invoke-WithShipVmbRc')

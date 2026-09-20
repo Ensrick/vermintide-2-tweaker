@@ -17,6 +17,10 @@ $verdict=Test-VtWorkshopUploadResultCandidate $candidate $publicationBytes
 Check ($verdict.Ok -and -not$verdict.Authenticated -and -not$verdict.MayMutate) 'valid candidate confused binding with authentication'
 Check ($candidate.recorded_at_utc -ceq '2026-09-20T12:34:56Z' -and $candidate.workshop_id -ceq $item -and $candidate.steam_manifest_id -ceq $manifest) 'constructor lost exact result coordinates'
 Check ($candidate.candidate_asset_name -ceq ("workshop-upload-result-weapon_tweaker-$commit-$($candidate.publication_receipt_sha256).json")) 'asset identity is not source/preauthorization-qualified'
+$bootstrapPublication=Copy-Result $publication;$bootstrapPublication.purpose='workshop_bootstrap'
+$bootstrapBytes=[Text.UTF8Encoding]::new($false).GetBytes(($bootstrapPublication|ConvertTo-Json -Depth 8 -Compress))
+$bootstrapCandidate=New-VtWorkshopUploadResultCandidate $bootstrapBytes $upload 'wt' 'wt.zip' $zipHash ([datetime]'2026-09-20T12:34:56Z')
+Check (Test-VtWorkshopUploadResultCandidate $bootstrapCandidate $bootstrapBytes).Ok 'first-upload bootstrap receipt cannot retain its assigned-item upload result'
 foreach($row in @(@{Field='authenticated';Value=$true},@{Field='workshop_id';Value='0'},@{Field='steam_manifest_id';Value='other'},@{Field='source_commit';Value='f'*40},@{Field='mod_id';Value='other'},@{Field='release_asset_sha256';Value='c'*64},@{Field='publication_receipt_sha256';Value='d'*64},@{Field='candidate_asset_name';Value='../receipt.json'},@{Field='recorded_at_utc';Value='2026-09-20T12:34:56.1Z'},@{Field='app_id';Value='480'})){
     $copy=Copy-Result $candidate;$copy.($row.Field)=$row.Value
     Check (-not(Test-VtWorkshopUploadResultCandidate $copy $publicationBytes).Ok) ("tampered "+$row.Field+' accepted')

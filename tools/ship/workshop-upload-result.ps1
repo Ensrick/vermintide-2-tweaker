@@ -39,9 +39,9 @@ function ConvertFrom-VtWorkshopPublicationReceiptBytes([byte[]]$Bytes) {
     }
     try{$receipt=$json|ConvertFrom-Json -ErrorAction Stop}catch{throw 'publication receipt is not valid JSON'}
     if($null -eq $receipt -or $receipt -is [Array] -or $receipt.schema -ne 3 -or
-            $receipt.purpose -cne 'workshop_upload' -or $receipt.repository -cne 'Ensrick/vermintide-2-tweaker' -or
+            $receipt.purpose -cnotin @('workshop_upload','workshop_bootstrap') -or $receipt.repository -cne 'Ensrick/vermintide-2-tweaker' -or
             [string]$receipt.authorization.mode -cne 'hosted_qa'){
-        throw 'publication receipt has no trusted schema-3 upload authorization shape'
+        throw 'publication receipt has no trusted schema-3 upload/bootstrap authorization shape'
     }
     foreach($field in @('release_tag','receipt_asset_name','source_commit','mod','version')){
         if($receipt.$field -isnot [string] -or [string]::IsNullOrWhiteSpace($receipt.$field)){throw "publication receipt $field is unavailable"}
