@@ -1,5 +1,28 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.352-dev (2026-09-20) - Keep-spawn missing-weapon consumer guard (#1637) [not-started]
+
+- Fixed a Keep-load crash in `SimpleInventoryExtension.extensions_ready` where
+  GUT's saved Unchained row still named melee/ranged backend IDs, but a later
+  item-interface refresh removed both instances before vanilla constructed the
+  player's weapon slots. The existing raw mirror-read check could truthfully
+  report `store-yes` and still lose this time-of-check/time-of-use race.
+- GUT's existing sole `BackendUtils.get_loadout_item` hook now owns a final,
+  fail-closed consumer guard. It leaves every valid native item untouched; only
+  after a melee/ranged lookup returns nil in modded Adventure STORE mode does it
+  try the official selected weapon and then the career-default weapon. A
+  fallback is accepted only when the live item interface resolves it at that
+  exact instant. The modded saved ID is never deleted or replaced, so a
+  late-registering CIM/LA/CWV instance can self-heal on a later read.
+- Recovery is inert in the official realm, Versus, read-only loadout mode and
+  non-weapon slots; backend/default-reader faults return vanilla's nil result
+  instead of escaping the hook. One bounded `[gut:1637]` line records each
+  career/slot/fallback tuple.
+- Regression coverage drives candidate ordering/deduplication, native success,
+  official/default fallback, mode/slot isolation, throwing readers and the
+  actual registered lookup callback. `/gut_regression_test` adds
+  `issue1637_spawn_weapon_consumer_guard`.
+
 ## 0.2.350-dev (2026-09-14) - Thirty modded loadouts via paged selector (#231) [verify-fix]
 
 - In the modded realm the hero view's loadout bar (Equipment and Talents tabs

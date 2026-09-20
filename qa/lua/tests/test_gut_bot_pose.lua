@@ -180,10 +180,47 @@ return function(H, repo_root)
         H.equal(bot._spawned_pose, "bot_designated_pose")
     end)
 
+    H.test("GUT #1637 production lookup recovers only after native weapon miss", function()
+        local api, env, lookups, mod = load_production()
+        local recoveries = {}
+        local fallback = { backend_id = "safe_default", data = { name = "bw_1h_sword" } }
+        mod._gut_recover_missing_weapon = function(career, slot, is_bot)
+            recoveries[#recoveries + 1] = {
+                career = career, slot = slot, is_bot = is_bot,
+            }
+            return fallback
+        end
+
+        local item = api.hook_callbacks.lookup(function()
+            return nil
+        end, "bw_unchained", "slot_melee", false)
+        H.equal(item, fallback)
+        H.deep_equal(recoveries[1], {
+            career = "bw_unchained", slot = "slot_melee", is_bot = false,
+        })
+
+        local native = { backend_id = "still_live" }
+        item = api.hook_callbacks.lookup(function()
+            return native
+        end, "bw_unchained", "slot_ranged", false)
+        H.equal(item, native)
+        H.equal(#recoveries, 1, "valid native item must bypass recovery")
+
+        mod._gut_recover_missing_weapon = function()
+            error("guard fault")
+        end
+        item = api.hook_callbacks.lookup(function() return nil end,
+            "bw_unchained", "slot_melee", false)
+        H.equal(item, nil, "recovery errors must preserve vanilla's nil result")
+    end)
+
     H.test("GUT #232 strengthened runtime check passes on the captured chain", function()
-        local api = load_production()
+        local api, env, lookups, mod = load_production()
+        mod._gut_recover_missing_weapon = function() return nil end
         H.equal(api.rt_checks[1].name, "issue232_bot_designated_victory_pose")
         H.equal(api.rt_checks[1].fn(), nil)
+        H.equal(api.rt_checks[2].name, "issue1637_spawn_weapon_consumer_guard")
+        H.equal(api.rt_checks[2].fn(), nil)
         H.equal(api.exec_chain_cases(), nil)
     end)
 end

@@ -66,6 +66,67 @@ function P.capture_slot_durable(slot_name, owned_by_items)
     return owned_by_items == true
 end
 
+-- Issue #1637: a stored weapon id can be visible while the item interface is
+-- refreshing, then disappear before SimpleInventoryExtension consumes it.
+-- The mirror-read guard cannot close that time-of-check/time-of-use gap.  Plan
+-- the emergency candidate list from vanilla-owned data only: the official
+-- selected row first, then the career's first default row.  Never mutate the
+-- GUT store -- a late-registering modded instance must remain able to heal on a
+-- later read.
+function P.official_weapon_candidates(mirror, career_name, slot_name, get_defaults)
+    if type(mirror) ~= "table" or type(career_name) ~= "string"
+        or not WEAPON_SLOTS[slot_name] then
+        return {}
+    end
+    local ids, seen = {}, {}
+    local function add(id)
+        if id ~= nil and not seen[id] then
+            seen[id] = true
+            ids[#ids + 1] = id
+        end
+    end
+
+    local career_data = rawget(mirror, "_career_data")
+    local selected_by_career = rawget(mirror, "_career_loadouts")
+    local selected = type(selected_by_career) == "table"
+        and selected_by_career[career_name] or nil
+    local selected_row = selected ~= nil and type(career_data) == "table"
+        and type(career_data[career_name]) == "table"
+        and career_data[career_name][selected] or nil
+    add(type(selected_row) == "table" and selected_row[slot_name] or nil)
+
+    local ok, defaults = pcall(get_defaults, mirror, career_name)
+    local default_row = ok and type(defaults) == "table" and defaults[1] or nil
+    add(type(default_row) == "table" and default_row[slot_name] or nil)
+    return ids
+end
+
+-- Exact consumer-boundary recovery. `native_item` is the result already
+-- returned by vanilla BackendUtils.get_loadout_item. A valid native result is
+-- never inspected or replaced. Recovery is restricted to STORE-mode weapon
+-- slots and accepts a fallback only when the live item interface resolves it
+-- now; uncertainty returns nil and preserves vanilla behavior.
+function P.recover_missing_weapon(opts)
+    if type(opts) ~= "table" then return nil, "invalid-options" end
+    if opts.native_item ~= nil then return opts.native_item, "native" end
+    if opts.mode ~= opts.mode_store then return nil, "inert-mode" end
+    if not WEAPON_SLOTS[opts.slot_name] then return nil, "inert-slot" end
+    if type(opts.resolve) ~= "function" or type(opts.get_defaults) ~= "function" then
+        return nil, "unavailable"
+    end
+
+    local candidates = P.official_weapon_candidates(opts.mirror, opts.career_name,
+        opts.slot_name, opts.get_defaults)
+    for i = 1, #candidates do
+        local id = candidates[i]
+        local ok, item = pcall(opts.resolve, id)
+        if ok and item ~= nil then
+            return item, i == 1 and "official-selected" or "career-default", id
+        end
+    end
+    return nil, "unresolved"
+end
+
 -- Issue #375 audit fix (2026-08-15): vanilla marks exactly slot_necklace / slot_ring /
 -- slot_trinket_1 `unequippable = true` (inventory_settings.lua:43/52/61), so an EMPTY
 -- accessory slot in an otherwise-complete row is a legitimate player choice that is

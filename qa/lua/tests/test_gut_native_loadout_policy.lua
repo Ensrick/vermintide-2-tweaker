@@ -135,6 +135,108 @@ return function(H, repo_root)
             Core.slot_owned_by_items(nil, items_interface)), false)
     end)
 
+    H.test("issue 1637 plans official spawn fallbacks without touching the modded id", function()
+        local mirror = {
+            _career_loadouts = { bw_unchained = 2 },
+            _career_data = { bw_unchained = {
+                [1] = { slot_melee = "official_row_1" },
+                [2] = { slot_melee = "official_selected", slot_ranged = "same_id" },
+            } },
+        }
+        local function defaults(self, career)
+            H.equal(self, mirror)
+            H.equal(career, "bw_unchained")
+            return { { slot_melee = "career_default", slot_ranged = "same_id" } }
+        end
+        H.deep_equal(Policy.official_weapon_candidates(
+            mirror, "bw_unchained", "slot_melee", defaults),
+            { "official_selected", "career_default" })
+        H.deep_equal(Policy.official_weapon_candidates(
+            mirror, "bw_unchained", "slot_ranged", defaults),
+            { "same_id" })
+        H.deep_equal(Policy.official_weapon_candidates(
+            mirror, "bw_unchained", "slot_hat", defaults), {})
+    end)
+
+    H.test("issue 1637 recovers only a live fallback at the exact consumer boundary", function()
+        local mirror = {
+            _career_loadouts = { bw_unchained = 1 },
+            _career_data = { bw_unchained = {
+                { slot_melee = "vanished_official" },
+            } },
+        }
+        local default_item = { backend_id = "live_default", data = { name = "bw_1h_sword" } }
+        local resolve_calls = {}
+        local item, source, id = Policy.recover_missing_weapon({
+            native_item = nil,
+            mode = Policy.MODE_STORE,
+            mode_store = Policy.MODE_STORE,
+            mirror = mirror,
+            career_name = "bw_unchained",
+            slot_name = "slot_melee",
+            get_defaults = function()
+                return { { slot_melee = "live_default" } }
+            end,
+            resolve = function(candidate)
+                resolve_calls[#resolve_calls + 1] = candidate
+                return candidate == "live_default" and default_item or nil
+            end,
+        })
+        H.equal(item, default_item)
+        H.equal(source, "career-default")
+        H.equal(id, "live_default")
+        H.deep_equal(resolve_calls, { "vanished_official", "live_default" })
+        H.equal(mirror._career_data.bw_unchained[1].slot_melee, "vanished_official",
+            "recovery must not mutate official data")
+    end)
+
+    H.test("issue 1637 guard is inert for native success, other modes and non-weapons", function()
+        local native = { backend_id = "already_live" }
+        local calls = 0
+        local common = {
+            native_item = native,
+            mode = Policy.MODE_STORE,
+            mode_store = Policy.MODE_STORE,
+            mirror = {},
+            career_name = "bw_unchained",
+            slot_name = "slot_melee",
+            get_defaults = function() calls = calls + 1; return {} end,
+            resolve = function() calls = calls + 1 end,
+        }
+        local item, source = Policy.recover_missing_weapon(common)
+        H.equal(item, native)
+        H.equal(source, "native")
+        H.equal(calls, 0)
+
+        common.native_item = nil
+        common.mode = Policy.MODE_READONLY
+        item, source = Policy.recover_missing_weapon(common)
+        H.equal(item, nil)
+        H.equal(source, "inert-mode")
+        common.mode = Policy.MODE_STORE
+        common.slot_name = "slot_hat"
+        item, source = Policy.recover_missing_weapon(common)
+        H.equal(item, nil)
+        H.equal(source, "inert-slot")
+        H.equal(calls, 0)
+    end)
+
+    H.test("issue 1637 recovery contains malformed and throwing backend state", function()
+        local item, source = Policy.recover_missing_weapon({
+            native_item = nil,
+            mode = Policy.MODE_STORE,
+            mode_store = Policy.MODE_STORE,
+            mirror = { _career_loadouts = { bw_unchained = 1 },
+                _career_data = { bw_unchained = { { slot_melee = "bad" } } } },
+            career_name = "bw_unchained",
+            slot_name = "slot_melee",
+            get_defaults = function() error("defaults unavailable") end,
+            resolve = function() error("resolver unavailable") end,
+        })
+        H.equal(item, nil)
+        H.equal(source, "unresolved")
+    end)
+
     H.test("issue 273 BackendUtils capture hook wires the owner gate for gear", function()
         local runtime_path = repo_root
             .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_native_loadouts.lua"
