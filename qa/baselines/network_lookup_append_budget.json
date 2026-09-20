@@ -1,0 +1,29 @@
+{
+  "schema": 1,
+  "issue": 428,
+  "generated": "2026-09-20",
+  "description": "Maximum remaining hand-written bidirectional NetworkLookup append blocks. Reductions are accepted; new owners or growth are blocked.",
+  "rows": [
+    { "path": "chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_adventure_pool.lua", "axis": "level_keys", "count": 1 },
+    { "path": "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_core_templates.lua", "axis": "damage_profiles", "count": 1 },
+    { "path": "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_illusion_families.lua", "axis": "item_names", "count": 8 },
+    { "path": "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_illusion_families.lua", "axis": "weapon_skins", "count": 8 },
+    { "path": "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_javelin_runtime_owner.lua", "axis": "damage_profiles", "count": 2 },
+    { "path": "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_javelin_runtime_owner.lua", "axis": "husks", "count": 2 },
+    { "path": "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_javelin_runtime_owner.lua", "axis": "item_names", "count": 1 },
+    { "path": "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_javelin_runtime_owner.lua", "axis": "pickup_names", "count": 2 },
+    { "path": "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_javelin_runtime_owner.lua", "axis": "projectile_units", "count": 1 },
+    { "path": "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_musket_runtime.lua", "axis": "damage_profiles", "count": 5 },
+    { "path": "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_skin_registry.lua", "axis": "item_names", "count": 2 },
+    { "path": "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_skin_registry.lua", "axis": "weapon_skins", "count": 2 },
+    { "path": "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua", "axis": "damage_profiles", "count": 1 },
+    { "path": "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_grail_knight_set.lua", "axis": "weapon_skins", "count": 1 },
+    { "path": "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_illusions.lua", "axis": "weapon_skins", "count": 2 },
+    { "path": "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_axe_balance.lua", "axis": "damage_profiles", "count": 1 },
+    { "path": "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_brett_sword_shield_buff.lua", "axis": "damage_profiles", "count": 1 },
+    { "path": "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_weapon_balance_patches.lua", "axis": "damage_profiles", "count": 2 },
+    { "path": "weapon_tweaker/scripts/mods/weapon_tweaker/_wt_axe_balance.lua", "axis": "damage_profiles", "count": 1 },
+    { "path": "weapon_tweaker/scripts/mods/weapon_tweaker/_wt_brett_sword_shield_buff.lua", "axis": "damage_profiles", "count": 1 },
+    { "path": "weapon_tweaker/scripts/mods/weapon_tweaker/_wt_weapon_balance_patches.lua", "axis": "damage_profiles", "count": 2 }
+  ]
+}
