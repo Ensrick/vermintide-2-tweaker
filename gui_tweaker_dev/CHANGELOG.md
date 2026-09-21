@@ -1,5 +1,31 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.354-dev (2026-09-20) - Spawn-weapon printf route proven without touching the global (#1637) [verify-fix]
+
+- The 0.2.353-dev regression proof (`issue1637_spawn_weapon_consumer_guard`)
+  captured its `[gut:1637]` lines by swapping the global `printf` inside
+  deployed code and restoring it afterwards. The deployed-source authority
+  (`tools/verify/live_test_source_authority.ps1`) forbids any deployed mod
+  from mutating global `printf`, record-wide and fail-closed, because raw
+  printf evidence for every mod becomes untrustworthy; with 0.2.353-dev
+  published, every lifecycle guard run, card refresh and ship label step
+  failed repo-wide on that rule. No deployed source writes the global any
+  more; only the offline harness under `qa/lua` (never deployed) may swap it.
+- The recovery module keeps a module-local route ledger instead: each
+  literal `pcall(printf, ...)` site (miss, recovered, sync shadow) records
+  whether the call ran and succeeded plus the fields behind the last line.
+  `issue1637_spawn_weapon_consumer_guard` now drives a fresh probe career
+  (`gut_rt1637_probe_<n>`) through the registered lookup hook into the real
+  installed recovery, reads that ledger, then runs the ordering proof against
+  fake dependencies through their own ledgers. The check fails when the
+  pcall did not run, errored, or recorded the wrong call.
+- Offline guard so this class cannot ship again: `qa/check_logging.ps1`
+  gains the hard `printf-mutation` category (exit 2, no escape, no floor)
+  for any runtime write to global/environment `printf` in an active mod
+  tree, with a planted fixture; `qa/rt_textual_invariants.psd1` locks the
+  ledger next to the miss route and the absence of any global printf write.
+- Player-facing behaviour is unchanged from 0.2.353-dev.
+
 ## 0.2.353-dev (2026-09-20) - Keep-spawn miss diagnostic and career-default weapon (#1637) [verify-fix]
 
 - The 0.2.352-dev guard ran on RainReligion's second crash log but recovered
