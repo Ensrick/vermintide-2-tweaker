@@ -81,6 +81,25 @@ It runs during code QA and in a lightweight issue/label/comment-event workflow,
 plus manual and daily checks. GitHub has no comment-pin workflow activity, so a
 pin-only change is caught by the next manual/daily run.
 
+### Incident exceptions
+
+`tools/verify/deployed_source_incident_exceptions.psd1` holds bounded incident
+exceptions for the deployed-source authority (issue #1643). Each entry names
+one GitHub incident issue, one canonical `ModId`, one exact deployed
+`<mod>/scripts/mods` tree hash, one exact repo-relative Lua path, one detector
+(`global-printf-mutation` is the only one), one `ExpiresUtc` instant, and a
+reason. The authority skips that detector's fail-closed throw only when every
+field matches the deployed record exactly and the current UTC time is before
+the expiry. It records the applied entry as `IncidentExceptions` on the
+authority object and warns once per applied entry; the blocking guard prints
+the same line in its report. Any other tree (the next ship of that mod), path,
+mod, or detector, or an elapsed expiry, restores the unchanged throw. A
+malformed file fails every authority run. Entries are temporary: each is
+pinned to one deployed tree and must be removed by a follow-up PR once the
+clean tree is deployed. The offline contract fixture proves the matching,
+wrong-tree, wrong-path, wrong-mod, expired, empty, and malformed cases on both
+PowerShell hosts.
+
 ## Public-release closure policy (offline only)
 
 `public_release_closure_policy.ps1` validates a trusted structured attestation
