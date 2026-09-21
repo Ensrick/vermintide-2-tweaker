@@ -26,15 +26,5 @@
 # incident is open.
 
 @{
-    Exceptions = @(
-        @{
-            Incident     = '#1643'
-            ModId        = 'gut_dev'
-            ModTree      = '2b5db0602a8f8e6b8fe6021ee4e9f9c320c9dca8'
-            RelativePath = 'gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_spawn_weapon_recovery.lua'
-            Detector     = 'global-printf-mutation'
-            ExpiresUtc   = '2026-09-24T00:00:00Z'
-            Reason       = 'gui_tweaker_dev 0.2.353-dev (release mods-2026-09-20, source 46c03483) ships an in-game regression proof that swaps the global printf via rawset(_G, "printf", ...) inside /gut_regression_test; the record-wide fail-closed throw made every PR and master qa-gate red and blocked the 0.2.354-dev fix from shipping. Remove this entry in the follow-up PR once 0.2.354-dev (swap removed) is the deployed gut_dev tree.'
-        }
-    )
+    Exceptions = @()
 }
