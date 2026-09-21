@@ -30,7 +30,7 @@ local RealmAuthority = mod:dofile(
 -- at the bottom of this same chunk, so no _G or cross-file exposure is needed.
 local _MEM_PROBE_T0_MP = collectgarbage("count")
 
-local MOD_VERSION = "0.2.39-dev"
+local MOD_VERSION = "0.2.40-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([mp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -178,7 +178,7 @@ local function set_schema_version(v)
 end
 
 local function get_starting_state()
-    return mod:get("starting_state") or "fresh"
+    return mod:get("starting_state") or "level_35"
 end
 
 local function is_seeded()

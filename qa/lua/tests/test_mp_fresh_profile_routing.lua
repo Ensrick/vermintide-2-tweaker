@@ -45,9 +45,7 @@ return function(H, repo_root)
 
     local function native_class()
         local class = {}
-        for _, list in ipairs({ Runtime.READ_METHODS, Runtime.WRITE_METHODS }) do
-            for _, method in ipairs(list) do class[method] = function() end end
-        end
+        for _, method in ipairs(Runtime.routed_methods()) do class[method] = function() end end
         class.has_item = function() end
         return class
     end
@@ -140,9 +138,17 @@ return function(H, repo_root)
             },
         }
         local mod = {}
-        function mod:hook(class_name, method, callback)
-            assert(T.hooks[class_name .. "." .. method] == nil, "duplicate hook " .. method)
-            T.hooks[class_name .. "." .. method] = callback
+        T.instance_hooks = {}
+        function mod:hook(target, method, callback)
+            if type(target) == "table" then
+                -- VMF instance hook: a separate chain on the instance table.
+                T.instance_hooks[target] = T.instance_hooks[target] or {}
+                assert(T.instance_hooks[target][method] == nil, "duplicate instance hook " .. method)
+                T.instance_hooks[target][method] = callback
+                return
+            end
+            assert(T.hooks[target .. "." .. method] == nil, "duplicate hook " .. method)
+            T.hooks[target .. "." .. method] = callback
         end
         function mod:get(key) return T.storage[key] end
         function mod:set(key, value)
@@ -481,12 +487,12 @@ return function(H, repo_root)
         H.equal(count_plain(main, 'mod:hook("BackendInterfaceItemPlayfab"'), 2)
         H.truthy(main:find('mod:hook("BackendInterfaceItemPlayfab", "has_item"', 1, true))
         H.truthy(main:find('mod:hook("BackendInterfaceItemPlayfab", "has_weapon_illusion"', 1, true))
-        for _, list in ipairs({ Runtime.READ_METHODS, Runtime.WRITE_METHODS }) do
-            for _, method in ipairs(list) do
-                H.equal(count_plain(runtime, 'mod:hook(Runtime.CLASS, "' .. method .. '"'), 1, method)
-                H.equal(main:find('"' .. method .. '"', 1, true), nil, method .. " must not be hooked in the entry point")
-            end
+        for _, method in ipairs(Runtime.routed_methods()) do
+            H.equal(count_plain(runtime, 'mod:hook(Runtime.CLASS, "' .. method .. '"'), 1, method)
+            H.equal(main:find('"' .. method .. '"', 1, true), nil, method .. " must not be hooked in the entry point")
         end
+        H.equal(#Runtime.routed_methods(), #Runtime.READ_METHODS + #Runtime.LOOKUP_METHODS + #Runtime.WRITE_METHODS)
+        H.equal(count_plain(runtime, "mod:hook(instance, method, wrappers[method])"), 1)
         H.truthy(main:find('mod:hook("LevelEndViewBase", "init", _with_eac_off_unless_fresh)', 1, true))
         H.truthy(main:find('mod:hook("HeroWindowItemCustomization", "_enable_craft_button", _with_eac_off_unless_fresh)', 1, true))
         H.truthy(main:find('mod:hook("HeroWindowItemCustomization", "_update_state_craft_button", _with_eac_off_unless_fresh)', 1, true))
@@ -501,5 +507,220 @@ return function(H, repo_root)
         H.equal(runtime:find("_backend_mirror:", 1, true), nil)
         H.equal(runtime:find("mod:echo", 1, true), nil)
         H.equal(runtime:find("mod:info", 1, true), nil)
+    end)
+
+    -- ------------------------------------------------------------
+    -- #1637: spawn lookups under the route
+    -- ------------------------------------------------------------
+    local function seeded_ids(T, self)
+        local loadouts = T.call("get_loadout", native("native-loadout"), self)
+        return loadouts.es_mercenary, loadouts.dr_slayer
+    end
+
+    H.test("MP #1637 get_item_from_id answers from the Fresh view, continues the chain on a miss, delegates when inactive", function()
+        local T = harness()
+        local self = native_self()
+        local merc = seeded_ids(T, self)
+        local chain_calls = {}
+        local function chain(_, backend_id)
+            chain_calls[#chain_calls + 1] = backend_id
+            return backend_id == "cim_template_1" and { key = "template" } or nil
+        end
+        local record = T.call("get_item_from_id", chain, self, merc.slot_melee)
+        H.equal(record.key, "es_2h_sword")
+        H.equal(record.backend_id, merc.slot_melee)
+        H.equal(record.data, T.globals.ItemMasterList.es_2h_sword)
+        H.equal(record.power_level, 5)
+        H.deep_equal(record.properties, {})
+        H.deep_equal(record.traits, {})
+        H.equal(#chain_calls, 0)
+        -- A native id is not in the Fresh view: the chain continues and, with
+        -- its routed tail, answers nil instead of the official record.
+        H.equal(T.call("get_item_from_id", chain, self, "official_sword"), nil)
+        H.deep_equal(chain_calls, { "official_sword" })
+        -- A sibling's synthetic id still resolves through the chain.
+        H.equal(T.call("get_item_from_id", chain, self, "cim_template_1").key, "template")
+        H.equal(T.call("get_item_from_id", chain, self, nil), nil)
+        H.equal(T.R.state_token(), "active")
+
+        T.setting = "level_35"
+        H.equal(T.call("get_item_from_id", function() return "native-record" end, self, merc.slot_melee), "native-record")
+        H.equal(T.R.state_token(), "official:setting")
+        T.setting = "fresh"
+
+        -- A handler throw latches the fault and delegates, like every route_read.
+        T.emporium_rev = 9
+        T.emporium_fail = true
+        H.equal(T.call("get_item_from_id", function() return "native-record" end, self, merc.slot_melee), "native-record")
+        H.equal(T.R.faulted, "get_item_from_id")
+        H.equal(T.count_logs("route state=official:fault stage=get_item_from_id"), 1)
+    end)
+
+    H.test("MP #1637 loadout ids the Fresh view cannot resolve fall back to the seeded career default", function()
+        local T = harness()
+        local self = native_self()
+        local merc = seeded_ids(T, self)
+        local default_melee = merc.slot_melee
+        H.equal(State.default_equipment_id(T.R.view(), "es_mercenary", "slot_melee"), default_melee)
+        H.equal(State.default_equipment_id(T.R.view(), "es_mercenary", "slot_hat"), nil)
+
+        -- Plant an id the view cannot resolve (a vanished Emporium grant or a
+        -- corrupt record) in the persisted loadout and reload the profile.
+        local stored = T.storage[State.SETTING_KEY]
+        stored.slices.items.careers.es_mercenary.loadouts[1].slot_melee = "ghost_melee"
+        stored.slices.items.careers.es_mercenary.loadouts[1].slot_necklace = "ghost_necklace"
+        stored.slices.items.careers.dr_slayer.loadouts[1].slot_melee = "ghost_slayer"
+        local again = harness({ globals = T.globals, storage = T.storage })
+        H.equal(again.call("get_loadout_item_id", native("native-id"), self, "es_mercenary", "slot_melee"), default_melee)
+        local record = again.call("get_item_from_id", function() return nil end, self, default_melee)
+        H.equal(record.key, "es_2h_sword")
+        H.equal(again.call("get_loadout_item_id", native("native-id"), self, "es_mercenary", "slot_necklace"),
+            State.ID_PREFIX .. "g1_es_mercenary_slot_necklace")
+        H.equal(again.count_logs("slot_fallback career=es_mercenary slot=slot_melee unresolved:ghost_melee to=" .. default_melee), 1)
+        again.call("get_loadout_item_id", native("native-id"), self, "es_mercenary", "slot_melee")
+        H.equal(again.count_logs("slot_fallback career=es_mercenary"), 2)
+        -- Cosmetic slots and resolvable ids are untouched.
+        H.equal(again.call("get_loadout_item_id", native("native-id"), self, "es_mercenary", "slot_hat"),
+            again.call("get_backend_id_from_cosmetic_item", native("native-cos"), self, "mercenary_hat_0000"))
+        H.equal(again.call("get_loadout_item_id", native("native-id"), self, "es_mercenary", "slot_ranged"), merc.slot_ranged)
+        H.equal(again.call("get_loadout", native("native-loadout"), self).es_mercenary.slot_melee, "ghost_melee")
+
+        -- No seeded default left (the seed row itself vanished): nil, as vanilla
+        -- answers for an empty slot.
+        local view = again.R.view()
+        view.items[State.ID_PREFIX .. "g1_dr_slayer_slot_melee"] = nil
+        local id, reason = State.loadout_item_id(view, "dr_slayer", "slot_melee", {})
+        H.equal(id, nil)
+        H.equal(reason, "unresolved:ghost_slayer")
+        H.equal(State.loadout_item_id(view, "dr_slayer", "slot_ranged", {}), State.ID_PREFIX .. "g1_dr_slayer_slot_ranged")
+    end)
+
+    local function fake_backend(instance)
+        return { backend = { _interfaces = { items = instance } } }
+    end
+
+    H.test("MP #1637 instance shadows of routed methods are joined so sibling instance hooks cannot bypass the route", function()
+        local T = harness()
+        local self = native_self()
+        local merc = seeded_ids(T, self)
+        local instance = setmetatable({ _backend_mirror = self._backend_mirror }, { __index = T.globals[CLASS] })
+        T.managers.backend = fake_backend(instance).backend
+        H.deep_equal(T.R.instance_shadows(instance), {})
+        T.R.tick()
+        H.equal(next(T.instance_hooks), nil)
+
+        -- A sibling hooks the INSTANCE: VMF leaves a raw field whose chain
+        -- ends at vanilla, bypassing every class hook.
+        local vanilla_calls = 0
+        rawset(instance, "get_loadout_item_id", function() vanilla_calls = vanilla_calls + 1; return "native-id" end)
+        rawset(instance, "get_loadout", function() return { es_mercenary = { slot_melee = "native-id" } } end)
+        rawset(instance, "set_loadout_item", function() return "native-write" end)
+        H.deep_equal(T.R.instance_shadows(instance), { "get_loadout", "get_loadout_item_id", "set_loadout_item" })
+        T.R.tick()
+        local joined = T.instance_hooks[instance]
+        H.truthy(joined.get_loadout_item_id and joined.get_loadout and joined.set_loadout_item)
+        H.equal(joined.get_item_from_id, nil)
+        H.equal(joined.get_all_backend_items, nil)
+        H.equal(T.count_logs("instance_join methods=get_loadout,get_loadout_item_id,set_loadout_item"), 1)
+
+        -- The joined wrapper is the class wrapper: the same decision on both paths.
+        local id = joined.get_loadout_item_id(rawget(instance, "get_loadout_item_id"), instance, "es_mercenary", "slot_melee")
+        H.equal(id, merc.slot_melee)
+        H.equal(vanilla_calls, 0)
+        local write = joined.set_loadout_item(rawget(instance, "set_loadout_item"), instance,
+            merc.slot_ranged, "es_mercenary", "slot_ranged")
+        H.equal(write, true)
+        H.equal(T.call("get_loadout", native("native"), self).es_mercenary.slot_ranged, merc.slot_ranged)
+        T.realm = false
+        H.equal(joined.get_loadout_item_id(rawget(instance, "get_loadout_item_id"), instance, "es_mercenary", "slot_melee"), "native-id")
+        H.equal(vanilla_calls, 1)
+        T.realm = true
+
+        -- Idempotent per (instance, method); a later shadow joins on a later tick.
+        T.R.tick()
+        H.equal(T.count_logs("instance_join"), 1)
+        rawset(instance, "get_item_from_id", function() return "native-record" end)
+        H.equal(T.checks.mp840_fresh_route_instance_shadows_joined(), "instance shadow not joined: get_item_from_id")
+        T.R.tick()
+        H.equal(T.checks.mp840_fresh_route_instance_shadows_joined(), nil)
+        H.equal(T.count_logs("instance_join methods=get_item_from_id"), 1)
+        H.equal(joined.get_item_from_id(rawget(instance, "get_item_from_id"), instance, merc.slot_melee).key, "es_2h_sword")
+        H.equal(joined.get_item_from_id(rawget(instance, "get_item_from_id"), instance, "official_sword"), "native-record")
+
+        -- A replaced interface object starts its own join; the old one is not re-hooked.
+        local replacement = setmetatable({}, { __index = T.globals[CLASS] })
+        rawset(replacement, "get_loadout_item_id", function() return "native-id" end)
+        T.managers.backend = fake_backend(replacement).backend
+        T.R.tick()
+        H.truthy(T.instance_hooks[replacement].get_loadout_item_id)
+        H.equal(T.instance_hooks[replacement].get_loadout, nil)
+        H.equal(T.count_logs("instance_join"), 3)
+
+        -- Unavailable backend: the check reports it instead of passing vacuously.
+        T.managers.backend = nil
+        H.equal(T.checks.mp840_fresh_route_instance_shadows_joined(), "items interface unavailable")
+        T.R.tick()
+        H.equal(T.count_logs("instance_join"), 3)
+
+        -- An unresolved route never hooks an instance.
+        local globals = world()
+        globals[CLASS].get_item_from_id = nil
+        local unresolved = harness({ globals = globals })
+        unresolved.managers.backend = fake_backend(instance).backend
+        unresolved.R.tick()
+        H.equal(next(unresolved.instance_hooks), nil)
+        H.equal(unresolved.R.reason, "missing:get_item_from_id")
+    end)
+
+    H.test("MP #1637 spawn lookup check proves resolution under the route and delegation when inactive", function()
+        local T = harness()
+        local self = native_self()
+        seeded_ids(T, self)
+        H.equal(T.checks.mp840_fresh_route_spawn_lookup_closed(), nil)
+        H.equal(T.count_logs("seed generation="), 1, "the fixture profile must never persist or re-seed")
+        H.equal(T.storage[State.SETTING_KEY].slices.items.revision, 1)
+
+        -- Inactive: the wrappers must hand the native lookup back untouched.
+        T.setting = "level_35"
+        H.equal(T.checks.mp840_fresh_route_spawn_lookup_closed(), nil)
+        H.equal(T.R.state_token(), "official:setting")
+        T.setting = "fresh"
+
+        -- The live view loses a playable career's melee weapon and its seeded
+        -- default: the route answers nil and the check names the slot.
+        H.equal(T.checks.mp840_fresh_route_spawn_lookup_closed(), nil)
+        local view = T.R.view()
+        view.items[State.ID_PREFIX .. "g1_es_mercenary_slot_melee"] = nil
+        H.equal(T.checks.mp840_fresh_route_spawn_lookup_closed(), "live route: es_mercenary slot_melee answered no id")
+
+        -- A playable career without a weapon in the seed is a failure, not a skip.
+        local globals = world()
+        globals.ItemMasterList.dr_dual_wield_axes = nil
+        globals.ItemMasterList.dr_2h_axe = nil
+        local broken = harness({ globals = globals })
+        broken.call("get_loadout", native("native"), native_self())
+        H.equal(broken.checks.mp840_fresh_route_spawn_lookup_closed(), "fixture profile: dr_slayer slot_ranged answered no id")
+
+        -- A record missing a native field is reported by name.
+        local T2 = harness()
+        T2.call("get_loadout", native("native"), native_self())
+        local live = T2.R.view()
+        live.items[State.ID_PREFIX .. "g1_dr_slayer_slot_melee"].traits = nil
+        problem = T2.checks.mp840_fresh_route_spawn_lookup_closed()
+        H.equal(problem, "live route: dr_slayer slot_melee id=" .. State.ID_PREFIX .. "g1_dr_slayer_slot_melee missing traits")
+        local bad_globals = world()
+        bad_globals[CLASS].get_loadout = nil
+        local unresolved = harness({ globals = bad_globals })
+        H.equal(unresolved.checks.mp840_fresh_route_spawn_lookup_closed(), "items interface route unresolved: missing:get_loadout")
+    end)
+
+    H.test("MP #1637 starting state defaults to the official inventory until a player opts into Fresh", function()
+        local main = read_source("/modded_progression/scripts/mods/modded_progression/modded_progression.lua")
+        local data = read_source("/modded_progression/scripts/mods/modded_progression/modded_progression_data.lua")
+        H.equal(count_plain(main, 'mod:get("starting_state") or "level_35"'), 1)
+        H.equal(main:find('or "fresh"', 1, true), nil)
+        H.equal(count_plain(data, 'default_value = "level_35"'), 1)
+        H.equal(data:find('default_value = "fresh"', 1, true), nil)
+        H.truthy(data:find('text = "start_fresh",%s+value = "fresh"'), "Fresh must stay selectable")
     end)
 end

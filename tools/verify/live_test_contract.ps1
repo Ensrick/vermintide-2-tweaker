@@ -586,6 +586,84 @@ rawset(_G, "printf", mod.debug)
         try{Get-VtDeployedSourceContract -RepoRoot $tmp -ReleaseManifest $manifest|Out-Null}
         catch{$rejected=$_.Exception.Message -match 'mutates global/environment printf'}
         Assert-VtContractFixture $rejected 'Cross-file global printf mutation did not reject the complete deployed record.'
+
+        # #1643: a bounded incident exception suspends only this detector, only
+        # for one exact mod, deployed tree, path and detector, only before its
+        # expiry. Everything else restores the unchanged fail-closed throw, and
+        # a malformed file fails every run even while the detector is silent.
+        $incidentPath=Join-Path $tmp 'tools\verify\deployed_source_incident_exceptions.psd1'
+        $mutatingTree=(& git -C $tmp rev-parse "$mutatingCommit`:fixture_mod/scripts/mods").Trim()
+        Assert-VtContractFixture ($mutatingTree -match '^[0-9a-f]{40}$') 'Fixture could not resolve the mutating deployed mod tree.'
+        $shadowPath='fixture_mod/scripts/mods/fixture_mod/_global_shadow.lua'
+        $incidentEntry={
+            param([hashtable]$Overrides)
+            $fields=[ordered]@{
+                Incident='#1643'; ModId='fixture'; ModTree=$mutatingTree; RelativePath=$shadowPath
+                Detector='global-printf-mutation'; ExpiresUtc='2099-01-01T00:00:00Z'; Reason='fixture incident'
+            }
+            foreach($key in @($Overrides.Keys)){
+                if($null -eq $Overrides[$key]){$fields.Remove($key)}else{$fields[$key]=$Overrides[$key]}
+            }
+            return '@{ '+(@($fields.Keys|ForEach-Object{"$_='$($fields[$_])'"}) -join '; ')+' }'
+        }
+        $writeIncident={
+            param([string[]]$Entries)
+            [IO.File]::WriteAllText($incidentPath,'@{ Exceptions = @( '+($Entries -join ', ')+' ) }',$utf8)
+        }
+        & $writeIncident @((& $incidentEntry @{}))
+        $manifest.mods[0].source_commit=$commit
+        $cleanAuthority=Get-VtDeployedSourceContract -RepoRoot $tmp -ReleaseManifest $manifest -WarningAction SilentlyContinue
+        Assert-VtContractFixture (@($cleanAuthority.IncidentExceptions).Count -eq 0) 'An incident exception was recorded while the detector was silent.'
+        $manifest.mods[0].source_commit=$mutatingCommit
+        # The fixture's receipt pins name the clean tree. Repoint them at the
+        # mutating tree for this one case so the only thing the exception
+        # changes is the printf throw; every other proof still has to hold.
+        $fixtureExceptionsPath=Join-Path $tmp 'tools\verify\live_test_contract_exceptions.psd1'
+        $savedFixtureExceptions=[IO.File]::ReadAllText($fixtureExceptionsPath)
+        [IO.File]::WriteAllText($fixtureExceptionsPath,$savedFixtureExceptions.Replace($fixtureModTree,$mutatingTree),$utf8)
+        $incidentWarnings=@()
+        try{
+            $incidentAuthority=Get-VtDeployedSourceContract -RepoRoot $tmp -ReleaseManifest $manifest -WarningAction SilentlyContinue -WarningVariable incidentWarnings
+        }
+        finally{[IO.File]::WriteAllText($fixtureExceptionsPath,$savedFixtureExceptions,$utf8)}
+        Assert-VtContractFixture (@($incidentAuthority.Records).Count -eq 1 -and [string]$incidentAuthority.Records[0].ModTree -ceq $mutatingTree) 'Matching incident exception did not build the deployed authority.'
+        $appliedIncident=@($incidentAuthority.IncidentExceptions)
+        Assert-VtContractFixture ($appliedIncident.Count -eq 1 -and [string]$appliedIncident[0].Incident -ceq '#1643' -and [string]$appliedIncident[0].ModId -ceq 'fixture' -and [string]$appliedIncident[0].ModTree -ceq $mutatingTree -and [string]$appliedIncident[0].RelativePath -ceq $shadowPath -and [string]$appliedIncident[0].Detector -ceq 'global-printf-mutation' -and [string]$appliedIncident[0].ExpiresUtc -ceq '2099-01-01T00:00:00Z' -and [string]$appliedIncident[0].Reason -ceq 'fixture incident') 'Applied incident exception was not recorded on the authority.'
+        $expectedIncidentLine="[authority] incident exception #1643 active for fixture tree $($mutatingTree.Substring(0,8))... (expires 2099-01-01T00:00:00Z)"
+        Assert-VtContractFixture (@($incidentWarnings | Where-Object { [string]$_ -ceq $expectedIncidentLine }).Count -eq 1) 'Applied incident exception did not emit exactly one authority line.'
+        $assertIncidentRestored={
+            param([string]$Label)
+            $rejected=$false
+            try{Get-VtDeployedSourceContract -RepoRoot $tmp -ReleaseManifest $manifest -WarningAction SilentlyContinue|Out-Null}
+            catch{$rejected=$_.Exception.Message -match 'mutates global/environment printf'}
+            Assert-VtContractFixture $rejected "Incident exception with $Label did not restore the fail-closed throw."
+        }
+        & $writeIncident @((& $incidentEntry @{ModTree=('d' * 40)})); & $assertIncidentRestored 'a different deployed tree'
+        & $writeIncident @((& $incidentEntry @{RelativePath='fixture_mod/scripts/mods/fixture_mod/fixture_mod.lua'})); & $assertIncidentRestored 'a different source path'
+        & $writeIncident @((& $incidentEntry @{ModId='other'})); & $assertIncidentRestored 'a different mod'
+        & $writeIncident @((& $incidentEntry @{ExpiresUtc='2000-01-01T00:00:00Z'})); & $assertIncidentRestored 'an elapsed expiry'
+        & $writeIncident @(); & $assertIncidentRestored 'an empty exception list'
+        $assertIncidentMalformed={
+            param([string]$Text,[string]$Label)
+            [IO.File]::WriteAllText($incidentPath,$Text,$utf8)
+            $rejected=$false
+            try{Get-VtDeployedSourceContract -RepoRoot $tmp -ReleaseManifest $manifest -WarningAction SilentlyContinue|Out-Null}
+            catch{$rejected=$_.Exception.Message -match '^Malformed deployed-source incident exception'}
+            Assert-VtContractFixture $rejected "Malformed incident exception ($Label) was not rejected with a clear message."
+        }
+        & $assertIncidentMalformed ('@{ Exceptions = @( '+(& $incidentEntry @{Reason=$null})+' ) }') 'missing Reason'
+        & $assertIncidentMalformed ('@{ Exceptions = @( '+(& $incidentEntry @{ModTree='2b5db060'})+' ) }') 'abbreviated tree'
+        & $assertIncidentMalformed ('@{ Exceptions = @( '+(& $incidentEntry @{ExpiresUtc='2099-01-01'})+' ) }') 'expiry without a UTC time'
+        & $assertIncidentMalformed ('@{ Exceptions = @( '+(& $incidentEntry @{Detector='receipt-route'})+' ) }') 'unknown detector'
+        & $assertIncidentMalformed ('@{ Exceptions = @( '+(& $incidentEntry @{Extra='x'})+' ) }') 'unknown key'
+        & $assertIncidentMalformed ('@{ Exceptions = @( '+(& $incidentEntry @{Incident='1643'})+' ) }') 'incident without #'
+        & $assertIncidentMalformed ('@{ Exceptions = @( '+(& $incidentEntry @{RelativePath='fixture_mod\scripts\mods\fixture_mod\_global_shadow.lua'})+' ) }') 'backslash path'
+        & $assertIncidentMalformed ('@{ Exceptions = @( '+(& $incidentEntry @{})+', '+(& $incidentEntry @{})+' ) }') 'duplicate entry'
+        & $assertIncidentMalformed "@{ Exceptions = @( 'nope' ) }" 'non-hashtable entry'
+        & $assertIncidentMalformed "@{ Other = @() }" 'missing Exceptions key'
+        $manifest.mods[0].source_commit=$commit
+        & $assertIncidentMalformed "@{ Other = @() }" 'silent detector'
+        [IO.File]::Delete($incidentPath)
         $manifest.mods[0].source_commit=$commit
 
         $manifest.mods[0].source_state = 'dirty'

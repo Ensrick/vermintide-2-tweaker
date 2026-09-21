@@ -356,6 +356,7 @@ function M.hydrate(slice, env, extras)
     env = env or {}
     extras = extras or {}
     local view = {
+        generation = slice.generation,
         revision = slice.revision,
         extras_revision = extras.revision,
         items = {},
@@ -498,7 +499,20 @@ function M.bot_loadouts(view, bot_equipment, allowed)
     return result
 end
 
+-- The id the seed minted for a career's equipment slot (M.seed_items), when
+-- the view still resolves it. Weapon and jewellery slots share this shape.
+function M.default_equipment_id(view, career, slot_name)
+    if type(view) ~= "table" or type(view.items) ~= "table" then return nil end
+    local id = M.ID_PREFIX .. "g" .. tostring(view.generation) .. "_" .. tostring(career) .. "_" .. tostring(slot_name)
+    return view.items[id] ~= nil and id or nil
+end
+
 -- [src: backend_interface_item_playfab.lua:512-538]
+-- Returns the backend id plus a fallback reason. Vanilla's spawn consumer
+-- resolves the id through `get_item_from_id` and ferrors when the default
+-- wielded slot stays empty [src: simple_inventory_extension.lua:162-174,
+-- 375-425], so an equipment slot never answers an id the same view cannot
+-- resolve: it falls back to the seeded career default, else nil.
 function M.loadout_item_id(view, career, slot_name, opts)
     opts = opts or {}
     local base = M.career_loadout(view, career)
@@ -516,7 +530,10 @@ function M.loadout_item_id(view, career, slot_name, opts)
         local poses = parent and view.unlocked_weapon_poses[parent]
         return poses and poses[item_id]
     end
-    return item_id
+    if view.items[item_id] ~= nil then return item_id end
+    local default_id = M.default_equipment_id(view, career, slot_name)
+    if default_id then return default_id, "unresolved:" .. tostring(item_id) end
+    return nil, "unresolved:" .. tostring(item_id)
 end
 
 -- [src: backend_interface_item_playfab.lua:760-800]

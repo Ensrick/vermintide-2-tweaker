@@ -1476,6 +1476,89 @@ function Get-VtCardDeploymentManifest {
 
 . (Join-Path $PSScriptRoot 'deployed_source_proof.ps1')
 
+# Bounded incident exceptions (#1643). One entry suspends exactly one named
+# fail-closed detector for one exact ModId, one exact deployed
+# <mod>/scripts/mods tree, and one exact Lua path until an explicit UTC expiry.
+# Nothing here weakens any other detector: a different tree (the next ship of
+# that mod), path, mod, or detector, or an elapsed expiry, restores the
+# unchanged throw. Entries are temporary and must be removed by a follow-up PR
+# once the clean tree is deployed. A malformed file fails every authority run.
+$script:VtIncidentExceptionDetectors=@('global-printf-mutation')
+$script:VtIncidentExceptionKeys=@('Incident','ModId','ModTree','RelativePath','Detector','ExpiresUtc','Reason')
+
+function Get-VtDeployedSourceIncidentExceptions {
+    [CmdletBinding()]
+    param([Parameter(Mandatory=$true)][string]$RepoRoot)
+    $path=Join-Path $RepoRoot 'tools/verify/deployed_source_incident_exceptions.psd1'
+    if(-not(Test-Path -LiteralPath $path -PathType Leaf)){return @()}
+    $data=Import-PowerShellDataFile -LiteralPath $path
+    if($data -isnot [System.Collections.IDictionary] -or -not$data.ContainsKey('Exceptions') -or @($data.Keys).Count -ne 1){
+        throw "Malformed deployed-source incident exception file '$path': expected exactly @{ Exceptions = @( ... ) }."
+    }
+    $entries=New-Object System.Collections.Generic.List[object]
+    $seen=New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+    $index=0
+    foreach($raw in @($data.Exceptions)){
+        $index++
+        $label="Malformed deployed-source incident exception entry $index in '$path'"
+        if($raw -isnot [System.Collections.IDictionary]){throw "${label}: expected a hashtable."}
+        foreach($key in @($raw.Keys)){
+            if($script:VtIncidentExceptionKeys -cnotcontains [string]$key){throw "${label}: unknown key '$key'."}
+        }
+        foreach($key in $script:VtIncidentExceptionKeys){
+            if(-not$raw.ContainsKey($key) -or $raw[$key] -isnot [string] -or [string]::IsNullOrWhiteSpace([string]$raw[$key])){
+                throw "${label}: '$key' must be one non-empty string."
+            }
+        }
+        $incident=[string]$raw.Incident; $modId=[string]$raw.ModId; $modTree=[string]$raw.ModTree
+        $relativePath=[string]$raw.RelativePath; $detector=[string]$raw.Detector; $expires=[string]$raw.ExpiresUtc
+        if($incident -notmatch '^#[1-9][0-9]*$'){throw "${label}: Incident must name one GitHub issue as '#<number>', got '$incident'."}
+        if($modId -notmatch '^[A-Za-z0-9_]+$'){throw "${label}: ModId must be one canonical inventory ModId, got '$modId'."}
+        if($modTree -notmatch '^[0-9a-f]{40}$'){throw "${label}: ModTree must be one full lowercase 40-hex deployed <mod>/scripts/mods tree, got '$modTree'."}
+        if($relativePath -match '\\|^/|//|(^|/)\.\.?(/|$)' -or $relativePath -notmatch '/scripts/mods/.+\.lua$'){
+            throw "${label}: RelativePath must be one repo-relative forward-slash Lua path under <mod>/scripts/mods, got '$relativePath'."
+        }
+        if($script:VtIncidentExceptionDetectors -cnotcontains $detector){
+            throw "${label}: Detector must be one of $($script:VtIncidentExceptionDetectors -join ', '), got '$detector'."
+        }
+        $expiresAtUtc=[DateTime]::MinValue
+        $parsed=($expires -match '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$') -and
+            [DateTime]::TryParseExact($expires,"yyyy-MM-dd'T'HH:mm:ss'Z'",[Globalization.CultureInfo]::InvariantCulture,
+                ([Globalization.DateTimeStyles]::AssumeUniversal -bor [Globalization.DateTimeStyles]::AdjustToUniversal),[ref]$expiresAtUtc)
+        if(-not$parsed){throw "${label}: ExpiresUtc must be one 'yyyy-MM-ddTHH:mm:ssZ' UTC instant, got '$expires'."}
+        $dedupeKey=$modId+"`n"+$modTree+"`n"+$relativePath+"`n"+$detector
+        if(-not$seen.Add($dedupeKey)){throw "${label}: duplicate exception for $modId $modTree '$relativePath' $detector."}
+        $entries.Add([pscustomobject][ordered]@{
+            Incident=$incident; ModId=$modId; ModTree=$modTree; RelativePath=$relativePath
+            Detector=$detector; ExpiresUtc=$expires; ExpiresAtUtc=$expiresAtUtc; Reason=[string]$raw.Reason
+        })
+    }
+    return @($entries.ToArray())
+}
+
+function Find-VtDeployedSourceIncidentException {
+    param($Exceptions,[string]$ModId,[string]$ModTree,[string]$RelativePath,[string]$Detector,[DateTime]$NowUtc)
+    # Exact, case-sensitive match on every pinned field; the exception is live
+    # only strictly before its expiry. Entries that name this mod, path and
+    # detector but miss on tree or expiry are reported and then ignored, so the
+    # unchanged fail-closed throw follows.
+    foreach($entry in @($Exceptions)){
+        if($null -eq $entry){continue}
+        if([string]$entry.ModId -cne $ModId -or [string]$entry.Detector -cne $Detector -or
+           [string]$entry.RelativePath -cne $RelativePath){continue}
+        if([string]$entry.ModTree -cne $ModTree){
+            Write-Warning "[authority] incident exception $($entry.Incident) for $ModId does not apply: pinned tree $($entry.ModTree) is not the deployed tree $ModTree."
+            continue
+        }
+        if($NowUtc -ge [DateTime]$entry.ExpiresAtUtc){
+            Write-Warning "[authority] incident exception $($entry.Incident) for $ModId expired $($entry.ExpiresUtc); the fail-closed throw is restored."
+            continue
+        }
+        return $entry
+    }
+    return $null
+}
+
 function Get-VtCardSourceAuthority {
     [CmdletBinding()]
     param(
@@ -1485,6 +1568,8 @@ function Get-VtCardSourceAuthority {
     $sourceInputs=Get-VtDeploymentSourceInputs -RepoRoot $RepoRoot -DeploymentManifest $DeploymentManifest
     $inventory=$sourceInputs.Inventory; $exceptions=$sourceInputs.Exceptions
     $deployedById=$sourceInputs.DeployedById; $legacyByKey=$sourceInputs.LegacyByKey
+    $incidentExceptions=@(Get-VtDeployedSourceIncidentExceptions -RepoRoot $RepoRoot)
+    $appliedIncidentExceptions=New-Object System.Collections.Generic.List[object]
     Invoke-VtDeploymentSourcePrefetch -RepoRoot $RepoRoot -SourceInputs $sourceInputs
 
     $records=New-Object System.Collections.Generic.List[object]
@@ -1504,7 +1589,18 @@ function Get-VtCardSourceAuthority {
         foreach($document in $documents){
             if([string]$document.Content -notmatch '(?i)(?:_G|_ENV)\s*(?:\.|\[)\s*["'']?printf|rawset\s*\(\s*(?:_G|_ENV|getfenv)|\b(?:debug\.)?setfenv\s*\(|\bgetfenv\s*\('){continue}
             if(Test-VtLuaMutatesGlobalPrintf -Tokens @($document.Tokens)){
-                throw "Deployed mod '$id' mutates global/environment printf in '$($document.RelativePath)'; raw printf authority is record-wide and fails closed."
+                # #1643: only an exact, unexpired incident exception for this
+                # mod, deployed tree, path and detector suspends the throw.
+                $incident=Find-VtDeployedSourceIncidentException -Exceptions $incidentExceptions -ModId $id -ModTree $modTree `
+                    -RelativePath ([string]$document.RelativePath) -Detector 'global-printf-mutation' -NowUtc ([DateTime]::UtcNow)
+                if($null -eq $incident){
+                    throw "Deployed mod '$id' mutates global/environment printf in '$($document.RelativePath)'; raw printf authority is record-wide and fails closed."
+                }
+                $appliedIncidentExceptions.Add([pscustomobject][ordered]@{
+                    Incident=[string]$incident.Incident; ModId=$id; ModTree=$modTree; RelativePath=[string]$document.RelativePath
+                    Detector='global-printf-mutation'; ExpiresUtc=[string]$incident.ExpiresUtc; Reason=[string]$incident.Reason
+                })
+                Write-Warning "[authority] incident exception $($incident.Incident) active for $id tree $($modTree.Substring(0,8))... (expires $($incident.ExpiresUtc))"
             }
         }
         $commandRoutes=New-Object System.Collections.Generic.List[object]
@@ -1551,7 +1647,10 @@ function Get-VtCardSourceAuthority {
     }
     Set-VtReceiptFamilyOverrides -Records @($records.ToArray()) -DocumentsByMod $documentsByMod -Exceptions $exceptions
     Set-VtReceiptDiscoveryOverrides -Records @($records.ToArray()) -DocumentsByMod $documentsByMod -Exceptions $exceptions
-    return [pscustomobject][ordered]@{ ReleaseTag=[string]$DeploymentManifest.release_tag; Records=@($records.ToArray()) }
+    return [pscustomobject][ordered]@{
+        ReleaseTag=[string]$DeploymentManifest.release_tag; Records=@($records.ToArray())
+        IncidentExceptions=@($appliedIncidentExceptions.ToArray())
+    }
 }
 
 function New-VtLiveTestCardAuthority {

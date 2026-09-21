@@ -9,7 +9,7 @@ return {
             {
                 setting_id    = "starting_state",
                 type          = "dropdown",
-                default_value = "fresh",
+                default_value = "level_35",
                 tooltip       = "starting_state_tooltip",
                 options = {
                     { text = "start_fresh",             value = "fresh" },
