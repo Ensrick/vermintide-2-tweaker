@@ -49,6 +49,14 @@ there is no copied implementation.
   sender, hot-join, receiver, and timed-buff safety floors.
 - `tests/test_gut_loadout_paging.lua`: #231 page/slot bijection, strip geometry,
   text Roman numerals and the modded-STORE-Adventure paging predicate.
+- `fixtures/vanilla_weapon_master_list.lua`: GENERATED vanilla weapon census
+  (every `ItemMasterList` melee/ranged entry with its `can_wield` list after the
+  DLC `UpdateItemMasterList` patches, each hero career's
+  `item_slot_types_by_slot_name` weapon rows, and the demo starting-gear
+  seeds). Regenerate from the decompiled source with
+  `py -3 qa/lua/fixtures/gen_vanilla_weapon_master_list.py <decompile_root> qa/lua/fixtures/vanilla_weapon_master_list.lua`
+  and commit the result; never hand-edit it. Used by
+  `tests/test_gut_spawn_weapon_policy.lua` (#1637).
 - `vendor/lua-5.1.5-win64/`: pinned Windows interpreter and provenance.
 
 Add a test file to the manifest in `run.lua`. The explicit list keeps ordering

@@ -308,6 +308,8 @@
 
     # ============================ gut_dev ============================
     @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_native_loadout_policy.lua'; needle='backend_id:match("^cwv_.+_%d%d%d$")'; literal=$true; polarity='present'; issueRef='#287'; note='readonly overlay accepts only exact CWV backend-instance identity.' }
+    @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_spawn_weapon_recovery.lua'; needle='pcall(printf, "[gut:1637] miss career=%s slot=%s'; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#1637'; note='every weapon-slot spawn miss is reported through the literal printf route, not a rawget-resolved function.' }
+    @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_spawn_weapon_policy.lua'; needle='backend_id = nil,'; literal=$true; polarity='present'; issueRef='#1637'; note='a synthetic career default carries no backend id: an unresolvable id would fatal in BackendInterfaceItemPlayfab.get_skin during create_equipment.' }
     @{ mod='gut_dev'; file='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_native_loadouts.lua'; needle='Policy.readonly_action(slot, v) == "preserve"'; literal=$true; polarity='present'; issueRef='#287'; note='whole-loadout reads use the same mod-owned predicate as single-slot reads/writes.' }
     # -- #231 paged native loadout selector: the runtime owner must route every
     #    physical-button access through the mapper and must never add a second hook
