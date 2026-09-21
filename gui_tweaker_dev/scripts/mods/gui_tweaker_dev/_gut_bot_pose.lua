@@ -22,6 +22,7 @@ local _unpack = unpack
 local spawn_depth = 0
 local repaired_count = 0
 local logged_careers = {}
+local live_probe_runs = 0
 
 local function pack(...)
     return { n = select("#", ...), ... }
@@ -196,11 +197,17 @@ end
 -- Issue #1637 runtime checks. The consumer guard executes the registered
 -- lookup callback against a nil-returning delegate and a probe recovery so the
 -- hook-to-recovery seam (career, slot, resolved is_bot, received is_bot, spawn
--- depth) is proven on the live function objects, then runs the recovery
--- module's offline ordering/printf proof. The default-fallback check is the
--- bounded live census: every hero career and both weapon slots must resolve a
--- vanilla career-default weapon from the real ItemMasterList / CareerSettings
--- tables and produce a valid synthetic item shape.
+-- depth) is proven on the live function objects, then drives the REAL
+-- installed recovery through the same hook with a fresh probe career and
+-- reads the module-local route ledger (the miss line is deduplicated per
+-- career/slot, so every run needs a token of its own), then runs the recovery
+-- module's offline ordering proof. The printf route is proven from the ledger
+-- kept next to each literal pcall(printf, ...) site, never by replacing the
+-- global printf: the deployed-source authority rejects any deployed mod that
+-- mutates it, record-wide. The default-fallback check is the bounded live
+-- census: every hero career and both weapon slots must resolve a vanilla
+-- career-default weapon from the real ItemMasterList / CareerSettings tables
+-- and produce a valid synthetic item shape.
 local function _exec_1637_seam()
     local selftest = mod._gut_spawn_weapon_selftest
     if type(selftest) ~= "table" or type(selftest.ordering) ~= "function" then
@@ -231,6 +238,29 @@ local function _exec_1637_seam()
     mod._gut_recover_missing_weapon = original
     if not ok then return "seam probe raised: " .. tostring(err) end
     if err then return err end
+
+    -- Live route: the installed recovery, reached through the registered hook
+    -- with a nil-returning delegate, must record exactly one successful
+    -- pcall(printf, ...) for this run's probe career in its ledger.
+    local ledger = selftest.ledger
+    if type(ledger) ~= "table" or type(ledger.miss) ~= "table" then
+        return "spawn-weapon route ledger missing"
+    end
+    live_probe_runs = live_probe_runs + 1
+    local career = "gut_rt1637_probe_" .. live_probe_runs
+    local before = ledger.miss.count
+    local ok_live, err_live = pcall(_lookup_cb, function() return nil end, career, "slot_melee", false)
+    if not ok_live then return "live route probe raised: " .. tostring(err_live) end
+    local last = ledger.miss.last
+    if ledger.miss.count ~= before + 1 or type(last) ~= "table" then
+        return "live miss route did not run for the probe career"
+    end
+    if not last.ok then return "live miss route pcall failed: " .. tostring(last.error) end
+    local f = last.fields
+    if type(f) ~= "table" or f.career ~= career or f.slot ~= "slot_melee"
+        or f.resolved ~= false or f.is_bot ~= false or f.spawn_depth ~= 0 then
+        return "live miss ledger recorded the wrong call"
+    end
     return selftest.ordering()
 end
 

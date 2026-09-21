@@ -1,6 +1,9 @@
 -- Behavioral coverage for the #1637 consumer-boundary recovery adapter:
--- candidate order, the literal printf miss route, dedupe, error containment,
--- the sync-RPC shadow hook and the install() wiring.
+-- candidate order, the literal printf miss route and its module-local ledger,
+-- dedupe, error containment, the sync-RPC shadow hook and the install() wiring.
+-- The global printf is swapped ONLY here, in the offline harness: deployed
+-- source must never touch it (the deployed-source authority rejects any
+-- deployed mod that mutates global printf, record-wide and fail-closed).
 return function(H, repo_root)
     local root = repo_root .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/"
     local Policy = assert(loadfile(root .. "_gut_native_loadout_policy.lua"))()
@@ -64,7 +67,7 @@ return function(H, repo_root)
 
     H.test("GUT #1637 adapter walks official, default, retry, owned, synthetic in order", function()
         local w = world()
-        local recover, synthetic_keys = w.recover()
+        local recover, synthetic_keys, ledger = w.recover()
         local captured = with_printf(function()
             local item = recover("bw_unchained", "slot_melee", false, false, 0)
             H.equal(item.key, "bw_sword")
@@ -80,6 +83,30 @@ return function(H, repo_root)
         H.equal(w.selected.slot_melee, "official_melee", "official data must not be mutated")
         H.equal(w.defaults[1].slot_melee, "default_melee")
         H.deep_equal(w.loadout_ids[1], { career = "bw_unchained", slot = "slot_melee", is_bot = false })
+
+        -- The ledger mirrors the route: one successful miss, one successful
+        -- recovery, and the fields behind the exact line above.
+        H.equal(ledger.miss.count, 1)
+        H.equal(ledger.miss.ok, 1)
+        H.equal(ledger.miss.last.ok, true)
+        H.equal(ledger.miss.last.error, nil)
+        local f = ledger.miss.last.fields
+        H.equal(f.career, "bw_unchained")
+        H.equal(f.slot, "slot_melee")
+        H.equal(f.is_bot, false)
+        H.equal(f.resolved, false)
+        H.equal(f.spawn_depth, 0)
+        H.equal(f.mode, "store")
+        H.equal(f.loadout_id, "saved_slot_melee")
+        H.equal(f.id_resolves, "false")
+        H.equal(f.source, "career-default-synthetic")
+        H.equal(f.key, "bw_sword")
+        H.equal(table.concat(f.trace, ","),
+            "official-selected:official_melee=nil,career-default:default_melee=nil,retry:saved_slot_melee=nil,default-owned:bw_sword=none,default-synthetic:bw_sword=ok")
+        H.equal(ledger.recovered.count, 1)
+        H.equal(ledger.recovered.ok, 1)
+        H.equal(ledger.recovered.last.fields, f)
+        H.equal(ledger.sync_shadow.count, 0)
     end)
 
     H.test("GUT #1637 adapter stops at the first live candidate per stage", function()
@@ -130,7 +157,7 @@ return function(H, repo_root)
 
     H.test("GUT #1637 miss line is written once per career and slot", function()
         local w = world()
-        local recover = w.recover()
+        local recover, _, ledger = w.recover()
         local captured = with_printf(function()
             recover("bw_unchained", "slot_melee", false, false, 0)
             recover("bw_unchained", "slot_melee", false, false, 0)
@@ -146,6 +173,9 @@ return function(H, repo_root)
         H.equal(hits, 2)
         H.truthy(captured[3]:find("slot=slot_ranged", 1, true))
         H.truthy(captured[3]:find("key=bw_skullstaff_fireball", 1, true))
+        H.equal(ledger.miss.count, 2, "the ledger counts routes, not calls")
+        H.equal(ledger.recovered.count, 2)
+        H.equal(ledger.miss.last.fields.slot, "slot_ranged")
     end)
 
     H.test("GUT #1637 adapter still logs when inert, without an interface, or on errors", function()
@@ -201,7 +231,7 @@ return function(H, repo_root)
 
     H.test("GUT #1637 printf route is the literal global, never a cached function", function()
         local w = world()
-        local recover = w.recover()
+        local recover, _, ledger = w.recover()
         local first = with_printf(function()
             recover("bw_unchained", "slot_melee", false, false, 0)
         end)
@@ -211,11 +241,21 @@ return function(H, repo_root)
         local ok = pcall(recover, "bw_unchained", "slot_ranged", false, false, 0)
         rawset(_G, "printf", old)
         H.equal(ok, true, "a missing printf global must not escape the recovery")
+        -- The ledger records the failed pcall instead of hiding it.
+        H.equal(ledger.miss.count, 2)
+        H.equal(ledger.miss.ok, 1)
+        H.equal(ledger.miss.last.ok, false)
+        H.truthy(tostring(ledger.miss.last.error):find("nil", 1, true), tostring(ledger.miss.last.error))
+        H.equal(ledger.miss.last.fields.slot, "slot_ranged")
+        H.equal(ledger.recovered.count, 2)
+        H.equal(ledger.recovered.ok, 1)
+        H.equal(ledger.recovered.last.ok, false)
     end)
 
     H.test("GUT #1637 sync guard shadows only synthetic defaults on the loadout RPC", function()
         local keys = { bw_sword = true }
-        local guard = Recovery.sync_guard(SpawnPolicy, keys)
+        local ledger = Recovery.new_ledger()
+        local guard = Recovery.sync_guard(SpawnPolicy, keys, ledger)
         local forwarded = {}
         local function func(player, slot, item, peer)
             forwarded[#forwarded + 1] = { player = player, slot = slot, item = item, peer = peer }
@@ -236,6 +276,10 @@ return function(H, repo_root)
         H.equal(#captured, 1)
         H.equal(captured[1], "[gut:1637] sync shadow slot=slot_melee key=bw_sword power_level=300")
         H.equal(raw.power_level, nil)
+        H.equal(ledger.sync_shadow.count, 1)
+        H.equal(ledger.sync_shadow.ok, 1)
+        H.equal(ledger.sync_shadow.last.ok, true)
+        H.deep_equal(ledger.sync_shadow.last.fields, { slot = "slot_melee", key = "bw_sword", power_level = 300 })
 
         local real = { key = "bw_sword", rarity = "plentiful", power_level = 250 }
         guard(func, "player", "slot_melee", real, nil)
@@ -245,9 +289,17 @@ return function(H, repo_root)
         H.equal(forwarded[4].item, other, "non-synthetic keys pass through untouched")
         guard(func, "player", "slot_hat", raw, nil)
         H.equal(forwarded[5].item, raw, "non-weapon slots pass through untouched")
+        H.equal(ledger.sync_shadow.count, 1, "pass-through items never log")
+
+        -- A guard built without a ledger owns a private one and still works.
+        local bare = Recovery.sync_guard(SpawnPolicy, keys)
+        captured = with_printf(function()
+            H.equal(bare(func, "player", "slot_melee", { key = "bw_sword", rarity = "plentiful" }, nil), "sent")
+        end)
+        H.equal(#captured, 1)
     end)
 
-    H.test("GUT #1637 install wires the recovery, the sync hook and the selftest surface", function()
+    H.test("GUT #1637 install wires the recovery, the sync hook, the ledger and the selftest surface", function()
         local hooks = {}
         local mod = {}
         function mod:dofile(path)
@@ -267,11 +319,30 @@ return function(H, repo_root)
         H.equal(#hooks, 1)
         H.equal(hooks[1].obj, loadout_utils)
         H.equal(hooks[1].method, "sync_loadout_slot")
-        H.equal(type(mod._gut_spawn_weapon_selftest), "table")
-        H.equal(mod._gut_spawn_weapon_selftest.policy, SpawnPolicy)
-        H.equal(type(mod._gut_spawn_weapon_selftest.synthetic_keys), "table")
-        H.equal(mod._gut_spawn_weapon_selftest.ordering(), nil)
-        local err, results = mod._gut_spawn_weapon_selftest.census(
+        local surface = mod._gut_spawn_weapon_selftest
+        H.equal(type(surface), "table")
+        H.equal(surface.policy, SpawnPolicy)
+        H.equal(type(surface.synthetic_keys), "table")
+        H.equal(type(surface.ledger), "table")
+        H.equal(surface.ledger.miss.count, 0)
+        H.equal(surface.ledger.sync_shadow.count, 0)
+
+        -- The exposed ledger is the one the installed sync hook writes.
+        surface.synthetic_keys.bw_sword = true
+        local captured = with_printf(function()
+            hooks[1].fn(function() return "sent" end, "player", "slot_melee",
+                { key = "bw_sword", rarity = "plentiful" }, nil)
+        end)
+        H.equal(#captured, 1)
+        H.equal(surface.ledger.sync_shadow.count, 1)
+        H.equal(surface.ledger.sync_shadow.last.ok, true)
+
+        -- The ordering proof runs through the ambient printf, never a swap.
+        captured = with_printf(function()
+            H.equal(surface.ordering(), nil)
+        end)
+        H.equal(#captured, 12, "every proof stage logs through the ambient global")
+        local err, results = surface.census(
             { bw_sword = { slot_type = "melee", rarity = "plentiful", template = "t", right_hand_unit = "u", can_wield = { "bw_unchained" } },
               bw_staff = { slot_type = "ranged", rarity = "plentiful", template = "t", right_hand_unit = "u", can_wield = { "bw_unchained" } } },
             nil, { "bw_unchained" })
@@ -281,13 +352,67 @@ return function(H, repo_root)
 
     H.test("GUT #1637 selftest ordering proof passes and reports a broken order", function()
         local before = rawget(_G, "printf")
-        H.equal(Recovery.selftest_ordering(Policy, SpawnPolicy, Policy.MODE_STORE), nil)
+        local captured = with_printf(function()
+            H.equal(Recovery.selftest_ordering(Policy, SpawnPolicy, Policy.MODE_STORE), nil)
+        end)
+        H.equal(#captured, 12)
+        H.truthy(captured[1]:find("^%[gut:1637%] miss career=gut_rt1637_probe slot=slot_melee "), captured[1])
         local broken = {}
         for k, v in pairs(Policy) do broken[k] = v end
         broken.official_weapon_candidates = function() return {}, {} end
-        local err = Recovery.selftest_ordering(broken, SpawnPolicy, Policy.MODE_STORE)
+        local err
+        with_printf(function()
+            err = Recovery.selftest_ordering(broken, SpawnPolicy, Policy.MODE_STORE)
+        end)
         H.equal(type(err), "string")
         H.truthy(err:find("candidate order mismatch", 1, true), err)
-        H.equal(rawget(_G, "printf"), before, "selftest must restore the printf global")
+        H.equal(rawget(_G, "printf"), before, "selftest must leave the printf global alone")
+    end)
+
+    H.test("GUT #1637 selftest never replaces the global printf and fails when the route cannot run", function()
+        -- A sentinel global asserts its own identity on every call: had the
+        -- selftest swapped printf, the sentinel would not be the callee.
+        local old = rawget(_G, "printf")
+        local calls, displaced = 0, 0
+        local function sentinel(fmt, ...)
+            calls = calls + 1
+            if rawget(_G, "printf") ~= sentinel then displaced = displaced + 1 end
+            return string.format(fmt, ...)
+        end
+        rawset(_G, "printf", sentinel)
+        local err = Recovery.selftest_ordering(Policy, SpawnPolicy, Policy.MODE_STORE)
+        local after = rawget(_G, "printf")
+        rawset(_G, "printf", old)
+        H.equal(err, nil)
+        H.equal(after, sentinel)
+        H.equal(calls, 12)
+        H.equal(displaced, 0)
+
+        -- No printf at all: the route's pcall fails and the proof says so.
+        rawset(_G, "printf", nil)
+        err = Recovery.selftest_ordering(Policy, SpawnPolicy, Policy.MODE_STORE)
+        rawset(_G, "printf", old)
+        H.equal(type(err), "string")
+        H.truthy(err:find("miss route pcall failed", 1, true), err)
+
+        -- A printf that throws is reported the same way, with its error.
+        rawset(_G, "printf", function() error("printf exploded") end)
+        err = Recovery.selftest_ordering(Policy, SpawnPolicy, Policy.MODE_STORE)
+        rawset(_G, "printf", old)
+        H.equal(type(err), "string")
+        H.truthy(err:find("miss route pcall failed", 1, true), err)
+        H.truthy(err:find("printf exploded", 1, true), err)
+    end)
+
+    H.test("GUT #1637 deployed recovery source never writes the global printf", function()
+        local file = assert(io.open(root .. "_gut_spawn_weapon_recovery.lua", "rb"))
+        local source = file:read("*a")
+        file:close()
+        H.equal(source:find('rawset(_G, "printf"', 1, true), nil, "deployed source swaps the global printf")
+        H.equal(source:find("_G.printf =", 1, true), nil, "deployed source assigns the global printf")
+        H.equal(source:find("setfenv", 1, true), nil)
+        H.equal(source:find("getfenv", 1, true), nil)
+        H.truthy(source:find('pcall(printf, "[gut:1637] miss career=%s slot=%s', 1, true),
+            "the literal miss route must stay")
     end)
 end

@@ -3,7 +3,7 @@
 # Encodes PROJECT_STANDARDS.md § 3.6 (Debug logging + "Chat-echo policy" matrix)
 # and docs/BUG_CLASSES.md § 17 (chat-echo spam + Variant B, Issue #240). Three
 # advisory sub-checks (each with a false-positive-safe suppression path) plus
-# one hard retired-key contract:
+# two hard contracts (the retired debug key and the global printf):
 #
 #   (a) ECHO       — a `mod:echo(` call in one of the § 3.6 / BUG_CLASSES § 17
 #       "NEVER" contexts, i.e. the sites those docs say to audit against the
@@ -44,12 +44,28 @@
 #       the exact General Tweaker STABLE promotion debt pinned in
 #       $legacyRetiredDebugKeyDebt below.
 #
+#   (e) PRINTF-MUTATION — a runtime write to the global/environment `printf`
+#       in any active mod tree (`_G.printf =`, `_G["printf"] =`,
+#       `rawset(_G, "printf", ...)`, `mod:hook*(_G, "printf", ...)`, any
+#       `setfenv(`, ambient `getfenv()`/`getfenv(0)`, `getfenv(...).printf =`).
+#       Issue #1637: the deployed-source authority
+#       (tools/verify/live_test_source_authority.ps1,
+#       Test-VtLuaMutatesGlobalPrintf) rejects any DEPLOYED mod that mutates
+#       global printf, record-wide and fail-closed, because raw printf evidence
+#       for every mod becomes untrustworthy; gut_dev 0.2.353-dev shipped such a
+#       swap inside an in-game regression proof and nothing offline caught it,
+#       so every lifecycle guard, card refresh and ship label step failed
+#       repo-wide until the next release. Hard error, NO inline escape and no
+#       floor: the offline Lua harness under qa/lua (never deployed, outside
+#       this scan scope) is the only place a printf swap may live.
+#
 # Existing hygiene debt is advisory by result: ordinary findings exit 1, which
-# Standard policy reports without blocking. Two monotonic floors are blocking:
+# Standard policy reports without blocking. Three contracts are blocking:
 # Issue #427's warn-chat floor (any warning-backed diagnostic helper outside the
-# exact three public stable-stream promotion debts exits 2) and Issue #169's
+# exact three public stable-stream promotion debts exits 2), Issue #169's
 # retired-key floor (any executable retired-key site outside the exact one
-# General Tweaker stable promotion debt exits 2).
+# General Tweaker stable promotion debt exits 2) and Issue #1637's printf
+# floor (any runtime write to global/environment printf exits 2).
 #
 # Detection scope mirrors check_unpack_safety.ps1: `*.lua` under each active mod's
 # `scripts/` subtree; skips tweaker/ (legacy), _archive, *_extract, bundleV2,
@@ -64,8 +80,9 @@
 # Exit codes:
 #   0 - no findings
 #   1 - one or more advisory findings (echo / per-frame / warn-chat)
-#   2 - hard error, self-test failure, new #427 warn-chat regression, or a #169
-#       retired-key site outside the pinned General Tweaker stable debt
+#   2 - hard error, self-test failure, new #427 warn-chat regression, a #169
+#       retired-key site outside the pinned General Tweaker stable debt, or any
+#       #1637 runtime write to global/environment printf
 #
 # Self-test: `-SelfTest` runs the synthetic fixtures under qa/_test_fixtures/ and
 # asserts per-category finding counts. Auto-discovered by qa/run_selftests.ps1.
@@ -199,6 +216,43 @@ function Get-RetiredDebugKeyCode {
     })
 }
 
+# Issue #1637: a runtime write to the global/environment printf. Detected on the
+# same comment/string-normalized source as the retired key, with the "printf"
+# literal kept as a sentinel so `rawset(_G, "printf", ...)` and `_G["printf"] =`
+# survive string blanking. The shapes mirror the deployed-source authority's
+# Test-VtLuaMutatesGlobalPrintf plus the VMF hook spelling: `_G.printf =` /
+# `_ENV.printf =` / `_G["printf"] =`, `rawset(_G|_ENV|getfenv(...), "printf", ...)`,
+# `mod:hook*(_G|_ENV, "printf", ...)`, any `setfenv(` / `debug.setfenv(` /
+# `pcall(setfenv, ...)`, ambient `getfenv()` / `getfenv(0)`, and
+# `getfenv(...).printf =` / `getfenv(...)["printf"] =`. Reads (`rawget`),
+# `pcall(printf, ...)` calls, comparisons, table fields (`{ printf = printf }`)
+# and `getfenv(<function>)` stay legal, exactly as the authority treats them.
+$rxPrintfBail = [regex]'printf|setfenv|getfenv'
+$rxPrintfMutation = [regex]('(?ms)(?:' +
+    '\b(?:_G|_ENV)\s*\.\s*printf\s*=(?!=)' + '|' +
+    '\b(?:_G|_ENV)\s*\[\s*@VT_PRINTF_KEY@\s*\]\s*=(?!=)' + '|' +
+    '\brawset\s*\(\s*(?:_G|_ENV|getfenv\s*\([^()]*\))\s*,\s*@VT_PRINTF_KEY@\s*,' + '|' +
+    '\bmod\s*:\s*hook\w*\s*\(\s*(?:_G|_ENV)\s*,\s*@VT_PRINTF_KEY@' + '|' +
+    '\b(?:debug\s*\.\s*)?setfenv\s*\(' + '|' +
+    '\bpcall\s*\(\s*setfenv\s*,' + '|' +
+    '\bgetfenv\s*\(\s*(?:0\s*)?\)' + '|' +
+    '\bgetfenv\s*\([^()]*\)\s*(?:\.\s*printf|\[\s*@VT_PRINTF_KEY@\s*\])\s*=(?!=)' +
+    ')')
+
+function Get-PrintfMutationCode {
+    param([string]$Source)
+    return $rxRetiredLuaSpans.Replace($Source, [System.Text.RegularExpressions.MatchEvaluator]{
+        param($Match)
+        $value = $Match.Value
+        $breaks = [regex]::Replace($value, '[^\r\n]', '')
+        if ($value -ceq '"printf"' -or $value -ceq "'printf'" -or
+            $value -cmatch '\A\[(=*)\[(?:\r\n|\n\r|\n|\r)?printf\]\1\]\z') {
+            return '@VT_PRINTF_KEY@' + $breaks
+        }
+        return [regex]::Replace($value, '[^\r\n]', ' ')
+    })
+}
+
 # escape comments (accepted on the flagged line OR the line directly above)
 $rxAllowEcho = [regex]'--\s*allow-echo\s*:'
 $rxAllowFrame= [regex]'--\s*allow-perframe\s*:'
@@ -327,7 +381,21 @@ function Scan-LoggingFile {
     } catch {
         throw "I/O failure reading ${Path}: $_"
     }
-    # fast bail — nothing to scan
+    # (e) Issue #1637 printf-mutation runs first, on its own predicate: it is
+    #     independent of the echo/per-frame census and must never be skipped by
+    #     the fast bail below. A write may span lines, so the whole
+    #     comment/string-normalized source is scanned, like the retired key.
+    if ($rxPrintfBail.IsMatch($text)) {
+        $printfCode = Get-PrintfMutationCode -Source $text
+        $printfLines = $null
+        foreach ($match in @($rxPrintfMutation.Matches($printfCode))) {
+            if ($null -eq $printfLines) { $printfLines = $text -split "`r?`n" }
+            $line = 1 + [regex]::Matches($printfCode.Substring(0, $match.Index), "`n").Count
+            $textAtLine = if ($line -le $printfLines.Count) { $printfLines[$line - 1].Trim() } else { '' }
+            $findings += [pscustomobject]@{ File = $Path; Line = $line; Category = 'printf-mutation'; Text = $textAtLine }
+        }
+    }
+    # fast bail — nothing else to scan
     if (-not ($rxEcho.IsMatch($text) -or $rxInfo.IsMatch($text) -or $rxWarning.IsMatch($text) `
             -or $text.Contains('enable_debug_logging'))) {
         return ,$findings
@@ -492,13 +560,14 @@ function Invoke-SelfTest {
     }
     # Expected finding counts per category per fixture.
     $cases = @(
-        @{ Path = "logging_echo_bad.lua";     Echo = 2; Frame = 0; Warn = 0; Retired = 0; Desc = "hook-body + on_setting_changed echo flagged; command / dev-banner / annotated echo suppressed" },
-        @{ Path = "logging_perframe_bad.lua"; Echo = 0; Frame = 2; Warn = 0; Retired = 0; Desc = "mod:info + mod:warning in update() flagged; annotated one suppressed" },
-        @{ Path = "logging_warn_helper_bad.lua"; Echo = 0; Frame = 0; Warn = 1; Retired = 0; Desc = "mod:warning in _dbg_alert flagged; genuine-guard warning + annotated one suppressed" },
-        @{ Path = "logging_warn_dbgtag_bad.lua"; Echo = 0; Frame = 0; Warn = 1; Retired = 0; Desc = "self-tagged [x:dbg] mod:warning outside any helper flagged; annotated one + untagged player-facing warning suppressed" },
-        @{ Path = "logging_string_dash.lua";  Echo = 1; Frame = 0; Warn = 0; Retired = 0; Desc = "`--`-in-string with a `while` keyword must not desync scope; command echoes stay clean" },
-        @{ Path = "logging_retired_debug_key.lua"; Echo = 0; Frame = 0; Warn = 0; Retired = 17; Desc = "direct literal reads/writes/widgets, including no-parentheses, explicit-self dot, leading-break long-literal and bracketed-field shapes, fail; comments, quoted prose and safe identifiers remain legal" },
-        @{ Path = "logging_clean.lua";        Echo = 0; Frame = 0; Warn = 0; Retired = 0; Desc = "all sanctioned forms — zero findings" }
+        @{ Path = "logging_echo_bad.lua";     Echo = 2; Frame = 0; Warn = 0; Retired = 0; Printf = 0; Desc = "hook-body + on_setting_changed echo flagged; command / dev-banner / annotated echo suppressed" },
+        @{ Path = "logging_perframe_bad.lua"; Echo = 0; Frame = 2; Warn = 0; Retired = 0; Printf = 0; Desc = "mod:info + mod:warning in update() flagged; annotated one suppressed" },
+        @{ Path = "logging_warn_helper_bad.lua"; Echo = 0; Frame = 0; Warn = 1; Retired = 0; Printf = 0; Desc = "mod:warning in _dbg_alert flagged; genuine-guard warning + annotated one suppressed" },
+        @{ Path = "logging_warn_dbgtag_bad.lua"; Echo = 0; Frame = 0; Warn = 1; Retired = 0; Printf = 0; Desc = "self-tagged [x:dbg] mod:warning outside any helper flagged; annotated one + untagged player-facing warning suppressed" },
+        @{ Path = "logging_string_dash.lua";  Echo = 1; Frame = 0; Warn = 0; Retired = 0; Printf = 0; Desc = "`--`-in-string with a `while` keyword must not desync scope; command echoes stay clean" },
+        @{ Path = "logging_retired_debug_key.lua"; Echo = 0; Frame = 0; Warn = 0; Retired = 17; Printf = 0; Desc = "direct literal reads/writes/widgets, including no-parentheses, explicit-self dot, leading-break long-literal and bracketed-field shapes, fail; comments, quoted prose and safe identifiers remain legal" },
+        @{ Path = "logging_printf_mutation_bad.lua"; Echo = 0; Frame = 0; Warn = 0; Retired = 0; Printf = 17; Desc = "direct/bracketed global assignment, rawset (single-line, multi-line, through getfenv), VMF hook on _G, setfenv/debug.setfenv/pcall(setfenv), ambient getfenv()/getfenv(0) and getfenv(n) field writes fail; prose, comments, rawget reads, pcall(printf) calls, comparisons, table fields and getfenv(<function>) remain legal" },
+        @{ Path = "logging_clean.lua";        Echo = 0; Frame = 0; Warn = 0; Retired = 0; Printf = 0; Desc = "all sanctioned forms — zero findings" }
     )
     $allPass = $true
     foreach ($c in $cases) {
@@ -513,13 +582,58 @@ function Invoke-SelfTest {
         $gf = @($rows | Where-Object { $_.Category -eq 'perframe' }).Count
         $gw = @($rows | Where-Object { $_.Category -eq 'warn-chat' }).Count
         $gr = @($rows | Where-Object { $_.Category -eq 'retired-debug-key' }).Count
-        $ok = ($ge -eq $c.Echo) -and ($gf -eq $c.Frame) -and ($gw -eq $c.Warn) -and ($gr -eq $c.Retired)
+        $gp = @($rows | Where-Object { $_.Category -eq 'printf-mutation' }).Count
+        $ok = ($ge -eq $c.Echo) -and ($gf -eq $c.Frame) -and ($gw -eq $c.Warn) -and ($gr -eq $c.Retired) -and ($gp -eq $c.Printf)
         $verdict = if ($ok) { "PASS" } else { "FAIL" }
         $colour  = if ($ok) { "Green" } else { "Red" }
-        Write-Host ("  [{0}] {1} -- echo={2}/{3} frame={4}/{5} warn={6}/{7} retired={8}/{9}" -f `
-            $verdict, $c.Path, $ge, $c.Echo, $gf, $c.Frame, $gw, $c.Warn, $gr, $c.Retired) -ForegroundColor $colour
+        Write-Host ("  [{0}] {1} -- echo={2}/{3} frame={4}/{5} warn={6}/{7} retired={8}/{9} printf={10}/{11}" -f `
+            $verdict, $c.Path, $ge, $c.Echo, $gf, $c.Frame, $gw, $c.Warn, $gr, $c.Retired, $gp, $c.Printf) -ForegroundColor $colour
         if (-not $ok) { Write-Host "        $($c.Desc)" -ForegroundColor DarkYellow; $allPass = $false }
     }
+
+    # #1637 shapes asserted independently, so a false positive cannot cancel a
+    # missed write and make the aggregate fixture count look correct.
+    $printfScan = Scan-LoggingFile -Path (Join-Path $fixDir 'logging_printf_mutation_bad.lua')
+    $printfRows = @($printfScan | Where-Object { $_.Category -eq 'printf-mutation' })
+    foreach ($case in @(
+        @{ Name = 'direct _G.printf assignment'; Ok = (@($printfRows | Where-Object { $_.Text -ceq '_G.printf = function() end' }).Count -eq 1) },
+        @{ Name = 'bracketed long-literal printf key'; Ok = (@($printfRows | Where-Object { $_.Text -ceq '_G[ [[printf]] ] = real_printf' }).Count -eq 1) },
+        @{ Name = 'multi-line rawset reports its first line'; Ok = (@($printfRows | Where-Object { $_.Text -ceq 'rawset(' }).Count -eq 1) },
+        @{ Name = 'rawset through getfenv'; Ok = (@($printfRows | Where-Object { $_.Text -ceq 'rawset(getfenv(1), "printf", real_printf)' }).Count -eq 1) },
+        @{ Name = 'VMF hook on the global table'; Ok = (@($printfRows | Where-Object { $_.Text -ceq 'mod:hook(_G, "printf", function(func, ...) end)' }).Count -eq 1) },
+        @{ Name = 'pcall(setfenv, ...) spelling'; Ok = (@($printfRows | Where-Object { $_.Text -ceq 'pcall(setfenv, chunk, env)' }).Count -eq 1) },
+        @{ Name = 'ambient getfenv() and getfenv(0)'; Ok = (@($printfRows | Where-Object { $_.Text -ceq 'local ambient = getfenv()' -or $_.Text -ceq 'local main_thread = getfenv(0)' }).Count -eq 2) },
+        @{ Name = 'getfenv(<function>) read stays legal'; Ok = (@($printfRows | Where-Object { $_.Text -like '*getfenv(some_function)*' }).Count -eq 0) },
+        @{ Name = 'rawget read and pcall(printf) call stay legal'; Ok = (@($printfRows | Where-Object { $_.Text -like '*rawget(_G, "printf")*' -or $_.Text -like 'pcall(printf,*' }).Count -eq 0) },
+        @{ Name = 'table field printf = printf stays legal'; Ok = (@($printfRows | Where-Object { $_.Text -like '*{ printf = printf }*' }).Count -eq 0) },
+        @{ Name = 'comparison _G.printf == nil stays legal'; Ok = (@($printfRows | Where-Object { $_.Text -like 'if _G.printf*' }).Count -eq 0) }
+    )) {
+        Write-Host ("  [{0}] #1637 {1}" -f $(if ($case.Ok) { 'PASS' } else { 'FAIL' }), $case.Name)
+        if (-not $case.Ok) { $allPass = $false }
+    }
+
+    # The one place a printf swap may live is the offline Lua harness under
+    # qa/lua, which is outside the active-mod scan scope. Prove BOTH halves: a
+    # scope regression must not start failing the harness, and a detector
+    # regression must not stop seeing the exact shape gut_dev 0.2.353-dev
+    # shipped (the harness keeps that shape on purpose). The deployed recovery
+    # module itself must scan clean; its absence is a failure, not a skip.
+    $harnessPath = Join-Path $repoRoot 'qa\lua\tests\test_gut_spawn_weapon_recovery.lua'
+    $recoveryPath = Join-Path $repoRoot 'gui_tweaker_dev\scripts\mods\gui_tweaker_dev\_gut_spawn_weapon_recovery.lua'
+    $harnessOutOfScope = @(Get-ScanFiles -Root $repoRoot | Where-Object { $_.FullName -like '*\qa\lua\*' }).Count -eq 0
+    $harnessShapeSeen = $false
+    if (Test-Path $harnessPath) {
+        $harnessScan = Scan-LoggingFile -Path $harnessPath
+        $harnessShapeSeen = @($harnessScan | Where-Object { $_.Category -eq 'printf-mutation' -and $_.Text -like 'rawset(_G, "printf", *' }).Count -ge 1
+    }
+    $recoveryClean = $false
+    if (Test-Path $recoveryPath) {
+        $recoveryScan = Scan-LoggingFile -Path $recoveryPath
+        $recoveryClean = @($recoveryScan | Where-Object { $_.Category -eq 'printf-mutation' }).Count -eq 0
+    }
+    $printfScopeOk = $harnessOutOfScope -and $harnessShapeSeen -and $recoveryClean
+    Write-Host ("  [{0}] #1637 scope -- qa/lua harness outside scan scope={1}; its printf swap detected when scanned directly={2}; deployed gut_dev recovery module clean={3}" -f $(if ($printfScopeOk) { 'PASS' } else { 'FAIL' }), $harnessOutOfScope, $harnessShapeSeen, $recoveryClean) -ForegroundColor $(if ($printfScopeOk) { 'Green' } else { 'Red' })
+    if (-not $printfScopeOk) { $allPass = $false }
 
     # The #427 floor is monotonic: the exact three stable-stream debts are
     # tolerated until promotion, their removal is clean, and either a new path
@@ -701,9 +815,20 @@ if ($retiredRows.Count -gt 0) {
 } else {
     Write-Host '[check_logging] #169 retired-key floor: zero executable sites.' -ForegroundColor DarkGreen
 }
+$printfRows = @($all | Where-Object { $_.Category -eq 'printf-mutation' })
+if ($printfRows.Count -gt 0) {
+    Write-Host "[check_logging] FAILED -- $($printfRows.Count) runtime write(s) to global/environment printf (#1637): the deployed-source authority rejects the whole deployed record of any mod that mutates raw printf; keep printf swaps in the offline qa/lua harness only." -ForegroundColor Red
+    foreach ($row in $printfRows) {
+        $rel = $row.File
+        if ($rel.StartsWith($repoRoot, [System.StringComparison]::OrdinalIgnoreCase)) { $rel = $rel.Substring($repoRoot.Length).TrimStart('\','/') }
+        Write-Host ("  ! {0}:{1}`n      {2}" -f $rel, $row.Line, $row.Text) -ForegroundColor Red
+    }
+    exit 2
+}
+Write-Host '[check_logging] #1637 printf-mutation floor: zero sites.' -ForegroundColor DarkGreen
 # Tolerated floor rows are promotion debt, not advisory hygiene findings; keep
 # them out of the echo/per-frame/warn-chat census below.
-$all = @($all | Where-Object { $_.Category -ne 'retired-debug-key' })
+$all = @($all | Where-Object { $_.Category -notin @('retired-debug-key', 'printf-mutation') })
 $unexpectedWarnRows = @(Get-UnexpectedWarnChatRows -Rows $warnRows -Root $repoRoot)
 if ($unexpectedWarnRows.Count -gt 0) {
     Write-Host "[check_logging] FAILED -- $($unexpectedWarnRows.Count) new warning-backed diagnostic helper(s) exceed the #427 migration floor." -ForegroundColor Red

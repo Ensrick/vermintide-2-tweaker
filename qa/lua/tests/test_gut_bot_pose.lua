@@ -274,14 +274,54 @@ return function(H, repo_root)
         H.equal(api.rt_checks[3].name, "issue1637_spawn_weapon_default_fallback")
         H.deep_equal(api.hero_careers(), { "bw_adept", "bw_unchained" })
         H.equal(mod.hooks.sync_loadout_slot ~= nil, true, "sync guard hook registered by install")
+        -- The production modules resolve printf through env (setfenv above):
+        -- capture their lines HERE, in the harness, and prove the seam never
+        -- touches the global printf (deployed-source authority rule).
         local old_printf = rawget(_G, "printf")
+        local lines = {}
+        env.printf = function(fmt, ...) lines[#lines + 1] = string.format(fmt, ...) end
+        local ledger = mod._gut_spawn_weapon_selftest.ledger
+        H.equal(type(ledger), "table")
+        H.equal(ledger.miss.count, 0)
         H.equal(api.rt_checks[2].fn(), nil)
+        H.equal(rawget(_G, "printf"), old_printf, "the seam proof must not touch the global printf")
+        -- The live route ran once through the registered hook with a probe
+        -- token of its own, then the ordering proof logged its 12 lines.
+        H.equal(ledger.miss.count, 1)
+        H.equal(ledger.miss.ok, 1)
+        H.equal(ledger.miss.last.ok, true)
+        H.equal(ledger.miss.last.fields.career, "gut_rt1637_probe_1")
+        H.equal(ledger.miss.last.fields.slot, "slot_melee")
+        H.equal(ledger.miss.last.fields.spawn_depth, 0)
+        H.truthy(lines[1]:find("^%[gut:1637%] miss career=gut_rt1637_probe_1 slot=slot_melee is_bot=false resolved=false spawn_depth=0 "), lines[1])
+        H.equal(#lines, 13)
         H.equal(api.rt_checks[3].fn(), nil)
+        -- A second run takes a fresh token, so the dedupe never hides the route.
+        lines = {}
         H.equal(api.exec_1637_seam(), nil)
+        H.equal(ledger.miss.count, 2)
+        H.equal(ledger.miss.last.fields.career, "gut_rt1637_probe_2")
+        H.equal(#lines, 13)
         H.equal(api.exec_1637_census(), nil)
-        H.equal(rawget(_G, "printf"), old_printf, "printf global restored after the seam proof")
         H.equal(type(mod._gut_recover_missing_weapon), "function",
             "seam probe must restore the production recovery")
+
+        -- A route whose pcall cannot run fails the check instead of passing.
+        -- A throwing stub, not nil: env falls back to _G, and other suites may
+        -- leave an ambient global printf behind.
+        env.printf = function() error("printf exploded") end
+        local route_err = api.rt_checks[2].fn()
+        H.equal(type(route_err), "string")
+        H.truthy(route_err:find("live miss route pcall failed", 1, true), route_err)
+        H.truthy(route_err:find("printf exploded", 1, true), route_err)
+        H.equal(ledger.miss.count, 3)
+        H.equal(ledger.miss.ok, 2)
+        env.printf = function(fmt, ...) lines[#lines + 1] = string.format(fmt, ...) end
+        -- A missing ledger is reported, never silently passed.
+        mod._gut_spawn_weapon_selftest.ledger = nil
+        H.equal(api.rt_checks[2].fn(), "spawn-weapon route ledger missing")
+        mod._gut_spawn_weapon_selftest.ledger = ledger
+        env.printf = nil
 
         -- A career without a wieldable weapon fails the census loudly.
         env.PROFILES_BY_CAREER_NAMES.vs_only = { affiliation = "heroes" }
