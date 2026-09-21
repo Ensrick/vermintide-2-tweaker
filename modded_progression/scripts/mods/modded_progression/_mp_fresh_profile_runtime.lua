@@ -4,10 +4,28 @@
 -- Every consumer of the items interface reaches the same object whether it
 -- calls Managers.backend:get_interface("items") or the loadout override
 -- registry [src: backend_manager_playfab.lua:201-209,329-341], so routing
--- the class methods covers both. Only the root reads that touch the native
--- mirror are routed; derived methods (get_item_from_id, get_filtered_items,
--- has_item, equipped_by, get_cosmetic_loadout, ...) call those roots through
--- `self:` and therefore follow the route without their own hook.
+-- the class methods covers both. The root reads that touch the native
+-- mirror are routed; derived methods (get_filtered_items, has_item,
+-- equipped_by, get_cosmetic_loadout, get_item_rarity, ...) call those roots
+-- through `self:` and therefore follow the route without their own hook.
+--
+-- get_item_from_id is routed as well (issue #1637): it is the reader every
+-- spawn, inventory, hero-view, crafting-preview and loadout-sync path uses
+-- to turn a loadout id into a record [src: backend_utils.lua:30-46;
+-- simple_inventory_extension.lua:375-425,883; gear_utils.lua:601], so it
+-- answers from the Fresh view directly instead of depending on the hook
+-- topology of get_all_backend_items.
+--
+-- Instance shadows (issue #1637): a sibling mod may hook the live interface
+-- INSTANCE rather than the class. VMF then builds a second hook chain on the
+-- instance whose tail is the vanilla method itself, never the class chain
+-- [src: vmf hooks.lua get_orig_function/create_internal_hook, the
+-- `_registry.uids` origin remap], so the class-level route is bypassed for
+-- every call that reaches the instance: loadout ids came from the native
+-- mirror while get_item_from_id answered from the Fresh view, and the Keep
+-- spawn ferrored on an empty melee slot. The tick therefore joins the
+-- instance chain for every routed method a sibling shadowed, keeping the
+-- per-call decision identical on both paths.
 --
 -- Routing is a per-call decision, never a mutation of the native object, so
 -- every exit path (setting change, realm, fault, disable) restores official
@@ -32,6 +50,24 @@ Runtime.READ_METHODS = {
 Runtime.WRITE_METHODS = {
     "set_loadout_item", "set_loadout_index", "add_loadout", "delete_loadout", "set_weapon_pose_skin",
 }
+-- Fresh-first id lookups: a miss continues down the hook chain (sibling
+-- synthetic ids still resolve) and the chain ends at vanilla, which reads
+-- the routed get_all_backend_items [src: backend_interface_item_playfab.lua:384-389].
+Runtime.LOOKUP_METHODS = { "get_item_from_id" }
+
+function Runtime.routed_methods()
+    local all = {}
+    for _, list in ipairs({ Runtime.READ_METHODS, Runtime.LOOKUP_METHODS, Runtime.WRITE_METHODS }) do
+        for _, method in ipairs(list) do all[#all + 1] = method end
+    end
+    return all
+end
+
+-- Native records carry these fields [src: playfab_mirror_base.lua:1723-1787];
+-- the spawn path reads data/backend_id [src: simple_inventory_extension.lua:384-388]
+-- and the buff path reads properties/traits/rarity [src: gear_utils.lua:601-620].
+Runtime.EQUIPMENT_RECORD_FIELDS = { "data", "backend_id", "key", "rarity", "power_level", "properties", "traits" }
+Runtime.COSMETIC_RECORD_FIELDS = { "data", "backend_id", "key", "rarity" }
 
 local function capture(...)
     return select("#", ...), { ... }
@@ -93,10 +129,8 @@ function Runtime.install(mod, deps)
     if type(class) ~= "table" then
         R.reason = "class_missing"
     else
-        for _, list in ipairs({ Runtime.READ_METHODS, Runtime.WRITE_METHODS }) do
-            for _, method in ipairs(list) do
-                if type(class[method]) ~= "function" then missing[#missing + 1] = method end
-            end
+        for _, method in ipairs(Runtime.routed_methods()) do
+            if type(class[method]) ~= "function" then missing[#missing + 1] = method end
         end
         if #missing > 0 then
             table.sort(missing)
@@ -230,8 +264,59 @@ function Runtime.install(mod, deps)
         view = nil
     end
 
+    -- The live items interface instance without the get_interface warning
+    -- (#695); _interfaces is the manager's own field [src: backend_manager_playfab.lua:201-208].
+    local function live_items_interface()
+        local m = managers()
+        local backend = type(m) == "table" and m.backend or nil
+        if type(backend) ~= "table" then return nil end
+        local interfaces = rawget(backend, "_interfaces")
+        local instance = type(interfaces) == "table" and interfaces.items or nil
+        return type(instance) == "table" and instance or nil
+    end
+
+    -- Routed methods a sibling shadowed on the instance table (a raw field
+    -- on the instance, not the class), i.e. the calls that bypass the class chain.
+    function R.instance_shadows(instance)
+        local shadows = {}
+        if type(instance) ~= "table" then return shadows end
+        for _, method in ipairs(Runtime.routed_methods()) do
+            if rawget(instance, method) ~= nil then shadows[#shadows + 1] = method end
+        end
+        return shadows
+    end
+
+    local wrappers = {}
+    R.joined = setmetatable({}, { __mode = "k" })
+
+    -- Join the instance chain for every shadowed routed method, once per
+    -- (instance, method). The routed wrapper is the same closure the class
+    -- hook uses, so the per-call decision is identical on both paths.
+    function R.join_instance(instance)
+        if type(instance) ~= "table" or not R.resolved then return 0 end
+        local joined = R.joined[instance]
+        if not joined then
+            joined = {}
+            R.joined[instance] = joined
+        end
+        local added = {}
+        for _, method in ipairs(R.instance_shadows(instance)) do
+            if not joined[method] and wrappers[method] then
+                mod:hook(instance, method, wrappers[method])
+                joined[method] = true
+                added[#added + 1] = method
+            end
+        end
+        if #added > 0 then
+            log("instance_join methods=%s backend=none", table.concat(added, ","))
+        end
+        return #added
+    end
+
     function R.tick()
         R.active()
+        local instance = live_items_interface()
+        if instance then R.join_instance(instance) end
     end
 
     function R.reset()
@@ -340,14 +425,30 @@ function Runtime.install(mod, deps)
     -- Mechanism default loadouts are a versus feature outside this slice.
     function H.get_default_loadouts() return nil end
     function H.get_default_override() return nil end
+    local fallback_seen = {}
     function H.get_loadout_item_id(_, career, slot_name, is_bot)
         local allowed_modes = inventory_settings().bot_loadout_allowed_game_modes
         local key = game_mode_key()
         local bot_allowed = type(allowed_modes) == "table" and key ~= nil and allowed_modes[key] == true
         local bot_loadout = is_bot and bot_allowed and bot_loadouts()[career] or nil
-        return State.loadout_item_id(current_view(), career, slot_name, {
+        local id, reason = State.loadout_item_id(current_view(), career, slot_name, {
             is_bot = is_bot, bot_allowed = bot_allowed, bot_loadout = bot_loadout, env = env(),
         })
+        if reason then
+            -- One receipt per (career, slot, unresolved id): bounded by the loadout table.
+            local seen_key = tostring(career) .. "/" .. tostring(slot_name) .. "/" .. reason
+            if not fallback_seen[seen_key] then
+                fallback_seen[seen_key] = true
+                log("slot_fallback career=%s slot=%s %s to=%s backend=none",
+                    tostring(career), tostring(slot_name), reason, tostring(id))
+            end
+        end
+        return id
+    end
+    -- [src: backend_interface_item_playfab.lua:384-389]
+    function H.get_item_from_id(_, backend_id)
+        if backend_id == nil then return nil end
+        return current_view().items[backend_id]
     end
     function H.get_backend_id_from_cosmetic_item(_, name) return current_view().unlocked_cosmetics[name] end
     function H.get_unlocked_weapon_poses() return current_view().unlocked_weapon_poses end
@@ -408,27 +509,51 @@ function Runtime.install(mod, deps)
     -- ------------------------------------------------------------
     local function route_read(method)
         local handler = assert(H[method], method)
-        return function(func, self, ...)
+        local wrapper = function(func, self, ...)
             if not R.active() then return func(self, ...) end
             local n, results = capture(pcall(handler, self, ...))
             if results[1] then return unpack(results, 2, n) end
             fault(method, results[2])
             return func(self, ...)
         end
+        wrappers[method] = wrappers[method] or wrapper
+        return wrapper
+    end
+
+    -- Fresh-first lookup: a handler hit answers; a miss continues down the
+    -- chain (its tail reads the routed root, so no native record can answer
+    -- while the route is active); a handler throw latches the fault.
+    local function route_lookup(method)
+        local handler = assert(H[method], method)
+        local wrapper = function(func, self, ...)
+            if not R.active() then return func(self, ...) end
+            local ok, result = pcall(handler, self, ...)
+            if not ok then
+                fault(method, result)
+            elseif result ~= nil then
+                return result
+            end
+            return func(self, ...)
+        end
+        wrappers[method] = wrappers[method] or wrapper
+        return wrapper
     end
 
     local function route_write(method, failure_value)
         local handler = assert(H[method], method)
-        return function(func, self, ...)
+        local wrapper = function(func, self, ...)
             if not R.active() then return func(self, ...) end
             local n, results = capture(pcall(handler, self, ...))
             if results[1] then return unpack(results, 2, n) end
             log("write_rejected method=%s error=%s backend=none", method, sanitize(results[2]))
             return failure_value
         end
+        wrappers[method] = wrappers[method] or wrapper
+        return wrapper
     end
 
     if R.resolved then
+        mod:hook(Runtime.CLASS, "get_item_from_id", route_lookup("get_item_from_id"))
         mod:hook(Runtime.CLASS, "get_all_backend_items", route_read("get_all_backend_items"))
         mod:hook(Runtime.CLASS, "get_all_fake_backend_items", route_read("get_all_fake_backend_items"))
         mod:hook(Runtime.CLASS, "get_loadout", route_read("get_loadout"))
@@ -491,6 +616,89 @@ function Runtime.install(mod, deps)
             return true
         end
         if not same(mirror, snapshot) then return "native mirror mutated by a routed write" end
+    end)
+
+    -- ------------------------------------------------------------
+    -- #1637: every id a view answers must resolve in the same view
+    -- ------------------------------------------------------------
+    local function record_problem(record, fields)
+        if type(record) ~= "table" then return "no record" end
+        for _, field in ipairs(fields) do
+            if record[field] == nil then return "missing " .. field end
+        end
+        return nil
+    end
+
+    -- Every career/slot id the view answers must resolve to a native-shaped
+    -- record, and every playable career (a DeusDefaultLoadout row) must answer
+    -- both weapon slots so the Keep spawn always finds its wield slot.
+    local function audit_view(view, lookup_id, lookup_item, e)
+        local resolved = 0
+        local playable = type(e.deus_default_loadout) == "table" and e.deus_default_loadout or {}
+        for career in pairs(type(view) == "table" and view.careers or {}) do
+            for _, slot in ipairs(State.LOADOUT_SLOTS) do
+                local id = lookup_id(career, slot)
+                if id == nil then
+                    if State.WEAPON_SLOTS[slot] and playable[career] ~= nil then
+                        return string.format("%s %s answered no id", tostring(career), slot)
+                    end
+                else
+                    local cosmetic = State.COSMETIC_SLOTS[slot] or slot == "slot_pose"
+                    local fields = cosmetic and Runtime.COSMETIC_RECORD_FIELDS or Runtime.EQUIPMENT_RECORD_FIELDS
+                    local problem = record_problem(lookup_item(id), fields)
+                    if problem then
+                        return string.format("%s %s id=%s %s", tostring(career), slot, tostring(id), problem)
+                    end
+                    resolved = resolved + 1
+                end
+            end
+        end
+        if resolved == 0 then return "no career/slot resolved" end
+        return nil
+    end
+    R.audit_view = audit_view
+
+    -- A throwaway profile seeded from the live client data, never persisted.
+    local function fixture_view()
+        local e = env()
+        local slice = State.seed_items(State.new_profile(nil), e)
+        return State.hydrate(slice, e, {
+            revision = 0, emporium = {}, classify = classify, skin_item_key = skin_item_key,
+        }), e
+    end
+
+    rt_register("mp840_fresh_route_spawn_lookup_closed", function()
+        if not R.resolved then return "items interface route unresolved: " .. tostring(R.reason) end
+        local view, e = fixture_view()
+        local problem = audit_view(view, function(career, slot)
+            return (State.loadout_item_id(view, career, slot, { env = e }))
+        end, function(id) return view.items[id] end, e)
+        if problem then return "fixture profile: " .. problem end
+        if R.active() then
+            problem = audit_view(current_view(), function(career, slot)
+                return H.get_loadout_item_id(nil, career, slot, false)
+            end, function(id) return H.get_item_from_id(nil, id) end, e)
+            if problem then return "live route: " .. problem end
+        else
+            local native = {}
+            local id = wrappers.get_loadout_item_id(function() return "native-id" end, native, "career", "slot_melee")
+            local item = wrappers.get_item_from_id(function(_, backend_id)
+                return "native:" .. tostring(backend_id)
+            end, native, "native-id")
+            if id ~= "native-id" or item ~= "native:native-id" then
+                return "inactive route did not delegate the native lookup"
+            end
+        end
+    end)
+
+    rt_register("mp840_fresh_route_instance_shadows_joined", function()
+        if not R.resolved then return "items interface route unresolved: " .. tostring(R.reason) end
+        local instance = live_items_interface()
+        if not instance then return "items interface unavailable" end
+        local joined = R.joined[instance] or {}
+        for _, method in ipairs(R.instance_shadows(instance)) do
+            if not joined[method] then return "instance shadow not joined: " .. method end
+        end
     end)
 
     return R
