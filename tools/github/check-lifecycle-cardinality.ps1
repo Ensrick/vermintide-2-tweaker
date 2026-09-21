@@ -97,6 +97,23 @@ function Get-VtLifecycleAuthorityContext {
     }
 }
 
+function Get-VtLifecycleIncidentExceptionLines {
+    param($Authority)
+    # #1643: every bounded incident exception the deployed-source authority
+    # applied is printed so CI logs show exactly which pinned tree, path and
+    # expiry are suspending one fail-closed detector. Report only; it changes
+    # no lifecycle decision.
+    $lines = New-Object System.Collections.Generic.List[string]
+    if ($null -eq $Authority -or -not $Authority.PSObject.Properties['IncidentExceptions']) { return @($lines.ToArray()) }
+    foreach ($incident in @($Authority.IncidentExceptions)) {
+        if ($null -eq $incident) { continue }
+        $tree = [string]$incident.ModTree
+        if ($tree.Length -gt 8) { $tree = $tree.Substring(0, 8) + '...' }
+        $lines.Add("[check-lifecycle-cardinality] AUTHORITY INCIDENT EXCEPTION $($incident.Incident) active for $($incident.ModId) tree $tree path '$($incident.RelativePath)' detector $($incident.Detector) (expires $($incident.ExpiresUtc)); remove the entry once the clean tree is deployed.")
+    }
+    return @($lines.ToArray())
+}
+
 function New-TestCard([string]$Topology = 'Solo', [string]$Steps = '1. Equip Kruber''s Mace in the Keep.', [string]$SoloStatus = '') {
     $soloLine = if ($SoloStatus) { "`n**Solo status:** $SoloStatus" } else { '' }
     return "## CURRENT LIVE TEST`n`n**Build/banner:** v1.2.3-dev, confirm ``[wt:LOAD]```n**Topology:** $Topology$soloLine`n`n$Steps`n`n**Expected:** The selected weapon behaves normally."
@@ -507,6 +524,13 @@ function Invoke-SelfTest {
     $batchCapRejected = $false
     try { New-VtIssueCommentBatchQuerySpec -Owner 'owner' -Name 'repo' -Numbers @(1..21) | Out-Null } catch { $batchCapRejected = $true }
     if (-not $batchCapRejected) { throw 'comment batch must reject more than 20 issues' }
+    $incidentLines = @(Get-VtLifecycleIncidentExceptionLines -Authority ([pscustomobject]@{ Records=@(); IncidentExceptions=@([pscustomobject]@{
+        Incident='#1643'; ModId='gut_dev'; ModTree='2b5db0602a8f8e6b8fe6021ee4e9f9c320c9dca8'
+        RelativePath='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_spawn_weapon_recovery.lua'
+        Detector='global-printf-mutation'; ExpiresUtc='2026-09-24T00:00:00Z'; Reason='fixture' }) }))
+    $expectedIncidentLine = "[check-lifecycle-cardinality] AUTHORITY INCIDENT EXCEPTION #1643 active for gut_dev tree 2b5db060... path 'gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_spawn_weapon_recovery.lua' detector global-printf-mutation (expires 2026-09-24T00:00:00Z); remove the entry once the clean tree is deployed."
+    if ($incidentLines.Count -ne 1 -or $incidentLines[0] -cne $expectedIncidentLine) { throw 'incident exception report line drifted' }
+    if (@(Get-VtLifecycleIncidentExceptionLines -Authority $authority).Count -ne 0 -or @(Get-VtLifecycleIncidentExceptionLines -Authority $null).Count -ne 0) { throw 'incident exception report must stay silent without applied exceptions' }
     Write-Host '[check-lifecycle-cardinality -SelfTest] OK'
 }
 
@@ -729,6 +753,10 @@ $authority = $authorityContext.Authority
 $authorityLoadError = $authorityContext.Error
 if ($authorityLoadError) {
     Write-Host "[check-lifecycle-cardinality] AUTHORITY REPORT-ONLY UNAVAILABLE: $authorityLoadError"
+}
+foreach ($incidentLine in @(Get-VtLifecycleIncidentExceptionLines -Authority $authority)) {
+    if ($env:GITHUB_ACTIONS -eq 'true') { Write-Host "::warning::$incidentLine" }
+    Write-Host $incidentLine
 }
 $phaseTimer.Restart()
 $decisionReport = Get-LifecycleDecisionReport -Issues $issues -RequirePinnedCard -Authority $authority -EnforceAuthority:$EnforceAuthority
