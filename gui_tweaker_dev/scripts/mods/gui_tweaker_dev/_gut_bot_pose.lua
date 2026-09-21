@@ -54,8 +54,12 @@ end
 --
 -- Issue #1637 shares this existing hook owner rather than registering a second
 -- callback on the same table/method pair.  Only after vanilla returns nil do we
--- ask native-loadouts for a currently resolvable official/default weapon.  A
--- valid native item, cosmetics, official/readonly realms, and an unavailable
+-- ask the spawn-weapon recovery (_gut_spawn_weapon_recovery.lua) for the next
+-- candidate: official selected row, mirror default row, one retry of the
+-- loadout id, then the vanilla career default.  The recovery receives both the
+-- is_bot vanilla was given and the value this hook resolved, plus the bot
+-- spawn depth, so its `[gut:1637] miss` line records the exact call.  A valid
+-- native item, cosmetics, official/readonly realms, and an unavailable
 -- recovery owner all remain byte-for-byte on the original result path.
 local function _lookup_cb(func, career_name, slot_name, is_bot, ...)
     local resolved, repaired = Policy.resolve_is_bot(spawn_depth, slot_name, is_bot)
@@ -71,7 +75,7 @@ local function _lookup_cb(func, career_name, slot_name, is_bot, ...)
     if item ~= nil then return item end
     local recover = mod._gut_recover_missing_weapon
     if type(recover) ~= "function" then return nil end
-    local ok, fallback = pcall(recover, career_name, slot_name, resolved)
+    local ok, fallback = pcall(recover, career_name, slot_name, resolved, is_bot, spawn_depth)
     return ok and fallback or nil
 end
 
@@ -170,10 +174,93 @@ local function _exec_chain_cases()
     return nil
 end
 
+-- Hero careers exactly as vanilla registers them: PROFILES_BY_CAREER_NAMES maps
+-- every career (DLC careers included via add_career_to_profile,
+-- sp_profiles.lua:413-419) to its profile; the tutorial profile carries
+-- affiliation "tutorial" and the dark-pact profiles are not "heroes"
+-- (sp_profiles.lua:134/172/210/248/286/324).
+local function _hero_careers()
+    local profiles = rawget(_G, "PROFILES_BY_CAREER_NAMES")
+    if type(profiles) ~= "table" then return nil end
+    local names = {}
+    for career_name, profile in pairs(profiles) do
+        if type(career_name) == "string" and type(profile) == "table"
+            and profile.affiliation == "heroes" then
+            names[#names + 1] = career_name
+        end
+    end
+    table.sort(names)
+    return names
+end
+
+-- Issue #1637 runtime checks. The consumer guard executes the registered
+-- lookup callback against a nil-returning delegate and a probe recovery so the
+-- hook-to-recovery seam (career, slot, resolved is_bot, received is_bot, spawn
+-- depth) is proven on the live function objects, then runs the recovery
+-- module's offline ordering/printf proof. The default-fallback check is the
+-- bounded live census: every hero career and both weapon slots must resolve a
+-- vanilla career-default weapon from the real ItemMasterList / CareerSettings
+-- tables and produce a valid synthetic item shape.
+local function _exec_1637_seam()
+    local selftest = mod._gut_spawn_weapon_selftest
+    if type(selftest) ~= "table" or type(selftest.ordering) ~= "function" then
+        return "spawn-weapon selftest surface missing"
+    end
+    local original = mod._gut_recover_missing_weapon
+    local seen
+    local probe_item = { key = "gut_rt1637_probe_item" }
+    mod._gut_recover_missing_weapon = function(career, slot, resolved, received, depth)
+        seen = { career = career, slot = slot, resolved = resolved, received = received, depth = depth }
+        return probe_item
+    end
+    local ok, err = pcall(function()
+        local item = _lookup_cb(function() return nil end, "gut_rt1637_probe", "slot_melee", false)
+        if item ~= probe_item then return "recovered item was not returned from the lookup hook" end
+        if not seen or seen.career ~= "gut_rt1637_probe" or seen.slot ~= "slot_melee"
+            or seen.resolved ~= false or seen.received ~= false or seen.depth ~= 0 then
+            return "recovery did not receive career/slot/resolved/received/depth from the hook"
+        end
+        seen = nil
+        local native = { key = "native" }
+        if _lookup_cb(function() return native end, "gut_rt1637_probe", "slot_melee", false) ~= native
+            or seen ~= nil then
+            return "a native item must bypass recovery"
+        end
+        return nil
+    end)
+    mod._gut_recover_missing_weapon = original
+    if not ok then return "seam probe raised: " .. tostring(err) end
+    if err then return err end
+    return selftest.ordering()
+end
+
+local function _exec_1637_census()
+    local selftest = mod._gut_spawn_weapon_selftest
+    if type(selftest) ~= "table" or type(selftest.census) ~= "function" then
+        return "spawn-weapon selftest surface missing"
+    end
+    local careers = _hero_careers()
+    if type(careers) ~= "table" or #careers == 0 then return "hero career list unavailable" end
+    local master_list = rawget(_G, "ItemMasterList")
+    local career_settings = rawget(_G, "CareerSettings")
+    if type(master_list) ~= "table" or type(career_settings) ~= "table" then
+        return "ItemMasterList / CareerSettings unavailable"
+    end
+    local err, results = selftest.census(master_list, career_settings, careers)
+    if err then return err end
+    if #results ~= #careers * 2 then
+        return string.format("census covered %d of %d career/slot pairs", #results, #careers * 2)
+    end
+    return nil
+end
+
 return {
     policy = Policy,
     hook_callbacks = { spawn = _spawn_cb, lookup = _lookup_cb },
     exec_chain_cases = _exec_chain_cases,
+    exec_1637_seam = _exec_1637_seam,
+    exec_1637_census = _exec_1637_census,
+    hero_careers = _hero_careers,
     rt_checks = {
         {
             name = "issue232_bot_designated_victory_pose",
@@ -190,6 +277,16 @@ return {
                 if type(mod._gut_recover_missing_weapon) ~= "function" then
                     return "native-loadout recovery owner missing"
                 end
+                return _exec_1637_seam()
+            end,
+        },
+        {
+            name = "issue1637_spawn_weapon_default_fallback",
+            fn = function()
+                if type(mod._gut_recover_missing_weapon) ~= "function" then
+                    return "native-loadout recovery owner missing"
+                end
+                return _exec_1637_census()
             end,
         },
     },

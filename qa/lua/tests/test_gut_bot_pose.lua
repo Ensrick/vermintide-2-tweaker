@@ -184,9 +184,10 @@ return function(H, repo_root)
         local api, env, lookups, mod = load_production()
         local recoveries = {}
         local fallback = { backend_id = "safe_default", data = { name = "bw_1h_sword" } }
-        mod._gut_recover_missing_weapon = function(career, slot, is_bot)
+        mod._gut_recover_missing_weapon = function(career, slot, resolved, received, depth)
             recoveries[#recoveries + 1] = {
-                career = career, slot = slot, is_bot = is_bot,
+                career = career, slot = slot, resolved = resolved,
+                received = received, depth = depth,
             }
             return fallback
         end
@@ -196,7 +197,18 @@ return function(H, repo_root)
         end, "bw_unchained", "slot_melee", false)
         H.equal(item, fallback)
         H.deep_equal(recoveries[1], {
-            career = "bw_unchained", slot = "slot_melee", is_bot = false,
+            career = "bw_unchained", slot = "slot_melee", resolved = false,
+            received = false, depth = 0,
+        })
+
+        -- Inside a bot spawn the recovery sees the resolved flag, the value
+        -- vanilla passed and the spawn depth (the #1637 miss line records all three).
+        api.hook_callbacks.spawn(function()
+            api.hook_callbacks.lookup(function() return nil end, "bw_unchained", "slot_pose", nil)
+        end, {})
+        H.deep_equal(recoveries[2], {
+            career = "bw_unchained", slot = "slot_pose", resolved = true,
+            received = nil, depth = 1,
         })
 
         local native = { backend_id = "still_live" }
@@ -204,7 +216,7 @@ return function(H, repo_root)
             return native
         end, "bw_unchained", "slot_ranged", false)
         H.equal(item, native)
-        H.equal(#recoveries, 1, "valid native item must bypass recovery")
+        H.equal(#recoveries, 2, "valid native item must bypass recovery")
 
         mod._gut_recover_missing_weapon = function()
             error("guard fault")
@@ -219,8 +231,106 @@ return function(H, repo_root)
         mod._gut_recover_missing_weapon = function() return nil end
         H.equal(api.rt_checks[1].name, "issue232_bot_designated_victory_pose")
         H.equal(api.rt_checks[1].fn(), nil)
-        H.equal(api.rt_checks[2].name, "issue1637_spawn_weapon_consumer_guard")
-        H.equal(api.rt_checks[2].fn(), nil)
         H.equal(api.exec_chain_cases(), nil)
+    end)
+
+    -- The #1637 runtime checks run the REAL recovery module against the real
+    -- policy, exactly as the entry point wires them in-game, plus a live-shaped
+    -- census over fake ItemMasterList / CareerSettings / PROFILES_BY_CAREER_NAMES.
+    local function wire_1637(mod, env)
+        local Policy = assert(loadfile(root .. "_gut_native_loadout_policy.lua"))()
+        -- The recovery module reads its globals through rawget(_G, ...); run it
+        -- in the same fake environment as the hook owner (env._G = env).
+        local chunk = assert(loadfile(root .. "_gut_spawn_weapon_recovery.lua"))
+        setfenv(chunk, env)
+        local Recovery = chunk()
+        env.LoadoutUtils = { sync_loadout_slot = function() end }
+        mod._gut_recover_missing_weapon = Recovery.install(mod, Policy,
+            function() return Policy.MODE_STORE end, Policy.MODE_STORE)
+        env.ItemMasterList = {
+            bw_sword = { slot_type = "melee", rarity = "plentiful", template = "t",
+                right_hand_unit = "u", can_wield = { "bw_unchained", "bw_adept" } },
+            bw_skullstaff_fireball = { slot_type = "ranged", rarity = "plentiful", template = "t",
+                right_hand_unit = "u", can_wield = { "bw_unchained", "bw_adept" } },
+            vs_bw_sword = { slot_type = "melee", rarity = "plentiful", template = "t",
+                right_hand_unit = "u", can_wield = { "vs_only" } },
+        }
+        env.CareerSettings = {
+            bw_unchained = { item_slot_types_by_slot_name = { slot_melee = { "melee" }, slot_ranged = { "ranged" } } },
+            bw_adept = { item_slot_types_by_slot_name = { slot_melee = { "melee" }, slot_ranged = { "ranged" } } },
+        }
+        local heroes = { affiliation = "heroes" }
+        env.PROFILES_BY_CAREER_NAMES = {
+            bw_unchained = heroes, bw_adept = heroes,
+            empire_soldier_tutorial = { affiliation = "tutorial" },
+            vs_only = { affiliation = "dark_pact" },
+        }
+    end
+
+    H.test("GUT #1637 runtime checks prove the seam, the ordering and the live census", function()
+        local api, env, lookups, mod = load_production()
+        wire_1637(mod, env)
+        H.equal(api.rt_checks[2].name, "issue1637_spawn_weapon_consumer_guard")
+        H.equal(api.rt_checks[3].name, "issue1637_spawn_weapon_default_fallback")
+        H.deep_equal(api.hero_careers(), { "bw_adept", "bw_unchained" })
+        H.equal(mod.hooks.sync_loadout_slot ~= nil, true, "sync guard hook registered by install")
+        local old_printf = rawget(_G, "printf")
+        H.equal(api.rt_checks[2].fn(), nil)
+        H.equal(api.rt_checks[3].fn(), nil)
+        H.equal(api.exec_1637_seam(), nil)
+        H.equal(api.exec_1637_census(), nil)
+        H.equal(rawget(_G, "printf"), old_printf, "printf global restored after the seam proof")
+        H.equal(type(mod._gut_recover_missing_weapon), "function",
+            "seam probe must restore the production recovery")
+
+        -- A career without a wieldable weapon fails the census loudly.
+        env.PROFILES_BY_CAREER_NAMES.vs_only = { affiliation = "heroes" }
+        local err = api.rt_checks[3].fn()
+        H.equal(type(err), "string")
+        H.truthy(err:find("no default weapon for vs_only", 1, true), err)
+        env.PROFILES_BY_CAREER_NAMES.vs_only = nil
+
+        -- A missing selftest surface is reported, never silently passed.
+        mod._gut_spawn_weapon_selftest = nil
+        H.equal(api.rt_checks[2].fn(), "spawn-weapon selftest surface missing")
+        H.equal(api.rt_checks[3].fn(), "spawn-weapon selftest surface missing")
+        mod._gut_recover_missing_weapon = nil
+        H.equal(api.rt_checks[2].fn(), "native-loadout recovery owner missing")
+        H.equal(api.rt_checks[3].fn(), "native-loadout recovery owner missing")
+    end)
+
+    H.test("GUT #1637 production lookup ends on the synthetic career default through the real chain", function()
+        local api, env, lookups, mod = load_production()
+        wire_1637(mod, env)
+        env.Managers = { backend = { _interfaces = { items = {
+            _backend_mirror = { _career_loadouts = {}, _career_data = {},
+                get_default_loadouts = function() return nil end },
+            get_item_from_id = function() return nil end,
+            get_all_backend_items = function() return {} end,
+        } } } }
+        env.BackendUtils.get_loadout_item_id = function() return "vanished_id" end
+        local lines = {}
+        env.printf = function(fmt, ...) lines[#lines + 1] = string.format(fmt, ...) end
+        local ok, item = pcall(api.hook_callbacks.lookup, function() return nil end,
+            "bw_unchained", "slot_melee", false)
+        env.printf = nil
+        H.truthy(ok, tostring(item))
+        H.equal(item.key, "bw_sword")
+        H.equal(item.backend_id, nil)
+        H.equal(item.data, env.ItemMasterList.bw_sword)
+        H.truthy(lines[1]:find("^%[gut:1637%] miss career=bw_unchained slot=slot_melee is_bot=false resolved=false spawn_depth=0 mode=store loadout_id=vanished_id id_resolves=false tried=retry:vanished_id=nil,default%-owned:bw_sword=none,default%-synthetic:bw_sword=ok source=career%-default%-synthetic key=bw_sword error=nil$"), lines[1])
+        H.truthy(lines[2]:find("recovered missing spawn weapon career=bw_unchained slot=slot_melee bot=false source=career-default-synthetic backend_id=nil key=bw_sword", 1, true))
+
+        -- The sync guard shadows the raw master-list row for that key only.
+        local sent
+        env.LoadoutUtils.sync_loadout_slot = function(player, slot, item) sent = item end
+        local guard = mod.hooks.sync_loadout_slot
+        guard(env.LoadoutUtils.sync_loadout_slot, "player", "slot_melee",
+            { key = "bw_sword", rarity = "plentiful" })
+        H.equal(sent.power_level, 300)
+        H.equal(sent.key, "bw_sword")
+        local real = { key = "bw_sword", power_level = 120 }
+        guard(env.LoadoutUtils.sync_loadout_slot, "player", "slot_melee", real)
+        H.equal(sent, real)
     end)
 end

@@ -1,5 +1,34 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.353-dev (2026-09-20) - Keep-spawn miss diagnostic and career-default weapon (#1637) [verify-fix]
+
+- The 0.2.352-dev guard ran on RainReligion's second crash log but recovered
+  nothing and wrote nothing: its only candidates were the same backend ids
+  that had just failed, and it logged only on success. Every weapon-slot miss
+  now writes exactly one `[gut:1637] miss` line per career and slot: the
+  career, the slot, the `is_bot` vanilla passed and the value the hook
+  resolved, the bot spawn depth, the loadout mode, the loadout id the backend
+  reports at that instant and whether the item interface resolves it, every
+  candidate tried with its result, the final source and any error. A silent
+  miss is no longer possible, whatever the mode or the failure.
+- The keep now always spawns a wielded weapon. After the official selected
+  row and the mirror default row, the recovery retries the loadout id once
+  and then falls back to the vanilla career default: the demo starting-gear
+  weapon for the fifteen base careers (`demo_settings.lua`), or for the five
+  DLC careers the first weapon the career can wield in that slot by
+  `CareerSettings[career].item_slot_types_by_slot_name`. An owned backend
+  instance of that weapon is preferred; otherwise the master-list entry is
+  equipped without a backend id, exactly as vanilla equips its own
+  `initial_inventory` slots, and the loadout sync RPC receives a shadow
+  carrying a power level. The saved modded loadout is never written, so a
+  late-registering crafted weapon still heals on the next read.
+- `/gut_regression_test` `issue1637_spawn_weapon_consumer_guard` now drives
+  the registered lookup hook into a probe recovery and runs the ordering and
+  printf-route proof; the new `issue1637_spawn_weapon_default_fallback`
+  runs a bounded live census of every hero career and both weapon slots
+  against the real item master list. The offline suite mirrors both against a
+  generated vanilla weapon fixture (`qa/lua/fixtures`).
+
 ## 0.2.352-dev (2026-09-20) - Keep-spawn missing-weapon consumer guard (#1637) [not-started]
 
 - Fixed a Keep-load crash in `SimpleInventoryExtension.extensions_ready` where

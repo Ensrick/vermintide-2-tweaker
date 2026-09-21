@@ -609,7 +609,7 @@ local function _official_gear_fallback(read_official, mirror, career_name, key, 
     return nil
 end
 M.official_gear_fallback = _official_gear_fallback   -- exported for the /gut_regression_test translation check
-mod._gut_recover_missing_weapon = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_spawn_weapon_recovery").new(Policy, _adventure_mode, MODE_STORE)
+mod._gut_recover_missing_weapon = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_spawn_weapon_recovery").install(mod, Policy, _adventure_mode, MODE_STORE)
 -- ------------------------------------------------------------------
 -- BackendUtils equip capture (v0.2.175). With Loremaster's Armoury installed, menu equips
 -- route through an LA-CLONED interface whose copied methods bypass class-level hooks, so

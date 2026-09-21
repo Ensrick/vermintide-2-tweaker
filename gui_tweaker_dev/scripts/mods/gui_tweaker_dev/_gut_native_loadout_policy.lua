@@ -78,11 +78,12 @@ function P.official_weapon_candidates(mirror, career_name, slot_name, get_defaul
         or not WEAPON_SLOTS[slot_name] then
         return {}
     end
-    local ids, seen = {}, {}
-    local function add(id)
+    local ids, labels, seen = {}, {}, {}
+    local function add(id, label)
         if id ~= nil and not seen[id] then
             seen[id] = true
             ids[#ids + 1] = id
+            labels[#labels + 1] = label
         end
     end
 
@@ -93,12 +94,13 @@ function P.official_weapon_candidates(mirror, career_name, slot_name, get_defaul
     local selected_row = selected ~= nil and type(career_data) == "table"
         and type(career_data[career_name]) == "table"
         and career_data[career_name][selected] or nil
-    add(type(selected_row) == "table" and selected_row[slot_name] or nil)
+    add(type(selected_row) == "table" and selected_row[slot_name] or nil, "official-selected")
 
     local ok, defaults = pcall(get_defaults, mirror, career_name)
     local default_row = ok and type(defaults) == "table" and defaults[1] or nil
-    add(type(default_row) == "table" and default_row[slot_name] or nil)
-    return ids
+    add(type(default_row) == "table" and default_row[slot_name] or nil, "career-default")
+    -- Second return: the source label of each id, in the same order (#1637 diagnostics).
+    return ids, labels
 end
 
 -- Exact consumer-boundary recovery. `native_item` is the result already
@@ -115,13 +117,13 @@ function P.recover_missing_weapon(opts)
         return nil, "unavailable"
     end
 
-    local candidates = P.official_weapon_candidates(opts.mirror, opts.career_name,
+    local candidates, labels = P.official_weapon_candidates(opts.mirror, opts.career_name,
         opts.slot_name, opts.get_defaults)
     for i = 1, #candidates do
         local id = candidates[i]
         local ok, item = pcall(opts.resolve, id)
         if ok and item ~= nil then
-            return item, i == 1 and "official-selected" or "career-default", id
+            return item, labels[i], id
         end
     end
     return nil, "unresolved"
