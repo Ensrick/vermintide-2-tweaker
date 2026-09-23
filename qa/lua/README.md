@@ -53,6 +53,11 @@ there is no copied implementation.
   its captured hooks: native-only (modded) career import, late designation
   retry, seed-seam preference, career bounds and drift repair, with printf
   resolved through a test-local environment (the global is never swapped).
+- `tests/test_gut_loc_format.lua`: #1651 pure loc format scan: the 0.2.355-dev
+  formatter probe reproduced on the live paged label (plain and hooked shape),
+  accept/reject tables, the shipped loc table scanned clean, and the live check
+  pinned to the pure scan. The formatter shadow counts calls; the global is
+  never swapped.
 - `fixtures/vanilla_weapon_master_list.lua`: GENERATED vanilla weapon census
   (every `ItemMasterList` melee/ranged entry with its `can_wield` list after the
   DLC `UpdateItemMasterList` patches, each hero career's

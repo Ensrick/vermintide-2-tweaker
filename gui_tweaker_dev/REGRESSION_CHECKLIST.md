@@ -1,5 +1,15 @@
 # Regression Checklist — gui_tweaker_dev
 
+## Localization format check is a pure scan (#1651, 0.2.356-dev)
+
+- Keep or mission, any mod set (with or without Loremasters Armoury): run
+  `/gut_regression_test`; `localization_format_safe` must PASS and the log must
+  not contain `bad argument #2 to 'hook_chain'`.
+- Paged loadouts still render `Page n/m` and `Loadout VII` style headers
+  (#231): the placeholder strings are untouched.
+- Host tests: `test_gut_loc_format.lua` (probe reproduction, accept/reject
+  tables, shipped loc table scan, check pinned to the pure scan).
+
 ## Thirty modded loadouts, paged selector (#231, 0.2.350-dev)
 
 - Modded realm, keep, "Use non-modded loadouts" OFF: open Equipment and press

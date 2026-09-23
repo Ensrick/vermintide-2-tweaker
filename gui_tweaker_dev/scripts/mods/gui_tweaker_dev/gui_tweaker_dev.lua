@@ -40,7 +40,7 @@ end
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.355-dev"
+local MOD_VERSION = "0.2.356-dev"
 local GUT_RPC_SCHEMA = 1 -- Bump only when a GUT positional wire shape changes.
 mod._GUT_RPC_SCHEMA = GUT_RPC_SCHEMA
 
@@ -362,28 +362,19 @@ _rt_register("arrow_hover_native_size", function()
     end
 end)
 
+-- Layer 3 (2026-05-25): runtime twin of qa/check_localization.ps1, so an unescaped % in a
+-- loc string cannot ship even when the static gate is skipped. (#1651) The scan is PURE:
+-- the former `pcall(string.format, value)` probe rejected every legitimate placeholder
+-- ("Page %d/%d") and ran through whatever hooks the formatter slot (LA does, so the error
+-- surfaced from VMF hooks.lua:180 as a hook_chain argument error). Rules: _gut_loc_format.lua.
+local _gut_loc_format = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_loc_format")
+mod._gut_loc_format = _gut_loc_format
 _rt_register("localization_format_safe", function()
-    -- Layer 3 (2026-05-25): catch unescaped %-format chars in loc strings at
-    -- runtime. VMF's tooltip render path calls string.format on the loc value;
-    -- literal "%APPDATA%" / "5%" / "%USERNAME%" raises 'invalid option' and
-    -- shows as a red error tooltip in the VMF settings UI. Static check is
-    -- qa/check_localization.ps1 -- this is its runtime twin so the bug can't
-    -- ship even if the static check is skipped. RULE: any literal % in a loc
-    -- string must be doubled to %%.
     local ok, loc = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/gui_tweaker_dev_localization")
     if not ok or type(loc) ~= "table" then
         return "localization table could not be loaded: " .. tostring(loc)
     end
-    for k, v in pairs(loc) do
-        if type(v) == "table" and type(v.en) == "string" then
-            local fmt_ok, fmt_err = pcall(string.format, v.en)
-            if not fmt_ok then
-                return string.format(
-                    "loc key %q has invalid format string (escape literal %% as %%%%): %s",
-                    k, tostring(fmt_err))
-            end
-        end
-    end
+    return _gut_loc_format.scan(loc)
 end)
 
 _rt_register("all_languages_defer_340", function()

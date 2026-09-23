@@ -1,5 +1,34 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.356-dev (2026-09-23) -- loc format check is a pure scan, not a formatter probe (#1651) [verify-fix]
+
+- Rain's v0.2.354-dev log failed `localization_format_safe` on
+  `gut_loadout_page_label` with `hooks.lua:180: bad argument #2 to 'hook_chain'
+  (no value)`. The check probed every loc value with `pcall(string.format,
+  value)` and no arguments (`gui_tweaker_dev.lua`, since 0.2.4-dev). That probe
+  rejects any legitimate placeholder: `Page %d/%d` and `Loadout %s` (#231) are
+  rendered through `mod:localize(key, page, page_count)` with arguments
+  (`_gut_loadout_paging.lua`), so the formatter demands them and raises on a
+  healthy string. The hook name in the message is incidental: Loremasters
+  Armoury hooks `string.format` (`Loremasters-Armoury/utils/hooks.lua:371`), so
+  the slot is VMF's internal hook closure and the argument error surfaces from
+  the `hook_chain(...)` call at `vmf/modules/core/hooks.lua:180`. The loc
+  string carries no bare `%`; nothing in the localization table changes.
+- New engine-free `_gut_loc_format.lua` scans each string the way Lua 5.1's
+  `scanformat` does without calling the formatter: `%%` is a literal; flags,
+  width, precision and one of `cdiouxXeEfgGqs` form a directive; anything else
+  (including a percent right after a digit, the static gate's rule) is an
+  unescaped percent. `localization_format_safe` now loads the loc table and
+  returns the scan verdict; every language field is checked and the first
+  offender is reported by key and language in sorted order.
+- Offline: `qa/lua/tests/test_gut_loc_format.lua` reproduces the 0.2.355-dev
+  probe on the live label (plain Lua and the hooked formatter shape), proves the
+  validator accepts the placeholder strings and rejects `%APPDATA%`, `5%`,
+  `Grenadier % Chance` and `10% chance` without ever calling the formatter,
+  scans the shipped loc table clean, and pins the check to the pure scan.
+- The same probe shape lives in `cim_dev` (`_cim_regression_checks.lua`,
+  `ranalds_importing`); tracked on #1656, not changed here.
+
 ## 0.2.355-dev (2026-09-22) -- import native bot designations for modded careers (#954) [verify-fix]
 
 - Rain's v0.2.354-dev log failed `issue954_bot_loadout_snapshot` with
