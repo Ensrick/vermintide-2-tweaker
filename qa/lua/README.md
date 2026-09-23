@@ -49,6 +49,10 @@ there is no copied implementation.
   sender, hot-join, receiver, and timed-buff safety floors.
 - `tests/test_gut_loadout_paging.lua`: #231 page/slot bijection, strip geometry,
   text Roman numerals and the modded-STORE-Adventure paging predicate.
+- `tests/test_gut_bot_loadout_snapshot.lua`: #954 detached bot owner through
+  its captured hooks: native-only (modded) career import, late designation
+  retry, seed-seam preference, career bounds and drift repair, with printf
+  resolved through a test-local environment (the global is never swapped).
 - `fixtures/vanilla_weapon_master_list.lua`: GENERATED vanilla weapon census
   (every `ItemMasterList` melee/ranged entry with its `can_wield` list after the
   DLC `UpdateItemMasterList` patches, each hero career's

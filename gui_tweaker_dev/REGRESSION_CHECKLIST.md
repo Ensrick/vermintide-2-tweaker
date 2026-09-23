@@ -101,7 +101,7 @@
 
 ## Detached bot loadouts (#954)
 
-- **Candidate:** v0.2.319-dev. Apply a tester lifecycle label only after this
+- **Candidate:** v0.2.355-dev. Apply a tester lifecycle label only after this
   exact candidate is committed, built, deployed, and identified by banner,
   Workshop manifest, and archive hash in a new live-test card.
 - The candidate reconciles the detached persisted snapshot at the shared
@@ -117,14 +117,23 @@
   Existing GUT ownership outranks stale `PlayerData`; a valid index whose row is
   not seeded remains retryable. The runtime check must fail when native
   assignments exist but the detached owner has zero snapshots.
+- A native assignment for a career the store never seeded (a modded career such
+  as Pusfume, designated by the vanilla window on open) must import on the next
+  bounded read: from official rows when the mirror has them, else from the
+  backend's current bot row. It must retry when the designation appears late,
+  refuse past the 64-career bound before any write, and never seal an entry
+  without its snapshot (v0.2.355-dev).
 - [ ] Prepare a Warrior Priest saved row with visibly distinct melee and ranged
   weapons, assign that row to the bot, then switch to another player loadout.
 - [ ] Change the player's weapons. Refresh/respawn the Warrior Priest bot and
   confirm its designated weapons remain unchanged.
 - [ ] Restart the game and repeat the player edit and bot refresh; both the bot
   snapshot and player row must retain their independent values.
-- [ ] Run `/gut_regression_test` and require
-  `issue954_bot_loadout_snapshot` to pass.
+- [ ] With the Pusfume career installed, open its loadout tab once, return to
+  the keep, then run `/gut_regression_test`: the log must show one
+  `[gut:954] native-only career import career=pusfume` line.
+- [ ] Run `/gut_regression_test` and require `issue954_bot_loadout_snapshot`
+  and `issue954_modded_career_import` to pass.
 
 If this candidate fails, use exactly one evidence-selected fallback:
 

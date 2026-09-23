@@ -1079,6 +1079,7 @@ BotLoadoutSnapshot.install(mod, {
     policy = Policy, slot_names = LOADOUT_SLOT_NAMES,
     mode_off = MODE_OFF, mode_store = MODE_STORE, mode_readonly = MODE_READONLY,
     log_prefix = "gut_dev", native_bot_assignments = _native_bot_assignments,
+    seed_career = function(iface, career) return _ensure_seeded(iface._backend_mirror, career, true) end,  -- #954 modded careers
 })
 
 -- ==================================================================
@@ -1106,7 +1107,6 @@ BotLoadoutSnapshot.install(mod, {
 -- (NOT iface:get_item_from_id), so we never trip the get_item_from_id -> _refresh ->
 -- mirror-read recursion (v0.2.173 burn). Cosmetic slots are already nil-safe in
 -- vanilla, so we leave them untouched.
---
 -- Pre-flight (2026-07-06): grepped gui_tweaker_dev for hooks on
 -- (HeroWindowLoadoutSelectionConsole, _populate_context_menu_loadout) -- NONE. gut's
 -- other hooks on this class target _save_bot_equipment (_gut_bot_loadout_snapshot.lua) and
