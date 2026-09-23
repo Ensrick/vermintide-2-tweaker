@@ -174,7 +174,17 @@ with `manifest.json` last. The broken tag route is never reused, sibling assets 
 and staged provenance/hash validation still runs before mutation. Download timeout budgets use the
 resolved asset metadata's declared byte size with the same 30-second floor, 256-KiB-per-second
 curve, and one-hour cap as uploads. Missing, malformed, negative, or unsupported sizes fail before
-the request, and the returned byte count must equal the declaration. Offline coverage:
+the request, and the returned byte count must equal the declaration.
+
+The release object embedded by the tag route, the list route, and `/releases/latest` is NOT
+trusted for asset identity. On 2026-09-23 `GET /releases/tags/mods-2026-09-23` listed
+`manifest.json` as asset id 583157616, which returned HTTP 404 on read, download, and delete, while
+`GET /releases/394315644/assets` served the live id 583314449; three ships failed on the manifest
+download. Every resolved release therefore refreshes its `assets` array from
+`GET /releases/{id}/assets?per_page=100` (paginated, at most ten pages) before any download or
+clobber. If that refresh fails (non-2xx, non-array, or rows without a numeric id and name) the
+embedded array is kept and one warning names the fallback, so offline fakes that only serve the tag
+and asset routes keep working. Offline coverage:
 
 ```powershell
 .\qa\check_github_release_fallback.ps1 -SelfTest

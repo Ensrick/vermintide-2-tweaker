@@ -198,6 +198,83 @@ function Test-GitHubTransientStatus {
     return ($StatusCode -eq 0 -or $StatusCode -eq 408 -or $StatusCode -eq 429 -or ($StatusCode -ge 500 -and $StatusCode -le 599))
 }
 
+# The release objects embedded by the tag route, the list route, and
+# /releases/latest can carry a STALE asset array. On 2026-09-23
+# GET /releases/tags/mods-2026-09-23 listed manifest.json as asset id 583157616,
+# which returned HTTP 404 on read, download, and delete, while
+# GET /releases/394315644/assets served the live id 583314449. Three ships failed
+# on "Download of release asset 'manifest.json' (id 583157616) failed with HTTP
+# 404". Every resolved release therefore refreshes its inventory from the
+# per-release assets endpoint; the embedded array is only an offline fallback.
+$script:GitHubReleaseAssetInventoryWarned = $false
+
+function Update-GitHubReleaseAssetInventory {
+    param(
+        [Parameter(Mandatory = $true)][string]$Repo,
+        [Parameter(Mandatory = $true)]$Release,
+        [scriptblock]$Request = ${function:Invoke-GitHubReleaseApiRequest},
+        [ValidateRange(1, 100)][int]$PerPage = 100,
+        [ValidateRange(1, 50)][int]$MaxPages = 10
+    )
+
+    $releaseId = "$($Release.id)"
+    if ($releaseId -notmatch '^[1-9][0-9]*$') {
+        return [pscustomobject]@{
+            Source = 'embedded'; Count = @($Release.assets).Count
+            Message = 'release has no numeric id; embedded asset inventory retained'
+        }
+    }
+
+    $rows = @()
+    $failure = $null
+    for ($page = 1; $page -le $MaxPages; $page++) {
+        $uri = "https://api.github.com/repos/$Repo/releases/$releaseId/assets?per_page=$PerPage&page=$page"
+        $response = & $Request -Method GET -Uri $uri
+        if ($response.StatusCode -lt 200 -or $response.StatusCode -ge 300) {
+            $failure = "release $releaseId assets page $page returned HTTP $($response.StatusCode)"
+            break
+        }
+        $content = "$($response.Content)".TrimStart()
+        if (-not $content.StartsWith('[')) {
+            $failure = "release $releaseId assets page $page is not a JSON array"
+            break
+        }
+        try { $parsed = $content | ConvertFrom-Json }
+        catch {
+            $failure = "release $releaseId assets page $page returned invalid JSON: $($_.Exception.Message)"
+            break
+        }
+        $pageRows = if ($null -eq $parsed) { @() } else { @($parsed) }
+        $invalid = @($pageRows | Where-Object {
+            "$($_.id)" -notmatch '^[1-9][0-9]*$' -or [string]::IsNullOrEmpty("$($_.name)")
+        })
+        if ($invalid.Count -gt 0) {
+            $failure = "release $releaseId assets page $page carries $($invalid.Count) row(s) without a numeric id and name"
+            break
+        }
+        $rows += $pageRows
+        if ($pageRows.Count -lt $PerPage) {
+            $Release | Add-Member -NotePropertyName assets -NotePropertyValue ([object[]]$rows) -Force
+            return [pscustomobject]@{
+                Source = 'release-id'; Count = $rows.Count
+                Message = "asset inventory refreshed from release $releaseId assets endpoint ($($rows.Count) row(s), $page page(s))"
+            }
+        }
+    }
+    if ($null -eq $failure) {
+        $failure = "release $releaseId assets endpoint exceeded $MaxPages full page(s)"
+    }
+    if (-not $script:GitHubReleaseAssetInventoryWarned) {
+        $script:GitHubReleaseAssetInventoryWarned = $true
+        Write-Warning ("GitHub release asset inventory refresh failed ($failure); using the embedded asset array, " +
+            'which GitHub has served stale (ghost asset ids that return HTTP 404 on download and delete).')
+    }
+    return [pscustomobject]@{
+        Source = 'embedded'; Count = @($Release.assets).Count
+        Message = "$failure; embedded asset inventory retained"
+    }
+}
+
 function Resolve-GitHubReleaseByTag {
     param(
         [Parameter(Mandatory = $true)][string]$Repo,
@@ -218,9 +295,11 @@ function Resolve-GitHubReleaseByTag {
                 PagesScanned = 0; Message = "Tag endpoint returned '$($release.tag_name)' for exact tag '$Tag'."
             }
         }
+        $inventory = Update-GitHubReleaseAssetInventory -Repo $Repo -Release $release -Request $Request
         return [pscustomobject]@{
             State = 'Found'; Release = $release; Route = 'tag'; TagStatus = $tagResponse.StatusCode
-            PagesScanned = 0; Message = "release '$Tag' resolved by canonical tag endpoint"
+            PagesScanned = 0; AssetInventory = $inventory.Source
+            Message = "release '$Tag' resolved by canonical tag endpoint; $($inventory.Message)"
         }
     }
 
@@ -257,9 +336,11 @@ function Resolve-GitHubReleaseByTag {
             }
         }
         if ($matches.Count -eq 1) {
+            $inventory = Update-GitHubReleaseAssetInventory -Repo $Repo -Release $matches[0] -Request $Request
             return [pscustomobject]@{
                 State = 'Found'; Release = $matches[0]; Route = 'list-fallback'; TagStatus = $tagResponse.StatusCode
-                PagesScanned = $page; Message = "$tagFailure; exact tag resolved from releases list page $page"
+                PagesScanned = $page; AssetInventory = $inventory.Source
+                Message = "$tagFailure; exact tag resolved from releases list page $page; $($inventory.Message)"
             }
         }
         if ($pageItems.Count -lt $PerPage) {
@@ -290,6 +371,7 @@ function Get-GitHubLatestReleaseFromList {
     $releases = @(ConvertFrom-GitHubReleaseJson -Response $response -Context 'latest releases list')
     $latest = @($releases | Where-Object { -not $_.draft -and -not $_.prerelease } | Select-Object -First 1)
     if ($latest.Count -eq 0) { return $null }
+    $null = Update-GitHubReleaseAssetInventory -Repo $Repo -Release $latest[0] -Request $Request
     return $latest[0]
 }
 

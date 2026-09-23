@@ -48,25 +48,49 @@ function New-FakeReleaseState {
         [switch]$Draft,
         [switch]$UploadRace,
         [switch]$CorruptReread,
+        [switch]$StaleTagAssets,
+        [switch]$AssetsRouteDown,
         $CandidateObject = $candidate
     )
     $state = @{
         Repo='Ensrick/vermintide-2-tweaker'; Tag='mods-2026-09-20'; ReleaseId='42'; AssetId='81'
         AssetName=[string]$CandidateObject.candidate_asset_name; Bytes=$ExistingBytes; Posts=0; Gets=0
+        InventoryGets=0; GhostGets=0
         Duplicate=[bool]$Duplicate; Draft=[bool]$Draft; UploadRace=[bool]$UploadRace; CorruptReread=[bool]$CorruptReread
+        StaleTagAssets=[bool]$StaleTagAssets; AssetsRouteDown=[bool]$AssetsRouteDown
     }
     $state.ManifestBytes = $ManifestBytes
     $state.Request = {        param($Method, $Uri, $Accept, $InputPath, [byte[]]$InputBytes, $ExpectedResponseBytes, $ContentType, $OutputPath)
+        # One live inventory, served by GET /releases/{id}/assets. The tag route
+        # embeds the same rows unless StaleTagAssets reproduces the 2026-09-23
+        # shape: a ghost manifest.json id (583157616) that 404s everywhere.
+        $inventory = @()
+        $inventory += [pscustomobject]@{id='82';name='manifest.json';size=[long]$state.ManifestBytes.Length;url="https://api.github.com/repos/$($state.Repo)/releases/assets/82"}
+        if ($null -ne $state.Bytes) {
+            $asset = [pscustomobject]@{id=$state.AssetId;name=$state.AssetName;size=[long]$state.Bytes.Length;url="https://api.github.com/repos/$($state.Repo)/releases/assets/$($state.AssetId)"}
+            $inventory += $asset
+            if ($state.Duplicate) { $inventory += (Copy-Value $asset) }
+        }
         if ($Method -ceq 'GET' -and $Uri -match '/releases/tags/') {
-            $assets = @()
-            $assets += [pscustomobject]@{id='82';name='manifest.json';size=[long]$state.ManifestBytes.Length;url="https://api.github.com/repos/$($state.Repo)/releases/assets/82"}
-            if ($null -ne $state.Bytes) {
-                $asset = [pscustomobject]@{id=$state.AssetId;name=$state.AssetName;size=[long]$state.Bytes.Length;url="https://api.github.com/repos/$($state.Repo)/releases/assets/$($state.AssetId)"}
-                $assets += $asset
-                if ($state.Duplicate) { $assets += (Copy-Value $asset) }
+            $embedded = $inventory
+            if ($state.StaleTagAssets) {
+                $embedded = @($inventory | ForEach-Object {
+                    if ($_.name -ceq 'manifest.json') {
+                        [pscustomobject]@{id='583157616';name='manifest.json';size=$_.size;url="https://api.github.com/repos/$($state.Repo)/releases/assets/583157616"}
+                    } else { $_ }
+                })
             }
-            $release = [ordered]@{id=$state.ReleaseId;tag_name=$state.Tag;draft=$state.Draft;prerelease=$false;assets=$assets}
+            $release = [ordered]@{id=$state.ReleaseId;tag_name=$state.Tag;draft=$state.Draft;prerelease=$false;assets=$embedded}
             return [pscustomobject]@{StatusCode=200;Content=($release|ConvertTo-Json -Depth 6 -Compress);Bytes=$null;Error=$null}
+        }
+        if ($Method -ceq 'GET' -and $Uri -match "/releases/$($state.ReleaseId)/assets\?per_page=100&page=1$") {
+            $state.InventoryGets++
+            if ($state.AssetsRouteDown) { return [pscustomobject]@{StatusCode=503;Content='';Bytes=$null;Error=$null} }
+            return [pscustomobject]@{StatusCode=200;Content=(ConvertTo-Json -InputObject $inventory -Depth 6 -Compress);Bytes=$null;Error=$null}
+        }
+        if ($Method -ceq 'GET' -and $Uri -match '/releases/assets/583157616$') {
+            $state.GhostGets++
+            return [pscustomobject]@{StatusCode=404;Content='';Bytes=$null;Error=$null}
         }
         if ($Method -ceq 'POST' -and $Uri -match 'uploads\.github\.com') {
             $state.Posts++
@@ -185,6 +209,32 @@ try {
             'weapon_tweaker' $inventoryPath $publicationBytes $upload $noRowState.Request
     } catch { $threw = $true }
     Check ($threw -and $noRowState.Posts -eq 0) 'missing hosted manifest row did not stop the upload proof'
+
+    # 2026-09-23 ship failures: GET /releases/tags/mods-2026-09-23 embedded manifest.json as ghost id
+    # 583157616 (HTTP 404 on download and delete) while GET /releases/{id}/assets served the live id.
+    # The proof must download the manifest by the live id and never touch the ghost.
+    $staleState = New-FakeReleaseState -StaleTagAssets
+    $staleProof = Publish-VtShipWorkshopUploadProof $staleState.Repo $staleState.Tag `
+        'weapon_tweaker' $inventoryPath $publicationBytes $upload $staleState.Request
+    Check ($staleProof.Authenticated -and $staleProof.Disposition -ceq 'CreatedAndReread' -and
+        $staleState.GhostGets -eq 0 -and $staleState.InventoryGets -ge 1 -and
+        $staleState.Posts -eq 1 -and $staleState.Gets -eq 1) `
+        'stale tag-route inventory (ghost manifest asset id) broke the upload proof'
+
+    # When the assets endpoint itself is down, the embedded array is the only inventory: the proof
+    # fails on the ghost id exactly as today, with one warning naming the fallback, and never uploads.
+    $script:GitHubReleaseAssetInventoryWarned = $false
+    $downState = New-FakeReleaseState -StaleTagAssets -AssetsRouteDown
+    $downError = $null
+    $downWarnings = @()
+    try {
+        $null = Publish-VtShipWorkshopUploadProof $downState.Repo $downState.Tag `
+            'weapon_tweaker' $inventoryPath $publicationBytes $upload $downState.Request `
+            -WarningVariable downWarnings -WarningAction SilentlyContinue
+    } catch { $downError = $_.Exception.Message }
+    Check ($downError -match "id 583157616\) failed with HTTP 404" -and $downState.Posts -eq 0 -and
+        @($downWarnings).Count -eq 1 -and "$($downWarnings[0])" -match 'embedded asset array') `
+        "assets-endpoint outage did not fall back to the embedded inventory with one warning [$downError]"
 } finally {
     if (Test-Path -LiteralPath $inventoryPath) { Remove-Item -LiteralPath $inventoryPath -Force }
 }
