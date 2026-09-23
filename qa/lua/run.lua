@@ -226,6 +226,7 @@ local suites = {
     "test_cwv_combat_styles",
     "test_cwv_peer_resolver",
     "test_cwv_dual_axes_husk_hands",
+    "test_cwv_careers_publication",
     "test_cwv_rapier_contract",
     "test_cwv_illusion_family_provenance",
     "test_wt_cwv_tuskgor_default",

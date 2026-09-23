@@ -338,7 +338,18 @@ local function _build_entry(def, backend_id)
 		entry.hud_icon = def.hud_icon
 	end
 	if def.careers then
-		entry.can_wield = def.careers
+		-- (#1660) Publish a PRIVATE copy. ItemMasterList rows are mutated in
+		-- place by sibling mods: a modded-career roster appends its career to
+		-- every melee/ranged row (_pusfume_roster.lua:90,124-127) and
+		-- weapon_tweaker's _set_career removes and appends
+		-- (_wt_availability.lua:130-137). The
+		-- catalog shares ONE careers array across 25 Empire definitions
+		-- (_cwv_variant_catalog.lua:9), so a by-reference publish leaked one
+		-- foreign append into every Empire def and four regression checks.
+		entry.can_wield = {}
+		for index = 1, #def.careers do
+			entry.can_wield[index] = def.careers[index]
+		end
 	end
 	if def.template then
 		entry.template = def.template

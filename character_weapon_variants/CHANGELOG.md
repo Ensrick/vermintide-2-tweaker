@@ -1,5 +1,33 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.543-dev (2026-09-23) -- careers array no longer aliased across Empire defs (#1660) [verify-fix]
+
+- `_build_entry` now publishes a private, element-wise copy of `def.careers`
+  as the ItemMasterList row's `can_wield`
+  (`_cwv_item_registration_owner.lua:341`). Sibling mods mutate rows in
+  place: Pusfume's roster appends its career to every melee/ranged row
+  (`_pusfume_roster.lua:90,124-127`; log `Opened 236 hero weapon(s)`), and
+  weapon_tweaker's `_set_career` removes and appends
+  (`_wt_availability.lua:130-137`). The catalog shares ONE careers array
+  across 25 Empire definitions (`_cwv_variant_catalog.lua:9`), so one
+  foreign append leaked into every Empire def and failed
+  `cwv_slot_extension_scoped`, `cwv_no_ammo_strip_coverage`,
+  `issue593_kruber_axe_shield_canonical_ownership` and
+  `issue597_greataxe_replaces_poleaxe` (RainReligion 2026-09-21, Pusfume
+  v0.7.0-dev co-installed). Those checks keep reading `def.careers`, which
+  is now CWV-owned authored data no sibling can reach; they need no
+  Pusfume skip.
+- Engine-free coverage: `test_cwv_careers_publication.lua` drives the
+  installed registration owner's `build_entry` for two definitions sharing
+  one careers array, applies a Pusfume-style append and a weapon_tweaker
+  style remove-and-append to the published rows, and asserts neither the
+  sibling row nor the catalog array sees them; a definition without careers
+  still inherits a copy of the base row's list.
+
+**DoD:** Registration data only; no mesh, template or wire payload changed.
+Live proof: the four named checks PASS in `/cwv_regression_test` on this
+build with Pusfume enabled.
+
 ## 0.1.542-dev (2026-09-23) -- Outrider grenade projectile swap runs on the clone (#1320) [verify-fix]
 
 - The Outrider Grenade Launcher's fire action now points at the authored
