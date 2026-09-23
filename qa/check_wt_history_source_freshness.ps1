@@ -1684,11 +1684,22 @@ return {
         # A root may exit while a descendant retains its redirected handles.
         # Output draining is network work and must fail closed at that phase's
         # deadline instead of consuming the taskkill and proof allocations.
+        #
+        # Precondition: the fixture root (a full PowerShell host that spawns a
+        # second host, records its identity, then exits) must be gone before
+        # the network deadline, or the probe takes the kill path instead of
+        # the drain path. The deadline plan caps the termination allocation at
+        # four seconds, so every millisecond above that is network budget: an
+        # 8000ms probe gives the root a 4000ms window. The former 5000ms probe
+        # left 1250ms; a hosted Windows PowerShell 5.1 runner needed ~1300ms
+        # (#1648: taskkill started 1288ms after root start, then reported the
+        # root as already gone), so the drain branch was never reached.
+        $outputPlan = New-WtHistoryProbeDeadlinePlan -TimeoutMilliseconds 8000
         $outputPidPath = New-FixturePidPath
         $outputClock = [System.Diagnostics.Stopwatch]::StartNew()
         $outputProbe = Invoke-WtHistoryBoundedProcessProbe `
             -StartInfo (New-ExitingParentStartInfo $outputPidPath) `
-            -TimeoutMs 5000
+            -TimeoutMs $outputPlan.TotalMilliseconds
         $outputClock.Stop()
         $outputParentIdentity = Register-FixtureIdentity $fixtureIdentities `
             'output-drain exited parent' ([int]$outputProbe.ProcessId) `
@@ -1703,13 +1714,25 @@ return {
             $failures.Add('output-drain descendant identity was not recorded') | Out-Null
             $null
         }
-        if (-not $outputProbe.TimedOut -or $outputProbe.TerminationProven -or
-            $outputProbe.KillAttempted -or
+        if ($outputProbe.KillAttempted) {
+            # The kill path means the root was still alive at the network
+            # deadline: a fixture precondition failure (slow host), not a
+            # drain defect. Name it so the two cannot be confused again.
+            $failures.Add("root-exit output drain fixture root did not exit inside the $($outputPlan.NetworkMilliseconds)ms network deadline, so the kill path ran instead of the drain path: elapsed=$($outputClock.ElapsedMilliseconds) result=$($outputProbe | Out-String)") | Out-Null
+        }
+        elseif (-not $outputProbe.TimedOut -or $outputProbe.TerminationProven -or
             $outputProbe.Stderr -cne 'bounded output drain expired') {
             $failures.Add("root-exit output drain did not stop at its network deadline: elapsed=$($outputClock.ElapsedMilliseconds) result=$($outputProbe | Out-String)") | Out-Null
         }
+        elseif ($outputClock.ElapsedMilliseconds -lt
+            ($outputPlan.NetworkMilliseconds - 50)) {
+            # The descendant holds the handles for 30s, so a drain that
+            # returns before the deadline (beyond timer granularity) did not
+            # wait for it.
+            $failures.Add("root-exit output drain returned before its $($outputPlan.NetworkMilliseconds)ms network deadline: elapsed=$($outputClock.ElapsedMilliseconds) result=$($outputProbe | Out-String)") | Out-Null
+        }
         Add-LatencyDiagnostic 'root-exit output drain' `
-            $outputClock.ElapsedMilliseconds 2250
+            $outputClock.ElapsedMilliseconds ($outputPlan.NetworkMilliseconds + 1000)
         Assert-State 'optional root-exit output drain' $outputProbe $false 'skip'
         Assert-State 'required root-exit output drain' $outputProbe $true 'fail'
         Assert-ExactIdentityState 'output-drain exited parent' `
