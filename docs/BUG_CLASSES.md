@@ -2220,8 +2220,22 @@ release-existence decision.
   floor even though its release metadata declares a much larger byte size.
 - Source, bundle, local deploy, and Workshop hashes are current; only the
   filtered GitHub asset update aborts or is misclassified as a missing release.
+- Variant (2026-09-23): the tag route (and `/releases?per_page=1`) returns
+  HTTP 200 but embeds a STALE `assets` array. `manifest.json` is listed as id
+  583157616 while `GET /releases/assets/583157616` returns 404 on read,
+  download, and delete; `GET /releases/{release_id}/assets` lists the live id
+  583314449, which downloads fine. `ship.ps1` fails with
+  `Download of release asset 'manifest.json' (id 583157616) failed with HTTP
+  404` before the Workshop upload, and a PATCH on the release does not refresh
+  the embedded array.
 
 ### Fix template
+- Never trust the asset array embedded in a release object. After any tag,
+  list, or `/releases/latest` lookup, refresh `assets` from
+  `GET /releases/{id}/assets?per_page=100` (paginated) and use only that
+  inventory for downloads and clobbers. If the refresh fails, keep the embedded
+  array and warn once so offline fakes stay valid; reproduce the ghost-id shape
+  in every fake that serves the tag route.
 - Try the canonical exact-tag route first. Confirm 404 and transient failures
   through a bounded number of list pages using a case-sensitive exact
   `tag_name`. Ambiguous matches or a full-page bound exhaustion are unavailable,

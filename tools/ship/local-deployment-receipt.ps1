@@ -75,6 +75,9 @@ function New-VtHostedLocalDeploymentReceipt {
         $response = & $Request -Method GET -Uri "https://api.github.com/repos/$repo/releases/latest"
         if ($response.StatusCode -ne 200) { throw 'No existing published release is available for a local deployment receipt.' }
         $release = ConvertFrom-GitHubReleaseJson -Response $response -Context 'local deployment receipt container'
+        # The embedded asset array can be stale (ghost ids that 404); the
+        # per-release assets endpoint is the clobber/download authority.
+        $null = Update-GitHubReleaseAssetInventory -Repo $repo -Release $release -Request $Request
         $null = Assert-VtLocalDeploymentRelease -Release $release -AssetName $assetName
         $authorization = Get-LivePublicationAuthorization -Repo $repo -SourceCommit $SourceCommit
         if (-not $authorization.Ok) { throw "Local deployment live authorization failed: $($authorization.Message)" }
@@ -92,6 +95,7 @@ function New-VtHostedLocalDeploymentReceipt {
         $readbackResponse = & $Request -Method GET -Uri "https://api.github.com/repos/$repo/releases/tags/$tag"
         if ($readbackResponse.StatusCode -ne 200) { throw 'Local deployment receipt release readback failed.' }
         $readbackRelease = ConvertFrom-GitHubReleaseJson -Response $readbackResponse -Context 'local deployment receipt readback'
+        $null = Update-GitHubReleaseAssetInventory -Repo $repo -Release $readbackRelease -Request $Request
         $asset = Assert-VtLocalDeploymentRelease -Release $readbackRelease -ExpectedTag $release.tag_name -ExpectedId ([string]$release.id) -AssetName $assetName -RequireAsset
         $hostedBytes = [byte[]](Get-GitHubReleaseAssetBytes -Repo $repo -Asset $asset -Request $Request)
         if ([Convert]::ToBase64String($hostedBytes) -cne [Convert]::ToBase64String($bytes)) { throw 'Hosted local deployment receipt bytes differ from the immutable candidate.' }
