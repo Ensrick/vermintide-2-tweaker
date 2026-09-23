@@ -138,6 +138,14 @@ return function(H, repo_root)
     local function run_apply_hook(options)
         options = options or {}
         local mod = fake_mod()
+        -- #1141 cases install the real conversion policies so the owner
+        -- computes the vanilla storable ranges instead of the linear fallback.
+        if options.value_policy then
+            mod._cim244_property_value_policy = options.value_policy
+        end
+        if options.accessory_policy then
+            mod._cim959_accessory_property_policy = options.accessory_policy
+        end
         local hooked, safe_hooked = {}, {}
         function mod:hook(_, method, fn) hooked[method] = fn end
         function mod:hook_safe(_, method, fn) safe_hooked[method] = fn end
@@ -187,7 +195,7 @@ return function(H, repo_root)
         }
         local records = { bid = record }
         local slot_count = options.noop and 2 or 3
-        local draft = {
+        local draft = options.draft or {
             properties = {
                 weave_power_vs_skaven = slot_count == 2
                     and { 1, 2 } or { 1, 2, 3 },
@@ -249,12 +257,13 @@ return function(H, repo_root)
         })
 
         local applies, discards, apply_ok, apply_detail = 0, 0, nil, nil
+        local apply_extra
         local loadout = {}
         for key, value in pairs(exports) do loadout[key] = value end
         loadout.apply_item_draft = function(...)
             applies = applies + 1
-            apply_ok, apply_detail = exports.apply_item_draft(...)
-            return apply_ok, apply_detail
+            apply_ok, apply_detail, apply_extra = exports.apply_item_draft(...)
+            return apply_ok, apply_detail, apply_extra
         end
         loadout.discard_item_draft = function(...)
             discards = discards + 1
@@ -296,26 +305,38 @@ return function(H, repo_root)
             _play_sound = function() sounds = sounds + 1 end,
         }
 
-        local saved_managers = rawget(_G, "Managers")
-        local saved_cjson = rawget(_G, "cjson")
-        rawset(_G, "Managers", {
-            backend = { get_interface = function() return items_backend end },
-        })
-        if options.cjson_missing then
-            rawset(_G, "cjson", nil)
-        else
-            rawset(_G, "cjson", {
-                encode = function(value)
-                    if options.encode_throw then error("encode exploded") end
-                    return #value > 0 and "encoded-traits" or "encoded-properties"
-                end,
+        -- Install the engine globals the owner reads (backend, JSON, and any
+        -- property tables a case supplies), run `body`, then restore them.
+        local function with_env(body)
+            local names, saved = { "Managers", "cjson" }, {}
+            for name in pairs(options.globals or {}) do names[#names + 1] = name end
+            for _, name in ipairs(names) do saved[name] = rawget(_G, name) end
+            rawset(_G, "Managers", {
+                backend = { get_interface = function() return items_backend end },
             })
+            if options.cjson_missing then
+                rawset(_G, "cjson", nil)
+            else
+                rawset(_G, "cjson", {
+                    encode = function(value)
+                        if options.encode_throw then error("encode exploded") end
+                        return #value > 0 and "encoded-traits" or "encoded-properties"
+                    end,
+                })
+            end
+            for name, value in pairs(options.globals or {}) do
+                rawset(_G, name, value)
+            end
+            local ok, err = pcall(body)
+            for _, name in ipairs(names) do rawset(_G, name, saved[name]) end
+            if not ok then error(err, 0) end
         end
-        local call_ok, call_error = pcall(
-            hooked._upgrade_magic_level,
-            function() error("vanilla Apply must not run") end, window)
-        rawset(_G, "Managers", saved_managers)
-        rawset(_G, "cjson", saved_cjson)
+        local call_ok, call_error
+        with_env(function()
+            call_ok, call_error = pcall(
+                hooked._upgrade_magic_level,
+                function() error("vanilla Apply must not run") end, window)
+        end)
 
         return {
             mod = mod,
@@ -348,7 +369,52 @@ return function(H, repo_root)
             syncs = syncs,
             sounds = sounds,
             safe_hooked = safe_hooked,
+            hooked = hooked,
+            with_env = with_env,
         }
+    end
+
+    -- #1141: the vanilla two-endpoint Adventure ranges and Weave maxima the
+    -- 2026-09-21 card exercised (weapon_properties.lua:21-26/72-77/108-113,
+    -- weave_properties.lua:13/37/55). Crit chance keeps its five-tier bonus
+    -- table, which the #244 policy declines.
+    local function vanilla_property_globals()
+        local function adventure(range)
+            return { description_values = { { value_type = "percent", value = range } } }
+        end
+        local function weave(max, display_name)
+            return {
+                display_name = display_name,
+                description_values = { { value_type = "percent", value = max } },
+            }
+        end
+        return {
+            WeaponProperties = { properties = {
+                block_cost = adventure({ -0.1, -0.3 }),
+                attack_speed = adventure({ 0.03, 0.05 }),
+                power_vs_skaven = adventure({ 0.05, 0.1 }),
+                crit_chance = adventure({ 0.03, 0.03, 0.04, 0.04, 0.05 }),
+            } },
+            WeaveProperties = { properties = {
+                weave_block_cost = weave(-0.3, "properties_block_cost"),
+                weave_attack_speed = weave(0.05, "properties_attack_speed"),
+                weave_power_vs_skaven = weave(0.1, "properties_power_vs_skaven"),
+                weave_crit_chance = weave(0.05, "properties_crit_chance"),
+                weave_stamina = weave(2, "properties_stamina"),
+            } },
+        }
+    end
+    local value_policy = assert(loadfile(root .. "_cim_property_value_policy.lua"))()
+    local accessory_policy = assert(loadfile(root .. "_cim_accessory_property_policy.lua"))()
+
+    local function with_property_globals(body)
+        local globals = vanilla_property_globals()
+        local saved = {}
+        for name in pairs(globals) do saved[name] = rawget(_G, name) end
+        for name, value in pairs(globals) do rawset(_G, name, value) end
+        local ok, err = pcall(body)
+        for name in pairs(globals) do rawset(_G, name, saved[name]) end
+        if not ok then error(err, 0) end
     end
 
     local MUTABLE_HOOKS = {
@@ -810,15 +876,16 @@ return function(H, repo_root)
         }), false)
     end)
 
-    H.test("CIM weave-loadout owner exports its four math helpers and temper boundary", function()
+    H.test("CIM weave-loadout owner exports its math helpers and temper boundary", function()
         local mod = fake_mod()
         local exports = install_owner(mod)
         local names = {}
         for name in pairs(exports) do names[#names + 1] = name end
         table.sort(names)
         H.deep_equal(names, {
-            "apply_item_draft", "bubble_cap", "cap_grid_property_arrays",
-            "discard_item_draft", "item_draft_payload", "store_property_slot",
+            "apply_item_draft", "bubble_cap", "bubbles_for_value",
+            "cap_grid_property_arrays", "discard_item_draft", "item_draft_payload",
+            "representable_bubble_range", "store_property_slot",
             "value_for_bubbles",
         })
         for _, name in ipairs(names) do
@@ -940,5 +1007,117 @@ return function(H, repo_root)
                 "owner must not touch " .. forbidden)
         end
         H.equal(count_plain(owner, "mod:hook"), 10)
+    end)
+
+    H.test("CIM #1141 storable bubble ranges follow the vanilla Adventure ranges", function()
+        local mod = fake_mod()
+        mod._cim244_property_value_policy = value_policy
+        local exports = install_owner(mod)
+        with_property_globals(function()
+            for _, case in ipairs({
+                { "weave_block_cost", 2, 5 },
+                { "weave_attack_speed", 3, 5 },
+                { "weave_power_vs_skaven", 3, 5 },
+                { "weave_crit_chance", 1, 5 },
+                { "weave_stamina", 1, 2 },
+                { "weave_movespeed", 1, 1 },
+            }) do
+                local low, high = exports.representable_bubble_range(case[1])
+                H.equal(low, case[2], case[1] .. " low")
+                H.equal(high, case[3], case[1] .. " high")
+            end
+            -- The report's arithmetic: one block-cost bubble (6%) clamps to the
+            -- 10% range start and reads back as two; one attack-speed bubble
+            -- (1%) clamps to 3% and reads back as three; one power-vs-skaven
+            -- bubble (2%) clamps to 5% and reads back as three.
+            local function round_trip(weave_key, count)
+                return exports.bubbles_for_value(weave_key,
+                    exports.value_for_bubbles(weave_key, count))
+            end
+            H.equal(round_trip("weave_block_cost", 1), 2)
+            H.equal(round_trip("weave_attack_speed", 1), 3)
+            H.equal(round_trip("weave_power_vs_skaven", 1), 3)
+            H.equal(round_trip("weave_crit_chance", 1), 1)
+            H.equal(round_trip("weave_block_cost", 2), 2)
+            H.equal(round_trip("weave_attack_speed", 3), 3)
+        end)
+    end)
+
+    H.test("CIM #1141 Apply refuses a staged count the item cannot store", function()
+        local result = run_apply_hook({
+            value_policy = value_policy,
+            accessory_policy = accessory_policy,
+            globals = vanilla_property_globals(),
+            draft = {
+                properties = { weave_block_cost = { 2 } },
+                traits = { weave_old_trait = 1 },
+            },
+        })
+        H.equal(result.call_ok, true, result.call_error)
+        H.equal(result.applies, 1)
+        H.equal(result.apply_ok, false)
+        H.equal(result.apply_detail, "unrepresentable")
+        H.equal(result.saves, 0, "nothing may be persisted")
+        H.equal(result.refreshes, 0)
+        H.equal(result.item.properties, result.old_item_properties)
+        H.equal(result.item.traits, result.old_item_traits)
+        H.equal(result.item.CustomData.properties, "old-properties-json")
+        H.equal(result.raw_item.properties, result.old_raw_properties)
+        H.equal(result.record.properties, result.old_saved_properties)
+        H.equal(result.drafts["es_mercenary|bid"], result.draft,
+            "the draft stays staged for the player to adjust")
+        H.equal(result.discards, 0)
+        H.equal(result.syncs, 0)
+        H.equal(result.sounds, 0)
+        H.equal(count_message(result.mod, "echo"), 0)
+        H.equal(count_message(result.mod, "warning",
+            "[cim] Apply rejected: block_cost needs 2 to 5 bubbles on this item (1 staged)"), 1)
+    end)
+
+    H.test("CIM #1141 a committed draft re-seeds as exactly the staged counts", function()
+        local result = run_apply_hook({
+            value_policy = value_policy,
+            accessory_policy = accessory_policy,
+            globals = vanilla_property_globals(),
+            draft = {
+                properties = { weave_block_cost = { 2, 3 } },
+                traits = { weave_old_trait = 1 },
+            },
+        })
+        H.equal(result.call_ok, true, result.call_error)
+        H.equal(result.apply_ok, true)
+        H.equal(result.apply_detail, true)
+        H.equal(result.saves, 1)
+        H.equal(result.discards, 1)
+        H.equal(result.syncs, 1)
+        local stored = result.item.properties.block_cost
+        H.truthy(type(stored) == "number" and math.abs(stored - 0.1) < 0.000001,
+            "two bubbles (12%) store as normalized 0.1 across 10%..30%")
+        H.equal(result.raw_item.properties.block_cost, stored)
+        H.equal(result.record.properties.block_cost, stored)
+        H.equal(result.item.properties.power_vs_skaven, nil,
+            "the replaced property is gone, not appended to")
+        -- The grid the player sees on reopen is seeded from the published item
+        -- through the real get_loadout_properties hook.
+        result.with_env(function()
+            local props = result.hooked.get_loadout_properties(
+                function() error("vanilla must not run") end,
+                nil, "es_mercenary", "bid")
+            H.equal(#props.weave_block_cost, 2, "reopen shows the two staged bubbles")
+            H.equal(props.weave_power_vs_skaven, nil)
+        end)
+    end)
+
+    H.test("CIM #1141 runtime check proves the round trip on the live owner", function()
+        local result = run_apply_hook({
+            value_policy = value_policy,
+            accessory_policy = accessory_policy,
+            globals = vanilla_property_globals(),
+        })
+        local check = result.mod.checks.issue1141_apply_exact_bubble_round_trip
+        H.equal(type(check), "function", "runtime must register the check")
+        result.with_env(function()
+            H.equal(check(), nil, "check must pass against the vanilla ranges")
+        end)
     end)
 end

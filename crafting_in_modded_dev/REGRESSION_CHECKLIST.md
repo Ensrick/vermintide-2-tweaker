@@ -62,6 +62,18 @@ foreign or copied raw seed rows without cleanup. The named #592 check binds
 its real `_om` ledger independently of the mod facade. Preserve this coverage
 alongside #1465's Apply presentation composition and window-exit release.
 
+### issue1141-exact-bubble-round-trip - Apply commits exactly the staged bubble counts
+
+| Field | Value |
+|---|---|
+| Symptom | One staged Block Cost Reduction bubble showed as two after APPLY; one Attack Speed or Power vs Skaven bubble showed as three (RainReligion, 2026-09-21). |
+| Root cause | An ordinary item stores a normalized Adventure value. The #244 write clamps a count below the Adventure range start to that start and the reopen read expands it back into the start's bubble count, so the grid and the committed item disagreed. |
+| Fix version(s) | cim_dev 0.8.136-dev (#1141) |
+| Category | SOLO / TRANSACTION |
+| Repro | Equip a crafted weapon, open Temper Item, stage exactly one Block Cost Reduction bubble, press APPLY, leave and reopen Temper Item. |
+| Expected post-fix | APPLY (and CRAFT) refuse the draft with `[cim] Apply rejected: <property> needs <low> to <high> bubbles on this item (<n> staged)`, nothing is saved, and the draft stays staged. Two block cost bubbles commit and reopen as two; a second APPLY reports no staged changes. |
+| Detection | `test_cim_temper_transaction.lua` covers `unrepresentable_properties` and its description; `test_cim_weave_loadout_owner.lua` derives the storable ranges from the vanilla numbers, refuses the one-bubble Apply, and re-seeds a committed draft exactly; `test_cim_temper_runtime.lua` proves refusal keeps the draft and mints nothing. `/cim_regression_test` runs `issue1141_apply_exact_bubble_round_trip` against the live property tables. |
+
 ### issue1122-1227-regression-instrument-ownership - live checks cannot hide drift
 
 | Field | Value |

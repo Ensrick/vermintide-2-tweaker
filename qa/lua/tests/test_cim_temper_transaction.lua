@@ -99,4 +99,60 @@ return function(H, repo_root)
         H.equal(source.properties.crit_chance, 1)
         H.equal(source.traits[1], "trait")
     end)
+
+    H.test("CIM #1141 lists staged counts outside the storable range, key-sorted", function()
+        local ranges = {
+            weave_block_cost = { 2, 5 },
+            weave_attack_speed = { 3, 5 },
+            weave_crit_chance = { 1, 5 },
+        }
+        local function range(weave_key)
+            local pair = ranges[weave_key]
+            if pair then return pair[1], pair[2] end
+            return nil
+        end
+        local function strip(key) return (key:gsub("^weave_", "")) end
+        local rejected = temper.unrepresentable_properties({
+            properties = {
+                weave_crit_chance = { 1 },
+                weave_block_cost = { 2 },
+                weave_attack_speed = { 3, 4 },
+                weave_unknown = { 5 },
+                weave_empty = {},
+            },
+        }, strip, range)
+        H.deep_equal(rejected, {
+            { key = "attack_speed", weave_key = "weave_attack_speed",
+              staged = 2, low = 3, high = 5 },
+            { key = "block_cost", weave_key = "weave_block_cost",
+              staged = 1, low = 2, high = 5 },
+        })
+        H.equal(temper.unrepresentable_properties({
+            properties = { weave_block_cost = { 2, 3 }, weave_crit_chance = { 1 } },
+        }, strip, range), nil)
+        H.equal(temper.unrepresentable_properties({}, strip, range), nil)
+        local over = temper.unrepresentable_properties({
+            properties = { weave_block_cost = { 1, 2, 3, 4, 5, 6 } },
+        }, strip, range)
+        H.equal(over[1].staged, 6)
+        H.equal(over[1].high, 5)
+    end)
+
+    H.test("CIM #1141 describes each refused count with its storable range", function()
+        local rejected = {
+            { key = "attack_speed", weave_key = "weave_attack_speed",
+              staged = 1, low = 3, high = 5 },
+            { key = "block_cost", weave_key = "weave_block_cost",
+              staged = 1, low = 2, high = 5 },
+        }
+        H.equal(temper.describe_unrepresentable(rejected),
+            "attack_speed needs 3 to 5 bubbles on this item (1 staged); "
+            .. "block_cost needs 2 to 5 bubbles on this item (1 staged)")
+        H.equal(temper.describe_unrepresentable(rejected, function(weave_key)
+            if weave_key == "weave_block_cost" then return "Block Cost Reduction" end
+            error("localizer exploded")
+        end), "attack_speed needs 3 to 5 bubbles on this item (1 staged); "
+            .. "Block Cost Reduction needs 2 to 5 bubbles on this item (1 staged)")
+        H.equal(temper.describe_unrepresentable(nil), "")
+    end)
 end
