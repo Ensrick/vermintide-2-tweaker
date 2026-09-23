@@ -58,6 +58,12 @@ there is no copied implementation.
   accept/reject tables, the shipped loc table scanned clean, and the live check
   pinned to the pure scan. The formatter shadow counts calls; the global is
   never swapped.
+- `tests/test_gut_mod_tweaker_keep_routing.lua`: #1652 the shipped Mod Tweaker
+  transition closure and `/gut_regression_test` runner lifted out of the entry
+  file: the old keep probe reproduces the live alert and missing fade, both
+  routing policies route as designed, the contracts module returns nil, `skip:`
+  or the loud mismatch messages, and the runner counts SKIP apart from PASS
+  and FAIL with printf resolved through a test-local environment.
 - `fixtures/vanilla_weapon_master_list.lua`: GENERATED vanilla weapon census
   (every `ItemMasterList` melee/ranged entry with its `can_wield` list after the
   DLC `UpdateItemMasterList` patches, each hero career's

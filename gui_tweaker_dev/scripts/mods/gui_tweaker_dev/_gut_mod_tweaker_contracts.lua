@@ -154,8 +154,9 @@ _rt_register("mod_tweaker_transition_registered", function()
     -- transition_with_fade so the closure takes the standalone-ModTweakerView branch.
     -- Pre-seed views.mod_tweaker_view so _attach_view short-circuits (idempotent
     -- early-return) without needing a real renderer; the closure must then set
-    -- current_view. (The keep branch routes via transition_with_fade -> hero_view
-    -- sub-state and is covered by mod_tweaker_substate_registered below.)
+    -- current_view. (The keep route is asserted against the published routing policy
+    -- further down; the dormant sub-state parameters live in
+    -- mod_tweaker_keep_substate_routing.)
     local fake = {
         ingame_ui_context = { is_in_inn = false },
         views = { mod_tweaker_view = { _exit_transition = nil } },
@@ -188,33 +189,90 @@ _rt_register("mod_tweaker_transition_registered", function()
         return string.format("ingame_menu origin did not set _exit_transition = ingame_menu (got %s)", tostring(et_legacy))
     end
 
-    -- KEEP branch (v0.2.60-dev): in the keep (is_in_inn ~= false) the closure must route
-    -- to the hero_view sub-state via transition_with_fade WITH force_open = true and
-    -- menu_state_name = "gut_mod_tweaker". Dropping force_open is the regression that made
-    -- the ESC button darken-then-open-nothing (the keep ESC menu IS hero_view, so without
-    -- force_open IngameUI.handle_transition skips the re-enter and menu_state_name is
-    -- ignored). Capture the call to assert both params survive.
-    if rawget(_G, "HeroViewStateModTweaker") then
-        local captured
-        local fake_keep = {
-            ingame_ui_context = { is_in_inn = true },
-            transition_with_fade = function(_self, transition, params)
-                captured = { transition = transition, params = params or {} }
-            end,
-        }
-        settings.transitions.mod_tweaker_view(fake_keep)
-        if not captured then
-            return "keep branch did not call transition_with_fade"
+    -- KEEP route (#1652): the hero_view sub-state route (v0.2.60-dev) has been gated OFF
+    -- since the v0.2.62-dev bounce revert (`_USE_KEEP_SUBSTATE = false`, published as
+    -- mod._gut_mt_keep_substate_routing), so in the keep (is_in_inn ~= false) the closure
+    -- opens the SAME standalone ModTweakerView and never calls transition_with_fade. The
+    -- old assertion demanded the dormant route whenever HeroViewStateModTweaker existed
+    -- (it always does: the state stays registered for /mod_tweaker) and drove the closure
+    -- with a keep fake that had no views, so it reported on a branch the code deliberately
+    -- does not take. Assert the keep route against the published policy instead; the
+    -- policy read must resolve (5.1d rule 2). The dormant sub-state parameters are
+    -- covered by mod_tweaker_keep_substate_routing below.
+    local policy = mod._gut_mt_keep_substate_routing
+    if type(policy) ~= "boolean" then
+        return "keep routing policy not published (mod._gut_mt_keep_substate_routing is "
+            .. type(policy) .. ")"
+    end
+    local fade_calls = 0
+    local fake_keep = {
+        current_view = "hero_view",
+        ingame_ui_context = { is_in_inn = true },
+        views = { mod_tweaker_view = { _exit_transition = nil } },
+        transition_with_fade = function() fade_calls = fade_calls + 1 end,
+    }
+    settings.transitions.mod_tweaker_view(fake_keep)
+    if policy then
+        if fade_calls ~= 1 then
+            return "keep branch did not route through transition_with_fade while the sub-state policy is on"
         end
-        if captured.transition ~= "hero_view" then
-            return string.format("keep branch transition not 'hero_view' (got %s)", tostring(captured.transition))
+    else
+        if fade_calls ~= 0 then
+            return "keep branch called transition_with_fade while the sub-state policy is off"
         end
-        if captured.params.menu_state_name ~= "gut_mod_tweaker" then
-            return string.format("keep branch menu_state_name not 'gut_mod_tweaker' (got %s)", tostring(captured.params.menu_state_name))
+        if fake_keep.current_view ~= "mod_tweaker_view" then
+            return "keep branch did not open the standalone ModTweakerView (current_view = "
+                .. tostring(fake_keep.current_view) .. ")"
         end
-        if captured.params.force_open ~= true then
-            return "keep branch missing force_open = true (the darken-then-nothing regression)"
+        if fake_keep.views.mod_tweaker_view._exit_transition ~= "hero_view" then
+            return "keep branch did not capture the hero_view origin for exit"
         end
+    end
+end)
+
+-- (#1652) The dormant keep sub-state route: transition_with_fade("hero_view", {
+-- menu_state_name = "gut_mod_tweaker", force_open = true }). Dropping force_open was the
+-- v0.2.60-dev darken-then-open-nothing regression (the keep ESC menu IS hero_view, so
+-- without force_open IngameUI.handle_transition skips the re-enter and menu_state_name
+-- is ignored). This runs only while the published policy is on; otherwise it SKIPs with
+-- the reason, because the closure never takes this branch (v0.2.62-dev revert) and a
+-- FAIL there was a verdict on nothing.
+_rt_register("mod_tweaker_keep_substate_routing", function()
+    local settings = package.loaded["scripts/ui/views/ingame_ui_settings"]
+    if not settings or not settings.transitions
+        or type(settings.transitions.mod_tweaker_view) ~= "function" then
+        return "transitions.mod_tweaker_view is not registered"
+    end
+    local policy = mod._gut_mt_keep_substate_routing
+    if type(policy) ~= "boolean" then
+        return "keep routing policy not published (mod._gut_mt_keep_substate_routing is "
+            .. type(policy) .. ")"
+    end
+    if not policy then
+        return "skip: keep sub-state routing is gated off (_USE_KEEP_SUBSTATE = false since v0.2.62-dev); the keep ESC entry opens the standalone ModTweakerView"
+    end
+    if not rawget(_G, "HeroViewStateModTweaker") then
+        return "sub-state policy is on but HeroViewStateModTweaker is not defined"
+    end
+    local captured
+    local fake_keep = {
+        ingame_ui_context = { is_in_inn = true },
+        transition_with_fade = function(_self, transition, params)
+            captured = { transition = transition, params = params or {} }
+        end,
+    }
+    settings.transitions.mod_tweaker_view(fake_keep)
+    if not captured then
+        return "keep branch did not call transition_with_fade"
+    end
+    if captured.transition ~= "hero_view" then
+        return string.format("keep branch transition not 'hero_view' (got %s)", tostring(captured.transition))
+    end
+    if captured.params.menu_state_name ~= "gut_mod_tweaker" then
+        return string.format("keep branch menu_state_name not 'gut_mod_tweaker' (got %s)", tostring(captured.params.menu_state_name))
+    end
+    if captured.params.force_open ~= true then
+        return "keep branch missing force_open = true (the darken-then-nothing regression)"
     end
 end)
 

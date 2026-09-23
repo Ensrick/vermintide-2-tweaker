@@ -1,5 +1,41 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.357-dev (2026-09-23) -- keep transition check follows the published routing policy (#1652) [verify-fix]
+
+- Rain's v0.2.354-dev log failed `mod_tweaker_transition_registered` with
+  `keep branch did not call transition_with_fade`. Not a regression in the
+  keep route: the HeroView sub-state route (0.2.60-dev) has been gated off by
+  `_USE_KEEP_SUBSTATE = false` since the 0.2.62-dev bounce revert
+  (`gui_tweaker_dev.lua`, transition closure), so the keep ESC entry opens the
+  standalone `ModTweakerView` and never calls `transition_with_fade`
+  (`IngameUI.transition_with_fade`, vanilla `ingame_ui.lua:982`). The check
+  (`_gut_mod_tweaker_contracts.lua`) still asserted the 0.2.60-dev route
+  whenever `HeroViewStateModTweaker` is defined, which it always is (the state
+  stays registered for `/mod_tweaker`), and drove the closure with a keep fake
+  that had no `views`, so the closure logged `[mt] transition: view not
+  attached; ESC entry is a no-op` (the line right above the FAIL) and the
+  check reported on a branch the code deliberately does not take.
+- The routing policy is now published as `mod._gut_mt_keep_substate_routing`
+  (the same `_USE_KEEP_SUBSTATE` constant, hoisted beside the closure).
+  `mod_tweaker_transition_registered` asserts the keep route against it: with
+  the policy off the keep fake must open the standalone view, capture the
+  `hero_view` origin for exit and never fade; with it on the fake must fade.
+  An unpublished policy fails loudly (5.1d rule 2).
+- New `mod_tweaker_keep_substate_routing` owns the dormant sub-state
+  parameters (`hero_view`, `gut_mod_tweaker`, `force_open = true`). While the
+  policy is off it returns `skip:` with the reason, and `/gut_regression_test`
+  now renders the ct-style `skip:` sentinel as `SKIP: <name> -- <reason>`
+  with its own count (`=== N passed, N failed, N skipped ===`) and a
+  `[regression] SKIP` printf line; a skip never reaches the warning channel.
+  On 0.2.356-dev the same return rendered as a FAIL.
+- Offline: `qa/lua/tests/test_gut_mod_tweaker_keep_routing.lua` lifts the
+  shipped transition closure and runner out of the entry file: the 0.2.356-dev
+  probe shape reproduces the exact live alert and missing fade; policy off
+  opens the standalone view; policy on still fades with `force_open`; the
+  contracts module returns nil, `skip:` or the loud mismatch messages against
+  each policy; the runner renders SKIP separately from PASS and FAIL.
+- Player-facing behaviour is unchanged.
+
 ## 0.2.356-dev (2026-09-23) -- loc format check is a pure scan, not a formatter probe (#1651) [verify-fix]
 
 - Rain's v0.2.354-dev log failed `localization_format_safe` on
