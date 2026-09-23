@@ -1,5 +1,26 @@
 # Regression Checklist — gui_tweaker_dev
 
+## Keep transition check follows the routing policy (#1652, 0.2.357-dev)
+
+- Keep, solo: run `/gut_regression_test`. `mod_tweaker_transition_registered`
+  must PASS and `mod_tweaker_keep_substate_routing` must render as
+  `SKIP: ... keep sub-state routing is gated off`; the summary line reads
+  `=== N passed, 0 failed, 1 skipped ===` and the log carries
+  `[regression] SKIP mod_tweaker_keep_substate_routing`.
+- ESC > Mod Tweaker in the keep still opens the menu and exits back to the
+  hero view; from a mission it returns to the menu it was opened from.
+- Host tests: `test_gut_mod_tweaker_keep_routing.lua`.
+
+## Localization format check is a pure scan (#1651, 0.2.356-dev)
+
+- Keep or mission, any mod set (with or without Loremasters Armoury): run
+  `/gut_regression_test`; `localization_format_safe` must PASS and the log must
+  not contain `bad argument #2 to 'hook_chain'`.
+- Paged loadouts still render `Page n/m` and `Loadout VII` style headers
+  (#231): the placeholder strings are untouched.
+- Host tests: `test_gut_loc_format.lua` (probe reproduction, accept/reject
+  tables, shipped loc table scan, check pinned to the pure scan).
+
 ## Thirty modded loadouts, paged selector (#231, 0.2.350-dev)
 
 - Modded realm, keep, "Use non-modded loadouts" OFF: open Equipment and press

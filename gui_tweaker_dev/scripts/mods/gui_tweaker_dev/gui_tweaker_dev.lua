@@ -40,7 +40,7 @@ end
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.355-dev"
+local MOD_VERSION = "0.2.357-dev"
 local GUT_RPC_SCHEMA = 1 -- Bump only when a GUT positional wire shape changes.
 mod._GUT_RPC_SCHEMA = GUT_RPC_SCHEMA
 
@@ -149,20 +149,25 @@ local function _rt_src_read(path)
     return t
 end
 mod:command("gut_regression_test", "GUI tweaker self-check", function()
-    local pass, fail = 0, 0
+    local pass, fail, skip = 0, 0, 0
     mod:echo("=== gut_regression_test (v%s) ===", MOD_VERSION)
     for _, c in ipairs(_RT_CHECKS) do
         local ok, err = pcall(c.fn)
         if ok and err == nil then
             mod:echo("  PASS: %s", c.name); pass = pass + 1
             mod:info("[regression] PASS %s", c.name)
+        elseif ok and type(err) == "string" and err:sub(1, 5) == "skip:" then
+            -- (#1652) ct-style sentinel (PROJECT_STANDARDS 5.1d rule 2): cannot run here, says why.
+            local why = err:sub(6):gsub("^%s+", "")
+            mod:echo("  SKIP: %s -- %s", c.name, why); skip = skip + 1
+            pcall(printf, "[regression] SKIP %s: %s", c.name, why)
         else
             local msg = (not ok and tostring(err)) or tostring(err)
             mod:echo("  FAIL: %s -- %s", c.name, msg); fail = fail + 1
             mod:warning("[regression] FAIL %s: %s", c.name, msg)
         end
     end
-    mod:echo("=== %d passed, %d failed ===", pass, fail)
+    mod:echo("=== %d passed, %d failed, %d skipped ===", pass, fail, skip)
 end)
 
 mod:command("lua_mem", "Print live Lua heap usage (per-mod memory measurement). Optional label: /lua_mem <label>", function(label)
@@ -362,28 +367,19 @@ _rt_register("arrow_hover_native_size", function()
     end
 end)
 
+-- Layer 3 (2026-05-25): runtime twin of qa/check_localization.ps1, so an unescaped % in a
+-- loc string cannot ship even when the static gate is skipped. (#1651) The scan is PURE:
+-- the former `pcall(string.format, value)` probe rejected every legitimate placeholder
+-- ("Page %d/%d") and ran through whatever hooks the formatter slot (LA does, so the error
+-- surfaced from VMF hooks.lua:180 as a hook_chain argument error). Rules: _gut_loc_format.lua.
+local _gut_loc_format = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_loc_format")
+mod._gut_loc_format = _gut_loc_format
 _rt_register("localization_format_safe", function()
-    -- Layer 3 (2026-05-25): catch unescaped %-format chars in loc strings at
-    -- runtime. VMF's tooltip render path calls string.format on the loc value;
-    -- literal "%APPDATA%" / "5%" / "%USERNAME%" raises 'invalid option' and
-    -- shows as a red error tooltip in the VMF settings UI. Static check is
-    -- qa/check_localization.ps1 -- this is its runtime twin so the bug can't
-    -- ship even if the static check is skipped. RULE: any literal % in a loc
-    -- string must be doubled to %%.
     local ok, loc = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/gui_tweaker_dev_localization")
     if not ok or type(loc) ~= "table" then
         return "localization table could not be loaded: " .. tostring(loc)
     end
-    for k, v in pairs(loc) do
-        if type(v) == "table" and type(v.en) == "string" then
-            local fmt_ok, fmt_err = pcall(string.format, v.en)
-            if not fmt_ok then
-                return string.format(
-                    "loc key %q has invalid format string (escape literal %% as %%%%): %s",
-                    k, tostring(fmt_err))
-            end
-        end
-    end
+    return _gut_loc_format.scan(loc)
 end)
 
 _rt_register("all_languages_defer_340", function()
@@ -1507,6 +1503,10 @@ mod._gut_mt_repin_la = _gut_mt_repin_la
 --   (b) views table -- hook IngameUI.setup_views post-call (ingame_ui.lua:145)
 --       and inject our view instance, mirroring how
 --       view_settings.views_function builds the canonical map.
+-- (#1652) Keep-routing policy, published for the regression contracts: false since the
+-- v0.2.62-dev sub-state bounce revert (closure below), so the keep ESC entry never fades.
+local _USE_KEEP_SUBSTATE = false
+mod._gut_mt_keep_substate_routing = _USE_KEEP_SUBSTATE
 local ok_settings_inject, settings_inject_err = pcall(function()
     local settings = package.loaded["scripts/ui/views/ingame_ui_settings"]
     if not settings or not settings.transitions then
@@ -1546,7 +1546,6 @@ local ok_settings_inject, settings_inject_err = pcall(function()
         -- view too. (HeroViewStateModTweaker + _ba_heroview_inject stay registered for the
         -- /mod_tweaker command.) Flip _USE_KEEP_SUBSTATE back only after the sub-state
         -- bounce is root-caused.
-        local _USE_KEEP_SUBSTATE = false
         if _USE_KEEP_SUBSTATE and in_keep and self.transition_with_fade and rawget(_G, "HeroViewStateModTweaker") then
             _dbg("[mt] ESC entry in keep -> hero_view sub-state gut_mod_tweaker")
             -- force_open = true is LOAD-BEARING. The ESC "Mod Tweaker" button fires from
