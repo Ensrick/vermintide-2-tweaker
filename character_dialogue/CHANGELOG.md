@@ -1,7 +1,10 @@
 # Character Dialogue Changelog
 
-## 0.1.12-dev (2026-09-06) - staged audio-isolation owner (#998)
+## 0.1.13-dev (2026-09-23) - staged audio-isolation owner (#998)
 
+- Reissued as 0.1.13-dev: the 0.1.12-dev entry (2026-09-06) merged to master
+  but was never published, so the claim broker allocated the next number.
+  Version strings only; no source change.
 - Adds the additive API v6 `isolation_setting` capability. GUI Dev stages this
   setting under CD's actual VMF owner, with one silent write and one batch
   completion callback; direct API and ordinary VMF notification reuse the same
