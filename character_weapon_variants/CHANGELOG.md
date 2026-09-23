@@ -1,5 +1,100 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.543-dev (2026-09-23) -- careers array no longer aliased across Empire defs (#1660) [verify-fix]
+
+- `_build_entry` now publishes a private, element-wise copy of `def.careers`
+  as the ItemMasterList row's `can_wield`
+  (`_cwv_item_registration_owner.lua:341`). Sibling mods mutate rows in
+  place: Pusfume's roster appends its career to every melee/ranged row
+  (`_pusfume_roster.lua:90,124-127`; log `Opened 236 hero weapon(s)`), and
+  weapon_tweaker's `_set_career` removes and appends
+  (`_wt_availability.lua:130-137`). The catalog shares ONE careers array
+  across 25 Empire definitions (`_cwv_variant_catalog.lua:9`), so one
+  foreign append leaked into every Empire def and failed
+  `cwv_slot_extension_scoped`, `cwv_no_ammo_strip_coverage`,
+  `issue593_kruber_axe_shield_canonical_ownership` and
+  `issue597_greataxe_replaces_poleaxe` (RainReligion 2026-09-21, Pusfume
+  v0.7.0-dev co-installed). Those checks keep reading `def.careers`, which
+  is now CWV-owned authored data no sibling can reach; they need no
+  Pusfume skip.
+- Engine-free coverage: `test_cwv_careers_publication.lua` drives the
+  installed registration owner's `build_entry` for two definitions sharing
+  one careers array, applies a Pusfume-style append and a weapon_tweaker
+  style remove-and-append to the published rows, and asserts neither the
+  sibling row nor the catalog array sees them; a definition without careers
+  still inherits a copy of the base row's list.
+
+**DoD:** Registration data only; no mesh, template or wire payload changed.
+Live proof: the four named checks PASS in `/cwv_regression_test` on this
+build with Pusfume enabled.
+
+## 0.1.542-dev (2026-09-23) -- Outrider grenade projectile swap runs on the clone (#1320) [verify-fix]
+
+- The Outrider Grenade Launcher's fire action now points at the authored
+  grenade projectile config. The template is
+  `table.clone(dr_deus_01_template_1, true)`, a deep copy (foundation
+  `scripts/util/table.lua:31-49`; the second argument is `skip_metatable`),
+  so the swap's identity guard `sub_action.projectile_info == Projectiles.dr_deus_01`
+  never matched the clone's copied table and the swap never ran: every shot
+  spawned the Trollhammer torpedo unit (`dr_deus_01_head`,
+  `dlcs/morris/morris_equipment_settings.lua:227-236`) through
+  `ProjectileSystem.spawn_player_projectile` (`projectile_system.lua:178-181`).
+  RainReligion's 2026-09-21 log: `FAIL: issue1320_outrider_projectile_unit_and_wire`.
+- `_cwv_outrider_projectile_wire.lua` gains a pure planner and applies it at
+  its install (from the item-identity transport owner, after the template
+  exists): a clone sub-action is swapped when the vanilla donor's sub-action
+  at the same path references `Projectiles.dr_deus_01` by identity
+  (`weapon_templates/dr_deus_01.lua:56`), with a fallback on the stable
+  `projectile_units_template` field when no donor row exists. The native
+  Trollhammer is never written, and the swap runs even when the lookup
+  registration fails closed. The constructor keeps no dofile and no identity
+  guard. Boot log:
+  `[cwv:1320] outrider projectile swap: rows=N swapped=N units_template=grenade`.
+- Engine-free coverage in `test_cwv_outrider_projectile_wire.lua`: the deep
+  copy defeats identity (the FAIL premise), the planner swaps the clone's fire
+  action and leaves the donor untouched, the field fallback and the foreign
+  projectile skip, the real install swaps and stays idempotent, and the
+  constructor no longer compares clone identity.
+
+**DoD:** Live proof is the #1320 solo card (Outrider shots spawn the grenade
+model, Bardin's Trollhammer unchanged) with
+`issue1320_outrider_projectile_unit_and_wire` PASS on this build.
+
+## 0.1.541-dev (2026-09-23) -- Dual Axes per-hand husk identity proof (#579) [verify-fix]
+
+- `issue579_dual_axes_preview_and_husk_skin_continuity` now drives the live
+  per-hand husk adapter with a RemotePlayer-shaped owner (`peer_id`,
+  `is_player_controlled`, `local_player_id` 1, `network_id`;
+  remote_player.lua:8,135-145). The old bare `{ peer_id }` stub was refused by
+  the #914 human-only peer gate (`_cwv_peer_resolver.lua:24-34`; log
+  `[cwv:914] ... source=owner not human peer=none`), so the write never saw
+  the exact descriptor and fell to the single-skin branch
+  (`_cwv_husk_path.lua:581-585`), which reads ONE primary skin for both hands.
+  A generated pair mirrors right into left, so both hands took the primary
+  illusion (RainReligion 2026-09-21, cwv 0.1.540-dev, both hands
+  `wpn_axe_02_t1`). The check also prefers illusion meshes resident on this
+  peer: a non-resident override is deferred to a bounded lease (#476), and
+  residency is not what the check proves.
+- `[cwv:474] husk re-keyed` now names the identity state per hand
+  (`identity=exact` / `none` / `unavailable`), so a co-op log attributes a
+  collapsed offhand to a missing exact identity instead of reading like a
+  successful re-key.
+- Co-op, what the client sees: once the owner's exact identity lands, the
+  remote husk shows the owner's right and left axe illusions independently.
+  Before it lands, the husk shows the primary illusion on both hands until the
+  bounded re-wield, and the observer's log now says which state each hand
+  was written under.
+- Engine-free coverage: `test_cwv_dual_axes_husk_hands.lua` proves the #914
+  gate refuses the bare stub and admits the RemotePlayer shape, the real husk
+  re-key collapses the offhand without an exact descriptor and keeps both
+  hands with one, the gate composed with the real lifecycle ledger drives the
+  adapter FAIL then PASS, and the shipped check no longer builds the bare stub.
+
+**DoD:** No mesh, transform, template or wire payload changed. Live proof is
+the #579 co-op card (the observer's rendered husk); solo
+`/cwv_regression_test` must show the check PASS on this build before the
+card is re-pinned.
+
 ## 0.1.540-dev (2026-09-18) -- publish the schema-2 Blacksmith seed identity provider (#1141, #592) [verify-fix]
 
 - Adds `_cwv_get_blacksmith_seed_identity_provider()` (schema 2, owner
