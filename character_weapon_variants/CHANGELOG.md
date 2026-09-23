@@ -1,5 +1,37 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.542-dev (2026-09-23) -- Outrider grenade projectile swap runs on the clone (#1320) [verify-fix]
+
+- The Outrider Grenade Launcher's fire action now points at the authored
+  grenade projectile config. The template is
+  `table.clone(dr_deus_01_template_1, true)`, a deep copy (foundation
+  `scripts/util/table.lua:31-49`; the second argument is `skip_metatable`),
+  so the swap's identity guard `sub_action.projectile_info == Projectiles.dr_deus_01`
+  never matched the clone's copied table and the swap never ran: every shot
+  spawned the Trollhammer torpedo unit (`dr_deus_01_head`,
+  `dlcs/morris/morris_equipment_settings.lua:227-236`) through
+  `ProjectileSystem.spawn_player_projectile` (`projectile_system.lua:178-181`).
+  RainReligion's 2026-09-21 log: `FAIL: issue1320_outrider_projectile_unit_and_wire`.
+- `_cwv_outrider_projectile_wire.lua` gains a pure planner and applies it at
+  its install (from the item-identity transport owner, after the template
+  exists): a clone sub-action is swapped when the vanilla donor's sub-action
+  at the same path references `Projectiles.dr_deus_01` by identity
+  (`weapon_templates/dr_deus_01.lua:56`), with a fallback on the stable
+  `projectile_units_template` field when no donor row exists. The native
+  Trollhammer is never written, and the swap runs even when the lookup
+  registration fails closed. The constructor keeps no dofile and no identity
+  guard. Boot log:
+  `[cwv:1320] outrider projectile swap: rows=N swapped=N units_template=grenade`.
+- Engine-free coverage in `test_cwv_outrider_projectile_wire.lua`: the deep
+  copy defeats identity (the FAIL premise), the planner swaps the clone's fire
+  action and leaves the donor untouched, the field fallback and the foreign
+  projectile skip, the real install swaps and stays idempotent, and the
+  constructor no longer compares clone identity.
+
+**DoD:** Live proof is the #1320 solo card (Outrider shots spawn the grenade
+model, Bardin's Trollhammer unchanged) with
+`issue1320_outrider_projectile_unit_and_wire` PASS on this build.
+
 ## 0.1.541-dev (2026-09-23) -- Dual Axes per-hand husk identity proof (#579) [verify-fix]
 
 - `issue579_dual_axes_preview_and_husk_skin_continuity` now drives the live
