@@ -1121,4 +1121,156 @@ return function(H, repo_root)
         H.equal(button.content.title_text, "Craft copy")
         H.equal(button.content.button_hotspot.disable_button, false)
     end)
+
+    local temper_transaction = assert(loadfile(
+        root .. "_cim_temper_transaction.lua"))()
+
+    H.test("CIM #1141 Apply refusal keeps the draft and names the storable range", function()
+        local backend_id, item_key = "owned-bid", "es_sword"
+        local master = {
+            key = item_key,
+            name = item_key,
+            slot_type = "melee",
+            can_wield = { "es_mercenary" },
+            template = "one_handed_sword_template_1",
+            item_type = "one_handed_sword",
+            inventory_icon = "icon_wpn_emp_sword_01_t1",
+        }
+        local record = assert(contract.normalize_record(backend_id, {
+            item_key = item_key,
+            rarity = "modded",
+            power_level = 300,
+            traits = {},
+            properties = {},
+            via_mirror = true,
+        }, master))
+        local payload, payload_error, mirror_record =
+            contract.build_mirror_payload(record, master,
+                function() return "{}" end)
+        H.equal(payload_error, nil)
+        local mirror = { _inventory_items = {} }
+        function mirror:add_item(id, item)
+            self._inventory_items[id] = item
+            item.backend_id, item.key, item.data = id, item.ItemId, master
+            item.rarity, item.power_level = "modded", 300
+            item.traits, item.properties = {}, {}
+        end
+        function mirror:remove_item(id) self._inventory_items[id] = nil end
+        H.truthy(contract.inject_mirror_item(mirror, backend_id, payload,
+            function() return "owned-refusal-nonce" end, mirror_record))
+        local live = mirror._inventory_items[backend_id]
+        local presented = deep_clone(live)
+
+        local mod = make_mod()
+        local discarded, injected, synced = 0, 0, 0
+        local printed = {}
+        install(context(mod, {
+            transaction = temper_transaction,
+            loadout = {
+                apply_item_draft = function()
+                    return false, "unrepresentable", {
+                        { key = "block_cost", weave_key = "weave_block_cost",
+                          staged = 1, low = 2, high = 5 },
+                    }
+                end,
+                discard_item_draft = function() discarded = discarded + 1 end,
+                item_draft_payload = function() error("Apply must not mint") end,
+            },
+            get_forged_record = function() return record end,
+            get_item_master = function() return master end,
+            get_raw_mirror_item = function() return live end,
+            inject_item = function() injected = injected + 1; return true end,
+            print_line = function(fmt, ...)
+                printed[#printed + 1] = string.format(fmt, ...)
+            end,
+        }))
+        local window = {
+            _career_name = "es_mercenary",
+            _params = {},
+            _selected_item = function() return presented, backend_id end,
+            _sync_backend_loadout = function() synced = synced + 1 end,
+            _play_sound = function() error("no completion sound on refusal") end,
+        }
+        with_globals(presented, function()
+            mod.hooks._upgrade_magic_level(function() error("vanilla") end, window)
+        end, { [item_key] = master })
+        H.equal(discarded, 0, "the draft must stay staged")
+        H.equal(injected, 0)
+        H.equal(synced, 0)
+        H.equal(mod.messages[#mod.messages],
+            "[cim] Apply rejected: block_cost needs 2 to 5 bubbles on this item (1 staged)")
+        H.equal(#printed, 1)
+        H.truthy(printed[1]:find("[cim:1141] result=bubbles_rejected", 1, true))
+        H.truthy(printed[1]:find("source_bid=owned-bid", 1, true))
+    end)
+
+    H.test("CIM #1141 Craft refusal mints nothing", function()
+        local mod = make_mod()
+        local injected, registered = 0, 0
+        mod._cim_register_craft = function() registered = registered + 1; return true end
+        mod._cim_base_power = function() return 300 end
+        local printed = {}
+        install(context(mod, {
+            transaction = temper_transaction,
+            loadout = {
+                apply_item_draft = function() error("Craft must not apply") end,
+                discard_item_draft = function() end,
+                item_draft_payload = function()
+                    return { properties = { attack_speed = 0 }, traits = { "new_trait" } }, {
+                        { key = "attack_speed", weave_key = "weave_attack_speed",
+                          staged = 1, low = 3, high = 5 },
+                    }
+                end,
+            },
+            inject_item = function() injected = injected + 1; return true end,
+            print_line = function(fmt, ...)
+                printed[#printed + 1] = string.format(fmt, ...)
+            end,
+        }))
+        local window = {
+            _career_name = "es_mercenary",
+            _params = { selected_slot_name = "slot_melee" },
+            _selected_item = function()
+                return { data = { key = "es_sword" } }, "blacksmith-bid"
+            end,
+        }
+        with_globals({ rarity = "default", key = "es_sword" }, function()
+            mod.hooks._upgrade_magic_level(function() error("vanilla") end, window)
+        end)
+        H.equal(injected, 0)
+        H.equal(registered, 0)
+        H.equal(mod.messages[#mod.messages],
+            "[cim] Craft rejected: attack_speed needs 3 to 5 bubbles on this item (1 staged)")
+        H.equal(#printed, 1)
+        H.truthy(printed[1]:find("result=bubbles_rejected", 1, true))
+        H.truthy(printed[1]:find("canonical=es_sword", 1, true))
+    end)
+
+    H.test("CIM #1141 refusal names the localized property when the engine can", function()
+        local mod = make_mod()
+        local temper = install(context(mod, { transaction = temper_transaction }))
+        local saved_weave, saved_localize = rawget(_G, "WeaveProperties"), rawget(_G, "Localize")
+        rawset(_G, "WeaveProperties", { properties = {
+            weave_block_cost = { display_name = "properties_block_cost" },
+        } })
+        rawset(_G, "Localize", function(key)
+            return key == "properties_block_cost" and "Block Cost Reduction" or nil
+        end)
+        local ok, named = pcall(temper.property_display_name, "weave_block_cost", "block_cost")
+        local ok2, bare = pcall(temper.property_display_name, "weave_missing", "missing")
+        rawset(_G, "WeaveProperties", saved_weave)
+        rawset(_G, "Localize", saved_localize)
+        H.truthy(ok and ok2)
+        H.equal(named, "Block Cost Reduction")
+        H.equal(bare, "missing")
+    end)
+
+    H.test("CIM #1141 round-trip check fails loudly without the owner exports", function()
+        local mod = make_mod()
+        install(context(mod))
+        local check = mod.checks.issue1141_apply_exact_bubble_round_trip
+        H.equal(type(check), "function")
+        H.truthy(tostring(check()):find(
+            "does not export the bubble round trip", 1, true))
+    end)
 end

@@ -98,6 +98,59 @@ function M.payload_from_grid(grid, strip_property, property_value)
     return { properties = properties, traits = traits }
 end
 
+-- #1141: an ordinary (Adventure) item stores a NORMALIZED value, so a staged
+-- bubble count survives Apply only when the write/read conversion returns it
+-- unchanged. `representable_range(weave_key)` yields the inclusive low/high
+-- counts that do; nil means every count is exact for that property. Returns a
+-- key-sorted list of { key, weave_key, staged, low, high }, or nil when the
+-- whole grid is exact.
+function M.unrepresentable_properties(grid, strip_property, representable_range)
+    grid = type(grid) == "table" and grid or {}
+    assert(type(strip_property) == "function", "strip_property callback required")
+    assert(type(representable_range) == "function",
+        "representable_range callback required")
+
+    local rejected = {}
+    for weave_key, slots in pairs(grid.properties or {}) do
+        local staged = type(slots) == "table" and #slots or 0
+        if staged > 0 then
+            local low, high = representable_range(weave_key)
+            if type(low) == "number" and type(high) == "number"
+                    and (staged < low or staged > high) then
+                rejected[#rejected + 1] = {
+                    key = strip_property(weave_key),
+                    weave_key = weave_key,
+                    staged = staged,
+                    low = low,
+                    high = high,
+                }
+            end
+        end
+    end
+    if #rejected == 0 then return nil end
+    table.sort(rejected, function(left, right)
+        return tostring(left.key) < tostring(right.key)
+    end)
+    return rejected
+end
+
+-- One player-facing clause per rejected property. `display_name` may map
+-- (weave_key, key) to a localized name; the bare key is the fallback.
+function M.describe_unrepresentable(rejected, display_name)
+    local clauses = {}
+    for index, entry in ipairs(rejected or {}) do
+        local name
+        if type(display_name) == "function" then
+            local ok, value = pcall(display_name, entry.weave_key, entry.key)
+            if ok and type(value) == "string" and value ~= "" then name = value end
+        end
+        clauses[index] = string.format(
+            "%s needs %d to %d bubbles on this item (%d staged)",
+            tostring(name or entry.key), entry.low, entry.high, entry.staged)
+    end
+    return table.concat(clauses, "; ")
+end
+
 function M.copy_payload(payload)
     payload = type(payload) == "table" and payload or {}
     return {
