@@ -47,16 +47,20 @@ Assert-ReleaseFixture ((Get-GitHubReleaseRequestTimeoutSeconds -InputBytes $uplo
 $uploadFixtureBytes = $null
 Assert-ReleaseFixture ((Get-GitHubReleaseRequestTimeoutSeconds -ExpectedResponseBytes ([int]::MaxValue)) -eq 3600) 'large valid download timeout retains one-hour cap'
 
-# Canonical success never touches the list fallback.
+# Canonical success never touches the list fallback. The resolved release's
+# asset inventory is refreshed from GET /releases/{id}/assets (2026-09-23).
 $normalCalls = [System.Collections.Generic.List[string]]::new()
 $normalRequest = {
     param($Method, $Uri)
     $normalCalls.Add("$Method $Uri")
+    if ($Uri -match '/releases/101/assets\?per_page=100&page=1$') { return (New-Issue651FixtureResponse 200 @()) }
     return (New-Issue651FixtureResponse 200 ([pscustomobject]@{ id = 101; tag_name = $tag; assets = @() }))
 }.GetNewClosure()
 $normal = Resolve-GitHubReleaseByTag -Repo $repo -Tag $tag -Request $normalRequest
 Assert-ReleaseFixture ($normal.State -eq 'Found' -and $normal.Route -eq 'tag' -and $normal.Release.id -eq 101) 'normal tag endpoint resolves release'
-Assert-ReleaseFixture ($normalCalls.Count -eq 1 -and $normalCalls[0] -match '/releases/tags/') 'normal lookup does not call list endpoint'
+Assert-ReleaseFixture ($normalCalls.Count -eq 2 -and $normalCalls[0] -match '/releases/tags/' -and
+    $normalCalls[1] -match '/releases/101/assets\?per_page=100&page=1$' -and
+    -not (($normalCalls -join "`n") -match '/releases\?per_page=')) 'normal lookup refreshes assets by release id and never calls the list endpoint'
 
 # A canonical 404 is confirmed against the list before it authorizes creation.
 $notFoundCalls = [System.Collections.Generic.List[string]]::new()
@@ -72,6 +76,7 @@ Assert-ReleaseFixture ($notFound.State -eq 'Absent' -and $notFound.Route -eq 'li
 $false404Request = {
     param($Method, $Uri)
     if ($Uri -match '/releases/tags/') { return (New-Issue651FixtureResponse 404 $null) }
+    if ($Uri -match '/releases/151/assets\?') { return (New-Issue651FixtureResponse 200 @()) }
     return (New-Issue651FixtureResponse 200 @([pscustomobject]@{ id = 151; tag_name = $tag; assets = @() }))
 }.GetNewClosure()
 $false404 = Resolve-GitHubReleaseByTag -Repo $repo -Tag $tag -Request $false404Request
@@ -83,6 +88,9 @@ $fallbackRequest = {
     param($Method, $Uri)
     $fallbackCalls.Add("$Method $Uri")
     if ($Uri -match '/releases/tags/') { return (New-Issue651FixtureResponse 503 $null) }
+    if ($Uri -match '/releases/203/assets\?') {
+        return (New-Issue651FixtureResponse 200 @([pscustomobject]@{ id = 901; name = 'manifest.json'; size = 1 }))
+    }
     return (New-Issue651FixtureResponse 200 @(
         [pscustomobject]@{ id = 202; tag_name = 'mods-2026-07-15'; assets = @() },
         [pscustomobject]@{ id = 203; tag_name = $tag; assets = @([pscustomobject]@{ id = 901; name = 'manifest.json' }) }
@@ -90,6 +98,7 @@ $fallbackRequest = {
 }.GetNewClosure()
 $fallback = Resolve-GitHubReleaseByTag -Repo $repo -Tag $tag -Request $fallbackRequest
 Assert-ReleaseFixture ($fallback.State -eq 'Found' -and $fallback.Route -eq 'list-fallback' -and $fallback.Release.id -eq 203) '503 fallback finds exact tag in releases list'
+Assert-ReleaseFixture ($fallback.AssetInventory -eq 'release-id' -and @($fallback.Release.assets).Count -eq 1 -and $fallback.Release.assets[0].id -eq 901) 'list-fallback release also refreshes its asset inventory by release id'
 Assert-ReleaseFixture ($fallback.Message -match 'degraded' -and $fallback.TagStatus -eq 503) '503 fallback reports degraded route distinctly'
 
 # Pagination is bounded but can find the exact tag after a full first page.
@@ -98,6 +107,7 @@ for ($i = 1; $i -le 100; $i++) { $pageOne += [pscustomobject]@{ id = $i; tag_nam
 $paginationRequest = {
     param($Method, $Uri)
     if ($Uri -match '/releases/tags/') { return (New-Issue651FixtureResponse 503 $null) }
+    if ($Uri -match '/releases/303/assets\?') { return (New-Issue651FixtureResponse 200 @()) }
     if ($Uri -match 'page=1(?:&|$)') { return (New-Issue651FixtureResponse 200 $pageOne) }
     return (New-Issue651FixtureResponse 200 @([pscustomobject]@{ id = 303; tag_name = $tag; assets = @() }))
 }.GetNewClosure()
@@ -135,6 +145,101 @@ $ambiguousRequest = {
 }.GetNewClosure()
 $ambiguous = Resolve-GitHubReleaseByTag -Repo $repo -Tag $tag -Request $ambiguousRequest
 Assert-ReleaseFixture ($ambiguous.State -eq 'Unavailable' -and $ambiguous.Message -match 'multiple exact') 'ambiguous exact matches block mutation'
+
+# 2026-09-23 shape: the tag route embeds manifest.json as ghost asset id
+# 583157616 (HTTP 404 on read, download, and delete) while
+# GET /releases/394315644/assets serves the live id 583314449. Resolution must
+# replace the embedded inventory so downloads and clobbers use the live id.
+$ghostCalls = [System.Collections.Generic.List[string]]::new()
+$ghostManifestBytes = [System.Text.Encoding]::UTF8.GetBytes('{"mods":[{"mod_id":"gut_dev","version":"0.2.357-dev"}]}')
+$ghostRequest = {
+    param($Method, $Uri, $Accept)
+    $ghostCalls.Add("$Method $Uri")
+    if ($Uri -match '/releases/tags/') {
+        return (New-Issue651FixtureResponse 200 ([pscustomobject]@{
+            id = 394315644; tag_name = $tag
+            assets = @([pscustomobject]@{ id = 583157616; name = 'manifest.json'; size = 75000; url = 'https://api.github.com/repos/Owner/Repo/releases/assets/583157616' })
+        }))
+    }
+    if ($Uri -match '/releases/394315644/assets\?per_page=100&page=1$') {
+        return (New-Issue651FixtureResponse 200 @(
+            [pscustomobject]@{ id = 583314449; name = 'manifest.json'; size = $ghostManifestBytes.LongLength; url = 'https://api.github.com/repos/Owner/Repo/releases/assets/583314449' }
+        ))
+    }
+    if ($Uri -match '/releases/assets/583157616$') { return (New-Issue651FixtureResponse 404 $null) }
+    if ($Uri -match '/releases/assets/583314449$') {
+        return [pscustomobject]@{ StatusCode = 200; Content = ''; Bytes = $ghostManifestBytes; Error = $null }
+    }
+    return (New-Issue651FixtureResponse 500 $null)
+}.GetNewClosure()
+$ghost = Resolve-GitHubReleaseByTag -Repo $repo -Tag $tag -Request $ghostRequest
+Assert-ReleaseFixture ($ghost.State -eq 'Found' -and $ghost.AssetInventory -eq 'release-id' -and
+    @($ghost.Release.assets).Count -eq 1 -and $ghost.Release.assets[0].id -eq 583314449) 'stale embedded ghost asset is replaced by the release-id assets inventory'
+$ghostAsset = Get-GitHubReleaseAsset -Release $ghost.Release -Name 'manifest.json'
+$ghostError = $null
+$ghostBytes = $null
+try { $ghostBytes = Get-GitHubReleaseAssetBytes -Repo $repo -Asset $ghostAsset -Request $ghostRequest }
+catch { $ghostError = $_.Exception.Message }
+Assert-ReleaseFixture ($null -eq $ghostError -and $ghostAsset.id -eq 583314449 -and
+    $null -ne $ghostBytes -and [System.Text.Encoding]::UTF8.GetString($ghostBytes) -match 'gut_dev') "manifest download uses the live asset id, never the 404 ghost id [$ghostError]"
+Assert-ReleaseFixture (-not (($ghostCalls -join "`n") -match '/releases/assets/583157616')) 'ghost asset id is never requested'
+
+# The assets endpoint pages at 100 rows; a full first page must not truncate.
+$pagedAssetsPageOne = @()
+for ($i = 1; $i -le 100; $i++) { $pagedAssetsPageOne += [pscustomobject]@{ id = 700000 + $i; name = "mod$i.zip"; size = 1 } }
+$pagedAssetsRequest = {
+    param($Method, $Uri)
+    if ($Uri -match '/releases/tags/') { return (New-Issue651FixtureResponse 200 ([pscustomobject]@{ id = 505; tag_name = $tag; assets = @() })) }
+    if ($Uri -match '/releases/505/assets\?per_page=100&page=1$') { return (New-Issue651FixtureResponse 200 $pagedAssetsPageOne) }
+    if ($Uri -match '/releases/505/assets\?per_page=100&page=2$') {
+        return (New-Issue651FixtureResponse 200 @([pscustomobject]@{ id = 700101; name = 'manifest.json'; size = 2 }))
+    }
+    return (New-Issue651FixtureResponse 500 $null)
+}.GetNewClosure()
+$pagedAssets = Resolve-GitHubReleaseByTag -Repo $repo -Tag $tag -Request $pagedAssetsRequest
+Assert-ReleaseFixture ($pagedAssets.State -eq 'Found' -and @($pagedAssets.Release.assets).Count -eq 101 -and
+    (Get-GitHubReleaseAsset -Release $pagedAssets.Release -Name 'manifest.json').id -eq 700101) 'asset inventory refresh paginates past a full first page'
+
+# A failed refresh keeps the embedded array (offline fakes that only serve the
+# tag route keep working) and warns exactly once per script.
+$script:GitHubReleaseAssetInventoryWarned = $false
+$degradedAssetsRequest = {
+    param($Method, $Uri)
+    if ($Uri -match '/releases/tags/') {
+        return (New-Issue651FixtureResponse 200 ([pscustomobject]@{
+            id = 606; tag_name = $tag; assets = @([pscustomobject]@{ id = 61; name = 'manifest.json'; size = 2 })
+        }))
+    }
+    return (New-Issue651FixtureResponse 503 $null)
+}.GetNewClosure()
+$degradedWarningsFirst = @()
+$degraded = Resolve-GitHubReleaseByTag -Repo $repo -Tag $tag -Request $degradedAssetsRequest `
+    -WarningVariable degradedWarningsFirst -WarningAction SilentlyContinue
+$degradedWarningsSecond = @()
+$null = Resolve-GitHubReleaseByTag -Repo $repo -Tag $tag -Request $degradedAssetsRequest `
+    -WarningVariable degradedWarningsSecond -WarningAction SilentlyContinue
+Assert-ReleaseFixture ($degraded.State -eq 'Found' -and $degraded.AssetInventory -eq 'embedded' -and
+    @($degraded.Release.assets).Count -eq 1 -and $degraded.Release.assets[0].id -eq 61 -and
+    $degraded.Message -match 'HTTP 503; embedded asset inventory retained') 'assets endpoint outage falls back to the embedded array'
+Assert-ReleaseFixture (@($degradedWarningsFirst).Count -eq 1 -and @($degradedWarningsSecond).Count -eq 0 -and
+    "$($degradedWarningsFirst[0])" -match 'embedded asset array') 'embedded-array fallback warns exactly once'
+
+# The latest-release list entry (base-manifest fallback) refreshes the same way.
+$latestRequest = {
+    param($Method, $Uri)
+    if ($Uri -match '/releases\?per_page=') {
+        return (New-Issue651FixtureResponse 200 @([pscustomobject]@{
+            id = 808; tag_name = 'mods-2026-07-15'; draft = $false; prerelease = $false
+            assets = @([pscustomobject]@{ id = 583157616; name = 'manifest.json'; size = 1 })
+        }))
+    }
+    if ($Uri -match '/releases/808/assets\?') {
+        return (New-Issue651FixtureResponse 200 @([pscustomobject]@{ id = 583314449; name = 'manifest.json'; size = 1 }))
+    }
+    return (New-Issue651FixtureResponse 500 $null)
+}.GetNewClosure()
+$latest = Get-GitHubLatestReleaseFromList -Repo $repo -Request $latestRequest
+Assert-ReleaseFixture ($latest.id -eq 808 -and @($latest.assets).Count -eq 1 -and $latest.assets[0].id -eq 583314449) 'latest-release list entry refreshes its asset inventory by release id'
 
 # Asset selection is case-sensitive, unique, and asset-id based for downloads.
 $downloadFixtureBytes = [System.Text.Encoding]::UTF8.GetBytes('{"ok":true}')

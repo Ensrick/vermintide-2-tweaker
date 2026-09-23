@@ -94,13 +94,26 @@ $hostArgs = @{ RepoRoot=$root; Mod='modx'; Version='1.2.3-dev'; SourceCommit=$so
 $script:Mode = 'Success'
 $script:Writes = [Collections.Generic.List[string]]::new()
 $script:ServerBytes = [byte[]]::new(0)
-function Response($Value) { return @{StatusCode=200; Content=($Value | ConvertTo-Json -Depth 20 -Compress)} }
+function Response($Value) { return @{StatusCode=200; Content=(ConvertTo-Json -InputObject $Value -Depth 20 -Compress)} }
+$script:GhostGets = 0
 $request = {
     param($Method,$Uri,$InputBytes,$ContentType,$Accept,$ExpectedResponseBytes)
     Check (-not [LocalDeploymentMutexProbe]::Available($releaseMutexName)) 'release mutex held throughout hosted transaction'
     $assetName = 'deployment-receipt-modx.json'
-    $release = @{id=17;tag_name='mods-2026-09-06';draft=$false;prerelease=$false;assets=@(@{id=77;name='manifest.json';size=42})}
-    if ($script:Mode -in @('Existing','DeleteFailure')) { $release.assets += @{id=11;name=$assetName;size=2} }
+    # One inventory per phase (before/after the receipt upload), served by the
+    # embedded release arrays AND by GET /releases/{id}/assets, which production
+    # treats as the authority since the tag route served ghost ids (2026-09-23).
+    $uploaded = $script:Writes.Contains('POST')
+    $assets = @(@{id=77;name='manifest.json';size=42})
+    if (-not $uploaded) {
+        if ($script:Mode -in @('Existing','DeleteFailure')) { $assets += @{id=11;name=$assetName;size=2} }
+        if ($script:Mode -eq 'Duplicate') { $assets += @(@{id=11;name=$assetName;size=2},@{id=12;name=$assetName;size=2}) }
+        if ($script:Mode -eq 'CaseAlias') { $assets += @{id=11;name='Deployment-receipt-modx.json';size=2} }
+    } else {
+        $assets += @{id=12;name=$assetName;size=$script:ServerBytes.Length;url='https://foreign.invalid/releases/assets/12'}
+        if ($script:Mode -eq 'ReadbackMissing') { $assets = @() }
+    }
+    $release = @{id=17;tag_name='mods-2026-09-06';draft=$false;prerelease=$false;assets=$assets}
     if ($Method -eq 'GET' -and $Uri.EndsWith('/releases/latest')) {
         switch ($script:Mode) {
             'NoRelease' { return @{StatusCode=404} }
@@ -111,10 +124,15 @@ $request = {
             'ZeroId' { $release.id=0 }
             'StringId' { $release.id='17' }
             'WrongTag' { $release.tag_name='other-2026-09-06' }
-            'Duplicate' { $release.assets += @(@{id=11;name=$assetName;size=2},@{id=12;name=$assetName;size=2}) }
-            'CaseAlias' { $release.assets += @{id=11;name='Deployment-receipt-modx.json';size=2} }
         }
         return Response $release
+    }
+    if ($Method -eq 'GET' -and $Uri -match '^https://api\.github\.com/repos/Ensrick/vermintide-2-tweaker/releases/[0-9]+/assets\?per_page=100&page=1$') {
+        return Response $assets
+    }
+    if ($Method -eq 'GET' -and $Uri -ceq 'https://api.github.com/repos/Ensrick/vermintide-2-tweaker/releases/assets/583157616') {
+        $script:GhostGets++
+        return @{StatusCode=404}
     }
     if ($Method -eq 'DELETE') {
         Check ($Uri -ceq 'https://api.github.com/repos/Ensrick/vermintide-2-tweaker/releases/assets/11') 'only previous deployment receipt can be deleted'
@@ -129,10 +147,12 @@ $request = {
     }
     if ($Method -eq 'GET' -and $Uri.Contains('/releases/tags/')) {
         if ($script:Mode -eq 'ReadbackUnavailable') { return @{StatusCode=503} }
-        $release.assets = @(@{id=77;name='manifest.json';size=42},@{id=12;name=$assetName;size=$script:ServerBytes.Length;url='https://foreign.invalid/releases/assets/12'})
-        if ($script:Mode -eq 'ReadbackMissing') { $release.assets = @() }
         if ($script:Mode -eq 'ReadbackId') { $release.id=18 }
         if ($script:Mode -eq 'ReadbackTag') { $release.tag_name='mods-2026-09-05' }
+        if ($script:Mode -eq 'StaleEmbeddedAssets') {
+            # Tag route embeds a ghost receipt id that 404s; only the assets endpoint carries id 12.
+            $release.assets = @(@{id=77;name='manifest.json';size=42},@{id=583157616;name=$assetName;size=$script:ServerBytes.Length})
+        }
         return Response $release
     }
     if ($Method -eq 'GET' -and $Uri -ceq 'https://api.github.com/repos/Ensrick/vermintide-2-tweaker/releases/assets/12') {
@@ -159,11 +179,12 @@ try {
         Reject { New-WorkshopPublicationReceipt @bad } "constructor bad Workshop ID $badId"
     }
     Reject { Get-VtPublicationSnapshot -RepoRoot $root -SourceCommit $source -Mod modx -ExpectedBuilderVersion '0.6.1+fixture' } 'different executing builder cannot reinterpret existing receipt'
-    foreach ($mode in @('Success','Existing','NoRelease','Draft','MissingDraft','StringDraft','Prerelease','ZeroId','StringId','WrongTag','Duplicate','CaseAlias','DeleteFailure','UploadFailure','ReadbackUnavailable','ReadbackMissing','ReadbackId','ReadbackTag','BytesMismatch')) {
-        $script:Mode=$mode; $script:Writes.Clear()
-        if ($mode -in @('Success','Existing')) {
+    foreach ($mode in @('Success','Existing','StaleEmbeddedAssets','NoRelease','Draft','MissingDraft','StringDraft','Prerelease','ZeroId','StringId','WrongTag','Duplicate','CaseAlias','DeleteFailure','UploadFailure','ReadbackUnavailable','ReadbackMissing','ReadbackId','ReadbackTag','BytesMismatch')) {
+        $script:Mode=$mode; $script:Writes.Clear(); $script:GhostGets=0
+        if ($mode -in @('Success','Existing','StaleEmbeddedAssets')) {
             $hosted = New-VtHostedLocalDeploymentReceipt @hostArgs -Request $request
             Check ([Convert]::ToBase64String($hosted.Bytes) -ceq [Convert]::ToBase64String($script:ServerBytes)) "$mode exact independent readback"
+            Check ($script:GhostGets -eq 0) "$mode never requests a ghost embedded asset id"
             Check ($hosted.Snapshot.OutputSet.Fingerprint -ceq $snapshot.OutputSet.Fingerprint) "$mode retains committed output identity"
             $handoff = Write-VtLocalDeploymentReceiptHandoff -Bytes $hosted.Bytes
             try { Check ([Convert]::ToBase64String([IO.File]::ReadAllBytes($handoff)) -ceq [Convert]::ToBase64String($hosted.Bytes)) 'private handoff exact bytes' }
