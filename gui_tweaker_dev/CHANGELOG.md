@@ -1,5 +1,33 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.355-dev (2026-09-22) -- import native bot designations for modded careers (#954) [verify-fix]
+
+- Rain's v0.2.354-dev log failed `issue954_bot_loadout_snapshot` with
+  `native bot designation not imported career=pusfume`. The 0.2.319-dev import
+  walked only the GUT saved-loadout store and looked the native `PlayerData`
+  designation up per store entry, while the check walks the native store. A
+  career the store never seeded (Pusfume: the vanilla loadout window designates
+  the selected row on open, and vanilla's own bot refresh skips the career
+  because it has no `playfab_name`) therefore stayed unimported on every read.
+- The owner now plans every native-only career on each bounded refresh or bot
+  read, within the existing 64-career bound: it seeds the store from official
+  rows when the mirror has them (the row then imports through the existing
+  path), else it copies the backend's current bot row for that career as the
+  detached snapshot. The store entry and its marker commit together, so the
+  bot never follows the player's later edits and cache drift is repaired as
+  for vanilla careers. A designation that appears after the first import is
+  picked up on the next read; nothing is sealed until a source row exists.
+- Evidence: one `[gut:954] native-only career import` line per imported
+  career, the import summary gains `seeded=`, and a module-local ledger holds
+  the last import and reconcile state for the regression checks (no global
+  printf swap). `issue954_bot_loadout_snapshot` now includes a synthetic
+  modded-career proof, and the sibling `issue954_modded_career_import` reports
+  the installed seam and ledger by name.
+- Offline: `qa/lua/tests/test_gut_bot_loadout_snapshot.lua` drives the owner
+  through its captured hooks (native-only import, late designation, seed seam,
+  bounds, invalid indexes, drift repair); it fails on the 0.2.354-dev module
+  with the exact live message and passes on this one.
+
 ## 0.2.354-dev (2026-09-20) - Spawn-weapon printf route proven without touching the global (#1637) [verify-fix]
 
 - The 0.2.353-dev regression proof (`issue1637_spawn_weapon_consumer_guard`)
