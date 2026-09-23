@@ -1,5 +1,40 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.541-dev (2026-09-23) -- Dual Axes per-hand husk identity proof (#579) [verify-fix]
+
+- `issue579_dual_axes_preview_and_husk_skin_continuity` now drives the live
+  per-hand husk adapter with a RemotePlayer-shaped owner (`peer_id`,
+  `is_player_controlled`, `local_player_id` 1, `network_id`;
+  remote_player.lua:8,135-145). The old bare `{ peer_id }` stub was refused by
+  the #914 human-only peer gate (`_cwv_peer_resolver.lua:24-34`; log
+  `[cwv:914] ... source=owner not human peer=none`), so the write never saw
+  the exact descriptor and fell to the single-skin branch
+  (`_cwv_husk_path.lua:581-585`), which reads ONE primary skin for both hands.
+  A generated pair mirrors right into left, so both hands took the primary
+  illusion (RainReligion 2026-09-21, cwv 0.1.540-dev, both hands
+  `wpn_axe_02_t1`). The check also prefers illusion meshes resident on this
+  peer: a non-resident override is deferred to a bounded lease (#476), and
+  residency is not what the check proves.
+- `[cwv:474] husk re-keyed` now names the identity state per hand
+  (`identity=exact` / `none` / `unavailable`), so a co-op log attributes a
+  collapsed offhand to a missing exact identity instead of reading like a
+  successful re-key.
+- Co-op, what the client sees: once the owner's exact identity lands, the
+  remote husk shows the owner's right and left axe illusions independently.
+  Before it lands, the husk shows the primary illusion on both hands until the
+  bounded re-wield, and the observer's log now says which state each hand
+  was written under.
+- Engine-free coverage: `test_cwv_dual_axes_husk_hands.lua` proves the #914
+  gate refuses the bare stub and admits the RemotePlayer shape, the real husk
+  re-key collapses the offhand without an exact descriptor and keeps both
+  hands with one, the gate composed with the real lifecycle ledger drives the
+  adapter FAIL then PASS, and the shipped check no longer builds the bare stub.
+
+**DoD:** No mesh, transform, template or wire payload changed. Live proof is
+the #579 co-op card (the observer's rendered husk); solo
+`/cwv_regression_test` must show the check PASS on this build before the
+card is re-pinned.
+
 ## 0.1.540-dev (2026-09-18) -- publish the schema-2 Blacksmith seed identity provider (#1141, #592) [verify-fix]
 
 - Adds `_cwv_get_blacksmith_seed_identity_provider()` (schema 2, owner

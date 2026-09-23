@@ -884,17 +884,19 @@ _rt_register("issue579_dual_axes_preview_and_husk_skin_continuity", function()
         -- offhand illusions saved on one pair. Pick two clones whose authored
         -- meshes actually differ, so a pair collapsed onto a single model cannot
         -- satisfy the assertion by string equality (the pre-#1156 blind spot).
+        local spawnable = _om._husk_unit_spawnable   -- prefer resident meshes: a non-resident override defers to a #476 lease, which is not what this proves
+        local function usable(c) return type(spawnable) ~= "function" or spawnable(mesh_of[c]) == true end
         local right_skin, left_skin
         for _, clone in ipairs(keys) do
             if not right_skin then
-                right_skin = clone
-            elseif mesh_of[clone] ~= mesh_of[right_skin] then
+                if usable(clone) then right_skin = clone end
+            elseif mesh_of[clone] ~= mesh_of[right_skin] and usable(clone) then
                 left_skin = clone
                 break
             end
         end
         if not left_skin then
-            return target_key .. " family carries fewer than two distinct meshes; per-hand identity is unprovable"
+            return target_key .. " family has no two distinct meshes resident on this peer; per-hand identity apply is unprovable this session"
         end
 
         -- Preview: each hand keeps the illusion saved for THAT hand. info.skin_name
@@ -1000,8 +1002,16 @@ _rt_register("issue579_dual_axes_preview_and_husk_skin_continuity", function()
             if not (player_mgr and type(old_owner) == "function") then
                 error("Managers.player:owner is unavailable")
             end
+            -- The #914 peer gate admits only a human (_cwv_peer_resolver.lua controlled():
+            -- RemotePlayer answers is_player_controlled() and local_player_id() 1,
+            -- remote_player.lua:135-145). A bare { peer_id } was refused as "owner not
+            -- human", so the per-hand write fell to the single-skin branch (2026-09-21 log).
+            local human_owner = { peer_id = peer_id, _local_player_id = 1, _player_controlled = true }
+            function human_owner:local_player_id() return self._local_player_id end
+            function human_owner:network_id() return self.peer_id end
+            function human_owner:is_player_controlled() return self._player_controlled end
             rawset(player_mgr, "owner", function(self, unit)
-                if unit == fake_owner then return { peer_id = peer_id } end
+                if unit == fake_owner then return human_owner end
                 return old_owner(self, unit)
             end)
             suppress_right = husk_pre("right", {}, item_units, "slot_melee",

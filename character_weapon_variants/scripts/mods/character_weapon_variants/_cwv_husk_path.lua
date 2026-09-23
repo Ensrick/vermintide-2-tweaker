@@ -613,8 +613,8 @@ do
 			if admissible then
 				item_units[field] = override
 				_husk_log_once("474_rekey:" .. tostring(base_name) .. ":" .. tostring(career) .. ":" .. tostring(hand) .. ":" .. tostring(skin),
-					"[cwv:474] husk re-keyed hand=%s base=%s career=%s via %s (skin=%s) -> %s",
-					tostring(hand), tostring(base_name), tostring(career), tostring(reason), tostring(skin), tostring(override))
+					"[cwv:474] husk re-keyed hand=%s base=%s career=%s via %s (skin=%s identity=%s) -> %s",
+					tostring(hand), tostring(base_name), tostring(career), tostring(reason), tostring(skin), tostring(identity_state), tostring(override))
 			else
 				-- Override not cwv-resident: cannot re-key to it. Leave the base
 				-- leftover in item_units and fall through to the #478 crash-floor,
