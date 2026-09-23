@@ -301,6 +301,7 @@ local suites = {
     "test_cos_husk_wield_runtime",
     "test_gut_inventory_preview_lighting",
     "test_gut_native_loadout_policy",
+    "test_gut_bot_loadout_snapshot",
     "test_gut_spawn_weapon_policy",
     "test_gut_spawn_weapon_recovery",
     "test_gut_reset_presentation",
