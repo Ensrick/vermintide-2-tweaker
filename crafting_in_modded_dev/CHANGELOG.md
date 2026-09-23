@@ -1,5 +1,45 @@
 # Crafting in Modded Changelog
 
+## 0.8.136-dev (2026-09-22) -- Temper Apply and Craft refuse unstorable bubble counts (#1141) [verify-fix]
+
+- Symptom (RainReligion, 2026-09-21 card step 7): pressing APPLY with one
+  staged Block Cost Reduction bubble left the crafted weapon showing two; one
+  Attack Speed or Power vs Skaven bubble came back as three. Nothing was
+  appended and no record carries duplicate nodes: an ordinary item stores one
+  NORMALIZED Adventure value per property (`buff_extension.lua:222-229` lerps
+  `variable_multiplier[1]..[2]` by it), so the #244 write clamped one 6% block
+  cost bubble to the 10% range start (`properties_block_cost = {-0.1, -0.3}`
+  against weave max `-0.3`, `weapon_properties.lua:108-113`,
+  `weave_properties.lua:55`) and the reopen read expanded that 10% back into
+  two bubbles. Attack Speed `{0.03, 0.05}` and Power vs Skaven `{0.05, 0.1}`
+  behave the same; Crit Chance uses a five-tier bonus table, which the policy
+  declines, so its one bubble stayed one.
+- Fix: the weave-loadout owner derives each property's exactly storable bubble
+  range from the same write/read conversions Apply uses
+  (`representable_bubble_range`), the transaction policy lists staged counts
+  outside it (`unrepresentable_properties`), and APPLY and CRAFT refuse such a
+  draft with one chat warning naming the property and its range, for example
+  `[cim] Apply rejected: Block Cost Reduction needs 2 to 5 bubbles on this item
+  (1 staged)`. The draft stays staged so the player can adjust it; nothing is
+  saved, published or resynced on refusal, and a bounded `[cim:1141]
+  result=bubbles_rejected` receipt lands in the log. A committed draft now
+  re-seeds as exactly the staged counts, so a second APPLY reports no staged
+  changes.
+- No saved record is repaired: the property map holds one value per key, so
+  there is nothing to dedupe. The five 3-property items in the regression
+  output were already listed by the 20:40:54 run, forty minutes before the
+  first Apply at 21:20:11, and are within the 10-distinct policy of #86; the
+  stale 2-cap check is tracked under #1656.
+- Adds `issue1141_apply_exact_bubble_round_trip` to `/cim_regression_test`
+  (registered by the Temper runtime beside the other #1141 checks) and offline
+  cases in `test_cim_temper_transaction.lua`, `test_cim_weave_loadout_owner.lua`
+  and `test_cim_temper_runtime.lua` that replay the one-bubble block cost
+  Apply against the vanilla ranges: it committed as two bubbles before this
+  change and is refused after it.
+- Amulet (accessory) auto-apply and vanilla crafting are unchanged.
+
+**Test:** Load `Crafting in Modded v0.8.136-dev` in the Modded Realm keep.
+
 ## 0.8.135-dev (2026-09-18) -- Temper Item stages behind Apply; Craft from Blacksmith copies (#1141) [verify-fix]
 
 - Symptom: with a 5-power Blacksmith weapon equipped, the Temper Item button

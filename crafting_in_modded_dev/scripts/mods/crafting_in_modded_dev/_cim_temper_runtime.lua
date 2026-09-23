@@ -137,6 +137,23 @@ local function install(ctx)
         local printer = rawget(_G, "printf")
         if type(printer) == "function" then printer(fmt, ...) end
     end
+    -- #1141: player-facing property name for the exact-count refusal.
+    state.property_display_name = ctx.property_display_name
+        or function(weave_key, bare_key)
+            local weave = rawget(_G, "WeaveProperties")
+            local entry = type(weave) == "table"
+                and type(weave.properties) == "table"
+                and weave.properties[weave_key] or nil
+            local localize = rawget(_G, "Localize")
+            if type(entry) == "table" and type(entry.display_name) == "string"
+                    and type(localize) == "function" then
+                local ok, text = pcall(localize, entry.display_name)
+                if ok and type(text) == "string" and text ~= "" then
+                    return text
+                end
+            end
+            return bare_key
+        end
     state.set_accessory_button_presentation = set_accessory_button_presentation
     state.issue1141_receipts = tonumber(state.issue1141_receipts) or 0
 
@@ -153,6 +170,17 @@ local function install(ctx)
             "[cim:1141] result=%s source_bid=%s raw=%s canonical=%s detail=%s receipt=%d/8",
             compact(result), compact(source_backend_id), compact(raw_item_key),
             compact(item_key), compact(detail), state.issue1141_receipts)
+    end
+
+    -- #1141: one chat line naming every staged count the item cannot store.
+    local function describe_rejected_counts(rejected)
+        local described, text = pcall(
+            state.transaction.describe_unrepresentable,
+            rejected, state.property_display_name)
+        if described and type(text) == "string" and text ~= "" then
+            return text
+        end
+        return "staged bubble counts this item cannot store"
     end
 
     local function rollback_item(backend_id, token, capability)
@@ -441,9 +469,18 @@ local function install(ctx)
                 return
             end
             if action == "apply" then
-                local ok, changed = state.loadout.apply_item_draft(
+                local ok, changed, detail = state.loadout.apply_item_draft(
                     self._career_name, backend_id)
                 if not ok then
+                    if changed == "unrepresentable" then
+                        -- #1141: the draft stays staged so the player can
+                        -- adjust it; nothing was saved or published.
+                        local why = describe_rejected_counts(detail)
+                        emit_receipt("bubbles_rejected", backend_id,
+                            raw_item_key, nil, why)
+                        mod:warning("[cim] Apply rejected: " .. why)
+                        return
+                    end
                     mod:warning("[cim] Apply failed: " .. tostring(changed))
                     return
                 end
@@ -467,10 +504,18 @@ local function install(ctx)
                 return
             end
 
-            local draft = state.loadout.item_draft_payload(
+            local draft, rejected = state.loadout.item_draft_payload(
                 self._career_name, backend_id)
             if not draft then
                 mod:warning("[cim] Craft failed: staged item data unavailable")
+                return
+            end
+            if rejected then
+                -- #1141: same exact-count gate as Apply; nothing is minted.
+                local why = describe_rejected_counts(rejected)
+                emit_receipt("bubbles_rejected", backend_id, raw_item_key,
+                    item_key, why)
+                mod:warning("[cim] Craft rejected: " .. why)
                 return
             end
             local payload = state.transaction.copy_payload(draft)
@@ -517,6 +562,68 @@ local function install(ctx)
                     "play_gui_craft_forge_button_completed")
             end
         end)
+
+    -- #1141 (2026-09-21 card, step 7): one staged block-cost bubble came
+    -- back as two after Apply. Proves the exact-count gate against the live
+    -- property tables with the same conversions Apply and Craft use, and pins
+    -- the reported cases so the report cannot recur silently.
+    state.rt_register("issue1141_apply_exact_bubble_round_trip", function()
+        local loadout, transaction = state.loadout, state.transaction
+        if type(loadout.representable_bubble_range) ~= "function"
+                or type(loadout.value_for_bubbles) ~= "function"
+                or type(loadout.bubbles_for_value) ~= "function" then
+            return "#1141 loadout owner does not export the bubble round trip"
+        end
+        if type(transaction.unrepresentable_properties) ~= "function" then
+            return "#1141 transaction policy lacks unrepresentable_properties"
+        end
+        local weave = rawget(_G, "WeaveProperties")
+        if type(weave) ~= "table" or type(weave.properties) ~= "table" then
+            return "skip: WeaveProperties not loaded"
+        end
+        local function strip(key) return (key:gsub("^weave_", "")) end
+        local function gate(weave_key, count)
+            local grid = { properties = { [weave_key] = {} } }
+            for slot = 1, count do grid.properties[weave_key][slot] = slot end
+            return transaction.unrepresentable_properties(
+                grid, strip, loadout.representable_bubble_range) == nil
+        end
+        -- Every count the gate accepts must survive the write/read pair, and
+        -- every count it refuses must not.
+        for _, weave_key in ipairs({
+            "weave_block_cost", "weave_attack_speed", "weave_power_vs_skaven",
+            "weave_crit_chance", "weave_fatigue_regen", "weave_stamina",
+        }) do
+            if weave.properties[weave_key] then
+                local low, high = loadout.representable_bubble_range(weave_key)
+                for count = 1, 5 do
+                    local back = loadout.bubbles_for_value(weave_key,
+                        loadout.value_for_bubbles(weave_key, count))
+                    local accepted = gate(weave_key, count)
+                    if accepted ~= (back == count) then
+                        return string.format(
+                            "#1141 %s staged=%d round_trip=%s range=%s..%s gate=%s",
+                            weave_key, count, tostring(back), tostring(low),
+                            tostring(high), accepted and "accepted" or "rejected")
+                    end
+                end
+            end
+        end
+        -- The tester's exact report: one block-cost, attack-speed or
+        -- power-vs-skaven bubble must be refused; two block-cost, three
+        -- attack-speed and one crit-chance bubble must pass.
+        for _, case in ipairs({
+            { "weave_block_cost", 1, false }, { "weave_block_cost", 2, true },
+            { "weave_attack_speed", 1, false }, { "weave_attack_speed", 3, true },
+            { "weave_power_vs_skaven", 1, false }, { "weave_crit_chance", 1, true },
+        }) do
+            local weave_key, count, expect_ok = case[1], case[2], case[3]
+            if weave.properties[weave_key] and gate(weave_key, count) ~= expect_ok then
+                return string.format("#1141 %s staged=%d expected %s",
+                    weave_key, count, expect_ok and "accept" or "reject")
+            end
+        end
+    end)
 
     state.rt_register("issue1141_temper_blacksmith_exact_identity", function()
         local provider, provider_status = cwv_seed_identity_provider()

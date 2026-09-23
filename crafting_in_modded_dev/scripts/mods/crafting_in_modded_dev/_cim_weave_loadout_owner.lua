@@ -364,6 +364,32 @@ local function install(ctx)
         return math.max(1, math.min(cap, math.ceil(value * cap)))
     end
 
+    -- #1141: an ordinary item keeps a NORMALIZED Adventure value
+    -- (buff_extension.lua:222-229 lerps variable_multiplier[1]..[2] by it), so
+    -- a bubble count below the Adventure range start or above its end has no
+    -- storable value. The #244 write clamps it and the reopen read expands it
+    -- again: one staged block-cost bubble (6%) came back as two (10%, the
+    -- `properties_block_cost` range start), one attack-speed bubble as three
+    -- (3%). Apply and Craft refuse such counts instead of committing a
+    -- different item than the grid shows.
+    local function _bubble_round_trip(weave_key, count)
+        return _bubbles_for_value(weave_key, _value_for_bubbles(weave_key, count))
+    end
+
+    -- Inclusive low/high staged counts whose round trip is identity, or nil
+    -- when no count survives (the gate then treats every count as exact).
+    local function _representable_bubble_range(weave_key)
+        local cap = _bubble_cap(weave_key)
+        local low, high
+        for count = 1, cap do
+            if _bubble_round_trip(weave_key, count) == count then
+                low = low or count
+                high = count
+            end
+        end
+        return low, high
+    end
+
     -- Persist a clicked slot_index into the property picker's slot-index array,
     -- applying the two vanilla guards (cross-property collision + per-property use
     -- cap). Pure: mutates `props` only, no UI/backend side effects, so the
@@ -645,11 +671,17 @@ local function install(ctx)
         end
     end
 
+    -- Returns the draft payload and, as a second value, the #1141 list of
+    -- staged counts this item cannot store exactly (nil when the draft is
+    -- exact). Apply and Craft refuse a draft that carries that list.
     local function _forge_item_draft_payload(career_name, item_backend_id)
         if not item_backend_id then return nil end
         local data = _forge_seed_item(career_name, item_backend_id)
-        return state.temper_transaction.payload_from_grid(
+        local payload = state.temper_transaction.payload_from_grid(
             data, _strip_weave, _value_for_bubbles)
+        local rejected = state.temper_transaction.unrepresentable_properties(
+            data, _strip_weave, _representable_bubble_range)
+        return payload, rejected
     end
 
     local function _discard_item_draft(career_name, item_backend_id)
@@ -777,8 +809,11 @@ local function install(ctx)
             return false, "raw_mirror_item"
         end
 
-        local payload = _forge_item_draft_payload(career_name, item_backend_id)
+        local payload, rejected = _forge_item_draft_payload(
+            career_name, item_backend_id)
         if not payload then return false, "draft" end
+        -- #1141: refuse before any candidate is built; the draft stays staged.
+        if rejected then return false, "unrepresentable", rejected end
 
         local forged_weapons = _get_forged_weapons()
         local saved = forged_weapons[item_backend_id]
@@ -1130,6 +1165,9 @@ local function install(ctx)
         item_draft_payload = _forge_item_draft_payload,
         apply_item_draft = _forge_apply_to_item,
         discard_item_draft = _discard_item_draft,
+        -- #1141 round-trip exports for the Temper runtime check.
+        bubbles_for_value = _bubbles_for_value,
+        representable_bubble_range = _representable_bubble_range,
     }
     return state.exports
 end
