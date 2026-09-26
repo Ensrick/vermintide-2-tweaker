@@ -1,9 +1,10 @@
 -- OWNER: CIM-dev Athanor picker category lifecycle.
 -- RESPONSIBILITY: Seed unknown picker categories, surface native/freedom options,
 -- restore temporarily widened category arrays, and guard the two picker hooks.
--- PUBLIC SURFACE: mod._cim_forge_picker_owner plus the five legacy
+-- PUBLIC SURFACE: mod._cim_forge_picker_owner plus the six legacy
 -- mod._cim_{ensure_weave_category_pools,ensure_trait_twin,
--- ensure_property_twin,apply_forge_freedom,restore_forge_freedom} adapters.
+-- ensure_property_twin,apply_forge_freedom,apply_forge_freedom_for_window,
+-- restore_forge_freedom} adapters.
 -- INSTALL ORDER: HeroWindowWeaveProperties._setup_menu_options, then
 -- HeroWindowWeaveProperties._sync_backend_loadout at the original entry boundary.
 -- INVARIANTS: One stable private dispatcher and backup store survive reload;
@@ -255,6 +256,18 @@ return function(ctx)
         end
     end
 
+    -- #414: the production `_setup_menu_options` adapter. The slot family comes
+    -- from the window's selected weapon; the accessory editor has none, so it
+    -- widens with a nil slot and must receive no CW weapon traits. Exposed so
+    -- the in-game check drives this exact path instead of the helper beneath it.
+    local function _apply_forge_freedom_for_window(window, slots_progression)
+        local selected_item = window and window._selected_item
+            and window:_selected_item()
+        local slot_type = selected_item and selected_item.data
+            and selected_item.data.slot_type
+        return _apply_forge_freedom(slots_progression, slot_type)
+    end
+
     local function _restore_forge_freedom()
         for category, record in pairs(state.backup.traits) do
             local target = record.target
@@ -280,6 +293,7 @@ return function(ctx)
     state.ensure_trait_twin = _ensure_trait_twin
     state.ensure_property_twin = _ensure_property_twin
     state.apply_forge_freedom = _apply_forge_freedom
+    state.apply_forge_freedom_for_window = _apply_forge_freedom_for_window
     state.restore_forge_freedom = _restore_forge_freedom
 
     local dispatch = state.dispatch
@@ -297,17 +311,26 @@ return function(ctx)
             apply_forge_freedom = function(...)
                 return state.apply_forge_freedom(...)
             end,
+            apply_forge_freedom_for_window = function(...)
+                return state.apply_forge_freedom_for_window(...)
+            end,
             restore_forge_freedom = function(...)
                 return state.restore_forge_freedom(...)
             end,
         }
         state.dispatch = dispatch
     end
+    -- A dispatcher created by an older install predates the #414 window adapter.
+    if not dispatch.apply_forge_freedom_for_window then
+        dispatch.apply_forge_freedom_for_window = function(...)
+            return state.apply_forge_freedom_for_window(...)
+        end
+    end
 
     -- PROJECT_STANDARDS 2.2a rule 10: public namespace tables are replaceable.
     -- Republish exhaustively on EVERY installer call, even after registration is
     -- already complete. Clear foreign/stale keys so the public contract remains
-    -- exactly five operations rather than accumulating reload residue.
+    -- exactly six operations rather than accumulating reload residue.
     local owner = mod._cim_forge_picker_owner
     if type(owner) ~= "table" then owner = {} end
     for key in pairs(owner) do owner[key] = nil end
@@ -315,6 +338,7 @@ return function(ctx)
     owner.ensure_trait_twin = dispatch.ensure_trait_twin
     owner.ensure_property_twin = dispatch.ensure_property_twin
     owner.apply_forge_freedom = dispatch.apply_forge_freedom
+    owner.apply_forge_freedom_for_window = dispatch.apply_forge_freedom_for_window
     owner.restore_forge_freedom = dispatch.restore_forge_freedom
     mod._cim_forge_picker_owner = owner
 
@@ -324,6 +348,7 @@ return function(ctx)
     mod._cim_ensure_trait_twin = dispatch.ensure_trait_twin
     mod._cim_ensure_property_twin = dispatch.ensure_property_twin
     mod._cim_apply_forge_freedom = dispatch.apply_forge_freedom
+    mod._cim_apply_forge_freedom_for_window = dispatch.apply_forge_freedom_for_window
     mod._cim_restore_forge_freedom = dispatch.restore_forge_freedom
 
     if state.installed then return owner end
@@ -333,10 +358,8 @@ return function(ctx)
         function(func, self, career_name, slots_progression)
             dispatch.ensure_weave_category_pools(career_name, slots_progression)
             if state.is_active() then
-                local selected_item = self._selected_item and self:_selected_item()
-                local slot_type = selected_item and selected_item.data
-                    and selected_item.data.slot_type
-                pcall(dispatch.apply_forge_freedom, slots_progression, slot_type)
+                pcall(dispatch.apply_forge_freedom_for_window, self,
+                    slots_progression)
             end
             return func(self, career_name, slots_progression)
         end)

@@ -1402,4 +1402,146 @@ return function(H, repo_root)
         H.truthy(selector:find("function M.set_identity_contract", 1, true))
         H.truthy(forge:find("template_selector.set_identity_contract(_contract)", 1, true))
     end)
+
+    -- #1654 fixtures: a lua-cjson-shaped codec (numbers at %.14g, the default
+    -- encode precision) and a mirror whose add_item mirrors the fields
+    -- PlayFabMirrorBase._update_data derives from CustomData
+    -- (playfab_mirror_base.lua:1723-1785).
+    local function json_encode(value)
+        local kind = type(value)
+        if kind == "number" then return string.format("%.14g", value) end
+        if kind == "string" then return string.format("%q", value) end
+        if kind == "boolean" then return tostring(value) end
+        local count = 0
+        for _ in pairs(value) do count = count + 1 end
+        if count == 0 then return "{}" end
+        local parts = {}
+        if #value == count then
+            for i = 1, #value do parts[i] = json_encode(value[i]) end
+            return "[" .. table.concat(parts, ",") .. "]"
+        end
+        local keys = {}
+        for key in pairs(value) do keys[#keys + 1] = tostring(key) end
+        table.sort(keys)
+        for i, key in ipairs(keys) do
+            parts[i] = string.format("%q", key) .. ":" .. json_encode(value[key])
+        end
+        return "{" .. table.concat(parts, ",") .. "}"
+    end
+    local function json_decode(text)
+        local lua = text:gsub("%[", "{"):gsub("%]", "}")
+            :gsub('"([%w_]+)":', '["%1"]=')
+        return assert(loadstring("return " .. lua))()
+    end
+    local es_2h_sword = {
+        slot_type = "melee", can_wield = { "es_mercenary" },
+        template = "two_handed_swords_template_1", item_type = "es_2h_sword",
+        inventory_icon = "icon_es_2h_sword", rarity = "plentiful",
+    }
+    local function playfab_mirror(masters)
+        local mirror = { _inventory_items = {} }
+        function mirror:add_item(backend_id, item)
+            self._inventory_items[backend_id] = item
+            local custom = item.CustomData
+            if custom.properties then item.properties = json_decode(custom.properties) end
+            if custom.traits then item.traits = json_decode(custom.traits) end
+            if custom.power_level then item.power_level = tonumber(custom.power_level) end
+            if custom.rarity then item.rarity = custom.rarity end
+            if custom.skin then item.skin = custom.skin end
+            item.backend_id, item.key = backend_id, item.ItemId
+            item.data = masters[item.ItemId]
+        end
+        function mirror:remove_item(backend_id)
+            self._inventory_items[backend_id] = nil
+        end
+        return mirror
+    end
+    local function saved_record(backend_id, properties, traits, skin)
+        return {
+            backend_id = backend_id, item_key = "es_2h_sword", owner = "cim",
+            schema_version = 1, provider = "vanilla", rarity = "modded",
+            power_level = 300, via_mirror = true, skin = skin,
+            properties = properties, traits = traits, trait = traits[1],
+        }
+    end
+    local function restore(mirror, record, decode)
+        local normalized = assert(contract.gate_record("mirror_injection",
+            record.backend_id, record, es_2h_sword))
+        local payload, err, mirror_record = contract.build_mirror_payload(
+            normalized, es_2h_sword, json_encode, decode)
+        if not payload then return nil, err end
+        return contract.inject_mirror_item(mirror, record.backend_id, payload,
+            function() return "nonce-" .. record.backend_id end, mirror_record)
+    end
+
+    H.test("CIM #1654 two saved copies of one weapon both restore", function()
+        -- The RainReligion 2026-09-21 pair: same es_2h_sword, different
+        -- properties, traits and illusions, restored one after the other.
+        local mirror = playfab_mirror({ es_2h_sword = es_2h_sword })
+        local favorited = saved_record("86741005-7eb6-4e01-b147-a2cf84735533",
+            { attack_speed = 0, power_vs_skaven = 0 },
+            { "melee_counter_push_power" }, "es_2h_sword_skin_03_magic_02")
+        local unfavorited = saved_record("e6b87040-ced6-4c88-a0e0-bf770bb4067b",
+            { crit_boost = 0, attack_speed = 0, power_vs_chaos = 0, stamina = 0.25 },
+            { "melee_shield_on_assist" }, "es_2h_sword_skin_03_magic_01")
+        for _, record in ipairs({ favorited, unfavorited }) do
+            local added, reason = restore(mirror, record, json_decode)
+            H.equal(reason, nil, record.backend_id)
+            H.truthy(added, record.backend_id)
+        end
+        H.truthy(mirror._inventory_items[favorited.backend_id])
+        H.truthy(mirror._inventory_items[unfavorited.backend_id])
+        H.truthy(mirror._inventory_items[favorited.backend_id].data
+            == mirror._inventory_items[unfavorited.backend_id].data,
+            "both copies share one ItemMasterList row")
+    end)
+
+    H.test("CIM #1654 postcondition names the failing field", function()
+        local masters = { es_2h_sword = es_2h_sword }
+        local mirror = playfab_mirror(masters)
+        local base_add = mirror.add_item
+        function mirror:add_item(backend_id, item)
+            base_add(self, backend_id, item)
+            item.properties.stamina = 0.5
+        end
+        local added, reason = restore(mirror, saved_record("field-probe",
+            { stamina = 0.25 }, {}, nil), json_decode)
+        H.equal(added, nil)
+        H.truthy(reason:find("mirror_postcondition:mismatch:properties", 1, true), reason)
+        H.equal(mirror._inventory_items["field-probe"], nil)
+
+        -- A stamp on the shared master row is reported with its location.
+        local stamped = {}
+        for key, value in pairs(es_2h_sword) do stamped[key] = value end
+        stamped.backend_id = "some-other-copy"
+        mirror = playfab_mirror({ es_2h_sword = stamped })
+        local normalized = assert(contract.gate_record("mirror_injection",
+            "stamp-probe", saved_record("stamp-probe", {}, {}, nil), stamped))
+        local payload, _, mirror_record = contract.build_mirror_payload(
+            normalized, stamped, json_encode, json_decode)
+        added, reason = contract.inject_mirror_item(mirror, "stamp-probe",
+            payload, function() return "nonce-stamp" end, mirror_record)
+        H.equal(added, nil)
+        H.truthy(reason:find("mismatch:data.backend_id", 1, true), reason)
+    end)
+
+    H.test("CIM #1654 payload is canonical under the mirror codec", function()
+        -- 3/5 bubbles of a 0.1..0.2 range stores 0.20000000000000018, which
+        -- %.14g encodes as "0.2": without canonicalization the exact
+        -- postcondition rejects the item it just built.
+        local value = (0.2 * 3 / 5 - 0.1) / (0.2 - 0.1)
+        H.truthy(value ~= 0.2)
+        local record = saved_record("codec-probe", { crit_boost = value },
+            { "melee_shield_on_assist" }, nil)
+        local added, reason = restore(playfab_mirror({ es_2h_sword = es_2h_sword }),
+            record, nil)
+        H.equal(added, nil)
+        H.truthy(reason:find("mismatch:properties", 1, true), reason)
+        added, reason = restore(playfab_mirror({ es_2h_sword = es_2h_sword }),
+            record, json_decode)
+        H.equal(reason, nil)
+        H.truthy(added)
+        H.equal(record.properties.crit_boost, value,
+            "canonicalization must not mutate the saved record")
+    end)
 end

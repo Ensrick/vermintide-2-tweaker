@@ -1,5 +1,61 @@
 # Crafting in Modded Changelog
 
+## 0.8.138-dev (2026-09-25) -- Saved crafts that fail to restore are named, never hidden (#1654) [diagnostics-armed]
+
+- Symptom (RainReligion, 2026-09-21, cim 0.8.135-dev only): of two crafted
+  Greatswords, the unfavorited copy was missing after every restart. Its
+  record was still saved (`Forge: restored 3 forged crafts`), but the boot
+  re-inject logged `Skipped saved craft es_2h_sword:
+  mirror_postcondition:mismatch|cleanup=complete` at INFO and the deferred
+  retry failed the same way without any log, so the weapon stayed out of
+  the inventory.
+- Not yet explained: the mismatch reason was a bare boolean. An offline
+  replay of both saved records through a mirror that parses CustomData like
+  `PlayFabMirrorBase._update_data` restores both, and no repo mod or vanilla
+  code writes instance stamps onto the shared ItemMasterList row. The
+  postcondition is unchanged.
+- Diagnostics: the postcondition now names the first failing field (for
+  example `mirror_postcondition:mismatch:properties` or
+  `mismatch:data.backend_id`), and a saved craft that cannot be restored
+  prints one `[cim:1654]` warning with that reason. The saved record is
+  kept; nothing is deleted.
+- Hardening: the mirror payload's properties and traits are canonicalized
+  through the same cjson codec the mirror decodes with, so a value such as
+  `0.20000000000000018` (3 bubbles of a 10-20% range) can no longer fail the
+  exact comparison against its own encoding.
+- Adds `issue1654_saved_crafts_restored` to `/cim_regression_test`: every
+  saved craft whose item row exists must be in the inventory, else it lists
+  each missing backend id with its restore reason. Offline cases in
+  `test_cim_synthetic_item_contract.lua` replay the two-copy restore, the
+  named-field reason and the codec round trip.
+
+**Test:** Load `Crafting in Modded v0.8.138-dev` in the Modded Realm keep.
+
+## 0.8.137-dev (2026-09-25) -- Accessories and dropped slots get no CW weapon traits (#414) [verify-fix]
+
+- Symptom: with Allow Chaos Wastes Traits on, the Athanor accessory editor
+  offered every weapon trait, and a lost slot argument handed a weapon every
+  trait regardless of melee or ranged. RainReligion's 2026-09-21 run already
+  failed `issue414_cw_traits_preserve_slot_family -- non-weapon/accessory
+  context received CW traits`.
+- Cause: `_cim_trait_slot_policy.lua` `category_matches_slot` returned
+  `category_slot(cat) == slot_type`; every non-Chaos-Wastes category maps to
+  nil, so a nil slot matched all of them. The accessory editor has no
+  selected weapon and widened its trait categories with a nil slot.
+- Fix: a category matches only when it is a mapped CW family equal to the
+  slot, so a nil or accessory slot gets no CW weapon traits. The Athanor
+  `_setup_menu_options` hook now goes through one production adapter,
+  `apply_forge_freedom_for_window`, which reads the slot from the selected
+  item.
+- `issue414_cw_traits_preserve_slot_family` now drives both production callers
+  (`_cim_trait_pool_for` and the Athanor window adapter) with melee, ranged,
+  necklace and no-item fixtures under forced "CW traits only" toggles and
+  checks the exact slot family, so dropping either slot argument fails it.
+  Offline cases added to `test_cim_trait_slot_policy.lua` and
+  `test_cim_forge_picker_owner.lua`.
+
+**Test:** Load `Crafting in Modded v0.8.137-dev` in the Modded Realm keep.
+
 ## 0.8.136-dev (2026-09-22) -- Temper Apply and Craft refuse unstorable bubble counts (#1141) [verify-fix]
 
 - Symptom (RainReligion, 2026-09-21 card step 7): pressing APPLY with one

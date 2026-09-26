@@ -313,10 +313,32 @@ function M.gate_record(surface, backend_id, input, master)
     return nil, reason or "unclassified"
 end
 
-function M.build_mirror_payload(record, master, json_encode)
+-- #1654: `json_decode` is optional. When supplied, properties and traits are
+-- canonicalized through the same codec the mirror parses them with
+-- (PlayFabMirrorBase._update_data decodes CustomData), so the returned
+-- expectation equals the row the mirror builds. A double such as
+-- 0.20000000000000018 otherwise encodes as "0.2" and the exact postcondition
+-- in inject_mirror_item rejects its own item.
+function M.build_mirror_payload(record, master, json_encode, json_decode)
     if type(record) ~= "table" then return nil, "record" end
     local normalized, err = M.normalize_record(record.backend_id, record, master)
     if not normalized then return nil, err end
+    if type(json_encode) == "function" and type(json_decode) == "function" then
+        local ok_p, props = pcall(function()
+            return json_decode(json_encode(normalized.properties))
+        end)
+        local ok_t, traits = pcall(function()
+            return json_decode(json_encode(normalized.traits))
+        end)
+        if not ok_p or type(props) ~= "table" then
+            return nil, "codec:properties"
+        end
+        if not ok_t or type(traits) ~= "table" then
+            return nil, "codec:traits"
+        end
+        normalized.properties = copy_map(props)
+        normalized.traits = copy_array(traits)
+    end
 
     local custom_data = {
         power_level = tostring(normalized.power_level),
@@ -935,49 +957,69 @@ local function _mirror_row_owned_by_token(row, token)
     return true
 end
 
+-- Returns true, or false plus the FIRST failing field (#1654: a bare
+-- "mismatch" hid which field kept a saved craft out of the inventory).
 local function _mirror_row_matches(row, token)
-    if not _mirror_row_owned_by_token(row, token) then return false end
+    if not _mirror_row_owned_by_token(row, token) then return false, "ownership" end
     local issued = _issued_mirror_tokens[token]
     local expected = issued and issued.expected
-    if type(expected) ~= "table" then return false end
+    if type(expected) ~= "table" then return false, "expectation" end
     local custom = row.CustomData
-    if row.backend_id ~= token.backend_id or row.key ~= token.item_key
-            or row.data ~= expected.master
-            or row.rarity ~= expected.rarity
-            or row.power_level ~= expected.power_level
-            or row.skin ~= expected.skin
-            or not _same_array(row.traits, expected.traits)
-            or not _same_map(row.properties, expected.properties)
-            or custom.cim_acquisition_key ~= token.item_key
-            or custom.cim_provider ~= expected.provider
-            or custom.rarity ~= expected.rarity
-            or custom.power_level ~= expected.custom_power_level
-            or custom.skin ~= expected.skin
-            or custom.traits ~= expected.custom_traits
-            or custom.properties ~= expected.custom_properties then
-        return false
+    local checks = {
+        { "backend_id", row.backend_id == token.backend_id },
+        { "key", row.key == token.item_key },
+        { "data", row.data == expected.master },
+        { "rarity", row.rarity == expected.rarity },
+        { "power_level", row.power_level == expected.power_level },
+        { "skin", row.skin == expected.skin },
+        { "traits", _same_array(row.traits, expected.traits) },
+        { "properties", _same_map(row.properties, expected.properties) },
+        { "CustomData.cim_acquisition_key",
+            custom.cim_acquisition_key == token.item_key },
+        { "CustomData.cim_provider", custom.cim_provider == expected.provider },
+        { "CustomData.rarity", custom.rarity == expected.rarity },
+        { "CustomData.power_level",
+            custom.power_level == expected.custom_power_level },
+        { "CustomData.skin", custom.skin == expected.skin },
+        { "CustomData.traits", custom.traits == expected.custom_traits },
+        { "CustomData.properties",
+            custom.properties == expected.custom_properties },
+    }
+    for _, check in ipairs(checks) do
+        if not check[2] then return false, check[1] end
     end
     if expected.provider == "cwv" then
-        if custom.cwv_key ~= token.item_key then return false end
+        if custom.cwv_key ~= token.item_key then return false, "CustomData.cwv_key" end
     elseif custom.cwv_key ~= nil then
-        return false
+        return false, "CustomData.cwv_key"
     end
-    local valid = true
-    _visit_item_rows(row, function(candidate)
+    local failed
+    _visit_item_rows(row, function(candidate, where)
+        if failed then return end
         for _, field in ipairs({
             "item_key", "cim_acquisition_key", "cwv_key",
         }) do
             local stamp = candidate[field]
-            if stamp ~= nil and stamp ~= token.item_key then valid = false end
+            if stamp ~= nil and stamp ~= token.item_key then
+                failed = where .. "." .. field
+                return
+            end
         end
         local provider = candidate.cim_provider
-        if provider ~= nil and provider ~= expected.provider then valid = false end
+        if provider ~= nil and provider ~= expected.provider then
+            failed = where .. ".cim_provider"
+            return
+        end
         for _, field in ipairs({ "backend_id", "ItemInstanceId" }) do
             local value = candidate[field]
-            if value ~= nil and value ~= token.backend_id then valid = false end
+            if value ~= nil and value ~= token.backend_id then
+                failed = where .. "." .. field
+                return
+            end
         end
     end)
-    return valid
+    if failed then return false, failed end
+    return true
 end
 
 -- During the synchronous add/postcondition boundary, exact object identity is
@@ -1076,13 +1118,15 @@ function M.inject_mirror_item(mirror, backend_id, payload, nonce_factory, record
             .. (cleaned and "complete" or tostring(cleanup_error))
         return nil, detail, nil, cleaned
     end
-    local matched_call, matched = pcall(_mirror_row_matches,
+    local matched_call, matched, mismatch_field = pcall(_mirror_row_matches,
         rawget(mirror._inventory_items, backend_id), token)
     if not matched_call or not matched then
         local cleaned, cleanup_error = _cleanup_injected_payload(
             mirror, backend_id, token)
         return nil, "mirror_postcondition:"
-            .. tostring(matched_call and "mismatch" or matched) .. "|cleanup="
+            .. tostring(matched_call
+                and ("mismatch:" .. tostring(mismatch_field)) or matched)
+            .. "|cleanup="
             .. (cleaned and "complete" or tostring(cleanup_error)), nil, cleaned
     end
     local rollback = function()
