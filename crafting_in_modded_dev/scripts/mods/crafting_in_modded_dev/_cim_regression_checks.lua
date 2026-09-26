@@ -414,6 +414,36 @@ _rt_register("modded_loadout_round_trip_save_then_clear", function()
     if result_err then return result_err end
 end)
 
+-- #1654: every saved mirror-path craft whose ItemMasterList row exists must be
+-- in the live inventory. A restore that fails its postcondition used to keep
+-- the record but hide the weapon silently; this names each one and its reason.
+_rt_register("issue1654_saved_crafts_restored", function()
+    local backend = Managers.backend
+    local mirror = backend and backend.get_backend_mirror
+        and backend:get_backend_mirror()
+    local inventory = mirror and mirror._inventory_items
+    if type(inventory) ~= "table" then return "skip: backend mirror not ready" end
+    local failures = mod._cim_restore_failures or {}
+    local checked, missing = 0, {}
+    for bid, w in pairs(context.get_forged_weapons()) do
+        if type(w) == "table" and w.via_mirror ~= false
+                and type(w.item_key) == "string"
+                and rawget(ItemMasterList, w.item_key) then
+            checked = checked + 1
+            if rawget(inventory, bid) == nil then
+                missing[#missing + 1] = string.format("%s(%s): %s",
+                    tostring(bid), w.item_key, tostring(failures[bid] or "no attempt"))
+            end
+        end
+    end
+    if #missing > 0 then
+        table.sort(missing)
+        return #missing .. " saved craft(s) missing from inventory: "
+            .. table.concat(missing, "; ")
+    end
+    if checked == 0 then return "skip: no restorable saved crafts" end
+end)
+
 _rt_register("forged_weapons_round_trip", function()
     -- Register a fake craft, save, force-reload, confirm parity.
     local result_err
