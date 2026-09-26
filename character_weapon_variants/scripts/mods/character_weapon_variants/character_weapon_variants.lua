@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.544-dev"
+local MOD_VERSION = "0.1.545-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
 mod._cwv_dev_anim_picker = mod:dofile("scripts/mods/character_weapon_variants/cwv_dev_anim_picker")
@@ -77,6 +77,8 @@ mod._cwv_crowbill_hammer_mode = _om.crowbill_hammer_mode
 mod._cwv_crowbill_presentation = _om.crowbill_presentation
 mod._cwv_crowbill_runtime = _om.crowbill_runtime
 _om.damage_profile_wire = mod:dofile("scripts/mods/character_weapon_variants/_cwv_damage_profile_wire")
+-- #916 pure burn predicate + scrub, shared by the maul constructor and its check.
+_om.burn_scrub = mod:dofile("scripts/mods/character_weapon_variants/_cwv_burn_scrub")
 -- #423/#424 exact-catalog wire system. wire_catalog is the byte-identical copy of
 -- tools/shared_lib/_lib_wire_catalog.lua (MOD_DEPENDENCIES.md standalone invariant
 -- forbids a get_mod() runtime dep); thrown_wire_policy is the pure disposition

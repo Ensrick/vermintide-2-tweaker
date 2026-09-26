@@ -566,13 +566,11 @@ local _variant_definitions = {
 		-- default + every illusion via _type_transforms.
 		--
 		-- Source template: one_handed_hammer_wizard_template_1.
-		-- Carries fire damage in EXACTLY one place — `medium_blunt_smiter_heavy`
-		-- (H1 heavy attack)'s default_target chains to
-		-- `default_target_slashing_smiter_burn_M`. Damage-type swap
-		-- handled in `_create_maul_template`: H1's damage_profile is
-		-- swapped to `medium_blunt_smiter_2h_hammer` (same heavy-smiter
-		-- shape, no burn). All other profiles (lights L1-L3, heavy H2/H3,
-		-- pushes) are clean — no FX/sound swaps needed (verified
+		-- Fire lives in the damage-profile dot fields (6.11.3: three
+		-- `mace_1h_*` profiles burn). `_create_maul_template` scrubs every
+		-- burning profile by property into a dot-free `cwv_maul_*` copy
+		-- (#916, `_cwv_burn_scrub.lua`); no name list to go stale. No
+		-- FX/sound swaps needed (verified
 		-- against `1h_hammers_wizard.lua` — all `melee_hit_hammers_1h`
 		-- + `blunt_hit`, no `staff_spark` or `fire_hit`).
 		--

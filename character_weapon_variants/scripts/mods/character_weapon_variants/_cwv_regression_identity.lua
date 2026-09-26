@@ -228,26 +228,22 @@ _rt_register("issue916_half_swording_combat_style_contract", function()
 	if maul.state_machine ~= HALF_SWORDING_RESOURCE then
 		return "#916 maul_template no longer runs the declared brw_hammer state machine"
 	end
-	local function find_profile(template, profile)
-		for _, action_group in pairs(template.actions or {}) do
-			if type(action_group) == "table" then
-				for _, sub_action in pairs(action_group) do
-					if type(sub_action) == "table"
-							and sub_action.damage_profile == profile then
-						return sub_action
-					end
-				end
-			end
-		end
-		return nil
+	-- Burn scrub is clone-local and keyed on the burn property: read the LIVE
+	-- donor, require every burning donor slot to point at its scrubbed copy,
+	-- no burn reachable from the clone, and no cwv_ profile on the donor.
+	local burn_scrub = _om.burn_scrub
+	local scrub_report = _om.maul_burn_scrub
+	if type(burn_scrub) ~= "table" or type(scrub_report) ~= "table" then
+		return "#916 maul burn scrub did not run"
 	end
-	-- Burn scrub is clone-local: no burn profile reachable from a sword, while
-	-- the untouched donor still carries it (proves no donor mutation).
-	if find_profile(maul, "medium_blunt_smiter_heavy") then
-		return "#916 the Maul burn scrub regressed: burn profile reachable from a sword"
-	end
-	if not find_profile(donor, "medium_blunt_smiter_heavy") then
-		return "#916 burn-scrub fixture stale: the donor lost its burn profile"
+	local burn_failure = burn_scrub.verify(donor, maul, {
+		profiles = rawget(_G, "DamageProfileTemplates"),
+		power_levels = rawget(_G, "PowerLevelTemplates"),
+		prefix = scrub_report.prefix,
+		wire_sources = _om._cwv_damage_profile_wire_source,
+	})
+	if burn_failure then
+		return "#916 the Maul burn scrub regressed: " .. burn_failure
 	end
 	-- Presentation isolation: 3P body events stay inside the proven greathammer
 	-- vocabulary via anim_event_3p; spot-check the canonical heavy remap row.

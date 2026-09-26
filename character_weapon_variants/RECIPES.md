@@ -1153,8 +1153,15 @@ Don't trust profile names. Walk the chain.
    the actual fire indicators.
 4. For every fire-bearing profile, find a non-burn analog of the same shape
    in `damage_profile_templates.lua`. Examples (verified in the source):
-   - `medium_blunt_smiter_heavy` (burn) → `medium_blunt_smiter_2h_hammer` (clean, same heavy-smiter shape)
    - `dagger_burning_slam_fencer` (burn) → `medium_slashing_linesman` (per shortsword precedent)
+
+   Name-keyed swap maps go stale when vanilla renames profiles: 6.11.3
+   renamed every Sienna 1h-mace profile and the Maul's single-name swap
+   went inert (#916). Prefer the property-keyed scrub in
+   `_cwv_burn_scrub.lua` (`scrub_template`): it detects burn the way
+   `parse_dot_name` does (`damage_utils.lua:3753-3777`), mints dot-free
+   `cwv_<prefix>_*` copies with the same damage shape, and `verify` checks
+   the live donor instead of a name fixture.
 
 If no clean analog exists for a given burn profile shape, you have two
 options: clone-and-rewrite (replace the burn `default_target` references
