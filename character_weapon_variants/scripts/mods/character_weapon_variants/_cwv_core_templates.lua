@@ -9,6 +9,7 @@
 -- Consumed via: one injected mod:dofile call at the original constructor boundary.
 
 local _clone_damage_profile
+local _register_cwv_damage_profile
 
 return function(mod, deps)
 	deps = deps or {}
@@ -24,6 +25,23 @@ return function(mod, deps)
 	local printf = deps.printf
 
 	assert(type(_om) == "table", "_cwv_core_templates requires deps.om")
+
+-- Single registration site for every profile this module mints (multiplier
+-- clones and the #916 burn scrub): template row plus the bidirectional wire
+-- index. Returns true once the profile is registered.
+_register_cwv_damage_profile = function(new_name, clone)
+	if not DamageProfileTemplates then return false end
+	DamageProfileTemplates[new_name] = clone
+
+	if NetworkLookup and NetworkLookup.damage_profiles and not rawget(NetworkLookup.damage_profiles, new_name) then
+		local tbl = NetworkLookup.damage_profiles
+		local idx = #tbl + 1
+		rawset(tbl, idx, new_name)
+		rawset(tbl, new_name, idx)
+	end
+	return true
+end
+
 -- ============================================================
 -- Imperial Longsword template (modified Kruber Greatsword template)
 -- -15% damage, +15% speed, +15% cleave, -15% stagger
@@ -121,14 +139,7 @@ _clone_damage_profile = function(source_name, prefix, mults)
 		end
 	end
 
-	DamageProfileTemplates[new_name] = clone
-
-	if NetworkLookup and NetworkLookup.damage_profiles and not rawget(NetworkLookup.damage_profiles, new_name) then
-		local tbl = NetworkLookup.damage_profiles
-		local idx = #tbl + 1
-		rawset(tbl, idx, new_name)
-		rawset(tbl, new_name, idx)
-	end
+	_register_cwv_damage_profile(new_name, clone)
 
 	return new_name
 end
@@ -898,10 +909,10 @@ end  -- #284: end shortsword do-block
 
 -- ============================================================
 -- Maul template (modified one_handed_hammer_wizard_template_1)
--- Sienna's Morningstar moveset cloned for Kruber. H1 heavy attack's
--- damage_profile (medium_blunt_smiter_heavy) is swapped to a non-burn
--- analog (medium_blunt_smiter_2h_hammer) — wizard fire is in the
--- damage-profile resolution chain, not the FX/sound fields.
+-- Sienna's Morningstar moveset cloned for Kruber. Wizard fire lives in the
+-- damage-profile resolution chain, not the FX/sound fields: every burning
+-- profile the clone references is replaced by a scrubbed `cwv_maul_*` copy
+-- (#916, see _cwv_burn_scrub.lua).
 --
 -- 3P wield routes to Kruber's greathammer SM (to_2h_hammer); per-action
 -- 3P remap covers wizard-mace events not authored on
@@ -911,16 +922,15 @@ end  -- #284: end shortsword do-block
 -- ARCHITECTURE.
 -- ============================================================
 
--- Single-entry burn swap. Verified that medium_blunt_smiter_heavy is the
--- ONLY profile in the wizard mace template that resolves to a _burn_*
--- PowerLevelTemplates entry. Other damage profiles (light_blunt_tank,
--- light_blunt_smiter, medium_blunt_tank_upper_1h, medium_push, light_push)
--- are clean. FX/sound fields already non-fire (melee_hit_hammers_1h /
--- blunt_hit / blunt_hit_armour) — no FX swap pass needed.
+-- #916 burn scrub, keyed on the burn PROPERTY (never on profile names):
+-- vanilla 6.11.3 renamed the donor's profiles and the old single-name swap
+-- (medium_blunt_smiter_heavy) went inert while three profiles still burned
+-- (power_level_templates.lua:5701 / 5760 / 5816+5828). Each burning profile
+-- becomes a dot-free `cwv_maul_<name>` copy with the same damage shape. FX /
+-- sound fields are already non-fire (melee_hit_hammers_1h / blunt_hit /
+-- blunt_hit_armour) -- no FX swap pass needed.
 do  -- #284: scope maul template locals off the top-level chunk (>200-local limit)
-local _MAUL_DAMAGE_PROFILE_SWAP = {
-	medium_blunt_smiter_heavy = "medium_blunt_smiter_2h_hammer",
-}
+local _MAUL_BURN_PREFIX = "cwv_maul_"
 
 -- 3P remap — source events (one_handed_hammer_wizard_template_1) →
 -- target events (two_handed_hammers_template_1, Kruber greathammer SM).
@@ -963,18 +973,38 @@ local function _create_maul_template()
 
 	local template = table.clone(Weapons.one_handed_hammer_wizard_template_1, true)
 
+	-- Step 1: scrub fire from every damage-profile field of the clone.
+	local burn_scrub = _om.burn_scrub
+	local wire = {}
+	local swapped, scrubbed, failures = burn_scrub.scrub_template(template, {
+		profiles = DamageProfileTemplates,
+		power_levels = PowerLevelTemplates,
+		prefix = _MAUL_BURN_PREFIX,
+		deep_clone = function(t) return table.clone(t, true) end,
+		register = function(new_name, clone, source_name)
+			local source, kind = burn_scrub.wire_source(source_name, burn_scrub.MAUL_WIRE_ANALOG,
+				DamageProfileTemplates, PowerLevelTemplates)
+			if not _register_cwv_damage_profile(new_name, clone) then return false end
+			_om._record_cwv_dp_source(new_name, source)   -- issue 423 wire-safe map
+			wire[new_name] = source
+			mod:info("[cwv:916] %s -> %s (wire %s: %s)", source_name, new_name, kind, source)
+			return true
+		end,
+	})
+	_om.maul_burn_scrub = {
+		prefix = _MAUL_BURN_PREFIX, swapped = swapped, profiles = scrubbed,
+		failures = failures, wire = wire,
+	}
+	for _, name in ipairs(failures) do
+		mod:warning("[cwv:916] maul burn scrub could not register %s%s; burn stays on %s",
+			_MAUL_BURN_PREFIX, name, name)
+	end
+
 	if template.actions then
 		for _, action_group in pairs(template.actions) do
 			if type(action_group) == "table" then
 				for _, sub_action in pairs(action_group) do
 					if type(sub_action) == "table" then
-						-- Step 1: scrub fire by swapping the burn-bearing
-						-- damage_profile to a non-burn analog. Single-entry
-						-- map; nothing else in this template fires.
-						local profile = sub_action.damage_profile
-						if profile and _MAUL_DAMAGE_PROFILE_SWAP[profile] then
-							sub_action.damage_profile = _MAUL_DAMAGE_PROFILE_SWAP[profile]
-						end
 						-- Step 2: 3P body event remap (3P only —
 						-- never write anim_event / 1P fields).
 						if sub_action.anim_event and _MAUL_ANIM_REMAP_3P[sub_action.anim_event] then
@@ -1043,8 +1073,8 @@ local function _create_maul_template()
 		}
 	end
 
-	mod:info("Created maul_template (burn scrub: %d profile swap, 3p anim remap: %d entries, wield_3p=to_2h_hammer)",
-		1, 9)
+	mod:info("Created maul_template (burn scrub: %d profiles / %d refs, 3p anim remap: %d entries, wield_3p=to_2h_hammer)",
+		#scrubbed, swapped, 9)
 end
 
 _create_maul_template()

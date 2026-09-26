@@ -1,5 +1,38 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.545-dev (2026-09-25) -- Maul burn scrub keys on the burn property (#916) [verify-fix]
+
+- Vanilla 6.11.3 renamed every Sienna 1h-mace profile, so the Maul's
+  single-name swap (`medium_blunt_smiter_heavy`) matched nothing and three
+  donor profiles still burned in `maul_template` (Maul item and the
+  Half-Swording combat style): `mace_1h_heavy_smiter_vertical`
+  (`burning_dot_3tick`), `mace_1h_heavy_tank_diag`
+  (`burning_dot_2tick_slow_unstackable`) and `mace_1h_light_smiter_vertical`
+  (`burning_dot_1tick`) (`power_level_templates.lua:5701/5760/5816`).
+- New pure `_cwv_burn_scrub.lua`: a burn predicate mirroring the engine's
+  `parse_dot_name` (`damage_utils.lua:3753-3777`; profile, default_target
+  and every target, sparse lists included) and a template scrub over every
+  `damage_profile*` field. Each burning profile becomes a dot-free
+  `cwv_maul_<name>` copy with the same damage shape, registered through the
+  module's single DamageProfileTemplates + NetworkLookup site.
+- #423 wire fallback for the scrubbed profiles is a same-shape non-burning
+  vanilla analog (`medium_blunt_smiter_1h`, `medium_blunt_tank_1h`,
+  `light_blunt_smiter`), validated at load (exists, no burn, same
+  charge_value), else the donor.
+- `issue916_half_swording_combat_style_contract` now reads the live donor:
+  no burn reachable from the clone, every burning donor slot points at its
+  scrubbed copy with a wire source, and no `cwv_` profile on the donor. A
+  donor with no fire passes. Replaces the stale name fixture that failed
+  with "the donor lost its burn profile" (RainReligion 2026-09-21, 0.1.540).
+- Engine-free coverage: `test_cwv_burn_scrub.lua`, including an optional
+  scan of the decompiled donor (3 profiles, 5 slots scrubbed).
+
+**DoD:** Live proof: `PASS: issue916_half_swording_combat_style_contract`,
+log `[cwv:916]` lines for the three profiles, and no burning effect on hits
+with the Maul or Half-Swording.
+
+Refs #916
+
 ## 0.1.544-dev (2026-09-25) -- reissue of 0.1.543-dev under a fresh claim [verify-fix]
 
 - Reissue of 0.1.543-dev under a fresh claim (stale claim); no code changes;
