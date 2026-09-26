@@ -1,5 +1,12 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.544-dev (2026-09-25) -- reissue of 0.1.543-dev under a fresh claim [verify-fix]
+
+- Reissue of 0.1.543-dev under a fresh claim (stale claim); no code changes;
+  carries #579, #1320, #1660. 0.1.543-dev was merged but never uploaded.
+
+Refs #579 #1320 #1660
+
 ## 0.1.543-dev (2026-09-23) -- careers array no longer aliased across Empire defs (#1660) [verify-fix]
 
 - `_build_entry` now publishes a private, element-wise copy of `def.careers`
