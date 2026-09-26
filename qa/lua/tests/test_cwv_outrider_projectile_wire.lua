@@ -86,8 +86,10 @@ return function(H, repo_root)
 				M.TEMPLATE_KEY)
 			H.equal(shared_inspect.default.lookup_data.item_template_name,
 				"some_native_template")
-			H.equal(#logs, 1)
-			H.truthy(logs[1]:find("[cwv:1320]", 1, true))
+			H.equal(#logs, 2)
+			H.truthy(logs[1]:find("[cwv:1320] outrider projectile swap: rows=0 swapped=0", 1, true),
+				"no Projectiles table in this fixture: the swap reports zero rows")
+			H.truthy(logs[2]:find("[cwv:1320] outrider projectile wire:", 1, true))
 			-- Re-install is idempotent: same reserved id, zero new stamps.
 			local second = M.install(nil, { om = om, network_lookup = network_lookup })
 			H.equal(second.registered, true)
@@ -136,6 +138,116 @@ return function(H, repo_root)
 		end)
 		_G.Weapons, _G.NetworkLookup = old_w, old_nl
 		if not ok then error(err) end
+	end)
+
+	-- Vanilla stores the projectile config by reference on the fire action
+	-- (weapon_templates/dr_deus_01.lua:56); the Outrider clone deep-copies the
+	-- whole template (foundation table.lua:31-49), exactly as this fixture does.
+	local function deep_clone(value)
+		if type(value) ~= "table" then return value end
+		local copy = {}
+		for key, child in pairs(value) do copy[key] = deep_clone(child) end
+		return copy
+	end
+	local DONOR_INFO = { projectile_units_template = "dr_deus_01_head",
+		gravity_settings = "drakegun", trajectory_template_name = "throw_trajectory" }
+	local function make_donor()
+		return { actions = { action_one = {
+			default = { kind = "grenade_thrower", projectile_info = DONOR_INFO },
+			push = { kind = "push_stagger" },
+		} } }
+	end
+
+	H.test("CWV #1320 deep copy defeats identity; planner matches the donor row and swaps the clone only", function()
+		local donor = make_donor()
+		local clone = deep_clone(donor)
+		local shoot = clone.actions.action_one.default
+		H.truthy(shoot.projectile_info ~= DONOR_INFO,
+			"the deep copy is why the old identity guard never matched (FAIL premise)")
+		H.equal(shoot.projectile_info.projectile_units_template, "dr_deus_01_head")
+		local grenade = deep_clone(DONOR_INFO)
+		grenade.projectile_units_template = "grenade"
+		local rows = M.plan_projectile_swap(clone, donor, DONOR_INFO)
+		H.equal(#rows, 1)
+		H.equal(rows[1].sub_action_name, "default")
+		H.equal(M.apply_projectile_swap(rows, grenade), 1)
+		H.equal(shoot.projectile_info, grenade,
+			"the fire action points at the authored grenade config (the #1320 check's assertion)")
+		H.equal(donor.actions.action_one.default.projectile_info, DONOR_INFO,
+			"the NATIVE Trollhammer keeps the torpedo config (#475 Invariant 1)")
+		H.equal(clone.actions.action_one.push.projectile_info, nil)
+		H.equal(M.apply_projectile_swap(rows, grenade), 0, "second pass is a no-op")
+	end)
+
+	H.test("CWV #1320 planner falls back to the stable units template without a donor row and skips foreign projectiles", function()
+		local donor = make_donor()
+		local clone = deep_clone(donor)
+		clone.actions.action_one.shoot_charged = { kind = "grenade_thrower",
+			projectile_info = deep_clone(DONOR_INFO) }
+		clone.actions.action_one.arrow = { kind = "grenade_thrower",
+			projectile_info = { projectile_units_template = "we_deus_01_arrow" } }
+		local rows = M.plan_projectile_swap(clone, donor, DONOR_INFO)
+		H.equal(#rows, 2)
+		H.equal(rows[1].sub_action_name, "default")
+		H.equal(rows[2].sub_action_name, "shoot_charged")
+		local grenade = { projectile_units_template = "grenade" }
+		H.equal(M.apply_projectile_swap(rows, grenade), 2)
+		H.equal(clone.actions.action_one.arrow.projectile_info.projectile_units_template,
+			"we_deus_01_arrow", "a sub-action on another projectile is never swapped")
+		-- Fail-closed shapes: no config, no clone, no grenade config.
+		H.equal(#M.plan_projectile_swap(clone, donor, nil), 0)
+		H.equal(#M.plan_projectile_swap(nil, donor, DONOR_INFO), 0)
+		H.equal(M.apply_projectile_swap(rows, nil), 0)
+	end)
+
+	H.test("CWV #1320 install swaps the fire action through the donor rows and leaves the donor alone", function()
+		local old_w, old_nl, old_at, old_p = _G.Weapons, _G.NetworkLookup, _G.ActionTemplates, _G.Projectiles
+		local ok, err = pcall(function()
+			local donor = make_donor()
+			donor.actions.action_one.default.lookup_data = {
+				item_template_name = M.DONOR_TEMPLATE_KEY,
+				action_name = "action_one", sub_action_name = "default" }
+			local clone = deep_clone(donor)
+			local grenade = deep_clone(DONOR_INFO)
+			grenade.projectile_units_template = "grenade"
+			_G.Weapons = { [M.TEMPLATE_KEY] = clone, [M.DONOR_TEMPLATE_KEY] = donor }
+			_G.Projectiles = { [M.DONOR_PROJECTILE_KEY] = DONOR_INFO,
+				[M.GRENADE_PROJECTILE_KEY] = grenade }
+			local lookup = { "n/a" }
+			lookup["n/a"] = 1
+			_G.NetworkLookup = { item_template_names = lookup }
+			_G.ActionTemplates = {}
+			local logs = {}
+			local state = M.install(nil, { om = {}, network_lookup = network_lookup,
+				printf = function(fmt, ...) logs[#logs + 1] = string.format(fmt, ...) end })
+			H.equal(state.registered, true)
+			H.equal(state.projectile_rows, 1)
+			H.equal(state.projectile_swapped, 1)
+			H.equal(state.projectile_units_template, "grenade")
+			H.equal(clone.actions.action_one.default.projectile_info, grenade,
+				"the fire action points at the authored grenade config (the #1320 check's assertion)")
+			H.equal(donor.actions.action_one.default.projectile_info, DONOR_INFO,
+				"the NATIVE Trollhammer keeps the torpedo config")
+			H.truthy(logs[1]:find(
+				"[cwv:1320] outrider projectile swap: rows=1 swapped=1 units_template=grenade", 1, true))
+			-- Re-install: the swap is idempotent.
+			local second = M.install(nil, { om = {}, network_lookup = network_lookup })
+			H.equal(second.projectile_rows, 1)
+			H.equal(second.projectile_swapped, 0)
+		end)
+		_G.Weapons, _G.NetworkLookup, _G.ActionTemplates, _G.Projectiles = old_w, old_nl, old_at, old_p
+		if not ok then error(err) end
+	end)
+
+	H.test("CWV #1320 the constructor no longer compares clone identity and the wire owner plans the swap", function()
+		local constructor = read(module_root .. "_cwv_core_templates.lua")
+		H.equal(constructor:find("if sub_action.projectile_info == Projectiles.dr_deus_01", 1, true), nil,
+			"identity against the deep-copied clone can never match (table.lua:31-49)")
+		H.equal(constructor:find("mod:dofile(", 1, true), nil,
+			"the core-template owner takes no dofile (decomposition contract)")
+		local wire = read(module_root .. "_cwv_outrider_projectile_wire.lua")
+		H.truthy(wire:find("M.plan_projectile_swap(template, donor, donor_info)", 1, true))
+		H.truthy(wire:find("M.apply_projectile_swap(swap_rows, grenade_info)", 1, true))
 	end)
 
 	H.test("CWV owns the exact canonical NetworkLookup helper copy", function()

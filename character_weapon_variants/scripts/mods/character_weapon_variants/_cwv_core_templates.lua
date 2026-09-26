@@ -1210,17 +1210,18 @@ local function _create_outrider_grenade_launcher_template()
 						"cwv_outrider_grenade_launcher_",
 						{ damage = _OUTRIDER_DAMAGE_MULT, stagger = _OUTRIDER_DAMAGE_MULT })
 				end
-				-- Projectile visual swap: point at our cloned config.
-				-- Only swap if vanilla had this sub-action pointed at the
-				-- trollhammer projectile config (defensive — other sub-actions
-				-- in this group might use different projectiles).
-				if sub_action.projectile_info == Projectiles.dr_deus_01
-						and Projectiles.cwv_outrider_grenade_projectile then
-					sub_action.projectile_info = Projectiles.cwv_outrider_grenade_projectile
-				end
 			end
 		end
 	end
+
+	-- (#1320) The projectile visual swap (Trollhammer torpedo config to the
+	-- authored grenade config on the fire action) is planned and applied by
+	-- _cwv_outrider_projectile_wire at its install from the item-identity
+	-- transport owner, after this template exists. This owner takes no dofile.
+	-- The former in-loop guard compared the clone's deep-copied projectile_info
+	-- against Projectiles.dr_deus_01 by identity; table.clone(..., true) copies
+	-- nested tables (foundation scripts/util/table.lua:31-49), so it never
+	-- matched and every Outrider shot spawned the torpedo unit.
 
 	-- default_loaded_projectile_settings reads `action.speed` at template-load
 	-- time. Since we just bumped action.speed above, sync the cached value.

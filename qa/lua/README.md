@@ -64,6 +64,14 @@ there is no copied implementation.
   routing policies route as designed, the contracts module returns nil, `skip:`
   or the loud mismatch messages, and the runner counts SKIP apart from PASS
   and FAIL with printf resolved through a test-local environment.
+- `tests/test_cwv_dual_axes_husk_hands.lua`: #579 per-hand husk write for a
+  generated Dual Axes pair through the real peer gate, lifecycle ledger and
+  husk re-key: the bare peer_id owner collapses the offhand, the RemotePlayer
+  shape keeps both hands, and the shipped check builds that shape.
+- `tests/test_cwv_careers_publication.lua`: #1660 the installed registration
+  owner's `build_entry` publishes a private `can_wield` copy per row, so a
+  sibling mod's in-place append or removal on one published row reaches
+  neither the sibling row nor the catalog's shared careers array.
 - `fixtures/vanilla_weapon_master_list.lua`: GENERATED vanilla weapon census
   (every `ItemMasterList` melee/ranged entry with its `can_wield` list after the
   DLC `UpdateItemMasterList` patches, each hero career's

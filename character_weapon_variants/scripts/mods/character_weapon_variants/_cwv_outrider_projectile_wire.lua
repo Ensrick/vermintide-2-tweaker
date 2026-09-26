@@ -30,6 +30,60 @@ local M = {}
 
 M.TEMPLATE_KEY = "outrider_grenade_launcher_template"
 M.DONOR_TEMPLATE_KEY = "dr_deus_01_template_1"
+M.DONOR_PROJECTILE_KEY = "dr_deus_01"
+M.GRENADE_PROJECTILE_KEY = "cwv_outrider_grenade_projectile"
+
+-- Pure: plan the projectile-config swap for the clone's action_one rows.
+-- Vanilla stores `Projectiles.dr_deus_01` by reference on the donor's fire
+-- action (weapon_templates/dr_deus_01.lua:56); the clone is
+-- table.clone(..., true), a DEEP copy (foundation scripts/util/table.lua:31-49,
+-- the second argument is skip_metatable), so identity against the clone's own
+-- projectile_info can never match. Match the DONOR sub-action at the same
+-- path by identity instead; when no donor row exists, fall back to the stable
+-- `projectile_units_template` field (dr_deus_01: "dr_deus_01_head",
+-- dlcs/morris/morris_equipment_settings.lua:227-236). Rows are sorted by
+-- sub-action name so the boot log is deterministic. The donor is never written.
+function M.plan_projectile_swap(clone, donor, donor_info)
+	local rows = {}
+	if type(donor_info) ~= "table" or type(clone) ~= "table"
+			or type(clone.actions) ~= "table" or type(clone.actions.action_one) ~= "table" then
+		return rows
+	end
+	local donor_actions = type(donor) == "table" and type(donor.actions) == "table"
+		and donor.actions.action_one or nil
+	for sub_name, sub_action in pairs(clone.actions.action_one) do
+		if type(sub_action) == "table" and type(sub_action.projectile_info) == "table" then
+			local donor_sub = type(donor_actions) == "table" and donor_actions[sub_name] or nil
+			local matched
+			if type(donor_sub) == "table" then
+				matched = donor_sub.projectile_info == donor_info
+			else
+				matched = sub_action.projectile_info.projectile_units_template
+					== donor_info.projectile_units_template
+			end
+			if matched then
+				rows[#rows + 1] = { sub_action_name = sub_name, sub_action = sub_action }
+			end
+		end
+	end
+	table.sort(rows, function(a, b) return a.sub_action_name < b.sub_action_name end)
+	return rows
+end
+
+-- Pure: point every planned clone row at the authored grenade config.
+-- Returns the number of rows changed; a second pass is a no-op.
+function M.apply_projectile_swap(rows, grenade_info)
+	local changed = 0
+	if type(grenade_info) ~= "table" then return changed end
+	for index = 1, #rows do
+		local sub_action = rows[index].sub_action
+		if sub_action.projectile_info ~= grenade_info then
+			sub_action.projectile_info = grenade_info
+			changed = changed + 1
+		end
+	end
+	return changed
+end
 
 -- Pure: collect the clone-private lookup_data tables eligible for the
 -- re-stamp. `shared_actions` is an identity set of action tables that must
@@ -98,6 +152,27 @@ function M.install(mod, ctx)
 		state.reason = "template_missing"
 		return state
 	end
+	-- (#1320) Projectile visual swap, planned against the DONOR's rows. The
+	-- constructor's old guard compared the clone's deep-copied projectile_info
+	-- against Projectiles.dr_deus_01 by identity, which never held, so every
+	-- Outrider shot spawned the Trollhammer torpedo unit. Independent of the
+	-- lookup registration below: a fail-closed lookup must not leave the
+	-- torpedo config on the fire action.
+	local projectiles = rawget(_G, "Projectiles")
+	local donor = rawget(weapons, M.DONOR_TEMPLATE_KEY)
+	local donor_info = type(projectiles) == "table"
+		and rawget(projectiles, M.DONOR_PROJECTILE_KEY) or nil
+	local grenade_info = type(projectiles) == "table"
+		and rawget(projectiles, M.GRENADE_PROJECTILE_KEY) or nil
+	local swap_rows = M.plan_projectile_swap(template, donor, donor_info)
+	state.projectile_rows = #swap_rows
+	state.projectile_swapped = M.apply_projectile_swap(swap_rows, grenade_info)
+	state.projectile_units_template = type(grenade_info) == "table"
+		and grenade_info.projectile_units_template or nil
+	pcall(emit,
+		"[cwv:1320] outrider projectile swap: rows=%d swapped=%d units_template=%s",
+		state.projectile_rows, state.projectile_swapped,
+		tostring(state.projectile_units_template))
 	local index, _, reason = network_lookup.register_named(
 		rawget(_G, "NetworkLookup"), "item_template_names", M.TEMPLATE_KEY)
 	if not index then
