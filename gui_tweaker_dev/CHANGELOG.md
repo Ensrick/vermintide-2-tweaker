@@ -1,5 +1,21 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.358-dev (2026-09-26) -- dropdown arrow glow check reads the real sprite key (#92) [verify-fix]
+
+- Rain's v0.2.354-dev log failed `mod_tweaker_dropdown_arrow_glow` with
+  `dropdown missing the drop_down_menu_arrow_clicked glow overlay`. Not a
+  widget regression: `create_dropdown` stores the glow sprite at
+  `content.arrow_glow_tex`, the key its `texture_uv` pass names (vanilla
+  `ui_passes.lua:164-166` reads `content[texture_id]`), while the check read
+  `content.arrow_glow`, which never existed. The check now resolves the sprite
+  through the glow pass's own `texture_id`.
+- The check also pins the glow geometry to the vanilla Options dropdown
+  (`options_view_definitions.lua:2782-2818`): glow 31x28 on the base arrow's
+  x, and the glow driver places it at row centre -1 closed and -26 open. No
+  widget change; the widget already matched.
+- Host test `test_gut_dropdown_arrow_glow.lua` drives the real check against
+  the shipped `create_dropdown`; the 0.2.357-dev check fails it.
+
 ## 0.2.357-dev (2026-09-23) -- keep transition check follows the published routing policy (#1652) [verify-fix]
 
 - Rain's v0.2.354-dev log failed `mod_tweaker_transition_registered` with
