@@ -26,8 +26,12 @@ function M.category_slot(category)
     return nil
 end
 
+-- #414: only a mapped CW family can match. A nil slot (Athanor accessory
+-- editor, dropped argument) or an accessory slot matches nothing; comparing
+-- nil == nil used to hand every unmapped vanilla category to that context.
 function M.category_matches_slot(category, slot_type)
-    return M.category_slot(category) == slot_type
+    local slot = M.category_slot(category)
+    return slot ~= nil and slot == slot_type
 end
 
 -- Independent coverage oracle for #1122. Production widens only the explicit
