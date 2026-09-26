@@ -64,6 +64,11 @@ there is no copied implementation.
   routing policies route as designed, the contracts module returns nil, `skip:`
   or the loud mismatch messages, and the runner counts SKIP apart from PASS
   and FAIL with printf resolved through a test-local environment.
+- `tests/test_gut_dropdown_arrow_glow.lua`: #92 the shipped `create_dropdown`
+  and its `DD_*` constants lifted out of the definitions file and driven through
+  the real `mod_tweaker_dropdown_arrow_glow` check: the shipped widget passes,
+  matches native 31x28 glow / 31x15 base geometry, and a sprite swap, a 31x15
+  glow or a glow that no longer shifts on open each fail the check.
 - `tests/test_cwv_dual_axes_husk_hands.lua`: #579 per-hand husk write for a
   generated Dual Axes pair through the real peer gate, lifecycle ledger and
   husk re-key: the bare peer_id owner collapses the offhand, the RemotePlayer

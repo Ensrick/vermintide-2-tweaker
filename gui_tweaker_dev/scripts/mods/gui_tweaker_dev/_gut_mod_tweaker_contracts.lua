@@ -840,7 +840,12 @@ end)
 -- the brighter drop_down_menu_arrow_clicked glow sprite layering on hover/open. Asserts:
 -- (a) base arrow_down + arrow_up passes both exist and are gated on content.active so one
 -- is ALWAYS drawn; (b) an arrow_glow pass draws drop_down_menu_arrow_clicked; (c) the base
--- arrows are at FULL alpha (never gated to a blank/dimmed open state).
+-- arrows are at FULL alpha (never gated to a blank/dimmed open state); (d) the glow
+-- geometry matches native: 31x28 on the base arrow's x (:2795-2818), and the driver
+-- places it at row centre -1 closed (-14 +13) and -26 open (-14 -12).
+-- The glow sprite is resolved through the pass's own texture_id (content[texture_id], the
+-- key texture_uv draw reads, ui_passes.lua:164-166), so a content-key rename cannot make
+-- the check read a nil key again (0.2.354-dev read content.arrow_glow, which never existed).
 _rt_register("mod_tweaker_dropdown_arrow_glow", function()
     local defs = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_definitions")
     if type(defs.create_dropdown) ~= "function" then return "create_dropdown factory missing" end
@@ -849,12 +854,13 @@ _rt_register("mod_tweaker_dropdown_arrow_glow", function()
         return "create_dropdown did not return a renderable widget"
     end
     -- (a) both base arrows present; one drawn when closed, one when open -> never blank.
-    local has_down, has_up, has_glow = false, false, false
+    local has_down, has_up, glow_pass, driver = false, false, nil, nil
     local down_check, up_check = nil, nil
     for _, p in ipairs(dd.element.passes) do
         if p.style_id == "arrow_down" then has_down = true; down_check = p.content_check_function end
         if p.style_id == "arrow_up"   then has_up   = true; up_check   = p.content_check_function end
-        if p.style_id == "arrow_glow" then has_glow = true end
+        if p.style_id == "arrow_glow" then glow_pass = p end
+        if p.pass_type == "local_offset" and p.offset_function then driver = p.offset_function end
     end
     if not (has_down and has_up) then
         return "#92 regression: dropdown missing a base down/up arrow pass (the arrow must stay visible when open — never gate the only arrow off active)"
@@ -866,14 +872,39 @@ _rt_register("mod_tweaker_dropdown_arrow_glow", function()
         return "#92 regression: dropdown arrow gating wrong (closed must draw the down arrow, open the up arrow — the open state must not be blank)"
     end
     -- (b) the _clicked glow sprite overlay exists (drop_down_menu_arrow_clicked).
-    local glowc = dd.content and dd.content.arrow_glow
-    if not (has_glow and glowc and glowc.texture_id == "drop_down_menu_arrow_clicked") then
-        return "#92 regression: dropdown missing the drop_down_menu_arrow_clicked glow overlay (native hover/open glow sprite)"
+    local glow_tex = glow_pass and dd.content and dd.content[glow_pass.texture_id or "texture_id"]
+    if glow_tex ~= "drop_down_menu_arrow_clicked" then
+        return "#92 regression: dropdown missing the drop_down_menu_arrow_clicked glow overlay (native hover/open glow sprite), got "
+            .. tostring(glow_tex)
     end
     -- (c) base arrows at FULL alpha in both states (native style.arrow color = font_default,255).
     local ad, au = dd.style and dd.style.arrow_down, dd.style and dd.style.arrow_up
     if not (ad and ad.color and ad.color[1] == 255 and au and au.color and au.color[1] == 255) then
         return "#92 regression: dropdown base arrows not at FULL alpha (native arrow is font_default,255 closed AND open; a dim/0 open arrow is the disappearing-arrow defect)"
+    end
+    -- (d) glow geometry. Row centre comes from the row hotspot (full row height).
+    local ag, hs = dd.style.arrow_glow, dd.style.hotspot
+    if not (ag and ag.texture_size and ag.offset and hs and hs.offset and hs.size) then
+        return "#92 regression: dropdown glow or hotspot style missing texture_size/offset"
+    end
+    if ag.texture_size[1] ~= 31 or ag.texture_size[2] ~= 28 then
+        return string.format("#92 regression: dropdown glow is %sx%s, native drop_down_menu_arrow_clicked is 31x28",
+            tostring(ag.texture_size[1]), tostring(ag.texture_size[2]))
+    end
+    if not (ad.offset and ag.offset[1] == ad.offset[1]) then
+        return "#92 regression: dropdown glow x does not sit on the base arrow x (native both at right edge -31)"
+    end
+    if not driver then
+        return "#92 regression: dropdown has no local_offset glow driver (glow cannot reposition on open)"
+    end
+    local cy = hs.offset[2] + hs.size[2] / 2
+    local want = { [false] = cy - 1, [true] = cy - 26 }
+    for _, open in ipairs({ false, true }) do
+        driver(nil, dd.style, { hotspot = { is_hover = true }, active = open })
+        if math.abs(ag.offset[2] - want[open]) > 0.01 then
+            return string.format("#92 regression: dropdown glow y %s when %s, native is row centre %s",
+                tostring(ag.offset[2] - cy), open and "open" or "closed", open and "-26" or "-1")
+        end
     end
 end)
 

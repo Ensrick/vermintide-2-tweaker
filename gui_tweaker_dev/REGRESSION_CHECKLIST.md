@@ -1,5 +1,13 @@
 # Regression Checklist — gui_tweaker_dev
 
+## Dropdown arrow glow check (#92, 0.2.358-dev)
+
+- Keep or mission: run `/gut_regression_test`; `mod_tweaker_dropdown_arrow_glow`
+  must PASS.
+- Mod Tweaker: hover a dropdown row; the glow appears over the down arrow and
+  fades out on leave. Open it; the arrow flips up and the glow sits above it.
+- Host tests: `test_gut_dropdown_arrow_glow.lua`.
+
 ## Keep transition check follows the routing policy (#1652, 0.2.357-dev)
 
 - Keep, solo: run `/gut_regression_test`. `mod_tweaker_transition_registered`
