@@ -1,5 +1,30 @@
 # Crafting in Modded Changelog
 
+## 0.8.137-dev (2026-09-25) -- Accessories and dropped slots get no CW weapon traits (#414) [verify-fix]
+
+- Symptom: with Allow Chaos Wastes Traits on, the Athanor accessory editor
+  offered every weapon trait, and a lost slot argument handed a weapon every
+  trait regardless of melee or ranged. RainReligion's 2026-09-21 run already
+  failed `issue414_cw_traits_preserve_slot_family -- non-weapon/accessory
+  context received CW traits`.
+- Cause: `_cim_trait_slot_policy.lua` `category_matches_slot` returned
+  `category_slot(cat) == slot_type`; every non-Chaos-Wastes category maps to
+  nil, so a nil slot matched all of them. The accessory editor has no
+  selected weapon and widened its trait categories with a nil slot.
+- Fix: a category matches only when it is a mapped CW family equal to the
+  slot, so a nil or accessory slot gets no CW weapon traits. The Athanor
+  `_setup_menu_options` hook now goes through one production adapter,
+  `apply_forge_freedom_for_window`, which reads the slot from the selected
+  item.
+- `issue414_cw_traits_preserve_slot_family` now drives both production callers
+  (`_cim_trait_pool_for` and the Athanor window adapter) with melee, ranged,
+  necklace and no-item fixtures under forced "CW traits only" toggles and
+  checks the exact slot family, so dropping either slot argument fails it.
+  Offline cases added to `test_cim_trait_slot_policy.lua` and
+  `test_cim_forge_picker_owner.lua`.
+
+**Test:** Load `Crafting in Modded v0.8.137-dev` in the Modded Realm keep.
+
 ## 0.8.136-dev (2026-09-22) -- Temper Apply and Craft refuse unstorable bubble counts (#1141) [verify-fix]
 
 - Symptom (RainReligion, 2026-09-21 card step 7): pressing APPLY with one

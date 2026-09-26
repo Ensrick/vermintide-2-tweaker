@@ -24,6 +24,12 @@ return function(H, repo_root)
             H.equal(policy.category_slot(category), nil, category)
         end
         H.equal(policy.category_matches_slot("deus_melee", nil), false)
+        -- #414: unmapped vanilla categories must not match a nil slot either.
+        for _, category in ipairs({ "melee", "ranged_ammo", "defence_accessory" }) do
+            H.equal(policy.category_matches_slot(category, nil), false, category)
+            H.equal(policy.category_matches_slot(category, "necklace"), false, category)
+            H.equal(policy.category_matches_slot(category, "melee"), false, category)
+        end
         H.equal(policy.category_matches_slot("deus_ranged", "necklace"), false)
     end)
 
@@ -88,6 +94,7 @@ return function(H, repo_root)
             .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_forge_picker_owner.lua")
         H.truthy(standard:find("_cim_cw_trait_entries%(master%.slot_type%)"))
         H.truthy(picker:find("selected_item%.data"))
-        H.truthy(picker:find("dispatch.apply_forge_freedom, slots_progression, slot_type", 1, true))
+        H.truthy(picker:find("pcall(dispatch.apply_forge_freedom_for_window, self,", 1, true))
+        H.truthy(picker:find("return _apply_forge_freedom(slots_progression, slot_type)", 1, true))
     end)
 end

@@ -577,6 +577,93 @@ _rt_register("issue414_cw_traits_preserve_slot_family", function()
     if #mod._cim_cw_trait_entries(nil) ~= 0 then
         return "non-weapon/accessory context received CW traits"
     end
+
+    -- #414: drive both PRODUCTION callers, so dropping either slot argument
+    -- fails here even while the helper above stays correct. Both read the
+    -- live toggles, which are forced to "CW traits only" for the probe.
+    local pool_for = mod._cim_trait_pool_for
+    local for_window = mod._cim_apply_forge_freedom_for_window
+    local restore = mod._cim_restore_forge_freedom
+    local picker_state = mod._cim_forge_picker_owner_state
+    local weave = rawget(_G, "WeaveTraits")
+    if type(pool_for) ~= "function" or type(for_window) ~= "function"
+            or type(restore) ~= "function" or not (weave and weave.categories) then
+        return "#414 production trait-pool adapters are not installed"
+    end
+    if picker_state and picker_state.backup
+            and next(picker_state.backup.traits or {}) ~= nil then
+        return "skip: Athanor property editor is open (live widening in progress)"
+    end
+    local cw_family = {}
+    for key in pairs(expected.melee) do cw_family[key] = true end
+    for key in pairs(expected.ranged) do cw_family[key] = true end
+    local fixtures = {
+        { slot = "melee", table_name = "melee", want = expected.melee },
+        { slot = "ranged", table_name = "ranged_ammo", want = expected.ranged },
+        { slot = "necklace", table_name = "defence_accessory", want = {} },
+        { slot = nil, table_name = nil, want = {} },
+    }
+    local saved_cw = mod:get("allow_cw_traits")
+    local saved_any = mod:get("allow_any_trait_property")
+    mod:set("allow_cw_traits", true, false)
+    mod:set("allow_any_trait_property", false, false)
+    local probe = "cim414_probe_category"
+    local ok, err = pcall(function()
+        -- Only CW-family keys outside the item's own pool can come from the
+        -- widening; compare those to the exact expected family.
+        -- Athanor twins can legitimately skip a trait with no display row, so
+        -- only the standard forge asserts completeness; both assert family.
+        local function check(label, keys, own, want, require_all)
+            local got = {}
+            for key in pairs(keys) do
+                if cw_family[key] and not own[key] then got[key] = true end
+            end
+            for key in pairs(got) do
+                if not want[key] then
+                    return label .. " received cross-family CW trait " .. key
+                end
+            end
+            for key in pairs(require_all and want or {}) do
+                if not own[key] and not got[key] then
+                    return label .. " omitted slot-eligible CW trait " .. key
+                end
+            end
+        end
+        for _, fx in ipairs(fixtures) do
+            local label = tostring(fx.slot or "nil-item")
+            local own = {}
+            for _, entry in ipairs(fx.table_name
+                    and WT.combinations[fx.table_name] or {}) do
+                if entry and entry[1] then own[entry[1]] = true end
+            end
+            if fx.table_name then
+                local keys = {}
+                for _, entry in ipairs(pool_for({
+                    trait_table_name = fx.table_name, slot_type = fx.slot,
+                }) or {}) do
+                    if entry and entry[1] then keys[entry[1]] = true end
+                end
+                local reason = check("standard forge " .. label, keys, own,
+                    fx.want, true)
+                if reason then return reason end
+            end
+            local item = fx.slot and { data = { slot_type = fx.slot } } or nil
+            for_window({ _selected_item = function() return item end },
+                { traits = { { category = probe } } })
+            local keys = {}
+            for _, weave_key in ipairs(weave.categories[probe] or {}) do
+                keys[(tostring(weave_key):gsub("^weave_", ""))] = true
+            end
+            restore()
+            local reason = check("Athanor " .. label, keys, {}, fx.want, false)
+            if reason then return reason end
+        end
+    end)
+    pcall(restore)
+    mod:set("allow_cw_traits", saved_cw, false)
+    mod:set("allow_any_trait_property", saved_any, false)
+    if not ok then return "#414 production probe threw: " .. tostring(err) end
+    if err then return err end
 end)
 
 _rt_register("default_trait_pool_excludes_boons_when_toggles_off", function()

@@ -23,6 +23,7 @@ return function(H, repo_root)
 
     local expected_exports = {
         "apply_forge_freedom",
+        "apply_forge_freedom_for_window",
         "ensure_property_twin",
         "ensure_trait_twin",
         "ensure_weave_category_pools",
@@ -130,7 +131,7 @@ return function(H, repo_root)
             "_cim_restore_forge_freedom = _forge_picker_owner.restore_forge_freedom"), 1)
     end)
 
-    H.test("CIM picker owner exports exactly five stable operations", function()
+    H.test("CIM picker owner exports exactly six stable operations", function()
         local f = fixture({ value = false }, {})
         local actual = {}
         for key in pairs(f.owner) do actual[#actual + 1] = key end
@@ -142,6 +143,8 @@ return function(H, repo_root)
         H.equal(f.mod._cim_ensure_trait_twin, f.owner.ensure_trait_twin)
         H.equal(f.mod._cim_ensure_property_twin, f.owner.ensure_property_twin)
         H.equal(f.mod._cim_apply_forge_freedom, f.owner.apply_forge_freedom)
+        H.equal(f.mod._cim_apply_forge_freedom_for_window,
+            f.owner.apply_forge_freedom_for_window)
         H.equal(f.mod._cim_restore_forge_freedom, f.owner.restore_forge_freedom)
     end)
 
@@ -222,6 +225,7 @@ return function(H, repo_root)
         f.mod._cim_ensure_trait_twin = nil
         f.mod._cim_ensure_property_twin = nil
         f.mod._cim_apply_forge_freedom = nil
+        f.mod._cim_apply_forge_freedom_for_window = nil
         f.mod._cim_restore_forge_freedom = nil
         local second_owner = f.install(second_context)
         H.equal(f.globals.WeaveTraits.categories.old_cat, old_trait_original,
@@ -242,13 +246,15 @@ return function(H, repo_root)
         for key in pairs(second_owner) do actual[#actual + 1] = key end
         table.sort(actual)
         H.deep_equal(actual, expected_exports,
-            "replacement map must contain exactly the five owner operations")
+            "replacement map must contain exactly the six owner operations")
         H.equal(f.mod._cim_ensure_weave_category_pools,
             second_owner.ensure_weave_category_pools)
         H.equal(f.mod._cim_ensure_trait_twin, second_owner.ensure_trait_twin)
         H.equal(f.mod._cim_ensure_property_twin, second_owner.ensure_property_twin)
         H.equal(f.mod._cim_apply_forge_freedom,
             second_owner.apply_forge_freedom)
+        H.equal(f.mod._cim_apply_forge_freedom_for_window,
+            second_owner.apply_forge_freedom_for_window)
         H.equal(f.mod._cim_restore_forge_freedom,
             second_owner.restore_forge_freedom)
         H.deep_equal(f.order, { "_setup_menu_options", "_sync_backend_loadout" })
@@ -288,6 +294,28 @@ return function(H, repo_root)
         H.equal(reloaded_globals.WeaveProperties.categories.reload_prop,
             reload_property_original,
             "new transaction must restore its exact property-category table")
+    end)
+
+    H.test("CIM #414 setup hook threads the selected item's slot, nil for accessories", function()
+        local f = fixture({ value = true }, { allow_cw_traits = true })
+        local seen = {}
+        f.context.get_cw_trait_entries = function(slot_type)
+            seen[#seen + 1] = tostring(slot_type)
+            return {}
+        end
+        f.install(f.context)
+        local function setup(item)
+            f.hooks._setup_menu_options(function() end, {
+                _selected_item = function() return item end,
+            }, "career", { traits = { { category = "probe_cat" } } })
+            f.owner.restore_forge_freedom()
+        end
+        setup({ data = { slot_type = "melee" } })
+        setup({ data = { slot_type = "ranged" } })
+        setup({ data = { slot_type = "necklace" } })
+        setup(nil)
+        H.deep_equal(seen, { "melee", "ranged", "necklace", "nil" },
+            "the hook must pass the exact selected slot through the window adapter")
     end)
 
     H.test("CIM picker owner seeds only progression categories", function()
