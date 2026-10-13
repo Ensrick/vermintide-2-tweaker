@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 | # | Rule |
 |---|---|
-| 1 | No recursive deletes (`rm -rf`, `Remove-Item -Recurse -Force`, etc.). Rename to `.bak.v<old>` and delete one path at a time with approval. |
+| 1 | Deleting is allowed, recursive deletes included (user, 2026-10-13; global CLAUDE.md rule 1). List the target first and delete explicit paths. Never delete other sessions' work or a worktree another agent has claimed. |
 | 2 | Never auto-launch VT2 or any game/interactive app without explicit user permission. |
 | 3 | Edit ONLY the `*_dev/` dir for the 5 promotion-pair mods (ct, cim, gt, gut, vdl). Weapon Tweaker is a special mirror pair: feature work lands in public-beta `weapon_tweaker/`, then `weapon_tweaker_dev/` is refreshed by exact runtime parity while preserving its `wt_dev` namespace, friends-only ID, and preview. |
 | 4 | Ship doctrine keys off the MOD_VERSION suffix. `-dev`/`-alpha`/`-beta` = FULL pipeline every build, NO ask. Clean version (no suffix) = stable: needs a fresh per-build ship signal naming the version. |
