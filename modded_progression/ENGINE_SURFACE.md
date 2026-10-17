@@ -32,12 +32,15 @@ the remaining routes in `PLAN.md` are not yet wired.
 67 registration sites, all `mod:hook` (full wrapper). `[hook]` =
 full wrapper (can rewrite args/returns). Three route through the shared
 `_with_eac_off` wrapper directly and five through its Fresh-aware sibling
-`_with_eac_off_unless_fresh` (or an inline equivalent), one
-(`IngameUI.not_in_modded`) is a flat return-true override, 22 form the #840
+`_with_eac_off_unless_fresh` (or an inline equivalent), 22 form the #840
 items/loadouts route in `_mp_fresh_profile_runtime.lua`, and the remainder own
 local progression/read/claim boundaries. There are no `hook_safe` sites and one
 table-form site (the #1637 instance join in the runtime). The `_with_eac_off` wrapper is a single load-bearing
 row-of-concern (issue 434) called out below and shared by all of its callers.
+The 44 sites whose class and method are both string literals are listed in
+`_mp_hook_targets.lua`; `/mp_regression_test` `mp1671_hook_targets_resolve`
+fails when a loaded class lacks one of those methods or a class is not loaded
+(#1671), and the offline `test_mp_hook_targets_resolve.lua` keeps the list to the source.
 
 ### The EAC-window bracket - shared wrapper (row-of-concern: issue 434) (owner doc: `docs/engine/11`)
 
@@ -55,7 +58,6 @@ row-of-concern (issue 434) called out below and shared by all of its callers.
 | `StoreItemPurchasePopup._create_ui_elements` [hook] `:443` | Emporium purchase-confirm popup buy-button disable flag (`:1149`) [src: `scripts/ui/views/store/store_item_purchase_popup.lua` per PLAN.md] | Enable the confirm-buy button (`:443`) | `_with_eac_off` |
 | `StoreLoginRewardsPopup._create_ui_elements` / `_claim_rewards` + `BackendInterfacePeddlerPlayFab.claim_login_rewards` [hooks] | Popup construction disables the button in modded play; `_claim_rewards` otherwise enters claiming state and calls the peddler method; that method enqueues authenticated `claimStoreRewards` [src: `store_login_rewards_popup.lua:41-59,181-216`; `backend_interface_peddler_playfab.lua:811-828`] | #589 fail-closed boundary: retain/reinforce the disabled UI, intercept direct activation, and reject every modded backend caller before enqueue; official realm is unchanged | Local mixed item/currency transaction is not armed; two runtime checks cover UI + request policy, and textual QA locks both hooks |
 | `HeroWindowItemCustomization._enable_craft_button` [hook] `:449` / `_update_state_craft_button` [hook] `:450` | Vanilla keep crafting bench: `_enable_craft_button` flips the `enable` arg false in modded (`:1878`); `_update_state_craft_button` sets the button-hotspot disable flag (`:1928`) [src: `scripts/ui/views/hero_view/windows/hero_window_item_customization.lua` per PLAN.md] | Re-enable the keep bench craft button so vanilla-cost crafting works (`:449`) | `_with_eac_off`; cim owns the Athanor sandbox, mp owns the keep bench (`docs/CROSS_MOD_ARCHITECTURE.md` Mod 4) |
-| `IngameUI.not_in_modded` [hook] `:454` | Returns `not script_data["eac-untrusted"]` - a generic "is this a trusted UI surface" query [src: `scripts/ui/views/ingame_ui.lua:381-382` verified] | Force-return true so generic UI surfaces treat the session as trusted (`:454`) | The ONLY hook that is a flat override, not an `_with_eac_off` bracket - it does not touch the global flag, so no commit-suppression exposure |
 
 ### Bounded mission-loot layer diagnostics (issue 607)
 
@@ -154,9 +156,7 @@ exact thing the mod exists to prevent. Hence `_with_eac_off` (`:390`) clears the
 flag, runs one vanilla body, and restores it, with a `pcall`+re-raise so a throw
 cannot skip the restore (issue 434). The `mod._mp_eac_depth` counter mirrors the
 bracket so `mod.is_eac_window()` (`:379`) can tell a sibling (cosmetics' #174
-chokepoint) whether the realm is currently un-gated. `IngameUI.not_in_modded` is
-the one exception: it reads the flag but `mp` overrides the RETURN, never the
-global, so it carries no suppression exposure.
+chokepoint) whether the realm is currently un-gated.
 
 ### Backend mirror as the single source of truth (owner: `docs/engine/11`)
 
@@ -205,6 +205,20 @@ re-discover these.
   (`dofile + table.dump`) before the crafting-bench interception can be authored -
   they are not in the decompile (PLAN.md research #1, "Items still gated on a
   runtime dump").
+- **The Spoils of War hotkey gate is not worth un-gating (#1671).** mp hooked
+  `IngameUI.not_in_modded` from 0.2.0-dev to keep the loot hotkey open; game
+  6.12.0 removed it and `hotkey_loot` now names `can_open_loot`
+  (`not GameSettingsDevelopment.read_only_backend`, which `MODDED_REALM` forces
+  true) [src 6.13.0: `scripts/ui/views/ingame_ui_settings.lua:818`,
+  `ingame_ui.lua:381-382,459,469`, `scripts/settings/game_settings_development.lua:49-50`].
+  Retargeting would open a screen with nothing to open: 6.13.0 greys both chest
+  Open buttons on the same flag and the press path needs them enabled
+  [src: `scripts/ui/views/hero_view/states/hero_view_state_loot.lua:1193-1199,1577`],
+  and mp neither awards nor opens containers locally
+  (`_mp_loot_diag.lua:20-21`). 0.2.41-dev deletes the dead hook; the hotkey and
+  the keep's `loot_access` interaction
+  (`scripts/unit_extensions/generic/interactions.lua:2301-2302`) stay
+  vanilla until #607 has a local chest open.
 
 ## Doc maintenance
 
@@ -215,7 +229,7 @@ re-enable design + interception map) - when the interception layer lands, `PLAN.
 is the primary and this doc gains the `BackendInterface*Playfab` rows. Per-view UI
 gate interior lines (`level_end_view_base.lua:59-71`, `hero_view_state_achievements`
 `:646`/`:2992`, the store/customization lines) are cited from `PLAN.md`'s decompile
-research; the load-bearing flag/commit sites (`not_in_modded`, `trigger_event`,
+research; the load-bearing flag/commit sites (`trigger_event`,
 `playfab_mirror_base.lua:2826/2839/2857`) were re-verified this pass. Line numbers
 are against the 2026-07-12 decompile - match crash logs by function name, not line.
 Section shape (hook table -> subsystem notes -> dead ends) matches

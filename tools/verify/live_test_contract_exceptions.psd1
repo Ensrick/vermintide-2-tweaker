@@ -217,7 +217,7 @@
         # local purchase, and overlay synchronization only.
         @{
             Marker='[mp:577]'; ModId='mp'
-            ModTrees=@{mp='8dd71ccd12e5f05e2364e90d1fdc4138028c2090'}
+            ModTrees=@{mp='ea0020cd31132dbaedfbdc5bda8d9e8014bb2422'}
             SourcesByMod=@{mp='modded_progression/scripts/mods/modded_progression/modded_progression.lua'}
             Signature='[mp:577] purchase_rejected item=%s reason=%s backend=none'
             Bound='at most one rejection receipt per explicit modded-realm Silver Shilling exchange attempt; both failure branches return before subsequent terminal routes'
@@ -234,7 +234,7 @@
         }
         @{
             Marker='[mp:577]'; ModId='mp'
-            ModTrees=@{mp='8dd71ccd12e5f05e2364e90d1fdc4138028c2090'}
+            ModTrees=@{mp='ea0020cd31132dbaedfbdc5bda8d9e8014bb2422'}
             SourcesByMod=@{mp='modded_progression/scripts/mods/modded_progression/modded_progression.lua'}
             Signature='[mp:577] purchase_committed item=%s price=%d balance=%d overlay=%s backend=none'
             Bound='at most one commit receipt per explicit modded-realm Silver Shilling exchange attempt after successful validation and purchase'
@@ -515,7 +515,7 @@
         }
         @{
             Marker='[mp:607]'; ModId='mp'
-            ModTrees=@{mp='8dd71ccd12e5f05e2364e90d1fdc4138028c2090'}
+            ModTrees=@{mp='ea0020cd31132dbaedfbdc5bda8d9e8014bb2422'}
             SourcesByMod=@{mp='modded_progression/scripts/mods/modded_progression/_mp_loot_diag_runtime.lua'}
             Signature='[mp:607] event=%s serial=%d flow=%s request=%s reason=%s chest=%s items=%d local_items=%d local_containers=%d local_uses=%d award_capable=%s open_capable=%s first_missing=%s backend=%s'
             Bound='one-mission observer events are persisted in a twelve-record bounded ledger'
@@ -1171,7 +1171,7 @@
             )
         }
         @{
-            ModId='enemy_tweaker'; ModTree='7ae383938e2791c8eb1b2af01168b1004e855796'
+            ModId='enemy_tweaker'; ModTree='d5ce1457b0a044ff2c5066ab46311f91348fb63d'
             Source='enemy_tweaker/scripts/mods/enemy_tweaker/_et_enemy_modifiers.lua'
             Marker='[et:453]'; AddRoute=$true
             Signature='[et:453] modifier-audit reason=%s modifiers=%d template_missing=%d wire_missing=%d enhancement_missing=%d child_missing=%d child_wire_missing=%d function_missing=%d special=%d boss=%d elite=%d lord=%d behavior_changes=0'
@@ -1186,7 +1186,7 @@
             )
         }
         @{
-            ModId='enemy_tweaker'; ModTree='7ae383938e2791c8eb1b2af01168b1004e855796'
+            ModId='enemy_tweaker'; ModTree='d5ce1457b0a044ff2c5066ab46311f91348fb63d'
             Source='enemy_tweaker/scripts/mods/enemy_tweaker/_et_enemy_modifiers.lua'
             Marker='[et:453]'; AddRoute=$true
             Signature='[et:453] %s family=%s enhancement=%s buff=%s template=%s wire=%s enhancement_contains=%s chain_templates=%d chain_functions=%d chain_gaps=%d capped=%s'
@@ -1202,7 +1202,7 @@
             )
         }
         @{
-            ModId='enemy_tweaker'; ModTree='7ae383938e2791c8eb1b2af01168b1004e855796'
+            ModId='enemy_tweaker'; ModTree='d5ce1457b0a044ff2c5066ab46311f91348fb63d'
             Source='enemy_tweaker/scripts/mods/enemy_tweaker/_et_enemy_modifiers.lua'
             Marker='[et:453]'; AddRoute=$true
             Signature='[et:453] live category=%s breed=%s sample=%d/%d eligible=%d eligible_sample=%s rejected_banned=%d rejected_buff=%d rejected_prereq=%d buff=%s health=%s blackboard=%s nav=%s position=%s side=%s race=%s go_id=%s existing_enhancements=%d mutation=0'
@@ -1218,7 +1218,7 @@
             )
         }
         @{
-            ModId='enemy_tweaker'; ModTree='7ae383938e2791c8eb1b2af01168b1004e855796'
+            ModId='enemy_tweaker'; ModTree='d5ce1457b0a044ff2c5066ab46311f91348fb63d'
             Source='enemy_tweaker/scripts/mods/enemy_tweaker/_et_enemy_modifiers.lua'
             Marker='[et:453]'; AddRoute=$true
             Signature='[et:453] modifier-audit ready modifiers=%d gaps=%d command=/et_modifier_audit behavior_changes=0'
@@ -1375,7 +1375,7 @@
             )
         }
         @{
-            ModId='enemy_tweaker'; ModTree='7ae383938e2791c8eb1b2af01168b1004e855796'
+            ModId='enemy_tweaker'; ModTree='d5ce1457b0a044ff2c5066ab46311f91348fb63d'
             Source='enemy_tweaker/scripts/mods/enemy_tweaker/_et_skaven_warlord_breed.lua'
             Marker='[et:324]'; AddRoute=$true
             Signature='[et:324] spawn#%d t=+%ss %s'

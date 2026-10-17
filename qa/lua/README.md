@@ -107,6 +107,13 @@ there is no copied implementation.
   (test-local logger seam), and the registered `issue1686_buff_icons_in_atlas`
   closure runs in a test-local environment and fails on a live stale icon. An
   optional case cross-checks the fixture against a local decompiled atlas.
+- `tests/test_mp_hook_targets_resolve.lua`: #1671 no mp source file hooks
+  the game-6.12-removed `IngameUI.not_in_modded` (or its `can_open_loot`
+  successor), the shipped `_mp_hook_targets.TARGETS` inventory equals every
+  literal `mod:hook("Class", "method")` site in every mp file reachable
+  from the entry, and the `/mp_regression_test` census fails on a missing or
+  retired method and on a class that is not loaded (past VMF's delay window
+  that hook was refused). The class lookup and log seams are test-local.
 - `tests/test_et_issue324_capacity_authority.lua`: #324 a characterization of
   the unchanged boot-shaped registrar refusal (`damage_source_cap_unavailable`
   with NetworkConstants absent and no `Network.type_info` capacity; passes on
