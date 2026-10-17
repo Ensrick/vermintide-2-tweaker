@@ -4,7 +4,17 @@
 # same-name/different-byte collision fails closed.
 . (Join-Path $PSScriptRoot 'workshop-upload-result.ps1')
 . (Join-Path $PSScriptRoot 'workshop-nochange-result.ps1')
+. (Join-Path $PSScriptRoot 'workshop-nochange-log-proof.ps1')
 . (Join-Path $PSScriptRoot '../publish-release/github-release-api.ps1')
+
+function Test-VtWorkshopAnyResultCandidate {
+    param([Parameter(Mandatory = $true)]$Candidate, [Parameter(Mandatory = $true)][byte[]]$PublicationReceiptBytes)
+    $purpose = [string](Get-VtWorkshopResultProperty $Candidate 'purpose')
+    if ($purpose -ceq $script:VtWorkshopResultPurpose) { return Test-VtWorkshopUploadResultCandidate $Candidate $PublicationReceiptBytes }
+    if ($purpose -ceq $script:VtWorkshopNoChangePurpose) { return Test-VtWorkshopNoChangeResultCandidate $Candidate $PublicationReceiptBytes }
+    if ($purpose -ceq $script:VtWorkshopNoChangeLogPurpose) { return Test-VtWorkshopNoChangeLogResultCandidate $Candidate $PublicationReceiptBytes }
+    return [pscustomobject]@{Ok=$false;Problems=@("Unknown Workshop result purpose '$purpose'.")}
+}
 
 function Get-VtWorkshopUploadResultBytesSha256 {
     param([Parameter(Mandatory = $true)][byte[]]$Bytes)
@@ -30,16 +40,7 @@ function ConvertTo-VtWorkshopUploadResultCandidateBytes {
         [Parameter(Mandatory = $true)]$Candidate,
         [Parameter(Mandatory = $true)][byte[]]$PublicationReceiptBytes
     )
-    $purpose = [string](Get-VtWorkshopResultProperty $Candidate 'purpose')
-    $verdict = if ($purpose -ceq $script:VtWorkshopResultPurpose) {
-        Test-VtWorkshopUploadResultCandidate $Candidate $PublicationReceiptBytes
-    }
-    elseif ($purpose -ceq $script:VtWorkshopNoChangePurpose) {
-        Test-VtWorkshopNoChangeResultCandidate $Candidate $PublicationReceiptBytes
-    }
-    else {
-        [pscustomobject]@{Ok=$false;Problems=@("Unknown Workshop result purpose '$purpose'.")}
-    }
+    $verdict = Test-VtWorkshopAnyResultCandidate $Candidate $PublicationReceiptBytes
     if (-not $verdict.Ok) {
         throw ('Invalid Workshop upload-result candidate: ' + ($verdict.Problems -join '; '))
     }
@@ -78,21 +79,16 @@ function ConvertFrom-VtWorkshopUploadResultCandidateBytes {
     elseif ($purpose -ceq $script:VtWorkshopNoChangePurpose) {
         $script:VtWorkshopNoChangeFields
     }
+    elseif ($purpose -ceq $script:VtWorkshopNoChangeLogPurpose) {
+        $script:VtWorkshopNoChangeLogFields
+    }
     else { @() }
     foreach ($field in @($expectedFields)) {
         if ([regex]::Matches($json, '"' + [regex]::Escape($field) + '"\s*:').Count -ne 1) {
             throw "Workshop upload-result field '$field' is missing or duplicated in persisted JSON."
         }
     }
-    $verdict = if ($purpose -ceq $script:VtWorkshopResultPurpose) {
-        Test-VtWorkshopUploadResultCandidate $candidate $PublicationReceiptBytes
-    }
-    elseif ($purpose -ceq $script:VtWorkshopNoChangePurpose) {
-        Test-VtWorkshopNoChangeResultCandidate $candidate $PublicationReceiptBytes
-    }
-    else {
-        [pscustomobject]@{Ok=$false;Problems=@("Unknown Workshop result purpose '$purpose'.")}
-    }
+    $verdict = Test-VtWorkshopAnyResultCandidate $candidate $PublicationReceiptBytes
     if (-not $verdict.Ok) {
         throw ('Persisted Workshop upload-result candidate is invalid: ' + ($verdict.Problems -join '; '))
     }
@@ -217,6 +213,16 @@ function Get-VtHostedReleaseAssetSha256 {
         [Parameter(Mandatory = $true)][string]$AssetName,
         [scriptblock]$Request = ${function:Invoke-GitHubReleaseApiRequest}
     )
+    return [string](Get-VtHostedReleaseManifestRow -Repo $Repo -ReleaseTag $ReleaseTag -AssetName $AssetName -Request $Request).sha256
+}
+
+function Get-VtHostedReleaseManifestRow {
+    param(
+        [Parameter(Mandatory = $true)][string]$Repo,
+        [Parameter(Mandatory = $true)][string]$ReleaseTag,
+        [Parameter(Mandatory = $true)][string]$AssetName,
+        [scriptblock]$Request = ${function:Invoke-GitHubReleaseApiRequest}
+    )
     $resolution = Resolve-GitHubReleaseByTag -Repo $Repo -Tag $ReleaseTag -Request $Request
     $release = Assert-VtWorkshopUploadResultRelease $resolution $ReleaseTag
     $manifestAsset = Get-GitHubReleaseAsset -Release $release -Name 'manifest.json'
@@ -229,7 +235,43 @@ function Get-VtHostedReleaseAssetSha256 {
     if ($rows.Count -ne 1) { throw "Hosted release manifest does not carry exactly one '$AssetName' row." }
     $sha = [string]$rows[0].sha256
     if ($sha -cnotmatch '^[0-9a-f]{64}$') { throw "Hosted release manifest digest for '$AssetName' is noncanonical." }
-    return $sha
+    return $rows[0]
+}
+
+function New-VtShipWorkshopNoChangeLogCandidate {
+    # Issue #1667: friends-only/private NOCHANGE. The inventory row and the hosted
+    # release manifest row must agree on a non-public visibility and bind this
+    # item, source commit, version, and release zip before the log-bound
+    # prior-UPLOADED ManifestID can become a candidate.
+    param(
+        [Parameter(Mandatory = $true)][string]$Repo,
+        [Parameter(Mandatory = $true)][string]$ReleaseTag,
+        [Parameter(Mandatory = $true)]$InventoryRow,
+        [Parameter(Mandatory = $true)][byte[]]$PublicationReceiptBytes,
+        [Parameter(Mandatory = $true)]$UploadResult,
+        [Parameter(Mandatory = $true)][string]$ReleaseAssetName,
+        [Parameter(Mandatory = $true)][string]$ReleaseAssetSha256,
+        [Parameter(Mandatory = $true)]$BeforeObservation,
+        [Parameter(Mandatory = $true)]$AfterObservation,
+        [scriptblock]$Request = ${function:Invoke-GitHubReleaseApiRequest}
+    )
+    $visibility = [string]$InventoryRow.Visibility
+    if (-not $InventoryRow.ContainsKey('Public') -or $InventoryRow.Public -isnot [bool] -or $InventoryRow.Public -or
+            $script:VtWorkshopNonPublicVisibilities -cnotcontains $visibility) {
+        throw 'Steam reports the item as not visible, but the mod inventory does not record it as friends_only or private.'
+    }
+    $receipt = (ConvertFrom-VtWorkshopPublicationReceiptBytes $PublicationReceiptBytes).Receipt
+    $row = Get-VtHostedReleaseManifestRow -Repo $Repo -ReleaseTag $ReleaseTag -AssetName $ReleaseAssetName -Request $Request
+    if ([string]$row.visibility -cne $visibility -or [string]$row.workshop_id -cne [string]$UploadResult.PublishedId -or
+            [string]$row.source_commit -cne [string]$receipt.source_commit -or [string]$row.version -cne [string]$receipt.version -or
+            [string]$row.sha256 -cne $ReleaseAssetSha256) {
+        throw "Hosted release manifest row for '$ReleaseAssetName' does not bind this non-public item, source, version, and zip."
+    }
+    return New-VtWorkshopNoChangeLogResultCandidate -PublicationReceiptBytes $PublicationReceiptBytes `
+        -UploadResult $UploadResult -ModId ([string]$InventoryRow.ModId) -ReleaseAssetName $ReleaseAssetName `
+        -ReleaseAssetSha256 $ReleaseAssetSha256 -Visibility $visibility `
+        -BeforeObservation $BeforeObservation -AfterObservation $AfterObservation `
+        -RecordedAtUtc (Get-VtWorkshopUploadResultRecordedAtUtc $UploadResult)
 }
 
 function Publish-VtShipWorkshopUploadProof {
@@ -292,6 +334,17 @@ function Publish-VtShipWorkshopUploadProof {
         'NOCHANGE' {
             if ($null -eq $BeforeWorkshopSnapshot -or $null -eq $AfterWorkshopSnapshot) {
                 throw 'NOCHANGE has no complete pre/post Steam published-file snapshot pair.'
+            }
+            if ((Get-VtWorkshopNoChangeProofBasis $BeforeWorkshopSnapshot $AfterWorkshopSnapshot) -ceq 'not-visible') {
+                $candidate = New-VtShipWorkshopNoChangeLogCandidate -Repo $Repo -ReleaseTag $ReleaseTag `
+                    -InventoryRow $rows[0] -PublicationReceiptBytes $PublicationReceiptBytes `
+                    -UploadResult $UploadResult -ReleaseAssetName $releaseAssetName `
+                    -ReleaseAssetSha256 $ReleaseAssetSha256 -BeforeObservation $BeforeWorkshopSnapshot `
+                    -AfterObservation $AfterWorkshopSnapshot -Request $Request
+                Publish-VtWorkshopUploadResultCandidate `
+                    -Repo $Repo -ReleaseTag $ReleaseTag -Candidate $candidate `
+                    -PublicationReceiptBytes $PublicationReceiptBytes -Request $Request
+                break
             }
             $candidate = New-VtWorkshopNoChangeResultCandidate `
                 -PublicationReceiptBytes $PublicationReceiptBytes `
