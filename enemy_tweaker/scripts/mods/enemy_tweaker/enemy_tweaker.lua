@@ -24,8 +24,8 @@ mod:info("Enemy Tweaker v%s loaded", MOD_VERSION)
 -- Cross-module contract: `mod._et` is the shared namespace. Each module is
 -- dofile'd EXACTLY ONCE, in the order below, and publishes its exports into
 -- mod._et. VMF's mod:dofile is NOT a singleton -- every call re-executes the
--- file and returns a fresh value -- so modules must never dofile each other;
--- only this manifest loads them. Load order is load-bearing:
+-- file and returns a fresh value -- so only this manifest loads modules, except
+-- single nested owners named in DEVELOPMENT.md (e.g. the #324 probe). Load order is load-bearing:
 --   * _et_regression first (every later module registers its checks),
 --   * _et_log before _et_protect (the protect wrappers alert through dbg_alert),
 --   * data/state providers (presets/swaps/mimic/roaming/champion) before

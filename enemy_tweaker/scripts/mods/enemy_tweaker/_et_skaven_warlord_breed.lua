@@ -346,11 +346,16 @@ do
     -- #324 capacity-authority probe (0.7.65-dev): logs what the registrar's
     -- capacity readers see at load and once the network authority appears.
     -- This module is its single load owner (the entry manifest sits on its
-    -- decomposition ceiling); a probe load failure never blocks the mod.
+    -- decomposition ceiling); a probe load failure never blocks the mod, but
+    -- it leaves one log row naming why the cap-probe rows are missing.
     local cap_ok, CapacityDiag = pcall(mod.dofile, mod,
         "scripts/mods/enemy_tweaker/_et_diag_capacity_authority")
+    local install_ok, install_err = false, CapacityDiag
     if cap_ok and type(CapacityDiag) == "table" then
-        pcall(CapacityDiag.install, ET, Registrar, registration_ok
+        install_ok, install_err = pcall(CapacityDiag.install, ET, Registrar, registration_ok
             and tostring(registration_reason) or ("rejected:" .. tostring(registration_reason)))
+    end
+    if not install_ok then
+        _diag_log("cap-probe install failed: %s", tostring(install_err))
     end
 end

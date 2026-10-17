@@ -1,12 +1,16 @@
 -- #324: the #1413 registrar refuses et_skaven_warlord at mod load with
 -- damage_source_cap_unavailable (12 of 12 tester logs on 0.7.64-dev). This
--- suite reproduces that refusal on a boot-shaped runtime (NetworkConstants
--- absent, Network.type_info yielding no capacity) and pins the bounded
--- diagnostic that records what the capacity readers see: the registrar's
--- read-only verdict seam, the probe's load and one-shot network samples, its
--- row bound, its in-game check, and its single load owner. No global is
--- written: the probe reads an injected globals table and emits through a
--- test-local seam.
+-- suite pins the bounded diagnostic that records what the capacity readers
+-- see: the registrar's read-only verdict seam, the probe's load and one-shot
+-- network samples, its per-phase and row bounds, its metatable-aware reader
+-- report, its literal printf route, its in-game check, and its single load
+-- owner. No global is written: the probe reads an injected globals table and
+-- emits through a test-local seam (the route case runs the chunk in a
+-- test-local environment).
+--
+-- CHARACTERIZATION, not fix proof: the first case ("boot-shaped runtime
+-- reproduces ...") describes the UNCHANGED registrar and passes on the base
+-- commit too. It pins the live refusal so a later fix flips it on purpose.
 return function(H, repo_root)
     local base = repo_root .. "/enemy_tweaker/scripts/mods/enemy_tweaker/"
     local registrar_path = base .. "_et_custom_breed_registrar.lua"
@@ -106,6 +110,7 @@ return function(H, repo_root)
         damage_hotjoin_sync = { max = 8191.75, tolerance = 0.25 },
     }
 
+    -- Characterization of the unchanged registrar (passes on the base too).
     H.test("ET #324 boot-shaped runtime reproduces damage_source_cap_unavailable", function()
         local boot_shapes = {
             { label = "type_info returns nil", network = network_returning({}) },
@@ -199,15 +204,23 @@ return function(H, repo_root)
         H.deep_equal(emitted, rows, "every ledger row is emitted once")
         for i = 1, #rows do has(rows[i], "[et:324] cap-probe phase=load ") end
         has(rows[1], "note=rejected:damage_source_cap_unavailable")
-        has(rows[1], "NetworkConstants=nil Network=table type_info=function")
-        has(rows[2], "axis=damage_source_id constant=n/a call=ok result=nil result_max=n/a")
-        has(rows[2], "verdict=damage_source_cap_unavailable lookup_rows=2")
+        has(rows[1], "NetworkConstants=nil Network=table type_info=function indexed=function meta=false via=raw")
+        -- Deciding fields precede the shape dumps.
+        has(rows[2], "axis=damage_source_id call=ok result_max=n/a verdict=damage_source_cap_unavailable lookup_rows=2 constant=n/a result=nil")
         has(rows[3], "axis=statistics_path_lookup")
         has(rows[3], "verdict=statistics_path_cap_unavailable lookup_rows=1")
         has(rows[4], "axis=damage_hotjoin_sync")
         has(rows[4], "verdict=health_sync_cap_unavailable lookup_rows=n/a")
 
+        -- The per-phase guard, checked while the row bound is still far away.
+        H.equal(probe.sample("load"), 0, "a phase samples once")
+        H.equal(#probe.rows(), 4, "a repeated phase added rows")
+        H.equal(#emitted, 4)
+
         H.equal(probe.poll(), false, "network sample fired before the authority existed")
+        H.equal(#probe.rows(), 4)
+        globals.NetworkConstants = {}
+        H.equal(probe.poll(), false, "network sample fired without damage_source_id")
         H.equal(#probe.rows(), 4)
 
         globals.NetworkConstants = {
@@ -220,17 +233,40 @@ return function(H, repo_root)
         rows = probe.rows()
         H.equal(#rows, 8)
         has(rows[5], "phase=network note=authority_appeared NetworkConstants=table")
-        has(rows[6], "constant=table{bits=number:12,max=number:4095,min=number:0}")
         has(rows[6], "result_max=number:4095 verdict=cap:4095")
+        has(rows[6], "constant=table{bits=number:12,max=number:4095,min=number:0}")
         has(rows[7], "verdict=cap:2047")
         has(rows[8], "verdict=cap:8191.75")
 
         H.equal(probe.poll(), false, "network sample is one-shot")
-        H.equal(probe.sample("load"), 0, "a phase samples once")
         H.equal(probe.sample("extra"), 0, "the ledger is bounded")
         H.equal(#probe.rows(), Diag.MAX_ROWS)
         H.equal(#emitted, Diag.MAX_ROWS)
         H.equal(probe.check(), nil)
+    end)
+
+    H.test("ET #324 probe check requires the network sample once the authority exists", function()
+        local live = {
+            NetworkConstants = { damage_source_id = NETWORK_ROWS.damage_source_id },
+            Network = network_returning(NETWORK_ROWS),
+        }
+        -- check() drives the one-shot network sample itself.
+        local _, polled = probe_fixture(live)
+        polled.sample("load", "x")
+        H.equal(polled.sampled("network"), false)
+        H.equal(polled.check(), nil)
+        H.equal(polled.sampled("network"), true)
+        H.equal(#polled.rows(), 8)
+
+        -- An authority that exists while the network rows are absent fails.
+        local globals = { Network = network_returning({}) }
+        local _, starved = probe_fixture(globals)
+        starved.sample("load", "x")
+        starved.sample("filler", "x")
+        globals.NetworkConstants = live.NetworkConstants
+        local failure = starved.check()
+        H.truthy(type(failure) == "string" and failure:find("network sample has 0 rows", 1, true) ~= nil,
+            "a missing network sample passed: " .. tostring(failure))
     end)
 
     H.test("ET #324 probe distinguishes thrown and userdata type_info results", function()
@@ -249,14 +285,61 @@ return function(H, repo_root)
         local userdata_globals = { Network = { type_info = function() return proxy end } }
         local _, boxed = probe_fixture(userdata_globals)
         boxed.sample("load", "x")
-        has(boxed.rows()[2], "call=ok result=userdata{max=number:4095} result_max=number:4095")
-        has(boxed.rows()[2], "verdict=damage_source_cap_unavailable",
+        has(boxed.rows()[2], "call=ok result_max=number:4095 verdict=damage_source_cap_unavailable",
             "the registrar's table-only reader would still refuse a userdata row")
+        has(boxed.rows()[2], "result=userdata{max=number:4095}")
 
         local _, absent = probe_fixture({})
         absent.sample("load", "x")
-        has(absent.rows()[1], "NetworkConstants=nil Network=nil type_info=nil")
-        has(absent.rows()[2], "call=skipped result=n/a")
+        has(absent.rows()[1], "NetworkConstants=nil Network=nil type_info=nil indexed=n/a meta=n/a via=none")
+        has(absent.rows()[2], "call=skipped result_max=n/a")
+        has(absent.rows()[2], "result=n/a")
+
+        -- Present only through __index: rawget misses it (as the registrar
+        -- does), the normal index reaches it, and the rows say so.
+        local hidden = setmetatable({}, { __index = {
+            type_info = function(kind) return NETWORK_ROWS[kind] end,
+        } })
+        local _, meta = probe_fixture({ Network = hidden })
+        meta.sample("load", "x")
+        has(meta.rows()[1], "Network=table type_info=nil indexed=function meta=true via=index")
+        has(meta.rows()[2], "call=ok result_max=number:4095 verdict=damage_source_cap_unavailable")
+        has(meta.rows()[3], "call=ok result_max=number:2047 verdict=statistics_path_cap_unavailable")
+
+        -- A throwing __index is reported, never raised.
+        local trap = setmetatable({}, { __index = function() error("no field", 0) end })
+        local _, trapped = probe_fixture({ Network = trap })
+        H.equal(trapped.sample("load", "x"), 4)
+        has(trapped.rows()[1], "type_info=nil indexed=index_error meta=true via=none")
+        has(trapped.rows()[2], "call=skipped")
+    end)
+
+    H.test("ET #324 probe emits through a literal raw-printf route", function()
+        local diag = read(diag_path)
+        H.truthy(diag:find('pcall(printf, "[et:324] cap-probe %s", body)', 1, true) ~= nil,
+            "the cap-probe rows lost their literal printf route")
+        H.equal(diag:find('rawget(_G, "printf")', 1, true), nil,
+            "a rawget printf helper hides the route from the live-test authority")
+        -- Run the chunk in a test-local environment; the real printf global
+        -- is never touched.
+        local printed = {}
+        local env = setmetatable({}, { __index = _G })
+        env._G = env
+        env.printf = function(fmt, ...)
+            printed[#printed + 1] = { fmt = fmt, text = string.format(fmt, ...) }
+        end
+        local chunk = assert(loadfile(diag_path))
+        setfenv(chunk, env)
+        local Diag = chunk()
+        local ET = { rt_register = function() end }
+        local probe = Diag.install(ET, nil, "x")
+        local rows = probe.rows()
+        H.equal(#rows, 4)
+        H.equal(#printed, 4)
+        for i = 1, #rows do
+            H.equal(printed[i].fmt, "[et:324] cap-probe %s")
+            H.equal(printed[i].text, rows[i], "printed row differs from the ledger")
+        end
     end)
 
     H.test("ET #324 probe in-game check and install wiring", function()
@@ -265,9 +348,19 @@ return function(H, repo_root)
 
         local Diag = fresh_diag()
         local registrar = fresh_registrar()
-        local checks = {}
-        local ET = { rt_register = function(name, fn) checks[name] = fn end }
+        local checks, at_register, poll_at_register = {}, nil, nil
+        local ET = {}
+        ET.rt_register = function(name, fn)
+            checks[name] = fn
+            -- Registered before the load sample: run now it must FAIL, so a
+            -- broken sample is a FAIL line, never a missing check.
+            at_register = fn()
+            poll_at_register = type(ET.capacity_diag_poll)
+        end
         local probe = Diag.install(ET, registrar, "rejected:damage_source_cap_unavailable")
+        H.truthy(type(at_register) == "string" and at_register:find("load sample has 0 rows", 1, true) ~= nil,
+            "the check was registered after the load sample: " .. tostring(at_register))
+        H.equal(poll_at_register, "function", "the poll hook is wired after the check")
         H.equal(type(ET.capacity_diag_poll), "function")
         H.equal(type(checks[Diag.CHECK_NAME]), "function")
         H.equal(Diag.CHECK_NAME, "issue324_capacity_authority_probe")

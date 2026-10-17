@@ -17,17 +17,28 @@
   one `[et:324] cap-probe phase=load` sample at mod load and one
   `phase=network` sample the first time `NetworkConstants.damage_source_id`
   exists, each a header plus one row per capacity axis (damage source,
-  statistics path, health sync) showing the raw NetworkConstants entry, the
-  `type_info` call outcome and shape, its `max`, the registrar's own verdict,
-  and the lookup row count. Module-local ledger, at most 8 printf rows, never
-  chat, no global writes, no registration change.
+  statistics path, health sync). The header also reports a metatable-aware
+  `indexed=` lookup of `Network.type_info`, `meta=` and `via=raw|index`, so a
+  function reachable only through `__index` never reads as absent. Each axis
+  row shows the `type_info` call outcome, its `max`, the registrar's own
+  verdict and the lookup row count first, then the raw NetworkConstants and
+  result shapes. Module-local ledger, at most 8 printf rows per module load,
+  emitted through a literal `[et:324] cap-probe %s` printf route, never chat,
+  no global writes, no registration change. The load sample calls
+  `Network.type_info` for all three axes before network init, which vanilla
+  never does.
 - Registrar: read-only `capacity_verdicts()` seam returns each capacity
   reader's verdict; it plans and writes nothing.
-- New `/et_regression_test` check `issue324_capacity_authority_probe`: the load
-  sample is present and the ledger stays bounded.
-- Offline: new `test_et_issue324_capacity_authority` reproduces the boot-shaped
-  refusal and covers the verdict seam, both samples, thrown and userdata
-  reader shapes, the row bound, the in-game check, and the single load owner.
+- New `/et_regression_test` check `issue324_capacity_authority_probe`,
+  registered before the load sample: the load rows are present, the network
+  rows are present once `NetworkConstants.damage_source_id` exists, and the
+  ledger stays bounded. A failed probe install leaves one
+  `[et:324] cap-probe install failed:` row.
+- Offline: new `test_et_issue324_capacity_authority` characterizes the
+  boot-shaped refusal and covers the verdict seam, both samples, the
+  per-phase and row bounds, thrown, userdata and `__index`-only reader
+  shapes, the literal printf route, the in-game check, and the single load
+  owner.
 
 ## 0.7.64-dev (2026-09-13): declarative custom-breed registrar and Chosen contract (#451) [verify-fix]
 
