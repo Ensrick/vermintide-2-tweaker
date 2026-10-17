@@ -350,6 +350,12 @@ _rt_register("issue371_runtime_gate_api", function()
     return nil
 end)
 
+-- (#1670) The /mod_tweaker command route (keep sub-state) and the Esc route (standalone
+-- view) fire their menu sounds on the same wwise world. Body: _mod_tweaker_sound.lua.
+_rt_register("issue1670_command_route_sound_path", function()
+    return mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_sound").check_routes()
+end)
+
 -- (#525) Register the engine-free tab-label policy's live check once.
 do
     local labels = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_tab_labels")

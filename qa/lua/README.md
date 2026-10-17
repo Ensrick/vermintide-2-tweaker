@@ -64,6 +64,15 @@ there is no copied implementation.
   routing policies route as designed, the contracts module returns nil, `skip:`
   or the loud mismatch messages, and the runner counts SKIP apart from PASS
   and FAIL with printf resolved through a test-local environment.
+- `tests/test_gut_mod_tweaker_sound_parity.lua`: #1670 both shipped Mod
+  Tweaker twins loaded whole against a PC-shaped world manager: the click and
+  hover each twin hands its interaction layer fire on `MUSIC_WWISE_WORLD` on
+  the Esc route (standalone view) and the `/mod_tweaker` route (keep
+  sub-state) alike, fall back to a registered `music_world`, stay silent with
+  no music world, and the real contracts module's
+  `issue1670_command_route_sound_path` check passes, skips outside the keep
+  or before the view attaches, and fails on the 0.2.358-dev lookup. printf,
+  WwiseWorld and the worlds resolve through a test-local environment.
 - `tests/test_gut_dropdown_arrow_glow.lua`: #92 the shipped `create_dropdown`
   and its `DD_*` constants lifted out of the definitions file and driven through
   the real `mod_tweaker_dropdown_arrow_glow` check: the shipped widget passes,

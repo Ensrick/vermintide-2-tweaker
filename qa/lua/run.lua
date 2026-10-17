@@ -503,6 +503,7 @@ local suites = {
     "test_gut_localization_orphan_cleanup",
     "test_gut_loc_format",
     "test_gut_mod_tweaker_keep_routing",
+    "test_gut_mod_tweaker_sound_parity",
     "test_gut_dropdown_arrow_glow",
     "test_gut_career_hud_holder",
     "test_gut_cosmetics_mission_mount",

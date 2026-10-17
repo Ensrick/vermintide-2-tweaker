@@ -1,5 +1,15 @@
 # Regression Checklist — gui_tweaker_dev
 
+## /mod_tweaker menu sounds match the Esc route (#1670, 0.2.359-dev)
+
+- Keep, solo: run `/gut_regression_test`; `issue1670_command_route_sound_path`
+  must PASS and the log carries `[gut:1670] command and Esc routes share the
+  sound path: MUSIC_WWISE_WORLD`. In a mission it renders as `SKIP: ... not
+  in the keep`.
+- Keep: open Mod Tweaker with `/mod_tweaker`, swap tabs and open a sub-menu;
+  each plays the same click and hover as Esc > Mod Tweaker.
+- Host tests: `test_gut_mod_tweaker_sound_parity.lua`.
+
 ## Dropdown arrow glow check (#92, 0.2.358-dev)
 
 - Keep or mission: run `/gut_regression_test`; `mod_tweaker_dropdown_arrow_glow`

@@ -1,5 +1,47 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.359-dev (2026-10-17) -- /mod_tweaker plays the same menu sounds as the Esc route (#1670) [verify-fix]
+
+- Rain's 0.2.357-dev keep session: Mod Tweaker opened with `/mod_tweaker` had
+  no click or hover sound on tab swaps and sub-menu opens; opened from the Esc
+  menu it had them. The two routes are different presentations: the Esc entry
+  opens the standalone `ModTweakerView` (`_USE_KEEP_SUBSTATE = false`), while
+  `/mod_tweaker` opens the keep HeroView sub-state, because
+  `_ba_heroview_inject.lua` registers `mod_tweaker` after the entry file and
+  VMF lets a mod overwrite its own command (VMF `commands.lua:31-43`). Log:
+  `[mt] HeroViewStateModTweaker entered (sub-state)` at 17:04:32 for the
+  command, `[transition] mod_tweaker_view` then `[mt:dump] (on_enter)` at
+  17:04:46 for the Esc entry.
+- Root cause: the sub-state (`_mod_tweaker_state.lua`) still carried the
+  lookup the standalone view dropped in 0.2.82-dev,
+  `World.wwise_world(Managers.world:world("music_world"))`. On PC the music
+  world is the boot global `MUSIC_WORLD` / `MUSIC_WWISE_WORLD` (vanilla
+  `boot_init.lua:23,31-33`), never registered with `WorldManager`
+  (`world_manager.lua:18-56`), so `WorldManager.world` asserts
+  (`world_manager.lua:111-113`, `error.lua:25-30`) and the pcall around it
+  dropped every `Play_hud_select` and `Play_hud_hover`. The open and close
+  sounds were unaffected: they go through the parent HeroView's
+  `play_sound` (`hero_view.lua:119-120`).
+- Fix: new `_mod_tweaker_sound.lua` holds the one resolver, exactly as
+  vanilla `OptionsView` resolves its world (`options_view.lua:282-288`):
+  `MUSIC_WWISE_WORLD` under `GLOBAL_MUSIC_WORLD`, else a registered
+  `music_world` read through `has_world` first. Both twins fire their click,
+  hover, open (standalone) and close (standalone) sounds through it and
+  publish it as `gut_sound_resolve`. The one-time `[mt:wwise]` debug probe now
+  names the resolved path per twin; the old probe called
+  `World.wwise_world`, which no vanilla script calls (vanilla uses
+  `Wwise.wwise_world`, `boot_init.lua:33`), and printed `present=true` for a
+  missing world.
+- New live check `issue1670_command_route_sound_path`: in the keep, the
+  sub-state and the standalone view must resolve the same wwise world by the
+  same path, and it must be `MUSIC_WWISE_WORLD` when `GLOBAL_MUSIC_WORLD` is
+  set; logs `[gut:1670] command and Esc routes share the sound path: ...`.
+  SKIPs outside the keep and before the standalone view is attached.
+- Offline: `qa/lua/tests/test_gut_mod_tweaker_sound_parity.lua` loads both
+  shipped twins whole and fires the click and hover each hands its
+  interaction layer against a PC-shaped world manager; the 0.2.358-dev
+  sub-state fires nothing.
+
 ## 0.2.358-dev (2026-09-26) -- dropdown arrow glow check reads the real sprite key (#92) [verify-fix]
 
 - Rain's v0.2.354-dev log failed `mod_tweaker_dropdown_arrow_glow` with
