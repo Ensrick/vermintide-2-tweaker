@@ -98,6 +98,16 @@ there is no copied implementation.
   destroyed remote slot, Sienna's donor, a stale face, a lost rotation, a
   missing presentation and an owner collapsing to the donor, and skip with a
   named reason when no peer holds a Crowbill.
+- `tests/test_cwv_regression_harness_1656.lua`: #1656 the cwv harness-defect
+  rows, each run as the shipped check body: the entry's regression context
+  binds only declared locals (`dbg_alert`, the bootstrap owner's published
+  display names); fixture selection never lands on a skin_only, retired or
+  cross-slot definition and reads generated Sword+Mace pairs from generator
+  output; `issue660`, `issue396` and `issue416_483` replay the real appearance
+  lifecycle on a registered owner; `cwv_key_resolution_uuid_safe` runs on the
+  registration owner's own #482 ladder; `issue604` keeps the selector's second
+  return; and `cwv_crowbill_hammer_runtime_contract` asserts the #423 shared
+  vanilla donor recorded by the entry's own recorder.
 - `fixtures/vanilla_weapon_master_list.lua`: GENERATED vanilla weapon census
   (every `ItemMasterList` melee/ranged entry with its `can_wield` list after the
   DLC `UpdateItemMasterList` patches, each hero career's

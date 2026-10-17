@@ -237,12 +237,17 @@ _rt_register("cwv_key_resolution_uuid_safe", function()
     if ladder("a9f48814-0000-4000-8000-000000000000", { cwv_key = "cwv_es_greataxe" }) ~= "cwv_es_greataxe" then
         return "#482 ladder rung 2 broken: item_data.cwv_key stamp not consulted for UUID bid"
     end
+	-- #1656: the legacy instance must name a REGISTERED key (rung 2 proves this
+	-- one). The old cwv_es_longsword_blackguard fixture is cwv_retired
+	-- (_cwv_variant_catalog.lua:119), which registration skips
+	-- (_cwv_item_registration_owner.lua:609), so the ladder answered nil on
+	-- every run; #620 migrates those saves to es_2h_sword instead.
 	local legacy_bid = "48200000-0000-4000-8000-000000000419"
-	if ladder(legacy_bid, { key = "cwv_es_longsword_blackguard", name = "es_bastard_sword" })
-			~= "cwv_es_longsword_blackguard" then
-		return "#482 legacy exact CWV key did not recover persisted Imperial Longsword identity"
+	if ladder(legacy_bid, { key = "cwv_es_greataxe", name = "dr_2h_axe" })
+			~= "cwv_es_greataxe" then
+		return "#482 legacy exact CWV key did not recover a persisted pre-stamp UUID identity"
 	end
-	if ladder(legacy_bid, nil) ~= "cwv_es_longsword_blackguard" then
+	if ladder(legacy_bid, nil) ~= "cwv_es_greataxe" then
 		return "#482 proven UUID identity did not survive a backend-unavailable preview transition"
 	end
     if ladder("not-a-registered-bid-482", { name = "dr_2h_axe" }) ~= nil then

@@ -70,7 +70,10 @@ runner with zero registrations from the identity family.
   wielded**, run `/cwv_regression_test` and retain that log.
   `issue1155_old_musket_descriptor_reconciler`,
   `issue617_old_musket_preview_texture_consumer`, and
-  `issue742_old_musket_texture_material_preflight` pass.
+  `issue742_old_musket_texture_material_preflight` pass. Since 0.1.548-dev
+  (#1656) a session that skipped the Athanor or the equip/wield steps reports
+  `SKIP: issue1155_old_musket_descriptor_reconciler -- <reason>` instead of a
+  FAIL; a SKIP is not a pass for this gate.
 - [ ] After the Keep gate passes, swap away and back, enter an Adventure mission,
   and repeat the first-person, local-third-person, and mode checks. Treat this as
   a separate transition/log phase: state exit deliberately invalidates Keep-only

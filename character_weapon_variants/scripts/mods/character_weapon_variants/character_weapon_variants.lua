@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.547-dev"
+local MOD_VERSION = "0.1.548-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
 mod._cwv_dev_anim_picker = mod:dofile("scripts/mods/character_weapon_variants/cwv_dev_anim_picker")
@@ -218,12 +218,13 @@ mod:info("Character Weapon Variants v%s loading", MOD_VERSION)
 -- ct v0.7.91 — chat commands are globally namespaced and `regression_test`
 -- is already claimed by `cim`.
 -- #1156: opts.known_defect marks a check as a KNOWN OPEN defect - its failure is an XFAIL (never a suite failure), its success an XPASS (a LOUD failure: verify the fix or drop the annotation).
+-- #1656: a `skip:`-prefixed reason is a SKIP (the check cannot run in this session and says why), counted apart from pass and fail.
 local _RT_CHECKS = {}
 local function _rt_register(name, fn, opts)
     _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn, defect = opts and opts.known_defect }
 end
 mod:command("cwv_regression_test", "Run regression smoke checks for past bugs", function()
-    local pass, fail, xfail = 0, 0, 0
+    local pass, fail, xfail, skip = 0, 0, 0, 0
     mod:echo("=== cwv regression_test (v%s) ===", MOD_VERSION)
     for _, c in ipairs(_RT_CHECKS) do
         local ok, err = pcall(c.fn)
@@ -233,6 +234,10 @@ mod:command("cwv_regression_test", "Run regression smoke checks for past bugs", 
             pcall(printf, "[regression] XPASS %s -- open issue %s no longer reproduces; verify the fix or drop known_defect", c.name, d)
         elseif ok and err == nil then
             mod:echo("  PASS: %s", c.name); pass = pass + 1; mod:info("[regression] PASS %s", c.name)
+        elseif ok and type(err) == "string" and err:sub(1, 5) == "skip:" then
+            local why = err:sub(6):gsub("^%s+", "")
+            mod:echo("  SKIP: %s -- %s", c.name, why); skip = skip + 1
+            pcall(printf, "[regression] SKIP %s: %s", c.name, why)
         elseif d then
             mod:echo("  XFAIL: %s (open issue %s) -- %s", c.name, d, tostring(err)); xfail = xfail + 1
             pcall(printf, "[regression] XFAIL %s (open issue %s): %s", c.name, d, tostring(err))
@@ -241,7 +246,7 @@ mod:command("cwv_regression_test", "Run regression smoke checks for past bugs", 
             mod:warning("[regression] FAIL %s: %s", c.name, tostring(err))
         end
     end
-    mod:echo("=== %d passed, %d failed, %d xfail (known defects) ===", pass, fail, xfail)
+    mod:echo("=== %d passed, %d failed, %d xfail (known defects), %d skipped ===", pass, fail, xfail, skip)
 end)
 mod:info("[regression-test-command] registered as /cwv_regression_test")
 
@@ -1537,10 +1542,13 @@ local _cwv_regression_context = {
 	mod_version = MOD_VERSION,
 	om = _om,
 	dbg = _dbg,
+	dbg_alert = _dbg_alert, -- #1656: dbg_helpers_two_channel read an unbound global
 	rt_register = _rt_register,
 	variant_definitions = _variant_definitions,
 	registered_keys = _om.item_registration.registered_keys,
-	display_names = _display_names,
+	-- #1656: the table is the bootstrap owner's local; `_display_names` here was an undeclared global.
+	display_names = _om.display_names,
+	regression_fixtures = mod:dofile("scripts/mods/character_weapon_variants/_cwv_regression_fixtures"),
 	find_def = _find_def,
 	build_entry = _om.item_registration.build_entry,
 	auto_register_all = _om.item_registration.auto_register_all,

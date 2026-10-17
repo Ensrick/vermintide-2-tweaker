@@ -163,6 +163,7 @@ return function(H, repo_root)
             "_cwv_commands_lifecycle",
 			"_cwv_regression_owner_loader",
 			"_cwv_regression_runtime_identity",
+			"_cwv_regression_fixtures",
             "_cwv_regression_identity",
 			"_cwv_regression_combat_style",
             "_cwv_regression_render",
@@ -193,6 +194,7 @@ return function(H, repo_root)
         local lifecycle_at = assert(entry:find("_cwv_commands_lifecycle", 1, true))
 		local regression_loader_at = assert(entry:find("_cwv_regression_owner_loader", 1, true))
 		local runtime_identity_at = assert(entry:find("_cwv_regression_runtime_identity", 1, true))
+		local fixtures_at = assert(entry:find("_cwv_regression_fixtures", 1, true))
         local identity_at = assert(entry:find("_cwv_regression_identity", 1, true))
 		local combat_style_at = assert(entry:find("_cwv_regression_combat_style", 1, true))
         local husk_ammo_at = assert(entry:find("_cwv_regression_husk_ammo", 1, true))
@@ -244,6 +246,9 @@ return function(H, repo_root)
 		H.truthy(lifecycle_at < regression_loader_at)
 		H.truthy(regression_loader_at < runtime_identity_at)
 		H.truthy(runtime_identity_at < identity_at)
+		-- #1656: the fixture module is loaded into the regression context, before any owner reads it.
+		H.truthy(runtime_identity_at < fixtures_at)
+		H.truthy(fixtures_at < identity_at)
         H.truthy(lifecycle_at < identity_at)
 		H.equal(count_plain(identity, "_cwv_regression_owner_loader"), 0)
 		H.equal(count_plain(entry, "_cwv_regression_owner_loader"), 1)
@@ -546,12 +551,14 @@ return function(H, repo_root)
 		-- Frozen from origin/master ae2d16cd before the mechanical extraction.
 		-- An intentional future callback edit must update both values explicitly;
 		-- the split itself may not silently alter a body, message, or options row.
-		H.equal(#moved, 51219)
+		-- #1656 (intentional): cwv_key_resolution_uuid_safe rung 3 re-pinned from the
+		-- retired cwv_es_longsword_blackguard to the registered cwv_es_greataxe.
+		H.equal(#moved, 51521)
 		local rolling = 0
 		for index = 1, #moved do
 			rolling = (rolling * 131 + moved:byte(index)) % 2147483647
 		end
-		H.equal(rolling, 59524266)
+		H.equal(rolling, 1403158992)
 	end)
 
 	H.test("CWV runtime identity owner validates before any registration", function()

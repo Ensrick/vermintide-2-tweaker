@@ -36,6 +36,7 @@ local MODULES_IN_INSTALL_ORDER = {
     "_cwv_commands_lifecycle.lua",
 	"_cwv_regression_owner_loader.lua",
 	"_cwv_regression_runtime_identity.lua",
+	"_cwv_regression_fixtures.lua",
     "_cwv_regression_identity.lua",
 	"_cwv_regression_combat_style.lua",
     "_cwv_regression_husk_ammo.lua",

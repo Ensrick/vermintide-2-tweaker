@@ -216,6 +216,7 @@ local suites = {
     "test_cwv_crowbill_runtime",
     "test_cwv_crowbill_presentation",
     "test_cwv_issue719_crowbill_rebuild",
+    "test_cwv_regression_harness_1656",
 	"test_cwv_durable_transform",
 	"test_cwv_relative_scale",
 	"test_cwv_entry_decomposition",

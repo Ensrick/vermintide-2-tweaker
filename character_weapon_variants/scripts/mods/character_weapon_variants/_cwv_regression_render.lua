@@ -969,10 +969,10 @@ end)
 
 _rt_register("dbg_helpers_two_channel", function()
     if type(_dbg) ~= "function" then return "_dbg helper missing" end
-    if type(_dbg_alert) ~= "function" then return "_dbg_alert helper missing" end
+    if type(ctx.dbg_alert) ~= "function" then return "_dbg_alert helper missing" end
     local ok = pcall(_dbg, "smoke test")
     if not ok then return "_dbg raised" end
-    ok = pcall(_dbg_alert, "smoke test")
+    ok = pcall(ctx.dbg_alert, "smoke test") -- #1656: the context's entry helper, not an unbound global
     if not ok then return "_dbg_alert raised" end
 end)
 
@@ -1143,12 +1143,12 @@ _rt_register("issue1155_old_musket_descriptor_reconciler", function()
 	local expected_identity = live.identity
 	if type(expected_identity) ~= "table" or expected_identity.kind ~= "backend_id"
 			or type(expected_identity.value) ~= "string" or expected_identity.value == "" then
-		return "Old Musket live gate has no exact equipped-item identity; equip one Old Musket after opening the Athanor"
+		return "skip: no Old Musket equipped since the Athanor preview armed the live gate; open the Athanor, then equip and wield one Old Musket and rerun"
 	end
 	local cim_identity = live.cim_identity
 	if type(cim_identity) ~= "table" or cim_identity.kind ~= "backend_id"
 			or type(cim_identity.value) ~= "string" or cim_identity.value == "" then
-		return "Old Musket live gate has no exact Athanor preview identity"
+		return "skip: the Athanor preview has not armed the Old Musket live gate this session; open the Athanor, then equip and wield one Old Musket and rerun"
 	end
 	if type(live.epoch) ~= "number" or type(live.generation) ~= "number"
 			or type(live.cim_generation) ~= "number" or live.cim_generation <= 0 then
@@ -1201,7 +1201,7 @@ _rt_register("issue1155_old_musket_descriptor_reconciler", function()
 		local slot_label = exact_slot_name == "slot_ranged" and "ranged slot"
 			or exact_slot_name == "slot_melee" and "melee slot"
 			or tostring(exact_slot_name)
-		return "Old Musket live gate found the exact tested instance in the "
+		return "skip: Old Musket live gate found the exact tested instance in the "
 			.. slot_label .. ", but it is not currently wielded; wield Old Musket "
 			.. "and rerun /cwv_regression_test"
 	end
@@ -2020,15 +2020,15 @@ _rt_register("issue604_dawi_crowbill_model01_transform", function()
 				and model.right_hand_scale == nil and model.right_hand_offset == nil
 				and model.right_hand_rotation == nil and model.right_hand_scale_3p == nil
 				and model.right_hand_rotation_3p == nil then
-			control = model
-			break
+			control = model; break
 		end
 	end
-	local control_def, control_source = control and _om._cwv_select_husk_transform_def(
-		"right", { variant_key = control.variant_key, right_hand_unit = control.right_hand_unit },
+	if not control then return "#604 untuned Imperial Crowbill control model is missing" end
+	local control_def, control_source = _om._cwv_select_husk_transform_def("right", -- #1656: bare call; `x and f()` dropped `source`
+		{ variant_key = control.variant_key, right_hand_unit = control.right_hand_unit },
 		{ name = family.SOURCE_ITEM }, nil, control.right_hand_unit, nil)
 	local control_plan = _om._cwv_husk_transform_apply_plan("right", control_def, control_source)
-	if not control or not control_def or control_source ~= "exact_model" or not control_plan
+	if not control_def or control_source ~= "exact_model" or not control_plan
 			or control_plan.should_apply ~= false or control_plan.durable ~= false
 			or control_plan.scale or control_plan.scale_multiplier
 			or control_plan.offset or control_plan.rotation then
@@ -2094,10 +2094,8 @@ _rt_register("cwv_crowbill_hammer_runtime_contract", function()
 	if source.actions and source.actions.action_three ~= nil then
 		return "vanilla Crowbill source template was mutated with Weapon Special"
 	end
-	local pick_special = pick.actions and pick.actions.action_three
-		and pick.actions.action_three.default
-	local hammer_special = hammer.actions and hammer.actions.action_three
-		and hammer.actions.action_three.default
+	local pick_special = pick.actions and pick.actions.action_three and pick.actions.action_three.default
+	local hammer_special = hammer.actions and hammer.actions.action_three and hammer.actions.action_three.default
 	if type(pick_special) ~= "table" or type(hammer_special) ~= "table"
 			or type(pick_special.enter_function) ~= "function"
 			or type(hammer_special.enter_function) ~= "function" then
@@ -2118,8 +2116,10 @@ _rt_register("cwv_crowbill_hammer_runtime_contract", function()
 				or pick_action.total_time ~= hammer_action.total_time then
 			return "Crowbill timing drifted: " .. tostring(action_name) .. "/" .. tostring(class)
 		end
-		if _om._cwv_damage_profile_wire_source[hammer_action.damage_profile]
-				~= pick_action.damage_profile then
+		-- #1656/#423: both faces fall back to ONE vanilla donor; the recorder never chains onto a cwv_ profile.
+		local wire = _om._cwv_damage_profile_wire_source
+		if not wire[pick_action.damage_profile]
+				or wire[hammer_action.damage_profile] ~= wire[pick_action.damage_profile] then
 			return "Crowbill mixed-peer damage fallback missing: " .. tostring(action_name)
 		end
 	end

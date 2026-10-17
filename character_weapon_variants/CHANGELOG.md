@@ -1,5 +1,68 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.548-dev (2026-10-17) -- /cwv_regression_test harness rows from the #1656 triage pass or skip with a reason (#1656) [verify-fix]
+
+Regression instrument only: no gameplay, mesh, template or wire change.
+
+- The runner gains a SKIP verdict. A check returning a `skip:`-prefixed
+  reason renders `SKIP: <name> -- <reason>`, logs `[regression] SKIP` through
+  engine printf and counts in its own column:
+  `=== N passed, N failed, N xfail (known defects), N skipped ===`.
+- `dbg_helpers_two_channel`: the regression context now carries
+  `dbg_alert`; the check read an unbound global (`_cwv_regression_render.lua:972`
+  at 0.1.547-dev).
+- `issue396_imperial_longsword_identity_and_remote_husk`: the context passed
+  the undeclared global `_display_names` (`character_weapon_variants.lua:1543`);
+  the bootstrap owner now publishes its table as `_om.display_names`. The
+  owned Imperial Longsword was retired by #620 and is never registered
+  (`_cwv_item_registration_owner.lua:609`), so the transport leg now runs on
+  a registered owner; the Longsword name, Helmgart illusion and husk-skin legs
+  are unchanged.
+- `issue660_world_identity_lifecycle_replay`: same retired fixture, which
+  always planned the native record (`_cwv_appearance_lifecycle.lua:70-79`);
+  re-pinned on a registered owner chosen by the new pure
+  `_cwv_regression_fixtures.lua`.
+- `cwv_key_resolution_uuid_safe`: the legacy-UUID rung named the retired
+  `cwv_es_longsword_blackguard`, which the #482 ladder can never return
+  (`_cwv_item_registration_owner.lua:130-133`); it now names the registered
+  Greataxe the stamp rung already proves. #620 migrates old Black Guard saves
+  to `es_2h_sword` instead.
+- `issue416_483_transition_generated_skin_identity`: the Sword+Mace pair is
+  read from the generator's own rows instead of a hand-composed key that
+  drifted when a vanilla pool grew (`_cwv_illusion_families.lua:1279-1292`).
+  It also selects the slot_melee payload rather than demanding exactly one:
+  a complete plan always adds the native slot_ranged record
+  (`_cwv_item_identity_transport_owner.lua:327-335`).
+- `issue604_dawi_crowbill_model01_transform`: `control and select(...)`
+  truncated the selector's second return (`_cwv_husk_transform_policy.lua:18-29`),
+  so the control leg failed every run; the call is now bare.
+- `cwv_crowbill_hammer_runtime_contract`: asserts the #423 policy, both faces
+  falling back to the same vanilla donor, instead of a hammer-to-pick chain
+  the recorder refuses (`character_weapon_variants.lua:143`).
+- `issue1155_old_musket_descriptor_reconciler`: SKIPs with the named reason
+  when no Old Musket is equipped, the Athanor preview has not armed the live
+  gate, or the Old Musket is equipped but not wielded.
+- The four Pusfume rows (`issue593_kruber_axe_shield_canonical_ownership`,
+  `cwv_slot_extension_scoped`, `cwv_no_ammo_strip_coverage`,
+  `issue597_greataxe_replaces_poleaxe`) are already fixed by 0.1.543-dev
+  (#1660) and unchanged. The `issue567_*` rows stay with #567.
+- Engine-free coverage: `test_cwv_regression_harness_1656.lua` (12 cases)
+  runs each shipped check body against production modules;
+  `test_regression_runner_verdicts.lua` and
+  `test_cwv_old_musket_runtime_contracts.lua` gain the SKIP cases. All fail on
+  0.1.547-dev and pass here.
+
+**DoD:** In a plain Keep session on 0.1.548-dev, `/cwv_regression_test` PASSes
+`dbg_helpers_two_channel`, `issue396_imperial_longsword_identity_and_remote_husk`,
+`issue660_world_identity_lifecycle_replay`, `cwv_key_resolution_uuid_safe`,
+`issue416_483_transition_generated_skin_identity`,
+`issue604_dawi_crowbill_model01_transform` and
+`cwv_crowbill_hammer_runtime_contract`, and reports
+`issue1155_old_musket_descriptor_reconciler` as PASS or SKIP with its reason,
+never FAIL.
+
+Refs #1656
+
 ## 0.1.547-dev (2026-10-17) -- Crowbill stays visible to other players after a pick/hammer toggle (#719) [verify-fix]
 
 - Switching the Imperial, Dawi or Sienna Crowbill between pick and hammer
