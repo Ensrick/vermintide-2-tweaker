@@ -96,7 +96,7 @@ try {
         $extractor = 'ae916ba306e0f5933f71e9b41ed0c0e7df46c28585da4fb92b5e2cc03199b15a'
         $oracleExtractor = '767c73dd8f2caf35575324aae7ac09e2460a3506f9ad6c8296d2bee6e973a2d5'
         $generator = 'a35a4e3c9d0eb759f211182fe24cf2897faf97a76ea60b02550bf6817189187e'
-        $sourceCatalog = '46a73fb1bd7de8bffcdb7def1a2cbeab7f48d0806c7571ffdf16c2644ebd2b06'
+        $sourceCatalog = 'c576645441dbd98fc5555983c4eb9834c0fffb26e4509ef2eab43c4d38011b65'
         $adjacentEvidence = '87b6f190c7beade349cbcb96a869c8bb43c2eba645849b4811bf670230739841'
         $rehydratedEvidence = '40a209e92700b23f39dea9ec0597a023ad9a78b97415d82baff8b55eaa5c3251'
         $hammerAdjacentEvidence = '8d1eb9ecc1466a8fa8aed558b74bf4a034cfc57157744ae482caadffd58bffa1'
@@ -107,8 +107,8 @@ try {
         $swiftbowRehydratedEvidence = 'baab8cbfa8b5c1b30a388a35273429fcfbb2717d64f7ed2f557535ef8b75f3e1'
         $grudgeAdjacentEvidence = '93daf862f7812f07cfe29bd9222332480f9e88b8b0038d5ba124a72ffbbbafa6'
         $grudgeRehydratedEvidence = 'a4398fdc8c82d088346eeb661e69e407fda57428260d9056b827ada0c9830165'
-        $generatedCatalog = '18033f2f1e3ca14800bd373151d6046c6e78a3ed48ae9e18a172187d33296fdd'
-        $devCatalog = '18033f2f1e3ca14800bd373151d6046c6e78a3ed48ae9e18a172187d33296fdd'
+        $generatedCatalog = '82a83bc9e8231972856dbb5a11dc4705858b91e288ecf8827e6f1389bb148827'
+        $devCatalog = '82a83bc9e8231972856dbb5a11dc4705858b91e288ecf8827e6f1389bb148827'
     }
     foreach ($entry in $pinned.GetEnumerator()) {
         if (-not (Test-Path -LiteralPath $entry.Key -PathType Leaf)) {

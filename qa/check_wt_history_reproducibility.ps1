@@ -70,11 +70,11 @@ try {
     $pinned = [ordered]@{
         $extractor = 'ae916ba306e0f5933f71e9b41ed0c0e7df46c28585da4fb92b5e2cc03199b15a'
         $generator = '8d5a643fce288e5b7be0ef0518796d200bfdb0ebab969862019abbbbb71420dd'
-        $sourceCatalog = 'ba5c9c7f68f45890fc43849f5abedbc14d31f533a0c1c82edfffe9b646bb1456'
-        $generatedCatalog = '041d02125a8e05a3347cc2c1640d092f1a77f75502ae19c57a47bffa41d0ce10'
+        $sourceCatalog = 'fc25565ccfc4544804f3cf96dcb4f70220f1ee22516d9afbe9b1f915d35d2331'
+        $generatedCatalog = '7e47144c7b41270087d3fa84288135e9f58d51afe8b870737ab33815e0410010'
         $oracleExtractor = '767c73dd8f2caf35575324aae7ac09e2460a3506f9ad6c8296d2bee6e973a2d5'
-        $oracleSpec = 'd5e32fde9031772dcd5ee8e380fe0b949535c60774d91e450aad598a04fa2dee'
-        $oracleRoutes = 'aae106b4c24bf5e865ac614ae3cad9d4821828b5a7ffab4ee118f707463eebe8'
+        $oracleSpec = 'b739f0dc73926d93344653d4af3d3b24da863c460ad5c3dc2627c698ac221714'
+        $oracleRoutes = 'ebbbc13c038b7bbc88901d86ed1cc6aefaafbbb66351caeb90994710a1612e90'
     }
     foreach ($entry in $pinned.GetEnumerator()) {
         if (-not (Test-Path -LiteralPath $entry.Key -PathType Leaf)) {
@@ -136,12 +136,12 @@ try {
 
     $currentRevision = $anchor.ContentRevision
 
-    # Issue #1529 is provenance-only: every source path referenced by any of
-    # the thirteen history families must resolve to the same Git blob at the
-    # retired 6.12.0 anchor and the canonical 6.12.1 anchor. Derive the scope
-    # from the checked-in source catalogs/specifications so a newly referenced
-    # input cannot silently escape this transition proof.
-    $previousContentRevision = '038498af2b565bcb10bf5ed225638293a7640c83'
+    # Issues #1529/#1682 are provenance-only: every source path referenced by
+    # any of the thirteen history families must resolve to the same Git blob at
+    # the retired 6.12.1 anchor and the canonical 6.13.0 anchor. Derive the
+    # scope from the checked-in source catalogs/specifications so a newly
+    # referenced input cannot silently escape this transition proof.
+    $previousContentRevision = '25fd7b8433e839b678d1c98a7a9af80918cbc252'
     $transitionInputs = @(
         Get-ChildItem (Join-Path $toolRoot 'evidence') -Recurse -File `
             -Filter '*source_catalog.lua'
@@ -158,7 +158,7 @@ try {
         }
     }
     if ($transitionPaths.Count -ne 38) {
-        throw "#1529 current-source transition scope drift: expected=38 actual=$($transitionPaths.Count)"
+        throw "#1682 current-source transition scope drift: expected=38 actual=$($transitionPaths.Count)"
     }
     foreach ($sourcePath in @($transitionPaths | Sort-Object)) {
         $before = Invoke-WtHistoryReadOnlyGit -Repository $source -Arguments @(
@@ -169,10 +169,10 @@ try {
         $afterBlobs = @($after.Output | Where-Object { $_ -match '^[0-9a-f]{40}$' })
         if ($before.ExitCode -ne 0 -or $after.ExitCode -ne 0 -or
             $beforeBlobs.Count -ne 1 -or $afterBlobs.Count -ne 1) {
-            throw "#1529 source transition object is unavailable: $sourcePath"
+            throw "#1682 source transition object is unavailable: $sourcePath"
         }
         if ($beforeBlobs[0] -cne $afterBlobs[0]) {
-            throw "#1529 gameplay source blob changed across 6.12.0/6.12.1: $sourcePath"
+            throw "#1682 gameplay source blob changed across 6.12.1/6.13.0: $sourcePath"
         }
     }
     $rehydration = @(

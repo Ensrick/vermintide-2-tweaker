@@ -72,11 +72,11 @@ try {
         $extractor = 'ae916ba306e0f5933f71e9b41ed0c0e7df46c28585da4fb92b5e2cc03199b15a'
         $oracleExtractor = '767c73dd8f2caf35575324aae7ac09e2460a3506f9ad6c8296d2bee6e973a2d5'
         $generator = '79e37fd70927b2890e6e8b85df99fab64e17b5c6c7b3bad3db06df7925241445'
-        $sourceCatalog = 'ac5edea20610ed92d48bb0911cc972d0ad761c89225fba00acfd9baad05e7b72'
+        $sourceCatalog = '7806800f1a46239f4f61809c5501d4ee2c61812ba1a87e8bc99b2811da787129'
         $adjacentEvidence = '9d261910ff282e25ef3e04a706f45600123842e2fd28f2247377a11ec8ab9417'
         $rehydratedEvidence = '5cd59760c5af801075c785fd285167768c6d8ecd45b4404b3a2c3cba6ebd156a'
-        $generatedCatalog = '0366c7cfe9d73d2897eb37d80262cb9f7381c80fe8dde055558ca4b44a7adb77'
-        $devCatalog = '0366c7cfe9d73d2897eb37d80262cb9f7381c80fe8dde055558ca4b44a7adb77'
+        $generatedCatalog = '4a7193b24e0f1d72bd035d0bc63caf36e4d749eda56758fbcf193493c0d99b9d'
+        $devCatalog = '4a7193b24e0f1d72bd035d0bc63caf36e4d749eda56758fbcf193493c0d99b9d'
     }
     foreach ($entry in $pinned.GetEnumerator()) {
         if (-not (Test-Path -LiteralPath $entry.Key -PathType Leaf)) {
