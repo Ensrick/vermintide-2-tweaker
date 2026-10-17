@@ -83,6 +83,12 @@ there is no copied implementation.
   carry its revision and `Current (Game Version 6.13.0)` label, the Patch 5.2
   rehydrated evidence projects onto it, and no provenance input keeps a
   retired 6.12.0 or 6.12.1 anchor.
+- `tests/test_cwv_javelin_recovery_contract.lua`: #296 the shared Tuskgor
+  Javelin recovery owner: both ground and linked pickup rows registered by
+  identity with their lookup pairs, the registered callbacks driven through
+  eligibility, a +1 refill and owned-pickup cleanup, re-registration re-owning
+  callbacks without lookup growth, and rollback when a lookup or pickup-map
+  write rejects, throws or is silently dropped.
 - `fixtures/vanilla_weapon_master_list.lua`: GENERATED vanilla weapon census
   (every `ItemMasterList` melee/ranged entry with its `can_wield` list after the
   DLC `UpdateItemMasterList` patches, each hero career's

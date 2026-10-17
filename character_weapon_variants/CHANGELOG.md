@@ -1,5 +1,37 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.546-dev (2026-10-17) -- Tuskgor Javelin recovery pickups get one owner and a runtime proof (#296) [verify-fix]
+
+- The landed and wall-stuck recovery pickups now register through one owner,
+  new `_cwv_javelin_recovery_contract.lua`, shared by production and the
+  named regression check. Both rows keep `ammo_type` eligibility on
+  `throwing_javelin` (`javelin.lua:1431`), `refill_amount = 1`, the
+  throwing-axe carrier unit and `limited_owned_pickup_unit`.
+- Registration is one transaction: both `NetworkLookup.pickup_names` pairs go
+  through the canonical `_lib_network_lookup` helper, then `Pickups.ammo` and
+  `AllPickups` are written and read back by identity. A rejected, thrown or
+  silently dropped write restores every pickup row and removes only the
+  lookup pairs this call inserted.
+- A VMF reload now re-owns both rows (fresh callbacks, no lookup growth);
+  before, `if not Pickups.ammo[...]` kept the previous instance's callbacks
+  (`_cwv_javelin_runtime_owner.lua:262` at 0.1.545-dev).
+- New `/cwv_regression_test` check
+  `issue296_tuskgor_javelin_recovery_transaction` (husk/ammo owner) drives the
+  registered callbacks for both rows: skin routing for Kruber and Saltzpyre,
+  eligibility and outline only for a `throwing_javelin` inventory, a +1
+  refill per pickup through the `add_ammo_from_pickup` boundary
+  (`interactions.lua:1353-1360`) and one `delete_limited_owned_pickup_unit`
+  per pickup. It swaps only the owner's private dependencies and restores
+  them on error. Impact physics stays a live check.
+- Engine-free coverage: `test_cwv_javelin_recovery_contract.lua` (10 cases).
+
+**DoD:** Live proof: `PASS: issue296_tuskgor_javelin_recovery_transaction`
+and `PASS: cwv_wire_safe_thrown_variant_installed`; in solo, each Tuskgor
+Javelin recovered from the ground, a wall and an enemy restores exactly one
+shot, and an ammo crate still refills the stack.
+
+Refs #296
+
 ## 0.1.545-dev (2026-09-25) -- Maul burn scrub keys on the burn property (#916) [verify-fix]
 
 - Vanilla 6.11.3 renamed every Sienna 1h-mace profile, so the Maul's
