@@ -286,6 +286,7 @@ local suites = {
 	"test_woc_load_banner",
     "test_dcp_portrait_materials",
     "test_dcp_portrait_settings_owner",
+    "test_dcp_entry_portrait_flow",
     "test_dcp_player_scope",
     "test_dcp_score_record",
     "test_cos_score_identity",

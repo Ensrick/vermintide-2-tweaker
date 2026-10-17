@@ -1,10 +1,13 @@
--- (#509) Sole owner of DCP's write to the global Mercenary career row
+-- (#509) Owner of DCP's persistent swap on the global Mercenary career row
 -- (SPProfiles[5].careers[1] = CareerSettings.es_mercenary, a plain table:
 -- Vermintide-2-Source-Code scripts/settings/profiles/sp_profiles.lua:132,315-316,
 -- career_settings.lua:467-477). Live sync, unload restore and the named
 -- regression check career_settings_swap_saves_and_restores all run these same
 -- functions. Every write is read back; ownership is released only when the
--- captured vanilla pair is visibly back on the row.
+-- captured vanilla pair is visibly back on the row. The one other writer is the
+-- entry file's UnitFramesHandler._sync_player_stats hook: it points
+-- portrait_image at one remote player's own portrait for a single synchronous
+-- vanilla call and then puts the live value back. It never persists.
 local M = {}
 
 local function valid_state(state)
@@ -142,8 +145,33 @@ function M.restore(state, career_override)
     return true
 end
 
+-- Vanilla HUD portrait for the per-player seams (HUD frames, Tab list, score
+-- screen) when a subject wears no tracked cosmetic. While the owner holds the
+-- row, the live value is DCP's swap and the captured original is vanilla. While
+-- it does not, no DCP portrait is on the row, so the live value is what vanilla
+-- built the widget from. Never depends on an apply having run: an untracked
+-- LOCAL Mercenary never applies, yet remote rows still need correcting.
+function M.vanilla_portrait(state, career)
+    if valid_state(state) and state.active and state.captured then
+        return state.original_portrait_image
+    end
+    if valid_career(career) then return career.portrait_image end
+    return nil
+end
+
+local function find_custom(custom_sets, field, value)
+    if value == nil then return nil end
+    for _, map in ipairs(type(custom_sets) == "table" and custom_sets or {}) do
+        for key, set in pairs(type(map) == "table" and map or {}) do
+            if type(set) == "table" and set[field] == value then return key end
+        end
+    end
+    return nil
+end
+
 -- Body of the named runtime check career_settings_swap_saves_and_restores.
--- Returns nil on pass or a failure string. ctx fields (all optional):
+-- Returns a failure string, or nil plus an optional note naming a skipped live
+-- half (the regression runner has no SKIP channel). ctx fields (all optional):
 --   live_career  the live SPProfiles[5].careers[1] row (nil => live parts skip)
 --   production   the production owner state DCP's sync/unload path uses
 --   custom_sets  list of DCP portrait maps (cosmetic key -> { hud = ... })
@@ -177,17 +205,20 @@ function M.check_transaction(ctx)
     -- the production owner, so nothing visible changes, and require the row to
     -- accept both writes and end exactly as it started.
     local live = ctx.live_career
-    if type(live) == "table" then
+    local skipped = nil
+    if type(live) ~= "table" then
+        skipped = "live half skipped: no SPProfiles[5].careers[1] row"
+    elseif not valid_portraits({ hud = live.portrait_image, medium = live.picking_image }) then
+        skipped = "live half skipped: the live Mercenary row has no portrait pair"
+    else
         local hud, medium = live.portrait_image, live.picking_image
-        if valid_portraits({ hud = hud, medium = medium }) then
-            local live_state = M.new()
-            ok, reason = M.apply(live_state, live, { hud = hud, medium = medium })
-            if not ok then return "live career row apply failed: " .. tostring(reason) end
-            ok, reason = M.restore(live_state, live)
-            if not ok then return "live career row restore failed: " .. tostring(reason) end
-            if live.portrait_image ~= hud or live.picking_image ~= medium then
-                return "live identity transaction changed the career row"
-            end
+        local live_state = M.new()
+        ok, reason = M.apply(live_state, live, { hud = hud, medium = medium })
+        if not ok then return "live career row apply failed: " .. tostring(reason) end
+        ok, reason = M.restore(live_state, live)
+        if not ok then return "live career row restore failed: " .. tostring(reason) end
+        if live.portrait_image ~= hud or live.picking_image ~= medium then
+            return "live identity transaction changed the career row"
         end
     end
 
@@ -202,18 +233,26 @@ function M.check_transaction(ctx)
         if type(live) == "table" and production.career ~= live then
             return "production owner holds a row other than the live Mercenary career"
         end
-        local sets = type(ctx.custom_sets) == "table" and ctx.custom_sets or {}
-        for _, map in ipairs(sets) do
-            for key, set in pairs(type(map) == "table" and map or {}) do
-                if type(set) == "table" and set.hud ~= nil
-                        and set.hud == production.original_portrait_image then
-                    return "captured original is DCP portrait " .. tostring(key)
-                        .. ": a swapped value leaked into the vanilla capture"
-                end
-            end
+        local key = find_custom(ctx.custom_sets, "hud", production.original_portrait_image)
+        if key then
+            return "captured original is DCP portrait " .. tostring(key)
+                .. ": a swapped value leaked into the vanilla capture"
         end
     end
-    return nil
+
+    -- 4. Unowned swap: while the owner does not hold the row, no DCP portrait
+    -- may be on it, because nothing would restore it on hat removal or unload.
+    -- The temporary _sync_player_stats bracket restores synchronously, so it is
+    -- never in flight while this check runs.
+    if type(production) == "table" and not production.active and type(live) == "table" then
+        local key = find_custom(ctx.custom_sets, "hud", live.portrait_image)
+            or find_custom(ctx.custom_sets, "medium", live.picking_image)
+        if key then
+            return "unowned DCP portrait " .. tostring(key)
+                .. " is on the live Mercenary row: nothing will restore it"
+        end
+    end
+    return nil, skipped
 end
 
 return M

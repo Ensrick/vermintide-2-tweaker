@@ -104,6 +104,12 @@ local _RT_CHECKS = {}
 local function _rt_register(name, fn)
     _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
 end
+-- The runner has no SKIP channel (nil = PASS), so a check that skips a live
+-- half names it here, log-only, and still returns nil.
+local function _rt_note_skip(name, note)
+    if note then pcall(printf, "[dcp:509] %s %s", tostring(name), tostring(note)) end
+    return nil
+end
 
 _rt_register("local_player_safe_network_lifecycle_609", function()
     local current_player = nil
@@ -587,7 +593,8 @@ end
 -- set, or nil when the player is not an es_mercenary, wears no tracked
 -- cosmetic, sync data is unavailable, or our portrait materials are not
 -- loaded yet (a custom texture before readiness is a "Material not found in
--- Gui" crash). Callers must fall back to the captured original (vanilla),
+-- Gui" crash). Callers must fall back to _portrait_settings_owner.vanilla_portrait
+-- (the captured original while DCP holds the row, else the unswapped live row),
 -- NEVER to the possibly-swapped global value.
 local _portrait_resolver = mod:dofile(
     "scripts/mods/dynamic_cosmetic_portraits/_dcp_portrait_resolver")
@@ -793,7 +800,7 @@ _rt_register("career_settings_swap_saves_and_restores", function()
     -- live row, and the live production ownership invariants.
     local live = SPProfiles and SPProfiles[5] and SPProfiles[5].careers
         and SPProfiles[5].careers[1]
-    local reason = _portrait_settings_owner.check_transaction({
+    local reason, note = _portrait_settings_owner.check_transaction({
         live_career = live,
         production = _portrait_settings,
         custom_sets = { _hat_portrait_map, _skin_portrait_map },
@@ -802,6 +809,7 @@ _rt_register("career_settings_swap_saves_and_restores", function()
     if type(mod.on_unload) ~= "function" then
         return "mod.on_unload missing -- swapped career_settings will not restore on unload"
     end
+    return _rt_note_skip("career_settings_swap_saves_and_restores", note)
 end)
 
 _rt_register("hud_alpha_mask_conformance_pipeline", function()
@@ -1200,7 +1208,7 @@ mod:hook("UnitFramesHandler", "_sync_player_stats", function(func, self, unit_fr
     end
     local set = _resolve_portrait_set_for_player(player)
     local resolved = (set and set.hud)
-        or _portrait_settings.original_portrait_image
+        or _portrait_settings_owner.vanilla_portrait(_portrait_settings, career)
         or career.portrait_image
     local saved = career.portrait_image
     career.portrait_image = resolved
@@ -1219,6 +1227,8 @@ mod:hook_safe("IngamePlayerListUI", "_update_player_information", function(self,
     local players = self._players
     local num_players = self._num_players
     if not players or not num_players then return end
+    local live = SPProfiles and SPProfiles[5] and SPProfiles[5].careers and SPProfiles[5].careers[1]
+    local vanilla = _portrait_settings_owner.vanilla_portrait(_portrait_settings, live)
     for i = 1, num_players do
         local pd = players[i]
         local player = pd and pd.player
@@ -1226,8 +1236,7 @@ mod:hook_safe("IngamePlayerListUI", "_update_player_information", function(self,
         if player and widget and widget.content and not pd.is_local_player
                 and _player_career_name(player) == "es_mercenary" then
             local set = _resolve_portrait_set_for_player(player)
-            local resolved = (set and set.hud)
-                or _portrait_settings.original_portrait_image
+            local resolved = (set and set.hud) or vanilla
             if resolved and widget.content.portrait ~= resolved then
                 widget.content.portrait = resolved
             end
@@ -1247,15 +1256,19 @@ end)
 -- 1. Untracked/default cosmetic keys fall through to the vanilla portrait.
 -- Runs once per score-screen build. self.peer_id is the local peer
 -- (end_view_state_score.lua:23-36).
-mod:hook_safe("EndViewStateScore", "_setup_player_scores", function(self, players_session_scores)
-    if not _portrait_settings.original_portrait_image then return end
+-- (#509) No early return on an owner capture: an untracked LOCAL Mercenary
+-- never applies, yet a remote Mercenary's own tracked portrait must still show
+-- here (0.1.30-dev review). Untracked rows take the owner's vanilla value.
+local function _correct_score_rows(score_view)
     -- A custom Gui material before residency is a Material-not-found crash.
     -- If readiness failed, no custom score correction is safe to draw.
     if not _check_portrait_materials_ready() then return end
-    local records = self._players_by_widget_index
-    local widgets = self._hero_widgets
+    local records = score_view._players_by_widget_index
+    local widgets = score_view._hero_widgets
     if not records or not widgets then return end
-    local my_peer_id = self.peer_id or (Network and Network.peer_id and Network.peer_id())
+    local live = SPProfiles and SPProfiles[5] and SPProfiles[5].careers and SPProfiles[5].careers[1]
+    local vanilla = _portrait_settings_owner.vanilla_portrait(_portrait_settings, live)
+    local my_peer_id = score_view.peer_id or (Network and Network.peer_id and Network.peer_id())
     for widget_index, rec in pairs(records) do
         local widget = widgets[widget_index]
         local content = widget and widget.content
@@ -1266,13 +1279,71 @@ mod:hook_safe("EndViewStateScore", "_setup_player_scores", function(self, player
             if not is_local_human then
                 local set = _portrait_resolver.resolve_score_record(
                     rec, _skin_portrait_map, _hat_portrait_map)
-                local resolved = (set and set.hud)
-                    or _portrait_settings.original_portrait_image
-                if content.portrait ~= resolved then
+                local resolved = (set and set.hud) or vanilla
+                if resolved and content.portrait ~= resolved then
                     content.portrait = resolved
                 end
             end
         end
+    end
+end
+
+mod:hook_safe("EndViewStateScore", "_setup_player_scores", function(self, players_session_scores)
+    _correct_score_rows(self)
+end)
+
+_rt_register("score_rows_resolve_without_local_swap_509", function()
+    -- (#509) Runs the production score-row correction on a synthetic score
+    -- view (no live widget is touched) in the local player's current state,
+    -- tracked cosmetic or not. A remote Mercenary row must take its own tracked
+    -- portrait, an untracked one must end on vanilla (never a DCP portrait or
+    -- nil), and the local player's own row stays as vanilla built it.
+    local name = "score_rows_resolve_without_local_swap_509"
+    local live = SPProfiles and SPProfiles[5] and SPProfiles[5].careers and SPProfiles[5].careers[1]
+    if type(live) ~= "table" then
+        return _rt_note_skip(name, "skipped: no SPProfiles[5].careers[1] row")
+    end
+    if not _check_portrait_materials_ready() then
+        return _rt_note_skip(name, "skipped: DCP portrait materials are not resident yet")
+    end
+    local tracked_key, tracked_set = next(_hat_portrait_map)
+    local built = live.portrait_image  -- what vanilla builds every row from
+    local tracked = { content = { portrait = built } }
+    local untracked = { content = { portrait = built } }
+    local own = { content = { portrait = built } }
+    _correct_score_rows({
+        peer_id = "dcp509_local_peer",
+        _players_by_widget_index = {
+            { profile_index = 5, career_index = 1, is_player_controlled = true,
+              peer_id = "dcp509_remote_peer", hat = { item_name = tracked_key } },
+            { profile_index = 5, career_index = 1, is_player_controlled = false,
+              peer_id = "dcp509_local_peer", hat = { item_name = "dcp509_untracked_hat" },
+              hero_skin = "dcp509_untracked_skin" },
+            { profile_index = 5, career_index = 1, is_player_controlled = true,
+              peer_id = "dcp509_local_peer", hat = { item_name = tracked_key } },
+        },
+        _hero_widgets = { tracked, untracked, own },
+    })
+    if tracked.content.portrait ~= tracked_set.hud then
+        return string.format("remote row wearing %s shows '%s', expected its own '%s' (owner active=%s)",
+            tostring(tracked_key), tostring(tracked.content.portrait), tostring(tracked_set.hud),
+            tostring(_portrait_settings.active))
+    end
+    local shown = untracked.content.portrait
+    local expected = _portrait_settings_owner.vanilla_portrait(_portrait_settings, live)
+    if type(shown) ~= "string" or shown == "" or shown ~= expected then
+        return string.format("untracked bot row shows '%s', expected vanilla '%s'",
+            tostring(shown), tostring(expected))
+    end
+    for _, map in ipairs({ _hat_portrait_map, _skin_portrait_map }) do
+        for key, set in pairs(map) do
+            if set.hud == shown then
+                return "untracked bot row shows DCP portrait " .. tostring(key)
+            end
+        end
+    end
+    if own.content.portrait ~= built then
+        return "the local player's own score row was rewritten"
     end
 end)
 

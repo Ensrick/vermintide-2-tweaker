@@ -299,6 +299,28 @@ return function(H, repo_root)
             tostring(reason))
     end)
 
+    H.test("DCP issue509 vanilla fallback and unowned-swap check do not depend on an apply", function()
+        local live = live_row()
+        local production = owner.new()
+        H.equal(owner.vanilla_portrait(production, live), "unit_frame_portrait_kruber_mercenary",
+            "never-applied owner: the live row is vanilla")
+        H.truthy(owner.apply(production, live, custom_sets[1].mercenary_hat_0001))
+        H.equal(owner.vanilla_portrait(production, live), "unit_frame_portrait_kruber_mercenary",
+            "active owner: the captured original, not the swap")
+        H.truthy(owner.restore(production, live))
+        H.equal(owner.vanilla_portrait(production, live), "unit_frame_portrait_kruber_mercenary")
+        H.equal(owner.vanilla_portrait(nil, nil), nil)
+
+        live.picking_image = "medium_custom_skin"
+        local reason = owner.check_transaction({
+            live_career = live, production = production, custom_sets = custom_sets,
+        })
+        H.truthy(type(reason) == "string" and reason:find("unowned DCP portrait skin_es_default", 1, true),
+            tostring(reason))
+        local _, note = owner.check_transaction({ production = production, custom_sets = custom_sets })
+        H.truthy(type(note) == "string" and note:find("live half skipped", 1, true), tostring(note))
+    end)
+
     local function block(start_needle, end_needle)
         local first = source:find(start_needle, 1, true)
         H.truthy(first, start_needle .. " missing")
