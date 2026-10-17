@@ -4,6 +4,9 @@
 if (-not (Get-Command Get-VtBundleOutputHandleProof -ErrorAction SilentlyContinue)) {
     . (Join-Path $PSScriptRoot 'bundle-output-set.ps1')
 }
+if (-not (Get-Command Get-VtWorkshopEvidencePriorContent -ErrorAction SilentlyContinue)) {
+    . (Join-Path $PSScriptRoot 'workshop-nochange-log-proof.ps1')
+}
 
 function Assert-VtWorkshopEvidenceId {
     param([string]$Value)
@@ -174,6 +177,12 @@ function Complete-VtWorkshopUploadEvidence {
     $bytes = Read-VtWorkshopEvidenceAppend -Stream $stream -Boundary $Capture.Boundary -End $proof.Length
     $text = [System.Text.UTF8Encoding]::new($false, $true).GetString($bytes)
     $result = ConvertFrom-VtWorkshopUploadTransaction -Text $text -PublishedId $PublishedId -StartedAt $Capture.StartedAt -EndedAt $EndedAt
+    if ($result.Status -ceq 'NOCHANGE') {
+        # Issue #1667: the item's prior UPLOADED chain from this exact captured
+        # prefix; consumed only for non-public items, never throws here.
+        $result | Add-Member -NotePropertyName PriorContent -NotePropertyValue (
+            Get-VtWorkshopEvidencePriorContent -Stream $stream -Capture $Capture -PublishedId $PublishedId)
+    }
     # Repeat uncached bounded reads before accepting; rotation is permitted by
     # the observer's sharing flags but never supplies evidence for this attempt.
     $prefixAgain = Get-VtWorkshopEvidencePrefix -Stream $stream -Count $Capture.Boundary

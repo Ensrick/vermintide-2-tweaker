@@ -2523,13 +2523,16 @@ Assert-WtHistorySourceFreshness -Mod $Mod -RepoRoot $repoRoot -Phase 'pre-upload
 # UPLOADED carries its ManifestID in the exact bounded log transaction and does
 # not depend on this query. NOCHANGE has no log ManifestID, so it may proceed to
 # tracker mutation only when an unchanged pre/post snapshot supplies the same
-# current hcontent_file. A transient query failure does not suppress a real
-# upload; it only makes a later NOCHANGE result fail closed.
+# current hcontent_file. A friends-only/private item answers "not visible" on
+# both sides instead (#1667); its ManifestID then comes from the prior UPLOADED
+# chain in the verified Steam log prefix, bound by the release owner. A
+# transient query failure does not suppress a real upload; it only makes a
+# later NOCHANGE result fail closed.
 $beforeWorkshopSnapshot = $null
 $beforeWorkshopSnapshotError = $null
 if (-not $isFirstUploadBootstrap) {
     try {
-        $beforeWorkshopSnapshot = Get-VtWorkshopPublishedFileSnapshot -PublishedId $publishedId
+        $beforeWorkshopSnapshot = Get-VtWorkshopPublishedFileObservation -PublishedId $publishedId
     }
     catch { $beforeWorkshopSnapshotError = $_.Exception.Message }
 }
@@ -2607,7 +2610,7 @@ if ($uploadStatus -ceq 'NOCHANGE') {
         Fail "Workshop returned NOCHANGE, but the pre-upload Steam published-file snapshot is unavailable: $beforeWorkshopSnapshotError"
     }
     try {
-        $afterWorkshopSnapshot = Get-VtWorkshopPublishedFileSnapshot -PublishedId $publishedId
+        $afterWorkshopSnapshot = Get-VtWorkshopPublishedFileObservation -PublishedId $publishedId
     }
     catch {
         Fail "Workshop returned NOCHANGE, but the post-upload Steam published-file snapshot is unavailable: $($_.Exception.Message)"
@@ -2617,7 +2620,8 @@ if ($uploadStatus -ceq 'NOCHANGE') {
 # Issue #1307: the plaintext Steam-log result is not tracker mutation
 # authority. Persist it append-only on the exact hosted release and trust it
 # only after a fresh GitHub reread. NOCHANGE additionally requires unchanged
-# Steam published-file identity on both sides of the exact log transaction.
+# Steam published-file identity on both sides of the exact log transaction, or
+# for a non-public item two not-visible answers plus the log-bound prior chain.
 # This gate precedes bootstrap exit, the successful-path pin step, labels, and
 # card rewrites. The existing outer failure finalizer may still reconcile
 # GitHub source pins after a recorded release mutation; it cannot label or

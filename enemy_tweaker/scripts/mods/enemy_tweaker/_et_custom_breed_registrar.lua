@@ -1398,6 +1398,24 @@ function M.declared_specs()
     return out
 end
 
+-- #324 read-only diagnostics seam: the exact verdict each build_plan capacity
+-- reader reaches against the runtime registration uses. It plans and writes
+-- nothing; _et_diag_capacity_authority logs it beside the raw shapes.
+function M.capacity_verdicts(injected_runtime)
+    local runtime = runtime_for(injected_runtime)
+    local readers = {
+        damage_source_id = read_damage_source_cap,
+        statistics_path_lookup = read_statistics_path_cap,
+        damage_hotjoin_sync = read_health_sync_cap,
+    }
+    local out = {}
+    for axis, reader in next, readers do
+        local cap, reason = reader(runtime)
+        out[axis] = cap ~= nil and ("cap:" .. tostring(cap)) or tostring(reason)
+    end
+    return out
+end
+
 function M._reset_terminal_for_tests(name)
     TERMINAL[name] = nil
 end

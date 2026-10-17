@@ -82,6 +82,20 @@ foreign items/apps, invalid UInt64 values, changed content generations, stale
 windows, and unavailable observations fail closed. The resulting ManifestID is
 still only an unauthenticated candidate until the release owner appends and
 rereads its exact bytes. `UPLOADED` remains on its independent log-bound path.
+Friends-only and private items (#1667) get the exact two-field result-9
+not-visible answer instead; both observations must carry it, the inventory and
+hosted release manifest row must agree on the non-public visibility, the row
+must name the same item, source, and version (the zip digest is read from that
+row, and a caller-supplied digest must equal it), and the ManifestID comes from
+the item's last complete UPLOADED transaction in the verified pre-upload prefix
+of the same log file, followed only by complete NOCHANGE transactions and
+same-manifest server-change lines (also allowed inside that UPLOADED
+transaction). The evidence self-test replays the real 2026-09-23 gut_dev
+sequence and rejects Timeout, incomplete, failed, foreign-AppID, reordered, and
+mismatched-server tails; a visibility change across the upload fails closed.
+Only the current `workshop_log.txt` is read, so after Steam rotates an item's
+last UPLOADED into `workshop_log.previous.txt` a non-public NOCHANGE fails
+closed until that item's next real UPLOADED ship.
 
 `check_workshop_upload_result_release.ps1` guards the next durable #1307
 boundary. The content-qualified candidate is appended to the exact ordinary
@@ -99,7 +113,8 @@ the GitHub release was already recorded, but it cannot make an issue test-ready
   or rewrite a live card. An `UPLOADED` result creates the exact asset, and the
   card refresh consumes its ManifestID only from that authenticated reread.
 `NOCHANGE` creates a distinct receipt-qualified asset only after the unchanged
-pre/post Steam snapshots above, then follows the same append-only exact-byte
+pre/post Steam snapshots above (or, for a non-public item, the not-visible pair
+plus the log-bound prior UPLOADED chain), then follows the same append-only exact-byte
 reread boundary. Card refresh consumes its ManifestID from that authenticated
 object too. No historical receipt is reused, and neither path reads a ManifestID
 directly from mutable prose or the manifestless NoChange log line.
@@ -853,7 +868,11 @@ There is no live API, launcher, Steam, game, upload or ready-card mutation.
 proof used by full live-card authority and current-pin recovery: canonical case
 and Workshop identity, clean real commit objects, derived mod trees, tokenized
 exact versions, explicit legacy root-to-mod-tree proof, selected prefetch, and
-published-release/asset metadata. Its 88 assertions run on PS7 and PS5.1; the
+published-release/asset metadata. The latest-release read refreshes its asset
+inventory from `/releases/{id}/assets` (#1666), so the 2026-09-23 ghost id
+583157616 is never downloaded; the embedded array is a one-warning fallback that
+names the gh failure, and the read adapter refuses anything but a GET to
+api.github.com. Its 98 assertions run on PS7 and PS5.1; the
 existing full source-authority selftest retains receipt-policy and partial-clone
 hydration coverage. Both new checks are automatically discovered in full QA.
 These checks establish GitHub source provenance only, not Workshop delivery.
