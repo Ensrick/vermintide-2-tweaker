@@ -151,6 +151,12 @@ must fit the engine's damage-source and statistics-path capacities [src:
 `scripts/network_lookup/network_constants.lua:121,133-139`]; a pre-existing
 exact same-name statistics segment is reused because this axis is one global set
 of path components [src: `scripts/network_lookup/network_lookup.lua:2263-2281`].
+Caveat (#324): at mod load `NetworkConstants` is nil. It is created only by
+`scripts/network_lookup/network_constants.lua:3`, which vanilla dofiles at
+`scripts/game_state/loading_sub_states/win32/state_loading_restart_network.lua:161`
+and `scripts/managers/network/game_network_manager.lua:59`, both after Boot
+loads mods (`scripts/boot.lua:400-413`); what `Network.type_info` returns
+before network init is [unverified].
 Its schema-3 marker
 retains detached breed/action
 snapshots, all three original wire and side-surface identities, and canonical threat/elite
