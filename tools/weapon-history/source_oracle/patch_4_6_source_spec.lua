@@ -6,7 +6,7 @@ return {
     schema = 1,
     oracle_id = "wt_patch_4_6_hagbane_source_oracle_v1",
     revisions = {
-        current = "25fd7b8433e839b678d1c98a7a9af80918cbc252",
+        current = "93dea911a4cc464a0eb51cfdc3a443297bfc4550",
         ["4_5_1"] = "0cec9547152a395c4f35f75288f29d8b18b8294f",
     },
     families = {

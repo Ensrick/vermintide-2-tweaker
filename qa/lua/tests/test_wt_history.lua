@@ -367,10 +367,10 @@ local function register(H, repo_root)
             H.equal(validation_error, nil)
             H.equal(valid, true)
             H.equal(catalog.current_source.revision,
-                "25fd7b8433e839b678d1c98a7a9af80918cbc252")
+                "93dea911a4cc464a0eb51cfdc3a443297bfc4550")
             H.equal(catalog.current_source.display_name,
-                "Current (Game Version 6.12.1)")
-            H.equal(catalog.current_source.label, "6.12.1 source anchor")
+                "Current (Game Version 6.13.0)")
+            H.equal(catalog.current_source.label, "6.13.0 source anchor")
             local counts = catalog_counts(catalog)
             totals.family_states = totals.family_states + counts.family_states
             totals.operations = totals.operations + counts.operations
@@ -391,7 +391,7 @@ local function register(H, repo_root)
         })
         local ledger = assert(by_path[CatalogUI.COMPLETENESS_LEDGER_MODULE])
         H.equal(ledger.current_revision,
-            "25fd7b8433e839b678d1c98a7a9af80918cbc252")
+            "93dea911a4cc464a0eb51cfdc3a443297bfc4550")
         H.deep_equal(ledger.totals, totals,
             "provenance refresh must not alter the post-#1436 gameplay census")
     end)
@@ -412,7 +412,7 @@ local function register(H, repo_root)
         H.equal(valid, true)
         H.equal(catalog.catalog_id, "wt_history_patch_6_0_v1")
         H.equal(catalog.current_source.revision,
-            "25fd7b8433e839b678d1c98a7a9af80918cbc252")
+            "93dea911a4cc464a0eb51cfdc3a443297bfc4550")
         H.equal(#catalog.families, 3)
         H.equal(next(catalog.derived_profiles), nil)
         H.deep_equal(catalog.generation, {
@@ -602,7 +602,7 @@ local function register(H, repo_root)
         H.equal(catalog.schema, 2)
         H.equal(catalog.catalog_id, "wt_history_patch_6_6_v1")
         H.equal(catalog.current_source.revision,
-            "25fd7b8433e839b678d1c98a7a9af80918cbc252")
+            "93dea911a4cc464a0eb51cfdc3a443297bfc4550")
         H.equal(#catalog.families, 1)
         H.equal(next(catalog.profile_specs), nil)
         H.equal(next(catalog.derived_profiles), nil)
@@ -673,7 +673,7 @@ local function register(H, repo_root)
         H.equal(catalog.schema, 2)
         H.equal(catalog.catalog_id, "wt_history_patch_6_8_v1")
         H.equal(catalog.current_source.revision,
-            "25fd7b8433e839b678d1c98a7a9af80918cbc252")
+            "93dea911a4cc464a0eb51cfdc3a443297bfc4550")
         H.equal(#catalog.families, 1)
         H.equal(next(catalog.profile_specs), nil)
         H.equal(next(catalog.derived_profiles), nil)
@@ -1346,7 +1346,7 @@ local function register(H, repo_root)
             end
         end
         H.equal(pinned, 0.2866666666666667,
-            "current 6.12.1 source literal must survive evidence and catalog generation")
+            "current 6.13.0 source literal must survive evidence and catalog generation")
         H.truthy(pinned ~= 0.28666666666667,
             "the former Lua 5.1 tostring truncation must remain detectable")
     end)

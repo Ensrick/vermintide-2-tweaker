@@ -142,7 +142,7 @@ local adjacent = load_data(evidence_dir
 local post = load_data(evidence_dir
     .. "/_wt_history_profiles_post_2_0_10_generated.lua")
 local current = load_data(evidence_dir
-    .. "/_wt_history_profiles_current_6_12_1_generated.lua")
+    .. "/_wt_history_profiles_current_6_13_0_generated.lua")
 assert(adjacent.old_revision == source_catalog.boundary.historical_revision
         and adjacent.new_revision == source_catalog.boundary.post_revision,
     "adjacent profile boundary drift")

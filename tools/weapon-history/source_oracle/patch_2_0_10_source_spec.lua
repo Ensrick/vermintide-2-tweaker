@@ -4,7 +4,7 @@ return {
     schema = 1,
     oracle_id = "wt_patch_2_0_10_sword_and_dagger_source_oracle_v1",
     revisions = {
-        current = "25fd7b8433e839b678d1c98a7a9af80918cbc252",
+        current = "93dea911a4cc464a0eb51cfdc3a443297bfc4550",
         ["2_0_9_1"] = "90c7c21adb7aa2b7de5fcdca5094727895fbeb1a",
     },
     families = {

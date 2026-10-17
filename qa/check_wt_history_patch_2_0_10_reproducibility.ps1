@@ -58,11 +58,11 @@ try {
     $pins = [ordered]@{
         $extractor = 'ae916ba306e0f5933f71e9b41ed0c0e7df46c28585da4fb92b5e2cc03199b15a'
         $oracle = '767c73dd8f2caf35575324aae7ac09e2460a3506f9ad6c8296d2bee6e973a2d5'
-        $generator = '27651869d5b0d8abf8a00cf2106128c32cbe991c04bbad30e762d7a4d8c16df2'
-        $spec = 'eb98ca14ecdb2df8d8af39a5cf78bc47453682ebcb41737e5ede9d82a373f0d9'
-        $sourceCatalog = '78b4ce35cc3f2a7cba515de51b5f4728529ede970fe89772c1ac7dfa840822f1'
-        $catalog = '464805ab5f4ee9dbc7495861b57a977ec6599b57b8b3e027b456f9f3d0e9e774'
-        $devCatalog = '464805ab5f4ee9dbc7495861b57a977ec6599b57b8b3e027b456f9f3d0e9e774'
+        $generator = '42e39e5ab5d6ec11253eea956237fe336b44e227e8e7c8282fddd1fc3b948acd'
+        $spec = '5c62d59248f8b429530a372faaba4c91cb3e50e9244ecc72ea844b86271b20dd'
+        $sourceCatalog = 'b1135fc4b1e74c8faad7f0ebbecb0854e8901de25b31c13aaf818243f5e421e0'
+        $catalog = 'a52bfa765b0cfe51c7acefab1ccd641c6fcd017cc6c7373bc1e7d8c7ca4e6fca'
+        $devCatalog = 'a52bfa765b0cfe51c7acefab1ccd641c6fcd017cc6c7373bc1e7d8c7ca4e6fca'
     }
     foreach ($pin in $pins.GetEnumerator()) {
         if (-not (Test-Path -LiteralPath $pin.Key -PathType Leaf) -or
@@ -75,9 +75,9 @@ try {
     }
 
     $ledger = [ordered]@{
-        '_wt_history_2_0_10_routes_oracle.lua' = 'b7b29d80d5f3688f08b0e528e00b2d3a56cb72598026954e9fac689241207bde'
+        '_wt_history_2_0_10_routes_oracle.lua' = '6b186bcd1a8c09ee6602cecfc8216f0fe01c4b2dffefa916d7a3af70e701211c'
         '_wt_history_profiles_2_0_9_1_to_2_0_10_generated.lua' = 'b8e7a4e42c68dbfddd9b20564fbae5851bd7201a93689b8a669f799889d8afba'
-        '_wt_history_profiles_current_6_12_1_generated.lua' = '7eb51fc267d42212bef2ab5bd07211288d9256e4dd7783094e714550dc88aeb2'
+        '_wt_history_profiles_current_6_13_0_generated.lua' = '7eb51fc267d42212bef2ab5bd07211288d9256e4dd7783094e714550dc88aeb2'
         '_wt_history_profiles_post_2_0_10_generated.lua' = 'f40fc0505834a1e15bbe43d298cef97486ab35d1adb4d8bd144ac6c453b22678'
     }
     $actual = @(Get-ChildItem -LiteralPath $evidence -File -Filter '*.lua' |
@@ -153,7 +153,7 @@ try {
         $jobs = @(
             [pscustomobject]@{ Name = 'adjacent'; Arguments = @('--profiles', $old, $post, $power, $damage); Evidence = '_wt_history_profiles_2_0_9_1_to_2_0_10_generated.lua' },
             [pscustomobject]@{ Name = 'post'; Arguments = @('--profiles', $post, $old, $power, $damage); Evidence = '_wt_history_profiles_post_2_0_10_generated.lua' },
-            [pscustomobject]@{ Name = 'current'; Arguments = @('--rehydrate-profiles', $current, $current, $adjacent); Evidence = '_wt_history_profiles_current_6_12_1_generated.lua' }
+            [pscustomobject]@{ Name = 'current'; Arguments = @('--rehydrate-profiles', $current, $current, $adjacent); Evidence = '_wt_history_profiles_current_6_13_0_generated.lua' }
         )
         foreach ($job in $jobs) {
             $primaryOut = Join-Path $tmp ($job.Name + '-primary.lua')

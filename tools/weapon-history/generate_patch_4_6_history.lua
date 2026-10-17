@@ -139,7 +139,7 @@ local historical = load_data(evidence_dir
 local post = load_data(evidence_dir
     .. "/_wt_history_profiles_post_4_6_generated.lua")
 local current = load_data(evidence_dir
-    .. "/_wt_history_profiles_current_6_12_1_generated.lua")
+    .. "/_wt_history_profiles_current_6_13_0_generated.lua")
 for _, snapshot in ipairs({ adjacent, historical, post, current }) do
     assert(snapshot.old_revision == source_catalog.boundary.historical_revision
             and snapshot.new_revision == source_catalog.boundary.post_revision,

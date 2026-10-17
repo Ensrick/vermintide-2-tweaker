@@ -57,7 +57,7 @@ Pinned source input:
 - repository: a local checkout of `Aussiemon/Vermintide-2-Source-Code` that
   contains every pinned commit, `commit:path`, and blob below; the shared
   read-only selector proves the complete ledger before regeneration
-- current content anchor (6.12.1): `25fd7b8433e839b678d1c98a7a9af80918cbc252`
+- current content anchor (6.13.0): `93dea911a4cc464a0eb51cfdc3a443297bfc4550`
 - historical anchors: the full revisions in `patch_5_2_source_spec.lua`
 
 From the Tweaker repository root, verify the exact-number serializer:
@@ -77,7 +77,7 @@ $env:WT_HISTORY_OUTPUT = `
 qa/lua/vendor/lua-5.1.5-win64/lua5.1.exe `
   tools/weapon-history/source_oracle/extract_weapon_history_oracle.lua `
   --source-repo $source `
-  --routes 25fd7b8433e839b678d1c98a7a9af80918cbc252 `
+  --routes 93dea911a4cc464a0eb51cfdc3a443297bfc4550 `
   tools/weapon-history/source_oracle/patch_5_2_source_spec.lua
 ```
 

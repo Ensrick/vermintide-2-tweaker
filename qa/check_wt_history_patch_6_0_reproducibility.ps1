@@ -42,17 +42,17 @@ try {
     $pins = [ordered]@{
         $extractor='ae916ba306e0f5933f71e9b41ed0c0e7df46c28585da4fb92b5e2cc03199b15a'
         $oracle='767c73dd8f2caf35575324aae7ac09e2460a3506f9ad6c8296d2bee6e973a2d5'
-        $generator='97693981baca7bb6ec3514a86094a57a945e6f7654443fe57b708023bb0538bd'
-        $sourceCatalog='b23a3b6f9f5ec65116478ea17d33e62b279b73102264ce964955026db47610f8'
-        $catalog='959e2414af359a87dcc978bee4ddcbbf2a51888919458a5da96bf5e0e1a53a34'
-        $devCatalog='959e2414af359a87dcc978bee4ddcbbf2a51888919458a5da96bf5e0e1a53a34'
+        $generator='be8a5a756fbead54f6d2717f25988a4a26b081c96f026b797c8082a8834e0268'
+        $sourceCatalog='15f3972433a3595c44a5718f139f14cc0f7883ff0588c68842b757a94e0f57c7'
+        $catalog='cd0a287227712f9015a5b2bfe8ee8f0a2c7e894a807ba12f5636eee7dd351139'
+        $devCatalog='cd0a287227712f9015a5b2bfe8ee8f0a2c7e894a807ba12f5636eee7dd351139'
     }
     foreach ($pin in $pins.GetEnumerator()) {
         if (-not (Test-Path -LiteralPath $pin.Key -PathType Leaf) -or
             (Hash $pin.Key) -cne $pin.Value) { throw "pinned artifact drift: $($pin.Key)" }
     }
     $ledger = @{
-        '_wt_history_profiles_current_6_12_1_generated.lua'='3c593a19fb8fd7ff8c8c0c35e2105a1ebdf46d2600dee98d971a89dc3cfddd95'
+        '_wt_history_profiles_current_6_13_0_generated.lua'='3c593a19fb8fd7ff8c8c0c35e2105a1ebdf46d2600dee98d971a89dc3cfddd95'
         '_wt_history_profiles_5_6_1_rehydrated_generated.lua'='e7d7c5c14526b2e09c0c74827a4e1760d1aaab65751273fe1386d8b337968943'
         '_wt_history_profiles_5_6_1_to_6_0_generated.lua'='990537de0d7405883f1cc2b9b70a0fba07a7a2cc1b99c66d4507c73c36ee2685'
         '_wt_history_snapshot_5_6_1_breton_rehydrated_generated.lua'='61837ef47d543637fa7554a8f0c0416cde2ef32bc789fb1a1344612535394763'
@@ -100,7 +100,7 @@ try {
             [pscustomobject]@{Name='bret-r';Args=@('--rehydrate-snapshot',$old,$current,(Join-Path $evidence '_wt_history_snapshot_5_6_1_breton_to_6_0_generated.lua'));Evidence='_wt_history_snapshot_5_6_1_breton_rehydrated_generated.lua'},
             [pscustomobject]@{Name='prof-a';Args=@('--profiles',$old,$post,$files[2][0],$files[3][0],$files[4][0],$files[5][0],$files[6][0]);Evidence='_wt_history_profiles_5_6_1_to_6_0_generated.lua'},
             [pscustomobject]@{Name='prof-h';Args=@('--rehydrate-profiles',$old,$current,(Join-Path $evidence '_wt_history_profiles_5_6_1_to_6_0_generated.lua'));Evidence='_wt_history_profiles_5_6_1_rehydrated_generated.lua'},
-            [pscustomobject]@{Name='prof-c';Args=@('--rehydrate-profiles',$current,$current,(Join-Path $evidence '_wt_history_profiles_5_6_1_to_6_0_generated.lua'));Evidence='_wt_history_profiles_current_6_12_1_generated.lua'})
+            [pscustomobject]@{Name='prof-c';Args=@('--rehydrate-profiles',$current,$current,(Join-Path $evidence '_wt_history_profiles_5_6_1_to_6_0_generated.lua'));Evidence='_wt_history_profiles_current_6_13_0_generated.lua'})
         foreach($j in $jobs){
             $out=Join-Path $tmp ($j.Name+'-primary.lua')
             Generate $lua $extractor $j.Args $source $out

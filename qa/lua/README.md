@@ -77,6 +77,12 @@ there is no copied implementation.
   owner's `build_entry` publishes a private `can_wield` copy per row, so a
   sibling mod's in-place append or removal on one published row reaches
   neither the sibling row nor the catalog's shared careers array.
+- `tests/test_wt_history_source_anchor.lua`: #1682 weapon-history anchor
+  coherence: the canonical anchor is the Game Version 6.13.0 same-commit tip,
+  all 13 catalogs and the completeness ledger in both Weapon Tweaker streams
+  carry its revision and `Current (Game Version 6.13.0)` label, the Patch 5.2
+  rehydrated evidence projects onto it, and no provenance input keeps a
+  retired 6.12.0 or 6.12.1 anchor.
 - `fixtures/vanilla_weapon_master_list.lua`: GENERATED vanilla weapon census
   (every `ItemMasterList` melee/ranged entry with its `can_wield` list after the
   DLC `UpdateItemMasterList` patches, each hero career's
