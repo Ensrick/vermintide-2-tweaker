@@ -274,6 +274,7 @@ local suites = {
 	"test_woc_blightreaper_power",
 	"test_woc_cursed_rarity",
 	"test_woc_inventory_icons",
+	"test_woc_ui_icons",
     "test_woc_appearance_policy",
 	"test_woc_blightreaper_pulse",
 	"test_woc_durable_transform",

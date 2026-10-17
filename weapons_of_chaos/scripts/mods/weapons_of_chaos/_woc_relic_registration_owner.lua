@@ -20,6 +20,7 @@ function M.install(mod, ctx)
 	local _chain_descriptor = assert(ctx.chain_descriptor, "chain_descriptor required")
 	local _relic_policy = assert(ctx.relic_policy, "relic_policy required")
 	local _inventory_icons = assert(ctx.inventory_icons, "inventory_icons required")
+	local _ui_icons = assert(ctx.ui_icons, "ui_icons required")
 	local _network_lookup = assert(ctx.network_lookup, "network_lookup required")
 	local _career_weapon_actions = assert(ctx.career_weapon_actions,
 		"career_weapon_actions required")
@@ -89,8 +90,10 @@ local function _build_entry(base, backend_id)
 	entry.inventory_icon  = INVENTORY_ICON
 	-- CIM's Athanor top renderer is not one of WOC's injected Gui renderers.
 	-- Preserve the cloned vanilla sword icon as an explicit resident fallback;
-	-- never submit the private WOC material to an unproven Gui.
-	entry.cim_inventory_icon_fallback = base.inventory_icon
+	-- never submit the private WOC material to an unproven Gui. The fallback
+	-- is an atlas name, so it is re-proven against the live atlas (#1687).
+	entry.cim_inventory_icon_fallback = (_ui_icons.resolve(
+		rawget(_G, "UIAtlasHelper"), base.inventory_icon))
 	-- hud_icon remains the inherited generic sword HUD material.
 
 	-- Drop the DLC gate: this is a new mod item reusing base-package meshes;
@@ -290,8 +293,9 @@ local function _install_blightreaper_moveset()
 	if not rows_ok then
 		return false, "property_rows", rows_reason
 	end
-	local traits_ok, traits_reason = _moveset.install_intrinsic_trait_rows(
-		rawget(_G, "WeaponTraits"), rawget(_G, "BuffTemplates"))
+	local traits_ok, traits_reason = _ui_icons.install_and_log(_moveset,
+		rawget(_G, "WeaponTraits"), rawget(_G, "BuffTemplates"),
+		rawget(_G, "UIAtlasHelper"), "registration")
 	if not traits_ok then
 		return false, "trait_rows", traits_reason
 	end

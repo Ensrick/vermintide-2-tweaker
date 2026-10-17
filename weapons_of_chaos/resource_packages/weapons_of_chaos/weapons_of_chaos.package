@@ -23,6 +23,7 @@ lua = [
 	"scripts/mods/weapons_of_chaos/_woc_shared_relic_runtime"
 	"scripts/mods/weapons_of_chaos/_woc_spirit_runtime_owner"
 	"scripts/mods/weapons_of_chaos/_woc_team_preview_identity"
+	"scripts/mods/weapons_of_chaos/_woc_ui_icons"
 	"scripts/mods/weapons_of_chaos/_woc_wire_policy"
 	"scripts/mods/weapons_of_chaos/weapons_of_chaos"
 	"scripts/mods/weapons_of_chaos/weapons_of_chaos_data"

@@ -1,5 +1,19 @@
 # Weapons of Chaos — Changelog
 
+## v0.1.60-dev (2026-10-17) - Poisoned Edge icon survives the 6.13.0 atlas (#1687) [verify-fix]
+
+- Game Version 6.13.0 renamed the Shade poison-talent icon WOC borrowed for
+  Poisoned Edge, so hovering the Blightreaper or any Poisoned Edge item could
+  hit the "Material not found in Gui" crash. The row now uses the current
+  vanilla icon `shade_2_2`.
+- Every atlas icon WOC hands to the UI (both trait rows and the Athanor
+  fallback item icon) is now checked against the live UI atlas at install and
+  falls back to vanilla's own tooltip default icon instead of crashing. Each
+  rewrite logs a `[WOC:1687]` line; boot logs one `[WOC:1687] trait icon atlas
+  guard` summary.
+- `/woc_regression_test` `issue655_blightreaper_trait_contract` now fails if
+  any WOC atlas icon is missing or a preferred icon has drifted.
+
 ## v0.1.59-dev (2026-08-31) - prevent source-only helper regressions (#595)
 
 - Added the omitted appearance-fade and resource-residency helpers to WOC's

@@ -83,6 +83,13 @@ there is no copied implementation.
   carry its revision and `Current (Game Version 6.13.0)` label, the Patch 5.2
   rehydrated evidence projects onto it, and no provenance input keeps a
   retired 6.12.0 or 6.12.1 anchor.
+- `tests/test_woc_ui_icons.lua`: #1687 every atlas icon WOC hands to the UI
+  resolves in the Game Version 6.13.0 atlas (test-local
+  `has_atlas_settings_by_texture_name` seam): the Poisoned Edge constant is no
+  longer the removed 6.12.1 key, a kept stale row is rewritten to vanilla's
+  `icons_placeholder`, atlas drift falls back and fails the audit, the audit
+  covers both traits and the Athanor fallback item icon, a missing helper
+  fails closed, and every trait-row install routes through the guard.
 - `fixtures/vanilla_weapon_master_list.lua`: GENERATED vanilla weapon census
   (every `ItemMasterList` melee/ranged entry with its `can_wield` list after the
   DLC `UpdateItemMasterList` patches, each hero career's
