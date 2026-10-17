@@ -83,6 +83,13 @@ there is no copied implementation.
   carry its revision and `Current (Game Version 6.13.0)` label, the Patch 5.2
   rehydrated evidence projects onto it, and no provenance input keeps a
   retired 6.12.0 or 6.12.1 anchor.
+- `tests/test_cim_ranalds_career_gate_1655.lua`: #1655 the shipped Community
+  Builds browser through its real draw, refresh and press path: browsing
+  another career disables IMPORT SELECTED BUILD and names the career to switch
+  to, the active career still imports, an unresolved career never stands in for
+  career 1, the shipped label has no format directive, and
+  `issue1655_ranalds_import_needs_active_career` passes, skips an unknown career
+  and fails a reverted gate. UI globals come from a test-local chunk environment.
 - `fixtures/vanilla_weapon_master_list.lua`: GENERATED vanilla weapon census
   (every `ItemMasterList` melee/ranged entry with its `can_wield` list after the
   DLC `UpdateItemMasterList` patches, each hero career's

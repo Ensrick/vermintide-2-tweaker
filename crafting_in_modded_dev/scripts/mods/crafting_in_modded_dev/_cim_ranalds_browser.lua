@@ -25,6 +25,9 @@ local FALLBACK = {
     page_next = "PAGE >",
     page_label = "PAGE %d / %d",
     import = "IMPORT SELECTED BUILD",
+    -- #1655: {career} is substituted with plain gsub, never string.format, so
+    -- the bare-format probe of every loc string cannot poison this label.
+    import_switch = "SWITCH TO {career} TO IMPORT",
     loading = "Loading community builds...",
     load_failed = "Could not load builds: %s",
     request_failed = "Could not start request: %s",
@@ -156,6 +159,12 @@ local function _build()
         import = _button("import", _loc("import"), 430, 58, 21),
     }
     for i = 1, 5 do definitions["row_" .. i] = _button("row_" .. i, "", ROW_W, ROW_H, 19) end
+    -- #1655: the disabled label names a localized career. The native text
+    -- pass upper-cases it like the other labels and shrinks a long name to the
+    -- button width, restoring the font size after the draw (UIPasses.text,
+    -- scripts/ui/ui_passes.lua:1956-1957, 1980-1981, 2203).
+    definitions.import.style.text.upper_case = true
+    definitions.import.style.text.dynamic_font_size = true
     Browser.widgets = {}
     for name, definition in pairs(definitions) do
         local init_ok, widget = pcall(UIWidget.init, definition)
@@ -210,10 +219,25 @@ end
 function Browser.open()
     if not Browser.catalog then return false end
     Browser.open_state = true
-    Browser.career_id = tonumber(Browser.current_career_id()) or 1
-    if not Browser.catalog.CAREERS[Browser.career_id] then Browser.career_id = 1 end
+    -- #1655: an unresolved career stays nil, so no browsed career matches it.
+    local active = tonumber(Browser.current_career_id())
+    Browser.active_career_id = Browser.catalog.CAREERS[active] and active or nil
+    Browser.career_id = Browser.active_career_id or 1
     _request()
     return true
+end
+
+-- #1655: any career's builds may be browsed, but IMPORT only commits for the
+-- career being played. Returns can_import, the button label, and the browsed
+-- career's label when the player has to switch to it first.
+function Browser.import_state()
+    local active = Browser.active_career_id
+    if active == nil or Browser.career_id ~= active then
+        local switch_to = tostring(Browser.career_label(Browser.career_id))
+        local label = (_loc("import_switch"):gsub("{career}", function() return switch_to end))
+        return false, label, switch_to
+    end
+    return Browser.selected ~= nil and not Browser.loading, _loc("import"), nil
 end
 
 function Browser.close()
@@ -263,7 +287,9 @@ local function _refresh_content()
         widget.content.visible = build ~= nil
         _set_button_color(widget, build and Browser.selected == build, build == nil)
     end
-    _set_button_color(widgets.import, false, not Browser.selected or Browser.loading)
+    local can_import, import_label = Browser.import_state()
+    widgets.import.content.text = import_label
+    _set_button_color(widgets.import, false, not can_import)
 end
 
 local function _handle_input()
@@ -289,7 +315,7 @@ local function _handle_input()
         local name = "row_" .. row
         if _consume(name) then Browser.selected = Browser.widgets[name].content._cim_build end
     end
-    if _consume("import") and Browser.selected and not Browser.loading then
+    if _consume("import") and (Browser.import_state()) then
         Browser.status = _loc("importing", Browser.selected.name)
         local ok_call, imported, result = pcall(Browser.import_build, Browser.selected)
         if not ok_call then
@@ -325,6 +351,61 @@ function Browser.draw(forge_state, overview, renderer, input_service, dt)
     end
     pcall(UIRenderer.end_pass, renderer)
     _handle_input()
+end
+
+-- #1655 in-game check: press the real IMPORT handler once for another career
+-- and once for the active one, with the live career resolver, labels and
+-- localization and a recording importer, then restore every touched field.
+local PROBE_FIELDS = { "open_state", "career_id", "active_career_id",
+    "selected", "loading", "status", "import_build" }
+
+local function _probe_press(career_id, active_id)
+    Browser.open_state, Browser.career_id, Browser.active_career_id = true, career_id, active_id
+    Browser.selected, Browser.loading = { name = "issue1655 probe" }, false
+    local calls = 0
+    Browser.import_build = function() calls = calls + 1; return false, "issue1655 probe" end
+    local can_import, label = Browser.import_state()
+    Browser.widgets.import.content.hotspot.on_release = true
+    _handle_input()
+    return can_import, label, calls
+end
+
+function Browser.check_import_career_gate()
+    if not Browser.catalog then return "Ranald browser is not configured" end
+    local active = tonumber(Browser.current_career_id())
+    if not active or not Browser.catalog.CAREERS[active] then
+        return "skip: the active career has no Ranald's Gift career id"
+    end
+    if not _build() then return "skip: Ranald browser widgets cannot be built yet" end
+    local other = active % 20 + 1
+    local saved = {}
+    for i = 1, #PROBE_FIELDS do saved[i] = Browser[PROBE_FIELDS[i]] end
+    local ok, other_ok, other_label, other_calls, same_ok, same_label, same_calls = pcall(function()
+        local a, b, c = _probe_press(other, active)
+        local d, e, f = _probe_press(active, active)
+        return a, b, c, d, e, f
+    end)
+    for i = 1, #PROBE_FIELDS do Browser[PROBE_FIELDS[i]] = saved[i] end
+    Browser.widgets.import.content.hotspot.on_release = false
+    if not ok then return "IMPORT probe raised: " .. tostring(other_ok) end
+    local other_name = tostring(Browser.career_label(other))
+    if other_ok or other_calls ~= 0 then
+        return "IMPORT still commits a " .. other_name .. " build while another career is played"
+    end
+    if not tostring(other_label):find(other_name, 1, true) then
+        return "disabled IMPORT label does not name " .. other_name .. ": " .. tostring(other_label)
+    end
+    if not same_ok or same_calls ~= 1 then
+        return "IMPORT for the active career no longer reaches the importer"
+    end
+    if same_label ~= _loc("import") then
+        return "active-career IMPORT label changed: " .. tostring(same_label)
+    end
+end
+
+if mod and type(mod._cim_rt_register) == "function" then
+    mod._cim_rt_register("issue1655_ranalds_import_needs_active_career",
+        Browser.check_import_career_gate)
 end
 
 return Browser

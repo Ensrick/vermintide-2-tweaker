@@ -4,7 +4,7 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-09-14.
+Last updated: 2026-10-17.
 
 ### issue1530-base-power-step-wording - step ownership stays in Mod Tweaker
 
@@ -29,6 +29,18 @@ Last updated: 2026-09-14.
 | Repro | In the Keep, open CIM's Athanor, choose **Community Builds**, switch career and Likes/Recent order, select one compatible build, and choose **Import Selected Build**. Restart and inspect the same career/loadout. |
 | Expected post-fix | The browser remains responsive and bounded. A compatible build creates exactly five Modded items and equips its five slots plus six talents on the selected loadout; the result persists. An unavailable DLC, illegal roll, malformed response, network failure, or failed mutation is rejected without changing any prior slot, talent, or persistent crafted row. |
 | Detection | `test_cim_ranalds_catalog.lua`, `test_cim_ranalds_import.lua`, `test_cim_ranalds_browser.lua`, and the forge-owner transaction case cover vocabulary, bounds, cursor paging, cancellation, live legality, all mutation exceptions, rollback, and modal input restoration. Slot-admission tests reject swapped ordinary weapon slots, absent/malformed career policies, and mismatched accessories before all writes, while accepting career-approved dual melee. `/cim_regression_test` runs `issue1360_ranalds_build_import` and `issue1141_ranald_slot_admission` against the installed owners. |
+
+### issue1655-ranalds-import-needs-active-career - browse any career, import only your own
+
+| Field | Value |
+|---|---|
+| Symptom | Community Builds let CAREER browse to another career and offered IMPORT SELECTED BUILD there; the press was then rejected with no earlier hint of what the career switch is for. |
+| Root cause | The import button checked only for a selection and a finished load (`_cim_ranalds_browser.lua:266`, `:292` before 0.8.139-dev) while CAREER moved the browsed career freely; the entry's career resolver returned career 1 for any career it could not match. |
+| Fix version(s) | cim_dev 0.8.139-dev (#1655) |
+| Category | SOLO / UI |
+| Repro | In the Keep, open CIM's Athanor, choose **Community Builds**, press **Career >** once, select a build, then press the bottom button. Return to your own career and import a compatible build. |
+| Expected post-fix | On another career the bottom button reads "SWITCH TO <career> TO IMPORT", renders disabled and does nothing. On the active career it reads **Import Selected Build** and imports as before. |
+| Detection | `test_cim_ranalds_career_gate_1655.lua` drives the shipped browser through draw, refresh and press. `/cim_regression_test` runs `issue1655_ranalds_import_needs_active_career` (SKIP when the active career has no Ranald's Gift id; Necromancer until #1696). |
 
 ### issue1117-bulk-accessory-button-layout - long label does not share the upgrade arrow
 
@@ -680,6 +692,7 @@ alongside #1465's Apply presentation composition and window-exit release.
 ## Slugs
 
 - issue1360-ranalds-build-import
+- issue1655-ranalds-import-needs-active-career
 - issue618-modded-salvage-autofill
 
 - feedback-deploy-vs-upload-distinction

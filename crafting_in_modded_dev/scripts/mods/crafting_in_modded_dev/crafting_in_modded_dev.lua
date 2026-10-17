@@ -36,7 +36,7 @@ mod._cim959_accessory_property_policy = mod:dofile(
 local _BULK_ACCESSORY_CRAFT = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_bulk_accessory_craft")
 _MEM_PROBE_T0_CIMD = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.8.138-dev"
+local MOD_VERSION = "0.8.139-dev"
 local _bootstrap = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_bootstrap_runtime")({
         mod = mod,
@@ -181,7 +181,7 @@ mod._cim_ranalds_browser.configure({
         for id, name in pairs(mod._cim_ranalds_catalog.CAREERS) do
             if name == career_name then return id end
         end
-        return 1
+        return nil -- #1655: unresolved never impersonates career 1
     end,
     career_label = function(career_id)
         local career_name = mod._cim_ranalds_catalog.CAREERS[career_id]
