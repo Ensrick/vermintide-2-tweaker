@@ -83,6 +83,24 @@ there is no copied implementation.
   carry its revision and `Current (Game Version 6.13.0)` label, the Patch 5.2
   rehydrated evidence projects onto it, and no provenance input keeps a
   retired 6.12.0 or 6.12.1 anchor.
+- `tests/test_mp_hook_targets_resolve.lua`: #1671 no mp source file hooks
+  the game-6.12-removed `IngameUI.not_in_modded` (or its `can_open_loot`
+  successor), the shipped `_mp_hook_targets.TARGETS` inventory equals every
+  literal `mod:hook("Class", "method")` site in every mp file reachable
+  from the entry, and the `/mp_regression_test` census fails on a missing or
+  retired method and on a class that is not loaded (past VMF's delay window
+  that hook was refused). The class lookup and log seams are test-local.
+- `tests/test_et_issue324_capacity_authority.lua`: #324 a characterization of
+  the unchanged boot-shaped registrar refusal (`damage_source_cap_unavailable`
+  with NetworkConstants absent and no `Network.type_info` capacity; passes on
+  the base too), the read-only `capacity_verdicts` seam, and the bounded
+  capacity-authority probe: load and one-shot network samples, the per-phase
+  and row bounds, thrown, userdata and `__index`-only reader shapes, the
+  literal `[et:324] cap-probe %s` printf route, the in-game check (registered
+  before the load sample, network rows required once the authority exists),
+  and its single load owner. The probe reads an injected globals table and
+  emits through a test-local seam; the route case runs the chunk in a
+  test-local environment.
 - `tests/test_cim_regression_harness_1656.lua`: #1656 five shipped
   `/cim_regression_test` checks driven through the real loadout, weave-loadout
   and forge UI owners: the loadout round trip against a transcription of
