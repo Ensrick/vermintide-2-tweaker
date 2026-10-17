@@ -232,6 +232,11 @@ function Update-GitHubReleaseAssetInventory {
         $response = & $Request -Method GET -Uri $uri
         if ($response.StatusCode -lt 200 -or $response.StatusCode -ge 300) {
             $failure = "release $releaseId assets page $page returned HTTP $($response.StatusCode)"
+            # Transport adapters report StatusCode 0 with the reason in Error.
+            if ($null -ne $response -and $response.PSObject.Properties['Error']) {
+                $reason = ConvertTo-GitHubReleaseSafeErrorText -Value $response.Error
+                if ($reason) { $failure += ": $reason" }
+            }
             break
         }
         $content = "$($response.Content)".TrimStart()

@@ -118,6 +118,17 @@ there is no copied implementation.
   carry its revision and `Current (Game Version 6.13.0)` label, the Patch 5.2
   rehydrated evidence projects onto it, and no provenance input keeps a
   retired 6.12.0 or 6.12.1 anchor.
+- `tests/test_et_issue324_capacity_authority.lua`: #324 a characterization of
+  the unchanged boot-shaped registrar refusal (`damage_source_cap_unavailable`
+  with NetworkConstants absent and no `Network.type_info` capacity; passes on
+  the base too), the read-only `capacity_verdicts` seam, and the bounded
+  capacity-authority probe: load and one-shot network samples, the per-phase
+  and row bounds, thrown, userdata and `__index`-only reader shapes, the
+  literal `[et:324] cap-probe %s` printf route, the in-game check (registered
+  before the load sample, network rows required once the authority exists),
+  and its single load owner. The probe reads an injected globals table and
+  emits through a test-local seam; the route case runs the chunk in a
+  test-local environment.
 - `fixtures/vanilla_weapon_master_list.lua`: GENERATED vanilla weapon census
   (every `ItemMasterList` melee/ranged entry with its `can_wield` list after the
   DLC `UpdateItemMasterList` patches, each hero career's

@@ -92,6 +92,7 @@ local suites = {
     "test_et_enemy_modifiers",
     "test_et_boss_ideas",
     "test_et_custom_breed_registrar",
+    "test_et_issue324_capacity_authority",
     "test_et_custom_breed_parity",
     "test_et_issue1497_local_host_fence",
     "test_et_pacing_tick_guard",
