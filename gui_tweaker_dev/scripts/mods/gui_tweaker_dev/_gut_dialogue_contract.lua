@@ -3,16 +3,38 @@
 local mod = get_mod("gut_dev")
 local M = {}
 
+-- CD API v6 (character_dialogue.lua `version = 6`, first published in Character
+-- Dialogue 0.1.14-dev) adds the staged owner. No CD, or an older one, is a
+-- supported setup: _mod_tweaker_dialogue.lua isolation_lead omits the row, so the
+-- check SKIPs by name there and FAILs only when a v6+ CD lacks the owner.
+M.STAGED_API = 6
+local NEEDS = "needs Character Dialogue 0.1.14-dev or newer; the Dialogue tab omits the isolation row"
+
+function M.owner_problem(cd)
+    if not cd then return "skip: Character Dialogue is not installed (optional integration)" end
+    local api = cd.character_dialogue_api
+    if type(api) ~= "table" or type(api.version) ~= "number" then
+        return "skip: Character Dialogue exposes no versioned character_dialogue_api (" .. NEEDS .. ")"
+    end
+    if api.version < M.STAGED_API then
+        return string.format("skip: Character Dialogue API v%s predates the v%d staged-isolation owner (%s)",
+            tostring(api.version), M.STAGED_API, NEEDS)
+    end
+    local setting = api.isolation_setting
+    if type(setting) ~= "table" or setting.version ~= 1 or setting.setting_id ~= "auto_isolation" then
+        return string.format("Character Dialogue API v%s lacks the isolation_setting v1 auto_isolation descriptor",
+            tostring(api.version))
+    end
+    if type(cd.on_settings_batch_changed) ~= "function" then
+        return string.format("Character Dialogue API v%s lacks on_settings_batch_changed", tostring(api.version))
+    end
+end
+
 function M.install(register)
     register("issue998_dialogue_staged_isolation", function()
         local cd = get_mod("character_dialogue")
-        if not cd then return end -- optional integration
-        local api = cd.character_dialogue_api
-        if not api or not api.isolation_setting or api.isolation_setting.version ~= 1
-            or api.isolation_setting.setting_id ~= "auto_isolation"
-            or type(cd.on_settings_batch_changed) ~= "function" then
-            return "Character Dialogue staged-isolation owner unavailable; install the coordinated build"
-        end
+        local problem = M.owner_problem(cd)
+        if problem then return problem end
         local Setting = cd:dofile("scripts/mods/character_dialogue/_cd_isolation_setting")
         local View = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_view")
         local UI = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_dialogue")

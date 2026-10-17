@@ -1,5 +1,122 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.362-dev (2026-10-17) -- DX12 fence probe budget is per session (#630) [diagnostics-armed]
+
+- The tester's 2026-09-23 log: earlier Mod Tweaker opens spent the `[gut:630]`
+  probe's 48-line budget, so the decisive session's edges and its exit summary
+  never printed.
+- Root cause: the probe is one instance for the whole game run
+  (`gui_tweaker_dev.lua:1411`), its `lines` counter starts at 0 once in
+  `_gut_dx12_fence630.lua` `M.new` (`:150`) and was never reset, and the exit
+  summary went through the same capped `log` (`:169-177`, `:279`).
+- Fix: `probe:enter` now resets the budget, so every Mod Tweaker open gets its
+  own 48 detail lines. The line that closes a session (the exit summary, or the
+  reenter anomaly that stands in for a missing exit) is reserved: it prints
+  after a spent budget and adds `lines=` and `suppressed=`. Output stays at
+  most 49 lines per open and none per frame; printf only, no behavior change.
+  A run backstop of 2048 lines (dozens of full opens) then one `run_cap` line
+  keeps an enter/leave loop from logging without end.
+- New `/gut_regression_test` check `issue630_dx12_fence_session_budget` drives a
+  private probe with a 3-line budget and a local ledger.
+- Offline: `qa/lua/tests/test_gut_dx12_fence630_session_budget.lua`, 6 of its
+  7 session-budget cases fail on 0.2.361-dev; an eighth case pins the run
+  backstop.
+- Card evidence: the only registered `[gut:630]` receipt route is
+  `[gut:630] frame_evidence`. Cite the enter and exit lines by their unmarked
+  fields (`exit session=`, `lines=`, `suppressed=`) and the PASS name, not with
+  the `[gut:630]` prefix.
+
+## 0.2.361-dev (2026-10-17) -- Dialogue isolation check SKIPs without a v6 Character Dialogue (#998) [verify-fix]
+
+- `/gut_regression_test` printed `FAIL: issue998_dialogue_staged_isolation --
+  Character Dialogue staged-isolation owner unavailable; install the
+  coordinated build` for any player whose Character Dialogue predates API v6
+  (0.1.11-dev and older), and a bare PASS with no Character Dialogue at all.
+- Root cause: `_gut_dialogue_contract.lua:9-15` on 0.2.360-dev returned nil
+  (PASS) when `get_mod("character_dialogue")` was nil and one FAIL string for
+  every other setup without the `isolation_setting` descriptor or
+  `on_settings_batch_changed`. An older Character Dialogue is a supported
+  setup: the Dialogue tab omits the isolation row by design
+  (`_mod_tweaker_dialogue.lua:50-61`), and the descriptor arrived with API v6
+  (`character_dialogue.lua:402`, `:564-566`, first published in 0.1.14-dev).
+- Fix: the check now SKIPs by name when Character Dialogue is not installed,
+  exposes no versioned API, or reports API v5 or older, and FAILs only when a
+  v6+ Character Dialogue lacks the descriptor or the batch owner, naming the
+  missing piece. With Character Dialogue 0.1.14-dev it still runs the isolated
+  staging/transaction contract and PASSes.
+- Offline: `qa/lua/tests/test_gut_dialogue_contract_skip.lua` drives the real
+  contract against the real Character Dialogue entry; 8 of its 9 cases fail on
+  0.2.360-dev.
+
+## 0.2.360-dev (2026-10-17) -- Tab talent module check no longer FAILs when it passes (#250) [verify-fix]
+
+- Rain's 0.2.354-dev keep session (log on #1637): `/gut_regression_test`
+  printed `FAIL: issue250_deus_tab_talent_module_loaded -- Tab talent runtime
+  check missing`, with no Chaos Wastes run in the log.
+- Root cause: the check ended with
+  `return check and check.fn() or "Tab talent runtime check missing"`
+  (`_gut_tab_property_refresh.lua:272-273` on 0.2.359-dev). The inner
+  `issue250_deus_tab_talent_tier_normalization` returns nil when it passes
+  (`_gut_tab_talent_refresh.lua:93`), so `check and nil` is nil and the `or`
+  branch reported "missing" exactly when the module loaded and its policy
+  check passed. The inner check was also never reported on its own: only this
+  provider dofiles the talent module, and the entry file registers only the
+  provider's `rt_checks` (`gui_tweaker_dev.lua:2149-2151`).
+- Fix: the module-loaded check finds the inner check by name and returns its
+  verdict as is (nil is PASS, a failure string is FAIL); a missing module or
+  check list still FAILs loudly. The provider now forwards the talent
+  module's checks, so `issue250_deus_tab_talent_tier_normalization` is
+  reported by name too. No SKIP path: the talent module loads in every
+  mechanism and its check is pure; only the Hold-Tab repair itself is
+  Deus-gated (`_gut_tab_talent_refresh.lua:23`).
+- Offline: `qa/lua/tests/test_gut_tab_talent_harness.lua` loads the shipped
+  provider whole with the real talent refresh and policies; 4 of its 6 cases
+  fail on 0.2.359-dev with the tester's exact message.
+
+## 0.2.359-dev (2026-10-17) -- /mod_tweaker plays the same menu sounds as the Esc route (#1670) [verify-fix]
+
+- Rain's 0.2.357-dev keep session: Mod Tweaker opened with `/mod_tweaker` had
+  no click or hover sound on tab swaps and sub-menu opens; opened from the Esc
+  menu it had them. The two routes are different presentations: the Esc entry
+  opens the standalone `ModTweakerView` (`_USE_KEEP_SUBSTATE = false`), while
+  `/mod_tweaker` opens the keep HeroView sub-state, because
+  `_ba_heroview_inject.lua` registers `mod_tweaker` after the entry file and
+  VMF lets a mod overwrite its own command (VMF `commands.lua:15-28`). Log:
+  `[mt] HeroViewStateModTweaker entered (sub-state)` at 17:04:32 for the
+  command, `[transition] mod_tweaker_view` then `[mt:dump] (on_enter)` at
+  17:04:46 for the Esc entry.
+- Root cause: the sub-state (`_mod_tweaker_state.lua`) still carried the
+  lookup the standalone view dropped in 0.2.82-dev,
+  `World.wwise_world(Managers.world:world("music_world"))`. On PC the music
+  world is the boot global `MUSIC_WORLD` / `MUSIC_WWISE_WORLD` (vanilla
+  `boot_init.lua:23,31-33`), never registered with `WorldManager`
+  (`world_manager.lua:18-56`), so `WorldManager.world` asserts
+  (`world_manager.lua:111-113`, `error.lua:25-30`) and the pcall around it
+  dropped every `Play_hud_select` and `Play_hud_hover`. The open and close
+  sounds were unaffected: they go through the parent HeroView's
+  `play_sound` (`hero_view.lua:119-120`).
+- Fix: new `_mod_tweaker_sound.lua` holds the one resolver, exactly as
+  vanilla `OptionsView` resolves its world (`options_view.lua:282-288`):
+  `MUSIC_WWISE_WORLD` under `GLOBAL_MUSIC_WORLD`, else a registered
+  `music_world` read through `has_world` first. Both twins fire their click,
+  hover, open (standalone) and close (standalone) sounds through it and
+  publish it as `gut_sound_resolve`. The one-time `[mt:wwise]` debug probe now
+  names the resolved path per twin; the old probe called
+  `World.wwise_world`, which no vanilla script calls (vanilla uses
+  `Wwise.wwise_world`, `boot_init.lua:33`), and printed `present=true` for a
+  missing world.
+- New live check `issue1670_command_route_sound_path`: in the keep, the
+  sub-state and the standalone view must resolve the same wwise world by the
+  same path, and it must be `MUSIC_WWISE_WORLD` when `GLOBAL_MUSIC_WORLD` is
+  set. The PASS verdict is its only output (no log line of its own). It SKIPs
+  outside the keep and before the standalone view is attached (open and close
+  Esc > Mod Tweaker once first). It is a wiring contract: the offline test and
+  the audible in-keep step prove the clicks and hovers themselves.
+- Offline: `qa/lua/tests/test_gut_mod_tweaker_sound_parity.lua` loads both
+  shipped twins whole and fires the click and hover each hands its
+  interaction layer against a PC-shaped world manager; the 0.2.358-dev
+  sub-state fires nothing.
+
 ## 0.2.358-dev (2026-09-26) -- dropdown arrow glow check reads the real sprite key (#92) [verify-fix]
 
 - Rain's v0.2.354-dev log failed `mod_tweaker_dropdown_arrow_glow` with
