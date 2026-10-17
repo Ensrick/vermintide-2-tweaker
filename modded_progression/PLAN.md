@@ -175,7 +175,7 @@ Each is a one-line VMF hook returning the opposite of `script_data["eac-untruste
 | `store_window_item_preview.lua:1873`, `store_item_purchase_popup.lua:1149`, `store_login_rewards_popup.lua:57` | Buy / claim buttons in Lohner's |
 | `hero_window_item_customization.lua:1878,1928` | Crafting bench "craft" button |
 | `hero_window_weave_properties.lua:1895`, `hero_window_weave_forge_overview.lua:985` | Athanor essence-craft buttons (cim already routes around these) |
-| `ingame_ui.lua:382` | Generic UI surface enable |
+| `ingame_ui.lua:381-382` (`can_open_loot` since game 6.12.0, was `not_in_modded`) | Spoils of War loot hotkey. NOT overridden since 0.2.41-dev (#1671): the 6.13.0 loot screen greys its Open buttons on the same flag (`hero_view_state_loot.lua:1193-1199`) and mp has no local chest award or open (#607), so the open screen would give nothing |
 | `achievement_manager.lua:125` (`trigger_event`) | **Achievement progress tracking** — entry point for every progress event; halted in modded. Un-gating this is what makes Okri's Challenges actually advance. Confirmed in research item #3 |
 | `achievement_manager.lua:294` (`update`) | Platform achievement push loop (Steam etc.). Not strictly needed for `mp` (local achievement tracking is enough) — leave gated unless we want Steam to register the achievements |
 
