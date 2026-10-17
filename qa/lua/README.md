@@ -89,6 +89,16 @@ there is no copied implementation.
   `isolation_setting` descriptor or `on_settings_batch_changed`, and PASSes the
   real entry without writing the owner. get_mod resolves through the dialogue
   fixture's test-local environment.
+- `tests/test_gut_dx12_fence630_session_budget.lua`: #630 the real
+  `_gut_dx12_fence630` probe: after eight healthy Mod Tweaker opens a ninth
+  (decisive) session still logs its enter, frame evidence and exit summary
+  (through 0.2.361-dev one 48-line run-wide budget dropped them), a frozen
+  session keeps its last `frame_evidence`, the exit summary and the reenter
+  anomaly are reserved past a spent budget and name the suppressed count,
+  output stays at most line_cap + 1 per session with nothing on steady frames,
+  and the contracts module's `issue630_dx12_fence_session_budget` check is
+  registered, PASSes, and FAILs on a run-wide budget. emit is a test-local
+  ledger; get_mod resolves through a test-local environment.
 - `tests/test_gut_dropdown_arrow_glow.lua`: #92 the shipped `create_dropdown`
   and its `DD_*` constants lifted out of the definitions file and driven through
   the real `mod_tweaker_dropdown_arrow_glow` check: the shipped widget passes,

@@ -51,6 +51,16 @@ _rt_register("issue630_dx12_fence_probe", function()
     end
 end)
 
+-- #630: the line budget is per Mod Tweaker session and the exit summary is
+-- reserved, so a long game run cannot starve the decisive session's summary.
+_rt_register("issue630_dx12_fence_session_budget", function()
+    local module = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_dx12_fence630")
+    if type(module) ~= "table" or type(module.session_budget_contract) ~= "function" then
+        return "#630 session budget contract is unavailable"
+    end
+    return module.session_budget_contract()
+end)
+
 _rt_register("issue167_slider_release_edge", function()
     local ok, Edge = pcall(mod.dofile, mod,
         "scripts/mods/gui_tweaker_dev/_mod_tweaker_slider_drag_edge")

@@ -74,6 +74,7 @@ local suites = {
     "test_gut_label_policy",
     "test_gut_gear_accent_parity",
     "test_gut_dx12_fence630",
+    "test_gut_dx12_fence630_session_budget",
     "test_gut_damage_numbers",
     "test_mod_tweaker_ordering",
     "test_mod_tweaker_disabled_sections",

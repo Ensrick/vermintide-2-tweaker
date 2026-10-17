@@ -450,7 +450,7 @@
             ModTrees=@{gut_dev=@('0778c26248cda31c84498f7dfbb7ca210fd8e499')}
             SourcesByMod=@{gut_dev='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_dx12_fence630.lua'}
             Signature='[gut:630] frame_evidence draw=%d visible_rows=%s resource_candidates=%s'
-            Bound='focus/tab/Weapons-expansion edge evidence under one absolute 48-row probe budget'
+            Bound='focus/tab/Weapons-expansion edge evidence under a 48-row per-session probe budget reset only by Mod Tweaker enter'
             EmitterAnchors=@(
                 @{Tokens=@('log','(','string','.','format','(','String:frame_evidence draw=%d visible_rows=%s resource_candidates=%s')}
                 @{Tokens=@('emit','(','String:[gut:630] ','..','message',')')}

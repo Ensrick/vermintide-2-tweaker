@@ -1,5 +1,24 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.362-dev (2026-10-17) -- DX12 fence probe budget is per session (#630) [diagnostics-armed]
+
+- The tester's 2026-09-23 log: earlier Mod Tweaker opens spent the `[gut:630]`
+  probe's 48-line budget, so the decisive session's edges and its exit summary
+  never printed.
+- Root cause: the probe is one instance for the whole game run
+  (`gui_tweaker_dev.lua:1411`), its `lines` counter starts at 0 once in
+  `_gut_dx12_fence630.lua` `M.new` (`:150`) and was never reset, and the exit
+  summary went through the same capped `log` (`:169-177`, `:279`).
+- Fix: `probe:enter` now resets the budget, so every Mod Tweaker open gets its
+  own 48 detail lines. The line that closes a session (the exit summary, or the
+  reenter anomaly that stands in for a missing exit) is reserved: it prints
+  after a spent budget and adds `lines=` and `suppressed=`. Output stays at
+  most 49 lines per open and none per frame; printf only, no behavior change.
+- New `/gut_regression_test` check `issue630_dx12_fence_session_budget` drives a
+  private probe with a 3-line budget and a local ledger.
+- Offline: `qa/lua/tests/test_gut_dx12_fence630_session_budget.lua`, 6 of its
+  7 cases fail on 0.2.361-dev.
+
 ## 0.2.361-dev (2026-10-17) -- Dialogue isolation check SKIPs without a v6 Character Dialogue (#998) [verify-fix]
 
 - `/gut_regression_test` printed `FAIL: issue998_dialogue_staged_isolation --
