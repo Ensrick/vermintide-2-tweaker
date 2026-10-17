@@ -22,6 +22,9 @@ return function(H, repo_root)
         return checks, commands
     end
 
+    -- Tests 1 and 2 are order-preservation guards: the registration surface they
+    -- pin is identical before and after the #2 split, so they also pass on the
+    -- inline source. Tests 3 to 6 are the ones that tell the split apart.
     H.test("WT common runtime-check extraction preserves beta registration surface", function()
         local checks, commands = install(public_root)
         H.equal(#checks, 61)
@@ -116,5 +119,51 @@ return function(H, repo_root)
         end)
         H.equal(ok, false)
         H.truthy(tostring(err):find("planted Hold-Pose owner failure", 1, true))
+    end)
+
+    H.test("WT dev registrar turns a missing Hold-Pose owner into one failing check", function()
+        -- mod:dofile returns nil when the child fails to load; registration must
+        -- continue so the entry still reaches the dev tool installs after it.
+        local names, callbacks = {}, {}
+        local ok, err = pcall(function()
+            dofile(dev_root .. "_wt_runtime_checks.lua").install({
+                command = function() end,
+            }, function(name, callback)
+                names[#names + 1] = name
+                callbacks[name] = callback
+            end, { dev_hold_pose = {} })
+        end)
+        H.truthy(ok, "missing Hold-Pose owner aborted registration: " .. tostring(err))
+        H.equal(#names, 67)
+        local slot
+        for i, name in ipairs(names) do
+            if name == "issue2_hold_pose_runtime_check_owner" then slot = i end
+        end
+        H.truthy(slot, "missing-owner check was not registered")
+        H.equal(names[slot - 1], "issue569_wp_hammer_remap_orientation_scope")
+        H.equal(names[slot + 1], "issue316_kruber_longbow_zoom_contract")
+        H.equal(names[#names], "issue943_fire_sword_heavy_contract")
+        local verdict = callbacks.issue2_hold_pose_runtime_check_owner()
+        H.equal(type(verdict), "string")
+        H.truthy(verdict:sub(1, 5) ~= "skip:", "a missing owner must FAIL, not SKIP")
+    end)
+
+    H.test("WT dev Hold-Pose checks pass against the real Hold-Pose owner", function()
+        local prior_get_mod = _G.get_mod
+        _G.get_mod = function()
+            return { get = function() return nil end }
+        end
+        local loaded, hold_pose = pcall(dofile, dev_root .. "wt_dev_hold_pose.lua")
+        _G.get_mod = prior_get_mod
+        H.truthy(loaded, "wt_dev_hold_pose.lua failed to load: " .. tostring(hold_pose))
+        local registered = {}
+        dofile(dev_root .. "_wt_runtime_checks_hold_pose.lua").install(function(name, callback)
+            registered[#registered + 1] = { name = name, callback = callback }
+        end, hold_pose)
+        H.equal(#registered, 5)
+        for _, entry in ipairs(registered) do
+            local verdict = entry.callback()
+            H.equal(verdict, nil, entry.name .. " did not PASS: " .. tostring(verdict))
+        end
     end)
 end

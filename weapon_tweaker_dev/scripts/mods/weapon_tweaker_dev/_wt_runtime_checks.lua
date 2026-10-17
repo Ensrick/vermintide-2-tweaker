@@ -1600,11 +1600,11 @@ function M.install(mod, _rt_register, deps)
     end)
     -- WT_DEV_OVERLAY_BEGIN:hold-pose-regressions
     local hold_pose_checks = deps.hold_pose_checks
-    if type(hold_pose_checks) ~= "table"
-            or type(hold_pose_checks.install) ~= "function" then
-        error("WT Dev Hold-Pose runtime-check owner missing")
+    if type(hold_pose_checks) == "table" and type(hold_pose_checks.install) == "function" then
+        hold_pose_checks.install(_rt_register, _wt_dev_hold_pose)
+    else -- #2: a missing child fails one check; the dev tool installs after this still run.
+        _rt_register("issue2_hold_pose_runtime_check_owner", function() return "Hold-Pose runtime-check owner missing" end)
     end
-    hold_pose_checks.install(_rt_register, _wt_dev_hold_pose)
     -- WT_DEV_OVERLAY_END:hold-pose-regressions
 
     _rt_register("issue316_kruber_longbow_zoom_contract", function()

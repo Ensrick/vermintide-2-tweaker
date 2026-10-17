@@ -1,6 +1,6 @@
 # Weapon Tweaker Changelog
 
-## 0.12.336-dev (2026-10-17) -- split Hold-Pose runtime checks out of the registrar (#2) [verify-fix]
+## 0.12.336-dev (2026-10-17) -- split Hold-Pose runtime checks out of the registrar (#2) [tooling]
 
 - Moves the five dev-only Hold-Pose `/wt_regression_test` checks
   (`issue168_hold_pose_independent_hands`, `issue569_hold_pose_composition`,
@@ -8,7 +8,11 @@
   `issue616_hold_pose_live_edit_delivery`,
   `issue616_hold_pose_nonuniform_scale`) into the new
   `_wt_runtime_checks_hold_pose.lua`. The check bodies are unchanged and they
-  still register in the same place, just before the #316 Longbow checks.
+  still register in the same place, just before the Longbow zoom checks.
+- If the new file ever fails to load, `/wt_regression_test` reports one
+  failing `issue2_hold_pose_runtime_check_owner` check in that place and the
+  rest of WT Dev still starts, including the animation picker and the
+  Hold-Pose tuner.
 - `_wt_runtime_checks.lua` drops from 2,383 to 2,210 counted lines; its
   file-size ceiling is lowered to match. No gameplay, hook, setting, asset or
   wire change. The public beta runtime is untouched.

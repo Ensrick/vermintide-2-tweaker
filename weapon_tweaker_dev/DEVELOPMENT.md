@@ -770,7 +770,11 @@ receive only the registry callback plus the installed Hold-Pose owner. The
 entry point loads that child and the common registrar invokes it synchronously
 at the historical dev-overlay position, before the longbow checks. Keep feature
 assertions in that child; do not make it own commands, engine hooks, settings,
-or another module load.
+or another module load. If the child is missing (VMF `mod:dofile` returns nil
+when a file fails to load), the registrar registers one failing
+`issue2_hold_pose_runtime_check_owner` check in that slot and carries on, so
+the dev tool installs at the end of the entry still run; an error thrown inside
+the child's own `install` still propagates.
 
 ### Issue #611 availability-master ownership
 
