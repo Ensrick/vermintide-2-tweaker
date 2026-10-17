@@ -26,6 +26,7 @@ return function(H, repo_root)
     local skin_registry = read("_cwv_skin_registry.lua")
     local illusion_families = read("_cwv_illusion_families.lua")
     local husk = read("_cwv_husk_path.lua")
+	local husk_transaction = read("_cwv_husk_spawn_transaction.lua")
     local husk_residency = read("_cwv_husk_residency_owner.lua")
     local registration = read("_cwv_item_registration_owner.lua")
     local menu_preview = read("_cwv_menu_preview_owner.lua")
@@ -154,6 +155,8 @@ return function(H, repo_root)
             "_cwv_item_registration_owner",
             "_cwv_weapon_transform_owner",
             "_cwv_husk_path",
+			"_cwv_husk_spawn_transaction",
+			"_cwv_issue719_transaction_check",
             "_cwv_item_identity_transport_owner",
             "_cwv_world_equipment_owner",
             "_cwv_menu_preview_owner",
@@ -180,6 +183,10 @@ return function(H, repo_root)
         local registration_at = assert(entry:find("_cwv_item_registration_owner", 1, true))
         local transform_at = assert(entry:find("_cwv_weapon_transform_owner", 1, true))
         local husk_at = assert(entry:find("_cwv_husk_path", 1, true))
+		local husk_transaction_at = assert(entry:find(
+			"_cwv_husk_spawn_transaction", 1, true))
+		local issue719_check_at = assert(entry:find(
+			"_cwv_issue719_transaction_check", 1, true))
         local identity_transport_at = assert(entry:find("_cwv_item_identity_transport_owner", 1, true))
         local world_equipment_at = assert(entry:find("_cwv_world_equipment_owner", 1, true))
         local menu_preview_at = assert(entry:find("_cwv_menu_preview_owner", 1, true))
@@ -221,6 +228,9 @@ return function(H, repo_root)
         H.truthy(transform_at < husk_at)
         H.truthy(registration_at < husk_at)
         H.truthy(families_at < husk_at)
+		H.truthy(husk_at < husk_transaction_at)
+		H.truthy(husk_transaction_at < issue719_check_at)
+		H.truthy(issue719_check_at < identity_transport_at)
         H.truthy(husk_at < identity_transport_at)
         H.truthy(identity_transport_at < world_equipment_at)
         H.truthy(world_equipment_at < menu_preview_at)
@@ -700,7 +710,7 @@ return function(H, repo_root)
     H.test("CWV husk-path machinery lives once in its module, reached from entry hooks", function()
         -- OOP W5 husk-path extraction: the husk display / transform / ledger /
         -- postcondition helpers (#474/#475/#478/#399/#397/#394/#604/#395/#660)
-        -- moved verbatim to _cwv_husk_path. Each _om._husk_* definition must live
+        -- moved to _cwv_husk_path. Each _om._husk_* definition must live
         -- exactly ONCE, in the module; the entry keeps only the deferred hook call
         -- sites (GearUtils.spawn_inventory_unit / BackendUtils.get_item_units).
         local exports = {
@@ -726,8 +736,13 @@ return function(H, repo_root)
         -- equip-surface owner (the bayonet attach and the melee-stance transform
         -- are inline in that same hook body), so the calls are asserted there.
         -- The get_item_units seam stayed in the entry.
-		H.truthy(equip_surface:find("_om._husk_adapter_pre(", 1, true))
-		H.truthy(equip_surface:find("_om._husk_adapter_post(", 1, true))
+		H.truthy(equip_surface:find("_om._husk_spawn_adapter_transaction(", 1, true))
+		H.truthy(husk:find("_om._husk_adapter_pre = function", 1, true))
+		H.truthy(husk:find("_om._husk_adapter_post = function", 1, true))
+		H.equal(count_plain(husk_transaction,
+			"_om._husk_spawn_adapter_transaction = function"), 1)
+		H.equal(count_plain(entry,
+			"_cwv_husk_spawn_transaction\")(mod, {"), 1)
         H.truthy(entry:find("_om._husk_preselect_units(result, item_data", 1, true))
         H.truthy(husk:find("_om._husk_rekey_units(hand, item_data", 1, true))
         H.truthy(husk:find("_om._husk_apply_cwv_transform(hand, item_data", 1, true))

@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.546-dev"
+local MOD_VERSION = "0.1.547-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
 mod._cwv_dev_anim_picker = mod:dofile("scripts/mods/character_weapon_variants/cwv_dev_anim_picker")
@@ -1345,6 +1345,13 @@ mod:dofile("scripts/mods/character_weapon_variants/_cwv_husk_path")(mod, {
 	apply_cwv_hand_transform = _apply_cwv_hand_transform,
 	triplet_text = _triplet_text,
 })
+mod:dofile("scripts/mods/character_weapon_variants/_cwv_husk_spawn_transaction")(mod, {
+	om = _om,
+})
+local _issue719_transaction_check = mod:dofile(
+	"scripts/mods/character_weapon_variants/_cwv_issue719_transaction_check")(mod, {
+	om = _om,
+})
 
 -- #620 upgraded the single post-observation hook to one full wrapper so a
 -- strictly synchronous remote owner+slot style context exists while vanilla
@@ -1545,6 +1552,7 @@ local _cwv_regression_context = {
 	skin_transform_map = _skin_transform_map,
 	crowbill_transform_by_unit = _crowbill_transform_by_unit,
 	custom_skin_keys = _custom_skin_keys,
+	issue719_transaction_check = _issue719_transaction_check,
 }
 mod:dofile("scripts/mods/character_weapon_variants/_cwv_regression_identity")(mod, _cwv_regression_context)
 mod:dofile("scripts/mods/character_weapon_variants/_cwv_regression_combat_style")(mod, _cwv_regression_context)

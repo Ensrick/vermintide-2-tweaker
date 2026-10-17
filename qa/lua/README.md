@@ -89,6 +89,15 @@ there is no copied implementation.
   eligibility, a +1 refill and owned-pickup cleanup, re-registration re-owning
   callbacks without lookup growth, and rollback when a lookup or pickup-map
   write rejects, throws or is silently dropped.
+- `tests/test_cwv_issue719_crowbill_rebuild.lua`: #719 the Crowbill Weapon
+  Special replayed over the vanilla equipment wire rules: the observer keeps
+  its slot (destroy, add, wield), the rebuild fails closed without the
+  re-equip sender, a failed re-equip restores the face and re-adds the slot;
+  the presentation record recomposes from the retained base; and the live
+  owner/observer legs of `issue719_imperial_crowbill_remote_identity` fail a
+  destroyed remote slot, Sienna's donor, a stale face, a lost rotation, a
+  missing presentation and an owner collapsing to the donor, and skip with a
+  named reason when no peer holds a Crowbill.
 - `fixtures/vanilla_weapon_master_list.lua`: GENERATED vanilla weapon census
   (every `ItemMasterList` melee/ranged entry with its `can_wield` list after the
   DLC `UpdateItemMasterList` patches, each hero career's

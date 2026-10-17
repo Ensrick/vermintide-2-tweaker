@@ -15,6 +15,8 @@ return function(H, repo_root)
     local mod_root = repo_root
         .. "/character_weapon_variants/scripts/mods/character_weapon_variants/"
     local module_path = mod_root .. "_cwv_husk_path.lua"
+	local transaction_path = mod_root .. "_cwv_husk_spawn_transaction.lua"
+	local issue719_check_path = mod_root .. "_cwv_issue719_transaction_check.lua"
     local main_path = mod_root .. "character_weapon_variants.lua"
 	local install_musket_wire = assert(loadfile(
 		mod_root .. "_cwv_old_musket_wire.lua"))()
@@ -144,6 +146,7 @@ return function(H, repo_root)
             apply_cwv_hand_transform = function() return true end,
             triplet_text = function() return "t" end,
         })
+		assert(loadfile(transaction_path))()(nil, { om = om })
         om._husk_custom_unit_material_donors[BORROWED_MESH] = DONOR_3P
         om._husk_custom_unit_material_donors[BORROWED_MESH .. "_3p"] = DONOR_3P
         return om, lines, leases, env
@@ -333,6 +336,137 @@ return function(H, repo_root)
         H.truthy(all:find("[cwv:399] husk ammo-nil pre-spawn", 1, true))
         H.truthy(all:find("[cwv:398] husk template identity", 1, true))
     end)
+
+	H.test("#719 installed wield drives atomic preselection through the production spawn transaction", function()
+		local om, _, _, env = fixture()
+		env.Application = { can_get = function() return true end }
+		local owner, spawned = {}, {}
+		om._husk_identity_descriptor = exact_descriptor("cwv_fix_axe", AXE_OVERRIDE)
+		local transformed = 0
+		om._husk_apply_cwv_transform = function(hand, item_data, item_units,
+				weapon_unit, observed_owner, slot_name)
+			H.equal(hand, "right")
+			H.equal(item_data.name, "fix_base")
+			H.equal(item_units.right_hand_unit, AXE_OVERRIDE)
+			H.equal(weapon_unit, spawned)
+			H.equal(observed_owner, owner)
+			H.equal(slot_name, "slot_melee")
+			transformed = transformed + 1
+		end
+		om.outrider_animation = {
+			husk_event = function() return nil end,
+			dispatch_event = function() end,
+			emit_evidence = function() end,
+		}
+		om.appearance_fade = { husk_wield = function() end }
+		local installed
+		om._install_husk_wield_hook({
+			hook = function(_, class_name, method_name, callback)
+				H.equal(class_name, "SimpleHuskInventoryExtension")
+				H.equal(method_name, "_wield_slot")
+				installed = callback
+			end,
+		})
+		local item_data = { name = "fix_base" }
+		local item_units = {
+			right_hand_unit = BASE_UNIT,
+			left_hand_unit = "inherited-offhand",
+		}
+		local equipment = { slots = { slot_melee = {
+			item_data = item_data, item_template = {},
+		} } }
+		local selected_template, native_calls = nil, 0
+		with_env(env, function()
+			local result = installed(function()
+				local ctx = rawget(om, "_appearance_husk_wield_context")
+				H.equal(ctx.owner_unit_3p, owner)
+				H.equal(ctx.slot_name, "slot_melee")
+				H.equal(om._husk_preselect_units(item_units, item_data,
+					nil, nil, "es_fix"), true)
+				H.equal(item_units.right_hand_unit, AXE_OVERRIDE)
+				H.equal(item_units.left_hand_unit, nil)
+				local weapon = om._husk_spawn_adapter_transaction(
+					function(_, _, template, observed_units)
+						native_calls = native_calls + 1
+						selected_template = template
+						H.equal(observed_units, item_units)
+						H.equal(observed_units.right_hand_unit, AXE_OVERRIDE)
+						return spawned, nil, nil, nil
+					end, nil, "right", equipment.slots.slot_melee.item_template,
+					item_units, "slot_melee", item_data, nil, owner,
+					nil, nil, nil, nil)
+				H.equal(weapon, spawned)
+				equipment.right_hand_wielded_unit_3p = spawned
+				return "vanilla-result"
+			end, { _unit = owner, _player = { peer_id = "peer-rain" } },
+				{}, equipment, "slot_melee", nil, owner)
+			H.equal(result, "vanilla-result")
+		end)
+		H.equal(rawget(om, "_appearance_husk_wield_context"), nil)
+		H.equal(native_calls, 1)
+		H.equal(selected_template, env.Weapons.fix_axe_template)
+		H.equal(transformed, 1)
+	end)
+
+	H.test("#719 runtime transaction check restores exact raw owners after failure", function()
+		local om = fixture()
+		local prior_context = { id = "context" }
+		local prior_identity = function() return "prior-identity" end
+		local prior_transform = function() return "prior-transform" end
+		om._appearance_husk_wield_context = prior_context
+		om._husk_identity_descriptor = prior_identity
+		om._husk_apply_cwv_transform = prior_transform
+		om._husk_preselect_units = function() error("preselect-boom") end
+		local check = assert(loadfile(issue719_check_path))()(nil, { om = om })
+		local err = check({ variant_key = "cwv_fix_axe" }, {
+			SOURCE_ITEM = "fix_base", PLACEHOLDER_UNIT = BASE_UNIT,
+		}, { right_hand_unit = AXE_OVERRIDE }, "es_fix")
+		H.truthy(type(err) == "string" and err:find("preselect-boom", 1, true))
+		H.equal(rawget(om, "_appearance_husk_wield_context"), prior_context)
+		H.equal(rawget(om, "_husk_identity_descriptor"), prior_identity)
+		H.equal(rawget(om, "_husk_apply_cwv_transform"), prior_transform)
+	end)
+
+	H.test("#719 runtime transaction check drives the complete production seam", function()
+		local om, _, _, env = fixture()
+		env.Application = { can_get = function() return true end }
+		om._husk_identity_descriptor = exact_descriptor("cwv_fix_axe", AXE_OVERRIDE)
+		-- Leg 2 drives the real Weapon Special rebuild owner (module level, no install).
+		om.crowbill_runtime = dofile(mod_root .. "_cwv_crowbill_runtime.lua")
+		local check = assert(loadfile(issue719_check_path))()(nil, { om = om })
+		local err
+		with_env(env, function()
+			err = check({
+				variant_key = "cwv_fix_axe", right_hand_unit = AXE_OVERRIDE,
+				fingerprint = "fp:cwv_fix_axe",
+			}, {
+				SOURCE_ITEM = "fix_base", PLACEHOLDER_UNIT = BASE_UNIT,
+			}, { right_hand_unit = AXE_OVERRIDE }, "es_fix")
+		end)
+		H.equal(err, nil)
+	end)
+
+	H.test("#719 runtime transaction check rejects a retained donor template", function()
+		local om, _, _, env = fixture()
+		env.Application = { can_get = function() return true end }
+		om._husk_identity_descriptor = exact_descriptor("cwv_fix_axe", AXE_OVERRIDE)
+		om._husk_spawn_adapter_transaction = function(func, world, hand,
+				donor_template, item_units)
+			return func(world, hand, donor_template, item_units)
+		end
+		local check = assert(loadfile(issue719_check_path))()(nil, { om = om })
+		local err
+		with_env(env, function()
+			err = check({
+				variant_key = "cwv_fix_axe", right_hand_unit = AXE_OVERRIDE,
+				fingerprint = "fp:cwv_fix_axe",
+			}, {
+				SOURCE_ITEM = "fix_base", PLACEHOLDER_UNIT = BASE_UNIT,
+			}, { right_hand_unit = AXE_OVERRIDE }, "es_fix")
+		end)
+		H.truthy(type(err) == "string"
+			and err:find("retained the Sienna donor template", 1, true))
+	end)
 
     H.test("clone template guards fail closed on a missing hand link", function()
         local om, _, _, env = fixture()
@@ -1220,17 +1354,16 @@ return function(H, repo_root)
             'mod:hook%("GearUtils", "spawn_inventory_unit"', "")), 0,
             "entry must not re-register the spawn chokepoint")
         for _, marker in ipairs({
-            -- gear_utils.lua:13 multi-return: weapon_3p, ammo_3p, weapon_1p, ammo_1p.
-            "local v_w3p, v_a3p, v_w1p, v_a1p =",
-            "func(world, hand, husk_spawn_template or item_template, item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p, unit_template, extra_extension_data, ammo_percent, material_settings_name)",
-			"_om._husk_adapter_pre(",
-			"_om._husk_adapter_post(",
-            "return nil, nil, nil, nil",
+            -- The sole live hook delegates the whole remote transaction to its
+            -- executable owner; owner/bot logic remains in this surface.
+            "local v_w3p, v_a3p, v_w1p, v_a1p",
+			"_om._husk_spawn_adapter_transaction(",
             "return v_w3p, v_a3p, v_w1p, v_a1p",
         }) do
             H.truthy(main:find(marker, 1, true), "missing entry adapter anchor: " .. marker)
         end
         local module_source = read(module_path)
+		local transaction_source = read(transaction_path)
         for _, marker in ipairs({
             "_om._husk_adapter_pre = function(hand, item_template, item_units, slot_name, item_data, owner_unit_3p)",
 			"_om._husk_adapter_post = function(hand, item_data, item_units, slot_name, owner_unit_3p, v_w3p, v_a3p, spawn_evidence)",
@@ -1246,11 +1379,22 @@ return function(H, repo_root)
         }) do
             H.truthy(module_source:find(marker, 1, true), "missing module adapter anchor: " .. marker)
         end
+		for _, marker in ipairs({
+			"_om._husk_spawn_adapter_transaction = function(func, world, hand,",
+			"local v_w3p, v_a3p, v_w1p, v_a1p = func(world, hand,",
+			"return nil, nil, nil, nil",
+			"return v_w3p, v_a3p, v_w1p, v_a1p",
+		}) do
+			H.truthy(transaction_source:find(marker, 1, true),
+				"missing transaction anchor: " .. marker)
+		end
         -- Render-side only: the adapter must never gain a network send.
         local adapter_start = module_source:find("COMPLETE husk adapter", 1, true)
         H.truthy(adapter_start)
         H.equal(module_source:find("network_send", adapter_start, true), nil,
             "complete husk adapter must stay render-side (issue 741/495 wire safety)")
+		H.equal(transaction_source:find("network_send", 1, true), nil,
+			"husk spawn transaction must stay render-side")
     end)
 
 end

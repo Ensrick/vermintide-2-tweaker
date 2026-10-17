@@ -28,6 +28,8 @@ local MODULES_IN_INSTALL_ORDER = {
 	"_cwv_crowbill_transform_runtime.lua",
     "_cwv_weapon_transform_owner.lua",
     "_cwv_husk_path.lua",
+    "_cwv_husk_spawn_transaction.lua",
+    "_cwv_issue719_transaction_check.lua",
     "_cwv_item_identity_transport_owner.lua",
     "_cwv_world_equipment_owner.lua",
     "_cwv_menu_preview_owner.lua",

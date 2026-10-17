@@ -12,6 +12,7 @@ local _build_entry = ctx.build_entry
 local _auto_register_all = ctx.auto_register_all
 local _cross_access_action_remap = ctx.cross_access_action_remap
 local _cwv_wield_hook_registration_count = ctx.wield_hook_registration_count
+local _issue719_transaction_check = ctx.issue719_transaction_check
 
 -- ============================================================
 -- /cwv_regression_test checks (scaffold near top of file).
@@ -693,7 +694,9 @@ _rt_register("issue719_imperial_crowbill_remote_identity", function()
 	end
 	if type(_om._husk_preselect_units) ~= "function"
 			or type(_om._husk_rekey_units) ~= "function"
-			or type(_om._husk_apply_cwv_transform) ~= "function" then
+			or type(_om._husk_apply_cwv_transform) ~= "function"
+			or type(_om._husk_spawn_adapter_transaction) ~= "function"
+			or type(_issue719_transaction_check) ~= "function" then
 		return "#719 centralized husk appearance adapters are not installed"
 	end
 	local surfaces = mod._cwv_identity_surfaces
@@ -758,12 +761,18 @@ _rt_register("issue719_imperial_crowbill_remote_identity", function()
 	if duplicate then
 		return "#719 duplicate identity scheduled a second husk rebuild"
 	end
+	local career = family.IMPERIAL_DEFAULTS and family.IMPERIAL_DEFAULTS[1]
+
+	-- Drive the exact GearUtils transaction, rather than its independent helper
+	-- functions. The child restores every temporary raw field on success/error.
+	local transaction_error = _issue719_transaction_check(
+		descriptor, family, model, career)
+	if transaction_error then return transaction_error end
 
 	-- POSTCONDITION 1 (what the player sees): the remote peer must either know
 	-- the exact variant at WIELD time from the vanilla wire alone, or own a
 	-- mechanism that re-applies an identity that lands after the wield. The
 	-- 2026-08-04 co-op session measured the exact identity arriving 41 s late.
-	local career = family.IMPERIAL_DEFAULTS and family.IMPERIAL_DEFAULTS[1]
 	local wield_def = career and type(_om._husk_resolve_display_def) == "function"
 		and _om._husk_resolve_display_def(family.SOURCE_ITEM, career, nil) or nil
 	local rewield = mod._cwv_rewield

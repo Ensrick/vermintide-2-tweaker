@@ -1,5 +1,47 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.547-dev (2026-10-17) -- Crowbill stays visible to other players after a pick/hammer toggle (#719) [verify-fix]
+
+- Switching the Imperial, Dawi or Sienna Crowbill between pick and hammer
+  with Weapon Special no longer makes it vanish for the other players. The
+  toggle rebuilt the slot with a destroy (sent to every peer,
+  `simple_inventory_extension.lua:1181-1187`) followed by a local-only add
+  (`:858-891`), so each observer dropped the slot (`gear_utils.lua:457`) and
+  then wielded nothing (`simple_husk_inventory_extension.lua:641-647`). The
+  rebuild now re-adds the slot through vanilla's own re-equip sender
+  (`_spawn_resynced_loadout`, `:1443-1473`), so observers receive the add
+  before the wield and CWV's wrapper on that sender republishes the exact
+  identity. Without that sender nothing is destroyed; a failed re-equip
+  restores the previous face and re-adds the slot.
+  Root cause: `_cwv_crowbill_runtime.lua:234-236` at 0.1.546-dev.
+- The remote-husk spawn now runs as one transaction owner,
+  `_cwv_husk_spawn_transaction.lua`: hand preselection, the one native
+  `GearUtils.spawn_inventory_unit` call and the post-spawn presentation. The
+  live hook, the regression check and the offline tests drive that same
+  function (ported from the 2026-09-20 candidate).
+- `issue719_imperial_crowbill_remote_identity` now proves three more legs:
+  the exact Imperial descriptor through that production transaction with a
+  template distinct from Sienna's donor; the Weapon Special rebuild trace;
+  and the live state of BOTH peers. Each peer logs one
+  `[cwv:719] peer observation` row per Crowbill holder: the wielder proves
+  its equipped Crowbill publishes exact identity, the observer proves the
+  remote slot still exists, the wielded 3P unit is the authored model (never
+  Sienna's donor) and the pick/hammer rotation it retains is the last
+  presentation write. With no Crowbill on either side it logs
+  `SKIP reason=no_crowbill_peer` and still passes on the other legs.
+- Engine-free coverage: `test_cwv_issue719_crowbill_rebuild.lua` (11 cases)
+  replays the toggle over the vanilla wire rules and drives the live legs;
+  `test_cwv_husk_adapter.lua` gains the transaction cases.
+
+**DoD:** Live proof on a two-player lobby, both peers on 0.1.547-dev: the
+observer sees the authored Imperial and Dawi Crowbill (never Sienna's) in the
+Keep, after a pick/hammer toggle, a swap, a mission start, a respawn and a hot
+join, with roles reversed once; `/cwv_regression_test` passes
+`issue719_imperial_crowbill_remote_identity` on both machines, the
+observer's log shows `[cwv:719] peer observation role=observer ... verdict=ok`.
+
+Refs #719
+
 ## 0.1.546-dev (2026-10-17) -- Tuskgor Javelin recovery pickups get one owner and a runtime proof (#296) [verify-fix]
 
 - The landed and wall-stuck recovery pickups now register through one owner,
