@@ -304,6 +304,8 @@ do
     end
 
     ET.warlord_diag_update = function()
+        -- One-shot #324 capacity sample once NetworkConstants exists.
+        if ET.capacity_diag_poll then ET.capacity_diag_poll() end
         for i = #_tracked, 1, -1 do
             local entry = _tracked[i]
             local due = entry.t0 + DIAG_OFFSETS[entry.next]
@@ -339,5 +341,16 @@ do
             BREED_NAME, DIAG_MAX_UNITS)
     else
         _diag_log("diagnostic loaded but breed registration failed — nothing to sample this session")
+    end
+
+    -- #324 capacity-authority probe (0.7.65-dev): logs what the registrar's
+    -- capacity readers see at load and once the network authority appears.
+    -- This module is its single load owner (the entry manifest sits on its
+    -- decomposition ceiling); a probe load failure never blocks the mod.
+    local cap_ok, CapacityDiag = pcall(mod.dofile, mod,
+        "scripts/mods/enemy_tweaker/_et_diag_capacity_authority")
+    if cap_ok and type(CapacityDiag) == "table" then
+        pcall(CapacityDiag.install, ET, Registrar, registration_ok
+            and tostring(registration_reason) or ("rejected:" .. tostring(registration_reason)))
     end
 end

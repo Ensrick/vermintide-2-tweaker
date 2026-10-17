@@ -81,6 +81,18 @@ Last updated: 2026-08-28.
 | Scope | The #1413 registrar remains the only publisher. #451B consumes its marker/fingerprints for parity without changing #324 Warlord combat AI or the registrar transaction semantics. |
 
 ---
+## Warlord registration capacity authority (#324)
+
+| Field | Detail |
+|---|---|
+| Symptom | 12 of 12 tester logs on 0.7.64-dev: `[et:warlord2] ALERT: registration rejected (damage_source_cap_unavailable)` at mod load; the Skaven Warlord never registers. |
+| Source-proven | `NetworkConstants` is created only by `network_constants.lua:3`, dofiled at `state_loading_restart_network.lua:161` and `game_network_manager.lua:59`, after Boot loads mods (`boot.lua:400-413`). What `Network.type_info` returns at mod load is unverified. |
+| Probe | `_et_diag_capacity_authority.lua`: `[et:324] cap-probe phase=load` header plus damage-source, statistics-path, and health-sync rows at load; the same four rows once with `phase=network` when `NetworkConstants.damage_source_id` first exists. Each axis row shows `constant=`, `call=`, `result=`, `result_max=`, `verdict=` (registrar `capacity_verdicts()`), `lookup_rows=`. At most 8 printf rows, no chat. |
+| Runtime | Solo in the Keep, `/et_regression_test` must report `PASS: issue324_capacity_authority_probe`. `issue324_warlord_diag_armed` keeps failing while the registration is refused; that FAIL is the defect, not the probe. |
+| Offline | `test_et_issue324_capacity_authority` reproduces the boot-shaped refusal and covers the verdict seam, both samples, thrown and userdata reader shapes, the row bound, the check, and the single load owner. |
+| Next | The load rows decide the fix: a valid capacity under another shape means a reader fix; no capacity at load but `verdict=cap:N` at `phase=network` means a deferred capacity proof, a registrar contract decision. |
+
+---
 ## Premium-skin special variants (#452)
 
 | Field | Detail |
