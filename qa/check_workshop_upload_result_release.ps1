@@ -235,6 +235,77 @@ try {
     Check ($downError -match "id 583157616\) failed with HTTP 404" -and $downState.Posts -eq 0 -and
         @($downWarnings).Count -eq 1 -and "$($downWarnings[0])" -match 'embedded asset array') `
         "assets-endpoint outage did not fall back to the embedded inventory with one warning [$downError]"
+
+    # Issue #1667: friends-only re-run after an upload whose proof step failed
+    # (gut_dev 0.2.357-dev, item 3751024698, 2026-09-23 05:05). Public Steam
+    # answers result 9 with only publishedfileid; the ManifestID is the prior
+    # UPLOADED 7244323320533321348 from the verified log prefix.
+    $hid = '3751024698'; $hidManifest = '7244323320533321348'
+    $hidPublication = Copy-Value $publication
+    $hidPublication.release_tag = 'mods-2026-09-20'; $hidPublication.receipt_asset_name = 'publication-receipt-gui_tweaker_dev.json'
+    $hidPublication.mod = 'gui_tweaker_dev'; $hidPublication.version = '0.2.357-dev'
+    $hidPublicationBytes = [Text.UTF8Encoding]::new($false).GetBytes(($hidPublication | ConvertTo-Json -Depth 8 -Compress))
+    $hidStart = [datetime]::SpecifyKind(([datetime]'2026-09-23T05:05:40'), [DateTimeKind]::Local)
+    $hidEnd = [datetime]::SpecifyKind(([datetime]'2026-09-23T05:06:00'), [DateTimeKind]::Local)
+    $hidNoChange = ConvertFrom-VtWorkshopUploadTransaction (
+        "[2026-09-23 05:05:46] [AppID 552500] Upload starting for workshop item $hid by AppID 552500`n" +
+        "[2026-09-23 05:05:54] [AppID 552500] No content change detected for item $hid`n" +
+        "[2026-09-23 05:05:55] [AppID 552500] Upload finished for workshop item $hid : OK`n") $hid $hidStart $hidEnd
+    $hidPrior = Get-VtWorkshopPriorContentTransaction -PublishedId $hid -Text (
+        "[2026-09-23 03:17:11] [AppID 552500] Upload starting for workshop item $hid by AppID 552500`n" +
+        "[2026-09-23 03:17:20] [AppID 552500] Uploaded new content ( ManifestID $hidManifest ) for item $hid.`n" +
+        "[2026-09-23 03:17:20] [AppID 552500] Upload finished for workshop item $hid : OK`n")
+    $hidNoChange | Add-Member -NotePropertyName PriorContent -NotePropertyValue ([pscustomobject]@{Ok=$true;Proof=$hidPrior;Error=$null})
+    $hiddenBytes = [Text.Encoding]::ASCII.GetBytes(
+        '{"response":{"result":1,"resultcount":1,"publishedfiledetails":[{"publishedfileid":"3751024698","result":9}]}}')
+    $hidBefore = ConvertFrom-VtWorkshopPublishedFileObservation $hiddenBytes $hid ([datetime]'2026-09-23T03:05:40Z')
+    $hidAfter = ConvertFrom-VtWorkshopPublishedFileObservation $hiddenBytes $hid ([datetime]'2026-09-23T03:06:01Z')
+    function New-HiddenManifestBytes([string]$Visibility = 'friends_only', [string]$Workshop = $hid,
+            [string]$Source = $commit, [string]$Version = '0.2.357-dev') {
+        return [Text.UTF8Encoding]::new($false).GetBytes(([ordered]@{manifest_schema=2;release_tag='mods-2026-09-20';mods=@(
+            [ordered]@{mod_id='gut_dev';asset_filename='gut_dev.zip';sha256=$zipHash;version=$Version;workshop_id=$Workshop
+                visibility=$Visibility;source_commit=$Source})} | ConvertTo-Json -Depth 8 -Compress))
+    }
+    function Write-HiddenInventory([string]$Public = '$false', [string]$Visibility = 'friends_only') {
+        [IO.File]::WriteAllText($inventoryPath, "@{ Mods = @(@{ Dir = 'gui_tweaker_dev'; ModId = 'gut_dev'; WorkshopId = '$hid'; Public = $Public; Visibility = '$Visibility' }) }",
+            [Text.UTF8Encoding]::new($false))
+    }
+    function New-HiddenState([byte[]]$Manifest = (New-HiddenManifestBytes)) {
+        $s = New-FakeReleaseState -ManifestBytes $Manifest
+        $s.AssetName = Get-VtWorkshopNoChangeResultAssetName 'gui_tweaker_dev' $commit (Get-VtWorkshopResultByteSha256 $hidPublicationBytes)
+        return $s
+    }
+    Write-HiddenInventory
+    $hidState = New-HiddenState
+    $hidProof = Publish-VtShipWorkshopUploadProof $hidState.Repo $hidState.Tag 'gui_tweaker_dev' $inventoryPath `
+        $hidPublicationBytes $hidNoChange $hidState.Request $hidBefore $hidAfter
+    Check ($hidProof.Authenticated -and $hidProof.MayMutate -and $hidProof.Disposition -ceq 'CreatedAndReread' -and
+        $hidProof.Candidate.purpose -ceq 'workshop-nochange-log-result-candidate/v1' -and
+        $hidProof.Candidate.steam_manifest_id -ceq $hidManifest -and $hidProof.Candidate.visibility -ceq 'friends_only' -and
+        $hidState.Posts -eq 1 -and $hidState.Gets -eq 1) `
+        'friends-only NOCHANGE did not authenticate the prior UPLOADED manifest through append + exact reread'
+    foreach ($case in @(
+        @{Name='public inventory row';Inventory=@('$true','public');Manifest=(New-HiddenManifestBytes);Upload=$hidNoChange;Before=$hidBefore},
+        @{Name='hosted row says public';Inventory=@('$false','friends_only');Manifest=(New-HiddenManifestBytes 'public');Upload=$hidNoChange;Before=$hidBefore},
+        @{Name='hosted row foreign item';Inventory=@('$false','friends_only');Manifest=(New-HiddenManifestBytes 'friends_only' '3751024699');Upload=$hidNoChange;Before=$hidBefore},
+        @{Name='hosted row foreign source commit';Inventory=@('$false','friends_only');Manifest=(New-HiddenManifestBytes 'friends_only' $hid ('f' * 40));Upload=$hidNoChange;Before=$hidBefore},
+        @{Name='hosted row foreign version';Inventory=@('$false','friends_only');Manifest=(New-HiddenManifestBytes 'friends_only' $hid $commit '0.2.356-dev');Upload=$hidNoChange;Before=$hidBefore},
+        @{Name='caller zip digest differs from hosted row';Inventory=@('$false','friends_only');Manifest=(New-HiddenManifestBytes);Upload=$hidNoChange;Before=$hidBefore;Zip=('c' * 64)},
+        @{Name='visible before hidden after';Inventory=@('$false','friends_only');Manifest=(New-HiddenManifestBytes);Upload=$hidNoChange;Before=$beforeSnapshot},
+        @{Name='no prior chain';Inventory=@('$false','friends_only');Manifest=(New-HiddenManifestBytes);Upload=(ConvertFrom-VtWorkshopUploadTransaction (
+            "[2026-09-23 05:05:46] [AppID 552500] Upload starting for workshop item $hid by AppID 552500`n" +
+            "[2026-09-23 05:05:54] [AppID 552500] No content change detected for item $hid`n" +
+            "[2026-09-23 05:05:55] [AppID 552500] Upload finished for workshop item $hid : OK`n") $hid $hidStart $hidEnd);Before=$hidBefore}
+    )) {
+        Write-HiddenInventory $case.Inventory[0] $case.Inventory[1]
+        $caseState = New-HiddenState $case.Manifest
+        $threw = $false
+        try {
+            $null = Publish-VtShipWorkshopUploadProof $caseState.Repo $caseState.Tag 'gui_tweaker_dev' $inventoryPath `
+                $hidPublicationBytes $case.Upload $caseState.Request $case.Before $hidAfter ([string]$case.Zip)
+        } catch { $threw = $true }
+        Check ($threw -and $caseState.Posts -eq 0 -and $caseState.Gets -eq 0) ("friends-only $($case.Name) reached GitHub mutation")
+    }
 } finally {
     if (Test-Path -LiteralPath $inventoryPath) { Remove-Item -LiteralPath $inventoryPath -Force }
 }

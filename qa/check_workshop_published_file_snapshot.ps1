@@ -119,6 +119,49 @@ Reject { Get-VtWorkshopPublishedFileSnapshot $item ([datetime]'2026-09-20T12:00:
 Reject { Get-VtWorkshopPublishedFileSnapshot '01' ([datetime]'2026-09-20T12:00:00Z') $request } `
     'noncanonical requested item reached transport'
 
+# Issue #1667: the exact 2026-09-23 public answer for friends-only gut_dev item
+# 3751024698. The content snapshot rejects it (root cause); the observation owner
+# classifies it as a positive not-visible answer for exactly that item.
+. (Join-Path $root 'tools/ship/workshop-nochange-log-proof.ps1')
+$hiddenItem = '3751024698'
+$hiddenBytes = [Text.Encoding]::ASCII.GetBytes(
+    '{"response":{"result":1,"resultcount":1,"publishedfiledetails":[{"publishedfileid":"3751024698","result":9}]}}')
+$rootCause = $null
+try { $null = ConvertFrom-VtWorkshopPublishedFileResponse $hiddenBytes $hiddenItem } catch { $rootCause = $_.Exception.Message }
+Check ($rootCause -match "consumer_app_id' is missing") "friends-only answer no longer reproduces the #1667 snapshot failure: $rootCause"
+$hidden = ConvertFrom-VtWorkshopPublishedFileObservation $hiddenBytes $hiddenItem ([datetime]'2026-09-23T03:05:40Z')
+Check ($hidden.purpose -ceq 'steam-published-file-not-visible/v1' -and $hidden.publishedfileid -ceq $hiddenItem -and
+    $hidden.detail_result -ceq '9' -and $hidden.response_sha256 -ceq (Get-VtWorkshopPublishedFileByteSha256 $hiddenBytes) -and
+    $hidden.observed_at_utc -ceq '2026-09-23T03:05:40Z') 'friends-only answer was not classified as an exact not-visible observation'
+$visible = ConvertFrom-VtWorkshopPublishedFileObservation $bytes $item ([datetime]'2026-09-20T12:00:00Z')
+Check ($visible.purpose -ceq 'steam-published-file-snapshot/v1' -and $visible.hcontent_file -ceq $manifest) `
+    'visible item lost its content snapshot through the observation owner'
+$hiddenText = [Text.Encoding]::ASCII.GetString($hiddenBytes)
+foreach ($case in @(
+    @{Name='foreign hidden item';Text=$hiddenText.Replace('"3751024698"','"3751024699"')},
+    @{Name='other detail result';Text=$hiddenText.Replace('"result":9','"result":2')},
+    @{Name='hidden row with content field';Text=$hiddenText.Replace('"result":9','"result":9,"hcontent_file":"1"')},
+    @{Name='duplicate hidden item key';Text=$hiddenText.Replace('"publishedfileid":"3751024698"','"publishedfileid":"3751024698","publishedfileid":"3751024698"')},
+    @{Name='zero hidden resultcount';Text=$hiddenText.Replace('"resultcount":1','"resultcount":0')},
+    @{Name='failed hidden envelope';Text=$hiddenText.Replace('{"result":1,','{"result":2,')},
+    @{Name='extra envelope key';Text=$hiddenText.Replace('{"response":','{"extra":0,"response":')}
+)) {
+    Reject { ConvertFrom-VtWorkshopPublishedFileObservation ([Text.Encoding]::ASCII.GetBytes($case.Text)) $hiddenItem } `
+        ($case.Name + ' was accepted as a not-visible observation')
+}
+$hiddenRequest = { param($Uri, [byte[]]$InputBytes, $ContentType) [pscustomobject]@{StatusCode=200;Bytes=$hiddenBytes;Error=$null} }
+$hiddenBefore = Get-VtWorkshopPublishedFileObservation $hiddenItem ([datetime]'2026-09-23T03:05:40Z') $hiddenRequest
+$hiddenAfter = Get-VtWorkshopPublishedFileObservation $hiddenItem ([datetime]'2026-09-23T03:06:10Z') $hiddenRequest
+Check ((Get-VtWorkshopNoChangeProofBasis $hiddenBefore $hiddenAfter) -ceq 'not-visible' -and
+    (Test-VtWorkshopNotVisibleObservationPair $hiddenBefore $hiddenAfter $hiddenItem).Ok) `
+    'stable not-visible pair was not accepted across the upload window'
+Check ((Get-VtWorkshopNoChangeProofBasis $snapshot $after) -ceq 'snapshot') 'public pair lost its snapshot basis'
+Reject { Get-VtWorkshopNoChangeProofBasis $snapshot $hiddenAfter } 'item that turned hidden during the upload kept a proof basis'
+Reject { Get-VtWorkshopNoChangeProofBasis $hiddenBefore $after } 'item that turned visible during the upload kept a proof basis'
+Check (-not (Test-VtWorkshopNotVisibleObservationPair $hiddenBefore $hiddenAfter '3751024699').Ok) 'foreign not-visible pair accepted'
+$staleHidden = Copy-Snapshot $hiddenAfter; $staleHidden.observed_at_utc = '2026-09-23T06:05:41Z'
+Check (-not (Test-VtWorkshopNotVisibleObservationPair $hiddenBefore $staleHidden $hiddenItem).Ok) 'stale not-visible window accepted'
+
 if (-not $Quiet) {
     Write-Host "[check_workshop_published_file_snapshot] PASS $script:cases assertions; selected Steam content identity is bounded and read-only."
 }
