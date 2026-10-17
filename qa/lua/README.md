@@ -101,6 +101,27 @@ there is no copied implementation.
   and its single load owner. The probe reads an injected globals table and
   emits through a test-local seam; the route case runs the chunk in a
   test-local environment.
+- `tests/test_cim_regression_harness_1656.lua`: #1656 five shipped
+  `/cim_regression_test` checks driven through the real loadout, weave-loadout
+  and forge UI owners: the loadout round trip against a transcription of
+  vanilla `set_loadout_item` (and the gate-off twin, now non-vacuous: it
+  fails on a rejected fixture registration and skips when vanilla's mirror
+  write never ran), the
+  #86 ten-property ceiling pinned to the trimmer and Athanor gate, the pure loc
+  scan (formatter shadow counts calls, parity with the gut #1651 scanner), the
+  #244 storable-range scaling contract, and the overview render target read
+  from the owner's exports. The two cases named `characterization:` pin
+  vanilla and #244 behavior and pass on the pre-fix source too. Chunks run
+  under a test-local environment; no global is written.
+- `tests/test_cim_ranalds_game_keys_1696.lua`: #1696 every Ranald's Gift
+  catalogue career and weapon value names a live row (the generated weapon
+  census plus the five merged Chaos Wastes weapons, and the 20 hero careers),
+  the Necromancer ids map to `bw_necromancer`, `bw_ghost_scythe` and
+  `bw_necromancy_staff` with the site's melee/ranged split, and the runtime
+  resolver reports exactly the unresolved keys without touching a strict
+  `__index`. An optional case re-reads the decompiled source
+  (`VT2_DECOMPILE_ROOT` or a sibling `Vermintide-2-Source-Code` checkout) and
+  skips when it is absent or lacks any of the files it reads, naming them.
 - `fixtures/vanilla_weapon_master_list.lua`: GENERATED vanilla weapon census
   (every `ItemMasterList` melee/ranged entry with its `can_wield` list after the
   DLC `UpdateItemMasterList` patches, each hero career's

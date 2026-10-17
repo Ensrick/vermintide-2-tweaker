@@ -833,6 +833,9 @@ return function(ctx)
 
     state.exports.apply_ui_polish = _forge_apply_ui_polish
     state.exports.get_widget = _forge_get_widget
+    -- #1656: read by the `overview_btn_render_target` regression check.
+    state.exports.overview_drawn_fields = _OVERVIEW_DRAWN_FIELDS
+    state.exports.overview_btn_render_field = _OVERVIEW_BTN_RENDER_FIELD
     state.exports.install_count = 1
     mod._cim_forge_ui_owner_installed = true
     return state.exports, true
