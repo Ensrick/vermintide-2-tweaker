@@ -500,6 +500,7 @@ local suites = {
     "test_gut_tab_property_refresh",
     "test_gut_tab_talent_filter",
     "test_gut_tab_live_provider",
+    "test_gut_tab_talent_harness",
     "test_gut_localization_orphan_cleanup",
     "test_gut_loc_format",
     "test_gut_mod_tweaker_keep_routing",

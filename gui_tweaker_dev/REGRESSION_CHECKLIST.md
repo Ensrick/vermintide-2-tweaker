@@ -1,5 +1,14 @@
 # Regression Checklist — gui_tweaker_dev
 
+## Tab talent module check reports the real verdict (#250, 0.2.360-dev)
+
+- Keep, solo: run `/gut_regression_test`;
+  `issue250_deus_tab_talent_module_loaded` and
+  `issue250_deus_tab_talent_tier_normalization` must both PASS (no Chaos
+  Wastes run needed: both checks are pure and load in every mechanism).
+- Chaos Wastes: the Hold-Tab talent strip test on issue #250 still applies.
+- Host tests: `test_gut_tab_talent_harness.lua`, `test_gut_tab_talent_filter.lua`.
+
 ## /mod_tweaker menu sounds match the Esc route (#1670, 0.2.359-dev)
 
 - Keep, solo: run `/gut_regression_test`; `issue1670_command_route_sound_path`

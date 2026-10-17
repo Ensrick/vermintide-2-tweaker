@@ -1,5 +1,30 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.360-dev (2026-10-17) -- Tab talent module check no longer FAILs when it passes (#250) [verify-fix]
+
+- Rain's 0.2.354-dev keep session (log on #1637): `/gut_regression_test`
+  printed `FAIL: issue250_deus_tab_talent_module_loaded -- Tab talent runtime
+  check missing`, with no Chaos Wastes run in the log.
+- Root cause: the check ended with
+  `return check and check.fn() or "Tab talent runtime check missing"`
+  (`_gut_tab_property_refresh.lua:272-273` on 0.2.359-dev). The inner
+  `issue250_deus_tab_talent_tier_normalization` returns nil when it passes
+  (`_gut_tab_talent_refresh.lua:93`), so `check and nil` is nil and the `or`
+  branch reported "missing" exactly when the module loaded and its policy
+  check passed. The inner check was also never reported on its own: only this
+  provider dofiles the talent module, and the entry file registers only the
+  provider's `rt_checks` (`gui_tweaker_dev.lua:2149-2151`).
+- Fix: the module-loaded check finds the inner check by name and returns its
+  verdict as is (nil is PASS, a failure string is FAIL); a missing module or
+  check list still FAILs loudly. The provider now forwards the talent
+  module's checks, so `issue250_deus_tab_talent_tier_normalization` is
+  reported by name too. No SKIP path: the talent module loads in every
+  mechanism and its check is pure; only the Hold-Tab repair itself is
+  Deus-gated (`_gut_tab_talent_refresh.lua:23`).
+- Offline: `qa/lua/tests/test_gut_tab_talent_harness.lua` loads the shipped
+  provider whole with the real talent refresh and policies; 4 of its 6 cases
+  fail on 0.2.359-dev with the tester's exact message.
+
 ## 0.2.359-dev (2026-10-17) -- /mod_tweaker plays the same menu sounds as the Esc route (#1670) [verify-fix]
 
 - Rain's 0.2.357-dev keep session: Mod Tweaker opened with `/mod_tweaker` had

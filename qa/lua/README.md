@@ -73,6 +73,14 @@ there is no copied implementation.
   `issue1670_command_route_sound_path` check passes, skips outside the keep
   or before the view attaches, and fails on the 0.2.358-dev lookup. printf,
   WwiseWorld and the worlds resolve through a test-local environment.
+- `tests/test_gut_tab_talent_harness.lua`: #250 the shipped Hold-Tab provider
+  loaded whole with the real talent refresh and policies:
+  `issue250_deus_tab_talent_module_loaded` PASSes in a keep and a Chaos Wastes
+  session (through 0.2.359-dev the `check and check.fn() or msg` tail turned
+  the inner PASS into "missing"), `issue250_deus_tab_talent_tier_normalization`
+  is reported once by its own name, a drifted talent policy fails both, and a
+  missing module or check list fails loudly. get_mod, the panel class and
+  Managers resolve through a test-local environment.
 - `tests/test_gut_dropdown_arrow_glow.lua`: #92 the shipped `create_dropdown`
   and its `DD_*` constants lifted out of the definitions file and driven through
   the real `mod_tweaker_dropdown_arrow_glow` check: the shipped widget passes,
