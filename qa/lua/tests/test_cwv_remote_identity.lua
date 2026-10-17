@@ -50,7 +50,7 @@ return function(H, repo_root)
         H.truthy(source:find("_registered_cwv_key(item.key)", 1, true))
         H.truthy(source:find("_cwv_identity_by_backend_id[backend_id] = key", 1, true))
         H.truthy(source:find("return _cwv_identity_by_backend_id[backend_id]", 1, true))
-        H.truthy(source:find("legacy exact CWV key did not recover persisted Imperial Longsword identity", 1, true))
+        H.truthy(source:find("legacy exact CWV key did not recover a persisted pre-stamp UUID identity", 1, true))
         H.truthy(source:find("proven UUID identity did not survive a backend-unavailable preview transition", 1, true))
         H.equal(source:find("_registered_cwv_key(item_data.name)", 1, true), nil,
             "inherited vanilla name must never infer a CWV variant")

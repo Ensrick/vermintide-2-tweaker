@@ -144,7 +144,7 @@ return function(H, repo_root)
         H.truthy(xpass_line:find("579", 1, true))
         H.truthy(xpass_line:find("verify the fix or drop known_defect", 1, true))
         -- One real failure plus the XPASS; the XFAIL is counted apart from both.
-        H.truthy(find_line(echoes, "=== 1 passed, 2 failed, 1 xfail (known defects) ==="))
+        H.truthy(find_line(echoes, "=== 1 passed, 2 failed, 1 xfail (known defects), 0 skipped ==="))
         H.truthy(find_line(printfs, "[regression] XPASS no_longer_broken"))
         H.truthy(find_line(printfs, "[regression] XFAIL still_broken"))
         H.truthy(find_line(warnings, "FAIL regressed"))
@@ -157,7 +157,33 @@ return function(H, repo_root)
         local echoes = run_runner(block, {
             { name = "xpass_only", fn = function() return nil end, defect = "1156" },
         }, { chunk_name = "cwv_runner" })
-        H.truthy(find_line(echoes, "=== 0 passed, 1 failed, 0 xfail (known defects) ==="))
+        H.truthy(find_line(echoes, "=== 0 passed, 1 failed, 0 xfail (known defects), 0 skipped ==="))
+    end)
+
+    -- #1656: the cwv runner had no SKIP verdict, so a check that could not run in the current
+    -- session (no Old Musket equipped) could only PASS on nothing or FAIL on a precondition.
+    H.test("CWV runner scores a skip: reason as SKIP, apart from pass, fail and xfail", function()
+        local block = extract_command(
+            read("character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"),
+            "cwv_regression_test")
+        local echoes, printfs, warnings = run_runner(block, {
+            { name = "healthy", fn = function() return nil end },
+            { name = "unarmed", fn = function() return "skip: no Old Musket equipped" end },
+            { name = "annotated_unarmed", fn = function() return "skip: not in keep" end, defect = "567" },
+            { name = "mentions_skip", fn = function() return "we had to skip: nothing" end },
+            { name = "still_broken", fn = function() return "reproduces" end, defect = "719" },
+        }, { chunk_name = "cwv_runner" })
+        local skip_line = find_line(echoes, "SKIP: unarmed")
+        H.truthy(skip_line)
+        H.truthy(skip_line:find("no Old Musket equipped", 1, true))
+        H.equal(skip_line:find("skip:", 1, true), nil, "the sentinel is stripped from the render")
+        -- A skip on an annotated check is still a skip: it ran nothing, so it proves nothing.
+        H.truthy(find_line(echoes, "SKIP: annotated_unarmed"))
+        H.equal(find_line(echoes, "XFAIL: annotated_unarmed"), nil)
+        H.truthy(find_line(echoes, "FAIL: mentions_skip"), "only the prefix is the sentinel")
+        H.truthy(find_line(echoes, "=== 1 passed, 1 failed, 1 xfail (known defects), 2 skipped ==="))
+        H.truthy(find_line(printfs, "[regression] SKIP unarmed"))
+        H.equal(find_line(warnings, "unarmed"), nil, "a skip never reaches the failure channel")
     end)
 
     H.test("GT runner gives a boolean return its own BAD-SHAPE verdict", function()

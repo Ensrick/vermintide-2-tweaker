@@ -1,5 +1,162 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.548-dev (2026-10-17) -- /cwv_regression_test harness rows from the #1656 triage pass or skip with a reason (#1656) [verify-fix]
+
+Regression instrument only: no gameplay, mesh, template or wire change.
+
+- The runner gains a SKIP verdict. A check returning a `skip:`-prefixed
+  reason renders `SKIP: <name> -- <reason>`, logs `[regression] SKIP` through
+  engine printf and counts in its own column:
+  `=== N passed, N failed, N xfail (known defects), N skipped ===`.
+- `dbg_helpers_two_channel`: the regression context now carries
+  `dbg_alert`; the check read an unbound global (`_cwv_regression_render.lua:972`
+  at 0.1.547-dev).
+- `issue396_imperial_longsword_identity_and_remote_husk`: the context passed
+  the undeclared global `_display_names` (`character_weapon_variants.lua:1543`);
+  the bootstrap owner now publishes its table as `_om.display_names`. The
+  owned Imperial Longsword was retired by #620 and is never registered
+  (`_cwv_item_registration_owner.lua:609`), so the transport leg now runs on
+  a registered owner; the Longsword name, Helmgart illusion and husk-skin legs
+  are unchanged.
+- `issue660_world_identity_lifecycle_replay`: same retired fixture, which
+  always planned the native record (`_cwv_appearance_lifecycle.lua:70-79`);
+  re-pinned on a registered owner chosen by the new pure
+  `_cwv_regression_fixtures.lua`.
+- `cwv_key_resolution_uuid_safe`: the legacy-UUID rung named the retired
+  `cwv_es_longsword_blackguard`, which the #482 ladder can never return
+  (`_cwv_item_registration_owner.lua:130-133`); it now names the registered
+  Greataxe the stamp rung already proves. #620 migrates old Black Guard saves
+  to `es_2h_sword` instead.
+- `issue416_483_transition_generated_skin_identity`: the Sword+Mace pair is
+  read from the generator's own rows instead of a hand-composed key that
+  drifted when a vanilla pool grew (`_cwv_illusion_families.lua:1279-1292`).
+  It also selects the slot_melee payload rather than demanding exactly one:
+  a complete plan always adds the native slot_ranged record
+  (`_cwv_item_identity_transport_owner.lua:327-335`).
+- `issue604_dawi_crowbill_model01_transform`: `control and select(...)`
+  truncated the selector's second return (`_cwv_husk_transform_policy.lua:18-29`),
+  so the control leg failed every run; the call is now bare.
+- `cwv_crowbill_hammer_runtime_contract`: asserts the #423 policy, both faces
+  falling back to the same vanilla donor, instead of a hammer-to-pick chain
+  the recorder refuses (`character_weapon_variants.lua:143`). That donor must
+  be the source action's own vanilla profile (the burning stab's non-burning
+  twin) and a registered, non-cwv_ row, through the read-only
+  `_cwv_crowbill_hammer_mode.wire_donor_fault`.
+- `issue1155_old_musket_descriptor_reconciler`: SKIPs with the named reason
+  when the Athanor preview has not armed the live gate (checked first), when
+  no Old Musket was equipped and wielded since, or when the Old Musket is
+  equipped but not wielded. A SKIP after the tester opened the Athanor and
+  then equipped and wielded an Old Musket is a FAIL to report.
+- The four Pusfume rows (`issue593_kruber_axe_shield_canonical_ownership`,
+  `cwv_slot_extension_scoped`, `cwv_no_ammo_strip_coverage`,
+  `issue597_greataxe_replaces_poleaxe`) are already fixed by 0.1.543-dev
+  (#1660) and unchanged. The `issue567_*` rows stay with #567.
+- Engine-free coverage: `test_cwv_regression_harness_1656.lua` (13 cases)
+  runs each shipped check body against production modules (one
+  registration-predicate case is a guard that also passes on the base);
+  `test_regression_runner_verdicts.lua` and
+  `test_cwv_old_musket_runtime_contracts.lua` gain the SKIP cases. All fail on
+  0.1.547-dev and pass here.
+
+**DoD:** In a plain Keep session on 0.1.548-dev, `/cwv_regression_test` PASSes
+`dbg_helpers_two_channel`, `issue396_imperial_longsword_identity_and_remote_husk`,
+`issue660_world_identity_lifecycle_replay`, `cwv_key_resolution_uuid_safe`,
+`issue416_483_transition_generated_skin_identity`,
+`issue604_dawi_crowbill_model01_transform` and
+`cwv_crowbill_hammer_runtime_contract`, and reports
+`issue1155_old_musket_descriptor_reconciler` as PASS or SKIP with its reason,
+never FAIL.
+
+Refs #1656
+
+## 0.1.547-dev (2026-10-17) -- Crowbill stays visible to other players after a pick/hammer toggle (#719) [verify-fix]
+
+- Switching the Imperial, Dawi or Sienna Crowbill between pick and hammer
+  with Weapon Special no longer makes it vanish for the other players. The
+  toggle rebuilt the slot with a destroy (sent to every peer,
+  `simple_inventory_extension.lua:1181-1187`) followed by a local-only add
+  (`:858-891`), so each observer dropped the slot (`gear_utils.lua:457`) and
+  then wielded nothing (`simple_husk_inventory_extension.lua:641-647`). The
+  rebuild now re-adds the slot through vanilla's own re-equip sender
+  (`_spawn_resynced_loadout`, `:1443-1473`), so observers receive the add
+  before the wield and CWV's wrapper on that sender republishes the exact
+  identity. Without that sender nothing is destroyed; a failed re-equip
+  restores the previous face and re-adds the slot.
+  Root cause: `_cwv_crowbill_runtime.lua:234-236` at 0.1.546-dev.
+- The remote-husk spawn now runs as one transaction owner,
+  `_cwv_husk_spawn_transaction.lua`: hand preselection, the one native
+  `GearUtils.spawn_inventory_unit` call and the post-spawn presentation. The
+  live hook, the regression check and the offline tests drive that same
+  function (ported from the 2026-09-20 candidate).
+- `issue719_imperial_crowbill_remote_identity` now proves three more legs:
+  a synthetic `rt719:` copy of the exact Imperial descriptor through that
+  production transaction, handed Sienna's vanilla husk template and required
+  to reach vanilla with the variant's declared template and the Imperial hand
+  unit (both Crowbill defs declare Sienna's template, so the model is the
+  proof); the Weapon Special rebuild trace; and the live state of BOTH
+  peers: the wielder proves its equipped Crowbill publishes exact identity,
+  the observer proves the remote slot still exists, the wielded 3P unit is
+  the authored model (never Sienna's donor) and the pick/hammer rotation it
+  retains is the last presentation write. The row PASSes only when every
+  Crowbill holder that peer sees was proven; otherwise it returns a `skip:`
+  verdict naming each reason (no Crowbill holder, no player manager, held but
+  not wielded, a vanilla Crowbill base without exact identity, rotation not
+  read back). The transaction leg stubs the #279/#579 probes and keys its one
+  `[cwv:660]` line on the synthetic fingerprint, so a run never plants a
+  husk-spawn line or log-once key a real peer would share.
+- A #478 residency-deferred husk hand ends the spawn hook at once again (the
+  transaction returns a 5th `true`), instead of running the Old Musket FX and
+  bayonet body over nil units.
+- Engine-free coverage: `test_cwv_issue719_crowbill_rebuild.lua` (11 cases)
+  replays the toggle over the vanilla wire rules and drives the live legs
+  (14 cases after the review pass); `test_cwv_husk_adapter.lua` gains the
+  transaction cases, a no-shared-diagnostics case and the defer case.
+
+**DoD:** Live proof on a two-player lobby, both peers on 0.1.547-dev: the
+observer sees the authored Imperial and Dawi Crowbill (never Sienna's) in the
+Keep, after a pick/hammer toggle, a swap, a mission start, a respawn and a hot
+join, with roles reversed once; `/cwv_regression_test` reports
+`PASS: issue719_imperial_crowbill_remote_identity` on both machines while the
+owner wields the Crowbill (a SKIP row is not a pass).
+
+Refs #719
+
+## 0.1.546-dev (2026-10-17) -- Tuskgor Javelin recovery pickups get one owner and a runtime proof (#296) [verify-fix]
+
+- The landed and wall-stuck recovery pickups now register through one owner,
+  new `_cwv_javelin_recovery_contract.lua`, shared by production and the
+  named regression check. Both rows keep `ammo_type` eligibility on
+  `throwing_javelin` (`javelin.lua:1431`), `refill_amount = 1`, the
+  throwing-axe carrier unit and `limited_owned_pickup_unit`.
+- Registration is one transaction: both `NetworkLookup.pickup_names` pairs go
+  through the canonical `_lib_network_lookup` helper, then `Pickups.ammo` and
+  `AllPickups` are written and read back by identity. A rejected, thrown or
+  silently dropped write restores every pickup row and removes only the
+  lookup pairs this call inserted.
+- A VMF reload now re-owns both rows (fresh callbacks, no lookup growth);
+  before, `if not Pickups.ammo[...]` kept the previous instance's callbacks
+  (`_cwv_javelin_runtime_owner.lua:262` at 0.1.545-dev).
+- New `/cwv_regression_test` check
+  `issue296_tuskgor_javelin_recovery_transaction` (husk/ammo owner) drives the
+  registered callbacks for both rows: skin routing for Kruber and Saltzpyre,
+  eligibility and outline only for a `throwing_javelin` inventory, the
+  refill shape vanilla `add_ammo_from_pickup` reads (`refill_amount = 1` and
+  no `refill_percentage`, `simple_inventory_extension.lua:1263-1266`) and one
+  `delete_limited_owned_pickup_unit` per pickup. It swaps only the owner's
+  private dependencies and restores them on error. It does not run the
+  vanilla refill: the +1 per recovered javelin and the impact physics stay
+  live checks.
+- Engine-free coverage: `test_cwv_javelin_recovery_contract.lua` (11 cases,
+  including an owner-source case that no existing-row guard precedes the
+  shared register call).
+
+**DoD:** Live proof: `PASS: issue296_tuskgor_javelin_recovery_transaction`
+and `PASS: cwv_wire_safe_thrown_variant_installed`; in solo, each Tuskgor
+Javelin recovered from the ground, a wall and an enemy restores exactly one
+shot, and an ammo crate still refills the stack.
+
+Refs #296
+
 ## 0.1.545-dev (2026-09-25) -- Maul burn scrub keys on the burn property (#916) [verify-fix]
 
 - Vanilla 6.11.3 renamed every Sienna 1h-mace profile, so the Maul's

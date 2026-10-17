@@ -7,11 +7,13 @@ local _rt_register = ctx.rt_register
 local _variant_definitions = ctx.variant_definitions
 local _registered_keys = ctx.registered_keys
 local _display_names = ctx.display_names
+local _fixtures = ctx.regression_fixtures
 local _find_def = ctx.find_def
 local _build_entry = ctx.build_entry
 local _auto_register_all = ctx.auto_register_all
 local _cross_access_action_remap = ctx.cross_access_action_remap
 local _cwv_wield_hook_registration_count = ctx.wield_hook_registration_count
+local _issue719_transaction_check = ctx.issue719_transaction_check
 
 -- ============================================================
 -- /cwv_regression_test checks (scaffold near top of file).
@@ -582,38 +584,38 @@ _rt_register("issue396_imperial_longsword_identity_and_remote_husk", function()
 		return "CWV item-identity side-channel helpers missing"
 	end
 	local skin_key = "cwv_es_longsword_nordland_skin"
+	-- #1656: #620 retired the owned Longsword (never registered), so the transport leg uses a registered owner.
+	local fx = _fixtures.live_owner(_variant_definitions, _registered_keys)
+	if not fx then return "no registered melee CWV owner to drive the identity planner (registration incomplete)" end
 	local payloads = plan({
-		slot_melee = {
-			item_data = { name = "es_bastard_sword", cwv_key = "cwv_es_longsword" },
-			skin = skin_key,
-		},
+		slot_melee = { item_data = { name = fx.base, cwv_key = fx.key }, skin = fx.skin },
 		slot_ranged = { item_data = { name = "es_handgun" } },
 	})
 	local by_slot = {}
 	for _, payload in ipairs(payloads) do by_slot[payload.slot] = payload end
-	if not by_slot.slot_melee or by_slot.slot_melee.item_key ~= "cwv_es_longsword"
-			or by_slot.slot_melee.skin_key ~= skin_key
+	if not by_slot.slot_melee or by_slot.slot_melee.item_key ~= fx.key
+			or by_slot.slot_melee.skin_key ~= fx.skin
 			or not by_slot.slot_ranged or by_slot.slot_ranged.item_key ~= "" then
 		return "identity planner did not preserve CWV owner and native clear payloads"
 	end
 	local changed = accept("rt396-peer", _om.appearance_lifecycle_policy.SCHEMA, by_slot.slot_melee)
-	local resolved = resolve("rt396-peer", "slot_melee", "es_bastard_sword")
-	if changed ~= true or resolved ~= owner then
-		return "receiver did not resolve the explicit Imperial Longsword marker over its vanilla base"
+	local resolved = resolve("rt396-peer", "slot_melee", fx.base)
+	if changed ~= true or resolved ~= fx.def then
+		return "receiver did not resolve the explicit CWV owner marker over its vanilla base"
 	end
 	if resolve("rt396-peer", "slot_melee", "es_handgun") ~= nil then
 		return "identity marker crossed its authored base-weapon boundary"
 	end
 	local descriptor = _om._cwv_identity_descriptor_for_peer(
-		"rt396-peer", "slot_melee", "es_bastard_sword")
-	if not descriptor or descriptor.skin ~= skin_key then
-		return "semantic identity channel lost the exact Helmgart illusion"
+		"rt396-peer", "slot_melee", fx.base)
+	if not descriptor or descriptor.skin ~= fx.skin then
+		return "semantic identity channel lost the owner's exact illusion"
 	end
 	local native = by_slot.slot_ranged
 	native.slot = "slot_melee"
-	native.base_item_key = "es_bastard_sword"
+	native.base_item_key = fx.base
 	accept("rt396-peer", _om.appearance_lifecycle_policy.SCHEMA, native)
-	if resolve("rt396-peer", "slot_melee", "es_bastard_sword") ~= nil then
+	if resolve("rt396-peer", "slot_melee", fx.base) ~= nil then
 		return "native-slot clear left stale CWV identity behind"
 	end
 
@@ -650,13 +652,12 @@ _rt_register("issue660_world_identity_lifecycle_replay", function()
 				and mod._cwv_identity_surfaces.mission_transition_peer_pull) then
 		return "#401/#914 bounded mission-transition peer-ready pull is not installed"
 	end
-	local payload = plan({
-		slot_melee = {
-			item_data = { name = "es_bastard_sword", cwv_key = "cwv_es_longsword" },
-		},
-	})[1]
-	if not payload or payload.base_item_key ~= "es_bastard_sword"
-			or payload.item_key ~= "cwv_es_longsword"
+	-- #1656: a registered owner; the retired cwv_es_longsword fixture always planned the native record.
+	local fx = _fixtures.live_owner(_variant_definitions, _registered_keys)
+	if not fx then return "#660 no registered melee CWV owner to drive the planner (registration incomplete)" end
+	local payload = plan({ slot_melee = { item_data = { name = fx.base, cwv_key = fx.key } } })[1]
+	if not payload or payload.base_item_key ~= fx.base
+			or payload.item_key ~= fx.key
 			or type(payload.fingerprint) ~= "string" or payload.fingerprint == "" then
 		return "#660 owner descriptor payload omitted exact item/base/model fingerprint"
 	end
@@ -673,7 +674,7 @@ _rt_register("issue660_world_identity_lifecycle_replay", function()
 	for k, v in pairs(payload) do bad[k] = v end
 	bad.fingerprint = payload.fingerprint .. "-provider-drift"
 	local declined = accept("rt660-peer", _om.appearance_lifecycle_policy.SCHEMA, bad)
-	local missing, state = resolve("rt660-peer", "slot_melee", "es_bastard_sword")
+	local missing, state = resolve("rt660-peer", "slot_melee", fx.base)
 	if not declined or missing ~= nil or state ~= "unavailable" then
 		return "#660 provider/fingerprint drift did not fail closed and clear stale exact identity"
 	end
@@ -693,7 +694,9 @@ _rt_register("issue719_imperial_crowbill_remote_identity", function()
 	end
 	if type(_om._husk_preselect_units) ~= "function"
 			or type(_om._husk_rekey_units) ~= "function"
-			or type(_om._husk_apply_cwv_transform) ~= "function" then
+			or type(_om._husk_apply_cwv_transform) ~= "function"
+			or type(_om._husk_spawn_adapter_transaction) ~= "function"
+			or type(_issue719_transaction_check) ~= "function" then
 		return "#719 centralized husk appearance adapters are not installed"
 	end
 	local surfaces = mod._cwv_identity_surfaces
@@ -758,12 +761,18 @@ _rt_register("issue719_imperial_crowbill_remote_identity", function()
 	if duplicate then
 		return "#719 duplicate identity scheduled a second husk rebuild"
 	end
+	local career = family.IMPERIAL_DEFAULTS and family.IMPERIAL_DEFAULTS[1]
+
+	-- Drive the exact GearUtils transaction, rather than its independent helper
+	-- functions. The child restores every temporary raw field on success/error.
+	local transaction_error = _issue719_transaction_check(
+		descriptor, family, model, career, authored.template)
+	if transaction_error then return transaction_error end
 
 	-- POSTCONDITION 1 (what the player sees): the remote peer must either know
 	-- the exact variant at WIELD time from the vanilla wire alone, or own a
 	-- mechanism that re-applies an identity that lands after the wield. The
 	-- 2026-08-04 co-op session measured the exact identity arriving 41 s late.
-	local career = family.IMPERIAL_DEFAULTS and family.IMPERIAL_DEFAULTS[1]
 	local wield_def = career and type(_om._husk_resolve_display_def) == "function"
 		and _om._husk_resolve_display_def(family.SOURCE_ITEM, career, nil) or nil
 	local rewield = mod._cwv_rewield
@@ -1068,7 +1077,8 @@ _rt_register("issue579_dual_axes_preview_and_husk_skin_continuity", function()
 end)
 
 _rt_register("issue416_483_transition_generated_skin_identity", function()
-    local exact_skin = "cwv_es_sword_and_mace_wpn_emp_sword_02_t1_wpn_emp_mace_03_t1"
+    -- #1656: read from the generator's output; a hand-composed pair key drifts when a vanilla pool grows.
+    local exact_skin = _fixtures.live_generated_pair_skin("cwv_es_sword_and_mace")
     local plan_identity = _om._cwv_identity_payloads
     local accept_identity = _om._cwv_accept_identity
     local resolve_identity = _om._cwv_identity_descriptor_for_peer
@@ -1083,12 +1093,12 @@ _rt_register("issue416_483_transition_generated_skin_identity", function()
 		return "#416/#483 transition identity/unconditional fallback surfaces are not installed"
     end
 
-    -- The exact generated pair from the repro must retain both authored meshes
-    -- and its clone-name-clobbered vanilla base id in a semantic payload.
-    local skin = WeaponSkins and WeaponSkins.skins and WeaponSkins.skins[exact_skin]
+    -- A generated pair must retain both authored meshes and its
+    -- clone-name-clobbered vanilla base id in a semantic payload.
+    local skin = exact_skin and WeaponSkins and WeaponSkins.skins and WeaponSkins.skins[exact_skin]
     if type(skin) ~= "table" or type(skin.right_hand_unit) ~= "string"
             or type(skin.left_hand_unit) ~= "string" then
-        return exact_skin .. " is absent or lost one generated hand"
+        return "no generated Sword+Mace pair illusion with both hands is registered"
     end
     local payloads = plan_identity({
         slot_melee = {
@@ -1099,8 +1109,8 @@ _rt_register("issue416_483_transition_generated_skin_identity", function()
             skin = exact_skin,
         },
     })
-    local payload = payloads[1]
-    if #payloads ~= 1 or payload.item_key ~= "cwv_es_sword_and_mace"
+    local payload = payloads[1] -- a COMPLETE plan: slot_melee first, then the native slot_ranged record
+    if not payload or payload.slot ~= "slot_melee" or payload.item_key ~= "cwv_es_sword_and_mace"
 			or payload.base_item_key ~= "es_dual_wield_hammer_sword"
             or payload.skin_key ~= exact_skin then
 		return "Sword+Mace transition payload lost exact variant/base/generated-skin identity"

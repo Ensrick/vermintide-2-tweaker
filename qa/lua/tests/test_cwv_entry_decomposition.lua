@@ -26,6 +26,7 @@ return function(H, repo_root)
     local skin_registry = read("_cwv_skin_registry.lua")
     local illusion_families = read("_cwv_illusion_families.lua")
     local husk = read("_cwv_husk_path.lua")
+	local husk_transaction = read("_cwv_husk_spawn_transaction.lua")
     local husk_residency = read("_cwv_husk_residency_owner.lua")
     local registration = read("_cwv_item_registration_owner.lua")
     local menu_preview = read("_cwv_menu_preview_owner.lua")
@@ -46,6 +47,7 @@ return function(H, repo_root)
     local husk_ammo = read("_cwv_regression_husk_ammo.lua")
     local render = read("_cwv_regression_render.lua")
     local javelin_runtime = read("_cwv_javelin_runtime_owner.lua")
+    local javelin_recovery = read("_cwv_javelin_recovery_contract.lua")
     local rapier_runtime = read("_cwv_rapier_runtime_owner.lua")
     local variant_bootstrap = read("_cwv_variant_bootstrap_owner.lua")
     local identity_transport = read("_cwv_item_identity_transport_owner.lua")
@@ -107,6 +109,7 @@ return function(H, repo_root)
     H.test("CWV completion owners stay bounded and resource-safe", function()
         local owners = {
             javelin_runtime,
+            javelin_recovery,
             rapier_runtime,
             variant_bootstrap,
             identity_transport,
@@ -152,12 +155,15 @@ return function(H, repo_root)
             "_cwv_item_registration_owner",
             "_cwv_weapon_transform_owner",
             "_cwv_husk_path",
+			"_cwv_husk_spawn_transaction",
+			"_cwv_issue719_transaction_check",
             "_cwv_item_identity_transport_owner",
             "_cwv_world_equipment_owner",
             "_cwv_menu_preview_owner",
             "_cwv_commands_lifecycle",
 			"_cwv_regression_owner_loader",
 			"_cwv_regression_runtime_identity",
+			"_cwv_regression_fixtures",
             "_cwv_regression_identity",
 			"_cwv_regression_combat_style",
             "_cwv_regression_render",
@@ -178,12 +184,17 @@ return function(H, repo_root)
         local registration_at = assert(entry:find("_cwv_item_registration_owner", 1, true))
         local transform_at = assert(entry:find("_cwv_weapon_transform_owner", 1, true))
         local husk_at = assert(entry:find("_cwv_husk_path", 1, true))
+		local husk_transaction_at = assert(entry:find(
+			"_cwv_husk_spawn_transaction", 1, true))
+		local issue719_check_at = assert(entry:find(
+			"_cwv_issue719_transaction_check", 1, true))
         local identity_transport_at = assert(entry:find("_cwv_item_identity_transport_owner", 1, true))
         local world_equipment_at = assert(entry:find("_cwv_world_equipment_owner", 1, true))
         local menu_preview_at = assert(entry:find("_cwv_menu_preview_owner", 1, true))
         local lifecycle_at = assert(entry:find("_cwv_commands_lifecycle", 1, true))
 		local regression_loader_at = assert(entry:find("_cwv_regression_owner_loader", 1, true))
 		local runtime_identity_at = assert(entry:find("_cwv_regression_runtime_identity", 1, true))
+		local fixtures_at = assert(entry:find("_cwv_regression_fixtures", 1, true))
         local identity_at = assert(entry:find("_cwv_regression_identity", 1, true))
 		local combat_style_at = assert(entry:find("_cwv_regression_combat_style", 1, true))
         local husk_ammo_at = assert(entry:find("_cwv_regression_husk_ammo", 1, true))
@@ -219,6 +230,9 @@ return function(H, repo_root)
         H.truthy(transform_at < husk_at)
         H.truthy(registration_at < husk_at)
         H.truthy(families_at < husk_at)
+		H.truthy(husk_at < husk_transaction_at)
+		H.truthy(husk_transaction_at < issue719_check_at)
+		H.truthy(issue719_check_at < identity_transport_at)
         H.truthy(husk_at < identity_transport_at)
         H.truthy(identity_transport_at < world_equipment_at)
         H.truthy(world_equipment_at < menu_preview_at)
@@ -232,6 +246,9 @@ return function(H, repo_root)
 		H.truthy(lifecycle_at < regression_loader_at)
 		H.truthy(regression_loader_at < runtime_identity_at)
 		H.truthy(runtime_identity_at < identity_at)
+		-- #1656: the fixture module is loaded into the regression context, before any owner reads it.
+		H.truthy(runtime_identity_at < fixtures_at)
+		H.truthy(fixtures_at < identity_at)
         H.truthy(lifecycle_at < identity_at)
 		H.equal(count_plain(identity, "_cwv_regression_owner_loader"), 0)
 		H.equal(count_plain(entry, "_cwv_regression_owner_loader"), 1)
@@ -475,7 +492,7 @@ return function(H, repo_root)
                 :gmatch('_rt_register%("([^"]+)"') do
             names[#names + 1] = name
         end
-		H.equal(#names, 94)
+		H.equal(#names, 95)
         H.equal(names[1], "cwv_variant_flag_present")
 		H.equal(names[3], "issue916_half_swording_combat_style_contract")
 		H.equal(names[5], "issue914_peer_ready_identity_lifecycle")
@@ -502,11 +519,14 @@ return function(H, repo_root)
 		H.equal(names[46], "issue1186_outrider_projectile_reads_cloned_tunes")
 		H.equal(names[47], "issue1188_wt_native_trollhammer_keeps_ammo")
 		H.equal(names[48], "issue1320_outrider_projectile_unit_and_wire")
-		H.equal(names[49], "cwv_unit_bearing_variants_registered")
-		H.equal(names[50], "issue482_crafted_uuid_transform_consumers")
+		-- #296 registers last in the husk/ammo/projectile owner; the render
+		-- owner sits on its file-size baseline.
+		H.equal(names[49], "issue296_tuskgor_javelin_recovery_transaction")
+		H.equal(names[50], "cwv_unit_bearing_variants_registered")
+		H.equal(names[51], "issue482_crafted_uuid_transform_consumers")
         -- #1155 is a renderer/material/lifecycle check. Keep it in the render
         -- regression owner so identity remains below the hard file-size ceiling.
-		H.equal(names[75], "issue1155_old_musket_descriptor_reconciler")
+		H.equal(names[76], "issue1155_old_musket_descriptor_reconciler")
         H.equal(names[#names - 3], "issue567_skin_reverse_index_valid")
         H.equal(names[#names - 2], "issue567_exact_pair_transition_live")
         H.equal(names[#names - 1], "issue704_canonical_skin_owner_and_sword_mace_sources")
@@ -531,12 +551,14 @@ return function(H, repo_root)
 		-- Frozen from origin/master ae2d16cd before the mechanical extraction.
 		-- An intentional future callback edit must update both values explicitly;
 		-- the split itself may not silently alter a body, message, or options row.
-		H.equal(#moved, 51219)
+		-- #1656 (intentional): cwv_key_resolution_uuid_safe rung 3 re-pinned from the
+		-- retired cwv_es_longsword_blackguard to the registered cwv_es_greataxe.
+		H.equal(#moved, 51521)
 		local rolling = 0
 		for index = 1, #moved do
 			rolling = (rolling * 131 + moved:byte(index)) % 2147483647
 		end
-		H.equal(rolling, 59524266)
+		H.equal(rolling, 1403158992)
 	end)
 
 	H.test("CWV runtime identity owner validates before any registration", function()
@@ -695,7 +717,7 @@ return function(H, repo_root)
     H.test("CWV husk-path machinery lives once in its module, reached from entry hooks", function()
         -- OOP W5 husk-path extraction: the husk display / transform / ledger /
         -- postcondition helpers (#474/#475/#478/#399/#397/#394/#604/#395/#660)
-        -- moved verbatim to _cwv_husk_path. Each _om._husk_* definition must live
+        -- moved to _cwv_husk_path. Each _om._husk_* definition must live
         -- exactly ONCE, in the module; the entry keeps only the deferred hook call
         -- sites (GearUtils.spawn_inventory_unit / BackendUtils.get_item_units).
         local exports = {
@@ -721,8 +743,13 @@ return function(H, repo_root)
         -- equip-surface owner (the bayonet attach and the melee-stance transform
         -- are inline in that same hook body), so the calls are asserted there.
         -- The get_item_units seam stayed in the entry.
-		H.truthy(equip_surface:find("_om._husk_adapter_pre(", 1, true))
-		H.truthy(equip_surface:find("_om._husk_adapter_post(", 1, true))
+		H.truthy(equip_surface:find("_om._husk_spawn_adapter_transaction(", 1, true))
+		H.truthy(husk:find("_om._husk_adapter_pre = function", 1, true))
+		H.truthy(husk:find("_om._husk_adapter_post = function", 1, true))
+		H.equal(count_plain(husk_transaction,
+			"_om._husk_spawn_adapter_transaction = function"), 1)
+		H.equal(count_plain(entry,
+			"_cwv_husk_spawn_transaction\")(mod, {"), 1)
         H.truthy(entry:find("_om._husk_preselect_units(result, item_data", 1, true))
         H.truthy(husk:find("_om._husk_rekey_units(hand, item_data", 1, true))
         H.truthy(husk:find("_om._husk_apply_cwv_transform(hand, item_data", 1, true))
