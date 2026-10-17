@@ -9,7 +9,9 @@ return function(H, repo_root)
     local COL_DISABLED = { 190, 24, 24, 24 }
     local LABELS = { [1] = "Mercenary", [14] = "Pyromancer", [15] = "Unchained" }
 
-    local function load_browser(registered)
+    -- find/replace (optional) loads a one-site mutant of the shipped browser, so
+    -- the in-game check can be shown to FAIL when a wiring line is dropped.
+    local function load_browser(registered, find, replace)
         local env = setmetatable({}, { __index = _G })
         env._G = env
         env.get_mod = function()
@@ -24,7 +26,17 @@ return function(H, repo_root)
         env.UIRenderer = {
             begin_pass = function() end, draw_widget = function() end, end_pass = function() end,
         }
-        local chunk = assert(loadfile(root .. "_cim_ranalds_browser.lua"))
+        local chunk
+        if find then
+            local file = assert(io.open(root .. "_cim_ranalds_browser.lua", "rb"))
+            local source = file:read("*a"); file:close()
+            local first, last = source:find(find, 1, true)
+            assert(first and not source:find(find, last + 1, true), "mutation site must occur once: " .. find)
+            chunk = assert(loadstring(source:sub(1, first - 1) .. replace .. source:sub(last + 1),
+                "@_cim_ranalds_browser.lua(mutant)"))
+        else
+            chunk = assert(loadfile(root .. "_cim_ranalds_browser.lua"))
+        end
         setfenv(chunk, env)
         return chunk()
     end
@@ -83,7 +95,8 @@ return function(H, repo_root)
         H.equal(browser.widgets.import.content.hotspot.on_release, false, "the press is consumed")
     end)
 
-    H.test("#1655 the active career's import path is unchanged", function()
+    -- Guard, not fail-before proof: this case passes before and after #1655.
+    H.test("#1655 guard: the active career still imports (passes before and after the fix)", function()
         local imports = {}
         local browser = load_browser()
         configure(browser, 15, imports)
@@ -157,7 +170,18 @@ return function(H, repo_root)
         local check = registered[CHECK]
         H.equal(type(check), "function", CHECK .. " is registered with /cim_regression_test")
         local original_import = browser.import_build
+        frame(browser) -- builds the widgets; the browser stays closed
+        local releases, store = {}, {}
+        browser.widgets.import.content.hotspot = setmetatable({}, {
+            __index = store,
+            __newindex = function(_, key, value)
+                if key == "on_release" then releases[#releases + 1] = tostring(value) end
+                store[key] = value
+            end,
+        })
         H.equal(check(), nil, "PASS on the shipped gate")
+        H.equal(table.concat(releases, ","), "true,false,true,false,false",
+            "each probe press is consumed by the real IMPORT handler, then the hotspot is cleared")
         H.equal(#imports, 0, "the probe never reaches the real importer")
         H.equal(browser.open_state, false, "probe restores the closed browser")
         H.equal(browser.status, nil, "probe restores the status line")
@@ -177,5 +201,21 @@ return function(H, repo_root)
         browser.import_state = shipped_state
         H.truthy(type(failure) == "string" and failure:find("Career 16", 1, true)
             and failure:sub(1, 5) ~= "skip:", "a reverted gate is a FAIL naming the career")
+    end)
+
+    H.test("#1655 the in-game check fails when the drawn IMPORT label or colour is not wired", function()
+        local mutants = {
+            { "widgets.import.content.text = import_label", "", "label" },
+            { "_set_button_color(widgets.import, false, not can_import)",
+                "_set_button_color(widgets.import, false, false)", "colour" },
+        }
+        for _, mutant in ipairs(mutants) do
+            local registered = {}
+            local browser = load_browser(registered, mutant[1], mutant[2])
+            configure(browser, 15, {})
+            local verdict = registered[CHECK]()
+            H.truthy(type(verdict) == "string" and verdict:find("drawn IMPORT", 1, true),
+                "a dropped " .. mutant[3] .. " wiring is a FAIL, got " .. tostring(verdict))
+        end
     end)
 end

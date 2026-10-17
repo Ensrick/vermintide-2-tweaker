@@ -39,7 +39,7 @@ Last updated: 2026-10-17.
 | Fix version(s) | cim_dev 0.8.139-dev (#1655) |
 | Category | SOLO / UI |
 | Repro | In the Keep, open CIM's Athanor, choose **Community Builds**, press **Career >** once, select a build, then press the bottom button. Return to your own career and import a compatible build. |
-| Expected post-fix | On another career the bottom button reads "SWITCH TO <career> TO IMPORT", renders disabled and does nothing. On the active career it reads **Import Selected Build** and imports as before. |
+| Expected post-fix | On another career the bottom button reads "SWITCH TO <career> TO IMPORT", renders disabled and does nothing. On the active career it reads **Import Selected Build** and imports as before. Importing another career's build into that career's saved loadout is blocked on purpose. Until #1696, a Necromancer sees the disabled label on every career, reading "SWITCH TO BW_NECRO TO IMPORT" on career 20. |
 | Detection | `test_cim_ranalds_career_gate_1655.lua` drives the shipped browser through draw, refresh and press. `/cim_regression_test` runs `issue1655_ranalds_import_needs_active_career` (SKIP when the active career has no Ranald's Gift id; Necromancer until #1696). |
 
 ### issue1117-bulk-accessory-button-layout - long label does not share the upgrade arrow

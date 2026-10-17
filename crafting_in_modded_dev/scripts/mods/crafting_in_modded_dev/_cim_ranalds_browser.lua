@@ -353,9 +353,10 @@ function Browser.draw(forge_state, overview, renderer, input_service, dt)
     _handle_input()
 end
 
--- #1655 in-game check: press the real IMPORT handler once for another career
--- and once for the active one, with the live career resolver, labels and
--- localization and a recording importer, then restore every touched field.
+-- #1655 in-game check: refresh the real widgets and press the real IMPORT
+-- handler once for another career and once for the active one, with the live
+-- career resolver, labels and localization and a recording importer, then
+-- restore every touched field and re-derive the widgets from it.
 local PROBE_FIELDS = { "open_state", "career_id", "active_career_id",
     "selected", "loading", "status", "import_build" }
 
@@ -365,9 +366,12 @@ local function _probe_press(career_id, active_id)
     local calls = 0
     Browser.import_build = function() calls = calls + 1; return false, "issue1655 probe" end
     local can_import, label = Browser.import_state()
-    Browser.widgets.import.content.hotspot.on_release = true
+    _refresh_content()
+    local widget = Browser.widgets.import
+    local drawn = { text = widget.content.text, disabled = widget.style.rect.color == COL_DISABLED }
+    widget.content.hotspot.on_release = true
     _handle_input()
-    return can_import, label, calls
+    return can_import, label, calls, drawn
 end
 
 function Browser.check_import_career_gate()
@@ -380,13 +384,15 @@ function Browser.check_import_career_gate()
     local other = active % 20 + 1
     local saved = {}
     for i = 1, #PROBE_FIELDS do saved[i] = Browser[PROBE_FIELDS[i]] end
-    local ok, other_ok, other_label, other_calls, same_ok, same_label, same_calls = pcall(function()
-        local a, b, c = _probe_press(other, active)
-        local d, e, f = _probe_press(active, active)
-        return a, b, c, d, e, f
-    end)
+    local ok, other_ok, other_label, other_calls, other_drawn, same_ok, same_label, same_calls, same_drawn
+        = pcall(function()
+            local a, b, c, d = _probe_press(other, active)
+            local e, f, g, h = _probe_press(active, active)
+            return a, b, c, d, e, f, g, h
+        end)
     for i = 1, #PROBE_FIELDS do Browser[PROBE_FIELDS[i]] = saved[i] end
     Browser.widgets.import.content.hotspot.on_release = false
+    pcall(_refresh_content)
     if not ok then return "IMPORT probe raised: " .. tostring(other_ok) end
     local other_name = tostring(Browser.career_label(other))
     if other_ok or other_calls ~= 0 then
@@ -395,11 +401,19 @@ function Browser.check_import_career_gate()
     if not tostring(other_label):find(other_name, 1, true) then
         return "disabled IMPORT label does not name " .. other_name .. ": " .. tostring(other_label)
     end
+    if other_drawn.text ~= other_label or not other_drawn.disabled then
+        return "drawn IMPORT button for " .. other_name .. " reads '" .. tostring(other_drawn.text)
+            .. "', disabled=" .. tostring(other_drawn.disabled)
+    end
     if not same_ok or same_calls ~= 1 then
         return "IMPORT for the active career no longer reaches the importer"
     end
     if same_label ~= _loc("import") then
         return "active-career IMPORT label changed: " .. tostring(same_label)
+    end
+    if same_drawn.text ~= same_label or same_drawn.disabled then
+        return "drawn active-career IMPORT button reads '" .. tostring(same_drawn.text)
+            .. "', disabled=" .. tostring(same_drawn.disabled)
     end
 end
 
