@@ -1,6 +1,6 @@
 -- Regenerated from immutable decompiled-source Git objects; do not hand-edit.
 return {
-    current_revision = "25fd7b8433e839b678d1c98a7a9af80918cbc252",
+    current_revision = "93dea911a4cc464a0eb51cfdc3a443297bfc4550",
     oracle_id = "wt_patch_4_6_hagbane_source_oracle_v1",
     routes = {
         hagbane_shortbow = {
@@ -37,7 +37,7 @@ return {
             ["scripts/settings/equipment/power_level_templates.lua"] = "13eeccec333d072261afd1705d4e18c8a411095e",
             ["scripts/settings/equipment/weapon_templates/shortbows_hagbane.lua"] = "2450220312570da7d14a3741edcf6c4d3ae0ec70",
         },
-        ["25fd7b8433e839b678d1c98a7a9af80918cbc252"] = {
+        ["93dea911a4cc464a0eb51cfdc3a443297bfc4550"] = {
             ["scripts/settings/equipment/damage_profile_templates.lua"] = "e8330328d0085f6aee09e0495ba88fdc0211d5aa",
             ["scripts/settings/equipment/power_level_templates.lua"] = "6eba753d985ea80057947ed1ae1a25214204783e",
             ["scripts/settings/equipment/weapon_templates/shortbows_hagbane.lua"] = "9803627f8e1a4573b6dbea8b11f8836e7460214f",

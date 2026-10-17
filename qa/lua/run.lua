@@ -133,6 +133,7 @@ local suites = {
     "test_wt_history_patch_6_11_0",
     "test_wt_history_patch_6_11_2",
     "test_wt_history_source_oracle",
+    "test_wt_history_source_anchor",
     "test_wt_fire_sword",
     "test_wt_hold_pose",
     "test_wt_overcharge_presentation",

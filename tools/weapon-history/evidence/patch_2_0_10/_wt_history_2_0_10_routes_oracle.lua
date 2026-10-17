@@ -1,6 +1,6 @@
 -- Regenerated from immutable decompiled-source Git objects; do not hand-edit.
 return {
-    current_revision = "25fd7b8433e839b678d1c98a7a9af80918cbc252",
+    current_revision = "93dea911a4cc464a0eb51cfdc3a443297bfc4550",
     oracle_id = "wt_patch_2_0_10_sword_and_dagger_source_oracle_v1",
     routes = {
         sword_and_dagger = {
@@ -50,15 +50,15 @@ return {
     },
     schema = 1,
     source_blobs = {
-        ["25fd7b8433e839b678d1c98a7a9af80918cbc252"] = {
-            ["scripts/settings/equipment/damage_profile_templates.lua"] = "e8330328d0085f6aee09e0495ba88fdc0211d5aa",
-            ["scripts/settings/equipment/power_level_templates.lua"] = "6eba753d985ea80057947ed1ae1a25214204783e",
-            ["scripts/settings/equipment/weapon_templates/dual_wield_sword_dagger.lua"] = "62d57cc3537ef6c7f78a40a8988027f0b527c8d9",
-        },
         ["90c7c21adb7aa2b7de5fcdca5094727895fbeb1a"] = {
             ["scripts/settings/equipment/damage_profile_templates.lua"] = "44ddcd9af0bb0df90bee614d102cdb6d99a6881f",
             ["scripts/settings/equipment/power_level_templates.lua"] = "f9643cb2701d0a8bc5df8f9ea103a0ce8a528d67",
             ["scripts/settings/equipment/weapon_templates/dual_wield_sword_dagger.lua"] = "c23af26d0557f5b29e52cafa72c52562da0a6f56",
+        },
+        ["93dea911a4cc464a0eb51cfdc3a443297bfc4550"] = {
+            ["scripts/settings/equipment/damage_profile_templates.lua"] = "e8330328d0085f6aee09e0495ba88fdc0211d5aa",
+            ["scripts/settings/equipment/power_level_templates.lua"] = "6eba753d985ea80057947ed1ae1a25214204783e",
+            ["scripts/settings/equipment/weapon_templates/dual_wield_sword_dagger.lua"] = "62d57cc3537ef6c7f78a40a8988027f0b527c8d9",
         },
     },
 }

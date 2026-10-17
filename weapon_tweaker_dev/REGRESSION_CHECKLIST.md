@@ -8,12 +8,23 @@ Last updated: 2026-09-01.
 
 ---
 
+## #1682 - Weapon-history provenance re-anchored to Game Version 6.13.0
+
+| Field | Check |
+|---|---|
+| Candidate version | WT 0.12.334-beta / WT Dev 0.12.335-dev. |
+| Menu | Every **Pre-Patch Weapon Versions** dropdown defaults to **Current (Game Version 6.13.0)**; no dropdown still names 6.12.1. |
+| Runtime | No gameplay change: every historical state, current guard and restore value is identical to 6.12.1. `/wt_regression_test` reports `PASS: issue1436_historical_weapon_patch_versions` with every family on Current. |
+| Automated | `test_wt_history_source_anchor.lua`, `check_wt_history_source_freshness.ps1 -RequireRemoteFresh`, and all 13 history reproducers with `-SourceRepo ... -RequireSource` (38 input blobs identical across 6.12.1/6.13.0). |
+
+---
+
 ## #1436 - Hotfix 6.11.2 Dagger and Axe & Falchion history
 
 | Field | Check |
 |---|---|
 | Candidate version | WT 0.12.328-beta / WT Dev 0.12.329-dev. |
-| Default | **Sienna's Dagger** and **Saltzpyre's Axe and Falchion** default to **Current (Game Version 6.12.1)** and perform zero gameplay writes. |
+| Default | **Sienna's Dagger** and **Saltzpyre's Axe and Falchion** default to **Current (Game Version 6.13.0)** and perform zero gameplay writes. |
 | Historical | Select **Game Version 6.11.1**. Dagger Heavy Attack 2 restores `dagger_h1_medium_smiter_diag`; Axe & Falchion Heavy Attacks 1 and 2 restore `axe_falcion_heavy_smiter_vertical_right` on the right-hand route only. |
 | Atomic refusal | A missing or foreign Axe & Falchion H1/H2 current guard refuses both family writes before mutation. |
 | Restore/isolation | Returning to Current restores all three exact native routes and original table identities. Dagger and Axe & Falchion selections remain independent. |
@@ -26,7 +37,7 @@ Last updated: 2026-09-01.
 | Field | Check |
 |---|---|
 | Candidate version | WT 0.12.330-beta / WT Dev 0.12.331-dev. |
-| Default | **Kruber's Longbow** and **One-handed Hammer/Mace (Kruber, Bardin, and Saltzpyre)** default to **Current (Game Version 6.12.1)** and perform zero gameplay writes. |
+| Default | **Kruber's Longbow** and **One-handed Hammer/Mace (Kruber, Bardin, and Saltzpyre)** default to **Current (Game Version 6.13.0)** and perform zero gameplay writes. |
 | Historical | Select **Game Version 6.10.0**. Longbow restores source-exact `aim_zoom_delay = 2` on gameplay and tutorial templates. Hammer/Mace restores `block_angle = 90` and `dodge_count = 3` on all three shared templates. |
 | Atomic refusal | A missing or foreign Longbow guard refuses both Longbow writes. A missing or foreign Hammer/Mace guard refuses all six family writes before mutation. |
 | Restore/composition | Returning to Current restores Longbow `0.22`, Hammer/Mace `120`/`4`, and all original table identities. The two family selections remain independent and ordinary WT adapters compose afterward. |
@@ -39,7 +50,7 @@ Last updated: 2026-09-01.
 | Field | Check |
 |---|---|
 | Candidate version | WT 0.12.333-beta / WT Dev 0.12.334-dev (reissues the unpublished 0.12.331-beta / 0.12.332-dev pair); in-game verification remains outstanding. |
-| Menu | **Pre-Patch Weapon Versions > Kerillian's Swiftbow** offers **Current (Game Version 6.12.1)** and **Game Version 6.10.0 (Ammunition Only) - bounded patch delta**. Longbow and Hammer/Mace keep their existing labels. |
+| Menu | **Pre-Patch Weapon Versions > Kerillian's Swiftbow** offers **Current (Game Version 6.13.0)** and **Game Version 6.10.0 (Ammunition Only) - bounded patch delta**. Longbow and Hammer/Mace keep their existing labels. |
 | Scope | Only maximum ammunition changes: 60 to 50 before career/talent bonuses. Cleave, headshot damage, reload, profiles and other weapons remain current. |
 | Restart | Changing the selection does not hot-apply. Restart with the ammunition preset, then restart with Current and compare maximum arrows using the same career/talents. |
 | Safety | Missing template/ammo table/capacity or a foreign capacity refuses without writes. Repeated apply does not stack; restore retains exact table identities and unrelated ordinary tweaks. |
@@ -50,7 +61,7 @@ Last updated: 2026-09-01.
 | Field | Check |
 |---|---|
 | Candidate version | WT 0.12.333-beta / WT Dev 0.12.334-dev; in-game verification remains outstanding. |
-| Menu | **Bardin's Grudge-Raker** offers **Current (Game Version 6.12.1)** and **Game Version 6.10.0 (Ammunition Only) - bounded patch delta**. Selection is startup-only. |
+| Menu | **Bardin's Grudge-Raker** offers **Current (Game Version 6.13.0)** and **Game Version 6.10.0 (Ammunition Only) - bounded patch delta**. Selection is startup-only. |
 | Scope | Only normal/Versus `ammo_data.max_ammo` changes from 20/20 to 16/16. Separate armored/monster damage, pellets, reload, clip size, career bonuses and presentation are excluded. |
 | Atomic refusal | Either missing template/ammo table/leaf or foreign capacity refuses both family writes. |
 | Restore/composition | Exact 20/20 restoration retains template/ammo/action identities and distinct normal/Versus damage profiles; reapply is idempotent. Swiftbow, Longbow and Hammer/Mace selections plus unrelated ordinary tweaks remain independent. |

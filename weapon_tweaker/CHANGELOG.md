@@ -1,5 +1,20 @@
 # Weapon Tweaker Changelog
 
+## 0.12.334-beta (2026-10-17) -- re-anchor weapon-history provenance to Game Version 6.13.0 (#1682) [verify-fix]
+
+- Upstream `Aussiemon/Vermintide-2-Source-Code` moved from Game Version
+  6.12.1 (`25fd7b84`) to 6.13.0 (`93dea911`), so the release freshness gate
+  stopped every Tweaker: Weapons build. The canonical source anchor, all 13
+  Pre-Patch Weapon Versions catalogs and the completeness ledger now name
+  6.13.0, and every catalog, evidence file and route oracle regenerates
+  byte-exact from the 6.13.0 source.
+- All 38 weapon-history source inputs are the same Git blobs at both
+  commits; none of the 37 upstream-changed paths is a weapon template or
+  damage-profile input.
+- Runtime behaviour does not change: every historical operation, current
+  guard and restore value is identical. The only visible difference is the
+  default dropdown label, which now reads **Current (Game Version 6.13.0)**.
+
 ## 0.12.333-beta (2026-09-13) -- reissue of 0.12.332-beta so the dev mirror can republish (#1436) [not-started]
 
 - Reissues 0.12.332-beta unchanged: the paired dev mirror's version claim

@@ -206,7 +206,7 @@ local adjacent_profiles = load_data(evidence_dir
 local historical_profiles = load_data(evidence_dir
     .. "/_wt_history_profiles_5_6_1_rehydrated_generated.lua")
 local current_profiles = load_data(evidence_dir
-    .. "/_wt_history_profiles_current_6_12_1_generated.lua")
+    .. "/_wt_history_profiles_current_6_13_0_generated.lua")
 for _, snapshot in ipairs({ adjacent_profiles, historical_profiles, current_profiles }) do
     assert(snapshot.old_revision == source_catalog.boundary.historical_revision
             and snapshot.new_revision == source_catalog.boundary.post_revision,
