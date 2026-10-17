@@ -3,7 +3,7 @@ local mod = get_mod("crt")
 -- concern module and this entry's lifecycle callbacks read/write it.
 mod._crt = mod._crt or {}
 
-local MOD_VERSION = "0.4.31-beta"
+local MOD_VERSION = "0.4.32-beta"
 mod._crt.MOD_VERSION = MOD_VERSION
 
 -- VMF mod-to-mod RPC schema (VMF_RECIPES section 10). Issue #776 appends the
@@ -104,6 +104,9 @@ mod._crt.focused_spirit = mod:dofile("scripts/mods/career_tweaker/_crt_focused_s
 -- constants; the beacon and receiver floor consume its exact catalog policy.
 mod._crt.wire_policy = mod:dofile("scripts/mods/career_tweaker/_crt_wire_policy")
 mod._crt.wire_catalog = mod:dofile("scripts/mods/career_tweaker/_lib_wire_catalog")
+-- #1686: pure atlas-presence guard for every buff/talent icon crt hands to the
+-- HUD. Loads before the balance, Foot Knight and regression consumers.
+mod._crt.buff_icons = mod:dofile("scripts/mods/career_tweaker/_crt_buff_icons")
 -- #428: one canonical pair-registration owner serves both the 34-name balance
 -- catalog and the two-name Tourney catalog. If the standalone copy cannot load,
 -- retain stub creation but reject every registration; the exact wire-catalog
@@ -134,6 +137,25 @@ end
 -- balance.network_unsafe_ids / parity_gate_ok / wire_parity_live). Real module
 -- or the safe-stub above -- either way a table honoring the read contract.
 mod._crt.balance = balance
+
+-- #1686: every crt buff registration runs at balance load or inside
+-- balance.apply. Re-prove the icon of every crt-registered template once now
+-- and after each apply pass, before any buff can reach the HUD (bug class 23).
+-- Every caller reaches apply through this table, so wrapping the field covers
+-- them all (entry reconcile, rework-master policy).
+if mod._crt.buff_icons and type(balance.apply) == "function" then
+    local buff_icons = mod._crt.buff_icons
+    local apply_registrations = balance.apply
+    local function sweep_icons(site)
+        buff_icons.log_rewrites(site, buff_icons.guard_names(rawget(_G, "UIAtlasHelper"),
+            rawget(_G, "BuffTemplates"), mod._crt_mod_registered_buff_names))
+    end
+    balance.apply = function(...)
+        apply_registrations(...)
+        sweep_icons("apply")
+    end
+    sweep_icons("load")
+end
 
 -- Big Rebalance was retired under #321 and its unreachable implementation was
 -- deleted under #433. Old cbr_* saved values remain untouched and reserved;

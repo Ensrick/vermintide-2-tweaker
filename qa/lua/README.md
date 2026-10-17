@@ -90,6 +90,17 @@ there is no copied implementation.
   `icons_placeholder`, atlas drift falls back and fails the audit, the audit
   covers both traits and the Athanor fallback item icon, a missing helper
   fails closed, and every trait-row install routes through the guard.
+- `tests/test_crt_buff_icons.lua`: #1686 every icon crt hands to the HUD
+  resolves in the Game Version 6.13.0 atlas (test-local
+  `has_atlas_settings_by_texture_name` seam): no crt module sets an icon
+  literal outside the 6.13.0 atlas (the two removed 6.12.1 keys fail it), the
+  Dance of Blades and Unchained buffs carry `maidenguard_4_2` and
+  `unchained_6_1`, the guard drops only unproven buff icons and fails closed
+  without the helper, the apply sweep touches only crt-registered names,
+  Leading Shots keeps the vanilla talent icon on a miss, the audit fails on
+  constant, factory and live drift, and every registration routes through the
+  guard. An optional case cross-checks the fixture against a local decompiled
+  atlas.
 - `fixtures/vanilla_weapon_master_list.lua`: GENERATED vanilla weapon census
   (every `ItemMasterList` melee/ranged entry with its `can_wield` list after the
   DLC `UpdateItemMasterList` patches, each hero career's

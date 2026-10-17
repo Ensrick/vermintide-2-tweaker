@@ -58,6 +58,7 @@ local suites = {
     "test_crt_tourney_catalog",
     "test_crt_umbrella_audit",
     "test_crt_dance_of_blades",
+    "test_crt_buff_icons",
     "test_crt_flagellation",
     "test_crt_foot_knight_policy",
     "test_crt_balance_split",

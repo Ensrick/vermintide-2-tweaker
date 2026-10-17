@@ -1462,3 +1462,30 @@ _rt_register("issue1575_profile_indicator_owner", function()
     end
 end)
 -- #1575 profile-indicator check end
+
+-- #1686 buff icon atlas check begin
+-- Every icon crt hands to the HUD must resolve in the live UI atlas: the
+-- preferred constants (even while their rework is off), the Dance of Blades
+-- factory, the Foot Knight catalog and every live crt-registered template. A
+-- miss reaches Gui_bitmap (ui_renderer.lua:117), the bug class 23 fatal.
+_rt_register("issue1686_buff_icons_in_atlas", function()
+    local icons = mod._crt and mod._crt.buff_icons
+    if type(icons) ~= "table" or type(icons.audit) ~= "function" then
+        return "#1686 buff icon guard not loaded"
+    end
+    local dance = mod._crt.dance_of_blades
+    local fk = mod._crt.foot_knight
+    if type(dance) ~= "table" or type(dance.templates) ~= "function" then
+        return "#1686 Dance of Blades factory missing"
+    end
+    local names = {}
+    for name in pairs(mod._crt_mod_registered_buff_names or {}) do names[name] = true end
+    for name in pairs(fk and fk.buff_icons or {}) do names[name] = true end
+    return icons.audit(rawget(_G, "UIAtlasHelper"), icons.icon_entries({
+        factory_templates = dance.templates(),
+        foot_knight_icons = fk and fk.buff_icons,
+        buff_templates = rawget(_G, "BuffTemplates"),
+        names = names,
+    }))
+end)
+-- #1686 buff icon atlas check end
