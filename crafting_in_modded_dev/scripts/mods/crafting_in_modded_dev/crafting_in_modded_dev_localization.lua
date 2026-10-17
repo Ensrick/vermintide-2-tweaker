@@ -15,6 +15,8 @@ return {
     ranalds_page_next = { en = "PAGE >" },
     ranalds_page_label = { en = "PAGE %d / %d" },
     ranalds_import = { en = "IMPORT SELECTED BUILD" },
+    -- #1655: {career} is replaced by plain text substitution, not a format directive.
+    ranalds_import_switch = { en = "SWITCH TO {career} TO IMPORT" },
     ranalds_loading = { en = "Loading community builds..." },
     ranalds_load_failed = { en = "Could not load builds: %s" },
     ranalds_request_failed = { en = "Could not start request: %s" },

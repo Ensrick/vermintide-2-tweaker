@@ -243,6 +243,7 @@ local suites = {
     "test_cim_ranalds_catalog",
     "test_cim_ranalds_import",
     "test_cim_ranalds_browser",
+    "test_cim_ranalds_career_gate_1655",
     "test_cim_modded_loadout_owner",
     "test_cim_weave_loadout_owner",
     "test_cim_temper_transaction",

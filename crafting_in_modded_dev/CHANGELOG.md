@@ -1,5 +1,65 @@
 # Crafting in Modded Changelog
 
+## 0.8.139-dev (2026-10-17) -- Community Builds import names the career to switch to (#1655) [verify-fix]
+
+- Symptom (RainReligion, 2026-09-21, cim 0.8.135-dev, playing Unchained):
+  Community Builds let CAREER browse to another career, select a build and
+  press IMPORT SELECTED BUILD, which then reported `Import rejected: item
+  unavailable: bw_reaper`. Nothing said before the press what the career
+  switch is for.
+- Cause: the import button only checked for a selection and a finished load
+  (`_cim_ranalds_browser.lua:266` and `:292` before this change), while CAREER
+  moves the browsed career freely (`:275-281`). The entry's career resolver
+  also returned career 1 for any career it could not match
+  (`crafting_in_modded_dev.lua:184` before this change), so an unmatched career
+  counted as Mercenary. The `bw_reaper` text itself is a catalogue key the game
+  does not have; that is tracked separately in #1696.
+- Fix (coordinator decision): browsing any career stays available for
+  reading builds. While the browsed career is not the one being played, IMPORT
+  SELECTED BUILD is disabled and reads "SWITCH TO <career> TO IMPORT" with the
+  career's in-game name; pressing it does nothing. The import path for the
+  active career is unchanged. An unmatched career no longer stands in for
+  Mercenary. The new label is localized (`ranalds_import_switch`), shrinks to
+  the button width and uses a plain `{career}` substitution, so the regression
+  command's format probe cannot turn it into "<Invalid string format>".
+- Behaviour removed on purpose: before this change, importing a build of
+  another career was not always rejected. The importer writes the build's own
+  career (`_cim_ranalds_import.lua:125-133`, `:509-510`, `:517-519`) and only skips
+  the live re-equip when that is not the career being played
+  (`_cim_modded_loadout_owner.lua:647-669`), so a build without catalogue drift
+  was saved into that other career's selected loadout and talents (the issue's
+  "Apply Only" option). That path is now blocked: import only for the career
+  being played. #1655 asked to discuss the options first; this is the chosen
+  option and can be reversed there.
+- Known until #1696: the catalogue maps career 20 to `bw_necro`, but the game's
+  key is `bw_necromancer` (Vermintide-2-Source-Code
+  `scripts/settings/dlcs/shovel/career_settings_shovel.lua:4`). A Necromancer
+  therefore has no resolved active career, so IMPORT stays disabled on every
+  browsed career, and on career 20 the button reads "SWITCH TO BW_NECRO TO
+  IMPORT". The label and the gate are corrected together when #1696 remaps
+  career 20.
+- Adds `issue1655_ranalds_import_needs_active_career` to
+  `/cim_regression_test`: once for another career and once for the active
+  career, with a stand-in importer, it refreshes the real browser widgets and
+  presses the real import handler. Another career must draw the switch label,
+  render disabled, never import and name that career; the active career must
+  draw IMPORT SELECTED BUILD enabled and reach the importer. It then restores
+  the browser. It SKIPs when the active career has no Ranald's Gift id
+  (Necromancer until #1696).
+- Offline proof: `qa/lua/tests/test_cim_ranalds_career_gate_1655.lua` drives
+  the shipped browser through draw, refresh and press; against the
+  0.8.138-dev source six of its seven cases fail (the button stays "IMPORT
+  SELECTED BUILD" and enabled for another career). The seventh is a guard that
+  the active career still imports, and passes before and after.
+
+**Test:** Load `Crafting in Modded v0.8.139-dev` in the keep on a non-Necromancer
+career and run `/cim_regression_test`: `issue1655_ranalds_import_needs_active_career`
+must PASS (on Necromancer it SKIPs until #1696). Open the Athanor, choose COMMUNITY BUILDS, press CAREER > once and
+select a build: the bottom button must read "SWITCH TO <that career> TO IMPORT",
+look disabled and do nothing when pressed. Press < CAREER to return to your
+career, select a build and press IMPORT SELECTED BUILD: it must behave as
+before (a compatible build reports "Imported and equipped: <name>").
+
 ## 0.8.138-dev (2026-09-25) -- Saved crafts that fail to restore are named, never hidden (#1654) [diagnostics-armed]
 
 - Symptom (RainReligion, 2026-09-21, cim 0.8.135-dev only): of two crafted
