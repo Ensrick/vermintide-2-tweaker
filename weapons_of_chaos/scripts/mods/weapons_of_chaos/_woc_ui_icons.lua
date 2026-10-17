@@ -51,8 +51,10 @@ function M.resolve(atlas_helper, preferred, fallback)
 end
 
 -- Rewrites `rows[key][field]` in place for every row whose icon is absent from
--- the atlas. Returns a list of { key, from, to, reason } for each rewrite.
-function M.guard_rows(atlas_helper, rows, keys, field, fallback)
+-- the atlas. A missing icon is repaired to `preferred[key]` (the row's own
+-- current constant) when the atlas proves it, else to the fallback. Returns a
+-- list of { key, from, to, reason } for each rewrite.
+function M.guard_rows(atlas_helper, rows, keys, field, fallback, preferred)
 	local replaced = {}
 	if type(rows) ~= "table" or type(keys) ~= "table" then return replaced end
 	field = field or "icon"
@@ -61,6 +63,11 @@ function M.guard_rows(atlas_helper, rows, keys, field, fallback)
 		if type(row) == "table" then
 			local current = row[field]
 			local safe, reason = M.resolve(atlas_helper, current, fallback)
+			local want = type(preferred) == "table" and preferred[key] or nil
+			if safe ~= current and want ~= nil and want ~= current
+					and M.in_atlas(atlas_helper, want) == true then
+				safe, reason = want, "preferred"
+			end
 			if safe ~= current then
 				row[field] = safe
 				replaced[#replaced + 1] = {
@@ -88,7 +95,10 @@ function M.install_trait_rows(moveset, weapon_traits, buff_templates, atlas_help
 	local ok, reason = moveset.install_intrinsic_trait_rows(weapon_traits, buff_templates)
 	if not ok then return ok, reason, {} end
 	local replaced = M.guard_rows(atlas_helper, weapon_traits.traits,
-		moveset.intrinsic_traits(), "icon")
+		moveset.intrinsic_traits(), "icon", nil, {
+			[moveset.POISON_TRAIT] = moveset.POISON_TRAIT_ICON,
+			[moveset.SHYISH_CURSE_TRAIT] = moveset.SHYISH_CURSE_ICON,
+		})
 	if type(report) == "function" then
 		for _, row in ipairs(replaced) do pcall(report, row) end
 	end
@@ -134,9 +144,10 @@ function M.woc_icon_rows(traits, moveset, masters, item_key, base_weapon)
 end
 
 -- In-game audit. `entries` is a list of { label, icon, preferred }. Returns nil
--- when every live icon resolves and matches its preferred constant, else the
--- first failure. A live icon outside the atlas is the crash; a preferred
--- constant outside the atlas is drift that the guard is masking.
+-- when every live icon is in the atlas, every preferred constant is in the
+-- atlas, and no live icon is the fallback while its preferred constant is
+-- resident; else the first failure. A live icon outside the atlas is the
+-- crash; the other two are a substitute the guard is masking.
 function M.audit(atlas_helper, entries)
 	if M.in_atlas(atlas_helper, M.FALLBACK_ICON) == nil then
 		return "UIAtlasHelper.has_atlas_settings_by_texture_name unavailable"
@@ -149,6 +160,11 @@ function M.audit(atlas_helper, entries)
 		if entry.preferred ~= nil and not M.in_atlas(atlas_helper, entry.preferred) then
 			return string.format("%s preferred icon %s left the UI atlas; fallback %s in use",
 				tostring(entry.label), tostring(entry.preferred), tostring(entry.icon))
+		end
+		if entry.preferred ~= nil and entry.icon == M.FALLBACK_ICON
+				and entry.preferred ~= M.FALLBACK_ICON then
+			return string.format("%s shows fallback %s although preferred icon %s is in the UI atlas",
+				tostring(entry.label), tostring(entry.icon), tostring(entry.preferred))
 		end
 	end
 	return nil

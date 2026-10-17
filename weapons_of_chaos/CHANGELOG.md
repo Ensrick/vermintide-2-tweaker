@@ -7,12 +7,14 @@
   hit the "Material not found in Gui" crash. The row now uses the current
   vanilla icon `shade_2_2`.
 - Every atlas icon WOC hands to the UI (both trait rows and the Athanor
-  fallback item icon) is now checked against the live UI atlas at install and
-  falls back to vanilla's own tooltip default icon instead of crashing. Each
-  rewrite logs a `[WOC:1687]` line; boot logs one `[WOC:1687] trait icon atlas
-  guard` summary.
+  fallback item icon) is now checked against the live UI atlas at install. A
+  missing trait icon is repaired to the row's current vanilla icon when the
+  atlas has it, else it falls back to vanilla's own tooltip default icon
+  instead of crashing. Each rewrite logs a `[WOC:1687]` line; boot logs one
+  `[WOC:1687] trait icon atlas guard` summary.
 - `/woc_regression_test` `issue655_blightreaper_trait_contract` now fails if
-  any WOC atlas icon is missing or a preferred icon has drifted.
+  any WOC atlas icon is missing, a preferred icon has drifted, or a row shows
+  the default icon while its preferred icon is in the atlas.
 
 ## v0.1.59-dev (2026-08-31) - prevent source-only helper regressions (#595)
 

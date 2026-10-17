@@ -68,7 +68,8 @@ return function(H, repo_root)
 
 	H.test("WOC guard rewrites a kept 6.12.1 row and falls back on atlas drift", function()
 		local guard = load_guard()
-		-- A row an earlier install kept with the removed key is repaired.
+		-- A row an earlier install kept with the removed key is repaired to the
+		-- row's own current constant, not the placeholder.
 		local weapon_traits = { traits = {
 			[moveset.POISON_TRAIT] = { name = moveset.POISON_TRAIT, icon = REMOVED_6130 },
 		} }
@@ -79,8 +80,25 @@ return function(H, repo_root)
 		H.equal(#rewrites, 1)
 		H.equal(#logged, 1)
 		H.deep_equal(rewrites[1], { key = moveset.POISON_TRAIT, from = REMOVED_6130,
-			to = guard.FALLBACK_ICON, reason = "fallback" })
-		H.equal(weapon_traits.traits[moveset.POISON_TRAIT].icon, "icons_placeholder")
+			to = moveset.POISON_TRAIT_ICON, reason = "preferred" })
+		H.equal(weapon_traits.traits[moveset.POISON_TRAIT].icon, "shade_2_2")
+		H.equal(guard.audit(atlas(ATLAS_6130), guard.woc_icon_rows(weapon_traits.traits,
+			moveset, {}, "woc_blightreaper", "es_1h_sword")), nil)
+
+		-- A placeholder kept while the preferred constant is resident is a
+		-- masked substitute: the audit fails instead of passing.
+		local substitute = guard.audit(atlas(ATLAS_6130), {
+			{ label = "Poisoned Edge", icon = "icons_placeholder", preferred = moveset.POISON_TRAIT_ICON },
+		})
+		H.truthy(substitute and substitute:find("shows fallback icons_placeholder", 1, true),
+			tostring(substitute))
+
+		-- Without a usable helper the kept row still fails closed to the default.
+		local unproven = { traits = {
+			[moveset.POISON_TRAIT] = { name = moveset.POISON_TRAIT, icon = REMOVED_6130 },
+		} }
+		guard.install_trait_rows(moveset, unproven, {}, nil)
+		H.equal(unproven.traits[moveset.POISON_TRAIT].icon, "icons_placeholder")
 
 		-- A future patch that drops shade_2_2: the row falls back, the live icon
 		-- still resolves, and the audit reports the drift instead of passing.
@@ -158,8 +176,52 @@ return function(H, repo_root)
 		H.truthy(package:find('"scripts/mods/weapons_of_chaos/_woc_ui_icons"', 1, true))
 	end)
 
-	local vanilla = "C:/Users/danjo/source/repos/Vermintide-2-Source-Code/"
-		.. "scripts/ui/atlas_settings/gui_icons_atlas.lua"
+	-- Runs the registered issue655 closure itself in a test-local environment
+	-- (no global writes), so an audit result it computes but drops is caught.
+	H.test("WOC issue655 in-game check returns the icon audit failure", function()
+		local guard = load_guard()
+		local main = read(root .. "weapons_of_chaos.lua")
+		local source = assert(main:match('_rt_register%("issue655_blightreaper_trait_contract".-\nend%)'),
+			"issue655 check missing")
+		local function upvalue(name)
+			return assert(main:match("\nlocal " .. name .. '%s*=%s*"([%w_]+)"'), name)
+		end
+		local item_key, base_weapon = upvalue("ITEM_KEY"), upvalue("BASE_WEAPON")
+		local function run(traits, helper)
+			local check
+			local chunk = assert(loadstring(source, "@issue655-runtime-check"))
+			setfenv(chunk, setmetatable({
+				_rt_register = function(_, fn) check = fn end,
+				_moveset = moveset, _ui_icons = guard,
+				ITEM_KEY = item_key, BASE_WEAPON = base_weapon, BACKEND_ID = item_key .. "_001",
+				_relic_runtime = { backend_items = function() return nil end },
+				NetworkLookup = { traits = {} },
+				_G = { WeaponTraits = { traits = traits }, UIAtlasHelper = helper, ItemMasterList = {
+					[base_weapon] = { inventory_icon = "icon_wpn_emp_sword_02_t1" },
+					[item_key] = { cim_inventory_icon_fallback = "icon_wpn_emp_sword_02_t1" },
+				} },
+			}, { __index = _G }))
+			chunk()
+			return assert(check, "issue655 check did not register")()
+		end
+		local weapon_traits = { traits = {} }
+		guard.install_trait_rows(moveset, weapon_traits, {}, atlas(ATLAS_6130))
+		local poison = weapon_traits.traits[moveset.POISON_TRAIT]
+		H.equal(run(weapon_traits.traits, atlas(ATLAS_6130)), nil)
+		poison.icon = REMOVED_6130
+		local failure = run(weapon_traits.traits, atlas(ATLAS_6130))
+		H.truthy(failure and failure:find("Gui_bitmap fatal", 1, true), tostring(failure))
+		poison.icon = "icons_placeholder"
+		failure = run(weapon_traits.traits, atlas(ATLAS_6130))
+		H.truthy(failure and failure:find("shows fallback", 1, true), tostring(failure))
+		poison.icon = moveset.POISON_TRAIT_ICON
+		failure = run(weapon_traits.traits, nil)
+		H.truthy(failure and failure:find("unavailable", 1, true), tostring(failure))
+	end)
+
+	local home = os.getenv("USERPROFILE") or ""
+	local vanilla = (os.getenv("VT2_SOURCE_ROOT") or (home .. "/source/repos/Vermintide-2-Source-Code"))
+		.. "/scripts/ui/atlas_settings/gui_icons_atlas.lua"
 	local probe = io.open(vanilla, "rb")
 	if probe then probe:close() end
 	H.test_if(probe ~= nil, "WOC trait icons exist in the decompiled vanilla atlas", function()

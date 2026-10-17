@@ -1159,10 +1159,12 @@ Poisoned Edge row used `kerillian_shade_increased_damage_on_poisoned_or_bleeding
 (6.12.1 `gui_icons_atlas.lua:14648`); 6.13.0 renamed it `shade_2_2`
 (`talent_settings_kerillian.lua:1593`, `gui_icons_atlas.lua:8684`), and the
 item tooltip trait pass draws it on hover (`ui_passes_tooltips.lua:1282/1290`).
-Fix: re-prove every atlas icon at install with the same engine predicate and
-fall back to vanilla's own tooltip default `icons_placeholder`
-(`ui_passes_tooltips.lua:1134`); the in-game check fails on drift instead of
-passing silently. Reference: `weapons_of_chaos/.../_woc_ui_icons.lua` +
+Fix: re-prove every atlas icon at install with the same engine predicate,
+repair a missing name to the row's current constant when the atlas has it, and
+otherwise fall back to vanilla's own tooltip default `icons_placeholder`
+(`ui_passes_tooltips.lua:1134`); the in-game check fails on drift, and on a
+placeholder shown while the preferred name is resident, instead of passing
+silently. Reference: `weapons_of_chaos/.../_woc_ui_icons.lua` +
 `issue655_blightreaper_trait_contract`. Custom single-texture materials are not
 atlas names: their safety is the renderer-injection contract above.
 

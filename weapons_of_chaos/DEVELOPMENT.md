@@ -107,8 +107,11 @@ vanilla atlas icons: the Shade poison icon `shade_2_2` (renamed by Game
 Version 6.13.0, #1687) and `mutator_icon_death_spirits`, the same icon
 declared by `scripts/settings/mutators/mutator_death.lua`. Every atlas icon
 WOC hands to the UI goes through `_woc_ui_icons.lua`, which re-proves it with
-`UIAtlasHelper.has_atlas_settings_by_texture_name` and falls back to vanilla's
-`icons_placeholder` (BUG_CLASSES section 23).
+`UIAtlasHelper.has_atlas_settings_by_texture_name`. A missing trait icon is
+repaired to the row's current constant when the atlas proves it, else it falls
+back to vanilla's `icons_placeholder` (BUG_CLASSES section 23). The issue655
+audit also fails on a placeholder shown while the preferred constant is
+resident, so a masked substitute cannot pass.
 
 CIM may offer `Poisoned Edge` to other melee weapons only after an exact
 `woc.poison_trait.v1` provider handshake. CIM parks that saved trait while WOC
