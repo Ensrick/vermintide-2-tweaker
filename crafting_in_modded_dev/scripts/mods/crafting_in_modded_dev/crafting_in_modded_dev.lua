@@ -36,7 +36,7 @@ mod._cim959_accessory_property_policy = mod:dofile(
 local _BULK_ACCESSORY_CRAFT = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_bulk_accessory_craft")
 _MEM_PROBE_T0_CIMD = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.8.139-dev"
+local MOD_VERSION = "0.8.140-dev"
 local _bootstrap = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_bootstrap_runtime")({
         mod = mod,
@@ -1024,6 +1024,19 @@ _rt_register("issue1360_ranalds_build_import", function()
             or type(importer.preflight) ~= "function" or type(importer.apply) ~= "function" then
         return "Ranald fetch/import API incomplete"
     end
+end)
+
+-- #1696: every catalogue career/weapon key resolves in the live tables.
+_rt_register("issue1696_ranalds_catalog_game_keys", function()
+    local catalog = mod._cim_ranalds_catalog
+    if type(catalog) ~= "table" or type(catalog.unresolved_game_keys) ~= "function" then
+        return "Ranald catalogue key resolver is not installed"
+    end
+    if type(ItemMasterList) ~= "table" or type(CareerSettings) ~= "table" then
+        return "skip: ItemMasterList or CareerSettings is not loaded"
+    end
+    local missing = catalog.unresolved_game_keys(ItemMasterList, CareerSettings)
+    if #missing > 0 then return "keys missing from the game: " .. table.concat(missing, ", ") end
 end)
 
 -- Re-add every saved mirror-path craft (Athanor + standard forge) to the live

@@ -1,5 +1,41 @@
 # Crafting in Modded Changelog
 
+## 0.8.140-dev (2026-10-17) -- Community Builds use the game's Necromancer keys (#1696) [verify-fix]
+
+- Symptom (RainReligion, 2026-09-21, cim 0.8.135-dev, #1655 report): every
+  Community Builds import using a Necromancer weapon was rejected with
+  `Import rejected: item unavailable: bw_reaper`, on any career.
+- Root cause: `_cim_ranalds_catalog.lua` copied Ranald's Gift's own codeName
+  strings (`src/data/WeaponsDataMap.js` / `HeroesDataMap.js` at the pinned
+  site commit). For three ids those are not game keys: weapon 82
+  `bw_reaper` (site "Ensorcelled Reaper", melee) is
+  `ItemMasterList.bw_ghost_scythe` (`item_master_list_shovel.lua:227`),
+  weapon 83 `bw_soulsteal` (site "Soulstealer Staff", ranged_heat) is
+  `ItemMasterList.bw_necromancy_staff` (`:481`), and career 20 `bw_necro` is
+  `CareerSettings.bw_necromancer` (`career_settings_shovel.lua:4`). The bad
+  career key also made preflight return "career unavailable", showed the raw
+  key as the career label, and kept the browser from opening on the
+  Necromancer's own builds.
+- Fix: the three ids now map to the game keys. Every other catalogue key was
+  checked against the 6.13.0 decompile: the other 81 weapons, the other 19
+  careers and every property and trait key already resolve. Import gating
+  (#1655) is unchanged.
+- New `/cim_regression_test` check `issue1696_ranalds_catalog_game_keys`:
+  every catalogue career resolves in `CareerSettings` and every weapon is an
+  `ItemMasterList` melee/ranged row (read with `rawget`, so a missing key
+  never trips ItemMasterList's logging `__index`).
+- Offline proof: `qa/lua/tests/test_cim_ranalds_game_keys_1696.lua` checks
+  the catalogue against the vanilla weapon census and hero career list, plus
+  an optional pass over the decompiled source; against 0.8.139-dev all four
+  cases fail on exactly `bw_necro`, `bw_reaper` and `bw_soulsteal`.
+
+**Test:** Load `Crafting in Modded v0.8.140-dev` in the keep, run
+`/cim_regression_test`: `issue1696_ranalds_catalog_game_keys` must PASS.
+Then, as the Necromancer, open the Athanor's Community Builds browser: it
+opens on the Necromancer's builds and the career label shows her localized
+name, not `bw_necro`. Import a build that uses the Ensorcelled Reaper or
+the Soulstealer Staff: it must not be rejected with "item unavailable".
+
 ## 0.8.139-dev (2026-10-17) -- Five regression checks judge the shipped policy, not stale fixtures (#1656) [verify-fix]
 
 - Symptom (RainReligion, 2026-09-21, cim 0.8.135-dev, plain keep run): five

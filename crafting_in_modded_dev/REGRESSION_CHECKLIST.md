@@ -6,6 +6,18 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-10-17.
 
+### issue1696-ranalds-catalog-game-keys - Community Builds name live game rows
+
+| Field | Value |
+|---|---|
+| Symptom | Every Community Builds import using a Necromancer weapon was rejected with `Import rejected: item unavailable: bw_reaper` (RainReligion, 0.8.135-dev, #1655 report). |
+| Root cause | `_cim_ranalds_catalog.lua` copied Ranald's Gift's codeNames; weapon 82 `bw_reaper`, weapon 83 `bw_soulsteal` and career 20 `bw_necro` are not game keys (`bw_ghost_scythe`, `bw_necromancy_staff`, `bw_necromancer`). |
+| Fix version(s) | cim_dev 0.8.140-dev (#1696) |
+| Category | SOLO / EXTERNAL DATA |
+| Repro | Enter the Keep and run `/cim_regression_test`. As the Necromancer, open the Athanor's Community Builds and import a build with the Ensorcelled Reaper or Soulstealer Staff. |
+| Expected post-fix | `issue1696_ranalds_catalog_game_keys` PASSes. The browser opens on the Necromancer with her localized career label, and the import is not rejected with "item unavailable". |
+| Detection | `test_cim_ranalds_game_keys_1696.lua` checks all 20 careers and 83 weapons against the vanilla census (plus the five merged Chaos Wastes weapons) and, when present, the decompiled source; it fails on exactly the three stale keys against 0.8.139-dev. `/cim_regression_test` runs `issue1696_ranalds_catalog_game_keys` against the live `ItemMasterList` and `CareerSettings`. |
+
 ### issue1656-regression-harness - checks judge the shipped policy
 
 | Field | Value |
