@@ -568,8 +568,11 @@
     # Source: dynamic_cosmetic_portraits/CHANGELOG.md 0.1.18-dev (issue 511).
     @{ mod='dcp'; file='dynamic_cosmetic_portraits/scripts/mods/dynamic_cosmetic_portraits/dynamic_cosmetic_portraits.lua'; needle='_skin_portrait_map[skin_key]'; literal=$true; polarity='present'; issueRef='#511'; note='skin lookup precedes hat lookup (an outfit overrides the hat portrait).' }
     @{ mod='dcp'; file='dynamic_cosmetic_portraits/scripts/mods/dynamic_cosmetic_portraits/dynamic_cosmetic_portraits.lua'; needle='_hat_portrait_map[hat_key]'; literal=$true; polarity='present'; issueRef='#511'; note='hat lookup is the fallback after the skin lookup.' }
-    @{ mod='dcp'; file='dynamic_cosmetic_portraits/scripts/mods/dynamic_cosmetic_portraits/dynamic_cosmetic_portraits.lua'; needle='_original_portrait_image = career.portrait_image'; literal=$true; polarity='present'; issueRef='#509'; note='save-before-swap: capture the vanilla portrait before overwriting (restore on unload).' }
-    @{ mod='dcp'; file='dynamic_cosmetic_portraits/scripts/mods/dynamic_cosmetic_portraits/dynamic_cosmetic_portraits.lua'; needle='career.portrait_image = _original_portrait_image'; literal=$true; polarity='present'; issueRef='#509'; note='restore writes the saved original back (no swapped portrait leak into non-dcp sessions).' }
+    # #509 (dcp 0.1.30-dev): the career-row write moved into one owner module that
+    # live sync, unload restore and the named regression check all execute.
+    @{ mod='dcp'; file='dynamic_cosmetic_portraits/scripts/mods/dynamic_cosmetic_portraits/_dcp_portrait_settings_owner.lua'; needle='state.original_portrait_image = career.portrait_image'; literal=$true; polarity='present'; issueRef='#509'; note='save-before-swap: the owner captures the vanilla portrait before overwriting (restore on unload).' }
+    @{ mod='dcp'; file='dynamic_cosmetic_portraits/scripts/mods/dynamic_cosmetic_portraits/_dcp_portrait_settings_owner.lua'; needle='pcall\(\s*write_pair,\s*career,\s*state\.original_portrait_image,\s*state\.original_picking_image\)'; literal=$false; polarity='present'; issueRef='#509'; note='restore writes the saved original pair back (no swapped portrait leak into non-dcp sessions).' }
+    @{ mod='dcp'; file='dynamic_cosmetic_portraits/scripts/mods/dynamic_cosmetic_portraits/dynamic_cosmetic_portraits.lua'; needle='_portrait_settings_owner.apply(_portrait_settings, career, portraits)'; literal=$true; polarity='present'; minCount=1; maxCount=1; issueRef='#509'; note='live sync swaps the career row only through the owner.' }
 
     # -- #526: hud-size portrait alpha must conform to the vanilla octagonal
     #    silhouette or portraits bleed outside the frame on the mission-

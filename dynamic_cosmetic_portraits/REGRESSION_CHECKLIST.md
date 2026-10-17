@@ -20,6 +20,14 @@ Last updated: 2026-07-18.
 - [ ] A missing/untracked score-record cosmetic falls back to the saved vanilla portrait, and a not-ready Gui material prevents custom assignment.
 - [ ] `/dcp_regression_test` passes `portrait_override_player_scoped`; offline `test_dcp_score_record` and `test_dcp_player_scope` pass.
 
+## Career-row portrait ownership (#509)
+
+- [ ] Only `_dcp_portrait_settings_owner.lua` swaps the Mercenary career row persistently; the `_sync_player_stats` bracket puts the live value back after its one call.
+- [ ] Equipping a tracked hat or outfit swaps the HUD and hero-select portraits; removing it, or unloading the mod, restores the vanilla pair.
+- [ ] With an untracked local Mercenary, a remote Mercenary's tracked portrait still shows on the score screen, Tab list and HUD frames.
+- [ ] `/dcp_regression_test` passes `career_settings_swap_saves_and_restores` and `score_rows_resolve_without_local_swap_509`; no `[dcp:509] portrait settings ... rejected` line in the log.
+- [ ] Offline `test_dcp_portrait_settings_owner.lua` and `test_dcp_entry_portrait_flow.lua` pass.
+
 ---
 ## Multiplayer / Network Sync
 

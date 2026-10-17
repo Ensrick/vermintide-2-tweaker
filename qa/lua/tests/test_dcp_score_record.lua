@@ -41,8 +41,14 @@ return function(H, repo_root)
     H.test("DCP score hook consumes the record resolver and readiness gate (#435)", function()
         H.truthy(main_source:find(
             '_portrait_resolver.resolve_score_record(', 1, true))
-        local hook_start = assert(main_source:find(
+        -- #509: the hook body lives in _correct_score_rows so the named check
+        -- /dcp_regression_test score_rows_resolve_without_local_swap_509 runs it.
+        local hook_at = assert(main_source:find(
             'mod:hook_safe("EndViewStateScore", "_setup_player_scores"', 1, true))
+        H.truthy(main_source:find('_correct_score_rows(self)', hook_at, true),
+            "score hook must run the shared correction body")
+        local hook_start = assert(main_source:find(
+            'local function _correct_score_rows(score_view)', 1, true))
         local gate = assert(main_source:find(
             'if not _check_portrait_materials_ready() then return end', hook_start, true))
         local resolver = assert(main_source:find(

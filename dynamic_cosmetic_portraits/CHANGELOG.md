@@ -1,5 +1,32 @@
 # Changelog — Dynamic Cosmetic Portraits
 
+## 0.1.30-dev (2026-10-17) -- career-settings check runs the real portrait transaction (#509) [verify-fix]
+
+- The persistent Mercenary career-row portrait swap now has one owner,
+  `_dcp_portrait_settings_owner.lua`, used by live sync, unload restore and
+  the named `career_settings_swap_saves_and_restores` regression check. The
+  co-op HUD frame hook still points the row at one remote player's portrait
+  for a single vanilla call and puts it straight back.
+- The owner captures the vanilla HUD and hero-select pair exactly once, keeps it
+  across repeated syncs, refuses another career row, reads back every write,
+  and keeps ownership after a failed or ignored write so the next sync or
+  unload can retry the restore. Failures log once, never to chat.
+- `/dcp_regression_test` now runs the owner itself: a synthetic
+  capture/repeat/restore, an identity transaction on the live Mercenary row
+  (nothing visible changes), and the live ownership checks, including a DCP
+  portrait left on the row with no owner to restore it. It no longer greps its
+  own source, and it logs a `[dcp:509] ... skipped` line when the live row is
+  missing.
+- The co-op HUD, Tab and score-screen fallbacks take the vanilla portrait from
+  the owner: the captured original while DCP holds the row, else the live row.
+  A remote Mercenary's own tracked portrait therefore still shows on the score
+  screen when the local Mercenary wears no tracked cosmetic (a review caught
+  this regression before release).
+- New `/dcp_regression_test` check `score_rows_resolve_without_local_swap_509`
+  runs the real score-row correction on a synthetic score screen.
+- Per-frame sync does no write while the owned portrait pair is already shown.
+- No portrait assets, maps or player-visible selection behavior changed.
+
 ## 0.1.29-dev (2026-08-23) — retire consumed portrait-scope telemetry (#499) [not-started]
 
 - Removed the automatic `[dcp:435]` HUD/Tab/score telemetry and its closed-issue
