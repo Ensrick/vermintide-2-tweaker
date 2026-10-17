@@ -1,5 +1,62 @@
 # Crafting in Modded Changelog
 
+## 0.8.139-dev (2026-10-17) -- Five regression checks judge the shipped policy, not stale fixtures (#1656) [verify-fix]
+
+- Symptom (RainReligion, 2026-09-21, cim 0.8.135-dev, plain keep run): five
+  `/cim_regression_test` checks FAILed for harness reasons; the product
+  behavior they guard was correct. Re-checked on 0.8.138-dev source: all five
+  were still present.
+- `modded_loadout_round_trip_save_then_clear`: the fixture's stand-in item
+  interface answered every field with a no-op, so vanilla `set_loadout_item`
+  indexed a nil item table (`backend_interface_item_playfab.lua:640`) and
+  raised before VMF ran cim's `hook_safe` capture. The stand-in now serves
+  the rows vanilla reads and records its mirror write
+  (`_cim_regression_fixtures.lua`); a chain that still raises reports SKIP
+  with the error instead of a false FAIL. The gate-off twin
+  `persist_loadouts_gate_off_is_passthrough` shared the stub and, since the
+  forge-surface split, used undeclared fixture ids (nil), so it passed without
+  equipping anything; it now drives a real capture and fails if the OFF gate
+  leaks.
+- `inventory_property_count_within_cap`: still pinned the pre-#86 ceiling of
+  2 properties; #86 raised the load-time trimmer and the Athanor's distinct
+  property gate to 10. The five 3-property items in the report are within
+  that policy. The check now uses the shared ceiling of 10.
+- `localization_format_safe`: probed every loc string with a bare
+  `string.format` and no arguments, which fails legitimate placeholders such
+  as "Importing %s..." and makes vanilla's formatter wrapper mark them invalid
+  for the rest of the session (`foundation/scripts/util/patches.lua:140-156`),
+  so the Ranald's Gift messages could read "<Invalid string format>" after a
+  test run. It now scans the directives without calling the formatter, using
+  a port of the gut #1651 scanner (`_cim_loc_format.lua`).
+- `default_property_cap_is_five_bubbles`: asserted the pre-#244 linear
+  storage (1 bubble = 0.2). Under #244 a count below the Adventure range start
+  has no storable value: one fatigue_regen bubble is 6% against a 10-30%
+  range (`weapon_properties.lua:114-119`, weave max 0.3 at
+  `weave_properties.lua:57-59`), so it stores 0, and APPLY/CRAFT already
+  refuse it (#1141). The policy is correct and unchanged; the check now
+  requires every storable count to round-trip, rise with each bubble and reach
+  the full value at 5, while the 5-bubble default cap and the stamina (2) and
+  movespeed (1) caps stay pinned.
+- `overview_btn_render_target`: the entry handed the regression context two
+  names that only exist as locals inside `_cim_forge_ui_owner.lua`, so the
+  check indexed nil. The forge UI owner now exports both and the check reads
+  them live.
+- `issue414_cw_traits_preserve_slot_family` (fixed by 0.8.137-dev) is
+  unchanged.
+- Offline proof: `qa/lua/tests/test_cim_regression_harness_1656.lua` runs the
+  shipped checks through the real loadout, weave-loadout and forge UI owners
+  (vanilla `set_loadout_item` transcribed); against the 0.8.138-dev source it
+  reproduces each reported FAIL message.
+
+**Test:** Load `Crafting in Modded v0.8.139-dev` in the keep, run
+`/cim_regression_test`. `modded_loadout_round_trip_save_then_clear`,
+`persist_loadouts_gate_off_is_passthrough`,
+`inventory_property_count_within_cap`, `localization_format_safe`,
+`default_property_cap_is_five_bubbles` and `overview_btn_render_target` must
+PASS (or SKIP with a named reason); `issue414_cw_traits_preserve_slot_family`
+must still PASS. Then open the Athanor's Community Builds browser: its page
+and status lines must show text, never "<Invalid string format>".
+
 ## 0.8.138-dev (2026-09-25) -- Saved crafts that fail to restore are named, never hidden (#1654) [diagnostics-armed]
 
 - Symptom (RainReligion, 2026-09-21, cim 0.8.135-dev only): of two crafted
