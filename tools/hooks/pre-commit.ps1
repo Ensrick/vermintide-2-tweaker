@@ -22,7 +22,7 @@
 #   Then read `git diff --cached --name-only`. If no staged file matches
 #      `*.lua`, `*.cfg`, `*.ps1`, or `*.mod`, skip the remaining gates — pure
 #      docs / asset commits don't need them.
-#   4. Run `qa/run_all.ps1 -Quick -SkipLua` (the -Quick always-run set: cfg +
+#   4. Run `qa/run_all.ps1 -Quick -SkipLua -Staged` (the -Quick always-run set: cfg +
 #      published-ids + version + unpack + widget-type + event-register +
 #      cross-mod-deps + the blocking LuaJIT-compatible syntax parse; skips the
 #      slow advisory luacheck analysis and the full-pass scans CI runs).

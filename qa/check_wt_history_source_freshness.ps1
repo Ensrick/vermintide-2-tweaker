@@ -1042,11 +1042,23 @@ return {
                 '-File $qaScript -Quick -SkipLua -Staged') -ne 1) {
             $failures.Add('pre-commit must pass -Staged and run_all must forward it to the freshness gate') | Out-Null
         }
+        # The main body must hand every probe result to the self-tested
+        # decision function with its real switches and exit with its code.
         $mainOffset = $sourceText.IndexOf("`nif (`$SelfTest) { Invoke-FreshnessSelfTest }",
             [StringComparison]::Ordinal)
-        if ($mainOffset -lt 0 -or (Get-OrdinalOccurrenceCount $sourceText.Substring($mainOffset) `
-                "-and `$result.Moved -and -not `$RequireRemoteFresh) {") -ne 1) {
-            $failures.Add('release freshness must bypass the ordinary change-set scope') | Out-Null
+        $mainText = if ($mainOffset -ge 0) { $sourceText.Substring($mainOffset) } else { '' }
+        foreach ($wiring in @(
+                '$decision = Invoke-WtHistoryFreshnessDecision -Result $result -RepoRoot $root -Staged:$Staged -RequireRemoteFresh:$RequireRemoteFresh -Quiet:$Quiet',
+                'if ($decision.ExitCode -ge 2) { throw $decision.Message }',
+                'if ($decision.Print) { Write-Host $decision.Line -ForegroundColor $decision.Color }',
+                'exit $decision.ExitCode')) {
+            if ((Get-OrdinalOccurrenceCount $mainText $wiring) -ne 1) {
+                $failures.Add("the main body must contain exactly once: $wiring") | Out-Null
+            }
+        }
+        if ((Get-OrdinalOccurrenceCount $mainText 'Resolve-WtHistoryFreshnessOutcome') -ne 0 -or
+            (Get-OrdinalOccurrenceCount $mainText 'Get-WtHistoryFreshnessChangeSet') -ne 0) {
+            $failures.Add('the main body must not bypass Invoke-WtHistoryFreshnessDecision') | Out-Null
         }
         if ((Get-OrdinalOccurrenceCount $sharedMatrixText `
                 '& $hostEntry.Path @freshnessArguments') -ne 1 -or
@@ -1433,6 +1445,21 @@ return {
                 $failures.Add("scope: '$path' must be outside weapon-history scope") | Out-Null
             }
         }
+        # Path lists are read with -z: git C-quotes a name holding a double
+        # quote, so a quoted line would miss the weapon_tweaker/ prefix.
+        $nul = [string][char]0
+        $split = @(Split-WtHistoryNulPathList @("weapon_tweaker/a`"b.lua${nul}gui_tweaker_dev/x.lua$nul"))
+        if ($split.Count -ne 2 -or $split[0] -cne 'weapon_tweaker/a"b.lua' -or
+            -not (Test-WtHistoryScopePath $split[0]) -or (Test-WtHistoryScopePath $split[1])) {
+            $failures.Add("scope: NUL path split mis-parsed a quoted name: $($split -join ' | ')") | Out-Null
+        }
+        $splitLf = @(Split-WtHistoryNulPathList @('weapon_tweaker/line', "break.lua$nul"))
+        if ($splitLf.Count -ne 1 -or $splitLf[0] -cne "weapon_tweaker/line`nbreak.lua") {
+            $failures.Add('scope: NUL path split must keep an LF inside one name') | Out-Null
+        }
+        if (@(Split-WtHistoryNulPathList @()).Count -ne 0) {
+            $failures.Add('scope: NUL path split of empty output must be empty') | Out-Null
+        }
 
         $lagResult = Test-WtHistoryRemoteProbe -Anchor $anchor -Probe $lag
         $nonWtSet = New-WtHistoryChangeSet $true 'staged' @('gui_tweaker_dev/fixture.lua', 'qa/run_all.ps1') ''
@@ -1461,13 +1488,31 @@ return {
             (Test-WtHistoryRemoteProbe -Anchor $anchor -Probe $exact) $wtSet $false 'pass'
         $null = Assert-Scoped 'optional unavailable + WT diff' `
             (Test-WtHistoryRemoteProbe -Anchor $anchor -Probe $unavailable) $wtSet $false 'skip'
+
+        # The main body's printed line and exit code come from the same
+        # decision function; unmoved results never consult a change set.
+        $noRepo = Join-Path ([IO.Path]::GetTempPath()) ('vt2-wt-history-no-repo-' + [guid]::NewGuid().ToString('N'))
+        foreach ($exitCase in @(
+                @{ Name = 'exact'; Probe = $exact; Quiet = $true; State = 'pass'; Exit = 0; Print = $false }
+                @{ Name = 'exact verbose'; Probe = $exact; Quiet = $false; State = 'pass'; Exit = 0; Print = $true }
+                @{ Name = 'optional unavailable'; Probe = $unavailable; Quiet = $true; State = 'skip'; Exit = 0; Print = $true }
+                @{ Name = 'malformed'; Probe = $malformed; Quiet = $true; State = 'fail'; Exit = 2; Print = $true })) {
+            $decision = Invoke-WtHistoryFreshnessDecision -RepoRoot $noRepo -Quiet:$exitCase.Quiet `
+                -Result (Test-WtHistoryRemoteProbe -Anchor $anchor -Probe $exitCase.Probe)
+            if ($decision.State -cne $exitCase.State -or $decision.ExitCode -ne $exitCase.Exit -or
+                $decision.Print -ne $exitCase.Print) {
+                $failures.Add("decision: $($exitCase.Name) expected=$($exitCase.State)/$($exitCase.Exit)/print=$($exitCase.Print) actual=$($decision.State)/$($decision.ExitCode)/print=$($decision.Print)") |
+                    Out-Null
+            }
+        }
     }
     catch {
         $failures.Add("scope decision fixture crashed: $($_.Exception.Message)") | Out-Null
     }
 
-    # The same decision over real git change sets: staged index (pre-commit),
-    # index + working tree (local), hosted PR range and hosted push range.
+    # The main-body decision over real git change sets: staged index
+    # (pre-commit), local index + working tree + branch commits + untracked
+    # files, hosted PR, push and workflow_dispatch ranges, and release mode.
     $scopeRepo = Join-Path ([IO.Path]::GetTempPath()) `
         ('vt2-wt-history-scope-' + [guid]::NewGuid().ToString('N'))
     try {
@@ -1486,9 +1531,23 @@ return {
         }
         $fixtureCommit = @('-c', 'user.name=fixture', '-c', 'user.email=fixture@example.invalid',
             '-c', 'commit.gpgsign=false', 'commit', '-q', '-m', 'fixture')
-        function Assert-ScopedRepo([string]$Name, [bool]$StagedOnly, $Context, [string]$Expected) {
-            $set = Get-WtHistoryFreshnessChangeSet -RepoRoot $scopeRepo -Staged:$StagedOnly -Context $Context
-            $null = Assert-Scoped "repo $Name" $lagResult $set $false $Expected
+        function Remove-ScopeFixtureFile([string]$Relative) {
+            [IO.File]::Delete((Join-Path $scopeRepo $Relative))
+        }
+        # Drive the exact main-body decision (moved tip, -Quiet as run_all
+        # passes it) and pin state, exit code and the printed line.
+        function Assert-ScopedRepo([string]$Name, [bool]$StagedOnly, $Context, [string]$Expected,
+                [bool]$Release = $false) {
+            $decision = Invoke-WtHistoryFreshnessDecision -Result $lagResult -RepoRoot $scopeRepo `
+                -Staged:$StagedOnly -RequireRemoteFresh:$Release -Quiet -Context $Context
+            $expectedExit = if ($Expected -ceq 'advisory') { 1 } else { 2 }
+            $expectedLine = if ($Expected -ceq 'advisory') { 'ADVISORY' } else { 'ERROR' }
+            if ($decision.State -cne $Expected -or $decision.ExitCode -ne $expectedExit -or
+                -not $decision.Print -or -not $decision.Line.StartsWith(
+                    "[check_wt_history_source_freshness] $expectedLine - ", [StringComparison]::Ordinal)) {
+                $failures.Add("scope: repo $Name expected=$Expected/exit $expectedExit actual=$($decision.State)/exit $($decision.ExitCode): $($decision.Line)") |
+                    Out-Null
+            }
         }
         $localContext = Get-WtHistoryHostedContext -GitHubActions '' -EventName '' -EventPath '' -BaseRef ''
 
@@ -1503,6 +1562,7 @@ return {
         Write-ScopeFixtureFile 'gui_tweaker_dev/fixture.lua' "return 2`n"
         $null = Invoke-ScopeFixtureGit @('add', '--', 'gui_tweaker_dev/fixture.lua')
         Assert-ScopedRepo 'staged non-WT' $true $localContext 'advisory'
+        Assert-ScopedRepo 'release staged non-WT' $true $localContext 'fail' $true
         Write-ScopeFixtureFile 'weapon_tweaker/fixture.lua' "return 2`n"
         Assert-ScopedRepo 'staged non-WT beside unstaged WT (pre-commit)' $true $localContext 'advisory'
         Assert-ScopedRepo 'staged non-WT beside unstaged WT (local union)' $false $localContext 'fail'
@@ -1514,6 +1574,17 @@ return {
         Assert-ScopedRepo 'staged rename out of WT' $true $localContext 'fail'
         $null = Invoke-ScopeFixtureGit @('reset', '-q', '--hard')
         Assert-ScopedRepo 'clean local tree' $false $localContext 'advisory'
+        # Untracked unignored files count in a local union run (not the index).
+        Write-ScopeFixtureFile 'weapon_tweaker/untracked_fixture.lua' "return 1`n"
+        Assert-ScopedRepo 'untracked WT (local union)' $false $localContext 'fail'
+        Assert-ScopedRepo 'untracked WT (pre-commit)' $true $localContext 'advisory'
+        Remove-ScopeFixtureFile 'weapon_tweaker/untracked_fixture.lua'
+        Write-ScopeFixtureFile '.git\info\exclude' "*.ignored`n"
+        Write-ScopeFixtureFile 'weapon_tweaker/scratch.ignored' "x`n"
+        Write-ScopeFixtureFile 'gui_tweaker_dev/untracked_fixture.lua' "return 1`n"
+        Assert-ScopedRepo 'ignored WT + untracked non-WT (local union)' $false $localContext 'advisory'
+        Remove-ScopeFixtureFile 'weapon_tweaker/scratch.ignored'
+        Remove-ScopeFixtureFile 'gui_tweaker_dev/untracked_fixture.lua'
 
         $eventPath = Join-Path $scopeRepo '.git\fixture-event.json'
         [IO.File]::WriteAllText($eventPath, '{"before":"' + $baseSha + '"}')
@@ -1527,13 +1598,20 @@ return {
         Write-ScopeFixtureFile 'gui_tweaker_dev/fixture.lua' "return 3`n"
         $null = Invoke-ScopeFixtureGit @('add', '-A')
         $null = Invoke-ScopeFixtureGit $fixtureCommit
+        $dispatchContext = Get-WtHistoryHostedContext -GitHubActions 'true' -EventName 'workflow_dispatch' `
+            -EventPath '' -BaseRef ''
         Assert-ScopedRepo 'PR range non-WT' $false $prContext 'advisory'
         Assert-ScopedRepo 'push range non-WT' $false $pushContext 'advisory'
+        Assert-ScopedRepo 'branch commit non-WT (local)' $false $localContext 'advisory'
+        Assert-ScopedRepo 'branch commit non-WT (dispatch)' $false $dispatchContext 'advisory'
         Write-ScopeFixtureFile 'weapon_tweaker/fixture.lua' "return 3`n"
         $null = Invoke-ScopeFixtureGit @('add', '-A')
         $null = Invoke-ScopeFixtureGit $fixtureCommit
         Assert-ScopedRepo 'PR range WT' $false $prContext 'fail'
         Assert-ScopedRepo 'push range WT' $false $pushContext 'fail'
+        Assert-ScopedRepo 'branch commit WT on a clean tree (local)' $false $localContext 'fail'
+        Assert-ScopedRepo 'branch commit WT (dispatch)' $false $dispatchContext 'fail'
+        Assert-ScopedRepo 'branch commit WT (pre-commit, index only)' $true $localContext 'advisory'
 
         Assert-ScopedRepo 'PR range with missing base' $false `
             (Get-WtHistoryHostedContext -GitHubActions 'true' -EventName 'pull_request' `
@@ -1545,9 +1623,43 @@ return {
         Assert-ScopedRepo 'push range with relative event path' $false `
             (Get-WtHistoryHostedContext -GitHubActions 'true' -EventName 'push' `
                 -EventPath 'fixture-event.json' -BaseRef '') 'fail'
-        Assert-ScopedRepo 'hosted run without a range' $false `
-            (Get-WtHistoryHostedContext -GitHubActions 'true' -EventName 'workflow_dispatch' `
-                -EventPath '' -BaseRef '') 'fail'
+        $headSha = (Invoke-ScopeFixtureGit @('rev-parse', 'HEAD')).Lines[0].Trim()
+        $null = Invoke-ScopeFixtureGit @('update-ref', 'refs/remotes/origin/master', $headSha)
+        Assert-ScopedRepo 'dispatch at the default-branch tip' $false $dispatchContext 'advisory'
+        Assert-ScopedRepo 'local at origin/master' $false $localContext 'advisory'
+        $null = Invoke-ScopeFixtureGit @('update-ref', '-d', 'refs/remotes/origin/master')
+        Assert-ScopedRepo 'local without origin/master' $false $localContext 'fail'
+        Assert-ScopedRepo 'dispatch without origin/master' $false $dispatchContext 'fail'
+
+        # A committed WT name that git C-quotes (a double quote: Windows refuses
+        # it in the index, but a fetched tree can carry it) must stay in scope,
+        # which only the -z path lists guarantee. HEAD gains that one file;
+        # the index keeps the old tree, so the staged diff lists just it.
+        function New-ScopeFixtureTree([object[]]$Entries) {
+            # Raw sorted tree entries: "<mode> <name>" NUL <20-byte id>.
+            $bytes = New-Object 'System.Collections.Generic.List[byte]'
+            foreach ($entry in $Entries) {
+                $bytes.AddRange([Text.Encoding]::ASCII.GetBytes("$($entry.Mode) $($entry.Name)"))
+                $bytes.Add([byte]0)
+                for ($i = 0; $i -lt 40; $i += 2) { $bytes.Add([Convert]::ToByte($entry.Sha.Substring($i, 2), 16)) }
+            }
+            $treeFile = Join-Path $scopeRepo '.git\fixture-tree.bin'
+            [IO.File]::WriteAllBytes($treeFile, $bytes.ToArray())
+            return (Invoke-ScopeFixtureGit @('hash-object', '-w', '-t', 'tree', $treeFile)).Lines[0].Trim()
+        }
+        $blob = (Invoke-ScopeFixtureGit @('rev-parse', 'HEAD:weapon_tweaker/fixture.lua')).Lines[0].Trim()
+        $guiTree = (Invoke-ScopeFixtureGit @('rev-parse', 'HEAD:gui_tweaker_dev')).Lines[0].Trim()
+        $wtTree = New-ScopeFixtureTree @(
+            @{ Mode = '100644'; Name = 'fixture.lua'; Sha = $blob }
+            @{ Mode = '100644'; Name = 'q"uote.lua'; Sha = $blob })
+        $rootTree = New-ScopeFixtureTree @(
+            @{ Mode = '40000'; Name = 'gui_tweaker_dev'; Sha = $guiTree }
+            @{ Mode = '40000'; Name = 'weapon_tweaker'; Sha = $wtTree })
+        $quotedSha = (Invoke-ScopeFixtureGit @('-c', 'user.name=fixture', '-c', 'user.email=fixture@example.invalid',
+                'commit-tree', $rootTree, '-p', 'HEAD', '-m', 'quoted')).Lines[0].Trim()
+        $null = Invoke-ScopeFixtureGit @('update-ref', 'HEAD', $quotedSha)
+        Assert-ScopedRepo 'committed C-quoted WT name (index vs HEAD)' $true $localContext 'fail'
+
         $missingRepoSet = Get-WtHistoryFreshnessChangeSet -RepoRoot (Join-Path $scopeRepo 'missing') `
             -Staged -Context $localContext
         $null = Assert-Scoped 'missing work tree' $lagResult $missingRepoSet $false 'fail'
@@ -2416,23 +2528,13 @@ try {
     $probe = Invoke-WtHistoryRemoteProbe -Anchor $anchor -TimeoutMs $TimeoutMilliseconds
     $result = Test-WtHistoryRemoteProbe -Anchor $anchor -Probe $probe `
         -Required:$RequireRemoteFresh
-    if ($result.State -ceq 'fail' -and $result.Moved -and -not $RequireRemoteFresh) {
-        # Issue #1683: only WT streams consume this provenance. Ordinary QA
-        # resolves the checked change set lazily, on a moved ref/tip only.
-        $changeSet = Get-WtHistoryFreshnessChangeSet -RepoRoot $root -Staged:$Staged
-        $result = Resolve-WtHistoryFreshnessOutcome -Result $result -ChangeSet $changeSet `
-            -Required:$RequireRemoteFresh
-    }
-    if ($result.State -ceq 'fail') { throw $result.Message }
-    if ($result.State -ceq 'advisory') {
-        Write-Host "[check_wt_history_source_freshness] ADVISORY - $($result.Message)" -ForegroundColor Yellow
-        exit 1
-    }
-    if (-not $Quiet -or $result.State -ceq 'skip') {
-        $color = if ($result.State -ceq 'pass') { 'Green' } else { 'Yellow' }
-        Write-Host "[check_wt_history_source_freshness] $($result.State.ToUpperInvariant()) - $($result.Message)" -ForegroundColor $color
-    }
-    exit 0
+    # Issue #1683: only WT streams consume this provenance, so ordinary QA
+    # scopes a moved ref/tip to the checked change set. The self-test drives
+    # this same decision function over real git fixtures.
+    $decision = Invoke-WtHistoryFreshnessDecision -Result $result -RepoRoot $root -Staged:$Staged -RequireRemoteFresh:$RequireRemoteFresh -Quiet:$Quiet
+    if ($decision.ExitCode -ge 2) { throw $decision.Message }
+    if ($decision.Print) { Write-Host $decision.Line -ForegroundColor $decision.Color }
+    exit $decision.ExitCode
 }
 catch {
     Write-Host "[check_wt_history_source_freshness] ERROR - $($_.Exception.Message)" -ForegroundColor Red

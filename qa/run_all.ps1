@@ -231,7 +231,8 @@ Run-Check "check_content_manifest"            { & (Join-Path $here "check_conten
 # Weapon-history source freshness is opportunistic in ordinary QA: unreachable
 # network is a visible skip. A reachable ref/tip mismatch blocks only when the
 # checked change set (-Staged: the index; otherwise index + working tree + the
-# hosted PR/push range) touches weapon-history inputs or a WT stream; any other
+# hosted PR/push range or the origin/master...HEAD branch range, plus untracked
+# files off GitHub Actions) touches weapon-history inputs or a WT stream; any other
 # change set gets a visible advisory (exit 1), so a game patch no longer freezes
 # every mod (issue #1683). The canonical WT BuildOnly/release path separately
 # requires exact remote freshness (ship.ps1 -RequireRemoteFresh).
