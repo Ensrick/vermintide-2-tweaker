@@ -1347,7 +1347,19 @@ says `public`. There is no suffix-vs-visibility contradiction to tie-break.
   For `No content change detected`, bounded credential-free Steam snapshots
   immediately before and after that transaction must agree on the exact VT2
   item/app/content-manifest/update-time/file-size identity; an unavailable or
-  changed snapshot fails closed. Each validated result is persisted under a
+  changed snapshot fails closed. A friends-only or private item has no public
+  snapshot (Steam answers detail result 9 with only `publishedfileid`, #1667):
+  both observations must be that exact not-visible answer, the mod inventory
+  and the hosted release manifest row must agree on the non-public visibility,
+  that row must name the same item, source commit, and version (the zip digest
+  is read from that row; a caller-supplied digest must equal it), and the
+  ManifestID is the item's last complete UPLOADED transaction in the verified
+  pre-upload prefix of the same retained log, followed only by complete
+  NOCHANGE transactions and same-manifest server-change lines. Any other later
+  item event, or no such transaction, fails closed. Only the current
+  `workshop_log.txt` is read: once Steam rotates the item's last UPLOADED into
+  `workshop_log.previous.txt`, a non-public NOCHANGE fails closed until the next
+  real UPLOADED ship of that item. Each validated result is persisted under a
   unique append-only GitHub release asset: never delete, replace, or borrow a
   result from an earlier preauthorization. The exact ordinary release and asset
   are then resolved again; downloaded bytes must equal the locally validated

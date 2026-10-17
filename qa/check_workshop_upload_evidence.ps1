@@ -25,9 +25,9 @@ Assert-Evidence ($errors.Count -eq 0) 'ship parses'
 Assert-Evidence ($shipText -notmatch 'Get-Content \$workshopLog -Tail|\$cutoff\s*=\s*\(Get-Date\)\.AddMinutes') 'stale tail/time fallback removed'
 Assert-Evidence ($shipText.Contains('$shipManifestId = $uploadResultAuthority.Candidate.steam_manifest_id')) 'card refresh consumes only the authenticated reread manifest field without manufacturing NoChange ID'
 Assert-Evidence (-not $shipText.Contains('$shipManifestId = $receiptAcceptance.ManifestId')) 'card refresh does not consume the plaintext parser manifest field'
-$preSnapshotPos = $shipText.IndexOf('$beforeWorkshopSnapshot = Get-VtWorkshopPublishedFileSnapshot')
+$preSnapshotPos = $shipText.IndexOf('$beforeWorkshopSnapshot = Get-VtWorkshopPublishedFileObservation')
 $uploadBoundaryPos = $shipText.IndexOf('$receiptAcceptance = Invoke-WithShipVmbRc')
-$postSnapshotPos = $shipText.IndexOf('$afterWorkshopSnapshot = Get-VtWorkshopPublishedFileSnapshot')
+$postSnapshotPos = $shipText.IndexOf('$afterWorkshopSnapshot = Get-VtWorkshopPublishedFileObservation')
 $proofPos = $shipText.IndexOf('$uploadResultAuthority = Publish-VtShipWorkshopUploadProof')
 Assert-Evidence ($preSnapshotPos -ge 0 -and $preSnapshotPos -lt $uploadBoundaryPos) `
     'Steam published-file pre-snapshot encloses the launcher upload boundary'
@@ -39,6 +39,8 @@ Assert-Evidence ($shipText.Contains("if (`$uploadStatus -ceq 'NOCHANGE')") -and
     'NOCHANGE alone requires the complete pre/post snapshot pair at the proof boundary'
 Assert-Evidence ($shipText.Contains('$beforeWorkshopSnapshotError = $_.Exception.Message')) `
     'pre-snapshot transport failure is retained without suppressing a real UPLOADED result'
+Assert-Evidence (-not $shipText.Contains('= Get-VtWorkshopPublishedFileSnapshot ')) `
+    'ship observes friends-only/private items as not-visible instead of requiring a public content snapshot (#1667)'
 Assert-Evidence ($standardsText.Contains('The plaintext producer') -and
     $standardsText.Contains('never delete, replace, or borrow a')) `
     'canonical doctrine records authenticated UPLOADED and NOCHANGE result authority'
@@ -125,6 +127,55 @@ foreach ($badId in @('0','01','-1','+1','1e3','18446744073709551616','3712896117
 Assert-Rejected { ConvertFrom-VtWorkshopUploadTransaction -Text $good -PublishedId $id -StartedAt $t1 -EndedAt $t0 } 'backwards observer clock'
 Assert-Evidence ((ConvertFrom-VtWorkshopUploadTransaction -Text $good -PublishedId $id -StartedAt $t0.AddMilliseconds(950) -EndedAt $t1).Status -ceq 'UPLOADED') 'second-resolution timestamp accepts captured subsecond start floor'
 
+# Issue #1667: prior UPLOADED chain for a non-public NOCHANGE, replayed from the
+# real 2026-09-23 gut_dev sequence (item 3751024698) in workshop_log.txt.
+$hid = '3751024698'
+function Hidden-Txn([string]$Stamp, [string]$Middle, [string]$Terminal = 'OK', [string]$Item = $hid) {
+    return "[$Stamp] [AppID 552500] Upload starting for workshop item $Item by AppID 552500`n" +
+        "[$Stamp] [AppID 552500] $Middle`n[$Stamp] [AppID 552500] Upload finished for workshop item $Item : $Terminal`n"
+}
+$up1 = Hidden-Txn '2026-09-23 00:17:45' "Uploaded new content ( ManifestID 4872591609380219711 ) for item $hid."
+$up2 = Hidden-Txn '2026-09-23 03:17:20' "Uploaded new content ( ManifestID 7244323320533321348 ) for item $hid."
+$nc1 = Hidden-Txn '2026-09-23 04:00:00' "No content change detected for item $hid"
+$foreign = Hidden-Txn '2026-09-23 04:10:00' "Uploaded new content ( ManifestID 1 ) for item $($hid)9." 'OK' ($hid + '9')
+$server = "[2026-09-23 04:20:00] [AppID 552500] Detected workshop change (latest from server) : changed cached item $hid, new manifest 7244323320533321348`n"
+$noise = "[2026-09-23 04:30:00] [AppID 552500] unrelated diagnostic manifest $hid`n"
+$prior = Get-VtWorkshopPriorContentTransaction -Text ($up1 + $up2) -PublishedId $hid
+Assert-Evidence ($prior.ManifestId -ceq '7244323320533321348' -and $prior.NoChangeCount -eq 0 -and $prior.ServerConfirmations -eq 0 -and
+    $prior.OutcomeLine -ceq "[2026-09-23 03:17:20] [AppID 552500] Uploaded new content ( ManifestID 7244323320533321348 ) for item $hid." -and
+    @($prior.ChainLines).Count -eq 3 -and $prior.ChainSha256 -cmatch '^[0-9a-f]{64}$') 'real 2026-09-23 prefix yields the last complete UPLOADED manifest'
+$prior = Get-VtWorkshopPriorContentTransaction -Text ($up1 + $up2 + $nc1 + $foreign + $server + $noise) -PublishedId $hid
+Assert-Evidence ($prior.ManifestId -ceq '7244323320533321348' -and $prior.NoChangeCount -eq 1 -and $prior.ServerConfirmations -eq 1 -and
+    @($prior.ChainLines).Count -eq 7) 'later NOCHANGE, same-manifest server line, foreign and substring items keep the prior manifest'
+# A same-manifest server line inside the found UPLOADED transaction must not
+# shift the bound start/outcome/finish lines.
+$upStart, $upOutcome, $upFinish = @($up2.TrimEnd("`n").Split([char]10))
+$innerServer = "[2026-09-23 03:17:20] [AppID 552500] Detected workshop change (latest from server) : changed cached item $hid, new manifest 7244323320533321348"
+foreach ($inner in @(
+    @{ Name='between outcome and finish'; Text="$upStart`n$upOutcome`n$innerServer`n$upFinish`n" },
+    @{ Name='between start and outcome'; Text="$upStart`n$innerServer`n$upOutcome`n$upFinish`n" }
+)) {
+    $prior = Get-VtWorkshopPriorContentTransaction -Text ($up1 + $inner.Text) -PublishedId $hid
+    Assert-Evidence ($prior.ManifestId -ceq '7244323320533321348' -and $prior.StartLine -ceq $upStart -and
+        $prior.OutcomeLine -ceq $upOutcome -and $prior.FinishLine -ceq $upFinish -and $prior.ServerConfirmations -eq 1 -and
+        @($prior.ChainLines).Count -eq 4) "same-manifest server line $($inner.Name) keeps the UPLOADED lines bound"
+}
+Assert-Evidence ((Get-VtWorkshopPriorContentTransaction -Text (($up1 + $up2).Replace("`n", "`r`n")) -PublishedId $hid).ManifestId -ceq '7244323320533321348') 'CRLF prefix accepted'
+foreach ($case in @(
+    @{ Name='last upload ended in Timeout (July 13 shape)'; Text=$up1 + $up2.Replace(' : OK', ' : Timeout') },
+    @{ Name='trailing incomplete start'; Text=$up2 + "[2026-09-23 04:00:00] [AppID 552500] Upload starting for workshop item $hid by AppID 552500`n" },
+    @{ Name='failed NOCHANGE terminal'; Text=$up2 + $nc1.Replace(' : OK', ' : Invalid Parameter') },
+    @{ Name='server reports a different manifest'; Text=$up2 + $server.Replace('7244323320533321348', '1444642237709131676') },
+    @{ Name='details failure after upload'; Text=$up2 + "[2026-09-23 04:00:00] [AppID 552500] Get details for item $hid failed : File Not Found`n" },
+    @{ Name='wrong AppID event after upload'; Text=$up2 + $nc1.Replace('[AppID 552500]', '[AppID 552501]') },
+    @{ Name='chain timestamps reverse'; Text=$up2 + $nc1.Replace('2026-09-23 04:00:00', '2026-09-23 03:00:00') },
+    @{ Name='overflow prior manifest'; Text=$up2.Replace('7244323320533321348', '18446744073709551616') },
+    @{ Name='no UPLOADED transaction'; Text=$nc1 },
+    @{ Name='only foreign uploads'; Text=$foreign },
+    @{ Name='empty prefix'; Text='' }
+)) { Assert-Rejected { Get-VtWorkshopPriorContentTransaction -Text $case.Text -PublishedId $hid } ("prior chain: " + $case.Name) }
+Assert-Rejected { Get-VtWorkshopPriorContentTransaction -Text $up2 -PublishedId '01' } 'prior chain: noncanonical item ID'
+
 # Native file tests operate only under one newly allocated disposable directory.
 $fixtureRoot = Join-Path ([IO.Path]::GetTempPath()) ('vt2-workshop-evidence-' + [guid]::NewGuid().ToString('N'))
 $null = [IO.Directory]::CreateDirectory($fixtureRoot)
@@ -154,6 +205,28 @@ try {
     Reset-Log
     $result = Invoke-VtWorkshopUploadEvidence -Path $path -PublishedId $id -UploadAction { Append-Log (Live-Transaction -Outcome NoChange) }
     Assert-Evidence ($result.Status -ceq 'NOCHANGE' -and $null -eq $result.ManifestId) 'native no-change remains manifestless'
+    Assert-Evidence (-not $result.PriorContent.Ok -and $result.PriorContent.Error -match 'no complete UPLOADED') 'native no-change without a prior upload reports an unavailable prior chain without failing evidence'
+    [IO.File]::WriteAllText($path, "existing prefix`n" + (Live-Transaction), $utf8)
+    $result = Invoke-VtWorkshopUploadEvidence -Path $path -PublishedId $id -UploadAction { Append-Log (Live-Transaction -Outcome NoChange) }
+    Assert-Evidence ($result.Status -ceq 'NOCHANGE' -and $result.PriorContent.Ok -and
+        $result.PriorContent.Proof.ManifestId -ceq $manifest -and $result.PriorContent.Proof.PublishedId -ceq $id) `
+        'native no-change binds the prior UPLOADED manifest from the exact captured prefix (#1667)'
+    # The prior chain comes only from the digest-verified captured prefix: a
+    # digest that no longer matches the prefix bytes yields no proof, never a throw.
+    $priorStream = [IO.File]::Open($path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::ReadWrite)
+    try {
+        $priorLength = [long]$priorStream.Length
+        $goodCapture = [pscustomobject]@{Boundary=$priorLength;Prefix=(Get-VtWorkshopEvidencePrefix -Stream $priorStream -Count $priorLength).Digest}
+        $priorOk = Get-VtWorkshopEvidencePriorContent -Stream $priorStream -Capture $goodCapture -PublishedId $id
+        $badCapture = [pscustomobject]@{Boundary=$priorLength;Prefix=[Convert]::ToBase64String([byte[]]::new(32))}
+        $priorBad = Get-VtWorkshopEvidencePriorContent -Stream $priorStream -Capture $badCapture -PublishedId $id
+    }
+    finally { $priorStream.Dispose() }
+    Assert-Evidence ($priorOk.Ok -and $priorOk.Proof.ManifestId -ceq $manifest -and -not $priorBad.Ok -and
+        $null -eq $priorBad.Proof -and $priorBad.Error -match 'prefix changed') 'prior chain is read only from the digest-verified captured prefix'
+    Reset-Log
+    $result = Invoke-VtWorkshopUploadEvidence -Path $path -PublishedId $id -UploadAction { Append-Log (Live-Transaction) }
+    Assert-Evidence ($null -eq $result.PSObject.Properties['PriorContent']) 'native UPLOADED carries no prior-content proof'
     Reset-Log
     Append-Log (Live-Transaction)
     Assert-Rejected { Invoke-VtWorkshopUploadEvidence -Path $path -PublishedId $id -UploadAction { Append-Log "unrelated new line`n" } } 'same-second old successful transaction cannot satisfy append boundary'
