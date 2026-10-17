@@ -83,6 +83,11 @@ there is no copied implementation.
   carry its revision and `Current (Game Version 6.13.0)` label, the Patch 5.2
   rehydrated evidence projects onto it, and no provenance input keeps a
   retired 6.12.0 or 6.12.1 anchor.
+- `tests/test_wt_runtime_checks_module.lua`: #2 WT runtime-check registrar
+  split: public and dev registration counts and order, the dev-only Hold-Pose
+  child `_wt_runtime_checks_hold_pose.lua` registering its five checks in the
+  historical slot before the #316 Longbow checks, failing closed without its
+  Hold-Pose owner, and the parent invoking it once and propagating its errors.
 - `fixtures/vanilla_weapon_master_list.lua`: GENERATED vanilla weapon census
   (every `ItemMasterList` melee/ranged entry with its `can_wield` list after the
   DLC `UpdateItemMasterList` patches, each hero career's

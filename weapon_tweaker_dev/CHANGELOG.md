@@ -1,5 +1,22 @@
 # Weapon Tweaker Changelog
 
+## 0.12.336-dev (2026-10-17) -- split Hold-Pose runtime checks out of the registrar (#2) [verify-fix]
+
+- Moves the five dev-only Hold-Pose `/wt_regression_test` checks
+  (`issue168_hold_pose_independent_hands`, `issue569_hold_pose_composition`,
+  `issue616_hold_pose_channel_bypass_restore`,
+  `issue616_hold_pose_live_edit_delivery`,
+  `issue616_hold_pose_nonuniform_scale`) into the new
+  `_wt_runtime_checks_hold_pose.lua`. The check bodies are unchanged and they
+  still register in the same place, just before the #316 Longbow checks.
+- `_wt_runtime_checks.lua` drops from 2,383 to 2,210 counted lines; its
+  file-size ceiling is lowered to match. No gameplay, hook, setting, asset or
+  wire change. The public beta runtime is untouched.
+- Pairs with public beta `0.12.335`, a version-only reissue the stream
+  parity gate requires.
+- Verify in the keep: `/wt_regression_test` reports the same five Hold-Pose
+  checks with the same verdicts as before, in the same place in the run.
+
 ## 0.12.335-dev (2026-10-17) -- mirror 0.12.334-beta: re-anchor weapon-history provenance to Game Version 6.13.0 (#1682) [verify-fix]
 
 - Mirrors public beta `0.12.334`: upstream

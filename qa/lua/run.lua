@@ -136,6 +136,7 @@ local suites = {
     "test_wt_history_source_anchor",
     "test_wt_fire_sword",
     "test_wt_hold_pose",
+    "test_wt_runtime_checks_module",
     "test_wt_overcharge_presentation",
     "test_wt_bolt_staff_overcharge",
     "test_wt_longbow_zoom_probe",
