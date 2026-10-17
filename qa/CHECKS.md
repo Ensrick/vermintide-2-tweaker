@@ -82,6 +82,20 @@ foreign items/apps, invalid UInt64 values, changed content generations, stale
 windows, and unavailable observations fail closed. The resulting ManifestID is
 still only an unauthenticated candidate until the release owner appends and
 rereads its exact bytes. `UPLOADED` remains on its independent log-bound path.
+Friends-only and private items (#1667) get the exact two-field result-9
+not-visible answer instead; both observations must carry it, the inventory and
+hosted release manifest row must agree on the non-public visibility, the row
+must name the same item, source, and version (the zip digest is read from that
+row, and a caller-supplied digest must equal it), and the ManifestID comes from
+the item's last complete UPLOADED transaction in the verified pre-upload prefix
+of the same log file, followed only by complete NOCHANGE transactions and
+same-manifest server-change lines (also allowed inside that UPLOADED
+transaction). The evidence self-test replays the real 2026-09-23 gut_dev
+sequence and rejects Timeout, incomplete, failed, foreign-AppID, reordered, and
+mismatched-server tails; a visibility change across the upload fails closed.
+Only the current `workshop_log.txt` is read, so after Steam rotates an item's
+last UPLOADED into `workshop_log.previous.txt` a non-public NOCHANGE fails
+closed until that item's next real UPLOADED ship.
 
 `check_workshop_upload_result_release.ps1` guards the next durable #1307
 boundary. The content-qualified candidate is appended to the exact ordinary
@@ -99,7 +113,8 @@ the GitHub release was already recorded, but it cannot make an issue test-ready
   or rewrite a live card. An `UPLOADED` result creates the exact asset, and the
   card refresh consumes its ManifestID only from that authenticated reread.
 `NOCHANGE` creates a distinct receipt-qualified asset only after the unchanged
-pre/post Steam snapshots above, then follows the same append-only exact-byte
+pre/post Steam snapshots above (or, for a non-public item, the not-visible pair
+plus the log-bound prior UPLOADED chain), then follows the same append-only exact-byte
 reread boundary. Card refresh consumes its ManifestID from that authenticated
 object too. No historical receipt is reused, and neither path reads a ManifestID
 directly from mutable prose or the manifestless NoChange log line.
