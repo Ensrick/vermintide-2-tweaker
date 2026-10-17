@@ -77,11 +77,18 @@ M.TARGETS = {
 }
 
 -- Pure census. `lookup(class_name)` returns the live class table or nil.
--- A class that is not loaded yet is deferred (VMF delays that hook too), never
--- a failure; a loaded class without the method, or a retired row, is missing.
+-- The check runs from /mp_regression_test in the keep, after VMF's last
+-- delayed-hook pass: VMF stops delaying on enter StateIngame and retries its
+-- queue once, and from then on a class still absent from _G is refused with
+-- "trying to hook object that doesn't exist" [VMF core/hooks.lua:278-287,
+-- :429-440]. So an unloaded class is a dead hook too, never a deferral; every
+-- TARGETS class is loaded by then [src 6.13.0: boot.lua:1321-1322,
+-- state_ingame.lua:58-59]. A loaded class without the method, or a retired
+-- row, is missing. Guards future game patches; a source revert is caught by
+-- the offline test, not by this census.
 function M.census(lookup, targets)
-    local report = { resolved = 0, missing = {}, deferred = {} }
-    local deferred_seen = {}
+    local report = { resolved = 0, missing = {}, unloaded = {} }
+    local unloaded_seen = {}
     for _, row in ipairs(targets or M.TARGETS) do
         local class_name, method = row[1], row[2]
         local key = class_name .. "." .. method
@@ -89,9 +96,9 @@ function M.census(lookup, targets)
         if M.RETIRED[key] then
             report.missing[#report.missing + 1] = key .. " (" .. M.RETIRED[key] .. ")"
         elseif type(class) ~= "table" then
-            if not deferred_seen[class_name] then
-                deferred_seen[class_name] = true
-                report.deferred[#report.deferred + 1] = class_name
+            if not unloaded_seen[class_name] then
+                unloaded_seen[class_name] = true
+                report.unloaded[#report.unloaded + 1] = class_name
             end
         elseif type(class[method]) ~= "function" then
             report.missing[#report.missing + 1] = key
@@ -103,8 +110,15 @@ function M.census(lookup, targets)
 end
 
 function M.failure(report)
-    if #report.missing == 0 then return nil end
-    return "hook target missing: " .. table.concat(report.missing, ", ")
+    local parts = {}
+    if #report.missing > 0 then
+        parts[#parts + 1] = "hook target missing: " .. table.concat(report.missing, ", ")
+    end
+    if #report.unloaded > 0 then
+        parts[#parts + 1] = "hook target class not loaded: " .. table.concat(report.unloaded, ", ")
+    end
+    if #parts == 0 then return nil end
+    return table.concat(parts, "; ")
 end
 
 function M.install(deps)
@@ -113,9 +127,9 @@ function M.install(deps)
     local lookup = assert(deps.lookup, "lookup is required")
     rt_register(M.CHECK_NAME, function()
         local report = M.census(lookup)
-        pcall(print_log, "[mp:1671] hook targets resolved=%d missing=%d deferred=%d " ..
-            "deferred_classes=%s", report.resolved, #report.missing, #report.deferred,
-            #report.deferred > 0 and table.concat(report.deferred, ",") or "none")
+        pcall(print_log, "[mp:1671] hook targets resolved=%d missing=%d unloaded=%d " ..
+            "unloaded_classes=%s", report.resolved, #report.missing, #report.unloaded,
+            #report.unloaded > 0 and table.concat(report.unloaded, ",") or "none")
         return M.failure(report)
     end)
 end

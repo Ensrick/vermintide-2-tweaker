@@ -39,8 +39,8 @@ table-form site (the #1637 instance join in the runtime). The `_with_eac_off` wr
 row-of-concern (issue 434) called out below and shared by all of its callers.
 The 44 sites whose class and method are both string literals are listed in
 `_mp_hook_targets.lua`; `/mp_regression_test` `mp1671_hook_targets_resolve`
-fails when a loaded class lacks one of those methods (#1671), and the offline
-`test_mp_hook_targets_resolve.lua` keeps the list equal to the source.
+fails when a loaded class lacks one of those methods or a class is not loaded
+(#1671), and the offline `test_mp_hook_targets_resolve.lua` keeps the list to the source.
 
 ### The EAC-window bracket - shared wrapper (row-of-concern: issue 434) (owner doc: `docs/engine/11`)
 

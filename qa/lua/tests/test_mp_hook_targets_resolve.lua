@@ -11,18 +11,23 @@ local function read_source(relative_path)
     return source
 end
 
--- Every mp source file the entry loads: the entry itself plus each
--- "scripts/mods/modded_progression/<name>" literal it names.
+-- Every mp source file reachable from the entry: the entry itself plus each
+-- "scripts/mods/modded_progression/<name>" literal named by any file already
+-- reached, so a module that only another module loads is scanned too.
 local function mp_sources()
     local entry = assert(read_source(ENTRY), "mp entry file missing")
-    local sources, seen = { { path = ENTRY, text = entry } }, {}
-    for name in entry:gmatch('"scripts/mods/modded_progression/([%w_]+)"') do
-        if not seen[name] then
-            seen[name] = true
-            local path = MOD_DIR .. name .. ".lua"
-            local text = read_source(path)
-            if text then sources[#sources + 1] = { path = path, text = text } end
+    local sources, seen = { { path = ENTRY, text = entry } }, { modded_progression = true }
+    local index = 1
+    while sources[index] do
+        for name in sources[index].text:gmatch('"scripts/mods/modded_progression/([%w_]+)"') do
+            if not seen[name] then
+                seen[name] = true
+                local path = MOD_DIR .. name .. ".lua"
+                local text = read_source(path)
+                if text then sources[#sources + 1] = { path = path, text = text } end
+            end
         end
+        index = index + 1
     end
     return sources
 end
@@ -77,7 +82,7 @@ H.test("MP #1671 hook-target inventory matches every literal mp hook site", func
     H.truthy(M.RETIRED["IngameUI.not_in_modded"], "retired-method record missing")
 end)
 
-H.test("MP #1671 live census fails on a missing method, defers unloaded classes", function()
+H.test("MP #1671 live census fails on a missing method or an unloaded class", function()
     local M = dofile(repo_root .. MODULE)
     local live = {
         IngameUI = { can_open_loot = function() return false end },
@@ -85,11 +90,16 @@ H.test("MP #1671 live census fails on a missing method, defers unloaded classes"
     }
     local function lookup(name) return live[name] end
 
-    local ok_report = M.census(lookup, { { "QuestManager", "get_data_by_id" }, { "LevelEndViewBase", "init" } })
+    local ok_report = M.census(lookup, { { "QuestManager", "get_data_by_id" } })
     H.equal(ok_report.resolved, 1)
-    H.equal(#ok_report.missing, 0)
-    H.equal(table.concat(ok_report.deferred, ","), "LevelEndViewBase")
     H.equal(M.failure(ok_report), nil)
+
+    -- Past VMF's delay window an absent class is a refused hook, not a deferral.
+    local unloaded = M.census(lookup, { { "QuestManager", "get_data_by_id" }, { "LevelEndViewBase", "init" } })
+    H.equal(unloaded.resolved, 1)
+    H.equal(#unloaded.missing, 0)
+    H.equal(table.concat(unloaded.unloaded, ","), "LevelEndViewBase")
+    H.equal(M.failure(unloaded), "hook target class not loaded: LevelEndViewBase")
 
     local gone = M.census(lookup, { { "QuestManager", "_increment_quest_stats" } })
     H.equal(M.failure(gone), "hook target missing: QuestManager._increment_quest_stats")
@@ -116,12 +126,13 @@ H.test("MP #1671 installs one regression check that logs its census", function()
     H.equal(checks[1].name, "mp1671_hook_targets_resolve")
     H.equal(checks[1].fn(), nil)
     H.truthy(lines[1] and lines[1]:find(string.format(
-        "[mp:1671] hook targets resolved=%d missing=0 deferred=0 deferred_classes=none",
+        "[mp:1671] hook targets resolved=%d missing=0 unloaded=0 unloaded_classes=none",
         #M.TARGETS), 1, true), lines[1])
 
     live.PlayFabRequestQueue = nil
-    H.equal(checks[1].fn(), nil, "an unloaded class is deferred, not failed")
-    H.truthy(lines[2]:find("deferred_classes=PlayFabRequestQueue", 1, true), lines[2])
+    H.equal(checks[1].fn(), "hook target class not loaded: PlayFabRequestQueue",
+        "an unloaded class fails the check")
+    H.truthy(lines[2]:find("unloaded=1 unloaded_classes=PlayFabRequestQueue", 1, true), lines[2])
 
     local entry = assert(read_source(ENTRY))
     local _, installs = entry:gsub('mod:dofile%("scripts/mods/modded_progression/_mp_hook_targets"%)', "")

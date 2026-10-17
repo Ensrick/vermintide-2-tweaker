@@ -86,10 +86,10 @@ there is no copied implementation.
 - `tests/test_mp_hook_targets_resolve.lua`: #1671 no mp source file hooks
   the game-6.12-removed `IngameUI.not_in_modded` (or its `can_open_loot`
   successor), the shipped `_mp_hook_targets.TARGETS` inventory equals every
-  literal `mod:hook("Class", "method")` site the entry loads, and the
-  `/mp_regression_test` census fails on a missing or retired method while
-  deferring a class that is not loaded yet. The class lookup and log seams are
-  test-local.
+  literal `mod:hook("Class", "method")` site in every mp file reachable
+  from the entry, and the `/mp_regression_test` census fails on a missing or
+  retired method and on a class that is not loaded (past VMF's delay window
+  that hook was refused). The class lookup and log seams are test-local.
 - `fixtures/vanilla_weapon_master_list.lua`: GENERATED vanilla weapon census
   (every `ItemMasterList` melee/ranged entry with its `can_wield` list after the
   DLC `UpdateItemMasterList` patches, each hero career's
