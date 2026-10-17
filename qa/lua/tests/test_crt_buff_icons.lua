@@ -249,6 +249,87 @@ return function(H, repo_root)
         H.equal(read(root .. "_crt_buff_icons.lua"):find("_G.printf", 1, true), nil)
     end)
 
+    H.test("CRT #1686 guard log is bounded and each sweep site prints one summary", function()
+        local icons = load_icons()
+        local lines = {}
+        local function capture(fmt, ...) lines[#lines + 1] = string.format(fmt, ...) end
+        local templates = {
+            crt_a = { buffs = { { icon = "kerillian_maidenguard_cooldown_on_nearby_allies" } } },
+            crt_b = { buffs = { { icon = "unchained_6_1" } } },
+        }
+        local rewrites, checked = icons.guard_names(atlas(ATLAS_6130), templates,
+            { crt_a = true, crt_b = true, crt_missing = true })
+        H.equal(#rewrites, 1)
+        H.equal(checked, 2, "coverage counts only live templates")
+        icons.log_rewrites("load", rewrites, checked, capture)
+        H.deep_equal(lines, {
+            "[crt:1686] load buff crt_a sub-buff 1 icon kerillian_maidenguard_cooldown_on_nearby_allies dropped (not_in_atlas)",
+            "[crt:1686] buff icon atlas guard (load): templates=2 dropped=1",
+        })
+        -- A repeated pass with the same drop and the same site adds nothing.
+        icons.log_rewrites("load", rewrites, checked, capture)
+        H.equal(#lines, 2)
+        -- A new site prints its own positive summary once; a clean sweep says so.
+        icons.log_rewrites("apply", {}, 2, capture)
+        icons.log_rewrites("apply", {}, 2, capture)
+        H.equal(#lines, 3)
+        H.equal(lines[3], "[crt:1686] buff icon atlas guard (apply): templates=2 dropped=0")
+        -- Single-template registration sites log drops only, never a summary.
+        icons.log_rewrites("foot_knight", {}, nil, capture)
+        H.equal(#lines, 3)
+        local entry = read(root .. "career_tweaker.lua")
+        H.truthy(entry:find("buff_icons.log_rewrites(site, buff_icons.guard_names(", 1, true),
+            "the sweep must pass guard_names' coverage count into the summary")
+    end)
+
+    -- Runs the registered in-game check itself in a test-local environment (no
+    -- global writes), so a body that computes the audit but drops it is caught.
+    H.test("CRT #1686 issue1686 in-game check runs the audit over live templates", function()
+        local regression = read(root .. "_crt_regression.lua")
+        local first = assert(regression:find('_rt_register("issue1686_buff_icons_in_atlas", function()', 1, true))
+        local finish = assert(regression:find("-- #1686 buff icon atlas check end", first, true))
+        local source = regression:sub(first, finish - 1)
+        -- The glue fields the check reads are assigned by their owners.
+        H.truthy(read(root .. "career_tweaker_balance.lua"):find(
+            'mod._crt.dance_of_blades = mod:dofile("scripts/mods/career_tweaker/_crt_dance_of_blades")', 1, true))
+        H.truthy(read(root .. "career_tweaker.lua"):find("mod._crt.foot_knight = foot_knight", 1, true))
+        H.truthy(read(root .. "_crt_foot_knight.lua"):find("M.buff_icons = BUFF_ICONS", 1, true))
+
+        local dance = dofile(root .. "_crt_dance_of_blades.lua")
+        local fk_icons = {
+            crt_fk_rock_shield_power = "markus_knight_passive_block_cost_aura",
+            crt_fk_teamwork_great_power = "markus_knight_damage_taken_ally_proximity",
+            crt_fk_final_march = "markus_knight_movement_speed_on_incapacitated_allies",
+        }
+        local function run(crt, helper, templates)
+            local check
+            local chunk = assert(loadstring(source, "@issue1686-runtime-check"))
+            setfenv(chunk, setmetatable({
+                _rt_register = function(_, fn) check = fn end,
+                mod = { _crt = crt, _crt_mod_registered_buff_names = { crt_unchained_ult_max_us = true } },
+                _G = { UIAtlasHelper = helper, BuffTemplates = templates },
+            }, { __index = _G }))
+            chunk()
+            return assert(check, "issue1686 check did not register")()
+        end
+        local icons = load_icons()
+        local crt = { buff_icons = icons, dance_of_blades = dance, foot_knight = { buff_icons = fk_icons } }
+        local live = { crt_unchained_ult_max_us = { buffs = { { icon = icons.UNCHAINED_ULT_ICON } } } }
+        H.equal(run(crt, atlas(ATLAS_6130), live), nil)
+        live.crt_unchained_ult_max_us.buffs[1].icon = "sienna_unchained_activated_ability_power_on_enemies_hit"
+        local failure = run(crt, atlas(ATLAS_6130), live)
+        H.truthy(failure and failure:find("live crt_unchained_ult_max_us", 1, true), tostring(failure))
+        live.crt_unchained_ult_max_us.buffs[1].icon = icons.UNCHAINED_ULT_ICON
+        failure = run(crt, atlas(without(ATLAS_6130, "markus_knight_passive_block_cost_aura")), live)
+        H.truthy(failure and failure:find("markus_knight_passive_block_cost_aura", 1, true), tostring(failure))
+        failure = run(crt, nil, live)
+        H.truthy(failure and failure:find("unavailable", 1, true), tostring(failure))
+        failure = run({ dance_of_blades = dance }, atlas(ATLAS_6130), live)
+        H.equal(failure, "#1686 buff icon guard not loaded")
+        failure = run({ buff_icons = icons }, atlas(ATLAS_6130), live)
+        H.equal(failure, "#1686 Dance of Blades factory missing")
+    end)
+
     local home = os.getenv("USERPROFILE") or ""
     local atlas_path = (os.getenv("VT2_SOURCE_ROOT") or (home .. "/source/repos/Vermintide-2-Source-Code"))
         .. "/scripts/ui/atlas_settings/gui_icons_atlas.lua"

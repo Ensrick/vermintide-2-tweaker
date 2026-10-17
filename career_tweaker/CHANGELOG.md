@@ -14,8 +14,11 @@
 - New `_crt_buff_icons.lua` checks every buff icon crt registers against the
   live atlas (every Foot Knight buff, plus one sweep over every crt-registered
   buff at load and after each rework apply pass). A missing buff icon is removed, so the buff still
-  works without a buff-bar slot, and logs `[crt:1686] ... dropped`. The
-  Leading Shots talent keeps the vanilla talent icon if its icon goes missing.
+  works without a buff-bar slot, and logs `[crt:1686] ... dropped` once per
+  distinct icon. Each sweep logs one `[crt:1686] buff icon atlas guard (load)`
+  / `(apply)` summary the first time it runs, so the log proves the guard ran.
+  The Leading Shots talent keeps the vanilla talent icon if its icon goes
+  missing.
 - `/crt_regression_test` adds `issue1686_buff_icons_in_atlas`: every crt icon
   must resolve in the atlas, including reworks that are switched off.
 - Offline `test_crt_buff_icons.lua` fails on the 0.4.31-beta source.

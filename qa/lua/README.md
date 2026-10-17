@@ -102,9 +102,11 @@ there is no copied implementation.
   `unchained_6_1`, the guard drops only unproven buff icons and fails closed
   without the helper, the apply sweep touches only crt-registered names,
   Leading Shots keeps the vanilla talent icon on a miss, the audit fails on
-  constant, factory and live drift, and every registration routes through the
-  guard. An optional case cross-checks the fixture against a local decompiled
-  atlas.
+  constant, factory and live drift, every registration routes through the
+  guard, the guard log dedupes drops and prints one summary per sweep site
+  (test-local logger seam), and the registered `issue1686_buff_icons_in_atlas`
+  closure runs in a test-local environment and fails on a live stale icon. An
+  optional case cross-checks the fixture against a local decompiled atlas.
 - `tests/test_et_issue324_capacity_authority.lua`: #324 a characterization of
   the unchanged boot-shaped registrar refusal (`damage_source_cap_unavailable`
   with NetworkConstants absent and no `Network.type_info` capacity; passes on

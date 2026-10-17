@@ -81,16 +81,19 @@ local function each_name(names, visit)
     end
 end
 
--- Guards every live template named in `names`; returns the combined rewrites.
+-- Guards every live template named in `names`; returns the combined rewrites
+-- and how many named templates were live tables (the sweep's coverage).
 function M.guard_names(atlas_helper, buff_templates, names)
-    local rewrites = {}
-    if type(buff_templates) ~= "table" then return rewrites end
+    local rewrites, checked = {}, 0
+    if type(buff_templates) ~= "table" then return rewrites, checked end
     each_name(names, function(name)
-        for _, row in ipairs(M.guard_template(atlas_helper, name, rawget(buff_templates, name))) do
+        local template = rawget(buff_templates, name)
+        if type(template) == "table" then checked = checked + 1 end
+        for _, row in ipairs(M.guard_template(atlas_helper, name, template)) do
             rewrites[#rewrites + 1] = row
         end
     end)
-    return rewrites
+    return rewrites, checked
 end
 
 -- Talent icon to install: the preferred name when the atlas proves it, else
@@ -100,15 +103,31 @@ function M.talent_icon(atlas_helper, preferred, vanilla_icon)
     return vanilla_icon
 end
 
--- One engine printf line per rewrite. Read-only use of the global (mod logging
--- is off for the author, CLAUDE.md rule 9); never assigned here.
-function M.log_rewrites(site, rewrites)
-    local log = rawget(_G, "printf")
+-- Module-local log ledger: each distinct drop prints once, and each sweep site
+-- prints one positive summary the first time it runs, so the log stays bounded
+-- across repeated balance.apply passes and proves the sweep ran.
+local _logged_drops = {}
+local _summarized_sites = {}
+
+-- Engine printf lines for rewrites. `checked` (a sweep's template count) adds
+-- the per-site summary; `log` is a test seam. Read-only use of the global (mod
+-- logging is off for the author, CLAUDE.md rule 9); never assigned here.
+function M.log_rewrites(site, rewrites, checked, log)
+    log = log or rawget(_G, "printf")
     if type(log) ~= "function" or type(rewrites) ~= "table" then return end
     for _, row in ipairs(rewrites) do
-        pcall(log, "[crt:1686] %s buff %s sub-buff %d icon %s dropped (%s)",
-            tostring(site), tostring(row.name), tonumber(row.index) or 0,
-            tostring(row.from), tostring(row.reason))
+        local key = tostring(row.name) .. "#" .. tostring(row.index) .. "#" .. tostring(row.from)
+        if not _logged_drops[key] then
+            _logged_drops[key] = true
+            pcall(log, "[crt:1686] %s buff %s sub-buff %d icon %s dropped (%s)",
+                tostring(site), tostring(row.name), tonumber(row.index) or 0,
+                tostring(row.from), tostring(row.reason))
+        end
+    end
+    if checked ~= nil and not _summarized_sites[tostring(site)] then
+        _summarized_sites[tostring(site)] = true
+        pcall(log, "[crt:1686] buff icon atlas guard (%s): templates=%d dropped=%d",
+            tostring(site), tonumber(checked) or 0, #rewrites)
     end
 end
 
