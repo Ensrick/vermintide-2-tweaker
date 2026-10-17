@@ -83,6 +83,30 @@ there is no copied implementation.
   carry its revision and `Current (Game Version 6.13.0)` label, the Patch 5.2
   rehydrated evidence projects onto it, and no provenance input keeps a
   retired 6.12.0 or 6.12.1 anchor.
+- `tests/test_woc_ui_icons.lua`: #1687 every atlas icon WOC hands to the UI
+  resolves in the Game Version 6.13.0 atlas (test-local
+  `has_atlas_settings_by_texture_name` seam): the Poisoned Edge constant is no
+  longer the removed 6.12.1 key, a kept stale row is repaired to the current
+  constant (to vanilla's `icons_placeholder` when the helper is unusable),
+  atlas drift falls back and fails the audit, a placeholder shown while the
+  preferred icon is resident fails the audit, the audit covers both traits and
+  the Athanor fallback item icon, a missing helper fails closed, every
+  trait-row install routes through the guard, and the registered
+  `issue655_blightreaper_trait_contract` closure runs in a test-local
+  environment and returns the icon audit failure.
+- `tests/test_crt_buff_icons.lua`: #1686 every icon crt hands to the HUD
+  resolves in the Game Version 6.13.0 atlas (test-local
+  `has_atlas_settings_by_texture_name` seam): no crt module sets an icon
+  literal outside the 6.13.0 atlas (the two removed 6.12.1 keys fail it), the
+  Dance of Blades and Unchained buffs carry `maidenguard_4_2` and
+  `unchained_6_1`, the guard drops only unproven buff icons and fails closed
+  without the helper, the apply sweep touches only crt-registered names,
+  Leading Shots keeps the vanilla talent icon on a miss, the audit fails on
+  constant, factory and live drift, every registration routes through the
+  guard, the guard log dedupes drops and prints one summary per sweep site
+  (test-local logger seam), and the registered `issue1686_buff_icons_in_atlas`
+  closure runs in a test-local environment and fails on a live stale icon. An
+  optional case cross-checks the fixture against a local decompiled atlas.
 - `tests/test_mp_hook_targets_resolve.lua`: #1671 no mp source file hooks
   the game-6.12-removed `IngameUI.not_in_modded` (or its `can_open_loot`
   successor), the shipped `_mp_hook_targets.TARGETS` inventory equals every
