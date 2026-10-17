@@ -81,6 +81,14 @@ there is no copied implementation.
   is reported once by its own name, a drifted talent policy fails both, and a
   missing module or check list fails loudly. get_mod, the panel class and
   Managers resolve through a test-local environment.
+- `tests/test_gut_dialogue_contract_skip.lua`: #998 the real
+  `_gut_dialogue_contract` module and the real Character Dialogue entry:
+  `issue998_dialogue_staged_isolation` SKIPs by name with no Character
+  Dialogue, with a v5 API (0.1.11-dev shape) or with no versioned API (through
+  0.2.360-dev those were a bare PASS and a FAIL), FAILs a v6+ API that lacks the
+  `isolation_setting` descriptor or `on_settings_batch_changed`, and PASSes the
+  real entry without writing the owner. get_mod resolves through the dialogue
+  fixture's test-local environment.
 - `tests/test_gut_dropdown_arrow_glow.lua`: #92 the shipped `create_dropdown`
   and its `DD_*` constants lifted out of the definitions file and driven through
   the real `mod_tweaker_dropdown_arrow_glow` check: the shipped widget passes,

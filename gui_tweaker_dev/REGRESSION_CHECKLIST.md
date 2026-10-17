@@ -75,7 +75,10 @@
 - Offline installed-view tests cover DEFAULT's transaction-owner delegate:
   unsupported or absent category/nodes cause no staging/reseed/repaint; normal
   tabs preserve false defaults, keybind exclusion and zero-setting reseeds.
-- `/gut_regression_test`: `issue998_dialogue_staged_isolation` must pass.
+- `/gut_regression_test`: `issue998_dialogue_staged_isolation` must pass with
+  Character Dialogue 0.1.14-dev or newer (API v6). Without Character Dialogue,
+  or with an older one, it SKIPs by name (the Dialogue tab omits the row there);
+  a FAIL means a v6+ Character Dialogue lacks the staged owner.
 
 ## Owner-qualified profile preimages (#221, 0.2.346-dev)
 

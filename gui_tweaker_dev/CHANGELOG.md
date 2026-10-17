@@ -1,5 +1,27 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.361-dev (2026-10-17) -- Dialogue isolation check SKIPs without a v6 Character Dialogue (#998) [verify-fix]
+
+- `/gut_regression_test` printed `FAIL: issue998_dialogue_staged_isolation --
+  Character Dialogue staged-isolation owner unavailable; install the
+  coordinated build` for any player whose Character Dialogue predates API v6
+  (0.1.11-dev and older), and a bare PASS with no Character Dialogue at all.
+- Root cause: `_gut_dialogue_contract.lua:9-15` on 0.2.360-dev returned nil
+  (PASS) when `get_mod("character_dialogue")` was nil and one FAIL string for
+  every other setup without the `isolation_setting` descriptor or
+  `on_settings_batch_changed`. An older Character Dialogue is a supported
+  setup: the Dialogue tab omits the isolation row by design
+  (`_mod_tweaker_dialogue.lua:50-61`), and the descriptor arrived with API v6
+  (`character_dialogue.lua:402`, `:564-566`, first published in 0.1.14-dev).
+- Fix: the check now SKIPs by name when Character Dialogue is not installed,
+  exposes no versioned API, or reports API v5 or older, and FAILs only when a
+  v6+ Character Dialogue lacks the descriptor or the batch owner, naming the
+  missing piece. With Character Dialogue 0.1.14-dev it still runs the isolated
+  staging/transaction contract and PASSes.
+- Offline: `qa/lua/tests/test_gut_dialogue_contract_skip.lua` drives the real
+  contract against the real Character Dialogue entry; 8 of its 9 cases fail on
+  0.2.360-dev.
+
 ## 0.2.360-dev (2026-10-17) -- Tab talent module check no longer FAILs when it passes (#250) [verify-fix]
 
 - Rain's 0.2.354-dev keep session (log on #1637): `/gut_regression_test`

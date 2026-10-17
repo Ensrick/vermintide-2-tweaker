@@ -234,7 +234,8 @@ node filtering, owner-qualified staging and loadout-reseed intent to the existin
 `_mod_tweaker_default_reset` owner; its injected custom-tab refusal runs before
 any node read, staging or arming. Apply remains the sole persistence boundary.
 `_gut_dialogue_contract`
-registers its isolated runtime staging/transaction check. The paired CD owner
+registers its isolated runtime staging/transaction check; it SKIPs by name when
+Character Dialogue is absent or predates API v6 (#998). The paired CD owner
 uses VMF's `set(..., false)` persistence then one batch completion notification
 (VMF `modules/core/settings.lua:27-43`); ordinary notifications dispatch through
 `modules/core/events.lua:44-49`. No GUT `mt::` shadow setting is created.

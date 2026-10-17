@@ -511,6 +511,7 @@ local suites = {
     "test_gut_module_extraction",
     "test_character_dialogue",
     "test_dialogue_staged_isolation",
+    "test_gut_dialogue_contract_skip",
     "test_appearance_descriptor",
     "test_appearance_census",
     "test_appearance_name_authority",
