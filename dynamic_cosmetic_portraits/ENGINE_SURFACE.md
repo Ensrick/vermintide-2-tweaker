@@ -35,7 +35,7 @@ mutation and a VMF data API respectively) and are covered in the subsystem notes
 
 | Class.method (kind) | Vanilla behavior at the seam | Why dcp hooks it | Trap / invariant |
 |---|---|---|---|
-| `UnitFrameUI.draw` [safe] `:734` | Draws a player HUD unit frame each frame [src: `scripts/ui/hud_ui/unit_frame_ui.lua:326`] | Call `_sync_portrait_settings()` so the career_settings swap activates on the first frame after the custom resources are resident and the hat/skin is detected (`:734`) | PER-FRAME row, but a cheap no-op once `_portrait_settings_active` flips: `_sync_portrait_settings` early-returns until `_check_portrait_materials_ready()` proves all 24 HUD/small `UIAtlasHelper` rows, the shared atlas material, and all 12 medium standalone materials on one injected Gui. Missing resources fail open to vanilla. `Gui.material(gui, name)` returns nil silently on a missing material in this build (NOT a throw), so the probe MUST inspect the return, not just `pcall` success. This is a readiness TICK only - the actual swap targets the shared `career_settings` table, so player scope is corrected at the consumer seams (issue 435) |
+| `UnitFrameUI.draw` [safe] `:734` | Draws a player HUD unit frame each frame [src: `scripts/ui/hud_ui/unit_frame_ui.lua:326`] | Call `_sync_portrait_settings()` so the career_settings swap activates on the first frame after the custom resources are resident and the hat/skin is detected (`:734`) | PER-FRAME row, but a cheap no-op once the `_dcp_portrait_settings_owner` state is active (its apply fast path writes nothing while the owned pair is already shown, #509): `_sync_portrait_settings` early-returns until `_check_portrait_materials_ready()` proves all 24 HUD/small `UIAtlasHelper` rows, the shared atlas material, and all 12 medium standalone materials on one injected Gui. Missing resources fail open to vanilla. `Gui.material(gui, name)` returns nil silently on a missing material in this build (NOT a throw), so the probe MUST inspect the return, not just `pcall` success. This is a readiness TICK only - the actual swap targets the shared `career_settings` table, so player scope is corrected at the consumer seams (issue 435) |
 
 ### Local presentation invalidation (non-hook seam)
 
@@ -60,8 +60,9 @@ doc and `DEVELOPMENT.md` carry the full architecture.
 Every VT2 portrait surface derives its texture name from
 `career_settings.portrait_image` (`<base>` directly on the HUD, `medium_<base>`
 on hero-select, `small_<base>` on matchmaking, etc.) [src: `career_settings.lua`
-portrait fields; e.g. `:67`]. `dcp` saves the originals once
-(`_original_portrait_image` / `_original_picking_image`, `:445`), then writes the
+portrait fields; e.g. `:67`]. `dcp` captures the originals once through `_dcp_portrait_settings_owner.lua`
+(#509: every write read back, ownership kept until the vanilla pair is visibly
+back on the row), then writes the
 custom `portrait_kruber_mercenary_<key>` pair into the live table when a tracked
 hat/outfit is equipped, restoring the originals when nothing matches or on unload
 (`_restore_portrait_settings`, `:428`). These are plain mutable Lua tables - no

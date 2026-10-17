@@ -94,6 +94,14 @@ there is no copied implementation.
   and its single load owner. The probe reads an injected globals table and
   emits through a test-local seam; the route case runs the chunk in a
   test-local environment.
+- `tests/test_dcp_portrait_settings_owner.lua`: #509 the production DCP
+  portrait-settings owner: exact capture (nil included), repeat-apply
+  preservation and its no-write per-frame fast path, cross-career rejection,
+  rollback and retained recovery ownership for throwing or silently ignored
+  writes, and the named `career_settings_swap_saves_and_restores` body
+  (`check_transaction`) passing on a healthy live row while failing on a
+  read-only row, a foreign held row or a leaked capture. The entry file's
+  check, sync, restore and unload paths are pinned to the owner.
 - `fixtures/vanilla_weapon_master_list.lua`: GENERATED vanilla weapon census
   (every `ItemMasterList` melee/ranged entry with its `can_wield` list after the
   DLC `UpdateItemMasterList` patches, each hero career's

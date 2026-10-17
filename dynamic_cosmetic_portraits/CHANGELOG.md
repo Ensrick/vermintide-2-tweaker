@@ -1,5 +1,21 @@
 # Changelog — Dynamic Cosmetic Portraits
 
+## 0.1.30-dev (2026-10-17) -- career-settings check runs the real portrait transaction (#509) [verify-fix]
+
+- The Mercenary career-row portrait write now has one owner,
+  `_dcp_portrait_settings_owner.lua`, used by live sync, unload restore and
+  the named `career_settings_swap_saves_and_restores` regression check.
+- The owner captures the vanilla HUD and hero-select pair exactly once, keeps it
+  across repeated syncs, refuses another career row, reads back every write,
+  and keeps ownership after a failed or ignored write so the next sync or
+  unload can retry the restore. Failures log once, never to chat.
+- `/dcp_regression_test` now runs the owner itself: a synthetic
+  capture/repeat/restore, an identity transaction on the live Mercenary row
+  (nothing visible changes), and the live ownership checks. It no longer
+  greps its own source.
+- Per-frame sync does no write while the owned portrait pair is already shown.
+- No portrait assets, maps or player-visible selection behavior changed.
+
 ## 0.1.29-dev (2026-08-23) — retire consumed portrait-scope telemetry (#499) [not-started]
 
 - Removed the automatic `[dcp:435]` HUD/Tab/score telemetry and its closed-issue

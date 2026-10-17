@@ -21,7 +21,7 @@ end
 -- exposure is needed. Matches modded_progression.lua:27.
 local _MEM_PROBE_T0_DCP = collectgarbage("count")
 
-local MOD_VERSION = "0.1.29-dev"
+local MOD_VERSION = "0.1.30-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([dcp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -357,9 +357,16 @@ local _skin_portrait_map = {
 }
 
 local _portrait_materials_ready = false
-local _portrait_settings_active = false
-local _original_portrait_image = nil
-local _original_picking_image = nil
+local _portrait_settings_owner = mod:dofile(
+    "scripts/mods/dynamic_cosmetic_portraits/_dcp_portrait_settings_owner")
+local _portrait_settings = _portrait_settings_owner.new()
+local _portrait_settings_error = nil
+local function _report_portrait_settings_error(stage, reason)
+    local current = tostring(stage) .. ":" .. tostring(reason)
+    if current == _portrait_settings_error then return end
+    _portrait_settings_error = current
+    pcall(printf, "[dcp:509] portrait settings %s rejected: %s", stage, tostring(reason))
+end
 local _last_known_hat_key = nil
 local _last_known_skin_key = nil
 local _presentation_hints = {}
@@ -580,7 +587,7 @@ end
 -- set, or nil when the player is not an es_mercenary, wears no tracked
 -- cosmetic, sync data is unavailable, or our portrait materials are not
 -- loaded yet (a custom texture before readiness is a "Material not found in
--- Gui" crash). Callers must fall back to _original_portrait_image (vanilla),
+-- Gui" crash). Callers must fall back to the captured original (vanilla),
 -- NEVER to the possibly-swapped global value.
 local _portrait_resolver = mod:dofile(
     "scripts/mods/dynamic_cosmetic_portraits/_dcp_portrait_resolver")
@@ -605,27 +612,27 @@ local function _resolve_portrait_set_for_player(player)
     return nil
 end
 
-local function _restore_portrait_settings()
-    if not _portrait_settings_active then return end
-    if not SPProfiles then return end
-    local career = SPProfiles[5] and SPProfiles[5].careers and SPProfiles[5].careers[1]
-    if career and _original_portrait_image then
-        career.portrait_image = _original_portrait_image
-        career.picking_image = _original_picking_image
-        _portrait_settings_active = false
-        mod:info("[portrait] restored career_settings to '%s'", _original_portrait_image)
+local function _restore_portrait_settings(career_override)
+    if not _portrait_settings.active then return true end
+    local career = career_override or _portrait_settings.career
+    if not career and SPProfiles then
+        career = SPProfiles[5] and SPProfiles[5].careers and SPProfiles[5].careers[1]
     end
+    local original = _portrait_settings.original_portrait_image
+    local ok, reason = _portrait_settings_owner.restore(_portrait_settings, career)
+    if ok then
+        _portrait_settings_error = nil
+        mod:info("[portrait] restored career_settings to '%s'", tostring(original))
+    else
+        _report_portrait_settings_error("restore", reason)
+    end
+    return ok, reason
 end
 
 local function _sync_portrait_settings()
     if not SPProfiles then return end
     local career = SPProfiles[5] and SPProfiles[5].careers and SPProfiles[5].careers[1]
     if not career then return end
-
-    if not _original_portrait_image then
-        _original_portrait_image = career.portrait_image
-        _original_picking_image = career.picking_image
-    end
 
     -- Portrait swapping is always on: the `dynamic_portraits` VMF toggle was
     -- removed 2026-06-22 (this mod has no settings page). It simply does what
@@ -643,12 +650,17 @@ local function _sync_portrait_settings()
         portraits = hat_key and _hat_portrait_map[hat_key]
     end
     if portraits then
-        career.portrait_image = portraits.hud
-        career.picking_image = portraits.medium
-        if not _portrait_settings_active then
+        if _portrait_settings.active and _portrait_settings.career ~= career then
+            local restored = _restore_portrait_settings(_portrait_settings.career)
+            if not restored then return end
+        end
+        local was_active = _portrait_settings.active
+        local ok, reason = _portrait_settings_owner.apply(_portrait_settings, career, portraits)
+        if ok and not was_active then
             mod:info("[portrait] swapped career_settings to '%s'", portraits.hud)
         end
-        _portrait_settings_active = true
+        if ok then _portrait_settings_error = nil
+        else _report_portrait_settings_error("apply", reason) end
     else
         _restore_portrait_settings()
     end
@@ -776,27 +788,19 @@ _rt_register("career_settings_swap_saves_and_restores", function()
     -- SPProfiles[5].careers[1] (Kruber mercenary) portrait_image/picking_image,
     -- capturing the vanilla originals before the first swap and restoring them on
     -- unload. If originals are not captured, or on_unload stops restoring, the
-    -- swapped portrait leaks into a non-dcp session. Runtime: the restore path +
-    -- unload hook exist. Source-pattern (split needles) confirms save-before-swap
-    -- and restore-writes-original; no-op when source is unreadable.
-    if type(_restore_portrait_settings) ~= "function" then
-        return "_restore_portrait_settings missing -- a swapped career_settings can never be reverted"
-    end
+    -- swapped portrait leaks into a non-dcp session. Runs the production owner:
+    -- a synthetic capture/repeat-apply/restore, an identity transaction on the
+    -- live row, and the live production ownership invariants.
+    local live = SPProfiles and SPProfiles[5] and SPProfiles[5].careers
+        and SPProfiles[5].careers[1]
+    local reason = _portrait_settings_owner.check_transaction({
+        live_career = live,
+        production = _portrait_settings,
+        custom_sets = { _hat_portrait_map, _skin_portrait_map },
+    })
+    if reason then return reason end
     if type(mod.on_unload) ~= "function" then
         return "mod.on_unload missing -- swapped career_settings will not restore on unload"
-    end
-    local ok, info = pcall(debug.getinfo, _rt_register, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
-    if not txt then return end
-    local save_needle    = "_original_portrait_image = career." .. "portrait_image"
-    local restore_needle = "career.portrait_image = _original_" .. "portrait_image"
-    if not txt:find(save_needle, 1, true) then
-        return "save-before-swap missing: _sync_portrait_settings must capture the vanilla portrait_image before overwriting it"
-    end
-    if not txt:find(restore_needle, 1, true) then
-        return "restore missing: _restore_portrait_settings must write the saved original back to career.portrait_image"
     end
 end)
 
@@ -897,7 +901,7 @@ mod:command("portrait_diag", "Diagnose portrait texture registration + hat state
 
     local ready = _check_portrait_materials_ready()
     emit("settings_active=%s dynamic_portraits=always-on materials_ready=%s",
-        tostring(_portrait_settings_active), tostring(ready))
+        tostring(_portrait_settings.active), tostring(ready))
     local career = SPProfiles and SPProfiles[5] and SPProfiles[5].careers and SPProfiles[5].careers[1]
     if career then
         emit("career_settings.portrait_image='%s' picking_image='%s'",
@@ -1142,14 +1146,14 @@ mod:command("test_portrait", "Force portrait career_settings swap", function()
     _sync_portrait_settings()
     local career = SPProfiles and SPProfiles[5] and SPProfiles[5].careers and SPProfiles[5].careers[1]
     mod:echo("[test_portrait] active=%s portrait_image='%s'",
-        tostring(_portrait_settings_active),
+        tostring(_portrait_settings.active),
         career and tostring(career.portrait_image) or "nil")
     _flush_log()
 end)
 
 -- Sync portrait career_settings on each UnitFrameUI draw so the swap
 -- activates as soon as materials are ready and hat is detected. Once
--- _portrait_settings_active is true, this is a cheap no-op.
+-- the portrait-settings owner is active, this is a cheap no-op.
 mod:hook_safe("UnitFrameUI", "draw", function(self, dt)
     _drain_presentation_refresh()
     _sync_portrait_settings()
@@ -1195,7 +1199,9 @@ mod:hook("UnitFramesHandler", "_sync_player_stats", function(func, self, unit_fr
         return func(self, unit_frame, ...)
     end
     local set = _resolve_portrait_set_for_player(player)
-    local resolved = (set and set.hud) or _original_portrait_image or career.portrait_image
+    local resolved = (set and set.hud)
+        or _portrait_settings.original_portrait_image
+        or career.portrait_image
     local saved = career.portrait_image
     career.portrait_image = resolved
     func(self, unit_frame, ...)
@@ -1220,7 +1226,8 @@ mod:hook_safe("IngamePlayerListUI", "_update_player_information", function(self,
         if player and widget and widget.content and not pd.is_local_player
                 and _player_career_name(player) == "es_mercenary" then
             local set = _resolve_portrait_set_for_player(player)
-            local resolved = (set and set.hud) or _original_portrait_image
+            local resolved = (set and set.hud)
+                or _portrait_settings.original_portrait_image
             if resolved and widget.content.portrait ~= resolved then
                 widget.content.portrait = resolved
             end
@@ -1241,7 +1248,7 @@ end)
 -- Runs once per score-screen build. self.peer_id is the local peer
 -- (end_view_state_score.lua:23-36).
 mod:hook_safe("EndViewStateScore", "_setup_player_scores", function(self, players_session_scores)
-    if not _original_portrait_image then return end  -- swap never activated; nothing can have leaked
+    if not _portrait_settings.original_portrait_image then return end
     -- A custom Gui material before residency is a Material-not-found crash.
     -- If readiness failed, no custom score correction is safe to draw.
     if not _check_portrait_materials_ready() then return end
@@ -1259,7 +1266,8 @@ mod:hook_safe("EndViewStateScore", "_setup_player_scores", function(self, player
             if not is_local_human then
                 local set = _portrait_resolver.resolve_score_record(
                     rec, _skin_portrait_map, _hat_portrait_map)
-                local resolved = (set and set.hud) or _original_portrait_image
+                local resolved = (set and set.hud)
+                    or _portrait_settings.original_portrait_image
                 if content.portrait ~= resolved then
                     content.portrait = resolved
                 end
