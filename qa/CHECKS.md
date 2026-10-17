@@ -853,7 +853,11 @@ There is no live API, launcher, Steam, game, upload or ready-card mutation.
 proof used by full live-card authority and current-pin recovery: canonical case
 and Workshop identity, clean real commit objects, derived mod trees, tokenized
 exact versions, explicit legacy root-to-mod-tree proof, selected prefetch, and
-published-release/asset metadata. Its 88 assertions run on PS7 and PS5.1; the
+published-release/asset metadata. The latest-release read refreshes its asset
+inventory from `/releases/{id}/assets` (#1666), so the 2026-09-23 ghost id
+583157616 is never downloaded; the embedded array is a one-warning fallback that
+names the gh failure, and the read adapter refuses anything but a GET to
+api.github.com. Its 98 assertions run on PS7 and PS5.1; the
 existing full source-authority selftest retains receipt-policy and partial-clone
 hydration coverage. Both new checks are automatically discovered in full QA.
 These checks establish GitHub source provenance only, not Workshop delivery.

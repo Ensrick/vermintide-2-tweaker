@@ -1431,6 +1431,28 @@ function Invoke-VtAuthorityGhRead {
     throw "$Description failed after four attempts: $($raw.Trim())"
 }
 
+# Issue #1666: /releases/latest embeds an asset array GitHub has served stale
+# (2026-09-23: ghost manifest.json id 583157616 returned 404 for over an hour
+# while /releases/{id}/assets listed the live id 583314449). The card authority
+# refreshes its inventory through the same owner publish-release uses (#1665),
+# reading through the bounded gh reader; the embedded array is a warned fallback.
+if (-not (Get-Command Update-GitHubReleaseAssetInventory -CommandType Function -ErrorAction SilentlyContinue)) {
+    . (Join-Path $PSScriptRoot '../publish-release/github-release-api.ps1')
+}
+
+function Invoke-VtAuthorityGhReleaseRequest {
+    param([string]$Method,[string]$Uri)
+    $prefix='https://api.github.com/'
+    if($Method -cne 'GET' -or -not $Uri.StartsWith($prefix,[StringComparison]::Ordinal)){
+        return [pscustomobject]@{StatusCode=0;Content='';Bytes=$null;Error='card authority performs only fixed GitHub API reads'}
+    }
+    try{
+        $raw=Invoke-VtAuthorityGhRead -Arguments @('api',$Uri.Substring($prefix.Length)) -Description 'Unable to refresh latest release asset inventory'
+        return [pscustomobject]@{StatusCode=200;Content=$raw;Bytes=$null;Error=$null}
+    }
+    catch{return [pscustomobject]@{StatusCode=0;Content='';Bytes=$null;Error=$_.Exception.Message}}
+}
+
 function Get-VtCardDeploymentManifest {
     [CmdletBinding()]
     param(
@@ -1456,6 +1478,7 @@ function Get-VtCardDeploymentManifest {
     if ($release.draft -isnot [bool] -or $release.draft) {
         throw 'Latest release must explicitly be published (boolean draft=false).'
     }
+    $null = Update-GitHubReleaseAssetInventory -Repo $Repository -Release $release -Request ${function:Invoke-VtAuthorityGhReleaseRequest}
     $assets = @($release.assets)
     $manifestAssets = @($assets | Where-Object { [string]$_.name -ieq 'manifest.json' })
     if ($manifestAssets.Count -ne 1 -or [string]$manifestAssets[0].name -cne 'manifest.json') {

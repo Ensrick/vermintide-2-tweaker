@@ -186,18 +186,64 @@ try{
     # Only this read boundary is replaced; production constructs every API
     # endpoint. A hostile download URL from release JSON is never followed.
     $script:httpCalls=New-Object 'System.Collections.Generic.List[string]'
+    # The live inventory (GET /releases/{id}/assets) mirrors the embedded array
+    # unless a case sets remoteInventory (stale embedded array) or inventoryDown.
+    $script:remoteInventory=$null; $script:inventoryDown=$false
+    $inventoryRoute='repos/Ensrick/vermintide-2-tweaker/releases/1/assets?per_page=100&page=1'
     function Invoke-VtAuthorityGhRead {
         param([string[]]$Arguments,[string]$Description)
         $script:httpCalls.Add(($Arguments -join ' '))
         if($Arguments[1] -ceq 'repos/Ensrick/vermintide-2-tweaker/releases/latest'){return ($script:remoteRelease | ConvertTo-Json -Depth 30)}
+        if($Arguments[1] -ceq $inventoryRoute){
+            if($script:inventoryDown){throw "$Description failed (exit 1, attempt 1/4): HTTP 404: Not Found"}
+            $rows=if($null -ne $script:remoteInventory){$script:remoteInventory}else{$script:remoteRelease.assets}
+            return (ConvertTo-Json -InputObject @($rows) -Depth 30)
+        }
         if($Arguments[1] -ceq 'repos/Ensrick/vermintide-2-tweaker/releases/assets/2'){return ($script:remoteManifest | ConvertTo-Json -Depth 30)}
         throw "Unexpected remote endpoint: $($Arguments -join ' ')"
     }
     $release=[pscustomobject]@{id=1;tag_name='mods-2026-09-06';draft=$false;assets=@([pscustomobject]@{name='manifest.json';id=2;url='https://invalid.example/never-follow'})}
     $script:remoteRelease=Copy-Value $release; $script:remoteManifest=Copy-Value $manifest
     $read=Get-VtCardDeploymentManifest
-    Assert ($read._authority_release_tag -ceq $manifest.release_tag -and $script:httpCalls.Count -eq 2) 'Valid published manifest read failed.'
-    Assert ($script:httpCalls[1] -ceq 'api repos/Ensrick/vermintide-2-tweaker/releases/assets/2 -H Accept: application/octet-stream') 'Asset URL rather than fixed repository route was trusted.'
+    Assert ($read._authority_release_tag -ceq $manifest.release_tag -and $script:httpCalls.Count -eq 3) 'Valid published manifest read failed.'
+    Assert ($script:httpCalls[1] -ceq "api $inventoryRoute") 'Asset inventory was not refreshed from the per-release assets endpoint (#1666).'
+    Assert ($script:httpCalls[2] -ceq 'api repos/Ensrick/vermintide-2-tweaker/releases/assets/2 -H Accept: application/octet-stream') 'Asset URL rather than fixed repository route was trusted.'
+
+    # 2026-09-23: /releases/latest embedded manifest.json as ghost id 583157616
+    # (HTTP 404) while /releases/{id}/assets listed the live id. The authority
+    # must download the live id and never touch the ghost (#1666).
+    $script:remoteRelease=Copy-Value $release; $script:remoteRelease.assets[0].id=583157616
+    $script:remoteInventory=@((Copy-Value $release).assets); $script:httpCalls.Clear()
+    $ghostRead=Get-VtCardDeploymentManifest
+    Assert ($ghostRead._authority_release_tag -ceq $manifest.release_tag -and
+        @($script:httpCalls | Where-Object {$_ -match '583157616'}).Count -eq 0 -and
+        $script:httpCalls[2] -ceq 'api repos/Ensrick/vermintide-2-tweaker/releases/assets/2 -H Accept: application/octet-stream') `
+        "Stale embedded asset array (ghost manifest id) reached download: $($script:httpCalls -join ' | ')"
+    # With the assets endpoint down, the embedded array is the only inventory:
+    # one warning names the fallback, and a valid embedded row still resolves.
+    $script:remoteRelease=Copy-Value $release; $script:remoteInventory=$null; $script:inventoryDown=$true
+    $script:GitHubReleaseAssetInventoryWarned=$false; $script:httpCalls.Clear(); $fallbackWarnings=@()
+    $fallbackRead=Get-VtCardDeploymentManifest -WarningVariable fallbackWarnings -WarningAction SilentlyContinue
+    Assert ($fallbackRead._authority_release_tag -ceq $manifest.release_tag -and $script:httpCalls.Count -eq 3 -and
+        @($fallbackWarnings).Count -eq 1 -and "$($fallbackWarnings[0])" -match 'embedded asset array') `
+        "Assets-endpoint outage did not fall back to the embedded array with one warning: $(@($fallbackWarnings) -join ' | ')"
+    Assert ("$($fallbackWarnings[0])" -match 'returned HTTP 0: Unable to refresh latest release asset inventory failed .*HTTP 404: Not Found') `
+        "Assets-endpoint fallback warning dropped the gh failure text: $($fallbackWarnings[0])"
+    $script:inventoryDown=$false
+    # The adapter is a read-only bridge: anything but a GET to api.github.com
+    # is refused before the gh reader runs.
+    $script:httpCalls.Clear()
+    foreach($refused in @(
+        @{Method='POST';Uri='https://api.github.com/repos/Ensrick/vermintide-2-tweaker/releases/1/assets'},
+        @{Method='DELETE';Uri='https://api.github.com/repos/Ensrick/vermintide-2-tweaker/releases/assets/2'},
+        @{Method='GET';Uri='https://uploads.github.com/repos/Ensrick/vermintide-2-tweaker/releases/1/assets'},
+        @{Method='GET';Uri='https://api.github.com.invalid.example/repos/Ensrick/vermintide-2-tweaker/releases/1/assets'},
+        @{Method='get';Uri='https://api.github.com/repos/Ensrick/vermintide-2-tweaker/releases/1/assets'}
+    )){
+        $response=Invoke-VtAuthorityGhReleaseRequest -Method $refused.Method -Uri $refused.Uri
+        Assert ($response.StatusCode -eq 0 -and "$($response.Error)" -match 'only fixed GitHub API reads') "Release adapter accepted $($refused.Method) $($refused.Uri)."
+    }
+    Assert ($script:httpCalls.Count -eq 0) "Refused release adapter request reached the gh reader: $($script:httpCalls -join ' | ')"
     foreach($case in @(
         @{Field='id';Value=0;Pattern='numeric id'},@{Field='id';Value=-1;Pattern='numeric id'},
         @{Field='id';Value='1';Pattern='numeric id'},@{Field='id';Value=$null;Pattern='numeric id'},
@@ -216,14 +262,14 @@ try{
         @{Field='id';Value='2';Pattern='numeric id'},@{Field='name';Value='Manifest.json';Pattern='case-exact'}
     )){
         $script:remoteRelease=Copy-Value $release; $script:remoteRelease.assets[0].($case.Field)=$case.Value; $script:httpCalls.Clear()
-        Reject {Get-VtCardDeploymentManifest} $case.Pattern "Remote asset $($case.Field) guard failed."
-        Assert ($script:httpCalls.Count -eq 1) 'Unproven asset identity reached an asset request.'
+        Reject {Get-VtCardDeploymentManifest -WarningAction SilentlyContinue} $case.Pattern "Remote asset $($case.Field) guard failed."
+        Assert ($script:httpCalls.Count -eq 2) 'Unproven asset identity reached an asset request.'
     }
     foreach($alias in @('manifest.json','Manifest.json')){
         $script:remoteRelease=Copy-Value $release
         $script:remoteRelease.assets+= [pscustomobject]@{name=$alias;id=3}; $script:httpCalls.Clear()
         Reject {Get-VtCardDeploymentManifest} 'case-exact' 'Duplicate/aliased manifest accepted.'
-        Assert ($script:httpCalls.Count -eq 1) 'Ambiguous assets reached download.'
+        Assert ($script:httpCalls.Count -eq 2) 'Ambiguous assets reached download.'
     }
     $script:remoteRelease=Copy-Value $release; $script:remoteManifest=Copy-Value $manifest
     $script:remoteManifest.release_tag='mods-2026-09-05'
