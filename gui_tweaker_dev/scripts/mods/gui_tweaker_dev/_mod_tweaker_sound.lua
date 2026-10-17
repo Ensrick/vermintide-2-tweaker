@@ -1,5 +1,4 @@
 local mod = get_mod("gut_dev")
-local _printf = rawget(_G, "printf") or function() end  -- module-local ledger; the global is only read
 
 -- _mod_tweaker_sound.lua - the ONE Wwise resolver for both Mod Tweaker presentations.
 --
@@ -9,7 +8,7 @@ local _printf = rawget(_G, "printf") or function() end  -- module-local ledger; 
 -- standalone ModTweakerView (_mod_tweaker_view.lua); the /mod_tweaker command opens
 -- the keep HeroView sub-state (_mod_tweaker_state.lua), because
 -- _ba_heroview_inject.lua registers that command after the entry file and VMF lets
--- a mod overwrite its own command (VMF commands.lua:31-43).
+-- a mod overwrite its own command (VMF commands.lua:15-28).
 --
 -- (#1670) Through 0.2.358-dev the sub-state still carried the pre-0.2.82-dev lookup
 -- World.wwise_world(Managers.world:world("music_world")). On PC the music world is
@@ -74,6 +73,11 @@ end
 -- resolve the same wwise world, by the same path, as the Esc route (standalone
 -- view), and that world must be the one vanilla OptionsView uses. Each twin
 -- publishes the resolver its clicks and hovers fire on as gut_sound_resolve.
+-- This is a wiring contract: both twins publish this module's resolve, so it
+-- proves the published resolver, not that each click and hover fires through it.
+-- The behavioural proof is the offline test_gut_mod_tweaker_sound_parity.lua (it
+-- fires the real play_click/play_hover) plus the audible in-keep step. The verdict
+-- is the only output: the check writes no log line of its own.
 function M.check_routes()
     -- Live keep flag (state_ingame.lua:137, state_ingame_running.lua:175); the captured
     -- ingame UI context can outlive the keep it was taken in.
@@ -92,6 +96,7 @@ function M.check_routes()
     local view = ui and ui.views and ui.views.mod_tweaker_view
     if not view then
         return "skip: standalone ModTweakerView (Esc route) is not attached to this IngameUI yet"
+            .. " (open and close Esc > Mod Tweaker once, then rerun)"
     end
     if type(view.gut_sound_resolve) ~= "function" then
         return "standalone ModTweakerView (Esc route) does not publish gut_sound_resolve"
@@ -106,7 +111,6 @@ function M.check_routes()
     if rawget(_G, "GLOBAL_MUSIC_WORLD") and cmd_ww ~= rawget(_G, "MUSIC_WWISE_WORLD") then
         return "GLOBAL_MUSIC_WORLD is set but the Mod Tweaker world is not MUSIC_WWISE_WORLD"
     end
-    pcall(_printf, "[gut:1670] command and Esc routes share the sound path: %s", tostring(cmd_path))
     return nil
 end
 

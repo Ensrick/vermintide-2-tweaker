@@ -198,7 +198,7 @@ return function(H, repo_root)
         return { is_in_inn = true, ingame_ui = { views = views } }
     end
 
-    H.test("GUT #1670 live check: PASS in the keep when the routes share the path, with a ledger line", function()
+    H.test("GUT #1670 live check: PASS in the keep when the routes share the path, verdict only", function()
         local s = make_env({ global_music = true, registered = { level_world = LEVEL } })
         local lines = {}
         s.env.printf = function(fmt, ...) lines[#lines + 1] = string.format(fmt, ...) end
@@ -207,7 +207,8 @@ return function(H, repo_root)
         H.equal(type(check), "function", "contracts must register issue1670_command_route_sound_path")
         s.mod._gut_ingame_ui_context = keep_ctx(s, true)
         H.equal(check(), nil)
-        H.deep_equal(lines, { "[gut:1670] command and Esc routes share the sound path: MUSIC_WWISE_WORLD" })
+        -- The /gut_regression_test PASS line is the evidence; the check logs nothing itself.
+        H.deep_equal(lines, {})
     end)
 
     H.test("GUT #1670 live check: SKIP with a reason outside the keep or before the view attaches", function()
@@ -254,6 +255,6 @@ return function(H, repo_root)
         local entry_cmd = main:find('mod:command("mod_tweaker"', 1, true)
         local inject_load = main:find('"scripts/mods/gui_tweaker_dev/_ba_heroview_inject"', 1, true)
         H.truthy(entry_cmd and inject_load and inject_load > entry_cmd,
-            "the inject module loads after the entry registration, so its handler wins (VMF commands.lua:31-43)")
+            "the inject module loads after the entry registration, so its handler wins (VMF commands.lua:15-28)")
     end)
 end

@@ -11,12 +11,16 @@
 
 ## /mod_tweaker menu sounds match the Esc route (#1670, 0.2.359-dev)
 
-- Keep, solo: run `/gut_regression_test`; `issue1670_command_route_sound_path`
-  must PASS and the log carries `[gut:1670] command and Esc routes share the
-  sound path: MUSIC_WWISE_WORLD`. In a mission it renders as `SKIP: ... not
-  in the keep`.
+- Keep, solo: open and close Esc > Mod Tweaker once (that attaches the
+  standalone view), then run `/gut_regression_test`;
+  `issue1670_command_route_sound_path` must PASS. Before that first Esc open it
+  renders as `SKIP: ... not attached`, in a mission as `SKIP: ... not in the
+  keep`. The check writes no log line of its own: cite only its PASS name.
 - Keep: open Mod Tweaker with `/mod_tweaker`, swap tabs and open a sub-menu;
-  each plays the same click and hover as Esc > Mod Tweaker.
+  each plays the same click and hover as Esc > Mod Tweaker. This audible step
+  is the deciding evidence: the live check is a wiring contract (both twins
+  publish the same resolver), and the offline test fires the real click and
+  hover.
 - Host tests: `test_gut_mod_tweaker_sound_parity.lua`.
 
 ## Dropdown arrow glow check (#92, 0.2.358-dev)

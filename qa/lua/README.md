@@ -70,8 +70,9 @@ there is no copied implementation.
   the Esc route (standalone view) and the `/mod_tweaker` route (keep
   sub-state) alike, fall back to a registered `music_world`, stay silent with
   no music world, and the real contracts module's
-  `issue1670_command_route_sound_path` check passes, skips outside the keep
-  or before the view attaches, and fails on the 0.2.358-dev lookup. printf,
+  `issue1670_command_route_sound_path` check passes with no log line of its
+  own, skips outside the keep or before the view attaches, and fails on the
+  0.2.358-dev lookup. printf,
   WwiseWorld and the worlds resolve through a test-local environment.
 - `tests/test_gut_tab_talent_harness.lua`: #250 the shipped Hold-Tab provider
   loaded whole with the real talent refresh and policies:

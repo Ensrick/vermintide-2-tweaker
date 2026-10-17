@@ -74,7 +74,7 @@
   opens the standalone `ModTweakerView` (`_USE_KEEP_SUBSTATE = false`), while
   `/mod_tweaker` opens the keep HeroView sub-state, because
   `_ba_heroview_inject.lua` registers `mod_tweaker` after the entry file and
-  VMF lets a mod overwrite its own command (VMF `commands.lua:31-43`). Log:
+  VMF lets a mod overwrite its own command (VMF `commands.lua:15-28`). Log:
   `[mt] HeroViewStateModTweaker entered (sub-state)` at 17:04:32 for the
   command, `[transition] mod_tweaker_view` then `[mt:dump] (on_enter)` at
   17:04:46 for the Esc entry.
@@ -101,8 +101,10 @@
 - New live check `issue1670_command_route_sound_path`: in the keep, the
   sub-state and the standalone view must resolve the same wwise world by the
   same path, and it must be `MUSIC_WWISE_WORLD` when `GLOBAL_MUSIC_WORLD` is
-  set; logs `[gut:1670] command and Esc routes share the sound path: ...`.
-  SKIPs outside the keep and before the standalone view is attached.
+  set. The PASS verdict is its only output (no log line of its own). It SKIPs
+  outside the keep and before the standalone view is attached (open and close
+  Esc > Mod Tweaker once first). It is a wiring contract: the offline test and
+  the audible in-keep step prove the clicks and hovers themselves.
 - Offline: `qa/lua/tests/test_gut_mod_tweaker_sound_parity.lua` loads both
   shipped twins whole and fires the click and hover each hands its
   interaction layer against a PC-shaped world manager; the 0.2.358-dev
