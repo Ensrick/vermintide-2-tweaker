@@ -6,6 +6,11 @@
 -- move together. A partial re-anchor disables the whole history runtime
 -- (_wt_history_catalog.lua refuses mismatched current_source identities), so
 -- this suite fails on any file still carrying a retired anchor.
+--
+-- Only the pinned-anchor case (ANCHOR_REVISION) and the retired-anchor scan
+-- tell a fixed tree from an unfixed one. The catalog/ledger and Patch 5.2
+-- cases compare against whatever current_source_anchor.lua names, so they are
+-- coherence guards against a partial re-anchor, not fail-before proof.
 
 local ANCHOR_REVISION = "93dea911a4cc464a0eb51cfdc3a443297bfc4550"
 local ANCHOR_GAME_VERSION = "6.13.0"

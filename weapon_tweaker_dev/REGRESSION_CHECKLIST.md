@@ -8,6 +8,18 @@ Last updated: 2026-09-01.
 
 ---
 
+## #2 - Hold-Pose runtime checks split (dev only)
+
+| Field | Check |
+|---|---|
+| Candidate version | WT Dev 0.12.336-dev (public 0.12.335-beta is a version-only reissue). |
+| Owner | The five Hold-Pose checks live in `_wt_runtime_checks_hold_pose.lua`; the common registrar calls it once, between `issue569_wp_hammer_remap_orientation_scope` and `issue316_kruber_longbow_zoom_contract`. |
+| Runtime | In a plain keep session, `/wt_regression_test` reports `issue168_hold_pose_independent_hands`, `issue569_hold_pose_composition`, `issue616_hold_pose_channel_bypass_restore`, `issue616_hold_pose_live_edit_delivery` and `issue616_hold_pose_nonuniform_scale` with the same verdicts as 0.12.335-dev, in that slot. No `issue2_hold_pose_runtime_check_owner` line appears. |
+| Fail-closed | A missing child registers one FAIL `issue2_hold_pose_runtime_check_owner` instead of aborting the entry; the animation picker and Hold-Pose tuner still install. A child that throws during install still propagates. |
+| Automated | `test_wt_runtime_checks_module.lua` (6 cases, including the real `wt_dev_hold_pose.lua` PASS path and the missing-owner case). |
+
+---
+
 ## #1682 - Weapon-history provenance re-anchored to Game Version 6.13.0
 
 | Field | Check |

@@ -91,7 +91,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.335-dev"
+local MOD_VERSION = "0.12.336-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -1393,6 +1393,10 @@ end)
 -- Runtime regression registrations are isolated from the entry point while
 -- preserving their original order and late-bound reads of live mod state.
 local _wt_runtime_checks = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_runtime_checks")
+-- WT_DEV_OVERLAY_BEGIN:hold-pose-runtime-check-owner
+local _wt_hold_pose_runtime_checks = mod:dofile(
+    "scripts/mods/weapon_tweaker_dev/_wt_runtime_checks_hold_pose")
+-- WT_DEV_OVERLAY_END:hold-pose-runtime-check-owner
 local _wt_runtime_check_deps = {
     unit_state = _unit_state,
     weapon_unlock_map = weapon_unlock_map,
@@ -1413,6 +1417,7 @@ local _wt_runtime_check_deps = {
 -- WT_DEV_OVERLAY_BEGIN:runtime-check-dependencies
 _wt_runtime_check_deps.dev_anim_picker = _wt_dev_anim_picker
 _wt_runtime_check_deps.dev_hold_pose = _wt_dev_hold_pose
+_wt_runtime_check_deps.hold_pose_checks = _wt_hold_pose_runtime_checks
 -- WT_DEV_OVERLAY_END:runtime-check-dependencies
 _wt_runtime_checks.install(mod, _rt_register, _wt_runtime_check_deps)
 _rt_register("issue1436_historical_weapon_patch_versions", function()
