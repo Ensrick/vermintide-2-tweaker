@@ -1140,15 +1140,15 @@ _rt_register("issue1155_old_musket_descriptor_reconciler", function()
 	if type(live) ~= "table" or type(live.surfaces) ~= "table" then
 		return "Old Musket live retained-state evidence is unavailable"
 	end
-	local expected_identity = live.identity
-	if type(expected_identity) ~= "table" or expected_identity.kind ~= "backend_id"
-			or type(expected_identity.value) ~= "string" or expected_identity.value == "" then
-		return "skip: no Old Musket equipped since the Athanor preview armed the live gate; open the Athanor, then equip and wield one Old Musket and rerun"
-	end
 	local cim_identity = live.cim_identity
 	if type(cim_identity) ~= "table" or cim_identity.kind ~= "backend_id"
 			or type(cim_identity.value) ~= "string" or cim_identity.value == "" then
 		return "skip: the Athanor preview has not armed the Old Musket live gate this session; open the Athanor, then equip and wield one Old Musket and rerun"
+	end
+	local expected_identity = live.identity
+	if type(expected_identity) ~= "table" or expected_identity.kind ~= "backend_id"
+			or type(expected_identity.value) ~= "string" or expected_identity.value == "" then
+		return "skip: no Old Musket equipped and wielded since the Athanor preview armed the live gate; equip and wield one Old Musket and rerun"
 	end
 	if type(live.epoch) ~= "number" or type(live.generation) ~= "number"
 			or type(live.cim_generation) ~= "number" or live.cim_generation <= 0 then
@@ -2116,11 +2116,11 @@ _rt_register("cwv_crowbill_hammer_runtime_contract", function()
 				or pick_action.total_time ~= hammer_action.total_time then
 			return "Crowbill timing drifted: " .. tostring(action_name) .. "/" .. tostring(class)
 		end
-		-- #1656/#423: both faces fall back to ONE vanilla donor; the recorder never chains onto a cwv_ profile.
-		local wire = _om._cwv_damage_profile_wire_source
-		if not wire[pick_action.damage_profile]
-				or wire[hammer_action.damage_profile] ~= wire[pick_action.damage_profile] then
-			return "Crowbill mixed-peer damage fallback missing: " .. tostring(action_name)
+		-- #1656/#423: both faces fall back to the SOURCE action's own registered vanilla profile.
+		local fault = policy.wire_donor_fault(source, action_name, pick_action.damage_profile,
+			hammer_action.damage_profile, _om._cwv_damage_profile_wire_source, rawget(_G, "DamageProfileTemplates"))
+		if fault then
+			return "Crowbill mixed-peer damage fallback " .. fault .. ": " .. tostring(action_name)
 		end
 	end
 	if type(runtime.resolve_template) ~= "function"

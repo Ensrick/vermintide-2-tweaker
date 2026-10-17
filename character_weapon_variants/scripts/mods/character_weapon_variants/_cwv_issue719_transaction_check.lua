@@ -2,27 +2,43 @@
 --
 -- The three legs behind /cwv_regression_test
 -- `issue719_imperial_crowbill_remote_identity`, after its payload round-trip:
---   1. transaction: the exact retained Imperial descriptor through atomic hand
---      preselection, the production GearUtils husk transaction and the
---      post-spawn presentation adapter (stand-in native spawn; every raw field
---      it swaps is restored on success or error).
+--   1. transaction: a synthetic copy of the retained Imperial descriptor
+--      (fingerprint `rt719:<fp>`) through atomic hand preselection, the
+--      production GearUtils husk transaction and the post-spawn presentation
+--      adapter, with a stand-in native spawn. A husk wields with the template
+--      BackendUtils resolves from the vanilla item row
+--      (simple_husk_inventory_extension.lua:661-662,
+--      backend_interface_item_playfab.lua:871-873); for bw_1h_crowbill that is
+--      Sienna's one_handed_crowbill (item_master_list_paperweight.lua:37), so
+--      the leg hands the transaction exactly that table and requires the native
+--      spawn to receive the variant's declared template and the Imperial hand
+--      unit. The model is the real proof: both Crowbill variants declare
+--      Sienna's template on purpose (_cwv_variant_catalog.lua:948/973).
+--      The transform and the #279/#579 probes are stand-ins, and the synthetic
+--      fingerprint keys the one #660 preselect line, so a run never writes a
+--      husk-spawn line, or spends a log-once key, that a real peer would share.
+--      Every raw field it swaps is restored on success or error.
 --   2. owner wire: the Weapon Special rebuild must re-add the slot through the
 --      announced vanilla path (_cwv_crowbill_runtime.rebuild_slot), never a
 --      destroy plus a local-only add that leaves observers without the slot.
 --   3. live peers: each peer reads its OWN engine state, so the same command
 --      means something on both machines of a co-op card. The owner proves its
 --      equipped Crowbill publishes exact identity; an observer proves, for every
---      remote human whose exact Crowbill identity it retains, that the slot
---      still exists, the wielded 3P unit is the descriptor's model (never
---      Sienna's donor) and the retained pick/hammer rotation is the
---      presentation owner's last write. With no Crowbill on either side the leg
---      logs a named SKIP and the check passes on legs 1 and 2.
+--      remote human holding a Crowbill, that the slot still exists, the wielded
+--      3P unit is the descriptor's model (never Sienna's donor) and the retained
+--      pick/hammer rotation is the presentation owner's last write.
+-- Verdict: FAIL on any defect; PASS only when at least one Crowbill holder was
+-- proven and none was left unproven; otherwise a `skip:` verdict (#1656 runner
+-- sentinel) naming every reason, so a PASS row on either peer proves its leg ran.
 -- Diagnostics go through engine printf only; nothing here writes a global.
 -- `ctx.env` is the offline seam: a table consulted before the engine global of
--- the same name (Managers, Unit, ScriptUnit, Quaternion, printf).
+-- the same name (Managers, Unit, ScriptUnit, Quaternion, Weapons, printf).
 return function(_, ctx)
 	local _om = ctx.om
 	local SLOT = "slot_melee"
+	-- Raw _om fields leg 1 replaces for its duration and always restores.
+	local SWAPPED = { "_appearance_husk_wield_context", "_husk_identity_descriptor",
+		"_husk_apply_cwv_transform", "_probe_579_hand_compare", "_probe_279_spawn" }
 
 	local function global(name)
 		local env = ctx.env
@@ -35,16 +51,34 @@ return function(_, ctx)
 		if type(sink) == "function" then pcall(sink, fmt, ...) end
 	end
 
-	local function transaction(descriptor, family, model, career)
+	-- A copy whose fingerprint can never equal a real peer's, so the shared
+	-- `660_preselect:<fingerprint>` log-once key and its text stay distinct.
+	local function synthetic(descriptor)
+		local copy = {}
+		for key, value in pairs(descriptor) do copy[key] = value end
+		copy.fingerprint = "rt719:" .. tostring(descriptor.fingerprint or descriptor.variant_key)
+		return copy
+	end
+
+	local function quiet() end
+
+	local function transaction(descriptor, family, model, career, template_name)
+		local weapons = global("Weapons")
+		template_name = template_name or family.SOURCE_TEMPLATE
+		local item_template = type(weapons) == "table" and weapons[family.SOURCE_TEMPLATE] or nil
+		local expected_template = type(weapons) == "table" and weapons[template_name] or nil
+		if type(item_template) ~= "table" or type(expected_template) ~= "table" then
+			return "#719 Crowbill weapon templates are not registered: "
+				.. tostring(family.SOURCE_TEMPLATE) .. ", " .. tostring(template_name)
+		end
+		local probe = synthetic(descriptor)
 		local owner = {}
 		local item_data = { name = family.SOURCE_ITEM }
 		local item_units = { right_hand_unit = family.PLACEHOLDER_UNIT }
 		local spawned = {}
-		local donor_template = {}
 		local selected_template, transform_calls
-		local prior_context = rawget(_om, "_appearance_husk_wield_context")
-		local prior_identity = rawget(_om, "_husk_identity_descriptor")
-		local prior_transform = rawget(_om, "_husk_apply_cwv_transform")
+		local saved = {}
+		for index, field in ipairs(SWAPPED) do saved[index] = rawget(_om, field) end
 		rawset(_om, "_appearance_husk_wield_context", {
 			owner_unit_3p = owner, slot_name = SLOT,
 		})
@@ -52,7 +86,7 @@ return function(_, ctx)
 				observed_slot, observed_base)
 			if observed_owner == owner and observed_slot == SLOT
 					and observed_base == family.SOURCE_ITEM then
-				return descriptor, "exact"
+				return probe, "exact"
 			end
 			return nil, "none"
 		end)
@@ -64,6 +98,8 @@ return function(_, ctx)
 				transform_calls = (transform_calls or 0) + 1
 			end
 		end)
+		rawset(_om, "_probe_579_hand_compare", quiet)
+		rawset(_om, "_probe_279_spawn", quiet)
 		local transaction_ok, transaction_error = pcall(function()
 			local selected = _om._husk_preselect_units(item_units, item_data,
 				nil, nil, career)
@@ -79,19 +115,18 @@ return function(_, ctx)
 					error("native spawn did not receive the Imperial model")
 				end
 				return spawned, nil, nil, nil
-			end, nil, "right", donor_template, item_units, SLOT, item_data, nil,
+			end, nil, "right", item_template, item_units, SLOT, item_data, nil,
 				owner, nil, nil, nil, nil)
 			if result ~= spawned then error("transaction lost the native spawn result") end
 		end)
-		rawset(_om, "_appearance_husk_wield_context", prior_context)
-		rawset(_om, "_husk_identity_descriptor", prior_identity)
-		rawset(_om, "_husk_apply_cwv_transform", prior_transform)
+		for index, field in ipairs(SWAPPED) do rawset(_om, field, saved[index]) end
 		if not transaction_ok then
 			return "#719 production husk spawn transaction failed: "
 				.. tostring(transaction_error)
 		end
-		if type(selected_template) ~= "table" or selected_template == donor_template then
-			return "#719 production husk spawn transaction retained the Sienna donor template"
+		if selected_template ~= expected_template then
+			return "#719 production husk spawn handed vanilla a template other than the"
+				.. " variant's declared " .. tostring(template_name)
 		end
 		if transform_calls ~= 1 then
 			return "#719 post-spawn presentation adapter did not run exactly once"
@@ -181,20 +216,31 @@ return function(_, ctx)
 		return math.abs(dot) >= 0.999
 	end
 
+	-- Observers return (fail, detail, proven): `fail` is a defect, `detail`
+	-- with proven=true is a completed leg, `detail` with proven=false is a
+	-- Crowbill holder this peer could not prove, and (nil, nil) is no holder.
 	local function observe_remote(player, unit, family)
 		local descriptor, state = nil, "none"
 		if _om._husk_identity_descriptor then
 			descriptor, state = _om._husk_identity_descriptor(unit, SLOT, family.SOURCE_ITEM, player)
 		end
-		if state ~= "exact" or type(descriptor) ~= "table"
-				or not family.is_family_key(descriptor.variant_key) then
-			return nil, nil, state
-		end
-		local key = descriptor.variant_key
 		local inv, equipment = inventory_of(unit)
 		local slots = equipment and equipment.slots
+		if state ~= "exact" or type(descriptor) ~= "table"
+				or not family.is_family_key(descriptor.variant_key) then
+			-- The sender proved the slot native, or it holds no Crowbill: nothing
+			-- to prove. A vanilla Crowbill base with no exact identity is exactly
+			-- the remote that would render Sienna's donor, so it is never a PASS.
+			local held = type(slots) == "table" and slots[SLOT] and slots[SLOT].item_data
+			if state ~= "native" and held and held.name == family.SOURCE_ITEM then
+				return nil, family.SOURCE_ITEM .. " held with identity state="
+					.. tostring(state), false
+			end
+			return nil, nil, false
+		end
+		local key = descriptor.variant_key
 		local wielded = inv and (inv.wielded_slot or (equipment and equipment.wielded_slot))
-		if wielded ~= SLOT then return nil, key .. " held, not wielded" end
+		if wielded ~= SLOT then return nil, key .. " held, not wielded", false end
 		if type(slots) ~= "table" or slots[SLOT] == nil then
 			return "#719 observer lost the remote " .. key .. " slot while it is wielded"
 				.. " (the Weapon Special rebuild never re-added it): weapon invisible"
@@ -202,7 +248,7 @@ return function(_, ctx)
 		local item_data = slots[SLOT].item_data
 		if not (item_data and item_data.name == family.SOURCE_ITEM) then
 			return nil, key .. " identity retained, slot holds "
-				.. tostring(item_data and item_data.name)
+				.. tostring(item_data and item_data.name), false
 		end
 		local weapon = equipment.right_hand_wielded_unit_3p
 		if not alive(weapon) then
@@ -236,8 +282,9 @@ return function(_, ctx)
 			return "#719 remote " .. key .. " lost its " .. tostring(record.mode)
 				.. " rotation after the presentation write"
 		end
-		return nil, key .. " unit=" .. tostring(observed) .. " mode=" .. tostring(record.mode)
+		local detail = key .. " unit=" .. tostring(observed) .. " mode=" .. tostring(record.mode)
 			.. " rotation=" .. (retained == nil and "unread" or "retained")
+		return nil, detail, retained == true
 	end
 
 	local function observe_owner(unit, family)
@@ -246,14 +293,14 @@ return function(_, ctx)
 		local slot = equipment and equipment.slots and equipment.slots[SLOT]
 		local key = slot and runtime and runtime.classify
 			and runtime.classify(family, slot.item_data, nil, _om._cwv_key_for_item)
-		if not key then return nil, nil end
-		if key == family.SOURCE_ITEM then return nil, "native Sienna Crowbill" end
+		-- No Crowbill, or Sienna's own native one: no CWV identity to prove.
+		if not key or key == family.SOURCE_ITEM then return nil, nil, false end
 		local payloads = _om._cwv_identity_payloads
 			and _om._cwv_identity_payloads({ [SLOT] = slot }) or {}
 		for _, payload in ipairs(payloads) do
 			if payload.slot == SLOT and payload.item_key == key
 					and type(payload.fingerprint) == "string" and payload.fingerprint ~= "" then
-				return nil, key .. " publishes exact identity"
+				return nil, key .. " publishes exact identity", true
 			end
 		end
 		return "#719 owner's equipped " .. key .. " does not publish exact identity:"
@@ -266,39 +313,47 @@ return function(_, ctx)
 		local players = resolver and resolver.human_players(managers and managers.player)
 		if type(players) ~= "table" then
 			emit("[cwv:719] peer observation SKIP reason=no_player_manager")
-			return nil
+			return "skip: legs 1-2 passed; no player manager to observe peers"
+				.. " (reason=no_player_manager)"
 		end
-		local seen = 0
+		local proven, unproven = 0, {}
 		for _, player in pairs(players) do
 			local unit = type(player) == "table" and player.player_unit
 			if alive(unit) then
 				local role = player.remote and "observer" or "owner"
-				local err, detail, state
+				local peer = tostring(resolver.player_peer_id(player))
+				local err, detail, ok_leg
 				if player.remote then
-					err, detail, state = observe_remote(player, unit, family)
+					err, detail, ok_leg = observe_remote(player, unit, family)
 				else
-					err, detail = observe_owner(unit, family)
+					err, detail, ok_leg = observe_owner(unit, family)
 				end
 				if err or detail then
-					seen = seen + 1
 					emit("[cwv:719] peer observation role=%s peer=%s verdict=%s %s",
-						role, tostring(resolver.player_peer_id(player)),
-						err and "FAIL" or "ok", tostring(err or detail))
-				elseif state and state ~= "none" then
-					emit("[cwv:719] peer observation role=observer peer=%s state=%s -- no exact Crowbill identity retained",
-						tostring(resolver.player_peer_id(player)), tostring(state))
+						role, peer, err and "FAIL" or (ok_leg and "ok" or "unproven"),
+						tostring(err or detail))
 				end
 				if err then return err end
+				if ok_leg then
+					proven = proven + 1
+				elseif detail then
+					unproven[#unproven + 1] = "role=" .. role .. " peer=" .. peer .. " " .. detail
+				end
 			end
 		end
-		if seen == 0 then
-			emit("[cwv:719] peer observation SKIP reason=no_crowbill_peer"
-				.. " -- equip the Imperial or Dawi Crowbill on one peer, rerun on both")
+		if #unproven > 0 then
+			return "skip: legs 1-2 passed; Crowbill holder not proven ("
+				.. table.concat(unproven, "; ") .. ") -- wield the Crowbill and rerun on both peers"
+		end
+		if proven == 0 then
+			emit("[cwv:719] peer observation SKIP reason=no_crowbill_peer")
+			return "skip: legs 1-2 passed; no Crowbill holder observed (reason=no_crowbill_peer)"
+				.. " -- equip and wield the Imperial or Dawi Crowbill on one peer, rerun on both"
 		end
 	end
 
-	return function(descriptor, family, model, career)
-		local err = transaction(descriptor, family, model, career)
+	return function(descriptor, family, model, career, template_name)
+		local err = transaction(descriptor, family, model, career, template_name)
 		if err then return err end
 		err = owner_wire(family)
 		if err then return err end

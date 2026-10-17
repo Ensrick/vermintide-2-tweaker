@@ -2,7 +2,9 @@
 --
 -- Keeps preselection/re-key, the one vanilla spawn, and post-spawn presentation
 -- in one executable owner. The live GearUtils hook, runtime regression checks,
--- and offline tests all drive this same function.
+-- and offline tests all drive this same function. A #478 residency defer
+-- returns nil x4 plus a 5th `true`, so the hook ends there exactly as it did
+-- before this owner existed (no musket FX/bayonet body over nil units).
 return function(_, ctx)
 	local _om = ctx.om
 
@@ -17,7 +19,7 @@ return function(_, ctx)
 				_om._probe_279_spawn(hand, item_data, item_units, owner_unit_1p,
 					owner_unit_3p, nil, "deferred_478")
 			end
-			return nil, nil, nil, nil
+			return nil, nil, nil, nil, true
 		end
 		local v_w3p, v_a3p, v_w1p, v_a1p = func(world, hand,
 			husk_template or item_template, item_units, slot_name, item_data,

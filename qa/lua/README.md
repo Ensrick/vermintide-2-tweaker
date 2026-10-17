@@ -86,9 +86,12 @@ there is no copied implementation.
 - `tests/test_cwv_javelin_recovery_contract.lua`: #296 the shared Tuskgor
   Javelin recovery owner: both ground and linked pickup rows registered by
   identity with their lookup pairs, the registered callbacks driven through
-  eligibility, a +1 refill and owned-pickup cleanup, re-registration re-owning
-  callbacks without lookup growth, and rollback when a lookup or pickup-map
-  write rejects, throws or is silently dropped.
+  eligibility, the vanilla refill shape (`refill_amount = 1`, no
+  `refill_percentage`) and owned-pickup cleanup, re-registration re-owning
+  callbacks without lookup growth, rollback when a lookup or pickup-map write
+  rejects, throws or is silently dropped, and an owner-source case that no
+  existing-row guard sits before the shared register call (the pre-fix
+  reload defect).
 - `tests/test_cwv_issue719_crowbill_rebuild.lua`: #719 the Crowbill Weapon
   Special replayed over the vanilla equipment wire rules: the observer keeps
   its slot (destroy, add, wield), the rebuild fails closed without the
@@ -96,8 +99,11 @@ there is no copied implementation.
   the presentation record recomposes from the retained base; and the live
   owner/observer legs of `issue719_imperial_crowbill_remote_identity` fail a
   destroyed remote slot, Sienna's donor, a stale face, a lost rotation, a
-  missing presentation and an owner collapsing to the donor, and skip with a
-  named reason when no peer holds a Crowbill.
+  missing presentation and an owner collapsing to the donor; they return a
+  `skip:` verdict, never a PASS, when no peer holds a Crowbill, when a remote
+  vanilla Crowbill base has no exact identity, when the Crowbill is held but
+  not wielded or its rotation cannot be read back, and a proven owner leg
+  never hides an unproven observer.
 - `tests/test_cwv_regression_harness_1656.lua`: #1656 the cwv harness-defect
   rows, each run as the shipped check body: the entry's regression context
   binds only declared locals (`dbg_alert`, the bootstrap owner's published
@@ -107,7 +113,10 @@ there is no copied implementation.
   lifecycle on a registered owner; `cwv_key_resolution_uuid_safe` runs on the
   registration owner's own #482 ladder; `issue604` keeps the selector's second
   return; and `cwv_crowbill_hammer_runtime_contract` asserts the #423 shared
-  vanilla donor recorded by the entry's own recorder.
+  donor recorded by the entry's own recorder is the source action's own
+  registered vanilla profile (the burning stab's non-burning twin), failing a
+  shared foreign or unregistered donor. One registration-predicate case is a
+  guard that passes on the pre-fix base too.
 - `tests/test_mp_hook_targets_resolve.lua`: #1671 no mp source file hooks
   the game-6.12-removed `IngameUI.not_in_modded` (or its `can_open_loot`
   successor), the shipped `_mp_hook_targets.TARGETS` inventory equals every

@@ -188,6 +188,8 @@ return function(H, repo_root)
     -- Fixture selection (pure module) against the real catalog.
     -- ------------------------------------------------------------------------------------
 
+    -- GUARD, not fix evidence: this needle passes on the pre-fix base too. It pins
+    -- registered_set() above to the registrar's predicate so the other cases stay honest.
     H.test("CWV #1656 registration predicate is still the registrar's", function()
         local registration = read("_cwv_item_registration_owner.lua")
         H.truthy(registration:find("if def.skin_only or def.cwv_retired then", 1, true),
@@ -566,6 +568,93 @@ return function(H, repo_root)
             local verdict = checks.cwv_crowbill_hammer_runtime_contract()
             H.truthy(type(verdict) == "string" and verdict:find("mixed%-peer damage fallback missing"),
                 "a face without a vanilla fallback must fail: " .. tostring(verdict))
+        end)
+        table.clone = saved_clone
+        if not ok then error(err, 0) end
+    end)
+
+    H.test("CWV #1656 Crowbill hammer contract binds the shared donor to the source action's own profile", function()
+        local family = dofile(root .. "_cwv_crowbill_family.lua")
+        local policy = dofile(root .. "_cwv_crowbill_hammer_mode.lua")
+        local runtime = dofile(root .. "_cwv_crowbill_runtime.lua")
+        local entry = read("character_weapon_variants.lua")
+        local from = assert(entry:find("_om._cwv_damage_profile_wire_source = {}", 1, true))
+        local fn_at = assert(entry:find("function _om._record_cwv_dp_source(cwv_key, source_name)", from, true))
+        local recorder = assert(loadstring("local _om = ...\n"
+            .. entry:sub(from, assert(entry:find("\nend\n", fn_at, true)) + 4), "@recorder"))
+        local function clone(value, seen)
+            if type(value) ~= "table" then return value end
+            seen = seen or {}
+            if seen[value] then return seen[value] end
+            local copy = {}
+            seen[value] = copy
+            for key, child in pairs(value) do copy[clone(key, seen)] = clone(child, seen) end
+            return copy
+        end
+        -- Vanilla shape: light_attack_left carries the burning stab
+        -- (1h_crowbills.lua:684), whose wire donor is the non-burning twin.
+        local action_one, damage_profiles, power_levels = {}, {}, {}
+        for action_name in pairs(policy.DIRECT_ACTIONS) do
+            local profile = action_name == "light_attack_left" and policy.BURNING_STAB_PROFILE
+                or "fixture_" .. action_name
+            action_one[action_name] = { kind = "sweep", damage_profile = profile, anim_time_scale = 1.1,
+                total_time = 1.5, allowed_chain_actions = {} }
+        end
+        for _, profile in ipairs({ policy.BURNING_STAB_PROFILE, policy.NONBURNING_STAB_PROFILE,
+                "fixture_heavy_attack", "fixture_heavy_attack_left", "fixture_heavy_attack_right_up",
+                "fixture_light_attack_right", "fixture_light_attack_last", "fixture_light_attack_upper",
+                "fixture_light_attack_bopp", "fixture_unrelated" }) do
+            damage_profiles[profile] = { cleave_distribution = "cleave_" .. profile,
+                armor_modifier = "armor_" .. profile, default_target = "target_" .. profile,
+                targets = "targets_" .. profile }
+            power_levels["cleave_" .. profile] = { attack = 1, impact = 1 }
+            power_levels["armor_" .. profile] = { attack = { 1, 0.5, 1, 1, 1, 0.5 } }
+            power_levels["target_" .. profile] = { power_distribution = { attack = 1, impact = 1 } }
+            power_levels["targets_" .. profile] = { { power_distribution = { attack = 1, impact = 1 } } }
+        end
+        local saved_clone = table.clone
+        table.clone = function(value) return clone(value) end
+        local ok, err = pcall(with_globals, {
+            Weapons = { [policy.SOURCE_TEMPLATE_KEY] = { actions = { action_one = action_one } } },
+            DamageProfileTemplates = damage_profiles, PowerLevelTemplates = power_levels,
+            NetworkLookup = { damage_profiles = {} },
+        }, function()
+            local om = { crowbill_hammer_mode = policy, crowbill_family = family,
+                _cwv_key_for_item = function(_, item) return item.cwv_key end }
+            recorder(om)
+            local fake_mod = {
+                _cwv_old_musket_interrupt = { install = function(template)
+                    for _, action in pairs(template.actions.action_one) do
+                        action.allowed_chain_actions[#action.allowed_chain_actions + 1] =
+                            { action = "action_three", input = "action_three", start_time = 0 }
+                    end
+                end },
+                get = function() return nil end,
+                network_register = function() end,
+            }
+            H.truthy(runtime.install(fake_mod, om))
+            local checks = install_render({ _cwv_crowbill_runtime = runtime,
+                _cwv_crowbill_hammer_mode = policy }, om)
+            H.equal(checks.cwv_crowbill_hammer_runtime_contract(), nil,
+                "the burning stab's non-burning wire donor is the source action's own profile")
+            local weapons = rawget(_G, "Weapons")
+            local wire = om._cwv_damage_profile_wire_source
+            local pick = weapons[runtime.PICK_TEMPLATE_KEY].actions.action_one.heavy_attack
+            local hammer = weapons[policy.HAMMER_TEMPLATE_KEY].actions.action_one.heavy_attack
+            -- Both faces agreeing on the WRONG vanilla profile must still fail.
+            wire[pick.damage_profile], wire[hammer.damage_profile] = "fixture_unrelated", "fixture_unrelated"
+            local verdict = checks.cwv_crowbill_hammer_runtime_contract()
+            H.truthy(type(verdict) == "string"
+                and verdict:find("is not the source action's vanilla profile", 1, true),
+                "a shared but foreign donor must fail: " .. tostring(verdict))
+            -- The right donor that DamageProfileTemplates no longer carries must fail.
+            wire[pick.damage_profile], wire[hammer.damage_profile] = "fixture_heavy_attack", "fixture_heavy_attack"
+            H.equal(checks.cwv_crowbill_hammer_runtime_contract(), nil)
+            damage_profiles.fixture_heavy_attack = nil
+            verdict = checks.cwv_crowbill_hammer_runtime_contract()
+            H.truthy(type(verdict) == "string"
+                and verdict:find("names an unregistered or cwv_ profile", 1, true),
+                "an unregistered donor must fail: " .. tostring(verdict))
         end)
         table.clone = saved_clone
         if not ok then error(err, 0) end

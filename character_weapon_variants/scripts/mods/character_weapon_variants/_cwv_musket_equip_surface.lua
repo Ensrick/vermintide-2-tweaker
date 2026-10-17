@@ -661,10 +661,13 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 	-- caller's item_template.
 	local v_w3p, v_a3p, v_w1p, v_a1p
 	if not owner_unit_1p and _om._husk_spawn_adapter_transaction then
-		v_w3p, v_a3p, v_w1p, v_a1p = _om._husk_spawn_adapter_transaction(
+		local husk_deferred
+		v_w3p, v_a3p, v_w1p, v_a1p, husk_deferred = _om._husk_spawn_adapter_transaction(
 			func, world, hand, item_template, item_units, slot_name, item_data,
 			owner_unit_1p, owner_unit_3p, unit_template, extra_extension_data,
 			ammo_percent, material_settings_name)
+		-- #478 defer: this hand was never spawned, so skip the musket body.
+		if husk_deferred == true then return nil, nil, nil, nil end
 	else
 		v_w3p, v_a3p, v_w1p, v_a1p = func(world, hand, item_template,
 			item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p,

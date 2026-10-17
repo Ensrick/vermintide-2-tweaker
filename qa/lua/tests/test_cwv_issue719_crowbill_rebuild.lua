@@ -237,9 +237,9 @@ return function(H, repo_root)
 			units.left_hand_unit = nil
 			return true
 		end
-		om._husk_spawn_adapter_transaction = function(func, world, hand, _, units,
+		om._husk_spawn_adapter_transaction = function(func, world, hand, template, units,
 				slot_name, item_data, _, owner_unit)
-			local spawned = func(world, hand, {}, units)
+			local spawned = func(world, hand, template, units)
 			om._husk_apply_cwv_transform(hand, item_data, units, spawned, owner_unit, slot_name)
 			return spawned
 		end
@@ -247,7 +247,7 @@ return function(H, repo_root)
 
 		local expected_3p = model.right_hand_unit .. "_3p"
 		local weapon = { alive = true, resource = opts.resource or expected_3p }
-		local husk_inv = { wielded_slot = SLOT }
+		local husk_inv = { wielded_slot = opts.not_wielded and "slot_ranged" or SLOT }
 		husk_inv._equipment = {
 			slots = opts.destroyed and {} or { [SLOT] = { item_data = { name = family.SOURCE_ITEM } } },
 			right_hand_wielded_unit_3p = weapon,
@@ -265,6 +265,7 @@ return function(H, repo_root)
 			fingerprint = "fp:719" }
 		om._husk_identity_descriptor = function(unit, slot_name, base)
 			if unit == husk and slot_name == SLOT and base == family.SOURCE_ITEM then
+				if opts.remote_state then return nil, opts.remote_state end
 				return descriptor, "exact"
 			end
 			return nil, "none"
@@ -296,7 +297,8 @@ return function(H, repo_root)
 				is_a = function(unit, name) return unit.resource == name end,
 			},
 			ScriptUnit = { has_extension = function(unit) return unit.inventory end },
-			Quaternion = { dot = function(a, b) return same(a, b) and 1 or 0 end },
+			Quaternion = opts.unread and {} or { dot = function(a, b) return same(a, b) and 1 or 0 end },
+			Weapons = { [family.SOURCE_TEMPLATE] = { id = "one_handed_crowbill" } },
 			printf = function(fmt, ...) lines[#lines + 1] = string.format(fmt, ...) end,
 		}
 		local check = assert(loadfile(mod_root .. "_cwv_issue719_transaction_check.lua"))()(
@@ -346,9 +348,38 @@ return function(H, repo_root)
 		H.truthy(type(err) == "string" and err:find("does not publish exact identity", 1, true), err)
 	end)
 
-	H.test("#719 live check skips with a named reason when no peer holds a Crowbill", function()
+	local function is_skip(err, needle)
+		return type(err) == "string" and err:sub(1, 5) == "skip:"
+			and err:find(needle, 1, true) ~= nil
+	end
+
+	H.test("#719 live check SKIPs, never PASSes, when no peer holds a Crowbill", function()
 		local err, log = check_world({ no_remote = true, no_owner = true })
-		H.equal(err, nil)
+		H.truthy(is_skip(err, "reason=no_crowbill_peer"), tostring(err))
 		H.truthy(log:find("SKIP reason=no_crowbill_peer", 1, true), log)
+	end)
+
+	H.test("#719 live check SKIPs a remote vanilla Crowbill base without exact identity", function()
+		for _, state in ipairs({ "none", "unavailable" }) do
+			local err = check_world({ no_owner = true, remote_state = state })
+			H.truthy(is_skip(err, "role=observer peer=peer-host bw_1h_crowbill held with identity state="
+				.. state), tostring(err))
+		end
+		-- A sender-proven native slot is not a CWV Crowbill holder at all.
+		local err = check_world({ no_owner = true, remote_state = "native" })
+		H.truthy(is_skip(err, "reason=no_crowbill_peer"), tostring(err))
+	end)
+
+	H.test("#719 live check SKIPs an observer leg it could not finish", function()
+		local err = check_world({ no_owner = true, not_wielded = true })
+		H.truthy(is_skip(err, IMPERIAL .. " held, not wielded"), tostring(err))
+		err = check_world({ no_owner = true, owner_mode = policy.MODE_PICK, unread = true })
+		H.truthy(is_skip(err, "rotation=unread"), tostring(err))
+	end)
+
+	H.test("#719 live check PASSes the owner leg alone and never lets it hide an unproven observer", function()
+		H.equal(check_world({ no_remote = true }), nil)
+		local err = check_world({ remote_state = "none" })
+		H.truthy(is_skip(err, "identity state=none"), tostring(err))
 	end)
 end

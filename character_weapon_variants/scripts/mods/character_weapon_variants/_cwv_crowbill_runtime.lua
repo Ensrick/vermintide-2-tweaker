@@ -89,10 +89,15 @@ end
 -- (simple_husk_inventory_extension.lua:641-647): the weapon vanished for every
 -- observer after a pick/hammer toggle. Vanilla re-equips through
 -- _spawn_resynced_loadout, which announces the add (plus a client's slot buffs)
--- before the local add and wield (:1443-1473). The same path is what
--- create_equipment_in_slot queues (:1398-1408), and CWV's own wrapper on it
--- republishes exact identity and nulls CWV skins for the wire.
--- Fails closed: without that sender nothing is destroyed.
+-- before the local add and wield (:1443-1473). The vanilla precedent for a
+-- direct destroy_slot followed by that sender is swap_equipment_from_storage
+-- (:2434-2458). The queued create_equipment_in_slot path (:1398-1408) instead
+-- waits in _update_resync_loadout for a profile resync and
+-- all_ingame_synced_for_peer (:545-569); skipping that gate is safe here only
+-- because the toggle re-equips the same Crowbill item and units: just the face
+-- changes, between two clones of one source template (_cwv_crowbill_hammer_mode.lua:205/246).
+-- CWV's own wrapper on the sender republishes exact identity and nulls CWV
+-- skins for the wire. Fails closed: without that sender nothing is destroyed.
 function M.rebuild_slot(inv, slot_name, item_data, skin)
 	if type(inv) ~= "table" or type(inv.destroy_slot) ~= "function"
 			or type(inv._spawn_resynced_loadout) ~= "function" then

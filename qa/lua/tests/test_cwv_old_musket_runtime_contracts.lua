@@ -855,6 +855,15 @@ return function(H, repo_root)
 			verdict = captured()
 			H.equal(type(verdict), "string")
 			H.equal(verdict:sub(1, 5), "skip:", "an unarmed Athanor preview must SKIP: " .. verdict)
+			-- Nothing armed and nothing captured: the reason names the first missing
+			-- step (the Athanor), never "no Old Musket equipped".
+			live.identity = nil
+			verdict = captured()
+			H.equal(type(verdict), "string")
+			H.equal(verdict:sub(1, 5), "skip:", "a fresh session must SKIP: " .. verdict)
+			H.truthy(verdict:find("the Athanor preview has not armed", 1, true),
+				"the skip must name the unarmed Athanor first: " .. verdict)
+			live.identity = held_identity
 			live.cim_identity = held_cim
 			H.equal(captured(), nil, "restored live gate passes again")
 

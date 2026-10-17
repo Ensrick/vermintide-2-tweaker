@@ -766,7 +766,7 @@ _rt_register("issue719_imperial_crowbill_remote_identity", function()
 	-- Drive the exact GearUtils transaction, rather than its independent helper
 	-- functions. The child restores every temporary raw field on success/error.
 	local transaction_error = _issue719_transaction_check(
-		descriptor, family, model, career)
+		descriptor, family, model, career, authored.template)
 	if transaction_error then return transaction_error end
 
 	-- POSTCONDITION 1 (what the player sees): the remote peer must either know

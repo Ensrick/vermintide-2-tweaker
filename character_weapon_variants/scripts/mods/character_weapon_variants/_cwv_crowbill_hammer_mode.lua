@@ -264,6 +264,32 @@ function M.build_hammer_template(source_template, damage_profiles, power_levels,
 	return template, generated
 end
 
+-- #1656/#423 read-only contract for `cwv_crowbill_hammer_runtime_contract`:
+-- both faces of one direct action must fall back on the wire to ONE donor, and
+-- that donor must be the SOURCE action's own vanilla profile (the burning stab
+-- replaced by its non-burning twin, as _pick_profile does) and a registered,
+-- non-cwv_ DamageProfileTemplates row. Ground truth is the untouched source
+-- template (1h_crowbills.lua:236-1216 in the decompiled source), never the
+-- recorder's own output. Returns nil, or a short fault phrase for the caller.
+function M.wire_donor_fault(source_template, action_name, pick_profile,
+		hammer_profile, wire_source, damage_profiles)
+	local actions = type(source_template) == "table" and source_template.actions
+	local source_action = type(actions) == "table" and type(actions.action_one) == "table"
+		and actions.action_one[action_name] or nil
+	local vanilla = type(source_action) == "table" and source_action.damage_profile or nil
+	if vanilla == M.BURNING_STAB_PROFILE then vanilla = M.NONBURNING_STAB_PROFILE end
+	local donor = type(wire_source) == "table" and wire_source[pick_profile] or nil
+	if type(donor) ~= "string" or wire_source[hammer_profile] ~= donor then return "missing" end
+	if type(vanilla) ~= "string" or donor ~= vanilla then
+		return "is not the source action's vanilla profile (" .. donor .. ")"
+	end
+	if donor:sub(1, 4) == "cwv_" or type(damage_profiles) ~= "table"
+			or type(rawget(damage_profiles, donor)) ~= "table" then
+		return "names an unregistered or cwv_ profile (" .. donor .. ")"
+	end
+	return nil
+end
+
 function M.rotation_for_mode(mode)
 	if not _valid_mode(mode) then return nil end
 	return {

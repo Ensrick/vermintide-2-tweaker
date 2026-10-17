@@ -1,12 +1,15 @@
 -- Tuskgor Javelin recovery-pickup owner (#296).
 --
 -- Production registration and the named runtime proof deliberately share this
--- instance.  The proof drives the exact registered callbacks through the same
--- boundary vanilla Interactions uses: eligibility ->
--- SimpleInventoryExtension:add_ammo_from_pickup -> owned-pickup cleanup.
--- Engine physics still requires live verification; this contract proves that a
--- spawned ground or linked pickup is registered, eligible, consumable for +1,
--- and cleaned up without copying the callback logic into a test.
+-- instance.  The proof drives the exact registered callbacks in the order
+-- vanilla Interactions uses them (eligibility, then the settings handed to
+-- SimpleInventoryExtension:add_ammo_from_pickup at interactions.lua:1360, then
+-- owned-pickup cleanup) without copying the callback logic into a test.
+-- It proves registration, eligibility, the refill data shape that vanilla
+-- add_ammo_from_pickup reads (refill_amount 1 and no refill_percentage,
+-- simple_inventory_extension.lua:1263-1266) and cleanup. It does not run the
+-- vanilla refill itself: the +1 per recovered javelin, like the engine physics,
+-- is proven only by the live card.
 local M = {}
 
 local function copy(source)
@@ -191,15 +194,11 @@ function M.new(deps)
 			local template = assert(args.template, "tuskgor_javelin_template absent")
 			local keys = { args.pickup_key, args.link_pickup_key }
 			local player, pickup_unit = {}, {}
-			local ammo, eligible_queries, deletions = 0, 0, 0
+			local eligible_queries, deletions = 0, 0
 			local inventory = {}
 			function inventory:has_ammo_consuming_weapon_equipped(ammo_type)
 				eligible_queries = eligible_queries + 1
 				return ammo_type == "throwing_javelin"
-			end
-			function inventory:add_ammo_from_pickup(settings)
-				if settings.type ~= "ammo" then fail("pickup type is not ammo") end
-				ammo = ammo + (settings.refill_amount or 0)
 			end
 			state.inventory_for = function(unit)
 				if unit == player then return inventory end
@@ -228,6 +227,11 @@ function M.new(deps)
 						or settings.refill_amount ~= 1 then
 					fail(key .. " recovery fields malformed")
 				end
+				-- Vanilla fasserts that a pickup carries only one of the two refill
+				-- fields (simple_inventory_extension.lua:1266).
+				if settings.refill_percentage ~= nil then
+					fail(key .. " carries refill_percentage beside refill_amount")
+				end
 				if not settings.can_interact_func(player, pickup_unit, nil) then
 					fail(key .. " rejected an eligible Tuskgor Javelin inventory")
 				end
@@ -237,12 +241,8 @@ function M.new(deps)
 				if settings.can_interact_func({}, pickup_unit, nil) then
 					fail(key .. " accepted an inventory-less player")
 				end
-				-- This is the exact native consumption call made by interactions.lua
-				-- after can_interact succeeds; use the registered settings object.
-				inventory:add_ammo_from_pickup(settings)
 				settings.on_pick_up_func(nil, player, true, pickup_unit)
 			end
-			if ammo ~= 2 then fail("ground + linked recovery did not each refill exactly one ammo") end
 			if deletions ~= 2 then fail("ground + linked recovery did not each clean up exactly once") end
 			if eligible_queries ~= 4 then fail("recovery callbacks did not run the expected eligibility queries") end
 

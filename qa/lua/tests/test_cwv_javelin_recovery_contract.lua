@@ -88,7 +88,7 @@ return function(H, repo_root)
         H.truthy(lookup.ground ~= lookup.linked)
     end)
 
-    H.test("CWV issue296 proof executes registered eligibility refill and cleanup", function()
+    H.test("CWV issue296 proof executes registered eligibility, refill shape and cleanup", function()
         local owner, args = fixture()
         local ok, err = owner.exercise(args)
         H.equal(ok, true, tostring(err))
@@ -247,6 +247,14 @@ return function(H, repo_root)
         H.truthy(tostring(err):find("recovery fields malformed", 1, true) ~= nil)
 
         ground.refill_amount = 1
+        -- Vanilla add_ammo_from_pickup fasserts on a row carrying both refill
+        -- fields (simple_inventory_extension.lua:1266).
+        ground.refill_percentage = 0.5
+        ok, err = owner.exercise(args)
+        H.equal(ok, nil)
+        H.truthy(tostring(err):find("carries refill_percentage beside refill_amount", 1, true) ~= nil)
+
+        ground.refill_percentage = nil
         args.skins.kruber.link_pickup_template_name = "foreign"
         ok, err = owner.exercise(args)
         H.equal(ok, nil)
@@ -276,6 +284,29 @@ return function(H, repo_root)
         -- the original dependency back rather than leaving its detached fake.
         H.equal(ground.can_interact_func("production-player"), true)
         H.equal(production_queries(), 1)
+    end)
+
+    H.test("CWV issue296 owner re-registers both recovery rows on every install", function()
+        -- The pre-fix owner wrapped registration in `if not Pickups.ammo[_TJ_PICKUP_KEY]`
+        -- (_cwv_javelin_runtime_owner.lua:262 at 0.1.545-dev), so a VMF reload kept
+        -- the previous instance's callbacks. Between the Pickups.ammo presence check
+        -- and the shared register call nothing may gate on an existing row.
+        local file = assert(io.open(repo_root .. "/character_weapon_variants/scripts/mods/"
+            .. "character_weapon_variants/_cwv_javelin_runtime_owner.lua", "rb"))
+        local owner = file:read("*a")
+        file:close()
+        local start = assert(owner:find("if not Pickups or not Pickups.ammo then", 1, true))
+        local call = assert(owner:find("_recovery.register({", start, true),
+            "the owner no longer registers recovery rows through the shared contract")
+        local between = owner:sub(start, call)
+        for _, guard in ipairs({ "Pickups.ammo[", "rawget(Pickups.ammo", "AllPickups[" }) do
+            H.equal(between:find(guard, 1, true), nil,
+                "an existing-row guard skips re-registration on reload: " .. guard)
+        end
+        H.equal(owner:find("Pickups.ammo[_TJ_PICKUP_KEY]", 1, true), nil,
+            "the owner writes recovery rows outside the shared contract")
+        H.equal(owner:find("Pickups.ammo[_TJ_LINK_PICKUP_KEY]", 1, true), nil,
+            "the owner writes recovery rows outside the shared contract")
     end)
 
     H.test("CWV issue296 named runtime check consumes the shared owner", function()
