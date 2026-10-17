@@ -14,10 +14,17 @@
   reenter anomaly that stands in for a missing exit) is reserved: it prints
   after a spent budget and adds `lines=` and `suppressed=`. Output stays at
   most 49 lines per open and none per frame; printf only, no behavior change.
+  A run backstop of 2048 lines (dozens of full opens) then one `run_cap` line
+  keeps an enter/leave loop from logging without end.
 - New `/gut_regression_test` check `issue630_dx12_fence_session_budget` drives a
   private probe with a 3-line budget and a local ledger.
 - Offline: `qa/lua/tests/test_gut_dx12_fence630_session_budget.lua`, 6 of its
-  7 cases fail on 0.2.361-dev.
+  7 session-budget cases fail on 0.2.361-dev; an eighth case pins the run
+  backstop.
+- Card evidence: the only registered `[gut:630]` receipt route is
+  `[gut:630] frame_evidence`. Cite the enter and exit lines by their unmarked
+  fields (`exit session=`, `lines=`, `suppressed=`) and the PASS name, not with
+  the `[gut:630]` prefix.
 
 ## 0.2.361-dev (2026-10-17) -- Dialogue isolation check SKIPs without a v6 Character Dialogue (#998) [verify-fix]
 

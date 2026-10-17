@@ -139,6 +139,30 @@ return function(H, root)
         H.truthy(#lines - before <= Probe.DEFAULT_LINE_CAP, "inactive exits emitted " .. tostring(#lines - before))
     end)
 
+    H.test("#630 an enter/leave loop stops at the run backstop with one run_cap line", function()
+        local Probe = load_probe()
+        H.truthy(Probe.DEFAULT_RUN_LINE_CAP >= 20 * (Probe.DEFAULT_LINE_CAP + 1),
+            "the default backstop must leave room for twenty fully spent sessions")
+        local lines = {}
+        local probe = Probe.new({ line_cap = 3, run_line_cap = 10,
+            emit = function(line) lines[#lines + 1] = line end })
+        for _ = 1, 50 do -- a lifecycle bounce: reenter without leave, then a leave
+            probe:enter({ presentation = "hero_substate" })
+            probe:enter({ presentation = "hero_substate" })
+            probe:before_draw({ focus = true, tab = "gut_equipment" })
+            probe:after_draw()
+            probe:leave("on_exit")
+        end
+        H.equal(#lines, 11, "10 budgeted run lines plus the terminal run_cap line")
+        H.truthy(lines[11]:find("[gut:630] run_cap=10 reached session=", 1, true), lines[11])
+        local snap = probe:snapshot()
+        H.equal(snap.run_capped, true)
+        H.equal(snap.run_lines, 10)
+        local before = #lines
+        healthy_session(probe)
+        H.equal(#lines, before, "nothing prints after the run backstop")
+    end)
+
     H.test("#630 issue630_dx12_fence_session_budget is registered and PASSes on the shipped module", function()
         local Probe = load_probe()
         H.equal(type(Probe.session_budget_contract), "function")

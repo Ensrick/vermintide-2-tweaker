@@ -97,6 +97,7 @@ there is no copied implementation.
   session keeps its last `frame_evidence`, the exit summary and the reenter
   anomaly are reserved past a spent budget and name the suppressed count,
   output stays at most line_cap + 1 per session with nothing on steady frames,
+  an enter/leave loop stops at the run backstop with one `run_cap` line,
   and the contracts module's `issue630_dx12_fence_session_budget` check is
   registered, PASSes, and FAILs on a run-wide budget. emit is a test-local
   ledger; get_mod resolves through a test-local environment.

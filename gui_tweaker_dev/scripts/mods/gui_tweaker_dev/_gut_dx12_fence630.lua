@@ -19,10 +19,14 @@
 -- the reenter anomaly that stands in for a missing exit) is reserved: it prints
 -- after that session's budget is spent and reports how many detail lines were
 -- suppressed. Bound: at most line_cap + 1 lines per enter(), none per frame.
+-- Run backstop: DEFAULT_RUN_LINE_CAP lines for the whole game run (dozens of
+-- full sessions), then one run_cap line and silence, so an enter/leave loop
+-- cannot log without end.
 
 local M = {}
 
 local DEFAULT_LINE_CAP = 48
+local DEFAULT_RUN_LINE_CAP = 2048
 
 local function _bool(value)
     if value == nil then return "?" end
@@ -158,6 +162,9 @@ function M.new(options)
         lines = 0,
         capped = false,
         suppressed = 0,
+        run_line_cap = options.run_line_cap or DEFAULT_RUN_LINE_CAP,
+        run_lines = 0,
+        run_capped = false,
         session = 0,
         active = false,
         owner = nil,
@@ -175,9 +182,28 @@ function M.new(options)
         last_resource_candidates = nil,
     }
 
+    -- Run backstop shared by every line: past run_line_cap the probe prints one
+    -- run_cap line and stays silent until the game restarts.
+    local function run_budget_left()
+        if state.run_lines < state.run_line_cap then
+            state.run_lines = state.run_lines + 1
+            return true
+        end
+        if not state.run_capped then
+            state.run_capped = true
+            emit(string.format("[gut:630] run_cap=%d reached session=%d; probe silent until restart",
+                state.run_line_cap, state.session))
+        end
+        return false
+    end
+
     local function log(message)
         if state.lines >= state.line_cap then
             state.capped = true
+            state.suppressed = state.suppressed + 1
+            return false
+        end
+        if not run_budget_left() then
             state.suppressed = state.suppressed + 1
             return false
         end
@@ -190,6 +216,7 @@ function M.new(options)
     -- only while a session is active and that edge ends it, so it fires at
     -- most once per enter().
     local function log_session_close(message)
+        if not run_budget_left() then return false end
         emit("[gut:630] " .. message)
         return true
     end
@@ -319,6 +346,9 @@ function M.new(options)
             lines = state.lines,
             capped = state.capped,
             suppressed = state.suppressed,
+            run_line_cap = state.run_line_cap,
+            run_lines = state.run_lines,
+            run_capped = state.run_capped,
             session = state.session,
             active = state.active,
             presentation = state.presentation,
@@ -425,6 +455,7 @@ function M.session_budget_contract()
 end
 
 M.DEFAULT_LINE_CAP = DEFAULT_LINE_CAP
+M.DEFAULT_RUN_LINE_CAP = DEFAULT_RUN_LINE_CAP
 M.count_visible = _count_visible
 M.equipment_state = _equipment_state
 M.visible_draw_signature = _visible_draw_signature
