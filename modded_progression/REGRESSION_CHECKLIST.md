@@ -24,6 +24,7 @@ Walk every entry below before any release that touches the relevant subsystem. P
 - [ ] #581: startup/keep challenge-board polling never reads an `mp_daily_v2_*` key from `StatisticsDatabase`; `/mp_regression_test` passes `mp581_owned_daily_bypasses_statistics_db`.
 - [ ] #589: the modded login-reward button remains disabled and no caller reaches `claimStoreRewards`; `/mp_regression_test` passes both `mp589_store_login_claim_*` checks. Official-realm claim remains vanilla.
 - [ ] #573: modded `get_quests` exposes only MP-owned daily rows with empty weekly/event slices, and modded refresh never calls backend `update_quests`; official read/refresh delegates unchanged.
+- [ ] #1671: the load log has no `[MOD][mp][ERROR] (hook): trying to hook function or method that doesn't exist` line; `/mp_regression_test` passes `mp1671_hook_targets_resolve` and logs `[mp:1671] hook targets resolved=<n> missing=0`; engine-free `test_mp_hook_targets_resolve.lua` passes. The Spoils of War hotkey stays vanilla (refused in the modded realm) by design.
 
 Last updated: 2026-09-12.
 
