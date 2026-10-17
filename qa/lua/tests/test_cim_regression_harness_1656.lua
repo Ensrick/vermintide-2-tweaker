@@ -233,7 +233,9 @@ return function(H, repo_root)
 
     -- 1. modded_loadout_round_trip_save_then_clear --------------------------
 
-    H.test("CIM #1656 the old all-no-op stub makes vanilla set_loadout_item raise before the capture", function()
+    -- Characterization (passes on the base too): pins the vanilla behavior the
+    -- stub fix depends on, not the fix itself.
+    H.test("CIM #1656 characterization: the old all-no-op stub makes vanilla set_loadout_item raise", function()
         local old_stub = setmetatable({}, { __index = function() return function() end end })
         local ok, err = pcall(vanilla_set_loadout_item, old_stub, "rt_test_bid", CAREER, SLOT, 2)
         H.equal(ok, false, "vanilla must reject the old stub")
@@ -276,6 +278,23 @@ return function(H, repo_root)
         local leaking = run(build_suite({ gate_leaks = true }), "persist_loadouts_gate_off_is_passthrough")
         H.truthy(type(leaking) == "string" and leaking:find("OFF gate leaked a capture", 1, true),
             "a leaking gate must FAIL now that vanilla accepts the stub: " .. tostring(leaking))
+    end)
+
+    H.test("CIM #1656 the gate-off twin fails on a rejected fixture registration", function()
+        -- A rejected registration leaves the bid unmodded, so even a leaking
+        -- gate captures nothing; the check must not read that as a pass.
+        local suite = build_suite({ gate_leaks = true })
+        suite.mod._cim_register_craft = function() return false, "gate_record_refused" end
+        H.equal(run(suite, "persist_loadouts_gate_off_is_passthrough"),
+            "fixture craft registration rejected: gate_record_refused")
+    end)
+
+    H.test("CIM #1656 the gate-off twin skips when vanilla never writes the mirror", function()
+        -- A chain that returns before vanilla never reaches the capture either.
+        local short_circuit = { set_loadout_item = function() return false end }
+        local suite = build_suite({ gate_leaks = true, globals = { BackendInterfaceItemPlayfab = short_circuit } })
+        H.equal(run(suite, "persist_loadouts_gate_off_is_passthrough"),
+            "skip: set_loadout_item chain never reached vanilla's mirror write (0 writes), gate not exercised")
     end)
 
     -- 2. inventory_property_count_within_cap --------------------------------
@@ -370,11 +389,18 @@ return function(H, repo_root)
             "port drifted from _gut_loc_format.lua")
         local code = read(root .. "_cim_loc_format.lua"):gsub("%-%-[^\n]*", "")
         H.equal(code:find("string.format", 1, true), nil, "no formatter call in the scanner")
+        -- The env shadow only sees `string.format`; a method call or a cached
+        -- reference would bypass it, so no code (outside string literals) may
+        -- name `.format` or `:format` at all.
+        local bare = code:gsub('"[^"\n]*"', '""'):gsub("'[^'\n]*'", "''")
+        H.equal(bare:find("[%.:]%s*format"), nil, "no formatter reference in the scanner")
     end)
 
     -- 4. default_property_cap_is_five_bubbles -------------------------------
 
-    H.test("CIM #1656 one fatigue_regen bubble has no storable Adventure value", function()
+    -- Characterization (passes on the base too): pins the #244 policy the
+    -- check must accept, not the check fix itself.
+    H.test("CIM #1656 characterization: one fatigue_regen bubble has no storable Adventure value", function()
         local suite = build_suite()
         H.equal(suite.weave.value_for_bubbles("weave_fatigue_regen", 1), 0,
             "6% clamps to the 10% range start (#244)")

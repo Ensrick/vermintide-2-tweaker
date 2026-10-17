@@ -28,6 +28,12 @@
   the catalogue against the vanilla weapon census and hero career list, plus
   an optional pass over the decompiled source; against 0.8.139-dev all four
   cases fail on exactly `bw_necro`, `bw_reaper` and `bw_soulsteal`.
+- #1656 follow-up in this build: `persist_loadouts_gate_off_is_passthrough`
+  now FAILs when its fixture craft registration is rejected (an unmodded bid
+  is never captured, so the check would pass vacuously), and SKIPs with a
+  named reason when the call chain never reaches vanilla's mirror write
+  (`backend_interface_item_playfab.lua:665`), the same way its round-trip twin
+  guards both preconditions.
 
 **Test:** Load `Crafting in Modded v0.8.140-dev` in the keep, run
 `/cim_regression_test`: `issue1696_ranalds_catalog_game_keys` must PASS.
@@ -84,7 +90,8 @@ the Soulstealer Staff: it must not be rejected with "item unavailable".
   (vanilla `set_loadout_item` transcribed); against the 0.8.138-dev source it
   reproduces each reported FAIL message.
 
-**Test:** Load `Crafting in Modded v0.8.139-dev` in the keep, run
+**Test:** Load `Crafting in Modded v0.8.140-dev` (or later; 0.8.139-dev is
+never deployed on its own) in the keep, run
 `/cim_regression_test`. `modded_loadout_round_trip_save_then_clear`,
 `persist_loadouts_gate_off_is_passthrough`,
 `inventory_property_count_within_cap`, `localization_format_safe`,

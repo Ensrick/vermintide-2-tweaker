@@ -24,10 +24,10 @@ Last updated: 2026-10-17.
 |---|---|
 | Symptom | On a plain keep run, `modded_loadout_round_trip_save_then_clear`, `inventory_property_count_within_cap`, `localization_format_safe`, `default_property_cap_is_five_bubbles` and `overview_btn_render_target` FAILed while the guarded behavior was correct (RainReligion, 0.8.135-dev). |
 | Root cause | Harness defects: a stand-in item interface that made vanilla `set_loadout_item` raise before the `hook_safe` capture; the pre-#86 2-property ceiling; a no-argument formatter probe on placeholder strings; pre-#244 linear storage expectations; and undeclared globals passed for two forge UI owner locals. The gate-off twin shared the stub and used undeclared fixture ids, so it passed vacuously. |
-| Fix version(s) | cim_dev 0.8.139-dev (#1656) |
+| Fix version(s) | cim_dev 0.8.139-dev source, first deployed in 0.8.140-dev with the gate-off registration guard (#1656) |
 | Category | SOLO / DIAGNOSTIC |
 | Repro | Enter the Keep and run `/cim_regression_test`. |
-| Expected post-fix | The five checks and `persist_loadouts_gate_off_is_passthrough` PASS, or SKIP with a named reason when the item interface chain raises. `issue414_cw_traits_preserve_slot_family` still PASSes. |
+| Expected post-fix | The five checks and `persist_loadouts_gate_off_is_passthrough` PASS, or SKIP with a named reason when the item interface chain raises or never reaches vanilla's mirror write. The gate-off check FAILs if its fixture craft registration is rejected. `issue414_cw_traits_preserve_slot_family` still PASSes. |
 | Detection | `test_cim_regression_harness_1656.lua` runs the shipped checks through the real loadout, weave-loadout and forge UI owners and reproduces each reported FAIL against 0.8.138-dev; it also pins the 10-property ceiling to the trimmer and the Athanor gate, and keeps `_cim_loc_format.lua` identical to the gut #1651 scanner. |
 
 ### issue1530-base-power-step-wording - step ownership stays in Mod Tweaker

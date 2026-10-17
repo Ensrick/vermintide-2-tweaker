@@ -411,18 +411,31 @@ _rt_register("persist_loadouts_gate_off_is_passthrough", function()
             result_err = "gate helper says enabled while setting is OFF"
             return
         end
-        mod._cim_register_craft(_RT_FAKE_BID, {
+        -- #1656: a rejected registration leaves the bid unmodded, so nothing is
+        -- captured whatever the gate does. Fail like the round-trip twin.
+        local registered, register_err = mod._cim_register_craft(_RT_FAKE_BID, {
             item_key = "es_1h_falchion", properties = {}, traits = {}, power_level = 300, rarity = "modded",
         })
+        if not registered then
+            result_err = "fixture craft registration rejected: " .. tostring(register_err)
+            return
+        end
         -- #1656: the old all-no-op stub made vanilla raise before the capture,
         -- so "nothing captured" held for the wrong reason. With a stub vanilla
         -- accepts, the capture really runs and the gate must stop it.
-        local fake_items = fixtures.loadout_interface_stub({ _RT_FAKE_BID })
+        local fake_items, mirror_writes = fixtures.loadout_interface_stub({ _RT_FAKE_BID })
         context.set_modded_loadout({})
         -- Equip a MODDED bid while the master toggle is OFF.
         local call_ok, call_err = pcall(hook_fn, fake_items, _RT_FAKE_BID, _RT_FAKE_CAREER, _RT_FAKE_SLOT, 1)
         if not call_ok then
             result_err = "skip: set_loadout_item chain raised before the cim capture: " .. tostring(call_err)
+            return
+        end
+        -- One mirror write proves vanilla ran (backend_interface_item_playfab.lua:665),
+        -- so the hook_safe capture was reached and the gate really was exercised.
+        if #mirror_writes ~= 1 then
+            result_err = "skip: set_loadout_item chain never reached vanilla's mirror write ("
+                .. #mirror_writes .. " writes), gate not exercised"
             return
         end
         local captured = context.get_modded_loadout()[_RT_FAKE_CAREER]

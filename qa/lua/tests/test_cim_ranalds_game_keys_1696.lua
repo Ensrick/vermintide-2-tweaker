@@ -124,11 +124,24 @@ return function(H, repo_root)
         "dlcs/bless/career_settings_bless.lua", "dlcs/shovel/career_settings_shovel.lua",
     }
     local morris = read("equipment/item_master_list_morris.lua")
+    -- Every listed file must be readable, or the case SKIPs naming the gaps:
+    -- a decompile refresh that moves one file must not turn the suite red.
+    local items, careers, absent = {}, {}, {}
+    local function collect(paths, into)
+        for i = 1, #paths do
+            local text = read(paths[i])
+            if text then into[#into + 1] = text else absent[#absent + 1] = paths[i] end
+        end
+    end
+    collect(item_files, items)
+    collect(career_files, careers)
+    if not morris then absent[#absent + 1] = "equipment/item_master_list_morris.lua" end
+    local skip_reason = "decompiled Vermintide-2-Source-Code checkout not found (set VT2_DECOMPILE_ROOT)"
+    if #absent > 0 and #absent < #item_files + #career_files + 1 then
+        skip_reason = "decompiled checkout lacks " .. table.concat(absent, ", ")
+    end
 
-    H.test_if(morris ~= nil, "#1696 catalogue keys resolve in the decompiled source", function()
-        local items, careers = {}, {}
-        for i = 1, #item_files do items[#items + 1] = assert(read(item_files[i]), item_files[i]) end
-        for i = 1, #career_files do careers[#careers + 1] = assert(read(career_files[i]), career_files[i]) end
+    H.test_if(#absent == 0, "#1696 catalogue keys resolve in the decompiled source", function()
         local item_text = "\n" .. table.concat(items, "\n")
         local career_text = "\n" .. table.concat(careers, "\n")
         H.truthy(morris:find("\ntable.merge(ItemMasterList, item_master_list)\n", 1, true),
@@ -154,5 +167,5 @@ return function(H, repo_root)
         end
         table.sort(missing)
         H.deep_equal(missing, {}, "catalogue keys absent from the decompiled source")
-    end, "decompiled Vermintide-2-Source-Code checkout not found (set VT2_DECOMPILE_ROOT)")
+    end, skip_reason)
 end
