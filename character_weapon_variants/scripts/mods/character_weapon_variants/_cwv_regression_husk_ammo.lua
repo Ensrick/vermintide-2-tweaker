@@ -406,4 +406,10 @@ _rt_register("issue296_tuskgor_javelin_recovery_transaction", function()
 	end
 end)
 
+_rt_register("issue1676_resolved_profile_multipliers", function()
+	local check = _om._cwv_profile_multiplier_check
+	if type(check) ~= "function" then return "#1676 shared profile constructor audit missing" end
+	return check()
+end)
+
 end

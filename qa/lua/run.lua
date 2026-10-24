@@ -200,6 +200,7 @@ local suites = {
     "test_cwv_acquisition_runtime",
     "test_cwv_javelin_pickup",
     "test_cwv_javelin_recovery_contract",
+    "test_cwv_resolved_profile_multipliers",
     "test_cwv_thrown_wire_policy",
     "test_cwv_damage_profile_wire",
     "test_cwv_burn_scrub",

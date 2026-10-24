@@ -8,6 +8,14 @@ Last updated: 2026-08-21.
 
 ## Regression-owner source map
 
+- `issue1676_resolved_profile_multipliers`, appended after #296 in the existing
+  husk/ammo/projectile owner, consumes the real core constructor's retained
+  numeric read-back. No constructed numeric clones means SKIP. Offline
+  `test_cwv_resolved_profile_multipliers.lua` executes resolved/named/mixed
+  representations, sparse targets, donor isolation, idempotence, existing stale
+  clones, wire mapping, the template consumer and installed named callback.
+  This does not replace live dummy-hit/balance and mixed-peer acceptance.
+
 - `_cwv_regression_identity.lua` owns the original 20-check identity prefix and
   appends the validated 22-check tail from
   `_cwv_regression_runtime_identity.lua`.

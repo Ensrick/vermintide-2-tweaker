@@ -1,5 +1,16 @@
 # character_weapon_variants - engine contact surface
 
+## Resolved damage-profile construction (#1676, 2026-10-24)
+
+Native 6.13.0 `scripts/settings/equipment/damage_profile_templates.lua:5570-5616`
+resolves cleave, target and critical power references to tables before mods run.
+`_cwv_core_templates.lua` owns both representations and scales deep copies;
+numeric sparse target keys are not an `ipairs` sequence. Existing native donor
+rows and the #423 wire-source mapping remain unchanged. The retained
+`issue1676_resolved_profile_multipliers` verdict proves constructor read-back,
+not later optional WT modifiers, actual hit damage, or peer safety. No new hook,
+RPC, registration identity, asset, or per-frame work is introduced by this fix.
+
 What vanilla VT2/Stingray does at every seam `cwv` touches, and why the mod is
 there. This is the per-mod companion to the subsystem set in `docs/engine/`
 (read `docs/engine/README.md` for house style). It does **not** re-explain a

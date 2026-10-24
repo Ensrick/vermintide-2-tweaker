@@ -1,5 +1,23 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.549-dev (2026-10-24) — Resolved profile multipliers and refreshed candidate (#1676, #296, #719, #1656)
+
+- Fix the shared damage-profile constructor silently skipping native resolved
+  tables. Damage, stagger and cleave now scale owned copies of table fields as
+  well as legacy named power references. Sparse target lists starting at `[2]`
+  are included; native donors, armor modifiers and unrelated metadata are not
+  changed. The existing #423 native wire-donor mapping is retained.
+- `issue1676_resolved_profile_multipliers` reports actual constructor read-back
+  evidence captured before later optional WT modifiers. An unexercised session
+  is SKIP, not PASS. It does not claim live damage balance or network acceptance.
+- Nine offline cases execute the real core installer/cloner and the installed
+  regression callback. Four cases failed before the correction, including the
+  real template-constructor integration; neutral/missing-donor controls passed.
+- Reissue the expired, unpublished 0.1.548-dev candidate under a fresh permanent
+  allocation. The #296/#719/#1656 changes below remain in this reviewed batch.
+  Build/Workshop receipts and in-game acceptance are separate; no stable or
+  testing-ready claim follows from these host tests.
+
 ## 0.1.548-dev (2026-10-17) -- /cwv_regression_test harness rows from the #1656 triage pass or skip with a reason (#1656) [verify-fix]
 
 Regression instrument only: no gameplay, mesh, template or wire change.

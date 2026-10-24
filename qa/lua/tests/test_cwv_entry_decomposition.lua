@@ -492,7 +492,7 @@ return function(H, repo_root)
                 :gmatch('_rt_register%("([^"]+)"') do
             names[#names + 1] = name
         end
-		H.equal(#names, 95)
+		H.equal(#names, 96)
         H.equal(names[1], "cwv_variant_flag_present")
 		H.equal(names[3], "issue916_half_swording_combat_style_contract")
 		H.equal(names[5], "issue914_peer_ready_identity_lifecycle")
@@ -519,14 +519,15 @@ return function(H, repo_root)
 		H.equal(names[46], "issue1186_outrider_projectile_reads_cloned_tunes")
 		H.equal(names[47], "issue1188_wt_native_trollhammer_keeps_ammo")
 		H.equal(names[48], "issue1320_outrider_projectile_unit_and_wire")
-		-- #296 registers last in the husk/ammo/projectile owner; the render
-		-- owner sits on its file-size baseline.
+		-- #296 then #1676 finish the husk/ammo/projectile/stat owner; the
+		-- render owner stays on its unchanged file-size baseline.
 		H.equal(names[49], "issue296_tuskgor_javelin_recovery_transaction")
-		H.equal(names[50], "cwv_unit_bearing_variants_registered")
-		H.equal(names[51], "issue482_crafted_uuid_transform_consumers")
+		H.equal(names[50], "issue1676_resolved_profile_multipliers")
+		H.equal(names[51], "cwv_unit_bearing_variants_registered")
+		H.equal(names[52], "issue482_crafted_uuid_transform_consumers")
         -- #1155 is a renderer/material/lifecycle check. Keep it in the render
         -- regression owner so identity remains below the hard file-size ceiling.
-		H.equal(names[76], "issue1155_old_musket_descriptor_reconciler")
+		H.equal(names[77], "issue1155_old_musket_descriptor_reconciler")
         H.equal(names[#names - 3], "issue567_skin_reverse_index_valid")
         H.equal(names[#names - 2], "issue567_exact_pair_transition_live")
         H.equal(names[#names - 1], "issue704_canonical_skin_owner_and_sword_mace_sources")
