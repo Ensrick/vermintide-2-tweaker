@@ -372,7 +372,7 @@ never take `-AllowPublic`.
 
 **Post-ship verification (both load-bearing - `ugc_tool` prints success even on failure):**
 1. `C:\Program Files (x86)\Steam\logs\workshop_log.txt` must show `Uploaded new content` for the item. For `friends_only`/`private` items the public Steam API returns blank fields, so if in doubt eyeball the Workshop page in Steam.
-2. `ship.ps1` hash-verifies the deploy against the Workshop content folder. If that verify fails with a hash mismatch AFTER a confirmed upload, it is a Steam reconcile race: re-run `& $env:VT2_SHIP_VMB_LAUNCHER deploy <mod> --no-remote` once and treat the ship as successful (the launcher is out-of-repo; see `docs/PORTABLE_SETUP.md` for resolution order). Do NOT lecture the user about restarting Steam unless the log shows they are actually running a stale build.
+2. `ship.ps1` hash-verifies the authorized deploy. A hash mismatch after a confirmed upload is an incomplete transaction, not proof of a Steam reconcile race or permission to declare success. Preserve the authenticated upload result and exact file hashes; use only the guarded recovery in `PROJECT_STANDARDS.md` section 6.6 through `tools/ship/ship.ps1` when its source, claim and lease gates authorize it. Do not bypass that recovery with a direct launcher deploy, manual Steam-folder writes or a spent version claim. Do not recommend restarting Steam unless the log shows an actually stale loaded build.
 
 **Protected source landing (issues #540/#724).** `master` requires the strict
 `qa-gate` context, applies the rule to administrators, forbids force-push and

@@ -141,6 +141,25 @@ function Get-DoctrineViolations {
             }
         }
 
+        # Root-guide recovery advice can wrap across lines. Only paragraphs
+        # identifying a partial-upload/hash failure are recovery scope; ordinary
+        # non-publishing build/deploy examples keep their existing contract.
+        $rootRecoveryLines = @{}
+        if ($document.Path.Replace('\', '/') -ieq 'CLAUDE.md') {
+            $rootLines = @($document.Lines)
+            for ($i = 0; $i -lt $rootLines.Count; $i++) {
+                if ([string]::IsNullOrWhiteSpace($rootLines[$i])) { continue }
+                $end = $i
+                while ($end + 1 -lt $rootLines.Count -and
+                        -not [string]::IsNullOrWhiteSpace($rootLines[$end + 1])) { $end++ }
+                $paragraph = ($rootLines[$i..$end] -join ' ') -replace '\s+', ' '
+                if ($paragraph -match '(?i)\b(?:hash mismatch|confirmed upload|post-upload)\b') {
+                    for ($at = $i; $at -le $end; $at++) { $rootRecoveryLines[$at + 1] = $true }
+                }
+                $i = $end
+            }
+        }
+
         $lineNumber = 0
         foreach ($line in @($document.Lines)) {
             $lineNumber++
@@ -166,13 +185,13 @@ function Get-DoctrineViolations {
                 $violations += "$($document.Path):${lineNumber}: direct launcher publication advice"
             }
 
-            # #1025: the active triage recovery checklist must not bypass the
-            # canonical transaction after a partial upload. Scope this to the
-            # runbook; separately frozen mod-document CLI debt is not permission
-            # to teach a new recovery path here.
+            # #1025: neither current recovery guide may bypass the canonical
+            # transaction after a partial upload. Separately frozen mod-document
+            # CLI debt is not permission to teach a new recovery path here.
             $triageRunbook = $document.Path.Replace('\', '/') -ieq 'docs/BUG_TRIAGE_RUNBOOK.md'
             $directDeploy = $line -match '(?i)(?:VMBLauncher(?:\.exe)?|&\s+`?\$(?:(?:env:)?[A-Za-z_]\w*|\{env:[^}]+\}))\s+deploy\b'
-            if ($triageRunbook -and $directDeploy -and -not $explicitProhibition) {
+            if (($triageRunbook -or $rootRecoveryLines.ContainsKey($lineNumber)) -and
+                    $directDeploy -and -not $explicitProhibition) {
                 $violations += "$($document.Path):${lineNumber}: direct launcher recovery bypass"
             }
 
@@ -285,6 +304,29 @@ if ($SelfTest) {
         if ((Get-DoctrineViolations $prohibition).Count -ne 0) {
             throw "explicit recovery prohibition was rejected: $deployCommand"
         }
+        $rootRecovery = @([pscustomobject]@{
+            Path = 'CLAUDE.md'
+            Lines = @('A hash mismatch after a confirmed', 'upload needs recovery:', $deployCommand)
+        })
+        if ((Get-DoctrineViolations $rootRecovery) -notcontains
+                'CLAUDE.md:3: direct launcher recovery bypass') {
+            throw "planted root-guide recovery bypass was not rejected: $deployCommand"
+        }
+        $rootProhibition = @([pscustomobject]@{
+            Path = 'CLAUDE.md'
+            Lines = @('After a confirmed upload, preserve the evidence.', ('Do not use ' + $deployCommand))
+        })
+        if ((Get-DoctrineViolations $rootProhibition).Count -ne 0) {
+            throw "explicit root-guide recovery prohibition was rejected: $deployCommand"
+        }
+    }
+    $rootBareDeploy = @([pscustomobject]@{
+        Path = 'CLAUDE.md'
+        Lines = @('Non-publishing local deploy:', 'Run & $exe deploy example_mod.', '',
+            'A hash mismatch after a confirmed upload requires canonical guarded recovery.')
+    })
+    if ((Get-DoctrineViolations $rootBareDeploy).Count -ne 0) {
+        throw 'root recovery scope leaked into a separate non-publishing paragraph'
     }
     $canonicalRecovery = @([pscustomobject]@{
         Path = 'docs/BUG_TRIAGE_RUNBOOK.md'
