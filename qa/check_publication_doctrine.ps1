@@ -5,12 +5,18 @@
 
 [CmdletBinding()]
 param(
-    [string]$RepoRoot = (Split-Path $PSScriptRoot -Parent),
+    [string]$RepoRoot,
     [switch]$Quiet,
     [switch]$SelfTest
 )
 
 $ErrorActionPreference = "Stop"
+
+# Windows PowerShell 5.1's -File path initializes PSScriptRoot after parameter
+# defaults. Resolve the optional root in the body, never from the caller's CWD.
+if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
+    $RepoRoot = [IO.Path]::GetDirectoryName($PSScriptRoot)
+}
 
 # #1025: six receipt/promotion-bound mod documents still contain exact legacy
 # launcher paths. Freeze only those reviewed lines so removal is clean while a
@@ -160,6 +166,16 @@ function Get-DoctrineViolations {
                 $violations += "$($document.Path):${lineNumber}: direct launcher publication advice"
             }
 
+            # #1025: the active triage recovery checklist must not bypass the
+            # canonical transaction after a partial upload. Scope this to the
+            # runbook; separately frozen mod-document CLI debt is not permission
+            # to teach a new recovery path here.
+            $triageRunbook = $document.Path.Replace('\', '/') -ieq 'docs/BUG_TRIAGE_RUNBOOK.md'
+            $directDeploy = $line -match '(?i)(?:VMBLauncher(?:\.exe)?|&\s+`?\$(?:(?:env:)?[A-Za-z_]\w*|\{env:[^}]+\}))\s+deploy\b'
+            if ($triageRunbook -and $directDeploy -and -not $explicitProhibition) {
+                $violations += "$($document.Path):${lineNumber}: direct launcher recovery bypass"
+            }
+
             if ($line -match "(?i)after every upload[^\r\n]*restart\s+(?:VT2|Steam|the game|game)\b") {
                 $violations += "$($document.Path):${lineNumber}: stale post-upload restart advice"
             }
@@ -246,6 +262,40 @@ if ($SelfTest) {
     if ((Get-DoctrineViolations $standaloneAll) -notcontains
         "DEVELOPMENT.md:1: direct launcher publication advice") {
         throw "planted standalone-all advice was not rejected"
+    }
+
+    foreach ($deployCommand in @(
+        '`& $env:VT2_SHIP_VMB_LAUNCHER deploy <mod> --no-remote` once.',
+        'Run VMBLauncher.exe deploy example_mod.',
+        'Run & $exe deploy example_mod.',
+        'Run & ${env:VT2_SHIP_VMB_LAUNCHER} deploy example_mod.'
+    )) {
+        $recoveryBypass = @([pscustomobject]@{
+            Path = 'docs/BUG_TRIAGE_RUNBOOK.md'
+            Lines = @('Deploy-verify hash mismatch after a confirmed upload: re-run', $deployCommand)
+        })
+        if ((Get-DoctrineViolations $recoveryBypass) -notcontains
+            'docs/BUG_TRIAGE_RUNBOOK.md:2: direct launcher recovery bypass') {
+            throw "planted direct recovery deploy bypass was not rejected: $deployCommand"
+        }
+        $prohibition = @([pscustomobject]@{
+            Path = 'docs/BUG_TRIAGE_RUNBOOK.md'
+            Lines = @('Do not use ' + $deployCommand)
+        })
+        if ((Get-DoctrineViolations $prohibition).Count -ne 0) {
+            throw "explicit recovery prohibition was rejected: $deployCommand"
+        }
+    }
+    $canonicalRecovery = @([pscustomobject]@{
+        Path = 'docs/BUG_TRIAGE_RUNBOOK.md'
+        Lines = @(
+            'Preserve the confirmed-upload receipt and exact file hashes.',
+            'Do not use a direct launcher deploy or manual Steam content writes.',
+            'Resume only through tools/ship/ship.ps1 with current authorization.'
+        )
+    })
+    if ((Get-DoctrineViolations $canonicalRecovery).Count -ne 0) {
+        throw 'canonical guarded recovery advice was rejected'
     }
 
     $restart = @([pscustomobject]@{
