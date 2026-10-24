@@ -5,12 +5,18 @@
 
 [CmdletBinding()]
 param(
-    [string]$RepoRoot = (Split-Path $PSScriptRoot -Parent),
+    [string]$RepoRoot,
     [switch]$Quiet,
     [switch]$SelfTest
 )
 
 $ErrorActionPreference = "Stop"
+
+# Windows PowerShell 5.1's -File path initializes PSScriptRoot after parameter
+# defaults. Resolve the optional root in the body, never from the caller's CWD.
+if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
+    $RepoRoot = [IO.Path]::GetDirectoryName($PSScriptRoot)
+}
 
 # #1025: six receipt/promotion-bound mod documents still contain exact legacy
 # launcher paths. Freeze only those reviewed lines so removal is clean while a
