@@ -5,6 +5,12 @@ Architecture, gotchas, and conventions for `weapon_tweaker`. Read alongside
 (pre-release gates), and `CROSS_CHARACTER_PORT_RECIPE.md` (the seven-step procedure
 for adding a new cross-character weapon port).
 
+The Hold-Pose check-owner extraction is revalidated in 0.12.337-dev; its
+0.12.336-dev preparation was unpublished. Its five production checks retain
+the original registrar slot. Test fixtures load the real owner in a private
+environment, and complete suite discovery must reject duplicate registration
+after merging an older branch. Public 0.12.336-beta is a version-only mirror.
+
 ---
 
 ## Design direction (2026-05-23)
@@ -764,6 +770,17 @@ animation picker, hold-pose, and zoom checks belong inside those overlays.
 Runtime checks must stay lazy so later initialization can populate the tables
 they inspect. `test_wt_runtime_checks_module.lua` protects the check boundaries,
 counts, dependency contract, overlay delta, and singleton command ownership.
+
+The dev-only Hold-Pose checks live in `_wt_runtime_checks_hold_pose.lua` and
+receive only the registry callback plus the installed Hold-Pose owner. The
+entry point loads that child and the common registrar invokes it synchronously
+at the historical dev-overlay position, before the longbow checks. Keep feature
+assertions in that child; do not make it own commands, engine hooks, settings,
+or another module load. If the child is missing (VMF `mod:dofile` returns nil
+when a file fails to load), the registrar registers one failing
+`issue2_hold_pose_runtime_check_owner` check in that slot and carries on, so
+the dev tool installs at the end of the entry still run; an error thrown inside
+the child's own `install` still propagates.
 
 ### Issue #611 availability-master ownership
 

@@ -167,7 +167,20 @@ there is no copied implementation.
   all 13 catalogs and the completeness ledger in both Weapon Tweaker streams
   carry its revision and `Current (Game Version 6.13.0)` label, the Patch 5.2
   rehydrated evidence projects onto it, and no provenance input keeps a
-  retired 6.12.0 or 6.12.1 anchor.
+  retired 6.12.0 or 6.12.1 anchor. The pinned-anchor and retired-anchor cases
+  separate a fixed tree from an unfixed one; the catalog and Patch 5.2 cases
+  are coherence guards that compare against the anchor file and catch a
+  partial re-anchor.
+- `tests/test_wt_runtime_checks_module.lua`: #2 WT runtime-check registrar
+  split. The first two cases are order-preservation guards (public and dev
+  registration counts and order, identical before and after the split). The
+  rest prove the split: the dev-only Hold-Pose child
+  `_wt_runtime_checks_hold_pose.lua` registers its five checks in the
+  historical slot before the Longbow zoom checks, fails closed without its
+  Hold-Pose owner, passes all five against the real `wt_dev_hold_pose.lua`,
+  and the parent invokes it once, propagates its errors, and turns a missing
+  child into one failing `issue2_hold_pose_runtime_check_owner` check instead
+  of aborting registration.
 - `tests/test_cwv_resolved_profile_multipliers.lua`: #1676 drives the actual
   core installer/cloner with native-resolved, legacy and mixed power fields,
   sparse targets, untouched donors, native wire mapping, cache idempotence,

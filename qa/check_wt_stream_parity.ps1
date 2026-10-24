@@ -22,6 +22,7 @@ $WtDevOnlyFiles = @(
     'wt_universal_availability.lua',
     'wt_dev_anim_picker.lua',
     'wt_dev_hold_pose.lua',
+    '_wt_runtime_checks_hold_pose.lua',
     'wt_port_status.lua'
 )
 $WtPublicCommands = @(
