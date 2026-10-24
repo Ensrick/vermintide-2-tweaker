@@ -323,10 +323,14 @@ shipping. Agent publication is headless and opens no interactive window.
   publication-only may instead accept `No content change` only after VMB has
   accepted the exact hosted receipt and staged bytes. `ugc_tool`'s generic
   "Upload finished" text is never sufficient evidence.
-- [ ] **Deploy-verify hash mismatch after a confirmed upload:** re-run
-  `& $env:VT2_SHIP_VMB_LAUNCHER deploy <mod> --no-remote` once, then continue.
-  Do not loop on it. (The launcher is out-of-repo; see `docs/PORTABLE_SETUP.md`
-  for resolution order.)
+- [ ] **Deploy-verify hash mismatch after a confirmed upload:** preserve the
+  successful-upload receipt and exact expected/observed file hashes. Do not
+  bypass the failed transaction with a direct launcher deploy or manual writes
+  into Steam's content directory. Diagnose the mismatch, then resume only through
+  `tools/ship/ship.ps1` with its still-valid claim and current-source authorization
+  (PROJECT_STANDARDS.md section 6.6). If either proof has expired or changed,
+  follow the canonical fresh-candidate procedure; do not renew old evidence.
+  Keep deployment and test readiness unclaimed until canonical verification passes.
 - [ ] **Add the status label to the Issue NOW (same pass, do NOT wait for STEP
   9).** Shipping a fix or diagnostic is what flips an issue into "ready to test",
   and that signal is a GitHub label, not just a comment. `PROJECT_STANDARDS.md`
