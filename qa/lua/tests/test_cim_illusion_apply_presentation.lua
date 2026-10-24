@@ -1,7 +1,12 @@
 return function(H, repo_root)
     local dev_path = repo_root
         .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_illusion_apply_presentation.lua"
-    local Presentation = dofile(dev_path)
+    local Presentation = dofile(repo_root .. "/tools/shared_lib/_lib_local_illusion_apply.lua")
+    local facade_loader = assert(loadfile(dev_path))
+    setfenv(facade_loader, setmetatable({
+        get_mod = function() return { dofile = function() return Presentation end } end,
+    }, { __index = _G }))
+    local CimPresentation = facade_loader()
     local CosmeticsSwap = dofile(repo_root
         .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_modded_illusion_swap.lua")
 
@@ -23,12 +28,22 @@ return function(H, repo_root)
             enable_calls = 0,
             bracket_calls = 0,
             logs = {},
+            actions = { default = {}, item_setting = { {
+                input_action = "refresh", description_text = "crafting_recipe_apply_weapon_skin",
+            } } },
+            action_reads = 0,
         }
+        local native_actions = state.actions
         local owner = Presentation.new({
             is_modded_realm = function() return state.modded end,
             with_eac_off = function(func, self, ...)
                 state.bracket_calls = state.bracket_calls + 1
                 return func(self, ...)
+            end,
+            get_generic_input_actions = function()
+                state.action_reads = state.action_reads + 1
+                if state.action_reader_throws then error("action-reader-boom") end
+                return state.actions
             end,
             skin_exists = function(skin) return state.skins[skin] == true end,
             skin_requires_unowned_dlc = function(skin)
@@ -56,6 +71,17 @@ return function(H, repo_root)
             return { content = { visible = false } }
         end
         local window = {
+            _state = "item_setting",
+            _menu_input_description = {
+                generic_actions = native_actions.default,
+                change_generic_actions = function(self, actions)
+                    if actions == native_actions.item_setting then
+                        if state.action_setter_throws then error("action-setter-boom") end
+                        if state.drop_action_write then return end
+                    end
+                    self.generic_actions = actions
+                end,
+            },
             _current_recipe_name = "apply_weapon_skin",
             _item_backend_id = "weapon-bid",
             _material_items = {},
@@ -77,6 +103,9 @@ return function(H, repo_root)
 
         local function vanilla_enable(self, enabled, disable_edges)
             state.enable_calls = state.enable_calls + 1
+            if state.read_only_backend then enabled = false end
+            self._menu_input_description:change_generic_actions(
+                native_actions[enabled and self._state or "default"])
             local widgets = self._widgets_by_name
             widgets.craft_button.content.visible = enabled
             widgets.craft_button.content.button_hotspot.disable_button = not enabled
@@ -126,6 +155,178 @@ return function(H, repo_root)
         end
     end
 
+    H.test("shared Apply restores native controller actions after readonly vanilla returns", function()
+        local state, owner, window, native_pressed = fixture()
+        state.read_only_backend = true
+        local a, b, c = owner.on_pressed(native_pressed, window, 2, false, false)
+        H.equal(a, "pressed"); H.equal(b, nil); H.equal(c, "tail")
+        H.equal(window._widgets_by_name.craft_button.content.visible, true)
+        H.equal(window._menu_input_description.generic_actions, state.actions.item_setting)
+        local _, released = owner.complete(window, "complete")
+        H.equal(released, true)
+        H.equal(window._menu_input_description.generic_actions, state.actions.default)
+    end)
+
+    H.test("shared Apply fails closed if the controller setter silently drops its write", function()
+        local state, owner, window = fixture()
+        state.read_only_backend, state.drop_action_write = true, true
+        local ok = owner.enforce(window, owner.plan(window, 2, false))
+        H.equal(ok, false)
+        H.equal(window._widgets_by_name.craft_button.content.visible, false)
+        H.equal(window._cim1465_apply_owned, false)
+        H.equal(#window._material_items, 0)
+    end)
+
+    H.test("shared Apply contains unavailable or throwing controller dependencies", function()
+        for _, fault in ipairs({ "action_reader_throws", "action_setter_throws", "missing-actions" }) do
+            local state, owner, window = fixture()
+            state.read_only_backend = true
+            if fault == "missing-actions" then state.actions = nil else state[fault] = true end
+            local ok = owner.enforce(window, owner.plan(window, 2, false))
+            H.equal(ok, false, fault)
+            H.equal(window._widgets_by_name.craft_button.content.visible, false, fault)
+            H.equal(window._cim1465_apply_owned, false, fault)
+        end
+    end)
+
+    H.test("shared Apply never resolves adapter controller actions on an unowned official surface", function()
+        local state, owner, window, native_pressed = fixture()
+        state.modded = false
+        state.action_reader_throws = true
+        owner.on_pressed(native_pressed, window, 2, false, false)
+        H.equal(state.action_reads, 0)
+    end)
+
+    H.test("shared Apply restores cached native default after a reader fails following engagement", function()
+        local state, owner, window = fixture()
+        state.read_only_backend = true
+        H.equal(owner.enforce(window, owner.plan(window, 2, false)), true)
+        state.action_reader_throws = true
+        H.equal(owner.release(window, "reader-unavailable"), true)
+        H.equal(window._menu_input_description.generic_actions, state.actions.default)
+        H.equal(window._cim1465_default_actions, nil)
+    end)
+
+    H.test("shared Apply rejects a table that omits the native Apply action", function()
+        local state, owner, window = fixture()
+        state.read_only_backend = true
+        state.actions.item_setting = state.actions.default
+        local ok, reason = owner.enforce(window, owner.plan(window, 2, false))
+        H.equal(ok, false)
+        H.equal(reason, "native-apply-action-missing")
+        H.equal(window._widgets_by_name.craft_button.content.visible, false)
+    end)
+
+    H.test("shared Apply releases old intent before a reentrant native selection callback", function()
+        local _, owner, window, native_pressed = fixture()
+        owner.on_pressed(native_pressed, window, 2, false, false)
+        H.equal(window._cim1465_apply_owned, true)
+        owner.on_pressed(function(self, ...)
+            H.equal(owner.refresh(self), false, "old intent remained active inside the new selection")
+            return native_pressed(self, ...)
+        end, window, 1, false, false)
+        H.equal(window._cim1465_apply_owned, false)
+    end)
+
+    H.test("shared Apply preserves completion intent across native disable and state writes", function()
+        local state, owner, window, native_pressed = fixture()
+        state.read_only_backend = true
+        owner.on_pressed(native_pressed, window, 2, false, false)
+        state.current_item.skin = "skin_b"
+        window:_enable_craft_button(false)
+        owner.on_state_update(function(view)
+            view._widgets_by_name.craft_button.content.visible = true
+        end, window, "apply_weapon_skin")
+        H.equal(window._cim563_pending_explicit_skin, "skin_b")
+        H.equal(window._widgets_by_name.craft_button.content.visible, false)
+        H.equal(window._has_all_crafting_requirements, false)
+        local pending, released = owner.complete(window, "native-complete")
+        H.equal(pending, "skin_b")
+        H.equal(released, true)
+    end)
+
+    H.test("shared Apply respects native force-disable without losing pending identity", function()
+        local state, owner, window, native_pressed = fixture()
+        owner.on_pressed(native_pressed, window, 2, false, false)
+        local a, b, c = owner.on_state_update(function() return "state", nil, "tail" end,
+            window, "apply_weapon_skin", "Apply", nil, true)
+        H.equal(a, "state"); H.equal(b, nil); H.equal(c, "tail")
+        H.equal(window._widgets_by_name.craft_button.content.visible, false)
+        H.equal(window._cim563_pending_explicit_skin, "skin_b")
+        H.equal(window._has_all_crafting_requirements, false)
+        H.equal(window._menu_input_description.generic_actions, state.actions.default)
+        owner.on_state_update(function() end, window, "apply_weapon_skin", "Apply", nil, false)
+        H.equal(window._widgets_by_name.craft_button.content.visible, true)
+        H.equal(window._has_all_crafting_requirements, true)
+    end)
+
+    H.test("shared Apply state handoff leaves the next native recipe and official realm untouched", function()
+        local state, owner, window, native_pressed = fixture()
+        owner.on_pressed(native_pressed, window, 2, false, false)
+        state.modded = false
+        local next_actions = {}
+        local a, b, c = owner.on_state_update(function(view)
+            H.equal(view._cim1465_apply_owned, false, "old ownership must release before native writes")
+            view._widgets_by_name.craft_button.content.visible = true
+            view._menu_input_description.generic_actions = next_actions
+            return "native", nil, "tail"
+        end, window, "reroll_properties")
+        H.equal(a, "native"); H.equal(b, nil); H.equal(c, "tail")
+        H.equal(window._widgets_by_name.craft_button.content.visible, true)
+        H.equal(window._menu_input_description.generic_actions, next_actions)
+        H.equal(window._cim563_pending_explicit_skin, nil)
+        H.equal(owner.runtime_check(), nil, "the component check must prove official release, not invent modded authority")
+    end)
+
+    H.test("CIM actual forge callback delegates Apply to the shared owner and preserves native returns", function()
+        local source = read(repo_root
+            .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/standard_forge.lua")
+        local helper_start = assert(source:find("local function _pack_results(...)", 1, true))
+        local helper_end = assert(source:find("\nend", helper_start, true)) + 3
+        local first = assert(source:find(
+            'mod:hook("HeroWindowItemCustomization", "_update_state_craft_button", function(', 1, true))
+        local last = assert(source:find("\nend)", first, true)) + 4
+        H.truthy(helper_start < first, "the real pack helper must be lexically available to the callback")
+        local install = assert(loadstring("return function(mod)\n"
+            .. source:sub(helper_start, helper_end) .. "\n" .. source:sub(first, last) .. "\nend"))()
+        local state, owner, window, native_pressed = fixture()
+        state.read_only_backend = true
+        owner.on_pressed(native_pressed, window, 2, false, false)
+        local callback
+        install({ _cim_standard_forge_active = true, _cim_illusion_apply_presentation_owner = owner,
+            hook = function(_, class, method, fn)
+                H.equal(class, "HeroWindowItemCustomization"); H.equal(method, "_update_state_craft_button")
+                callback = fn
+            end })
+        local a, b, c = callback(function(view)
+            view._widgets_by_name.craft_button.content.button_hotspot.disable_button = true
+            view._menu_input_description:change_generic_actions(state.actions.default)
+            return "state", nil, "tail"
+        end, window, "apply_weapon_skin", "Apply", nil, false)
+        H.equal(a, "state"); H.equal(b, nil); H.equal(c, "tail")
+        H.equal(window._widgets_by_name.craft_button.content.button_hotspot.disable_button, false)
+        H.equal(window._menu_input_description.generic_actions, state.actions.item_setting)
+    end)
+
+    H.test("CIM compatibility facade resolves exactly the bundled canonical owner", function()
+        local loader = assert(loadfile(dev_path))
+        local calls = 0
+        setfenv(loader, setmetatable({ get_mod = function(id)
+            H.equal(id, "cim_dev")
+            return { dofile = function(_, path)
+                calls = calls + 1
+                H.equal(path, "scripts/mods/crafting_in_modded_dev/_lib_local_illusion_apply")
+                return Presentation
+            end }
+        end }, { __index = _G }))
+        local facade = loader()
+        H.equal(facade.new, Presentation.new)
+        H.equal(facade.SCHEMA, Presentation.SCHEMA)
+        H.equal(Presentation.install, nil, "shared behavior must not bundle CIM-only hook registration")
+        H.equal(type(facade.install), "function")
+        H.equal(calls, 1)
+    end)
+
     local function chain(callbacks, vanilla)
         local current = vanilla
         for index = 1, #callbacks do
@@ -146,7 +347,7 @@ return function(H, repo_root)
                 dev_hooks[method] = callback
             end,
         }
-        Presentation.install(dev_mod, owner, function() end)
+        CimPresentation.install(dev_mod, owner, function() end)
 
         local cosmetics_hooks = {}
         local glow_refreshes = 0
@@ -164,6 +365,10 @@ return function(H, repo_root)
             echo = function() end,
         }
         local cosmetics_owner = CosmeticsSwap.install(cosmetics_mod, {
+            presentation = Presentation,
+            register_check = function() end,
+            is_modded_realm = function() return state.modded end,
+            get_generic_input_actions = function() return state.actions end,
             get_mod = function(name)
                 if name == "cim_dev" then return dev_mod end
             end,
@@ -492,7 +697,7 @@ return function(H, repo_root)
                     error("check-registration-boom")
                 end
             end
-            local ok = pcall(Presentation.install, mod, owner, register_check)
+            local ok = pcall(CimPresentation.install, mod, owner, register_check)
             H.equal(ok, false)
             H.equal(hook_calls, contract.hooks)
             H.equal(check_calls, contract.checks)
@@ -504,7 +709,7 @@ return function(H, repo_root)
         local missing_check = { hook = function()
             missing_hook_calls = missing_hook_calls + 1
         end }
-        H.equal(pcall(Presentation.install, missing_check, owner, nil), false)
+        H.equal(pcall(CimPresentation.install, missing_check, owner, nil), false)
         H.equal(missing_hook_calls, 0)
         H.equal(missing_check._cim_illusion_apply_presentation_owner, nil)
         H.equal(missing_check._cim_illusion_swap_provider, nil)
@@ -513,7 +718,7 @@ return function(H, repo_root)
         local incomplete_mod = { hook = function()
             incomplete_hook_calls = incomplete_hook_calls + 1
         end }
-        H.equal(pcall(Presentation.install, incomplete_mod, {
+        H.equal(pcall(CimPresentation.install, incomplete_mod, {
             on_enable = function() end,
             on_pressed = function() end,
             owns_illusion_swap = function() return true end,
@@ -521,13 +726,21 @@ return function(H, repo_root)
         H.equal(incomplete_hook_calls, 0)
         H.equal(incomplete_mod._cim_illusion_swap_provider, nil)
 
+        H.equal(pcall(CimPresentation.install, incomplete_mod, {
+            on_enable = owner.on_enable,
+            on_pressed = owner.on_pressed,
+            owns_illusion_swap = owner.owns_illusion_swap,
+            runtime_check = owner.runtime_check,
+        }, function() end), false, "a missing state-writer seam cannot publish a capability")
+        H.equal(incomplete_hook_calls, 0)
+
         local calls = {}
         local installed = {
             hook = function(_, class, method, callback)
                 calls[#calls + 1] = { class, method, callback }
             end,
         }
-        local provider = Presentation.install(installed, owner, function(name, callback)
+        local provider = CimPresentation.install(installed, owner, function(name, callback)
             calls[#calls + 1] = { name, callback }
         end)
         H.equal(#calls, 3)

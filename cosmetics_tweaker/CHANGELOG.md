@@ -1,5 +1,25 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.226-dev (2026-10-24) -- Complete local illusion Apply and shared native authority (#1690, #1693)
+
+- Local illusion Apply now owns the button, requirements and controller action
+  table after native read-only menu writers, without weakening backend safety.
+  Cosmetics and CIM Dev bundle one canonical presentation class instead of
+  maintaining divergent fixes. Existing capability negotiation still selects
+  one Apply owner, including both hook orders and public CIM compatibility.
+- Native disables preserve the pending skin until local completion; a recipe or
+  realm handoff releases ownership before native state is written. DLC denial,
+  invalid mirror rows, failed request allocation and overlapping requests fail
+  closed without a real backend request. Error receipts are bounded.
+- Shared realm V2 now honors native MODDED_REALM before all legacy or sibling
+  fallbacks. Explicit false/malformed values deny. The old EAC bracket remains
+  legacy-only; GameSettingsDevelopment.read_only_backend is never changed.
+- Installed-hook regression fixtures reproduce the old modern-menu failure;
+  actual controller writers, reentrancy, completion, pending state, official
+  isolation and failure paths are covered offline. Named component checks are
+  issue1690_local_illusion_apply_surface and issue1693_shared_native_realm_authority.
+  These checks do not establish an actual game launch or visual acceptance.
+
 ## 0.9.225-dev (2026-10-24) -- Native realm authority for unlocks and poses (#1691)
 
 - Game 6.12+ no longer writes the legacy EAC field used by Cosmetics' frame,

@@ -1,6 +1,7 @@
 return function(H, repo_root)
     local CosmeticsSwap = dofile(repo_root
         .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_modded_illusion_swap.lua")
+    local Presentation = dofile(repo_root .. "/tools/shared_lib/_lib_local_illusion_apply.lua")
 
     local function with_globals(body)
         local names = {
@@ -102,6 +103,13 @@ return function(H, repo_root)
                 echo = function() end,
             }
             CosmeticsSwap.install(cosmetics, {
+                presentation = Presentation,
+                register_check = function() end,
+                is_modded_realm = function() return modded end,
+                get_generic_input_actions = function() return {
+                    default = {}, item_setting = { { input_action = "refresh",
+                        description_text = "crafting_recipe_apply_weapon_skin" } },
+                } end,
                 get_mod = get_mod,
                 with_eac_off = function(func, self, ...)
                     return func(self, ...)

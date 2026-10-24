@@ -6,6 +6,20 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-10-24.
 
+## Shared modern illusion Apply (#1690, #1693)
+
+- Offline: actual standard-forge state callback delegates to the canonical
+  owner with native return/nil-hole preservation. Both Cosmetics/CIM hook orders
+  retain one owner. Native disable must clear controller eligibility without
+  discarding the skin before completion; recipe/realm handoff yields.
+- Pending solo live acceptance: CIM Dev 0.8.142-dev, a weapon gear menu, select
+  a different owned illusion, Apply using mouse and controller, reopen/restart
+  and confirm persistence. Repeat with Cosmetics 0.9.226-dev enabled; no double
+  application. Current/invalid/DLC-denied choices must not leave Apply active.
+- /cim_regression_test includes issue1465_illusion_apply_presentation and
+  issue1693_shared_native_realm_authority. Component checks are not a game
+  launch or interactive-menu acceptance. Stable CIM is unchanged.
+
 ### issue1696-ranalds-catalog-game-keys - Community Builds name live game rows
 
 | Field | Value |

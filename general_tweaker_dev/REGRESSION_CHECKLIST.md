@@ -4,7 +4,17 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-08-13.
+Last updated: 2026-10-24.
+
+## Native realm precedence (#1693)
+
+- Offline shared tests must prove modern native true works without the old EAC
+  field; false/malformed must deny despite permissive legacy/sibling state.
+  An absent native value retains old-game compatibility.
+- Pending solo live acceptance: General Dev 0.2.276-dev in the modded Keep,
+  /gt_regression_test reports issue1693_shared_native_realm_authority passing.
+  Check an ordinary level-control action still behaves normally. The component
+  check does not establish a game launch, nor repair unrelated progression UIs.
 
 ## Developer heal command (#1143)
 

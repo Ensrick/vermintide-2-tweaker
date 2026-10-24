@@ -16,10 +16,16 @@ return function(H, repo_root)
             local globals = { MODDED_REALM = native,
                 script_data = { ["eac-untrusted"] = true },
                 GameSettingsDevelopment = { read_only_backend = true } }
+            local calls = 0
             local adapter = Factory.new(globals, {
-                is_modded = function() error("native realm must not call legacy authority") end,
+                VERSION = 2,
+                is_modded = function(...)
+                    calls = calls + 1
+                    return Legacy.is_modded(...)
+                end,
             })
             H.equal(adapter.is_modded(), native == true)
+            H.equal(calls, 1, "production must use the canonical authority, not a duplicate algorithm")
             H.equal(globals.MODDED_REALM, native)
             H.equal(globals.script_data["eac-untrusted"], true)
             H.equal(globals.GameSettingsDevelopment.read_only_backend, true)
@@ -38,10 +44,12 @@ return function(H, repo_root)
     H.test("Cosmetics #1691 named check exercises the installed adapter and reports old-game SKIP", function()
         local globals = { MODDED_REALM = true }
         local adapter = Factory.new(globals, Legacy)
-        local check
+        local checks = {}
         adapter.install_checks(function(name, fn)
-            H.equal(name, "issue1691_native_realm_authority"); check = fn
+            checks[name] = fn
         end)
+        local check = assert(checks.issue1691_native_realm_authority)
+        H.equal(checks.issue1693_shared_native_realm_authority(), nil)
         H.equal(check(), nil)
         adapter.is_modded = function() return false end
         H.truthy(check():find("disagrees", 1, true))
@@ -64,9 +72,19 @@ return function(H, repo_root)
         commands.cos_regression_test()
         local output = table.concat(lines, "\n")
         H.truthy(output:find("SKIP: issue1691_native_realm_authority", 1, true))
-        H.truthy(output:find("1 passed, 0 failed", 1, true))
+        H.truthy(output:find("2 passed, 0 failed", 1, true))
         H.truthy(output:find("1 skipped", 1, true))
         H.equal(output:find("PASS: issue1691_native_realm_authority", 1, true), nil)
+    end)
+
+    H.test("Cosmetics canonical adapter denies an obsolete bundled authority", function()
+        local adapter = Factory.new({ MODDED_REALM = true }, {
+            VERSION = 1, is_modded = function() return true end,
+        })
+        H.equal(adapter.is_modded(), false)
+        local checks = {}
+        adapter.install_checks(function(name, fn) checks[name] = fn end)
+        H.truthy(checks.issue1693_shared_native_realm_authority():find("missing", 1, true))
     end)
 
     local function unlock_fixture(native, legacy_flag, frames_on)

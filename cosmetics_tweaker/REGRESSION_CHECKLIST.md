@@ -6,6 +6,24 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-10-24.
 
+## Modern local Apply and shared realm (#1690, #1693)
+
+- Offline: installed native-shaped callbacks, not only planner stubs, must retain
+  controller Apply actions after readonly native writers, preserve pending skin
+  through native disable/completion, and yield before a new recipe/realm writer.
+  Missing/throwing readers, dropped writes, DLC denial and overlapping requests
+  must fail closed without a real backend request.
+- Pending live acceptance (solo): with Cosmetics 0.9.226-dev in the modded Keep,
+  choose a different owned illusion through a weapon's gear menu. Apply must
+  work with mouse and controller, save once and remain after reopening/restart.
+  Re-selecting the current illusion must not leave Apply actionable.
+- Repeat with CIM Dev 0.8.142-dev, then with Cosmetics alone. An unowned-DLC
+  illusion remains locked. The ordinary upgrade/reroll recipes are not owned
+  by the Cosmetics Apply adapter.
+- Run /cos_regression_test: issue1690_local_illusion_apply_surface and
+  issue1693_shared_native_realm_authority must pass. These are component
+  checks and do not replace the actual menu and persistence steps above.
+
 ## Native realm unlock and pose gates (#1691)
 
 - Candidate 0.9.225-dev: in the modded Keep, run `/cos_regression_test`;
