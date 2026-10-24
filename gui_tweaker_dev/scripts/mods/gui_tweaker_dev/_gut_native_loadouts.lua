@@ -37,9 +37,10 @@
 --   `PlayFabMirrorAdventure` (NOT `PlayFabMirrorBase`): class.lua copies parent methods into
 --   the child at definition time (class.lua:51-57), so a base-class hook would silently miss
 --   the live instance (dedicated servers use `PlayFabMirrorDedicated`; the user is P2P-only,
---   so dedicated is out of scope). Realm signal is `script_data["eac-untrusted"]`
---   (application_parameter.lua:150; named `in_modded_realm` at mod_manager.lua:22; VMF's own
---   dev_console gate uses it). Failsafe: if the realm can't be determined we go fully inert.
+--   so dedicated is out of scope). The boot guard owns realm authority:
+--   native MODDED_REALM first, with backend/legacy fallback before game 6.12.
+--   (application_parameter.lua:150-152, source 93dea911). Failsafe: if the realm
+--   can't be determined we go fully inert.
 --
 -- Cross-mod: cim hooks `BackendUtils.set_loadout_item` + `BackendInterfaceItemPlayfab.set_loadout_item`
 -- (equip capture) and cosmetics_tweaker hooks `BackendUtils.set_loadout_item` + the items
@@ -1664,6 +1665,9 @@ for _, target in ipairs(BootGuard.HOOK_TARGETS or {}) do
 end
 
 M.rt_checks = {
+    { name = "issue1688_modded_realm_authority", fn = function()
+        return BootGuard.check_realm_authority()
+    end },
     { name = "issue954_bot_loadout_snapshot", fn = function()
         local err = BotLoadoutSnapshot.contract_check(Policy, LOADOUT_SLOT_NAMES)
         if err or _adventure_mode() ~= MODE_STORE then return err end

@@ -1,5 +1,23 @@
 # Regression Checklist — gui_tweaker_dev
 
+## Native realm and UTF8 compatibility (#1688, #1695, 0.2.363-dev)
+
+- In the modded Keep, `/gut_regression_test` passes
+  `issue1688_modded_realm_authority`; the load marker reports the modded realm.
+  With "Use non-modded loadouts" OFF, equip a different saved modded loadout;
+  returning to the official realm must retain the original official loadout.
+  Do not use the official scrub apply command in modded.
+- On game 6.12+, `issue1695_scoreboard_native_utf8` passes. Hold Tab with the
+  native live scoreboard enabled; long non-ASCII player names truncate at
+  whole characters without the deprecated `UTF8Utils.string_length` warning.
+  Older game versions report the named modern-reader check as SKIP.
+- Offline: `test_gut_official_loadout_boot_policy.lua` covers modern startup
+  with no backend/legacy flag, conflicting official values, and old-game
+  fallback. `test_gut_scoreboard_live_adapter.lua` exercises the installed Tab
+  draw with a throwing deprecated shim and the pre-6.12 fallback.
+- These are candidate steps, not a current deployed test card. Stable requires
+  a separately authorized promotion and its own exact-version verification.
+
 ## Tab talent module check reports the real verdict (#250, 0.2.360-dev)
 
 - Keep, solo: run `/gut_regression_test`;
