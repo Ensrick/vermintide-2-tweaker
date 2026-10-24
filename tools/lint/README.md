@@ -156,7 +156,7 @@ takes more than a second per file.
 
 **The wired pre-commit gate is `tools/mod-lint/lint-mod.ps1`, not this script.**
 `tools/install-hooks.ps1` installs the pre-commit hook that runs
-`qa/run_all.ps1 -Quick -SkipLua` and `tools/mod-lint/lint-mod.ps1` against staged
+`qa/run_all.ps1 -Quick -SkipLua -Staged` and `tools/mod-lint/lint-mod.ps1` against staged
 files (blocks on errors only). This `regression-lint.ps1` is an exploratory
 scanner and is **not** part of that hook.
 
