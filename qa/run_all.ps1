@@ -6,11 +6,14 @@
 #   .\qa\run_all.ps1 -SkipLua     # skip luacheck (e.g. if not installed locally)
 #   .\qa\run_all.ps1 -Quick       # cheap static checks + Lua units (fast)
 #   .\qa\run_all.ps1 -FixStale    # auto-banner stale docs
+#   .\qa\run_all.ps1 -Quick -SkipLua -Staged   # pre-commit: change-set-scoped
+#                                 # checks read only the index (issue #1683)
 
 [CmdletBinding()]
 param(
     [switch]$SkipLua,
     [switch]$Quick,
+    [switch]$Staged,
     [switch]$FixStale,
     [switch]$SkipBundleAtomicity,
     [switch]$SkipBuildReceipts,
@@ -226,9 +229,14 @@ Run-Check "check_diff_whitespace"             { & (Join-Path $here "check_diff_w
 # reproducible under the same repository-owned manifest grammar.
 Run-Check "check_content_manifest"            { & (Join-Path $here "check_content_manifest.ps1")            -SelfTest -Quiet:$Quiet }
 # Weapon-history source freshness is opportunistic in ordinary QA: unreachable
-# network is a visible skip, while any reachable ref/tip mismatch blocks. The
-# canonical WT BuildOnly/release path separately requires remote availability.
-Run-Check "check_wt_history_source_freshness" { & (Join-Path $here "check_wt_history_source_freshness.ps1") -Quiet:$Quiet }
+# network is a visible skip. A reachable ref/tip mismatch blocks only when the
+# checked change set (-Staged: the index; otherwise index + working tree + the
+# hosted PR/push range or the origin/master...HEAD branch range, plus untracked
+# files off GitHub Actions) touches weapon-history inputs or a WT stream; any other
+# change set gets a visible advisory (exit 1), so a game patch no longer freezes
+# every mod (issue #1683). The canonical WT BuildOnly/release path separately
+# requires exact remote freshness (ship.ps1 -RequireRemoteFresh).
+Run-Check "check_wt_history_source_freshness" { & (Join-Path $here "check_wt_history_source_freshness.ps1") -Staged:$Staged -Quiet:$Quiet }
 # Issue #1278: every newly generated canonical root carries a deterministic
 # receipt binding it to the exact dirty source snapshot that will be committed.
 # BuildOnly skips the stale pre-build receipt, then writes and validates the new
