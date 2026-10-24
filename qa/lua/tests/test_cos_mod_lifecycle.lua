@@ -26,12 +26,13 @@ return function(H, repo_root)
     H.test("Cosmetics entry delegates its lifecycle owner exactly once", function()
         H.equal(occurrences(entry, "_cos_mod_lifecycle"), 1)
         H.truthy(entry:find(
-            'mod:dofile("scripts/mods/cosmetics_tweaker/_cos_mod_lifecycle").install',
+            'local LIFECYCLE = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_mod_lifecycle")',
             1, true))
+        H.equal(occurrences(entry, "LIFECYCLE.install(mod, {"), 1)
         H.equal(entry:find("mod.on_game_state_changed = function", 1, true), nil)
         H.equal(entry:find("mod.on_disabled = function", 1, true), nil)
         H.equal(entry:find("mod.on_unload = function", 1, true), nil)
-        H.truthy(entry:find("_cos_mod_lifecycle", 1, true)
+        H.truthy(entry:find("LIFECYCLE.install(mod, {", 1, true)
             < entry:find("_cos_settings_runtime", 1, true))
     end)
 

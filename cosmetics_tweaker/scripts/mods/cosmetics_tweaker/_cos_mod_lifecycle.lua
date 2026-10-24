@@ -3,6 +3,14 @@
 
 local M = {}
 
+-- #609: the native safe accessor returns nil outside a live network game
+-- (player_manager.lua:580-596). Shared by all Cosmetics lifecycle consumers.
+function M.local_player_safe(player_manager)
+    local pm = player_manager or (Managers and Managers.player)
+    if not (pm and type(pm.local_player_safe) == "function") then return nil end
+    return pm:local_player_safe()
+end
+
 function M.install(mod, deps)
     if mod._cos_mod_lifecycle_owner then
         return mod._cos_mod_lifecycle_owner

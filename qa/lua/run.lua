@@ -447,6 +447,7 @@ local suites = {
     "test_cos_la_loadout_safety",
     "test_cos_glow_transport",
     "test_cos_weapon_pose_policy",
+    "test_cos_realm_authority_1691",
     "test_cos_deus_yield_policy",
     "test_gt_disconnect_grace",
     "test_gt_disconnect_failure_diag",

@@ -199,6 +199,11 @@ return function(H, repo_root)
         H.truthy(forge:find("_is_modded_realm()", 1, true) ~= nil)
         H.truthy(forge:find("_with_eac_off(func", 1, true) ~= nil)
         H.equal(cosmetics:find("_lib_modded_realm_authority", 1, true), nil)
+        local cosmetics_realm = read(
+            "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_realm_authority.lua")
+        H.truthy(cosmetics_realm:find("_lib_modded_realm_authority", 1, true) ~= nil)
+        H.truthy(cosmetics:find("with_eac_off = mod._cos_realm_authority.with_eac_off", 1, true) ~= nil,
+            "the current-engine adapter must share its already-loaded legacy bracket")
         H.truthy(cosmetics_swap:find("_lib_modded_realm_authority", 1, true) ~= nil)
         H.truthy(cosmetics_swap:find(
             "return authority.with_eac_off", 1, true) ~= nil)
