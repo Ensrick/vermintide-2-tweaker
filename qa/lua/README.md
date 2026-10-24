@@ -14,15 +14,19 @@ pwsh -NoProfile -File qa/check_lua_unit_tests.ps1 -SelfTest
 
 The PowerShell gate independently discovers every top-level `tests/test_*.lua`
 file and writes a small, temporary inventory outside the repository. The Lua
-runner requires each discovered module to have actually loaded its registration
-function, either from its explicit list or through a listed suite's transitive
-`require`. Comments and strings naming a test file do not count. Unreached
+runner requires each discovered module to complete its registration function,
+either directly or through a listed suite's transitive `require` and call.
+Importing a function without calling it is not coverage. The runner temporarily
+tracks registration calls, then restores the exact raw `require` field on
+success or error before running cases. Comments naming a file do not count. Unreached
 files, malformed inventories and duplicate explicit registrations fail before
 test execution. Run the PowerShell entry point rather than invoking `run.lua`
 without its inventory.
 
 `-SelfTest` proves both the original harness pass/planted-failure paths and the
-actual directory-discovery/runner rejection of an unlisted fixture. It does not
+actual directory-discovery/runner rejection of both an unlisted fixture and an
+import-only fixture. It also proves exact raw-field/metatable restoration after
+an injected registration error. It does not
 replace a normal full-suite run. Every invocation removes its owned temporary
 inventory in `finally`; it does not copy the repository or change source files.
 
@@ -54,8 +58,9 @@ there is no copied implementation.
 
 - `run.lua`: explicit suite manifest and process entry point.
 - `harness.lua`: dependency-free assertions and reporting.
-- `suite_manifest.lua` and `tests/test_suite_manifest.lua`: actual import
-  completeness, inventory validation, transitive imports and duplicate roots.
+- `suite_manifest.lua` and `tests/test_suite_manifest.lua`: completed registration
+  coverage, inventory validation, nested calls, thrown/unused registrations,
+  exact return holes and duplicate roots.
 - `tests/test_crt_career_unlock.lua`: level-gate-only career unlock boundaries.
 - `tests/test_ct_tab_collectibles_layout.lua`: native collectible row offsets.
 - `tests/test_gt_regression_module.lua`: the original 88-registration extraction

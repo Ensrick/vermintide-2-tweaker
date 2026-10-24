@@ -49,6 +49,20 @@ function M.check_realm_authority()
     end
 end
 
+-- The boot boundary owns these checks; the native store only appends them to
+-- its public list. Context injection preserves its installed-marker witness.
+function M.regression_checks(native, marker, realm_query)
+    return {
+        { name = "issue1688_modded_realm_authority", fn = M.check_realm_authority },
+        { name = "native_loadouts_installed", fn = function()
+            if native.MARKER ~= marker then return "marker mismatch" end
+            if type(realm_query) ~= "function" then return "realm detector missing" end
+            local ok = pcall(realm_query)
+            if not ok then return "_in_modded_realm raised" end
+        end },
+    }
+end
+
 function M.active(mirror)
     return Policy.guard_active(M.in_modded_realm(),
         mirror and mirror._characters_data_key, ADVENTURE_DATA_KEY)

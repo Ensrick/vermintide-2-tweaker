@@ -17,22 +17,64 @@ return function(H, repo_root)
         H.equal(policy.parse(false), nil)
     end)
 
-    H.test("suite manifest accepts actual direct and transitive imports", function()
-        local register = function() end
+    H.test("suite manifest accepts completed direct and transitive registration evidence", function()
         H.equal(policy.audit({ "test_direct", "test_child" }, {
-            test_direct = register, test_child = register,
+            test_direct = true, test_child = true,
         }), nil)
     end)
 
-    H.test("suite manifest fails on an unlisted file or fake cache sentinel", function()
-        local register = function() end
-        local reason = policy.audit({ "test_direct", "test_unlisted" }, { test_direct = register })
+    H.test("suite manifest rejects importing a suite without executing its registration", function()
+        H.truthy(policy.audit({ "test_import_only" }, {
+            test_import_only = function() end,
+        }), "a loaded registration function is not an executed suite")
+    end)
+
+    H.test("suite manifest fails on missing or non-completion evidence", function()
+        local reason = policy.audit({ "test_direct", "test_unlisted" }, { test_direct = true })
         H.equal(reason, "unreached test suites: test_unlisted")
-        for _, value in ipairs({ true, false, "test_unlisted", {} }) do
+        for _, value in ipairs({ false, "test_unlisted", {}, function() end }) do
             H.equal(policy.audit({ "test_unlisted" }, { test_unlisted = value }), reason)
         end
         H.equal(policy.audit({}, {}), "suite inventory required")
-        H.equal(policy.audit({ "test_direct" }, false), "module-load inventory required")
+        H.equal(policy.audit({ "test_direct" }, false), "completed-registration inventory required")
+    end)
+
+    H.test("suite tracker observes completed nested calls and preserves nil return holes", function()
+        local tracked, completed
+        local calls = 0
+        local modules = {
+            test_child = function() calls = calls + 1 end,
+            test_parent = function(value)
+                tracked("test_child")(value)
+                return "head", nil, "tail"
+            end,
+            production_helper = function() end,
+        }
+        tracked, completed = policy.track(function(name) return modules[name] end)
+        local parent = tracked("test_parent")
+        H.equal(tracked("test_parent"), parent)
+        H.equal(completed.test_parent, nil)
+        H.truthy(policy.audit({ "test_parent", "test_child" }, completed))
+        local a, b, c = parent("fixture")
+        H.equal(a, "head"); H.equal(b, nil); H.equal(c, "tail")
+        H.equal(calls, 1)
+        H.equal(policy.audit({ "test_parent", "test_child" }, completed), nil)
+        H.equal(tracked("production_helper"), modules.production_helper)
+        H.equal(completed.production_helper, nil)
+    end)
+
+    H.test("suite tracker never accepts a thrown registration hidden by its parent", function()
+        local tracked, completed
+        local modules = {
+            test_child = function() error("registration failed") end,
+            test_parent = function() pcall(tracked("test_child")) end,
+        }
+        tracked, completed = policy.track(function(name) return modules[name] end)
+        tracked("test_parent")()
+        H.equal(completed.test_parent, true)
+        H.equal(completed.test_child, nil)
+        H.equal(policy.audit({ "test_parent", "test_child" }, completed),
+            "unreached test suites: test_child")
     end)
 
     H.test("suite manifest rejects duplicate explicit registrations after merges", function()

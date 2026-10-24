@@ -122,6 +122,9 @@ Only when the modern flag is absent does the owner fall back to backend realm
 metadata and then pre-6.12 `script_data["eac-untrusted"]`. All native-store,
 readonly and scrub gates consume `_gut_official_loadout_boot_guard` rather
 than interpreting a second realm signal. No backend read-only flag is changed.
+The boot owner also exports the realm check and existing installed-marker/query
+witness; the native store appends those checks without owning another copy.
+This keeps the store below its frozen size baseline while preserving both names.
 
 The native scoreboard's UTF8 reader (#1695) follows the 6.12 API move to
 `Utf8.length` (`scripts/utils/utf8_utils.lua:7`); `UTF8Utils.sub_string` remains

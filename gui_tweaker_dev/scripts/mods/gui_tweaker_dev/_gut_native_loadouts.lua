@@ -1665,9 +1665,6 @@ for _, target in ipairs(BootGuard.HOOK_TARGETS or {}) do
 end
 
 M.rt_checks = {
-    { name = "issue1688_modded_realm_authority", fn = function()
-        return BootGuard.check_realm_authority()
-    end },
     { name = "issue954_bot_loadout_snapshot", fn = function()
         local err = BotLoadoutSnapshot.contract_check(Policy, LOADOUT_SLOT_NAMES)
         if err or _adventure_mode() ~= MODE_STORE then return err end
@@ -1683,12 +1680,6 @@ M.rt_checks = {
         if type(WTTraceCore) ~= "table" or type(WTTraceCore.take) ~= "function" then
             return "bounded WT trace core missing"
         end
-    end },
-    { name = "native_loadouts_installed", fn = function()
-        if M.MARKER ~= MARKER then return "marker mismatch" end
-        if type(_in_modded_realm) ~= "function" then return "realm detector missing" end
-        local ok = pcall(_in_modded_realm)
-        if not ok then return "_in_modded_realm raised" end
     end },
     { name = "native_loadouts_failsafe_inert", fn = function()
         -- Tri-mode gate: OFF in official always; STORE is the modded default (implicit
@@ -2128,6 +2119,10 @@ M.rt_checks = {
         end
     end },
 }
+
+for _, check in ipairs(BootGuard.regression_checks(M, MARKER, _in_modded_realm)) do
+    M.rt_checks[#M.rt_checks + 1] = check
+end
 
 printf("[gut_dev:NATIVE_LOADOUTS] module loaded (%s) modded_realm=%s hooks=%d",
     MARKER, tostring(_in_modded_realm()), #M.HOOK_TARGETS)

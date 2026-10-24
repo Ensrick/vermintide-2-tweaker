@@ -557,20 +557,31 @@ if explicit_error then
     os.exit(2)
 end
 
-for _, suite in ipairs(suites) do
-    local register = require(suite)
-    if type(register) ~= "function" then
-        error(suite .. " must return a registration function")
+local previous_raw_require = rawget(_G, "require")
+local tracked_require, completed_suites = SuiteManifest.track(require)
+rawset(_G, "require", tracked_require)
+local registered, registration_error = pcall(function()
+    for _, suite in ipairs(suites) do
+        local register = require(suite)
+        if type(register) ~= "function" then
+            error(suite .. " must return a registration function")
+        end
+        register(Harness, repo_root)
     end
-    register(Harness, repo_root)
+end)
+rawset(_G, "require", previous_raw_require)
+if not registered then
+    io.stderr:write("[lua_suite_manifest] ERROR -- suite registration failed: ",
+        tostring(registration_error), "\n")
+    os.exit(2)
 end
 
-local coverage_error = SuiteManifest.audit(expected_suites, package.loaded)
+local coverage_error = SuiteManifest.audit(expected_suites, completed_suites)
 if coverage_error then
     io.stderr:write("[lua_suite_manifest] ERROR -- ", coverage_error, "\n")
     os.exit(2)
 end
-io.write(string.format("[lua_suite_manifest] OK -- %d discovered suites reached.\n", #expected_suites))
+io.write(string.format("[lua_suite_manifest] OK -- %d discovered suites registered.\n", #expected_suites))
 
 local passed, total, failed = Harness.run()
 if passed then

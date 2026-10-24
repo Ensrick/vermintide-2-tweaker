@@ -1,6 +1,6 @@
 -- #1700: compare the host-discovered suite inventory with modules actually
--- required while registering the explicit runner. Strings/comments naming a
--- file are not coverage, and a transitive require is valid coverage. Pure Lua
+-- completed while registering the explicit runner. Importing a registration
+-- function is not coverage until it returns successfully. Pure Lua
 -- policy; PowerShell owns directory discovery and the temporary manifest.
 local M = {}
 local MAX_BYTES, MAX_SUITES = 1048576, 4096
@@ -33,14 +33,34 @@ function M.read(path)
     return M.parse(source)
 end
 
-function M.audit(names, loaded)
+function M.track(require_function)
+    assert(type(require_function) == "function", "require function required")
+    local completed, wrappers = {}, {}
+    local function tracked_require(name)
+        local registration = require_function(name)
+        if type(name) ~= "string" or not name:match("^test_[a-z0-9_]+$")
+                or type(registration) ~= "function" then return registration end
+        local cached = wrappers[name]
+        if cached and cached.registration == registration then return cached.wrapper end
+        local function complete(...)
+            completed[name] = true
+            return ...
+        end
+        local function invoke(...)
+            return complete(registration(...))
+        end
+        wrappers[name] = { registration = registration, wrapper = invoke }
+        return invoke
+    end
+    return tracked_require, completed
+end
+
+function M.audit(names, completed)
     if type(names) ~= "table" or #names == 0 then return "suite inventory required" end
-    if type(loaded) ~= "table" then return "module-load inventory required" end
+    if type(completed) ~= "table" then return "completed-registration inventory required" end
     local missing = {}
     for _, name in ipairs(names) do
-        -- Each test module returns its registration function; a truthy cache
-        -- sentinel alone does not establish that a test suite was loaded.
-        if type(rawget(loaded, name)) ~= "function" then missing[#missing + 1] = name end
+        if rawget(completed, name) ~= true then missing[#missing + 1] = name end
     end
     if #missing > 0 then return "unreached test suites: " .. table.concat(missing, ", ") end
     return nil

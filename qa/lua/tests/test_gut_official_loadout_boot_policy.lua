@@ -71,6 +71,26 @@ return function(H, repo_root)
         end, { modded_realm = false })
     end)
 
+    H.test("issue 1688 boot owner exports both executable checks without weakening install evidence", function()
+        with_guard(nil, nil, function(guard)
+            local native = { MARKER = "expected" }
+            local calls = 0
+            local checks = guard.regression_checks(native, "expected", function()
+                calls = calls + 1
+                return guard.in_modded_realm()
+            end)
+            H.equal(#checks, 2)
+            H.equal(checks[1].name, "issue1688_modded_realm_authority")
+            H.equal(checks[1].fn, guard.check_realm_authority)
+            H.equal(checks[1].fn(), nil)
+            H.equal(checks[2].name, "native_loadouts_installed")
+            H.equal(checks[2].fn(), nil)
+            H.equal(calls, 1)
+            native.MARKER = "drift"
+            H.equal(checks[2].fn(), "marker mismatch")
+        end, { modded_realm = true, no_backend = true })
+    end)
+
     H.test("issue 402 boot guard is modded Adventure only", function()
         H.equal(Policy.guard_active(true, "characters_data", "characters_data"), true)
         H.equal(Policy.guard_active(false, "characters_data", "characters_data"), false)

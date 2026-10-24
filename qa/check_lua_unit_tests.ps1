@@ -102,6 +102,92 @@ try {
             throw "real runner did not reject the discovered unlisted suite (exit $negativeCode)"
         }
         Write-Host '[lua_suite_manifest] SELF-TEST OK -- actual discovery and runner reject an unlisted suite.'
+
+        # Importing the discovered registration function without calling it
+        # must not count as coverage. Exercise the unmodified real runner;
+        # this probe adds only an unused transitive require in one suite.
+        $importOnlyProbe = Join-Path $inventoryRoot 'import-only-probe.lua'
+        $probeSource = @'
+local runner, inventory, sentinel = arg[1], arg[2], arg[3]
+local native_require = require
+package.preload[sentinel] = function() return function() end end
+local injected = false
+_G.require = function(name)
+    local registration = native_require(name)
+    if not injected and type(name) == "string" and name:match("^test_")
+            and type(registration) == "function" then
+        injected = true
+        return function(...)
+            require(sentinel)
+            return registration(...)
+        end
+    end
+    return registration
+end
+arg[0], arg[1], arg[2], arg[3] = runner, "--suite-manifest", inventory, nil
+dofile(runner)
+'@
+        [IO.File]::WriteAllText($importOnlyProbe, $probeSource, (New-Object Text.UTF8Encoding($false)))
+        $previousPreference = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'
+            $output = @(& $luaExe $importOnlyProbe $runner $inventoryPath $sentinel 2>&1)
+            $negativeCode = $LASTEXITCODE
+        }
+        finally { $ErrorActionPreference = $previousPreference }
+        if ($negativeCode -ne 2 -or -not ($output | Where-Object { "$_".Contains($needle) })) {
+            throw "real runner did not reject the import-only suite at its coverage boundary (exit $negativeCode)"
+        }
+        Write-Host '[lua_suite_manifest] SELF-TEST OK -- the real runner rejects an import-only suite.'
+
+        # A registration error must restore an inherited require by exact raw
+        # shape, not create a persistent raw field or replace its metatable.
+        $restoreProbe = Join-Path $inventoryRoot 'restore-require-probe.lua'
+        $probeSource = @'
+local runner, inventory = arg[1], arg[2]
+local native_require, native_exit = require, os.exit
+local previous_meta = getmetatable(_G)
+local injected = false
+local function inherited_require(name)
+    local registration = native_require(name)
+    if not injected and type(name) == "string" and name:match("^test_")
+            and type(registration) == "function" then
+        injected = true
+        return function() error("planted suite registration error") end
+    end
+    return registration
+end
+local probe_meta = { __index = function(_, name)
+    if name == "require" then return inherited_require end
+end }
+rawset(_G, "require", nil)
+setmetatable(_G, probe_meta)
+os.exit = function(code)
+    local restored = rawget(_G, "require") == nil and getmetatable(_G) == probe_meta
+    io.write(restored and "[lua_suite_manifest] REQUIRE RAW SHAPE RESTORED\n"
+        or "[lua_suite_manifest] REQUIRE RAW SHAPE LOST\n")
+    os.exit = native_exit
+    setmetatable(_G, previous_meta)
+    rawset(_G, "require", native_require)
+    native_exit(restored and code or 3)
+end
+arg[0], arg[1], arg[2] = runner, "--suite-manifest", inventory
+dofile(runner)
+'@
+        [IO.File]::WriteAllText($restoreProbe, $probeSource, (New-Object Text.UTF8Encoding($false)))
+        $previousPreference = $ErrorActionPreference
+        try {
+            $ErrorActionPreference = 'Continue'
+            $output = @(& $luaExe $restoreProbe $runner $inventoryPath 2>&1)
+            $negativeCode = $LASTEXITCODE
+        }
+        finally { $ErrorActionPreference = $previousPreference }
+        if ($negativeCode -ne 2 -or
+            -not ($output | Where-Object { "$_".Contains('[lua_suite_manifest] REQUIRE RAW SHAPE RESTORED') }) -or
+            -not ($output | Where-Object { "$_".Contains('planted suite registration error') })) {
+            throw "real runner did not restore inherited require after registration failure (exit $negativeCode)"
+        }
+        Write-Host '[lua_suite_manifest] SELF-TEST OK -- registration errors restore exact require raw shape.'
     }
     $exitCode = 0
 }

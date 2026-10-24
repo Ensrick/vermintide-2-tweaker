@@ -18,6 +18,9 @@
   `issue1695_scoreboard_native_utf8`. The UTF8 check explicitly skips older
   games without the modern reader. Stable promotion remains separate; this
   dev change does not establish that the public stable bugs are fixed.
+- Both boot-boundary checks are owned by the boot guard and appended to the
+  store's exported list. The existing marker/query witness is retained while
+  the frozen native-store module shrinks rather than raising its size baseline.
 
 ## 0.2.362-dev (2026-10-17) -- DX12 fence probe budget is per session (#630) [diagnostics-armed]
 
