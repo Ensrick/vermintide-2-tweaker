@@ -64,6 +64,13 @@
             )
         }
         @{
+            Source = "_lib_local_illusion_apply.lua"
+            Consumers = @(
+                "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_lib_local_illusion_apply.lua"
+                "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_lib_local_illusion_apply.lua"
+            )
+        }
+        @{
             Source = "_lib_weapon_appearance.lua"
             Consumers = @(
                 "character_weapon_variants/scripts/mods/character_weapon_variants/_lib_weapon_appearance.lua"

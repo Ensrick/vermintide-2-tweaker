@@ -104,7 +104,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- ([174:loadout] retired with #174/#500; _diag_probe renamed per §2.2b/#499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.225-dev"
+local MOD_VERSION = "0.9.226-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -534,7 +534,7 @@ local _refresh_illusion_glow_badges =
 local MODDED_ILLUSION_SWAP = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_modded_illusion_swap")
 mod._cos_modded_illusion_swap_owner = MODDED_ILLUSION_SWAP.install(mod, {
     get_mod = get_mod,
-    with_eac_off = mod._cos_realm_authority.with_eac_off,
+    realm_authority = mod._cos_realm_authority,
     skin_requires_unowned_dlc = _skin_requires_unowned_dlc,
     custom_skin_keys = _custom_skin_keys,
     glow_picker = GlowPicker,

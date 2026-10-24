@@ -16,10 +16,9 @@ function M.new(globals, legacy)
     local adapter = {}
 
     function adapter.is_modded()
-        local native = rawget(globals, "MODDED_REALM")
-        if native ~= nil then return native == true end
+        if legacy.VERSION ~= 2 then return false end
         return legacy.is_modded(rawget(globals, "script_data"), 0,
-            rawget(globals, "Development")) == true
+            rawget(globals, "Development"), globals) == true
     end
 
     -- Compatibility bracket only. Modern UI presentation must be restored at
@@ -31,6 +30,7 @@ function M.new(globals, legacy)
 
     function adapter.install_checks(register)
         register("issue1691_native_realm_authority", function()
+            if legacy.VERSION ~= 2 then return "V2 shared realm authority missing" end
             local native = rawget(globals, "MODDED_REALM")
             if native == nil then return "skip: native MODDED_REALM unavailable on this game version" end
             if adapter.is_modded() ~= (native == true) then
@@ -40,6 +40,12 @@ function M.new(globals, legacy)
             return rawget(globals, "MODDED_REALM") ~= nil,
                 "native MODDED_REALM unavailable on this game version"
         end })
+        register("issue1693_shared_native_realm_authority", function()
+            if legacy.VERSION ~= 2 or type(legacy.runtime_check) ~= "function" then
+                return "V2 shared realm authority missing"
+            end
+            return legacy.runtime_check()
+        end)
     end
 
     return adapter

@@ -22,10 +22,6 @@ and reverts everything. This matches how the Athanor handles property/trait edit
 ]]
 
 local mod = get_mod("cim_dev")
-local _is_modded_realm = mod._cim_is_modded_realm or function() return false end
-local _with_eac_off = mod._cim_with_eac_off or function(func, self, ...)
-    return func(self, ...)
-end
 mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_salvage_modded_button")
 local _craft_dispatch = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_craft_dispatch")
@@ -159,48 +155,33 @@ mod._cim_versus_shadowed = _cim_versus_shadowed
 -- ============================================================
 -- Customization menu (gear-icon → reroll properties / reroll traits)
 -- ============================================================
--- The gear-icon menu is `HeroWindowItemCustomization`. Its craft button
--- is gated by three conditions (`hero_window_item_customization.lua:1928`):
---   disable_button = force_disable or not has_all_requirements or script_data["eac-untrusted"]
--- In modded realm `script_data["eac-untrusted"] = true` → button always
--- greyed → user can't reroll props or traits via the cosmetics menu.
---
--- Two fixes:
---   1. Lifecycle hooks below also flip `_cim_standard_forge_active` so
---      cim's `craft()` hook intercepts the click (otherwise vanilla
---      tries to send a PlayFab request that the modded backend rejects
---      with the EAC-untrusted kick).
---   2. Wrapping hook on `_update_state_craft_button` does two jobs:
---      (a) For `apply_weapon_skin`: temporarily clears `eac-untrusted`
---          around the original call so vanilla's state check doesn't
---          bake in the modded gate (migrated from illusion_swap.lua to
---          prevent a duplicate `mod:hook*` on the same class+method —
---          VMF silently drops the second registration with a
---          "Attempting to rehook active hook" warning).
---      (b) When the standard forge UI is active: overrides the
---          disable_button write AFTER vanilla sets it, dropping the
---          eac-untrusted term but keeping force_disable + requirements.
-mod:hook("HeroWindowItemCustomization", "_update_state_craft_button", function(func, self, recipe_name, ...)
-    local result
-    if _is_modded_realm() and recipe_name == "apply_weapon_skin" then
-        result = _with_eac_off(func, self, recipe_name, ...)
-    else
-        result = func(self, recipe_name, ...)
-    end
+-- Native 6.13's readonly backend disables customization presentation, but
+-- that protection must remain intact. The shared local Apply owner handles
+-- its complete widget/controller transaction; this forge owner still handles
+-- requirements for other local recipes. Missing Apply ownership stays native.
+-- The existing hook is retained, and all native returns preserve nil holes.
+local function _pack_results(...)
+    return { n = select("#", ...), ... }
+end
 
-    -- Post-write override: re-enable button for the standard forge UI
-    -- (gear-icon reroll-props / reroll-traits / upgrade / apply-skin tabs).
-    if mod._cim_standard_forge_active then
+mod:hook("HeroWindowItemCustomization", "_update_state_craft_button", function(func, self, recipe_name, ...)
+    local owner = mod._cim_illusion_apply_presentation_owner
+    local results
+    if owner and type(owner.on_state_update) == "function" then
+        results = _pack_results(owner.on_state_update(func, self, recipe_name, ...))
+    else
+        results = _pack_results(func(self, recipe_name, ...))
+    end
+    if mod._cim_standard_forge_active and recipe_name ~= "apply_weapon_skin" then
         local btn = self._widgets_by_name and self._widgets_by_name.craft_button
         if btn then
             local has_all = self._has_all_crafting_requirements
             if has_all == nil then has_all = true end
-            local force_disable = select(3, ...)  -- (button_text, glow_color, force_disable, offset)
+            local force_disable = select(3, ...)
             btn.content.button_hotspot.disable_button = force_disable or not has_all or false
         end
     end
-
-    return result
+    return unpack(results, 1, results.n)
 end)
 
 -- ============================================================
@@ -254,10 +235,6 @@ mod:hook("HeroWindowItemCustomization", "_update_property_option", function(func
         -- item.properties and still applies to the buff system.
     end
 end)
-
-local function _pack_results(...)
-    return { n = select("#", ...), ... }
-end
 
 for _, klass in ipairs({ "HeroWindowItemCustomization", "HeroWindowCrafting", "HeroWindowCraftingConsole" }) do
     local class_for_dump = klass
