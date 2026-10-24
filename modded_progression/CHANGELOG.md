@@ -1,5 +1,20 @@
 # Modded Progression — Changelog
 
+## 0.2.43-dev (2026-10-24) - #607 loot diagnostic gate reads the game 6.12 realm global (#1692)
+
+- Fresh allocation replaces the expired 0.2.42-dev candidate. Review also
+  tightened malformed native authority: only an absent MODDED_REALM may use
+  the old-game fallback; a present non-boolean value is denied. Two actual
+  policy/emit cases failed before that correction and pass afterward.
+
+- **Symptom (#1692):** since game 6.12.0 the #607 loot-layer diagnostic recorded nothing in the modded realm: no `[mp:607]` lines, and `/mp_loot_diag` reported zero events, so the #607 card could not produce its receipts. Nothing errored, because all six hooked methods still exist at 6.13.0.
+- **Root cause:** the emit gate (`_mp_loot_diag_runtime.lua:85-87` in 0.2.41-dev) read `script_data["eac-untrusted"]` through `realm_state = function() return script_data end` (`modded_progression.lua:1302`), and `should_capture` opens only on exactly `true` (`_mp_loot_diag.lua:40-42`). Game 6.11.3 wrote that key (`application_parameter.lua:150`); game 6.12.0 stopped writing it and publishes the realm only as `rawset(_G, "MODDED_REALM", modded_realm)` (`application_parameter.lua:150-152` at 6.13.0). The boot self-test only called `should_capture` with literal values, so it kept passing.
+- **Fix:** the runtime now takes a boolean `is_modded_realm` dependency instead of raw realm state and never reads a global itself. `modded_progression.lua` builds it from the new pure `LootDiag.realm_is_modded(rawget(_G, "MODDED_REALM"), _is_mp_realm)`: a boolean `MODDED_REALM` decides in both directions, and only when it is absent (the pre-6.12 layout) does mp's existing realm query answer (raw flag, launch parameter, EAC-off bracket depth). A missing, non-true or throwing fallback fails closed. The `_with_eac_off` brackets (issue 1684) and the shared `_lib_modded_realm_authority.lua` (issue 1693) are unchanged. The `/mp_loot_diag` summary line now also prints `gate=open` or `gate=closed`.
+- **Checks:** `/mp_regression_test` gains `issue1692_loot_diag_gate_open_in_modded_realm`: the live realm query answers true, the emit gate is open, and the MODDED_REALM-first precedence rows hold. MP loads only in the modded realm (`mod_manager.lua:273` at 6.13.0), so it must PASS in any Keep session. New engine-free `test_mp_loot_diag_realm_gate.lua` evaluates the shipped wiring expression over four layouts: 6.12+ with `MODDED_REALM` only (captures `end_level`), `MODDED_REALM = false` (captures nothing even when the legacy query says modded), and the pre-6.12 raw-flag and bracket-depth layouts (both capture). It fails 6/6 on 0.2.41-dev and passes 6/6 here. The `test_mp_loot_diag.lua` stubs now supply the new dependency.
+- **Boundary:** still observation only. No chest or item is granted or opened and no request is added; `first_missing=local_container_award`, `award_capable=false` and `open_capable=false` are unchanged.
+
+**Test (solo, modded realm):** confirm `[mp:LOAD] v0.2.43-dev`. In the Keep run `/mp_regression_test` (expect `issue1692_loot_diag_gate_open_in_modded_realm` PASS) and `/mp_loot_diag reset`, then `/mp_loot_diag` once (expect `gate=open`). Complete one ordinary Adventure mission, continue through every result screen back to the Keep, and run `/mp_loot_diag` once. Expected: the newest log has bounded `[mp:607]` receipts for `event=end_level`, `event=pre_request` with `flow=end_level request=generateEndOfLevelLoot`, and `event=local_ledger`, with `first_missing=local_container_award award_capable=false open_capable=false`; a `event=rejection` row may also appear.
+
 ## 0.2.41-dev (2026-10-17) - dead IngameUI.not_in_modded hook removed, hook targets checked live (#1671) [verify-fix]
 
 - **Symptom (RainReligion, #1671):** every load since game 6.12.0 logged `[MOD][mp][ERROR] (hook): trying to hook function or method that doesn't exist: [IngameUI.not_in_modded]` (mp 0.2.40-dev, three 2026-09-23 logs). The hook came from 0.2.0-dev and kept the Spoils of War hotkey open in the modded realm.

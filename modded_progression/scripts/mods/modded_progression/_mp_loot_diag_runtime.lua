@@ -25,7 +25,9 @@ function Runtime.install(mod, deps)
     local get_inventory_store = assert(deps.get_inventory_store,
         "get_inventory_store is required")
     local rt_register = assert(deps.rt_register, "rt_register is required")
-    local realm_state = assert(deps.realm_state, "realm_state is required")
+    -- #1692: a boolean realm query (LootDiag.realm_is_modded over MODDED_REALM
+    -- and the legacy fallback), never the raw script_data flag.
+    local is_modded_realm = assert(deps.is_modded_realm, "is_modded_realm is required")
     local print_log = assert(deps.print_log, "print_log is required")
     local item_master_list = assert(deps.item_master_list,
         "item_master_list is required")
@@ -82,9 +84,7 @@ function Runtime.install(mod, deps)
 
     local function emit(event, context, result)
         return observe("emit", function()
-            local realm = realm_state()
-            if type(realm) ~= "table" or
-                    not LootDiag.should_capture(realm["eac-untrusted"]) then return nil end
+            if not LootDiag.should_capture(is_modded_realm() == true) then return nil end
             local next_ledger, record
             if event == "success" then
                 next_ledger, record = LootDiag.capture(ledger(), context, result, now())
@@ -342,6 +342,29 @@ function Runtime.install(mod, deps)
         end
     end)
 
+    -- #1692: the live emit gate must be open. MP only loads in the modded realm
+    -- (6.13.0 mod_manager.lua:273 scans unapproved mods only when MODDED_REALM),
+    -- so in any session where this command runs a closed gate is the bug, not a
+    -- missing precondition. The pure precedence rows lock both game layouts.
+    rt_register("issue1692_loot_diag_gate_open_in_modded_realm", function()
+        if LootDiag.ACTIVE ~= true then return "#607 diagnostic unexpectedly retired" end
+        local modded = is_modded_realm()
+        if modded ~= true then
+            return "realm query answered " .. tostring(modded) .. " in a loaded MP session"
+        end
+        if not LootDiag.should_capture(modded) then return "#607 emit gate closed in the modded realm" end
+        local function yes() return true end
+        local function no() return false end
+        if LootDiag.realm_is_modded(true, no) ~= true or
+                LootDiag.realm_is_modded(false, yes) ~= false or
+                LootDiag.realm_is_modded(nil, yes) ~= true or
+                LootDiag.realm_is_modded(1, yes) ~= false or
+                LootDiag.realm_is_modded(nil, no) ~= false or
+                LootDiag.realm_is_modded(nil, nil) ~= false then
+            return "#1692 MODDED_REALM-first realm precedence failed"
+        end
+    end)
+
     mod:command("mp_loot_diag", "Show or reset bounded issue #607 loot diagnostics",
         function(action)
             if action == "reset" then
@@ -353,9 +376,11 @@ function Runtime.install(mod, deps)
             local current = ledger()
             local facts = LootDiag.catalogue_facts(item_master_list())
             local local_facts = LootDiag.local_ledger_facts(get_inventory_store())
-            mod:echo("#607 diagnostic active=%s events=%d/%d first_missing=%s " ..
+            local gate_open = LootDiag.should_capture(is_modded_realm() == true)
+            mod:echo("#607 diagnostic active=%s gate=%s events=%d/%d first_missing=%s " ..
                 "local_items=%d containers=%d uses=%d catalogue_gear=%d dlc_gated=%d",
-                tostring(LootDiag.ACTIVE), #current.records, LootDiag.MAX_RECORDS,
+                tostring(LootDiag.ACTIVE), gate_open and "open" or "closed",
+                #current.records, LootDiag.MAX_RECORDS,
                 LootDiag.diagnose(current), local_facts.items, local_facts.containers,
                 local_facts.container_uses, facts.gear, facts.dlc_gated)
             for _, record in ipairs(current.records) do
