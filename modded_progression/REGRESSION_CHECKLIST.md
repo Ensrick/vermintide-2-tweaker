@@ -15,6 +15,7 @@ Walk every entry below before any release that touches the relevant subsystem. P
 - [ ] #607: `/mp_loot_diag` reports `first_missing=local_container_award`, at most 12 sanitized events, no backend/player ids, and honest `award_capable=false` / `open_capable=false`; reset clears only diagnostic evidence.
 - [ ] #607: an existing ordinary mission chest opened through Spoils of War emits the bounded `open` flow; `/mp_regression_test` passes `issue607_local_loot_layer_diagnostic_contract`; engine-free `test_mp_loot_diag.lua` passes.
 - [ ] #607: observer failures at realm, chest context, request queue, local inventory, persistence, or `printf` cannot prevent any of the six native wrappers or change first/middle/trailing nil returns; `pre_request` requires a finite positive numeric enqueue id.
+- [ ] #1692: in a plain Keep session `/mp_regression_test` passes `issue1692_loot_diag_gate_open_in_modded_realm` and `/mp_loot_diag` reports `gate=open`; one modded mission then logs `[mp:607] event=end_level` on game 6.12+ (realm published only as `MODDED_REALM`); engine-free `test_mp_loot_diag_realm_gate.lua` passes.
 
 - [ ] #577: one modded SM purchase debits local shillings once, grants/owns the exact item immediately and after restart, and never enqueues `PurchaseItem` or `storePurchaseMade`.
 - [ ] #577: repeat/double activation, stale price, owned item, insufficient funds, unavailable/DLC/platform/bundle offer, and failed persistence cannot double-spend or partially grant; official purchase remains vanilla.
@@ -49,11 +50,11 @@ Last updated: 2026-10-17.
 |-------|-------|
 | Symptom | The prior diagnostic waited for `loot_chest_rewards_request_cb`, so the normal modded-realm EAC rejection produced no issue evidence and the live test was impossible. |
 | Root cause | Both mission rewards and chest openings enqueue EAC-challenged CloudScript before their success callbacks; backend success was incorrectly treated as the probe trigger. |
-| Fix version(s) | mp v0.2.35-dev diagnostics |
+| Fix version(s) | mp v0.2.35-dev diagnostics; v0.2.43-dev realm gate (#1692: since game 6.12.0 the raw `eac-untrusted` flag is never written, so the gate reads `MODDED_REALM` first) |
 | Category | INTEGRATION / DIAGNOSTIC |
 | Repro | Complete one ordinary Adventure mission in the modded realm, return through the result screens, run `/mp_loot_diag`, and inspect the newest log. |
-| Expected diagnostic | Mission entry, target request enqueue, local inventory census, and any EAC/API rejection are independently visible. The summary names `local_container_award` as the first unbuilt layer and claims no chest/item grant. |
-| Detection | `/mp_regression_test` passes `issue607_local_loot_layer_diagnostic_contract`; engine-free `test_mp_loot_diag.lua` locks request/rejection attribution, bounds, sanitization, local container census, one hook per seam, positive enqueue-id evidence, and planted observer failures across all six wrappers with exact nil-hole return preservation. |
+| Expected diagnostic | Mission entry, target request enqueue, local inventory census, and any EAC/API rejection are independently visible. The summary names `local_container_award` as the first unbuilt layer, reports `gate=open`, and claims no chest/item grant. |
+| Detection | `/mp_regression_test` passes `issue607_local_loot_layer_diagnostic_contract` and `issue1692_loot_diag_gate_open_in_modded_realm`; engine-free `test_mp_loot_diag_realm_gate.lua` locks the MODDED_REALM-first gate over the 6.12+ and pre-6.12 layouts; `test_mp_loot_diag.lua` locks request/rejection attribution, bounds, sanitization, local container census, one hook per seam, positive enqueue-id evidence, and planted observer failures across all six wrappers with exact nil-hole return preservation. |
 
 ### mp-emporium-purchase-local — SM purchase must be one durable backend-free transaction
 

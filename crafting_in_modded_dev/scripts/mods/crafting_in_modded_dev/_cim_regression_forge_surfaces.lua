@@ -35,12 +35,25 @@ return function(context)
     local _ensure_item_adventure_visible = context.ensure_item_adventure_visible
     local _is_in_keep = context.is_in_keep
     local _AccessoryPanel = context.accessory_panel
-    local _OVERVIEW_BTN_RENDER_FIELD = context.overview_btn_render_field
-    local _OVERVIEW_DRAWN_FIELDS = context.overview_drawn_fields
     local CIM_RPC_SCHEMA = context.rpc_schema
     local _rt_with_loadout_sandbox = context.with_loadout_sandbox
     local _forge_ui_source_anchor = mod._cim_forge_ui_owner
         and mod._cim_forge_ui_owner.apply_ui_polish
+
+    -- #1656: the forge-surface split left these as undeclared globals (nil), so
+    -- the gate-off check registered and equipped nothing. Same values as the
+    -- core checks' fixture ids.
+    local _RT_FAKE_BID    = "rt_test_bid_dont_ship_me"
+    local _RT_FAKE_CAREER = "_rt_test_career"
+    local _RT_FAKE_SLOT   = "_rt_test_slot"
+
+    -- #1656: pure fixtures, loaded per run (same loader as the core checks).
+    local function _rt_fixtures()
+        local ok, fixtures = pcall(mod.dofile, mod,
+            "scripts/mods/crafting_in_modded_dev/_cim_regression_fixtures")
+        if ok and type(fixtures) == "table" then return fixtures end
+        return nil, "regression fixtures did not load: " .. tostring(fixtures)
+    end
 
 _rt_register("morris_hub_passes_open_forge_gate", function()
     -- v0.7.47-alpha removed the blanket `mech == "deus" -> block` early return
@@ -141,10 +154,19 @@ _rt_register("overview_btn_render_target", function()
     -- went into a collection the window never iterates and NEVER rendered
     -- ("nothing changed" report). Pin the append target to the valid drawn set
     -- so a regression can't silently re-break it.
-    if not _OVERVIEW_DRAWN_FIELDS[_OVERVIEW_BTN_RENDER_FIELD] then
+    -- #1656: both values are locals of _cim_forge_ui_owner.lua; the entry used
+    -- to pass undeclared globals, so the check indexed nil. Read the owner's
+    -- exports live instead.
+    local owner = mod._cim_forge_ui_owner
+    local drawn = type(owner) == "table" and owner.overview_drawn_fields
+    local field = type(owner) == "table" and owner.overview_btn_render_field
+    if type(drawn) ~= "table" or type(field) ~= "string" then
+        return "forge UI owner does not export overview_drawn_fields / overview_btn_render_field"
+    end
+    if not drawn[field] then
         return string.format(
-            "overview jewelry buttons append to %q, which is NOT a drawn array on HeroWindowWeaveForgeOverview (must be one of _top_widgets/_bottom_widgets/_top_hdr_widgets/_bottom_hdr_widgets) — buttons will not render",
-            tostring(_OVERVIEW_BTN_RENDER_FIELD))
+            "overview jewelry buttons append to %q, which is NOT a drawn array on HeroWindowWeaveForgeOverview (must be one of _top_widgets/_bottom_widgets/_top_hdr_widgets/_bottom_hdr_widgets): buttons will not render",
+            tostring(field))
     end
 end)
 
@@ -377,6 +399,8 @@ _rt_register("persist_loadouts_gate_off_is_passthrough", function()
         return "skip: BackendInterfaceItemPlayfab.set_loadout_item not loaded (run in-keep)"
     end
     local hook_fn = cls.set_loadout_item
+    local fixtures, fixtures_err = _rt_fixtures()
+    if not fixtures then return fixtures_err end
 
     local result_err
     -- The sandbox forces the toggle ON for its body; we deliberately flip it OFF
@@ -387,13 +411,33 @@ _rt_register("persist_loadouts_gate_off_is_passthrough", function()
             result_err = "gate helper says enabled while setting is OFF"
             return
         end
-        mod._cim_register_craft(_RT_FAKE_BID, {
+        -- #1656: a rejected registration leaves the bid unmodded, so nothing is
+        -- captured whatever the gate does. Fail like the round-trip twin.
+        local registered, register_err = mod._cim_register_craft(_RT_FAKE_BID, {
             item_key = "es_1h_falchion", properties = {}, traits = {}, power_level = 300, rarity = "modded",
         })
-        local fake_items = setmetatable({}, { __index = function() return function() end end })
+        if not registered then
+            result_err = "fixture craft registration rejected: " .. tostring(register_err)
+            return
+        end
+        -- #1656: the old all-no-op stub made vanilla raise before the capture,
+        -- so "nothing captured" held for the wrong reason. With a stub vanilla
+        -- accepts, the capture really runs and the gate must stop it.
+        local fake_items, mirror_writes = fixtures.loadout_interface_stub({ _RT_FAKE_BID })
         context.set_modded_loadout({})
         -- Equip a MODDED bid while the master toggle is OFF.
-        pcall(hook_fn, fake_items, _RT_FAKE_BID, _RT_FAKE_CAREER, _RT_FAKE_SLOT, 1)
+        local call_ok, call_err = pcall(hook_fn, fake_items, _RT_FAKE_BID, _RT_FAKE_CAREER, _RT_FAKE_SLOT, 1)
+        if not call_ok then
+            result_err = "skip: set_loadout_item chain raised before the cim capture: " .. tostring(call_err)
+            return
+        end
+        -- One mirror write proves vanilla ran (backend_interface_item_playfab.lua:665),
+        -- so the hook_safe capture was reached and the gate really was exercised.
+        if #mirror_writes ~= 1 then
+            result_err = "skip: set_loadout_item chain never reached vanilla's mirror write ("
+                .. #mirror_writes .. " writes), gate not exercised"
+            return
+        end
         local captured = context.get_modded_loadout()[_RT_FAKE_CAREER]
         if captured ~= nil and next(captured) ~= nil then
             result_err = "OFF gate leaked a capture into _modded_loadout (should be untouched)"

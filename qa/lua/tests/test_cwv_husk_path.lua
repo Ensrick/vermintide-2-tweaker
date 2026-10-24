@@ -15,6 +15,7 @@ return function(H, repo_root)
         .. "/character_weapon_variants/scripts/mods/character_weapon_variants/"
     local policy_path = mod_root .. "_cwv_husk_transform_policy.lua"
 	local husk_path = mod_root .. "_cwv_husk_path.lua"
+	local transaction_path = mod_root .. "_cwv_husk_spawn_transaction.lua"
     local main_path = mod_root .. "character_weapon_variants.lua"
     local Policy = assert(loadfile(policy_path))()
 
@@ -172,12 +173,16 @@ return function(H, repo_root)
             "the musket equip-surface owner holds the spawn chokepoint")
         H.equal(count(source, 'mod:hook("GearUtils", "spawn_inventory_unit"'), 0,
             "entry must not re-register GearUtils.spawn_inventory_unit")
-        -- Both husk adapter halves must still be dispatched from that hook body.
-		H.truthy(equip_surface:find("_om._husk_adapter_pre(", 1, true),
-            "spawn chokepoint still calls the pre-spawn husk adapter")
-		H.truthy(equip_surface:find("_om._husk_adapter_post(", 1, true),
-            "spawn chokepoint still calls the post-spawn husk adapter")
+        -- The hook must delegate to the single transaction owner; that owner
+        -- dispatches both adapter halves around vanilla exactly once.
+		H.truthy(equip_surface:find("_om._husk_spawn_adapter_transaction(", 1, true),
+            "spawn chokepoint still calls the complete husk transaction")
 		local husk_source = read(husk_path)
+		local transaction_source = read(transaction_path)
+		H.truthy(husk_source:find("_om._husk_adapter_pre = function", 1, true))
+		H.truthy(husk_source:find("_om._husk_adapter_post = function", 1, true))
+		H.truthy(transaction_source:find("_om._husk_adapter_pre(", 1, true))
+		H.truthy(transaction_source:find("_om._husk_adapter_post(", 1, true))
 		H.equal(count(source, 'mod:hook("SimpleHuskInventoryExtension", "_wield_slot"'), 0,
 			"entry must not duplicate the executable husk hook owner")
 		H.equal(count(husk_source, 'hook_mod:hook("SimpleHuskInventoryExtension", "_wield_slot"'), 1,

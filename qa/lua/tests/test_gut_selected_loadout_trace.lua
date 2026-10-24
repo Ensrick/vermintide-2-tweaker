@@ -22,7 +22,7 @@ return function(Harness, repo_root)
     Harness.test("selected loadout trace suppresses identical hot reads", function()
         local trace = core.new(4)
         Harness.truthy(trace:record(snapshot(2, "melee-2")))
-        Harness.falsy(trace:record(snapshot(2, "melee-2")))
+        Harness.equal(trace:record(snapshot(2, "melee-2")), false)
         Harness.equal(trace:size(), 1)
     end)
 

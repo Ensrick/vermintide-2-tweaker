@@ -34,12 +34,27 @@ M.REQUEST_FLOWS = {
     generateLootChestRewards = "open",
 }
 
--- Modded realm only (eac_untrusted == true), fail-closed on nil: the flag is
--- always a boolean once application_parameter.lua:150 runs, so a nil here
--- means we were called before realm state existed and must not capture.
-function M.should_capture(eac_untrusted, active)
+-- Modded realm only, fail-closed: `is_modded` must be exactly true (the
+-- boolean answer of M.realm_is_modded below); nil or any other value means the
+-- realm is unknown or official and nothing is captured.
+function M.should_capture(is_modded, active)
     if active == nil then active = M.ACTIVE end
-    return active == true and eac_untrusted == true
+    return active == true and is_modded == true
+end
+
+-- #1692: the realm query behind the capture gate. Since game 6.12.0 the engine
+-- publishes the realm only as the boolean global MODDED_REALM
+-- [src: foundation/scripts/util/application_parameter.lua:150-152 at 6.13.0]
+-- and no longer writes script_data["eac-untrusted"], which up to 6.11.3 held
+-- the same boolean (application_parameter.lua:150 at c5e4968b). A boolean
+-- MODDED_REALM decides in both directions; only when it is absent (pre-6.12
+-- layout) does the caller's legacy query answer. The caller reads the globals
+-- and passes them in; a missing, non-true or throwing legacy query fails closed.
+function M.realm_is_modded(modded_realm, legacy_is_modded)
+    if modded_realm ~= nil then return modded_realm == true end
+    if type(legacy_is_modded) ~= "function" then return false end
+    local ok, result = pcall(legacy_is_modded)
+    return ok and result == true
 end
 
 function M.request_flow(request_name)

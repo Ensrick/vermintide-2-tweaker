@@ -64,9 +64,10 @@ end)
 
 H.test("MP #607 arms only while active on the modded realm", function()
     local D = load_module()
-    -- Modded realm (eac_untrusted == true) is the ONLY realm where this mod
-    -- can load (decompile mod_manager.lua:275: unapproved Workshop mods are
-    -- excluded from the official-realm scan), so the gate must open there.
+    -- Modded realm (realm query answered exactly true) is the ONLY realm where
+    -- this mod can load (decompile 6.13.0 mod_manager.lua:273: unapproved
+    -- Workshop mods are excluded from the official-realm scan), so the gate
+    -- must open there.
     H.equal(D.should_capture(true, true), true)
     -- Official realm and unknown realm state both fail closed.
     H.equal(D.should_capture(false, true), false)
@@ -275,7 +276,7 @@ H.test("MP #607 runtime adapters delegate and diagnose a rejected mission reques
         loot_diag = D,
         get_inventory_store = function() return inventory end,
         rt_register = function(name, callback) checks[name] = callback end,
-        realm_state = function() return { ["eac-untrusted"] = true } end,
+        is_modded_realm = function() return true end,
         print_log = function(fmt, ...)
             logs[#logs + 1] = string.format(fmt, ...)
         end,
@@ -380,9 +381,9 @@ H.test("MP #607 observer throws cannot alter any of the six native wrappers", fu
             return {}
         end,
         rt_register = function() end,
-        realm_state = function()
+        is_modded_realm = function()
             if fail.realm then error("planted realm read") end
-            return { ["eac-untrusted"] = true }
+            return true
         end,
         print_log = function(fmt, ...)
             if fail.log then error("planted printf") end

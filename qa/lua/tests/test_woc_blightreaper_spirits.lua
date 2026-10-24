@@ -102,6 +102,13 @@ return function(H, repo_root)
 		local file = assert(io.open(path, "rb"))
 		local source = file:read("*a")
 		file:close()
+		local owner_file = assert(io.open(repo_root
+			.. "/weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_spirit_runtime_owner.lua", "rb"))
+		local owner = owner_file:read("*a")
+		owner_file:close()
+		-- #1700: the phase-5 extraction moved the state/creators into this
+		-- owner. Pin both the entry's dispatch and the owner's host-gated
+		-- producers; scanning the old entry alone never exercises that seam.
 		for _, needle in ipairs({
 			'events:register(mod, "on_player_killed_enemy"',
 			'"BuffSystem", "rpc_add_buff_synced_params"',
@@ -110,31 +117,44 @@ return function(H, repo_root)
 			'damage_utils.add_damage_network(target, unit, amount',
 			'damage_utils.heal_network(target, target, dealt',
 			'if _spirit_state.count >= _spirits.MAX_ACTIVE then',
-			'if network and network.is_server then _update_spirits(dt) end',
-			'_audio.update(dt)',
 			'_owner_trait_evidence(',
 			'"kill observed peer=%s damage=%s source=%s trait=%s identity=%s',
-			'_stop_spirit_runtime("mod-disabled")',
-			'_release_spirit_package("mod-disabled")',
-			'_stop_spirit_runtime("mod-unload")',
-			'_release_spirit_package("mod-unload")',
 		}) do
-			H.truthy(source:find(needle, 1, true), "missing spirit boundary: " .. needle)
+			H.truthy(owner:find(needle, 1, true), "missing spirit owner boundary: " .. needle)
+		end
+		for _, needle in ipairs({
+			'"scripts/mods/weapons_of_chaos/_woc_spirit_runtime_owner").new({',
+			'_audio.update(dt)', '_spirit_runtime:update(dt)',
+			'_spirit_runtime:stop("mod-disabled")', '_release_spirit_package("mod-disabled")',
+			'_spirit_runtime:stop("mod-unload")', '_release_spirit_package("mod-unload")',
+		}) do
+			H.truthy(source:find(needle, 1, true), "missing spirit entry dispatch: " .. needle)
+		end
+		for _, definition in ipairs({
+			'_mark_blight_poison = function(hit_unit, owner_unit)',
+			'local function _spawn_spirit(killed_unit, target_unit, attribution)',
+			'local function _on_blightreaper_kill(killing_blow, _, killed_unit)',
+			'_start_spirit_runtime = function()',
+		}) do
+			local start = assert(owner:find(definition, 1, true), "missing host-owned producer")
+			local finish = assert(owner:find("\nend", start, true), "unterminated producer")
+			H.truthy(owner:sub(start, finish):find("network.is_server", 1, true),
+				"producer lost its host boundary: " .. definition)
 		end
 		local _, update_count = source:gsub("mod%.update%s*=%s*function", "")
 		H.equal(update_count, 1, "WOC audio and spirit work must share one update callback")
-		H.equal(source:find('network_register("woc_blightreaper_spirit', 1, true), nil)
-		H.equal(source:find('Application.can_get, "unit", _spirits.UNIT', 1, true), nil,
+		H.equal((source .. owner):find('network_register("woc_blightreaper_spirit', 1, true), nil)
+		H.equal((source .. owner):find('Application.can_get, "unit", _spirits.UNIT', 1, true), nil,
 			"loaded native package is the spawn boundary; stale can_get blocked all spirits")
-		H.equal(source:find('convert_to_temp', 1, true), nil,
+		H.equal((source .. owner):find('convert_to_temp', 1, true), nil,
 			"contact must reproduce native death_explosion damage then mutator heal")
-		H.truthy(source:find('local target_pos, target_pos_reason = _spirit_position(target)',
+		H.truthy(owner:find('local target_pos, target_pos_reason = _spirit_position(target)',
 			1, true), "chase target must pass the validated live-position seam")
-		H.truthy(source:find('local position, position_reason = _spirit_position(unit)',
+		H.truthy(owner:find('local position, position_reason = _spirit_position(unit)',
 			1, true), "spawned spirit must pass the validated live-position seam")
-		H.truthy(source:find('if not entry.chase_logged then', 1, true),
+		H.truthy(owner:find('if not entry.chase_logged then', 1, true),
 			"chase-start telemetry must be once per spirit, not per frame")
-		H.equal(source:find('local target_pos = POSITION_LOOKUP[target]', 1, true), nil,
+		H.equal(owner:find('local target_pos = POSITION_LOOKUP[target]', 1, true), nil,
 			"stale lookup userdata must never reach Vector3 arithmetic directly")
 
 		local package_path = repo_root
@@ -146,7 +166,14 @@ return function(H, repo_root)
 			"unavailable native source unit must not break WOC compilation")
 		H.truthy(source:find('_spirits.package_contract(rawget(_G, "DLCSettings"))',
 			1, true), "production must resolve the source-backed real package")
-		H.equal(source:find('load(_spirits.UNIT', 1, true), nil,
-			"native spirit must not be force-loaded as a package")
+		-- The entry's own runtime diagnostic quotes the forbidden spelling.
+		-- Inspect the actual acquisition owner, not that inert quoted needle.
+		local acquire_start = assert(source:find("local function _ensure_spirit_package()", 1, true))
+		local acquire_end = assert(source:find("\nlocal function _release_spirit_package", acquire_start, true))
+		local acquire = source:sub(acquire_start, acquire_end - 1)
+		H.equal(acquire:find('load(_spirits.UNIT', 1, true), nil,
+			"package acquisition must not force-load a unit as a package")
+		H.equal(owner:find('load(_spirits.UNIT', 1, true), nil,
+			"spirit runtime must not bypass the package acquisition owner")
 	end)
 end

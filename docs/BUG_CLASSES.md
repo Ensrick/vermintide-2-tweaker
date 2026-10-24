@@ -4033,3 +4033,34 @@ spawn payload) around `ConflictDirector._post_spawn_unit`.
   `post_ai_spawned_function` [src: `scripts/settings/mutators/mutator_geheimnisnacht_2021_hard_mode.lua:144-152`].
 - Adjacent classes: 1 (duplicate hooks on the shared seam) and 46 (hook timing
   relative to what vanilla has already consumed).
+
+## 93. Authored power-reference names mistaken for resolved runtime tables
+
+**Observed:** #1676, CWV shared damage-profile constructors. Multipliers were
+guarded by `type(field) == "string"`, while the native loader had already
+replaced those names with `PowerLevelTemplates` tables. A successful clone and
+wire registration therefore concealed unchanged damage, stagger and cleave.
+
+### Empirical boundary
+
+- Game 6.13.0 source `93dea911`,
+  `scripts/settings/equipment/damage_profile_templates.lua:5570-5616`, resolves
+  critical, cleave, armor, default-target and target-list references before mods.
+- Executing the real `_cwv_core_templates.lua` installer/cloner reproduced four
+  failures: resolved fields, a sparse named target list, mixed representations
+  and the actual template consumer. Neutral/missing-donor controls passed.
+- A target list may start at `[2]`; `ipairs` is not evidence of completeness.
+  This is related to class 75, but the collection here is combat data, not a
+  backend inventory. `_cwv_burn_scrub.lua` and Crowbill's mode owner already
+  resolve both forms; a string branch alone is not proof of this defect.
+
+### Fix and prevention
+
+Resolve either representation, deep-copy before scaling, and preserve native
+donors, unrelated metadata and the existing native wire-source mapping. Test
+resolved, named and mixed fields, sparse keys, cache idempotence and the actual
+consumer. A literal authored-table fixture alone cannot prove runtime behavior.
+Retain numeric constructor read-back before optional later WT tuning, so a
+moving donor does not manufacture a false regression. An unexercised runtime
+check must be SKIP, not PASS. Host tests do not prove live hit balance or peer
+compatibility; those remain separate acceptance boundaries under #1676/#423.

@@ -3,27 +3,27 @@ return function(H, repo_root)
         .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_official_loadout_boot_policy.lua"
     local Policy = assert(loadfile(policy_path))()
 
-    local function with_guard(metadata_realm, eac_untrusted, body)
-        local saved_get_mod, saved_managers = _G.get_mod, _G.Managers
-        local saved_script_data, saved_printf = _G.script_data, _G.printf
+    local function with_guard(metadata_realm, eac_untrusted, body, options)
+        options = options or {}
         local hooks = {}
         local fake_mod = {
             dofile = function() return Policy end,
             hook = function(_, _, method, callback) hooks[method] = callback end,
         }
-        _G.get_mod = function() return fake_mod end
-        _G.Managers = { backend = { _metadata = { realm = metadata_realm } } }
-        _G.script_data = { ["eac-untrusted"] = eac_untrusted }
-        _G.printf = function() end
+        local env = setmetatable({}, { __index = _G })
+        env._G = env
+        env.get_mod = function() return fake_mod end
+        env.Managers = options.no_backend and {} or
+            { backend = { _metadata = { realm = metadata_realm } } }
+        env.script_data = { ["eac-untrusted"] = eac_untrusted }
+        env.MODDED_REALM = options.modded_realm
+        env.printf = function() end
         local guard_path = repo_root
             .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_official_loadout_boot_guard.lua"
-        local ok_load, guard = pcall(assert(loadfile(guard_path)))
-        local ok_body, body_error
-        if ok_load then ok_body, body_error = pcall(body, guard, hooks) end
-        _G.get_mod, _G.Managers = saved_get_mod, saved_managers
-        _G.script_data, _G.printf = saved_script_data, saved_printf
-        if not ok_load then error(guard) end
-        if not ok_body then error(body_error) end
+        local loader = assert(loadfile(guard_path))
+        if setfenv then setfenv(loader, env)
+        else loader = assert(loadfile(guard_path, "t", env)) end
+        body(loader(), hooks)
     end
 
     H.test("issue 402 stable backend realm outranks a transient EAC flag", function()
@@ -31,6 +31,64 @@ return function(H, repo_root)
         H.equal(Policy.realm_is_modded("official", true), false)
         H.equal(Policy.realm_is_modded(nil, true), true)
         H.equal(Policy.realm_is_modded(nil, false), false)
+    end)
+
+    H.test("issue 1688 modern native realm is authoritative before backend startup", function()
+        H.equal(Policy.realm_is_modded(nil, nil, true), true)
+        H.equal(Policy.realm_is_modded("official", false, true), true)
+        H.equal(Policy.realm_is_modded("modded", true, false), false)
+        H.equal(Policy.realm_is_modded(nil, true, false), false)
+        H.equal(Policy.realm_is_modded("modded", true, "true"), false,
+            "malformed modern flag must not revive a legacy modded signal")
+    end)
+
+    H.test("issue 1688 modern modded boot blocks official repair without the old EAC key", function()
+        with_guard(nil, nil, function(guard, hooks)
+            H.equal(guard.in_modded_realm(), true)
+            H.equal(guard.check_realm_authority(), nil)
+            local native, continued = 0, 0
+            local mirror = {
+                _characters_data_key = "characters_data",
+                get_read_only_data = function() return "existing" end,
+                _verify_default_gear = function() continued = continued + 1 end,
+                _verify_dlc_careers = function() continued = continued + 1 end,
+            }
+            hooks._fix_career_data(function() native = native + 1 end, mirror, {}, nil, nil)
+            hooks._verify_career_loadouts(function() native = native + 1 end, mirror)
+            H.equal(native, 0, "modern modded boot reached official repair")
+            H.equal(continued, 2)
+        end, { modded_realm = true, no_backend = true })
+    end)
+
+    H.test("issue 1688 modern official boot ignores stale legacy and backend modded values", function()
+        with_guard("modded", true, function(guard, hooks)
+            H.equal(guard.in_modded_realm(), false)
+            H.equal(guard.check_realm_authority(), nil)
+            local native = 0
+            hooks._verify_career_loadouts(function() native = native + 1 end,
+                { _characters_data_key = "characters_data" })
+            H.equal(native, 1)
+        end, { modded_realm = false })
+    end)
+
+    H.test("issue 1688 boot owner exports both executable checks without weakening install evidence", function()
+        with_guard(nil, nil, function(guard)
+            local native = { MARKER = "expected" }
+            local calls = 0
+            local checks = guard.regression_checks(native, "expected", function()
+                calls = calls + 1
+                return guard.in_modded_realm()
+            end)
+            H.equal(#checks, 2)
+            H.equal(checks[1].name, "issue1688_modded_realm_authority")
+            H.equal(checks[1].fn, guard.check_realm_authority)
+            H.equal(checks[1].fn(), nil)
+            H.equal(checks[2].name, "native_loadouts_installed")
+            H.equal(checks[2].fn(), nil)
+            H.equal(calls, 1)
+            native.MARKER = "drift"
+            H.equal(checks[2].fn(), "marker mismatch")
+        end, { modded_realm = true, no_backend = true })
     end)
 
     H.test("issue 402 boot guard is modded Adventure only", function()

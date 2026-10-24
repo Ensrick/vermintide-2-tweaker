@@ -1,5 +1,27 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.363-dev (2026-10-24) -- Native 6.12 realm and UTF8 compatibility (#1688, #1695)
+
+- Early official-loadout protection now consumes the native `MODDED_REALM`
+  boolean before the backend exists. Explicit official `false` cannot be
+  overridden by stale backend metadata or the removed legacy EAC key. Older
+  game versions retain the backend-first legacy fallback. The existing store,
+  readonly and scrub gates continue to share that one owner; no backend
+  read-only setting is changed.
+- The live scoreboard uses native `Utf8.length`, retaining the old method only
+  on pre-6.12 games. UTF8 substring handling stays native and short names do not
+  invoke truncation.
+- Added modern startup/conflicting-flag actual-hook cases and a real Tab draw
+  case which fails if the deprecated length shim runs. Boot fixtures execute
+  in a private environment instead of replacing the host's globals.
+- Named runtime checks: `issue1688_modded_realm_authority` and
+  `issue1695_scoreboard_native_utf8`. The UTF8 check explicitly skips older
+  games without the modern reader. Stable promotion remains separate; this
+  dev change does not establish that the public stable bugs are fixed.
+- Both boot-boundary checks are owned by the boot guard and appended to the
+  store's exported list. The existing marker/query witness is retained while
+  the frozen native-store module shrinks rather than raising its size baseline.
+
 ## 0.2.362-dev (2026-10-17) -- DX12 fence probe budget is per session (#630) [diagnostics-armed]
 
 - The tester's 2026-09-23 log: earlier Mod Tweaker opens spent the `[gut:630]`

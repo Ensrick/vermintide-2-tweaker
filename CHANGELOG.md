@@ -1,5 +1,23 @@
 # Changelog
 
+## 2026-10-24 - Enforce Lua suite registration completeness (#1700)
+
+The offline Lua gate now discovers every top-level test file independently of
+the runner, then checks completed direct/transitive registrations before executing cases.
+An imported but unused registration function is rejected, and the temporary
+require tracker restores exact raw shape after successful or failed registration.
+Unreachable files, malformed inventories and duplicate explicit registrations
+fail closed. Its temporary inventory is outside the repository and removed in
+`finally`; PS5.1/PS7 self-tests drive real discovery and a deliberately unlisted
+and import-only fixtures through the actual runner, plus a throwing registration
+with an inherited require to prove restoration.
+
+Recovered the omitted career-unlock, collectible-layout, regression-owner,
+exclusive-choice, loadout-trace, spirit-policy and weapon-picker/registrar suites.
+Repaired their stale owner/count bindings and unsupported assertion call without
+changing mod runtime code. The original GT extraction already registered 88
+names at immutable baseline `5afeefef`; its unused test incorrectly expected 83.
+
 ## 2026-09-17 - Canonical ships require VMB Launcher 0.6.3 (#1548)
 
 The approved default launcher is now 0.6.3 (release asset SHA-256

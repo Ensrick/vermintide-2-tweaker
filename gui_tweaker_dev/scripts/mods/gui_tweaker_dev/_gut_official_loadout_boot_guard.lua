@@ -27,7 +27,40 @@ end
 
 function M.in_modded_realm()
     local sd = rawget(_G, "script_data")
-    return Policy.realm_is_modded(_backend_realm(), sd and sd["eac-untrusted"])
+    return Policy.realm_is_modded(_backend_realm(), sd and sd["eac-untrusted"],
+        rawget(_G, "MODDED_REALM"))
+end
+
+function M.check_realm_authority()
+    local modern = rawget(_G, "MODDED_REALM")
+    if modern ~= nil and M.in_modded_realm() ~= (modern == true) then
+        return "native MODDED_REALM disagrees with the installed boot guard"
+    end
+    if Policy.realm_is_modded(nil, nil, true) ~= true then
+        return "modern modded boot requires the removed legacy EAC key"
+    end
+    if Policy.realm_is_modded("modded", true, false) ~= false then
+        return "modern official realm was overridden by a stale modded signal"
+    end
+    if Policy.realm_is_modded("modded", false) ~= true or
+        Policy.realm_is_modded("official", true) ~= false or
+        Policy.realm_is_modded(nil, true) ~= true then
+        return "pre-6.12 realm fallback changed"
+    end
+end
+
+-- The boot boundary owns these checks; the native store only appends them to
+-- its public list. Context injection preserves its installed-marker witness.
+function M.regression_checks(native, marker, realm_query)
+    return {
+        { name = "issue1688_modded_realm_authority", fn = M.check_realm_authority },
+        { name = "native_loadouts_installed", fn = function()
+            if native.MARKER ~= marker then return "marker mismatch" end
+            if type(realm_query) ~= "function" then return "realm detector missing" end
+            local ok = pcall(realm_query)
+            if not ok then return "_in_modded_realm raised" end
+        end },
+    }
 end
 
 function M.active(mirror)

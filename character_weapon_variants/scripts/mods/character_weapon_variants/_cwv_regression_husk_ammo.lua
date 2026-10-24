@@ -10,6 +10,8 @@
 --     from a (base_weapon, career) signal that is only CWV-positive while the
 --     base's can_wield stays disjoint from the strip set, which a weapon_tweaker
 --     unlock removes at runtime.
+-- Later appended: issue1320 (Outrider projectile unit and wire) and issue296
+-- (Tuskgor Javelin recovery pickups refill one shot), registered last.
 -- Both drive PRODUCTION seams (`_om._cwv_apply_renamed_projectile_template`,
 -- `_om._husk_adapter_pre` / `_husk_adapter_post`, `_om._husk_ammo_pair_admits`)
 -- against live game tables, and both restore every seam and every table they
@@ -384,6 +386,30 @@ _rt_register("issue1320_outrider_projectile_unit_and_wire", function()
 	if rawget(nl.item_template_names, def.template) ~= state.lookup_index then
 		return "#1320 item_template_names id drifted from its captured reservation"
 	end
+end)
+
+_rt_register("issue296_tuskgor_javelin_recovery_transaction", function()
+	-- Issue #296: once either impact outcome has spawned a recovery pickup, the
+	-- registered rows must still route both skins, stay eligible only for
+	-- `throwing_javelin`, refill exactly one shot and clean up their
+	-- limited-owned pickup (interactions.lua:1353-1360,
+	-- simple_inventory_extension.lua:1260-1276). The owner swaps only its own
+	-- private dependencies, never an engine global, and restores them on error.
+	-- Impact physics and contact still need the live card.
+	local exercise = _om._tj_recovery_transaction_check
+	if type(exercise) ~= "function" then
+		return "#296 Tuskgor Javelin recovery transaction owner missing"
+	end
+	local ok, err = exercise()
+	if ok ~= true then
+		return "#296 Tuskgor Javelin recovery transaction failed: " .. tostring(err)
+	end
+end)
+
+_rt_register("issue1676_resolved_profile_multipliers", function()
+	local check = _om._cwv_profile_multiplier_check
+	if type(check) ~= "function" then return "#1676 shared profile constructor audit missing" end
+	return check()
 end)
 
 end

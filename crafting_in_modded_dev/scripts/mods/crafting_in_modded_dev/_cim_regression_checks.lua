@@ -20,9 +20,19 @@ return function(context)
     local _forge_load = context.forge_load
     local _store_property_slot = context.store_property_slot
     local _modded_loadout_load = context.modded_loadout_load
+    local _weave_loadout = context.weave_loadout
     local _weave_economy_source_anchor = mod._cim_weave_economy_source_anchor
     local _accessory_property_source_anchor = mod._cim_accessory_property_source_anchor
     local _rt_with_loadout_sandbox
+
+    -- #1656: pure fixtures and verdicts, loaded per run so a dev reload of the
+    -- module is picked up. A load failure is a FAIL naming the module.
+    local function _rt_fixtures()
+        local ok, fixtures = pcall(mod.dofile, mod,
+            "scripts/mods/crafting_in_modded_dev/_cim_regression_fixtures")
+        if ok and type(fixtures) == "table" then return fixtures end
+        return nil, "regression fixtures did not load: " .. tostring(fixtures)
+    end
 
 -- ============================================================
 -- /regression_test checks (see scaffold near MOD_VERSION).
@@ -359,22 +369,28 @@ _rt_register("modded_loadout_round_trip_save_then_clear", function()
         return "skip: BackendInterfaceItemPlayfab.set_loadout_item not loaded (run in-keep)"
     end
     local hook_fn = cls.set_loadout_item
+    local fixtures, fixtures_err = _rt_fixtures()
+    if not fixtures then return fixtures_err end
 
     local result_err
     _rt_with_loadout_sandbox(function()
         -- Pretend rt_test_bid is a real cim craft so _cim_is_modded_backend_id
         -- returns true. We register/unregister via the public API to mirror
         -- the real craft path.
-        mod._cim_register_craft(_RT_FAKE_BID, {
+        local registered, register_err = mod._cim_register_craft(_RT_FAKE_BID, {
             item_key = "es_1h_falchion", properties = {}, traits = {}, power_level = 300, rarity = "modded",
         })
+        if not registered then
+            result_err = "fixture craft registration rejected: " .. tostring(register_err)
+            return
+        end
 
-        -- Dummy `items` table — vanilla set_loadout_item only touches fields
-        -- that exist on the real interface. Our hook is hook_safe so it fires
-        -- after vanilla returns; if vanilla errors we still PASS as long as
-        -- the cim hook's side effect ran. Either way we don't care about the
-        -- vanilla path here — we're testing the cim hook's invariants.
-        local fake_items = setmetatable({}, { __index = function() return function() end end })
+        -- #1656: the capture is a hook_safe, which VMF runs only after vanilla
+        -- returns. The old all-no-op stub made vanilla raise at
+        -- backend_interface_item_playfab.lua:640 first, so the capture never
+        -- fired. This stub serves the rows vanilla reads and records its mirror
+        -- write instead of touching the real backend.
+        local fake_items = fixtures.loadout_interface_stub({ _RT_FAKE_BID, _RT_FAKE_VANILLA_BID })
 
         -- v0.8.13-dev: pass an EXPLICIT loadout index (4th arg) so the test is
         -- deterministic without a live mirror, and assert the INDEXED schema
@@ -382,8 +398,13 @@ _rt_register("modded_loadout_round_trip_save_then_clear", function()
         -- capture honors the passed index rather than defaulting to the selected.
         local _RT_FAKE_INDEX = 2
 
-        -- Step 1: equip modded.
-        pcall(hook_fn, fake_items, _RT_FAKE_BID, _RT_FAKE_CAREER, _RT_FAKE_SLOT, _RT_FAKE_INDEX)
+        -- Step 1: equip modded. A raise means the chain never reached the
+        -- capture, so the round trip cannot be judged on this build.
+        local call_ok, call_err = pcall(hook_fn, fake_items, _RT_FAKE_BID, _RT_FAKE_CAREER, _RT_FAKE_SLOT, _RT_FAKE_INDEX)
+        if not call_ok then
+            result_err = "skip: set_loadout_item chain raised before the cim capture: " .. tostring(call_err)
+            return
+        end
 
         -- Round-trip via VMF settings: clear in-memory, reload from disk, check.
         context.set_modded_loadout({})
@@ -396,7 +417,11 @@ _rt_register("modded_loadout_round_trip_save_then_clear", function()
         end
 
         -- Step 2: equip vanilla (non-modded) at the same career/slot/index.
-        pcall(hook_fn, fake_items, _RT_FAKE_VANILLA_BID, _RT_FAKE_CAREER, _RT_FAKE_SLOT, _RT_FAKE_INDEX)
+        call_ok, call_err = pcall(hook_fn, fake_items, _RT_FAKE_VANILLA_BID, _RT_FAKE_CAREER, _RT_FAKE_SLOT, _RT_FAKE_INDEX)
+        if not call_ok then
+            result_err = "skip: set_loadout_item chain raised before the cim capture: " .. tostring(call_err)
+            return
+        end
 
         context.set_modded_loadout({})
         _modded_loadout_load()
@@ -571,29 +596,24 @@ _rt_register("issue563_vanilla_skin_override_exact_backend_id", function()
 end)
 
 _rt_register("inventory_property_count_within_cap", function()
-    -- v0.7.25 trim invariant: no item in the mirror should carry >2
-    -- properties. The _create_interfaces hook trims on load; if anything is
-    -- still over, either the trim broke or a code path bypassed it.
+    -- Trim invariant: no item in the mirror carries more properties than the
+    -- load-time trimmer keeps. v0.7.25 set that ceiling at 2; #86 raised the
+    -- trimmer and the Athanor's distinct-property gate to 10, and #1656 moved
+    -- this check from the stale 2 to the shared ceiling. If anything is still
+    -- over, either the trim broke or a code path bypassed it.
+    local fixtures, fixtures_err = _rt_fixtures()
+    if not fixtures then return fixtures_err end
     local backend = Managers and Managers.backend
     if not backend then return "skip: Managers.backend not ready (run in-keep)" end
     local items_iface = backend.get_interface and backend:get_interface("items")
     local mirror = items_iface and items_iface._backend_mirror
     local inv = mirror and mirror._inventory_items
     if type(inv) ~= "table" then return "skip: backend_mirror._inventory_items not ready" end
-    local offenders = {}
-    for bid, item in pairs(inv) do
-        local props = item and item.properties
-        if type(props) == "table" then
-            local n = 0
-            for _ in pairs(props) do n = n + 1 end
-            if n > 2 then
-                offenders[#offenders + 1] = tostring(bid) .. "(" .. tostring(n) .. ")"
-                if #offenders >= 5 then break end
-            end
-        end
-    end
-    if #offenders > 0 then
-        return "items over 2-property cap: " .. table.concat(offenders, ", ")
+    local ceiling = fixtures.ITEM_PROPERTY_CEILING
+    local offenders, total = fixtures.property_count_offenders(inv, ceiling, 5)
+    if total > 0 then
+        return string.format("%d item(s) over the %d-property cap: %s",
+            total, ceiling, table.concat(offenders, ", "))
     end
 end)
 
@@ -972,18 +992,19 @@ _rt_register("localization_format_safe", function()
     -- qa/check_localization.ps1 -- this is its runtime twin so the bug can't
     -- ship even if the static check is skipped. RULE: any literal % in a loc
     -- string must be doubled to %%.
-    local ok, loc = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev_localization")
-    if not ok or type(loc) ~= "table" then return end  -- can't reach loc; skip
-    for k, v in pairs(loc) do
-        if type(v) == "table" and type(v.en) == "string" then
-            local fmt_ok, fmt_err = pcall(string.format, v.en)
-            if not fmt_ok then
-                return string.format(
-                    "loc key %q has invalid format string (escape literal %% as %%%%): %s",
-                    k, tostring(fmt_err))
-            end
-        end
+    -- #1656: scan the directives, never call the formatter. A bare
+    -- string.format probe failed every legitimate "%s"/"%d" placeholder and
+    -- made vanilla's wrapper mark those strings invalid for the session
+    -- (foundation/scripts/util/patches.lua:140-156). Rules: _cim_loc_format.lua.
+    local scan_ok, loc_format = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded_dev/_cim_loc_format")
+    if not scan_ok or type(loc_format) ~= "table" or type(loc_format.scan) ~= "function" then
+        return "loc format scanner did not load: " .. tostring(loc_format)
     end
+    local ok, loc = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev_localization")
+    if not ok or type(loc) ~= "table" then
+        return "localization table did not load: " .. tostring(loc)
+    end
+    return loc_format.scan(loc)
 end)
 
 _rt_register("issue244_athanor_literal_property_values", function()
@@ -1205,41 +1226,52 @@ _rt_register("default_property_cap_is_five_bubbles", function()
     -- The real #86 fix is the distinct-property ceiling (MAX_DISTINCT / trimmer
     -- raised to 10), exercised by `picker_caps_persisted_slot_array`; this guards
     -- the DEFAULT bubble cap + its scaling math.
+    -- #1656: scaling is judged against the #244 storage policy, not the
+    -- pre-#244 linear 1 bubble = 0.2. A count below the Adventure range start
+    -- has no storable value (one fatigue_regen bubble is 6% of a 10-30% range)
+    -- and Apply refuses it (#1141), so only the storable counts must scale.
     if type(_bubble_cap) ~= "function" then return "_bubble_cap missing" end
     if type(_value_for_bubbles) ~= "function" then return "_value_for_bubbles missing" end
-
-    local saved = mod:get("movespeed_2pct_mode")
-    if saved ~= false then mod:set("movespeed_2pct_mode", false) end
-    local function _restore() if saved == true then mod:set("movespeed_2pct_mode", true) end end
-
-    -- A spread of real default (non-special-cased) weave property keys — each
-    -- must resolve to cap 5 in any key form (weave_X / properties_X / bare X).
-    for _, key in ipairs({
-        "weave_fatigue_regen", "weave_crit_chance", "weave_attack_speed",
-        "weave_block_cost", "weave_power_vs_chaos", "fatigue_regen",
-        "properties_crit_chance",
-    }) do
-        local c = _bubble_cap(key)
-        if c ~= 5 then
-            _restore()
-            return string.format("default cap for '%s' = %s, expected 5 (#86 single-bubble regression)", key, tostring(c))
-        end
-        -- Value must SCALE with bubbles: 1 → 0.2, 5 → 1.0 (full).
-        if _value_for_bubbles(key, 1) ~= 0.2 then
-            _restore()
-            return string.format("'%s': 1 bubble value = %s, expected 0.2 (scaling broken)", key, tostring(_value_for_bubbles(key, 1)))
-        end
-        if _value_for_bubbles(key, 5) ~= 1.0 then
-            _restore()
-            return string.format("'%s': 5 bubble value = %s, expected 1.0 (max)", key, tostring(_value_for_bubbles(key, 5)))
-        end
+    local fixtures, fixtures_err = _rt_fixtures()
+    if not fixtures then return fixtures_err end
+    local scaling_api = {
+        value_for_bubbles = _value_for_bubbles,
+        bubbles_for_value = _weave_loadout and _weave_loadout.bubbles_for_value,
+        representable_bubble_range = _weave_loadout and _weave_loadout.representable_bubble_range,
+    }
+    if type(scaling_api.bubbles_for_value) ~= "function"
+        or type(scaling_api.representable_bubble_range) ~= "function" then
+        return "weave loadout owner does not export the #1141 bubble round trip"
     end
 
-    -- Special cases unchanged.
-    if _bubble_cap("weave_stamina") ~= 2 then _restore(); return "stamina cap regressed from 2" end
-    if _bubble_cap("weave_movespeed") ~= 1 then _restore(); return "movespeed cap regressed from 1" end
-
-    _restore()
+    local saved = mod:get("movespeed_2pct_mode")
+    -- A diagnostic must not persist its temporary mode or strand it on a
+    -- reader error. Keep the entire override in the protected body and restore
+    -- the exact prior value (including nil) before reporting any verdict.
+    local ok, result = pcall(function()
+        if saved ~= false then mod:set("movespeed_2pct_mode", false, false) end
+        -- Real generic property keys must resolve to cap 5 in every key form.
+        for _, key in ipairs({
+            "weave_fatigue_regen", "weave_crit_chance", "weave_attack_speed",
+            "weave_block_cost", "weave_power_vs_chaos", "fatigue_regen",
+            "properties_crit_chance",
+        }) do
+            local c = _bubble_cap(key)
+            if c ~= 5 then
+                return string.format("default cap for '%s' = %s, expected 5 (#86 single-bubble regression)", key, tostring(c))
+            end
+            local scaling_err = fixtures.bubble_scaling_failure(key, c, scaling_api)
+            if scaling_err then return scaling_err end
+        end
+        if _bubble_cap("weave_stamina") ~= 2 then return "stamina cap regressed from 2" end
+        if _bubble_cap("weave_movespeed") ~= 1 then return "movespeed cap regressed from 1" end
+    end)
+    if saved ~= false then
+        local restored, restore_err = pcall(mod.set, mod, "movespeed_2pct_mode", saved, false)
+        if not restored then return "temporary movespeed mode restore failed: " .. tostring(restore_err) end
+    end
+    if not ok then return "bubble scaling reader raised: " .. tostring(result) end
+    return result
 end)
 
 _rt_register("action_rejection_uses_warning_channel", function()
