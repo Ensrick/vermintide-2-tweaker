@@ -159,37 +159,53 @@ return function(H, repo_root)
     end)
 
     H.test("CRT #1686 Leading Shots routes its talent icon through the guard", function()
-        local build = assert(loadfile(root .. "_crt_balance_catalog_engineer.lua"))()
         local perk_module = "scripts/unit_extensions/default_player_unit/buffs/settings/buff_perk_names"
-        local saved_globals = {
-            BuffTemplates = rawget(_G, "BuffTemplates"), AttackTypes = rawget(_G, "AttackTypes"),
-            Talents = rawget(_G, "Talents"), TalentIDLookup = rawget(_G, "TalentIDLookup"),
-            UIAtlasHelper = rawget(_G, "UIAtlasHelper"), preload = package.preload[perk_module],
-            loaded = package.loaded[perk_module],
-        }
-        local function run(names)
-            package.loaded[perk_module] = nil
-            package.preload[perk_module] = function() return { guaranteed_crit = "guaranteed_crit" } end
+        local global_names = { "BuffTemplates", "AttackTypes", "Talents", "TalentIDLookup", "UIAtlasHelper" }
+        local before = {}
+        for i, name in ipairs(global_names) do before[i] = rawget(_G, name) end
+        local preload, loaded = rawget(package.preload, perk_module), rawget(package.loaded, perk_module)
+        local function unchanged()
+            for i, name in ipairs(global_names) do
+                H.equal(rawget(_G, name), before[i], name .. " leaked from the icon fixture")
+            end
+            H.equal(rawget(package.preload, perk_module), preload, "perk preload leaked")
+            H.equal(rawget(package.loaded, perk_module), loaded, "perk cache leaked")
+        end
+        local function run(names, fail_perks)
             local talent = { buffs = {}, icon = "vanilla_talent_icon" }
-            _G.BuffTemplates = {}
-            _G.AttackTypes = { projectile = 1, instant_projectile = 2, heavy_instant_projectile = 3 }
-            _G.Talents = { dwarf_ranger = { [1] = talent } }
-            _G.TalentIDLookup = { bardin_engineer_improved_explosives = { hero_name = "dwarf_ranger", talent_id = 1 } }
-            _G.UIAtlasHelper = atlas(names)
+            -- All production globals, including rawget(_G, ...), resolve to
+            -- this private environment. Nil parent fields stay absent even
+            -- when the injected perk reader throws; no restore loop can omit
+            -- them and no package.preload/package.loaded entry is modified.
+            local env = {
+                BuffTemplates = {},
+                AttackTypes = { projectile = 1, instant_projectile = 2, heavy_instant_projectile = 3 },
+                Talents = { dwarf_ranger = { [1] = talent } },
+                TalentIDLookup = { bardin_engineer_improved_explosives = { hero_name = "dwarf_ranger", talent_id = 1 } },
+                UIAtlasHelper = atlas(names),
+                require = function(name)
+                    H.equal(name, perk_module, "unexpected dependency")
+                    if fail_perks then error("injected perk lookup failure", 0) end
+                    return { guaranteed_crit = "guaranteed_crit" }
+                end,
+            }
+            env._G = env
+            setmetatable(env, { __index = _G })
+            local chunk = assert(loadfile(root .. "_crt_balance_catalog_engineer.lua"))
+            setfenv(chunk, env)
+            local build = chunk()
             local defs = build({ make_stub = function() return { _crt_pending = true } end, buff_icons = load_icons() })
             defs.rework_dr_engineer_leading_shots.custom_apply({})
             return talent.icon
         end
-        local ok, err = pcall(function()
-            H.equal(run(ATLAS_6130), "bardin_engineer_ranged_crit_count")
-            H.equal(run(without(ATLAS_6130, "bardin_engineer_ranged_crit_count")), "vanilla_talent_icon")
-        end)
-        for key, value in pairs(saved_globals) do
-            if key == "preload" then package.preload[perk_module] = value
-            elseif key == "loaded" then package.loaded[perk_module] = value
-            else _G[key] = value end
-        end
-        if not ok then error(err, 0) end
+        H.equal(run(ATLAS_6130), "bardin_engineer_ranged_crit_count")
+        unchanged()
+        H.equal(run(without(ATLAS_6130, "bardin_engineer_ranged_crit_count")), "vanilla_talent_icon")
+        unchanged()
+        local ok, err = pcall(run, ATLAS_6130, true)
+        H.equal(ok, false, "throwing dependency must reach the fixture caller")
+        H.equal(err, "injected perk lookup failure")
+        unchanged()
     end)
 
     H.test("CRT #1686 audit passes on 6.13.0 and fails on drift", function()

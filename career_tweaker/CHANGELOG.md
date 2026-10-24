@@ -1,6 +1,9 @@
 # Career Tweaker Changelog
 
-## 0.4.32-beta (2026-10-17) - buff icons survive the 6.13.0 atlas (#1686) [verify-fix]
+## 0.4.34-beta (2026-10-24) - buff icons survive the 6.13.0 atlas (#1686) [verify-fix]
+
+- Reissued the unpublished 0.4.32-beta candidate under a fresh broker claim;
+  the expired allocation is not renewed or reused.
 
 - Game Version 6.13.0 removed two atlas icons crt buffs used. With the
   Handmaiden Dance of Blades rework on, the first enemy hit added a buff whose

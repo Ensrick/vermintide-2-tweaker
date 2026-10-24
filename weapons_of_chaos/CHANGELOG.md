@@ -1,6 +1,9 @@
 # Weapons of Chaos — Changelog
 
-## v0.1.60-dev (2026-10-17) - Poisoned Edge icon survives the 6.13.0 atlas (#1687) [verify-fix]
+## v0.1.62-dev (2026-10-24) - Poisoned Edge icon survives the 6.13.0 atlas (#1687) [verify-fix]
+
+- Reissued the unpublished 0.1.60-dev candidate under a fresh broker claim;
+  the expired allocation is not renewed or reused.
 
 - Game Version 6.13.0 renamed the Shade poison-talent icon WOC borrowed for
   Poisoned Edge, so hovering the Blightreaper or any Poisoned Edge item could

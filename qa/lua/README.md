@@ -138,7 +138,9 @@ there is no copied implementation.
   Dance of Blades and Unchained buffs carry `maidenguard_4_2` and
   `unchained_6_1`, the guard drops only unproven buff icons and fails closed
   without the helper, the apply sweep touches only crt-registered names,
-  Leading Shots keeps the vanilla talent icon on a miss, the audit fails on
+  Leading Shots keeps the vanilla talent icon on a miss and preserves exact
+  parent global/package state on success and a throwing perk lookup through a
+  private environment (no global monkeypatch), the audit fails on
   constant, factory and live drift, every registration routes through the
   guard, the guard log dedupes drops and prints one summary per sweep site
   (test-local logger seam), and the registered `issue1686_buff_icons_in_atlas`
