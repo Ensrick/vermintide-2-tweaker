@@ -201,6 +201,15 @@ there is no copied implementation.
   from the entry, and the `/mp_regression_test` census fails on a missing or
   retired method and on a class that is not loaded (past VMF's delay window
   that hook was refused). The class lookup and log seams are test-local.
+- `tests/test_mp_loot_diag_realm_gate.lua`: #1692 the #607 loot diagnostic's
+  emit gate follows the realm the game publishes. It evaluates the exact
+  `is_modded_realm` wiring expression from `modded_progression.lua` over test
+  layouts: game 6.12+ (`MODDED_REALM` only, no raw flag) captures the
+  `end_level` receipt and `/mp_loot_diag` reports `gate=open`; `MODDED_REALM =
+  false` captures nothing even when the legacy authority says modded; the
+  pre-6.12 raw-flag and bracket-depth layouts still capture. The
+  `issue1692_loot_diag_gate_open_in_modded_realm` check passes open and fails
+  closed. Globals and `script_data` are test-local tables.
 - `tests/test_et_issue324_capacity_authority.lua`: #324 a characterization of
   the unchanged boot-shaped registrar refusal (`damage_source_cap_unavailable`
   with NetworkConstants absent and no `Network.type_info` capacity; passes on

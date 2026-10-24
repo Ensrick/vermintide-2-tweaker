@@ -137,6 +137,7 @@ local suites = {
     "test_mp_shilling_ui_policy",
     "test_mp_emporium_purchase",
     "test_mp_loot_diag",
+    "test_mp_loot_diag_realm_gate",
     "test_mp_fresh_profile_census",
     "test_mp_fresh_profile_routing",
     "test_mp_hook_targets_resolve",

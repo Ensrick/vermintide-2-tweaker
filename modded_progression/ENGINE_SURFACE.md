@@ -86,6 +86,16 @@ nil returns; `pre_request` requires vanilla to return a finite positive numeric
 enqueue id. Observer-failure rows retain only their controlled stage and the
 fixed `observer_failed` reason, never raw exception text or identifiers.
 
+The emit gate asks one boolean realm query, `LootDiag.realm_is_modded`, wired
+in `modded_progression.lua`: game 6.12.0+ publishes the realm only as the
+global `MODDED_REALM` [src: `application_parameter.lua:150-152` at 6.13.0],
+which decides whenever it is a boolean; mp's legacy realm query (raw flag,
+launch parameter, bracket depth) answers only when it is absent. The gate no
+longer reads `script_data["eac-untrusted"]`, which 6.12.0 stopped writing, so
+a 0.2.41-dev-style raw-flag gate never opened (issue 1692). Runtime check
+`issue1692_loot_diag_gate_open_in_modded_realm` and engine-free
+`test_mp_loot_diag_realm_gate.lua` lock both game layouts.
+
 ### Vanilla Silver Shilling presentation and local refresh (issue 578; owner docs: `docs/engine/09`, `docs/engine/11`)
 
 | Class.method (kind) | Vanilla behavior at the seam | Why mp hooks it | Trap / invariant |
