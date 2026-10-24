@@ -171,7 +171,7 @@ end
 
 -- Body of the named runtime check career_settings_swap_saves_and_restores.
 -- Returns a failure string, or nil plus an optional note naming a skipped live
--- half (the regression runner has no SKIP channel). ctx fields (all optional):
+-- half. The named-check adapter reports that note as SKIP, not PASS. ctx fields:
 --   live_career  the live SPProfiles[5].careers[1] row (nil => live parts skip)
 --   production   the production owner state DCP's sync/unload path uses
 --   custom_sets  list of DCP portrait maps (cosmetic key -> { hud = ... })
@@ -234,6 +234,7 @@ function M.check_transaction(ctx)
             return "production owner holds a row other than the live Mercenary career"
         end
         local key = find_custom(ctx.custom_sets, "hud", production.original_portrait_image)
+            or find_custom(ctx.custom_sets, "medium", production.original_picking_image)
         if key then
             return "captured original is DCP portrait " .. tostring(key)
                 .. ": a swapped value leaked into the vanilla capture"

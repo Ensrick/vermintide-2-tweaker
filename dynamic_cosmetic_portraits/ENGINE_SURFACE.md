@@ -74,6 +74,10 @@ three places: the `UnitFrameUI.draw` tick above, `mod.on_game_state_changed`
 `M.vanilla_portrait` (`:154`): the captured original while the owner holds the
 row, else the live row, which is then unswapped. It never depends on an apply, so
 a remote Mercenary's own portrait still shows when the local one is untracked.
+The #509 transaction check rejects custom portraits captured as either the HUD
+or hero-select original. A missing live career row returns an explicit `SKIP`
+to the regression runner; its separate skipped count is not a successful live
+verification.
 The `_sync_player_stats` bracket is the only other writer of the row: one
 synchronous vanilla call, live value put straight back.
 

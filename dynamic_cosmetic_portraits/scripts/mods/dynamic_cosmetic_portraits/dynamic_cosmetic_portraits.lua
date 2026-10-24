@@ -21,7 +21,7 @@ end
 -- exposure is needed. Matches modded_progression.lua:27.
 local _MEM_PROBE_T0_DCP = collectgarbage("count")
 
-local MOD_VERSION = "0.1.30-dev"
+local MOD_VERSION = "0.1.31-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([dcp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -104,10 +104,13 @@ local _RT_CHECKS = {}
 local function _rt_register(name, fn)
     _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
 end
--- The runner has no SKIP channel (nil = PASS), so a check that skips a live
--- half names it here, log-only, and still returns nil.
+-- A missing live half is observable but is not a completed verification.
+-- Preserve its log receipt and return the runner's explicit SKIP verdict.
 local function _rt_note_skip(name, note)
-    if note then pcall(printf, "[dcp:509] %s %s", tostring(name), tostring(note)) end
+    if note then
+        pcall(printf, "[dcp:509] %s %s", tostring(name), tostring(note))
+        return "skip: " .. tostring(note)
+    end
     return nil
 end
 
@@ -149,20 +152,24 @@ local function _rt_src_read(path)
     return t
 end
 mod:command("dcp_regression_test", "Run regression smoke checks for past bugs", function()
-    local pass, fail = 0, 0
+    local pass, fail, skip = 0, 0, 0
     mod:echo("=== dcp regression_test (v%s) ===", MOD_VERSION)
     for _, c in ipairs(_RT_CHECKS) do
         local ok, err = pcall(c.fn)
         if ok and err == nil then
             mod:echo("  PASS: %s", c.name); pass = pass + 1
             mod:info("[regression] PASS %s", c.name)
+        elseif ok and type(err) == "string" and err:sub(1, 5) == "skip:" then
+            local note = err:sub(6):gsub("^%s+", "")
+            mod:echo("  SKIP: %s -- %s", c.name, note); skip = skip + 1
+            mod:info("[regression] SKIP %s: %s", c.name, note)
         else
             local msg = (not ok and tostring(err)) or tostring(err)
             mod:echo("  FAIL: %s -- %s", c.name, msg); fail = fail + 1
             mod:warning("[regression] FAIL %s: %s", c.name, msg)
         end
     end
-    mod:echo("=== %d passed, %d failed ===", pass, fail)
+    mod:echo("=== %d passed, %d failed, %d skipped ===", pass, fail, skip)
 end)
 
 _rt_register("dbg_helpers_two_channel", function()

@@ -299,6 +299,18 @@ return function(H, repo_root)
             tostring(reason))
     end)
 
+    H.test("DCP issue509 rejects a captured custom hero-select original even with vanilla HUD", function()
+        local live = live_row()
+        live.picking_image = "medium_custom_skin"
+        local production = owner.new()
+        H.truthy(owner.apply(production, live, custom_sets[1].mercenary_hat_0001))
+        local reason = owner.check_transaction({
+            live_career = live, production = production, custom_sets = custom_sets,
+        })
+        H.truthy(type(reason) == "string" and reason:find("skin_es_default", 1, true),
+            "custom picker original must be diagnosed: " .. tostring(reason))
+    end)
+
     H.test("DCP issue509 vanilla fallback and unowned-swap check do not depend on an apply", function()
         local live = live_row()
         local production = owner.new()

@@ -1,6 +1,11 @@
 # Changelog — Dynamic Cosmetic Portraits
 
-## 0.1.30-dev (2026-10-17) -- career-settings check runs the real portrait transaction (#509) [verify-fix]
+## 0.1.31-dev (2026-10-24) -- career-settings check runs the real portrait transaction (#509) [verify-fix]
+
+- Fresh claim replaces the expired, unpublished 0.1.30-dev allocation.
+- Independent review added medium-only original-contamination coverage and
+  corrected synthetic-only PASS results: unavailable live halves now display
+  SKIP and count separately in the actual `/dcp_regression_test` summary.
 
 - The persistent Mercenary career-row portrait swap now has one owner,
   `_dcp_portrait_settings_owner.lua`, used by live sync, unload restore and

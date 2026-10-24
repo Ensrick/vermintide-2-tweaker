@@ -170,7 +170,7 @@ there is no copied implementation.
   rollback and retained recovery ownership for throwing or silently ignored
   writes, and the named `career_settings_swap_saves_and_restores` body
   (`check_transaction`) passing on a healthy live row while failing on a
-  read-only row, a foreign held row, a leaked capture or an unowned DCP
+  read-only row, a foreign held row, a leaked HUD or hero-select capture, or an unowned DCP
   portrait on the row; `vanilla_portrait` never depends on an apply. The entry
   file's check, sync, restore and unload paths are pinned to the owner.
 - `tests/test_dcp_entry_portrait_flow.lua`: #509 runs the real DCP entry chunk
@@ -181,7 +181,8 @@ there is no copied implementation.
   `on_unload` restoring the vanilla pair through the live wrappers, and the
   named `career_settings_swap_saves_and_restores` and
   `score_rows_resolve_without_local_swap_509` checks passing, failing on an
-  unowned DCP portrait, and logging a skipped live half.
+  unowned DCP portrait, and reporting a missing live half as `SKIP` with a
+  separate skipped total rather than counting it as `PASS`.
 - `fixtures/vanilla_weapon_master_list.lua`: GENERATED vanilla weapon census
   (every `ItemMasterList` melee/ranged entry with its `can_wield` list after the
   DLC `UpdateItemMasterList` patches, each hero career's

@@ -26,6 +26,8 @@ Last updated: 2026-07-18.
 - [ ] Equipping a tracked hat or outfit swaps the HUD and hero-select portraits; removing it, or unloading the mod, restores the vanilla pair.
 - [ ] With an untracked local Mercenary, a remote Mercenary's tracked portrait still shows on the score screen, Tab list and HUD frames.
 - [ ] `/dcp_regression_test` passes `career_settings_swap_saves_and_restores` and `score_rows_resolve_without_local_swap_509`; no `[dcp:509] portrait settings ... rejected` line in the log.
+- [ ] A missing live career row produces `SKIP`, increments the separate skipped count, and is not accepted as live verification. Repeat in the Keep with the live row available before accepting either check.
+- [ ] A custom hero-select portrait cannot be retained as the captured vanilla original, even when the captured HUD portrait itself is vanilla.
 - [ ] Offline `test_dcp_portrait_settings_owner.lua` and `test_dcp_entry_portrait_flow.lua` pass.
 
 ---

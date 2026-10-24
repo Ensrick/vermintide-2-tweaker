@@ -94,6 +94,8 @@ return function(H, repo_root)
                 if name then results[name] = "PASS" end
                 local failed, why = line:match("^  FAIL: (%S+) %-%- (.*)$")
                 if failed then results[failed] = "FAIL: " .. why end
+                local skipped, note = line:match("^  SKIP: (%S+) %-%- (.*)$")
+                if skipped then results[skipped] = "SKIP: " .. note end
             end
             return results
         end
@@ -211,12 +213,14 @@ return function(H, repo_root)
             tostring(result))
     end)
 
-    H.test("DCP issue509 named checks log a skipped live half and still pass", function()
+    H.test("DCP issue509 named checks report SKIP rather than PASS without their live half", function()
         local f = load_entry(UNTRACKED_HAT)
         f.env.SPProfiles = false  -- false, not nil: nil would fall through to the real _G
         local results = f:regression()
-        H.equal(results.career_settings_swap_saves_and_restores, "PASS")
-        H.equal(results.score_rows_resolve_without_local_swap_509, "PASS")
+        H.truthy(results.career_settings_swap_saves_and_restores:find("SKIP: ", 1, true) == 1,
+            "career check must not report a synthetic-only PASS")
+        H.truthy(results.score_rows_resolve_without_local_swap_509:find("SKIP: ", 1, true) == 1,
+            "score check must not report an unavailable-live-row PASS")
         local noted = {}
         for _, line in ipairs(f.logs) do
             if line:find("[dcp:509] career_settings_swap_saves_and_restores live half skipped", 1, true) then
@@ -228,5 +232,7 @@ return function(H, repo_root)
         end
         H.truthy(noted.career, "career check names its skipped live half")
         H.truthy(noted.score, "score check names its skip")
+        H.truthy(table.concat(f.logs, "\n"):find("0 failed, 2 skipped", 1, true),
+            "the actual runner summary must count both skipped checks")
     end)
 end
