@@ -9,6 +9,8 @@ local function build(ctx)
     assert(ctx.make_stub, "crt balance catalog make_stub required")
     assert(ctx.ensure_wire_safe_funcs, "crt balance catalog wire helper required")
     assert(ctx.min_thp_on_kill, "crt balance catalog THP floor required")
+    -- #1686: hand the pure atlas guard to the catalogs (Leading Shots talent icon).
+    ctx.buff_icons = ctx.buff_icons or (type(mod._crt) == "table" and mod._crt.buff_icons or nil)
 
     local builders = {
         mod:dofile("scripts/mods/career_tweaker/_crt_balance_catalog_early"),

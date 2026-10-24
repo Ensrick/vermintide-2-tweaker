@@ -22,10 +22,13 @@
 #   Then read `git diff --cached --name-only`. If no staged file matches
 #      `*.lua`, `*.cfg`, `*.ps1`, or `*.mod`, skip the remaining gates — pure
 #      docs / asset commits don't need them.
-#   4. Run `qa/run_all.ps1 -Quick -SkipLua` (the -Quick always-run set: cfg +
+#   4. Run `qa/run_all.ps1 -Quick -SkipLua -Staged` (the -Quick always-run set: cfg +
 #      published-ids + version + unpack + widget-type + event-register +
 #      cross-mod-deps + the blocking LuaJIT-compatible syntax parse; skips the
 #      slow advisory luacheck analysis and the full-pass scans CI runs).
+#      `-Staged` scopes change-set-aware checks to the index: a moved
+#      weapon-history source tip blocks only a commit that stages
+#      weapon-history inputs or a WT stream, else it is an advisory (#1683).
 #      Any non-zero exit blocks the commit.
 #   5. Run `tools/mod-lint/lint-mod.ps1`. Exit 2 (duplicate-hook errors)
 #      blocks the commit; exit 1 (warnings — forward-ref / late-local /
@@ -155,7 +158,7 @@ if ($relevant.Count -eq 0) {
 
 Write-Host "[pre-commit] $($relevant.Count) relevant file(s) staged; running local QA gates." -ForegroundColor Cyan
 
-# --- Step 4: qa/run_all.ps1 -Quick -SkipLua --------------------------------
+# --- Step 4: qa/run_all.ps1 -Quick -SkipLua -Staged -------------------------
 $qaScript = Join-Path $repoRoot 'qa\run_all.ps1'
 if (-not (Test-Path $qaScript)) {
     Write-Host "[pre-commit] missing $qaScript -- cannot verify; aborting commit." -ForegroundColor Red
@@ -163,8 +166,8 @@ if (-not (Test-Path $qaScript)) {
 }
 
 Write-Host ""
-Write-Host "[pre-commit] step 4/7: qa/run_all.ps1 -Quick -SkipLua" -ForegroundColor Cyan
-$qaOutput = & pwsh -NoProfile -File $qaScript -Quick -SkipLua 2>&1
+Write-Host "[pre-commit] step 4/7: qa/run_all.ps1 -Quick -SkipLua -Staged" -ForegroundColor Cyan
+$qaOutput = & pwsh -NoProfile -File $qaScript -Quick -SkipLua -Staged 2>&1
 $qaExit = $LASTEXITCODE
 $qaOutput | ForEach-Object { Write-Host $_ }
 

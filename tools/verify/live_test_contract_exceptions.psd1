@@ -217,7 +217,7 @@
         # local purchase, and overlay synchronization only.
         @{
             Marker='[mp:577]'; ModId='mp'
-            ModTrees=@{mp='8dd71ccd12e5f05e2364e90d1fdc4138028c2090'}
+            ModTrees=@{mp='ea0020cd31132dbaedfbdc5bda8d9e8014bb2422'}
             SourcesByMod=@{mp='modded_progression/scripts/mods/modded_progression/modded_progression.lua'}
             Signature='[mp:577] purchase_rejected item=%s reason=%s backend=none'
             Bound='at most one rejection receipt per explicit modded-realm Silver Shilling exchange attempt; both failure branches return before subsequent terminal routes'
@@ -234,7 +234,7 @@
         }
         @{
             Marker='[mp:577]'; ModId='mp'
-            ModTrees=@{mp='8dd71ccd12e5f05e2364e90d1fdc4138028c2090'}
+            ModTrees=@{mp='ea0020cd31132dbaedfbdc5bda8d9e8014bb2422'}
             SourcesByMod=@{mp='modded_progression/scripts/mods/modded_progression/modded_progression.lua'}
             Signature='[mp:577] purchase_committed item=%s price=%d balance=%d overlay=%s backend=none'
             Bound='at most one commit receipt per explicit modded-realm Silver Shilling exchange attempt after successful validation and purchase'
@@ -251,7 +251,7 @@
         }
         @{
             Marker='[crt:728]'; ModId='crt'
-            ModTrees=@{crt='a054ad0aa94f908db3f1cdf22c98aecf3337ba4f'}
+            ModTrees=@{crt='c230341c06aae6007f8cd55a3e0ca45d1636a11b'}
             SourcesByMod=@{crt='career_tweaker/scripts/mods/career_tweaker/_crt_career_unlock.lua'}
             Signature='[crt:728] installed setting=%s scope=local_level_gate occupancy=vanilla'
             Bound='one terminal install receipt per module evaluation'
@@ -260,7 +260,7 @@
         }
         @{
             Marker='[crt:728]'; ModId='crt'
-            ModTrees=@{crt='a054ad0aa94f908db3f1cdf22c98aecf3337ba4f'}
+            ModTrees=@{crt='c230341c06aae6007f8cd55a3e0ca45d1636a11b'}
             SourcesByMod=@{crt='career_tweaker/scripts/mods/career_tweaker/_crt_career_unlock.lua'}
             Signature='[crt:728] level_gate setting=%s unlock=%s profile=%s level=%s result=%s reason=%s'
             Bound='unlock decisions are signature-deduplicated for the finite unlock catalogue'
@@ -272,7 +272,7 @@
         }
         @{
             Marker='[crt:728]'; ModId='crt'
-            ModTrees=@{crt='a054ad0aa94f908db3f1cdf22c98aecf3337ba4f'}
+            ModTrees=@{crt='c230341c06aae6007f8cd55a3e0ca45d1636a11b'}
             SourcesByMod=@{crt='career_tweaker/scripts/mods/career_tweaker/_crt_career_unlock.lua'}
             Signature='[crt:728] character_select setting=%s kruber_profile=%s party=%s available=%s reserved_by=%s careers=[%s]'
             Bound='character-selection summaries are digest-deduplicated over a finite widget catalogue'
@@ -284,7 +284,7 @@
         }
         @{
             Marker='[crt:728]'; ModId='crt'
-            ModTrees=@{crt='a054ad0aa94f908db3f1cdf22c98aecf3337ba4f'}
+            ModTrees=@{crt='c230341c06aae6007f8cd55a3e0ca45d1636a11b'}
             SourcesByMod=@{crt='career_tweaker/scripts/mods/career_tweaker/_crt_career_unlock.lua'}
             Signature='[crt:728] ui_refresh setting=%s hero_summary=%s character_select=%s'
             Bound='one UI-refresh receipt per explicit unlock-all or level-override setting transition'
@@ -450,7 +450,7 @@
             ModTrees=@{gut_dev=@('0778c26248cda31c84498f7dfbb7ca210fd8e499')}
             SourcesByMod=@{gut_dev='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_dx12_fence630.lua'}
             Signature='[gut:630] frame_evidence draw=%d visible_rows=%s resource_candidates=%s'
-            Bound='focus/tab/Weapons-expansion edge evidence under one absolute 48-row probe budget'
+            Bound='focus/tab/Weapons-expansion edge evidence under a 48-row per-session probe budget reset only by Mod Tweaker enter'
             EmitterAnchors=@(
                 @{Tokens=@('log','(','string','.','format','(','String:frame_evidence draw=%d visible_rows=%s resource_candidates=%s')}
                 @{Tokens=@('emit','(','String:[gut:630] ','..','message',')')}
@@ -515,7 +515,7 @@
         }
         @{
             Marker='[mp:607]'; ModId='mp'
-            ModTrees=@{mp='8dd71ccd12e5f05e2364e90d1fdc4138028c2090'}
+            ModTrees=@{mp='ea0020cd31132dbaedfbdc5bda8d9e8014bb2422'}
             SourcesByMod=@{mp='modded_progression/scripts/mods/modded_progression/_mp_loot_diag_runtime.lua'}
             Signature='[mp:607] event=%s serial=%d flow=%s request=%s reason=%s chest=%s items=%d local_items=%d local_containers=%d local_uses=%d award_capable=%s open_capable=%s first_missing=%s backend=%s'
             Bound='one-mission observer events are persisted in a twelve-record bounded ledger'
@@ -795,7 +795,7 @@
     # a finite-output exemption.
     ReceiptDiscoveryOverrides = @(
         @{
-            ModId='WOC';ModTree='91c0721cb0ccbbec25a28b8bc08ba17e62b9add9'
+            ModId='WOC';ModTree='5aae34e82a63ee7c316e90965854496b3aa7223a'
             Source='weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_blightreaper_audio.lua';Marker='[WOC:633]'
             Signature='[WOC:633] audio contract inspect_event=%s inspect_bank=%s inspect_package=%s ambient_event=%s ambient_bank=%s ambient_status=diagnostic force_load=false network=false probe_runs=%d/%d chat=false'
             EmitterAnchors=@(
@@ -804,27 +804,27 @@
             )
         }
         @{
-            ModId='WOC';ModTree='91c0721cb0ccbbec25a28b8bc08ba17e62b9add9';Source='weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_blightreaper_audio.lua';Marker='[WOC:633]'
+            ModId='WOC';ModTree='5aae34e82a63ee7c316e90965854496b3aa7223a';Source='weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_blightreaper_audio.lua';Marker='[WOC:633]'
             Signature='[WOC:633] inspect started event=%s bank=%s package_state=%s max_seconds=%d owner=local-1p chat=false'
             EmitterAnchors=@(@{Tokens=@('log','(','String:[WOC:633] inspect started event=%s bank=%s package_state=%s max_seconds=%d owner=local-1p chat=false')})
         }
         @{
-            ModId='WOC';ModTree='91c0721cb0ccbbec25a28b8bc08ba17e62b9add9';Source='weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_blightreaper_audio.lua';Marker='[WOC:633]'
+            ModId='WOC';ModTree='5aae34e82a63ee7c316e90965854496b3aa7223a';Source='weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_blightreaper_audio.lua';Marker='[WOC:633]'
             Signature='[WOC:633] inspect SKIP reason=%s event=%s package=%s chat=false'
             EmitterAnchors=@(@{Tokens=@('String:[WOC:633] inspect SKIP reason=%s event=%s package=%s chat=false')})
         }
         @{
-            ModId='WOC';ModTree='91c0721cb0ccbbec25a28b8bc08ba17e62b9add9';Source='weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_blightreaper_audio.lua';Marker='[WOC:633]'
+            ModId='WOC';ModTree='5aae34e82a63ee7c316e90965854496b3aa7223a';Source='weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_blightreaper_audio.lua';Marker='[WOC:633]'
             Signature='[WOC:633] ambient probe started runs=%d/%d event=%s bank=%s id=%s source=local-3p max_seconds=%d force_load=false network=false chat=false'
             EmitterAnchors=@(@{Tokens=@('log','(','String:[WOC:633] ambient probe started runs=%d/%d event=%s bank=%s id=%s source=local-3p max_seconds=%d force_load=false network=false chat=false')})
         }
         @{
-            ModId='WOC';ModTree='91c0721cb0ccbbec25a28b8bc08ba17e62b9add9';Source='weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_blightreaper_audio.lua';Marker='[WOC:633]'
+            ModId='WOC';ModTree='5aae34e82a63ee7c316e90965854496b3aa7223a';Source='weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_blightreaper_audio.lua';Marker='[WOC:633]'
             Signature='[WOC:633] ambient probe SKIP reason=%s runs=%d/%d event=%s bank=%s force_load=false network=false chat=false'
             EmitterAnchors=@(@{Tokens=@('log','(','String:[WOC:633] ambient probe SKIP reason=%s runs=%d/%d event=%s bank=%s force_load=false network=false chat=false')})
         }
         @{
-            ModId='WOC';ModTree='91c0721cb0ccbbec25a28b8bc08ba17e62b9add9';Source='weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_blightreaper_audio.lua';Marker='[WOC:633]'
+            ModId='WOC';ModTree='5aae34e82a63ee7c316e90965854496b3aa7223a';Source='weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_blightreaper_audio.lua';Marker='[WOC:633]'
             Signature='[WOC:633] audio stop kind=%s reason=%s event=%s id=%s stopped=%s chat=false'
             EmitterAnchors=@(@{Tokens=@('log','(','String:[WOC:633] audio stop kind=%s reason=%s event=%s id=%s stopped=%s chat=false')})
         }
@@ -998,7 +998,7 @@
             )
         }
         @{
-            ModId='crt'; ModTree='a054ad0aa94f908db3f1cdf22c98aecf3337ba4f'
+            ModId='crt'; ModTree='c230341c06aae6007f8cd55a3e0ca45d1636a11b'
             Source='career_tweaker/scripts/mods/career_tweaker/_crt_diagnostics.lua'
             Marker='[crt:699]'; AddRoute=$true
             Signature='[crt:699] icon active=true subject=%s buff=%s role=%s template=%s expected=%s icon=%s atlas=%s atlas_id=%s widget=%s widget_icon=%s semantic_match=%s numb_collision=%s hud_widgets=%d hud_capacity=%d hidebuffs=%s hidden=%s priority=%s'
@@ -1108,7 +1108,7 @@
             )
         }
         @{
-            ModId='WOC'; ModTree='91c0721cb0ccbbec25a28b8bc08ba17e62b9add9'
+            ModId='WOC'; ModTree='5aae34e82a63ee7c316e90965854496b3aa7223a'
             Source='weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_boss_weapon_catalog.lua'
             Marker='[WOC:boss-catalog]'
             Signature='[WOC:boss-catalog] facet=authored id=%s issue=%s stage=%s status=%s registration_enabled=%s required=%s missing=%s'
@@ -1284,7 +1284,7 @@
             )
         }
         @{
-            ModId='WOC'; ModTree='91c0721cb0ccbbec25a28b8bc08ba17e62b9add9'
+            ModId='WOC'; ModTree='5aae34e82a63ee7c316e90965854496b3aa7223a'
             Source='weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua'
             Marker='[WOC:712]'
             Signature='[WOC:712] transform proof kind=%s surface=%s perspective=%s before=%s after=%s target=%s write={%s} durable=true node=%s node_name=%s'
@@ -1298,7 +1298,7 @@
             )
         }
         @{
-            ModId='WOC'; ModTree='91c0721cb0ccbbec25a28b8bc08ba17e62b9add9'
+            ModId='WOC'; ModTree='5aae34e82a63ee7c316e90965854496b3aa7223a'
             Source='weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua'
             Marker='[WOC:712]'
             Signature='[WOC:712] tuner set offset={%f,%f,%f} rotation={%f,%f,%f} scale_3p=%f scale_1p=%f retargeted=%d live=%d'
@@ -1313,7 +1313,7 @@
             )
         }
         @{
-            ModId='WOC'; ModTree='91c0721cb0ccbbec25a28b8bc08ba17e62b9add9'
+            ModId='WOC'; ModTree='5aae34e82a63ee7c316e90965854496b3aa7223a'
             Source='weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua'
             Marker='[WOC:712]'
             Signature='[WOC:712] pose audit canonical offset={%.3f,%.3f,%.3f} rotation={%.1f,%.1f,%.1f} scale_3p={%.3f,%.3f,%.3f} scale_1p={%.3f,%.3f,%.3f} live=%d shown=%d truncated=%d'
@@ -1327,7 +1327,7 @@
             )
         }
         @{
-            ModId='WOC'; ModTree='91c0721cb0ccbbec25a28b8bc08ba17e62b9add9'
+            ModId='WOC'; ModTree='5aae34e82a63ee7c316e90965854496b3aa7223a'
             Source='weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua'
             Marker='[WOC:712]'
             Signature='[WOC:712] pose audit row=%d surface=%s perspective=%s node=%s retained=%s wt_tuner_claims=%s current=%s target=%s write={%s}'
@@ -1342,7 +1342,7 @@
             )
         }
         @{
-            ModId='WOC'; ModTree='91c0721cb0ccbbec25a28b8bc08ba17e62b9add9'
+            ModId='WOC'; ModTree='5aae34e82a63ee7c316e90965854496b3aa7223a'
             Source='weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua'
             Marker='[WOC:712]'; AddRoute=$true
             Signature='[WOC:712] unit census surface=%s perspective=%s %s'
@@ -1358,7 +1358,7 @@
             )
         }
         @{
-            ModId='WOC'; ModTree='91c0721cb0ccbbec25a28b8bc08ba17e62b9add9'
+            ModId='WOC'; ModTree='5aae34e82a63ee7c316e90965854496b3aa7223a'
             Source='weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_blightreaper_pulse.lua'
             Marker='[WOC:712]'; AddRoute=$true
             Signature='[WOC:712] transform SKIP reason=%s node_name=%s chat=false'

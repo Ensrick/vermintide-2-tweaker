@@ -144,7 +144,7 @@ mix them, and do not invent a fourth.
 
 **Tier (a) - Repo QA gates (`qa/*`).** Static PowerShell checks, `luacheck`,
 and engine-free Lua 5.1 unit tests, run by the pre-commit hook
-(`qa/run_all.ps1 -Quick -SkipLua`) and CI
+(`qa/run_all.ps1 -Quick -SkipLua -Staged`) and CI
 (`.github/workflows/qa.yml`). They read SOURCE, never the running game, so they
 are the only tier that runs without VT2. Errors (exit >=2) block the commit;
 warnings (exit 1) report but never block (`qa/CHECKS.md` "Gate semantics"). New
@@ -1806,7 +1806,7 @@ before acting. Memory cited claims can be 20+ days old. The verification is
 
 ### 8.5a Pre-commit hook + `--no-verify` escape hatch
 
-Established 2026-05-25 alongside `tools/install-hooks.ps1` (Issue #29). After cloning the repo, run `./tools/install-hooks.ps1` to install the local pre-commit hook. It first runs `qa/check_diff_whitespace.ps1 -Staged` against every non-empty staged patch, including docs/assets, then runs `qa/run_all.ps1 -Quick -SkipLua` and `tools/mod-lint/lint-mod.ps1` for staged `*.lua` / `*.cfg` / `*.ps1` / `*.mod` files. This keeps trailing whitespace, cfg drift, MOD_VERSION / title-suffix typos, duplicate hook registrations, and the other recurring bug classes catalogued in § 11a out of committed history. The installer is idempotent; only the heavier code gates self-disable for commits that touch no checked extensions. Hosted pull-request QA independently runs `check_diff_whitespace.ps1` on the explicit merge-base/base-to-head range, so committing a defect cannot hide it from a clean worktree.
+Established 2026-05-25 alongside `tools/install-hooks.ps1` (Issue #29). After cloning the repo, run `./tools/install-hooks.ps1` to install the local pre-commit hook. It first runs `qa/check_diff_whitespace.ps1 -Staged` against every non-empty staged patch, including docs/assets, then runs `qa/run_all.ps1 -Quick -SkipLua -Staged` (change-set-aware checks read only the index, #1683) and `tools/mod-lint/lint-mod.ps1` for staged `*.lua` / `*.cfg` / `*.ps1` / `*.mod` files. This keeps trailing whitespace, cfg drift, MOD_VERSION / title-suffix typos, duplicate hook registrations, and the other recurring bug classes catalogued in § 11a out of committed history. The installer is idempotent; only the heavier code gates self-disable for commits that touch no checked extensions. Hosted pull-request QA independently runs `check_diff_whitespace.ps1` on the explicit merge-base/base-to-head range, so committing a defect cannot hide it from a clean worktree.
 
 **Gates block on ERRORS only.** A gate that finds an error fails the commit; WARNINGS print but do not block (this is the behavior a parallel `qa/run_all` change is landing). So the source commit + push that is part of every ship (§ 6.6) proceeds cleanly whenever the checks surface only advisory warnings; it does not get stuck behind a warning.
 

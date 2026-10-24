@@ -1,5 +1,31 @@
 # Career Tweaker Changelog
 
+## 0.4.34-beta (2026-10-24) - buff icons survive the 6.13.0 atlas (#1686) [verify-fix]
+
+- Reissued the unpublished 0.4.32-beta candidate under a fresh broker claim;
+  the expired allocation is not renewed or reused.
+
+- Game Version 6.13.0 removed two atlas icons crt buffs used. With the
+  Handmaiden Dance of Blades rework on, the first enemy hit added a buff whose
+  icon (`kerillian_maidenguard_cooldown_on_nearby_allies`) no longer exists; with
+  the Unchained career-skill rework on, the career skill did the same
+  (`sienna_unchained_activated_ability_power_on_enemies_hit`). The buff bar
+  then drew the missing name and the game crashed ("Material not found in
+  Gui", bug class 23).
+- Both buffs now use the names vanilla uses for the same talents:
+  `maidenguard_4_2` and `unchained_6_1`.
+- New `_crt_buff_icons.lua` checks every buff icon crt registers against the
+  live atlas (every Foot Knight buff, plus one sweep over every crt-registered
+  buff at load and after each rework apply pass). A missing buff icon is removed, so the buff still
+  works without a buff-bar slot, and logs `[crt:1686] ... dropped` once per
+  distinct icon. Each sweep logs one `[crt:1686] buff icon atlas guard (load)`
+  / `(apply)` summary the first time it runs, so the log proves the guard ran.
+  The Leading Shots talent keeps the vanilla talent icon if its icon goes
+  missing.
+- `/crt_regression_test` adds `issue1686_buff_icons_in_atlas`: every crt icon
+  must resolve in the atlas, including reworks that are switched off.
+- Offline `test_crt_buff_icons.lua` fails on the 0.4.31-beta source.
+
 ## 0.4.31-beta (2026-09-12) - keep rework selections through profile switches (#1575) [not-started]
 
 - Switching Mod Tweaker profiles on the Careers tab could turn off enabled
