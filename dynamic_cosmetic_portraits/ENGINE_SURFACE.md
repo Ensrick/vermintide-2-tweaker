@@ -35,7 +35,7 @@ mutation and a VMF data API respectively) and are covered in the subsystem notes
 
 | Class.method (kind) | Vanilla behavior at the seam | Why dcp hooks it | Trap / invariant |
 |---|---|---|---|
-| `UnitFrameUI.draw` [safe] `:734` | Draws a player HUD unit frame each frame [src: `scripts/ui/hud_ui/unit_frame_ui.lua:326`] | Call `_sync_portrait_settings()` so the career_settings swap activates on the first frame after the custom resources are resident and the hat/skin is detected (`:734`) | PER-FRAME row, but a cheap no-op once `_portrait_settings_active` flips: `_sync_portrait_settings` early-returns until `_check_portrait_materials_ready()` proves all 24 HUD/small `UIAtlasHelper` rows, the shared atlas material, and all 12 medium standalone materials on one injected Gui. Missing resources fail open to vanilla. `Gui.material(gui, name)` returns nil silently on a missing material in this build (NOT a throw), so the probe MUST inspect the return, not just `pcall` success. This is a readiness TICK only - the actual swap targets the shared `career_settings` table, so player scope is corrected at the consumer seams (issue 435) |
+| `UnitFrameUI.draw` [safe] `:1165` | Draws a player HUD unit frame each frame [src: `scripts/ui/hud_ui/unit_frame_ui.lua:326`] | Call `_sync_portrait_settings()` so the career_settings swap activates on the first frame after the custom resources are resident and the hat/skin is detected (`:1165`) | PER-FRAME row, but a cheap no-op once the `_dcp_portrait_settings_owner` state is active (its apply fast path writes nothing while the owned pair is already shown, #509): `_sync_portrait_settings` early-returns until `_check_portrait_materials_ready()` proves all 24 HUD/small `UIAtlasHelper` rows, the shared atlas material, and all 12 medium standalone materials on one injected Gui. Missing resources fail open to vanilla. `Gui.material(gui, name)` returns nil silently on a missing material in this build (NOT a throw), so the probe MUST inspect the return, not just `pcall` success. This is a readiness TICK only - the actual swap targets the shared `career_settings` table, so player scope is corrected at the consumer seams (issue 435) |
 
 ### Local presentation invalidation (non-hook seam)
 
@@ -60,14 +60,26 @@ doc and `DEVELOPMENT.md` carry the full architecture.
 Every VT2 portrait surface derives its texture name from
 `career_settings.portrait_image` (`<base>` directly on the HUD, `medium_<base>`
 on hero-select, `small_<base>` on matchmaking, etc.) [src: `career_settings.lua`
-portrait fields; e.g. `:67`]. `dcp` saves the originals once
-(`_original_portrait_image` / `_original_picking_image`, `:445`), then writes the
+portrait fields; e.g. `:67`]. `dcp` captures the originals once through
+`_dcp_portrait_settings_owner.lua` (`M.apply` `:44`, `M.restore` `:114`; #509:
+every write read back, ownership kept until the vanilla pair is visibly back on
+the row), then writes the
 custom `portrait_kruber_mercenary_<key>` pair into the live table when a tracked
 hat/outfit is equipped, restoring the originals when nothing matches or on unload
-(`_restore_portrait_settings`, `:428`). These are plain mutable Lua tables - no
-hook is needed on any consumer. `_sync_portrait_settings` (`:440`) is driven from
+(`_restore_portrait_settings`, `:622`). These are plain mutable Lua tables - no
+hook is needed on any consumer. `_sync_portrait_settings` (`:639`) is driven from
 three places: the `UnitFrameUI.draw` tick above, `mod.on_game_state_changed`
-(`:738`), and cleanup via `mod.on_unload` (`:749`).
+(`:1383`), and cleanup via `mod.on_unload` (`:1402`). The #435 per-player seams
+(HUD `_sync_player_stats`, Tab list, score screen) fall back to
+`M.vanilla_portrait` (`:154`): the captured original while the owner holds the
+row, else the live row, which is then unswapped. It never depends on an apply, so
+a remote Mercenary's own portrait still shows when the local one is untracked.
+The #509 transaction check rejects custom portraits captured as either the HUD
+or hero-select original. A missing live career row returns an explicit `SKIP`
+to the regression runner; its separate skipped count is not a successful live
+verification.
+The `_sync_player_stats` bracket is the only other writer of the row: one
+synchronous vanilla call, live value put straight back.
 
 ### Cosmetic-key resolution (owner: `docs/engine/06`, feeds `docs/engine/11`)
 
