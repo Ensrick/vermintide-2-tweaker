@@ -196,40 +196,15 @@ local function _cat_set(category, setting_id, value)
     if MT then MT:set(mod_id, setting_id, value) end
 end
 
--- Native menu sound feedback. The real Options menu fires Wwise events on the
--- view's wwise_world: "Play_hud_select" on a commit (options_view.lua:544 etc.)
--- and "Play_hud_hover" on hover-enter (options_view.lua:423 etc.). We resolve a
--- wwise_world off the music_world (pcall-guarded; a missing world is silent, never
--- a crash). A one-time debug probe logs which worlds expose a usable wwise_world,
--- so if Play_hud_* are inaudible the log shows whether the handle resolved.
-local _wwise_probed = false
-local function _wwise_world()
-    local world = Managers.world and Managers.world:world("music_world")
-    return world and World.wwise_world(world)
-end
-local function _wwise_probe()
-    if _wwise_probed then return end
-    _wwise_probed = true
-    pcall(function()
-        local names = { "music_world", "top_ingame_view", "level_world" }
-        for i = 1, #names do
-            local w = Managers.world and Managers.world:has_world(names[i]) and Managers.world:world(names[i])
-            local ww = w and World.wwise_world(w)
-            mod:debug("[mt:wwise] world '%s' present=%s wwise_world=%s",
-                names[i], tostring(w ~= nil), tostring(ww ~= nil))
-        end
-    end)
-end
-local function _play_event(event)
-    pcall(function()
-        local ww = _wwise_world()
-        if ww then WwiseWorld.trigger_event(ww, event) end
-    end)
-end
+-- Native menu sound feedback. (#1670) Through the ONE resolver both twins share: the
+-- /mod_tweaker command opens this sub-state, and its clicks and hovers were silent
+-- while it resolved its own (unregistered) music_world. See _mod_tweaker_sound.lua.
+local sound = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_sound")
+local _wwise_probe = sound.new_probe("substate")
 -- Commit/click sound (checkbox flip, arrow click, dropdown cycle, slider release).
-local function _play_click() _play_event("Play_hud_select") end
+local function _play_click() sound.play("Play_hud_select") end
 -- Hover sound — fire on the EDGE (hover-enter) only, never every frame.
-local function _play_hover() _play_event("Play_hud_hover") end
+local function _play_hover() sound.play("Play_hud_hover") end
 
 -- ---------------------------------------------------------------
 -- (#208) EQUIPMENT MERGE. The four inventory-management mods get folded into ONE
@@ -1090,6 +1065,9 @@ end
 HeroViewStateModTweaker.play_sound = function (self, event)
     if self.parent and self.parent.play_sound then self.parent:play_sound(event) end
 end
+-- (#1670) The resolver this sub-state's clicks and hovers fire on, published for
+-- the issue1670_command_route_sound_path check.
+HeroViewStateModTweaker.gut_sound_resolve = sound.resolve
 
 HeroViewStateModTweaker._has_active_level_vote = function (self)
     local vm = self.voting_manager

@@ -64,6 +64,43 @@ there is no copied implementation.
   routing policies route as designed, the contracts module returns nil, `skip:`
   or the loud mismatch messages, and the runner counts SKIP apart from PASS
   and FAIL with printf resolved through a test-local environment.
+- `tests/test_gut_mod_tweaker_sound_parity.lua`: #1670 both shipped Mod
+  Tweaker twins loaded whole against a PC-shaped world manager: the click and
+  hover each twin hands its interaction layer fire on `MUSIC_WWISE_WORLD` on
+  the Esc route (standalone view) and the `/mod_tweaker` route (keep
+  sub-state) alike, fall back to a registered `music_world`, stay silent with
+  no music world, and the real contracts module's
+  `issue1670_command_route_sound_path` check passes with no log line of its
+  own, skips outside the keep or before the view attaches, and fails on the
+  0.2.358-dev lookup. printf,
+  WwiseWorld and the worlds resolve through a test-local environment.
+- `tests/test_gut_tab_talent_harness.lua`: #250 the shipped Hold-Tab provider
+  loaded whole with the real talent refresh and policies:
+  `issue250_deus_tab_talent_module_loaded` PASSes in a keep and a Chaos Wastes
+  session (through 0.2.359-dev the `check and check.fn() or msg` tail turned
+  the inner PASS into "missing"), `issue250_deus_tab_talent_tier_normalization`
+  is reported once by its own name, a drifted talent policy fails both, and a
+  missing module or check list fails loudly. get_mod, the panel class and
+  Managers resolve through a test-local environment.
+- `tests/test_gut_dialogue_contract_skip.lua`: #998 the real
+  `_gut_dialogue_contract` module and the real Character Dialogue entry:
+  `issue998_dialogue_staged_isolation` SKIPs by name with no Character
+  Dialogue, with a v5 API (0.1.11-dev shape) or with no versioned API (through
+  0.2.360-dev those were a bare PASS and a FAIL), FAILs a v6+ API that lacks the
+  `isolation_setting` descriptor or `on_settings_batch_changed`, and PASSes the
+  real entry without writing the owner. get_mod resolves through the dialogue
+  fixture's test-local environment.
+- `tests/test_gut_dx12_fence630_session_budget.lua`: #630 the real
+  `_gut_dx12_fence630` probe: after eight healthy Mod Tweaker opens a ninth
+  (decisive) session still logs its enter, frame evidence and exit summary
+  (through 0.2.361-dev one 48-line run-wide budget dropped them), a frozen
+  session keeps its last `frame_evidence`, the exit summary and the reenter
+  anomaly are reserved past a spent budget and name the suppressed count,
+  output stays at most line_cap + 1 per session with nothing on steady frames,
+  an enter/leave loop stops at the run backstop with one `run_cap` line,
+  and the contracts module's `issue630_dx12_fence_session_budget` check is
+  registered, PASSes, and FAILs on a run-wide budget. emit is a test-local
+  ledger; get_mod resolves through a test-local environment.
 - `tests/test_gut_dropdown_arrow_glow.lua`: #92 the shipped `create_dropdown`
   and its `DD_*` constants lifted out of the definitions file and driven through
   the real `mod_tweaker_dropdown_arrow_glow` check: the shipped widget passes,
@@ -83,6 +120,13 @@ there is no copied implementation.
   carry its revision and `Current (Game Version 6.13.0)` label, the Patch 5.2
   rehydrated evidence projects onto it, and no provenance input keeps a
   retired 6.12.0 or 6.12.1 anchor.
+- `tests/test_mp_hook_targets_resolve.lua`: #1671 no mp source file hooks
+  the game-6.12-removed `IngameUI.not_in_modded` (or its `can_open_loot`
+  successor), the shipped `_mp_hook_targets.TARGETS` inventory equals every
+  literal `mod:hook("Class", "method")` site in every mp file reachable
+  from the entry, and the `/mp_regression_test` census fails on a missing or
+  retired method and on a class that is not loaded (past VMF's delay window
+  that hook was refused). The class lookup and log seams are test-local.
 - `tests/test_et_issue324_capacity_authority.lua`: #324 a characterization of
   the unchanged boot-shaped registrar refusal (`damage_source_cap_unavailable`
   with NetworkConstants absent and no `Network.type_info` capacity; passes on
