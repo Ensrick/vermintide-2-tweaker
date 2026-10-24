@@ -25,6 +25,7 @@ local PAGE_EVIDENCE_CAP = 8
 local SIDECAR_EVIDENCE_CAP = 8
 local MAX_NAME = 18
 local UTF8 = rawget(_G, "UTF8Utils")
+local NativeUtf8 = rawget(_G, "Utf8")
 local PANEL_W = 1160
 local PANEL_H = 590
 local PAD_X = 20
@@ -398,9 +399,12 @@ mod.on_game_state_changed = function(status, state_name, ...)
 end
 
 local function _truncate(name)
-    if UTF8 and type(UTF8.string_length) == "function"
-            and type(UTF8.sub_string) == "function" then
-        return UTF8.string_length(name) > MAX_NAME
+    -- 6.12+ moved character length to Utf8.length (utf8_utils.lua:7,
+    -- source 93dea911); the old method is only a noisy ModShim wrapper.
+    local length = NativeUtf8 and NativeUtf8.length
+    if type(length) ~= "function" then length = UTF8 and UTF8.string_length end
+    if type(length) == "function" and UTF8 and type(UTF8.sub_string) == "function" then
+        return length(name) > MAX_NAME
             and UTF8.sub_string(name, 1, MAX_NAME - 3) .. "..." or name
     end
     return #name > MAX_NAME and name:sub(1, MAX_NAME - 3) .. "..." or name
@@ -514,6 +518,18 @@ end
 
 return {
     rt_checks = {
+        {
+            name = "issue1695_scoreboard_native_utf8",
+            fn = function()
+                if type(NativeUtf8) ~= "table" or type(NativeUtf8.length) ~= "function" then
+                    return "skip: native Utf8.length is unavailable on this game version"
+                end
+                local name = string.rep("é", MAX_NAME + 1)
+                if _truncate(name) ~= string.rep("é", MAX_NAME - 3) .. "..." then
+                    return "native UTF8 scoreboard truncation split a character"
+                end
+            end,
+        },
         {
             name = "issue272_native_live_scoreboard_page",
             fn = function()

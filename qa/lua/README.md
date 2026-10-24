@@ -49,6 +49,14 @@ there is no copied implementation.
   sender, hot-join, receiver, and timed-buff safety floors.
 - `tests/test_gut_loadout_paging.lua`: #231 page/slot bijection, strip geometry,
   text Roman numerals and the modded-STORE-Adventure paging predicate.
+- `tests/test_gut_official_loadout_boot_policy.lua`: #402/#1688 the actual
+  early boot hooks in a private environment: modern native realm before
+  backend creation, explicit official values overriding stale legacy data,
+  pre-6.12 fallback, read-only snapshot import, bounded repair continuation
+  and one missing-snapshot bootstrap.
+- `tests/test_gut_scoreboard_live_adapter.lua`: #1414 actual Tab/end draw
+  seams and detached sidecar lifetime; #1695 native UTF8 length wins over a
+  throwing deprecated shim, with pre-6.12 fallback retained.
 - `tests/test_gut_bot_loadout_snapshot.lua`: #954 detached bot owner through
   its captured hooks: native-only (modded) career import, late designation
   retry, seed-seam preference, career bounds and drift repair, with printf

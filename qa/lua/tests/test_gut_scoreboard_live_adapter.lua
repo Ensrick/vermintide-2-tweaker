@@ -7,7 +7,7 @@ return function(H, repo_root)
 
     local GLOBAL_NAMES = {
         "get_mod", "Managers", "ScoreboardHelper", "UIRenderer",
-        "UISceneGraph", "UIWidget", "UILayer", "UTF8Utils", "Localize",
+        "UISceneGraph", "UIWidget", "UILayer", "UTF8Utils", "Utf8", "Localize",
         "printf",
     }
 
@@ -54,7 +54,7 @@ return function(H, repo_root)
         }
     end
 
-    local function live_harness(body)
+    local function live_harness(body, utf8_options)
         local state = {
             now = 0,
             mechanism = "adventure",
@@ -170,6 +170,8 @@ return function(H, repo_root)
                 state.logs[#state.logs + 1] = string.format(fmt, ...)
             end,
         }
+        values.Utf8 = utf8_options and utf8_options.native
+        values.UTF8Utils = utf8_options and utf8_options.legacy
 
         with_globals(values, function()
             local api = assert(loadfile(live_path))()
@@ -184,6 +186,42 @@ return function(H, repo_root)
             })
         end)
     end
+
+    H.test("GUT #1695 real Tab adapter prefers native Utf8.length over the deprecated shim", function()
+        local calls, substring_calls = 0, 0
+        local name = string.rep("é", 20)
+        live_harness(function(env)
+            env.state.grouped = { host = player("host", name, 1) }
+            env.tab_draw({ _ui_top_renderer = {} }, 0.016)
+            H.equal(env.state.last_widget.content.player_header_1, string.rep("é", 15) .. "...")
+            H.equal(calls, 1)
+            H.equal(substring_calls, 1)
+        end, {
+            native = { length = function(text) H.equal(text, name); calls = calls + 1; return 20 end },
+            legacy = {
+                string_length = function() error("deprecated shim must not run") end,
+                sub_string = function(text, first, last)
+                    H.equal(text, name); H.equal(first, 1); H.equal(last, 15)
+                    substring_calls = substring_calls + 1
+                    return string.rep("é", 15)
+                end,
+            },
+        })
+    end)
+
+    H.test("GUT #1695 real Tab adapter preserves the pre-6.12 UTF8 fallback", function()
+        local calls = 0
+        live_harness(function(env)
+            env.tab_draw({ _ui_top_renderer = {} }, 0.016)
+            H.equal(env.state.last_widget.content.player_header_1, "Alpha")
+            H.equal(calls, 2, "both short player names should use the legacy reader")
+        end, {
+            legacy = {
+                string_length = function(text) calls = calls + 1; return #text end,
+                sub_string = function() error("short names must not be truncated") end,
+            },
+        })
+    end)
 
     H.test("GUT #1414 exit sidecar survives absent end database and deleted remote rows", function()
         live_harness(function(env)

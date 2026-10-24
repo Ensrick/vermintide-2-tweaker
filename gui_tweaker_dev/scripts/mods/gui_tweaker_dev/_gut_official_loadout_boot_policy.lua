@@ -3,7 +3,13 @@
 
 local M = {}
 
-function M.realm_is_modded(backend_realm, eac_untrusted)
+function M.realm_is_modded(backend_realm, eac_untrusted, modded_realm)
+    -- Game 6.12+ sets a native boolean before backend construction
+    -- (application_parameter.lua:150-152, source 93dea911). Explicit false
+    -- is authoritative; never revive an old modded signal in official.
+    if modded_realm ~= nil then return modded_realm == true end
+    -- Pre-6.12 compatibility only: initialized backend metadata, then the
+    -- historical application-parameter flag during early boot.
     if backend_realm == "modded" then return true end
     if backend_realm == "official" then return false end
     return eac_untrusted == true
