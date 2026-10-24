@@ -1,5 +1,17 @@
 # character_weapon_variants - engine contact surface
 
+## Animation-picker readiness owner (#317, 0.1.550-dev)
+
+The existing WeaponUnitExtension._play_3p_anim hook substitutes the event before
+native NetworkLookup encoding and local playback (6.13 source 93dea911,
+scripts/unit_extensions/weapons/weapon_unit_extension.lua:627-655). Its returned
+cross-access owner now exposes the installation marker; the named picker check
+reads that owner and calls the actual combined _cross_access_target_event route.
+A private, synchronous settings overlay proves non-default picks and the real
+baked/default fallback without saving settings, emitting animation/audio events
+or adding an RPC. Installation-marker and resolver proof are not evidence of
+observed engine playback or a peer's rendered animation; those remain live checks.
+
 ## Resolved damage-profile construction (#1676, 2026-10-24)
 
 Native 6.13.0 `scripts/settings/equipment/damage_profile_templates.lua:5570-5616`

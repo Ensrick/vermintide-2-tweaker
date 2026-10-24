@@ -5,6 +5,13 @@ PROJECT_STANDARDS tier (a), not a fourth test tier. It runs under the vendored
 PUC-Rio Lua 5.1.5 interpreter, requires no package manager or network access,
 and is part of both Quick and full QA.
 
+`test_cwv_anim_picker.lua` additionally executes #317's exact production named
+registration against the production cross-access factory/combined resolver, with
+disconnected/missing-owner/missing-fallback adversaries and exact settings restore.
+Only that callback is extracted: unrelated checks in its owner use LuaJIT goto,
+which the engine supports but this Lua 5.1 host does not. No production goto is
+edited and no picker/baked-map/check algorithm is copied into the route fixture.
+
 ```powershell
 pwsh -NoProfile -File qa/check_lua_unit_tests.ps1
 pwsh -NoProfile -File qa/check_lua_unit_tests.ps1 -SelfTest

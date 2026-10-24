@@ -459,7 +459,7 @@ _rt_register("issue645_reciprocal_style_descriptors", function()
 end)
 
 _rt_register("issue317_career_scoped_animation_picker", function()
-	return mod._cwv_dev_anim_picker.regression_check()
+	return mod._cwv_dev_anim_picker.runtime_contract(_om)
 end)
 
 _rt_register("dual_axes_cosmetic_family_parity", function()
