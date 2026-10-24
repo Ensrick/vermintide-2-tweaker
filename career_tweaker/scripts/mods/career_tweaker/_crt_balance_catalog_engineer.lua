@@ -10,6 +10,9 @@
 local function build(ctx)
     assert(type(ctx) == "table", "crt Engineer catalog context required")
     local _crt_make_stub = assert(ctx.make_stub, "crt Engineer catalog make_stub required")
+    -- #1686 atlas guard. The composer always injects it; its buff icons are
+    -- re-proven by the apply sweep, the talent icon here.
+    local _buff_icons = ctx.buff_icons
 
 local BALANCE_MODS = {
     -- ============================================================
@@ -126,7 +129,13 @@ local BALANCE_MODS = {
             saved.ls_dv    = talent.description_values
             saved.ls_dname = talent.display_name  -- usually nil (vanilla talent has only `name`)
             talent.buffs              = { "crt_engineer_leading_shots_counter" }
-            talent.icon               = "bardin_engineer_ranged_crit_count"
+            local leading_icon = "bardin_engineer_ranged_crit_count"
+            if _buff_icons then
+                -- #1686: an atlas miss keeps the vanilla talent's own icon.
+                leading_icon = _buff_icons.talent_icon(rawget(_G, "UIAtlasHelper"),
+                    _buff_icons.LEADING_SHOTS_ICON, saved.ls_icon)
+            end
+            talent.icon               = leading_icon
             -- Title resolves as Localize(display_name or name) (hero_window_talents.lua:328);
             -- the vanilla `name` still localizes to "Ingenious Ordnance", so set
             -- display_name (it takes precedence) to show "Leading Shots".
