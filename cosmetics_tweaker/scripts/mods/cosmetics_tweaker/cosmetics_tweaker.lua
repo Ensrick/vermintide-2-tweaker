@@ -1,4 +1,5 @@
 local mod = get_mod("cosmetics_tweaker")
+mod._cos_realm_authority = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_realm_authority").install(mod, _G)
 local RESOURCE_RESIDENCY = mod:dofile(
     "scripts/mods/cosmetics_tweaker/_lib_resource_residency")
 local WEAPON_APPEARANCE = mod:dofile("scripts/mods/cosmetics_tweaker/_lib_weapon_appearance").new()
@@ -7,11 +8,8 @@ local WEAPON_APPEARANCE = mod:dofile("scripts/mods/cosmetics_tweaker/_lib_weapon
 -- faults once the network backend has been torn down. Vanilla's guarded API
 -- returns nil unless a live network game exists (player_manager.lua:580-596).
 -- Keep this above every dofile so lifecycle-reachable modules share one gate.
-local function _local_player_safe(player_manager)
-    local pm = player_manager or (Managers and Managers.player)
-    if not (pm and type(pm.local_player_safe) == "function") then return nil end
-    return pm:local_player_safe()
-end
+local LIFECYCLE = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_mod_lifecycle")
+local _local_player_safe = LIFECYCLE.local_player_safe
 mod._local_player_safe = _local_player_safe
 -- v0.9.3.1: LA Prefix Patch embedded. MUST load before anything that touches
 -- LA hooks (the dedup filter wraps VMFMod's prototype methods, and LA's mod
@@ -106,7 +104,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- ([174:loadout] retired with #174/#500; _diag_probe renamed per §2.2b/#499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.224-dev"
+local MOD_VERSION = "0.9.225-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -274,6 +272,7 @@ local _rt_register = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_command_own
 -- #1145: checks register from the module that owns the guarded code (§2.2a
 -- rule 6), keeping marker and reader in one file (the #1148 scope-loss class).
 mod._cos_rewield.install_checks(mod, _rt_register)
+mod._cos_realm_authority.install_checks(_rt_register)
 
 -- ============================================================
 -- Material tinting research (TODO: cloned + recolored cosmetics)
@@ -435,7 +434,7 @@ mod:dofile("scripts/mods/cosmetics_tweaker/_cos_news_feed_safety").install(mod, 
 -- grants. apply_cosmetic_unlocks is exported as mod._cos.apply_cosmetic_unlocks;
 -- the lifecycle callbacks below drive it.
 
-mod:dofile("scripts/mods/cosmetics_tweaker/_cos_mod_lifecycle").install(mod, {
+LIFECYCLE.install(mod, {
     trace = _trace,
     mh_embed = MH_EMBED,
     tpe = TPE,
@@ -535,6 +534,7 @@ local _refresh_illusion_glow_badges =
 local MODDED_ILLUSION_SWAP = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_modded_illusion_swap")
 mod._cos_modded_illusion_swap_owner = MODDED_ILLUSION_SWAP.install(mod, {
     get_mod = get_mod,
+    with_eac_off = mod._cos_realm_authority.with_eac_off,
     skin_requires_unowned_dlc = _skin_requires_unowned_dlc,
     custom_skin_keys = _custom_skin_keys,
     glow_picker = GlowPicker,

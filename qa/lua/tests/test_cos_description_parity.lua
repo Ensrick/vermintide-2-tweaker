@@ -48,7 +48,8 @@ return function(H, repo_root)
     -- Installed-hook fixture: the production illusions module, the private
     -- localizer seam and a native Localize backed by an editable map. The engine
     -- tables carry the four vanilla typo rows plus one resolvable vanilla skin.
-    local function fixture()
+    local function fixture(options)
+        options = options or {}
         local env = setmetatable({}, { __index = _G })
         env._G = env
         local checks, prints, hooks, calls = {}, {}, {}, { private = 0, native = 0 }
@@ -61,7 +62,9 @@ return function(H, repo_root)
         }
         local cos = setmetatable({ name = "cosmetics_tweaker", _cos = {
             LA_BRIDGE = { localization = { la_control = "Loremaster control" } },
-            custom_skin_keys = {}, skin_requires_unowned_dlc = function() return false end,
+            custom_skin_keys = {}, skin_requires_unowned_dlc = function(key)
+                return key == options.dlc_key
+            end,
             encarmine_item_localization = { hat_control = "Hat control" },
             gk_set_item_localization = { outfit_control = "Outfit control" },
             presentation_localization = { presentation_control = "Presentation control" },
@@ -112,14 +115,42 @@ return function(H, repo_root)
             local original = object[method]
             object[method] = function(...) return callback(original, ...) end
         end
-        cos.hook_safe = function(_, class, method)
+        cos.hook_safe = function(_, class, method, callback)
             H.equal(class, "BackendInterfaceCraftingPlayfab")
             H.equal(method, "get_unlocked_weapon_skins")
+            H.equal(hooks[method], nil)
+            hooks[method] = callback
         end
+        cos._cos_realm_authority = execute(base .. "_cos_realm_authority.lua", env).new(
+            env, execute(base .. "_lib_modded_realm_authority.lua", env))
         execute(base .. "_cos_illusions.lua", env, true)
-        return { env = env, cos = cos, loc = loc, checks = checks, calls = calls,
+        return { env = env, cos = cos, loc = loc, checks = checks, calls = calls, hooks = hooks,
             prints = prints, native = native, native_map = native_map }
     end
+
+    H.test("Cosmetics #1691 installed illusion unlock recognizes modern realm without the old flag", function()
+        local f = fixture()
+        f.env.MODDED_REALM = true
+        f.cos.get = function(_, name) return name == "unlock_all_illusions" end
+        local rows = {}
+        f.hooks.get_unlocked_weapon_skins({ _backend_mirror = { _unlocked_weapon_skins = rows } })
+        H.equal(rows.es_1h_sword_skin_01, true)
+    end)
+
+    H.test("Cosmetics #1691 installed illusion unlock respects official authority and DLC denial", function()
+        local f = fixture({ dlc_key = "es_1h_sword_skin_01" })
+        f.env.MODDED_REALM = true
+        f.cos.get = function(_, name) return name == "unlock_all_illusions" end
+        local rows = {}
+        f.hooks.get_unlocked_weapon_skins({ _backend_mirror = { _unlocked_weapon_skins = rows } })
+        H.equal(rows.es_1h_sword_skin_01, nil)
+        H.equal(rows.wh_deus_skin_02_magic_02, true)
+        f.env.MODDED_REALM = false
+        f.env.script_data = { ["eac-untrusted"] = true }
+        rows = {}
+        f.hooks.get_unlocked_weapon_skins({ _backend_mirror = { _unlocked_weapon_skins = rows } })
+        H.equal(rows.wh_deus_skin_02_magic_02, nil)
+    end)
 
     H.test("#1567 alias table pins the two vanilla typo keys and their sibling order", function()
         H.deep_equal(Parity.VANILLA_ALIASES, {

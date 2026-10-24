@@ -43,6 +43,11 @@ there is no copied implementation.
   including last-changed preference and top-result fallback.
 - `tests/test_peer_parity_transition.lua`: shared legacy-payload compatibility,
   exact challenge/epoch/replay rejection, and bounded-envelope coverage.
+- `tests/test_cos_realm_authority_1691.lua`: native realm precedence and
+  legacy fallback, no global/backend writes, named live-check verdicts, and
+  actual cosmetic mirror injection/resync with official and DLC denials.
+  The pose suite and description-parity fixture also exercise the installed
+  pose-gather and illusion-unlock callbacks with modern native authority.
 - `tests/test_shared_wire_catalog.lua`: deterministic namespaced catalog identity,
   numeric drift sensitivity, malformed lookup rejection, and payload-size coverage.
 - `tests/test_crt_wire_contract.lua`: CRT schema-3 integration plus the independent
