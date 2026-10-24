@@ -840,7 +840,32 @@ return function(H, repo_root)
 			H.truthy(verdict:find(
 				"not currently wielded; wield Old Musket and rerun /cwv_regression_test",
 				1, true))
+			-- #1656: a missing session precondition is a SKIP with its reason, never a FAIL.
+			H.equal(verdict:sub(1, 5), "skip:", "unwielded Old Musket must SKIP: " .. verdict)
 			equipment.wielded_slot = "slot_ranged"
+
+			local held_identity, held_cim = live.identity, live.cim_identity
+			live.identity = nil
+			verdict = captured()
+			H.equal(type(verdict), "string")
+			H.equal(verdict:sub(1, 5), "skip:", "no equipped Old Musket must SKIP: " .. verdict)
+			H.truthy(verdict:find("no Old Musket equipped", 1, true))
+			live.identity = held_identity
+			live.cim_identity = nil
+			verdict = captured()
+			H.equal(type(verdict), "string")
+			H.equal(verdict:sub(1, 5), "skip:", "an unarmed Athanor preview must SKIP: " .. verdict)
+			-- Nothing armed and nothing captured: the reason names the first missing
+			-- step (the Athanor), never "no Old Musket equipped".
+			live.identity = nil
+			verdict = captured()
+			H.equal(type(verdict), "string")
+			H.equal(verdict:sub(1, 5), "skip:", "a fresh session must SKIP: " .. verdict)
+			H.truthy(verdict:find("the Athanor preview has not armed", 1, true),
+				"the skip must name the unarmed Athanor first: " .. verdict)
+			live.identity = held_identity
+			live.cim_identity = held_cim
+			H.equal(captured(), nil, "restored live gate passes again")
 
 			equipment.slots.slot_ranged = {
 				item_data = { backend_id = "different-instance" },

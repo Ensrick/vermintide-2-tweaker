@@ -659,46 +659,25 @@ mod:hook("GearUtils", "spawn_inventory_unit", function(func, world, hand, item_t
 	-- exactly a hand vanilla never spawned. The template override feeds ONLY the
 	-- vanilla call below; owner-path gates further down keep reading the
 	-- caller's item_template.
-	local husk_spawn_template, husk_spawn_evidence
-	if not owner_unit_1p and _om._husk_adapter_pre then
-		local suppress, husk_tpl, spawn_evidence = _om._husk_adapter_pre(
-			hand, item_template, item_units, slot_name, item_data, owner_unit_3p)
-		if suppress then
-			if _om._probe_279_spawn then
-				_om._probe_279_spawn(hand, item_data, item_units, owner_unit_1p, owner_unit_3p, nil, "deferred_478")
-			end
-			return nil, nil, nil, nil
-		end
-		husk_spawn_template = husk_tpl
-		husk_spawn_evidence = spawn_evidence
-	end
-	local v_w3p, v_a3p, v_w1p, v_a1p =
-		func(world, hand, husk_spawn_template or item_template, item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p, unit_template, extra_extension_data, ammo_percent, material_settings_name)
-
-	-- issue 279 (2nd repro): capture the full ammo-attach decision at EVERY
-	-- spawn (owner + husk, both hands) for a no_ammo_unit variant's base. Self-gates
-	-- on base being a no_ammo base; pure diagnostic (see the helper for the trace).
-	if _om._probe_279_spawn then
-		_om._probe_279_spawn(hand, item_data, item_units, owner_unit_1p, owner_unit_3p, v_a3p, nil)
-	end
-
-	-- ============================================================
-	-- Husk (remote-player) CWV apply -- COMPLETE adapter, POST-SPAWN half
-	-- ============================================================
-	-- This hook is the ONLY GearUtils path that fires for husks:
-	-- SimpleHuskInventoryExtension._wield_slot -> spawn_inventory_unit
-	-- (simple_husk_inventory_extension.lua:666/670). The owner/bot path runs
-	-- GearUtils.create_equipment (1P rig present); husks have no 1P rig, so
-	-- `owner_unit_1p == nil` is the husk/bot discriminator, and everything here
-	-- is IDEMPOTENT with the create_equipment apply so a bot spawn reaching both
-	-- paths is harmless. Post half = #399 ammo-strip net (returns true -> nil
-	-- the captured ammo return), transform/texture/presentation apply
-	-- (397/394/604), and the #579 per-hand compare probe. Helpers live on `_om`
-	-- (populated at load time; entry locals are not visible from the module).
-	if not owner_unit_1p and _om._husk_adapter_post then
-		if _om._husk_adapter_post(hand, item_data, item_units, slot_name,
-				owner_unit_3p, v_w3p, v_a3p, husk_spawn_evidence) then
-			v_a3p = nil
+	local v_w3p, v_a3p, v_w1p, v_a1p
+	if not owner_unit_1p and _om._husk_spawn_adapter_transaction then
+		local husk_deferred
+		v_w3p, v_a3p, v_w1p, v_a1p, husk_deferred = _om._husk_spawn_adapter_transaction(
+			func, world, hand, item_template, item_units, slot_name, item_data,
+			owner_unit_1p, owner_unit_3p, unit_template, extra_extension_data,
+			ammo_percent, material_settings_name)
+		-- #478 defer: this hand was never spawned, so skip the musket body.
+		if husk_deferred == true then return nil, nil, nil, nil end
+	else
+		v_w3p, v_a3p, v_w1p, v_a1p = func(world, hand, item_template,
+			item_units, slot_name, item_data, owner_unit_1p, owner_unit_3p,
+			unit_template, extra_extension_data, ammo_percent,
+			material_settings_name)
+		-- issue 279 (2nd repro): owner/bot half; the husk transaction owns
+		-- the equivalent observation for remote spawns.
+		if _om._probe_279_spawn then
+			_om._probe_279_spawn(hand, item_data, item_units, owner_unit_1p,
+				owner_unit_3p, v_a3p, nil)
 		end
 	end
 

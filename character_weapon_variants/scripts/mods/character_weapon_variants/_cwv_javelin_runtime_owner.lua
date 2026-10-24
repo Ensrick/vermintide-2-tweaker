@@ -6,6 +6,20 @@ local function install(mod, ctx)
 	local _dbg = assert(ctx.dbg, "cwv javelin owner requires dbg")
 	local _clone_damage_profile = assert(ctx.clone_damage_profile,
 		"cwv javelin owner requires clone_damage_profile")
+	local _recovery = mod:dofile(
+		"scripts/mods/character_weapon_variants/_cwv_javelin_recovery_contract").new({
+		inventory_for = function(unit)
+			return ScriptUnit.has_extension(unit, "inventory_system")
+		end,
+		lookup_lib = mod:dofile(
+			"scripts/mods/character_weapon_variants/_lib_network_lookup"),
+		peer_id = function() return Network.peer_id() end,
+		pickup_system = function()
+			return Managers.state.entity:system("pickup_system")
+		end,
+		debug = _dbg,
+	})
+	_om.javelin_recovery_contract = _recovery
 
 	-- (#1186) Renamed-clone projectile policy. This owner holds the mod's ONLY
 	-- PlayerProjectileUnitExtension.init registration (VMF drops a second hook on
@@ -259,89 +273,26 @@ local function install(mod, ctx)
 			mod:warning("Pickups.ammo missing — link_pickup behavior unavailable")
 			return
 		end
-		if not Pickups.ammo[_TJ_PICKUP_KEY] then
-			local function _can_interact(interactor_unit, _interactable_unit, _data)
-				local inv = ScriptUnit.has_extension(interactor_unit, "inventory_system")
-				local result = inv and inv:has_ammo_consuming_weapon_equipped("throwing_javelin") or false
-				_dbg("[cwv stick] can_interact_func -> %s (inv=%s)", tostring(result), tostring(inv ~= nil))
-				return result
-			end
-			local function _outline_available(local_player_unit)
-				local inv = ScriptUnit.has_extension(local_player_unit, "inventory_system")
-				return inv and inv:has_ammo_consuming_weapon_equipped("throwing_javelin") or false
-			end
-			local function _on_pick_up(_world, _interactor_unit, _is_server, interactable_unit)
-				_dbg("[cwv stick] on_pick_up_func fired")
-				local peer_id = Network.peer_id()
-				local pickup_system = Managers.state.entity:system("pickup_system")
-				pickup_system:delete_limited_owned_pickup_unit(peer_id, interactable_unit)
-			end
-			local base = {
-				ammo_kind            = "thrown",
-				consumable_item      = true,
-				debug_pickup_category = "throwing_weapons",
-				hud_description      = "cwv_interaction_ammunition_javelin",  -- v0.1.183: own loc string (was "interaction_ammunition_axe" — wrong text)
-				local_pickup_sound   = true,
-				only_once            = true,
-				outline_distance     = "small_pickup",
-				pickup_sound_event   = "pickup_ammo",
-				refill_amount        = 1,
-				spawn_weighting      = 1e-06,
-				type                 = "ammo",
-				can_interact_func    = _can_interact,
-				outline_available_func = _outline_available,
-				on_pick_up_func      = _on_pick_up,
-			}
-			-- v0.1.118: unit_name = boar spear _3p for both variants (held mesh
-			-- is reliably loaded for our cwv weapon, unlike the elf javelin
-			-- prj_*_3ps which is in the woods DLC's per-weapon package).
-			-- v0.1.119: unit_template_name = "limited_owned_pickup_unit" for BOTH
-			-- variants (was "limited_owned_pickup_projectile_unit" for the
-			-- non-link/dropped variant). The "_projectile_unit" template requires
-			-- the unit to have a physics actor named "throw" for bouncy ground
-			-- pickup behavior — the boar spear _3p doesn't have that actor and
-			-- crashes Actor.create_actor (crash GUID 86d07a4e on dummy hit). The
-			-- non-projectile template doesn't need it; pickups spawn statically
-			-- at the impact position instead of bouncing. Acceptable trade-off.
-			Pickups.ammo[_TJ_PICKUP_KEY] = table.clone(base)
-			Pickups.ammo[_TJ_PICKUP_KEY].unit_name          = _TJ_PICKUP_UNIT
-			Pickups.ammo[_TJ_PICKUP_KEY].unit_template_name = "limited_owned_pickup_unit"
-			Pickups.ammo[_TJ_PICKUP_KEY].pickup_name        = _TJ_PICKUP_KEY
-			Pickups.ammo[_TJ_LINK_PICKUP_KEY] = table.clone(base)
-			Pickups.ammo[_TJ_LINK_PICKUP_KEY].unit_name          = _TJ_PICKUP_UNIT
-			Pickups.ammo[_TJ_LINK_PICKUP_KEY].unit_template_name = "limited_owned_pickup_unit"
-			Pickups.ammo[_TJ_LINK_PICKUP_KEY].pickup_name        = _TJ_LINK_PICKUP_KEY
-			-- Re-attach the function refs after table.clone (closures get shallow-copied
-			-- correctly, but be explicit so a future refactor doesn't trip us).
-			for _, key in ipairs({ _TJ_PICKUP_KEY, _TJ_LINK_PICKUP_KEY }) do
-				Pickups.ammo[key].can_interact_func      = _can_interact
-				Pickups.ammo[key].outline_available_func = _outline_available
-				Pickups.ammo[key].on_pick_up_func        = _on_pick_up
-			end
-
-			-- AllPickups is built once at boot from Pickups.<group>.<name> and is
-			-- the lookup the pickup system reads. Mirror our entries in.
-			if AllPickups then
-				AllPickups[_TJ_PICKUP_KEY]      = Pickups.ammo[_TJ_PICKUP_KEY]
-				AllPickups[_TJ_LINK_PICKUP_KEY] = Pickups.ammo[_TJ_LINK_PICKUP_KEY]
-			end
-
-			-- NetworkLookup.pickup_names is built from AllPickups at boot. Mirror
-			-- our keys in via rawset (the table has an error-throwing __index).
-			if NetworkLookup and NetworkLookup.pickup_names then
-				local tbl = NetworkLookup.pickup_names
-				for _, key in ipairs({ _TJ_PICKUP_KEY, _TJ_LINK_PICKUP_KEY }) do
-					if not rawget(tbl, key) then
-						local idx = #tbl + 1
-						rawset(tbl, idx, key)
-						rawset(tbl, key, idx)
-					end
-				end
-			end
-
-			mod:info("Registered pickups: %s + %s (boar spear unit, ammo_type=throwing_javelin)",
-				_TJ_PICKUP_KEY, _TJ_LINK_PICKUP_KEY)
+		-- v0.1.118/119: both outcomes use the actor-bearing throwing-axe
+		-- carrier and the non-projectile limited-owned template. Re-own both rows
+		-- on a VMF reload so the runtime proof always drives this instance's exact
+		-- callbacks; the reverse lookup insertion itself remains idempotent.
+		local ground, linked, rejection = _recovery.register({
+			pickups = Pickups.ammo,
+			all_pickups = AllPickups,
+			pickup_lookup = NetworkLookup and NetworkLookup.pickup_names,
+			pickup_key = _TJ_PICKUP_KEY,
+			link_pickup_key = _TJ_LINK_PICKUP_KEY,
+			unit_name = _TJ_PICKUP_UNIT,
+		})
+		if not ground or not linked then
+			mod:warning("Tuskgor Javelin recovery registration rejected: %s",
+				tostring(rejection))
+			return
 		end
+
+		mod:info("Registered pickups: %s + %s (boar spear unit, ammo_type=throwing_javelin)",
+			_TJ_PICKUP_KEY, _TJ_LINK_PICKUP_KEY)
 	end
 
 	-- ============================================================
@@ -1151,6 +1102,18 @@ local function install(mod, ctx)
 
 	_register_tuskgor_javelin_assets()
 	_create_tuskgor_javelin_template()
+	_om._tj_recovery_transaction_check = function()
+		return _recovery.exercise({
+			pickups = Pickups and Pickups.ammo,
+			all_pickups = AllPickups,
+			skins = WeaponSkins and WeaponSkins.skins,
+			template = Weapons and Weapons.tuskgor_javelin_template,
+			pickup_key = _TJ_PICKUP_KEY,
+			link_pickup_key = _TJ_LINK_PICKUP_KEY,
+			unit_name = _TJ_PICKUP_UNIT,
+			skin_keys = { "cwv_es_javelin_skin", "cwv_wh_javelin_skin" },
+		})
+	end
 
 	-- ============================================================================
 	-- issue 424: fail-closed mixed-lobby Tuskgor Javelin feature gate.

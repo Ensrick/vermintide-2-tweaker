@@ -28,6 +28,9 @@ local function install(mod, ctx)
 	-- ============================================================
 
 	local _display_names = {}
+	-- #1656: published read-only for the regression context (issue396 check),
+	-- which bound an undeclared entry global and indexed nil.
+	_om.display_names = _display_names
 	local _item_text = mod:dofile("scripts/mods/character_weapon_variants/_cwv_item_text")
 
 	for _, def in ipairs(_variant_definitions) do

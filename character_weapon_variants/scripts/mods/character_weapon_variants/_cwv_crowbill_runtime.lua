@@ -81,6 +81,37 @@ function M.valid_wire(policy, family, schema, op, slot_name, mode, identity, fam
 		and _valid_family_key(family, family_key)
 end
 
+-- #719 Weapon Special rebuild on the vanilla equipment wire. A local
+-- destroy_slot broadcasts the slot destroy (simple_inventory_extension.lua:
+-- 1181-1187) and every remote husk drops the slot (gear_utils.lua:457), but a
+-- bare add_equipment is local only (:858-891). The following wield then reaches
+-- a husk whose slot no longer exists, so it spawns nothing
+-- (simple_husk_inventory_extension.lua:641-647): the weapon vanished for every
+-- observer after a pick/hammer toggle. Vanilla re-equips through
+-- _spawn_resynced_loadout, which announces the add (plus a client's slot buffs)
+-- before the local add and wield (:1443-1473). The vanilla precedent for a
+-- direct destroy_slot followed by that sender is swap_equipment_from_storage
+-- (:2434-2458). The queued create_equipment_in_slot path (:1398-1408) instead
+-- waits in _update_resync_loadout for a profile resync and
+-- all_ingame_synced_for_peer (:545-569); skipping that gate is safe here only
+-- because the toggle re-equips the same Crowbill item and units: just the face
+-- changes, between two clones of one source template (_cwv_crowbill_hammer_mode.lua:205/246).
+-- CWV's own wrapper on the sender republishes exact identity and nulls CWV
+-- skins for the wire. Fails closed: without that sender nothing is destroyed.
+function M.rebuild_slot(inv, slot_name, item_data, skin)
+	if type(inv) ~= "table" or type(inv.destroy_slot) ~= "function"
+			or type(inv._spawn_resynced_loadout) ~= "function" then
+		return false, "resync_unavailable"
+	end
+	local ok_destroy, destroy_error = pcall(inv.destroy_slot, inv, slot_name, true)
+	if not ok_destroy then return false, "destroy: " .. tostring(destroy_error) end
+	local ok_spawn, spawn_error = pcall(inv._spawn_resynced_loadout, inv, {
+		slot_id = slot_name, item_data = item_data, skin = skin,
+	}, false)
+	if not ok_spawn then return false, "resync: " .. tostring(spawn_error) end
+	return true
+end
+
 function M.install(mod, om)
 	if M._installed then return M end
 	local policy, family = om.crowbill_hammer_mode, om.crowbill_family
@@ -231,13 +262,16 @@ function M.install(mod, om)
 		local previous = item_mode(item_data, identity)
 		if previous == desired_mode and not force_rebuild then return false end
 		set_item_mode(item_data, identity, desired_mode)
-		local ok_destroy = pcall(inv.destroy_slot, inv, slot_name, true)
-		local ok_add = ok_destroy and pcall(inv.add_equipment, inv, slot_name, item_data)
-		local ok_wield = ok_add and pcall(inv.wield, inv, slot_name)
-		if not ok_wield then
+		local ok_rebuild, rebuild_error = M.rebuild_slot(inv, slot_name, item_data, slot.skin)
+		if not ok_rebuild then
 			set_item_mode(item_data, identity, previous)
-			pcall(printf, "[cwv:604] mode rebuild failed; restored=%s family=%s",
-				tostring(previous), tostring(family_key))
+			-- A failure after the destroy leaves no local slot: re-add the restored
+			-- face through the same announced path (destroy_slot is a no-op then).
+			if rebuild_error ~= "resync_unavailable" then
+				M.rebuild_slot(inv, slot_name, item_data, slot.skin)
+			end
+			pcall(printf, "[cwv:604] mode rebuild failed; restored=%s family=%s reason=%s",
+				tostring(previous), tostring(family_key), tostring(rebuild_error))
 			return false
 		end
 		apply_presentation(player_unit, slot_name, identity, desired_mode, false)
