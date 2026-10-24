@@ -188,10 +188,13 @@ function Invoke-SelfTest {
     $asciiPath = Join-Path $fixtureRoot "ascii.ps1"
     $badPath = Join-Path $fixtureRoot "bad.ps1"
     $badParsePath = Join-Path $fixtureRoot "bad_parse.ps1"
+    $fixtureQaDir = Join-Path $fixtureRoot "qa"
+    $defaultRootScript = Join-Path $fixtureQaDir "check_in_progress.ps1"
 
     New-Item -ItemType Directory -Path $fixtureRoot | Out-Null
     New-Item -ItemType Directory -Path $claimDir | Out-Null
     New-Item -ItemType Directory -Path $modDir | Out-Null
+    New-Item -ItemType Directory -Path $fixtureQaDir | Out-Null
 
     try {
         [System.IO.File]::WriteAllText($asciiPath, 'Write-Host "ok"', (New-Object System.Text.UTF8Encoding($false)))
@@ -232,6 +235,7 @@ function Invoke-SelfTest {
         }
 
         $inProgressScript = Join-Path $repoRootPath "qa/check_in_progress.ps1"
+        [System.IO.File]::Copy($inProgressScript, $defaultRootScript, $false)
         $runAllScript = Join-Path $repoRootPath "qa/run_all.ps1"
         $diffWhitespaceScript = Join-Path $repoRootPath "qa/check_diff_whitespace.ps1"
         $refreshCardsScript = Join-Path $repoRootPath "tools/ship/refresh-cards.ps1"
@@ -249,6 +253,20 @@ function Invoke-SelfTest {
             $fresh = Invoke-HostScript -HostPath $hostInfo.Path -ScriptPath $inProgressScript -ScriptArguments @("-RepoRoot", $fixtureRoot, "-SkipGitDiff")
             if ($fresh.ExitCode -ne 0 -or $fresh.Output -notmatch 'active claim\(s\), all fresh') {
                 $failures += "$($hostInfo.Name) fresh-sentinel contract failed (exit $($fresh.ExitCode))"
+            }
+
+            # #1721: the explicit-root cases cannot detect a parameter-default
+            # PSScriptRoot failure. Invoke the actual copied script with -File
+            # and no root, both inside and outside its intended repository.
+            foreach ($workingDirectory in @($fixtureRoot, $repoRootPath)) {
+                Push-Location -LiteralPath $workingDirectory
+                try {
+                    $defaultRoot = Invoke-HostScript -HostPath $hostInfo.Path -ScriptPath $defaultRootScript -ScriptArguments @('-SkipGitDiff')
+                }
+                finally { Pop-Location }
+                if ($defaultRoot.ExitCode -ne 0 -or $defaultRoot.Output -notmatch 'OK - 1 active claim\(s\), all fresh') {
+                    $failures += "$($hostInfo.Name) default-root -File contract failed from '$workingDirectory' (exit $($defaultRoot.ExitCode))"
+                }
             }
 
             Write-Sentinel -Path $sentinelPath -Started ([DateTime]::UtcNow.AddHours(-48).ToString("o"))
@@ -297,10 +315,10 @@ function Invoke-SelfTest {
         }
     }
     finally {
-        foreach ($file in @($sentinelPath, $asciiPath, $badPath, $badParsePath)) {
+        foreach ($file in @($sentinelPath, $asciiPath, $badPath, $badParsePath, $defaultRootScript)) {
             if (Test-Path -LiteralPath $file) { Remove-Item -LiteralPath $file }
         }
-        foreach ($directory in @($claimDir, $modDir, $fixtureRoot)) {
+        foreach ($directory in @($claimDir, $modDir, $fixtureQaDir, $fixtureRoot)) {
             if (Test-Path -LiteralPath $directory) { Remove-Item -LiteralPath $directory }
         }
     }
