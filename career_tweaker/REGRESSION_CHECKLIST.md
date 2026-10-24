@@ -131,6 +131,17 @@ contract. The actual CRT callback/GUT Apply fixture in
 | Detection | Offline `test_crt_dance_of_blades.lua` models the exact engine bucket/expiry and authority predicates with planted old-defect controls. Runtime `/crt_regression_test` check `issue473_dance_of_blades_contract` validates the installed live templates, including exact distinct names, incoming `stacking_name`, and server authority. |
 
 ---
+## Buff and talent icons resolve in the UI atlas (#1686)
+
+| Field | Value |
+|-------|-------|
+| Crash | An icon name absent from the atlas reaches `Gui_bitmap` the first time BuffUI draws the active buff (`buff_ui.lua:128/135`, `ui_renderer.lua:74/117`): "Material 'X' not found in Gui", bug class 23. Game Version 6.13.0 removed the two 6.12.1 keys the Dance of Blades stack and the Unchained career-skill buff used. |
+| Names | Dance of Blades outgoing stack `maidenguard_4_2`; Unchained `crt_unchained_ult_max_us` `unchained_6_1`; Leading Shots `bardin_engineer_ranged_crit_count`; Foot Knight keeps its three `markus_knight_*` keys. |
+| Guard | `_crt_buff_icons.lua` proves each name with `UIAtlasHelper.has_atlas_settings_by_texture_name` at registration: every Foot Knight local template, plus one sweep over `mod._crt_mod_registered_buff_names` after the balance load (Unchained) and after each `balance.apply` pass (the entry wraps the field; every catalog registration runs inside it). An unproven buff icon is dropped (the buff still works, without a HUD slot) and logs `[crt:1686] ... dropped` once per distinct icon (module-local ledger); the Leading Shots talent keeps the vanilla talent icon on a miss. |
+| Log | Each sweep site prints one bounded positive line the first time it runs: `[crt:1686] buff icon atlas guard (load): templates=<N> dropped=0` at boot and `(apply)` after the first rework apply pass. On 6.13.0 expect `dropped=0` and no `... dropped` line. A missing summary means the sweep never ran. |
+| Detection | Offline `test_crt_buff_icons.lua` (fails on the 0.4.31-beta source; also runs the registered `issue1686_buff_icons_in_atlas` closure in a test-local environment). Runtime `/crt_regression_test` check `issue1686_buff_icons_in_atlas` audits the constants, the Dance of Blades factory, the Foot Knight catalog and every live crt-registered template, so it fails on atlas drift even while a rework is off. After a game patch, rerun it before any crt card. |
+
+---
 ## Multiplayer / Network Sync
 
 ### crt-networked-rework-peer-parity — Modded buff names on vanilla rpc_add_buff CTD non-crt peers (issue 425)

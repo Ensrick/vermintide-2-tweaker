@@ -11,10 +11,22 @@
 -- Diagnostics are automatic in the dev stream, issue-prefixed, edge-triggered,
 -- and hard-capped. Remove this module and its two presentation call sites when
 -- issue #630 is closed.
+--
+-- Budget: DEFAULT_LINE_CAP detail lines PER SESSION (one Mod Tweaker open);
+-- enter() resets it. Through 0.2.361-dev one budget covered the whole game run,
+-- so earlier opens spent it and the decisive session lost its exit summary
+-- (tester log 2026-09-23). The line that closes a session (the exit summary, or
+-- the reenter anomaly that stands in for a missing exit) is reserved: it prints
+-- after that session's budget is spent and reports how many detail lines were
+-- suppressed. Bound: at most line_cap + 1 lines per enter(), none per frame.
+-- Run backstop: DEFAULT_RUN_LINE_CAP lines for the whole game run (dozens of
+-- full sessions), then one run_cap line and silence, so an enter/leave loop
+-- cannot log without end.
 
 local M = {}
 
 local DEFAULT_LINE_CAP = 48
+local DEFAULT_RUN_LINE_CAP = 2048
 
 local function _bool(value)
     if value == nil then return "?" end
@@ -149,6 +161,10 @@ function M.new(options)
         line_cap = options.line_cap or DEFAULT_LINE_CAP,
         lines = 0,
         capped = false,
+        suppressed = 0,
+        run_line_cap = options.run_line_cap or DEFAULT_RUN_LINE_CAP,
+        run_lines = 0,
+        run_capped = false,
         session = 0,
         active = false,
         owner = nil,
@@ -166,12 +182,41 @@ function M.new(options)
         last_resource_candidates = nil,
     }
 
+    -- Run backstop shared by every line: past run_line_cap the probe prints one
+    -- run_cap line and stays silent until the game restarts.
+    local function run_budget_left()
+        if state.run_lines < state.run_line_cap then
+            state.run_lines = state.run_lines + 1
+            return true
+        end
+        if not state.run_capped then
+            state.run_capped = true
+            emit(string.format("[gut:630] run_cap=%d reached session=%d; probe silent until restart",
+                state.run_line_cap, state.session))
+        end
+        return false
+    end
+
     local function log(message)
         if state.lines >= state.line_cap then
             state.capped = true
+            state.suppressed = state.suppressed + 1
+            return false
+        end
+        if not run_budget_left() then
+            state.suppressed = state.suppressed + 1
             return false
         end
         state.lines = state.lines + 1
+        emit("[gut:630] " .. message)
+        return true
+    end
+
+    -- Reserved session-closing line, outside the detail budget. Callers emit it
+    -- only while a session is active and that edge ends it, so it fires at
+    -- most once per enter().
+    local function log_session_close(message)
+        if not run_budget_left() then return false end
         emit("[gut:630] " .. message)
         return true
     end
@@ -182,9 +227,15 @@ function M.new(options)
         info = info or {}
         if state.active then
             state.imbalance_count = state.imbalance_count + 1
-            log(string.format("anomaly=reenter previous=%s in_draw=%s", _value(state.presentation), _bool(state.in_draw)))
+            log_session_close(string.format(
+                "anomaly=reenter previous=%s session=%d begins=%d ends=%d in_draw=%s suppressed=%d",
+                _value(state.presentation), state.session, state.draw_begins, state.draw_ends,
+                _bool(state.in_draw), state.suppressed))
         end
         state.session = state.session + 1
+        state.lines = 0
+        state.capped = false
+        state.suppressed = 0
         state.active = true
         state.owner = info.owner or info.view
         state.presentation = info.presentation or "?"
@@ -276,10 +327,13 @@ function M.new(options)
         end
         local balance = state.draw_begins - state.draw_ends
         if balance ~= 0 or state.in_draw then state.imbalance_count = state.imbalance_count + 1 end
-        log(string.format(
-            "exit session=%d presentation=%s reason=%s begins=%d ends=%d balance=%d in_draw=%s anomalies=%d",
+        local summary = string.format(
+            "exit session=%d presentation=%s reason=%s begins=%d ends=%d balance=%d in_draw=%s anomalies=%d lines=%d suppressed=%d",
             state.session, _value(state.presentation), _value(reason), state.draw_begins,
-            state.draw_ends, balance, _bool(state.in_draw), state.imbalance_count))
+            state.draw_ends, balance, _bool(state.in_draw), state.imbalance_count,
+            state.lines, state.suppressed)
+        -- A repeated exit with no open session stays inside the detail budget.
+        if state.active then log_session_close(summary) else log(summary) end
         state.active = false
         state.owner = nil
         state.presentation = nil
@@ -291,6 +345,10 @@ function M.new(options)
             line_cap = state.line_cap,
             lines = state.lines,
             capped = state.capped,
+            suppressed = state.suppressed,
+            run_line_cap = state.run_line_cap,
+            run_lines = state.run_lines,
+            run_capped = state.run_capped,
             session = state.session,
             active = state.active,
             presentation = state.presentation,
@@ -361,7 +419,43 @@ function M.runtime_info(owner, presentation)
     }
 end
 
+-- /gut_regression_test contract (#630): a private probe with a 3-line budget
+-- and a local ledger. It never touches the live probe or printf. Returns nil on
+-- PASS or a failure string.
+function M.session_budget_contract()
+    local cap, ledger = 3, {}
+    local probe = M.new({ line_cap = cap, emit = function(line) ledger[#ledger + 1] = line end })
+    local function session(reason)
+        local before = #ledger
+        probe:enter({ presentation = "contract" })
+        for i = 1, 6 do
+            probe:before_draw({ focus = i % 2 == 0, tab = "gut_equipment" })
+            probe:after_draw()
+        end
+        local snap = probe:snapshot()
+        probe:leave(reason)
+        return snap, ledger[before + 1] or "", ledger[#ledger] or "", #ledger - before
+    end
+    local first, _, first_exit, first_count = session("contract_first")
+    if not first.capped or first.suppressed == 0 then
+        return "#630 contract burst did not spend its session budget"
+    end
+    if not first_exit:find("exit session=1 ", 1, true)
+        or not first_exit:find("suppressed=" .. first.suppressed, 1, true) then
+        return "#630 exit summary was dropped once the session budget was spent"
+    end
+    local _, second_enter, second_exit, second_count = session("contract_second")
+    if not second_enter:find("enter session=2 ", 1, true)
+        or not second_exit:find("exit session=2 ", 1, true) then
+        return "#630 a later session did not get a fresh budget and its own exit summary"
+    end
+    if first_count > cap + 1 or second_count > cap + 1 then
+        return "#630 a session emitted more than its budget plus one summary"
+    end
+end
+
 M.DEFAULT_LINE_CAP = DEFAULT_LINE_CAP
+M.DEFAULT_RUN_LINE_CAP = DEFAULT_RUN_LINE_CAP
 M.count_visible = _count_visible
 M.equipment_state = _equipment_state
 M.visible_draw_signature = _visible_draw_signature

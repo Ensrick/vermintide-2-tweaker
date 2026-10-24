@@ -251,7 +251,7 @@
         }
         @{
             Marker='[crt:728]'; ModId='crt'
-            ModTrees=@{crt='a054ad0aa94f908db3f1cdf22c98aecf3337ba4f'}
+            ModTrees=@{crt='c230341c06aae6007f8cd55a3e0ca45d1636a11b'}
             SourcesByMod=@{crt='career_tweaker/scripts/mods/career_tweaker/_crt_career_unlock.lua'}
             Signature='[crt:728] installed setting=%s scope=local_level_gate occupancy=vanilla'
             Bound='one terminal install receipt per module evaluation'
@@ -260,7 +260,7 @@
         }
         @{
             Marker='[crt:728]'; ModId='crt'
-            ModTrees=@{crt='a054ad0aa94f908db3f1cdf22c98aecf3337ba4f'}
+            ModTrees=@{crt='c230341c06aae6007f8cd55a3e0ca45d1636a11b'}
             SourcesByMod=@{crt='career_tweaker/scripts/mods/career_tweaker/_crt_career_unlock.lua'}
             Signature='[crt:728] level_gate setting=%s unlock=%s profile=%s level=%s result=%s reason=%s'
             Bound='unlock decisions are signature-deduplicated for the finite unlock catalogue'
@@ -272,7 +272,7 @@
         }
         @{
             Marker='[crt:728]'; ModId='crt'
-            ModTrees=@{crt='a054ad0aa94f908db3f1cdf22c98aecf3337ba4f'}
+            ModTrees=@{crt='c230341c06aae6007f8cd55a3e0ca45d1636a11b'}
             SourcesByMod=@{crt='career_tweaker/scripts/mods/career_tweaker/_crt_career_unlock.lua'}
             Signature='[crt:728] character_select setting=%s kruber_profile=%s party=%s available=%s reserved_by=%s careers=[%s]'
             Bound='character-selection summaries are digest-deduplicated over a finite widget catalogue'
@@ -284,7 +284,7 @@
         }
         @{
             Marker='[crt:728]'; ModId='crt'
-            ModTrees=@{crt='a054ad0aa94f908db3f1cdf22c98aecf3337ba4f'}
+            ModTrees=@{crt='c230341c06aae6007f8cd55a3e0ca45d1636a11b'}
             SourcesByMod=@{crt='career_tweaker/scripts/mods/career_tweaker/_crt_career_unlock.lua'}
             Signature='[crt:728] ui_refresh setting=%s hero_summary=%s character_select=%s'
             Bound='one UI-refresh receipt per explicit unlock-all or level-override setting transition'
@@ -450,7 +450,7 @@
             ModTrees=@{gut_dev=@('0778c26248cda31c84498f7dfbb7ca210fd8e499')}
             SourcesByMod=@{gut_dev='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_dx12_fence630.lua'}
             Signature='[gut:630] frame_evidence draw=%d visible_rows=%s resource_candidates=%s'
-            Bound='focus/tab/Weapons-expansion edge evidence under one absolute 48-row probe budget'
+            Bound='focus/tab/Weapons-expansion edge evidence under a 48-row per-session probe budget reset only by Mod Tweaker enter'
             EmitterAnchors=@(
                 @{Tokens=@('log','(','string','.','format','(','String:frame_evidence draw=%d visible_rows=%s resource_candidates=%s')}
                 @{Tokens=@('emit','(','String:[gut:630] ','..','message',')')}
@@ -998,7 +998,7 @@
             )
         }
         @{
-            ModId='crt'; ModTree='a054ad0aa94f908db3f1cdf22c98aecf3337ba4f'
+            ModId='crt'; ModTree='c230341c06aae6007f8cd55a3e0ca45d1636a11b'
             Source='career_tweaker/scripts/mods/career_tweaker/_crt_diagnostics.lua'
             Marker='[crt:699]'; AddRoute=$true
             Signature='[crt:699] icon active=true subject=%s buff=%s role=%s template=%s expected=%s icon=%s atlas=%s atlas_id=%s widget=%s widget_icon=%s semantic_match=%s numb_collision=%s hud_widgets=%d hud_capacity=%d hidebuffs=%s hidden=%s priority=%s'

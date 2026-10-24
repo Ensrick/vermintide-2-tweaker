@@ -10,6 +10,11 @@ local M = {
     stack_buff = "crt_maidenguard_dance_of_blades_stack",
     damage_stack = "crt_maidenguard_dance_of_blades_damage",
     damage_taken_stack = "crt_maidenguard_dance_of_blades_damage_taken",
+    -- #1686: 6.13.0 removed the 6.12.1 atlas key
+    -- kerillian_maidenguard_cooldown_on_nearby_allies (6.12.1
+    -- gui_icons_atlas.lua:14508); vanilla now uses maidenguard_4_2
+    -- (talent_settings_kerillian.lua:1970, gui_icons_atlas.lua:9454).
+    damage_icon = "maidenguard_4_2",
 }
 
 function M.templates()
@@ -38,7 +43,7 @@ function M.templates()
             buffs = {
                 {
                     duration = M.duration,
-                    icon = "kerillian_maidenguard_cooldown_on_nearby_allies",
+                    icon = M.damage_icon,
                     max_stacks = M.max_stacks,
                     multiplier = M.damage_per_stack,
                     name = M.damage_stack,
