@@ -421,7 +421,7 @@ Rules:
 
 ### Local development setup
 
-After cloning, run `./tools/install-hooks.ps1` to enable the local pre-commit hook. It runs `qa/run_all.ps1 -Quick -SkipLua` (cfg drift + MOD_VERSION / title suffix typos) and `tools/mod-lint/lint-mod.ps1` (duplicate hook registrations, forward-ref / late-local / save-restore / network-bound checks) against staged `*.lua` / `*.cfg` / `*.ps1` / `*.mod` files before the commit hits CI. **The gates block on ERRORS only; warnings report without blocking** (a QA change may be landing in parallel). The installer is idempotent. Bypass on a single commit with `git commit --no-verify` if you've verified the working tree locally and the hook is being overly cautious; cite the reason in the commit message. See `PROJECT_STANDARDS.md` section 8 for the escape-hatch convention.
+After cloning, run `./tools/install-hooks.ps1` to enable the local pre-commit hook. It runs `qa/run_all.ps1 -Quick -SkipLua -Staged` (cfg drift + MOD_VERSION / title suffix typos; `-Staged` scopes change-set-aware checks such as the weapon-history freshness gate to the index, #1683) and `tools/mod-lint/lint-mod.ps1` (duplicate hook registrations, forward-ref / late-local / save-restore / network-bound checks) against staged `*.lua` / `*.cfg` / `*.ps1` / `*.mod` files before the commit hits CI. **The gates block on ERRORS only; warnings report without blocking** (a QA change may be landing in parallel). The installer is idempotent. Bypass on a single commit with `git commit --no-verify` if you've verified the working tree locally and the hook is being overly cautious; cite the reason in the commit message. See `PROJECT_STANDARDS.md` section 8 for the escape-hatch convention.
 
 ## Multi-agent coordination
 

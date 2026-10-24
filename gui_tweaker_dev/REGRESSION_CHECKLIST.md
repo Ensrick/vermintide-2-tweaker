@@ -1,5 +1,28 @@
 # Regression Checklist — gui_tweaker_dev
 
+## Tab talent module check reports the real verdict (#250, 0.2.360-dev)
+
+- Keep, solo: run `/gut_regression_test`;
+  `issue250_deus_tab_talent_module_loaded` and
+  `issue250_deus_tab_talent_tier_normalization` must both PASS (no Chaos
+  Wastes run needed: both checks are pure and load in every mechanism).
+- Chaos Wastes: the Hold-Tab talent strip test on issue #250 still applies.
+- Host tests: `test_gut_tab_talent_harness.lua`, `test_gut_tab_talent_filter.lua`.
+
+## /mod_tweaker menu sounds match the Esc route (#1670, 0.2.359-dev)
+
+- Keep, solo: open and close Esc > Mod Tweaker once (that attaches the
+  standalone view), then run `/gut_regression_test`;
+  `issue1670_command_route_sound_path` must PASS. Before that first Esc open it
+  renders as `SKIP: ... not attached`, in a mission as `SKIP: ... not in the
+  keep`. The check writes no log line of its own: cite only its PASS name.
+- Keep: open Mod Tweaker with `/mod_tweaker`, swap tabs and open a sub-menu;
+  each plays the same click and hover as Esc > Mod Tweaker. This audible step
+  is the deciding evidence: the live check is a wiring contract (both twins
+  publish the same resolver), and the offline test fires the real click and
+  hover.
+- Host tests: `test_gut_mod_tweaker_sound_parity.lua`.
+
 ## Dropdown arrow glow check (#92, 0.2.358-dev)
 
 - Keep or mission: run `/gut_regression_test`; `mod_tweaker_dropdown_arrow_glow`
@@ -56,7 +79,10 @@
 - Offline installed-view tests cover DEFAULT's transaction-owner delegate:
   unsupported or absent category/nodes cause no staging/reseed/repaint; normal
   tabs preserve false defaults, keybind exclusion and zero-setting reseeds.
-- `/gut_regression_test`: `issue998_dialogue_staged_isolation` must pass.
+- `/gut_regression_test`: `issue998_dialogue_staged_isolation` must pass with
+  Character Dialogue 0.1.14-dev or newer (API v6). Without Character Dialogue,
+  or with an older one, it SKIPs by name (the Dialogue tab omits the row there);
+  a FAIL means a v6+ Character Dialogue lacks the staged owner.
 
 ## Owner-qualified profile preimages (#221, 0.2.346-dev)
 
@@ -194,10 +220,11 @@ If this candidate fails, use exactly one evidence-selected fallback:
 - [ ] Open Mod Tweaker in the keep, select Weapons, change window focus once, return, and close the menu normally.
 - [ ] `[gut:630]` reports `presentation=standalone`, the `gut_equipment` tab edge plus `equipment_state=...weapons:expanded-stored...`, `focus=false`/`focus=true` edges, and an exit summary with `balance=0`.
 - [ ] Each first-draw/focus/tab/Weapons-expansion edge is followed by one `frame_evidence` record naming the post-pass `visible_rows` and `resource_candidates`; steady frames emit no such record.
-- [ ] The issue probe emits no per-frame line; its process-wide output never exceeds 48 records.
+- [ ] The issue probe emits no per-frame line; each Mod Tweaker open emits at most 48 records plus one reserved exit summary (`lines=` / `suppressed=`), so a later open still logs its edges and exit after earlier opens. A 2048-line run backstop ends in one `run_cap` line.
+- [ ] Card evidence: `[gut:630] frame_evidence` is the only registered `[gut:630]` receipt route. Cite the enter/exit lines by unmarked fields (`exit session=`, `balance=0`, `lines=`, `suppressed=`) and `issue630_dx12_fence_session_budget` PASS, never as `[gut:630] enter ...` / `[gut:630] exit ...`.
 - [ ] If the native fence timeout recurs, retain the complete console log and matching dump. The last `frame_evidence` identifies the UI set submitted before `D3D12RenderDevice::end_frame`; a missing draw end still identifies an unmatched Mod Tweaker pass.
 - [ ] Repeat the focus transition in a vanilla Hero/Inventory view as a control; do not add a renderer/focus workaround unless the two signatures establish the boundary.
-- [ ] `/gut_regression_test` passes `issue630_dx12_fence_probe`; offline `test_gut_dx12_fence630.lua` passes.
+- [ ] `/gut_regression_test` passes `issue630_dx12_fence_probe` and `issue630_dx12_fence_session_budget`; offline `test_gut_dx12_fence630.lua` and `test_gut_dx12_fence630_session_budget.lua` pass.
 
 ## Mod Tweaker module extraction / file-size gate
 

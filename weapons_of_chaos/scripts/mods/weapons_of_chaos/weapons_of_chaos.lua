@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.59-dev"
+local MOD_VERSION = "0.1.62-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -190,6 +190,7 @@ local _pulse_lib = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_p
 mod._woc_resource_residency = _resource_residency
 local _spirits = mod:dofile("scripts/mods/weapons_of_chaos/_woc_blightreaper_spirits")
 local _inventory_icons = mod:dofile("scripts/mods/weapons_of_chaos/_woc_inventory_icons")
+local _ui_icons = mod:dofile("scripts/mods/weapons_of_chaos/_woc_ui_icons")
 local _relic_policy = mod:dofile("scripts/mods/weapons_of_chaos/_woc_relic_policy")
 local _shared_relic_policy = mod:dofile(
 	"scripts/mods/weapons_of_chaos/_woc_shared_relic")
@@ -639,6 +640,7 @@ local _relic_runtime = mod:dofile(
 		chain_descriptor = _chain_descriptor,
 		relic_policy = _relic_policy,
 		inventory_icons = _inventory_icons,
+		ui_icons = _ui_icons,
 		network_lookup = _network_lookup,
 		career_weapon_actions = _career_weapon_actions,
 		career_action_owner = _career_action_owner,
@@ -1387,8 +1389,8 @@ mod.on_all_mods_loaded = function(...)
 	-- The reusable poison trait is a WOC capability, not contingent on the
 	-- Blightreaper acquisition toggle. Install its local row/proc before CIM
 	-- evaluates the provider contract.
-	local rows_ok, rows_reason = _moveset.install_intrinsic_trait_rows(
-		rawget(_G, "WeaponTraits"), rawget(_G, "BuffTemplates"))
+	local rows_ok, rows_reason = _ui_icons.install_and_log(_moveset, rawget(_G, "WeaponTraits"),
+		rawget(_G, "BuffTemplates"), rawget(_G, "UIAtlasHelper"), "boot")
 	local poison_ok, poison_reason = _relic_runtime:install_poison()
 	if not rows_ok or not poison_ok then
 		printf("[WOC:655] reusable poison capability unavailable: rows=%s poison=%s",
@@ -1418,6 +1420,9 @@ _rt_register("issue655_blightreaper_trait_contract", function()
 	if not poison or poison.buff_name ~= _moveset.POISON_BUFF_TEMPLATE then
 		return "Poisoned Edge row does not own the Hagbane proc buff"
 	end
+	local icon_failure = _ui_icons.audit(rawget(_G, "UIAtlasHelper"), _ui_icons.woc_icon_rows( -- #1687
+		traits, _moveset, rawget(_G, "ItemMasterList"), ITEM_KEY, BASE_WEAPON))
+	if icon_failure then return icon_failure end
 	if not curse or curse.icon ~= _moveset.SHYISH_CURSE_ICON
 			or curse.crafting_disabled ~= true then
 		return "intrinsic Shyish curse row/icon contract drifted"

@@ -802,10 +802,10 @@ end
 -- crt_unchained_ult_max_us (#8): static buff added on Unchained career-skill use
 -- when rework_bw_unchained_career_skill_max_us is on. +60% melee power for 10s ==
 -- the max Unstable Strength melee bonus (6x10% == 5x12% == 0.60) regardless of
--- current overcharge. Filled here (real template) over the pre-registered stub.
+-- current overcharge. Fills the stub; 6.13.0 icon, atlas-checked by the entry (#1686).
 if BuffTemplates and (BuffTemplates.crt_unchained_ult_max_us == nil or (rawget(BuffTemplates, "crt_unchained_ult_max_us") or {})._crt_pending) then
     BuffTemplates.crt_unchained_ult_max_us = {
-        buffs = { { stat_buff = "power_level_melee", multiplier = 0.60, duration = 10, name = "crt_unchained_ult_max_us", icon = "sienna_unchained_activated_ability_power_on_enemies_hit" } },
+        buffs = { { stat_buff = "power_level_melee", multiplier = 0.60, duration = 10, name = "crt_unchained_ult_max_us", icon = "unchained_6_1" } },
     }
 end
 

@@ -32,9 +32,14 @@ M.POISON_PROC = "woc_blightreaper_apply_hagbane_poison"
 M.POISON_TRAIT = "woc_poisoned_edge"
 M.SHYISH_CURSE_TRAIT = "woc_shyish_health_curse"
 M.SHYISH_CURSE_BUFF = "woc_shyish_health_curse_display_only"
-M.POISON_TRAIT_ICON = "kerillian_shade_increased_damage_on_poisoned_or_bleeding_enemy"
--- Proven boot-resident in gui_icons_atlas.lua:3392 and consumed by the native
--- mutator_death.lua:6 UI. No WOC texture is exposed to another renderer.
+-- #1687: 6.13.0 renamed the Shade poison-talent icon. Vanilla now draws it as
+-- `shade_2_2` (talent_settings_kerillian.lua:1593, gui_icons_atlas.lua:8684);
+-- the old talent-named atlas key is gone and drawing it is a Gui fatal.
+-- _woc_ui_icons.lua re-proves both trait icons against the live atlas.
+M.POISON_TRAIT_ICON = "shade_2_2"
+-- Proven boot-resident in gui_icons_atlas.lua:3182 (6.13.0) and consumed by
+-- the native mutator_death.lua:6 UI. No WOC texture is exposed to another
+-- renderer.
 M.SHYISH_CURSE_ICON = "mutator_icon_death_spirits"
 M.CRIT_PROPERTY = "woc_intrinsic_crit"
 M.ORDER_PROPERTY = "woc_power_vs_order"
