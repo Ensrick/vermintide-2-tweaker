@@ -10,6 +10,22 @@ pwsh -NoProfile -File qa/check_lua_unit_tests.ps1
 pwsh -NoProfile -File qa/check_lua_unit_tests.ps1 -SelfTest
 ```
 
+## Suite inventory (#1700)
+
+The PowerShell gate independently discovers every top-level `tests/test_*.lua`
+file and writes a small, temporary inventory outside the repository. The Lua
+runner requires each discovered module to have actually loaded its registration
+function, either from its explicit list or through a listed suite's transitive
+`require`. Comments and strings naming a test file do not count. Unreached
+files, malformed inventories and duplicate explicit registrations fail before
+test execution. Run the PowerShell entry point rather than invoking `run.lua`
+without its inventory.
+
+`-SelfTest` proves both the original harness pass/planted-failure paths and the
+actual directory-discovery/runner rejection of an unlisted fixture. It does not
+replace a normal full-suite run. Every invocation removes its owned temporary
+inventory in `finally`; it does not copy the repository or change source files.
+
 ## Tier boundary
 
 - Put deterministic transformations here when they run on ordinary Lua values
@@ -38,6 +54,20 @@ there is no copied implementation.
 
 - `run.lua`: explicit suite manifest and process entry point.
 - `harness.lua`: dependency-free assertions and reporting.
+- `suite_manifest.lua` and `tests/test_suite_manifest.lua`: actual import
+  completeness, inventory validation, transitive imports and duplicate roots.
+- `tests/test_crt_career_unlock.lua`: level-gate-only career unlock boundaries.
+- `tests/test_ct_tab_collectibles_layout.lua`: native collectible row offsets.
+- `tests/test_gt_regression_module.lua`: the original 88-registration extraction
+  surface (verified against immutable baseline `5afeefef`), unique names and the
+  bot update/aid ownership boundaries.
+- `tests/test_gut_exclusive_radio.lua`: exclusive-choice layout and input routing.
+- `tests/test_gut_selected_loadout_trace.lua`: trace deduplication and bounded state.
+- `tests/test_woc_blightreaper_spirits.lua`: native spirit policy plus the current
+  entry-to-spirit-owner dispatch, host-gated producers and package-acquisition
+  boundary; inert diagnostic strings do not count as a live package load.
+- `tests/test_wt_runtime_checks_module.lua`: current public/dev registration
+  surfaces; `tests/test_wt_issue946_crowbill_picker.lua`: developer-picker coverage.
 - `tests/test_attack_labeler.lua`: production-helper coverage.
 - `tests/test_mod_tweaker_search.lua`: #559 search expansion snapshot/restore/dismissal coverage,
   including last-changed preference and top-result fallback.
