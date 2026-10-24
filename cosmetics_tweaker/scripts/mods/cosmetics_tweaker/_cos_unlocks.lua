@@ -14,6 +14,7 @@
 -- mod._cos.U (managed-cosmetic map) and mod._cos.skin_requires_unowned_dlc.
 
 local mod = get_mod("cosmetics_tweaker")
+local Realm = assert(mod._cos_realm_authority, "Cosmetics realm owner required")
 local COS = mod._cos
 local U = COS.U
 local _skin_requires_unowned_dlc = COS.skin_requires_unowned_dlc
@@ -230,7 +231,7 @@ end
 -- 2026-05-06 02:41 for the diagnostic that surfaced this.
 
 mod:hook("PlayFabMirrorAdventure", "_create_fake_inventory_items", function(func, self, fake_inventory_items, items_type)
-    if items_type == "cosmetics" and script_data["eac-untrusted"] and fake_inventory_items then
+    if items_type == "cosmetics" and Realm.is_modded() and fake_inventory_items then
         if mod:get("unlock_all_frames") then
             local added, skipped = _inject_all_frames(fake_inventory_items)
             _frame_inject_stats.hook_fired = _frame_inject_stats.hook_fired + 1
@@ -263,7 +264,7 @@ mod:hook("PlayFabMirrorAdventure", "_create_fake_inventory_items", function(func
 end)
 
 mod:hook_safe("PlayFabMirrorAdventure", "get_unlocked_cosmetics", function(self)
-    if not script_data["eac-untrusted"] then return end
+    if not Realm.is_modded() then return end
     local cosmetics = self._unlocked_cosmetics
     if not cosmetics then return end
     -- Belt-and-suspenders resync for callers that re-query after login. Both injectors
@@ -275,7 +276,7 @@ end)
 
 mod:command("frames_status", "Diagnostic for the Unlock All Portrait Frames toggle.", function()
     local on = mod:get("unlock_all_frames")
-    local modded = script_data and script_data["eac-untrusted"]
+    local modded = Realm.is_modded()
     mod:echo("[frames_status] toggle=%s modded_realm=%s", tostring(on), tostring(modded))
     mod:echo("[frames_status] inject hook fired %d time(s); last added=%d skipped_dlc=%d",
         _frame_inject_stats.hook_fired, _frame_inject_stats.last_added, _frame_inject_stats.last_skipped_dlc)
@@ -318,7 +319,7 @@ end)
 -- with mod-logging OFF, so the mod:info lines above are invisible; this echoes to chat).
 mod:command("cosmetics_status", "Diagnostic for the vanilla-unobtainable skin/hat unlock.", function()
     mod:echo("[cosmetics_status] modded_realm=%s | last inject: added=%d skipped_dlc=%d (of %d tracked)",
-        tostring(script_data and script_data["eac-untrusted"]),
+        tostring(Realm.is_modded()),
         _unob_inject_stats.last_added, _unob_inject_stats.last_skipped_dlc, #_unobtainable_cosmetics)
     local backend = Managers.backend
     local mirror = backend and backend.get_interface and backend:get_interface("items")

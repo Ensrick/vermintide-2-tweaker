@@ -1,5 +1,26 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.225-dev (2026-10-24) -- Native realm authority for unlocks and poses (#1691)
+
+- Game 6.12+ no longer writes the legacy EAC field used by Cosmetics' frame,
+  unobtainable-cosmetic, vanilla-illusion and authored-pose gates. One stateless
+  current-engine adapter now reads native `MODDED_REALM` first; explicit
+  official false cannot be revived by stale legacy data. Older engines use
+  the existing shared launch-parameter authority.
+- Existing mirror, illusion and pose hook owners all consume the same
+  adapter. DLC denial, existing cosmetic backend IDs and the independent
+  frame toggle remain unchanged. No backend read-only flag, entitlement,
+  game global, new hook or network protocol is modified.
+- `/cos_regression_test` adds `issue1691_native_realm_authority`, explicitly
+  SKIP on older games without that native flag. Host cases exercise the real
+  mirror injection/resync, illusion-unlock and pose-gather callbacks, modern
+  and legacy authority, malformed values, official isolation and DLC denial.
+- #1690's Apply-button/read-only presentation is a separate boundary and is
+  not claimed fixed by these unlock/pose changes.
+- The existing guarded local-player accessor now lives in the existing
+  lifecycle owner. Callback installation order is unchanged, and the entry's
+  structural ceiling is preserved rather than increased.
+
 ## 0.9.224-dev (2026-09-14) -- item description parity census and vanilla typo bridge (#1567) [verify-fix]
 
 - Symptom: Rain reported on #913 that Saltzpyre's Shyish griffon-foot

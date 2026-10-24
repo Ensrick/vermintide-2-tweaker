@@ -27,6 +27,8 @@ return function(H, repo_root)
     -- inline source. Tests 3 to 6 are the ones that tell the split apart.
     H.test("WT common runtime-check extraction preserves beta registration surface", function()
         local checks, commands = install(public_root)
+        -- Source-audited current registration surface, also preserved by the
+        -- original #2 Hold-Pose extraction in PR #1703.
         H.equal(#checks, 61)
         H.equal(checks[1], "husk_extension_hooked")
         H.equal(checks[#checks], "issue943_fire_sword_heavy_contract")
@@ -149,12 +151,13 @@ return function(H, repo_root)
     end)
 
     H.test("WT dev Hold-Pose checks pass against the real Hold-Pose owner", function()
-        local prior_get_mod = _G.get_mod
-        _G.get_mod = function()
+        local prior_raw_get_mod = rawget(_G, "get_mod")
+        local loader = assert(loadfile(dev_root .. "wt_dev_hold_pose.lua"))
+        setfenv(loader, setmetatable({ get_mod = function()
             return { get = function() return nil end }
-        end
-        local loaded, hold_pose = pcall(dofile, dev_root .. "wt_dev_hold_pose.lua")
-        _G.get_mod = prior_get_mod
+        end }, { __index = _G }))
+        local loaded, hold_pose = pcall(loader)
+        H.equal(rawget(_G, "get_mod"), prior_raw_get_mod, "fixture must not rewrite the live global shape")
         H.truthy(loaded, "wt_dev_hold_pose.lua failed to load: " .. tostring(hold_pose))
         local registered = {}
         dofile(dev_root .. "_wt_runtime_checks_hold_pose.lua").install(function(name, callback)

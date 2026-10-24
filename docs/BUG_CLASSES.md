@@ -1106,7 +1106,7 @@ and melee secondary independently.
 
 ## 23. Keep-only Gui material drawn mid-mission ("Material 'X' not found in Gui" draw fatal)
 
-**First seen:** 2026-07-02 (gut_dev pose-cosmetics atlas, issue 155); repeats: store atlas (issue 363, gut_dev v0.2.202-dev), area-selection videos (issue 336, gut_dev v0.2.206-dev)
+**First seen:** 2026-07-02 (gut_dev pose-cosmetics atlas, issue 155); repeats: store atlas (issue 363, gut_dev v0.2.202-dev), area-selection videos (issue 336, gut_dev v0.2.206-dev), WOC Poisoned Edge trait icon removed from the atlas by Game Version 6.13.0 (issue 1687, WOC v0.1.60-dev), crt Dance of Blades and Unchained buff icons removed by 6.13.0 (issue 1686, crt v0.4.32-beta)
 **Canonical Issue:** [#336](https://github.com/Ensrick/vermintide-2-tweaker/issues/336) (area videos; carries the class's fullest two-layer fix)
 **Lives in:** any mod-forced keep view/window opened mid-mission (mission map, in-mission inventory/crafting, hero select) whose widgets reference materials vanilla registers only in the keep
 
@@ -1148,6 +1148,39 @@ siblings. `UIWidget.init` clones content/style but retains the pass array, so
 mutation must clone-on-write or it can suppress sibling instances and later
 Keep widgets that share the definition. A broad `_draw`/`UIRenderer` `pcall` is
 too late and too wide.
+
+### Variant: atlas name removed by a game patch (#1687)
+Not keep-only: an atlas icon name a mod hands to the UI (trait `icon`, item
+`inventory_icon`) stops existing after a patch. `UIRenderer.script_draw_bitmap`
+only takes the UV branch when `UIAtlasHelper.has_atlas_settings_by_texture_name`
+is true (`ui_renderer.lua:74`), so a removed name falls through to the raw
+`Gui_bitmap` call (`ui_renderer.lua:117`) with the same fatal. Instance: WOC's
+Poisoned Edge row used `kerillian_shade_increased_damage_on_poisoned_or_bleeding_enemy`
+(6.12.1 `gui_icons_atlas.lua:14648`); 6.13.0 renamed it `shade_2_2`
+(`talent_settings_kerillian.lua:1593`, `gui_icons_atlas.lua:8684`), and the
+item tooltip trait pass draws it on hover (`ui_passes_tooltips.lua:1282/1290`).
+Fix: re-prove every atlas icon at install with the same engine predicate,
+repair a missing name to the row's current constant when the atlas has it, and
+otherwise fall back to vanilla's own tooltip default `icons_placeholder`
+(`ui_passes_tooltips.lua:1134`); the in-game check fails on drift, and on a
+placeholder shown while the preferred name is resident, instead of passing
+silently. Reference: `weapons_of_chaos/.../_woc_ui_icons.lua` +
+`issue655_blightreaper_trait_contract`. Custom single-texture materials are not
+atlas names: their safety is the renderer-injection contract above.
+
+Buff-icon instance (#1686): BuffUI reads the sub-buff template's `icon`
+(`buff_ui.lua:128`) and builds a HUD widget for any non-nil value (`:135`), so
+the fatal fires the first time the buff is active. crt's Dance of Blades stack
+used `kerillian_maidenguard_cooldown_on_nearby_allies` (6.12.1
+`gui_icons_atlas.lua:14508`, now `maidenguard_4_2` at `:9454`) and the Unchained
+career-skill buff used `sienna_unchained_activated_ability_power_on_enemies_hit`
+(6.12.1 `:7830`, now `unchained_6_1` at `:7746`). For a buff the safe fallback
+is no icon (vanilla's own no-widget case), not a placeholder; a talent icon
+keeps the vanilla talent's icon. Guard every registration site plus one sweep
+after the apply pass over every mod-registered name. Reference:
+`career_tweaker/.../_crt_buff_icons.lua` + `issue1686_buff_icons_in_atlas`.
+After any game patch, grep every mod for `icon = "` and re-check the names
+against the new `gui_icons_atlas.lua`.
 
 ### Reference fix
 gut_dev `_gut_gui_material_guard.lua` (pose atlas + store atlas + area videos in the one consolidated `UIRenderer.create` hook) + `_gut_mission_map.lua` video-widget skip guards, commit 1b2cea8 (v0.2.206-dev). CIM `_cim_forge_widget_material_policy.lua` + `_setup_weapon_stats` producer hook (issue #83, v0.8.92-dev) is the dynamic-list reference. Related but distinct: class 22 (shading-env VARIATION AV - env resident, variation name absent); `memory: reference_vt2_create_screen_gui_missing_material_crash` (create_screen_gui C-fatal at Gui CREATE time, pre-filter the material list).
@@ -4000,3 +4033,34 @@ spawn payload) around `ConflictDirector._post_spawn_unit`.
   `post_ai_spawned_function` [src: `scripts/settings/mutators/mutator_geheimnisnacht_2021_hard_mode.lua:144-152`].
 - Adjacent classes: 1 (duplicate hooks on the shared seam) and 46 (hook timing
   relative to what vanilla has already consumed).
+
+## 93. Authored power-reference names mistaken for resolved runtime tables
+
+**Observed:** #1676, CWV shared damage-profile constructors. Multipliers were
+guarded by `type(field) == "string"`, while the native loader had already
+replaced those names with `PowerLevelTemplates` tables. A successful clone and
+wire registration therefore concealed unchanged damage, stagger and cleave.
+
+### Empirical boundary
+
+- Game 6.13.0 source `93dea911`,
+  `scripts/settings/equipment/damage_profile_templates.lua:5570-5616`, resolves
+  critical, cleave, armor, default-target and target-list references before mods.
+- Executing the real `_cwv_core_templates.lua` installer/cloner reproduced four
+  failures: resolved fields, a sparse named target list, mixed representations
+  and the actual template consumer. Neutral/missing-donor controls passed.
+- A target list may start at `[2]`; `ipairs` is not evidence of completeness.
+  This is related to class 75, but the collection here is combat data, not a
+  backend inventory. `_cwv_burn_scrub.lua` and Crowbill's mode owner already
+  resolve both forms; a string branch alone is not proof of this defect.
+
+### Fix and prevention
+
+Resolve either representation, deep-copy before scaling, and preserve native
+donors, unrelated metadata and the existing native wire-source mapping. Test
+resolved, named and mixed fields, sparse keys, cache idempotence and the actual
+consumer. A literal authored-table fixture alone cannot prove runtime behavior.
+Retain numeric constructor read-back before optional later WT tuning, so a
+moving donor does not manufacture a false regression. An unexercised runtime
+check must be SKIP, not PASS. Host tests do not prove live hit balance or peer
+compatibility; those remain separate acceptance boundaries under #1676/#423.

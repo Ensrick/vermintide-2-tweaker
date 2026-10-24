@@ -8,6 +8,14 @@ Last updated: 2026-08-21.
 
 ## Regression-owner source map
 
+- `issue1676_resolved_profile_multipliers`, appended after #296 in the existing
+  husk/ammo/projectile owner, consumes the real core constructor's retained
+  numeric read-back. No constructed numeric clones means SKIP. Offline
+  `test_cwv_resolved_profile_multipliers.lua` executes resolved/named/mixed
+  representations, sparse targets, donor isolation, idempotence, existing stale
+  clones, wire mapping, the template consumer and installed named callback.
+  This does not replace live dummy-hit/balance and mixed-peer acceptance.
+
 - `_cwv_regression_identity.lua` owns the original 20-check identity prefix and
   appends the validated 22-check tail from
   `_cwv_regression_runtime_identity.lua`.
@@ -70,7 +78,10 @@ runner with zero registrations from the identity family.
   wielded**, run `/cwv_regression_test` and retain that log.
   `issue1155_old_musket_descriptor_reconciler`,
   `issue617_old_musket_preview_texture_consumer`, and
-  `issue742_old_musket_texture_material_preflight` pass.
+  `issue742_old_musket_texture_material_preflight` pass. Since 0.1.548-dev
+  (#1656) a session that skipped the Athanor or the equip/wield steps reports
+  `SKIP: issue1155_old_musket_descriptor_reconciler -- <reason>` instead of a
+  FAIL; a SKIP is not a pass for this gate.
 - [ ] After the Keep gate passes, swap away and back, enter an Adventure mission,
   and repeat the first-person, local-third-person, and mode checks. Treat this as
   a separate transition/log phase: state exit deliberately invalidates Keep-only
@@ -300,7 +311,8 @@ any remote-husk or bot verification.
 |---|---|
 | Repro | Craft/equip the Imperial Crowbill before a second CWV player joins. Observe it in the Keep, enter a mission without re-equipping, swap away/back, respawn, and hot-join once with roles reversed. |
 | Invariant | The canonical CIM synthetic row keeps the exact variant in `mod_data.cwv_key` while the vanilla equipment wire carries `bw_1h_crowbill` and no CWV skin. The VMF-only exact descriptor must retain `cwv_es_imperial_crowbill` and locally reconstruct its authored custom unit. The unit path never enters a vanilla `NetworkLookup`; a duplicate fingerprint never causes a second rebuild. |
-| Detection | Offline `test_cwv_appearance_lifecycle.lua` proves the skinless Imperial payload/reconstruction/dedupe contract. `/cwv_regression_test` passes `issue719_imperial_crowbill_remote_identity`. Paired logs must show the same descriptor fingerprint through identity receive, `lifecycle=husk_wield adapter=hand_selection`, and `[cwv:huskpath] def=cwv_es_imperial_crowbill`; a Sienna donor model with `state=exact` is a downstream husk adapter failure, while no exact receive is delivery/parity. |
+| Weapon Special | The pick/hammer toggle rebuilds the slot through `_cwv_crowbill_runtime.rebuild_slot`: destroy, then vanilla `_spawn_resynced_loadout`, so every observer receives the re-added slot before the wield. A destroy plus a local-only add left observers with no slot and an invisible weapon. |
+| Detection | Offline `test_cwv_appearance_lifecycle.lua` proves the skinless Imperial payload/reconstruction/dedupe contract; `test_cwv_husk_adapter.lua` drives the production husk spawn transaction; `test_cwv_issue719_crowbill_rebuild.lua` replays the toggle over the vanilla wire rules and drives the live check legs. `/cwv_regression_test` must report `PASS: issue719_imperial_crowbill_remote_identity` on BOTH peers. Since the 0.1.548-dev review pass a PASS row proves that peer's leg ran: the row PASSes only when every Crowbill holder that peer can see was proven (the wielder's equipped Crowbill publishes exact identity; the observer sees the remote slot, the authored `_3p` unit, the owner's face and a read-back retained rotation). Otherwise it reports `SKIP: issue719_imperial_crowbill_remote_identity -- legs 1-2 passed; ...` naming each reason (`reason=no_crowbill_peer`, `reason=no_player_manager`, `held, not wielded`, `bw_1h_crowbill held with identity state=<s>`, `rotation=unread`), and a SKIP is not a pass for this gate. The `[cwv:719] peer observation` lines are diagnostics only. The check's own transaction leg runs on a synthetic `rt719:<fingerprint>` copy with the #279/#579 probes stubbed, so its one `[cwv:660] ... descriptor=rt719:...` line never matches a real peer. Paired logs must show the same descriptor fingerprint through identity receive, `lifecycle=husk_wield adapter=hand_selection`, and `[cwv:huskpath] def=cwv_es_imperial_crowbill`; a Sienna donor model with `state=exact` is a downstream husk adapter failure, while no exact receive is delivery/parity. |
 
 ---
 
@@ -368,7 +380,7 @@ any remote-husk or bot verification.
 | Repro | In solo and an all-CWV two-player lobby, throw into floor and wall, then recover the landed/stuck spear. Repeat host/client roles; also verify a mixed lobby does not crash. |
 | Expected post-fix | Confirmed-CWV lobbies retain the functional CWV pickup. Unconfirmed/mixed parity substitutes the boot-stable vanilla key and never sends a CWV-only lookup index. Ordinary ammo crates refill without creating natural javelin loot. |
 | Mixed-lobby policy | While capability is unproven, exact CWV Tuskgor Javelin rows are hidden from the ranged picker and already-equipped copies cannot emit a projectile or consume ammo. `TransientPackageLoader.hot_join_sync` fences and shadows numeric projectile/husk refs during loading; `GameNetworkManager.set_peer_synchronizing` removes live custom recovery pickups before `GameSession.add_peer`. Native `we_javelin` is unchanged. |
-| Detection | Offline `test_cwv_javelin_pickup.lua`; runtime `cwv_wire_safe_thrown_variant_installed`. The runtime check also requires the action gate, dormant-bomb ActionUtils sender guard, registered parity feature, and pre-roster hot-join fence. |
+| Detection | Offline `test_cwv_javelin_pickup.lua` covers wire containment and `test_cwv_javelin_recovery_contract.lua` drives the exact registered ground/link callbacks. Runtime `cwv_wire_safe_thrown_variant_installed` guards the sender/hot-join axes; `issue296_tuskgor_javelin_recovery_transaction` proves both skin-qualified impact outcomes remain registered by identity, eligible only for `throwing_javelin`, carry the refill shape vanilla `add_ammo_from_pickup` reads (`refill_amount = 1`, no `refill_percentage`, `simple_inventory_extension.lua:1263-1266`), and clean up their limited-owned pickup. It does not run the vanilla refill: the +1 per recovered javelin and the physics/contact still require live verification. |
 
 ---
 

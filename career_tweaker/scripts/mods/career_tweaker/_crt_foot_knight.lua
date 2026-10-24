@@ -68,6 +68,11 @@ local AURA_PATCHES = {
 
 local function _register_local_template(name, body)
     if not BuffTemplates or rawget(BuffTemplates, name) ~= nil then return end
+    -- #1686: atlas-check every icon before the HUD can see it (bug class 23).
+    local icons = mod._crt and mod._crt.buff_icons
+    if icons then
+        icons.guard_and_log(rawget(_G, "UIAtlasHelper"), "foot_knight", name, body)
+    end
     BuffTemplates[name] = body
 end
 

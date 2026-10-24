@@ -431,7 +431,10 @@ the strict reader retains schema-1 support for historical direct-parent/
 README-only receipts. Ordinary QA runs
 `check_wt_history_source_freshness.ps1` opportunistically: an unreachable
 remote reports a visible skip while all pinned offline evidence remains
-blocking, but a reachable mismatched or malformed remote fails. Canonical
+blocking, and a reachable malformed remote fails. A reachable mismatched
+ref/tip fails ordinary QA only when the checked change set (pre-commit: the
+index) touches this directory, a `qa/` `wt_history` path, or either WT stream;
+otherwise it prints a visible advisory to re-anchor (issue #1683). Canonical
 BuildOnly/release runs use `-RequireRemoteFresh`, so network unavailability or
 any default-ref/tip movement blocks before compilation. The probe is bounded
 `git ls-remote --symref`; its advertised 1--60 second budget includes bounded

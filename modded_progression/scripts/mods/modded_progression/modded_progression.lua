@@ -30,7 +30,7 @@ local RealmAuthority = mod:dofile(
 -- at the bottom of this same chunk, so no _G or cross-file exposure is needed.
 local _MEM_PROBE_T0_MP = collectgarbage("count")
 
-local MOD_VERSION = "0.2.40-dev"
+local MOD_VERSION = "0.2.43-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([mp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -1265,9 +1265,13 @@ end)
 mod:hook("HeroWindowItemCustomization", "_enable_craft_button", _with_eac_off_unless_fresh)
 mod:hook("HeroWindowItemCustomization", "_update_state_craft_button", _with_eac_off_unless_fresh)
 
--- Generic in-game UI guard. The function literally returns
--- `not script_data["eac-untrusted"]`; we want it always true.
-mod:hook("IngameUI", "not_in_modded", function(func, self) return true end)
+-- #1671: the IngameUI.not_in_modded hook is gone (game 6.12.0 removed the
+-- method); the owner module records why and checks every literal mp hook target.
+mod:dofile("scripts/mods/modded_progression/_mp_hook_targets").install({
+    rt_register = _rt_register,
+    print_log = printf,
+    lookup = function(class_name) return rawget(_G, class_name) end,
+})
 
 -- Achievement progress tracking — CRITICAL. Without this, kill counts
 -- and mission-completion events don't tick the challenge progress
@@ -1295,7 +1299,8 @@ mod:dofile("scripts/mods/modded_progression/_mp_loot_diag_runtime").install(mod,
     loot_diag = LootDiag,
     get_inventory_store = get_inventory_store,
     rt_register = _rt_register,
-    realm_state = function() return script_data end,
+    -- #1692: game 6.12.0+ MODDED_REALM decides; the shared realm authority answers pre-6.12.
+    is_modded_realm = function() return LootDiag.realm_is_modded(rawget(_G, "MODDED_REALM"), _is_mp_realm) end,
     print_log = printf,
     item_master_list = function() return ItemMasterList end,
     now = os.time,

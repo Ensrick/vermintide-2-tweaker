@@ -9,6 +9,7 @@ package.path = table.concat({
 }, ";")
 
 local Harness = require("harness")
+local SuiteManifest = require("suite_manifest")
 
 local function run_harness_self_test()
     Harness.test("self-test pass sentinel", function()
@@ -38,7 +39,22 @@ if arg[1] == "--self-test" then
     os.exit(0)
 end
 
+-- The canonical PowerShell gate discovers every top-level test_*.lua file.
+-- Do not infer reachability from source spelling: compare actual imports once
+-- all explicit suites have registered their direct/transitive children.
+local expected_suites, inventory_error
+if arg[1] == "--suite-manifest" then
+    expected_suites, inventory_error = SuiteManifest.read(arg[2])
+else
+    inventory_error = "run through qa/check_lua_unit_tests.ps1 (suite inventory required)"
+end
+if not expected_suites then
+    io.stderr:write("[lua_suite_manifest] ERROR -- ", tostring(inventory_error), "\n")
+    os.exit(2)
+end
+
 local suites = {
+	"test_suite_manifest",
 	"test_shared_weapon_appearance",
 	"test_shared_appearance_fade",
 	"test_shared_career_weapon_actions",
@@ -58,12 +74,14 @@ local suites = {
     "test_crt_tourney_catalog",
     "test_crt_umbrella_audit",
     "test_crt_dance_of_blades",
+    "test_crt_buff_icons",
     "test_crt_flagellation",
     "test_crt_foot_knight_policy",
     "test_crt_balance_split",
     "test_crt_balance_catalog_engineer",
     "test_crt_retired_big_rebalance",
     "test_crt_talent_selection",
+    "test_crt_career_unlock",
     "test_crt_wire_contract",
     "test_mod_tweaker_transaction",
     "test_mod_tweaker_profiles",
@@ -74,6 +92,7 @@ local suites = {
     "test_gut_label_policy",
     "test_gut_gear_accent_parity",
     "test_gut_dx12_fence630",
+    "test_gut_dx12_fence630_session_budget",
     "test_gut_damage_numbers",
     "test_mod_tweaker_ordering",
     "test_mod_tweaker_disabled_sections",
@@ -118,8 +137,10 @@ local suites = {
     "test_mp_shilling_ui_policy",
     "test_mp_emporium_purchase",
     "test_mp_loot_diag",
+    "test_mp_loot_diag_realm_gate",
     "test_mp_fresh_profile_census",
     "test_mp_fresh_profile_routing",
+    "test_mp_hook_targets_resolve",
     "test_modded_realm_authority",
     "test_gt_level_control_backend_guard",
     "test_wt_passive_charge",
@@ -137,7 +158,6 @@ local suites = {
     "test_wt_history_source_anchor",
     "test_wt_fire_sword",
     "test_wt_hold_pose",
-    "test_wt_runtime_checks_module",
     "test_wt_overcharge_presentation",
     "test_wt_bolt_staff_overcharge",
     "test_wt_longbow_zoom_probe",
@@ -172,6 +192,8 @@ local suites = {
     "test_wt_ingame_3p_swap_owner",
     "test_wt_menu_preview_owner",
     "test_wt_phase5_runtime_owners",
+    "test_wt_runtime_checks_module",
+    "test_wt_issue946_crowbill_picker",
     "test_cwv_remote_audio",
     "test_cwv_remote_identity",
     "test_cwv_husk_path",
@@ -197,6 +219,8 @@ local suites = {
     "test_cwv_acquisition",
     "test_cwv_acquisition_runtime",
     "test_cwv_javelin_pickup",
+    "test_cwv_javelin_recovery_contract",
+    "test_cwv_resolved_profile_multipliers",
     "test_cwv_thrown_wire_policy",
     "test_cwv_damage_profile_wire",
     "test_cwv_burn_scrub",
@@ -216,6 +240,8 @@ local suites = {
     "test_cwv_crowbill_hammer_mode",
     "test_cwv_crowbill_runtime",
     "test_cwv_crowbill_presentation",
+    "test_cwv_issue719_crowbill_rebuild",
+    "test_cwv_regression_harness_1656",
 	"test_cwv_durable_transform",
 	"test_cwv_relative_scale",
 	"test_cwv_entry_decomposition",
@@ -243,6 +269,7 @@ local suites = {
     "test_cim_forge_picker_owner",
     "test_cim_forge_ui_owner",
     "test_cim_ranalds_catalog",
+    "test_cim_ranalds_game_keys_1696",
     "test_cim_ranalds_import",
     "test_cim_ranalds_browser",
     "test_cim_modded_loadout_owner",
@@ -265,6 +292,7 @@ local suites = {
     "test_cim_property_value_policy",
     "test_cim_tab_preview",
     "test_cim_regression_module",
+    "test_cim_regression_harness_1656",
     "test_cim_favorite_persistence",
     "test_woc_wire_policy",
 	"test_woc_boss_weapon_catalog",
@@ -276,6 +304,7 @@ local suites = {
 	"test_woc_blightreaper_power",
 	"test_woc_cursed_rarity",
 	"test_woc_inventory_icons",
+	"test_woc_ui_icons",
     "test_woc_appearance_policy",
 	"test_woc_blightreaper_pulse",
 	"test_woc_durable_transform",
@@ -284,8 +313,11 @@ local suites = {
 	"test_woc_blightreaper_audio",
 	"test_woc_attack_order",
 	"test_woc_phase5_runtime_owners",
+	"test_woc_blightreaper_spirits",
 	"test_woc_load_banner",
     "test_dcp_portrait_materials",
+    "test_dcp_portrait_settings_owner",
+    "test_dcp_entry_portrait_flow",
     "test_dcp_player_scope",
     "test_dcp_score_record",
     "test_cos_score_identity",
@@ -358,6 +390,7 @@ local suites = {
     "test_ct_spawn_eligibility_owner",
     "test_ct_pickup_spawn_owner",
     "test_ct_tab_panel_owner",
+    "test_ct_tab_collectibles_layout",
     "test_ct_boon_grant_owner",
     "test_ct_campaign_graph_owner",
     "test_ct_altar_reuse_owner",
@@ -444,6 +477,7 @@ local suites = {
     "test_cos_la_loadout_safety",
     "test_cos_glow_transport",
     "test_cos_weapon_pose_policy",
+    "test_cos_realm_authority_1691",
     "test_cos_deus_yield_policy",
     "test_gt_disconnect_grace",
     "test_gt_disconnect_failure_diag",
@@ -502,28 +536,58 @@ local suites = {
     "test_gut_tab_property_refresh",
     "test_gut_tab_talent_filter",
     "test_gut_tab_live_provider",
+    "test_gut_tab_talent_harness",
     "test_gut_localization_orphan_cleanup",
     "test_gut_loc_format",
     "test_gut_mod_tweaker_keep_routing",
+    "test_gut_mod_tweaker_sound_parity",
     "test_gut_dropdown_arrow_glow",
     "test_gut_career_hud_holder",
     "test_gut_cosmetics_mission_mount",
     "test_gut_module_extraction",
+    "test_gt_regression_module",
+    "test_gut_exclusive_radio",
+    "test_gut_selected_loadout_trace",
     "test_character_dialogue",
     "test_dialogue_staged_isolation",
+    "test_gut_dialogue_contract_skip",
     "test_appearance_descriptor",
     "test_appearance_census",
     "test_appearance_name_authority",
     "test_resource_residency_census",
 }
 
-for _, suite in ipairs(suites) do
-    local register = require(suite)
-    if type(register) ~= "function" then
-        error(suite .. " must return a registration function")
-    end
-    register(Harness, repo_root)
+local explicit_error = SuiteManifest.validate_explicit(suites)
+if explicit_error then
+    io.stderr:write("[lua_suite_manifest] ERROR -- ", explicit_error, "\n")
+    os.exit(2)
 end
+
+local previous_raw_require = rawget(_G, "require")
+local tracked_require, completed_suites = SuiteManifest.track(require)
+rawset(_G, "require", tracked_require)
+local registered, registration_error = pcall(function()
+    for _, suite in ipairs(suites) do
+        local register = require(suite)
+        if type(register) ~= "function" then
+            error(suite .. " must return a registration function")
+        end
+        register(Harness, repo_root)
+    end
+end)
+rawset(_G, "require", previous_raw_require)
+if not registered then
+    io.stderr:write("[lua_suite_manifest] ERROR -- suite registration failed: ",
+        tostring(registration_error), "\n")
+    os.exit(2)
+end
+
+local coverage_error = SuiteManifest.audit(expected_suites, completed_suites)
+if coverage_error then
+    io.stderr:write("[lua_suite_manifest] ERROR -- ", coverage_error, "\n")
+    os.exit(2)
+end
+io.write(string.format("[lua_suite_manifest] OK -- %d discovered suites registered.\n", #expected_suites))
 
 local passed, total, failed = Harness.run()
 if passed then

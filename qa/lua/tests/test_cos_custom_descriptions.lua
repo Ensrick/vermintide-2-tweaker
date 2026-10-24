@@ -114,6 +114,8 @@ return function(H, repo_root)
                 H.equal(method, "get_unlocked_weapon_skins")
             end
         end
+        cos._cos_realm_authority = execute(base .. "_cos_realm_authority.lua", env).new(
+            env, execute(base .. "_lib_modded_realm_authority.lua", env))
         execute(base .. "_cos_illusions.lua", env, true)
         return { env = env, cos = cos, loc = loc, checks = checks, calls = calls,
             prints = prints, native = native, set_language = set_language }

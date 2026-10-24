@@ -1,5 +1,118 @@
 # Crafting in Modded Changelog
 
+## 0.8.141-dev (2026-10-24) -- Fresh #1656/#1696 candidate and diagnostic restoration
+
+- Carries the prepared regression-harness and Necromancer catalog corrections
+  from the unpublished 0.8.140-dev candidate under a fresh version claim.
+- Review reproduced two additional #1656 failures: the default bubble check
+  created a false setting override when no value existed, and left the user's
+  movement-speed mode disabled if a scaling reader threw. The protected check
+  now restores the exact prior value before returning success or an error,
+  without persisting the temporary override.
+- The two added actual-check cases fail before correction and pass afterward;
+  the combined host suite passes 4,160 cases. This is artifact preparation,
+  not evidence that the dev or stable Workshop item has been updated.
+
+## 0.8.140-dev (2026-10-17) -- Community Builds use the game's Necromancer keys (#1696) [verify-fix]
+
+- Symptom (RainReligion, 2026-09-21, cim 0.8.135-dev, #1655 report): every
+  Community Builds import using a Necromancer weapon was rejected with
+  `Import rejected: item unavailable: bw_reaper`, on any career.
+- Root cause: `_cim_ranalds_catalog.lua` copied Ranald's Gift's own codeName
+  strings (`src/data/WeaponsDataMap.js` / `HeroesDataMap.js` at the pinned
+  site commit). For three ids those are not game keys: weapon 82
+  `bw_reaper` (site "Ensorcelled Reaper", melee) is
+  `ItemMasterList.bw_ghost_scythe` (`item_master_list_shovel.lua:227`),
+  weapon 83 `bw_soulsteal` (site "Soulstealer Staff", ranged_heat) is
+  `ItemMasterList.bw_necromancy_staff` (`:481`), and career 20 `bw_necro` is
+  `CareerSettings.bw_necromancer` (`career_settings_shovel.lua:4`). The bad
+  career key also made preflight return "career unavailable", showed the raw
+  key as the career label, and kept the browser from opening on the
+  Necromancer's own builds.
+- Fix: the three ids now map to the game keys. Every other catalogue key was
+  checked against the 6.13.0 decompile: the other 81 weapons, the other 19
+  careers and every property and trait key already resolve. Import gating
+  (#1655) is unchanged.
+- New `/cim_regression_test` check `issue1696_ranalds_catalog_game_keys`:
+  every catalogue career resolves in `CareerSettings` and every weapon is an
+  `ItemMasterList` melee/ranged row (read with `rawget`, so a missing key
+  never trips ItemMasterList's logging `__index`).
+- Offline proof: `qa/lua/tests/test_cim_ranalds_game_keys_1696.lua` checks
+  the catalogue against the vanilla weapon census and hero career list, plus
+  an optional pass over the decompiled source; against 0.8.139-dev all four
+  cases fail on exactly `bw_necro`, `bw_reaper` and `bw_soulsteal`.
+- #1656 follow-up in this build: `persist_loadouts_gate_off_is_passthrough`
+  now FAILs when its fixture craft registration is rejected (an unmodded bid
+  is never captured, so the check would pass vacuously), and SKIPs with a
+  named reason when the call chain never reaches vanilla's mirror write
+  (`backend_interface_item_playfab.lua:665`), the same way its round-trip twin
+  guards both preconditions.
+
+**Test:** Load `Crafting in Modded v0.8.140-dev` in the keep, run
+`/cim_regression_test`: `issue1696_ranalds_catalog_game_keys` must PASS.
+Then, as the Necromancer, open the Athanor's Community Builds browser: it
+opens on the Necromancer's builds and the career label shows her localized
+name, not `bw_necro`. Import a build that uses the Ensorcelled Reaper or
+the Soulstealer Staff: it must not be rejected with "item unavailable".
+
+## 0.8.139-dev (2026-10-17) -- Five regression checks judge the shipped policy, not stale fixtures (#1656) [verify-fix]
+
+- Symptom (RainReligion, 2026-09-21, cim 0.8.135-dev, plain keep run): five
+  `/cim_regression_test` checks FAILed for harness reasons; the product
+  behavior they guard was correct. Re-checked on 0.8.138-dev source: all five
+  were still present.
+- `modded_loadout_round_trip_save_then_clear`: the fixture's stand-in item
+  interface answered every field with a no-op, so vanilla `set_loadout_item`
+  indexed a nil item table (`backend_interface_item_playfab.lua:640`) and
+  raised before VMF ran cim's `hook_safe` capture. The stand-in now serves
+  the rows vanilla reads and records its mirror write
+  (`_cim_regression_fixtures.lua`); a chain that still raises reports SKIP
+  with the error instead of a false FAIL. The gate-off twin
+  `persist_loadouts_gate_off_is_passthrough` shared the stub and, since the
+  forge-surface split, used undeclared fixture ids (nil), so it passed without
+  equipping anything; it now drives a real capture and fails if the OFF gate
+  leaks.
+- `inventory_property_count_within_cap`: still pinned the pre-#86 ceiling of
+  2 properties; #86 raised the load-time trimmer and the Athanor's distinct
+  property gate to 10. The five 3-property items in the report are within
+  that policy. The check now uses the shared ceiling of 10.
+- `localization_format_safe`: probed every loc string with a bare
+  `string.format` and no arguments, which fails legitimate placeholders such
+  as "Importing %s..." and makes vanilla's formatter wrapper mark them invalid
+  for the rest of the session (`foundation/scripts/util/patches.lua:140-156`),
+  so the Ranald's Gift messages could read "<Invalid string format>" after a
+  test run. It now scans the directives without calling the formatter, using
+  a port of the gut #1651 scanner (`_cim_loc_format.lua`).
+- `default_property_cap_is_five_bubbles`: asserted the pre-#244 linear
+  storage (1 bubble = 0.2). Under #244 a count below the Adventure range start
+  has no storable value: one fatigue_regen bubble is 6% against a 10-30%
+  range (`weapon_properties.lua:114-119`, weave max 0.3 at
+  `weave_properties.lua:57-59`), so it stores 0, and APPLY/CRAFT already
+  refuse it (#1141). The policy is correct and unchanged; the check now
+  requires every storable count to round-trip, rise with each bubble and reach
+  the full value at 5, while the 5-bubble default cap and the stamina (2) and
+  movespeed (1) caps stay pinned.
+- `overview_btn_render_target`: the entry handed the regression context two
+  names that only exist as locals inside `_cim_forge_ui_owner.lua`, so the
+  check indexed nil. The forge UI owner now exports both and the check reads
+  them live.
+- `issue414_cw_traits_preserve_slot_family` (fixed by 0.8.137-dev) is
+  unchanged.
+- Offline proof: `qa/lua/tests/test_cim_regression_harness_1656.lua` runs the
+  shipped checks through the real loadout, weave-loadout and forge UI owners
+  (vanilla `set_loadout_item` transcribed); against the 0.8.138-dev source it
+  reproduces each reported FAIL message.
+
+**Test:** Load `Crafting in Modded v0.8.140-dev` (or later; 0.8.139-dev is
+never deployed on its own) in the keep, run
+`/cim_regression_test`. `modded_loadout_round_trip_save_then_clear`,
+`persist_loadouts_gate_off_is_passthrough`,
+`inventory_property_count_within_cap`, `localization_format_safe`,
+`default_property_cap_is_five_bubbles` and `overview_btn_render_target` must
+PASS (or SKIP with a named reason); `issue414_cw_traits_preserve_slot_family`
+must still PASS. Then open the Athanor's Community Builds browser: its page
+and status lines must show text, never "<Invalid string format>".
+
 ## 0.8.138-dev (2026-09-25) -- Saved crafts that fail to restore are named, never hidden (#1654) [diagnostics-armed]
 
 - Symptom (RainReligion, 2026-09-21, cim 0.8.135-dev only): of two crafted

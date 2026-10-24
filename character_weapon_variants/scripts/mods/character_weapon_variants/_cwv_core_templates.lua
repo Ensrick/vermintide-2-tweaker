@@ -25,6 +25,57 @@ return function(mod, deps)
 	local printf = deps.printf
 
 	assert(type(_om) == "table", "_cwv_core_templates requires deps.om")
+	-- Retain the constructor's actual read-back proof, before another mod may
+	-- intentionally tune these profiles again. No synthetic engine writes and
+	-- no later comparison against a donor changed by WT's optional modifiers.
+	local multiplier_audit = { comparisons = 0, profiles = 0 }
+	local function power_row(value)
+		if type(value) == "string" then
+			return type(PowerLevelTemplates) == "table" and rawget(PowerLevelTemplates, value) or nil
+		end
+		return type(value) == "table" and value or nil
+	end
+	local function audit_profile(name, source, result, mults)
+		multiplier_audit.profiles = multiplier_audit.profiles + 1
+		local function compare(expected_row, observed_row, field, multiplier, path)
+			local value = type(expected_row) == "table" and expected_row[field] or nil
+			if type(value) ~= "number" then return end
+			multiplier_audit.comparisons = multiplier_audit.comparisons + 1
+			local observed = type(observed_row) == "table" and observed_row[field] or nil
+			local expected = value * multiplier
+			if type(observed) ~= "number" or observed ~= observed
+					or math.abs(observed - expected) > 1e-9 * math.max(1, math.abs(expected)) then
+				multiplier_audit.failure = multiplier_audit.failure or (name .. "." .. path
+					.. " expected " .. tostring(expected) .. ", got " .. tostring(observed))
+			end
+		end
+		local function target(expected, observed, path)
+			expected = type(expected) == "table" and expected or nil
+			observed = type(observed) == "table" and observed or nil
+			compare(expected and expected.power_distribution, observed and observed.power_distribution,
+				"attack", mults.damage or 1, path .. ".power_distribution.attack")
+			compare(expected and expected.power_distribution, observed and observed.power_distribution,
+				"impact", mults.stagger or 1, path .. ".power_distribution.impact")
+		end
+		local expected, observed = power_row(source.cleave_distribution), power_row(result.cleave_distribution)
+		compare(expected, observed, "attack", mults.cleave or 1, "cleave_distribution.attack")
+		compare(expected, observed, "impact", mults.cleave or 1, "cleave_distribution.impact")
+		target(power_row(source.default_target), power_row(result.default_target), "default_target")
+		target(power_row(source.critical_strike), power_row(result.critical_strike), "critical_strike")
+		expected, observed = power_row(source.targets), power_row(result.targets)
+		for index, row in pairs(expected or {}) do
+			if type(index) == "number" and type(row) == "table" then
+				target(row, type(observed) == "table" and observed[index] or nil,
+					"targets[" .. tostring(index) .. "]")
+			end
+		end
+	end
+	_om._cwv_profile_multiplier_check = function()
+		if multiplier_audit.failure then return "#1676 constructor read-back: " .. multiplier_audit.failure end
+		if multiplier_audit.profiles == 0 or multiplier_audit.comparisons == 0 then
+			return "skip: no numeric CWV clone construction was observed this session"
+		end
+	end
 
 -- Single registration site for every profile this module mints (multiplier
 -- clones and the #916 burn scrub): template row plus the bidirectional wire
@@ -63,7 +114,10 @@ _clone_damage_profile = function(source_name, prefix, mults)
 
 	local new_name = prefix .. source_name
 	_om._record_cwv_dp_source(new_name, source_name)   -- issue 423 wire-safe map
-	if DamageProfileTemplates[new_name] then return new_name end
+	if DamageProfileTemplates[new_name] then
+		audit_profile(new_name, source, DamageProfileTemplates[new_name], mults)
+		return new_name
+	end
 
 	local dmg_mult = mults.damage or 1
 	local stg_mult = mults.stagger or 1
@@ -71,75 +125,51 @@ _clone_damage_profile = function(source_name, prefix, mults)
 
 	local clone = table.clone(source, true)
 
-	if type(clone.cleave_distribution) == "string" and PowerLevelTemplates then
-		local key = clone.cleave_distribution
-		local src = PowerLevelTemplates[key]
-		if src then
-			local new_key = prefix .. key
-			if not PowerLevelTemplates[new_key] then
-				local c = table.clone(src, true)
-				if c.attack then c.attack = c.attack * clv_mult end
-				if c.impact then c.impact = c.impact * clv_mult end
-				PowerLevelTemplates[new_key] = c
-			end
-			clone.cleave_distribution = new_key
+	-- Native 6.13 resolves these fields to tables before mods load. Keep the
+	-- legacy named-reference representation too, but scale the same owned copy
+	-- in either case. Never mutate a native PowerLevelTemplates/donor table.
+	local function scaled_reference(value, scale)
+		if type(value) == "table" then
+			scale(value) -- already deep-copied with the damage profile above
+			return value
+		end
+		local source_power = type(value) == "string" and PowerLevelTemplates
+			and PowerLevelTemplates[value] or nil
+		if type(source_power) ~= "table" then return value end
+		local new_key = prefix .. value
+		if not PowerLevelTemplates[new_key] then
+			local owned = table.clone(source_power, true)
+			scale(owned)
+			PowerLevelTemplates[new_key] = owned
+		end
+		return new_key
+	end
+	local function scale_number(row, key, multiplier)
+		if type(row[key]) == "number" then row[key] = row[key] * multiplier end
+	end
+	local function scale_target(row)
+		if type(row) ~= "table" then return end
+		local power = row.power_distribution
+		if type(power) == "table" then
+			scale_number(power, "attack", dmg_mult)
+			scale_number(power, "impact", stg_mult)
 		end
 	end
-
-	if type(clone.default_target) == "string" and PowerLevelTemplates then
-		local key = clone.default_target
-		local src = PowerLevelTemplates[key]
-		if src then
-			local new_key = prefix .. key
-			if not PowerLevelTemplates[new_key] then
-				local c = table.clone(src, true)
-				if c.power_distribution then
-					if c.power_distribution.attack then c.power_distribution.attack = c.power_distribution.attack * dmg_mult end
-					if c.power_distribution.impact then c.power_distribution.impact = c.power_distribution.impact * stg_mult end
-				end
-				PowerLevelTemplates[new_key] = c
-			end
-			clone.default_target = new_key
+	clone.cleave_distribution = scaled_reference(clone.cleave_distribution, function(row)
+		scale_number(row, "attack", clv_mult)
+		scale_number(row, "impact", clv_mult)
+	end)
+	clone.default_target = scaled_reference(clone.default_target, scale_target)
+	clone.targets = scaled_reference(clone.targets, function(rows)
+		-- Vanilla has sparse targets starting at [2]; ipairs silently skips them.
+		for index, target in pairs(rows) do
+			if type(index) == "number" then scale_target(target) end
 		end
-	end
-
-	if type(clone.targets) == "string" and PowerLevelTemplates then
-		local key = clone.targets
-		local src = PowerLevelTemplates[key]
-		if src then
-			local new_key = prefix .. key
-			if not PowerLevelTemplates[new_key] then
-				local c = table.clone(src, true)
-				for _, target in ipairs(c) do
-					if target.power_distribution then
-						if target.power_distribution.attack then target.power_distribution.attack = target.power_distribution.attack * dmg_mult end
-						if target.power_distribution.impact then target.power_distribution.impact = target.power_distribution.impact * stg_mult end
-					end
-				end
-				PowerLevelTemplates[new_key] = c
-			end
-			clone.targets = new_key
-		end
-	end
-
-	if type(clone.critical_strike) == "string" and PowerLevelTemplates then
-		local key = clone.critical_strike
-		local src = PowerLevelTemplates[key]
-		if src then
-			local new_key = prefix .. key
-			if not PowerLevelTemplates[new_key] then
-				local c = table.clone(src, true)
-				if c.power_distribution then
-					if c.power_distribution.attack then c.power_distribution.attack = c.power_distribution.attack * dmg_mult end
-					if c.power_distribution.impact then c.power_distribution.impact = c.power_distribution.impact * stg_mult end
-				end
-				PowerLevelTemplates[new_key] = c
-			end
-			clone.critical_strike = new_key
-		end
-	end
+	end)
+	clone.critical_strike = scaled_reference(clone.critical_strike, scale_target)
 
 	_register_cwv_damage_profile(new_name, clone)
+	audit_profile(new_name, source, DamageProfileTemplates[new_name], mults)
 
 	return new_name
 end

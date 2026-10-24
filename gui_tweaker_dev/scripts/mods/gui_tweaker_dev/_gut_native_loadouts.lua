@@ -37,9 +37,10 @@
 --   `PlayFabMirrorAdventure` (NOT `PlayFabMirrorBase`): class.lua copies parent methods into
 --   the child at definition time (class.lua:51-57), so a base-class hook would silently miss
 --   the live instance (dedicated servers use `PlayFabMirrorDedicated`; the user is P2P-only,
---   so dedicated is out of scope). Realm signal is `script_data["eac-untrusted"]`
---   (application_parameter.lua:150; named `in_modded_realm` at mod_manager.lua:22; VMF's own
---   dev_console gate uses it). Failsafe: if the realm can't be determined we go fully inert.
+--   so dedicated is out of scope). The boot guard owns realm authority:
+--   native MODDED_REALM first, with backend/legacy fallback before game 6.12.
+--   (application_parameter.lua:150-152, source 93dea911). Failsafe: if the realm
+--   can't be determined we go fully inert.
 --
 -- Cross-mod: cim hooks `BackendUtils.set_loadout_item` + `BackendInterfaceItemPlayfab.set_loadout_item`
 -- (equip capture) and cosmetics_tweaker hooks `BackendUtils.set_loadout_item` + the items
@@ -1680,12 +1681,6 @@ M.rt_checks = {
             return "bounded WT trace core missing"
         end
     end },
-    { name = "native_loadouts_installed", fn = function()
-        if M.MARKER ~= MARKER then return "marker mismatch" end
-        if type(_in_modded_realm) ~= "function" then return "realm detector missing" end
-        local ok = pcall(_in_modded_realm)
-        if not ok then return "_in_modded_realm raised" end
-    end },
     { name = "native_loadouts_failsafe_inert", fn = function()
         -- Tri-mode gate: OFF in official always; STORE is the modded default (implicit
         -- feature, no enable toggle); READONLY when "Use non-modded loadouts" is ON.
@@ -2124,6 +2119,10 @@ M.rt_checks = {
         end
     end },
 }
+
+for _, check in ipairs(BootGuard.regression_checks(M, MARKER, _in_modded_realm)) do
+    M.rt_checks[#M.rt_checks + 1] = check
+end
 
 printf("[gut_dev:NATIVE_LOADOUTS] module loaded (%s) modded_realm=%s hooks=%d",
     MARKER, tostring(_in_modded_realm()), #M.HOOK_TARGETS)

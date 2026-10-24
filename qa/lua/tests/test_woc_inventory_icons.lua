@@ -85,7 +85,9 @@ return function(H, repo_root)
 
 	H.test("WOC item owns custom icon and resident Athanor fallback", function()
 		H.truthy(registration:find("entry.inventory_icon  = INVENTORY_ICON", 1, true))
-		H.truthy(registration:find("entry.cim_inventory_icon_fallback = base.inventory_icon", 1, true))
+		-- #1687: the inherited vanilla fallback is re-proven against the atlas.
+		H.truthy(registration:find("entry.cim_inventory_icon_fallback = (_ui_icons.resolve(", 1, true))
+		H.truthy(registration:find('rawget(_G, "UIAtlasHelper"), base.inventory_icon))', 1, true))
 		H.truthy(registration:find("issue613_blightreaper_inventory_icon_contract", 1, true))
 		H.truthy(main:find('local BASE_WEAPON = "es_1h_sword"', 1, true))
 	end)

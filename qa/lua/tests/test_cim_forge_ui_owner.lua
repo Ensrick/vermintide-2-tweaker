@@ -155,7 +155,7 @@ return function(H, repo_root)
         for key in pairs(second) do export_keys[#export_keys + 1] = key end
         table.sort(export_keys)
         H.equal(table.concat(export_keys, ","),
-            "apply_ui_polish,get_widget,install_count")
+            "apply_ui_polish,get_widget,install_count,overview_btn_render_field,overview_drawn_fields")
 
         H.truthy(old_panel._on_craft, "first panel did not receive craft callback")
         H.equal(new_panel._on_craft, old_panel._on_craft,

@@ -4,7 +4,25 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-09-14.
+Last updated: 2026-10-24.
+
+## Native realm unlock and pose gates (#1691)
+
+- Candidate 0.9.225-dev: in the modded Keep, run `/cos_regression_test`;
+  `issue1691_native_realm_authority` must PASS. On a pre-6.12 game the check
+  reports SKIP instead of claiming current-engine verification.
+- With Unlock All Portrait Frames on, restart and confirm eligible frames
+  and enabled unobtainable cosmetics are in inventory. Unowned DLC remains
+  denied; existing owned cosmetic identities are not replaced.
+- With Unlock All Illusions on, eligible vanilla illusions appear unlocked.
+  The separate Apply-button issue #1690 is not part of this gate correction.
+- With Unlock Weapon Poses on, the pose wheel offers authored poses for the
+  currently wielded weapon. Turning it off restores native selection.
+- Offline tests run the real mirror, illusion-unlock and pose-gather owners
+  with native MODDED_REALM and no legacy key, plus explicit official false
+  against a conflicting legacy true. No global/backend flag may change.
+
+These are candidate acceptance steps, not a deployed current live-test card.
 
 ---
 ## Item description parity (#1567)

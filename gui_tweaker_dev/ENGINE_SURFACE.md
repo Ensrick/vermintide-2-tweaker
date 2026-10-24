@@ -115,6 +115,22 @@ instance). Tri-mode gate: `MODE_OFF` (official/Versus, fully inert) / `MODE_STOR
 (default modded) / `MODE_READONLY` (#287 mod-owned overlay: cosmetics plus exact CWV
 backend instances; ordinary gameplay values remain official-read-only).
 
+Realm authority (#1688) comes from native `MODDED_REALM`, initialized before
+backend creation at `foundation/scripts/util/application_parameter.lua:150-152`
+(source `93dea911`). Explicit `false` wins over stale legacy/metadata values.
+Only when the modern flag is absent does the owner fall back to backend realm
+metadata and then pre-6.12 `script_data["eac-untrusted"]`. All native-store,
+readonly and scrub gates consume `_gut_official_loadout_boot_guard` rather
+than interpreting a second realm signal. No backend read-only flag is changed.
+The boot owner also exports the realm check and existing installed-marker/query
+witness; the native store appends those checks without owning another copy.
+This keeps the store below its frozen size baseline while preserving both names.
+
+The native scoreboard's UTF8 reader (#1695) follows the 6.12 API move to
+`Utf8.length` (`scripts/utils/utf8_utils.lua:7`); `UTF8Utils.sub_string` remains
+the native substring operation. The deprecated length method is a pre-6.12
+fallback only, never called while the modern reader is available.
+
 | Class.method (kind) | Vanilla behavior at the seam | Why gut hooks it | Trap / invariant |
 |---|---|---|---|
 | `PlayFabMirrorAdventure.get_character_data` [hook] `_gut_native_loadouts.lua` | Resolves one slot's value from `_career_data[career][index or selected]`, nil if absent [src: `playfab_mirror_base.lua:1909-1919`] | STORE: serve the slot from the modded store; per-read official fallback for a gear id unresolvable RIGHT NOW; #375 emits one bounded changed-state snapshot tying the caller and requested/resolved/selected indices to both weapon rows and the value served | NEVER destructively sanitize - synthetic ids (cim craft, LA/cosmetics UUID) register LATE (2026-07-02 spawn-fatals); resolve via RAW field reads only, NEVER `iface:get_item_from_id` (recursion -> 1 GiB heap, v0.2.173 burn); weapon-slot last resort is `get_default_loadouts` [src: `:1955-1966`]. The #375 cache is deduplicated and hard-capped at 128 records, never a per-frame log. |
@@ -168,7 +184,7 @@ A renamespaced fork of the HideBuffs "UI Tweaks" mod (`get_mod("HideBuffs")` -> 
 | `HeroWindowIngameView._update_presentation` [safe] `gui_tweaker_dev.lua:1412` | Lays out the modern keep/ESC menu button column (`offset[2] = -(60*index-1)`, panel `total_height+90`) [src: `hero_window_ingame_view.lua:490-515`] | Compact the column when gut's own Mod Tweaker button pushes it past ~8 to 10 buttons and overflows off-screen (#93, always-on) | The legacy `IngameView` is only the bare in-MISSION menu and has no `set_background_height`/logo - 8 versions of hooking it never fired; the modern menu is this class. No-op below the overflow threshold |
 | `OptionsView.build_settings_list` [hook] `_gut_video_profiles.lua` | Builds each native options-tab widget list from its definition | Prepend five-slot graphics profile controls only to `video_settings_list` | Consolidated singleton for #292; source `options_view.lua:1029-1147`; unsupported Video values are skipped. Every non-Video definition is forwarded by identity and untouched. CKC has no vanilla Options integration (#528). |
 
-`_mod_tweaker_view.lua` is a `class()` view borrowing the IngameUI renderer; it creates a modal input service `create_input_service("gut_mod_tweaker","IngameMenuKeymaps","IngameMenuFilters")` and maps keyboard/mouse/gamepad to it (`:64-69`). The bare pcall there is a backlog P2 (swallows a `create_input_service` failure - the view opens dead with no log). Issue #630's `_gut_dx12_fence630.lua` is an observation-only owner around this existing pass: it edge-logs view entry/exit, selected tab, `Window.has_focus()`, and balanced draw calls with a 48-line process cap. It creates no renderer/world/unit/package, skips no frame, and changes no focus behavior. The captured 2026-07-15 dump spent 15.791 seconds in `RI::wait_for_fence` / `D3D12RenderDevice::end_frame` after `[Window] Window => inactive`; absent a Lua exception or an identified ownership imbalance, a focus workaround would be speculative.
+`_mod_tweaker_view.lua` is a `class()` view borrowing the IngameUI renderer; it creates a modal input service `create_input_service("gut_mod_tweaker","IngameMenuKeymaps","IngameMenuFilters")` and maps keyboard/mouse/gamepad to it (`:64-69`). The bare pcall there is a backlog P2 (swallows a `create_input_service` failure - the view opens dead with no log). Issue #630's `_gut_dx12_fence630.lua` is an observation-only owner around this existing pass: it edge-logs view entry/exit, selected tab, `Window.has_focus()`, and balanced draw calls with a 48-line budget per Mod Tweaker open plus one reserved exit summary (0.2.362-dev; the earlier process-wide budget starved later sessions), under a 2048-line run backstop that ends in one `run_cap` line, so the bound is per open and an enter/leave loop still stops. It creates no renderer/world/unit/package, skips no frame, and changes no focus behavior. The captured 2026-07-15 dump spent 15.791 seconds in `RI::wait_for_fence` / `D3D12RenderDevice::end_frame` after `[Window] Window => inactive`; absent a Lua exception or an identified ownership imbalance, a focus workaround would be speculative.
 
 ### Surface 5b - In-mission keep menus + Bestiary/Armory + probes (owner: `docs/engine/09`, `/06`; `_gut_mission_*.lua`, `_ba_*.lua`, the `_gut_*_probe.lua` set)
 
@@ -234,7 +250,8 @@ node filtering, owner-qualified staging and loadout-reseed intent to the existin
 `_mod_tweaker_default_reset` owner; its injected custom-tab refusal runs before
 any node read, staging or arming. Apply remains the sole persistence boundary.
 `_gut_dialogue_contract`
-registers its isolated runtime staging/transaction check. The paired CD owner
+registers its isolated runtime staging/transaction check; it SKIPs by name when
+Character Dialogue is absent or predates API v6 (#998). The paired CD owner
 uses VMF's `set(..., false)` persistence then one batch completion notification
 (VMF `modules/core/settings.lua:27-43`); ordinary notifications dispatch through
 `modules/core/events.lua:44-49`. No GUT `mt::` shadow setting is created.

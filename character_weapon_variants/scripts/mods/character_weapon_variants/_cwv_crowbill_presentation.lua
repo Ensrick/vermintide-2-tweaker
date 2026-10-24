@@ -110,9 +110,24 @@ function M.new(deps)
 			identity = identity,
 			surface = surface,
 			base_rotation = stored_base,
+			mode = mode,
 		}
 		bucket(identity)[unit] = true
 		return true
+	end
+
+	-- #719 read-only evidence for the live husk check: which identity, surface
+	-- and face this owner last wrote to `unit`, plus the rotation that write
+	-- must have left behind (recomposed from the retained base, never from the
+	-- unit's current pose). The caller compares it with engine readback.
+	function owner:record(unit)
+		local record = unit ~= nil and records[unit] or nil
+		if not record then return nil end
+		local base = type(deps.resolve_rotation) == "function"
+			and deps.resolve_rotation(record.base_rotation) or record.base_rotation
+		local expected = M.compose_rotation(base, record.mode, deps.rotation_ops)
+		return { identity = record.identity, surface = record.surface,
+			mode = record.mode, expected_rotation = expected }
 	end
 
 	-- Bounded transition replay: one pass over units already registered for

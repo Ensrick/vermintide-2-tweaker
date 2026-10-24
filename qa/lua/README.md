@@ -10,6 +10,26 @@ pwsh -NoProfile -File qa/check_lua_unit_tests.ps1
 pwsh -NoProfile -File qa/check_lua_unit_tests.ps1 -SelfTest
 ```
 
+## Suite inventory (#1700)
+
+The PowerShell gate independently discovers every top-level `tests/test_*.lua`
+file and writes a small, temporary inventory outside the repository. The Lua
+runner requires each discovered module to complete its registration function,
+either directly or through a listed suite's transitive `require` and call.
+Importing a function without calling it is not coverage. The runner temporarily
+tracks registration calls, then restores the exact raw `require` field on
+success or error before running cases. Comments naming a file do not count. Unreached
+files, malformed inventories and duplicate explicit registrations fail before
+test execution. Run the PowerShell entry point rather than invoking `run.lua`
+without its inventory.
+
+`-SelfTest` proves both the original harness pass/planted-failure paths and the
+actual directory-discovery/runner rejection of both an unlisted fixture and an
+import-only fixture. It also proves exact raw-field/metatable restoration after
+an injected registration error. It does not
+replace a normal full-suite run. Every invocation removes its owned temporary
+inventory in `finally`; it does not copy the repository or change source files.
+
 ## Tier boundary
 
 - Put deterministic transformations here when they run on ordinary Lua values
@@ -38,17 +58,45 @@ there is no copied implementation.
 
 - `run.lua`: explicit suite manifest and process entry point.
 - `harness.lua`: dependency-free assertions and reporting.
+- `suite_manifest.lua` and `tests/test_suite_manifest.lua`: completed registration
+  coverage, inventory validation, nested calls, thrown/unused registrations,
+  exact return holes and duplicate roots.
+- `tests/test_crt_career_unlock.lua`: level-gate-only career unlock boundaries.
+- `tests/test_ct_tab_collectibles_layout.lua`: native collectible row offsets.
+- `tests/test_gt_regression_module.lua`: the original 88-registration extraction
+  surface (verified against immutable baseline `5afeefef`), unique names and the
+  bot update/aid ownership boundaries.
+- `tests/test_gut_exclusive_radio.lua`: exclusive-choice layout and input routing.
+- `tests/test_gut_selected_loadout_trace.lua`: trace deduplication and bounded state.
+- `tests/test_woc_blightreaper_spirits.lua`: native spirit policy plus the current
+  entry-to-spirit-owner dispatch, host-gated producers and package-acquisition
+  boundary; inert diagnostic strings do not count as a live package load.
+- `tests/test_wt_runtime_checks_module.lua`: current public/dev registration
+  surfaces; `tests/test_wt_issue946_crowbill_picker.lua`: developer-picker coverage.
 - `tests/test_attack_labeler.lua`: production-helper coverage.
 - `tests/test_mod_tweaker_search.lua`: #559 search expansion snapshot/restore/dismissal coverage,
   including last-changed preference and top-result fallback.
 - `tests/test_peer_parity_transition.lua`: shared legacy-payload compatibility,
   exact challenge/epoch/replay rejection, and bounded-envelope coverage.
+- `tests/test_cos_realm_authority_1691.lua`: native realm precedence and
+  legacy fallback, no global/backend writes, named live-check verdicts, and
+  actual cosmetic mirror injection/resync with official and DLC denials.
+  The pose suite and description-parity fixture also exercise the installed
+  pose-gather and illusion-unlock callbacks with modern native authority.
 - `tests/test_shared_wire_catalog.lua`: deterministic namespaced catalog identity,
   numeric drift sensitivity, malformed lookup rejection, and payload-size coverage.
 - `tests/test_crt_wire_contract.lua`: CRT schema-3 integration plus the independent
   sender, hot-join, receiver, and timed-buff safety floors.
 - `tests/test_gut_loadout_paging.lua`: #231 page/slot bijection, strip geometry,
   text Roman numerals and the modded-STORE-Adventure paging predicate.
+- `tests/test_gut_official_loadout_boot_policy.lua`: #402/#1688 the actual
+  early boot hooks in a private environment: modern native realm before
+  backend creation, explicit official values overriding stale legacy data,
+  pre-6.12 fallback, read-only snapshot import, bounded repair continuation
+  and one missing-snapshot bootstrap.
+- `tests/test_gut_scoreboard_live_adapter.lua`: #1414 actual Tab/end draw
+  seams and detached sidecar lifetime; #1695 native UTF8 length wins over a
+  throwing deprecated shim, with pre-6.12 fallback retained.
 - `tests/test_gut_bot_loadout_snapshot.lua`: #954 detached bot owner through
   its captured hooks: native-only (modded) career import, late designation
   retry, seed-seam preference, career bounds and drift repair, with printf
@@ -64,6 +112,43 @@ there is no copied implementation.
   routing policies route as designed, the contracts module returns nil, `skip:`
   or the loud mismatch messages, and the runner counts SKIP apart from PASS
   and FAIL with printf resolved through a test-local environment.
+- `tests/test_gut_mod_tweaker_sound_parity.lua`: #1670 both shipped Mod
+  Tweaker twins loaded whole against a PC-shaped world manager: the click and
+  hover each twin hands its interaction layer fire on `MUSIC_WWISE_WORLD` on
+  the Esc route (standalone view) and the `/mod_tweaker` route (keep
+  sub-state) alike, fall back to a registered `music_world`, stay silent with
+  no music world, and the real contracts module's
+  `issue1670_command_route_sound_path` check passes with no log line of its
+  own, skips outside the keep or before the view attaches, and fails on the
+  0.2.358-dev lookup. printf,
+  WwiseWorld and the worlds resolve through a test-local environment.
+- `tests/test_gut_tab_talent_harness.lua`: #250 the shipped Hold-Tab provider
+  loaded whole with the real talent refresh and policies:
+  `issue250_deus_tab_talent_module_loaded` PASSes in a keep and a Chaos Wastes
+  session (through 0.2.359-dev the `check and check.fn() or msg` tail turned
+  the inner PASS into "missing"), `issue250_deus_tab_talent_tier_normalization`
+  is reported once by its own name, a drifted talent policy fails both, and a
+  missing module or check list fails loudly. get_mod, the panel class and
+  Managers resolve through a test-local environment.
+- `tests/test_gut_dialogue_contract_skip.lua`: #998 the real
+  `_gut_dialogue_contract` module and the real Character Dialogue entry:
+  `issue998_dialogue_staged_isolation` SKIPs by name with no Character
+  Dialogue, with a v5 API (0.1.11-dev shape) or with no versioned API (through
+  0.2.360-dev those were a bare PASS and a FAIL), FAILs a v6+ API that lacks the
+  `isolation_setting` descriptor or `on_settings_batch_changed`, and PASSes the
+  real entry without writing the owner. get_mod resolves through the dialogue
+  fixture's test-local environment.
+- `tests/test_gut_dx12_fence630_session_budget.lua`: #630 the real
+  `_gut_dx12_fence630` probe: after eight healthy Mod Tweaker opens a ninth
+  (decisive) session still logs its enter, frame evidence and exit summary
+  (through 0.2.361-dev one 48-line run-wide budget dropped them), a frozen
+  session keeps its last `frame_evidence`, the exit summary and the reenter
+  anomaly are reserved past a spent budget and name the suppressed count,
+  output stays at most line_cap + 1 per session with nothing on steady frames,
+  an enter/leave loop stops at the run backstop with one `run_cap` line,
+  and the contracts module's `issue630_dx12_fence_session_budget` check is
+  registered, PASSes, and FAILs on a run-wide budget. emit is a test-local
+  ledger; get_mod resolves through a test-local environment.
 - `tests/test_gut_dropdown_arrow_glow.lua`: #92 the shipped `create_dropdown`
   and its `DD_*` constants lifted out of the definitions file and driven through
   the real `mod_tweaker_dropdown_arrow_glow` check: the shipped widget passes,
@@ -96,6 +181,88 @@ there is no copied implementation.
   and the parent invokes it once, propagates its errors, and turns a missing
   child into one failing `issue2_hold_pose_runtime_check_owner` check instead
   of aborting registration.
+- `tests/test_cwv_resolved_profile_multipliers.lua`: #1676 drives the actual
+  core installer/cloner with native-resolved, legacy and mixed power fields,
+  sparse targets, untouched donors, native wire mapping, cache idempotence,
+  real template consumption, and the installed retained-construction check.
+  The check is SKIP without observed numeric clones and does not compare
+  later optional WT modifiers against a moving donor.
+- `tests/test_cwv_javelin_recovery_contract.lua`: #296 the shared Tuskgor
+  Javelin recovery owner: both ground and linked pickup rows registered by
+  identity with their lookup pairs, the registered callbacks driven through
+  eligibility, the vanilla refill shape (`refill_amount = 1`, no
+  `refill_percentage`) and owned-pickup cleanup, re-registration re-owning
+  callbacks without lookup growth, rollback when a lookup or pickup-map write
+  rejects, throws or is silently dropped, and an owner-source case that no
+  existing-row guard sits before the shared register call (the pre-fix
+  reload defect).
+- `tests/test_cwv_issue719_crowbill_rebuild.lua`: #719 the Crowbill Weapon
+  Special replayed over the vanilla equipment wire rules: the observer keeps
+  its slot (destroy, add, wield), the rebuild fails closed without the
+  re-equip sender, a failed re-equip restores the face and re-adds the slot;
+  the presentation record recomposes from the retained base; and the live
+  owner/observer legs of `issue719_imperial_crowbill_remote_identity` fail a
+  destroyed remote slot, Sienna's donor, a stale face, a lost rotation, a
+  missing presentation and an owner collapsing to the donor; they return a
+  `skip:` verdict, never a PASS, when no peer holds a Crowbill, when a remote
+  vanilla Crowbill base has no exact identity, when the Crowbill is held but
+  not wielded or its rotation cannot be read back, and a proven owner leg
+  never hides an unproven observer.
+- `tests/test_cwv_regression_harness_1656.lua`: #1656 the cwv harness-defect
+  rows, each run as the shipped check body: the entry's regression context
+  binds only declared locals (`dbg_alert`, the bootstrap owner's published
+  display names); fixture selection never lands on a skin_only, retired or
+  cross-slot definition and reads generated Sword+Mace pairs from generator
+  output; `issue660`, `issue396` and `issue416_483` replay the real appearance
+  lifecycle on a registered owner; `cwv_key_resolution_uuid_safe` runs on the
+  registration owner's own #482 ladder; `issue604` keeps the selector's second
+  return; and `cwv_crowbill_hammer_runtime_contract` asserts the #423 shared
+  donor recorded by the entry's own recorder is the source action's own
+  registered vanilla profile (the burning stab's non-burning twin), failing a
+  shared foreign or unregistered donor. One registration-predicate case is a
+  guard that passes on the pre-fix base too.
+- `tests/test_woc_ui_icons.lua`: #1687 every atlas icon WOC hands to the UI
+  resolves in the Game Version 6.13.0 atlas (test-local
+  `has_atlas_settings_by_texture_name` seam): the Poisoned Edge constant is no
+  longer the removed 6.12.1 key, a kept stale row is repaired to the current
+  constant (to vanilla's `icons_placeholder` when the helper is unusable),
+  atlas drift falls back and fails the audit, a placeholder shown while the
+  preferred icon is resident fails the audit, the audit covers both traits and
+  the Athanor fallback item icon, a missing helper fails closed, every
+  trait-row install routes through the guard, and the registered
+  `issue655_blightreaper_trait_contract` closure runs in a test-local
+  environment and returns the icon audit failure.
+- `tests/test_crt_buff_icons.lua`: #1686 every icon crt hands to the HUD
+  resolves in the Game Version 6.13.0 atlas (test-local
+  `has_atlas_settings_by_texture_name` seam): no crt module sets an icon
+  literal outside the 6.13.0 atlas (the two removed 6.12.1 keys fail it), the
+  Dance of Blades and Unchained buffs carry `maidenguard_4_2` and
+  `unchained_6_1`, the guard drops only unproven buff icons and fails closed
+  without the helper, the apply sweep touches only crt-registered names,
+  Leading Shots keeps the vanilla talent icon on a miss and preserves exact
+  parent global/package state on success and a throwing perk lookup through a
+  private environment (no global monkeypatch), the audit fails on
+  constant, factory and live drift, every registration routes through the
+  guard, the guard log dedupes drops and prints one summary per sweep site
+  (test-local logger seam), and the registered `issue1686_buff_icons_in_atlas`
+  closure runs in a test-local environment and fails on a live stale icon. An
+  optional case cross-checks the fixture against a local decompiled atlas.
+- `tests/test_mp_hook_targets_resolve.lua`: #1671 no mp source file hooks
+  the game-6.12-removed `IngameUI.not_in_modded` (or its `can_open_loot`
+  successor), the shipped `_mp_hook_targets.TARGETS` inventory equals every
+  literal `mod:hook("Class", "method")` site in every mp file reachable
+  from the entry, and the `/mp_regression_test` census fails on a missing or
+  retired method and on a class that is not loaded (past VMF's delay window
+  that hook was refused). The class lookup and log seams are test-local.
+- `tests/test_mp_loot_diag_realm_gate.lua`: #1692 the #607 loot diagnostic's
+  emit gate follows the realm the game publishes. It evaluates the exact
+  `is_modded_realm` wiring expression from `modded_progression.lua` over test
+  layouts: game 6.12+ (`MODDED_REALM` only, no raw flag) captures the
+  `end_level` receipt and `/mp_loot_diag` reports `gate=open`; `MODDED_REALM =
+  false` captures nothing even when the legacy authority says modded; the
+  pre-6.12 raw-flag and bracket-depth layouts still capture. The
+  `issue1692_loot_diag_gate_open_in_modded_realm` check passes open and fails
+  closed. Globals and `script_data` are test-local tables.
 - `tests/test_et_issue324_capacity_authority.lua`: #324 a characterization of
   the unchanged boot-shaped registrar refusal (`damage_source_cap_unavailable`
   with NetworkConstants absent and no `Network.type_info` capacity; passes on
@@ -107,6 +274,46 @@ there is no copied implementation.
   and its single load owner. The probe reads an injected globals table and
   emits through a test-local seam; the route case runs the chunk in a
   test-local environment.
+- `tests/test_dcp_portrait_settings_owner.lua`: #509 the production DCP
+  portrait-settings owner: exact capture (nil included), repeat-apply
+  preservation and its no-write per-frame fast path, cross-career rejection,
+  rollback and retained recovery ownership for throwing or silently ignored
+  writes, and the named `career_settings_swap_saves_and_restores` body
+  (`check_transaction`) passing on a healthy live row while failing on a
+  read-only row, a foreign held row, a leaked HUD or hero-select capture, or an unowned DCP
+  portrait on the row; `vanilla_portrait` never depends on an apply. The entry
+  file's check, sync, restore and unload paths are pinned to the owner.
+- `tests/test_dcp_entry_portrait_flow.lua`: #509 runs the real DCP entry chunk
+  in a test-local environment with engine stubs: a remote Mercenary's tracked
+  portrait on the score screen while the local Mercenary is untracked (the
+  0.1.30-dev review regression), untracked remote rows staying vanilla on the
+  score screen, Tab list and HUD frames in both local states, hat removal and
+  `on_unload` restoring the vanilla pair through the live wrappers, and the
+  named `career_settings_swap_saves_and_restores` and
+  `score_rows_resolve_without_local_swap_509` checks passing, failing on an
+  unowned DCP portrait, and reporting a missing live half as `SKIP` with a
+  separate skipped total rather than counting it as `PASS`.
+- `tests/test_cim_regression_harness_1656.lua`: #1656 five shipped
+  `/cim_regression_test` checks driven through the real loadout, weave-loadout
+  and forge UI owners: the loadout round trip against a transcription of
+  vanilla `set_loadout_item` (and the gate-off twin, now non-vacuous: it
+  fails on a rejected fixture registration and skips when vanilla's mirror
+  write never ran), the
+  #86 ten-property ceiling pinned to the trimmer and Athanor gate, the pure loc
+  scan (formatter shadow counts calls, parity with the gut #1651 scanner), the
+  #244 storable-range scaling contract, and the overview render target read
+  from the owner's exports. The two cases named `characterization:` pin
+  vanilla and #244 behavior and pass on the pre-fix source too. Chunks run
+  under a test-local environment; no global is written.
+- `tests/test_cim_ranalds_game_keys_1696.lua`: #1696 every Ranald's Gift
+  catalogue career and weapon value names a live row (the generated weapon
+  census plus the five merged Chaos Wastes weapons, and the 20 hero careers),
+  the Necromancer ids map to `bw_necromancer`, `bw_ghost_scythe` and
+  `bw_necromancy_staff` with the site's melee/ranged split, and the runtime
+  resolver reports exactly the unresolved keys without touching a strict
+  `__index`. An optional case re-reads the decompiled source
+  (`VT2_DECOMPILE_ROOT` or a sibling `Vermintide-2-Source-Code` checkout) and
+  skips when it is absent or lacks any of the files it reads, naming them.
 - `fixtures/vanilla_weapon_master_list.lua`: GENERATED vanilla weapon census
   (every `ItemMasterList` melee/ranged entry with its `can_wield` list after the
   DLC `UpdateItemMasterList` patches, each hero career's
