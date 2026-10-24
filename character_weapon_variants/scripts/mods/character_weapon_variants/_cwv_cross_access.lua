@@ -486,5 +486,6 @@ _cwv_networked_3p_remap_installed = true
 return {
 	action_remap = _cross_access_action_remap,
 	wield_hook_registration_count = _cwv_wield_hook_registration_count,
+	networked_3p_remap_installed = true,
 }
 end

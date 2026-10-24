@@ -1,5 +1,25 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.550-dev (2026-10-24) -- Execute animation-picker readiness through its owner (#317)
+
+- Recover the preserved, previously uncommitted picker-contract candidate and
+  strengthen its evidence: the named check now executes the real combined
+  pre-RPC resolver, rather than only validating the dropdown vocabulary.
+  It proves distinct Saltzpyre/Kruber picks, the real baked fallback and master-off.
+- Cross-access installation exposes its existing hook marker through its returned
+  owner. The picker contract consumes that owner/runtime context explicitly,
+  without relying on a separate module's global marker or growing the umbrella
+  regression file past its ceiling. No new hook or network channel.
+- The synchronous probe uses a private getter overlay, never saved player settings;
+  it restores the previous overlay on success or error. Four production-callback
+  cases fail on .549 (zero resolver calls or false PASS on disconnected paths),
+  then pass here. Added error-path restoration and missing-owner coverage.
+- The exact named registration is extracted for the Lua 5.1 host because unrelated
+  checks in its production owner use engine-supported LuaJIT goto syntax. The
+  production combined resolver and installed callback are not copied or replaced
+  by a synthetic baked-map algorithm. These are component checks, not observed
+  animation playback, persistence or peer acceptance; live verification is pending.
+
 ## 0.1.549-dev (2026-10-24) — Resolved profile multipliers and refreshed candidate (#1676, #296, #719, #1656)
 
 - Fix the shared damage-profile constructor silently skipping native resolved

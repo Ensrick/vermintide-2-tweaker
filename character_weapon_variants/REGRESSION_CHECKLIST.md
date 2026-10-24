@@ -4,7 +4,24 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-08-21.
+Last updated: 2026-10-24.
+
+## Animation-picker executable readiness (#317)
+
+- Offline: the actual cross-access factory installs exactly one network-bound
+  3P animation callback. The exact production named check must call the real
+  combined resolver four times and reject a disconnected resolver, missing owner
+  marker and picker-only route lacking baked fallback. A throwing route restores
+  the user's exact selection. A stale independent/global marker is not authority.
+- Pending solo live acceptance for 0.1.550-dev: in the modded Keep run
+  /cwv_regression_test and require issue317_career_scoped_animation_picker PASS.
+  In the developer animation picker, try a non-default heavy-attack choice on
+  Saltzpyre's Dual Axes and Kruber's Dual Axes. Swap away/back, enter a mission,
+  restart, then restore the baked/default row and turn the master off. Confirm
+  each action follows the saved choice or default as appropriate.
+- The component check does not play an animation. Actual owner playback and
+  persistence must pass solo before a remote-observer co-op card is exposed.
+  Bardin's native Dual Axes and unrelated weapons remain unmodified controls.
 
 ## Regression-owner source map
 

@@ -5,6 +5,7 @@
 local mod = get_mod("character_weapon_variants")
 local M = {}
 local UNSET = "__cwv_anim_unset__"
+local _runtime_probe_settings
 
 local _SOURCE_EVENTS = {
 	"attack_swing_heavy_right", "attack_swing_charge_diagonal",
@@ -69,6 +70,11 @@ local function _fresh_options(vocab)
 	return options
 end
 
+local function _get(setting_id)
+	if _runtime_probe_settings ~= nil then return _runtime_probe_settings[setting_id] end
+	return mod:get(setting_id)
+end
+
 function M.build_widget_tree()
 	local groups = {}
 	for _, entry in ipairs(_ENTRIES) do
@@ -107,7 +113,7 @@ end
 
 -- Returning nil preserves CWV's baked mapping or vanilla fall-through.
 function M.resolve(item_key, career, source_event)
-	if not mod:get("enable_cwv_dev_anim_picker")
+	if not _get("enable_cwv_dev_anim_picker")
 		or type(career) ~= "string"
 		or type(source_event) ~= "string"
 		or not _SOURCE_EVENT_SET[source_event] then
@@ -116,7 +122,7 @@ function M.resolve(item_key, career, source_event)
 	for _, entry in ipairs(_ENTRIES) do
 		if (item_key == entry.item_key or item_key == entry.variant_key)
 			and career:sub(1, 3) == entry.career_prefix then
-			local value = mod:get(_sid_event(entry, source_event))
+			local value = _get(_sid_event(entry, source_event))
 			-- user_settings.config is external input. Decline a stale or hand-edited
 			-- value unless it belongs to the receiver template's closed vocabulary.
 			if value ~= nil and value ~= UNSET and _VOCAB_SETS[entry.vocab][value] then
@@ -138,7 +144,7 @@ function M.dump()
 	for _, entry in ipairs(_ENTRIES) do
 		pcall(printf, "[cwv:317] %s", entry.label)
 		for _, source_event in ipairs(_SOURCE_EVENTS) do
-			local value = mod:get(_sid_event(entry, source_event))
+			local value = _get(_sid_event(entry, source_event))
 			if value ~= nil and value ~= UNSET then
 				pcall(printf, "[cwv:317]   %s = %q,", source_event, value)
 			end
@@ -162,7 +168,7 @@ function M.regression_check()
 			local sid = _sid_event(entry, source_event)
 			if seen[sid] then return "duplicate setting id: " .. sid end
 			seen[sid] = true
-			local value = mod:get(sid)
+			local value = _get(sid)
 			if value ~= nil and value ~= UNSET and not allowed[value] then
 				return string.format("%s stores out-of-vocabulary event %s", sid, tostring(value))
 			end
@@ -184,6 +190,57 @@ function M.regression_check()
 		if not ok then return "anim-picker dump crashed under printf capture (#317)" end
 		if captured < 2 then return "anim-picker dump does not route through printf (#317)" end
 	end
+end
+
+-- Execute the installed pre-RPC resolver without mutating user_settings.config.
+-- A private synchronous getter overlay is visible only to M.resolve and is
+-- restored on success or error before this function returns.
+function M.runtime_contract(runtime)
+	local static_err = M.regression_check()
+	if static_err then return static_err end
+	if #_ENTRIES ~= 2 then return "expected exactly two picker surfaces" end
+	local resolve_live = type(runtime) == "table" and runtime._cross_access_target_event
+	local owner = type(runtime) == "table" and runtime.cross_access
+	local hook_installed = type(owner) == "table" and owner.networked_3p_remap_installed
+	if type(resolve_live) ~= "function" then return "live pre-RPC resolver missing" end
+	if hook_installed ~= true then return "networked 3P remap hook not installed" end
+
+	local saved = _runtime_probe_settings
+	local ok, err = xpcall(function()
+		local saltz_sid = "cwv_dev_anim_saltz_dual_axes_attack_swing_heavy_right"
+		local kruber_sid = "cwv_dev_anim_kruber_dual_axes_attack_swing_heavy_right"
+		_runtime_probe_settings = {
+			enable_cwv_dev_anim_picker = true,
+			[saltz_sid] = "attack_swing_heavy_down",
+			-- Deliberately differ from the baked Kruber mapping
+			-- (attack_swing_heavy_right_diagonal). Otherwise this check can pass
+			-- while the picker is completely bypassed.
+			[kruber_sid] = "attack_swing_down",
+		}
+		if resolve_live("cwv_wh_dual_axes", "wh_captain", "attack_swing_heavy_right")
+				~= "attack_swing_heavy_down" then
+			error("Saltzpyre pick did not reach the live resolver")
+		end
+		if resolve_live("cwv_es_dual_axes", "es_mercenary", "attack_swing_heavy_right")
+				~= "attack_swing_down" then
+			error("Kruber pick did not reach the live resolver")
+		end
+		_runtime_probe_settings[kruber_sid] = UNSET
+		-- The live wield path can identify this cloned item by its vanilla base
+		-- key. UNSET must therefore expose the existing baked resolver rather
+		-- than be mistaken for a nil result from Picker.resolve alone.
+		if resolve_live("dr_dual_wield_axes", "es_mercenary",
+				"attack_swing_heavy_right") ~= "attack_swing_heavy_right_diagonal" then
+			error("UNSET did not restore the baked/default result")
+		end
+		_runtime_probe_settings.enable_cwv_dev_anim_picker = false
+		if resolve_live("dr_dual_wield_axes", "es_mercenary",
+				"attack_swing_heavy_right") ~= "attack_swing_heavy_right_diagonal" then
+			error("master-off did not restore the baked/default result")
+		end
+	end, function(reason) return tostring(reason) end)
+	_runtime_probe_settings = saved
+	if not ok then return "picker live-contract failure: " .. tostring(err) end
 end
 
 

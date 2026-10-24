@@ -8,10 +8,101 @@ return function(H, repo_root)
         command = function() end,
         info = function() end,
     }
-    local old_get_mod = _G.get_mod
-    _G.get_mod = function() return fake_mod end
-    local Picker = assert(loadfile(path))()
-    _G.get_mod = old_get_mod
+    local picker_loader = assert(loadfile(path))
+    setfenv(picker_loader, setmetatable({ get_mod = function() return fake_mod end },
+        { __index = _G }))
+    local Picker = picker_loader()
+
+    local function runtime_owner(resolve, installed)
+        return { _cross_access_target_event = resolve,
+            cross_access = { networked_3p_remap_installed = installed } }
+    end
+
+    -- The combined resolver is the production chunk. Extract the exact named
+    -- registration from its production owner because other checks in that file
+    -- use LuaJIT goto syntax unavailable in this Lua 5.1 host. No copied picker,
+    -- baked map or named-check algorithm is used, and no production goto is edited.
+    local function installed_fixture()
+        local base = repo_root .. "/character_weapon_variants/scripts/mods/character_weapon_variants/"
+        local hooks, counts, checks = {}, {}, {}
+        local mod = { _cwv_dev_anim_picker = Picker }
+        local function hook(_, class, method, callback)
+            local key = class .. "." .. method
+            hooks[key], counts[key] = callback, (counts[key] or 0) + 1
+        end
+        mod.hook, mod.hook_safe = hook, hook
+        local env = setmetatable({}, { __index = _G })
+        local function load(name)
+            local chunk = assert(loadfile(base .. name .. ".lua"))
+            setfenv(chunk, env)
+            return chunk()
+        end
+        local om = { greataxe = { ANIM_REMAP_3P = {} }, remote_audio_dispatch = {} }
+        om.cross_access = load("_cwv_cross_access")(mod, {
+            om = om, dbg = function() end, es_all_careers = {}, wh_all_careers = {},
+        })
+        H.equal(type(hooks["WeaponUnitExtension._play_3p_anim"]), "function")
+        H.equal(counts["WeaponUnitExtension._play_3p_anim"], 1)
+        -- A stale legacy/global marker must not substitute for the owner that
+        -- actually installed the callback, in either direction.
+        env._cwv_networked_3p_remap_installed = false
+        local file = assert(io.open(base .. "_cwv_regression_identity.lua", "rb"))
+        local source = file:read("*a"); file:close()
+        local first = assert(source:find('_rt_register("issue317_career_scoped_animation_picker", function()', 1, true))
+        local last = assert(source:find("\nend)", first, true)) + 4
+        local chunk = assert(loadstring("return function(mod, _om, _rt_register)\n"
+            .. source:sub(first, last) .. "\nend", "@issue317-production-registration"))
+        setfenv(chunk, env)
+        chunk()(mod, om, function(name, callback) checks[name] = callback end)
+        return checks.issue317_career_scoped_animation_picker, om, mod
+    end
+
+    H.test("CWV #317 named check drives the installed combined resolver and owner", function()
+        local check, om = installed_fixture()
+        local actual, calls = om._cross_access_target_event, 0
+        om._cross_access_target_event = function(...)
+            calls = calls + 1
+            return actual(...)
+        end
+        H.equal(check(), nil)
+        H.equal(calls, 4, "static vocabulary validation is not a live resolver test")
+    end)
+
+    H.test("CWV #317 named check rejects a disconnected picker resolver", function()
+        local check, om = installed_fixture()
+        om._cross_access_target_event = function() return nil end
+        local result = check()
+        H.equal(type(result), "string", "disconnected production resolver must fail")
+    end)
+
+    H.test("CWV #317 named check rejects an absent installed owner marker", function()
+        local check, om = installed_fixture()
+        om.cross_access.networked_3p_remap_installed = false
+        local result = check()
+        H.equal(type(result), "string", "uninstalled route must fail despite a valid picker")
+    end)
+
+    H.test("CWV #317 named check detects loss of the actual baked fallback", function()
+        local check, om = installed_fixture()
+        om._cross_access_target_event = Picker.resolve
+        local result = check()
+        H.equal(type(result), "string", "picker-only success cannot prove combined native fallback")
+    end)
+
+    H.test("CWV #317 installed-check error restores the exact player selection", function()
+        local check, om = installed_fixture()
+        local sid = "cwv_dev_anim_saltz_dual_axes_attack_swing_heavy_right"
+        settings.enable_cwv_dev_anim_picker, settings[sid] = true, "attack_swing_heavy_left"
+        om._cross_access_target_event = function() error("installed-resolver-boom") end
+        local result = check()
+        H.equal(type(result), "string")
+        H.truthy(result:find("installed%-resolver%-boom"))
+        H.equal(Picker.resolve("cwv_wh_dual_axes", "wh_captain", "attack_swing_heavy_right"),
+            "attack_swing_heavy_left")
+        H.equal(settings.enable_cwv_dev_anim_picker, true)
+        H.equal(settings[sid], "attack_swing_heavy_left")
+        settings.enable_cwv_dev_anim_picker, settings[sid] = nil, nil
+    end)
 
     H.test("CWV animation picker scopes picks to receiver and preserves defaults", function()
         local sid = "cwv_dev_anim_saltz_dual_axes_attack_swing_heavy_right"
@@ -59,6 +150,55 @@ return function(H, repo_root)
             "picker must not mutate the shared Bardin template")
         H.equal(picker_source:find("NetworkLookup", 1, true), nil,
             "picker must not add a network payload")
+    end)
+
+    H.test("CWV issue 317 runtime contract drives both picks through the live resolver", function()
+        settings.enable_cwv_dev_anim_picker = nil
+        settings["cwv_dev_anim_saltz_dual_axes_attack_swing_heavy_right"] = nil
+        local live_calls = 0
+        local baked = {
+            dr_dual_wield_axes = {
+                es_mercenary = {
+                    attack_swing_heavy_right = "attack_swing_heavy_right_diagonal",
+                },
+            },
+        }
+        local function live(item_key, career, source_event)
+            live_calls = live_calls + 1
+            local picked = Picker.resolve(item_key, career, source_event)
+            local by_item = baked[item_key]
+            local by_career = by_item and by_item[career]
+            return picked or (by_career and by_career[source_event])
+        end
+        H.equal(Picker.runtime_contract(runtime_owner(live, true)), nil)
+        H.equal(live_calls, 4)
+        H.equal(settings.enable_cwv_dev_anim_picker, nil,
+            "runtime contract must not mutate the player's master setting")
+        H.equal(settings["cwv_dev_anim_saltz_dual_axes_attack_swing_heavy_right"], nil,
+            "runtime contract must not persist a synthetic pick")
+        local missing_hook = Picker.runtime_contract(runtime_owner(live, false))
+        H.truthy(type(missing_hook) == "string"
+            and missing_hook:find("hook not installed", 1, true))
+
+        local missing_resolver = Picker.runtime_contract(runtime_owner(nil, true))
+        H.truthy(type(missing_resolver) == "string"
+            and missing_resolver:find("resolver missing", 1, true))
+    end)
+
+    H.test("CWV issue 317 runtime contract restores its probe overlay after errors", function()
+        settings.enable_cwv_dev_anim_picker = true
+        settings["cwv_dev_anim_saltz_dual_axes_attack_swing_heavy_right"] =
+            "attack_swing_heavy_left"
+        local err = Picker.runtime_contract(runtime_owner(function()
+            error("synthetic live resolver failure")
+        end, true))
+        H.truthy(type(err) == "string"
+            and err:find("synthetic live resolver failure", 1, true))
+        H.equal(Picker.resolve("cwv_wh_dual_axes", "wh_captain",
+            "attack_swing_heavy_right"), "attack_swing_heavy_left",
+            "throwing probe left its private settings overlay installed")
+        settings["cwv_dev_anim_saltz_dual_axes_attack_swing_heavy_right"] = nil
+        settings.enable_cwv_dev_anim_picker = nil
     end)
 
     H.test("CWV issue 317 dump reaches the engine console via printf", function()
