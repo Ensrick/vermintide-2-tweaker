@@ -36,7 +36,7 @@ mod._cim959_accessory_property_policy = mod:dofile(
 local _BULK_ACCESSORY_CRAFT = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_bulk_accessory_craft")
 _MEM_PROBE_T0_CIMD = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.8.141-dev"
+local MOD_VERSION = "0.8.142-dev"
 local _bootstrap = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_bootstrap_runtime")({
         mod = mod,
@@ -48,6 +48,13 @@ local _dbg = _bootstrap.dbg
 local _dbg_alert = _bootstrap.dbg_alert
 local _rt_register = _bootstrap.rt_register
 local _rt_src_read = _bootstrap.rt_src_read
+
+_rt_register("issue1693_shared_native_realm_authority", function()
+    if RealmAuthority.VERSION ~= 2 or type(RealmAuthority.runtime_check) ~= "function" then
+        return "V2 shared realm authority missing"
+    end
+    return RealmAuthority.runtime_check()
+end)
 
 -- #947: persisted Chaos Wastes traits may execute in Adventure, where vanilla
 -- does not retain the Morris gameplay package that owns their hit-time particle

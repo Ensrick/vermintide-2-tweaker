@@ -282,6 +282,9 @@ local _APPLY_PRESENTATION = mod:dofile(
 local _apply_owner = _APPLY_PRESENTATION.new({
     is_modded_realm = _is_modded_realm,
     with_eac_off = _with_eac_off,
+    get_generic_input_actions = function()
+        return local_require("scripts/ui/views/hero_view/windows/definitions/hero_window_item_customization_definitions").generic_input_actions
+    end,
     skin_exists = function(skin_key)
         return type(skin_key) == "string" and WeaponSkins and WeaponSkins.skins
             and rawget(WeaponSkins.skins, skin_key) ~= nil

@@ -229,6 +229,12 @@ end)
 -- growing the already-baselined umbrella regression module and ensures the
 -- named check cannot remain registered if this feature module stops loading.
 if type(mod._gt_rt_register) == "function" then
+    mod._gt_rt_register("issue1693_shared_native_realm_authority", function()
+        if RealmAuthority.VERSION ~= 2 or type(RealmAuthority.runtime_check) ~= "function" then
+            return "V2 shared realm authority missing"
+        end
+        return RealmAuthority.runtime_check()
+    end)
     mod._gt_rt_register("issue1509_modded_level_control_reward_guard", function()
         if type(BackendGuard) ~= "table" or type(BackendGuard.reconcile) ~= "function" then
             return "level-control backend guard policy missing"
@@ -243,10 +249,12 @@ if type(mod._gt_rt_register) == "function" then
             state,
             { ["eac-untrusted"] = false },
             { application_parameter = { ["eac-untrusted"] = true } })
-        if skip ~= true or corrected ~= true then
-            return "launch-authoritative modded state did not suppress backend rewards"
+        local native = rawget(_G, "MODDED_REALM")
+        local expected = native == nil or native == true
+        if skip ~= expected or corrected ~= expected then
+            return "native/legacy realm authority disagrees with backend reward suppression"
         end
-        if state._booted_eac_untrusted ~= true then
+        if state._booted_eac_untrusted ~= expected then
             return "cached StateInGameRunning modded bit was not restored"
         end
     end)

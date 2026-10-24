@@ -12,6 +12,21 @@ behavior, and links out. Where a seam is byte-shared with `cwv`, this doc reuses
 `docs/BUG_CLASSES.md` class; `#N` / "issue N" = a GitHub issue. Grep-verified
 2026-07-15 against the decompile and the mod source.
 
+### Local illusion Apply after native read-only menu writers (#1690, #1693)
+
+At source 93dea911 (game 6.13), HeroWindowItemCustomization's controller handler
+requires `_has_all_crafting_requirements` before refresh input (666-675), its
+enable/state writers independently apply read_only_backend (1878, 1928), and
+completion resets controller actions (2547). Hiding/showing the button alone is
+therefore not the contract. The canonical `_lib_local_illusion_apply.lua` bundled
+by Cosmetics and CIM Dev owns validated local selection, controller action
+readback, requirements and completion identity together, after native writers.
+The definitions' exported generic_input_actions map (1967, 2105) is obtained
+with local_require. Native account read-only protection is never cleared.
+Recipe/realm handoffs release before the next native writer; an explicit native
+disable preserves the skin only until the existing local completion consumes it.
+No hook, RPC or runtime shared-mod dependency is added.
+
 ### Current-engine realm authority (#1691)
 
 Game 6.12+ initializes native `MODDED_REALM` before backend construction

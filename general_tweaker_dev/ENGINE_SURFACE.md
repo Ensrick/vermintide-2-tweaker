@@ -1,5 +1,15 @@
 # general_tweaker_dev - engine contact surface
 
+## Native realm precedence (#1693, 0.2.276-dev)
+
+Game 6.12+ publishes MODDED_REALM before backend initialization
+(`foundation/scripts/util/application_parameter.lua:150-152`, source 93dea911).
+The bundled shared realm V2 now queries that raw value first: only exact true
+permits; explicit false/malformed cannot fall through to legacy flags or MP.
+Only absent native state uses the older authority. It writes neither the native
+global nor GameSettingsDevelopment.read_only_backend. The #1509 regression owner
+uses the same precedence; the new named check uses isolated contexts.
+
 ## Godmode outgoing armor boundary (#1008, 0.2.258-dev)
 
 | Surface | Ownership and invariant |

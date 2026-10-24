@@ -30,7 +30,7 @@ local RealmAuthority = mod:dofile(
 -- at the bottom of this same chunk, so no _G or cross-file exposure is needed.
 local _MEM_PROBE_T0_MP = collectgarbage("count")
 
-local MOD_VERSION = "0.2.43-dev"
+local MOD_VERSION = "0.2.44-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([mp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -397,30 +397,17 @@ end
 -- ============================================================
 -- UI gate overrides (build-order step 2)
 -- ============================================================
--- Vanilla has ~10 sites that read script_data["eac-untrusted"] to grey
--- out UI buttons and skip reward popups. Strategy: hook each enclosing
--- function, set the flag to nil while the original body runs, restore
--- on exit. The flag stays globally true outside our wrapped calls, so
--- commit suppression in playfab_mirror_base (lines 2826/2839/2857) and
--- the DLC-update gate in unlock_manager.lua:719 remain intact.
---
--- Multi-return handled via table-pack/unpack so wrappers don't collapse
--- secondary returns (see feedback_hook_multi_return_collapse).
---
--- NIL-HOLE PRESERVATION: `_with_eac_off` wraps 9 different vanilla functions
--- (init / UI / AchievementManager.trigger_event / etc.) — some have implicit
--- early `return` (zero values), some return values from method calls. A bare
--- `{ func(...) }` table loses its length tracking on internal nils, and
--- `unpack(results)` then stops at the first nil, silently truncating
--- subsequent returns. Same bug class that burned weapon_tweaker v0.12.77/.78.
--- Use select("#") to capture the true return count, then unpack with explicit
--- bounds so nil holes survive.
+-- Compatibility wrappers below clear only the PRE-6.12 legacy script flag.
+-- Current 6.13 UI/achievement gates read GameSettingsDevelopment.read_only_backend;
+-- these brackets do not enable them (#1684). Never clear that protection: it
+-- also blocks real PlayFab commits (playfab_mirror_base.lua:2826/2839/2857).
+-- Modern local UI actions need explicit owner-side presentation adapters, not
+-- a realm/backend mutation. V2 realm authority honors MODDED_REALM first.
+-- Preserve exact return counts, including internal nils, for legacy callers.
 local function _capture(...) return select("#", ...), { ... } end
 
--- #174: track whether we are currently inside a `_with_eac_off` window (the
--- realm is un-gated for a vanilla progression call). Depth counter mirrors the
--- eac-flag set/restore bracket exactly so behaviour is byte-identical. Read by
--- cosmetics' #174 chokepoint hook.
+-- #174 legacy bracket depth is not modern realm authority. Retain it for
+-- compatible sibling consumers and balanced restore/error handling.
 mod._mp_eac_depth = 0
 -- Distinct from `_mp_eac_depth`: the generic bracket also runs in official
 -- realm, so it cannot identify realm ownership. This counter increments only
@@ -432,15 +419,16 @@ mod.is_modded_realm = function()
         script_data, mod._mp_modded_depth, rawget(_G, "Development"))
 end
 
--- issue 434: the flag AND the depth counter MUST be restored on EVERY exit path.
--- A throw inside `func` used to skip both the decrement and the flag restore,
--- leaving `script_data["eac-untrusted"] = nil` globally; the commit-suppression
--- sites (playfab_mirror_base.lua:2826/2839/2857) gate on that flag, so a leaked
--- nil re-enables real-account PlayFab writes -- exactly what mp exists to prevent.
--- `AchievementManager.trigger_event` (a hot per-mission hook) is the highest
--- throw-exposure wrapped fn. We pcall the inner call, restore both in finally
--- style, then re-raise the original error transparently so callers behave as
--- vanilla would have (the only difference is the realm is re-gated first).
+_rt_register("issue1693_shared_native_realm_authority", function()
+    if RealmAuthority.VERSION ~= 2 or type(RealmAuthority.runtime_check) ~= "function" then
+        return "V2 shared realm authority missing"
+    end
+    return RealmAuthority.runtime_check()
+end)
+
+-- #434's pre-6.12 leak risk remains a compatibility invariant: restore the
+-- legacy flag and both counters before rethrowing. The current native backend
+-- protection is independent and is never changed by this wrapper.
 mod.with_eac_off = function(func, self, ...)
     return RealmAuthority.with_eac_off(script_data, mod, func, self, function(err)
         _dbg_alert("_with_eac_off: wrapped fn threw; eac flag restored, re-raising: %s", tostring(err))
@@ -449,9 +437,8 @@ end
 local _with_eac_off = mod.with_eac_off
 
 -- issue 434 regression: a throw inside `_with_eac_off` must restore the
--- eac-untrusted flag AND the depth counter on ALL paths, and re-raise. If the
--- flag leaks nil, real-account PlayFab commits fire (playfab_mirror_base.lua
--- :2826/2839/2857). Registered here (not up with the other checks) because
+-- legacy flag AND the depth counter on ALL paths, and re-raise. Registered here
+-- (not up with the other checks) because
 -- `_with_eac_off` is a file-local defined just above -- registering earlier
 -- would forward-ref a nil global.
 _rt_register("eac_flag_restored_after_throw", function()
@@ -1273,10 +1260,9 @@ mod:dofile("scripts/mods/modded_progression/_mp_hook_targets").install({
     lookup = function(class_name) return rawget(_G, class_name) end,
 })
 
--- Achievement progress tracking — CRITICAL. Without this, kill counts
--- and mission-completion events don't tick the challenge progress
--- counters, so claiming a challenge later is pointless. The DEDICATED_SERVER
--- branch of the gate still holds (we only flip the eac-untrusted half).
+-- Pre-6.12 compatibility only. Modern AchievementManager.trigger_event returns
+-- on read_only_backend; #1684 requires separately owned local progress routing.
+-- This retained bracket does not claim modern challenge tracking is enabled.
 mod:hook("AchievementManager", "trigger_event", _with_eac_off)
 
 -- AchievementManager.update (line 294) drives the Steam-platform push

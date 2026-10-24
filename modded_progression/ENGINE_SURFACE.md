@@ -19,15 +19,24 @@ account. Its core architectural insight
 (`PLAN.md` "Core architectural insight") is that `script_data["eac-untrusted"]`
 is NOT one master gate: the PlayFab commit-suppression sites keep the real
 account safe and must stay live, while a separate set of UI sites merely grey out
-buttons and skip reward popups. `mp` therefore flips the flag to nil only inside
-a bracketed window around each vanilla UI/progression call, restores it on every
-exit path, and leaves the commit-suppression gate untouched. As of v0.2.39-dev,
+buttons and skip reward popups. Historically `mp` flipped that legacy flag to nil
+inside a bracketed UI/progression call and restored it on every exit. Since game
+6.12 these brackets do not bypass modern read_only_backend UI gates (#1684);
+they remain old-game compatibility only. Never clear the native read-only flag,
+which also protects real PlayFab commits. As of v0.2.39-dev,
 simulated daily claims and Silver Shilling Emporium purchases have fully local
 backend interceptions, issue #607 has bounded layer diagnostics, and the Fresh
 profile's items/loadouts slice (#840) is served by an MP-owned interface route;
 the remaining routes in `PLAN.md` are not yet wired.
 
 ## Hook table
+
+Current shared authority (#1693, 0.2.44-dev): MODDED_REALM at
+`foundation/scripts/util/application_parameter.lua:150-152` (source 93dea911)
+decides before legacy depth, script flags or sibling fallback. Exactly true
+permits; present false/malformed denies, and only absence uses the old-game
+query. The named check exercises isolated contexts, not a live protection toggle.
+This does not implement #1684's local UI adapters or #607's container award/open.
 
 67 registration sites, all `mod:hook` (full wrapper). `[hook]` =
 full wrapper (can rewrite args/returns). Three route through the shared

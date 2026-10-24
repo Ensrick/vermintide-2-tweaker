@@ -2,6 +2,64 @@ return function(H, repo_root)
     local path = repo_root .. "/tools/shared_lib/_lib_modded_realm_authority.lua"
     local Authority = assert(loadfile(path))()
 
+    H.test("native realm authority precedes absent backend and every legacy permission", function()
+        local legacy = { ["eac-untrusted"] = true }
+        local launch = { application_parameter = { ["eac-untrusted"] = true } }
+        H.equal(Authority.is_modded({}, 0, nil, { MODDED_REALM = true }), true)
+        H.equal(Authority.is_modded(legacy, 2, launch, { MODDED_REALM = false }), false)
+        for _, value in ipairs({ 1, 0, "true", {}, function() return true end }) do
+            H.equal(Authority.is_modded(legacy, 2, launch, { MODDED_REALM = value }), false)
+        end
+        H.equal(Authority.is_modded(legacy, 0, nil, {}), true)
+        H.equal(Authority.is_modded({}, 0, nil,
+            setmetatable({}, { __index = { MODDED_REALM = true } })), false)
+    end)
+
+    H.test("native official or malformed realm never consults a permissive sibling", function()
+        local calls = 0
+        local lookup = function()
+            calls = calls + 1
+            return { is_modded_realm = function() return true end }
+        end
+        H.equal(Authority.sibling_is_modded({}, lookup, nil, { MODDED_REALM = false }), false)
+        H.equal(Authority.sibling_is_modded({}, lookup, nil, { MODDED_REALM = "true" }), false)
+        H.equal(Authority.sibling_is_modded({}, lookup, nil, { MODDED_REALM = true }), true)
+        H.equal(calls, 0)
+        H.equal(Authority.sibling_is_modded({}, lookup, nil, {}), true)
+        H.equal(calls, 1)
+    end)
+
+    H.test("legacy bracket never clears native realm or backend read-only protection", function()
+        local env = { MODDED_REALM = true, GameSettingsDevelopment = { read_only_backend = true } }
+        local script = { ["eac-untrusted"] = true }
+        local state = { _mp_eac_depth = 0, _mp_modded_depth = 0 }
+        Authority.with_eac_off(script, state, function()
+            H.equal(rawget(script, "eac-untrusted"), nil)
+            H.equal(Authority.is_modded(script, state._mp_modded_depth, nil, env), true)
+            H.equal(env.MODDED_REALM, true)
+            H.equal(env.GameSettingsDevelopment.read_only_backend, true)
+        end, nil)
+        H.equal(script["eac-untrusted"], true)
+        H.equal(state._mp_eac_depth, 0)
+        H.equal(state._mp_modded_depth, 0)
+    end)
+
+    H.test("bundled realm module defaults to its actual engine environment without global writes", function()
+        local chunk = assert(loadfile(path))
+        local env = setmetatable({ MODDED_REALM = true }, { __index = _G })
+        env._G = env
+        setfenv(chunk, env)
+        local installed = chunk()
+        H.equal(installed.VERSION, 2)
+        H.equal(installed.is_modded({}, 0), true)
+        env.MODDED_REALM = false
+        H.equal(installed.sibling_is_modded({ ["eac-untrusted"] = true }, function()
+            error("native denial must not query the sibling")
+        end), false)
+        H.equal(env.MODDED_REALM, false)
+        H.equal(installed.runtime_check(), nil)
+    end)
+
     H.test("modded realm authority accepts only exact raw flag or balanced depth", function()
         H.equal(Authority.is_modded({ ["eac-untrusted"] = true }, 0), true)
         H.equal(Authority.is_modded({ ["eac-untrusted"] = false }, 1), true)
@@ -173,7 +231,7 @@ return function(H, repo_root)
         local swap = read("/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/illusion_swap.lua")
         local forge = read("/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/standard_forge.lua")
         local presentation = read(
-            "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_illusion_apply_presentation.lua")
+            "/tools/shared_lib/_lib_local_illusion_apply.lua")
         local cosmetics = read(
             "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua")
         local cosmetics_swap = read(
@@ -196,21 +254,21 @@ return function(H, repo_root)
         H.truthy(swap:find("_is_modded_realm()", 1, true) ~= nil)
         H.truthy(swap:find("with_eac_off = _with_eac_off", 1, true) ~= nil)
         H.truthy(presentation:find("deps.with_eac_off(func", 1, true) ~= nil)
-        H.truthy(forge:find("_is_modded_realm()", 1, true) ~= nil)
-        H.truthy(forge:find("_with_eac_off(func", 1, true) ~= nil)
+        H.truthy(forge:find("mod._cim_illusion_apply_presentation_owner", 1, true) ~= nil)
+        H.truthy(forge:find("owner.on_state_update(func", 1, true) ~= nil)
         H.equal(cosmetics:find("_lib_modded_realm_authority", 1, true), nil)
         local cosmetics_realm = read(
             "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_realm_authority.lua")
         H.truthy(cosmetics_realm:find("_lib_modded_realm_authority", 1, true) ~= nil)
-        H.truthy(cosmetics:find("with_eac_off = mod._cos_realm_authority.with_eac_off", 1, true) ~= nil,
+        H.truthy(cosmetics:find("realm_authority = mod._cos_realm_authority", 1, true) ~= nil,
             "the current-engine adapter must share its already-loaded legacy bracket")
         H.truthy(cosmetics_swap:find("_lib_modded_realm_authority", 1, true) ~= nil)
         H.truthy(cosmetics_swap:find(
             "return authority.with_eac_off", 1, true) ~= nil)
         H.truthy(cosmetics_swap:find(
-            "return _with_eac_off(func, self, enable, disable_edges)", 1, true) ~= nil)
+            "return presentation.on_enable(func, self, enable, disable_edges)", 1, true) ~= nil)
         H.truthy(cosmetics_swap:find(
-            "return _with_eac_off(func, self, recipe_name, ...)", 1, true) ~= nil)
+            "return presentation.on_state_update(func, self, recipe_name, ...)", 1, true) ~= nil)
         H.truthy(gt:find("_lib_modded_realm_authority", 1, true) ~= nil)
         H.truthy(gt:find("BackendGuard.reconcile", 1, true) ~= nil)
     end)

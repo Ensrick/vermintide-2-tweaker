@@ -4,6 +4,17 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
+## Shared native authority (#1693)
+
+- Offline precedence: native true works before backend construction; false or
+  malformed native values deny even with permissive old state. Only absence
+  uses pre-6.12 fallback. The live native global/protection flags are not mutated.
+- Pending solo live acceptance: Modded Progression 0.2.44-dev in the modded Keep,
+  /mp_regression_test reports issue1693_shared_native_realm_authority passing.
+  Repeat #1692's loot diagnostic steps below; this remains observation only.
+- #1684's modern UI gates and #607's local loot award/open remain separate,
+  unfinished work. Do not treat a passing realm check as their acceptance.
+
 - [ ] #840: with `Fresh (level 1)` selected in the modded realm, every career's inventory and loadout comes from the MP profile (starter weapons, default hat/skin/frame, plentiful jewellery, power 5); the log has one `[mp:fresh] seed generation=N` line per generation and one `route state=active` line, never `route state=official:fault`.
 - [ ] #840: switching the starting state away from Fresh, leaving the modded realm, or disabling the mod restores official reads immediately with one `route state=official:<reason>` line; switching back re-routes without a second seed.
 - [ ] #840: equipping, adding/deleting custom loadouts, and pose skins under Fresh persist across restart and never enqueue a PlayFab request or change the official inventory; `/mp_regression_test` passes all four `mp840_fresh_*` checks and offline `test_mp_fresh_profile_routing.lua` passes.

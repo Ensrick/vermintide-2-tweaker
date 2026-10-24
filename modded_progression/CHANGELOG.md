@@ -1,5 +1,17 @@
 # Modded Progression — Changelog
 
+## 0.2.44-dev (2026-10-24) -- Shared current-engine realm authority (#1693)
+
+- Supersedes unpublished 0.2.43-dev and retains #1692's observation-only loot
+  diagnostic repair. The shared realm query now honors native MODDED_REALM
+  before legacy script flags, bracket depth or sibling fallbacks. Explicit false
+  and malformed values deny; pre-6.12 absent-native fallback is retained.
+- Adds issue1693_shared_native_realm_authority to the existing regression owner.
+  It uses isolated contexts rather than mutating live realm/account protection.
+- This is not #1684's modern progression/UI fix and does not implement #607's
+  local container award/open path. The old EAC-off bracket cannot bypass modern
+  read_only_backend gates; those account-protection gates remain untouched.
+
 ## 0.2.43-dev (2026-10-24) - #607 loot diagnostic gate reads the game 6.12 realm global (#1692)
 
 - Fresh allocation replaces the expired 0.2.42-dev candidate. Review also
