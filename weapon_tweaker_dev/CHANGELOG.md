@@ -1,5 +1,40 @@
 # Weapon Tweaker Changelog
 
+## 0.12.337-dev (2026-10-24) -- refresh the preserved Hold-Pose owner extraction (#2) [tooling]
+
+- Supersedes the unpublished 0.12.336-dev candidate under a fresh claim and
+  carries its unchanged five-check child, historical registration order and
+  fail-closed missing-child behavior. Parent ceiling remains reduced to 2,210;
+  no baseline increase or new gameplay behavior.
+- Revalidated on current master with complete independent Lua suite discovery.
+  That guard caught and prevented a duplicate registration during the merge;
+  the corrected full branch suite passes 4,301 cases. The real Hold-Pose fixture
+  now loads in a private environment rather than monkeypatching global get_mod.
+- Canonical artifacts/receipts are rebuilt for both mirror versions before
+  review and publication. Tooling evidence does not close gameplay issues or
+  assert a game launch, menu or live visual pass.
+
+## 0.12.336-dev (2026-10-17) -- split Hold-Pose runtime checks out of the registrar (#2) [tooling]
+
+- Moves the five dev-only Hold-Pose `/wt_regression_test` checks
+  (`issue168_hold_pose_independent_hands`, `issue569_hold_pose_composition`,
+  `issue616_hold_pose_channel_bypass_restore`,
+  `issue616_hold_pose_live_edit_delivery`,
+  `issue616_hold_pose_nonuniform_scale`) into the new
+  `_wt_runtime_checks_hold_pose.lua`. The check bodies are unchanged and they
+  still register in the same place, just before the Longbow zoom checks.
+- If the new file ever fails to load, `/wt_regression_test` reports one
+  failing `issue2_hold_pose_runtime_check_owner` check in that place and the
+  rest of WT Dev still starts, including the animation picker and the
+  Hold-Pose tuner.
+- `_wt_runtime_checks.lua` drops from 2,383 to 2,210 counted lines; its
+  file-size ceiling is lowered to match. No gameplay, hook, setting, asset or
+  wire change. The public beta runtime is untouched.
+- Pairs with public beta `0.12.335`, a version-only reissue the stream
+  parity gate requires.
+- Verify in the keep: `/wt_regression_test` reports the same five Hold-Pose
+  checks with the same verdicts as before, in the same place in the run.
+
 ## 0.12.335-dev (2026-10-17) -- mirror 0.12.334-beta: re-anchor weapon-history provenance to Game Version 6.13.0 (#1682) [verify-fix]
 
 - Mirrors public beta `0.12.334`: upstream

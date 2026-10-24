@@ -1,5 +1,20 @@
 # Weapon Tweaker Changelog
 
+## 0.12.336-beta (2026-10-24) -- fresh mirror allocation for the dev check-owner split (#2) [tooling]
+
+- Supersedes the unpublished 0.12.335-beta candidate after its claim expired.
+  Public runtime behavior is unchanged; the version-only reissue preserves
+  exact stream parity with Dev 0.12.337-dev. No new gameplay, setting, asset,
+  hook or wire behavior is introduced in the public stream.
+
+## 0.12.335-beta (2026-10-17) -- reissue of 0.12.334-beta so the dev mirror can carry the Hold-Pose check split (#2) [tooling]
+
+- Reissues 0.12.334-beta unchanged: the paired dev mirror moves to
+  0.12.336-dev for its dev-only Hold-Pose runtime-check split, and the stream
+  parity gate requires both streams to move together. Adds no gameplay, hook,
+  setting, asset or wire change; the 0.12.334-beta Game Version 6.13.0
+  re-anchor is carried as is.
+
 ## 0.12.334-beta (2026-10-17) -- re-anchor weapon-history provenance to Game Version 6.13.0 (#1682) [verify-fix]
 
 - Upstream `Aussiemon/Vermintide-2-Source-Code` moved from Game Version
