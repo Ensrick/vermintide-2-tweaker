@@ -51,12 +51,14 @@ return function(H, repo_root)
         end
         probe:leave("on_exit")
 
+        -- 7 budgeted detail lines plus the reserved exit summary (#630 per-session budget).
         local state = probe:snapshot()
-        H.equal(#lines, 7)
+        H.equal(#lines, 8)
         H.equal(state.lines, 7)
         H.equal(state.capped, true)
         H.equal(state.draw_begins, 20)
         H.equal(state.draw_ends, 20)
+        H.truthy(string.find(lines[8], "exit session=1 ", 1, true), lines[8])
     end)
 
     H.test("#630 distinguishes Equipment tab subsections", function()

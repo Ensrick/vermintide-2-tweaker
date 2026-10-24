@@ -213,7 +213,17 @@ if window and type(window._setup_mission_data) == "function" then
     mission_rows_hook_installed = true
 end
 
-return {
+-- (#250) The talent module's own regression checks. Only this module
+-- dofiles it, so these are forwarded below for /gut_regression_test to
+-- report by name.
+local TALENT_CHECK = "issue250_deus_tab_talent_tier_normalization"
+local function talent_checks()
+    local checks = talent_ok and type(TalentRefresh) == "table"
+        and TalentRefresh.rt_checks
+    return type(checks) == "table" and checks or {}
+end
+
+local api = {
     policy = Policy,
     refresh_local = refresh_local,
     rt_checks = {
@@ -269,8 +279,13 @@ return {
                     return "Tab talent normalization module failed to load: "
                         .. tostring(TalentRefresh)
                 end
-                local check = TalentRefresh.rt_checks and TalentRefresh.rt_checks[1]
-                return check and check.fn() or "Tab talent runtime check missing"
+                -- (#250) Run the inner check by name and return its verdict
+                -- as is: nil is PASS. The old `check and check.fn() or msg`
+                -- turned that nil into "missing", so a passing check FAILed.
+                for _, check in ipairs(talent_checks()) do
+                    if check.name == TALENT_CHECK then return check.fn() end
+                end
+                return "Tab talent runtime check missing"
             end,
         },
         {
@@ -291,3 +306,7 @@ return {
         },
     },
 }
+for _, check in ipairs(talent_checks()) do
+    api.rt_checks[#api.rt_checks + 1] = check
+end
+return api

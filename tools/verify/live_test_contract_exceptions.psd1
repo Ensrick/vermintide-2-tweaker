@@ -217,7 +217,7 @@
         # local purchase, and overlay synchronization only.
         @{
             Marker='[mp:577]'; ModId='mp'
-            ModTrees=@{mp='8dd71ccd12e5f05e2364e90d1fdc4138028c2090'}
+            ModTrees=@{mp='ea0020cd31132dbaedfbdc5bda8d9e8014bb2422'}
             SourcesByMod=@{mp='modded_progression/scripts/mods/modded_progression/modded_progression.lua'}
             Signature='[mp:577] purchase_rejected item=%s reason=%s backend=none'
             Bound='at most one rejection receipt per explicit modded-realm Silver Shilling exchange attempt; both failure branches return before subsequent terminal routes'
@@ -234,7 +234,7 @@
         }
         @{
             Marker='[mp:577]'; ModId='mp'
-            ModTrees=@{mp='8dd71ccd12e5f05e2364e90d1fdc4138028c2090'}
+            ModTrees=@{mp='ea0020cd31132dbaedfbdc5bda8d9e8014bb2422'}
             SourcesByMod=@{mp='modded_progression/scripts/mods/modded_progression/modded_progression.lua'}
             Signature='[mp:577] purchase_committed item=%s price=%d balance=%d overlay=%s backend=none'
             Bound='at most one commit receipt per explicit modded-realm Silver Shilling exchange attempt after successful validation and purchase'
@@ -450,7 +450,7 @@
             ModTrees=@{gut_dev=@('0778c26248cda31c84498f7dfbb7ca210fd8e499')}
             SourcesByMod=@{gut_dev='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_dx12_fence630.lua'}
             Signature='[gut:630] frame_evidence draw=%d visible_rows=%s resource_candidates=%s'
-            Bound='focus/tab/Weapons-expansion edge evidence under one absolute 48-row probe budget'
+            Bound='focus/tab/Weapons-expansion edge evidence under a 48-row per-session probe budget reset only by Mod Tweaker enter'
             EmitterAnchors=@(
                 @{Tokens=@('log','(','string','.','format','(','String:frame_evidence draw=%d visible_rows=%s resource_candidates=%s')}
                 @{Tokens=@('emit','(','String:[gut:630] ','..','message',')')}
@@ -515,7 +515,7 @@
         }
         @{
             Marker='[mp:607]'; ModId='mp'
-            ModTrees=@{mp='8dd71ccd12e5f05e2364e90d1fdc4138028c2090'}
+            ModTrees=@{mp='ea0020cd31132dbaedfbdc5bda8d9e8014bb2422'}
             SourcesByMod=@{mp='modded_progression/scripts/mods/modded_progression/_mp_loot_diag_runtime.lua'}
             Signature='[mp:607] event=%s serial=%d flow=%s request=%s reason=%s chest=%s items=%d local_items=%d local_containers=%d local_uses=%d award_capable=%s open_capable=%s first_missing=%s backend=%s'
             Bound='one-mission observer events are persisted in a twelve-record bounded ledger'
