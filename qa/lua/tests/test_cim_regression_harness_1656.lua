@@ -414,6 +414,25 @@ return function(H, repo_root)
         H.equal(run(suite, "default_property_cap_is_five_bubbles"), nil)
     end)
 
+    H.test("CIM #1656 bubble check preserves an absent temporary setting exactly", function()
+        local suite = build_suite()
+        H.equal(rawget(suite.settings, "movespeed_2pct_mode"), nil)
+        H.equal(run(suite, "default_property_cap_is_five_bubbles"), nil)
+        H.equal(rawget(suite.settings, "movespeed_2pct_mode"), nil,
+            "a diagnostic must not create a persistent false override")
+    end)
+
+    H.test("CIM #1656 bubble check restores the user's mode when a scaling reader throws", function()
+        local suite = build_suite()
+        suite.settings.movespeed_2pct_mode = true
+        suite.weave.representable_bubble_range = function() error("scaling reader unavailable") end
+        local result = run(suite, "default_property_cap_is_five_bubbles")
+        H.truthy(type(result) == "string" and result:find("scaling reader unavailable", 1, true),
+            "reader error must remain visible: " .. tostring(result))
+        H.equal(suite.settings.movespeed_2pct_mode, true,
+            "the outer regression runner cannot restore a setting changed inside the check")
+    end)
+
     H.test("CIM #1656 the scaling verdict still catches a flat or single-bubble row", function()
         local fixtures = assert(loadfile(root .. "_cim_regression_fixtures.lua"))()
         local flat = {

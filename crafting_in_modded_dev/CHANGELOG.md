@@ -1,5 +1,18 @@
 # Crafting in Modded Changelog
 
+## 0.8.141-dev (2026-10-24) -- Fresh #1656/#1696 candidate and diagnostic restoration
+
+- Carries the prepared regression-harness and Necromancer catalog corrections
+  from the unpublished 0.8.140-dev candidate under a fresh version claim.
+- Review reproduced two additional #1656 failures: the default bubble check
+  created a false setting override when no value existed, and left the user's
+  movement-speed mode disabled if a scaling reader threw. The protected check
+  now restores the exact prior value before returning success or an error,
+  without persisting the temporary override.
+- The two added actual-check cases fail before correction and pass afterward;
+  the combined host suite passes 4,160 cases. This is artifact preparation,
+  not evidence that the dev or stable Workshop item has been updated.
+
 ## 0.8.140-dev (2026-10-17) -- Community Builds use the game's Necromancer keys (#1696) [verify-fix]
 
 - Symptom (RainReligion, 2026-09-21, cim 0.8.135-dev, #1655 report): every

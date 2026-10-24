@@ -1245,34 +1245,33 @@ _rt_register("default_property_cap_is_five_bubbles", function()
     end
 
     local saved = mod:get("movespeed_2pct_mode")
-    if saved ~= false then mod:set("movespeed_2pct_mode", false) end
-    local function _restore() if saved == true then mod:set("movespeed_2pct_mode", true) end end
-
-    -- A spread of real default (non-special-cased) weave property keys — each
-    -- must resolve to cap 5 in any key form (weave_X / properties_X / bare X).
-    for _, key in ipairs({
-        "weave_fatigue_regen", "weave_crit_chance", "weave_attack_speed",
-        "weave_block_cost", "weave_power_vs_chaos", "fatigue_regen",
-        "properties_crit_chance",
-    }) do
-        local c = _bubble_cap(key)
-        if c ~= 5 then
-            _restore()
-            return string.format("default cap for '%s' = %s, expected 5 (#86 single-bubble regression)", key, tostring(c))
+    -- A diagnostic must not persist its temporary mode or strand it on a
+    -- reader error. Keep the entire override in the protected body and restore
+    -- the exact prior value (including nil) before reporting any verdict.
+    local ok, result = pcall(function()
+        if saved ~= false then mod:set("movespeed_2pct_mode", false, false) end
+        -- Real generic property keys must resolve to cap 5 in every key form.
+        for _, key in ipairs({
+            "weave_fatigue_regen", "weave_crit_chance", "weave_attack_speed",
+            "weave_block_cost", "weave_power_vs_chaos", "fatigue_regen",
+            "properties_crit_chance",
+        }) do
+            local c = _bubble_cap(key)
+            if c ~= 5 then
+                return string.format("default cap for '%s' = %s, expected 5 (#86 single-bubble regression)", key, tostring(c))
+            end
+            local scaling_err = fixtures.bubble_scaling_failure(key, c, scaling_api)
+            if scaling_err then return scaling_err end
         end
-        -- Value must SCALE across the storable bubbles and fill at 5.
-        local scaling_err = fixtures.bubble_scaling_failure(key, c, scaling_api)
-        if scaling_err then
-            _restore()
-            return scaling_err
-        end
+        if _bubble_cap("weave_stamina") ~= 2 then return "stamina cap regressed from 2" end
+        if _bubble_cap("weave_movespeed") ~= 1 then return "movespeed cap regressed from 1" end
+    end)
+    if saved ~= false then
+        local restored, restore_err = pcall(mod.set, mod, "movespeed_2pct_mode", saved, false)
+        if not restored then return "temporary movespeed mode restore failed: " .. tostring(restore_err) end
     end
-
-    -- Special cases unchanged.
-    if _bubble_cap("weave_stamina") ~= 2 then _restore(); return "stamina cap regressed from 2" end
-    if _bubble_cap("weave_movespeed") ~= 1 then _restore(); return "movespeed cap regressed from 1" end
-
-    _restore()
+    if not ok then return "bubble scaling reader raised: " .. tostring(result) end
+    return result
 end)
 
 _rt_register("action_rejection_uses_warning_channel", function()

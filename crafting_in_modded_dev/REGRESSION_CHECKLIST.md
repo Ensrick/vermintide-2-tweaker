@@ -4,7 +4,7 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-10-17.
+Last updated: 2026-10-24.
 
 ### issue1696-ranalds-catalog-game-keys - Community Builds name live game rows
 
@@ -12,7 +12,7 @@ Last updated: 2026-10-17.
 |---|---|
 | Symptom | Every Community Builds import using a Necromancer weapon was rejected with `Import rejected: item unavailable: bw_reaper` (RainReligion, 0.8.135-dev, #1655 report). |
 | Root cause | `_cim_ranalds_catalog.lua` copied Ranald's Gift's codeNames; weapon 82 `bw_reaper`, weapon 83 `bw_soulsteal` and career 20 `bw_necro` are not game keys (`bw_ghost_scythe`, `bw_necromancy_staff`, `bw_necromancer`). |
-| Fix version(s) | cim_dev 0.8.140-dev (#1696) |
+| Fix version(s) | Candidate cim_dev 0.8.141-dev (carries unpublished 0.8.140-dev source, #1696); deployment pending |
 | Category | SOLO / EXTERNAL DATA |
 | Repro | Enter the Keep and run `/cim_regression_test`. As the Necromancer, open the Athanor's Community Builds and import a build with the Ensorcelled Reaper or Soulstealer Staff. |
 | Expected post-fix | `issue1696_ranalds_catalog_game_keys` PASSes. The browser opens on the Necromancer with her localized career label, and the import is not rejected with "item unavailable". |
@@ -24,11 +24,16 @@ Last updated: 2026-10-17.
 |---|---|
 | Symptom | On a plain keep run, `modded_loadout_round_trip_save_then_clear`, `inventory_property_count_within_cap`, `localization_format_safe`, `default_property_cap_is_five_bubbles` and `overview_btn_render_target` FAILed while the guarded behavior was correct (RainReligion, 0.8.135-dev). |
 | Root cause | Harness defects: a stand-in item interface that made vanilla `set_loadout_item` raise before the `hook_safe` capture; the pre-#86 2-property ceiling; a no-argument formatter probe on placeholder strings; pre-#244 linear storage expectations; and undeclared globals passed for two forge UI owner locals. The gate-off twin shared the stub and used undeclared fixture ids, so it passed vacuously. |
-| Fix version(s) | cim_dev 0.8.139-dev source, first deployed in 0.8.140-dev with the gate-off registration guard (#1656) |
+| Fix version(s) | Candidate cim_dev 0.8.141-dev; includes unpublished 0.8.139/0.8.140-dev source and temporary-setting restoration hardening (#1656); deployment pending |
 | Category | SOLO / DIAGNOSTIC |
 | Repro | Enter the Keep and run `/cim_regression_test`. |
 | Expected post-fix | The five checks and `persist_loadouts_gate_off_is_passthrough` PASS, or SKIP with a named reason when the item interface chain raises or never reaches vanilla's mirror write. The gate-off check FAILs if its fixture craft registration is rejected. `issue414_cw_traits_preserve_slot_family` still PASSes. |
 | Detection | `test_cim_regression_harness_1656.lua` runs the shipped checks through the real loadout, weave-loadout and forge UI owners and reproduces each reported FAIL against 0.8.138-dev; it also pins the 10-property ceiling to the trimmer and the Athanor gate, and keeps `_cim_loc_format.lua` identical to the gut #1651 scanner. |
+
+The bubble check must also restore `movespeed_2pct_mode` exactly after a
+successful run or a throwing scaling reader; a missing setting remains absent.
+Temporary overrides use the non-persisting setter. Host tests reproduce both
+review failures before the 0.8.141-dev correction.
 
 ### issue1530-base-power-step-wording - step ownership stays in Mod Tweaker
 
