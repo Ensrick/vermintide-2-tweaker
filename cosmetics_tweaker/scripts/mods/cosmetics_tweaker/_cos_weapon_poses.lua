@@ -6,6 +6,7 @@ local mod = get_mod("cosmetics_tweaker")
 -- backend entitlement, loadout, RPC, or ItemMasterList entry is mutated.
 
 local Policy = mod._cos_weapon_pose_policy
+local Realm = assert(mod._cos_realm_authority, "Cosmetics realm owner required")
 local catalog
 local unsupported = Policy.new_unsupported_ledger()
 
@@ -14,8 +15,7 @@ local function setting_on()
 end
 
 local function realm_untrusted()
-    local sd = rawget(_G, "script_data")
-    return (sd and sd["eac-untrusted"] == true) and true or false
+    return Realm.is_modded()
 end
 
 local function enabled()

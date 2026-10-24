@@ -12,6 +12,27 @@ behavior, and links out. Where a seam is byte-shared with `cwv`, this doc reuses
 `docs/BUG_CLASSES.md` class; `#N` / "issue N" = a GitHub issue. Grep-verified
 2026-07-15 against the decompile and the mod source.
 
+### Current-engine realm authority (#1691)
+
+Game 6.12+ initializes native `MODDED_REALM` before backend construction
+(`foundation/scripts/util/application_parameter.lua:150-152`, source `93dea911`);
+the historical `script_data["eac-untrusted"]` field is no longer populated.
+The composition root creates `_cos_realm_authority` once. Existing frame,
+unobtainable-cosmetic, vanilla-illusion and pose owners query that same adapter.
+Explicit native false is final; only an absent native flag delegates to the
+already-shared legacy launch-parameter authority. Its compatibility bracket
+still touches only the old flag: never toggle native MODDED_REALM or
+GameSettingsDevelopment.read_only_backend to bypass current UI restrictions.
+The latter also protects real backend commits; #1690 owns the local Apply
+presentation correction separately.
+
+The existing #609 guarded local-player accessor is now exported by the existing
+`_cos_mod_lifecycle` module and bound before engine-facing owners load. Loading
+that stateless module early does not install its callbacks: `LIFECYCLE.install`
+remains in the original post-news-feed position. Behavioral tests cover absent
+network/player state and explicit manager resolution; singleton and install-order
+tests keep the callback order unchanged. The entry's 1,494-line ceiling is retained.
+
 `cosmetics_tweaker` is a wide, not deep, engine-contact mod: it recolours and
 re-meshes hats, weapon skins, shields and glow. The authored Encarmine Helmet is
 the narrow exception that mints a cosmetic item while cloning a vanilla hat

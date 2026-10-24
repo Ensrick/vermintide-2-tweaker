@@ -17,6 +17,7 @@
 -- (Localize fallback).
 
 local mod = get_mod("cosmetics_tweaker")
+local Realm = assert(mod._cos_realm_authority, "Cosmetics realm owner required")
 local COS = mod._cos
 local LA_BRIDGE = COS.LA_BRIDGE
 local _skin_requires_unowned_dlc = COS.skin_requires_unowned_dlc
@@ -328,7 +329,7 @@ mod:hook_safe("BackendInterfaceCraftingPlayfab", "get_unlocked_weapon_skins", fu
             mirror._unlocked_weapon_skins[skin_key] = true
         end
     end
-    if mod:get("unlock_all_illusions") and script_data["eac-untrusted"] and WeaponSkins then
+    if mod:get("unlock_all_illusions") and Realm.is_modded() and WeaponSkins then
         for skin_key, _ in pairs(WeaponSkins.skins) do
             if not _skin_requires_unowned_dlc(skin_key) then
                 mirror._unlocked_weapon_skins[skin_key] = true

@@ -17,6 +17,7 @@ return function(H, repo_root)
         .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_husk_wield_runtime.lua")
         .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_glow_picker_host.lua")
         .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_update_scheduler.lua")
+        .. read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_mod_lifecycle.lua")
     local command_owner = read(
         "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_command_owner.lua")
     local button_owner = read(
@@ -44,12 +45,28 @@ return function(H, repo_root)
             read("cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_tpe.lua"),
         }, "\n")
         local executable = lifecycle_sources:gsub("%-%-[^\n]*", "")
-        H.truthy(entry:find('local function _local_player_safe(player_manager)', 1, true))
+        H.truthy(entry:find('local _local_player_safe = LIFECYCLE.local_player_safe', 1, true))
         H.truthy(entry:find('pm.local_player_safe', 1, true))
         H.truthy(command_owner:find('register("local_player_safe_network_lifecycle_609"', 1, true))
         H.truthy(command_owner:find('title state must yield nil', 1, true))
         H.truthy(command_owner:find('ingame state lost player', 1, true))
         H.equal(executable:find(':local_player%(%s*%)'), nil)
+    end)
+
+    H.test("Cosmetics lifecycle owner retains the guarded local-player implementation", function()
+        local chunk = assert(loadfile(repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_mod_lifecycle.lua"))
+        local env = setmetatable({ Managers = false }, { __index = _G })
+        setfenv(chunk, env)
+        local lifecycle = chunk()
+        H.equal(lifecycle.local_player_safe(), nil)
+        H.equal(lifecycle.local_player_safe({ local_player = function() error("unsafe") end }), nil)
+        local player = {}
+        local manager = { local_player_safe = function() return player end,
+            local_player = function() error("unsafe") end }
+        H.equal(lifecycle.local_player_safe(manager), player)
+        env.Managers = { player = manager }
+        H.equal(lifecycle.local_player_safe(), player)
     end)
 
     H.test("Cosmetics glow persistence is exact-item plus illusion and explicit-Apply", function()

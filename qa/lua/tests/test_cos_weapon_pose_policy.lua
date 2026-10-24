@@ -119,13 +119,14 @@ return function(H, repo_root)
 
     -- Load the REAL production module against fixture globals and hand its
     -- captured SocialWheelUI hook bodies to the callback.
-    local function isolated(master, callback)
+    local function isolated(master, callback, realm_options)
         local saved = {
-            get_mod = _G.get_mod,
-            script_data = _G.script_data,
-            ItemMasterList = _G.ItemMasterList,
-            printf = _G.printf,
+            get_mod = rawget(_G, "get_mod"),
+            script_data = rawget(_G, "script_data"),
+            ItemMasterList = rawget(_G, "ItemMasterList"),
+            printf = rawget(_G, "printf"),
         }
+        local saved_modern = rawget(_G, "MODDED_REALM")
         local state = { setting = true }
         local hooks, logs = {}, {}
         local mod = {
@@ -146,11 +147,17 @@ return function(H, repo_root)
         _G.get_mod = function(name)
             if name == "cosmetics_tweaker" then return mod end
         end
-        _G.script_data = { ["eac-untrusted"] = true }
+        local legacy = true
+        if realm_options then legacy = realm_options.legacy end
+        rawset(_G, "MODDED_REALM", realm_options and realm_options.modern)
+        _G.script_data = { ["eac-untrusted"] = legacy }
         _G.ItemMasterList = master
         _G.printf = function(fmt, ...)
             logs[#logs + 1] = string.format(fmt, ...)
         end
+        mod._cos_realm_authority = dofile(repo_root
+            .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_realm_authority.lua").new(
+                _G, dofile(repo_root .. "/tools/shared_lib/_lib_modded_realm_authority.lua"))
         local ok, module_or_err = pcall(dofile, module_path)
         local ok2, err2 = true, nil
         if ok then
@@ -161,9 +168,26 @@ return function(H, repo_root)
         _G.script_data = saved.script_data
         _G.ItemMasterList = saved.ItemMasterList
         _G.printf = saved.printf
+        rawset(_G, "MODDED_REALM", saved_modern)
         if not ok then error(module_or_err, 0) end
         if not ok2 then error(err2, 0) end
     end
+
+    H.test("Cosmetics #1691 actual pose gather recognizes the modern native modded flag", function()
+        isolated(authored_master(), function(_, hooks)
+            local rows = hooks._gather_weapon_poses_by_parent_item(
+                function() return "vanilla" end, {}, "es_2h_hammer")
+            H.equal(type(rows), "table", "modern modded realm must expose authored poses")
+            H.equal(#rows, 2)
+        end, { modern = true })
+    end)
+
+    H.test("Cosmetics #1691 actual pose gather gives explicit official false priority", function()
+        isolated(authored_master(), function(_, hooks)
+            H.equal(hooks._gather_weapon_poses_by_parent_item(
+                function() return "vanilla" end, {}, "es_2h_hammer"), "vanilla")
+        end, { modern = false, legacy = true })
+    end)
 
     H.test("Cosmetics pose gather serves authored rows only when armed", function()
         isolated(authored_master(), function(module, hooks, state, script_data)
