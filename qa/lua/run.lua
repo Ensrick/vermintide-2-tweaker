@@ -9,6 +9,7 @@ package.path = table.concat({
 }, ";")
 
 local Harness = require("harness")
+local SuiteManifest = require("suite_manifest")
 
 local function run_harness_self_test()
     Harness.test("self-test pass sentinel", function()
@@ -38,7 +39,22 @@ if arg[1] == "--self-test" then
     os.exit(0)
 end
 
+-- The canonical PowerShell gate discovers every top-level test_*.lua file.
+-- Do not infer reachability from source spelling: compare actual imports once
+-- all explicit suites have registered their direct/transitive children.
+local expected_suites, inventory_error
+if arg[1] == "--suite-manifest" then
+    expected_suites, inventory_error = SuiteManifest.read(arg[2])
+else
+    inventory_error = "run through qa/check_lua_unit_tests.ps1 (suite inventory required)"
+end
+if not expected_suites then
+    io.stderr:write("[lua_suite_manifest] ERROR -- ", tostring(inventory_error), "\n")
+    os.exit(2)
+end
+
 local suites = {
+	"test_suite_manifest",
 	"test_shared_weapon_appearance",
 	"test_shared_appearance_fade",
 	"test_shared_career_weapon_actions",
@@ -65,6 +81,7 @@ local suites = {
     "test_crt_balance_catalog_engineer",
     "test_crt_retired_big_rebalance",
     "test_crt_talent_selection",
+    "test_crt_career_unlock",
     "test_crt_wire_contract",
     "test_mod_tweaker_transaction",
     "test_mod_tweaker_profiles",
@@ -174,6 +191,8 @@ local suites = {
     "test_wt_ingame_3p_swap_owner",
     "test_wt_menu_preview_owner",
     "test_wt_phase5_runtime_owners",
+    "test_wt_runtime_checks_module",
+    "test_wt_issue946_crowbill_picker",
     "test_cwv_remote_audio",
     "test_cwv_remote_identity",
     "test_cwv_husk_path",
@@ -287,6 +306,7 @@ local suites = {
 	"test_woc_blightreaper_audio",
 	"test_woc_attack_order",
 	"test_woc_phase5_runtime_owners",
+	"test_woc_blightreaper_spirits",
 	"test_woc_load_banner",
     "test_dcp_portrait_materials",
     "test_dcp_player_scope",
@@ -361,6 +381,7 @@ local suites = {
     "test_ct_spawn_eligibility_owner",
     "test_ct_pickup_spawn_owner",
     "test_ct_tab_panel_owner",
+    "test_ct_tab_collectibles_layout",
     "test_ct_boon_grant_owner",
     "test_ct_campaign_graph_owner",
     "test_ct_altar_reuse_owner",
@@ -514,6 +535,9 @@ local suites = {
     "test_gut_career_hud_holder",
     "test_gut_cosmetics_mission_mount",
     "test_gut_module_extraction",
+    "test_gt_regression_module",
+    "test_gut_exclusive_radio",
+    "test_gut_selected_loadout_trace",
     "test_character_dialogue",
     "test_dialogue_staged_isolation",
     "test_gut_dialogue_contract_skip",
@@ -523,6 +547,12 @@ local suites = {
     "test_resource_residency_census",
 }
 
+local explicit_error = SuiteManifest.validate_explicit(suites)
+if explicit_error then
+    io.stderr:write("[lua_suite_manifest] ERROR -- ", explicit_error, "\n")
+    os.exit(2)
+end
+
 for _, suite in ipairs(suites) do
     local register = require(suite)
     if type(register) ~= "function" then
@@ -530,6 +560,13 @@ for _, suite in ipairs(suites) do
     end
     register(Harness, repo_root)
 end
+
+local coverage_error = SuiteManifest.audit(expected_suites, package.loaded)
+if coverage_error then
+    io.stderr:write("[lua_suite_manifest] ERROR -- ", coverage_error, "\n")
+    os.exit(2)
+end
+io.write(string.format("[lua_suite_manifest] OK -- %d discovered suites reached.\n", #expected_suites))
 
 local passed, total, failed = Harness.run()
 if passed then
