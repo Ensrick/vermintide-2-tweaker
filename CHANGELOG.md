@@ -1,5 +1,15 @@
 # Changelog
 
+## 2026-10-24 - One local illusion Apply owner and native realm V2 (#1690, #1693)
+
+Cosmetics and CIM Dev now bundle one canonical Apply presentation class with
+native controller-action readback, pending-completion preservation and safe
+native recipe/realm handoff. Modern read-only backend protection stays enabled;
+only validated local illusion requests are handled by the existing local owner.
+The shared realm primitive honors MODDED_REALM before legacy or sibling state
+across Cosmetics, CIM Dev, MP and General Dev. Old EAC brackets are explicitly
+legacy-only, and MP's separate #1684 UI/progression work remains open.
+
 ## 2026-10-24 - Enforce Lua suite registration completeness (#1700)
 
 The offline Lua gate now discovers every top-level test file independently of

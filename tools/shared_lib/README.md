@@ -27,6 +27,31 @@ fails on the missing declaration itself rather than waiting for the bytes to
 fork. Likewise every canonical `_lib_*.lua` here needs a `Libraries` entry; a
 tools-only library that nothing bundles declares `Consumers = @()`.
 
+## Current-engine realm and local illusion Apply contracts
+
+`_lib_modded_realm_authority.lua` V2 treats a present raw `MODDED_REALM` as
+authoritative: exactly `true` permits modded behavior; false or malformed values
+deny without consulting stale script data or a sibling mod. Only absence uses
+the pre-6.12 fallback. Explicit environment arguments support isolated tests;
+production defaults to the real global table. Its EAC-off bracket is a legacy
+compatibility shim, not a bypass for modern UI restrictions. Never clear
+`GameSettingsDevelopment.read_only_backend`: it also protects real PlayFab writes.
+
+`_lib_local_illusion_apply.lua` owns the complete local Apply presentation for
+Cosmetics and CIM Dev. Consumers inject the native `generic_input_actions` map
+loaded with `local_require`, not ordinary `require`. The owner validates/read-backs
+the controller action table as well as button visibility, requirements, material
+selection and pending completion identity. A missing or dropped action update
+fails closed. Explicit native disable clears actionable UI but preserves the
+pending skin until completion; recipe/realm transitions release old ownership
+before the new native writer runs. The CIM-prefixed window fields and schema-1
+provider name remain intentional compatibility details, not a second implementation.
+Only CIM's facade registers its hooks/provider; the shared class contains no
+CIM-only installer that could be mistaken for a second Cosmetics hook owner.
+
+No new RPC or global backend exemption is part of either contract. The shared
+realm correction does not repair MP's separate modern reward/UI adapters (#1684).
+
 ## Peer parity modes and wire catalogs
 
 `_lib_peer_parity.lua` preserves its original four-argument VMF payload unless

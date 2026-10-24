@@ -1,5 +1,22 @@
 # Crafting in Modded Changelog
 
+## 0.8.142-dev (2026-10-24) -- Shared modern illusion Apply owner (#1690, #1693)
+
+- Supersedes the unpublished 0.8.141-dev candidate and retains its #1656/#1696
+  corrections. Stable CIM 0.8.92 is unchanged.
+- The existing presentation owner is now a compatibility facade over the same
+  canonical class bundled by Cosmetics. Native button state, controller Apply
+  action readback, requirements and pending completion identity form one local
+  transaction. State updates cannot re-enable an explicitly disabled request or
+  erase its selected skin before completion. Recipe/realm changes yield to native.
+- Native action definitions are obtained with local_require. Missing/throwing
+  readers and dropped writes deny Apply rather than enabling an unusable surface.
+  No native backend read-only protection is cleared.
+- Shared realm V2 uses MODDED_REALM before legacy state, denying explicit false
+  and malformed values even when a sibling claims modded. The named shared
+  check is issue1693_shared_native_realm_authority. Offline installed callbacks
+  and both Cosmetics/CIM hook orders are covered; live acceptance is pending.
+
 ## 0.8.141-dev (2026-10-24) -- Fresh #1656/#1696 candidate and diagnostic restoration
 
 - Carries the prepared regression-harness and Necromancer catalog corrections

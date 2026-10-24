@@ -1,5 +1,19 @@
 # crafting_in_modded_dev - engine contact surface
 
+## Modern local illusion Apply (#1690, #1693, 0.8.142-dev)
+
+The existing `_cim_illusion_apply_presentation.lua` is a compatibility facade
+over the byte-synchronized canonical `_lib_local_illusion_apply.lua`, also
+bundled by Cosmetics. Native HeroWindowItemCustomization input at 666-675
+checks `_has_all_crafting_requirements`, its enable/state writers at 1878/1928
+enforce read_only_backend, and completion at 2547 resets actions (game 6.13,
+source 93dea911). The local owner restores validated button/controller state
+after those writers, and obtains definitions via native local_require. An
+explicit disable retains pending identity for completion but is not actionable.
+Recipe/realm handoff releases old ownership before native writes. No native
+backend protection changes. Shared realm V2 uses MODDED_REALM before legacy
+or sibling permission, with malformed/false denial. Public CIM is not changed.
+
 What vanilla VT2/Stingray does at every seam `cim_dev` touches, and why the mod is
 there. This is the per-mod companion to the subsystem set in `docs/engine/`
 (read `docs/engine/README.md` for house style). It does **not** re-explain a

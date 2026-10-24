@@ -1,7 +1,11 @@
 -- _lib_modded_realm_authority.lua -- exact modded-realm authority contract.
 --
--- The raw `script_data["eac-untrusted"]` flag is authoritative while it is
--- true. `Development.application_parameter` retains the launch-time parameter
+-- V2: a present raw native MODDED_REALM is authoritative (only exact true
+-- permits). An explicit false or malformed value cannot inherit permission
+-- from a legacy flag, launch parameter, depth or sibling. Only absent native
+-- state uses the pre-6.12 contract below. No native state is ever written.
+-- The legacy `script_data["eac-untrusted"]` flag permits while it is true.
+-- `Development.application_parameter` retains the launch-time parameter
 -- presence that originally populated the flag, so it remains authoritative if
 -- another synchronous UI shim temporarily clears or falsely restores the raw
 -- field. Modded Progression's balanced, positive integral depth is the final
@@ -12,7 +16,14 @@
 -- copies are synchronized by tools/shared_lib/sync-shared-libs.ps1; never edit
 -- a copy locally.
 
-local M = { VERSION = 1 }
+local M = { VERSION = 2 }
+
+local function native_realm(environment)
+    if environment == nil then environment = _G end
+    if type(environment) ~= "table" then return false, true end
+    local value = rawget(environment, "MODDED_REALM")
+    return value == true, value ~= nil
+end
 
 local function valid_depth(value)
     return type(value) == "number"
@@ -35,7 +46,9 @@ function M.launch_parameter_is_modded(development)
         or rawget(parameters, "eac_untrusted") ~= nil
 end
 
-function M.is_modded(script_data, modded_depth, development)
+function M.is_modded(script_data, modded_depth, development, environment)
+    local native, present = native_realm(environment)
+    if present then return native end
     if type(script_data) == "table" and rawget(script_data, "eac-untrusted") == true then
         return true
     end
@@ -43,11 +56,12 @@ function M.is_modded(script_data, modded_depth, development)
     return valid_depth(modded_depth) and modded_depth > 0
 end
 
--- Resolve CIM's optional stable `mp` sibling surface. A raw true flag remains
--- sufficient when MP is absent; otherwise every malformed/throwing sibling
--- response is denied rather than guessed.
-function M.sibling_is_modded(script_data, get_mod, development)
-    if M.is_modded(script_data, 0, development) then return true end
+-- Native denial must stop before querying a permissive/old MP sibling.
+-- The sibling remains a fallback only for engines without native state.
+function M.sibling_is_modded(script_data, get_mod, development, environment)
+    local native, present = native_realm(environment)
+    if present then return native end
+    if M.is_modded(script_data, 0, development, environment) then return true end
     if type(get_mod) ~= "function" then return false end
     local got_provider, provider = pcall(get_mod, "mp")
     if not got_provider or type(provider) ~= "table" then return false end
@@ -55,6 +69,27 @@ function M.sibling_is_modded(script_data, get_mod, development)
     if type(query) ~= "function" then return false end
     local called, result = pcall(query)
     return called and result == true
+end
+
+-- Engine-free behavioral smoke for each bundled consumer's runtime harness.
+-- Explicit environments avoid changing the live realm or account protection.
+function M.runtime_check()
+    local legacy = { ["eac-untrusted"] = true }
+    if M.is_modded({}, 0, nil, { MODDED_REALM = true }) ~= true then
+        return "#1693 native modded authority is not honored before backend startup"
+    end
+    for _, value in ipairs({ false, 1, "true" }) do
+        local calls = 0
+        if M.sibling_is_modded(legacy, function()
+            calls = calls + 1
+            return { is_modded_realm = function() return true end }
+        end, nil, { MODDED_REALM = value }) ~= false or calls ~= 0 then
+            return "#1693 native denial fell through to legacy/sibling permission"
+        end
+    end
+    if M.is_modded(legacy, 0, nil, {}) ~= true then
+        return "#1693 pre-6.12 absent-native fallback was lost"
+    end
 end
 
 -- When MP is available, only MP may own a nested EAC-off bracket because its
@@ -72,6 +107,8 @@ function M.sibling_with_eac_off(script_data, get_mod, func, self, on_error, ...)
     return M.with_eac_off(script_data, nil, func, self, on_error, ...)
 end
 
+-- LEGACY UI shim only: this does not bypass 6.12+'s read_only_backend gates.
+-- Never clear that native protection: it also prevents real PlayFab commits.
 -- #434's EAC-off bracket. The original flag and both counters are restored
 -- before an optional error observer and before the original error is re-raised.
 -- The explicit return count retains nil holes from vanilla methods.

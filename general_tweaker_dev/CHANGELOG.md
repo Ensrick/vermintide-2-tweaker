@@ -1,5 +1,16 @@
 # General Tweaker Changelog
 
+## 0.2.276-dev (2026-10-24) -- Shared native realm authority (#1693)
+
+- Updates the existing sibling realm adapter to the canonical V2 contract:
+  native MODDED_REALM decides before stale legacy flags or a permissive sibling.
+  False/malformed native values deny, while absent native state retains old-game
+  compatibility. No account-protection flag is changed.
+- Registers issue1693_shared_native_realm_authority in the existing level-control
+  owner, and corrects #1509's smoke expectation for native realm precedence.
+  Retains the prior unpublished boot-time chat-warning correction. Stable
+  Tweaker: General is unchanged; this is a dev candidate, not runtime acceptance.
+
 ## 0.2.275-dev (2026-09-13) -- reissue unpublished 0.2.274-dev (#727, #1509) [tooling]
 
 - 0.2.274-dev was merged on 2026-09-12 (PR #1580) but never uploaded to the
