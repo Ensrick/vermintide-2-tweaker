@@ -442,60 +442,16 @@ local function _cat_set(category, setting_id, value)
     if MT then MT:set(mod_id, setting_id, value) end
 end
 
--- Native menu sound feedback. The real Options menu fires Wwise events on the
--- view's wwise_world: "Play_hud_select" on a commit (options_view.lua:544 etc.)
--- and "Play_hud_hover" on hover-enter (options_view.lua:423 etc.).
---
--- (v0.2.82-dev) ROOT-CAUSE FIX for "no menu sounds" (enter/exit/click/hover all
--- silent in the standalone in-mission view). The prior helper did
--- `World.wwise_world(Managers.world:world("music_world"))` — WRONG on PC. On
--- Windows `GLOBAL_MUSIC_WORLD = true` (boot_init.lua:23), so the music world is
--- NOT registered with Managers.world; it lives as the standalone boot globals
--- `MUSIC_WORLD` / `MUSIC_WWISE_WORLD` (boot_init.lua:31-33). `Managers.world:world
--- ("music_world")` therefore returns nil (or a foreign world) and the helper
--- yielded a nil/silent wwise_world, so every WwiseWorld.trigger_event no-op'd.
--- Resolve it EXACTLY as vanilla OptionsView does (options_view.lua:282-288):
--- prefer the pre-resolved MUSIC_WWISE_WORLD global when GLOBAL_MUSIC_WORLD is set,
--- else fall back to Managers.world:wwise_world(world). pcall-guarded; a missing
--- world is silent, never a crash. A one-time debug probe logs which worlds expose
--- a usable wwise_world, so if Play_hud_* are inaudible the log shows the resolution.
-local _wwise_probed = false
-local function _wwise_world()
-    -- PC path: the boot-global music wwise world (vanilla's first branch).
-    if rawget(_G, "GLOBAL_MUSIC_WORLD") and rawget(_G, "MUSIC_WWISE_WORLD") then
-        return MUSIC_WWISE_WORLD
-    end
-    -- Fallback (consoles / dedicated): the music world registered with Managers.world,
-    -- resolved via the MANAGER's wwise_world(world) accessor (matches options_view:287),
-    -- not World.wwise_world(world) — the manager owns the per-world wwise handle.
-    local world = Managers.world and Managers.world:has_world("music_world")
-                  and Managers.world:world("music_world")
-    return world and Managers.world:wwise_world(world)
-end
-local function _wwise_probe()
-    if _wwise_probed then return end
-    _wwise_probed = true
-    pcall(function()
-        -- (v0.2.82-dev) Log the boot-global music world FIRST — that's the one the
-        -- real OptionsView uses on PC and the one _wwise_world() now resolves.
-        mod:debug("[mt:wwise] GLOBAL_MUSIC_WORLD=%s MUSIC_WWISE_WORLD=%s resolved=%s",
-            tostring(rawget(_G, "GLOBAL_MUSIC_WORLD")), tostring(rawget(_G, "MUSIC_WWISE_WORLD") ~= nil),
-            tostring(_wwise_world() ~= nil))
-        local names = { "music_world", "top_ingame_view", "level_world" }
-        for i = 1, #names do
-            local w = Managers.world and Managers.world:has_world(names[i]) and Managers.world:world(names[i])
-            local ww = w and World.wwise_world(w)
-            mod:debug("[mt:wwise] world '%s' present=%s wwise_world=%s",
-                names[i], tostring(w ~= nil), tostring(ww ~= nil))
-        end
-    end)
-end
-local function _play_event(event)
-    pcall(function()
-        local ww = _wwise_world()
-        if ww then WwiseWorld.trigger_event(ww, event) end
-    end)
-end
+-- Native menu sound feedback. (v0.2.82-dev) fixed this twin's silent menu by
+-- resolving the wwise world exactly as vanilla OptionsView does
+-- (options_view.lua:282-288); (#1670) that resolver now lives in
+-- _mod_tweaker_sound.lua so the keep sub-state (the /mod_tweaker command route)
+-- fires on the same world instead of its own stale lookup.
+local sound = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_sound")
+local _wwise_probe = sound.new_probe("standalone")
+local _play_event = sound.play
+-- (#1670) Published for the issue1670_command_route_sound_path check.
+ModTweakerView.gut_sound_resolve = sound.resolve
 -- Commit/click sound (checkbox flip, arrow click, dropdown cycle, slider release).
 local function _play_click() _play_event("Play_hud_select") end
 -- Hover sound — fire on the EDGE (hover-enter) only, never every frame.
