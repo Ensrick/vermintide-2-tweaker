@@ -5,6 +5,12 @@ Architecture, gotchas, and conventions for `weapon_tweaker`. Read alongside
 (pre-release gates), and `CROSS_CHARACTER_PORT_RECIPE.md` (the seven-step procedure
 for adding a new cross-character weapon port).
 
+The Hold-Pose check-owner extraction is revalidated in 0.12.337-dev; its
+0.12.336-dev preparation was unpublished. Its five production checks retain
+the original registrar slot. Test fixtures load the real owner in a private
+environment, and complete suite discovery must reject duplicate registration
+after merging an older branch. Public 0.12.336-beta is a version-only mirror.
+
 ---
 
 ## Design direction (2026-05-23)

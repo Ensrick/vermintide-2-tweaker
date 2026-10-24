@@ -1,5 +1,19 @@
 # Weapon Tweaker Changelog
 
+## 0.12.337-dev (2026-10-24) -- refresh the preserved Hold-Pose owner extraction (#2) [tooling]
+
+- Supersedes the unpublished 0.12.336-dev candidate under a fresh claim and
+  carries its unchanged five-check child, historical registration order and
+  fail-closed missing-child behavior. Parent ceiling remains reduced to 2,210;
+  no baseline increase or new gameplay behavior.
+- Revalidated on current master with complete independent Lua suite discovery.
+  That guard caught and prevented a duplicate registration during the merge;
+  the corrected full branch suite passes 4,301 cases. The real Hold-Pose fixture
+  now loads in a private environment rather than monkeypatching global get_mod.
+- Canonical artifacts/receipts are rebuilt for both mirror versions before
+  review and publication. Tooling evidence does not close gameplay issues or
+  assert a game launch, menu or live visual pass.
+
 ## 0.12.336-dev (2026-10-17) -- split Hold-Pose runtime checks out of the registrar (#2) [tooling]
 
 - Moves the five dev-only Hold-Pose `/wt_regression_test` checks
