@@ -14,6 +14,12 @@ M.SOURCE_COMMIT = "50f8ca93ecc74f95f806e424827c30b6b107cc1f"
 M.SOURCE_REVISION_DATE = "2026-08-23"
 M.PAGE_SIZE = 5
 
+-- Values are GAME keys, not the site's own codeName strings (#1696). The
+-- site names the Necromancer "bw_necro" and her weapons "bw_reaper"
+-- (Ensorcelled Reaper, melee) and "bw_soulsteal" (Soulstealer Staff,
+-- ranged_heat); the game rows are CareerSettings.bw_necromancer
+-- (career_settings_shovel.lua:4) and ItemMasterList.bw_ghost_scythe /
+-- bw_necromancy_staff (item_master_list_shovel.lua:227 / :481).
 M.CAREERS = {
     [1] = "es_mercenary", [2] = "es_huntsman", [3] = "es_knight",
     [4] = "dr_ranger", [5] = "dr_ironbreaker", [6] = "dr_slayer",
@@ -21,7 +27,7 @@ M.CAREERS = {
     [10] = "wh_captain", [11] = "wh_bountyhunter", [12] = "wh_zealot",
     [13] = "bw_adept", [14] = "bw_scholar", [15] = "bw_unchained",
     [16] = "es_questingknight", [17] = "dr_engineer",
-    [18] = "we_thornsister", [19] = "wh_priest", [20] = "bw_necro",
+    [18] = "we_thornsister", [19] = "wh_priest", [20] = "bw_necromancer",
 }
 
 M.WEAPONS = {
@@ -58,7 +64,8 @@ M.WEAPONS = {
     [74] = "we_life_staff", [75] = "we_javelin", [76] = "wh_1h_hammer",
     [77] = "wh_2h_hammer", [78] = "wh_hammer_shield",
     [79] = "wh_dual_hammer", [80] = "wh_hammer_book",
-    [81] = "wh_flail_shield", [82] = "bw_reaper", [83] = "bw_soulsteal",
+    [81] = "wh_flail_shield", [82] = "bw_ghost_scythe",
+    [83] = "bw_necromancy_staff",
 }
 
 M.PROPERTIES = {
@@ -231,6 +238,44 @@ end
 function M.trait_key(trait_table_name, id)
     local values = M.TRAITS[trait_table_name]
     return values and values[_integer(id)] or nil
+end
+
+local WEAPON_SLOT_TYPES = { melee = true, ranged = true }
+
+local function _sorted_ids(map)
+    local ids = {}
+    for id in pairs(map) do ids[#ids + 1] = id end
+    table.sort(ids)
+    return ids
+end
+
+-- #1696: every catalogue value must name a live row, or an import fails with
+-- "item unavailable" / "career unavailable". Careers must be CareerSettings
+-- tables; weapons must be ItemMasterList melee/ranged rows. rawget because
+-- ItemMasterList's __index logs a Crashify exception per missing key
+-- (item_master_list.lua:133-137). Returns sorted "kind id=key" strings.
+function M.unresolved_game_keys(item_master_list, career_settings)
+    local missing = {}
+    local career_ids = _sorted_ids(M.CAREERS)
+    for i = 1, #career_ids do
+        local id = career_ids[i]
+        local key = M.CAREERS[id]
+        if type(career_settings) ~= "table"
+                or type(rawget(career_settings, key)) ~= "table" then
+            missing[#missing + 1] = "career " .. tostring(id) .. "=" .. tostring(key)
+        end
+    end
+    local weapon_ids = _sorted_ids(M.WEAPONS)
+    for i = 1, #weapon_ids do
+        local id = weapon_ids[i]
+        local key = M.WEAPONS[id]
+        local master = type(item_master_list) == "table"
+            and rawget(item_master_list, key) or nil
+        if type(master) ~= "table" or not WEAPON_SLOT_TYPES[master.slot_type] then
+            missing[#missing + 1] = "weapon " .. tostring(id) .. "=" .. tostring(key)
+        end
+    end
+    return missing
 end
 
 function M.sort(builds, mode)
