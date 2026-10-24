@@ -132,7 +132,7 @@ WARNINGS, `2` (or higher) = ERRORS. `run_all.ps1` aggregates these so that:
   data<->loc diffs) must not block unrelated commits, because a gate that blocks
   on noise trains sessions to bypass the pre-commit hook with `--no-verify`.
 - **Errors (exit >=2) fail the gate.** `run_all` exits with the highest error
-  code seen. The pre-commit hook (`qa/run_all.ps1 -Quick -SkipLua`) therefore
+  code seen. The pre-commit hook (`qa/run_all.ps1 -Quick -SkipLua -Staged`) therefore
   blocks only on genuine breakage.
 - **Execution failures (reserved exits 90–99) always fail the gate before policy
   is applied.** An Advisory check may report legitimate exit 1/2 findings, but a
@@ -620,9 +620,25 @@ so the incomplete-checkout adversary now covers every supported slice.
 manifest and reads only the canonical remote's symbolic HEAD with bounded,
 noninteractive `git ls-remote`. Ordinary QA accepts genuine network
 unavailability as a visible skip while retaining every pinned offline gate; a
-reachable lagged, moved, malformed, or ambiguous remote is blocking. Canonical
-WT public/dev BuildOnly and release runs require remote freshness, so an
-unavailable remote also blocks there. Offline adversarial fixtures cover exact
+reachable malformed or ambiguous remote is blocking. A reachable lagged or
+moved ref/tip blocks ordinary QA only when the checked change set touches
+weapon-history inputs or a WT stream (`weapon_tweaker/`, `weapon_tweaker_dev/`,
+`tools/weapon-history/`, or a `qa/` path naming `wt_history`); any other
+determinate change set gets a visible ADVISORY (exit 1, a run_all warning)
+naming the moved tip and the #1682 re-anchor, so a game patch cannot freeze
+every mod again (issue #1683). The change set is the index under `-Staged`
+(pre-commit passes `run_all.ps1 -Quick -SkipLua -Staged`), otherwise the index
+plus working tree plus one committed range: the hosted PR range
+(`origin/$GITHUB_BASE_REF...HEAD`), the push range (event `before...HEAD`), or
+for local and `workflow_dispatch` runs the branch range `origin/master...HEAD`
+(empty on the default branch); local runs also count untracked unignored
+files. Path lists are read NUL-separated (`-z`) so a C-quoted name cannot slip
+out of scope. A missing range base, or any git failure, fails closed.
+`wt_history_freshness_scope.ps1` owns that scope and the main-body decision
+(`Invoke-WtHistoryFreshnessDecision`: state, printed line, exit code), which
+the self-test drives end to end. Canonical WT public/dev BuildOnly and release
+runs require remote freshness (`-RequireRemoteFresh` bypasses the scope), so
+an unavailable remote or any movement still blocks there. Offline adversarial fixtures cover exact
 tip, lag, default-branch movement, malformed/ambiguous output, timeout, and the
 optional-versus-required unavailability split under both PowerShell hosts. The
 1--60 second total budget includes bounded tree-termination proof: PS7 uses
@@ -733,7 +749,7 @@ gate; strict `-SourceRepo ... -RequireSource` requires every source proof.
 | `check_wt_history_patch_4_6_reproducibility.ps1` | ✅ OK (2026-08-29) | Issue #1436 source-exact Hagbane-only Patch 4.6 gate: two finesse-DoT profile leaves, two current routes, current-schema private rehydration, Ricochet/weapon-diagram/refactor exclusions, primary/oracle agreement, and byte-exact public/dev catalogs. |
 | `run_wt_history_patch_4_6_host_matrix.ps1` | ✅ OK (2026-08-29) | Issue #1436 blocking dual-host validator for the complete six-file/18-object Patch 4.6 source closure, one-DLC-blob-identity adversary, no-fetch/no-lock extraction and exact raw-environment restoration; strict `-RequireSource` performs and requires both regenerations, while source-less CI is explicitly pinned-only. |
 | `check_wt_history_patch_6_0_reproducibility.ps1` | ✅ OK (2026-08-29) | Issue #1436 full-QA gate for the bounded Patch 6.0 shield-scalar and Fireball-profile slice; exact primary/oracle reproduction and catalog generation pass from the complete pinned source checkout. |
-| `check_wt_history_source_freshness.ps1` | ✅ OK (2026-10-17) | Issues #1682/#1529/#1436/#540 central 6.13.0 schema-2 semantic anchor equals the observed canonical default tip with an empty metadata gap; the strict reader retains schema-1 direct-parent/README-only compatibility. Ordinary offline QA may visibly skip only unavailable network, while WT BuildOnly/release requires exact remote ref/tip freshness without fetch/FETCH_HEAD mutation. Injected 750/1687/563 ms deadline traces prove every programmed wait, including the 5763 ms resume adversary. Real PS5.1 taskkill integrations accept exact success or exact helper-contained deadline timeout with target retention through final cleanup; malformed/nonzero/unproven results fail, the delayed 12.5-second case pins its 1.5-second budget without a wrapper child, scheduler/OS latency remains diagnostic, and one real hanging-helper case retains exact cleanup proof. |
+| `check_wt_history_source_freshness.ps1` | ✅ OK (2026-10-17) | Issues #1682/#1529/#1436/#540 central 6.13.0 schema-2 semantic anchor equals the observed canonical default tip with an empty metadata gap; the strict reader retains schema-1 direct-parent/README-only compatibility. Ordinary offline QA may visibly skip only unavailable network, while WT BuildOnly/release requires exact remote ref/tip freshness without fetch/FETCH_HEAD mutation. Issue #1683: in ordinary QA a moved ref/tip blocks only a change set touching weapon-history inputs or a WT stream and is otherwise a visible advisory; fixtures pin the path classifier, NUL path parsing, every decision state with its exit code and printed line, and real staged/union/untracked/branch-range/PR-range/push-range/dispatch/C-quoted-name/indeterminate git change sets under both hosts. Injected 750/1687/563 ms deadline traces prove every programmed wait, including the 5763 ms resume adversary. Real PS5.1 taskkill integrations accept exact success or exact helper-contained deadline timeout with target retention through final cleanup; malformed/nonzero/unproven results fail, the delayed 12.5-second case pins its 1.5-second budget without a wrapper child, scheduler/OS latency remains diagnostic, and one real hanging-helper case retains exact cleanup proof. |
 | `check_wt_history_source_checkout.ps1` | ✅ OK (2026-09-01) | Offline PS7/PS5.1 adversary proves that stale/partial Git trees visibly skip ordinary regeneration and fail closed under `-RequireSource` for the Patch 2.0.6, 2.0.9.1, 2.0.10, 3.1, 3.2, 4.1.1, 4.6, 5.2, 6.0, 6.6, 6.8, 6.11.0, and Hotfix 6.11.2 gates. |
 | `run_wt_history_source_host_matrix.ps1` | ✅ OK (2026-09-01) | Issue #540 blocking dual-host owner for the generic freshness and incomplete-checkout self-tests. Full QA invokes it exactly once; static coverage forbids patch-specific matrices and `run_selftests.ps1` from multiplying the same process fixtures. |
 | `run_wt_history_patch_6_6_host_matrix.ps1` | ✅ OK (2026-10-17) | Issues #1682/#1529/#1436 blocking dual-host gate for the exact Patch 6.6 Deepwood Staff adjacent boundary, 6.13.0 current guards, independent-oracle agreement, and byte-exact public/dev catalogs. |
