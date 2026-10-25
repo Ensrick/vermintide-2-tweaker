@@ -1,5 +1,25 @@
 # Modded Progression — Changelog
 
+## 0.2.45-dev (2026-10-25) -- Close unsupported daily reroll action (#1684) [not-started]
+
+- Source review found a distinct backend path outside the automatic daily
+  rotation interception: native daily replacement enqueues `refreshQuest`
+  without an EAC challenge or a `read_only_backend` check. This establishes a
+  reachable local enqueue, not observed network dispatch or an account change.
+- A single owner now refuses modded reroll availability and direct backend
+  rerolls until a local replacement transaction exists. It also intercepts
+  stale close-button actions before native UI can block input with a nil poll
+  id. Close intent is sampled before hiding the affordance and its stale hover
+  is cleared, so subsequent normal claim/expand clicks still reach native UI.
+  Official argument/return tuples remain native.
+- Malformed or throwing realm authority fails closed. No quest/ledger state,
+  EAC flag, backend read-only setting or achievement protection is changed.
+  Added `issue1684_daily_reroll_backend_boundary` and installed-callback QA,
+  including isolated execution of native producer/UI fixtures when available.
+- This safety slice does not implement local rerolls, the modern daily
+  completion/filter UI, Emporium button/action adapters, or container awards.
+  Actual installed-game launch remains unverified; no live-test invitation.
+
 ## 0.2.44-dev (2026-10-24) -- Shared current-engine realm authority (#1693)
 
 - Supersedes unpublished 0.2.43-dev and retains #1692's observation-only loot

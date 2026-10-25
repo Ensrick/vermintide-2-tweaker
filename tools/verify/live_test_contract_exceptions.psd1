@@ -1014,7 +1014,7 @@
             )
         }
         @{
-            ModId='cim_dev'; ModTree='0268889253c2a64cac0a8ad51dc60c311e251653'
+            ModId='cim_dev'; ModTree='cb10f83fd4981dadff30d22f7164a9d1c9ac78bf'
             Source='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_loadout_wire_owner.lua'
             Marker='[cim:921]'; AddRoute=$true
             Signature='[cim:921] dropped invalid rarity metadata source=%s peer=%s slot=%s value=%s count=%d/%d'
@@ -1029,7 +1029,7 @@
             )
         }
         @{
-            ModId='cim_dev'; ModTree='0268889253c2a64cac0a8ad51dc60c311e251653'
+            ModId='cim_dev'; ModTree='cb10f83fd4981dadff30d22f7164a9d1c9ac78bf'
             Source='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_loadout_wire_owner.lua'
             Marker='[cim:921]'; AddRoute=$true
             Signature='[cim:921] rarity metadata source=%s peer=%s slot=%s prior=%s current=%s stored=%s->%s count=%d/%d'
@@ -1044,7 +1044,7 @@
             )
         }
         @{
-            ModId='cim_dev'; ModTree='0268889253c2a64cac0a8ad51dc60c311e251653'
+            ModId='cim_dev'; ModTree='cb10f83fd4981dadff30d22f7164a9d1c9ac78bf'
             Source='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_cw_trait_residency.lua'
             Marker='[cim:947]'; AddRoute=$true
             Signature='[cim:947] package=%s ref=%s state=%s detail=%s requests=%d'

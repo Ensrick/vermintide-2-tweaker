@@ -42,6 +42,18 @@ account mirror. Bounded local features may project local state at an owned
 interface/presentation seam, but a complete fresh profile must not mutate the
 canonical mirror until exact isolation and restoration are proven.
 
+## Unsupported daily replacement stays closed (#1684)
+
+Automatic local daily rotation is not the native replace-one-quest action.
+Until a local reroll transaction exists, `_mp_daily_reroll_runtime.lua` denies
+modded backend availability and direct replacement, including unknown IDs.
+Its row-action adapter also removes stale close affordances before native UI
+can block input with no poll id. Official calls preserve native behavior and
+full return tuples; unreadable realm authority denies. Never clear
+`read_only_backend` to make this button appear. The source-qualified paths
+and deterministic check are recorded in `ENGINE_SURFACE.md` and the changelog.
+This is safety hardening, not completion of the daily-row presentation work.
+
 ## Fresh-profile isolation boundary (#840)
 
 The decompiled backend manager exposes three narrow override routes:
