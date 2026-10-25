@@ -137,6 +137,7 @@ local suites = {
     "test_mp_daily_reroll",
     "test_mp_shilling_ui_policy",
     "test_mp_emporium_purchase",
+    "test_mp_emporium_ui",
     "test_mp_loot_diag",
     "test_mp_loot_diag_realm_gate",
     "test_mp_fresh_profile_census",

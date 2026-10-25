@@ -350,3 +350,9 @@ new source-provenance QA wiring remains in `run_all.ps1`. The Lua test layer has
 no runtime dependency on the decompiled source manifest, but this branch must be
 merged after #543 (or rebased once #543 lands) because its QA wiring is additive
 to that commit.
+
+- `tests/test_mp_emporium_ui.lua`: #1684 exact plain-SM preview authorization,
+  pre-platform purchase-request guard, controller/desktop action revalidation,
+  and deferred settlement of the existing synchronous local transaction. Tests
+  distinguish installed callback contracts from optional native-source execution;
+  no backend/account protection flag is changed.

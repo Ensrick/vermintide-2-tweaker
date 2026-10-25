@@ -4,30 +4,32 @@ What vanilla VT2/Stingray does at every seam `modded_progression` (`mp`) touches
 and why the mod is there. This is the per-mod companion to the subsystem set in
 `docs/engine/` (read `docs/engine/README.md` for house style). It does **not**
 re-explain a subsystem the engine docs own, and it does **not** duplicate the
-mod's `PLAN.md` (the full re-enable design, interception map, build order) - it
+mod's `PLAN.md` (the roadmap and explicitly historical research) - it
 names each engine seam, cites the vanilla behavior, and links out. Decompile
 paths are relative to `C:\Users\danjo\source\repos\Vermintide-2-Source-Code`;
 `mp` line numbers are `modded_progression.lua` unless noted. `§N` =
 a `docs/BUG_CLASSES.md` class; `#N` / "issue N" = a GitHub issue. Grep-verified
-2026-08-13 against the decompile.
+2026-08-13 against the decompile. Current realm/Emporium corrections below use
+6.13.0 source `93dea911`; historical line references are not current gate authority.
 
 `mp` re-enables selected vanilla progression surfaces while the complete local
 mission-loot system remains unbuilt. Its target architecture covers XP, loot,
 currency, Okri's Challenges, Lohner's, and keep crafting in the modded realm,
 storing all owned state in VMF settings and never writing to the real PlayFab
-account. Its core architectural insight
-(`PLAN.md` "Core architectural insight") is that `script_data["eac-untrusted"]`
-is NOT one master gate: the PlayFab commit-suppression sites keep the real
-account safe and must stay live, while a separate set of UI sites merely grey out
-buttons and skip reward popups. Historically `mp` flipped that legacy flag to nil
-inside a bracketed UI/progression call and restored it on every exit. Since game
-6.12 these brackets do not bypass modern read_only_backend UI gates (#1684);
-they remain old-game compatibility only. Never clear the native read-only flag,
-which also protects real PlayFab commits. As of v0.2.39-dev,
-simulated daily claims and Silver Shilling Emporium purchases have fully local
-backend interceptions, issue #607 has bounded layer diagnostics, and the Fresh
-profile's items/loadouts slice (#840) is served by an MP-owned interface route;
-the remaining routes in `PLAN.md` are not yet wired.
+account. [PLAN.md](PLAN.md) preserves the original design and historical research;
+this document names current installed seams. Game 6.12+ publishes native
+`MODDED_REALM` and sets `GameSettingsDevelopment.read_only_backend`
+(`application_parameter.lua:150-152`, `game_settings_development.lua:49-50`).
+The latter also protects real PlayFab commits
+(`playfab_mirror_base.lua:2826,2839,2857`) and must never be cleared.
+
+Legacy EAC brackets are old-game compatibility only, not modern UI adapters.
+Local daily claim/backend interception and plain-SM Emporium transactions exist,
+but modern daily-row presentation remains legacy-pending until its separate
+adapter lands. The Emporium owner below does not complete daily rows, #607's
+mission containers, #589's mixed login rewards or #840's remaining Fresh slices.
+The Fresh items/loadouts slice is an MP-owned interface route, not a blanket
+canonical-mirror overlay.
 
 ## Hook table
 
@@ -51,14 +53,13 @@ The named isolated check exercises installed callbacks, not a live backend.
 
 Registration sites use `mod:hook` (full wrapper); the current total is reported
 by `tools/mod-lint/lint-mod.ps1`, not frozen here. `[hook]` =
-full wrapper (can rewrite args/returns). Three route through the shared
-`_with_eac_off` wrapper directly and five through its Fresh-aware sibling
-`_with_eac_off_unless_fresh` (or an inline equivalent), 22 form the #840
-items/loadouts route in `_mp_fresh_profile_runtime.lua`, and the remainder own
+full wrapper (can rewrite args/returns). Legacy compatibility calls use
+`_with_eac_off` or its Fresh-aware sibling; their counts are not frozen here.
+The Fresh items/loadouts route lives in `_mp_fresh_profile_runtime.lua`, and the
+Emporium's five seams live in `_mp_emporium_ui_runtime.lua`. The remainder own
 local progression/read/claim boundaries. There are no `hook_safe` sites and one
-table-form site (the #1637 instance join in the runtime). The `_with_eac_off` wrapper is a single load-bearing
-row-of-concern (issue 434) called out below and shared by all of its callers.
-The 47 sites whose class and method are both string literals are listed in
+table-form site (the #1637 instance join in the runtime).
+The 50 sites whose class and method are both string literals are listed in
 `_mp_hook_targets.lua`; `/mp_regression_test` `mp1671_hook_targets_resolve`
 fails when a loaded class lacks one of those methods or a class is not loaded
 (#1671), and the offline `test_mp_hook_targets_resolve.lua` keeps the list to the source.
@@ -67,18 +68,21 @@ fails when a loaded class lacks one of those methods or a class is not loaded
 
 | Class.method (kind) | Vanilla behavior at the seam | Why mp hooks it | Trap / invariant |
 |---|---|---|---|
-| `_with_eac_off` (shared wrapper, not a hook) `:390` | - | Clears `script_data["eac-untrusted"]` to nil, runs the wrapped vanilla body under `pcall`, then restores the flag AND decrements `mod._mp_eac_depth` on EVERY exit path, re-raising any error transparently | ROW-OF-CONCERN. A throw inside the body must not leak `eac-untrusted = nil` globally: the commit-suppression sites `playfab_mirror_base.lua:2826`/`:2839`/`:2857` gate real-account statistics/weave/item writes on that exact flag [src verified], so a leaked nil re-enables the writes `mp` exists to prevent (issue 434; regression `eac_flag_restored_after_throw` `:412`). Multi-return preserved via `select("#")` + explicit `unpack` bounds - nil-hole collapse class that burned weapon_tweaker v0.12.77/.78 |
+| `_with_eac_off` (shared wrapper, not a hook) | Pre-6.12 compatibility clears/restores the legacy script flag; it does not bypass modern native gates | Preserve the existing bounded bracket, nested depth and complete return/exception contract (#434) | Native `MODDED_REALM` and `read_only_backend` are never written. Real commit protection in 6.13.0 is `read_only_backend` at `playfab_mirror_base.lua:2826,2839,2857`, not the bracketed legacy key |
 
 ### Reward popups + progression UI un-gate (owner doc: `docs/engine/09`, feeds `docs/engine/11`)
 
 | Class.method (kind) | Vanilla behavior at the seam | Why mp hooks it | Trap / invariant |
 |---|---|---|---|
-| `LevelEndViewBase.init` [hook] `:430` | Builds the end-of-mission reward reel (level-up, deed, deus, keep-decoration, event, win-track, versus-level-up); each popup is skipped in init when `is_untrusted` is true [src: `scripts/ui/views/level_end/level_end_view_base.lua:59-71` per PLAN.md] | Run the body with the flag cleared so the reward popups the modded realm earned actually display (`:430`) | Wrapped in `_with_eac_off`; hot-ish (once per mission end) but not per-frame |
-| `HeroViewStateAchievements._create_entries` [hook] `:435` / `_handle_claim_all_challenges` [hook] `:436` | Okri's Challenges list: `_create_entries` sets the `completed`/claimable flag per entry (`:646`); `_handle_claim_all_challenges` gates the claim-all button (`:2992`) [src: `scripts/ui/views/hero_view/states/hero_view_state_achievements.lua`, lines per PLAN.md] | Un-gate the challenge list + claim-all so earned challenges are claimable (`:435`) | Two distinct methods on one class, no hook collision; both `_with_eac_off` |
-| `StoreWindowItemPreview._set_unlock_button_states` [hook] `:442` | Lohner's Emporium: enables/disables the buy button (`:1873`) [src: `scripts/ui/views/store/windows/store_window_item_preview.lua` per PLAN.md] | Enable the buy button for currency the modded realm holds (`:442`) | `_with_eac_off` |
-| `StoreItemPurchasePopup._create_ui_elements` [hook] `:443` | Emporium purchase-confirm popup buy-button disable flag (`:1149`) [src: `scripts/ui/views/store/store_item_purchase_popup.lua` per PLAN.md] | Enable the confirm-buy button (`:443`) | `_with_eac_off` |
+| `LevelEndViewBase.init` [hook] | Current reward-popup setup is gated by `read_only_backend` [src 6.13.0: `scripts/ui/views/level_end/level_end_view_base.lua:59,231`] | Retains the old-game Fresh-aware compatibility wrapper | LEGACY-PENDING on current native gates; this wrapper does not implement local mission rewards or make them available |
+| `HeroViewStateAchievements._create_entries` / `_handle_claim_all_challenges` [hooks] | Native row completion and claim-all visibility read `read_only_backend` [src 6.13.0: `scripts/ui/views/hero_view/states/hero_view_state_achievements.lua:646,2992`] | Retains the existing Fresh-aware legacy presentation wrappers | LEGACY-PENDING: backend-free daily claim routing is not a modern row adapter. The separate daily-row release must own filtering/completion/claim-all without altering native protections |
+| `StoreWindowItemPreview._set_unlock_button_states` [hook; `_mp_emporium_ui_runtime.lua`] | Native preview writes buy-button disabled state [src 6.13.0: `scripts/ui/views/hero_view/windows/store/store_window_item_preview.lua:1872-1880`] | After native presentation, enable only an exact current plain-SM offer satisfying native acquisition flags and the local owner contract | Replaces the retired legacy bracket; no global flag changes and no authorization while pending/busy |
+| `StoreItemPurchasePopup._create_ui_elements` [hook; `_mp_emporium_ui_runtime.lua`] | Native constructor disables purchase in read-only play [src 6.13.0: `scripts/ui/views/store_item_purchase_popup.lua:1149`] | Update only this owned hotspot after native construction and current offer validation | Replaces the retired legacy bracket. Disabled/enabled presentation is never action authority |
+| `HeroViewStateStore.product_purchase_request` [hook; `_mp_emporium_ui_runtime.lua`] | Product routing can reach Steam/DLC before popup creation [src 6.13.0: `scripts/ui/views/hero_view/states/hero_view_state_store.lua:1527-1595`] | Deny unsafe/stale modded products before that routing | Only current validated plain-SM local products proceed; official calls preserve native tuples/errors |
+| `StoreItemPurchasePopup._poll_result_on_enter` [hook; `_mp_emporium_ui_runtime.lua`] | Native chooses a currency with `pairs` and calls `exchange_chips`; controller confirm ignores disabled hotspots [src 6.13.0: `scripts/ui/views/store_item_purchase_popup.lua:1524-1547,1557-1584`] | Revalidate the exact live offer and queue the existing local SM transaction instead of native purchase | No DLC/platform/bundle/mixed/non-SM/foreign/stale offer may use this local action |
+| `StoreItemPurchasePopup.update` [hook; `_mp_emporium_ui_runtime.lua`] | Native transition invokes on-enter before storing state [src 6.13.0: `scripts/ui/views/store_item_purchase_popup.lua:1065-1084,1224-1254`] | Settle the pending local action after native update so synchronous completion is not overwritten | One current pending owner; revalidate before debit, release abandoned/destroyed popups, contain errors without native purchase fallback |
 | `StoreLoginRewardsPopup._create_ui_elements` / `_claim_rewards` + `BackendInterfacePeddlerPlayFab.claim_login_rewards` [hooks] | Popup construction disables the button in modded play; `_claim_rewards` otherwise enters claiming state and calls the peddler method; that method enqueues authenticated `claimStoreRewards` [src: `store_login_rewards_popup.lua:41-59,181-216`; `backend_interface_peddler_playfab.lua:811-828`] | #589 fail-closed boundary: retain/reinforce the disabled UI, intercept direct activation, and reject every modded backend caller before enqueue; official realm is unchanged | Local mixed item/currency transaction is not armed; two runtime checks cover UI + request policy, and textual QA locks both hooks |
-| `HeroWindowItemCustomization._enable_craft_button` [hook] `:449` / `_update_state_craft_button` [hook] `:450` | Vanilla keep crafting bench: `_enable_craft_button` flips the `enable` arg false in modded (`:1878`); `_update_state_craft_button` sets the button-hotspot disable flag (`:1928`) [src: `scripts/ui/views/hero_view/windows/hero_window_item_customization.lua` per PLAN.md] | Re-enable the keep bench craft button so vanilla-cost crafting works (`:449`) | `_with_eac_off`; cim owns the Athanor sandbox, mp owns the keep bench (`docs/CROSS_MOD_ARCHITECTURE.md` Mod 4) |
+| `HeroWindowItemCustomization._enable_craft_button` / `_update_state_craft_button` [hooks] | Native craft visibility and hotspot state read `read_only_backend` [src 6.13.0: `scripts/ui/views/hero_view/windows/hero_window_item_customization.lua:1877-1905,1928`] | Retains the existing Fresh-aware legacy wrapper | Not a current native-menu crafting implementation; keep account protection unchanged and treat a local crafting transaction/presentation adapter as separate work |
 
 ### Bounded mission-loot layer diagnostics (issue 607)
 
@@ -153,15 +157,20 @@ locks both).
 | live items interface instance, every routed method a sibling shadowed (table-form `mod:hook(instance, method, wrapper)` from `R.tick`) | A sibling that hooks the INSTANCE gets a separate VMF chain whose tail is the vanilla method: the origin is remapped through `_registry.uids` and `create_internal_hook` installs a raw field on the instance [src: vmf `hooks.lua:106-120,176-193,305-308`]; `get_loadout_interface_by_slot` and `get_interface("items")` both return that instance [src: `backend_manager_playfab.lua:201-208,329-341`] | Join the instance chain with the same wrapper closure the class hook uses (issue 1637: Tweaker: Weapons Dev and Tweaker: Cosmetics shadow `get_loadout` / `get_loadout_item_id`, Weapons Dev also the loadout writes), so a call through the instance reaches the same per-call decision | Once per (instance, method), weak-keyed by instance; one bounded `[mp:fresh] instance_join methods=...` receipt per batch; never installed while the route is unresolved; `mp840_fresh_route_instance_shadows_joined` proves every live shadow is joined |
 | `BackendInterfaceItemPlayfab.get_all_backend_items` / `.get_all_fake_backend_items` / `.get_loadout` / `.get_bot_loadout` / `.get_career_loadouts` / `.get_selected_career_loadout` / `.get_default_loadouts` / `.get_default_override` / `.get_loadout_item_id` / `.get_backend_id_from_cosmetic_item` / `.get_unlocked_weapon_poses` / `.get_equipped_weapon_pose_skins` / `.get_equipped_weapon_pose_skin` / `.sum_best_power_levels` / `.equipped_by_loadout` / `.is_equipped_by_any_loadout` [hooks] | The root reads of the items interface refresh from and return the canonical mirror's inventory, fake cosmetic rows, and per-career character data [src: `backend_interface_item_playfab.lua:37-160,384-544,760-800,894-902`]; every consumer reaches this one object through `get_interface("items")` or the loadout override registry [src: `backend_manager_playfab.lua:201-209,329-341`] | Serve the MP-owned Fresh view (seeded once per profile generation) only when modded realm + `starting_state == "fresh"` + boot-time resolution + no fault all hold; otherwise delegate to the original method | Per-call decision, no native mutation, so every exit path (setting, realm, disable, fault, re-enable) is a restore. `get_loadout_item_id` never answers an equipment id the same view cannot resolve: it falls back to the seeded career default, else nil, with one bounded `slot_fallback` receipt per (career, slot, id) (issue 1637). Derived methods (`get_filtered_items`, `has_item`, `equipped_by`, `get_cosmetic_loadout`, `get_loadout_by_career_name`, ...) follow through `self:` and are NOT hooked (the two existing `has_item` / `has_weapon_illusion` hooks from #577 stay the only entry-point hooks on this class). A handler throw latches `official:fault` and delegates; mechanism default loadouts (versus) return nil under Fresh |
 | `BackendInterfaceItemPlayfab.set_loadout_item` / `.set_loadout_index` / `.add_loadout` / `.delete_loadout` / `.set_weapon_pose_skin` [hooks] | Validate against the item map, then write the mirror's character data / loadout index / pose skin [src: `backend_interface_item_playfab.lua:257-276,587-602,635-670`; `playfab_mirror_base.lua:1928-1942,1968-2068,2253-2255`] | Commit copy-on-write to the persisted profile with vanilla's validation (unknown item, `magic` rarity, cosmetic slots store the item key) and never touch the native mirror | A failed persist discards the copy and returns the vanilla failure value (`false` / nil) without delegating, so official state stays byte-identical and the route stays active; `mp840_fresh_route_write_never_touches_native` checks this in-game |
-| `_with_eac_off_unless_fresh` + inline `_create_entries` / `_handle_claim_all_challenges` variants (wrapper, not a hook) | The level-end reward reel, Okri's achievement `completed` flag / claim-all visibility, and the keep bench craft button are gated on `eac-untrusted` [src: `level_end_view_base.lua:59`; `hero_view_state_achievements.lua:646,2992`; `hero_window_item_customization.lua:1878,1928`] | While the Fresh route is active these un-routed slices run vanilla's modded body with the flag intact (greyed / skipped) instead of being silently official-backed; daily quest rows (`entry_type == "quest"`) keep the #434 bracket | `mp840_fresh_unavailable_slices_gated` asserts the flag is intact inside the wrapper only when the route is active |
+| `_with_eac_off_unless_fresh` + inline `_create_entries` / `_handle_claim_all_challenges` variants (wrapper, not a hook) | Current level-end, achievement row/claim-all and crafting sites read `read_only_backend` [src 6.13.0: `level_end_view_base.lua:59`; `hero_view_state_achievements.lua:646,2992`; `hero_window_item_customization.lua:1878,1928`] | Retains old-game Fresh isolation behavior: do not clear even the legacy flag for un-routed Fresh slices | The old bracket on daily rows is not a current row adapter. Keep those rows legacy-pending and native protection intact until their separate owned implementation |
 
 ### Achievement progress tracking (row-of-concern) (owner doc: `docs/engine/11`)
 
 | Class.method (kind) | Vanilla behavior at the seam | Why mp hooks it | Trap / invariant |
 |---|---|---|---|
-| `AchievementManager.trigger_event` [hook] `:460` | The entry point for EVERY achievement progress event (kill counts, mission completion, tome/grim, etc.); returns immediately when `DEDICATED_SERVER or script_data["eac-untrusted"]` is true [src: `scripts/managers/achievements/achievement_manager.lua:124-125` verified] | Run the body with the flag cleared so challenge progress counters actually tick - without this, un-gating the claim button gets nothing (PLAN.md research #3) (`:460`) | ROW-OF-CONCERN: highest throw-exposure `_with_eac_off` caller (hot per-mission path) - this is the fn issue 434's restore-on-throw exists to protect. The `DEDICATED_SERVER` half of the gate still holds (only the `eac-untrusted` half is flipped). `AchievementManager.update` (`:294`, the Steam platform-push loop) is deliberately LEFT gated - local tracking needs no Steam push [src: `achievement_manager.lua:294` verified] |
+| `AchievementManager.trigger_event` [hook] | Current native tracking returns when `read_only_backend` is true; platform update also checks it [src 6.13.0: `scripts/managers/achievements/achievement_manager.lua:128-130,298`] | Retains the pre-6.12 legacy compatibility wrapper and its #434 throw/tuple contract | Does not bypass current tracking gates. Never clear the native protection or enable platform writes to make local challenges progress |
 
 ### Simulated daily ownership and claim (issue 568; owner doc: `docs/engine/11`)
+
+Backend ownership/claim boundaries below are not a claim that the modern rows
+are integrated. `_create_entries` / `_handle_claim_all_challenges` remain
+legacy-pending until the separate daily-row adapter release; Emporium does not
+change them or the daily-reroll safety owner.
 
 | Class.method (kind) | Vanilla behavior at the seam | Why mp hooks it | Trap / invariant |
 |---|---|---|---|
@@ -175,29 +184,28 @@ locks both).
 Each note is the minimum needed to read the hooks above; the owning `docs/engine`
 doc and `PLAN.md` carry the full architecture.
 
-### Why the flag is bracketed, not globally cleared (owner: `docs/engine/11`)
+### Legacy bracket compatibility, not current protection (owner: `docs/engine/11`)
 
-`script_data["eac-untrusted"]` gates two unrelated things (PLAN.md "Core
-architectural insight"): (1) UI button-greying / popup-skipping - the ~10 sites
-`mp` un-gates, harmless to flip; (2) PlayFab commit suppression at
-`playfab_mirror_base.lua:2826` (statistics), `:2839` (weaves), `:2857` (items)
-[src verified], the sites that keep the real account safe. `mp` must NEVER leave
-that flag nil outside a wrapped call, or a real-account write leaks out - the
-exact thing the mod exists to prevent. Hence `_with_eac_off` (`:390`) clears the
-flag, runs one vanilla body, and restores it, with a `pcall`+re-raise so a throw
-cannot skip the restore (issue 434). The `mod._mp_eac_depth` counter mirrors the
-bracket so `mod.is_eac_window()` (`:379`) can tell a sibling (cosmetics' #174
-chokepoint) whether the realm is currently un-gated.
+The pre-6.12 EAC bracket remains balanced, nested and throw-safe (#434); that
+historical contract is worth preserving. It is not a 6.13.0 UI or backend bypass.
+Shared realm V2 queries native `MODDED_REALM` before legacy inputs, and modern
+commit suppression reads `GameSettingsDevelopment.read_only_backend` at
+`playfab_mirror_base.lua:2826,2839,2857`. Neither native field may be changed.
+New local features require exact owned presentation/action and transaction
+boundaries, not another flag-clearing wrapper. The Emporium owner below is one
+bounded example, not authorization for unrelated progression routes.
 
-### Backend mirror as the single source of truth (owner: `docs/engine/11`)
+### Backend mirror and owned local projections (owner doc: `docs/engine/11`)
 
-The in-memory `backend_mirror` is what inventory, ownership, and equipment
-consumers read. Issue #577 wires the first durable inventory slice: the local
-transaction is committed to VMF settings first, then its exact item record is
-classified through the same mirror mutator family as vanilla. The overlay is
-re-applied over a fresh mirror after boot and removed on official transition.
-Other progression slices remain backed directly by the currency/unlock/inventory
-stores (`:195`-`:349`) until their planned interceptions land.
+The canonical mirror contains official account state. #577 commits the local
+SM purchase transaction to VMF settings before projecting that exact item's
+owned inventory/unlock data; it does not isolate an entire profile. #840's
+implemented Fresh items/loadouts route uses `_mp_fresh_profile_runtime.lua`
+and `_mp_fresh_profile_state.lua` without mutating the native mirror.
+The entry's `apply_mirror_overlay` and generic serialization helpers remain
+disabled/stubbed; do not wire a blanket overwrite or mark Fresh seeded.
+XP/talents, currencies/store and crafting/loot/decorations isolation remain
+separate slices in [PLAN.md](PLAN.md#fresh-profile-isolation-boundary-840).
 
 ### Sibling API surface (owner: `docs/engine/11`; detail: `docs/CROSS_MOD_ARCHITECTURE.md` Mod 4)
 
@@ -215,15 +223,16 @@ unlocks) live in those mods, not here.
 Pulled from `PLAN.md` (research findings, risks) and the code comments - do not
 re-discover these.
 
-- **`eac-untrusted` is not a single switch you can leave off.** Clearing it
-  globally re-enables real-account PlayFab commits at
-  `playfab_mirror_base.lua:2826`/`:2839`/`:2857`. The flag must be flipped only
-  inside a bracket that restores it on every path including a throw (issue 434) -
-  a leaked nil silently defeats the mod's whole non-destructive premise.
-- **Un-gating the claim button alone does nothing.** Okri's Challenge progress is
-  separately halted at `AchievementManager.trigger_event` (`:124-125`), so the
-  claim popup shows zero progress until the tracking hook also runs the body. Both
-  the UI gate AND the tracking gate must be un-gated (PLAN.md research #3).
+- **No global protection bypass.** In 6.13.0, `read_only_backend` protects
+  statistics/weave/weapon-pose commits at `playfab_mirror_base.lua:2826,2839,2857`.
+  Clearing the legacy key does not bypass it, and clearing the native flag is
+  forbidden. Preserve the legacy bracket's restore-on-throw contract only for
+  compatibility; it is not a new-feature implementation strategy.
+- **A claim button alone is not local progression.** Current native tracking and
+  row/claim-all gates are separate read-only sites
+  (`achievement_manager.lua:128-130,298`;
+  `hero_view_state_achievements.lua:646,2992`). Daily claim backend isolation
+  does not prove modern row completion/filtering or full achievement tracking.
 - **Loot-rolling probabilities are server-side and not in the Lua tree.** The
   chest-open / property-roll / trait-roll weight tables live in PlayFab
   CloudScript, not `scripts/`. Issue #607 explicitly rejects hand-tuned
@@ -255,14 +264,38 @@ re-discover these.
 
 Follows `docs/engine/README.md` maintenance rules: if an mp hook moves, a guard is
 added, or a cited vanilla line drifts after a game patch, edit the affected row in
-the SAME commit. This doc complements, and must not duplicate, `PLAN.md` (the full
-re-enable design + interception map) - when the interception layer lands, `PLAN.md`
-is the primary and this doc gains the `BackendInterface*Playfab` rows. Per-view UI
-gate interior lines (`level_end_view_base.lua:59-71`, `hero_view_state_achievements`
-`:646`/`:2992`, the store/customization lines) are cited from `PLAN.md`'s decompile
-research; the load-bearing flag/commit sites (`trigger_event`,
-`playfab_mirror_base.lua:2826/2839/2857`) were re-verified this pass. Line numbers
-are against the 2026-07-12 decompile - match crash logs by function name, not line.
+the SAME commit. This doc owns current installed seams; `PLAN.md` preserves the
+roadmap/interception map and explicitly labeled historical research. Historical
+proposals are not current authorization to clear flags or overwrite the mirror. The realm, Emporium, daily-row, crafting and achievement gate citations above
+were checked against game 6.13.0 source `93dea911`. Other inherited citations
+retain their historical scope; resolve by function name against the current
+source before changing a seam, rather than treating a historical flag as current.
 Section shape (hook table -> subsystem notes -> dead ends) matches
 `character_weapon_variants/ENGINE_SURFACE.md`. Reverse index:
 `docs/engine/README.md` "Per-mod surface docs".
+
+## Local Silver Shilling action boundary (#1684/#577)
+
+`_mp_emporium_ui_runtime.lua` replaces only the preview unlock and popup-create
+legacy brackets. A current plain-SM stock row and all native acquisition flags
+are required before a preview authorization is minted; stock/data/price changes,
+missing DLC, local ownership, insufficient funds and pending work fail closed.
+DLC/platform, bundles, mixed currency, non-SM and foreign products are not enabled.
+
+`HeroViewStateStore.product_purchase_request` is guarded before its Steam/DLC
+branches (`hero_view_state_store.lua:1527-1595`). Controller confirmation ignores
+the popup disabled hotspot (`store_item_purchase_popup.lua:1524-1547`), so
+`_poll_result_on_enter` independently revalidates instead of delegating to native
+currency selection / `exchange_chips` (`:1557-1584`). The existing SM transaction
+is shared by a local function; no new backend writer is introduced.
+
+Native `_change_state` invokes on-enter before storing its new state (`:1065-1084`).
+Because the local exchange callback is synchronous, the adapter settles after
+native `update` returns (`:1224-1254`), preventing approved/exit from being
+clobbered back to poll_result. One current authorization and one pending popup
+are retained; no RPC, backend flag spoofing or broad UI replacement is used.
+The named runtime smoke uses detached test state and never purchases a live item.
+
+The shared local transaction also preserves both `pcall` results when checking
+an owned required DLC. Combining `unlock and pcall(...)` collapsed its ownership
+result to nil; the actual-ledger required-DLC test locks the corrected tuple.
