@@ -324,3 +324,100 @@ the SAME commit. Line numbers are against the 2026-07-11 decompile - match crash
 logs by function name, not line. This doc is the template for the other mods'
 `ENGINE_SURFACE.md`; keep the section shape (hook table -> subsystem notes ->
 dead ends) stable.
+
+## #645 installed candidate-diagnostic and first-person graph contract
+
+The existing WeaponUnitExtension._play_3p_anim registration and its returned
+cross-access owner share one callback function. The named
+issue645_reciprocal_style_descriptors check executes that callback through a
+detached synchronous context, then the production pre-RPC dispatcher and capped
+candidate observer. No extra hook/RPC is added; normal remap, audio and ownership
+behavior is unchanged outside that private context. It suppresses only remap
+lookup/logging in the smoke, never saved settings or a live action.
+
+The detached observer has its own enabled gate, emitter, dedupe/count stores and
+body token. Reentrancy rejects; exception/return paths clear the private context.
+The installed-owner marker, exact callback identity, context forwarding,
+non-candidate rejection, dedupe, cap and complete native return tuple are covered
+by test_cwv_candidate_diagnostic_route.lua. A disconnected observer or dispatcher
+cannot pass the named smoke. This is not execution of the VMF dispatcher chain.
+
+The same contract compares reciprocal Spear-and-Shield first-person state-machine
+and wield names plus weapon-authored block/attack/chain fields to their donors.
+Source 6.13.0 / 93dea911: weapon_templates/1h_spears_shield.lua:7-1477,1484-1485
+and es_deus_01.lua:7-1743,1749-1750, relative to scripts/settings/equipment/.
+Native table fixtures use explicit constructor/shared-action stubs; graph parity
+does not establish animation-resource residency, rendered block playback or
+input/state-machine timing. Those remain Solo in-game acceptance. Future style
+families and #786 remote presentation remain separate; this gate exposes none
+of the fail-closed candidates as selectable styles.
+
+## Native Sword-and-Shield component admission (#657)
+
+`_cwv_identity_descriptor_planner.lua` owns descriptor construction only; the
+existing transport installs its local/remote callbacks and retains hook, schema-3
+channel, delivery/ACK, replay, lifecycle and coalesced rebuild ownership. Native
+Empire and Bretonnian Sword-and-Shield join Greatsword's immutable style-family
+transaction. Future families are not implicitly admitted. The style controller
+prepares exact appearance before destroying the live slot and retains its
+existing failure rollback/persistence contract.
+
+Native item KEY is not item TYPE: `es_sword_shield_breton` declares
+`es_1h_sword_shield_breton` [src 6.13: `scripts/settings/dlcs/lake/item_master_list_lake.lua:411-417`].
+The planner queries Cosmetics' Apply-committed provider with the registered item
+type. It forwards the resulting source skin through native world resolution,
+payload, dedupe and receiver reconstruction. Raw unit paths never enter the
+payload; schema and numeric lookup registration do not change.
+
+Only the explicit `cwv_style_world` native base identity may ask Cosmetics'
+schema-1 native admission owner for a left component. Both peers validate the
+exact native key/type, hand, source skin, registered matching donor, source unit,
+current compatible pool and required DLC. The existing CWV-owner-stamped path is
+not weakened. Missing/foreign/stale/throwing inputs fail closed; absent Cosmetics
+or no committed offhand retains ordinary primary/base behavior.
+
+The native red runed GK unit has both blue/purple material aliases [src:
+`scripts/settings/equipment/weapon_skins_lake.lua:141-168`]. A legacy unit-only
+save cannot prove that color; it is intentionally not normalized by guessing.
+Other LA/custom/native material families are not newly admitted by this slice.
+The twelve explicit native mappings are cross-checked against exact source rows.
+
+`issue657_native_shield_style_identity` runs the installed planner factory with
+detached callbacks/ledger and read-only registries, not live gear or network
+traffic. It tests absence fallback and reports a missing/unreadable co-installed
+Cosmetics capability. Offline coverage additionally executes the actual
+committed-state owner, registered receiver, style commit/refusal/rollback, native
+source mappings, adversaries and bounded serialized semantic arguments. These
+are not engine rendering/material acceptance or #786 peer verification. #579's
+generated dual axes, #476's cache namespace and #914's readiness/delivery remain
+separate preserved contracts.
+
+## Integrated native-style admission and detached-check ownership (#657/#645/#692)
+
+Family admission is resolved before inventory/action access or style-state writes.
+A missing predicate retains the legacy Greatsword transaction rule; explicit
+false retains the non-migrated path. A throwing/non-callable predicate or a
+non-Boolean result refuses with `appearance family unavailable`, without store,
+model-data, equipment, persistence or network changes. The actual cycle callback
+tests include both native Sword-and-Shield directions and native Greatsword,
+with absent/existing model metadata and raw table identities retained.
+
+The entry loads the #645 diagnostic contract once into its regression context;
+the identity regression owner never loads a child while checking it. Missing
+injected child remains a visible failed contract.
+
+The #692 `_cwv_issue692_transform_check` owns both its deterministic writer
+exercise and named registration. The entry retains its module and registrar
+together and reuses the single original weapon-transform constructor; normal
+installation supplies no detached appearance API. The render owner invokes that
+cached registrar at its existing first-check boundary. Missing registrar refuses
+installation rather than skipping a check; a missing/changed check module after
+registration returns the original named failure. Existing compatibility handles
+remain the exact WeaponAppearance object/function identities.
+
+`issue692_inverse_transform_application` observes retained numeric state through
+the real immutable builder/consumer/production writer with an explicit detached
+API. It is not live owner/preview/husk/peer, physics, animation or package proof.
+The whole render-registration fixture supplies only detached picker-install,
+log and memory-count collaborators at its existing startup tail; it executes no
+unrelated captured engine-facing checks or real picker installation.

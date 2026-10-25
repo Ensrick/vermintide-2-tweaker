@@ -1,5 +1,24 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.551-dev (2026-10-25) -- Exact shield admission and executable diagnostic ownership (#657, #645, #692) [not-started]
+
+- #657: share a pure descriptor planner between the installed transport and
+  detached checks. Admit only validated native Sword-and-Shield identities from
+  the coordinated Cosmetics0.9.227-dev provider; preserve stamped CWV ownership,
+  schema3 offhand identity, dedupe, acknowledgements and refusal boundaries.
+- Family-admission errors, nonfunctions (including callable tables) and unknown
+  results refuse before action interruption or state writes. Missing optional
+  admission preserves the existing Greatsword-only fallback.
+- #645: the named check now exercises the actual installed animation callback,
+  dispatcher and bounded observer route using its entry-owned helper. This is
+  diagnostic delivery evidence, not animation/resource playback verification.
+- #692: the named inverse-transform check exercises the actual immutable
+  builder/consumer and retained detached production-writer state. Reuse one
+  installed constructor and one cached registrar without growing frozen owners.
+- No new selectable style, RPC, lookup, resource package or damage change.
+  Existing #579/#476/#914/#786 acceptance remains separate; actual startup,
+  live models, transitions and peer rendering are not established by these tests.
+
 ## 0.1.550-dev (2026-10-24) -- Execute animation-picker readiness through its owner (#317)
 
 - Recover the preserved, previously uncommitted picker-contract candidate and

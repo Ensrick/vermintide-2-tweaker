@@ -1,5 +1,21 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.227-dev (2026-10-25) -- Source-qualified native shield appearance admission (#657) [not-started]
+
+- Resolve committed native Sword-and-Shield offhands through twelve explicit
+  source-qualified mappings. Validate current item family, pool membership,
+  donor unit and DLC ownership before exposing a semantic offhand identity.
+- Unit-only saved state can normalize only when one exact native mapping is
+  provable. Shared-unit runed material variants remain rejected as ambiguous;
+  this does not admit Loremaster/custom material aliases by first match.
+- The existing CWV appearance sender consumes this committed identity without
+  adding RPCs, numeric lookup entries or transmitted unit paths. Requires the
+  coordinated CWV0.1.551-dev descriptor admission. Current peers refuse
+  unsupported or mismatched identity; older-version live interoperability
+  remains unverified.
+- Deterministic provider-to-planner/payload/receiver and refusal tests pass;
+  actual game launch, transitions and remote rendering remain unverified.
+
 ## 0.9.226-dev (2026-10-24) -- Complete local illusion Apply and shared native authority (#1690, #1693)
 
 - Local illusion Apply now owns the button, requirements and controller action

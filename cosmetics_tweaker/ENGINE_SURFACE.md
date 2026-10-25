@@ -500,3 +500,30 @@ SAME commit. Line numbers are against the 2026-07-11 decompile and mod source - 
 crash logs by function name, not line. Structural template is
 `character_weapon_variants/ENGINE_SURFACE.md`; keep the section shape (hook table ->
 subsystem notes -> dead ends) stable.
+
+## Committed native shield identity (#657)
+
+`_cos_native_shield_identity.lua` is a read-only schema-1 component owner used
+by `_cos_offhand_state_runtime.lua`. The existing Apply-committed exact-instance
+provider derives a canonical native source skin from a saved unit only through
+twelve explicit source-qualified shield mappings and the current item/hand pool.
+It never exports hover state, localized names, numeric indexes or raw unit paths.
+No save migration, hook, RPC, global registration or renderer mutation is added.
+
+Native skin ownership is `matching_item_key`, not CWV's generated owner stamp
+[src 6.13: `scripts/settings/equipment/item_master_list_weapon_skins.lua:6266-6288`;
+`scripts/settings/dlcs/lake/item_master_list_lake.lua:575-594`]. The current
+registered target item type, source donor, actual WeaponSkins unit, pool membership
+and all required DLC must agree on each query. Getter failures and unreadable
+unlock state deny. The exported native admission capability validates the same
+proof on receivers; the CWV planner independently checks its semantic fields and
+local rows before accepting an otherwise ownerless native skin.
+
+The generic runed red GK pool option remains unsupported for this normalization:
+blue/purple source skins share its unit but use different material settings
+[`scripts/settings/equipment/weapon_skins_lake.lua:141-168`]. Guessing a skin by
+unit would discard information. Legacy unit-only saves are left intact, and a
+style transition requiring that unprovable component refuses before rebuild.
+Existing generated CWV/Dual Axes committed identity and all LA render/cache paths
+retain their separate owners. Coordinated Cosmetics then CWV publication is
+required; source/fixture results do not establish live model/material parity.

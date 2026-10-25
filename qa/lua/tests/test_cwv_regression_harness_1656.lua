@@ -115,7 +115,9 @@ return function(H, repo_root)
         local captured = {}
         mod._cwv_dev_anim_picker = mod._cwv_dev_anim_picker or { install = function() end }
         mod.info = mod.info or function() end
+        local issue692 = dofile(root .. "_cwv_issue692_transform_check.lua")
         local ctx = {
+            issue692_check = issue692, issue692_register = issue692.register,
             mod_version = "qa-1656", om = om, dbg = function() end,
             rt_register = function(name, fn) captured[name] = fn end,
             variant_definitions = {}, registered_keys = {}, display_names = {},

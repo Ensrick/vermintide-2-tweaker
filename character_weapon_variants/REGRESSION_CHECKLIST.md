@@ -1466,3 +1466,53 @@ any remote-husk or bot verification.
   compound, and changing either Dual Axes toggle does not disturb the other.
 - [ ] Native Bardin Dual Axes plus CWV Kruber and Saltzpyre Dual Axes agree on
   host/client results; all `cwv_axe_cleave_*` profiles are network registered.
+
+## Reciprocal-style diagnostic readiness (#645)
+
+- Named issue645_reciprocal_style_descriptors must execute the returned
+  cross-access owner's exact registered callback, production dispatcher and
+  capped observer with detached state. Missing ownership/route, wrong context,
+  duplicate/cap drift, and broken first-person donor graph fields must fail.
+- Probe success/error/reentrancy must leave live wield caches, saved settings,
+  live diagnostic counters and remap logs untouched. The native delegate's
+  complete nil-containing return tuple must remain exact.
+- Offline table equality is NOT a first-person playback pass. After actual
+  release and launch verification, test both reciprocal Spear-and-Shield styles:
+  block enter/hold/release, push/push-attack, light/heavy charge/release, native
+  restoration, swap, preview reopen and Keep-to-mission transition.
+- Collect bounded candidate-family action rows only; unimplemented reciprocal
+  Sword/Spear/Axe/Glaive families remain unavailable. #1026's consolidated
+  modifiers/requirements are not discarded. Peer acceptance belongs to #786
+  after the applicable Solo checks; no new live-ready status follows from this
+  source-only contract.
+
+## Native reciprocal Sword-and-Shield identity (#657)
+
+- [ ] `issue657_native_shield_style_identity` passes with current co-installed
+  Cosmetics capability; absence-only fallback is not full component coverage.
+- [ ] Installed committed provider -> planner -> payload -> registered receiver
+  preserves distinct primary/offhand identity in both native directions.
+- [ ] Native source mappings, item-key/type, current pool/DLC, stale/foreign/
+  missing/throwing state, semantic tampering and schema bounds remain covered.
+- [ ] Detached style commit prepares appearance once before rebuild; refusal
+  destroys nothing and persists nothing; failed wield rolls back the style.
+- [ ] Ambiguous unit-only runed/material selections refuse without guessing or
+  rewriting the save. No raw unit paths or numeric skin IDs enter the wire.
+- [ ] Canonical two-owner release/launch gates precede solo live acceptance;
+  #786/#476 peer roles and #579/#914 regressions remain separate required tests.
+
+## Integrated source-only admission and transform checks (#657/#645/#692)
+
+- The actual cycle completion callback must reject throwing/non-callable or
+  non-Boolean family admission before item/store/equipment/persistence/network
+  changes. Missing admission retains legacy Greatsword preflight; explicit false
+  follows the non-migrated path. Offline tests preserve absent/existing model
+  metadata and raw store identities for both native shield directions.
+- `issue692_inverse_transform_application` exercises the production immutable
+  descriptor and transform writer with detached retained numeric state; it must
+  fail a discarded write, missing child, wrong registrar or lost API dependency.
+  This is not a substitute for actual model/surface/transition/peer acceptance.
+- Entry-only helper ownership, a single constructor load, exact registration
+  order and unchanged entry/owner ceilings are source QA obligations. No live
+  readiness, stable promotion, #660 umbrella completion or future style family
+  is claimed by these host checks.

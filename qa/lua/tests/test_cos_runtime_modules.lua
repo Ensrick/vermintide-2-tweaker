@@ -46,7 +46,7 @@ return function(H, repo_root)
             H.equal(count_plain(entry, call), 1, name .. " load count")
         end
         for _, name in ipairs({
-            "_cos_offhand_state_runtime", "_cos_offhand_apply_runtime",
+            "_cos_offhand_state_runtime", "_cos_offhand_apply_runtime", "_cos_native_shield_identity",
             "_cos_offhand_diagnostics", "_cos_glow_diagnostics_runtime",
             "_cos_deus_yield_policy",
         }) do

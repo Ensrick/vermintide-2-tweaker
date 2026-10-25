@@ -439,7 +439,9 @@ local function _is_unit(v) return _om.peer_resolver.alive_unit(v, Unit) end
 --     `_resolve_field` and hand WA the already-resolved value.
 local _WA_LIBRARY = mod:dofile(
 	"scripts/mods/character_weapon_variants/_lib_weapon_appearance")
-local WA = _WA_LIBRARY.new()
+-- An explicit detached API is used only by the named #692 writer check.
+-- Normal installation passes nil and retains the native appearance API.
+local WA = _WA_LIBRARY.new(ctx.appearance_api)
 mod._wa_to_quaternion_for_rt = WA.to_quaternion -- compatibility: /cwv regression
 mod._cwv_weapon_appearance = WA  -- cross-file / cross-mod handle (Phase 2+)
 

@@ -410,8 +410,7 @@ _rt_register("issue914_peer_ready_identity_lifecycle", function()
 end)
 
 _rt_register("issue645_reciprocal_style_descriptors", function()
-	local policy = _om.combat_style_policy
-	local runtime = _om.combat_styles
+	local policy, runtime = _om.combat_style_policy, _om.combat_styles
 	if type(policy) ~= "table" or type(runtime) ~= "table" then
 		return "Combat Style policy/runtime is not installed"
 	end
@@ -455,7 +454,9 @@ _rt_register("issue645_reciprocal_style_descriptors", function()
 			return "unproven family escaped fail-closed diagnostics: " .. item_key
 		end
 	end
-	if policy.DIAGNOSTIC_EVENT_CAP > 32 then return "#645 diagnostic cap is unbounded" end
+	local contract = ctx.candidate_diagnostic_contract
+	if type(contract) ~= "table" or type(contract.check) ~= "function" then return "#645 candidate diagnostic contract missing" end
+	return contract.check(policy, _om.cross_access, Weapons)
 end)
 
 _rt_register("issue317_career_scoped_animation_picker", function()

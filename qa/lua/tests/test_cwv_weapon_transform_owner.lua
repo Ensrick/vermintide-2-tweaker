@@ -47,7 +47,7 @@ return function(H, repo_root)
             "local _skin_transform_map = {}",
             "local _crowbill_transform_by_unit = {}",
             "local function _is_unit(v)",
-            "local WA = _WA_LIBRARY.new()",
+            "local WA = _WA_LIBRARY.new(ctx.appearance_api)",
             "local function _apply_scale(unit, scale_tbl)",
             "local function _apply_offset(unit, offset_tbl)",
             "local function _transform_unit(unit, scale_tbl, offset_tbl, rotation)",
@@ -129,8 +129,10 @@ return function(H, repo_root)
                 "owner localizes ctx." .. field)
         end
         H.equal(count_plain(entry,
-            'mod:dofile("scripts/mods/character_weapon_variants/_cwv_weapon_transform_owner")(mod, {'), 1,
-            "entry installs the transform owner exactly once")
+            '_om.install_weapon_transforms = mod:dofile("scripts/mods/character_weapon_variants/_cwv_weapon_transform_owner")'), 1,
+            "entry loads and retains the transform constructor exactly once")
+        H.equal(count_plain(entry, '_om.install_weapon_transforms(mod, {'), 1,
+            "entry installs the retained transform constructor exactly once")
     end)
 
     H.test("CWV entry re-binds the transform producers its surfaces still call", function()

@@ -1602,7 +1602,7 @@ function M.install(mod, deps)
 		if count >= M.DIAGNOSTIC_EVENT_CAP or self.diagnostic_seen[key] then return false end
 		self.diagnostic_seen[key] = true
 		self.diagnostic_counts[candidate_id] = count + 1
-		pcall(printf,
+		pcall(type(deps.emit_candidate_diagnostic) == "function" and deps.emit_candidate_diagnostic or printf,
 			"[cwv:645] candidate=%s item=%s career=%s owner_event=%s sample=%d/%d reason=%s",
 			candidate_id, tostring(item_key_value), tostring(career), source_event,
 			count + 1, M.DIAGNOSTIC_EVENT_CAP, candidate.reason)
@@ -1716,8 +1716,10 @@ function M.install(mod, deps)
 	function runtime:set_item_style(item, backend_id, desired, reason, rebuild)
 		local row = self:describe(item, backend_id)
 		if not row then return false, "unsupported item" end
-		local resolved = M.style(row.item_key, desired)
+		local resolved, family_ok, descriptor_family = M.style(row.item_key, desired), true, row.family_id == "greatsword"
 		if resolved ~= desired then return false, "unsupported style" end
+		if type(deps.style_descriptor_family) == "function" then family_ok, descriptor_family = pcall(deps.style_descriptor_family, row.family_id) elseif deps.style_descriptor_family ~= nil then family_ok = false end
+		if not family_ok or type(descriptor_family) ~= "boolean" then return false, "appearance family unavailable" end
 		local inventory, equipment, slot_name, live_item
 		if rebuild then
 			inventory = local_equipment()
@@ -1744,13 +1746,11 @@ function M.install(mod, deps)
 		row.item_data.mod_data = row.item_data.mod_data or {}
 		row.item_data.mod_data.cwv_combat_style = desired
 		local live_row = live_item and self:describe(live_item)
-		local rebuilding_live_item = live_row and live_row.identity == row.identity
-		if rebuild and rebuilding_live_item and row.family_id == "greatsword" then
+		if rebuild and live_row and live_row.identity == row.identity and descriptor_family then
 			local prepared = false
 			if type(deps.prepare_style_descriptor) == "function"
 					and equipment and equipment.slots then
-				local ok, value = pcall(deps.prepare_style_descriptor,
-					equipment.slots, row.identity, desired)
+				local ok, value = pcall(deps.prepare_style_descriptor, equipment.slots, row.identity, desired)
 				prepared = ok and value == true
 			end
 			if not prepared then

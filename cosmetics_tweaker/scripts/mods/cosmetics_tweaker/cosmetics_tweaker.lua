@@ -104,7 +104,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- ([174:loadout] retired with #174/#500; _diag_probe renamed per §2.2b/#499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.226-dev"
+local MOD_VERSION = "0.9.227-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -712,9 +712,9 @@ mod:dofile("scripts/mods/cosmetics_tweaker/_cos_customization_view_lifecycle").i
 -- receiver-side dual-unit validation. No hook/RPC/command/update registration.
 local _cos_offhand_state_runtime = mod:dofile(
     "scripts/mods/cosmetics_tweaker/_cos_offhand_state_runtime").install(mod, {
-    gk_set = GK_SET,
-    la_bridge = LA_BRIDGE,
-    la_persist = LA_PERSIST,
+    native_shield_identity = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_native_shield_identity"),
+    get_weapon_skins = function() return WeaponSkins and WeaponSkins.skins end,
+    gk_set = GK_SET, la_bridge = LA_BRIDGE, la_persist = LA_PERSIST,
     offhand_names = OFFHAND_NAMES,
     decorate_shield_option = _decorate_shield_option,
     offhand_options = _offhand_options,

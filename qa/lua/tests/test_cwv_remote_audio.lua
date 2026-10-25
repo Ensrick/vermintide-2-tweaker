@@ -14,7 +14,7 @@ return function(H, repo_root)
 
     H.test("CWV delegates substituted animation and audio to vanilla", function()
         local hook_start = assert(source:find(
-            'mod:hook("WeaponUnitExtension", "_play_3p_anim"', 1, true
+            "local function _networked_3p_anim(", 1, true
         ))
         local hook_end = assert(source:find(
             "_cwv_networked_3p_remap_installed = true", hook_start, true

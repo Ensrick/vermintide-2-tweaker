@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.550-dev"
+local MOD_VERSION = "0.1.551-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
 mod._cwv_dev_anim_picker = mod:dofile("scripts/mods/character_weapon_variants/cwv_dev_anim_picker")
@@ -1016,7 +1016,8 @@ local _find_def, _give_variant = _variant_runtime.find_def, _variant_runtime.giv
 -- exact point the inline blocks ran, so registry construction still happens
 -- before the Combat Style install below reads `cwv_imperial_longsword` out of the
 -- type table and before any surface can resolve a def.
-mod:dofile("scripts/mods/character_weapon_variants/_cwv_weapon_transform_owner")(mod, {
+_om.install_weapon_transforms = mod:dofile("scripts/mods/character_weapon_variants/_cwv_weapon_transform_owner")
+_om.install_weapon_transforms(mod, {
 	om = _om,
 	variant_definitions = _variant_definitions,
 	find_def = _find_def,
@@ -1159,6 +1160,7 @@ do
 			},
 		},
 		style_descriptor_transform = _om.combat_style_appearance.transform_decision,
+		style_descriptor_family = _om.combat_style_appearance.supports_family,
 		local_style_descriptor = function(identity)
 			return _om._cwv_local_style_descriptor
 				and _om._cwv_local_style_descriptor(identity) or nil
@@ -1538,7 +1540,13 @@ local _regression_owner_loader = mod:dofile(
 	"scripts/mods/character_weapon_variants/_cwv_regression_owner_loader")
 local _runtime_identity_owner = mod:dofile(
 	"scripts/mods/character_weapon_variants/_cwv_regression_runtime_identity")
+_om.issue692_check = mod:dofile("scripts/mods/character_weapon_variants/_cwv_issue692_transform_check")
 local _cwv_regression_context = {
+	candidate_diagnostic_contract = mod:dofile("scripts/mods/character_weapon_variants/_cwv_candidate_diagnostic_contract"),
+	issue692_check = _om.issue692_check,
+	issue692_register = _om.issue692_check.register,
+	issue692_transform_owner = _om.install_weapon_transforms,
+	issue692_base_item = type(ItemMasterList) == "table" and rawget(ItemMasterList, "es_bastard_sword"),
 	mod_version = MOD_VERSION,
 	om = _om,
 	dbg = _dbg,
