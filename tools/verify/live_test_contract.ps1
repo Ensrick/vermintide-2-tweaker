@@ -715,8 +715,8 @@ rawset(_G, "printf", mod.debug)
         Assert-VtContractFixture ($mp577Routes.Count -eq 2) '#577 must expose exactly the rejection and committed family routes.'
         $mp577Reject = @($mp577Routes | Where-Object { [string]$_.Signature -ceq '[mp:577] purchase_rejected item=%s reason=%s backend=none' })
         $mp577Commit = @($mp577Routes | Where-Object { [string]$_.Signature -ceq '[mp:577] purchase_committed item=%s price=%d balance=%d overlay=%s backend=none' })
-        Assert-VtContractFixture ($mp577Reject.Count -eq 1 -and @($mp577Reject[0].EmitterAnchors).Count -eq 2 -and @($mp577Reject[0].GuardAnchors).Count -eq 4) '#577 rejection authority no longer binds both failure callsites and returns.'
-        Assert-VtContractFixture ($mp577Commit.Count -eq 1 -and @($mp577Commit[0].EmitterAnchors).Count -eq 1 -and @($mp577Commit[0].GuardAnchors).Count -eq 5) '#577 committed authority no longer binds the successful transaction tail.'
+        Assert-VtContractFixture ($mp577Reject.Count -eq 1 -and @($mp577Reject[0].EmitterAnchors).Count -eq 2 -and @($mp577Reject[0].GuardAnchors).Count -eq 5) '#577 rejection authority no longer binds its helper, both failure callsites and returns.'
+        Assert-VtContractFixture ($mp577Commit.Count -eq 1 -and @($mp577Commit[0].EmitterAnchors).Count -eq 1 -and @($mp577Commit[0].GuardAnchors).Count -eq 6) '#577 committed authority no longer binds its helper and successful transaction tail.'
         foreach($mp577Route in $mp577Routes){
             Assert-VtContractFixture ([string]$mp577Route.SourcesByMod.mp -ceq 'modded_progression/scripts/mods/modded_progression/modded_progression.lua') '#577 audited source path drifted unexpectedly.'
         }
@@ -724,6 +724,42 @@ rawset(_G, "printf", mod.debug)
         # literal hash, because every canonical modded_progression ship repoints
         # it to the newly deployed tree.
         $liveRepoRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+        # Execute the consumed overrides against the actual production helper,
+        # not just the historical inline-hook fixture above. MP46 extracted the
+        # transaction; stale inline terminal anchors must fail this positive case.
+        $mp577Path = [string]$mp577Commit[0].SourcesByMod.mp
+        $mp577Source = [IO.File]::ReadAllText((Join-Path $liveRepoRoot $mp577Path), [Text.Encoding]::UTF8).Replace("`r`n", "`n")
+        $invokeCurrentMp577 = {
+            param([string]$Source, $Overrides = $mp577Routes)
+            $document = [pscustomobject]@{ RelativePath=$mp577Path; Content=$Source; Tokens=@(Get-VtLuaTokens -Content $Source) }
+            $scan = Get-VtDirectLuaCallRoutes -Document $document
+            $record = [pscustomobject]@{ ModId='mp'; ModTree=[string]$mp577Commit[0].ModTrees.mp; ReceiptRoutes=@($scan.ReceiptRoutes) }
+            Set-VtReceiptFamilyOverrides -Records @($record) -DocumentsByMod @{mp=@($document)} -Exceptions @{ReceiptFamilyOverrides=@($Overrides)}
+            return $record
+        }
+        $currentMp577 = & $invokeCurrentMp577 $mp577Source
+        foreach ($signature in @($mp577Reject[0].Signature, $mp577Commit[0].Signature)) {
+            $routes = @($currentMp577.ReceiptRoutes | Where-Object { [string]$_.Signature -ceq $signature })
+            Assert-VtContractFixture ($routes.Count -ge 1 -and @($routes | Where-Object { -not $_.Bound }).Count -eq 0) '#577 current helper receipt was not bounded by its consumed override.'
+        }
+        $mp577Mutations = @(
+            @('local function _mp577_local_exchange(self, item_id, price, callback_fn)', 'local function _mp577_other_exchange(self, item_id, price, callback_fn)'),
+            @('return _mp577_local_exchange(self, item_id, price, callback_fn)', '_mp577_local_exchange(self, item_id, price, callback_fn)'),
+            @('if _is_mp_realm() and chip_type == Dailies.REWARD_KIND then', 'if _is_mp_realm() or chip_type == Dailies.REWARD_KIND then'),
+            @('local granted, balance_or_reason = Dailies.purchase(plan)', 'local granted, balance_or_reason = Dailies.other_purchase(plan)'),
+            @('local overlaid, overlay_reason = _mp577_sync_overlay(self)', 'local overlaid, overlay_reason = _mp577_other_overlay(self)'),
+            @('if callback_fn then callback_fn(true, { granted }) end', 'if callback_fn then callback_fn(false, { granted }) end'),
+            @("tostring(item_id), tostring(reason))`n        if callback_fn then callback_fn(false) end`n        return", "tostring(item_id), tostring(reason))`n        if callback_fn then callback_fn(false) end"),
+            @("tostring(item_id), tostring(balance_or_reason))`n        if callback_fn then callback_fn(false) end`n        return", "tostring(item_id), tostring(balance_or_reason))`n        if callback_fn then callback_fn(false) end")
+        )
+        foreach ($mutation in $mp577Mutations) {
+            $changed = $mp577Source.Replace($mutation[0], $mutation[1])
+            Assert-VtContractFixture ($changed -cne $mp577Source) '#577 current-source mutation did not affect production source.'
+            $rejected = $false
+            try { & $invokeCurrentMp577 $changed | Out-Null }
+            catch { $rejected = [string]$_.Exception.Message -match 'anchor drift' }
+            Assert-VtContractFixture $rejected '#577 helper/hook/terminal drift did not fail closed.'
+        }
         $mp577Pin = Get-VtReceiptFamilyPinnedTree -Exceptions $exceptions -Marker '[mp:577]' -ModId 'mp' -RepoRoot $liveRepoRoot
         Assert-VtContractFixture ($mp577Pin.Routes -eq 2 -and $mp577Pin.Tree -cmatch '^[0-9a-f]{40}$') '#577 mp pin derivation lost the two-route family shape.'
         if (-not $mp577Pin.Resolved) {
