@@ -14,6 +14,8 @@ The autodumps are intentionally SEPARATE from the on-demand `/inv_dump` /
 `/mirror_dump` / `/cim_dump_loadout` / `/forge_list` / `/salvage_debug`
 commands — the commands echo to chat for interactive use; the autodumps go
 log-only and are tuned for diagnosing post-hoc from a forwarded log file.
+The bounded #1694 forge realm receipt uses raw engine printf so it remains
+available when VMF mod logging is disabled.
 ]]
 
 local mod = get_mod("cim_dev")
@@ -316,13 +318,16 @@ mod._cim_autodump_forge_open = function(class_name, window_self)
         pcall(mod._cim_autodump_jewelry_probe, window_self, class_name)
     end
 
-    local eac      = script_data and script_data["eac-untrusted"] and "true" or "false"
+    -- #1694: 6.12+ publishes MODDED_REALM, not the retired EAC field
+    -- (application_parameter.lua:150-152). Reuse CIM's entry-owned authority
+    -- so explicit native denial and pre-6.12 fallbacks match the forge itself.
+    local realm    = mod._cim_is_modded_realm() and "true" or "false"
     local sf       = mod._cim_standard_forge_active and "true" or "false"
     local show_only = mod:get("show_only_modded_weapons") and "true" or "false"
     local mech     = Managers.mechanism and Managers.mechanism:current_mechanism_name() or "?"
     local career_name, profile_name = _local_career()
-    _info(label, "eac_untrusted=%s sf_active=%s show_only_modded=%s mech=%s career=%s/%s",
-        eac, sf, show_only, mech, tostring(profile_name), tostring(career_name))
+    printf("[cim:1694] forge_open class=%s modded_realm=%s sf_active=%s show_only_modded=%s mech=%s career=%s/%s",
+        tostring(class_name), realm, sf, show_only, mech, tostring(profile_name), tostring(career_name))
 
     -- Mirror health (modded vs vanilla item counts).
     local items_iface = Managers.backend and Managers.backend:get_interface("items")
