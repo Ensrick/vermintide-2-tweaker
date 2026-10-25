@@ -1,6 +1,7 @@
 -- _cim_keep_forge_interaction.lua -- restore the physical Keep forge in modded.
 --
--- Vanilla disables `forge_access` whenever EAC marks the session untrusted.
+-- Native 6.13.0 gates `forge_access` with read_only_backend (interactions:2211).
+-- CIM uses its explicit modded-realm reader; native account protection is intact.
 -- CIM already owns the resulting standard-forge window and every craft write,
 -- so this module re-enables only that authored interaction in a live hub. The
 -- original predicate and stop callback remain authoritative everywhere else.
@@ -14,7 +15,7 @@ function M.resolve(original_result, eac_untrusted, in_keep)
     return original_result
 end
 
-function M.install(mod, interaction_definitions)
+function M.install(mod, interaction_definitions, logger)
     local forge = interaction_definitions and interaction_definitions.forge_access
     local client = forge and forge.client
     if type(client) ~= "table" or type(client.can_interact) ~= "function" then
@@ -44,7 +45,11 @@ function M.install(mod, interaction_definitions)
         local result = M.resolve(original_result, is_modded, in_keep)
         if result and is_modded and in_keep and not state.reported then
             state.reported = true
-            printf("[cim:624] Keep forge interaction enabled; native forge transition retained")
+            if logger then
+                logger("[cim:624] Keep forge interaction enabled; native forge transition retained")
+            else
+                printf("[cim:624] Keep forge interaction enabled; native forge transition retained")
+            end
         end
         return result
     end

@@ -272,12 +272,12 @@ alongside #1465's Apply presentation composition and window-exit release.
 | Field | Value |
 |---|---|
 | Symptom | The physical forge in the Keep has no interaction prompt in the modded realm even with CIM installed. |
-| Root cause | Vanilla `forge_access.can_interact` returns false when `script_data["eac-untrusted"]` is true, before its existing transition callback can open the standard forge. |
+| Root cause | Current native 6.13.0 `forge_access.client.can_interact` returns `not GameSettingsDevelopment.read_only_backend` before the existing transition callback can open the forge (`interactions.lua:2211-2213`). The EAC-script-flag wording describes older game versions, not the current gate. |
 | Fix version(s) | cim_dev 0.8.79-dev |
 | Category | SOLO |
 | Repro | Enter the modded Keep, approach the physical forge, interact, close the view, and repeat with keyboard/mouse or controller. |
 | Expected post-fix | The native prompt opens CIM's backend-safe standard forge every time. Official realm and non-Keep behavior remain vanilla. |
-| Detection | Offline `test_cim_keep_forge_interaction.lua` passes and `/cim_regression_test` passes `issue624_keep_forge_interaction`; first successful availability emits one `[cim:624]` line. |
+| Detection | Offline `test_cim_keep_forge_interaction.lua` and `/cim_regression_test` check `issue624_keep_forge_interaction` pass. The named check retains its live predicate identity audit and executes detached installed callbacks; it does not open a live menu. First actual successful availability still emits one `[cim:624]` line. |
 
 ### athanor-selector-icon-resource-closure - issue #617
 
