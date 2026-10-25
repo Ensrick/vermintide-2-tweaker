@@ -217,7 +217,7 @@
         # local purchase, and overlay synchronization only.
         @{
             Marker='[mp:577]'; ModId='mp'
-            ModTrees=@{mp='123dcf2eab07d034d03539efcf47eea711d9152d'}
+            ModTrees=@{mp='0e7a05f3795f5d10bb2b9ec0ac852b54d3f28388'}
             SourcesByMod=@{mp='modded_progression/scripts/mods/modded_progression/modded_progression.lua'}
             Signature='[mp:577] purchase_rejected item=%s reason=%s backend=none'
             Bound='at most one rejection receipt per explicit modded-realm Silver Shilling exchange attempt; both failure branches return before subsequent terminal routes'
@@ -234,7 +234,7 @@
         }
         @{
             Marker='[mp:577]'; ModId='mp'
-            ModTrees=@{mp='123dcf2eab07d034d03539efcf47eea711d9152d'}
+            ModTrees=@{mp='0e7a05f3795f5d10bb2b9ec0ac852b54d3f28388'}
             SourcesByMod=@{mp='modded_progression/scripts/mods/modded_progression/modded_progression.lua'}
             Signature='[mp:577] purchase_committed item=%s price=%d balance=%d overlay=%s backend=none'
             Bound='at most one commit receipt per explicit modded-realm Silver Shilling exchange attempt after successful validation and purchase'
@@ -515,7 +515,7 @@
         }
         @{
             Marker='[mp:607]'; ModId='mp'
-            ModTrees=@{mp='123dcf2eab07d034d03539efcf47eea711d9152d'}
+            ModTrees=@{mp='0e7a05f3795f5d10bb2b9ec0ac852b54d3f28388'}
             SourcesByMod=@{mp='modded_progression/scripts/mods/modded_progression/_mp_loot_diag_runtime.lua'}
             Signature='[mp:607] event=%s serial=%d flow=%s request=%s reason=%s chest=%s items=%d local_items=%d local_containers=%d local_uses=%d award_capable=%s open_capable=%s first_missing=%s backend=%s'
             Bound='one-mission observer events are persisted in a twelve-record bounded ledger'
