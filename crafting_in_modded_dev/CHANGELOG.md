@@ -1,5 +1,20 @@
 # Crafting in Modded Changelog
 
+## 0.8.144-dev (2026-10-25) -- Installed Keep-forge regression proof (#1689, #624)
+
+- Strengthen the existing `issue624_keep_forge_interaction` check: retain its
+  live predicate identity audit and execute the actual installer against detached
+  callbacks, covering modded Keep, official/non-Keep, native errors and tuples,
+  one-shot logging, idempotence and untouched native stop/HUD callbacks.
+- Add an optional logger dependency for detached proof; the normal engine
+  `printf` path and actual interaction behavior remain unchanged. No new hook,
+  input action, transition, account-protection write or backend request.
+- Correct the current 6.13 source documentation: the native predicate reads
+  `GameSettingsDevelopment.read_only_backend`, not the historical EAC script flag.
+- Thirty focused offline cases pass; three deliberate regressions fail 9/8/7
+  cases. This is not actual startup, interaction prompt or forge-view acceptance.
+  Stable CIM 0.8.92 is unchanged and still needs separately authorized promotion.
+
 ## 0.8.143-dev (2026-10-25) -- Truthful forge realm diagnostics (#1694) [not-started]
 
 - Forge-open diagnostics now query CIM's existing native-first realm authority

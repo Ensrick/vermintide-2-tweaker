@@ -853,13 +853,8 @@ end)
 _rt_register("issue624_keep_forge_interaction", function()
     local policy = mod._cim_keep_forge_interaction
     local state = mod._cim_keep_forge_interaction_state
-    if type(policy) ~= "table" or type(policy.resolve) ~= "function" then
+    if type(policy) ~= "table" or type(policy.install) ~= "function" then
         return "#624 Keep forge policy is not loaded"
-    end
-    if policy.resolve(false, true, true) ~= true
-        or policy.resolve(false, true, false) ~= false
-        or policy.resolve(false, false, true) ~= false then
-        return "#624 Keep/untrusted interaction boundary changed"
     end
     if type(state) ~= "table" or type(state.original_can_interact) ~= "function"
         or type(state.installed_predicate) ~= "function" then
@@ -871,6 +866,14 @@ _rt_register("issue624_keep_forge_interaction", function()
     if live ~= state.installed_predicate then
         return "#624 another writer replaced the CIM forge_access predicate"
     end
+    local loaded, proof = pcall(mod.dofile, mod,
+        "scripts/mods/crafting_in_modded_dev/_cim_regression_keep_forge")
+    if not loaded or type(proof) ~= "function" then
+        return "#624 installed-predicate proof did not load: " .. tostring(proof)
+    end
+    local checked, failure = pcall(proof, policy)
+    if not checked then return "#624 installed-predicate proof failed: " .. tostring(failure) end
+    return failure
 end)
 
 _rt_register("issue617_athanor_icon_resource_closure", function()
