@@ -30,7 +30,7 @@ local RealmAuthority = mod:dofile(
 -- at the bottom of this same chunk, so no _G or cross-file exposure is needed.
 local _MEM_PROBE_T0_MP = collectgarbage("count")
 
-local MOD_VERSION = "0.2.45-dev"
+local MOD_VERSION = "0.2.46-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([mp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -1011,52 +1011,57 @@ mod:hook("BackendInterfacePeddlerPlayFab", "get_chips", function(func, self, chi
     return func(self, chip_type, ...)
 end)
 
+local function _mp577_local_exchange(self, item_id, price, callback_fn)
+    local chip_type = Dailies.REWARD_KIND
+    local native_offer = Emporium.find_offer(self._peddler_stock, item_id)
+    local offer = Emporium.project_offer(native_offer, Dailies.REWARD_KIND, _mp577_ui.local_owned)
+    local data = offer and offer.data
+    local dlc_owned = true
+    if data and data.required_dlc then
+        local unlock = Managers and Managers.unlock
+        local ok, owned = false, false
+        if unlock then ok, owned = pcall(unlock.is_dlc_unlocked, unlock, data.required_dlc) end
+        dlc_owned = ok and owned == true
+    end
+    local mirror = self._backend_mirror
+    local mirror_ready = _mp577_mirror_ready(mirror)
+    local plan, reason = Emporium.validate({
+        offer = offer,
+        currency = chip_type,
+        expected_price = price,
+        balance = Dailies.balance(),
+        owned = offer and _mp577_ui.local_owned(item_id),
+        available = mirror_ready and offer ~= nil,
+        dlc_owned = dlc_owned,
+    })
+    if not plan then
+        pcall(printf, "[mp:577] purchase_rejected item=%s reason=%s backend=none",
+            tostring(item_id), tostring(reason))
+        if callback_fn then callback_fn(false) end
+        return
+    end
+    local granted, balance_or_reason = Dailies.purchase(plan)
+    if not granted then
+        pcall(printf, "[mp:577] purchase_rejected item=%s reason=%s backend=none",
+            tostring(item_id), tostring(balance_or_reason))
+        if callback_fn then callback_fn(false) end
+        return
+    end
+    local overlaid, overlay_reason = _mp577_sync_overlay(self)
+    mod._mp577_last_purchase = {
+        item_key = item_id,
+        backend_id = granted.ItemInstanceId,
+        balance = balance_or_reason,
+        overlaid = overlaid == true,
+    }
+    pcall(printf, "[mp:577] purchase_committed item=%s price=%d balance=%d overlay=%s backend=none",
+        tostring(item_id), plan.price, balance_or_reason, overlaid and "ready" or tostring(overlay_reason))
+    if callback_fn then callback_fn(true, { granted }) end
+end
+
 mod:hook("BackendInterfacePeddlerPlayFab", "exchange_chips", function(func, self, item_id, chip_type, price, callback_fn, ...)
     if _is_mp_realm() and chip_type == Dailies.REWARD_KIND then
-        local native_offer = Emporium.find_offer(self._peddler_stock, item_id)
-        local offer = Emporium.project_offer(native_offer, Dailies.REWARD_KIND, _mp577_ui.local_owned)
-        local data = offer and offer.data
-        local dlc_owned = true
-        if data and data.required_dlc then
-            local unlock = Managers and Managers.unlock
-            local ok, owned = unlock and pcall(unlock.is_dlc_unlocked, unlock, data.required_dlc)
-            dlc_owned = ok and owned == true
-        end
-        local mirror = self._backend_mirror
-        local mirror_ready = _mp577_mirror_ready(mirror)
-        local plan, reason = Emporium.validate({
-            offer = offer,
-            currency = chip_type,
-            expected_price = price,
-            balance = Dailies.balance(),
-            owned = offer and _mp577_ui.local_owned(item_id),
-            available = mirror_ready and offer ~= nil,
-            dlc_owned = dlc_owned,
-        })
-        if not plan then
-            pcall(printf, "[mp:577] purchase_rejected item=%s reason=%s backend=none",
-                tostring(item_id), tostring(reason))
-            if callback_fn then callback_fn(false) end
-            return
-        end
-        local granted, balance_or_reason = Dailies.purchase(plan)
-        if not granted then
-            pcall(printf, "[mp:577] purchase_rejected item=%s reason=%s backend=none",
-                tostring(item_id), tostring(balance_or_reason))
-            if callback_fn then callback_fn(false) end
-            return
-        end
-        local overlaid, overlay_reason = _mp577_sync_overlay(self)
-        mod._mp577_last_purchase = {
-            item_key = item_id,
-            backend_id = granted.ItemInstanceId,
-            balance = balance_or_reason,
-            overlaid = overlaid == true,
-        }
-        pcall(printf, "[mp:577] purchase_committed item=%s price=%d balance=%d overlay=%s backend=none",
-            tostring(item_id), plan.price, balance_or_reason, overlaid and "ready" or tostring(overlay_reason))
-        if callback_fn then callback_fn(true, { granted }) end
-        return
+        return _mp577_local_exchange(self, item_id, price, callback_fn)
     end
     return func(self, item_id, chip_type, price, callback_fn, ...)
 end)
@@ -1233,12 +1238,36 @@ mod:hook("HeroViewStateAchievements", "_handle_claim_all_challenges", function(f
     return _with_eac_off(func, self, ...)
 end)
 
--- Lohner's Emporium:
---   _set_unlock_button_states (line 1873) — buy button enable
---   _create_ui_elements (line 1149)       — popup buy button disable flag
---   _create_ui_elements (line 57)         — login-rewards claim button
-mod:hook("StoreWindowItemPreview", "_set_unlock_button_states", _with_eac_off)
-mod:hook("StoreItemPurchasePopup", "_create_ui_elements", _with_eac_off)
+-- #1684: exact plain-SM UI/action owner replaces the two inert legacy
+-- presentation brackets. The existing local transaction remains the sole writer.
+local EmporiumUi = mod:dofile("scripts/mods/modded_progression/_mp_emporium_ui_runtime")
+EmporiumUi.install(mod, {
+    policy = Emporium,
+    is_modded_realm = function()
+        local native = rawget(_G, "MODDED_REALM")
+        if native ~= nil then
+            if type(native) == "boolean" then return native end
+            return nil
+        end
+        return _is_mp_realm()
+    end,
+    get_peddler = function()
+        local backend = Managers and Managers.backend
+        local interfaces = backend and backend._interfaces
+        return type(interfaces) == "table" and rawget(interfaces, "peddler") or nil
+    end,
+    mirror_ready = _mp577_mirror_ready,
+    clock = os.time,
+    dlc_owned = function(name)
+        local unlock = Managers and Managers.unlock
+        return unlock and unlock:is_dlc_unlocked(name) == true or false
+    end,
+    local_owned = _mp577_ui.local_owned,
+    balance = Dailies.balance,
+    local_exchange = _mp577_local_exchange,
+    rt_register = _rt_register,
+    print_log = printf,
+})
 -- #589: this surface previously used _with_eac_off, which deliberately
 -- un-greyed a button whose authenticated claimStoreRewards write was not
 -- intercepted. Keep the native modded-realm disable state and reinforce it

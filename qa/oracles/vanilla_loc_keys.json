@@ -13,6 +13,10 @@
     {
       "key": "return_to_game_button_name",
       "evidence": "scripts/ui/views/ingame_view_menu_layout.lua:57"
+    },
+    {
+      "key": "hat",
+      "evidence": "scripts/settings/dlcs/cog/item_master_list_cog.lua:126"
     }
   ]
 }

@@ -385,6 +385,8 @@ return {
 local entry = {}
 entry.display_name = "planted_unresolvable_locless_key"
 entry.item_type = "weapon_skin"  -- vanilla loc key, should NOT error
+entry.item_type = "hat"  -- native semantic type, resolved ONLY by committed oracle
+entry.item_type = "haat" -- near miss must remain unresolved
 entry.description = "planted_annotated_fixture_key" -- name-integrity: non-rendered-test-data
 -- display_name = "planted_commented_example_key"
 "@
@@ -399,12 +401,23 @@ entry.description = "planted_annotated_fixture_key" -- name-integrity: non-rende
         $check2Fired = ($res.errors | Where-Object { $_ -match '\[check2\].*planted_unresolvable_locless_key' }).Count -gt 0
         $check2FalsePos = ($res.errors | Where-Object { $_ -match '\[check2\].*weapon_skin' }).Count -gt 0
         $annotatedFalsePos = ($res.errors | Where-Object { $_ -match 'planted_annotated_fixture_key|planted_commented_example_key' }).Count -gt 0
+        $hatFalsePos = @($res.errors | Where-Object { $_ -match 'item_type = "hat"' }).Count -gt 0
+        $hatNearMissFired = @($res.errors | Where-Object { $_ -match 'item_type = "haat"' }).Count -eq 1
+        # Same fixture, removing ONLY the source-proven hat key must expose the
+        # exact unresolved value. Never baseline or annotate away this check.
+        $withoutHatKeys = @{}
+        foreach ($key in $vanillaKeys.Keys) {
+            if ($key -cne 'hat') { $withoutHatKeys[$key] = $vanillaKeys[$key] }
+        }
+        $withoutHat = Invoke-IntegrityChecks -repoRoot $tmp -vanillaKeys $withoutHatKeys -onlyMods @($modName)
+        $hatOracleRemovalFired = @($withoutHat.errors | Where-Object { $_ -match 'item_type = "hat"' }).Count -eq 1
         $movedCheck2MatchesBaseline = (Normalize-Sig '[check2] selftest_mod: display_name = "same_key" (scripts/mods/selftest_mod/old.lua) resolves in no loc table (mod/any-mod/vanilla) and is not a literal English string') -eq `
             (Normalize-Sig '[check2] selftest_mod: display_name = "same_key" (scripts/mods/selftest_mod/new.lua) resolves in no loc table (mod/any-mod/vanilla) and is not a literal English string')
         $offlineOracleComplete = @(
             'return_to_game_button_name',
             'options_menu_button_name',
-            'quit_menu_button_name'
+            'quit_menu_button_name',
+            'hat'
         ) | ForEach-Object { $committedKeys.ContainsKey($_) } | Where-Object { -not $_ } | Measure-Object | Select-Object -ExpandProperty Count
 
         function Write-SelfTestResult([string]$label, [bool]$passed) {
@@ -418,13 +431,16 @@ entry.description = "planted_annotated_fixture_key" -- name-integrity: non-rende
         Write-SelfTestResult "  CHECK 2 (unresolvable display_name) fired:           " $check2Fired
         Write-SelfTestResult "  CHECK 2 did NOT false-positive on vanilla item_type: " (-not $check2FalsePos)
         Write-SelfTestResult "  CHECK 2 ignores annotated fixtures and comments:       " (-not $annotatedFalsePos)
-        Write-SelfTestResult "  Offline vanilla oracle has source-proven menu keys:    " ($offlineOracleComplete -eq 0)
+        Write-SelfTestResult "  Offline vanilla oracle has source-proven vanilla keys: " ($offlineOracleComplete -eq 0)
+        Write-SelfTestResult "  CHECK 2 resolves native hat through the real oracle:   " (-not $hatFalsePos)
+        Write-SelfTestResult "  CHECK 2 rejects the haat near miss:                    " $hatNearMissFired
+        Write-SelfTestResult "  CHECK 2 detects removing only hat from the oracle:    " $hatOracleRemovalFired
         Write-SelfTestResult "  CHECK 2 ratchet survives source-file moves:             " $movedCheck2MatchesBaseline
         Write-Host ""
         Write-Host "  Raised errors:" -ForegroundColor DarkGray
         foreach ($e in $res.errors) { Write-Host "    - $e" -ForegroundColor DarkGray }
 
-        if ($check1Fired -and $check2Fired -and -not $check2FalsePos -and -not $annotatedFalsePos -and $offlineOracleComplete -eq 0 -and $movedCheck2MatchesBaseline) {
+        if ($check1Fired -and $check2Fired -and -not $check2FalsePos -and -not $annotatedFalsePos -and $offlineOracleComplete -eq 0 -and $movedCheck2MatchesBaseline -and -not $hatFalsePos -and $hatNearMissFired -and $hatOracleRemovalFired) {
             Write-Host "[check_name_integrity] SELF-TEST PASSED" -ForegroundColor Green
             return 0
         } else {

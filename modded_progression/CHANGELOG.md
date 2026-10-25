@@ -1,5 +1,25 @@
 # Modded Progression — Changelog
 
+## 0.2.46-dev (2026-10-25) -- Own local SM purchase actions (#1684/#577) [not-started]
+
+- Replace two ineffective legacy Emporium UI brackets with one bounded owner
+  for preview, product request, popup construction, confirmation and settlement.
+  Only an exact current plain-Silver-Shilling offer can proceed, subject to
+  native acquisition flags, affordability, local ownership, required DLC and
+  expiry; platform/DLC purchases, bundles, mixed and non-SM offers stay closed.
+- Revalidate before the existing local debit/grant transaction. Controller
+  confirmation no longer trusts the disabled hotspot; synchronous local
+  completion settles after native state assignment instead of being overwritten.
+  Preserve official calls, complete return tuples and native exceptions.
+- Preserve both results of the existing required-DLC pcall. No native account
+  protection flag, real purchase writer, telemetry or new backend request is used.
+  Add installed-callback and exact-native source fixtures plus the detached
+  issue1684_local_emporium_action_boundary check; no live purchase in that check.
+- Mark old EAC/blanket-overlay planning as historical and document current
+  native protection and the five actual action seams. This does not implement
+  modern daily rows, login rewards, non-SM purchases, mission containers or the
+  remaining Fresh profile slices. Installed-game acceptance remains unverified.
+
 ## 0.2.45-dev (2026-10-25) -- Close unsupported daily reroll action (#1684) [not-started]
 
 - Source review found a distinct backend path outside the automatic daily

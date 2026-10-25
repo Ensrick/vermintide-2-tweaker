@@ -1,6 +1,15 @@
 # Modded Progression — Plan
 
-Internal id: `mp`. Single VMF mod that re-enables 100% of vanilla Vermintide 2's progression systems in the modded realm, with all state persisted locally and the player's real PlayFab account untouched.
+Internal id: `mp`. Target: a fully local modded-realm progression universe with the player's real PlayFab account untouched. This plan records the roadmap, not a claim that every progression surface is implemented.
+
+> CURRENT AUTHORITY (game 6.13.0, source `93dea911`): use
+> [ENGINE_SURFACE.md](ENGINE_SURFACE.md) for installed owners and limitations.
+> Historical gate/overlay research below is not a current implementation recipe.
+> Shared realm V2 (`_lib_modded_realm_authority.lua`), the bounded Emporium owner
+> (`_mp_emporium_ui_runtime.lua`) and daily-reroll denial owner
+> (`_mp_daily_reroll_runtime.lua`) do not clear `read_only_backend`.
+> Modern daily-row presentation, mission containers and the remaining Fresh
+> profile slices are separate unfinished work; the Emporium slice completes none of them.
 
 ## Goal
 
@@ -28,6 +37,15 @@ No new systems invented. Vanilla only.
 - Any non-vanilla currency, system, NPC, or UI surface.
 
 ## Core architectural insight
+
+> HISTORICAL / NONCURRENT: the legacy-flag description in the rest of this
+> section predates game 6.12.0. In 6.13.0, native `MODDED_REALM` is published at
+> `foundation/scripts/util/application_parameter.lua:150-152`, sets
+> `GameSettingsDevelopment.read_only_backend` at
+> `scripts/settings/game_settings_development.lua:49-50`, and that same read-only
+> flag protects real commits at `playfab_mirror_base.lua:2826,2839,2857`.
+> Never clear it to enable UI. Current scoped owners and local transaction
+> boundaries are documented in [ENGINE_SURFACE.md](ENGINE_SURFACE.md).
 
 `script_data["eac-untrusted"]` is not the master gate. Two distinct things happen in modded:
 
@@ -178,7 +196,14 @@ implemented.
 
 ## UI gates to override
 
-Each is a one-line VMF hook returning the opposite of `script_data["eac-untrusted"]` at the read site:
+> HISTORICAL / NONCURRENT: this is the original gate-research inventory, not
+> advice to add one-line flag overrides. The cited current menu sites read
+> `GameSettingsDevelopment.read_only_backend`, not the legacy EAC key. Preserve
+> that protection. The Emporium's five owned presentation/action seams are in
+> [ENGINE_SURFACE.md](ENGINE_SURFACE.md#local-silver-shilling-action-boundary-1684577);
+> daily-row presentation remains legacy-pending until its separate adapter lands.
+
+Original research table:
 
 | Site | What it un-gates |
 |---|---|
@@ -192,6 +217,16 @@ Each is a one-line VMF hook returning the opposite of `script_data["eac-untruste
 | `achievement_manager.lua:294` (`update`) | Platform achievement push loop (Steam etc.). Not strictly needed for `mp` (local achievement tracking is enough) — leave gated unless we want Steam to register the achievements |
 
 ## Local persistence model
+
+> HISTORICAL / UNIMPLEMENTED BLANKET OVERLAY: the field list and boot sequence
+> below describe an early proposal, not current startup behavior. The entry's
+> `apply_mirror_overlay` stub remains disabled; do not wire it, seed Fresh from it,
+> or mark a profile seeded. The implemented #840 items/loadouts slice uses
+> `_mp_fresh_profile_runtime.lua` plus `_mp_fresh_profile_state.lua` and does not
+> write the canonical mirror. #577's durable local SM purchase projection is
+> narrower and is not a complete Fresh-profile overlay. See
+> [Fresh-profile isolation boundary](#fresh-profile-isolation-boundary-840) and
+> [ENGINE_SURFACE.md](ENGINE_SURFACE.md#backend-mirror-and-owned-local-projections-owner-doc-docsengine11).
 
 PlayFab sign-in still happens in modded; the mirror initializes from the **real account**. `mp` overlays the modded shadow on top of that fresh-loaded mirror at game-start, then re-serializes to VMF settings on every mutation.
 
@@ -241,7 +276,15 @@ Seed flag is one-shot per save slot. Switching tiers post-seed warns about losin
 - `mp.credit(kind, amount)`
 - `mp.has_currency(kind, amount) → bool`
 
-## Research findings (2026-05-14)
+## Research findings (2026-05-14; HISTORICAL)
+
+> HISTORICAL / NONCURRENT: preserved research evidence and proposals, not a
+> current authorization to override native protections, enable global achievement
+> tracking, seed a Fresh mirror or ship approximate loot. The current native
+> gates and installed owners are in [ENGINE_SURFACE.md](ENGINE_SURFACE.md).
+> For example, 6.13.0 `AchievementManager.trigger_event` and `update` use
+> `read_only_backend` (`achievement_manager.lua:128-130,298`); a legacy EAC bracket
+> does not bypass them. The later #607 no-approximation decision below controls.
 
 ### #1 — `BackendInterfaceCraftingPlayfab` — RESOLVED
 
@@ -360,6 +403,11 @@ Single intercept point covers all five craft pages.
 
 ## Build order
 
+> HISTORICAL ROADMAP: this original sequence is not a current implementation
+> checklist or completion ledger. In particular, blanket mirror seeding and
+> legacy flag overrides are not authorized. Follow the current owners and
+> remaining-slice boundaries in [ENGINE_SURFACE.md](ENGINE_SURFACE.md).
+
 1. **Scaffolding** — VMB mod folder, VMF settings UI for starting-state, mirror-overlay layer (read VMF → mirror), serialization layer (mirror → VMF).
 2. **UI gate overrides + achievement tracking** — ~10 hooks returning `false` for `eac-untrusted` at the click-handler / popup-setup sites, **plus** a `mod:hook(AchievementManager, "trigger_event", ...)` that lets the body run regardless of `eac-untrusted` (without this, Okri's Challenges show zero progress). Visual verification: every gated screen displays normally, buttons clickable, kill-count statistics tick up.
 3. **End-of-mission rewards** — intercept `generate_end_of_level_loot`, build local loot table, call mirror mutators. Verify XP credit, shillings credit, chest enters inventory.
@@ -379,3 +427,14 @@ Step 2 unblocks visual verification of every subsequent step. Steps 3–7 are in
 - No CW economy bridge — CW already routes through the un-gated pipeline.
 - No Versus-mode XP/win-track work in v0.1.x.
 - No achievement *grant* beyond what vanilla flows produce — no custom challenge definitions.
+
+## Plain-SM Emporium UI/action slice (#1684/#577)
+
+The Emporium adapter authorizes only a currently validated native-stock cosmetic
+with SM as its sole currency, respecting native acquisition/ownership/DLC and
+funds conditions. The actual click/confirm action revalidates the live product
+and routes through the existing local exchange transaction, never native
+platform purchase or currency iteration. Synchronous local completion settles
+after native popup state assignment. This slice does not make DLC/platform,
+bundle, mixed-currency, non-SM, expired or stale offers locally purchasable.
+Official behavior and all account-protection flags remain unchanged.
