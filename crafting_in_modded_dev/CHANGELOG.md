@@ -1,5 +1,22 @@
 # Crafting in Modded Changelog
 
+## 0.8.143-dev (2026-10-25) -- Truthful forge realm diagnostics (#1694) [not-started]
+
+- Forge-open diagnostics now query CIM's existing native-first realm authority
+  instead of the retired `script_data["eac-untrusted"]` flag. Explicit native
+  official/malformed values deny, and absent-native legacy fallbacks remain.
+- The bounded `[cim:1694] forge_open` receipt names `modded_realm` honestly and
+  uses engine `printf`, so it reaches the log even with VMF mod logging off.
+  This changes diagnostic output only; no realm/backend/settings state is written.
+- Ten actual-callback host cases cover native modded/official/malformed state,
+  absent-native legacy/launch/MP fallback, live authority updates and raw-global
+  preservation. All ten fail against the old emitter.
+- Verification is automatic when either native forge menu opens: compare its
+  `modded_realm` receipt with `/inv_dump`. No new command is needed for this
+  read-only output correction. Actual game launch is not verified locally.
+- Public stable CIM 0.8.92 is unchanged; #1694 remains unready pending its
+  authorized official promotion and required runtime acceptance.
+
 ## 0.8.142-dev (2026-10-24) -- Shared modern illusion Apply owner (#1690, #1693)
 
 - Supersedes the unpublished 0.8.141-dev candidate and retains its #1656/#1696

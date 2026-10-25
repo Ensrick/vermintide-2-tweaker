@@ -300,6 +300,9 @@ there is no copied implementation.
   `score_rows_resolve_without_local_swap_509` checks passing, failing on an
   unowned DCP portrait, and reporting a missing live half as `SKIP` with a
   separate skipped total rather than counting it as `PASS`.
+- `tests/test_cim_forge_realm_diagnostic.lua`: #1694 actual forge-open receipt
+  with the entry-owned native realm adapter, legacy fallbacks, raw log output,
+  late authority updates and no changes to host globals.
 - `tests/test_cim_regression_harness_1656.lua`: #1656 five shipped
   `/cim_regression_test` checks driven through the real loadout, weave-loadout
   and forge UI owners: the loadout round trip against a transcription of

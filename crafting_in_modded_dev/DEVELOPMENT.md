@@ -178,3 +178,13 @@ the reassigned `_forged_weapons` through a call-time accessor.
 The three v0.8.121-dev owners finish the structural phase at 1,433 nonblank
 lines. Further changes should preserve the entry as composition root and extend
 the named owner that already controls the relevant state or engine seam.
+
+### Forge realm diagnostic authority (#1694)
+
+`cim_debug.lua` queries the existing `mod._cim_is_modded_realm` adapter each
+time a forge opens. Do not read the retired EAC flag directly or label the
+resolved realm as that raw flag. The finite `[cim:1694] forge_open` receipt
+uses engine `printf` rather than VMF mod logging; no backend, native realm or
+settings state is changed. The host suite executes the actual entry adapter
+and registered diagnostic callback in private environments, including native
+denials, absent-native fallbacks and a changed authority between two opens.
