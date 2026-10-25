@@ -11,7 +11,7 @@ param(
     [string]$ArtifactPath,
     [string]$RequireDeadPidsPath,
     [string]$ReadyPath,
-    [ValidateSet('Success', 'Wait', 'Throw', 'Crash', 'CrashWithChild', 'SuccessWithResidue')][string]$Mode = 'Success'
+    [ValidateSet('Success', 'Wait', 'Throw', 'Crash', 'CrashWithChild', 'SuccessWithResidue', 'DrainTimeoutEvidence')][string]$Mode = 'Success'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -28,7 +28,7 @@ try {
         -TimeoutMilliseconds $TimeoutMilliseconds `
         -SemaphoreName $SemaphoreName `
         -RecordPath $RecordPath
-    if ($Mode -in @('CrashWithChild', 'SuccessWithResidue')) {
+    if ($Mode -in @('CrashWithChild', 'SuccessWithResidue', 'DrainTimeoutEvidence')) {
         $sleepCommand = [Convert]::ToBase64String([Text.Encoding]::Unicode.GetBytes('Start-Sleep -Seconds 30'))
         $childScript = @"
 `$self = [Diagnostics.Process]::GetCurrentProcess().Path
@@ -61,6 +61,28 @@ Start-Sleep -Seconds 30
         }
     }
     [System.IO.File]::WriteAllText($MarkerPath, 'acquired')
+    if ($Mode -eq 'DrainTimeoutEvidence') {
+        # A zero fixture budget forces the real timeout branch after the first
+        # authenticated kill. Production still uses its unchanged 10s budget.
+        $failure = ''
+        try { [VmbTransactionProcessTreeGuard]::TerminateAndWaitForResidualDescendants(0) }
+        catch { $failure = $_.Exception.Message }
+        if ($failure -notmatch 'mutex was not released.*owner_pid=\d+ timeout_ms=0 residual_count=\d+ active_count=' -or
+            $failure -notmatch '; pid=\d+' -or $failure.Contains('Start-Sleep') -or $failure.Length -gt 6000) {
+            throw "Missing, unbounded or sensitive timeout evidence: $failure"
+        }
+        [IO.File]::WriteAllText($MarkerPath + '.timeout-evidence', $failure)
+        if (-not (Test-Path -LiteralPath $RecordPath)) { throw 'Observation released owner record.' }
+        # Exact bounded formatter case: count stays accurate, at most16 member
+        # records, remaining members summarized; no process command-line read.
+        $formatter = [VmbTransactionProcessTreeGuard].GetMethod('DescribeResidualTimeout', [Reflection.BindingFlags]'NonPublic,Static')
+        $members = New-Object 'System.Collections.Generic.List[uint32]'
+        1..20 | ForEach-Object { $members.Add([uint32]$PID) }
+        $bounded = $formatter.Invoke($null, [object[]]@($PID, 0, $members.PSObject.BaseObject))
+        if ([regex]::Matches($bounded, '; pid=').Count -ne 16 -or $bounded -notmatch '; omitted=4$' -or $bounded.Length -gt 6000) {
+            throw 'Timeout member evidence is not bounded.'
+        }
+    }
     if ($Mode -eq 'Throw') { throw 'planted transaction failure' }
     if ($Mode -in @('Crash', 'CrashWithChild')) {
         if ($ReleasePath) {

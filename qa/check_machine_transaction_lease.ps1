@@ -183,6 +183,28 @@ function Invoke-MachineTransactionLeaseSelfTest {
     try {
         $helperText = [System.IO.File]::ReadAllText($helper, [System.Text.Encoding]::UTF8)
         $workerText = [IO.File]::ReadAllText($worker, [Text.Encoding]::UTF8)
+        foreach ($completionCase in @('Success', 'LauncherFailure', 'TransactionFailure')) {
+            $completionPrefix = Join-Path $temp ('completion-' + $completionCase)
+            $completion = Start-Process -FilePath $hostPath -ArgumentList @('-NoProfile','-NonInteractive','-File',
+                (Join-Path $PSScriptRoot '_test_fixtures\ship_completion_worker.ps1'),
+                '-RepoRoot', $repoRoot, '-Mode', $completionCase) -PassThru -WindowStyle Hidden `
+                -RedirectStandardOutput ($completionPrefix + '.out') -RedirectStandardError ($completionPrefix + '.err')
+            $children += $completion
+            $null = $completion.Handle
+            Assert-Fixture ($completion.WaitForExit(15000)) 'actual completion boundary terminates within fixture ceiling'
+            $completionOutput = [IO.File]::ReadAllText($completionPrefix + '.out')
+            $completionError = [IO.File]::ReadAllText($completionPrefix + '.err')
+            if ($completionCase -eq 'Success') {
+                Assert-Fixture ($completion.ExitCode -eq 0 -and $completionError -eq '' -and
+                    $completionOutput.IndexOf('SHIP SUCCESS') -gt $completionOutput.IndexOf('fixture-transaction-cleanup') -and
+                    $completionOutput.IndexOf('TEST BUILD READY') -gt $completionOutput.IndexOf('SHIP SUCCESS')) 'success and readiness follow actual complete cleanup'
+            }
+            else {
+                Assert-Fixture ($completion.ExitCode -ne 0 -and $completionError.Contains('planted-') -and
+                    $completionOutput.Contains('fixture-transaction-cleanup') -and
+                    $completionOutput -notmatch 'SHIP SUCCESS|TEST BUILD READY') "$completionCase cannot announce readiness or conceal its failure"
+            }
+        }
         Assert-Fixture ($workerText.Contains('[Diagnostics.Process]::GetCurrentProcess().Kill()') -and
             [regex]::Matches($workerText, '\.Kill\s*\(').Count -eq 1 -and
             -not $workerText.Contains('::FailFast(') -and
@@ -681,6 +703,17 @@ function Invoke-MachineTransactionLeaseSelfTest {
         $normalContender.WaitForExit()
         Assert-Fixture ((Test-Path -LiteralPath $normalContenderMarker) -and [string]::IsNullOrWhiteSpace((Read-WorkerError $normalContenderMarker))) 'normal release drains lingering child/grandchild before contender mutation'
         Assert-WorkerExitPath $normalMarker $normalOwner $false
+
+        $evidenceMarker = Join-Path $temp 'timeout-evidence.marker'
+        $evidenceRecord = Join-Path $temp 'timeout-evidence-owner.json'
+        $evidencePids = Join-Path $temp 'timeout-evidence-pids.txt'
+        $evidenceWorker = Start-Worker ('Global\Ensrick.VMBLauncher.Tests.' + [guid]::NewGuid().ToString('N')) `
+            $evidenceRecord 'ship' 'mod-a' 3000 $evidenceMarker '' $evidencePids 'DrainTimeoutEvidence'
+        $children += $evidenceWorker
+        $null = $evidenceWorker.Handle
+        Assert-Fixture ($evidenceWorker.WaitForExit(20000)) 'real timeout evidence worker terminates within ceiling'
+        Assert-Fixture ($evidenceWorker.ExitCode -eq 0 -and (Test-Path ($evidenceMarker + '.timeout-evidence')) -and
+            -not (Test-Path $evidenceRecord) -and [string]::IsNullOrWhiteSpace((Read-WorkerError $evidenceMarker))) 'bounded real timeout evidence preserves ownership and subsequent normal drain succeeds'
 
         Write-Host "[check_machine_transaction_lease -SelfTest] PASS $script:__transactionPassed assertions ($($PSVersionTable.PSVersion))" -ForegroundColor Green
         return 0
