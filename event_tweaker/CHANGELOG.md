@@ -1,5 +1,15 @@
 # Tweaker: Events — Changelog
 
+## 0.4.54-dev (2026-10-25) -- Canonical publication guidance (#1025) [tooling]
+
+- Replace conflicting upload-before-commit and machine-local launcher recipes
+  with references to PROJECT_STANDARDS section 6.6: claim, candidate BuildOnly,
+  exact source/artifact review, protected merge, exact-default QA, then canonical
+  publication. Preserve public visibility and its required AllowPublic flag.
+- No event selection, guard, package, gameplay or uploader behavior changes.
+  The documentation is a compiler input, so this release binds its corrected
+  text and version to a fresh canonical artifact/receipt.
+
 ## 0.4.53-dev (2026-09-13) -- reissue unpublished 0.4.52-dev (#727) [tooling]
 
 - 0.4.52-dev was merged on 2026-09-12 (PR #1580) but never uploaded to the

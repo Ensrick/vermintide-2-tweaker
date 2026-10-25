@@ -47,9 +47,13 @@ rules specific to this mod; architecture and recipes live in `DEVELOPMENT.md`.
   are positively proven. The same module adds a second preserving wrapper for
   the optional GUI runtime-gate retry. Nothing else may
   replace `mod.update`; any later owner must capture and call the previous chain.
-- **Ship**: `-dev` version = full pipeline every build, no ask, and the item is
-  public, so always `tools\ship\ship.ps1 -Mod event_tweaker -AllowPublic`; then
-  git add (new files explicitly) + commit + push in the same pass.
+- **Ship**: follow repo-root `PROJECT_STANDARDS.md` section 6.6, not a copied
+  publication sequence. A `-dev` version takes the full pipeline without an
+  extra prompt. Claim and prepare with canonical `-BuildOnly`, land the exact
+  source/artifact proof through protected review and merge, then publish from
+  clean exact default HEAD after hosted QA succeeds. The public item requires
+  `tools\ship\ship.ps1 -Mod event_tweaker -AllowPublic`. Never upload before
+  committing/merging source, or use direct launcher/GUI publication.
 
 ## What makes this mod different
 

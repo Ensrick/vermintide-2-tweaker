@@ -415,8 +415,8 @@ The mutator name must be a string that's already registered in `NetworkLookup.mu
 
 1. Add the name to the matching category's `mutators` array in `event_tweaker_catalog.lua` (`CATEGORIES`) — the single shared copy the script modules and the data file both read.
 2. Add `mut_<id>` and `mut_<id>_tooltip` keys to `event_tweaker_localization.lua`. Convention: tooltip leads with `[<mutator_id>]` so the literal name being injected is verifiable from the UI.
-3. Bump `MOD_VERSION` in `event_tweaker.lua` per the always-bump rule.
-4. Build (`& $exe build event_tweaker`), deploy (`& $exe deploy event_tweaker`) where `$exe` is `tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe`, restart, test.
+3. Follow the claim/version/changelog and candidate-review procedure in repo-root `PROJECT_STANDARDS.md` section 6.6; do not choose a version before the canonical claim.
+4. Use the canonical build/publication procedure below, then verify the loaded version and test the mutator. Do not substitute a machine-local launcher path or restart Steam as a routine refresh step.
 
 ## Adding a new event preset
 
@@ -582,18 +582,34 @@ CurrentPacing.delay_mini_patrol_threat_value = 200
 - `/event_clear` — uncheck every individual mutator checkbox. The Event Preset dropdown is untouched.
 - `/event_apply` — reload the current level so any pending preset or mutator changes take effect. Auto-fires on `event_preset` change; for individual mutator toggles you have to invoke this command (or wait for the next natural level transition).
 
-## Build & deploy (matches sibling tweaker mods)
+## Build and publication
+
+The maintained VMB Launcher remains the build/deploy boundary. Repo-root
+[PROJECT_STANDARDS.md](../PROJECT_STANDARDS.md) section 6.6 owns the claim,
+version, artifact/receipt, review, merge, publication and recovery procedure;
+[PORTABLE_SETUP.md](../docs/PORTABLE_SETUP.md) owns machine-local launcher and
+configuration resolution. Do not copy an executable path into this guide.
+
+From the repository root, prepare the claimed candidate through the wrapper:
 
 ```powershell
-$exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe"
-& $exe build  event_tweaker
-& $exe deploy event_tweaker
+.\tools\ship\ship.ps1 -Mod event_tweaker -BuildOnly
 ```
 
-Those commands are nonpublishing iteration only. Workshop publication follows
-the merge-first canonical transaction in `PROJECT_STANDARDS.md` section 6.6.
-Direct launcher `all`/`upload`, GUI publication, and the removed legacy wrappers
-are prohibited.
+Land the reviewed source and its exact artifact proof through protected review
+and merge. Only after exact-default-branch hosted QA succeeds, publish from a
+clean checkout using the same canonical entry point:
+
+```powershell
+.\tools\ship\ship.ps1 -Mod event_tweaker -AllowPublic
+```
+
+This public item's visibility requires `-AllowPublic`; its prerelease version
+follows the no-extra-prompt rule in section 6.6. Do not upload first and land
+source afterward. Direct launcher `all`/`upload`, GUI publication and removed
+legacy wrappers remain prohibited. A partial transaction or failed final
+verification is not success; preserve its evidence and follow canonical
+recovery without changing the uploader or writing into Steam-managed content.
 
 ## Known limitations
 
