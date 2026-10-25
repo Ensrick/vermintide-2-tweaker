@@ -1,10 +1,9 @@
 -- Runtime owner for issue #465 replacement-player progression handoff.
--- Loaded once by chaos_wastes_tweaker_dev.lua; owns the four lifecycle hooks
+-- Loaded once by chaos_wastes_tweaker_dev.lua; owns the six lifecycle hooks
 -- and their bounded state/projection helpers.
 local M = {}
 
 function M.install(mod, deps)
-    local effective_setting = assert(deps and deps.effective_setting, "#465 effective_setting dependency missing")
     local REAL_PLAYER_LOCAL_ID = assert(deps and deps.real_player_local_id, "#465 real player id dependency missing")
 
 -- ============================================================
@@ -18,6 +17,8 @@ function M.install(mod, deps)
 -- coin balance, per the feature specification; a departure-created bot receives
 -- the departing human's balance until another human takes over.
 --
+-- Preservation is implicit host behavior. Retired saved/synchronized opt-out
+-- values are deliberately never read or rewritten.
 -- Direct run-state writes use only vanilla SharedState fields. No custom RPC or
 -- per-frame polling is involved. If CT peer parity has not been positively proven,
 -- CT-owned boon/buff names are filtered before the copy so this convenience feature
@@ -48,10 +49,9 @@ function mod._ct465_record_edge(name, game_mode)
     edges[name] = edges[name] + 1
     local active = Managers.state and Managers.state.game_mode
         and Managers.state.game_mode._game_mode
-    mod._ct_replacement_log("edge=%s count=%d mode=%s same_active=%s server=%s enabled=%s",
+    mod._ct_replacement_log("edge=%s count=%d mode=%s same_active=%s server=%s policy=implicit",
         tostring(name), edges[name], tostring(game_mode), tostring(game_mode == active),
-        tostring(game_mode and game_mode._is_server),
-        tostring(effective_setting("replacement_player_compensation")))
+        tostring(game_mode and game_mode._is_server))
 end
 
 function mod._ct465_report()
@@ -236,7 +236,6 @@ end
 
 mod:hook("GameModeDeus", "player_left_game_session", function(func, self, peer_id, local_player_id)
     local enabled = self and self._is_server
-        and effective_setting("replacement_player_compensation")
     if enabled then mod._ct465_record_edge("deus_left", self) end
     if enabled then
         local run_state = self._deus_run_controller and self._deus_run_controller._run_state
@@ -269,9 +268,7 @@ end)
 -- the concrete GameModeDeus hook distinguishes "the game never delegated" from
 -- "the concrete hook was not the active class" without polling per frame.
 mod:hook("GameModeManager", "player_left_game_session", function(func, self, peer_id, local_player_id)
-    if effective_setting("replacement_player_compensation") then
-        mod._ct465_record_edge("manager_left", self and self._game_mode)
-    end
+    mod._ct465_record_edge("manager_left", self and self._game_mode)
     return func(self, peer_id, local_player_id)
 end)
 
@@ -295,8 +292,6 @@ mod:hook_safe("GameModeDeus", "_add_bot", function(self)
         mod._ct_bot_economy_log("initialized bot=%s balance=%s from host",
             tostring(bot.name and bot:name() or bot_local), tostring(host_coins))
     end
-
-    if not effective_setting("replacement_player_compensation") then return end
 
     local profile_index = bot:profile_index()
     local career_index = bot:career_index()
@@ -365,7 +360,6 @@ end
 
 mod:hook("GameModeDeus", "remove_bot", function(func, self, party_id, peer_id, local_player_id, update_safe)
     local enabled = self and self._is_server
-        and effective_setting("replacement_player_compensation")
     if enabled then mod._ct465_record_edge("deus_remove", self) end
     local run_controller = enabled and self._deus_run_controller
     local run_state = run_controller and run_controller._run_state
@@ -433,9 +427,7 @@ mod:hook("GameModeDeus", "remove_bot", function(func, self, party_id, peer_id, l
 end)
 
 mod:hook("GameModeManager", "remove_bot", function(func, self, party_id, peer_id, local_player_id, update_safe)
-    if effective_setting("replacement_player_compensation") then
-        mod._ct465_record_edge("manager_remove", self and self._game_mode)
-    end
+    mod._ct465_record_edge("manager_remove", self and self._game_mode)
     return func(self, party_id, peer_id, local_player_id, update_safe)
 end)
 

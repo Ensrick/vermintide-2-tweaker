@@ -252,9 +252,10 @@ local function read(name)
             H.equal(type(f.mod._ct_progdiff_step), "function")
             H.equal(rawget(_G, "CT_PROGRESSIVE_DIFFICULTY_MARKER"),
                 "progressive_difficulty:per_controller_start_hotjoin_sync_contiguous_tiers_v3")
-            -- The replacement runtime still receives the two values it always did.
+            -- Replacement preservation is intrinsic; no setting reader crosses
+            -- this install boundary. Other run-creation features still need ctx.
             H.equal(f.replacement.seen_ctx.real_player_local_id, 1)
-            H.equal(type(f.replacement.seen_ctx.effective_setting), "function")
+            H.equal(f.replacement.seen_ctx.effective_setting, nil)
         end)
     end)
 
