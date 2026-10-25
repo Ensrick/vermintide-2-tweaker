@@ -1,5 +1,14 @@
 # Verminious Dreams Lighting — Changelog
 
+## 1.0.20-dev (2026-10-25) -- Canonical publication guidance (#1025) [tooling]
+
+- Replace the copied launcher path and fixed bundle-count claim with the
+  canonical claim/BuildOnly/review/merge/publication procedure and artifact proof.
+  Correct the tuning recipe to this development stream's actual source path.
+- Preserve friends-only visibility and all lighting profiles/runtime behavior.
+  Stable lighting remains unchanged and retains its separate named-version
+  authorization requirement. Rebuild the documentation compiler inputs normally.
+
 ## v1.0.19-dev - 2026-08-13 - #1287 clean artifact reconciliation
 
 - Rebuilt the unchanged lighting implementation from one clean, source-addressable commit so the Lua version, Workshop title, tracked root bundle, BuildOnly receipt, release manifest, and publication receipt identify the same artifact.

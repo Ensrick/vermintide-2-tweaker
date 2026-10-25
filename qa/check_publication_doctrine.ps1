@@ -18,38 +18,13 @@ if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
     $RepoRoot = [IO.Path]::GetDirectoryName($PSScriptRoot)
 }
 
-# #1025: six receipt/promotion-bound mod documents still contain exact legacy
-# launcher paths. Freeze only those reviewed lines so removal is clean while a
-# new path, changed path, copied occurrence, or reintroduced root instruction
-# is blocking. Do not add rows here to make a failure disappear.
+# #1025: only the clean-stable lighting document retains an exact legacy
+# launcher path pending its separately authorized promotion. Removed prerelease
+# rows are no longer exempt: a new path, changed path, copied occurrence or
+# reintroduced root instruction is blocking. Never add rows to hide a failure.
 $script:KnownLauncherPathDebt = @(
     [pscustomobject]@{
-        Path = 'event_tweaker/DEVELOPMENT.md'
-        Line = '4. Build (`& $exe build event_tweaker`), deploy (`& $exe deploy event_tweaker`) where `$exe` is `tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe`, restart, test.'
-        Max = 1
-    },
-    [pscustomobject]@{
-        Path = 'event_tweaker/DEVELOPMENT.md'
-        Line = '$exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe"'
-        Max = 1
-    },
-    [pscustomobject]@{
-        Path = 'verminious_dreams_lighting_dev/DEVELOPMENT.md'
-        Line = '$exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe"'
-        Max = 1
-    },
-    [pscustomobject]@{
         Path = 'verminious_dreams_lighting/DEVELOPMENT.md'
-        Line = '$exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe"'
-        Max = 1
-    },
-    [pscustomobject]@{
-        Path = 'dynamic_cosmetic_portraits/DEVELOPMENT.md'
-        Line = '$exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe"'
-        Max = 1
-    },
-    [pscustomobject]@{
-        Path = 'dynamic_cosmetic_portraits/CLAUDE.md'
         Line = '$exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe"'
         Max = 1
     }
@@ -249,7 +224,7 @@ if ($SelfTest) {
         }
     }
     $knownDebtFixture = @([pscustomobject]@{
-        Path = 'event_tweaker/DEVELOPMENT.md'
+        Path = $script:KnownLauncherPathDebt[0].Path
         Lines = @($script:KnownLauncherPathDebt[0].Line)
     })
     if ((Get-DoctrineViolations $knownDebtFixture).Count -ne 0 -or
@@ -257,12 +232,29 @@ if ($SelfTest) {
         throw 'exact frozen launcher-path debt was not isolated'
     }
     $copiedDebtFixture = @([pscustomobject]@{
-        Path = 'event_tweaker/DEVELOPMENT.md'
+        Path = $script:KnownLauncherPathDebt[0].Path
         Lines = @($script:KnownLauncherPathDebt[0].Line, $script:KnownLauncherPathDebt[0].Line)
     })
     if ((Get-DoctrineViolations $copiedDebtFixture) -notcontains
-        'event_tweaker/DEVELOPMENT.md:2: copied legacy launcher executable path') {
+        ($script:KnownLauncherPathDebt[0].Path + ':2: copied legacy launcher executable path')) {
         throw 'copied frozen launcher-path debt was not rejected'
+    }
+
+    foreach ($retiredPath in @(
+        'event_tweaker/DEVELOPMENT.md',
+        'dynamic_cosmetic_portraits/DEVELOPMENT.md',
+        'dynamic_cosmetic_portraits/CLAUDE.md',
+        'verminious_dreams_lighting_dev/DEVELOPMENT.md'
+    )) {
+        $retired = @([pscustomobject]@{
+            Path = $retiredPath
+            Lines = @($script:KnownLauncherPathDebt[0].Line)
+        })
+        if ((Get-DoctrineViolations $retired) -notcontains
+                (${retiredPath} + ':1: hardcoded launcher executable path') -or
+                (Get-KnownLauncherPathDebtCount $retired) -ne 0) {
+            throw "retired prerelease launcher-path debt was still exempt: $retiredPath"
+        }
     }
 
     $direct = @([pscustomobject]@{

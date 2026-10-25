@@ -83,6 +83,22 @@ function Get-NextPatchVersion {
     return "$major.$minor.$($patch + 1)$suffix"
 }
 
+# Instruction text only: allocation, verification and publication behavior do
+# not depend on these messages. Keep the same owner available to self-tests.
+function Get-ClaimNextStepMessages {
+    param([string]$Mod, [string]$Version)
+    @(
+        ('  NEXT: set local MOD_VERSION = "{0}"; update cfg and changelog.' -f $Version),
+        '  Follow PROJECT_STANDARDS.md section 6.6 for the complete procedure.',
+        ('  Prepare: .\tools\ship\ship.ps1 -Mod {0} -BuildOnly' -f $Mod),
+        '  Commit source with the authority-selected artifact proof (tracked bundle or schema-3 receipt); pass protected review, merge and exact-default-branch QA.',
+        '  From a clean live default HEAD, publish:',
+        ('        .\tools\ship\ship.ps1 -Mod {0}' -f $Mod),
+        '  Add -AllowPublic only when itemV2.cfg visibility requires it.',
+        '  BuildOnly preserves this claim; successful final publication releases it.'
+    )
+}
+
 # Read MOD_VERSION from the mod's main lua, exactly as ship.ps1 Step 1 does. The
 # lua lives at <mod>\scripts\mods\<mod>\<mod>.lua using the DIRECTORY name.
 function Get-ClaimModVersion {
@@ -426,6 +442,28 @@ function Invoke-ClaimSelfTest {
     }
 
     Write-Host "=== claim.ps1 -SelfTest ===" -ForegroundColor Cyan
+    # Exercise the same instruction owner printed after a real acquisition.
+    # No claim, filesystem, launcher or publication action is needed here.
+    function Test-NextStepOrder([string[]]$Messages) {
+        $text = $Messages -join "`n"
+        $prepare = $text.IndexOf('-BuildOnly', [StringComparison]::Ordinal)
+        $review = $text.IndexOf('protected review', [StringComparison]::Ordinal)
+        $clean = $text.IndexOf('clean live default HEAD', [StringComparison]::Ordinal)
+        $publish = $text.LastIndexOf('.\tools\ship\ship.ps1 -Mod fixture_mod', [StringComparison]::Ordinal)
+        return $prepare -ge 0 -and $review -gt $prepare -and $clean -gt $review -and $publish -gt $clean
+    }
+    foreach ($version in @('0.1.2-dev', '1.2.3')) {
+        $advice = @(Get-ClaimNextStepMessages -Mod fixture_mod -Version $version)
+        Assert (Test-NextStepOrder $advice) "claim instructions prepare, review/merge and clean-head publish in order ($version)"
+        Assert (($advice -join "`n").Contains($version)) "claim instructions retain exact allocated version ($version)"
+        Assert (($advice -join "`n").Contains('tracked bundle or schema-3 receipt') -and
+            ($advice -join "`n") -notmatch 'source, exact bundle and receipt') "claim instructions preserve both artifact authorities ($version)"
+        Assert (($advice -join "`n").Contains('BuildOnly preserves this claim; successful final publication releases it.')) "claim instructions distinguish candidate build from final release ($version)"
+    }
+    $advice = @(Get-ClaimNextStepMessages -Mod fixture_mod -Version '0.1.2-dev')
+    Assert (-not (Test-NextStepOrder @($advice | Where-Object { $_ -notmatch '-BuildOnly' }))) "claim instruction check rejects missing candidate build"
+    $reordered = @($advice[5]) + @($advice[0..4]) + @($advice[6..7])
+    Assert (-not (Test-NextStepOrder $reordered)) "claim instruction check rejects publication before review"
     $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
     $nowRef = (Get-Date).ToUniversalTime()
 
@@ -746,9 +784,10 @@ if ($r.Ok) {
     Write-Host ("  Session          : {0}" -f $sessionId)
     if ($r.BrokeStale) { Write-Host ("  (broke a stale claim older than {0} h)" -f $StaleHours) -ForegroundColor Yellow }
     Write-Host ""
-    Write-Host ("  NEXT: set  local MOD_VERSION = `"{0}`"  in the mod's lua, then:" -f $r.Version)
-    Write-Host ("        .\tools\ship\ship.ps1 -Mod {0}" -f $Mod)
-    Write-Host ("  ship.ps1 auto-releases this claim on success; or free it early with")
+    foreach ($message in (Get-ClaimNextStepMessages -Mod $Mod -Version $r.Version)) {
+        Write-Host $message
+    }
+    Write-Host ("  To free this claim early, use:")
     Write-Host ("        .\tools\ship\claim.ps1 -Mod {0} -Release" -f $Mod)
     Write-Host "=======================================================" -ForegroundColor Green
     exit 0

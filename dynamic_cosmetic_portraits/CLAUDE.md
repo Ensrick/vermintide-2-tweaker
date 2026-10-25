@@ -61,25 +61,34 @@ in `CHARACTER_COSMETIC_CATALOG.md`. **Always consult that catalog when
 the user names a portrait by its in-game display name** (e.g. "Plumed
 Horseshoe" → look up → `mercenary_hat_0003`).
 
-## Build & deploy
+## Build and publication
+
+The sole release-procedure owner is repo-root
+[PROJECT_STANDARDS.md](../PROJECT_STANDARDS.md) section 6.6. Use
+[PORTABLE_SETUP.md](../docs/PORTABLE_SETUP.md) for maintained VMB Launcher and
+configuration resolution; do not copy a machine-local executable path here.
+
+After claiming the candidate and updating its version/changelog, prepare from
+the repository root:
 
 ```powershell
-$exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe"
-& $exe build  dynamic_cosmetic_portraits
-& $exe deploy dynamic_cosmetic_portraits
+.\tools\ship\ship.ps1 -Mod dynamic_cosmetic_portraits -BuildOnly
 ```
 
-`VMBLauncher.exe deploy` copies the bundle to the local Steam Workshop folder
-(`steamapps/workshop/content/552500/3721036701/`), verifies bundle hashes,
-and pushes to every remote target currently enabled in VMBLauncher settings.
-These are nonpublishing iteration commands. For a Workshop release, follow the
-merge-first canonical transaction in `PROJECT_STANDARDS.md` section 6.6.
-Direct launcher `all`/`upload` and GUI publication are prohibited.
-A disabled target is not updated and must not be reported as updated. Workshop
-ID **3721036701**; current cfg visibility is `friends_only`, with
-`itemV2.cfg` remaining the sole authority.
-(The legacy `deploy_all.ps1` shim that used to cover this was removed
-2026-05-21 — use `VMBLauncher.exe deploy <mod>` or `tools\ship\ship.ps1` directly.)
+Land the reviewed source/artifact proof through protected review and merge.
+After exact-default-branch hosted QA succeeds, publish from a clean checkout:
+
+```powershell
+.\tools\ship\ship.ps1 -Mod dynamic_cosmetic_portraits
+```
+
+Direct launcher `all`/`upload`, GUI publication and removed legacy wrappers
+are prohibited. Report local/remote deployment only when the canonical
+transaction verified that target; publication-only and disabled targets are
+not deployed. Workshop ID **3721036701**; current cfg visibility is
+`friends_only`, so do not use `-AllowPublic`. `itemV2.cfg` remains authoritative.
+A failed final verification is not success; preserve evidence and follow the
+owner procedure rather than bypassing recovery with direct deploy commands.
 
 ## Hot-reload is unsafe
 

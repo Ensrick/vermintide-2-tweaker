@@ -232,23 +232,39 @@ isn't justified for a three-mission lighting mod.
 
 ---
 
-## Build & deploy
+## Build and publication
+
+Use repo-root [PROJECT_STANDARDS.md](../PROJECT_STANDARDS.md) section 6.6
+for claims, versions, artifact/receipt review, protected merge and publication.
+[PORTABLE_SETUP.md](../docs/PORTABLE_SETUP.md) owns maintained VMB Launcher and
+configuration resolution; do not copy a machine-local executable path here.
+
+Prepare the claimed candidate from the repository root:
 
 ```powershell
-$exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe"
-& $exe build  verminious_dreams_lighting_dev
-& $exe deploy verminious_dreams_lighting_dev
+.\tools\ship\ship.ps1 -Mod verminious_dreams_lighting_dev -BuildOnly
 ```
 
-Those commands are nonpublishing iteration only. Workshop publication follows
-the merge-first canonical transaction in `PROJECT_STANDARDS.md` section 6.6.
-This friends-only dev stream never takes `-AllowPublic`. After a tuning pass:
+After the exact source/artifact proof is reviewed, committed, merged and passes
+hosted QA at default HEAD, publish from a clean checkout:
 
-1. In-game, run `vdl_dump` to print the resolved values block.
-2. Paste into `_PROFILES` in
-   `scripts/mods/verminious_dreams_lighting/verminious_dreams_lighting.lua`.
-3. Bump `MOD_VERSION` per the always-bump rule.
-4. Republish.
+```powershell
+.\tools\ship\ship.ps1 -Mod verminious_dreams_lighting_dev
+```
+
+This friends-only prerelease stream does not take `-AllowPublic`. Direct
+launcher `all`/`upload` and GUI publication remain prohibited. Preserve a
+failed transaction's evidence and follow section 6.6 recovery; do not switch
+uploaders, bypass failed verification or write into Steam-managed content.
+
+After a tuning pass:
+
+1. In-game, run `/vdl_dump` to print the resolved values block.
+2. Paste into `_PROFILES` in the development source
+   `scripts/mods/verminious_dreams_lighting_dev/verminious_dreams_lighting_dev.lua`.
+3. Follow section 6.6 for the next claimed version and its normal release.
+   Do not edit or publish the separate stable lighting stream as part of this
+   development iteration; it retains its own promotion/authorization boundary.
 
 Preview: placeholder lives at `item_preview.png` — was copied from
 event_tweaker pre-public; verify before transitioning visibility.
@@ -257,6 +273,6 @@ event_tweaker pre-public; verify before transitioning visibility.
 
 ## Status
 
-- Build: `VMBLauncher.exe build verminious_dreams_lighting_dev` →
-  `verminious_dreams_lighting_dev/bundleV2/` (4 bundles + .mod)
+- Build outputs: `verminious_dreams_lighting_dev/bundleV2/`; the exact current
+  output set is proved by the canonical artifact/receipt, not a fixed count here.
 - Release: canonical transaction in `PROJECT_STANDARDS.md` section 6.6

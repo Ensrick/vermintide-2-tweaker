@@ -1,5 +1,14 @@
 # Changelog — Dynamic Cosmetic Portraits
 
+## 0.1.32-dev (2026-10-25) -- Canonical publication guidance (#1025) [tooling]
+
+- Remove copied machine-local launcher paths and point both workflow guides to
+  PROJECT_STANDARDS section 6.6 and portable setup. Candidate BuildOnly and exact
+  source/artifact review precede protected merge and clean-head publication.
+- Retain friends-only visibility, portrait assets and all runtime behavior.
+  Documentation is a compiler input; the corrected guides and version receive
+  a fresh canonical bundle/receipt, not an unbuilt source-only edit.
+
 ## 0.1.31-dev (2026-10-24) -- career-settings check runs the real portrait transaction (#509) [verify-fix]
 
 - Fresh claim replaces the expired, unpublished 0.1.30-dev allocation.

@@ -321,19 +321,33 @@ In `resource_packages/dynamic_cosmetic_portraits/dynamic_cosmetic_portraits.pack
 - Add only the new medium material and texture paths. The shared atlas package
   rows are already present and the rebuild script updates their contents.
 
-### 8 — Bump version, build, deploy
+### 8 — Prepare, review and publish
+
+Use repo-root [PROJECT_STANDARDS.md](../PROJECT_STANDARDS.md) section 6.6 as
+the sole claim/version/changelog and release-procedure owner. Launcher and
+configuration resolution belongs to [PORTABLE_SETUP.md](../docs/PORTABLE_SETUP.md),
+not a machine-local executable path in this recipe.
+
+After the canonical claim and version/changelog update, prepare from the
+repository root:
 
 ```powershell
-# In dynamic_cosmetic_portraits.lua, increment MOD_VERSION.
-$exe = "C:\Users\danjo\source\repos\vermintide-2-tweaker\tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe"
-& $exe build  dynamic_cosmetic_portraits
-& $exe deploy dynamic_cosmetic_portraits
+.\tools\ship\ship.ps1 -Mod dynamic_cosmetic_portraits -BuildOnly
 ```
 
-`VMBLauncher.exe deploy` verifies bundle-hash parity against the Workshop folder.
-If a hash mismatch is reported, do **not** consider the deploy complete.
-(The legacy `deploy_all.ps1` shim that previously covered this flow was
-removed 2026-05-21 — use `VMBLauncher.exe deploy <mod>` or `tools\ship\ship.ps1` directly.)
+Commit the reviewed source and exact artifact proof, pass protected review,
+merge and exact-default-branch hosted QA, then run the canonical publication
+transaction from a clean checkout:
+
+```powershell
+.\tools\ship\ship.ps1 -Mod dynamic_cosmetic_portraits
+```
+
+This friends-only item does not use `-AllowPublic`; `itemV2.cfg` remains the
+visibility authority. Publication-only is not a local or remote deploy. A
+hash mismatch or cleanup failure is not completion: preserve receipt/hash
+and log evidence and follow section 6.6 recovery. Do not bypass it with a
+direct deploy or writes into Steam-managed content.
 
 ### 9 — Test in-game
 
