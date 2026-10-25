@@ -1,5 +1,24 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.353-dev (2026-10-25) -- Implicit replacement progression preservation (#465) [not-started]
+
+- Replacement progression preservation is intrinsic host behavior, as requested.
+  Remove the retired checkbox, localization and six opt-out reads. Existing
+  saved or synchronized false values are ignored without forced setting writes,
+  migration or a replacement RPC. Public stable CT is unchanged.
+- Preserve the six existing lifecycle hooks and their server authority,
+  selected-bot capture, initial-setup ordering, compatibility filtering,
+  readback/rollback, current-host coin override and once-only consumption.
+  The bounded edge receipt now reports `policy=implicit`.
+- Eleven actual installed-callback cases cover both transfer directions,
+  deferred setup, stale false controls, non-server denial, exact bot selection,
+  parity, rollback/retry and bot-economy ordering. Independent focused review:
+  47 passes; restoring the old production runtime produces 11 failures.
+- Later gameplay acceptance still requires identifiable acquired boons, both
+  weapon tiers and an observed human-to-bot-to-human trace. No particular
+  randomly offered boon is required. The starting-boon dependency and actual
+  engine/backend refresh remain unverified; this is not a live-test invitation.
+
 ## 0.7.352-dev (2026-09-14) -- Metal wind curse adapter, command-gated (#253) [diagnostics-armed]
 
 - First bounded slice of "Weave winds as Chaos Wastes curses", per

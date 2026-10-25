@@ -2,7 +2,9 @@
 
 ## Behavior
 
-`Replacement Player Compensation` is host-controlled and enabled by default.
+Replacement preservation is implicit host-side CT behavior, not a setting.
+Retired saved or synchronized `replacement_player_compensation = false` values
+are ignored without rewriting settings or broadcasting a replacement value.
 
 - When a human leaves an active pilgrimage, CT snapshots that player's granted
   power-ups, persistent buffs, Pilgrim's Coin, and serialized melee/ranged Deus
@@ -45,7 +47,7 @@ host receiver that materializes a joining career's initial loadout when it loses
 the race with bot selection.
 
 The handoff writes existing vanilla SharedState fields. It sends no custom RPCs,
-does not poll per frame, and caps diagnostics at 32 lines per run (`[ct:465]`).
+does not poll per frame, and caps diagnostics at 64 lines per run (`[ct:465]`).
 Cloning is bounded to six table levels and 256 entries per snapshot. Exceeding
 either bound rejects the handoff before any write rather than truncating progression.
 
@@ -63,10 +65,12 @@ joiner without CT from receiving an unknown network lookup index.
 
 ## Co-op verification
 
-1. Host and client enable the candidate CT dev build and leave Replacement Player
-   Compensation enabled. Begin a Chaos Wastes run.
-2. Give the client at least two visible boons, spend or collect coins so their balance
-   differs from the host, and upgrade or swap both weapon slots. Record both rarities.
+1. Host and client load the exact candidate CT dev build named by the issue card.
+   Begin a Chaos Wastes run; there is no replacement-compensation toggle.
+2. The client acquires any two identifiable boons. Record their displayed names;
+   random acquisition does not require Natural Bond specifically. Spend or collect
+   coins so their balance differs from the host, and upgrade or swap both weapon
+   slots. Record both rarities.
 3. Client disconnects. Confirm the same-profile replacement bot has the client's
    boons and both weapon tiers; the log must contain one `human->bot` line whose
    `apply=true`, `talents=true`, `weapons=true`, and `status=true` receipts all pass.
@@ -74,13 +78,26 @@ joiner without CT from receiving an unknown network lookup index.
    reconnect. Confirm the returning player receives the bot's current boons and both
    weapons, while their coin balance exactly matches the host. Require one
    `bot->human` line and no `parity_filtered` entries when both peers run CT.
-5. Repeat with the setting disabled. The vanilla fresh-state behavior must remain.
-6. Repeat steps 2-4 after choosing a different career for that hero than the host's
+5. Repeat steps 2-4 after choosing a different career for that hero than the host's
    configured bot career. Both rarity tiers must transfer without giving either
    target a weapon from the wrong career; `[ct:465]` must report `projection=exact`
    or only explicit fail-closed slot details, never an incompatible serialized item.
-7. Repeat one leave/rejoin cycle quickly enough to exercise whichever network order
+6. Repeat one leave/rejoin cycle quickly enough to exercise whichever network order
    occurs. An `awaiting=rpc_deus_set_initial_setup` line must be followed by exactly
    one `deferred-finish`, or the immediate path must emit exactly one `bot->human`.
-8. Run `/ct_regression_test` and require `replacement_player_compensation_installed`
+7. Run `/ct_regression_test` and require `replacement_player_compensation_installed`
    to pass.
+
+## Offline boundary and remaining acceptance
+
+`qa/lua/tests/test_ct_replacement_compensation.lua` drives the six installed
+callbacks in a private Lua environment with the real capture, projection policy,
+parity filter, apply/readback and rollback helpers. Only engine/backend refresh
+interfaces are stubbed; these tests do not prove an in-game bot refresh or network
+handoff. Legacy persisted and synchronized false controls must not suppress either
+edge, and the installer must also work without any setting-reader dependency.
+
+The source-policy change does not resolve #1146. Its starting-boon purchase test
+still needs a human pass before the dependent full gameplay acceptance is claimed.
+After a new CT dev release, use the current pinned issue card and an observed
+human-to-bot-to-human trace; an install-only regression pass cannot close #465.

@@ -256,7 +256,6 @@ end)
 mod._ct_replacement_runtime = mod:dofile(
     "scripts/mods/chaos_wastes_tweaker_dev/_ct_replacement_runtime")
 mod._ct_replacement_runtime.install(mod, {
-    effective_setting = effective_setting,
     real_player_local_id = REAL_PLAYER_LOCAL_ID,
 })
 -- Journey-completion difficulty guard owner (#291 / #1159).
