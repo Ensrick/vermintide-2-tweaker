@@ -13,21 +13,59 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$AuditVersion = '1.2.0'
+$AuditVersion = '1.3.0'
 $TargetLanguages = @('fr', 'pl', 'es', 'tr', 'de', 'br-pt', 'ru')
 $KnownLanguages = @('en') + $TargetLanguages
 if (-not $RepoRoot) { $RepoRoot = Join-Path $PSScriptRoot '..' }
 $repoRoot = (Resolve-Path $RepoRoot).Path
 
 function Find-LocFiles([string]$root) {
-    Get-ChildItem -Path $root -Filter '*_localization.lua' -Recurse -File -ErrorAction SilentlyContinue |
-        Where-Object {
-            $p = $_.FullName
-            $p -notlike '*\_archive\*' -and $p -notlike '*\bundleV2\*' `
-                -and $p -notlike '*\.build\*' -and $p -notlike '*\.temp\*' `
-                -and $p -notlike '*\.release-stage\*' -and $p -notlike '*\tweaker\*' `
-                -and $p -notlike '*\sample_*\*'
+    # #1176: enumerate canonical owners, never the repository container. A
+    # complete nested checkout, QA fixture or reference cache is not a mod.
+    # #1101: ancestor names such as .claude must not exclude this checkout.
+    $inventoryPath = Join-Path $root 'tools\mod-inventory.psd1'
+    if (-not (Test-Path -LiteralPath $inventoryPath -PathType Leaf)) {
+        throw "canonical mod inventory is missing: $inventoryPath"
+    }
+    try { $inventory = Import-PowerShellDataFile -LiteralPath $inventoryPath }
+    catch { throw "canonical mod inventory cannot be imported: $($_.Exception.Message)" }
+    if (-not $inventory.ContainsKey('Mods') -or $inventory.Mods -isnot [array] `
+            -or $inventory.Mods.Count -eq 0) {
+        throw 'canonical mod inventory must contain a nonempty Mods array'
+    }
+    $owners = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    $directories = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($entry in $inventory.Mods) {
+        if ($entry -isnot [System.Collections.IDictionary] -or $entry.Dir -isnot [string] `
+                -or $entry.Dir -cnotmatch '^[A-Za-z0-9][A-Za-z0-9_-]*$') {
+            throw 'canonical mod inventory contains an unsafe or missing Dir'
         }
+        if (-not $owners.Add($entry.Dir)) {
+            throw "canonical mod inventory contains duplicate owner: $($entry.Dir)"
+        }
+        $directories.Add($entry.Dir)
+    }
+    $paths = New-Object 'System.Collections.Generic.List[string]'
+    foreach ($dir in $directories) {
+        $sourceRoot = Join-Path $root "$dir\scripts\mods\$dir"
+        $canonical = Join-Path $sourceRoot "${dir}_localization.lua"
+        if (-not (Test-Path -LiteralPath $canonical -PathType Leaf)) {
+            throw "canonical localization entry is missing for owner ${dir}: $canonical"
+        }
+        # Owned nested localization modules remain in scope. Exclusions are
+        # relative to this owner's source tree, not its machine-specific path.
+        $prefix = [IO.Path]::GetFullPath($sourceRoot).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+        foreach ($file in Get-ChildItem -LiteralPath $sourceRoot -Filter '*_localization.lua' -Recurse -File -ErrorAction Stop) {
+            $relative = $file.FullName.Substring($prefix.Length).Replace('\', '/')
+            if ($relative -match '(?i)(^|/)(?:\.claude|\.git|_archive|bundleV2|\.build|\.temp|\.release-stage|sample_[^/]*)/') {
+                continue
+            }
+            $paths.Add($file.FullName)
+        }
+    }
+    $ordered = $paths.ToArray()
+    [Array]::Sort($ordered, [StringComparer]::Ordinal)
+    foreach ($path in $ordered) { Get-Item -LiteralPath $path -ErrorAction Stop }
 }
 
 function Get-FormatSignature([string]$value) {
@@ -159,6 +197,87 @@ return {
     Assert ($dynamicGenerators -eq 2) 'detects English-only computed localization generators'
     Assert ($duplicateKeys -eq 1) 'detects a duplicate static localization identity before hashtable collapse'
     Assert ((Get-FormatSignature 'Count: %d%%') -eq '%d|%%') 'preserves ordered directive and literal-percent signature'
+
+    # Tiny owned trees only: no real worktree, repository copy or localization
+    # mutation. Both hosts exercise the same production discovery function.
+    $tempBase = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\', '/')
+    $temp = Join-Path $tempBase ('vt2-translation444-' + [guid]::NewGuid().ToString('N'))
+    $normal = Join-Path $temp 'normal'
+    $linked = Join-Path $temp '.claude\worktrees\checkout'
+    $inventoryText = "@{ Mods = @(@{ Dir = 'alpha' }, @{ Dir = 'beta' }) }"
+    function Write-DiscoveryFixture([string]$Root, [string]$Relative, [string]$Text) {
+        $path = Join-Path $Root $Relative
+        [void][IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($path))
+        [IO.File]::WriteAllText($path, $Text, (New-Object Text.UTF8Encoding($false)))
+    }
+    function Assert-DiscoveryFailure([string]$Root, [string]$Pattern, [string]$Name) {
+        $message = ''
+        try { $null = @(Find-LocFiles $Root) } catch { $message = $_.Exception.Message }
+        Assert ($message -match $Pattern) "$Name (observed: $message)"
+    }
+    try {
+        foreach ($root in @($normal, $linked)) {
+            Write-DiscoveryFixture $root 'tools\mod-inventory.psd1' $inventoryText
+            foreach ($owner in @('alpha', 'beta')) {
+                Write-DiscoveryFixture $root "$owner\scripts\mods\$owner\${owner}_localization.lua" `
+                    'return { greeting = { en = "Hello" } }'
+            }
+            Write-DiscoveryFixture $root 'alpha\scripts\mods\alpha\nested\extra_localization.lua' `
+                'return { nested = { en = "Nested" } }'
+            foreach ($poison in @(
+                '.claude\worktrees\copy\alpha\scripts\mods\alpha\alpha_localization.lua',
+                '.spawn_tweaks_ref\alpha\scripts\mods\alpha\alpha_localization.lua',
+                '_archive\alpha\scripts\mods\alpha\alpha_localization.lua',
+                'sample_mod\scripts\mods\sample_mod\sample_mod_localization.lua',
+                'qa\lua\tests\test_event_modifier_localization.lua',
+                'alpha\scripts\mods\foreign\foreign_localization.lua',
+                'alpha\scripts\mods\alpha\.claude\copy\poison_localization.lua',
+                'alpha\scripts\mods\alpha\.build\poison_localization.lua')) {
+                Write-DiscoveryFixture $root $poison 'return { poison = { en = "Wrong", zz = "Wrong" } }'
+            }
+        }
+        $found = @(Find-LocFiles $normal)
+        Assert ($found.Count -eq 3) 'T444_inventory_owners_only: two owners and one nested module'
+        Assert (@($found | Where-Object { $_.FullName -match 'worktrees|\.spawn_tweaks_ref|_archive|sample_mod' }).Count -eq 0) `
+            'T444_nested_worktree_and_reference_cache_ignored'
+        Assert (@($found | Where-Object { $_.Name -eq 'test_event_modifier_localization.lua' }).Count -eq 0) `
+            'T444_qa_fixture_ignored'
+        Assert (@($found | Where-Object { $_.Name -eq 'extra_localization.lua' }).Count -eq 1) `
+            'T444_nested_localization_included'
+        $linkedFound = @(Find-LocFiles $linked)
+        Assert (($linkedFound.Name -join '|') -ceq ($found.Name -join '|')) `
+            'T444_parent_named_claude_valid: ancestor names do not alter the census'
+        Write-DiscoveryFixture $normal 'tools\mod-inventory.psd1' `
+            "@{ Mods = @(@{ Dir = 'alpha' }, @{ Dir = 'beta' }, @{ Dir = 'sample_gamma' }) }"
+        Write-DiscoveryFixture $normal 'sample_gamma\scripts\mods\sample_gamma\sample_gamma_localization.lua' `
+            'return { added = { en = "New owner" } }'
+        Assert (@(Find-LocFiles $normal).Count -eq 4) 'T444_new_owner_automatic: no hardcoded owner count'
+
+        Assert-DiscoveryFailure (Join-Path $temp 'missing-inventory') 'inventory is missing' 'T444_missing_inventory_fails'
+        foreach ($bad in @(
+            @{ Text = '@{ Mods = @() }'; Pattern = 'nonempty Mods array'; Name = 'empty' },
+            @{ Text = '@{ Other = @() }'; Pattern = 'nonempty Mods array'; Name = 'missing Mods' },
+            @{ Text = "@{ Mods = 'alpha' }"; Pattern = 'nonempty Mods array'; Name = 'nonarray Mods' },
+            @{ Text = '@{ Mods = @('; Pattern = 'cannot be imported'; Name = 'malformed' },
+            @{ Text = "@{ Mods = @(@{ Dir = '../escape' }) }"; Pattern = 'unsafe or missing Dir'; Name = 'traversal' },
+            @{ Text = "@{ Mods = @(@{ Dir = '' }) }"; Pattern = 'unsafe or missing Dir'; Name = 'empty Dir' },
+            @{ Text = '@{ Mods = @(@{ Dir = 42 }) }'; Pattern = 'unsafe or missing Dir'; Name = 'nonstring Dir' },
+            @{ Text = "@{ Mods = @(@{ Dir = 'alpha' }, @{ Dir = 'ALPHA' }) }"; Pattern = 'duplicate owner'; Name = 'duplicate' })) {
+            Write-DiscoveryFixture $normal 'tools\mod-inventory.psd1' $bad.Text
+            Assert-DiscoveryFailure $normal $bad.Pattern "T444_invalid_inventory_fails: $($bad.Name)"
+        }
+        Write-DiscoveryFixture $normal 'tools\mod-inventory.psd1' "@{ Mods = @(@{ Dir = 'missing_owner' }) }"
+        Assert-DiscoveryFailure $normal 'canonical localization entry is missing' 'T444_missing_owner_entry_fails'
+    }
+    finally {
+        # Verify the exact owned absolute target before recursive fixture cleanup.
+        $resolved = [IO.Path]::GetFullPath($temp)
+        if (-not $resolved.StartsWith($tempBase + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) `
+                -or [IO.Path]::GetFileName($resolved) -notmatch '^vt2-translation444-[a-f0-9]{32}$') {
+            throw 'refusing cleanup outside the owned translation fixture directory'
+        }
+        if ([IO.Directory]::Exists($resolved)) { [IO.Directory]::Delete($resolved, $true) }
+    }
     $passed = $script:TranslationSelfTestPassed
     Write-Host "[translation_readiness] $(if ($passed) { 'OK' } else { 'FAILED' }) -- self-test, audit v$AuditVersion."
     return $(if ($passed) { 0 } else { 2 })
@@ -168,7 +287,12 @@ if ($SelfTest) { exit (Invoke-SelfTest) }
 
 $files, $englishTotal, $missingTotal, $driftTotal = 0, 0, 0, 0
 $unknownLocaleTotal, $dynamicGeneratorTotal, $duplicateKeyTotal = 0, 0, 0
-foreach ($file in (Find-LocFiles $repoRoot | Sort-Object FullName)) {
+try { $localizationFiles = @(Find-LocFiles $repoRoot) }
+catch {
+    Write-Host "[translation_readiness] ERROR -- discovery failed: $($_.Exception.Message)" -ForegroundColor Red
+    exit 2
+}
+foreach ($file in $localizationFiles) {
     $files++
     $text = [System.IO.File]::ReadAllText($file.FullName, [System.Text.Encoding]::UTF8)
     $entries = Parse-StaticEntries $text

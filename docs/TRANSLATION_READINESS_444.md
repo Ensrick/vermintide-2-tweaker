@@ -1,7 +1,7 @@
 # Translation readiness (#444)
 
 Status: blocked by design until English copy and the intended 1.0 mod releases are
-stable. Audit schema: **v1.2.0**.
+stable. Audit schema: **v1.3.0**.
 
 ## Supported language contract
 
@@ -22,7 +22,14 @@ pwsh -NoProfile -File qa/check_translation_readiness.ps1 -SelfTest
 ```
 
 Default mode is observation-only while the issue is blocked. It inventories each
-active `*_localization.lua`, counts statically authored English entries, and
+active `*_localization.lua` under the canonical `tools/mod-inventory.psd1`
+owners' `<mod>/scripts/mods/<mod>` source roots, including nested localization
+modules. It never scans the repository container, copied worktrees, QA fixtures,
+archives or reference caches as additional owners. A legitimate checkout below
+a `.claude/worktrees` ancestor remains valid. Missing/malformed/empty inventory,
+unsafe or duplicate owners, and a missing canonical owner localization entry
+fail visibly with exit 2 rather than producing an incomplete or empty census.
+It counts statically authored English entries and
 reports explicit coverage for all seven target translations. It also compares
 ordered Lua `string.format` tokens, including escaped literal percent signs,
 rejects mistyped/unsupported language IDs, and inventories computed localization
@@ -37,6 +44,12 @@ and zero duplicate static English identities across the active catalog.
 Generator counts are migration blockers rather than translation coverage.
 All seven target slots are currently relying on English fallback. This is a
 planning snapshot, not a frozen translation manifest.
+
+The discovery self-test creates only tiny owned temporary trees. It covers
+inventory ownership, nested modules, copied worktrees and cache contamination,
+QA fixtures, checkout ancestors, newly added owners, and invalid/missing owner
+inputs. The original parsing and strict-readiness checks remain unchanged.
+This tooling correction does not unfreeze English or authorize translations.
 
 `-Strict` is the future release gate. It exits 2 when any English entry lacks an
 explicit target string, changes its format-token signature, uses an unknown
