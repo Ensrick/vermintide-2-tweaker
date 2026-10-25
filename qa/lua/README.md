@@ -254,6 +254,12 @@ there is no copied implementation.
   (test-local logger seam), and the registered `issue1686_buff_icons_in_atlas`
   closure runs in a test-local environment and fails on a live stale icon. An
   optional case cross-checks the fixture against a local decompiled atlas.
+- `tests/test_mp_daily_reroll.lua`: #1684 installed backend availability,
+  reroll and stale-row callbacks deny unsupported modded replacement without
+  touching account protection. Covers exact entry wiring, malformed/throwing
+  authority, official tuples/exceptions, bounded logging and the isolated
+  named runtime check. Optional native-source fixtures prove both the enqueue
+  path and the nil-poll UI lock avoided by the action adapter.
 - `tests/test_mp_hook_targets_resolve.lua`: #1671 no mp source file hooks
   the game-6.12-removed `IngameUI.not_in_modded` (or its `can_open_loot`
   successor), the shipped `_mp_hook_targets.TARGETS` inventory equals every

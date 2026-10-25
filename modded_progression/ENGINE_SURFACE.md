@@ -38,7 +38,19 @@ permits; present false/malformed denies, and only absence uses the old-game
 query. The named check exercises isolated contexts, not a live protection toggle.
 This does not implement #1684's local UI adapters or #607's container award/open.
 
-67 registration sites, all `mod:hook` (full wrapper). `[hook]` =
+Daily reroll safety (#1684, 0.2.45-dev): `_mp_daily_reroll_runtime.lua` owns
+the backend `can_refresh_daily_quest` / `refresh_daily_quest` methods and the
+achievement row's `_on_achievement_pressed` action. Native daily replacement
+directly enqueues `refreshQuest` without an EAC challenge
+(`backend_interface_quests_playfab.lua:193-212`), independently of automatic
+`update_quests`. Modded availability is false and direct rerolls are denied;
+stale close clicks stop before native input blocking with a nil poll id
+(`hero_view_state_achievements.lua:1219-1228`). Only explicitly readable official
+authority delegates. No account-protection flag or quest state is changed.
+The named isolated check exercises installed callbacks, not a live backend.
+
+Registration sites use `mod:hook` (full wrapper); the current total is reported
+by `tools/mod-lint/lint-mod.ps1`, not frozen here. `[hook]` =
 full wrapper (can rewrite args/returns). Three route through the shared
 `_with_eac_off` wrapper directly and five through its Fresh-aware sibling
 `_with_eac_off_unless_fresh` (or an inline equivalent), 22 form the #840
@@ -46,7 +58,7 @@ items/loadouts route in `_mp_fresh_profile_runtime.lua`, and the remainder own
 local progression/read/claim boundaries. There are no `hook_safe` sites and one
 table-form site (the #1637 instance join in the runtime). The `_with_eac_off` wrapper is a single load-bearing
 row-of-concern (issue 434) called out below and shared by all of its callers.
-The 44 sites whose class and method are both string literals are listed in
+The 47 sites whose class and method are both string literals are listed in
 `_mp_hook_targets.lua`; `/mp_regression_test` `mp1671_hook_targets_resolve`
 fails when a loaded class lacks one of those methods or a class is not loaded
 (#1671), and the offline `test_mp_hook_targets_resolve.lua` keeps the list to the source.

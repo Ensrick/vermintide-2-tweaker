@@ -134,6 +134,7 @@ local suites = {
     "test_mod_tweaker_numeric_editor",
     "test_mp_dailies",
     "test_mp_quest_boundary",
+    "test_mp_daily_reroll",
     "test_mp_shilling_ui_policy",
     "test_mp_emporium_purchase",
     "test_mp_loot_diag",

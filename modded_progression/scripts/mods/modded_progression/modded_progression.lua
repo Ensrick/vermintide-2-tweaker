@@ -30,7 +30,7 @@ local RealmAuthority = mod:dofile(
 -- at the bottom of this same chunk, so no _G or cross-file exposure is needed.
 local _MEM_PROBE_T0_MP = collectgarbage("count")
 
-local MOD_VERSION = "0.2.44-dev"
+local MOD_VERSION = "0.2.45-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([mp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -906,6 +906,21 @@ _rt_register("modded_daily_realm_boundary", function()
 end)
 
 local QuestBoundary = mod:dofile("scripts/mods/modded_progression/_mp_quest_boundary")
+
+-- #1684/#573: no local daily reroll transaction exists. Keep its native
+-- affordance and request closed without changing account protection.
+mod:dofile("scripts/mods/modded_progression/_mp_daily_reroll_runtime").install(mod, {
+    is_modded_realm = function()
+        local native = rawget(_G, "MODDED_REALM")
+        if native ~= nil then
+            if type(native) == "boolean" then return native end
+            return nil -- malformed native authority cannot authorize official writes
+        end
+        return _is_mp_realm()
+    end,
+    rt_register = _rt_register,
+    print_log = printf,
+})
 
 -- #573 follow-up: the challenge surface is one realm-owned transaction. The
 -- old hook replaced only `daily`, leaving official weekly/event rows visible;
