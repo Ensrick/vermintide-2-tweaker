@@ -206,11 +206,54 @@ public static class VmbTransactionProcessTreeGuard
                     } }
                     catch (ArgumentException) { }
                 }
-                if (DateTime.UtcNow >= deadline)
-                    throw new TimeoutException("Transaction process tree retained descendants; mutex was not released.");
+                if (DateTime.UtcNow >= deadline) {
+                    string detail;
+                    try { detail = DescribeResidualTimeout(current.Id, timeoutMilliseconds, residual); }
+                    catch { detail = "timeout_evidence=unavailable"; }
+                    throw new TimeoutException("Transaction process tree retained descendants; mutex was not released. " + detail);
+                }
                 Thread.Sleep(20);
             }
         }
+    }
+
+    // Failure-only, bounded evidence. No command lines, environment or paths;
+    // every temporary Process handle is closed before the original timeout
+    // escapes. Observation failures never replace that timeout or release the
+    // mutex. This does not change termination policy or the production budget.
+    private static string DescribeResidualTimeout(int ownerId, int timeoutMilliseconds, List<uint> residual)
+    {
+        System.Text.StringBuilder text = new System.Text.StringBuilder();
+        text.Append("owner_pid=").Append(ownerId).Append(" timeout_ms=").Append(timeoutMilliseconds)
+            .Append(" residual_count=").Append(residual.Count).Append(" active_count=");
+        try { text.Append(QueryActiveCount(_job)); }
+        catch { text.Append("unavailable"); }
+        int limit = Math.Min(16, residual.Count);
+        for (int i = 0; i < limit; i++) {
+            uint pid = residual[i];
+            text.Append("; pid=").Append(pid);
+            try { using (Process process = Process.GetProcessById((int)pid)) {
+                try {
+                    string name = process.ProcessName;
+                    // A hostile filename must not inject lines into ship logs.
+                    text.Append(" name=");
+                    for (int c = 0; c < Math.Min(80, name.Length); c++)
+                        text.Append(Char.IsLetterOrDigit(name[c]) || name[c] == '_' || name[c] == '-' || name[c] == '.' ? name[c] : '_');
+                } catch { text.Append(" name=unavailable"); }
+                try { text.Append(" exited=").Append(process.HasExited); }
+                catch { text.Append(" exited=unavailable"); }
+                try {
+                    bool belongs;
+                    text.Append(" in_job=").Append(IsProcessInJob(process.Handle, _job, out belongs) ? belongs.ToString() : "unavailable");
+                } catch { text.Append(" in_job=unavailable"); }
+                try { text.Append(" start_utc_ticks=").Append(process.StartTime.ToUniversalTime().Ticks); }
+                catch { text.Append(" start_utc_ticks=unavailable"); }
+            } }
+            catch (ArgumentException) { text.Append(" state=gone"); }
+            catch { text.Append(" state=unavailable"); }
+        }
+        if (residual.Count > limit) text.Append("; omitted=").Append(residual.Count - limit);
+        return text.ToString();
     }
 
     private static uint[] QueryActive(IntPtr job)

@@ -3785,6 +3785,19 @@ immutable proof is covered by `qa/check_deployed_source_proof.ps1`. Missing rele
 manifest reconstruction remains a separate authority problem (#1434); failure to
 fetch it changes no pins and cannot create publication or test-readiness evidence.
 
+**Late-cleanup reporting follow-up (#1328, 2026-10-24):** GUI Dev 0.2.363-dev
+uploaded new content but the outer machine-lease drain subsequently failed and
+the job exited 1. The old placement still printed `SHIP SUCCESS` and
+`TEST BUILD READY` before that failure. Those messages must execute only after
+the entire owning `finally` returns; claim finalization stays inside the lease.
+The actual production completion tail is exercised with successful cleanup and
+planted executable/machine-lease failures under PS5.1 and PS7. A drain timeout
+records owner PID, budget, accounting count and at most16 residual process
+identities/statuses (no command lines, environment or paths), closing every
+temporary process handle. This preserves the original timeout and containment;
+it is observability, not proof of the original residual process's cause. A later
+successful upload alone cannot retroactively establish that missing evidence.
+
 ## 88. Imported asset basis is mistaken for an attachment-pose defect
 
 **First confirmed:** 2026-08-21 (Old Musket issue #1155).

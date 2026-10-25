@@ -1558,6 +1558,8 @@ function Invoke-ShipSelfTest {
         $launcherCapabilityPos -lt $authorizationRecordPos) "ship leases the exact launcher before probing capabilities or mutating a release"
     Assert ($uploadActionPos -ge 0 -and $uploadActionPos -lt $launcherLeaseExitPos -and
         $launcherLeaseExitPos -lt $transactionLeaseExitPos) "ship holds the executable lease through upload and releases it before the transaction lease"
+    Assert ($selfTxt.LastIndexOf('Write-Host "==================== SHIP SUCCESS') -gt $transactionLeaseExitPos -and
+        $selfTxt.LastIndexOf('Write-Host "  TEST BUILD READY"') -gt $transactionLeaseExitPos) "completion reporting follows all owned cleanup, including final process drain"
     Assert ($selfTxt.IndexOf('Get-VmbLauncherVersion -LauncherPath $launcher', $mainDispatchPos) -lt 0 -and
         $selfTxt.IndexOf('& $launcher', $mainDispatchPos) -lt 0 -and
         $selfTxt.IndexOf('-FilePath $launcher', $mainDispatchPos) -lt 0) "main ship path has no free-path launcher execution or post-build version lookup"
@@ -2976,7 +2978,71 @@ catch {
 }
 
 # ---------------------------------------------------------------------------
-# Step 7: success summary
+# Release the ship/version claim: the upload + deploy verified, so v$modVersion
+# is spent and the mod is free for the next session to claim (tools/ship/CLAIMS.md).
+# ---------------------------------------------------------------------------
+if (-not $NoClaim) {
+    $claimScript = Join-Path $PSScriptRoot 'claim.ps1'
+    if (Test-Path -LiteralPath $claimScript) {
+        & $claimScript -Mod $Mod -Release -Quiet
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host ""
+            Write-Host ("  Ship claim for {0} released." -f $Mod) -ForegroundColor DarkGray
+        }
+        else {
+            Write-Host ""
+            Write-Host ("  NOTE: could not auto-release the ship claim for {0}. A foreign owner is never removed; inspect it with .\tools\ship\claim.ps1 -Mod {0}." -f $Mod) -ForegroundColor Yellow
+        }
+    }
+}
+
+}
+finally {
+    # An SDK/upload/verification failure must not strand GitHub source pins.
+    # Keep the original failure/claim and never enter readiness/label paths.
+    # The helper drains authenticated descendants while we still own the
+    # machine transaction; Exit below retains its defensive second drain.
+    try {
+        if ($publishedPinContext -and -not $pinFinalizationAttempted) {
+            $pinFinalizationAttempted = $true
+            try {
+                $pinResult = Invoke-VtPublishedPinFinalization -PublicationJson $publishedPinContext -TransactionLease $transactionLease
+                Write-VtPinFinalizationWarning ("Workshop publication remains incomplete; GitHub source-pin finalization: {0}." -f $pinResult.Summary)
+            }
+            catch {
+                Write-VtPinFinalizationWarning ("Publication failure retained; source-pin finalization also failed: {0}. Pending provenance: {1}" -f $_.Exception.Message, $publishedPinContext)
+            }
+        }
+    }
+    finally {
+    try {
+        try {
+            if ($privateLauncherSettings -and (Test-Path -LiteralPath $privateLauncherSettings)) {
+                Remove-Item -LiteralPath $privateLauncherSettings -Force -ErrorAction SilentlyContinue
+                if (Test-Path -LiteralPath $privateLauncherSettings) {
+                    Write-Warning "Could not remove ship-private launcher settings: $privateLauncherSettings"
+                }
+            }
+        }
+        finally {
+            if ($null -ne $launcherExecutableLease) {
+                Exit-VmbLauncherExecutableLease -Lease $launcherExecutableLease
+            }
+        }
+    }
+    finally {
+        if ($null -ne $transactionLease) {
+            Exit-VmbMachineTransactionLease -Lease $transactionLease
+        }
+    }
+    }
+}
+
+# ---------------------------------------------------------------------------
+# Step 7: success summary -- only after ALL owned cleanup has returned.
+# A completed upload is not a completed transaction (#1328). In particular,
+# a final process-drain failure must escape without announcing readiness.
+# Keep claim finalization above, inside the continuously held machine lease.
 # ---------------------------------------------------------------------------
 $uploadHuman = if ($uploadStatus -eq 'UPLOADED') { 'Uploaded new content' } else { 'No content change (server up to date)' }
 Write-Host ""
@@ -3021,65 +3087,4 @@ Write-Host "    Confirm the running build via the NEWEST log under" -ForegroundC
 Write-Host "       %APPDATA%\Fatshark\Vermintide 2\console_logs\" -ForegroundColor Yellow
 Write-Host ("    look for:  [{0}:LOAD] v{1}" -f $loadTag, $modVersion) -ForegroundColor Yellow
 Write-Host $bar -ForegroundColor Yellow
-
-# ---------------------------------------------------------------------------
-# Release the ship/version claim: the upload + deploy verified, so v$modVersion
-# is spent and the mod is free for the next session to claim (tools/ship/CLAIMS.md).
-# ---------------------------------------------------------------------------
-if (-not $NoClaim) {
-    $claimScript = Join-Path $PSScriptRoot 'claim.ps1'
-    if (Test-Path -LiteralPath $claimScript) {
-        & $claimScript -Mod $Mod -Release -Quiet
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host ""
-            Write-Host ("  Ship claim for {0} released." -f $Mod) -ForegroundColor DarkGray
-        }
-        else {
-            Write-Host ""
-            Write-Host ("  NOTE: could not auto-release the ship claim for {0}. A foreign owner is never removed; inspect it with .\tools\ship\claim.ps1 -Mod {0}." -f $Mod) -ForegroundColor Yellow
-        }
-    }
-}
-
 exit 0
-}
-finally {
-    # An SDK/upload/verification failure must not strand GitHub source pins.
-    # Keep the original failure/claim and never enter readiness/label paths.
-    # The helper drains authenticated descendants while we still own the
-    # machine transaction; Exit below retains its defensive second drain.
-    try {
-        if ($publishedPinContext -and -not $pinFinalizationAttempted) {
-            $pinFinalizationAttempted = $true
-            try {
-                $pinResult = Invoke-VtPublishedPinFinalization -PublicationJson $publishedPinContext -TransactionLease $transactionLease
-                Write-VtPinFinalizationWarning ("Workshop publication remains incomplete; GitHub source-pin finalization: {0}." -f $pinResult.Summary)
-            }
-            catch {
-                Write-VtPinFinalizationWarning ("Publication failure retained; source-pin finalization also failed: {0}. Pending provenance: {1}" -f $_.Exception.Message, $publishedPinContext)
-            }
-        }
-    }
-    finally {
-    try {
-        try {
-            if ($privateLauncherSettings -and (Test-Path -LiteralPath $privateLauncherSettings)) {
-                Remove-Item -LiteralPath $privateLauncherSettings -Force -ErrorAction SilentlyContinue
-                if (Test-Path -LiteralPath $privateLauncherSettings) {
-                    Write-Warning "Could not remove ship-private launcher settings: $privateLauncherSettings"
-                }
-            }
-        }
-        finally {
-            if ($null -ne $launcherExecutableLease) {
-                Exit-VmbLauncherExecutableLease -Lease $launcherExecutableLease
-            }
-        }
-    }
-    finally {
-        if ($null -ne $transactionLease) {
-            Exit-VmbMachineTransactionLease -Lease $transactionLease
-        }
-    }
-    }
-}
