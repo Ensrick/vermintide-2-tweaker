@@ -29,12 +29,16 @@
 
 [CmdletBinding()]
 param(
-    [string]$RepoRoot = (Join-Path $PSScriptRoot ".."),
+    [string]$RepoRoot,
     [switch]$Quiet,
     [switch]$SkipGitDiff
 )
 
 $ErrorActionPreference = 'Stop'
+# #1721: PS5.1 -File initializes PSScriptRoot after parameter defaults.
+if ([string]::IsNullOrWhiteSpace($RepoRoot)) {
+    $RepoRoot = [System.IO.Path]::GetDirectoryName($PSScriptRoot)
+}
 $repoRoot = (Resolve-Path $RepoRoot).Path
 $inProgressDir = Join-Path $repoRoot ".in_progress"
 $exitCode = 0
