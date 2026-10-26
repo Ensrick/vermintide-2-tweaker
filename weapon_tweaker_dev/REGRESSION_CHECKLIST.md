@@ -1,5 +1,37 @@
 # Regression Checklist — weapon_tweaker
 
+## #428 - Atomic Priest punch registration (mirrored)
+
+| Field | Check |
+|---|---|
+| Deployment | Prepared source only until an exact Dev version is claimed, built and published. No in-game verification is claimed by this entry. |
+| Owner/order | The Dev `_wt_priest_punch_owner.lua` installs at the old balance-module Priest position, after authentic-pistol and before later axe/#431 catalog work. Profile values, numeric append ID, fallback and normalized public/Dev behavior remain unchanged. |
+| Atomic/retained contract | Missing, malformed, foreign or partial Priest state cannot publish/repoint. A failed write restores exact raw cells/table identities/inherited absence without changing metatables. Donor/PowerLevelTemplates remain immutable. Custom use requires the committed tuple, unchanged action membership, existing #431 authority and checkbox; valid unrelated later appends remain supported. No hook, RPC, lookup name, history family or entry growth is added. |
+| Automated | `test_wt_priest_punch_owner.lua` runs real owner, complete balance-module and full runtime-check registration/callback paths for both streams; external old/new module oracles compare actual #431 catalogs. Fault/mutation coverage is source proof, not gameplay verification. |
+| Solo after publication | As Warrior Priest, compare the Reckoner Great Hammer's punch special with the tweak off/on; ordinary attacks remain unchanged. `/wt_regression_test` must pass the existing `wt_priest_punch_buff_wired` check, now validating retained transaction values rather than presence alone. |
+| Co-op after solo | Verify host/client roles on matching WT Dev builds, then a mixed lobby without WT on the other peer. Native fallback must prevent any custom damage-profile decode error. This is still unverified; do not weaken #431's separate sender floor. |
+| Scope | A bounded #428 slice only; the other composite owners/history work remain independent and are not declared complete. See the common `weapon_tweaker/ENGINE_SURFACE.md` Priest transaction section. |
+| Joint #942 oracle | `test_wt_priest_thermal_composition.lua` executes actual balance/default thermal/catalog modules for both mirrored streams and all toggle combinations, preserving existing IDs/content before thermal append and closing both gates before native join. |
+
+---
+
+## #942 - Flame Sword heat-scaled melee (mirrored)
+
+- [ ] Data-owner regression: complete-menu tests preserve all existing settings,
+  defaults, order and actual dependency calls; exactly five heat keys are added.
+  Both partial parent data contracts freeze the reduced 1715/1766 ceilings.
+
+| Field | Check |
+|---|---|
+| Deployment | Prepared source only; no claimed Dev version or in-game verification. Use this stream's eventual exact published banner, not a host-harness pass, for live acceptance. |
+| Defaults/scope | **Flame Sword: Heat-Scaled Melee** is off. Defaults add 2% cleave and 1% direct melee damage per absolute heat point; optional armor requires strictly above 25. Burning DoT, offhand/other weapons, nova area and heat/decay stay native. |
+| Automated | Actual owner/config transport, installed callback and full catalog-finalization tests plus `test_wt_priest_thermal_composition.lua`. The existing `issue942_fire_sword_heat_boundary` named check reads installed ownership and runs private protocol/heat checks without changing live/global raw state. Both runtime copies reject lost owner/template/hook/catalog/profile/fallback/action/protocol authority. Synthetic catalog/peer environments stay offline-only; none of these checks proves live rendering/damage/network simulation. |
+| Solo after publication | On Sienna's Flame Sword, compare zero/nonzero heat and setting-off restoration; inspect lights, both heavies, direct/target/area behavior and exactly-25/above-25 armor behavior. Preserve #943 heavy options, the Deepwood guard and independent Warrior Priest punch behavior. |
+| Co-op after solo | Matching Dev builds/settings must agree; change numbers on either peer and restore them to require a fresh handshake. Settings stay editable. Exercise reversed roles and an unconfirmed/non-WT join, verifying both features' native fallback before native join handling. |
+| Limits | Native cjson ABI, true network scheduling, installed game startup and feel remain unverified. Proof direction/delivery delay is explicit; neither #942 nor wider #428 completion follows from host tests. |
+
+---
+
 Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) — entries that apply to weapon_tweaker.
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
@@ -825,3 +857,36 @@ Last updated: 2026-10-24.
 - vt2-mod-command-inventory
 - vt2-no-bows-on-warrior-priest
 - vt2-no-tpose-default-stance
+
+## #428 authentic-pistol transaction regression
+
+Offline: run the canonical Lua suite, including test_wt_authentic_pistol_owner.
+Both streams must preserve the complete native donor and old/new healthy
+balance/template/catalog result; exactly one pistol append still precedes
+Priest with the same source fallback. OFF and missing Weapons/PowerLevelTemplates
+must not gate registration. Malformed/foreign/partial lookup/profile/fallback
+state, clone aliases, throwing readers/helpers and every failed/dropped commit
+write must leave no partial publication. Retained tamper and action-write faults
+must release all managed firing actions without scaling ammo/spread/timing again.
+The unchanged-oracle old-balance control must expose its real missing-lookup
+partial DPT publication. Named check wt_authentic_pistol_profile_registered_unconditionally
+must fail for absent/invalid retained ownership, not SKIP or merely accept a key.
+The actual installed named callback, same-module reentry and whole balance
+helper must reject forged validator/owner methods and paired callback/repoint
+replacement, including tampering after registration but before the setting
+read. Rejected repeat apply must not rescale timings or select the custom
+profile; read-only probes/reentry preserve exact raw fields and metatables.
+Unrelated fields remain a healthy control, and separate mod identities in one
+module cannot borrow each other's retained record. The immutable closure and
+getter-disconnection controls must fail the same behavioral assertions.
+Compile both complete entries (including the Lua local limit), then execute
+their actual original-position balance capture and later fourth-argument
+check install. Pre-check-install forged owner/validator must fail, while
+healthy/unrelated state passes. Missing DI must never fall back to mod fields;
+removing only the actual entry's fourth argument must fail the healthy oracle.
+
+Remaining live acceptance: actual installed launch, solo authentic brace firing
+through all three native firing actions, OFF control, and the separate #431
+matched/mixed lobby recovery/floor checks. Offline identity preservation is not
+a fresh proof of network capacity or human gameplay acceptance. #428 remains
+an open repository architecture umbrella, outside the in-game test queue.

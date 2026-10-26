@@ -347,16 +347,21 @@ return function(H, repo_root)
 	end)
 
 	H.test("WT #601 settings default on and compose with canonical lifecycle", function()
-		local data = read(repo_root
-			.. "/weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_data.lua")
+		local group = dofile(repo_root
+			.. "/weapon_tweaker/scripts/mods/weapon_tweaker/_wt_weapon_overrides_widgets.lua").build()
 		for _, id in ipairs({
 			policy.GREATAXE_LIGHT_CRIT_SETTING,
 			policy.DUAL_AXES_LIGHT_CRIT_SETTING,
 			policy.DUAL_AXES_CLEAVE_SETTING,
 		}) do
-			local at = assert(data:find('setting_id = "' .. id .. '"', 1, true))
-			local row = data:sub(at, at + 220)
-			H.truthy(row:find("default_value = true", 1, true))
+			local matches = 0
+			for _, row in ipairs(group.sub_widgets) do
+				if row.setting_id == id then
+					matches = matches + 1
+					H.equal(row.type, "checkbox"); H.equal(row.default_value, true)
+				end
+			end
+			H.equal(matches, 1, "default-on tweak must have one real widget")
 		end
 		local source = read(repo_root
 			.. "/weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua")
@@ -376,17 +381,22 @@ return function(H, repo_root)
 	end)
 
 	H.test("WT #621/#622/#623 settings default off and share the canonical balance lifecycle", function()
-		local data = read(repo_root
-			.. "/weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_data.lua")
+		local group = dofile(repo_root
+			.. "/weapon_tweaker/scripts/mods/weapon_tweaker/_wt_weapon_overrides_widgets.lua").build()
 		for _, id in ipairs({
 			policy.ONE_HAND_AXE_CLEAVE_SETTING,
 			policy.COG_HAMMER_HEAVY_SPEED_SETTING,
 			policy.MACE_SWORD_SPEED_SETTING,
 			policy.EXECUTIONER_LIGHT_HEADSHOT_SETTING,
 		}) do
-			local at = assert(data:find('setting_id = "' .. id .. '"', 1, true))
-			local row = data:sub(at, at + 220)
-			H.truthy(row:find("default_value = false", 1, true))
+			local matches = 0
+			for _, row in ipairs(group.sub_widgets) do
+				if row.setting_id == id then
+					matches = matches + 1
+					H.equal(row.type, "checkbox"); H.equal(row.default_value, false)
+				end
+			end
+			H.equal(matches, 1, "default-off tweak must have one real widget")
 		end
 		local source = read(repo_root
 			.. "/weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua")

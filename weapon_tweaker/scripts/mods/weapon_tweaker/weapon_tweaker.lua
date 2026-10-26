@@ -91,7 +91,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.336-beta"
+local MOD_VERSION = "0.12.338-beta"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -812,10 +812,10 @@ local _wt_validate_attachment_sources =
 --
 -- Authentic Brace of Pistols, the issue #348 Kruber Empire 1h sword push-combo
 -- revert, and the Warrior Priest punch buff moved verbatim to
--- _wt_weapon_balance_patches.lua. Bare dofile at the former execution position:
+-- _wt_weapon_balance_patches.lua. Capture its verifier at the former position:
 -- the two cloned damage profiles append to NetworkLookup.damage_profiles, so
 -- this load position is what fixes the index every wt peer has to agree on.
-mod:dofile("scripts/mods/weapon_tweaker/_wt_weapon_balance_patches")
+local _wt_balance_registration_verify = mod:dofile("scripts/mods/weapon_tweaker/_wt_weapon_balance_patches")
 
 -- Moonfire Bow pre-nerf AOE restoration - owner module (#1159).
 -- The toggle read, the ExplosionTemplates + NetworkLookup.explosion_templates
@@ -1019,7 +1019,7 @@ _wt_axe_balance_policy.install(mod)
 -- The bounded apply seam (mod._wt_apply_fire_sword) is owned by
 -- _wt_fire_sword.lua; installing here keeps the load-time apply at the exact
 -- manifest position the adapter used to occupy.
-_wt_fire_sword_policy.install(mod)
+mod:dofile("scripts/mods/weapon_tweaker/_wt_fire_sword_owner").install(mod, _wt_fire_sword_policy, _wt_axe_balance_policy)
 
 -- ============================================================
 -- Issue 431: exact peer-catalog gate + unconditional wire floor
@@ -1034,29 +1034,6 @@ mod:dofile("scripts/mods/weapon_tweaker/_wt431_damage_profile_parity")
 -- Normalize a stale master flag from an older/custom settings file without
 -- mutating any leaf. Programmatic write is non-notifying and bounded to one.
 _wt_rework_runtime:sync()
-
--- #664 hook pre-flight: repository grep on 2026-07-17 found no other WT hook
--- on DamageUtils.calculate_damage. Vanilla computes and returns the complete
--- post-armor, post-buff, post-stagger damage at damage_utils.lua:449-569; the
--- private light profile marker therefore gives an exact 1.30x headshot result
--- without changing body shots, heavies, cleave, stagger, crit, or armor data.
-if rawget(_G, "DamageUtils") then
-    mod:hook(DamageUtils, "calculate_damage", function(func, damage_output, target_unit,
-            attacker_unit, hit_zone_name, original_power_level, boost_curve,
-            boost_damage_multiplier, is_critical_strike, damage_profile, ...)
-        local damage, second = func(damage_output, target_unit, attacker_unit,
-            hit_zone_name, original_power_level, boost_curve, boost_damage_multiplier,
-            is_critical_strike, damage_profile, ...)
-        if type(damage) == "number" and target_unit then
-            local breed = AiUtils.unit_breed(target_unit)
-            local multiplier_type = DamageUtils.get_breed_damage_multiplier_type(breed, hit_zone_name)
-            damage = _wt_axe_balance_policy.scale_executioner_headshot_damage(
-                damage, multiplier_type, damage_profile)
-        end
-        if second ~= nil then return damage, second end
-        return damage
-    end)
-end
 
 _rt_register("issue621_one_hand_axe_cleave_boundary", function()
     local function action(profile)
@@ -1367,7 +1344,7 @@ local _wt_runtime_check_deps = {
     deepwood_runtime = _deepwood_runtime,
     fire_sword_policy = _wt_fire_sword_policy,
 }
-_wt_runtime_checks.install(mod, _rt_register, _wt_runtime_check_deps)
+_wt_runtime_checks.install(mod, _rt_register, _wt_runtime_check_deps, _wt_balance_registration_verify)
 _rt_register("issue1436_historical_weapon_patch_versions", function()
     if not _wt_history_runtime then
         return "#1436: historical weapon runtime was not installed"

@@ -92,9 +92,104 @@ the wrapper named in the trap column (`_safe_hook.lua`, issue 26).
 | `PlayerProjectileUnitExtension` / `PlayerProjectileHuskExtension` `.hit_enemy` / `.hit_level_unit` / `.hit_non_level_unit` [safe] `:5284` (2 classes x 3 methods) | Resolves a fired projectile's impact on the shooter's machine and on every peer's husk view [src: `scripts/unit_extensions/weapons/projectiles/player_projectile_unit_extension.lua`] | Spawn the Moonfire-arrow impact puff FX on both the shooter's and every observer's screen; hooking both roots is why the puff is visible to all peers (`_wt_moonfire_on_hit`, `:5284`) | Both roots carry the same fields the handler reads; the FX package rides the equipped Moonbow, so `World.create_particles` on hit is safe; cosmetics_tweaker's identical puff defers to this one (no double-up) |
 | `WeaponSystem.rpc_start_flamethrower` / `.update_synced_flamethrower_particle_effects` [safe post] `_wt_flamestorm_fx.lua` (#400) | Creates the synchronized 3P flamethrower particle and moves it every update from the wielded 3P weapon's `fx_muzzle` position and rotation [src: `scripts/entity_system/systems/weapon/weapon_system.lua:470-487,744-774`] | For exact `staff_flamethrower_template` use on non-Sienna careers, preserve muzzle position but orient the observer particle from the wearer's replicated `aim_direction`, matching the owner damage ray [src: `scripts/unit_extensions/weapons/actions/action_flamethrower.lua:226-228`] | Visual-only and peer-local. Exact template + non-`bw_` policy excludes Drakegun and native Sienna; one helper owns immediate creation plus the required continuous re-assert because vanilla rewrites the pose rotation every update. One apply log per unit, never per frame. |
 | `_lib_network_lookup.register_named(NetworkLookup, "explosion_templates", ...)` [tbl] `wt_moonfire_aoe_revert` registration (#428/#535) | The lookup is built once at engine boot and frozen with a strict `__index` that errors on a missing key [src: `scripts/network_lookup/network_lookup.lua` build `:1211` (`create_lookup({"n/a"}, ExplosionTemplates)`), strict `__index` `:2360-2367`] | Register the pre-nerf Moonfire AoE revert template as an index-append so any `NetworkLookup.explosion_templates[name]` encode cannot strict-`__index`-fatal (index determinism, PROJECT_STANDARDS §9.3) | The canonical helper uses only raw access, validates the complete dense symmetric lookup before trusting or extending it, accepts an existing exact pair idempotently, and rejects malformed state without mutation; rejection evidence is bounded by reason and reaches `wt_535_moonfire_explosion_registered`. The check also pins the fallback's positive integral index and reverse row, and treats a previously registered lookup axis disappearing as failure. **Wire-inert / belt-and-suspenders.** `_wt_moonfire_on_hit` calls `DamageUtils.create_explosion` DIRECTLY, never `AreaDamageSystem.create_explosion`. `DamageUtils.create_explosion` never encodes via `NetworkLookup.explosion_templates`; its only AoE-network touch is `area_damage_system:add_aoe_damage_target` [src: `damage_utils.lua:1470`] -> host-only local ring buffer, name stored as a STRING, resolved via `ExplosionUtils.get_template -> ExplosionTemplates[name]` [src: `area_damage_system.lua:280,331,347`], never `NetworkLookup`. The ONLY `NetworkLookup.explosion_templates[name]` encode in the explosion path is `AreaDamageSystem.create_explosion` [src: `area_damage_system.lua:162`], which moonfire never reaches - so the name never rides the wire and no floor hook is needed. Fallback `machinegun_poison_arrow` recorded in `mod._wt535_explosion_template_fallback` for a future send path. |
-| `rawset(NetworkLookup.damage_profiles, ...)` [tbl] `:4832`, `:5146`, `_wt_brett_sword_shield_buff.lua:128` | The lookup is built once at game load and frozen with a strict `__index` that errors on a missing key [src: `scripts/network_lookup/network_lookup.lua` build `:2209` (`create_lookup({}, DamageProfileTemplates)`), strict `__index` `:2360-2367`] | Register wt's cloned damage profiles (authentic brace no-dropoff, priest-punch scaled, brett buff) as index-appends so `PlayerProjectileUnitExtension`'s `NetworkLookup.damage_profiles[...]` lookup at projectile spawn does not fatal (`:4829`) | Forward + reverse append (`idx->key` and `key->idx`), guarded by `rawget` so it registers once; same pattern cwv uses for its custom profiles (`character_weapon_variants.lua:1364`); registration is unconditional at boot for index determinism across wt peers (PROJECT_STANDARDS §9.3) - but the appended index must NEVER wire to a non-wt peer, which is the #431 gate + floor row below |
+| `NetworkLookup.damage_profiles` [tbl] `_wt_weapon_balance_patches.lua`, `_wt_priest_punch_owner.lua`, `_wt_brett_sword_shield_buff.lua` | The lookup is built once at game load and frozen with a strict `__index` that errors on a missing key [src: `scripts/network_lookup/network_lookup.lua` build `:2209` (`create_lookup({}, DamageProfileTemplates)`), strict `__index` `:2360-2367`] | Register WT's authentic-pistol, Priest-punch and Bret clones at their established append positions | Priest registration now uses the bounded #428 profile/lookup/fallback transaction described below; authentic-pistol and Bret retain their existing owners. Registration remains unconditional for index determinism (PROJECT_STANDARDS 9.3); only action repointing is gated. The appended custom integer must never reach a non-WT decoder: the separate #431 gate and sender floor below remain unchanged. |
 | `WeaponSystem.send_rpc_attack_hit` [hook] `_wt431_damage_profile_parity.lua` (#431) | THE single choke point every attack-hit send funnels through (melee sweep, hitscan `DamageUtils.process_projectile_hit`, projectiles, shield slam, push stagger, geiser, lunge, AoE): host dispatches the receiver locally, a client wires `damage_profile_id` to the host via `rpc_attack_hit` [src: `weapon_system.lua:148-183`; host decode `:243`] | Unconditional sender-side wire floor: coerce a wt-custom `damage_profile_id` back to its clone-source vanilla id before a CLIENT send whenever peer-parity is not positively confirmed - a non-wt host would fatal on the strict `__index` decode (BUG_CLASSES 31; the parity gate on the three toggles is the primary defense, this floor catches mid-swing latched-id leaks). #1158 application floor: the id resolution is a pure numeric disposition (`_wt431_wire_contract.profile_id_for_send`) over a load-time catalog snapshot - a WT-owned id stays custom ONLY under an installed exact gate plus an intact live catalog; on any policy or lookup failure it substitutes a donor proven RESIDENT in the live lookup (round-trip in both directions, not mere table presence) or returns nil so the hook DROPS the RPC. The custom numeric id can never survive a failure. Dropping also skips the function's local boss-health-bar registration (`weapon_system.lua:185-200`) - accepted, since the alternative on that branch is a hard host-side `NetworkLookup` error; drop logging is bounded per distinct id | Takes no toggle argument by construction (class 31 fix template; wire safety is never toggle-gated, memory `reference_vt2_wire_safety_never_toggle_gated`); every named RPC param forwarded positionally, tail key/value pairs ride `...`; wt's only hook on this (Class, method) - re-grepped 2026-08-08; the mod's other `WeaponSystem` hooks target different methods (`_summon_vortex`, `rpc_start_flamethrower`, `update_synced_flamethrower_particle_effects`), so there is no collision |
 | VMF channel `wt_damage_profiles_exact_v1` (`mod:network_register`/`network_send`) `_wt431_damage_profile_parity.lua` (#431) | VMF mod-to-mod messaging delivers only to peers running the same mod id with a matching handler - absence of a reply proves absence of wt | The issue 371 peer-parity beacon (`_lib_peer_parity.lua` copy, master in `tools/shared_lib/`): the custom-damage-profile toggles only repoint at cloned profiles while every human peer proves the same exact catalog; instant revert when one is not | The dedicated exact-generation channel must never alias legacy `wt_peer_parity_present`: its presence-only handler ignores appended proof and would otherwise acknowledge asymmetrically. Fail-safe: inert until positively confirmed; any beacon error forces features OFF; install() wraps `mod.update` (backend's), so it must load after `weapon_tweaker_backend.lua`. #1158: the beacon is published to `mod._wt_peer_parity` only after an install-commit check, so a half-installed beacon can never present itself as a confirmed gate. The install-transaction fanout landed with the shared lib's latch: `install()` performs receiver registration and `mod.update` ownership inside ONE pcall and RETURNS the commit boolean, wt requires BOTH that boolean and `is_installed()`, and a failed attempt is terminal for the instance (no retry can double-register a retained receiver). The transport also rejects a mismatched schema generation BEFORE accepting a peer's epoch or challenge, so a previously acknowledged peer cannot stay exact-safe after presenting an incompatible generation. `_wt431_profiles_allowed()` requires installed AND enabled AND live-catalog integrity against the load-time snapshot. |
+
+### Priest punch profile transaction (#428, both WT streams)
+
+The mirrored `_wt_priest_punch_owner.lua` installs at the existing Priest
+tail of `_wt_weapon_balance_patches.lua`, after the authentic-pistol clone and
+before the later entry-side axe owners and #431 catalog capture. Healthy
+registration keeps the existing `wt_priest_punch_buffed` name, numeric append
+position, `light_blunt_smiter_stab` fallback and profile content: default target
+and every authored target retain 2x attack / 3x impact scaling. The donor and
+`PowerLevelTemplates` remain unchanged. This adds no hook, RPC, lookup name,
+history family or entry-point line.
+
+The owner resolves only detached target copies and gives the canonical
+`_lib_network_lookup.register` a shadow axis. It refuses missing, malformed,
+partial or foreign Priest registration state before publishing. Live profile,
+forward/reverse lookup cells, fallback, callback and retained owner are one
+read-back-checked transaction; an exception or discarded write restores exact
+raw cells, existing table identities and inherited-field absence. No rollback
+changes a metatable. Readiness is latched before any custom action repoint.
+
+Reapply requires the retained profile's actual numeric tree, exact pair,
+fallback, callback, action membership and registry identities, plus the existing
+#431 parity authority and checkbox. Lost authority restores owned punch actions
+to their donor without registering late; later valid unrelated lookup appends
+remain allowed. The existing `wt_priest_punch_buff_wired` check keeps its name
+and order but now validates this retained transaction; missing/throwing state
+is a failure, not a skip. Its validation reads private data and a shadow only.
+
+Offline evidence executes complete original/proposed balance modules, the
+actual runtime-check registrar/callback, strict lookup metatables, failure at
+each write, and #431 catalog comparisons (`test_wt_priest_punch_owner.lua`).
+This establishes source/transaction behavior, not actual in-game damage,
+stagger, animation or multiplayer acceptance. The wider #428 composite-owner
+migration remains incomplete; authentic-pistol, Bret and axe owners are not
+rewritten by this slice. Follow each stream's regression checklist after a
+future exact build is published.
+
+### Flame Sword heat owner and exact configuration agreement (#942)
+
+The data module constructs its existing `weapon_overrides` array element through
+the dependency-free `_wt_weapon_overrides_widgets.build()` factory at the same
+table-construction position. This owner returns fresh literal descriptors; it
+does not read settings, install gameplay, or defer VMF setting registration.
+The complete group retains the master, existing independent #943 options and
+Priest row unchanged, and adds exactly five heat setting IDs (one checkbox plus
+four advanced options). `test_wt_weapon_overrides_widgets.lua` executes both
+complete production data modules and their actual availability/master/history
+dependencies against an independent frozen-inline descriptor oracle, including
+empty/disabled providers, failure identity and cached-module fresh-tree cases.
+The freed 33 lines are frozen by lowering only the two data target ceilings to
+1715/1766 and adding partial data-owner contracts. The umbrellas still exceed
+1500 lines; this is neither full data decomposition nor permission for regrowth.
+
+The mirrored `_wt_fire_sword_owner.lua` composes the existing #943 heavy-style
+policy with default-off **Flame Sword: Heat-Scaled Melee**. Absolute heat is
+clamped to the owner's readable maximum; defaults add 2% melee cleave and 1%
+direct melee damage per heat point. The optional armor branch uses strict
+`heat > threshold` (default 25), preserves positive native armor entries and
+does not alter burning DoT, offhand/other weapons, nova area or heat decay.
+The pure policy/application owners retain exact native tuples and exceptions.
+
+Private profile registration is toggle-independent and precedes #431 catalog
+capture. It occurs after the established Priest/pistol IDs; the joint actual
+balance/default-owner/catalog boot oracle proves their numeric prefix, content
+and source fallbacks survive the additional heat profiles unchanged. Existing
+#431 epoch/catalog authority and its unconditional sender floor remain separate
+and unchanged in meaning. The actual complete catalog module calls the heat
+owner's finalizer only after its real lifecycle/floor/gated-feature commit, and
+before its final return; detached synthetic finalization is not the boot proof.
+
+Native boundaries are the existing `DamageUtils.calculate_damage` composition
+and exact `ActionSweep.client_owner_start_action`,
+`ActionShieldSlam.client_owner_start_action`, `ActionUtils.get_max_targets` and
+`GameNetworkManager.hot_join_sync` hooks. The sole existing remove-peer hook
+fans out to both owners. Join fences close heat and existing profile gates
+before native pre-roster sync. Update/settings/disable/state callbacks retain
+native positional returns; retained partial installation is inert and cannot
+retry registration. No entry ceiling is increased.
+
+The additional `wt_fire_sword_heat_config_v1` channel proves exact bounded
+configuration tuples through fresh challenge/ack generations, not hash-only or
+query-only authorization. Settings stay editable while mismatched. Proofs cap
+routes/retired history, retry traffic and the 500-byte VMF envelope; no per-hit
+or per-frame heat messages are sent. A locally changed setting invalidates
+locally at once; a remote's invalidation is delivery/expiry-bound, so agreement
+is directional, not instant common knowledge. VMF peer identity and native GUID
+uniqueness are supplied dependencies, not cryptographic or anti-cheat claims.
+
+Offline coverage executes real owners/protocols, actual installed callback
+paths, complete catalog boot and joint Priest/heat join behavior. The original
+restricted-array JSON codec is a QA fixture, not native cjson. Native cjson ABI,
+installed game launch, true network scheduling and damage-feel acceptance remain
+unverified. The solo/mixed/reversed-role checks in both stream checklists remain
+required after an exact publication. These source proofs do not close #942 or
+the wider #428 migration.
 
 ### Direct setting-table tweaks (no hook)
 
@@ -301,3 +396,51 @@ mod source - match crash logs by function name, not line. Structural template is
 primary and `weapon_tweaker_dev/` is its friends-only runtime-parity mirror.
 Preserve their distinct VMF/settings namespaces and Workshop presentation;
 `qa/check_wt_stream_parity.ps1` permits no gameplay-code drift.
+
+## Authentic-pistol composite registration (#428)
+
+The local owner `_wt_authentic_pistol_owner.lua` runs at the existing unconditional
+pistol registration point in `_wt_weapon_balance_patches.lua`, before Priest
+registration and the later #431 catalog capture. It consumes the manifested
+canonical lookup helper on a detached shadow. DPT, the numeric/reverse pair,
+clone-source fallback and retained owner/callback publish as one raw-rollback
+transaction; foreign/partial state is refused rather than adopted or repaired.
+Weapons, action snapshots, feature settings and PowerLevelTemplates are not
+registration prerequisites. Three firing-action snapshots remain separate and
+are created only by the existing enabled authentic-mode application.
+
+Native `shot_sniper` is authored at damage_profile_templates.lua:2187-2264;
+its near/far armor and power values are copied into a detached profile. The
+existing 0.3 -> 0.15 cleave values remain unchanged. Native table.clone
+(foundation/scripts/util/table.lua:31-48) uses its second argument to skip
+metatable assertions, not to select recursion depth. The owner passes detached
+input and rejects donor/input aliases before retaining a private output.
+
+Retained registration readback and the existing #431 parity gate are both
+required before custom action repointing. Authority loss releases captured
+actions to their recorded originals; foreign action replacements are not
+overwritten. Parity callbacks never rerun full authentic mode because that
+would scale timings again. Ammo, spread, timing, reload, profile name/order,
+fallback ancestry and healthy numeric/catalog identity are preserved. No hook,
+RPC or lookup name is added. The named unconditional-registration check now
+executes retained production owner validation without live writes. Authority
+compares the original validator and repoint closures, not mutually replaceable
+method/callback fields. Same-module reentry uses a private mod-keyed record;
+the balance helper captures its original owner and validator before the later
+feature-setting read. After the unchanged Priest tail, the balance module
+returns that existing verification closure. The entry retains it at the
+original load position and passes it privately as the check install's fourth
+argument; check installation never adopts methods from already-forged mod
+fields. Missing private DI visibly fails, even if public fields look valid. A
+forged validator/owner or paired callback replacement cannot authorize a
+profile, another full timing scale, or a successful named check. Unrelated
+annotation fields do not invalidate ownership. The record is module-local
+(the production VMF module owns one mod); its weak keys are not a Lua 5.1
+garbage-collection guarantee because retained closures refer back to the mod.
+
+This closes a source-proven local composite-state gap, not a demonstrated
+current wire escape, crash or engine capacity defect. Existing #431 epoch,
+exact catalog and unconditional sender floor remain independent. Detached
+tests execute whole old/new balance modules, native data/clone snapshots,
+real entry call expressions and complete #431 capture/callback/floor owners;
+they do not establish actual game launch, projectile rendering or co-op play.

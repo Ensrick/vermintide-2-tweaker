@@ -1,5 +1,32 @@
 # Weapon Tweaker Changelog
 
+## 0.12.339-dev (2026-10-26) -- mirror Fire Sword and rework ownership (#942, #428, #1737)
+
+### Why
+
+- Mirror public beta 0.12.338-beta's reviewed Fire Sword heat, bounded rework
+  owners, private Authentic Brace verifier and corrected English description.
+
+### Changed
+
+- Keep exact normalized runtime parity with the public beta while preserving
+  the Dev namespace, friends-only Workshop item, preview and Dev-only checks.
+- Carry the same atomic Warrior Priest profile registration and extracted
+  weapon-override widget owner; lower the affected data-file ceiling.
+- Keep synthetic peer fixtures offline; mirror the read-only installed-owner
+  and private-protocol diagnostic without environment reassignment.
+- Preserve #431 registration/fallback contracts and all pre-patch catalogs.
+  Do not include the separate history-transaction candidate in this release.
+
+### Verification boundary
+
+- Supersedes the never-built 0.12.338-dev allocation after correcting this
+  session's claim-owner invocation. No launcher or publication code changed.
+- The reviewed source composition passed 5,240 Lua cases plus parser, parity
+  and strict hook lint. Normal build/release gates still bind final artifacts.
+- Live startup/menu, gameplay, network and rendered-text acceptance remain
+  outstanding; there is no installed VT2 executable for a silent launch here.
+
 ## 0.12.337-dev (2026-10-24) -- refresh the preserved Hold-Pose owner extraction (#2) [tooling]
 
 - Supersedes the unpublished 0.12.336-dev candidate under a fresh claim and

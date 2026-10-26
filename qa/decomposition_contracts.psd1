@@ -56,6 +56,22 @@
             RequiredModules = @('_wt_anim_remap.lua', '_wt_availability.lua', '_wt_cross_character_safety.lua', '_wt_cross_char_template_patches.lua', '_wt_history_owner.lua', '_wt_ingame_3p_swap_owner.lua', '_wt_longbow_variable_zoom.lua', '_wt_menu_preview_owner.lua', '_wt_moonfire_aoe.lua', '_wt_regression.lua', '_wt_transform_runtime.lua', '_wt_weapon_balance_patches.lua')
         }
         @{
+            # Partial data-owner split only: the menu remains above 1500.
+            # Freeze the actual shrink and retain the fresh descriptor owner.
+            Name = 'weapon_tweaker_data'
+            State = 'partial'
+            Entry = 'weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_data.lua'
+            CeilingLines = 1715
+            RequiredModules = @('_wt_weapon_overrides_widgets.lua')
+        }
+        @{
+            Name = 'weapon_tweaker_dev_data'
+            State = 'partial'
+            Entry = 'weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/weapon_tweaker_dev_data.lua'
+            CeilingLines = 1766
+            RequiredModules = @('_wt_weapon_overrides_widgets.lua')
+        }
+        @{
             Name = 'career_tweaker_balance'
             State = 'complete'
             Entry = 'career_tweaker/scripts/mods/career_tweaker/career_tweaker_balance.lua'

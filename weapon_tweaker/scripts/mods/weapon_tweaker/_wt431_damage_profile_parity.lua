@@ -169,6 +169,7 @@ if mod._wt_peer_parity then
     -- no other hook on this (Class, method); level transitions do not call it.
     mod:hook_safe("GameNetworkManager", "remove_peer", function(_, peer_id)
         mod._wt_peer_parity:forget_peer(peer_id)
+        if mod._wt942_owner then mod._wt942_owner:disconnect(peer_id) end
     end)
     mod._wt431_disconnect_epoch_guard = true
 end
@@ -247,6 +248,7 @@ local function _wt431_reapply_profile_repoints()
     if not history_reconciled and type(mod._wt_apply_axe_balance) == "function" then
         pcall(mod._wt_apply_axe_balance, nil, false)
     end
+    if mod._wt942_owner then mod._wt942_owner:reconcile() end
 end
 
 if mod._wt_peer_parity then
@@ -430,6 +432,11 @@ if WT and type(WT.rt_register) == "function" then
             return "floor must never touch vanilla names"
         end
     end)
+end
+
+-- #942 profiles were prepared before our catalog; publish only after lifecycle commit.
+if mod._wt942_owner and type(mod._wt942_owner.finish_install) == "function" then
+    mod._wt942_owner:finish_install()
 end
 
 return {}

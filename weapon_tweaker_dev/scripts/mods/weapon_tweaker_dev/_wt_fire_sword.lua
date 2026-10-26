@@ -200,10 +200,13 @@ end
 -- single-setting dispatch (_wt_settings_runtime), owner batches, and
 -- on_disabled all rerun against the same baseline projection, so late or
 -- replaced templates re-capture per identity. Applies once at install.
-function M.install(mod)
+function M.install(mod, dependencies)
+    local deps = dependencies or {}
     local state = M.new()
     mod._wt_apply_fire_sword = function(setting_id, force_off)
-        if type(Weapons) ~= "table" then return end
+        local weapons
+        if deps.weapons then weapons = deps.weapons() else weapons = Weapons end
+        if type(weapons) ~= "table" then return end
         if setting_id
                 and setting_id ~= M.SWEEP_OPENER_SETTING
                 and setting_id ~= M.NOVA_SLOWDOWN_SETTING then
@@ -215,8 +218,8 @@ function M.install(mod)
         local sweep_opener = enabled(M.SWEEP_OPENER_SETTING)
         local nova_slowdown = enabled(M.NOVA_SLOWDOWN_SETTING)
         local idle_edges, nova_actions = state:apply(
-            sweep_opener, nova_slowdown, Weapons)
-        pcall(printf,
+            sweep_opener, nova_slowdown, weapons)
+        pcall(deps.log or printf,
             "[wt:943] applied: sweep_opener=%s nova_slowdown=%s idle_edges=%d nova_actions=%d",
             tostring(sweep_opener), tostring(nova_slowdown), idle_edges, nova_actions)
     end
