@@ -30,7 +30,7 @@ local RealmAuthority = mod:dofile(
 -- at the bottom of this same chunk, so no _G or cross-file exposure is needed.
 local _MEM_PROBE_T0_MP = collectgarbage("count")
 
-local MOD_VERSION = "0.2.46-dev"
+local MOD_VERSION = "0.2.47-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([mp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -1101,7 +1101,8 @@ end)
 -- Defense in depth for #589. The UI hook below is the normal interception,
 -- but no alternate caller may enqueue authenticated claimStoreRewards in the
 -- modded realm. Leave `_is_done_claiming` true so a caller cannot become stuck
--- waiting on a callback that intentionally never exists.
+-- polling this backend flag. UI callers that wait only on their callback need
+-- their own pre-action guard; the calendar owner below is one such caller.
 mod:hook("BackendInterfacePeddlerPlayFab", "claim_login_rewards", function(func, self, ...)
     local allowed, n, results = _route_store_login_claim(func, self, ...)
     if not allowed then
@@ -1123,30 +1124,8 @@ mod:hook("BackendInterfaceQuestsPlayfab", "get_quest_rewards", function(func, se
     return func(self, id, ...)
 end)
 
--- Exact individual UI interception identified in VT2 source:
--- HeroViewStateAchievements._claim_quest_reward -> QuestManager.claim_reward
--- -> BackendInterfaceQuestsPlayfab.claim_quest_rewards -> generateQuestRewards.
--- MP-owned ids stop at the first method. Unknown/official ids are blocked in
--- modded play, while official-realm calls retain the original implementation.
-mod:hook("HeroViewStateAchievements", "_claim_quest_reward", function(func, self, id, ...)
-    if not _is_mp_realm() then return func(self, id, ...) end
-    if not Dailies.is_owned_id(id) then
-        _dbg_alert("blocked non-MP quest claim id=%s backend=none", tostring(id))
-        return nil, "Only Modded Progression simulated dailies can be claimed in modded play."
-    end
-    return _local_claim({ id })
-end)
-
-mod:hook("HeroViewStateAchievements", "_claim_multiple_quest_rewards", function(func, self, ids, ...)
-    if not _is_mp_realm() then return func(self, ids, ...) end
-    for _, id in ipairs(ids or {}) do
-        if not Dailies.is_owned_id(id) then
-            _dbg_alert("blocked mixed/non-MP claim-all id=%s backend=none", tostring(id))
-            return nil, "Claim-all contained a quest not owned by Modded Progression."
-        end
-    end
-    return _local_claim(ids or {})
-end)
+-- #1684/#573 individual and claim-all actions are owned by the exact daily
+-- UI adapter below; it routes only current completed local-roster identities.
 
 -- Defense in depth: no quest reward request of any identity may reach PlayFab
 -- while MP owns the modded-realm surface. These hooks should be unreachable for
@@ -1217,26 +1196,34 @@ end)
 -- Fresh route keeps vanilla's modded-realm skip.
 mod:hook("LevelEndViewBase", "init", _with_eac_off_unless_fresh)
 
--- Okri's Challenges UI:
---   _create_entries (line 646)  — `completed` flag on each entry
---   _handle_claim_all_challenges (line 2992) — claim-all button visibility
--- #840: achievement rows/claims are official-backed (loot slice pending), so
--- the Fresh route leaves them greyed; MP-owned daily quest rows (#573) keep
--- the bracket because their claim path is fully local.
-mod:hook("HeroViewStateAchievements", "_create_entries", function(func, self, entries, entry_type, ...)
-    if entry_type ~= "quest" and FreshProfile.active() then
-        return func(self, entries, entry_type, ...)
-    end
-    return _with_eac_off(func, self, entries, entry_type, ...)
-end)
-mod:hook("HeroViewStateAchievements", "_handle_claim_all_challenges", function(func, self, ...)
-    -- [src: hero_view_state_achievements.lua:2961] the layout type names the
-    -- active claim-all surface; only the achievements surface stays gated.
-    if self._achievement_layout_type == "achievements" and FreshProfile.active() then
-        return func(self, ...)
-    end
-    return _with_eac_off(func, self, ...)
-end)
+-- #1684/#573: modern MP-owned daily presentation and local actions. Reuses
+-- the four existing hook seams; local dailies need no native-protection bracket.
+-- Nonquest delegates retain the existing Fresh/legacy-bracket policy.
+mod:dofile("scripts/mods/modded_progression/_mp_daily_ui_runtime").install(mod, {
+    is_modded_realm = function()
+        local native = rawget(_G, "MODDED_REALM")
+        if native ~= nil then
+            if type(native) == "boolean" then return native end
+            return nil
+        end
+        return _is_mp_realm()
+    end,
+    dailies = Dailies, local_claim = _local_claim,
+    print_log = printf, rt_register = _rt_register,
+    -- Preserve the existing #840 nonquest compatibility policy, not local dailies.
+    legacy_create_entries = function(func, self, entries, entry_type, ...)
+        if entry_type ~= "quest" and FreshProfile.active() then
+            return func(self, entries, entry_type, ...)
+        end
+        return _with_eac_off(func, self, entries, entry_type, ...)
+    end,
+    legacy_claim_all = function(func, self, ...)
+        if self._achievement_layout_type == "achievements" and FreshProfile.active() then
+            return func(self, ...)
+        end
+        return _with_eac_off(func, self, ...)
+    end,
+})
 
 -- #1684: exact plain-SM UI/action owner replaces the two inert legacy
 -- presentation brackets. The existing local transaction remains the sole writer.
@@ -1287,6 +1274,23 @@ mod:hook("StoreLoginRewardsPopup", "_claim_rewards", function(func, self, ...)
     end
     return unpack(results, 1, n)
 end)
+
+-- #1684: calendar claims must be denied before native blocks input.
+-- The exact class is loaded by the unconditional store require chain before
+-- mods (boot.lua:387-404,1321; hero_view_state_store.lua:7).
+local CalendarLoginGuard = mod:dofile("scripts/mods/modded_progression/_mp_calendar_login_guard")
+CalendarLoginGuard.install(mod, {
+    is_modded_realm = function()
+        local native = rawget(_G, "MODDED_REALM")
+        if native ~= nil then
+            if type(native) == "boolean" then return native end
+            return nil
+        end
+        return _is_mp_realm()
+    end,
+    print_log = printf,
+    rt_register = _rt_register,
+})
 
 -- Vanilla keep crafting bench:
 --   _enable_craft_button (line 1878)        — flips `enable` arg to false

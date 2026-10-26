@@ -54,6 +54,7 @@ M.TARGETS = {
     { "BackendInterfaceQuestsPlayfab", "update_quests" },
     { "BackendManagerPlayFab", "playfab_api_error" },
     { "BackendManagerPlayFab", "playfab_eac_error" },
+    { "HeroWindowGotwfOverview", "_claim_daily_reward" },
     { "HeroViewStateAchievements", "_claim_multiple_quest_rewards" },
     { "HeroViewStateAchievements", "_claim_quest_reward" },
     { "HeroViewStateAchievements", "_create_entries" },
