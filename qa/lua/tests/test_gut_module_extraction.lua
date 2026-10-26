@@ -52,6 +52,9 @@ return function(H, repo_root)
                 { source = view, name = "_mod_tweaker_view_interaction" },
                 { source = state, name = "_mod_tweaker_state_interaction" },
             }
+            if stream.dialogue then
+                owners[#owners + 1] = { source = view, name = "_mod_tweaker_view_rows" }
+            end
             for _, owner in ipairs(owners) do
                 H.equal(occurrences(owner.source, stream.module_path .. owner.name), 1,
                     owner.name .. " must have one owner")
@@ -66,7 +69,8 @@ return function(H, repo_root)
         for _, stream in ipairs(streams) do
             local view = read(stream.root .. "_mod_tweaker_view.lua")
             local view_interaction = read(stream.root .. "_mod_tweaker_view_interaction.lua")
-            assert_unique_methods(view, view_interaction, "ModTweakerView")
+            local rows = stream.dialogue and read(stream.root .. "_mod_tweaker_view_rows.lua") or ""
+            assert_unique_methods(view .. rows, view_interaction, "ModTweakerView")
 
             local state = read(stream.root .. "_mod_tweaker_state.lua")
             local state_interaction = read(stream.root .. "_mod_tweaker_state_interaction.lua")
@@ -138,6 +142,10 @@ return function(H, repo_root)
         H.equal(slider_edge:find("function mod.on_", 1, true), nil,
             "_mod_tweaker_slider_drag_edge.lua owns lifecycle")
 
+        local rows = read(streams[2].root .. "_mod_tweaker_view_rows.lua")
+        for _, forbidden in ipairs({ "mod:dofile(", "mod:hook", "mod:command(", "function mod.update", "function mod.on_" }) do
+            H.equal(rows:find(forbidden, 1, true), nil, "row owner must remain hook/lifecycle neutral")
+        end
         local diagnostics = read(streams[2].root .. "_mod_tweaker_view_diagnostics.lua")
         H.equal(diagnostics:find("mod:hook(", 1, true), nil,
             "_mod_tweaker_view_diagnostics.lua owns an engine hook")

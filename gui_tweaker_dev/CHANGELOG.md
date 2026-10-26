@@ -1,5 +1,21 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.364-dev (2026-10-26) -- Retain row and map-check owners (#2) [not-started]
+
+- Move the three existing mission-map checks into an ordered registration
+  child, without running them at installation or adding hooks or commands.
+- Give the standalone setting-row factory and adjacent gear append tail one
+  explicit owner. Preserve staged settings, per-provider localization, lazy
+  options, runtime gates, factory failure bounds, offsets and return values.
+  Traversal, search, input and lifecycle ownership stay in the original view.
+- Add complete-owner and adversarial extraction coverage, retaining the prior
+  disabled-section and gear-accent policy assertions at their new owner.
+  Lower only the two reduced GUI size ceilings; #2 remains partial because the
+  parents still exceed the target. Public GUI is unchanged.
+- Source evidence does not establish live renderer/input acceptance. The normal
+  build, protected QA, publication and supported launch boundaries remain
+  required; no new human-test lifecycle is asserted by this refactor.
+
 ## 0.2.363-dev (2026-10-24) -- Native 6.12 realm and UTF8 compatibility (#1688, #1695)
 
 - Early official-loadout protection now consumes the native `MODDED_REALM`

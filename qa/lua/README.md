@@ -33,6 +33,21 @@ returns and the reciprocal Spear-and-Shield action-graph fields. Optional exact
 6.13 donor fixtures strengthen table coverage; neither those nor synthetic probe
 contexts establish rendered first-person playback, physics, persistence or peers.
 
+The #2 GUI Dev partial map-check split is covered by
+`test_gut_runtime_checks_mission_map.lua`: actual ordered entry invocation and
+installed child, explicit authored verdict/error identities, no eager gameplay
+or file reads, IO-unavailable behavior and Windows/POSIX source paths. The
+portable suite reads only the current source and package; it never requires the
+retired inline implementation or a source checkout. It does not model VMF,
+Stingray drawing, package residency or actual game execution.
+
+The separate #2 standalone row-owner split is covered by
+`test_gut_view_rows.lua`: the whole view loads its real install-only child;
+actual normal/search/drill consumers retain owner-qualified staged values,
+factory/error/offset order and the single #717 gear-accent policy. Authored
+field/trace expectations and disconnected-owner/policy controls are portable
+Lua evidence, not VMF installation, renderer output or live game acceptance.
+
 ## Suite inventory (#1700)
 
 The PowerShell gate independently discovers every top-level `tests/test_*.lua`

@@ -1,5 +1,22 @@
 # Regression Checklist — gui_tweaker_dev
 
+## Mission-map check owner extraction (#2 partial slice)
+
+- Offline `test_gut_runtime_checks_mission_map.lua` executes the installed
+  child through the actual entry invocation; the three original names/order,
+  every failure string, nil-source skip and reader/registrar error identities
+  remain unchanged. It does not depend on the retired inline check bodies.
+- `check_file_sizes.ps1` retains the lowered exact Dev entry ceiling;
+  `check_decomposition_contracts.ps1` retains this partial phase and reachable
+  child owner. The entry is still above target; this does not complete #2.
+- Existing live `/gut_regression_test` names remain
+  `mission_map_backdrop_swap`, `area_video_guard_two_layers`, and
+  `mission_map_preview_backdrop`. Their IO-safe source checks can skip unreadable
+  source in retail; a pass is not proof of material residency or map drawing.
+  No new in-game action is required merely to prove registration extraction.
+- No stable GUI source, runtime hook, check behavior, settings or resource path
+  changed. This section is an owner contract, not a deployed live-test card.
+
 ## Native realm and UTF8 compatibility (#1688, #1695, 0.2.363-dev)
 
 - In the modded Keep, `/gut_regression_test` passes
@@ -252,6 +269,21 @@ If this candidate fails, use exactly one evidence-selected fallback:
 - [ ] Each owner loads and installs its interaction/contracts module once; no extracted module owns an engine hook, command, or lifecycle callback.
 - [ ] `qa/check_file_sizes.ps1` reports no hard-limit error for the six GUI owner files; do not update `qa/baselines/file_sizes.json` for this split.
 - [ ] `test_gut_module_extraction.lua`, the complete offline Lua suite, Quick QA, and both GUI mod-lint runs pass.
+
+### Standalone row-owner slice (#2)
+
+- [ ] `test_gut_view_rows.lua` loads the whole actual view and real child once,
+      then drives normal/search/drill dispatch, owner-qualified staged false,
+      step25, all row families, lazy providers, factory failures and gear order.
+- [ ] Child-disconnection, wrong owner/staged value, dropped gate/accent,
+      changed error boundary and copied-offset mutations fail that same oracle.
+- [ ] Existing #717 gear-accent and slider-step policies still pass; the
+      HeroView builder, stable GUI, input and named runtime checks are unchanged.
+- [ ] The view's exact lower target ceiling and partial owner contract pass;
+      verify actual child package inclusion during the later canonical build.
+- [ ] After deployment, open the same setting rows normally, through search
+      and through Advanced: values/tooltips, disabled colors, gears and layout
+      remain unchanged. Offline table factories do not prove renderer output.
 
 ## Character Dialogue media controls (#605)
 

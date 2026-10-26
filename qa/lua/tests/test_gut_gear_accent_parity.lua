@@ -21,6 +21,11 @@ return function(H, repo_root)
     H.test("both dev twins consume the ONE shared gear-parent accent policy", function()
         for _, name in ipairs({ "_mod_tweaker_view.lua", "_mod_tweaker_state.lua" }) do
             local source = read(name)
+            if name == "_mod_tweaker_view.lua" then
+                H.truthy(source:find("ViewRows.install(ModTweakerView", 1, true),
+                    "standalone row owner must be installed")
+                source = read("_mod_tweaker_view_rows.lua")
+            end
             H.truthy(string.find(source, "defs.apply_gear_parent_accent(row, has_gear)", 1, true),
                 name .. " must call the shared gear-parent accent policy (#611/#717)")
             H.truthy(not string.find(source, "255, 160, 146, 101", 1, true),

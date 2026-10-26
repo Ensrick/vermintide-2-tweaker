@@ -67,9 +67,12 @@ return function(Harness, repo_root)
             Harness.truthy(s:match("base_power_level%s*=%s*25"), dev_files[i])
             Harness.truthy(s:match("starting_coins%s*=%s*25"), dev_files[i])
             Harness.truthy(s:match("cot_cost_amount%s*=%s*25"), dev_files[i])
-            Harness.truthy(s:find("local _, owner_mod_id = _owner(category, setting_id)", 1, true), dev_files[i])
-            Harness.truthy(s:find("_resolve_step(w, owner_mod_id", 1, true), dev_files[i])
-            Harness.equal(s:find("_resolve_step(w, category and category.mod_id", 1, true), nil, dev_files[i])
+            -- test_gut_view_rows also drives the actual installed step25 path.
+            local row_source = i == 1 and read(
+                "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view_rows.lua") or s
+            Harness.truthy(row_source:find("local _, owner_mod_id = _owner(category, setting_id)", 1, true), dev_files[i])
+            Harness.truthy(row_source:find("_resolve_step(w, owner_mod_id", 1, true), dev_files[i])
+            Harness.equal(row_source:find("_resolve_step(w, category and category.mod_id", 1, true), nil, dev_files[i])
         end
     end)
 
