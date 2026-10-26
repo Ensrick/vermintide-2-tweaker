@@ -560,7 +560,8 @@ end
         H.test(tag.."actual entry calls and full431 boot retain catalog and firing lifecycle",function()
             local prefix=root.."/"..ns.."/scripts/mods/"..ns.."/"
             local function load(name) return assert(loadfile(prefix..name..".lua"))() end
-            local Checks,Lookup,Contract=load("_wt_fire_sword_heat_checks"),load("_lib_network_lookup"),load("_wt431_wire_contract")
+            local Checks=assert(loadfile(root.."/qa/lua/fixtures/wt_fire_sword_heat_network.lua"))()
+            local Lookup,Contract=load("_lib_network_lookup"),load("_wt431_wire_contract")
             local Json=assert(loadfile(root.."/qa/lua/fixtures/restricted_json.lua"))()
             local file=assert(io.open(prefix..ns..".lua","rb"));local entry=file:read("*a");file:close()
             local balance_call=assert(entry:match('mod:dofile%("scripts/mods/'..ns..'/_wt_weapon_balance_patches"%)'))

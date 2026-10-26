@@ -5,6 +5,15 @@ PROJECT_STANDARDS tier (a), not a fourth test tier. It runs under the vendored
 PUC-Rio Lua 5.1.5 interpreter, requires no package manager or network access,
 and is part of both Quick and full QA.
 
+The Fire Sword installed-owner check (#942) is read-only: it verifies retained
+owner/template/profile/hook/catalog state and runs a bounded private configuration
+protocol/heat-reader proof. Full simulated engine, exact-catalog and two-peer
+transport fixtures live in `fixtures/wt_fire_sword_heat_network.lua` only. Its
+private function environments must not be copied into deployed Lua (#1637).
+The existing heat integration, Priest composition and Authentic Brace suites
+consume that same offline fixture. Neither layer proves native rendering or
+live Steam/VMF multiplayer behavior.
+
 `test_cwv_anim_picker.lua` additionally executes #317's exact production named
 registration against the production cross-access factory/combined resolver, with
 disconnected/missing-owner/missing-fallback adversaries and exact settings restore.

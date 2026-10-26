@@ -12,7 +12,8 @@ return function(H, root)
     for _, namespace in ipairs({ "weapon_tweaker", "weapon_tweaker_dev" }) do
         local prefix = root .. "/" .. namespace .. "/scripts/mods/" .. namespace .. "/"
         local function load(name) return assert(loadfile(prefix .. name .. ".lua"))() end
-        local Fixture, Lookup, Contract = load("_wt_fire_sword_heat_checks"), load("_lib_network_lookup"), load("_wt431_wire_contract")
+        local Fixture = assert(loadfile(root .. "/qa/lua/fixtures/wt_fire_sword_heat_network.lua"))()
+        local Lookup, Contract = load("_lib_network_lookup"), load("_wt431_wire_contract")
         for _, priest_on in ipairs({ false, true }) do
             for _, heat_on in ipairs({ false, true }) do
                 H.test(namespace .. " Priest/thermal real composition " .. tostring(priest_on) .. "/" .. tostring(heat_on), function()

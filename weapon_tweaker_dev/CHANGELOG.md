@@ -13,6 +13,8 @@
   the Dev namespace, friends-only Workshop item, preview and Dev-only checks.
 - Carry the same atomic Warrior Priest profile registration and extracted
   weapon-override widget owner; lower the affected data-file ceiling.
+- Keep synthetic peer fixtures offline; mirror the read-only installed-owner
+  and private-protocol diagnostic without environment reassignment.
 - Preserve #431 registration/fallback contracts and all pre-patch catalogs.
   Do not include the separate history-transaction candidate in this release.
 

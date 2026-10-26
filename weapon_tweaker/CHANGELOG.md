@@ -14,6 +14,9 @@
 
 - Split Fire Sword heat policy, runtime, transport and configuration proof into
   explicit owners; preserve the separate DoT, area-damage and heat-decay rules.
+- Keep synthetic engine/catalog peer fixtures offline. The in-game diagnostic
+  reads installed ownership and exercises private policy/configuration proof
+  without changing live settings, globals or function environments.
 - Make Warrior Priest punch profile registration atomic, and move the weapon
   override widget construction out of the main settings data file. Lower the
   affected decomposition ceilings instead of raising them.

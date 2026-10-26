@@ -5,6 +5,15 @@ Architecture, gotchas, and conventions for `weapon_tweaker`. Read alongside
 (pre-release gates), and `CROSS_CHARACTER_PORT_RECIPE.md` (the seven-step procedure
 for adding a new cross-character weapon port).
 
+The mirrored #942 diagnostic reads the installed owner/template, hook commits,
+catalog lifecycle and profile/fallback/action ownership, then exercises only
+private configuration-protocol and heat-reader state. Full synthetic peer
+environments live in `qa/lua/fixtures/wt_fire_sword_heat_network.lua` and are
+never deployed. See the public mirror's module-contract table; do not add
+environment reassignment, live-setting writes or transport registration to the
+runtime check. Offline transport proof and actual gameplay acceptance remain
+separate.
+
 The Hold-Pose check-owner extraction is revalidated in 0.12.337-dev; its
 0.12.336-dev preparation was unpublished. Its five production checks retain
 the original registrar slot. Test fixtures load the real owner in a private

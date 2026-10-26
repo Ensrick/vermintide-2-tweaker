@@ -1,7 +1,7 @@
 return function(H, root)
     local prefix=root.."/weapon_tweaker/scripts/mods/weapon_tweaker/"
     local function load(name) return assert(loadfile(prefix..name..".lua"))() end
-    local Fixture=load("_wt_fire_sword_heat_checks")
+    local Fixture=assert(loadfile(root.."/qa/lua/fixtures/wt_fire_sword_heat_network.lua"))()
     local Json=assert(loadfile(root.."/qa/lua/fixtures/restricted_json.lua"))()
     local function pack(...) return {n=select("#",...),...} end
     local function pair()
@@ -364,11 +364,71 @@ return function(H, root)
         H.equal(a.owner.terminal,true);H.equal(a:damage(armored),10)
         H.equal(a.native_damage[9],a.profiles.direct,"failed owner must not pass latched armor to native")
     end)
-    H.test("WT #942 named real registration executes fixture and missing dependency fails",function()
+    H.test("WT #942 named real registration reads installed owner and missing dependency fails",function()
         local _,a=pair()
         H.equal(a.checks.issue942_fire_sword_heat_boundary(),nil)
         a.deps.load=function() return nil end
-        H.truthy(a.checks.issue942_fire_sword_heat_boundary():find("detached check missing",1,true))
+        H.truthy(a.checks.issue942_fire_sword_heat_boundary():find("runtime check missing",1,true))
+    end)
+    H.test("WT #942 named check never rewrites installed or global state",function()
+        local _,a=pair()
+        local seen,records={},{}
+        local function capture(value)
+            if type(value)~="table" or seen[value] then return end
+            seen[value]=true
+            local row={target=value,meta=getmetatable(value),fields={}}
+            records[#records+1]=row
+            for key,item in next,value do
+                row.fields[key]=item;capture(key);capture(item)
+            end
+        end
+        capture(a.mod);capture(a.deps);capture(a.lookup)
+        local globals={}
+        for _,key in ipairs({"Managers","Network","printf","setfenv","getfenv"}) do
+            globals[key]={rawget(_G,key)}
+        end
+        H.equal(a.checks.issue942_fire_sword_heat_boundary(),nil)
+        for _,row in ipairs(records) do
+            H.equal(getmetatable(row.target),row.meta)
+            for key,item in next,row.fields do H.equal(rawget(row.target,key),item) end
+            for key in next,row.target do H.equal(rawget(row.fields,key),rawget(row.target,key)) end
+        end
+        for key,item in pairs(globals) do H.equal(rawget(_G,key),item[1]) end
+    end)
+    for _,namespace in ipairs({"weapon_tweaker","weapon_tweaker_dev"}) do
+        local checks=assert(loadfile(root.."/"..namespace.."/scripts/mods/"..namespace
+            .."/_wt_fire_sword_heat_checks.lua"))()
+        for _,failure in ipairs({"owner","template","hook","catalog","profile","fallback","action","protocol"}) do
+            H.test(namespace.." #942 installed diagnostic rejects lost "..failure,function()
+                local _,a=pair()
+                if failure=="owner" then a.mod._wt942_owner={}
+                elseif failure=="template" then a.weapons["flaming_sword_template_1"]={}
+                elseif failure=="hook" then a.owner.hooks.join=false
+                elseif failure=="catalog" then a.mod._wt431_disconnect_epoch_guard=nil
+                elseif failure=="profile" then a.profiles.wt942_direct_direct={}
+                elseif failure=="fallback" then a.deps.fallbacks.wt942_direct_direct="foreign"
+                elseif failure=="action" then a.owner.runtime.state.rows[1].key="foreign"
+                else a.owner.transport.protocol={inspect=function() return {fatal=true} end} end
+                local ok=pcall(checks.run,load,a.mod,a.owner,a.deps)
+                H.equal(ok,false,"lost installed dependency must fail the diagnostic")
+            end)
+        end
+    end
+    H.test("WT #942 runtime check still executes private protocol mismatch oracle",function()
+        local _,a=pair()
+        local checks=load("_wt_fire_sword_heat_checks")
+        local real=load("_wt_fire_sword_heat_config_proof")
+        local function disconnected(name)
+            if name~="_wt_fire_sword_heat_config_proof" then return load(name) end
+            return setmetatable({new=function(deps)
+                local protocol=real.new(deps)
+                protocol.allows=function() return true end
+                return protocol
+            end},{__index=real})
+        end
+        local ok,problem=pcall(checks.run,disconnected,a.mod,a.owner,a.deps)
+        H.equal(ok,false)
+        H.truthy(tostring(problem):find("mismatch stayed active",1,true))
     end)
     H.test("WT #942 original restricted JSON fixture round trips exact protocol shapes",function()
         for _,packet in ipairs({{1,"q","a",1000000000,"",0,"c1000000000","",1,0,"0","0","0"},

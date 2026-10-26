@@ -231,10 +231,10 @@ function M.install(mod, heavy_policy, balance_policy, dependencies)
             end
             local checked, problem = pcall(function()
                 local checks = deps.load("_wt_fire_sword_heat_checks")
-                assert(type(checks) == "table" and type(checks.run) == "function", "#942 detached check missing")
-                checks.run(deps.load)
+                assert(type(checks) == "table" and type(checks.run) == "function", "#942 runtime check missing")
+                checks.run(deps.load, mod, owner, deps)
             end)
-            if not checked then return "#942 detached installed-adapter proof failed: " .. tostring(problem) end
+            if not checked then return "#942 installed-owner/private-protocol proof failed: " .. tostring(problem) end
         end)
         owner.prepared = true
     end)
