@@ -24,6 +24,9 @@ local function register_private_profiles()
     rawset(lookup, "fixture", index)
 end
 '@ + "`n"
+# A CRLF checkout gives here-string literals CRLF too. Canonicalize this
+# detached fixture once before the case that deliberately authors CRLF.
+$fixtureSource=$fixtureSource.Replace("`r`n","`n")
 function Write-OwnedText([string]$Path,[string]$Text) {
     [void][IO.Directory]::CreateDirectory((Split-Path -Parent $Path))
     [IO.File]::WriteAllText($Path,$Text,$utf8)
@@ -73,6 +76,7 @@ function Invoke-Gate([string]$HostPath,[string]$Gate,[string]$Root) {
 $cases=@(
     @{name='exact pins and independent counts';exit=0;pattern='(?s)heuristic_detected=2 baseline=2.*pinned_unscanned=2 minimum_known_present=4 global_completeness=unproved';edit={param($r)}},
     @{name='CRLF normalized only';exit=0;pattern='pinned_unscanned=2';edit={param($r) foreach($p in $paths){Write-OwnedText (Join-Path $r $p) ($fixtureSource.Replace("`n","`r`n"))}}},
+    @{name='CRCRLF is not normalized away';exit=2;pattern='source drift';edit={param($r) Write-OwnedText (Join-Path $r $paths[0]) ($fixtureSource.Replace("`n","`r`r`n"))}},
     @{name='benign source comment drift';exit=2;pattern='source drift';edit={param($r) Write-OwnedText (Join-Path $r $paths[0]) ($fixtureSource+"-- benign`n")}},
     @{name='missing source is not migration';exit=2;pattern='source missing';edit={param($r) Remove-Item -LiteralPath (Join-Path $r $paths[0])}},
     @{name='empty source';exit=2;pattern='source drift';edit={param($r) Write-OwnedText (Join-Path $r $paths[0]) ''}},
