@@ -35,12 +35,12 @@
             RequiredModules = @('_gut_runtime_checks_mission_map.lua')
         }
         @{
-            # #2 partial view slice: only setting-row/gear construction moves.
+            # #2 partial view slice: retained setting-row and category-catalog owners.
             Name = 'gui_tweaker_dev_view_rows'
             State = 'partial'
             Entry = 'gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view.lua'
-            CeilingLines = 2043
-            RequiredModules = @('_mod_tweaker_view_rows.lua', '_mod_tweaker_view_diagnostics.lua', '_mod_tweaker_view_interaction.lua')
+            CeilingLines = 1685
+            RequiredModules = @('_mod_tweaker_view_rows.lua', '_mod_tweaker_view_catalog.lua', '_mod_tweaker_view_diagnostics.lua', '_mod_tweaker_view_interaction.lua')
         }
         @{
             # Structural phase completed at 0.9.207-dev (#1159): the entry is

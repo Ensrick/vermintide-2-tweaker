@@ -96,6 +96,7 @@ return function(H, repo_root, source_override)
         local pure = {
             _mod_tweaker_search = true, _mod_tweaker_ordering = true,
             _mod_tweaker_label_policy = true, _mod_tweaker_exclusive_layout = true,
+            _mod_tweaker_view_catalog = true,
         }
         local function load_source(path)
             local chunk = assert(loadstring(read(path), "@" .. path)); setfenv(chunk, env); return chunk()

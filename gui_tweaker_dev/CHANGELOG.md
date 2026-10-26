@@ -1,5 +1,22 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.365-dev (2026-10-26) -- Retain category catalog owner (#2) [not-started]
+
+- Give the standalone view's existing category assembly one explicit owner.
+  Preserve all 366 moved lines, call-time VMF discovery, CKC and UI Tweaks
+  folds, Equipment synthesis, category/depth/owner identity and ordering.
+- Bind the deferred builder once at the original view location. Keep its
+  existing rebuild pcall and controller fallback; do not change input,
+  rendering, lifecycle, settings transactions or the keep-state twin.
+- Add complete-owner and disconnected/order counterfactual coverage while
+  preserving the existing row and disabled-section policy assertions.
+- Lower the view's exact size ceilings from 2043 to 1685 lines; the new
+  catalog is 380 lines and the entry remains unchanged. #2 is still partial
+  because these parents remain above the target. Public GUI is unchanged.
+- Source proof does not establish installed game launch or live GUI
+  acceptance. Build, receipt, protected QA and normal publication remain
+  required; no new human-test lifecycle is asserted by this refactor.
+
 ## 0.2.364-dev (2026-10-26) -- Retain row and map-check owners (#2) [not-started]
 
 - Move the three existing mission-map checks into an ordered registration

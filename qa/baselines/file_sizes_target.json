@@ -20,7 +20,7 @@
     "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_native_loadouts.lua": 2041,
     "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_definitions.lua": 2261,
     "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_state.lua": 1800,
-    "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view.lua": 2043,
+    "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view.lua": 1685,
     "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/gui_tweaker_dev.lua": 2252,
     "gui_tweaker/scripts/mods/gui_tweaker/_mod_tweaker_definitions.lua": 1996,
     "gui_tweaker/scripts/mods/gui_tweaker/_mod_tweaker_state.lua": 1725,

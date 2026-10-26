@@ -90,6 +90,23 @@ child; do not regrow it in the view. `test_gut_view_rows.lua` executes installed
 methods and actual normal/search/drill dispatch with independent table/trace
 oracles; live rendering remains outside that host-only proof.
 
+### Standalone category-catalog owner (#2, partial decomposition)
+
+`_mod_tweaker_view_catalog.lua` binds the standalone view's existing collaborators
+once at the former Equipment/discovery block. It owns deferred VMF category
+discovery, CKC then live UI Tweaks folding, Equipment synthesis and the existing
+category sort. The parent retains `pcall(_vmf_categories)`, controller fallback,
+rows/search, staged transactions, profiles, renderer/input and lifecycle. The
+child adds no hook, command, lifecycle wrapper, setting write or eager VMF read.
+
+Owner maps, depth rebasing, disabled headers, diagnostic-once flags and HideBuffs
+profile exclusion are preserved. New category discovery/integration composition
+belongs in this child; live-tree policy remains in `_mod_tweaker_external_group`
+and author/stream aliases remain in `_mod_tweaker_disabled_sections`. The keep
+state and stable GUI are unchanged. This is another partial #2 split, not the
+1,500-line target or live GUI acceptance. `test_gut_view_catalog.lua` exercises the
+complete child through actual parent binding/rebuild with detached table inputs.
+
 ## Hook table
 
 ~135 registration sites across ~35 modules, grouped below into rows-of-concern.
