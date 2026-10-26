@@ -172,6 +172,17 @@ there is no copied implementation.
   generated Dual Axes pair through the real peer gate, lifecycle ledger and
   husk re-key: the bare peer_id owner collapses the offhand, the RemotePlayer
   shape keeps both hands, and the shipped check builds that shape.
+- `tests/test_cwv_dual_axes_installed_chain.lua`: #579 QA-only two-endpoint
+  installed-edge proof for Kruber's and Saltzpyre's Dual Axes. Uses the real
+  Cosmetics catalog, persistence commit and committed provider, source-owned
+  item-identity/world-descriptor constructors, publish hook, registered receive
+  callback, husk wield hook and GearUtils hand transaction. Independently pinned
+  native axe meshes expose loss of the offhand axis. Covers foreign/stale/missing
+  records, local catalog drift, native fallback, raw context/error restoration,
+  dedupe and bounded targeted replay/ACK. The private queue and native spawn-input
+  spy prove Lua wiring only, not VMF transport, engine residency/rendering, actual
+  model visibility, or reversed-role co-op acceptance. Production named check,
+  version and current test card remain unchanged.
 - `tests/test_cwv_careers_publication.lua`: #1660 the installed registration
   owner's `build_entry` publishes a private `can_wield` copy per row, so a
   sibling mod's in-place append or removal on one published row reaches
