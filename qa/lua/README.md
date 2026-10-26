@@ -382,8 +382,32 @@ an explicit skip. The native JSON fixture changes only two LuaJIT hexadecimal
 string escapes to equivalent stock-Lua-5.1 decimal escapes, with exact counts.
 No engine object, real VMF save, backend/Steam call or live rendering is tested.
 
+### MP-owned daily UI (#1684/#573)
+
+`test_mp_daily_ui.lua` executes the four installed production owners for local
+row construction, claim-all presentation, and individual/multiple actions.
+Mandatory cases use graphics-free widget/metadata collaborators and fail-closed
+account-protection tripwires. Optional exact 6.13 completion/table, claim-all and
+localized search-parser fixtures exercise the source-qualified sequential
+boundaries; absence is reported as a skip, not engine coverage. Rendering,
+native input/audio, real VMF persistence and PlayFab/Steam writes are not tested.
+The existing real-local-owner tests and #573 human persistence/official-isolation
+card remain required. The runner lists the suite explicitly.
+
 - `tests/test_mp_emporium_ui.lua`: #1684 exact plain-SM preview authorization,
   pre-platform purchase-request guard, controller/desktop action revalidation,
   and deferred settlement of the existing synchronous local transaction. Tests
   distinguish installed callback contracts from optional native-source execution;
   no backend/account protection flag is changed.
+
+- `tests/test_mp_calendar_login_guard.lua`: #1684 calendar login pre-action safety;
+  actual installed/entry callbacks and exact portable native 6.13 action/completion,
+  source-qualified no-callback baseline, official sequential completion, tri-state
+  authority, no UI writes, exact tuple/error identity and bounded denial logging.
+  This does not implement reward schedules or local login grants.
+
+- `tests/test_mp_daily_calendar_composition.lua`: executes both actual entry
+  installer blocks together; checks five unique callbacks, exact named-check
+  identities/order, live native-first authority and official tuple/error parity.
+  Its #840 matrix uses the actual shared legacy bracket and unchanged Fresh
+  assertions, including inactive/unsupported branches and raw flag restoration.

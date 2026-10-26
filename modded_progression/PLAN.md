@@ -6,10 +6,16 @@ Internal id: `mp`. Target: a fully local modded-realm progression universe with 
 > [ENGINE_SURFACE.md](ENGINE_SURFACE.md) for installed owners and limitations.
 > Historical gate/overlay research below is not a current implementation recipe.
 > Shared realm V2 (`_lib_modded_realm_authority.lua`), the bounded Emporium owner
-> (`_mp_emporium_ui_runtime.lua`) and daily-reroll denial owner
+> (`_mp_emporium_ui_runtime.lua`), exact local daily UI owner
+> (`_mp_daily_ui_runtime.lua`) and daily-reroll denial owner
 > (`_mp_daily_reroll_runtime.lua`) do not clear `read_only_backend`.
-> Modern daily-row presentation, mission containers and the remaining Fresh
-> profile slices are separate unfinished work; the Emporium slice completes none of them.
+> Nonquest presentation retains #840's original Fresh/native-vs-legacy-bracket
+> branches through injected entry delegates; the daily adapter does not own it.
+> Calendar login claims are denied before input locking by a separate safety
+> owner; this does not provide a login schedule or local reward transaction.
+> Mission containers, mixed login rewards and the remaining Fresh profile
+> slices remain separate unfinished work. Local UI source/fixture coverage is
+> not live acceptance or completion of all #1684/#573 requirements.
 
 ## Goal
 
@@ -70,7 +76,8 @@ can block input with no poll id. Official calls preserve native behavior and
 full return tuples; unreadable realm authority denies. Never clear
 `read_only_backend` to make this button appear. The source-qualified paths
 and deterministic check are recorded in `ENGINE_SURFACE.md` and the changelog.
-This is safety hardening, not completion of the daily-row presentation work.
+This denial owner is safety hardening; modern daily rows/actions are separately
+owned by `_mp_daily_ui_runtime.lua`, not by the reroll bracket.
 
 ## Fresh-profile isolation boundary (#840)
 
@@ -200,8 +207,10 @@ implemented.
 > advice to add one-line flag overrides. The cited current menu sites read
 > `GameSettingsDevelopment.read_only_backend`, not the legacy EAC key. Preserve
 > that protection. The Emporium's five owned presentation/action seams are in
-> [ENGINE_SURFACE.md](ENGINE_SURFACE.md#local-silver-shilling-action-boundary-1684577);
-> daily-row presentation remains legacy-pending until its separate adapter lands.
+> [ENGINE_SURFACE.md](ENGINE_SURFACE.md#local-silver-shilling-action-boundary-1684577).
+> Modern local daily rows/actions use the four existing seams documented in
+> [Exact local daily UI](ENGINE_SURFACE.md#exact-local-daily-ui-1684573), not a
+> native flag override. Historical rows below are preserved research only.
 
 Original research table:
 
@@ -438,3 +447,21 @@ platform purchase or currency iteration. Synchronous local completion settles
 after native popup state assignment. This slice does not make DLC/platform,
 bundle, mixed-currency, non-SM, expired or stale offers locally purchasable.
 Official behavior and all account-protection flags remain unchanged.
+
+## Exact local daily UI slice (#1684/#573)
+
+`_mp_daily_ui_runtime.lua` replaces the four existing quest-row/claim owners,
+not native account protections. It constructs only current unclaimed MP daily
+rows with the fixed local Silver Shilling reward, deriving completion before
+native filtering/sorting/progress/dimming. Claim-all uses exact authored visible
+widgets and current live eligibility, including after native single-claim list
+rebuild. Actions revalidate before the existing local transaction and recover
+requested claiming rows on refusal/error. Explicit official calls delegate;
+foreign/stale/mixed/sparse/duplicate, unsupported-reward, pending and unknown-
+authority inputs deny without native statistics or backend fallback.
+
+The named detached runtime check and graphics-free installed-hook/native-source
+fixtures do not verify real rendering, VMF persistence, engine startup or live
+traffic. #573 still requires its restart/rollover/official-isolation acceptance.
+Daily replacement remains hidden/denied; mixed login rewards, containers,
+achievement tracking and remaining Fresh slices are not implemented here.

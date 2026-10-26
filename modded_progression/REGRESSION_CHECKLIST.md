@@ -1,5 +1,24 @@
 # Regression Checklist — modded_progression
 
+## Calendar login claim pre-action boundary (#1684; historical #589 safety)
+
+- The exact native calendar action must not run in modded/unreadable authority:
+  no `_force_index`, `_awaiting_result`, input-block, sound or backend read/write.
+  A peddler `_is_done_claiming=true` flag does not release this callback-only UI.
+- Official calls preserve offset/arguments, return holes and exception identity;
+  its native asynchronous callback still clears the wait and releases input.
+- Denial is log-only and reason-bounded, including a throwing/reentrant logger.
+  Never fabricate reward completion or release another existing input owner.
+- `issue1684_calendar_login_action_boundary` is a detached installed-callback
+  component check, not proof of event availability or actual game acceptance.
+- `test_mp_calendar_login_guard.lua` executes actual installed/entry callbacks,
+  the current backend guard and pinned complete native action/completion bodies.
+  The native calendar baseline reproduces the no-callback input lock; the new
+  action boundary prevents it. Existing #589/#581 accepted scopes stay closed.
+- Local login reward schedules/grants remain unimplemented; modern quest rows
+  have a separate local owner. No testing-ready tag follows from offline checks.
+
+
 Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) — entries that apply to modded_progression.
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
@@ -445,3 +464,31 @@ Last updated: 2026-10-17.
 - vt2-chat-command-syntax
 - vt2-hash-reverse-lookup
 - vt2-mod-command-inventory
+
+## Modern MP-owned daily UI (#1684/#573)
+
+- [ ] `issue1684_owned_daily_ui` passes in the detached runtime-check context.
+- [ ] Offline installed-hook tests cover completion/text/claimed/locked/reward/
+  rarity filters before creation; current-roster/reward validation; exact
+  official tuples/exceptions; unknown realm, stale/mixed/duplicate inputs,
+  pending/reentrant calls and failure cleanup with no backend/statistics calls.
+- [ ] Native sequential fixture: with three completed local dailies, claim one.
+  Both remaining rows stay in the claimable list; no negative-key stale row.
+- [ ] Native claim-all failure fixture restores only the requested authored
+  claiming rows, leaves no poll, and permits a later successful local retry.
+- [ ] Solo live: open Okri's Challenges in modded play; complete/reopen a daily,
+  filter completed rows and claim once. Claim all remaining completed rows.
+  Each credits five Silver Shillings once; failed/duplicate claims do not stick.
+- [ ] Restart, realm isolation, rollover and flow-specific traffic checks remain
+  #573's required human acceptance. Ignore unrelated earlier account bootstrap
+  when checking requests caused by opening/claiming MP dailies.
+- [ ] Unsupported reroll stays hidden/denied; login reward and official-backed
+  achievement/container surfaces stay protected. No real account flag is
+  toggled by the daily adapter.
+- [ ] A rendered completed row loses claim-all eligibility if current progress
+  resets, its target rises, or a same-day local reset recreates that identity
+  incomplete. Cached widget completion must not override the live owner.
+- Nonquest presentation must retain the original #840 entry delegates: Fresh
+  native passthrough versus inactive legacy bracket, including unsupported
+  claim-all layouts. The installed-composition matrix covers raw nil/false/true
+  flags, hostile inherited metatables, full tuples/errors and exact raw restore.

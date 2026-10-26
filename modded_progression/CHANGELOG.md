@@ -1,5 +1,23 @@
 # Modded Progression — Changelog
 
+## 0.2.47-dev (2026-10-25) -- Own modern daily rows and calendar claim boundary (#1684, #573) [not-started]
+
+- Build current unclaimed local daily rows through native quest widgets and
+  search/filter collaborators. Derive completion and claim-all eligibility
+  from the current local roster, not the native read-only backend presentation.
+- Revalidate fixed Silver Shilling rewards, identity, completion and pending
+  work before the existing local claim transaction. Reconcile native stale
+  claim-list removal and release only owned failed claiming rows for retry.
+- Preserve official arguments, complete return tuples and exceptions, plus
+  the original nonquest Fresh/legacy delegates. Unknown realm, foreign/stale
+  identities and unsupported rewards refuse without backend fallback.
+- Deny unsupported login-calendar claims before native input is blocked.
+  No fabricated login reward, schedule, account-protection flag change, new
+  backend request, mission-container grant or Fresh profile slice is added.
+- Add detached installed-callback checks and source-qualified native fixtures.
+  Offline behavior is not actual rendering, persistence, rollover, installed
+  startup or live account isolation; those acceptance steps remain unverified.
+
 ## 0.2.46-dev (2026-10-25) -- Own local SM purchase actions (#1684/#577) [not-started]
 
 - Replace two ineffective legacy Emporium UI brackets with one bounded owner
