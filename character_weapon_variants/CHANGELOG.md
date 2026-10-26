@@ -1,5 +1,26 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.552-dev (2026-10-26) -- Retained Greatsword remote post-wield pose (#660) [not-started]
+
+- Add one bounded retained-pose consumer for transformed Greatsword combat
+  styles on remote husks. Capture the native numerical pose before the existing
+  initial transform, then repair measured post-wield drift through the shared
+  atomic writer and independently read back position, scale and quaternion.
+- Keep exact descriptor/source identity, current owner/slot/render generation,
+  native/no-transform exclusion and weak engine-handle ownership. No new hook,
+  RPC, package, timer or per-frame pose traffic. Source semantic generation and
+  wire fingerprints remain unchanged; the spawn counter is observer-local.
+- The named check distinguishes a positively observed lifecycle exit from an
+  active missing identity/target/readback failure. It checks the most recently
+  attempted managed target, not every player in a lobby. The actual queued
+  consumer uses the existing canonical equipment lifecycle edge.
+- Add a structural-only husk/wield contract and actual planner/receiver,
+  entry/spawn/initial-writer/coalescer/reconciler tests. Other surfaces, next-frame
+  retention and reversed-role multiplayer acceptance remain unverified.
+- Correct historical engine06 claims about sender coverage, native-base semantic
+  identity and Old Musket authored materials. This does not close #660 or its
+  separate #786/#657/#474 acceptance leaves.
+
 ## 0.1.551-dev (2026-10-25) -- Exact shield admission and executable diagnostic ownership (#657, #645, #692) [not-started]
 
 - #657: share a pure descriptor planner between the installed transport and
