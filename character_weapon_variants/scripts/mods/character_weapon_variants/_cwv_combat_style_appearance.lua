@@ -1,6 +1,6 @@
--- _cwv_combat_style_appearance.lua -- immutable Greatsword style appearance.
+-- _cwv_combat_style_appearance.lua -- immutable Combat Style appearance.
 --
--- The first #660 family migration makes the effective Combat Style template,
+-- The #660/#657 family migrations make the effective Combat Style template,
 -- presentation transform, exact hand units, and compact style rider one
 -- fingerprinted descriptor.  Owner and observer build from the same semantic
 -- slot snapshot; no backend UUID or engine object crosses the wire.
@@ -13,6 +13,10 @@ local M = {}
 
 M.PROVIDER = "cwv_style"
 M.FAMILY = "greatsword"
+M.SUPPORTED_FAMILIES = { greatsword = true, sword_shield = true }
+function M.supports_family(family_id)
+	return M.SUPPORTED_FAMILIES[family_id] == true
+end
 
 local function nonempty(value)
 	return type(value) == "string" and value ~= "" and value or nil
@@ -61,7 +65,7 @@ function M.build(deps, args)
 	if type(D) ~= "table" or type(D.build) ~= "function" then
 		return nil, "descriptor unavailable"
 	end
-	if type(row) ~= "table" or row.family_id ~= M.FAMILY
+	if type(row) ~= "table" or not M.supports_family(row.family_id)
 			or type(row.package) ~= "table" then
 		return nil, "family unsupported"
 	end
@@ -138,7 +142,7 @@ end
 
 function M.expectation(descriptor)
 	if type(descriptor) ~= "table" or descriptor.provider ~= M.PROVIDER
-			or descriptor.style_family ~= M.FAMILY then
+			or not M.supports_family(descriptor.style_family) then
 		return nil, "descriptor unsupported"
 	end
 	if not nonempty(descriptor.variant_key) or not nonempty(descriptor.style_id)

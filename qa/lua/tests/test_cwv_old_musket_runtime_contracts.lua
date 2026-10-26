@@ -812,9 +812,11 @@ return function(H, repo_root)
 			})
 			rawset(_G, "_MEM_PROBE_T0_CWV", collectgarbage("count"))
 
+			local issue692 = dofile(repo_root .. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_issue692_transform_check.lua")
 			local install = assert(loadfile(repo_root
 				.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_render.lua"))()
 			install(mod, {
+				issue692_check = issue692, issue692_register = issue692.register,
 				mod_version = "qa-1155", om = om, dbg = function() end,
 				rt_register = function(name, check)
 					if name == "issue1155_old_musket_descriptor_reconciler" then

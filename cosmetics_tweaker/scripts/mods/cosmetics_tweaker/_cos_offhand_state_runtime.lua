@@ -88,6 +88,31 @@ function OffhandStateRuntime.install(mod, deps)
         return _offhand_options[item_key]
     end
 
+    -- #657: the same read-only native admission owner serves committed sender
+    -- normalization and receiver compatibility. No renderer/unit path is sent.
+    local native_contract = deps.native_shield_identity
+    local native_owner
+    if type(native_contract) == "table" and type(native_contract.new) == "function" then
+        native_owner = native_contract.new({
+            get_item_master = _get_item_master_list,
+            get_weapon_skins = deps.get_weapon_skins,
+            get_pool = function(item_type, hand)
+                local pools = _get_offhand_options(item_type)
+                return pools and pools[hand]
+            end,
+            get_saved = function(backend_id)
+                return LA_PERSIST.get_saved_offhands_for(backend_id)
+            end,
+            dlc_owned = function(dlc)
+                local managers = _get_managers()
+                local unlock = managers and managers.unlock
+                return unlock and unlock:is_dlc_unlocked(dlc) == true or false
+            end,
+        })
+    end
+    mod._cos = mod._cos or {}
+    mod._cos.cwv_native_shield_identity = native_owner
+
     -- #579 cross-mod identity provider.  CWV owns the semantic item channel,
     -- while Cosmetics owns the Apply-gated exact-instance offhand choice.  The
     -- provider exposes only the committed skin key after proving that the saved
@@ -99,6 +124,9 @@ function OffhandStateRuntime.install(mod, deps)
                 or (hand_field ~= "left_hand_unit"
                     and hand_field ~= "right_hand_unit") then
             return nil, "invalid"
+        end
+        if native_owner and native_contract.supports_type(item_type) then
+            return native_owner.committed(backend_id, item_type, hand_field)
         end
         local hands = LA_PERSIST.get_saved_offhands_for
             and LA_PERSIST.get_saved_offhands_for(backend_id)

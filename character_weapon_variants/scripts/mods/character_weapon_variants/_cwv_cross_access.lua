@@ -340,6 +340,8 @@ end
 local _cross_access_local_weapon_key = nil
 local _cross_access_local_style_item = nil
 local _cross_access_local_career     = nil
+-- Detached synchronous #645 smoke context; never persisted or networked.
+local _candidate_diagnostic_probe = nil
 
 -- CONSOLIDATED wield hook. VMF's `mod:hook_safe` does NOT chain on the same
 -- (Class, method) — a second registration silently overwrites the first
@@ -418,6 +420,7 @@ end)
 -- Resolve the local player's 3P body unit fresh each call (the unit can
 -- change across respawns / level transitions).
 function _local_3p_body_unit()
+	if _candidate_diagnostic_probe then return _candidate_diagnostic_probe.body end
 	local pm = Managers.player
 	if not pm then return nil end
 	local p = pm:local_player(1)
@@ -433,13 +436,18 @@ _om.remote_audio_dispatch = _om.remote_audio_dispatch or mod:dofile(
 	"scripts/mods/character_weapon_variants/_cwv_remote_audio_dispatch")
 
 _om._cross_access_observe_live = function(event_3p)
-	if _om.combat_styles and _om.combat_styles.observe_candidate_action then
-		_om.combat_styles:observe_candidate_action(
-			_cross_access_local_weapon_key, _cross_access_local_career, event_3p)
+	local probe = _candidate_diagnostic_probe
+	local runtime = probe and probe.runtime or _om.combat_styles
+	if runtime and runtime.observe_candidate_action then
+		runtime:observe_candidate_action(
+			probe and probe.item_key or _cross_access_local_weapon_key,
+			probe and probe.career or _cross_access_local_career, event_3p)
 	end
 end
 
 _om._cross_access_resolve_live = function(event_3p)
+	-- The smoke proves observation/delegation, not remap playback or lookup writes.
+	if _candidate_diagnostic_probe then return nil end
 	local target = _om.combat_styles and _om.combat_styles.remap_event
 		and _om.combat_styles:remap_event(_cross_access_local_style_item, nil,
 			_cross_access_local_career, event_3p)
@@ -473,19 +481,44 @@ _om._cross_access_log_applied = function(event_3p, target, target_id)
 	end
 end
 
-mod:hook("WeaponUnitExtension", "_play_3p_anim", function(func, self, event_3p, event, owner_unit, looping_event, anim_time_scale)
-	return _om.remote_audio_dispatch.invoke(func, self, event_3p, event,
-		owner_unit, looping_event, anim_time_scale, _local_3p_body_unit(),
-		_om._cross_access_observe_live, _om._cross_access_resolve_live,
-		_om._cross_access_lookup_anim, _om._cross_access_log_applied,
-		_om._cross_access_log_declined)
-end)
+	local function _networked_3p_anim(func, self, event_3p, event, owner_unit, looping_event, anim_time_scale)
+		return _om.remote_audio_dispatch.invoke(func, self, event_3p, event,
+			owner_unit, looping_event, anim_time_scale, _local_3p_body_unit(),
+			_om._cross_access_observe_live, _om._cross_access_resolve_live,
+			_om._cross_access_lookup_anim, _om._cross_access_log_applied,
+			_om._cross_access_log_declined)
+	end
+mod:hook("WeaponUnitExtension", "_play_3p_anim", _networked_3p_anim)
 _cwv_networked_3p_remap_installed = true
+
+-- Execute that exact installed callback, with no Unit/Managers/native RPC call.
+-- A private context leaves live wield caches, settings, diagnostic stores and
+-- remap logs untouched. Restore before returning/re-raising any probe outcome.
+	local function _probe_candidate_action(runtime, item_key, career, event, delegate)
+		if _candidate_diagnostic_probe ~= nil then return false, "candidate probe is busy" end
+		if type(runtime) ~= "table" or type(runtime.observe_candidate_action) ~= "function"
+				or type(item_key) ~= "string" or type(career) ~= "string"
+				or type(event) ~= "string" or type(delegate) ~= "function" then
+			return false, "candidate probe arguments invalid"
+		end
+		local body = {}
+		_candidate_diagnostic_probe = {
+			runtime = runtime, item_key = item_key, career = career, body = body,
+		}
+		local function capture(...) return select("#", ...), { ... } end
+		local count, values = capture(pcall(_networked_3p_anim, delegate, {},
+			event, "issue645-private-event", body, false, 1))
+		_candidate_diagnostic_probe = nil
+		if not values[1] then return false, values[2] end
+		return true, unpack(values, 2, count)
+	end
 
 
 return {
 	action_remap = _cross_access_action_remap,
 	wield_hook_registration_count = _cwv_wield_hook_registration_count,
 	networked_3p_remap_installed = true,
+	networked_3p_anim_callback = _networked_3p_anim,
+	probe_candidate_action = _probe_candidate_action,
 }
 end

@@ -17,6 +17,13 @@ pwsh -NoProfile -File qa/check_lua_unit_tests.ps1
 pwsh -NoProfile -File qa/check_lua_unit_tests.ps1 -SelfTest
 ```
 
+`test_cwv_candidate_diagnostic_route.lua` executes #645's exact named registration,
+installed cross-access callback and production capped observer with detached probe
+state. It rejects missing/disconnected dispatch/observer paths and verifies cleanup,
+returns and the reciprocal Spear-and-Shield action-graph fields. Optional exact
+6.13 donor fixtures strengthen table coverage; neither those nor synthetic probe
+contexts establish rendered first-person playback, physics, persistence or peers.
+
 ## Suite inventory (#1700)
 
 The PowerShell gate independently discovers every top-level `tests/test_*.lua`
@@ -350,6 +357,19 @@ new source-provenance QA wiring remains in `run_all.ps1`. The Lua test layer has
 no runtime dependency on the decompiled source manifest, but this branch must be
 merged after #543 (or rebased once #543 lands) because its QA wiring is additive
 to that commit.
+
+### Native Sword-and-Shield identity (#657)
+
+`test_cwv_native_shield_identity.lua` installs the actual Cosmetics committed
+state owner and CWV transport into private collaborators, then uses its exact
+registered receiver. Both native directions, separate peer admission, current
+pool/DLC/source validation, dedupe/fingerprint, actual asynchronous style
+transaction completion/preflight refusal/rollback, and detached runtime check
+are behavioral assertions. Exact 6.13 native registry/material mappings and
+serialized argument length run when that source checkout is present; absence is
+an explicit skip. The native JSON fixture changes only two LuaJIT hexadecimal
+string escapes to equivalent stock-Lua-5.1 decimal escapes, with exact counts.
+No engine object, real VMF save, backend/Steam call or live rendering is tested.
 
 - `tests/test_mp_emporium_ui.lua`: #1684 exact plain-SM preview authorization,
   pre-platform purchase-request guard, controller/desktop action revalidation,

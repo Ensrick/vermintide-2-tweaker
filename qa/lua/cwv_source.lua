@@ -30,6 +30,7 @@ local MODULES_IN_INSTALL_ORDER = {
     "_cwv_husk_path.lua",
     "_cwv_husk_spawn_transaction.lua",
     "_cwv_issue719_transaction_check.lua",
+    "_cwv_identity_descriptor_planner.lua",
     "_cwv_item_identity_transport_owner.lua",
     "_cwv_world_equipment_owner.lua",
     "_cwv_menu_preview_owner.lua",
@@ -40,6 +41,7 @@ local MODULES_IN_INSTALL_ORDER = {
     "_cwv_regression_identity.lua",
 	"_cwv_regression_combat_style.lua",
     "_cwv_regression_husk_ammo.lua",
+    "_cwv_issue692_transform_check.lua",
     "_cwv_regression_render.lua",
 }
 

@@ -5,6 +5,7 @@
 param(
     [string]$RepoRoot = '',
     [string]$BaselinePath = '',
+    [string]$SupplementalInventoryPath = '',
     [switch]$Quiet,
     [switch]$SelfTest
 )
@@ -15,6 +16,11 @@ if ([string]::IsNullOrWhiteSpace($RepoRoot)) { $RepoRoot = Join-Path $scriptDir 
 if ([string]::IsNullOrWhiteSpace($BaselinePath)) {
     $BaselinePath = Join-Path $scriptDir 'baselines\network_lookup_append_budget.json'
 }
+
+if ([string]::IsNullOrWhiteSpace($SupplementalInventoryPath)) {
+    $SupplementalInventoryPath = Join-Path $scriptDir 'baselines\network_lookup_unscanned_owner_pins.psd1'
+}
+. (Join-Path $scriptDir 'network_lookup_unscanned_owner_pins.ps1')
 
 function Get-ManualAppendRows {
     param(
@@ -212,6 +218,8 @@ function Invoke-SelfTest {
         $newOwner = Compare-AppendBudget -Current @{ 'c.lua|husks' = 1 } -Baseline $baseline
         if ($newOwner.Errors.Count -ne 1) { throw "new owner was not rejected" }
 
+        & (Join-Path $scriptDir 'test_network_lookup_unscanned_owners.ps1') -CandidateRoot (Split-Path $scriptDir -Parent)
+        if ($LASTEXITCODE -ne 0) { throw 'supplemental owner actual-gate self-tests failed' }
         if (-not $Quiet) { Write-Host '[check_network_lookup_append_budget self-test] PASS' -ForegroundColor Green }
         exit 0
     }
@@ -234,6 +242,10 @@ try {
         throw 'active-mod inventory contains no mods'
     }
 
+    $supplemental = Assert-KnownUnscannedLookupOwners -RepoRoot $root -InventoryPath $SupplementalInventoryPath
+    if ($null -eq $supplemental -or $supplemental.Count -ne 2 -or $supplemental.Complete -ne $false) {
+        throw 'supplemental owner validation did not return its exact bounded result'
+    }
     $allRows = @()
     foreach ($mod in @($inventory.Mods)) {
         $dir = [string]$mod.Dir
@@ -261,7 +273,9 @@ try {
         $baselineTotal = ($baseline.Values | Measure-Object -Sum).Sum
         if ($null -eq $currentTotal) { $currentTotal = 0 }
         if ($null -eq $baselineTotal) { $baselineTotal = 0 }
-        Write-Host "[check_network_lookup_append_budget] current=$currentTotal baseline=$baselineTotal owners=$($current.Count)"
+        Write-Host "[check_network_lookup_append_budget] heuristic_detected=$currentTotal baseline=$baselineTotal owners=$($current.Count)"
+        $minimum = $currentTotal + $supplemental.Count
+        Write-Host "[check_network_lookup_append_budget] pinned_unscanned=$($supplemental.Count) minimum_known_present=$minimum global_completeness=unproved"
         foreach ($reduction in $comparison.Reductions) {
             Write-Host "  migration progress: $reduction" -ForegroundColor Green
         }

@@ -197,12 +197,26 @@ function M.resolve_spawn_descriptor(args)
             and rawget(args.item_master, offhand_skin) or nil
         local offhand_row = type(args.weapon_skins) == "table"
             and rawget(args.weapon_skins, offhand_skin) or nil
-        if type(offhand_item) ~= "table"
-                or offhand_item.cwv_owner_item_type ~= variant.item_key
-                or type(offhand_row) ~= "table" then
+        if type(offhand_item) ~= "table" or type(offhand_row) ~= "table" then
             return nil, "offhand_skin_unresolved"
         end
         local left = unit_from(offhand_row, "left_hand_unit")
+        if offhand_item.cwv_owner_item_type ~= variant.item_key then
+            -- Native admission is explicit and source-qualified by the installed
+            -- planner. Never relax the stamped CWV path or accept a shared template.
+            local base = args.base
+            local ok, admitted
+            if args.provider == "cwv_style_world"
+                    and args.base_item_key == variant.item_key
+                    and type(base) == "table"
+                    and type(args.native_offhand_unit) == "function" then
+                ok, admitted = pcall(args.native_offhand_unit, variant.item_key,
+                    base.item_type, "left_hand_unit", offhand_skin)
+            end
+            if not ok or not admitted or admitted ~= left then
+                return nil, "offhand_skin_unresolved"
+            end
+        end
         if not left then return nil, "offhand_units_missing" end
         offhand_exact = { skin = offhand_skin, left_hand_unit = left }
     end

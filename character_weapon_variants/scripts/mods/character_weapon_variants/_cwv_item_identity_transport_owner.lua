@@ -142,62 +142,10 @@ local function install(mod, ctx)
 		-- immutable transaction. Native family members need a world descriptor
 		-- too; synthesize only from their exact ItemMasterList row and selected
 		-- skin, never from a career/base heuristic.
-		local function _native_style_world(item_key, base_item_key, skin, instance_id)
-			local base = type(ItemMasterList) == "table"
-				and rawget(ItemMasterList, base_item_key) or nil
-			if type(base) ~= "table" or item_key ~= base_item_key then
-				return nil, base, "native_base_mismatch"
-			end
-			local selected = skin ~= "" and skin ~= "n/a" and skin or nil
-			local descriptor, reason = _om.exact_appearance.resolve_spawn_descriptor({
-				provider = "cwv_style_world",
-				instance_id = instance_id,
-				variant = {
-					item_key = item_key, base_weapon = base_item_key,
-					right_hand_unit = base.right_hand_unit,
-					left_hand_unit = base.left_hand_unit,
-				},
-				base = base, base_item_key = base_item_key,
-				fallback_item_key = base_item_key,
-				explicit_skin = selected,
-				weapon_skins = WeaponSkins and WeaponSkins.skins,
-				item_master = ItemMasterList,
-			})
-			return descriptor, base, reason
-		end
-
-		local function _style_descriptor(item_data, slot_name, skin, row,
-				base_item_key, instance_id, offhand_skin)
-			if type(row) ~= "table" or row.family_id ~= "greatsword" then
-				return nil, "family_not_migrated"
-			end
-			local def = _find_def(row.item_key)
-			local world, base, reason
-			if def and not def.skin_only then
-				base = def.base_weapon and rawget(ItemMasterList, def.base_weapon)
-				world, _, reason = _om._cwv_resolve_world_descriptor(
-					item_data or { name = def.base_weapon }, skin, nil,
-					def.item_key, instance_id, offhand_skin)
-				base_item_key = def.base_weapon
-			else
-				world, base, reason = _native_style_world(row.item_key,
-					base_item_key, skin, instance_id)
-			end
-			if not world or type(base) ~= "table" then
-				return nil, reason or "world_unavailable"
-			end
-			local transform_key = type(row.package.presentation) == "table"
-				and row.package.presentation.transform_key or nil
-			local presentation = transform_key and _om.combat_styles
-				and _om.combat_styles:presentation(transform_key) or nil
-			return _om.combat_style_appearance.build({
-				descriptor = _om.appearance_descriptor,
-				encode_style_rider = _om.combat_style_policy.encode_style_rider,
-			}, {
-				slot_name = slot_name, row = row, world = world, base = base,
-				base_item_key = base_item_key, presentation = presentation,
-			})
-		end
+		-- #657: pure descriptor planner, shared by the installed transport and
+		-- detached executable checks. Delivery, hooks and rebuild ownership stay here.
+		_om.identity_planner_factory = mod:dofile(
+			"scripts/mods/character_weapon_variants/_cwv_identity_descriptor_planner")
 		_om._cwv_local_style_descriptor_by_slot = {}
 		_om._cwv_local_style_descriptor = function(identity)
 			for _, slot_name in ipairs({ "slot_melee", "slot_ranged" }) do
@@ -209,86 +157,16 @@ local function install(mod, ctx)
 			return nil
 		end
 
+		local planner = _om.identity_planner_factory.new({
+			om = _om, find_def = _find_def,
+			retained = _om._cwv_local_style_descriptor_by_slot,
+			get_mod = get_mod, printf = printf,
+			get_item_master = function() return ItemMasterList end,
+			get_weapon_skins = function() return WeaponSkins and WeaponSkins.skins end,
+		})
 		local lifecycle = _om.appearance_lifecycle_policy.new({
-			resolve_local = function(slot_data, slot_name)
-				_om._cwv_local_style_descriptor_by_slot[slot_name] = nil
-				local item_data = slot_data and slot_data.item_data
-				local base_name = item_data and item_data.name
-				if not item_data then return nil, base_name end
-				local backend_id = item_data.backend_id
-					or (item_data.mod_data and item_data.mod_data.backend_id)
-				local style_row = _om.combat_styles
-					and _om.combat_styles:describe(item_data, backend_id) or nil
-				if style_row and style_row.family_id == "greatsword" then
-					local style_descriptor, style_reason = _style_descriptor(
-						item_data, slot_name, slot_data.skin, style_row,
-						base_name, backend_id)
-					if style_descriptor then
-						_om._cwv_local_style_descriptor_by_slot[slot_name] = {
-							identity = style_row.identity,
-							descriptor = style_descriptor,
-						}
-						return style_descriptor, base_name
-					end
-					pcall(printf,
-						"[cwv:660] lifecycle=identity_plan adapter=style_descriptor slot=%s item=%s state=DECLINED reason=%s",
-						tostring(slot_name), tostring(style_row.item_key),
-						tostring(style_reason))
-					return nil, base_name
-				end
-				local key = _om._cwv_key_for_item(backend_id, item_data)
-				if not key then return nil, base_name end
-				local skin = slot_data.skin
-				local offhand_skin
-				local cosmetics = get_mod and get_mod("cosmetics_tweaker")
-				local provider = cosmetics and cosmetics._cos
-					and cosmetics._cos.cwv_offhand_identity
-				if type(provider) == "function" and backend_id then
-					local ok, value = pcall(provider, backend_id, key,
-						"left_hand_unit")
-					if ok and type(value) == "string" and value ~= "" then
-						offhand_skin = value
-					end
-				end
-				local descriptor = _om._cwv_resolve_world_descriptor(item_data, skin,
-					nil, key, backend_id, offhand_skin)
-				return descriptor, base_name
-			end,
-			resolve_remote = function(payload, sender_peer_id)
-				if payload.provider == _om.combat_style_appearance.PROVIDER then
-					local family_id, style_id =
-						_om.combat_style_policy.decode_style_rider(payload.style)
-					local member_family = _om.combat_style_policy.member(payload.item_key)
-					if family_id ~= "greatsword" or member_family ~= family_id then
-						return nil, "style_identity"
-					end
-					local package = _om.combat_style_policy.package(
-						payload.item_key, style_id)
-					if not package or package.style_id ~= style_id then
-						return nil, "style_package"
-					end
-					local row = { item_key = payload.item_key,
-						family_id = family_id, style_id = style_id,
-						package = package }
-					return _style_descriptor({ name = payload.base_item_key },
-						payload.slot, payload.skin_key, row,
-						payload.base_item_key,
-						tostring(sender_peer_id) .. ":" .. tostring(payload.slot),
-						payload.offhand_skin_key)
-				end
-				local def = type(payload.item_key) == "string" and _find_def(payload.item_key)
-				if not def or def.skin_only or def.base_weapon ~= payload.base_item_key then
-					return nil, "item_or_base"
-				end
-				local skin = payload.skin_key ~= "" and payload.skin_key or nil
-				local offhand_skin = payload.offhand_skin_key ~= ""
-					and payload.offhand_skin_key or nil
-				local descriptor, _, reason = _om._cwv_resolve_world_descriptor(
-					{ name = def.base_weapon }, skin, nil, def.item_key,
-					tostring(sender_peer_id) .. ":" .. tostring(payload.slot),
-					offhand_skin)
-				return descriptor, reason
-			end,
+			resolve_local = planner.resolve_local,
+			resolve_remote = planner.resolve_remote,
 			send = function(recipient, schema, payload, edge)
 				-- #474: stance rides the delivering channel. Stamped only on Old
 				-- Musket payloads so every other item's wire shape is unchanged;

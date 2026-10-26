@@ -4,8 +4,7 @@ local MOD_VERSION = ctx.mod_version
 local _om = ctx.om
 local _dbg = ctx.dbg
 local _rt_register = ctx.rt_register
-local _variant_definitions = ctx.variant_definitions
-local _registered_keys = ctx.registered_keys
+local _variant_definitions, _registered_keys = ctx.variant_definitions, ctx.registered_keys
 local _display_names = ctx.display_names
 local _find_def = ctx.find_def
 local _build_entry = ctx.build_entry
@@ -16,6 +15,8 @@ local _transform_map = ctx.transform_map
 local _skin_transform_map = ctx.skin_transform_map
 local _crowbill_transform_by_unit = ctx.crowbill_transform_by_unit
 local _custom_skin_keys = ctx.custom_skin_keys
+
+assert(type(ctx.issue692_register) == "function" and ctx.issue692_register, "#692 registration owner missing")(mod, ctx, _om, _find_def, _rt_register)
 
 _rt_register("cwv_unit_bearing_variants_registered", function()
     -- Issue #417: a variant that overrides a hand unit must resolve a def on every

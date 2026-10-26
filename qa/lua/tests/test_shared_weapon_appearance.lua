@@ -401,9 +401,31 @@ return function(H, repo_root)
         local source = file:read("*a")
         file:close()
         H.truthy(source:find('"scripts/mods/character_weapon_variants/_lib_weapon_appearance"', 1, true))
-        H.truthy(source:find("local WA = _WA_LIBRARY.new()", 1, true))
+        H.truthy(source:find("local WA = _WA_LIBRARY.new(ctx.appearance_api)", 1, true))
         H.truthy(source:find("mod._wa_to_quaternion_for_rt = WA.to_quaternion", 1, true))
         H.truthy(source:find("mod._cwv_weapon_appearance = WA", 1, true))
+        local first = assert(source:find("local _WA_LIBRARY = mod:dofile(", 1, true))
+        local last_marker = "mod._cwv_weapon_appearance = WA"
+        local last = assert(source:find(last_marker, first, true)) + #last_marker - 1
+        local constructor = assert(loadstring("local mod, ctx = ...\n"
+            .. source:sub(first, last) .. "\nreturn WA", "=issue420_actual_cwv_constructor"))
+        for _, explicit in ipairs({ false, {} }) do
+            local api = explicit or nil
+            local calls, loaded = 0, 0
+            local wa = { to_quaternion = function() end }
+            local mod = { dofile = function(_, requested)
+                loaded = loaded + 1
+                H.equal(requested, "scripts/mods/character_weapon_variants/_lib_weapon_appearance")
+                return { new = function(received)
+                    calls = calls + 1; H.equal(received, api)
+                    return wa
+                end }
+            end }
+            H.equal(constructor(mod, { appearance_api = api }), wa)
+            H.equal(calls, 1); H.equal(loaded, 1)
+            H.equal(mod._wa_to_quaternion_for_rt, wa.to_quaternion)
+            H.equal(mod._cwv_weapon_appearance, wa)
+        end
         H.equal(source:find("function WA.apply_scale", 1, true), nil)
         H.equal(source:find("local _offset_applied", 1, true), nil)
     end)

@@ -204,4 +204,16 @@ _rt_register("issue604_crowbill_template_ownership", function()
 	end
 end)
 
+_rt_register("issue657_native_shield_style_identity", function()
+	local factory = _om.identity_planner_factory
+	if type(factory) ~= "table" or type(factory.check_native_shield) ~= "function" then
+		return "#657 native style descriptor planner is not installed"
+	end
+	return factory.check_native_shield({
+		om = _om, get_mod = get_mod,
+		get_item_master = function() return ItemMasterList end,
+		get_weapon_skins = function() return WeaponSkins and WeaponSkins.skins end,
+	})
+end)
+
 end

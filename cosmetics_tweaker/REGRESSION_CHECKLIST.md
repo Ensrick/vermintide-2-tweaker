@@ -1240,3 +1240,18 @@ These are candidate acceptance steps, not a deployed current live-test card.
 - vt2-husk-rpc-race
 - vt2-mod-command-inventory
 - vt2-player-unit-field
+
+## Native reciprocal Sword-and-Shield identity (#657)
+
+- [ ] `issue657_native_shield_style_identity` passes with current co-installed
+  Cosmetics capability; absence-only fallback is not full component coverage.
+- [ ] Installed committed provider -> planner -> payload -> registered receiver
+  preserves distinct primary/offhand identity in both native directions.
+- [ ] Native source mappings, item-key/type, current pool/DLC, stale/foreign/
+  missing/throwing state, semantic tampering and schema bounds remain covered.
+- [ ] Detached style commit prepares appearance once before rebuild; refusal
+  destroys nothing and persists nothing; failed wield rolls back the style.
+- [ ] Ambiguous unit-only runed/material selections refuse without guessing or
+  rewriting the save. No raw unit paths or numeric skin IDs enter the wire.
+- [ ] Canonical two-owner release/launch gates precede solo live acceptance;
+  #786/#476 peer roles and #579/#914 regressions remain separate required tests.
