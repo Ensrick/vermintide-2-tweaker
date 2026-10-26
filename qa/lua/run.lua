@@ -561,6 +561,8 @@ local suites = {
     "test_gut_career_hud_holder",
     "test_gut_cosmetics_mission_mount",
     "test_gut_module_extraction",
+    "test_gut_view_rows",
+    "test_gut_runtime_checks_mission_map",
     "test_gt_regression_module",
     "test_gut_exclusive_radio",
     "test_gut_selected_loadout_trace",

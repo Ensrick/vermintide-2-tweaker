@@ -219,8 +219,17 @@ return function(H, repo_root)
 
     H.test("both Mod Tweaker paths refresh runtime gates before row input", function()
         local root = repo_root .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/"
+        local parent_file = assert(io.open(root .. "_mod_tweaker_view.lua", "rb"))
+        local parent = parent_file:read("*a")
+        parent_file:close()
+        H.truthy(parent:find('local ViewRows = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_view_rows")', 1, true),
+            "standalone view must load its explicit row owner")
+        H.truthy(parent:find("ViewRows.install(ModTweakerView, {", 1, true),
+            "standalone view must install its row owner")
+        H.truthy(parent:find("mt = _mt, nf = _nf, owner = _owner,", 1, true),
+            "row owner must receive the existing Mod Tweaker provider")
         for _, filename in ipairs({
-            "_mod_tweaker_view.lua",
+            "_mod_tweaker_view_rows.lua",
             "_mod_tweaker_state.lua",
             "_mod_tweaker_view_interaction.lua",
             "_mod_tweaker_state_interaction.lua",
@@ -230,6 +239,10 @@ return function(H, repo_root)
             file:close()
             H.truthy(source:find("apply_runtime_gate", 1, true),
                 filename .. " must consume the shared runtime-gate API")
+            if filename == "_mod_tweaker_view_rows.lua" then
+                H.truthy(source:find("MT:apply_runtime_gate(row, row._mod_id, setting_id)", 1, true),
+                    "installed row owner must invoke the shared runtime-gate API")
+            end
         end
     end)
 

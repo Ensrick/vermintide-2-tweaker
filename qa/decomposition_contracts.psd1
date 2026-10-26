@@ -26,6 +26,23 @@
             RequiredModules = @('_gt_bot_update_fixes.lua', '_gt_bot_aid_owner.lua')
         }
         @{
+            # #2 partial slice: only the three mission-map check registrations
+            # move; the oversized Dev entry remains pending further owners.
+            Name = 'gui_tweaker_dev_map_checks'
+            State = 'partial'
+            Entry = 'gui_tweaker_dev/scripts/mods/gui_tweaker_dev/gui_tweaker_dev.lua'
+            CeilingLines = 2252
+            RequiredModules = @('_gut_runtime_checks_mission_map.lua')
+        }
+        @{
+            # #2 partial view slice: only setting-row/gear construction moves.
+            Name = 'gui_tweaker_dev_view_rows'
+            State = 'partial'
+            Entry = 'gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view.lua'
+            CeilingLines = 2043
+            RequiredModules = @('_mod_tweaker_view_rows.lua', '_mod_tweaker_view_diagnostics.lua', '_mod_tweaker_view_interaction.lua')
+        }
+        @{
             # Structural phase completed at 0.9.207-dev (#1159): the entry is
             # at or below the 1500-line target and every extracted owner is
             # retained by this machine-readable contract.

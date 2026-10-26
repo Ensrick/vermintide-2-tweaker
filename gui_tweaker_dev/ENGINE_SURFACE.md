@@ -49,6 +49,47 @@ Dialogue dependency is additional. Both package manifests already include
 individual manifest row. Offline `test_gut_module_extraction.lua` enforces these
 ownership, parity, and package contracts.
 
+### Mission-map runtime-check registration (#2 partial slice)
+
+Dev only: the root entry imports `_gut_runtime_checks_mission_map.lua` once,
+between `lifecycle_chain_integrity` and `arrow_hover_native_size`. Its explicit
+`register({mod, register, read_source})` contract installs, in order,
+`mission_map_backdrop_swap`, `area_video_guard_two_layers`, and
+`mission_map_preview_backdrop`. The child owns registration only: no engine
+hook, lifecycle, command, map opening, or eager check execution. It receives the
+existing IO-safe source reader; it does not load the gameplay map owner itself.
+The three check bodies, verdict/error identities, and #336/#511 source-read
+skip behavior are unchanged. Unreadable source is not evidence that packages or
+materials are resident; runtime marker/class checks retain their existing scope.
+
+The entry remains above the 1500-line target. This is a narrow `partial`
+decomposition contract, not completion of #2 or a stable promotion. Exact entry
+ceilings live in the two QA manifests rather than a prose counter. The package
+already includes root `scripts/mods/gui_tweaker_dev/*`; no package or resource
+change is needed. `test_gut_runtime_checks_mission_map.lua` executes the actual
+entry invocation and installed child with detached collaborators, including
+error objects, nil source, native-method drift and source-path variants. It is
+host Lua registration/verdict proof, not a renderer, VMF or live mission test.
+
+### Standalone setting-row owner (#2, partial decomposition)
+
+`_mod_tweaker_view_rows.lua` installs only `_build_node_row` and `_append_row`
+once at their former view-owner position. Its explicit dependencies retain the
+view's owner-qualified localization, staged reads, numeric-step and keybind
+formatting helpers plus the same definitions and math tables. Factories still
+mutate the caller's offset; lazy providers, factory pcall boundaries, five-value
+returns, runtime gating, late-bound marker printf and parent-before-gear order
+are unchanged. The child has no hook, command or lifecycle authority.
+
+Traversal/search, profile/apply/default transactions and input remain in their
+current owners; the HeroView state and stable GUI are not changed. The row
+child and the retained interaction/diagnostics owners are wired by a partial
+view decomposition contract with a lower exact ceiling, not a claim that GUI
+Dev has reached the 1,500-line target. New row presentation belongs in this
+child; do not regrow it in the view. `test_gut_view_rows.lua` executes installed
+methods and actual normal/search/drill dispatch with independent table/trace
+oracles; live rendering remains outside that host-only proof.
+
 ## Hook table
 
 ~135 registration sites across ~35 modules, grouped below into rows-of-concern.
