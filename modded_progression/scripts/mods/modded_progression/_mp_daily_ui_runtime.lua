@@ -313,7 +313,7 @@ function M.runtime_check()
         local_claim = function() claims = claims + 1; return "mp_local_daily_claim_probe" end,
         ui = { widget = function() return { content={}, style={reward_icon={}} } end,
             parse=function(s) return s end, matches=function() return true end,
-            currency=function() return {icon="shillings",rarity="common",item_type="currency"} end,
+            currency=function() return {icon="shillings",rarity="common",item_type="chips",slot_type="chips"} end,
             background=function() return "icon_bg_common" end, dim=function() end },
     })
     local view = { _achievement_layout_type="quest", _active_tab={}, _search_query="",

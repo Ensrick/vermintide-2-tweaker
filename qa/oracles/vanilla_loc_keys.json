@@ -17,6 +17,10 @@
     {
       "key": "hat",
       "evidence": "scripts/settings/dlcs/cog/item_master_list_cog.lua:126"
+    },
+    {
+      "key": "chips",
+      "evidence": "scripts/settings/dlcs/store/currencies.lua:22"
     }
   ]
 }

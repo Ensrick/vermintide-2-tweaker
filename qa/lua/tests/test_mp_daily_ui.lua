@@ -53,7 +53,7 @@ local function fixture(query,overrides)
             return needle:lower()
         end,
         matches=function(needle,text) return text:lower():find(needle,1,true) end,
-        currency=function(code,amount) assert(code=="SM" and amount==5); return {icon="shilling_icon",rarity="common",item_type="currency"} end,
+        currency=function(code,amount) assert(code=="SM" and amount==5); return {icon="shilling_icon",rarity="common",item_type="chips",slot_type="chips"} end,
         background=function(rarity) assert(rarity=="common"); return "icon_bg_common" end,
         dim=function(widget) widget.dimmed=true end,
     }
@@ -119,7 +119,8 @@ H.test("MP daily row builder preserves completed-first order and native progress
     H.equal(w[1].content.completed,true); H.equal(w[1].content.can_close,false)
     H.equal(w[1].content.draw_bar,false); H.equal(w[1].content.expandable,false); H.equal(w[1].dimmed,nil)
     H.equal(w[3].content.progress_text,"0/2"); H.equal(w[3].content.draw_bar,true); H.equal(w[3].dimmed,true)
-    H.equal(w[1].content.reward_item.data.item_type,"currency")
+    H.equal(w[1].content.reward_item.data.item_type,"chips")
+    H.equal(w[1].content.reward_item.data.slot_type,"chips")
     H.equal(w[1].content.reward_icon,"shilling_icon"); H.equal(w[1].content.reward_icon_background,"icon_bg_common")
     H.equal(f.scroll,1); H.equal(f.animations,1); H.equal(f.empty,false)
     H.truthy(w~=f.view._claimable_challenge_widgets)
@@ -132,7 +133,7 @@ for _,spec in ipairs({
     {name="claimed false",key="claimed",value=false,want=3},
     {name="locked true",key="locked",value=true,want=0},
     {name="locked false",key="locked",value=false,want=3},
-    {name="currency",key="reward",value="currency",want=3},
+    {name="Silver Shillings",key="reward",value="chips",want=3},
     {name="foreign reward",key="reward",value="weapon",want=0},
     {name="matching rarity",key="rarity",value="common",want=3},
     {name="foreign rarity",key="rarity",value="unique",want=0},
@@ -386,7 +387,7 @@ H.test("MP daily default native adapter calls only existing widget/query/currenc
         end},
         BackendUtils={get_fake_currency_item=function(code,amount)
             H.equal(code,"SM"); H.equal(amount,5); calls.metadata=calls.metadata+1
-            return {icon="shilling_icon",rarity="common",item_type="currency"}
+            return {icon="shilling_icon",rarity="common",item_type="chips",slot_type="chips"}
         end},
         SearchUtils={extract_queries=function(needle)
             calls.parse=calls.parse+1; return needle
