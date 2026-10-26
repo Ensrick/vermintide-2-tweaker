@@ -19,8 +19,9 @@
 --
 -- Registers ActionHandgun.client_owner_post_update plus one post-sync observer
 -- on each native equipment HUD. The
--- consolidated BackendUtils.get_item_template hook that routes musket stance
--- stays in the entry, beside the Crowbill and combat-style branches it shares.
+-- consolidated BackendUtils.get_item_template hook is retained as a private
+-- installer called by the entry at its original position, preserving native-first
+-- combat-style, Crowbill and Musket precedence without a second hook.
 --
 -- Load-time deps: Weapons, DamageProfileTemplates and SpreadTemplates must
 -- already exist (this loads at the same point in the entry as before). Runtime
@@ -35,6 +36,23 @@
 local function install(mod, ctx)
 local _om = ctx.om
 local _dbg = ctx.dbg
+local _old_musket_shot, _old_musket_fire, _old_musket_melee
+local _old_musket_factory = assert(ctx.old_musket_shot_factory, "Old Musket private factory disconnected")
+local _network_lookup = assert(_old_musket_factory.network_lookup, "Old Musket private lookup helper disconnected")
+local _old_musket_melee_new = assert(_old_musket_factory.melee_factory, "Old Musket private melee factory disconnected")
+_old_musket_melee = _old_musket_melee_new({ state = _om,
+	profiles = function() return DamageProfileTemplates end,
+	lookup = function() return NetworkLookup and NetworkLookup.damage_profiles end,
+	weapons = function() return Weapons end,
+	action_templates = function() return ActionTemplates end,
+	clone = function(value) return table.clone(value, true) end, emit = printf,
+})
+local function _old_musket_target_template(stance)
+	if stance == "melee" then return _old_musket_melee.template() end
+	if _old_musket_fire and _old_musket_shot and _old_musket_shot.admit({ item_key = "cwv_es_musket_old", template = "old_musket_template" }) then
+		return Weapons.old_musket_template
+	end
+end
 
 -- ============================================================
 -- Musket template (modified handgun_template_1)
@@ -226,9 +244,13 @@ local function _toggle_musket_stance_and_rewield(player_unit)
 
 	-- Stance flag stored on the IML item_data's mod_data. mod_data is
 	-- mutable across the whole equip lifecycle; survives wield+unwield.
-	item_data.mod_data = item_data.mod_data or {}
-	local current = item_data.mod_data.cwv_musket_stance or "ranged"
+	local current = item_data.mod_data and item_data.mod_data.cwv_musket_stance or "ranged"
 	local next_stance = (current == "ranged") and "melee" or "ranged"
+	-- #428: the target must be retained before any stance, wire, ammo or slot mutation.
+	local bid = item_data.backend_id
+	local legacy_old = type(bid) == "string" and bid:match("^cwv_es_musket_old_")
+	if (is_old_musket or legacy_old) and not _old_musket_target_template(next_stance) then return end
+	item_data.mod_data = item_data.mod_data or {}
 	item_data.mod_data.cwv_musket_stance = next_stance
 	-- #474: stance is presentation state as well as a local template choice.
 	-- Record and publish the edge before the destroy/add cycle so observers can
@@ -637,68 +659,17 @@ local _OLD_MUSKET_DAMAGE_MULT = 1.5
 local _OLD_MUSKET_MAX_AMMO    = 11
 local _OLD_MUSKET_SPREAD_MULT = 1.5
 
+_old_musket_shot = _old_musket_factory.new({
+	state = _om,
+	profiles = function() return rawget(_G, "DamageProfileTemplates") end,
+	lookup = function() local nl = rawget(_G, "NetworkLookup"); return nl and rawget(nl, "damage_profiles") end,
+	weapons = function() return rawget(_G, "Weapons") end,
+	clone = function(value) return table.clone(value, true) end,
+	damage_multiplier = _OLD_MUSKET_DAMAGE_MULT, emit = printf,
+})
+
 local function _create_cwv_old_musket_damage_profile()
-	if not DamageProfileTemplates then return "shot_sniper" end
-	local source = DamageProfileTemplates.shot_sniper
-	if not source then return "shot_sniper" end
-	local key = "cwv_old_musket_shot"
-	_om._record_cwv_dp_source(key, "shot_sniper")   -- issue 423 wire-safe map
-	if DamageProfileTemplates[key] then return key end
-
-	local clone = table.clone(source, true)
-	local function _scale(pd)
-		if not pd then return end
-		if pd.attack then pd.attack = pd.attack * _OLD_MUSKET_DAMAGE_MULT end
-		if pd.impact then pd.impact = pd.impact * _OLD_MUSKET_DAMAGE_MULT end
-	end
-	if clone.default_target then
-		_scale(clone.default_target.power_distribution_near)
-		_scale(clone.default_target.power_distribution_far)
-		_scale(clone.default_target.power_distribution)
-	end
-	if type(clone.targets) == "table" then
-		for _, target in ipairs(clone.targets) do
-			_scale(target.power_distribution_near)
-			_scale(target.power_distribution_far)
-			_scale(target.power_distribution)
-		end
-	end
-
-	-- v0.1.305: penetration tuning per user spec.
-	--   * Cleave distribution boosted so the shot punches through ~6 regular
-	--     enemies (vanilla shot_sniper = 0.3, gives 1-2 pierce on unarmored).
-	--   * Armor modifier bumped on the higher-armor indices so the shot reads
-	--     "a bit better through armor" without making it a tank-deleter. The
-	--     `armor_modifier_*` arrays are indexed by armor type — vanilla
-	--     shot_sniper has (1, 1.2, 1.5, 1, 0.75, 0.5). We bring the upper
-	--     three (super-armor / berserker-shielded / chaos-warrior class) up.
-	local _CLEAVE_ATTACK = 1.5  -- ~6-target pierce on regular enemies
-	local _CLEAVE_IMPACT = 0.6  -- proportional stagger cleave
-	if clone.cleave_distribution then
-		clone.cleave_distribution.attack = _CLEAVE_ATTACK
-		clone.cleave_distribution.impact = _CLEAVE_IMPACT
-	end
-	local function _boost_armor_attack(mod_table)
-		if not mod_table or not mod_table.attack then return end
-		-- attack[i] for i=4..6 — armored / super-armored. Bring each up by ~0.2.
-		for i = 4, 6 do
-			if mod_table.attack[i] then mod_table.attack[i] = mod_table.attack[i] + 0.2 end
-		end
-	end
-	_boost_armor_attack(clone.armor_modifier_near)
-	_boost_armor_attack(clone.armor_modifier_far)
-
-	DamageProfileTemplates[key] = clone
-
-	-- Register in NetworkLookup so multiplayer hit RPCs can serialize the key
-	-- (see _create_cwv_musket_damage_profile for the rationale + GUID a8094388).
-	if NetworkLookup and NetworkLookup.damage_profiles and not rawget(NetworkLookup.damage_profiles, key) then
-		local tbl = NetworkLookup.damage_profiles
-		local idx = #tbl + 1
-		rawset(tbl, idx, key)
-		rawset(tbl, key, idx)
-	end
-	return key
+	return _old_musket_shot.prepare()
 end
 
 local function _create_old_musket_template()
@@ -706,18 +677,21 @@ local function _create_old_musket_template()
 		mod:warning("handgun_template_1 not found — old_musket_template unavailable")
 		return
 	end
-	if Weapons.old_musket_template then return end
+	if rawget(Weapons, "old_musket_template") ~= nil then _old_musket_shot.reject("foreign_template"); return end
 
 	local template = table.clone(Weapons.handgun_template_1, true)
 	local damage_key = _create_cwv_old_musket_damage_profile()
+	if not damage_key then return end
+	local shot_rows = {}
 
 	-- Swap damage_profile on every shot_sniper firing sub-action.
 	if template.actions then
-		for _, action_group in pairs(template.actions) do
+		for action_name, action_group in pairs(template.actions) do
 			if type(action_group) == "table" then
-				for _, sub_action in pairs(action_group) do
+				for sub_action_name, sub_action in pairs(action_group) do
 					if type(sub_action) == "table" and sub_action.damage_profile == "shot_sniper" then
 						sub_action.damage_profile = damage_key
+						shot_rows[#shot_rows + 1] = { action = sub_action, group = action_name, name = sub_action_name }
 					end
 				end
 			end
@@ -793,7 +767,7 @@ local function _create_old_musket_template()
 		end
 	end
 
-	Weapons.old_musket_template = template
+	if not _old_musket_shot.publish_template(Weapons, template, shot_rows) then return end
 	mod:info("Created old_musket_template (handgun_template_1 + %.2fx damage + %.2fx reload time)",
 		_OLD_MUSKET_DAMAGE_MULT, _OLD_MUSKET_RELOAD_MULT)
 end
@@ -849,7 +823,8 @@ do
 	end
 
 	if rawget(_G, "ActionHandgun") and type(ActionHandgun.client_owner_post_update) == "function" then
-		mod:hook("ActionHandgun", "client_owner_post_update", function(func, self, dt, t, world, can_damage)
+		_old_musket_fire = function(func, self, dt, t, world, can_damage)
+			if not _old_musket_shot.guard(self, t) then return end
 			local action = self.current_action
 			local before_state = self.state
 			local before_extra = self.extra_buff_shot
@@ -859,7 +834,8 @@ do
 				_om._dispatch_old_musket_remote_fire(self)
 			end
 			return result
-		end)
+		end
+		mod:hook("ActionHandgun", "client_owner_post_update", _old_musket_fire)
 		_om._old_musket_remote_fire_hook_installed = true
 	end
 end
@@ -883,69 +859,12 @@ do
 local _OLD_MUSKET_BAYONET_DAMAGE_MULT = 0.9
 local _OLD_MUSKET_BAYONET_RANGE_MOD   = 1.2
 
-local function _scale_old_musket_melee_damage_profile(profile_name)
-	if not DamageProfileTemplates then return profile_name end
-	local source = DamageProfileTemplates[profile_name]
-	if not source then return profile_name end
-	local key = "cwv_old_musket_melee_" .. profile_name
-	_om._record_cwv_dp_source(key, profile_name)   -- issue 423 wire-safe map
-	if DamageProfileTemplates[key] then return key end
-
-	local clone = table.clone(source, true)
-	local function _scale(pd)
-		if not pd then return end
-		if pd.attack then pd.attack = pd.attack * _OLD_MUSKET_BAYONET_DAMAGE_MULT end
-		-- stagger (impact) left at vanilla — user didn't ask for stagger change.
-	end
-	if clone.default_target then
-		_scale(clone.default_target.power_distribution)
-		_scale(clone.default_target.power_distribution_near)
-		_scale(clone.default_target.power_distribution_far)
-	end
-	if type(clone.targets) == "table" then
-		for _, target in ipairs(clone.targets) do
-			_scale(target.power_distribution)
-			_scale(target.power_distribution_near)
-			_scale(target.power_distribution_far)
-		end
-	end
-	DamageProfileTemplates[key] = clone
-	if NetworkLookup and NetworkLookup.damage_profiles and not rawget(NetworkLookup.damage_profiles, key) then
-		local tbl = NetworkLookup.damage_profiles
-		local idx = #tbl + 1
-		rawset(tbl, idx, key)
-		rawset(tbl, key, idx)
-	end
-	return key
-end
-
 local function _create_old_musket_template_melee()
 	if not Weapons or not Weapons.two_handed_heavy_spears_template then
 		mod:warning("two_handed_heavy_spears_template not found — old_musket_template_melee unavailable")
 		return
 	end
-	if Weapons.old_musket_template_melee then return end
-
-	local template = table.clone(Weapons.two_handed_heavy_spears_template, true)
-
-	-- range_mod 1.2 + swap damage profiles to scaled clones.
-	if template.actions then
-		for _, action_group in pairs(template.actions) do
-			if type(action_group) == "table" then
-				for _, sub_action in pairs(action_group) do
-					if type(sub_action) == "table" then
-						if sub_action.range_mod then
-							sub_action.range_mod = _OLD_MUSKET_BAYONET_RANGE_MOD
-						end
-						if sub_action.damage_profile then
-							sub_action.damage_profile = _scale_old_musket_melee_damage_profile(sub_action.damage_profile)
-						end
-					end
-				end
-			end
-		end
-	end
-
+	local complete, mode = _old_musket_melee.construct(Weapons.two_handed_heavy_spears_template, function(template)
 	-- Stance toggle back to ranged.
 	template.actions = template.actions or {}
 	template.actions.action_three = {
@@ -984,7 +903,10 @@ local function _create_old_musket_template_melee()
 	-- Display unit — handgun rig (same as musket_template_melee).
 	template.display_unit = "units/weapons/weapon_display/display_1h_handguns"
 
-	Weapons.old_musket_template_melee = template
+		return mod._cwv_old_musket_interrupt.audit(template, "action_three") == true
+	end)
+	if not complete then return end
+	if mode ~= "custom" then return end -- the bounded owner log identifies native degradation, not 0.9x damage
 	mod:info("Created old_musket_template_melee (Tuskgor spear clone, range_mod=%.2f, damage=%.2fx)",
 		_OLD_MUSKET_BAYONET_RANGE_MOD, _OLD_MUSKET_BAYONET_DAMAGE_MULT)
 end
@@ -1028,6 +950,72 @@ _om._cwv_musket_unregister_slot = function(owner, slot_name)
 end
 _om.musket_ammo_hud = _om.musket_ammo_hud_policy.install(mod, _om.musket_ammo_pool)
 
+local function install_template_router()
+mod:hook("BackendUtils", "get_item_template", function(func, item_data, backend_id)
+	local template = func(item_data, backend_id)
+	if not item_data then return template end
+	-- #620: one per-instance style owner chooses among pre-registered immutable
+	-- templates. This remains in the existing singleton BackendUtils hook so a
+	-- second VMF registration cannot shadow the musket/Crowbill paths.
+	if _om.combat_styles and _om.combat_styles.resolve_template then
+		local style_template = _om.combat_styles:resolve_template(item_data, backend_id)
+		if style_template then return style_template end
+	end
+	-- #604: local owner selects one of two pre-registered Crowbill templates.
+	-- Remote equipment remains the vanilla source template on the wire.
+	if _om.crowbill_runtime and _om.crowbill_runtime.resolve_template then
+		local crowbill_template = _om.crowbill_runtime.resolve_template(item_data, backend_id)
+		if crowbill_template then return crowbill_template end
+	end
+
+	-- v0.1.301: identify variant family — cwv_es_musket vs cwv_es_musket_old.
+	-- Both use mod_data.cwv_musket_stance as the per-item stance flag (it's
+	-- per-item via mod_data so no name collision); we just return different
+	-- template pairs depending on which family.
+	local is_old_musket = false
+	local is_musket     = false
+	local canonical_key = _om._cwv_key_for_item
+		and _om._cwv_key_for_item(item_data.backend_id or backend_id, item_data)
+	if canonical_key == "cwv_es_musket_old" then
+		is_old_musket = true
+	elseif canonical_key == "cwv_es_musket" then
+		is_musket = true
+	elseif item_data.template == "old_musket_template" or item_data.template == "old_musket_template_melee" then
+		is_old_musket = true
+	elseif item_data.template == "musket_template" or item_data.template == "musket_template_melee" then
+		is_musket = true
+	else
+		local bid = item_data.backend_id or backend_id
+		if type(bid) == "string" then
+			if bid:match("^cwv_es_musket_old_") then
+				is_old_musket = true
+			elseif bid:match("^cwv_es_musket_") then
+				is_musket = true
+			end
+		end
+	end
+	if not (is_musket or is_old_musket) then return template end
+
+	-- Read stance from mod_data; default to ranged.
+	local stance = item_data.mod_data and item_data.mod_data.cwv_musket_stance or "ranged"
+	if is_old_musket then
+		local selected = _old_musket_target_template(stance) or _old_musket_target_template("ranged")
+		if not selected then error("[cwv:428] Old Musket effective template authority lost") end
+		return selected
+	end
+	if stance == "melee" and Weapons.musket_template_melee then
+		return Weapons.musket_template_melee
+	end
+	return Weapons.musket_template or template
+end)
+end
+
+return { network_lookup = _network_lookup, install_template_router = install_template_router, admit_old_musket = function(def)
+	return _old_musket_fire ~= nil and _old_musket_shot.admit(def) and _old_musket_melee.ready()
+end, check_old_musket = function()
+	if not _old_musket_fire then return "#428 existing Handgun callback was not installed" end
+	return _old_musket_shot.check(_old_musket_fire) or _old_musket_melee.check()
+end }
 end
 
 return install

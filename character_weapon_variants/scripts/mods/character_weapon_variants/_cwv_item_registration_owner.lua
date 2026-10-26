@@ -75,6 +75,8 @@ local _custom_skin_keys = ctx.custom_skin_keys
 local _career_weapon_actions = ctx.career_weapon_actions
 local _cwv_career_weapon_actions = ctx.cwv_career_weapon_actions
 local _career_action_owner = ctx.career_action_owner
+local _old_musket_admission = ctx.old_musket_admission
+local _old_musket_denials = 0
 
 -- ============================================================
 -- Item creation helper (shared by give command)
@@ -241,6 +243,18 @@ _om._cwv_key_for_item = function(backend_id, item_data)
 end
 
 local function _build_entry(def, backend_id)
+	if def and def.item_key == "cwv_es_musket_old" then
+		local existing = ItemMasterList and rawget(ItemMasterList, def.item_key)
+		local ok, ready = pcall(_old_musket_admission, def)
+		if (existing ~= nil and existing ~= _registered_keys[def.item_key]) or not ok or ready ~= true then
+			if _old_musket_denials < 16 then
+				_old_musket_denials = _old_musket_denials + 1
+				pcall(printf, "[cwv:428] owner=old_musket_item edge=build_entry admission=denied existing=%s count=%d/16",
+					tostring(existing ~= nil), _old_musket_denials)
+			end
+			return nil
+		end
+	end
 	-- v0.1.345-dev: per-call _dbg trace. _build_entry is sparse (boot-time only,
 	-- ~30 variants/session), so always-on.
 	_dbg("[cwv:build_entry] event=enter key=%s base=%s backend_id=%s",

@@ -1,5 +1,27 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.553-dev (2026-10-26) -- Atomic Old Musket construction and admission (#428) [not-started]
+
+- Publish the Old Musket shot profile and complete bayonet profile/template
+  family through bounded transactions with positive symmetric lookup proof,
+  exact raw rollback, source-generation accounting and conditional first fallback.
+  Existing custom names alone are not ownership evidence. Native degradation
+  requires independently proven complete donors; otherwise no new item is admitted.
+- Capture factories/helpers privately from the ordered entry manifest. Both
+  fresh item and seed builders consume the same exact-template admission;
+  missing saved masters remain pending in CIM, without deleting or rerolling crafts.
+- Preflight target stance before mode/ammo/destruction changes. Preserve the
+  sole native-first item-template router, its other weapon branches and the
+  existing Handgun hook; an already-latched unproven shot cannot spend ammo,
+  fire late or borrow a stale success. Native-first assertions are not rescued.
+- Reject changed source-map, generation or initial-fallback preimages after
+  the injected finish boundary without overwriting intervening producer state.
+  Preserve the actual healthy math, first-encounter IDs and seven bayonet events.
+- Add actual constructor/builder/seed/callback and rollback counterfactuals.
+  This is construction/admission hardening, not proof of retained native Sweep,
+  arbitrary foreign hot-reload, rendering, audio, peer or historical crash causality.
+  Other profile publishers and the later damage sender/catalog floor are unchanged.
+
 ## 0.1.552-dev (2026-10-26) -- Retained Greatsword remote post-wield pose (#660) [not-started]
 
 - Add one bounded retained-pose consumer for transformed Greatsword combat

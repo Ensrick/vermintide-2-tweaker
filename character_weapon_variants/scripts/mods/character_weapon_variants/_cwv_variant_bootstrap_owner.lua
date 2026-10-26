@@ -1,9 +1,30 @@
 -- Three-phase installation preserves the original hook/module ordering:
 -- localization+unlocks, skin unlock hook, item-registration consumers.
-local function install(mod, ctx)
+local function install(mod, ctx, musket_construction)
 	local _om = assert(ctx.om, "cwv bootstrap owner requires om")
 	local _variant_definitions = assert(ctx.variant_definitions,
 		"cwv bootstrap owner requires variant_definitions")
+	local admit_old_musket = type(musket_construction) == "table" and musket_construction.admit_old_musket
+	local check_old_musket = type(musket_construction) == "table" and musket_construction.check_old_musket
+	local network_lookup = type(musket_construction) == "table" and musket_construction.network_lookup
+	local old_musket_builder
+	local function install_items(owner, dependencies)
+		local private = {}; for key, value in next, dependencies do private[key] = value end
+		private.old_musket_admission = admit_old_musket
+		private.network_lookup = network_lookup
+		local result = owner(mod, private)
+		old_musket_builder = _om.item_registration and _om.item_registration.build_entry
+		return result
+	end
+	local function register_checks(register)
+		register("issue428_old_musket_construction", function()
+			if type(check_old_musket) ~= "function" then return "#428 private Old Musket construction owner disconnected" end
+			local verdict = check_old_musket(); if verdict then return verdict end
+			if type(old_musket_builder) ~= "function" then return "#428 private item builder disconnected" end
+			local ok, entry = pcall(old_musket_builder, { item_key = "cwv_es_musket_old", template = "unproven_template", base_weapon = "es_handgun" })
+			if not ok or entry ~= nil then return "#428 item admission did not reject an unproven Old Musket template" end
+		end)
+	end
 
 	-- ============================================================
 	-- Optional mod detection
@@ -169,7 +190,7 @@ local function install(mod, ctx)
 	_apply_weapon_unlocks()
 
 
-	local function after_skins(custom_skin_keys)
+	local function after_skins(custom_skin_keys, register)
 		local _custom_skin_keys = assert(custom_skin_keys,
 			"cwv bootstrap owner requires custom_skin_keys")
 
@@ -374,10 +395,11 @@ local function install(mod, ctx)
 			}
 		end
 
-		return after_registration
+		register_checks(register)
+		return { after_registration = after_registration, install_items = install_items }
 	end
 
-	return after_skins
+	return { after_skins = after_skins }
 end
 
 return install

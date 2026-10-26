@@ -364,7 +364,7 @@ return function(H, repo_root)
         local families_at = assert(entry:find("_cwv_illusion_families", 1, true))
         H.truthy(skin_at < families_at)
         H.truthy(unlocks_applied_at < unlock_at)
-        H.truthy(families_at < assert(entry:find("_finish_variant_skins(_custom_skin_keys)", 1, true)))
+        H.truthy(families_at < assert(entry:find("_variant_install.after_skins(_custom_skin_keys, _rt_register)", 1, true)))
 
         H.truthy(skin_registry:find("custom_illusions = _custom_illusions", 1, true))
         H.truthy(skin_registry:find("custom_skin_keys = _custom_skin_keys", 1, true))
@@ -888,7 +888,7 @@ return function(H, repo_root)
             "for _, pending in ipairs(pending_defs) do"), 2)
         H.equal(count_plain(entry,
             "scripts/mods/character_weapon_variants/_lib_network_lookup"), 1)
-        H.truthy(entry:find("network_lookup = mod:dofile(", 1, true))
+        H.truthy(entry:find('_variant_install = _variant_install.bind(mod:dofile("scripts/mods/character_weapon_variants/_lib_network_lookup"))', 1, true))
         H.truthy(registration:find(
             "local _network_lookup = assert(ctx.network_lookup,", 1, true))
         H.equal(count_plain(entry, "local idx = #NetworkLookup.item_names + 1"), 0)
@@ -907,7 +907,7 @@ return function(H, repo_root)
         -- bound exactly once in the entry and never rebound.
         H.truthy(registration:find("local function install(mod, ctx)", 1, true))
         H.truthy(entry:find("dbg_alert = _dbg_alert,", 1, true))
-        H.truthy(entry:find("network_lookup = mod:dofile(", 1, true))
+        H.truthy(entry:find('_variant_install = _variant_install.bind(mod:dofile("scripts/mods/character_weapon_variants/_lib_network_lookup"))', 1, true))
         H.truthy(entry:find("cwv_career_weapon_actions = _cwv_career_weapon_actions,", 1, true))
         H.truthy(entry:find("career_action_owner = _career_action_owner,", 1, true))
 
@@ -1141,14 +1141,14 @@ return function(H, repo_root)
             "the nested load is the #474 Old Musket stance channel")
 
         -- BOUNDARY. This owner covers the MESH, not the weapon. The Old Musket's
-        -- item/template/stance behavior stays in the entry's consolidated
+        -- item/template/stance behavior stays in the Musket owner's consolidated
         -- get_item_template hook; the bayonet child-unit lifecycle (a second
         -- VANILLA unit linked to the rifle, not a custom-mesh gap) and every
         -- wield-side hook belong to the musket equip-surface owner, which #1159
         -- lifted out of the entry AFTER this owner landed. Either way they are
         -- not this owner's job, and each must exist exactly once mod-wide.
         local not_custom_mesh = {
-            { marker = 'mod:hook("BackendUtils", "get_item_template"', home = entry },
+            { marker = 'mod:hook("BackendUtils", "get_item_template"', home = musket_runtime },
             { marker = 'mod:hook("SimpleInventoryExtension", "_wield_slot"', home = equip_surface },
             { marker = 'mod:hook("GearUtils", "destroy_wielded"', home = equip_surface },
             { marker = "local function _attach_musket_bayonets", home = equip_surface },
