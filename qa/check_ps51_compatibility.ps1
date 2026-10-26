@@ -179,6 +179,42 @@ function Write-Sentinel {
     [System.IO.File]::WriteAllText($Path, $body, (New-Object System.Text.UTF8Encoding($false)))
 }
 
+function Test-NameIntegrityCliRoots {
+    param(
+        [string]$HostPath,
+        [string]$HostName,
+        [string]$ScriptPath,
+        [string]$Root,
+        [string]$OutsideDirectory
+    )
+    $failures = @()
+    $explicitSource = Join-Path $OutsideDirectory "name-checker-unused-native-source"
+    $cases = @(
+        @{ Name = 'both omitted'; Arguments = @('-SelfTest') },
+        @{ Name = 'RepoRoot omitted'; Arguments = @('-SelfTest', '-VtSrc', $explicitSource) },
+        @{ Name = 'VtSrc omitted'; Arguments = @('-SelfTest', '-RepoRoot', $Root) },
+        @{ Name = 'both explicit'; Arguments = @('-SelfTest', '-RepoRoot', $Root, '-VtSrc', $explicitSource) }
+    )
+    foreach ($workingDirectory in @($Root, $OutsideDirectory)) {
+        foreach ($case in $cases) {
+            Push-Location -LiteralPath $workingDirectory
+            try {
+                $result = Invoke-HostScript -HostPath $HostPath -ScriptPath $ScriptPath -ScriptArguments $case.Arguments
+            }
+            finally { Pop-Location }
+            if ($result.ExitCode -ne 0 -or
+                $result.Output -notmatch '\[check_name_integrity\] SELF-TEST PASSED' -or
+                $result.Output -match '(?m)^\s*CHECK .*FAIL\s*$') {
+                $failures += "$HostName name-checker $($case.Name) -File contract failed from '$workingDirectory' (exit $($result.ExitCode)): $($result.Output)"
+            }
+            else {
+                Write-Host "[check_ps51_compatibility:name-cli] $HostName $($case.Name) from '$workingDirectory': PASS"
+            }
+        }
+    }
+    return $failures
+}
+
 function Invoke-SelfTest {
     $failures = @()
     $fixtureRoot = Join-Path ([System.IO.Path]::GetTempPath()) ("vt2-ps51-{0}" -f ([guid]::NewGuid().ToString("N")))
@@ -242,6 +278,7 @@ function Invoke-SelfTest {
         $commandCollisionScript = Join-Path $repoRootPath "qa/check_command_collisions.ps1"
         $appearanceScript = Join-Path $repoRootPath "qa/check_appearance_contracts.ps1"
         $appearanceManifest = Join-Path $repoRootPath "qa/appearance_contracts.psd1"
+        $nameIntegrityScript = Join-Path $repoRootPath "qa/check_name_integrity.ps1"
         foreach ($hostInfo in $hosts) {
             if (Test-Path -LiteralPath $sentinelPath) { Remove-Item -LiteralPath $sentinelPath }
             $zero = Invoke-HostScript -HostPath $hostInfo.Path -ScriptPath $inProgressScript -ScriptArguments @("-RepoRoot", $fixtureRoot, "-SkipGitDiff")
@@ -280,6 +317,10 @@ function Invoke-SelfTest {
             if ($malformed.ExitCode -ne 2 -or $malformed.Output -notmatch 'missing required') {
                 $failures += "$($hostInfo.Name) malformed-sentinel contract failed (exit $($malformed.ExitCode))"
             }
+
+            # #1739: real -File binding must work before the name self-test runs.
+            $failures += @(Test-NameIntegrityCliRoots -HostPath $hostInfo.Path -HostName $hostInfo.Name `
+                -ScriptPath $nameIntegrityScript -Root $repoRootPath -OutsideDirectory $fixtureRoot)
 
             $policy = Invoke-HostScript -HostPath $hostInfo.Path -ScriptPath $runAllScript -ScriptArguments @("-SelfTest", "-Quiet")
             if ($policy.ExitCode -ne 0 -or $policy.Output -notmatch '\[run_all:selftest\] PASS') {
