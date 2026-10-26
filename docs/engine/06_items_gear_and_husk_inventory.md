@@ -65,7 +65,7 @@ below), `docs/CROSS_MOD_ARCHITECTURE.md` (LA bridge dispatch).
 
 | Module | Responsibility | Key sites |
 |---|---|---|
-| cwv `character_weapon_variants.lua` | Variant item registration (MoreItemsLibrary clones keeping `entry.name/key = base_weapon`), the `WA` WeaponAppearance transform module, per-path applies, husk re-key, wire safety. | WA module `:9913-9981`; four-path map comment `:9884-9893` |
+| cwv entry + display owners | Entry manifest, semantic item identity, husk hand/mesh/transform selection, and the bounded Old Musket descriptor/material pilot. Other families retain their own acceptance boundaries. | `character_weapon_variants.lua:1347,1470,1485,1512`; current owner routing and historical limitations: §5.1-5.3 |
 | cwv `_lib_peer_parity.lua` | Copied shared lib: VMF-network presence beacon gating gameplay axes that cannot be wire-substituted (BUG_CLASSES 31). Master at `tools/shared_lib/_lib_peer_parity.lua`. | `character_weapon_variants/scripts/mods/character_weapon_variants/_lib_peer_parity.lua:1-50` |
 | cosmetics `cosmetics_tweaker.lua` + `_la_bridge.lua`, `_la_persistence.lua`, `_material_hijack_embedded.lua`, `_moreitemslibrary_embedded.lua` | Custom illusions, LA (Loremaster's Armoury) clone bridge + per-peer husk cosmetic cache, glow system, per-path paints/scales/offsets, wire safety for LA/custom skin keys. | see 3.2 |
 | wt `weapon_tweaker.lua` | Cross-character access (`can_wield` mutation), per-career unit overrides, in-game + preview 3P mesh swaps (brace->repeater, longbow->crossbow, repeating pistol->handgun, hammer+book), attachment-node crash guards, preview scale/offset/wield-pose. | see 3.2 |
@@ -101,7 +101,7 @@ Every render surface calls this function: owner (`gear_utils.lua:10`), husk (`si
 ### 2.3 Husk (remote view) - what actually reaches other screens
 
 1. Owner's `rpc_add_equipment` arrives; `InventorySystem.rpc_add_equipment` decodes name + skin from NetworkLookup (`inventory_system.lua:298-304`) and calls `SimpleHuskInventoryExtension.add_equipment(slot, item_name, skin_name)` (`:306`).
-2. The husk stores `ItemMasterList[item_name]` - **the BASE master entry, never the owner's backend item**: no backend_id, no traits, no cwv identity (`simple_husk_inventory_extension.lua:186`). Only `slot.skin` carries any cosmetic identity across the wire. This is BUG_CLASSES 27 / issue #392.
+2. On the **vanilla equipment channel**, the husk stores `ItemMasterList[item_name]` - the BASE master entry, not the owner's backend item (`simple_husk_inventory_extension.lua:186`). That channel carries no backend id or CWV instance identity; `slot.skin` is its cosmetic signal (BUG_CLASSES 27). CWV's separate semantic `cwv_item_identity` channel supplies wearer/slot identity to its local adapters; see §5.2, rather than treating the historical vanilla-wire limitation as a current ban on native-base variants.
 3. `rpc_wield_equipment` -> `wield` -> `_wield_slot`: destroys ALL husk equipment units then re-spawns only the wielded slot's 3P units via `GearUtils.spawn_inventory_unit(world, hand, ..., unit_1p=nil, unit_3p=husk_body)` (`:658-671`). **Husk weapon units are transient - re-created on every weapon swap** (owner units persist per slot). Any per-unit runtime mutation (scale, texture) must therefore re-apply on every husk wield.
 4. `_wield_slot` sets `equipment.wielded_slot` only on success (`:775`); `wield` then runs `start_weapon_fx` (`:363`) which indexes `equipment.slots[equipment.wielded_slot]` unguarded (`:790-801`) - nil slot = CTD (#280).
 5. Ammo display: husk ammo count comes from GameSession fields (`:58-73`); ammo 3P mesh spawns from `ammo_unit_name_3p or ammo_unit_name .. "_3p"` (`gear_utils.lua:169`).
@@ -133,7 +133,7 @@ Every render surface calls this function: owner (`gear_utils.lua:10`), husk (`si
 | `GearUtils.spawn_inventory_unit` | Path 1 (via create_equipment) AND Path 2 (husk, direct) | Full wrapper; discriminator `owner_unit_1p == nil` = husk/3P-only spawn (cwv:4759-4764). Capture all four returns `w3p, a3p, w1p, a1p` (BUG_CLASSES 2). Pre-call mutation of `item_units` re-keys the mesh (cwv:10154-10172); post-call transforms apply to returned units. | Husk re-fires on EVERY wield - all applies must be idempotent (cwv WA offset guard, cwv:9921-9931). Linked weapon target node 0 is one local-pose contract: vanilla saves it at `gear_utils.lua:300-305` and restores it with `Unit.set_local_pose` at `:321-327`; use shared WA's atomic pose path, not an OR of separate setter results (BUG_CLASSES 58 / WOC #613). One hook per mod - wt consolidated its two swaps into one hook (weapon_tweaker.lua:5495-5506). |
 | `GearUtils.link_units` | every attachment link, all paths | Full wrapper filtering entries whose named node is missing via `Unit.has_node` (wt:4697-4711, cwv:5526-5548). | `Unit.node` missing-node error is ENGINE-FATAL, bypasses pcall (DEVELOPMENT.md quirks; cwv:5528-5532). This is the universal choke point - `GearUtils.link` calls through the table (`gear_utils.lua:290`), so a table hook intercepts every spawn path. |
 | `GearUtils.destroy_wielded` | owner + husk weapon teardown | Pre-call cleanup of anything you linked to the unit (cwv bayonet, cwv:5150-5162). | Runs before `mark_for_deletion`; the unit is still alive - read `Unit.get_data` here, not after. |
-| `GearUtils.hot_join_sync` | server-side, per joining peer | Wrapper; substitute wire-unsafe names/skins on slot_data around the call. | **Currently UNHOOKED by cwv/cosmetics - see 5 item 1.** |
+| `GearUtils.hot_join_sync` | server-side, per joining peer | Wrapper; substitute wire-unsafe names/skins on slot_data around the call, then restore even on error. | Current owners: CWV `_cwv_item_identity_transport_owner.lua:445-475` and Cosmetics `_cos_wire.lua:158-168`; both are entry-installed. Hook coverage is not incompatible-peer runtime acceptance; see §5.1. |
 | `SimpleInventoryExtension.game_object_initialized` | owner unit go-live | Wrapper that nulls custom skin keys on slot_data, calls through, restores (cosmetics `_wire_null_custom_skins` cosmetics_tweaker.lua:6075-6103; cwv:10424-10447). Preserve up to 4 returns. | The null must be UNCONDITIONAL - never toggle-gated (BUG_CLASSES 31; regression test `wire_skin_null_ungated` cosmetics_tweaker.lua:10467+). |
 | `SimpleInventoryExtension._wield_slot` | owner wield | Full wrapper for pre/post work (cwv reload-exploit + bayonet sync, cwv:5033-5094). | Separate class from husk `_wield_slot` - different signature `(self, equipment, slot_data, unit_1p, unit_3p, buff_extension)` vs husk `(self, world, equipment, slot_name, unit_1p, unit_3p)`. Hook both when the concern is both-sided (BUG_CLASSES 5). |
 | `SimpleHuskInventoryExtension._wield_slot` | every husk weapon swap | `_cos_husk_wield_runtime.lua` owns the one string-form hook (VMF delays until class load). It sets a stack-style context around vanilla for downstream `get_item_units`, restores it on success or error, and preserves eight return values. | ALWAYS delegate to vanilla - an early bail leaves `wielded_slot` nil and vanilla `wield` then nil-indexes at `simple_husk_inventory_extension.lua:540`. Post-vanilla glow and LA replay stays ordered and bounded. |
@@ -152,13 +152,13 @@ Surfaces: **1** owner in-world (1P + own 3P, keep + mission, incl. bots), **2** 
 
 | Feature | Mod | Seam(s) hooked | 1 own-1P | 1 own-3P / bots | 2 husk | 3 preview | 4 browser |
 |---|---|---|---|---|---|---|---|
-| cwv transforms (scale/offset/rotation, per hand per perspective) | cwv | `GearUtils.create_equipment` (cwv:10457-10499) ; `GearUtils.spawn_inventory_unit` husk branch -> `_husk_apply_cwv_transform` (cwv:4774-4786, 10216-10277) ; previewers `_spawn_item` (cwv:10719-10733) ; `LootItemUnitPreviewer.spawn_units` (cwv:10747) - all through `WA` (cwv:9913-9981) | yes (unless `scale_3p_only`, cwv:10492) | yes | partial - only when def resolves: skin/backend positive signal or unambiguous non-native base+career re-key (cwv:10231-10243); NATIVE-wieldable bases (musket/es_handgun) decline -> no transform on clients (issue #474 symptom 3) | yes | yes |
-| cwv mesh override (variant unit paths) | cwv | data level: `_build_entry` writes entry unit fields + `BackendUtils.get_item_units` hook forces def units when no skin applied (cwv:10311-10348) ; husk pre-spawn re-key `_husk_rekey_units` (cwv:4750-4752, 10154-10172) ; preview swap via `equip_item`-recipe mutation (`_cwv_preview_meshswap_apply` [WEAPON_APPEARANCE_STANDARD 4.1], v0.1.370) ; browser resolves upstream via the shared get_item_units hook (#419) | yes | yes | partial - resident vanilla overrides on non-native (base, career) pairs only; custom meshes + native bases fall to BASE mesh (issue #474 symptom 1) | yes (pending verify #237) | yes (upstream) |
+| cwv transforms (scale/offset/rotation, per hand per perspective) | cwv | Owner `GearUtils.create_equipment` in `_cwv_world_equipment_owner.lua:33`; husk transform owner `_cwv_husk_path.lua:984`; preview/browser wrappers `_cwv_menu_preview_owner.lua:623,632,845`; shared `WA` primitive | implemented; per-def perspective policy | implemented | exact descriptor/model selection precedes legacy inference (`_cwv_husk_path.lua:1006-1026`; `_cwv_husk_transform_policy.lua:18-28`); native-pair decline applies only to ambiguous fallback, not accepted exact identity. Retained/live acceptance remains per family (#474/#660). | implemented | implemented |
+| cwv mesh override (variant unit paths) | cwv | `BackendUtils.get_item_units` wrapper (`character_weapon_variants.lua:1407`); husk hand preselection/re-key (`_cwv_husk_path.lua:328-365,529-625`); preview/browser adapters remain in `_cwv_menu_preview_owner.lua` | implemented | implemented | accepted semantic identity can select native-base and custom-bundle units, subject to exact-unit/resource admission; absent or rejected evidence preserves the appropriate vanilla fallback (§5.2), not a blanket native/custom exclusion | implemented; acceptance remains issue-scoped | implemented; acceptance remains issue-scoped |
 | cwv residency (force-load override 3P units) | cwv | boot pass `_force_load_husk_override_units` (cwv:4536-4567), guard predicate `_om._resident_override_3p` shared with re-key + preview (#418) | n/a | covered (runs on host too, #415 note) | yes (every peer) | n/a (preview world resident) | n/a |
 | cwv ammo strip (`no_ammo_unit`) | cwv | data level on entry (path 1) ; husk strip `_husk_strip_cwv_ammo` (cwv:4778-4780, 10176-10205) | data | data | yes (career-set gated) | - | - |
-| cwv musket bayonet (linked child unit) | cwv | `spawn_inventory_unit` attach (cwv:4839+), `destroy_wielded` detach (cwv:5150), `_wield_slot` + `show_first/third_person_inventory` visibility sync (cwv:5033-5145), orphan prune | yes | yes | **no husk bayonet** (husk resolves base handgun; #392) | via `_cwv_spawn_item_post` musket block (cwv:10592-10634) | [unverified] |
-| cwv Old Musket textures / FX proxy / stance transforms | cwv | `spawn_inventory_unit` gated on `cwv_es_musket_old` backend_id (cwv:4814-4836) ; preview inline `Material.set_texture` triples (cwv:10600-10628) | yes | yes | **no** (backend_id absent on husk) | yes | #227 red/transparent (texture set not applied on this path) |
-| cwv wire safety (skin + loadout axes) | cwv | `game_object_initialized` skin-null (cwv:10424-10447) ; `LoadoutUtils.sync_loadout_slot` base-key shadow (cwv:10381-10408) | n/a | n/a | send-side only; hot_join/resync senders uncovered (see 5.1) | n/a | n/a |
+| cwv musket bayonet (linked child unit; not Old Musket's baked geometry) | cwv | `_cwv_musket_equip_surface.lua:550-612,639-765` retains the separate attach/lifecycle path; `:760-765` explicitly excludes Old Musket because its bayonet is part of the custom mesh | existing owner path | existing owner path | [unverified] linked-child parity is not established by the semantic identity channel or Old Musket pilot; do not infer a generic bayonet fix from §5.2 | existing preview path; not re-audited here | [unverified] |
+| cwv Old Musket authored material and stance transforms | cwv | One descriptor/reconciler `_cwv_old_musket_appearance.lua:340-490`; one resource-gated authored-material consumer `_cwv_old_musket_preview.lua:167-250`; adapters submit exact live units (§5.3) | structural pilot evidence under #1155; calibration under #474 | same bounded pilot | adapter exists (`_cwv_husk_path.lua:1135-1149`); reversed-role rendered/pose/audio acceptance belongs to #474 | structural pilot evidence under #1155 | structural pilot evidence under #1155; framing under #474; separate oracle repair #1156 |
+| cwv wire safety (skin + loadout axes) | cwv | `_cwv_item_identity_transport_owner.lua:52,401,424,445,493`: loadout base-key shadow, three equipment skin-null senders, and profile-sync skin substitution | n/a | n/a | sender coverage exists; custom numeric skins stay off vanilla equipment/profile wire, semantic descriptors travel separately (§5.1-5.2). This is not a claim of every appearance cell passing. | n/a | n/a |
 | cosmetics per-weapon scale ("thiccc") + grip offsets + glow | cosmetics | `_cos_equipment_assembly.lua` applies scale/offset after `GearUtils.create_equipment`; `_cos_preview_runtime.lua` applies scale from the resolved `spawn_data.unit_name` in inventory and illusion previews; `_cos_render.lua` delegates ordinary transform math to the shared WeaponAppearance instance (#420). Glow retains its separate apply/transport owners. | yes | yes | glow has peer broadcast/replay; scale/offset has no husk adapter and retains native transform | yes | yes |
 | cosmetics LA offhand/illusion mesh + paint | cosmetics + `_la_bridge` | own: `create_equipment` -> `_apply_la_offhand_to_units` (cosmetics:5242) ; husk: `_wield_slot` context wrapper (cosmetics:7995-8032) + `get_item_units` mesh swap from `_la_equips_by_peer` cache (cosmetics:4064-4160) ; preview: `equip_item` + `_spawn_item` wrappers (cosmetics:5310-5456) ; browser: `load_package` short-circuit + `spawn_units` (cosmetics:5499, 5554) ; per-instance persistence `_la_persistence` | yes | yes | yes for peers running cosmetics + LA (cache fed by `cos_la_apply` RPC; vanilla peers see vanilla substitute) | yes | yes |
 | cosmetics LA wire safety | cosmetics | `CosmeticUtils.update_cosmetic_slot` (cosmetics:5814), `game_object_initialized` (cosmetics:6095), PUAE/AttachmentUtils pre-mutation (cosmetics:6105-6139, 8491), `set_loadout_item` cache (cosmetics:5671) | n/a | n/a | substitution shipped for cosmetic axes | n/a | n/a |
@@ -172,8 +172,8 @@ Surfaces: **1** owner in-world (1P + own 3P, keep + mission, incl. bots), **2** 
 
 Cross-referenced to `docs/BUG_CLASSES.md`:
 
-1. **Husk resolves BASE item_data (BUG_CLASSES 27 / #392).** The equipment wire carries only `NetworkLookup.item_names[item_data.name]` + a weapon_skin id (`simple_inventory_extension.lua:258-264`); cwv clones keep `entry.name = base_weapon`, so no husk-side hook can see the variant identity unless a skin survived the sync or the (base, career) pair is non-native-unambiguous (cwv:10065-10113). Native-wieldable bases (issue #474's musket on Kruber) are unreachable by construction - only the per-wearer marker (#392 Phase 3, ride `_lib_peer_parity`-style VMF network) closes them.
-2. **Modded NetworkLookup index on a vanilla RPC = remote CTD (BUG_CLASSES 31).** Strict `__index` at `network_lookup.lua:2362`. Sender-side substitution must be unconditional, never toggle-gated. Known senders of skin/name ids: `game_object_initialized` (covered), `_spawn_resynced_loadout` (`simple_inventory_extension.lua:1451-1457`, NOT covered), `GearUtils.hot_join_sync` (`gear_utils.lua:481-486`, NOT covered), `CosmeticUtils.update_cosmetic_slot` (covered), `LoadoutUtils.sync_loadout_slot` (covered), PUAE/AttachmentUtils attachment RPCs (covered).
+1. **Vanilla husk equipment still resolves BASE item_data (BUG_CLASSES 27).** The equipment RPC carries base item and skin ids (`simple_inventory_extension.lua:258-264`); it does not carry the owner's backend identity. CWV now supplements that channel with accepted wearer/slot semantic descriptors, consumed before ambiguous base+career inference. Native-base rejection is the safe fallback, not a ban on exact descriptor-backed husk presentation (§5.2). #392's resolved crafting scope must not be used as a claim that every remote appearance cell passed.
+2. **Modded NetworkLookup index on a vanilla RPC = remote CTD (BUG_CLASSES 31).** The strict decoder still requires unconditional sender substitution. The current CWV and Cosmetics owners cover initial equipment, `_spawn_resynced_loadout`, and `GearUtils.hot_join_sync`; the former uncovered flags are historical (§5.1). Their profile/cosmetic and loadout/attachment channels are separate sender axes, not evidence that skin-null at one equipment seam protects all wires. Never substitute a hook census for mixed-peer acceptance.
 3. **Self-owned vs husk class split (BUG_CLASSES 5).** `SimpleInventoryExtension` and `SimpleHuskInventoryExtension` share no code; `GearUtils.create_equipment` never runs for husks; `spawn_inventory_unit` runs for both with `owner_unit_1p == nil` as the husk/bot-3P discriminator (`gear_utils.lua:176`, `simple_husk_inventory_extension.lua:666-670`).
 4. **Husk wield re-spawns everything.** `_wield_slot` destroys + re-spawns per wield (`simple_husk_inventory_extension.lua:658-671`) - per-unit mutations must be idempotent AND re-applied every wield; unit handles cached across wields are dead.
 5. **`Unit.node` engine-fatal (uncatchable).** Any linking table naming a node the spawned unit lacks kills the process through `GearUtils.link_units` (`gear_utils.lua:297-298`) or previewer link paths. Guard with `Unit.has_node` filters (wt:4677-4711, cwv:5526-5548). pcall does NOT catch it.
@@ -194,21 +194,90 @@ Cross-referenced to `docs/BUG_CLASSES.md`:
 
 Ordered by severity. Each names our code, the engine-idiomatic alternative, and the citation.
 
-### 5.1 P0 - wire skin-null covers 1 of 3 vanilla senders
+### 5.1 Wire sender coverage - historical gap, current owners
 
-`_wire_null_custom_skins` (cosmetics_tweaker.lua:6075-6103) and cwv's twin (character_weapon_variants.lua:10424-10447) null custom skin keys ONLY around `SimpleInventoryExtension.game_object_initialized`, then RESTORE the custom key onto `slot_data.skin`. But vanilla encodes `NetworkLookup.weapon_skins[slot_data.skin]` on two more sender paths that read the RESTORED value:
-- `GearUtils.hot_join_sync` (`gear_utils.lua:481-486`) - fires when a peer late-joins while a modded HOST wears a custom illusion / cwv skin;
-- `SimpleInventoryExtension._spawn_resynced_loadout` (`simple_inventory_extension.lua:1449-1457`) - fires on every keep/mission re-equip via `create_equipment_in_slot` (`:1408` passes `item_units.skin`).
+**Historical investigation (July 2026):** the original survey found custom-skin
+null/restore only at initial equipment broadcast and identified hot-join and
+resync as additional strict-lookup encoders. The crash mechanism remains valid
+(BUG_CLASSES 31); the one-of-three coverage count and monolith anchors do not
+describe the current implementation. The vanilla encode sites are still
+`simple_inventory_extension.lua:259`, `:1451`, and `gear_utils.lua:484`.
 
-A vanilla (or differently-registered) peer cold-decodes the appended index -> class-31 CTD - the exact crash the game_object_initialized null was shipped to kill. Engine-idiomatic fix: apply the SAME null-and-restore helper around `SimpleInventoryExtension.hot_join_sync` (`:1108`) and `_spawn_resynced_loadout`, or null `equipment_to_spawn.skin` inside a `_queue_item_spawn` wrapper. The shared helper already exists and is regression-tested (`wire_skin_null_ungated`, cosmetics:10467).
+**Current routing (source `d61adab1`, 2026-10-26):** Cosmetics installs wrappers
+for `game_object_initialized`, `_spawn_resynced_loadout`, and
+`GearUtils.hot_join_sync` in
+`cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_wire.lua:128,142,158`;
+its entry installs that owner at `cosmetics_tweaker.lua:369-372`. CWV installs
+the same three sender boundaries in
+`character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_item_identity_transport_owner.lua:401,424,445`.
+Both use scoped, exception-safe null/restore helpers and preserve four sender
+returns (`_cos_wire.lua:28-52`; CWV `_cwv_cosmetic_skin_wire.lua:63-87`). CWV's
+current helper has no parity/roster input: semantic identity travels separately,
+never as a modded numeric skin index (#741). Do not reintroduce the historical
+#495 parity exception. #495 records its narrow verified sender fix; Cosmetics
+incompatible-peer acceptance belongs to #421, not to this source-hook census.
 
-### 5.2 P1 - #474 root cause: native-wieldable bases are unreachable on husks by design
+### 5.2 Native-base husk identity - historical limitation, semantic resolution
 
-The husk re-key/transform resolver deliberately declines any (base, career) pair the career can natively wield (cwv:10080-10105) - correct as a never-corrupt guard, but it means `cwv_es_musket` (base `es_handgun`, native on Kruber careers) can NEVER render its mesh, transforms, or bayonet on other players' screens, matching #474 symptoms 1 and 3 exactly. The engine offers no data seam that survives the wire (2.3); the fix is the per-wearer variant marker over VMF mod-to-mod network (absence-safe by construction, `_lib_peer_parity.lua:26-33` pattern), consumed in the existing `spawn_inventory_unit` husk branch (cwv:4750-4786) as a higher-priority signal than base+career. Until it ships, no cross-char variant on a native-wieldable base may claim husk parity (WEAPON_APPEARANCE_STANDARD 5).
+**Historical investigation (July 2026):** base+career inference could not
+distinguish a variant from a genuine native-wieldable base. Declining ambiguous
+native pairs protected real weapons (#475), but left no positive identity for
+the Musket. That limitation motivated the later semantic channel; it is not a
+current claim that native-base variants can never reach a husk adapter.
 
-### 5.3 P1 - Old Musket textures fight the engine; `material_settings_name` does this on all four paths for free
+**Current routing (source `d61adab1`, 2026-10-26):**
+`_cwv_item_identity_transport_owner.lua:232-253,366` exports the wearer/slot
+descriptor resolver and registers `cwv_item_identity`. Schema 3 carries semantic
+keys and reconstructs the receiver's descriptor locally
+(`_cwv_appearance_lifecycle.lua:3-9`;
+`_cwv_identity_descriptor_planner.lua:160-184`). Husk hand selection, mesh
+re-key, and transform selection consult that exact descriptor before the legacy
+base+career fallback (`_cwv_husk_path.lua:339-365,529-546,1006-1026`). Explicit
+native/unavailable/stale evidence keeps vanilla presentation; absence of exact
+identity is not permission to reinterpret an ambiguous native pair. These CWV
+files live under `character_weapon_variants/scripts/mods/character_weapon_variants/`.
 
-cwv binds musket textures with raw `Material.set_texture` loops per path (preview: character_weapon_variants.lua:10600-10628; owner: `_apply_old_musket_textures` via cwv:4820-4821) - the banned shared-asset primitive (#420), and the browser path is broken (#227). Engine-idiomatic: register a `MaterialSettingsTemplates` entry with `type = "texture"` variables and set `material_settings_name` on the cwv SKIN entry - vanilla then applies it automatically on owner + husk spawns (`gear_utils.lua:195-199` via `apply_material_settings` `:149-151`), inventory preview (`world_hero_previewer.lua:683/706` carries `material_settings_name` into spawn_data), and the illusion browser (same `get_item_units` resolution, `loot_item_unit_previewer.lua:270`). cosmetics already proves the template-registration half (`MaterialSettingsTemplates._cosmetics_tweaker_glow`, cosmetics:4952-4964). Caveat: texture entries are gated on `Application.can_get("texture", ...)` (`gear_utils.lua:149`) - mod-bundled textures must be resident.
+#392's closure covered blacksmith/template identity, not every husk surface.
+The bounded Old Musket structural pilot evidence is recorded under #1155;
+#1154's program closure does not establish full-family adoption under #660.
+The bounded Greatsword remote post-wield consumer now captures its numerical
+baseline before the existing initial transform and independently reobserves
+position/scale/quaternion through `_cwv_style_rewield.lua:272,415,497`; its
+contract's `wield` refines the descriptor's canonical `equip` edge. This is one
+structural cell, not synchronized source generation, next-frame retention or
+acceptance of every Greatsword surface/edge.
+Numerical grip/aim calibration, browser framing, and the subsequent reversed-role
+remote-husk acceptance remain governed by #474's evidence and test sequence.
+
+### 5.3 Old Musket materials - historical painter, authored closure
+
+**Historical investigation (July 2026):** per-path shared-asset texture writes
+and the red/transparent browser reproduction motivated removing private
+painters (#420/#227). The old proposal to move this work to
+`material_settings_name` was an investigation alternative, not the implementation
+now owned by the Old Musket pilot.
+
+**Current routing (source `d61adab1`, 2026-10-26):** the custom unit's `rifle_mat`
+maps to CWV's authored material (`character_weapon_variants/units/cwv_es_musket_custom/cwv_es_musket_custom.unit:2`);
+that material binds all five texture maps at compile time
+(`cwv_es_musket_custom.material:1129-1133` in the same directory).
+`character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_preview.lua:220-247`
+requires the texture closure, binds the proven-resident authored material with
+`Unit.set_all_materials` (`:167-183`), and validates the live mesh material
+handles before reporting success. `apply_textures` is only a compatibility
+alias to `apply_material` (`:250`), not a per-path `Material.set_texture` loop.
+
+The Old Musket descriptor/reconciler selects the authored material and exact
+attachment profile, applies through the shared primitive, and reads retained
+position/scale/quaternion/material state back before committing
+(`_cwv_old_musket_appearance.lua:340-374,416-451,459-490`, same CWV script directory).
+Unsupported surface/edge cells explicitly keep vanilla presentation (`:16-24,418-420`).
+#1155 records the narrow structural pilot acceptance; #1156 records the separate
+browser-oracle repair. Neither makes the historical #227 symptom a current
+failure nor supplies #474's outstanding calibration/peer evidence or #660's
+remaining family migrations. Renderer, identity, resource, and lifecycle
+coverage must still be established per declared cell, not inferred from a
+material setter or from the pilot alone.
 
 ### 5.4 P1 - musket bayonet reimplements the engine's attached-units lifecycle
 
@@ -245,9 +314,11 @@ Two hooks re-hide the duplicated 3P boar spear after every vanilla visibility se
 
 cwv hooks `"BackendUtils"` string-form (cwv:3938) while cosmetics documents string-form as unresolvable for plain tables and mandates table-form (cosmetics:4040-4045); both currently work because VMF resolves strings via `rawget(_G, name)` and defers unresolved hooks (`vmf/modules/core/hooks.lua:46-58, :379-389`). The REAL constraints are (a) registration-time existence for table-form, (b) LA's clone-backend reassignment (hook the post-LA reference; docs/CROSS_MOD_ARCHITECTURE.md). Pick one doctrine repo-wide and record WHY, so the next session doesn't "fix" a working hook into a broken one - the v0.8.58 CosmeticUtils burn (cosmetics:5807-5812) deserves a root-cause note (likely registration-order, not string-form per se) [unverified].
 
-### 5.11 P2 - duplicated wire-null implementations
+### 5.11 Historical duplication concern - distinct current wire owners
 
-cwv:10424-10447 and cosmetics:6075-6103 are byte-similar null-and-restore wrappers on the same vanilla seam, each keyed to its own skin set. VMF chains cross-mod hooks fine, but the pattern (and its 5.1 gap) is maintained twice. Fold into the shared-lib pattern (5.7) with a per-mod key-set parameter, so closing the hot-join/resync senders (5.1) happens once.
+The July survey proposed a shared null/restore helper because the then-inline implementations duplicated the sender gap. Both current owners cover all three equipment senders (§5.1); there is no remaining one-of-three gap to close by sharing them. CWV's pure `_cwv_cosmetic_skin_wire.lua:63-87` and Cosmetics' `_cos_wire.lua:28-52` retain separate skin catalogs and exception-safe restoration. Any later unification must preserve their existing owner contracts and mixed-peer acceptance obligations; it is not justified by the obsolete coverage claim.
+
+The other July-era improvement entries in this section are not re-audited by the bounded §5.1-5.3 routing correction; retain their independent evidence and issue boundaries.
 
 ---
 

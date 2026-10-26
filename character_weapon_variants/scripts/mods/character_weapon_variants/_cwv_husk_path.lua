@@ -15,10 +15,7 @@
 -- extraction (OOP W5, PROJECT_STANDARDS §2.2a) — no behavior change; every printf
 -- marker is byte-identical to its pre-split form.
 --
--- Owned by: character_weapon_variants.lua entry point. Consumed via: mod:dofile —
--- dofiled at the husk-apply-helpers position so its file-local dependencies
--- (_variant_definitions, _find_def, _is_unit, _apply_cwv_hand_transform,
--- _triplet_text) are already defined in the entry when it runs.
+-- Manifest-owned; transform/identity collaborators are installed before use.
 return function(mod, ctx)
 	local _om = ctx.om
 	local _variant_definitions = ctx.variant_definitions
@@ -30,13 +27,8 @@ return function(mod, ctx)
 -- ============================================================
 -- Husk apply helpers  (issues 397/394/399) — assigned onto `_om`
 -- ============================================================
--- These run from the GearUtils.spawn_inventory_unit hook (~line 4525, the
--- husk-reaching path). They are DEFINED here — below `_transform_unit`,
--- `_resolve_field`, `_resolve_cwv_def`, `_is_unit` — because Lua locals are
--- only visible after their declaration point; the hook above can't see these
--- helpers directly, so it reaches them through the `_om` upvalue table
--- (declared near the top of the file), whose fields are populated at load
--- time before any in-mission spawn. See the husk block in that hook.
+-- GearUtils.spawn_inventory_unit reaches these manifest-owned helpers through
+-- `_om`; the entry supplies its already initialized transform collaborators.
 do
 	local function _descriptor_hand_unit(descriptor, hand)
 		local owner = _om.combat_style_appearance
@@ -1420,6 +1412,13 @@ do
 					end
 				end
 				_om._husk_spawned_unit_names[v_w3p] = row
+				local retained = _om._greatsword_husk_retained
+				if retained and _om._husk_identity_descriptor then
+					pcall(function()
+						local descriptor = _om._husk_identity_descriptor(owner_unit_3p, slot_name, item_data and item_data.name)
+						retained.capture(descriptor, v_w3p, owner_unit_3p, slot_name, hand, observed)
+					end)
+				end
 			end
 		end
 		if _om._husk_strip_cwv_ammo and _om._husk_strip_cwv_ammo(item_data, owner_unit_3p, v_a3p, slot_name, item_units) then

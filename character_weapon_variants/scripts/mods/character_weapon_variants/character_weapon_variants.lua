@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.551-dev"
+local MOD_VERSION = "0.1.552-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
 mod._cwv_dev_anim_picker = mod:dofile("scripts/mods/character_weapon_variants/cwv_dev_anim_picker")
@@ -1113,7 +1113,7 @@ do
 	-- #786: engine surfaces for the guarded husk re-wield. Policy, coalescer and
 	-- the authored catalogue are the only authorities; nothing here reads back
 	-- the state a re-wield just produced.
-	local _style_rewield_deps = {
+	local _style_rewield_deps = _om.style_rewield.bind_retained(_om, {
 		policy = policy, coalescer = mod._cwv_rewield, printf = printf,
 		unit_api = Unit, script_unit = ScriptUnit, probe_state = {},
 		style_resource_resident = style_resource_resident,
@@ -1129,7 +1129,7 @@ do
 			return _om.combat_styles and _om.combat_styles:effective_template_name(
 				item_data, nil, unit, slot_name) end,
 		descriptor_expectation = _om.combat_style_appearance.expectation,
-	}
+	}, Vector3, Quaternion, _rt_register)
 
 	_om.combat_styles = policy.install(mod, {
 		cwv_key_for_item = function(backend_id, item_data)

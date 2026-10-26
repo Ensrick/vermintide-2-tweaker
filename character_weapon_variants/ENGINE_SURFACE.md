@@ -1,5 +1,25 @@
 # character_weapon_variants - engine contact surface
 
+## Greatsword remote post-wield retained adapter (#660)
+
+The existing planner/wire/coalescer remain unchanged. The husk post-spawn
+adapter captures node-0 baseline before CWV's first write; the queued post-wield
+callback repairs measured drift through WA, then independently reads position,
+scale and quaternion. Native/no-transform styles remain animation-owned.
+`GearUtils.spawn_inventory_unit` creates and links the unit before returning
+(6.13 `gear_utils.lua:190-193`); the native complete-pose contract is at
+`:300-305,321-327`. All persisted pose values are numerical; engine handles,
+including value-to-key back-references, are weak under Lua 5.1.
+
+Observation generation is local, not a synchronized source revision. Semantic
+generation, next-animation-frame retention, other surfaces/edges and actual
+co-op rendering remain pending. `/cwv_regression_test` names
+`issue660_greatsword_husk_retained`, skipping before managed remote evidence
+exists or after a positively observed lifecycle exit, then rechecking the exact
+active target. Missing authority/readback on an active managed target fails;
+missing peer identity alone is not evidence of departure. This is not complete
+family adoption; #786/#657 retain their separate live acceptance obligations.
+
 ## Animation-picker readiness owner (#317, 0.1.550-dev)
 
 The existing WeaponUnitExtension._play_3p_anim hook substitutes the event before
