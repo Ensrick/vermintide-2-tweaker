@@ -2381,12 +2381,19 @@ competing/retired lifecycle in the **same pass** as the CHANGELOG entry. Filing 
 new issue: give it type + mod + `not-started`; enter the live-test queue only
 after the current card and deployment are ready.
 
-**Mechanized (issue #326).** `tools/ship/ship.ps1` step 6 parses the `#N` refs
-from the shipped CHANGELOG entry, but it mutates no issue unless the header names
+**Mechanized (issues #326 / #750).** `tools/ship/ship.ps1` step 6 selects `#N`
+mutation targets only from the shipped CHANGELOG header. Body-only references
+are printed as advisory context, never mutation authority; a body-only entry
+is skipped. It mutates no issue unless the header names
 exactly one explicit lifecycle marker: `[not-started]`, `[verify-fix]`, or
-`[diagnostics-armed]`/`[diag]`. Before any issue mutation it validates the newest
-exact current card through the shared policy. Co-op routing comes from that card;
-stale `coop-required` is removed on a solo or non-ready target. `[docs]` and
+`[diagnostics-armed]`/`[diag]`. Before entering or retaining a ready lifecycle it
+validates the newest exact current card through the shared policy. Co-op routing comes from that card;
+stale `coop-required` is removed on a validated solo target. Existing ready
+lifecycles cannot become `not-started` through automatic ship aftercare, even
+with an explicit header target: preserve the card and co-op qualifier, and use
+an explicit evidence-backed tracker operation if readiness must be revoked.
+This automation fence does not prohibit manual revocation under the lifecycle
+discipline below. `[docs]` and
 `[tooling]` entries never auto-label issues. A
 verify-to-diagnostics downgrade is blocked unless the selected replacement method
 cites failed-verification evidence. A validated transition receives an evidence
