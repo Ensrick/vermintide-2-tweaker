@@ -41,14 +41,19 @@
 
 [CmdletBinding()]
 param(
-    [string]$RepoRoot = (Join-Path $PSScriptRoot ".."),
-    [string]$VtSrc    = (Join-Path $PSScriptRoot "..\..\Vermintide-2-Source-Code"),
+    [string]$RepoRoot,
+    [string]$VtSrc,
     [switch]$Quiet,
     [switch]$SelfTest,
     [switch]$UpdateBaseline
 )
 
 $ErrorActionPreference = "Stop"
+
+# #1739: PS5 standalone -File does not bind PSScriptRoot during defaults.
+# Derive omitted paths here; explicitly supplied values retain their semantics.
+if (-not $PSBoundParameters.ContainsKey('RepoRoot')) { $RepoRoot = Join-Path $PSScriptRoot ".." }
+if (-not $PSBoundParameters.ContainsKey('VtSrc')) { $VtSrc = Join-Path $PSScriptRoot "..\..\Vermintide-2-Source-Code" }
 
 function Read-Utf8([string]$p) { return [System.IO.File]::ReadAllText($p, [System.Text.Encoding]::UTF8) }
 function Log($msg, $color = "DarkGray") { if (-not $Quiet) { Write-Host $msg -ForegroundColor $color } }

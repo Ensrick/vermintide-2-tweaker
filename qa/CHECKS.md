@@ -798,6 +798,8 @@ pwsh -NoProfile -File qa/check_name_integrity.ps1            # all mods
 pwsh -NoProfile -File qa/check_name_integrity.ps1 -SelfTest  # planted-fault proof
 ```
 
+The standalone name checker supports both PowerShell 7 and Windows PowerShell 5.1. Omitted `RepoRoot` and `VtSrc` values are derived from the script location after parameter binding; explicit values (including empty/null input) are not silently replaced. The existing dual-host compatibility self-test invokes the actual checker with `-File -SelfTest` for both defaults, each single omitted path, and explicit paths, from the repository and an owned outside directory (#1739). This is a CLI contract, separate from #1721's sentinel checks and #85's encoding/parser guard.
+
 `check_name_integrity.ps1` reads `NAME_MAP.generated.json` as a runtime-name
 oracle (so cwv/cosmetics runtime-registered names don't false-positive) — run the
 generator first for best results. It **is wired into `run_all.ps1`** (Standard)
