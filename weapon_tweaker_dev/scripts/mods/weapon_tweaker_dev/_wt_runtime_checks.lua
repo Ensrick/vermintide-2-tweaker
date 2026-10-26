@@ -8,7 +8,7 @@
 
 local M = {}
 
-function M.install(mod, _rt_register, deps)
+function M.install(mod, _rt_register, deps, balance_registration_verify)
     deps = deps or {}
     local _unit_state = deps.unit_state
     local weapon_unlock_map = deps.weapon_unlock_map
@@ -686,30 +686,13 @@ function M.install(mod, _rt_register, deps)
     -- three migrated hook sites: SimpleInventoryExtension.wield,
     -- GearUtils.create_equipment, GearUtils.spawn_inventory_unit).
     _rt_register("wt_priest_punch_buff_wired", function()
-        -- The buffed punch profile must register at load (network-index determinism)
-        -- and the apply fn must exist. Mirrors the authentic-pistol guard.
-        if type(mod.wt_apply_priest_punch_buff) ~= "function" then
-            return "mod.wt_apply_priest_punch_buff missing"
+        local owner = rawget(mod, "_wt428_priest_punch_owner")
+        if type(owner) ~= "table" or type(rawget(owner, "validate")) ~= "function"
+            or rawget(mod, "wt_apply_priest_punch_buff") ~= rawget(owner, "apply") then
+            return "Priest punch transaction owner/callback missing"
         end
-        local DPT = rawget(_G, "DamageProfileTemplates")
-        if not DPT then return "skip: DamageProfileTemplates not loaded" end
-        if not DPT.wt_priest_punch_buffed then
-            return "wt_priest_punch_buffed damage profile not registered at load"
-        end
-        if NetworkLookup and NetworkLookup.damage_profiles
-            and not rawget(NetworkLookup.damage_profiles, "wt_priest_punch_buffed") then
-            return "wt_priest_punch_buffed missing from NetworkLookup.damage_profiles (would desync/crash networked)"
-        end
-        -- The clone must actually be scaled vs the source on default_target (2x dmg /
-        -- 3x stagger), proving the power_distribution scale ran.
-        local src = DPT.light_blunt_smiter_stab
-        local buf = DPT.wt_priest_punch_buffed
-        local function pd(p) return type(p)=="table" and type(p.default_target)=="table" and p.default_target.power_distribution or nil end
-        local sp, bp = pd(src), pd(buf)
-        if type(sp)=="table" and type(bp)=="table" and type(sp.attack)=="number" and type(sp.impact)=="number" then
-            if math.abs(bp.attack - sp.attack * 2) > 0.0001 then return "punch damage not 2x on default_target" end
-            if math.abs(bp.impact - sp.impact * 3) > 0.0001 then return "punch stagger not 3x on default_target" end
-        end
+        local ok, ready = pcall(owner.validate)
+        if not ok or ready ~= true then return "Priest punch retained transaction invalid" end
     end)
 
     _rt_register("wt_traced_hook_present", function()
@@ -839,22 +822,11 @@ function M.install(mod, _rt_register, deps)
     end)
 
     _rt_register("wt_authentic_pistol_profile_registered_unconditionally", function()
-        -- audit 2026-06-07 (PROJECT_STANDARDS §9.3): the custom damage profile must be
-        -- registered in NetworkLookup on EVERY peer regardless of the authentic-brace
-        -- toggle, or the network index diverges between peers with the toggle on vs off
-        -- (RPC crash / wrong-damage desync). Assert it's present even when the toggle
-        -- is off. Fails if a future edit re-gates the registration behind the toggle.
-        local DPT = rawget(_G, "DamageProfileTemplates")
-        local NL  = rawget(_G, "NetworkLookup")
-        if not (DPT and NL and NL.damage_profiles) then
-            return "skip: DamageProfileTemplates/NetworkLookup not loaded"
+        if type(balance_registration_verify) ~= "function" then
+            return "Authentic pistol retained registration owner missing"
         end
-        if not rawget(DPT, "wt_authentic_pistol") then
-            return "wt_authentic_pistol missing from DamageProfileTemplates (registration not unconditional)"
-        end
-        if not rawget(NL.damage_profiles, "wt_authentic_pistol") then
-            return "wt_authentic_pistol missing from NetworkLookup.damage_profiles (peer index would diverge)"
-        end
+        local ok, key = pcall(balance_registration_verify)
+        if not ok or key ~= "wt_authentic_pistol" then return "Authentic pistol retained registration invalid" end
     end)
 
     _rt_register("wt_kruber_1h_sword_push_combo_revert", function()

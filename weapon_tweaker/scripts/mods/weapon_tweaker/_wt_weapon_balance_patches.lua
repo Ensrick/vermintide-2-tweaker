@@ -16,8 +16,9 @@
 -- Both clones stay registered even with their toggle OFF (PROJECT_STANDARDS
 -- 9.3 gated-registration divergence) and record a wire-safe vanilla fallback
 -- for the issue-431 send floor; only the template repoint is toggle-gated.
--- Everything below the accessor block is byte-identical to the lines it
--- replaced. Offline evidence: qa/lua/tests/test_wt_template_patch_owners.lua.
+-- The Priest punch tail now commits its profile/lookup/fallback atomically
+-- through _wt_priest_punch_owner at the same registration position (#428).
+-- Offline evidence: qa/lua/tests/test_wt_template_patch_owners.lua.
 
 local mod = get_mod("wt")
 
@@ -36,11 +37,11 @@ local _dbg = mod._wt.dbg
 --   1. Damage: every firing sub-action's `impact_data.damage_profile`
 --      switches from `shot_carbine` (vanilla brace) to a clone of
 --      `shot_sniper` (Kruber's handgun) with the near→far dropoff
---      flattened AND cleave_distribution halved (≈2x penetration:
---      from ~3 targets → ~6). Plus `ignore_shield_hit = true` on the
+--      flattened AND the existing cleave_distribution values retained
+--      at 0.15 (half the native 0.3). Plus `ignore_shield_hit = true` on the
 --      sub-action, which is what lets the handgun ignore shields.
 --      Combined effect: armor-piercing, shield-breaking, full damage at
---      all ranges, passes through ~6 enemies.
+--      all ranges; this registration migration changes no cleave balance.
 --   2. Right-click is left vanilla. Lock-target / fast_shot rapid-fire
 --      kept intact. (Previous revisions tried to disable or replace it
 --      with a handgun-style zoom — both reverted in v0.12.15 because
@@ -91,73 +92,15 @@ local _dbg = mod._wt.dbg
 -- A restart is required to toggle off because the in-place patches
 -- can't be cleanly reverted without snapshotting + restoring vanilla.
 
+local _wt428_pistol, _wt428_pistol_validate
 local function _wt_clone_shot_sniper_no_dropoff()
-    if not DamageProfileTemplates then return nil end
-    local source = DamageProfileTemplates.shot_sniper
-    if not source then return nil end
-    local key = "wt_authentic_pistol"
-    if DamageProfileTemplates[key] then return key end
-
-    local clone = table.clone(source, true)
-
-    -- Flatten near/far dropoff: mirror near values to far so range no
-    -- longer reduces damage. shot_sniper has separate `armor_modifier_near`
-    -- vs `armor_modifier_far` and per-target `power_distribution_near`
-    -- vs `power_distribution_far`.
-    if clone.armor_modifier_near then
-        clone.armor_modifier_far = table.clone(clone.armor_modifier_near, true)
+    if type(_wt428_pistol) ~= "table" or type(_wt428_pistol_validate) ~= "function"
+        or rawget(mod, "_wt428_authentic_pistol_owner") ~= _wt428_pistol
+        or rawget(_wt428_pistol, "validate") ~= _wt428_pistol_validate then return nil end
+    local ok, valid = pcall(_wt428_pistol_validate)
+    if ok and valid == true then
+        return "wt_authentic_pistol"
     end
-    if clone.default_target then
-        if clone.default_target.power_distribution_near then
-            clone.default_target.power_distribution_far = table.clone(clone.default_target.power_distribution_near, true)
-        end
-        -- range_modifier_settings is the curve that interpolates between
-        -- near and far. With both endpoints equal we don't strictly need
-        -- to remove it, but clearing it makes the no-dropoff intent
-        -- explicit.
-        clone.default_target.range_modifier_settings = nil
-    end
-
-    -- Double penetration. `cleave_distribution.attack` / `.impact` is the
-    -- fraction of cleave power consumed per target hit; halving each value
-    -- lets projectiles pass through ~2x as many enemies before running
-    -- out of cleave. shot_sniper vanilla is 0.3/0.3 (≈3 targets);
-    -- wt_authentic_pistol becomes 0.15/0.15 (≈6 targets).
-    if clone.cleave_distribution then
-        if type(clone.cleave_distribution.attack) == "number" then
-            clone.cleave_distribution.attack = clone.cleave_distribution.attack / 2
-        end
-        if type(clone.cleave_distribution.impact) == "number" then
-            clone.cleave_distribution.impact = clone.cleave_distribution.impact / 2
-        end
-    end
-
-    DamageProfileTemplates[key] = clone
-
-    -- Register in NetworkLookup.damage_profiles. The lookup is built once at
-    -- game load (network_lookup.lua:2203) and frozen with an __index metatable
-    -- that errors on missing keys. PlayerProjectileUnitExtension (line 92)
-    -- looks up `NetworkLookup.damage_profiles[impact_data.damage_profile]` at
-    -- projectile spawn — without this registration every brace shot crashes
-    -- with "Table damage_profiles does not contain key: wt_authentic_pistol",
-    -- which is exactly what made v0.12.6 silently no-op. Same pattern CWV uses
-    -- for its custom damage-profile clones (character_weapon_variants.lua:1364).
-    if NetworkLookup and NetworkLookup.damage_profiles and not rawget(NetworkLookup.damage_profiles, key) then
-        local tbl = NetworkLookup.damage_profiles
-        local idx = #tbl + 1
-        rawset(tbl, idx, key)
-        rawset(tbl, key, idx)
-    end
-
-    -- issue 431: record the clone SOURCE as this profile's wire-safe fallback.
-    -- The send_rpc_attack_hit floor (_wt431_damage_profile_parity.lua) coerces
-    -- the custom id back to this vanilla id if it would ever ride the wire
-    -- while a peer without wt is present. Belt-and-suspenders `or {}` because
-    -- registration sites run before the parity module loads.
-    mod._wt431_custom_profile_fallback = mod._wt431_custom_profile_fallback or {}
-    mod._wt431_custom_profile_fallback[key] = "shot_sniper"
-
-    return key
 end
 
 -- issue 431: parity-gated repoint for the authentic-brace damage profile.
@@ -171,18 +114,7 @@ end
 -- issue-431 peer-parity callbacks (_wt431_damage_profile_parity.lua). The rest
 -- of the authentic-brace mode (ammo/spread/speed) never rides a lookup index,
 -- so it stays applied regardless of parity.
-mod._wt431_brace_repoint = function()
-    local slots = mod._wt431_brace_profile_slots
-    if type(slots) ~= "table" then return end
-    local allowed = type(mod._wt431_profiles_allowed) == "function"
-        and mod._wt431_profiles_allowed() == true
-    for i = 1, #slots do
-        local s = slots[i]
-        if type(s.impact_data) == "table" then
-            s.impact_data.damage_profile = allowed and s.custom or s.original
-        end
-    end
-end
+-- The retained transaction owner publishes this callback at registration below.
 
 -- Primary spread mult: applied to the default brace spread used by
 -- single-shot LMB (action_one.default). 2× wider than vanilla.
@@ -428,7 +360,9 @@ end
 -- NetworkLookup appenders vs one that doesn't) still requires routing through
 -- bt's shared sorted registry — the proper long-term fix, tracked as follow-up.
 -- Regression: wt_authentic_pistol_profile_registered_unconditionally.
-if not _wt_clone_shot_sniper_no_dropoff() then
+_wt428_pistol = mod:dofile("scripts/mods/weapon_tweaker/_wt_authentic_pistol_owner").install(mod)
+_wt428_pistol_validate = type(_wt428_pistol) == "table" and rawget(_wt428_pistol, "validate")
+if not _wt428_pistol then
     -- Ungated (mod:warning): if the profile can't register at load (tables not
     -- ready), a networked brace shot would desync / crash on the other peer when
     -- the toggle is on. Surface it without requiring Debug Logging.
@@ -516,92 +450,10 @@ end
 -- between a host with the toggle on and a client with it off -- PROJECT_STANDARDS
 -- §9.3). Only the action repoint is toggle-gated.
 do
-    local PRIEST_PUNCH_PROFILE = "wt_priest_punch_buffed"
-    local PRIEST_PUNCH_SRC = "light_blunt_smiter_stab"
-    local PRIEST_HAMMER_TMPL = "two_handed_hammer_priest_template"
-    local DAMAGE_MULT = 2  -- doubles damage
-    local STAGGER_MULT = 3  -- triples stagger
-
-    -- Scale a power-level node's damage (attack) / stagger (impact). Resolves a
-    -- string ref to PowerLevelTemplates and returns an OWN copy so the shared
-    -- vanilla table is never mutated.
-    local function _scaled_node(node)
-        if type(node) == "string" then
-            node = rawget(_G, "PowerLevelTemplates") and PowerLevelTemplates[node]
-        end
-        if type(node) ~= "table" then return node end
-        local c = table.clone(node, true)
-        local pd = c.power_distribution
-        if type(pd) == "table" then
-            if type(pd.attack) == "number" then pd.attack = pd.attack * DAMAGE_MULT end
-            if type(pd.impact) == "number" then pd.impact = pd.impact * STAGGER_MULT end
-        end
-        return c
+    local owner, reason = mod:dofile("scripts/mods/weapon_tweaker/_wt_priest_punch_owner").install(mod)
+    if not owner then
+        pcall(printf, "[wt:428] priest-punch transaction rejected (%s); owned registration/repoint not installed", tostring(reason))
     end
-
-    -- Register the cloned+scaled profile. Idempotent; mirrors
-    -- _wt_clone_shot_sniper_no_dropoff's NetworkLookup registration.
-    local function _register_priest_punch_profile()
-        local DPT = rawget(_G, "DamageProfileTemplates")
-        if not DPT then return false end
-        if DPT[PRIEST_PUNCH_PROFILE] then return true end
-        local src = DPT[PRIEST_PUNCH_SRC]
-        if not src then return false end
-        local clone = table.clone(src, true)
-        clone.default_target = _scaled_node(clone.default_target)
-        if type(clone.targets) == "string" then
-            clone.targets = rawget(_G, "PowerLevelTemplates") and PowerLevelTemplates[clone.targets]
-        end
-        if type(clone.targets) == "table" then
-            local nt = {}
-            for i, t in ipairs(clone.targets) do nt[i] = _scaled_node(t) end
-            clone.targets = nt
-        end
-        DPT[PRIEST_PUNCH_PROFILE] = clone
-        if NetworkLookup and NetworkLookup.damage_profiles
-            and not rawget(NetworkLookup.damage_profiles, PRIEST_PUNCH_PROFILE) then
-            local tbl = NetworkLookup.damage_profiles
-            local idx = #tbl + 1
-            rawset(tbl, idx, PRIEST_PUNCH_PROFILE)
-            rawset(tbl, PRIEST_PUNCH_PROFILE, idx)
-        end
-        -- issue 431: clone source = wire-safe fallback for the send floor.
-        mod._wt431_custom_profile_fallback = mod._wt431_custom_profile_fallback or {}
-        mod._wt431_custom_profile_fallback[PRIEST_PUNCH_PROFILE] = PRIEST_PUNCH_SRC
-        return true
-    end
-
-    -- Captured once so toggling off restores the exact vanilla key.
-    local _punch_orig_profile
-
-    -- Repoint the punch action's damage_profile based on the toggle. Iterates the
-    -- template's action groups and finds the `punch` sub-action (no dependence on
-    -- which group it lives in).
-    mod.wt_apply_priest_punch_buff = function()
-        local tpl = rawget(_G, "Weapons") and Weapons[PRIEST_HAMMER_TMPL]
-        if not (tpl and tpl.actions) then return end
-        -- issue 431: parity gate -- the custom profile is only pointed-to while
-        -- every other human peer is confirmed to run wt (a non-wt peer would
-        -- fatal decoding our appended index off rpc_attack_hit, BUG_CLASSES 31).
-        -- Nil-guarded: before the beacon module loads (or if it failed), this
-        -- reads false and the punch stays on its vanilla profile (fail-safe).
-        local allowed = type(mod._wt431_profiles_allowed) == "function"
-            and mod._wt431_profiles_allowed() == true
-        local enabled = mod:get("wt_priest_punch_buff") and allowed
-        local use_profile = enabled and DamageProfileTemplates and DamageProfileTemplates[PRIEST_PUNCH_PROFILE] and PRIEST_PUNCH_PROFILE or nil
-        for _, group in pairs(tpl.actions) do
-            if type(group) == "table" and type(group.punch) == "table" then
-                if _punch_orig_profile == nil then
-                    _punch_orig_profile = group.punch.damage_profile or PRIEST_PUNCH_SRC
-                end
-                group.punch.damage_profile = use_profile or _punch_orig_profile
-            end
-        end
-    end
-
-    -- ALWAYS register at load (network-index determinism); repoint per toggle.
-    if not _register_priest_punch_profile() then
-        mod:warning("[wt:priest-punch] damage-profile registration failed at load (DamageProfileTemplates/NetworkLookup not ready)")
-    end
-    mod.wt_apply_priest_punch_buff()
 end
+-- Private entry-to-check dependency: retain the already-installed verifier.
+return _wt_clone_shot_sniper_no_dropoff

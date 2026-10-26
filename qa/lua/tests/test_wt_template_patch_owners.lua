@@ -139,22 +139,15 @@ return function(H, repo_root)
             -- Both custom damage profiles append forward AND reverse into
             -- NetworkLookup.damage_profiles, unconditionally at load, and record
             -- their vanilla clone source as the send-floor fallback.
-            H.equal(count_plain(balance, "rawset(tbl, idx, key)"), 1)
-            H.equal(count_plain(balance, "rawset(tbl, key, idx)"), 1)
-            H.equal(count_plain(balance, "rawset(tbl, idx, PRIEST_PUNCH_PROFILE)"), 1)
-            H.equal(count_plain(balance, "rawset(tbl, PRIEST_PUNCH_PROFILE, idx)"), 1)
-            H.equal(count_plain(balance,
-                'mod._wt431_custom_profile_fallback[key] = "shot_sniper"'), 1)
-            H.equal(count_plain(balance,
-                "mod._wt431_custom_profile_fallback[PRIEST_PUNCH_PROFILE] = PRIEST_PUNCH_SRC"), 1)
             -- Registration is ungated; only the repoint is toggle-gated. The
             -- unconditional call sits outside the `if mod:get(...)` guard.
-            H.equal(count_plain(balance, "if not _wt_clone_shot_sniper_no_dropoff() then"), 1)
-            H.equal(count_plain(balance, "if not _register_priest_punch_profile() then"), 1)
+            -- Both actual transaction owners have executable behavioral suites.
+            H.equal(count_plain(balance,
+                'mod:dofile("scripts/mods/' .. stream.ns .. '/_wt_authentic_pistol_owner").install(mod)'), 1)
+            H.equal(count_plain(balance,
+                'mod:dofile("scripts/mods/' .. stream.ns .. '/_wt_priest_punch_owner").install(mod)'), 1)
             -- The two functions the parity module and the entry call by name
             -- stay published on `mod`, not turned into module locals.
-            H.equal(count_plain(balance, "mod._wt431_brace_repoint = function()"), 1)
-            H.equal(count_plain(balance, "mod.wt_apply_priest_punch_buff = function()"), 1)
             H.equal(count_plain(entry, "mod._wt431_brace_repoint = function()"), 0)
             H.equal(count_plain(entry, "mod.wt_apply_priest_punch_buff = function()"), 0)
             -- The entry still dispatches the punch buff from the rework runtime.
@@ -217,4 +210,5 @@ return function(H, repo_root)
             H.equal(normalized, public_owner, owner .. " must be stream-identical")
         end
     end)
+    return require("test_wt_priest_punch_owner")(H, repo_root)
 end

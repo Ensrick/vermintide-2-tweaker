@@ -385,3 +385,10 @@ statement, then promote.
 - Whether `Unit.actor` / other `Unit.*` engine APIs share the exact same
   pcall-bypassing fatal behavior as `Unit.node` (the `has_*` companion rule is
   asserted generally but only `Unit.node` is confirmed). [unverified]
+
+## Authored pistol clone and cleave contracts
+
+- Native `table.clone(t, skip_metatable)` recursively clones nested non-class tables; its second argument bypasses the metatable assertion, not recursion depth. [src: foundation/scripts/util/table.lua:31-48]
+- Native `shot_sniper` authors near/far armor and target power distributions plus cleave attack/impact values of 0.3 each. [src: scripts/settings/equipment/damage_profile_templates.lua:2187-2264]
+- `ActionUtils.get_max_targets` multiplies cleave power by `cleave_distribution.attack`/`.impact` before deriving target mass; those fields are not expressed there as a per-target cost divisor. [src: scripts/helpers/action_utils.lua:22-31]
+- The player projectile resolves its impact profile through `NetworkLookup.damage_profiles` when created, before later hit-send coercion can substitute an index. [src: scripts/unit_extensions/weapons/projectiles/player_projectile_unit_extension.lua:90-92]

@@ -143,9 +143,16 @@ local function register(Harness, repo_root)
     Harness.test("WT #664 setting-id chain widget == policy constant == dispatch arm", function()
         local policy = dofile(wt_dir .. "/_wt_axe_balance.lua")
         Harness.equal("wt_executioner_light_headshot_bonus", policy.EXECUTIONER_LIGHT_HEADSHOT_SETTING)
-        local data = read(wt_dir .. "/weapon_tweaker_data.lua")
-        Harness.truthy(data:find('setting_id = "' .. policy.EXECUTIONER_LIGHT_HEADSHOT_SETTING .. '"', 1, true),
-            "widget for the executioner toggle must exist under the policy's id")
+        local group = dofile(wt_dir .. "/_wt_weapon_overrides_widgets.lua").build()
+        local matches = 0
+        for _, row in ipairs(group.sub_widgets) do
+            if row.setting_id == policy.EXECUTIONER_LIGHT_HEADSHOT_SETTING then
+                matches = matches + 1
+                Harness.equal(row.type, "checkbox")
+                Harness.equal(row.default_value, false)
+            end
+        end
+        Harness.equal(matches, 1, "executioner policy must bind one real widget")
         -- The bounded apply adapter moved out of the entry into its policy
         -- owner (_wt_axe_balance.M.install), so drive it instead of grepping
         -- the entry: the executioner setting id must reach exactly the

@@ -21,6 +21,11 @@ M.RUNTIME_GATE_SETTINGS = {
     "wt_brett_sword_shield_buff",
     "wt_dual_axes_cleave",
     "wt_executioner_light_headshot_bonus",
+    "wt_fire_sword_heat",
+    "wt_fire_sword_heat_armor",
+    "wt_fire_sword_heat_cleave_percent",
+    "wt_fire_sword_heat_damage_percent",
+    "wt_fire_sword_heat_armor_threshold",
     "wt_one_hand_axe_cleave_nerf",
     "wt_priest_punch_buff",
 }

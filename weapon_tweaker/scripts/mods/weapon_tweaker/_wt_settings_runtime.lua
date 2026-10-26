@@ -7,6 +7,10 @@ function M.install(c)
     mod.on_setting_changed = function(setting_id)
         if c.rework_runtime:is_batching() then return end
         if c.rework_runtime:on_master_changed(setting_id) then return end
+        if mod._wt942_on_setting_changed and mod._wt942_on_setting_changed(setting_id) then
+            c.rework_runtime:sync_for_leaf(setting_id)
+            return
+        end
         if c.history_runtime
                 and c.history_runtime:on_setting_changed(setting_id) then
             c.rework_runtime:sync_for_leaf(setting_id)

@@ -1,5 +1,43 @@
 # Weapon Tweaker Changelog
 
+## 0.12.338-beta (2026-10-26) -- Fire Sword heat and rework ownership (#942, #428, #1737)
+
+### Why
+
+- The Fire Sword heat setting needed one consistent preparation, application
+  and peer-configuration contract. Rework registration also needed bounded,
+  independently verifiable owners instead of more entry/data-file growth.
+- The public Authentic Brace of Pistols description made claims inconsistent
+  with its installed ammunition and retained native controls.
+
+### Changed
+
+- Split Fire Sword heat policy, runtime, transport and configuration proof into
+  explicit owners; preserve the separate DoT, area-damage and heat-decay rules.
+- Make Warrior Priest punch profile registration atomic, and move the weapon
+  override widget construction out of the main settings data file. Lower the
+  affected decomposition ceilings instead of raising them.
+- Give Authentic Brace profile preparation a private captured verifier, passed
+  from its original balance installer to the existing runtime-check owner.
+  Missing or forged mutable public fields cannot substitute for that proof.
+- Correct the English Authentic Brace description against native 6.13 ammo,
+  reload, timing and spread behavior without changing its balance in this fix.
+- Retain the existing #431 registration order, current/mixed-peer fallback and
+  all committed pre-patch catalogs. The separate history-transaction candidate
+  is not part of this release.
+
+### Verification boundary
+
+- Supersedes the never-built 0.12.337-beta allocation after correcting this
+  session's claim-owner invocation. No launcher or publication code changed.
+- Frozen source composition passed 5,240 Lua cases, parser, stream parity and
+  strict hook lint before integration. Canonical build/release checks bind the
+  final versioned artifacts. These are not game-launch or gameplay passes.
+- After publication, verify the Fire Sword setting in the keep and the existing
+  regression checks; confirm this exact beta banner in the log. Actual startup,
+  rendered descriptions, weapon feel and matched/mixed-peer behavior still need
+  live acceptance. The local VT2 executable is not installed on this machine.
+
 ## 0.12.336-beta (2026-10-24) -- fresh mirror allocation for the dev check-owner split (#2) [tooling]
 
 - Supersedes the unpublished 0.12.335-beta candidate after its claim expired.
