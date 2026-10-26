@@ -119,6 +119,11 @@ return function(H, repo_root)
                 .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/" .. name, "rb"))
             local source = file:read("*a")
             file:close()
+            if name == "_mod_tweaker_view.lua" then
+                H.truthy(source:find('mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_view_catalog")', 1, true))
+                file = assert(io.open(repo_root .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view_catalog.lua", "rb"))
+                source = file:read("*a"); file:close()
+            end
             H.truthy(source:find("external_group.find_mod_list", 1, true))
             H.truthy(source:find("external_group.replace_group_children", 1, true))
             H.truthy(source:find("external_group.bridge_known_fallback", 1, true))

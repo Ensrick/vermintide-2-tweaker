@@ -77,6 +77,11 @@ return function(H, repo_root)
                 local file = assert(io.open(stream.root .. filename, "rb"))
                 local source = file:read("*a")
                 file:close()
+                if stream.name == "dev" and filename == "_mod_tweaker_view.lua" then
+                    H.truthy(source:find('mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_view_catalog")', 1, true))
+                    file = assert(io.open(stream.root .. "_mod_tweaker_view_catalog.lua", "rb"))
+                    source = file:read("*a"); file:close()
+                end
 
                 H.truthy(source:find("disabled_sections.is_author_mod(mod_name)", 1, true),
                     stream.name .. " " .. filename .. " must use shared authored-mod discovery")

@@ -1,5 +1,16 @@
 # Regression Checklist — gui_tweaker_dev
 
+## #2 standalone category-catalog ownership
+
+- `test_gut_view_catalog.lua` loads the complete catalog child through the actual
+  view binding. Discovery stays deferred; rebuild retains its existing pcall and
+  controller fallback. CKC precedes UI Tweaks, then Equipment synthesis and sort.
+- Retain exact depth/owner arrays, mixed CKC/HideBuffs/GUT buffers, disabled headers,
+  stream aliases, profile exclusions, source-node identity and diagnostic bounds.
+- `test_gut_view_rows.lua` retains its independent row/gear oracles with the real
+  catalog dependency loaded. Keep-state and stable GUI remain unchanged.
+- This is host-only structural proof, not renderer/input or live acceptance.
+
 ## Mission-map check owner extraction (#2 partial slice)
 
 - Offline `test_gut_runtime_checks_mission_map.lua` executes the installed

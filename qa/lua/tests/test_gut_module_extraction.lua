@@ -54,12 +54,13 @@ return function(H, repo_root)
             }
             if stream.dialogue then
                 owners[#owners + 1] = { source = view, name = "_mod_tweaker_view_rows" }
+                owners[#owners + 1] = { source = view, name = "_mod_tweaker_view_catalog", api = "bind" }
             end
             for _, owner in ipairs(owners) do
                 H.equal(occurrences(owner.source, stream.module_path .. owner.name), 1,
                     owner.name .. " must have one owner")
                 local module = read(stream.root .. owner.name .. ".lua")
-                H.truthy(module:find("function M.install", 1, true), owner.name .. " has no explicit API")
+                H.truthy(module:find("function M." .. (owner.api or "install"), 1, true), owner.name .. " has no explicit API")
                 H.truthy(module:find("return M", 1, true), owner.name .. " does not export its API")
             end
         end
@@ -142,6 +143,10 @@ return function(H, repo_root)
         H.equal(slider_edge:find("function mod.on_", 1, true), nil,
             "_mod_tweaker_slider_drag_edge.lua owns lifecycle")
 
+        local catalog = read(streams[2].root .. "_mod_tweaker_view_catalog.lua")
+        for _, forbidden in ipairs({ "mod:dofile(", "mod:hook", "mod:command(", "function mod.update", "function mod.on_" }) do
+            H.equal(catalog:find(forbidden, 1, true), nil, "catalog owner must remain hook/lifecycle neutral")
+        end
         local rows = read(streams[2].root .. "_mod_tweaker_view_rows.lua")
         for _, forbidden in ipairs({ "mod:dofile(", "mod:hook", "mod:command(", "function mod.update", "function mod.on_" }) do
             H.equal(rows:find(forbidden, 1, true), nil, "row owner must remain hook/lifecycle neutral")

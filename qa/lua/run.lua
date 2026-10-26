@@ -563,6 +563,7 @@ local suites = {
     "test_gut_cosmetics_mission_mount",
     "test_gut_module_extraction",
     "test_gut_view_rows",
+    "test_gut_view_catalog",
     "test_gut_runtime_checks_mission_map",
     "test_gt_regression_module",
     "test_gut_exclusive_radio",
