@@ -40,6 +40,9 @@ $targets = @(
             -Pattern '^# SELFTEST-OWNER:\s+run_[A-Za-z0-9_.-]+\.ps1$' -Quiet) } `
         | ForEach-Object { $_.FullName }
 )
+# The master SelfTest returns before normal gates; this cannot recurse.
+$policyPs1 = Join-Path $here 'run_all.ps1'
+if (Test-Path $policyPs1) { $targets += $policyPs1 }
 $shipPs1 = Join-Path $repoRoot 'tools\ship\ship.ps1'
 if (Test-Path $shipPs1) { $targets += $shipPs1 }
 $claimPs1 = Join-Path $repoRoot 'tools\ship\claim.ps1'
@@ -56,6 +59,8 @@ $worktreeLifecyclePs1 = Join-Path $repoRoot 'tools\worktrees\worktree.ps1'
 if (Test-Path $worktreeLifecyclePs1) { $targets += $worktreeLifecyclePs1 }
 $promotionStatusPs1 = Join-Path $repoRoot 'tools\promote\promotion-status.ps1'
 if (Test-Path $promotionStatusPs1) { $targets += $promotionStatusPs1 }
+$modLintPs1 = Join-Path $repoRoot 'tools\mod-lint\lint-mod.ps1'
+if (Test-Path $modLintPs1) { $targets += $modLintPs1 }
 
 $failed = @()
 foreach ($t in $targets) {

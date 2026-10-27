@@ -174,6 +174,53 @@ function Invoke-PolicySelfTest {
         $failures += "reserved tool-failure exit was flattened by advisory policy"
     }
 
+    # #1759: execute the actual Quick notice with real policy/summary functions.
+    # Select only that statement, never run the normal QA gate to test wording.
+    $tokens = $null; $parseErrors = $null
+    $source = [IO.File]::ReadAllText($PSCommandPath)
+    $ast = [Management.Automation.Language.Parser]::ParseInput($source, [ref]$tokens, [ref]$parseErrors)
+    $quickBlocks = @($ast.EndBlock.Statements | Where-Object {
+        $_ -is [Management.Automation.Language.IfStatementAst] -and
+        $_.Clauses[0].Item1.Extent.Text -ceq '$Quick'
+    })
+    $notice = @()
+    if (@($parseErrors).Count -eq 0 -and $quickBlocks.Count -eq 1) {
+        $notice = @($quickBlocks[0].Clauses[0].Item2.Statements | Where-Object {
+            $_.Extent.Text.StartsWith('Write-Host "Quick mode - ')
+        })
+    }
+    if ($notice.Count -ne 1) {
+        $failures += 'one actual Quick completion notice was not found'
+    } else {
+        $writeNotice = [scriptblock]::Create($notice[0].Extent.Text)
+        foreach ($fixture in @(
+            @{ Name = 'passed'; Code = 0; Expected = 0; Summary = '[run_all] OK - all checks passed.' },
+            @{ Name = 'failed'; Code = 2; Expected = 2; Summary = '[run_all] FAILED - blocking errors (exit 2).' },
+            @{ Name = 'skipped'; Code = 0; Expected = 0; Summary = '[run_all] OK - all checks passed.' },
+            @{ Name = 'infrastructure'; Code = 99; Expected = 99; Summary = '[run_all] FAILED - blocking errors (exit 99).' }
+        )) {
+            $script:blockingExit = 0; $script:warnings = @(); $script:infrastructureFailures = @()
+            $output = & {
+                Run-Check 'lua-output-fixture' {
+                    if ($fixture.Name -ceq 'infrastructure') { throw 'planted Lua host failure' }
+                    if ($fixture.Name -ceq 'skipped') { Write-Host '[lua-output-fixture] SKIP - private fixture' }
+                    $global:LASTEXITCODE = $fixture.Code
+                }
+                & $writeNotice
+                Write-Summary
+            } 6>&1 | Out-String
+            if ($script:blockingExit -ne $fixture.Expected -or
+                    -not $output.Contains('Quick mode - selected checks finished;') -or
+                    $output.Contains('Lua syntax and units passed') -or
+                    -not $output.Contains($fixture.Summary) -or
+                    ($fixture.Name -ceq 'skipped' -and -not $output.Contains('SKIP - private fixture'))) {
+                $failures += "Quick notice/real gate verdict disagrees for $($fixture.Name)"
+            } else {
+                Write-Host "[quick-summary:selftest] PASS $($fixture.Name)" -ForegroundColor Green
+            }
+        }
+    }
+
     try {
         Invoke-QAWorktreeStateSelfTest
     } catch {
@@ -346,7 +393,7 @@ Run-Check "check_lua_parse"                    { & (Join-Path $here "check_lua_p
 Run-Check "lua_unit_tests"                    { & (Join-Path $here "check_lua_unit_tests.ps1")               -Quiet:$Quiet }
 
 if ($Quick) {
-    Write-Host "Quick mode - Lua syntax and units passed; skipping localization, stale-docs, file-sizes, advisory luacheck." -ForegroundColor DarkGray
+    Write-Host "Quick mode - selected checks finished; skipping localization, stale-docs, file-sizes, advisory luacheck." -ForegroundColor DarkGray
     Confirm-QAWorktreePurity
     Write-Summary
     exit $script:blockingExit

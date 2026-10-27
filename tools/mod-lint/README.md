@@ -34,14 +34,16 @@ of the local — and crashes at call time. The fix is either to move the
 helper definition above the call site, or to add a bare `local NAME`
 forward declaration near the top of the file.
 
-The linter flags any top-level `local function NAME` (column-zero
-declaration) whose name is referenced from a closure starting on an
-earlier line, with no matching `local NAME` forward declaration above the
-closure.
+The linter considers column-zero `local function NAME` declarations and
+requires an actual bare-name reference on a line BEFORE the declaration,
+inside an earlier-started anonymous closure without an earlier forward
+declaration. A returned installer enclosing its own declaration and later
+calls is not itself an earlier reference. This remains a formatting/extent
+heuristic, not a complete Lua scope resolver.
 
 False-positive rate is kept low by:
-- Only considering column-0 declarations (helpers defined inside another
-  function's body are scoped there, not module-level).
+- Only considering column-0 declarations, while checking each actual reference
+  line rather than treating an enclosing wrapper as proof of earlier use.
 - Skipping `obj.NAME` / `obj:NAME` table-access references (those resolve
   dynamically against a table, not against the closure's upvalue).
 - Recognising explicit forward declarations (`local NAME` on its own
@@ -123,7 +125,13 @@ cim v0.7.28 rehook patterns. Linter should report 4 duplicate-hook errors.
 forward-ref pattern. Linter should report 1 forward-ref warning.
 
 Both fixtures live outside the `$KnownMods` list in `lint-mod.ps1` so the
-default no-argument scan does NOT include them.
+default no-argument scan does NOT include them. The required data-only
+`test_fixtures/forward_ref_cases.psd1` adds ordered/unused returned installers,
+genuine pre-declaration callbacks/calls, correct forward-declaration reuse,
+field access, comments/strings and block-boundary cases, each in LF and CRLF.
+`-SelfTest` uses the actual scanner; `qa/run_selftests.ps1` explicitly registers
+this out-of-tree tool. The declaration inventory, extent heuristic, warning
+severity, JSON schema and named-only JSON-path safety remain unchanged.
 
 The `late-local-shadows-global` check has an in-memory self-test that
 synthesizes its fixtures programmatically (the bug only reproduces when the
