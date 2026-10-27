@@ -556,3 +556,13 @@ get_mod resolves only public/dev WT identities late; the existing canonical
 shared career install/release protocol is recognized without a prefix-only
 exception. Every unrelated donor/template/profile/preview cell stays pinned.
 Canonical action content is deliberately delegated, not engine-ABI validated.
+
+- `_cwv_elven_shield_construction_owner.lua`: private closed-family producer,
+  loaded once by entry; injected graph/lookup/career/scalar+audit authority.
+  Owns template/profile/pair transaction and four native elf preview cells;
+  existing core-return/bootstrap/item path consumes admission by value.
+  No native hook, setting, RPC, sender or retained-action surface added.
+
+### #428 Greataxe construction/producer boundary
+
+The private template-cell transaction and four crit-cell envelope retain full immediate source-before/precommit ownership. No new hook, profile, lookup, audit, generation or preview publisher is introduced. Source/clone baselines remain independently captured; unsupported authority fails closed.

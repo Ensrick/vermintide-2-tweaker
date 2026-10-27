@@ -14,12 +14,20 @@ local function install(mod, ctx, musket_construction)
 	local shortsword = ctx.shortsword_construction
 	local admit_shortsword = type(shortsword) == "table" and shortsword.admit_shortsword
 	local check_shortsword = type(shortsword) == "table" and shortsword.check_shortsword
+	local elven_shield = ctx.elven_shield_construction
+	local admit_elven_shield = type(elven_shield) == "table" and elven_shield.admit_elven_shield
+	local check_elven_shield = type(elven_shield) == "table" and elven_shield.check_elven_shield
+	local greataxe = ctx.greataxe_construction
+	local admit_greataxe = type(greataxe) == "table" and greataxe.admit_greataxe
+	local check_greataxe = type(greataxe) == "table" and greataxe.check_greataxe
 	local old_musket_builder
 	local function install_items(owner, dependencies)
 		local private = {}; for key, value in next, dependencies do private[key] = value end
 		private.old_musket_admission = admit_old_musket
 		private.javelin_admission = admit_javelin
 		private.shortsword_admission = admit_shortsword
+		private.elven_shield_admission = admit_elven_shield
+		private.exact_template_admissions = { cwv_es_greataxe = admit_greataxe }
 		private.network_lookup = network_lookup
 		local result = owner(mod, private)
 		old_musket_builder = _om.item_registration and _om.item_registration.build_entry
@@ -47,6 +55,22 @@ local function install(mod, ctx, musket_construction)
 		else
 			register("issue428_old_musket_retained_sweep", function() return "#428 private retained Sweep registrar disconnected" end)
 		end
+		register("issue428_greataxe_construction", function()
+			if type(check_greataxe) ~= "function" then return "#428 private Greataxe construction owner disconnected" end
+			local verdict = check_greataxe(); if verdict then return verdict end
+			if type(old_musket_builder) ~= "function" then return "#428 private item builder disconnected" end
+			local ok, entry = pcall(old_musket_builder, { item_key = "cwv_es_greataxe", template = "unproven_template", base_weapon = "dr_2h_axe" })
+			if not ok or entry ~= nil then return "#428 item admission did not reject an unproven Greataxe template" end
+		end)
+		register("issue428_elven_shield_construction", function()
+			if type(check_elven_shield) ~= "function" then return "#428 private Elven shield construction owner disconnected" end
+			local verdict = check_elven_shield(); if verdict then return verdict end
+			if type(old_musket_builder) ~= "function" then return "#428 private item builder disconnected" end
+			for _, key in ipairs({ "cwv_we_sword_shield", "cwv_we_sword_shield_veteran" }) do
+				local ok, entry = pcall(old_musket_builder, { item_key = key, template = "unproven_template", base_weapon = "es_sword_shield" })
+				if not ok or entry ~= nil then return "#428 item admission did not reject an unproven Elven shield template" end
+			end
+		end)
 		register("issue428_shortsword_construction", function()
 			if type(check_shortsword) ~= "function" then return "#428 private Shortsword construction owner disconnected" end
 			local verdict = check_shortsword(); if verdict then return verdict end

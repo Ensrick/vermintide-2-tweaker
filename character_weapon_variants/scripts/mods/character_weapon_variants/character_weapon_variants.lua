@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.558-dev"
+local MOD_VERSION = "0.1.559-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
 mod._cwv_dev_anim_picker = mod:dofile("scripts/mods/character_weapon_variants/cwv_dev_anim_picker")
@@ -505,6 +505,13 @@ local _core_template_construction = mod:dofile("scripts/mods/character_weapon_va
 	_cwv_profile_graph, get_mod)
 _core_template_construction = mod:dofile(
 	"scripts/mods/character_weapon_variants/_cwv_core_templates")(mod, {
+	elven_shield_factory = mod:dofile("scripts/mods/character_weapon_variants/_cwv_elven_shield_construction_owner").bind(
+		_cwv_network_lookup, _cwv_profile_graph, _cwv_career_envelope,
+		mod:dofile("scripts/mods/character_weapon_variants/_cwv_elven_shield_history_envelope").bind(
+			_cwv_profile_graph, _core_template_construction)),
+	greataxe_factory = mod:dofile("scripts/mods/character_weapon_variants/_cwv_greataxe_construction_owner").bind(
+		_cwv_profile_graph, _cwv_career_envelope,
+		mod:dofile("scripts/mods/character_weapon_variants/_cwv_greataxe_crit_envelope").bind(rawget(_G, "get_mod"))),
 	shortsword_factory = mod:dofile("scripts/mods/character_weapon_variants/_cwv_shortsword_construction_owner").bind(
 		_cwv_network_lookup, _cwv_profile_graph, _cwv_career_envelope,
 		mod:dofile("scripts/mods/character_weapon_variants/_cwv_shortsword_history_envelope").bind(
@@ -905,6 +912,8 @@ _variant_install =
 		variant_definitions = _variant_definitions,
 		javelin_construction = _javelin_runtime,
 		shortsword_construction = _core_template_construction.shortsword_construction,
+		elven_shield_construction = _core_template_construction.elven_shield_construction,
+		greataxe_construction = _core_template_construction.greataxe_construction,
 	}, _variant_install)
 -- Skin/illusion registrars stay at their original load-bearing registration boundary.
 -- CWV_SKIN_REGISTRY_INSTALL_ONCE_v1

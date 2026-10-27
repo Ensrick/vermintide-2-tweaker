@@ -134,6 +134,82 @@ function Assert-ShortswordPriorCoreIdentity {
     }
     finally { $process.Dispose(); $hash.Dispose() }
 }
+function Assert-ElvenShieldPriorCoreIdentity {
+    param([string]$LuaExecutable, [string]$Exporter, [string]$Repository)
+    foreach ($value in @($LuaExecutable, $Exporter, $Repository)) {
+        if ($value.Contains('"') -or $value.Contains([string][char]10) -or $value.Contains([string][char]13)) { throw 'Invalid fixed ElvenShield exporter path' }
+    }
+    $fixture = Join-Path (Split-Path -Parent $Exporter) 'cwv_elven_shield_construction_source.lua'
+    $utf8 = New-Object Text.UTF8Encoding($false, $true)
+    $hash = [Security.Cryptography.SHA256]::Create()
+    $process = New-Object Diagnostics.Process
+    try {
+        $text = [IO.File]::ReadAllText($fixture).Replace(([string][char]13 + [char]10), [string][char]10)
+        $actual = ([BitConverter]::ToString($hash.ComputeHash($utf8.GetBytes($text)))).Replace('-', '').ToLowerInvariant()
+        if ($actual -cne '9c303ada988fa2ebd5c3b7c530461b9e787464cc153ac87d18687f5035f10f45') { throw 'Required ElvenShield native closure hash mismatch' }
+        $start = New-Object Diagnostics.ProcessStartInfo
+        $start.FileName = $LuaExecutable
+        $start.Arguments = '"' + $Exporter + '" --export-prior-elven-shield-core "' + $Repository + '"'
+        $start.UseShellExecute = $false
+        $start.CreateNoWindow = $true
+        $start.RedirectStandardOutput = $true
+        $start.RedirectStandardError = $true
+        $start.StandardOutputEncoding = $utf8
+        $start.StandardErrorEncoding = $utf8
+        $process.StartInfo = $start
+        if (-not $process.Start()) { throw 'ElvenShield identity exporter did not start' }
+        $stdout = $process.StandardOutput.ReadToEndAsync()
+        $stderr = $process.StandardError.ReadToEndAsync()
+        if (-not $process.WaitForExit(10000)) { $process.Kill(); throw 'ElvenShield identity exporter timed out' }
+        $output = $stdout.GetAwaiter().GetResult()
+        $errorText = $stderr.GetAwaiter().GetResult()
+        if ($process.ExitCode -ne 0) { throw ('ElvenShield identity exporter failed: ' + $errorText) }
+        $normalized = $output.Replace(([string][char]13 + [char]10), [string][char]10)
+        $bytes = $utf8.GetBytes($normalized)
+        $actual = ([BitConverter]::ToString($hash.ComputeHash($bytes))).Replace('-', '').ToLowerInvariant()
+        # The pinned historical owner is LF UTF8 without BOM: raw == normalized.
+        if ($bytes.Length -ne 67523 -or $actual -cne '2aeb3673d4a05a1cd257f18a24d66c2e38e9b2a3957a6dd8eb4afc8af46a7a08') { throw 'Complete prior ElvenShield runtime identity mismatch' }
+    }
+    finally { $process.Dispose(); $hash.Dispose() }
+}
+function Assert-GreataxePriorCoreIdentity {
+    param([string]$LuaExecutable, [string]$Exporter, [string]$Repository)
+    foreach ($value in @($LuaExecutable, $Exporter, $Repository)) {
+        if ($value.Contains('"') -or $value.Contains([string][char]10) -or $value.Contains([string][char]13)) { throw 'Invalid fixed Greataxe exporter path' }
+    }
+    $fixture = Join-Path (Split-Path -Parent $Exporter) 'cwv_greataxe_construction_source.lua'
+    $utf8 = New-Object Text.UTF8Encoding($false, $true)
+    $hash = [Security.Cryptography.SHA256]::Create()
+    $process = New-Object Diagnostics.Process
+    try {
+        $text = [IO.File]::ReadAllText($fixture).Replace(([string][char]13 + [char]10), [string][char]10)
+        $actual = ([BitConverter]::ToString($hash.ComputeHash($utf8.GetBytes($text)))).Replace('-', '').ToLowerInvariant()
+        if ($actual -cne '215cfae8dca6a05008c783c9b1773b7d8ad801665538c013cdf5246bce2001d2') { throw 'Required Greataxe native closure hash mismatch' }
+        $start = New-Object Diagnostics.ProcessStartInfo
+        $start.FileName = $LuaExecutable
+        $start.Arguments = '"' + $Exporter + '" --export-prior-greataxe-core "' + $Repository + '"'
+        $start.UseShellExecute = $false
+        $start.CreateNoWindow = $true
+        $start.RedirectStandardOutput = $true
+        $start.RedirectStandardError = $true
+        $start.StandardOutputEncoding = $utf8
+        $start.StandardErrorEncoding = $utf8
+        $process.StartInfo = $start
+        if (-not $process.Start()) { throw 'Greataxe identity exporter did not start' }
+        $stdout = $process.StandardOutput.ReadToEndAsync()
+        $stderr = $process.StandardError.ReadToEndAsync()
+        if (-not $process.WaitForExit(10000)) { $process.Kill(); throw 'Greataxe identity exporter timed out' }
+        $output = $stdout.GetAwaiter().GetResult()
+        $errorText = $stderr.GetAwaiter().GetResult()
+        if ($process.ExitCode -ne 0) { throw ('Greataxe identity exporter failed: ' + $errorText) }
+        $normalized = $output.Replace(([string][char]13 + [char]10), [string][char]10)
+        $bytes = $utf8.GetBytes($normalized)
+        $actual = ([BitConverter]::ToString($hash.ComputeHash($bytes))).Replace('-', '').ToLowerInvariant()
+        # The pinned historical owner is LF UTF8 without BOM: raw == normalized.
+        if ($bytes.Length -ne 68110 -or $actual -cne 'd110baa4df99a212ab1f14a62fd127ace8a96dac4dd4a13f7c32eeff2460309d') { throw 'Complete prior Greataxe runtime identity mismatch' }
+    }
+    finally { $process.Dispose(); $hash.Dispose() }
+}
 $tempParent = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\', '/')
 $inventoryRoot = [IO.Path]::GetFullPath((Join-Path $tempParent ('vt2-lua-suite-' + [guid]::NewGuid().ToString('N'))))
 $inventoryCreated = $false
@@ -144,6 +220,10 @@ try {
         Assert-JavelinPriorRuntimeIdentity -LuaExecutable $luaExe -Exporter $exporter -Repository (Split-Path -Parent $PSScriptRoot)
         $shortswordExporter = Join-Path $luaRoot 'fixtures\cwv_shortsword_construction_harness.lua'
         Assert-ShortswordPriorCoreIdentity -LuaExecutable $luaExe -Exporter $shortswordExporter -Repository (Split-Path -Parent $PSScriptRoot)
+        $elvenShieldExporter = Join-Path $luaRoot 'fixtures\cwv_elven_shield_construction_harness.lua'
+        Assert-ElvenShieldPriorCoreIdentity -LuaExecutable $luaExe -Exporter $elvenShieldExporter -Repository (Split-Path -Parent $PSScriptRoot)
+        $greataxeExporter = Join-Path $luaRoot 'fixtures\cwv_greataxe_construction_harness.lua'
+        Assert-GreataxePriorCoreIdentity -LuaExecutable $luaExe -Exporter $greataxeExporter -Repository (Split-Path -Parent $PSScriptRoot)
     }
     [void][IO.Directory]::CreateDirectory($inventoryRoot)
     $inventoryCreated = $true

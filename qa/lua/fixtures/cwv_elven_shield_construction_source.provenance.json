@@ -1,0 +1,431 @@
+{
+  "schema": 1,
+  "purpose": "required portable native Elven Shield construction source; no runtime native checkout or missing-input SKIP",
+  "native_commit": "93dea911a4cc464a0eb51cfdc3a443297bfc4550",
+  "native_inputs": [
+    {
+      "path": "scripts/settings/equipment/weapon_templates/1h_swords_shield.lua",
+      "raw_bytes": 37406,
+      "raw_sha256": "10318dd1dd23578e6e011f33de23477ca8cf7695b914b1aca7d495782dde523a",
+      "decoded_bytes": 35942,
+      "decoded_sha256": "991d439bc35944223eddd2403689de10f26325a8758f6df09e01594797e6073a",
+      "git_sha256": "a8d92a5749ae760d656029ce84a634f5f01d7ac3acdf7c85fbcef52be6e3cdb1"
+    },
+    {
+      "path": "scripts/settings/equipment/damage_profile_templates.lua",
+      "raw_bytes": 129566,
+      "raw_sha256": "d8f363a06382867e174beda889eae571fe9e89a3bbf227cc5be4e35ec4424282",
+      "decoded_bytes": 123913,
+      "decoded_sha256": "d1edf69f722cf142d4a3940589000363c8d106edb24ebbbafadc1a239b5935ec",
+      "git_sha256": "f333aad4c94ee0b313afcf6dd94885c01dc84e655bd02c6f602e7ddb1c8c4a80"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "raw_bytes": 100650,
+      "raw_sha256": "f27d8a59d5473807ba5aa1a431ce2ea04001ccfd20835df0c2ec547c4af8b4d6",
+      "decoded_bytes": 94708,
+      "decoded_sha256": "35f8ccfbb078f322010d89f03f789c43c5ba271ea39b534b072b5343065ad5fa",
+      "git_sha256": "5e66d0feb82326bb3f274cc54662cfd21b95b81586843651f495ac3e0e314766"
+    },
+    {
+      "path": "scripts/settings/equipment/item_master_list_exported.lua",
+      "raw_bytes": 397276,
+      "raw_sha256": "9bfae4a7f6c8794219d1a8d46938e7050c2b09712543073c17103f418db4fff0",
+      "decoded_bytes": 383483,
+      "decoded_sha256": "86b1b2af853bc7bd0f4f1ac4b2888f763333368f3c1db7c986854a7693ac87ca",
+      "git_sha256": "b58ac97d625067369ece256c091d150ecf5e103cdfeefda60d90421d9bbc7bda"
+    }
+  ],
+  "selected_spans": [
+    {
+      "path": "scripts/settings/equipment/damage_profile_templates.lua",
+      "start_line": 7,
+      "end_line": 52,
+      "bytes": 1568,
+      "sha256": "bbd5fa30b690f83bde0d732efc342bbb244951d9e88c8aa467e97cf481589557"
+    },
+    {
+      "path": "scripts/settings/equipment/damage_profile_templates.lua",
+      "start_line": 127,
+      "end_line": 134,
+      "bytes": 318,
+      "sha256": "fe5acd3ff16976dbce8dfdb3eb72c8ca0f6a3ee42aca35cdb524d3d6a197d34f"
+    },
+    {
+      "path": "scripts/settings/equipment/damage_profile_templates.lua",
+      "start_line": 180,
+      "end_line": 180,
+      "bytes": 105,
+      "sha256": "34401994278f3b8dfff38fb6ccd88e04294dbe0aa9429c1c73ee6f14fc679922"
+    },
+    {
+      "path": "scripts/settings/equipment/damage_profile_templates.lua",
+      "start_line": 296,
+      "end_line": 309,
+      "bytes": 552,
+      "sha256": "22084dbe176d8c12adcaacb25c50b2fbce4f48fcec2b66025bc684eaa0db62e1"
+    },
+    {
+      "path": "scripts/settings/equipment/damage_profile_templates.lua",
+      "start_line": 315,
+      "end_line": 315,
+      "bytes": 165,
+      "sha256": "cb410a5085f46b18d9b94aaad56ce273282e4a9d9ddd4bf6a528d47a2ae2cfca"
+    },
+    {
+      "path": "scripts/settings/equipment/damage_profile_templates.lua",
+      "start_line": 494,
+      "end_line": 501,
+      "bytes": 337,
+      "sha256": "c3fd05befd68f37761ec72e29d0008dee38e9441262b3dbbc059907d6c345ce7"
+    },
+    {
+      "path": "scripts/settings/equipment/damage_profile_templates.lua",
+      "start_line": 542,
+      "end_line": 548,
+      "bytes": 314,
+      "sha256": "54d689d41815d0e77a27d437d110a6721843dd3d6fface4aa9214d51a44de39c"
+    },
+    {
+      "path": "scripts/settings/equipment/damage_profile_templates.lua",
+      "start_line": 670,
+      "end_line": 692,
+      "bytes": 835,
+      "sha256": "9a750e68e092f802e9cfbc83622826f69df165ab35efc5f590ac48faf46bf98d"
+    },
+    {
+      "path": "scripts/settings/equipment/damage_profile_templates.lua",
+      "start_line": 903,
+      "end_line": 923,
+      "bytes": 645,
+      "sha256": "5bc59f2e934f8e19fa4cde8acf8ff3cc5420211cee7d64d363d46bb9c6f8f85f"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "name": "armor_modifier_linesman_L",
+      "start_line": 461,
+      "end_line": 477,
+      "bytes": 136,
+      "sha256": "d9e185d779f314ab1abc808986cd472e5bba0db768ad47b115d28f392502968b"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "name": "armor_modifier_push_M",
+      "start_line": 49,
+      "end_line": 65,
+      "bytes": 134,
+      "sha256": "a96d4c6f1be04871ac89ccb3349ecc185133d7d57296e021fce8cd16c8ddd01f"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "name": "armor_modifier_shield_push_M",
+      "start_line": 65,
+      "end_line": 81,
+      "bytes": 140,
+      "sha256": "537589071a003264c786c8313a11ab6e840fed3f1c1b31892fe3437bc13c1526"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "name": "armor_modifier_slam_aoe_tank_M",
+      "start_line": 292,
+      "end_line": 308,
+      "bytes": 145,
+      "sha256": "895e005ceb50cdb4295432b8aa2dd3eddff485c5acfcd0e9408c6ac08fc6328c"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "name": "armor_modifier_slam_tank_M",
+      "start_line": 275,
+      "end_line": 292,
+      "bytes": 148,
+      "sha256": "9ab83c474d8fd8ff06dcadf0038104792da4760e7584f74cb254d71335f18d03"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "name": "armor_modifier_slam_target_tank_M",
+      "start_line": 258,
+      "end_line": 275,
+      "bytes": 156,
+      "sha256": "417c1d8569c45beeb26d33a4ca85cacdeee2bc2466ca9b9d7be33e69f3a18cd4"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "name": "armor_modifier_stab_smiter_L",
+      "start_line": 2347,
+      "end_line": 2363,
+      "bytes": 149,
+      "sha256": "9b7a6ff52bce108f57816fd72ed6ab933d9d41eeafea736e739f4f20fb3f1e55"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "name": "armor_modifier_stab_smiter_M_1h",
+      "start_line": 2639,
+      "end_line": 2655,
+      "bytes": 150,
+      "sha256": "bafcff6d8359c4e713d6b909dc68f4bf9eb9f599d0804f698328ddc247f06a69"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "name": "armor_modifier_tank_M",
+      "start_line": 3121,
+      "end_line": 3137,
+      "bytes": 138,
+      "sha256": "34035d317ec0348d9fd8c46520ada0496ca01366837123997003f2bcb287729b"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "name": "armor_modifier_tank_M_1h",
+      "start_line": 3137,
+      "end_line": 3153,
+      "bytes": 142,
+      "sha256": "c842afd1ce914d082561bfc0afe1a804ecebadc3b4c9ed641c62651b669eff2c"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "name": "cleave_distribution_linesman_L",
+      "start_line": 457,
+      "end_line": 461,
+      "bytes": 74,
+      "sha256": "b6cedd9700d543c9d5d58cc48a483a0dc78e9261cce08d0ebb0ce02a5908ac10"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "name": "cleave_distribution_push_default",
+      "start_line": 20,
+      "end_line": 24,
+      "bytes": 71,
+      "sha256": "bda576fb83b839cdfd88141f8153bc2cd68af02a67a790304b90f3cf78163682"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "name": "cleave_distribution_smiter_default",
+      "start_line": 1733,
+      "end_line": 1737,
+      "bytes": 81,
+      "sha256": "5327a1335d5fdb195af622f9fd1fa01090294e3f59a9caa2e8f63e251bfe0f0d"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "name": "cleave_distribution_tank_M",
+      "start_line": 3153,
+      "end_line": 3157,
+      "bytes": 69,
+      "sha256": "ec886c06d9bab12d008ccbb8e7d7aa106fae9c33459e9d6aac1e2519ad572b8b"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "name": "critical_strike_linesman_L",
+      "start_line": 441,
+      "end_line": 457,
+      "bytes": 181,
+      "sha256": "a7872b692317acab60b4d853590c9d67b1e7c2f558da54fea2a82dcc34be0162"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "name": "critical_strike_slam_tank_M",
+      "start_line": 242,
+      "end_line": 258,
+      "bytes": 178,
+      "sha256": "791c03bacaf78cb2a53e4553621243b0146158f8af2862d2a781ab929d5a07a6"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "name": "critical_strike_stab_smiter_L",
+      "start_line": 2315,
+      "end_line": 2331,
+      "bytes": 178,
+      "sha256": "9ef80e7d1a98dbe4b07716e1ad9b4653fcb47d1ae082b3080f21ce69924850d6"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "name": "critical_strike_stab_smiter_M_1h",
+      "start_line": 2561,
+      "end_line": 2577,
+      "bytes": 181,
+      "sha256": "0929f33cdc20ea7c4d51a7397fb57015be854913c825b6a5be0ad35457140373"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "name": "critical_strike_tank_M",
+      "start_line": 3105,
+      "end_line": 3121,
+      "bytes": 173,
+      "sha256": "723aeca7da45cd970861abb29e2c45cf3d8f1b9ace36a994b5952a0960e2ea86"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "name": "default_target_linesman_L",
+      "start_line": 477,
+      "end_line": 485,
+      "bytes": 189,
+      "sha256": "c7b81b94e73044f25365500617202cec20765e88930c3072c5c88a013542ef11"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "name": "default_target_slam_aoe_tank_M",
+      "start_line": 324,
+      "end_line": 333,
+      "bytes": 217,
+      "sha256": "511e44584e16832cad74e342bc5fd0b464ad8faec745486e9d25be9bc2e5440e"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "name": "default_target_slam_tank_M",
+      "start_line": 316,
+      "end_line": 324,
+      "bytes": 178,
+      "sha256": "2527562f12707a5f397319e1fe63896944c427932da6d3d07bd62203c03c99aa"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "name": "default_target_slam_target_tank_M",
+      "start_line": 308,
+      "end_line": 316,
+      "bytes": 187,
+      "sha256": "78d20a3e692a63a588f12b167c0c8ebb3d4a5164989519139b406f4b25e34e15"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "name": "default_target_stab_smiter_L",
+      "start_line": 2395,
+      "end_line": 2405,
+      "bytes": 251,
+      "sha256": "dc752e70f3142b380e430ae041329da6af6efe3337ab5291037cb5710ebbd409"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "name": "default_target_stab_smiter_M_1h",
+      "start_line": 2655,
+      "end_line": 2665,
+      "bytes": 250,
+      "sha256": "2b772ed7637fffbfe5cdc86b2f627c77bf41b40d1723f7c9b042cc060fa17c7f"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "name": "default_target_tank_M",
+      "start_line": 3157,
+      "end_line": 3165,
+      "bytes": 173,
+      "sha256": "adeac9e5456cb7b99dd39131e75256b8bf064d3ba45e20c5c97088dcb3adff0c"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "name": "target_push_M",
+      "start_line": 81,
+      "end_line": 90,
+      "bytes": 182,
+      "sha256": "0df0c7c85ac0081df3d4bea6792976fca80225a83a8cc9762ab02b299e5f4890"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "name": "targets_linesman_L",
+      "start_line": 485,
+      "end_line": 506,
+      "bytes": 486,
+      "sha256": "49e7243a0d4371b37ad986f4508e4bab9aa636c3395d0f6c456d6408a0fe7955"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "name": "targets_stab_smiter_L",
+      "start_line": 2405,
+      "end_line": 2433,
+      "bytes": 423,
+      "sha256": "a7dc6c083ee8fbf68105083c35bccb74341822132126e4edba67ffb8309fda1e"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "name": "targets_tank_M",
+      "start_line": 3165,
+      "end_line": 3192,
+      "bytes": 519,
+      "sha256": "9cb5eba3d6af248abf730876435b4f086a7131dda8cf17c32689150381853418"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "name": "targets_tank_M_1h",
+      "start_line": 3192,
+      "end_line": 3235,
+      "bytes": 684,
+      "sha256": "d5f6c5f37da3366d2c4fb88505400c6808cd71fe3614e757bb899f8dbb5b9299"
+    },
+    {
+      "path": "scripts/settings/equipment/damage_profile_templates.lua",
+      "start_line": 5571,
+      "end_line": 5618,
+      "bytes": 2111,
+      "sha256": "a74935cd40a15fd692bb4a8973ed285de7114702b381ee27bcf080b874dd6d3f"
+    },
+    {
+      "path": "scripts/settings/equipment/item_master_list_exported.lua",
+      "start_line": 6639,
+      "end_line": 6659,
+      "bytes": 750,
+      "sha256": "9c2af926f04427924c5da1d145702b3e726c498905ebf3e5c04c0a5eaa9c2cec"
+    }
+  ],
+  "power_fields": [
+    "armor_modifier_linesman_L",
+    "armor_modifier_push_M",
+    "armor_modifier_shield_push_M",
+    "armor_modifier_slam_aoe_tank_M",
+    "armor_modifier_slam_tank_M",
+    "armor_modifier_slam_target_tank_M",
+    "armor_modifier_stab_smiter_L",
+    "armor_modifier_stab_smiter_M_1h",
+    "armor_modifier_tank_M",
+    "armor_modifier_tank_M_1h",
+    "cleave_distribution_linesman_L",
+    "cleave_distribution_push_default",
+    "cleave_distribution_smiter_default",
+    "cleave_distribution_tank_M",
+    "critical_strike_linesman_L",
+    "critical_strike_slam_tank_M",
+    "critical_strike_stab_smiter_L",
+    "critical_strike_stab_smiter_M_1h",
+    "critical_strike_tank_M",
+    "default_target_linesman_L",
+    "default_target_slam_aoe_tank_M",
+    "default_target_slam_tank_M",
+    "default_target_slam_target_tank_M",
+    "default_target_stab_smiter_L",
+    "default_target_stab_smiter_M_1h",
+    "default_target_tank_M",
+    "target_push_M",
+    "targets_linesman_L",
+    "targets_stab_smiter_L",
+    "targets_tank_M",
+    "targets_tank_M_1h"
+  ],
+  "decoded_closure_bytes": 50067,
+  "decoded": [
+    {
+      "name": "weapon",
+      "bytes": 35942,
+      "sha256": "991d439bc35944223eddd2403689de10f26325a8758f6df09e01594797e6073a"
+    },
+    {
+      "name": "profiles",
+      "bytes": 4875,
+      "sha256": "a1c5caca15186226210848e4445f6fb0b957e7af7d70d7ee8c180d22691dbcdc"
+    },
+    {
+      "name": "power",
+      "bytes": 6389,
+      "sha256": "8897fdde216a5482519d4224e34061be1ac4d24b872cf4acff6248cf9ba656dd"
+    },
+    {
+      "name": "resolve",
+      "bytes": 2111,
+      "sha256": "a74935cd40a15fd692bb4a8973ed285de7114702b381ee27bcf080b874dd6d3f"
+    },
+    {
+      "name": "item",
+      "bytes": 750,
+      "sha256": "9c2af926f04427924c5da1d145702b3e726c498905ebf3e5c04c0a5eaa9c2cec"
+    }
+  ],
+  "reuse": "Existing immutable R3 complete installer/native clone/class/Shortsword fixture inputs by reference; no corpus or external runtime fallback",
+  "fixture_path": "qa/lua/fixtures/cwv_elven_shield_construction_source.lua",
+  "fixture_bytes": 50308,
+  "fixture_sha256": "9c303ada988fa2ebd5c3b7c530461b9e787464cc153ac87d18687f5035f10f45"
+}

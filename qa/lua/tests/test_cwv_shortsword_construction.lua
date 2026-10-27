@@ -307,7 +307,7 @@ return function(H, root)
     H.test("#428 Shortsword strict prior reconstruction rejects corrupt/missing source hunks",function()
         local read=function(p)local f=assert(io.open(p,"rb"));local s=f:read("*a");f:close();return s end
         local current=read(root.."/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_core_templates.lua")
-        local delta=read(root.."/qa/lua/fixtures/cwv_shortsword_history_prior.reverse.patch")
+        local delta=read(root.."/qa/lua/fixtures/cwv_shortsword_greataxe_producer_prior.reverse.patch")
         H.equal(#F.reconstruct(current,delta),66493)
         H.equal(pcall(F.reconstruct,current,delta:gsub("@@ %-(%d+)","@@ -999999",1)),false)
         H.equal(pcall(F.reconstruct,current,""),false)

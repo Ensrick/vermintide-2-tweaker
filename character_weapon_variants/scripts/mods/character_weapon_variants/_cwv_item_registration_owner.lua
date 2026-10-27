@@ -81,6 +81,12 @@ local _javelin_admission = ctx.javelin_admission
 local _javelin_denials = 0
 local _shortsword_admission = ctx.shortsword_admission
 local _shortsword_denials = 0
+local _elven_shield_admission = ctx.elven_shield_admission
+local _elven_shield_denials = 0
+-- Closed one-row private dispatch; the four existing family gates stay unchanged.
+local _exact_template_admissions = { cwv_es_greataxe = {
+	admit = type(ctx.exact_template_admissions) == "table" and rawget(ctx.exact_template_admissions, "cwv_es_greataxe"), denials = 0,
+} }
 
 -- ============================================================
 -- Item creation helper (shared by give command)
@@ -286,6 +292,33 @@ local function _build_entry(def, backend_id)
 			return nil
 		end
 	end
+	if def and (def.item_key == "cwv_we_sword_shield" or def.item_key == "cwv_we_sword_shield_veteran") then
+		local existing = ItemMasterList and rawget(ItemMasterList, def.item_key)
+		local ok, ready = pcall(_elven_shield_admission, def)
+		if (existing ~= nil and not rawequal(existing, _registered_keys[def.item_key])) or not ok or ready ~= true then
+			if _elven_shield_denials < 16 then
+				_elven_shield_denials = _elven_shield_denials + 1
+				pcall(printf, "[cwv:428] owner=elven_shield_item edge=build_entry admission=denied existing=%s count=%d/16",
+					tostring(existing ~= nil), _elven_shield_denials)
+			end
+			return nil
+		end
+	end
+
+	local owned_template = def and _exact_template_admissions[def.item_key]
+	if owned_template then
+		local existing = ItemMasterList and rawget(ItemMasterList, def.item_key)
+		local ok, ready = pcall(owned_template.admit, def)
+		if (existing ~= nil and not rawequal(existing, _registered_keys[def.item_key])) or not ok or ready ~= true then
+			if owned_template.denials < 16 then
+				owned_template.denials = owned_template.denials + 1
+				pcall(printf, "[cwv:428] owner=greataxe_item edge=build_entry admission=denied existing=%s count=%d/16",
+					tostring(existing ~= nil), owned_template.denials)
+			end
+			return nil
+		end
+	end
+
 	-- v0.1.345-dev: per-call _dbg trace. _build_entry is sparse (boot-time only,
 	-- ~30 variants/session), so always-on.
 	_dbg("[cwv:build_entry] event=enter key=%s base=%s backend_id=%s",

@@ -157,6 +157,8 @@ return function(mod, deps)
 
 	local history_producer_binding = deps.history_producer_binding
 	local shortsword_factory, shortsword_owner = deps.shortsword_factory
+	local elven_shield_factory, elven_shield_owner = deps.elven_shield_factory
+	local greataxe_factory, greataxe_owner = deps.greataxe_factory
 	local detached_scalar_factory = function(options)
 			assert(type(options) == "table", "detached scalar options missing")
 			local profiles, levels = options.profiles, options.power_levels
@@ -430,14 +432,7 @@ local _ess_anim_remap = {
 }
 
 -- ANIM ADDENDUM: this function only touches stats + 3P fields. 1P is universal.
-local function _create_elven_sword_shield_template()
-	if not Weapons or not Weapons.one_handed_sword_shield_template_1 then
-		mod:warning("one_handed_sword_shield_template_1 not found — Elven Sword+Shield stat modifications unavailable")
-		return
-	end
-	if Weapons.elven_sword_shield_template then return end
-
-	local template = table.clone(Weapons.one_handed_sword_shield_template_1, true)
+local function _prepare_elven_sword_shield_template(template, clone_scalar)
 
 	if template.actions then
 		for _, action_group in pairs(template.actions) do
@@ -448,7 +443,7 @@ local function _create_elven_sword_shield_template()
 							sub_action.anim_time_scale = sub_action.anim_time_scale * _ESS_SPEED_MULT
 						end
 						if sub_action.damage_profile then
-							sub_action.damage_profile = _clone_damage_profile(sub_action.damage_profile, "cwv_ess_", {
+							sub_action.damage_profile = clone_scalar(sub_action.damage_profile, "cwv_ess_", {
 								stagger = _ESS_STAGGER_MULT,
 							})
 						end
@@ -469,34 +464,36 @@ local function _create_elven_sword_shield_template()
 		we_thornsister = "to_1h_spear_shield",
 	}
 
-	Weapons.elven_sword_shield_template = template
+	return true
+end
 
+local function _create_elven_sword_shield_template()
+	if not Weapons or not Weapons.one_handed_sword_shield_template_1 then
+		mod:warning("one_handed_sword_shield_template_1 not found — Elven Sword+Shield stat modifications unavailable")
+		return
+	end
+	if type(elven_shield_factory) ~= "function" then return end
+	elven_shield_owner = elven_shield_factory({
+		state = _om, scalar_factory = detached_scalar_factory, action_templates = ActionTemplates,
+		profiles = function() return rawget(_G, "DamageProfileTemplates") end,
+		power_levels = function() return rawget(_G, "PowerLevelTemplates") end,
+		lookup = function() local network = rawget(_G, "NetworkLookup"); return network and rawget(network, "damage_profiles") end,
+		weapons = function() return rawget(_G, "Weapons") end,
+		clone = function(value) return table.clone(value, true) end,
+	})
+	if not elven_shield_owner.construct(_prepare_elven_sword_shield_template) then return end
 	-- CLARIFY: Per memory note feedback_cwv_previewer_template_lookup.md, the
 	-- inventory previewer resolves item templates via item_data.name (= base
 	-- weapon key for cwv items), so it reads one_handed_sword_shield_template_1
 	-- NOT our elven_sword_shield_template. Patch the BASE template's
 	-- wield_anim_career_3p so the menu preview pose is correct for elf careers.
 	-- Scoped to elf careers only — Kruber/etc. fall through to original behavior.
-	local elf_wield_3p = {
-		we_waywatcher  = "to_1h_spear_shield",
-		we_maidenguard = "to_1h_spear_shield",
-		we_shade       = "to_1h_spear_shield",
-		we_thornsister = "to_1h_spear_shield",
-	}
-	local base = Weapons.one_handed_sword_shield_template_1
-	if base then
-		base.wield_anim_career_3p = base.wield_anim_career_3p or {}
-		for k, v in pairs(elf_wield_3p) do
-			base.wield_anim_career_3p[k] = v
-		end
-	end
 	-- QUESTION: Attack-event remaps from _ess_anim_remap are only applied to the
 	-- cloned template. The previewer reads the BASE template (see comment above),
 	-- so previewer attack animations would NOT pick up the remap. Currently this
 	-- is fine because the previewer doesn't fire attack events — only the
 	-- wield_anim. If that changes, the attack remaps must also be patched onto
 	-- the base template (probably via career_anim_event tables).
-
 	mod:info("Created elven_sword_shield_template (spd=%.0f%% stagger=%.0f%%, %d 3p anim remaps, wield_3p=to_1h_spear_shield) + patched base template career_3p table for elf careers",
 		_ESS_SPEED_MULT * 100, _ESS_STAGGER_MULT * 100, 5)
 end
@@ -1184,17 +1181,20 @@ do
 			mod:warning("two_handed_axes_template_1 not found - Greataxe unavailable")
 			return
 		end
-		if Weapons[greataxe.TEMPLATE_KEY] then return end
+		if type(greataxe_factory) ~= "function" then return end
+		greataxe_owner = greataxe_factory({ family = greataxe,
+			weapons = function() return rawget(_G, "Weapons") end,
+			clone = function(value) return table.clone(value, true) end,
+		})
+		-- Exact native gameplay graph; only these four authored wield fields differ.
+		if not greataxe_owner.construct(function(template)
+			template.wield_anim_career_3p = template.wield_anim_career_3p or {}
+			for _, career in ipairs(greataxe.DEFAULT_CAREERS) do
+				template.wield_anim_career_3p[career] = "to_2h_hammer"
+			end
 
-		-- No timing or damage-profile edits: #597 requires an exact gameplay
-		-- analogue of Bardin's Greataxe. Only receiver-local 3P fields differ.
-		local template = table.clone(Weapons.two_handed_axes_template_1, true)
-		template.wield_anim_career_3p = template.wield_anim_career_3p or {}
-		for _, career in ipairs(greataxe.DEFAULT_CAREERS) do
-			template.wield_anim_career_3p[career] = "to_2h_hammer"
-		end
-
-		Weapons[greataxe.TEMPLATE_KEY] = template
+			return true
+		end) then return end
 		mod:info("Created %s (exact dr_2h_axe stats/moveset; Kruber wield=to_2h_hammer)",
 			greataxe.TEMPLATE_KEY)
 	end
@@ -1437,6 +1437,20 @@ end  -- #284: end outrider grenade-launcher do-block
 		-- and publication/source journals. Its audit cannot mutate the live ledger.
 		detached_scalar_factory = detached_scalar_factory,
 		history_producer_binding = history_producer_binding,
+		greataxe_construction = {
+			admit_greataxe = function(def) return greataxe_owner ~= nil and greataxe_owner.admit(def) end,
+			check_greataxe = function()
+				if not greataxe_owner then return "#428 private Greataxe construction owner disconnected" end
+				return greataxe_owner.check()
+			end,
+		},
+		elven_shield_construction = {
+			admit_elven_shield = function(def) return elven_shield_owner ~= nil and elven_shield_owner.admit(def) end,
+			check_elven_shield = function()
+				if not elven_shield_owner then return "#428 private Elven shield construction owner disconnected" end
+				return elven_shield_owner.check()
+			end,
+		},
 		shortsword_construction = {
 			admit_shortsword = function(def) return shortsword_owner ~= nil and shortsword_owner.admit(def) end,
 			check_shortsword = function()
