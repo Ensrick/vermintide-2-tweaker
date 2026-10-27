@@ -20,6 +20,10 @@
 #     release manifest's source commit, root bundle/SHA-256, and ZIP/SHA-256.
 #     Exact `Feature provenance` and every untyped evidence heading remain
 #     historical and byte-identical.
+#   * full deployed artifact authority validates typed sibling claims without
+#     granting write ownership over them. Stale sibling artifact/build claims
+#     require all-stream reconciliation or evidence-backed corrective upkeep.
+#     Sibling Steam ManifestIDs are preserved, not independently authenticated.
 #
 # Card step text, expected needles, topology, feature provenance, untyped
 # evidence, and every other mod's tokens are NEVER touched. When a card's
@@ -403,7 +407,8 @@ function Get-VtCardRefreshPlan {
         [string]$StreamIdentity,
         [string[]]$SiblingPublishedIds = @(),
         [string[]]$SiblingStreamIdentities = @(),
-        $ArtifactTarget
+        $ArtifactTarget,
+        [object[]]$ArtifactTargets
     )
 
     $result = [pscustomobject]@{
@@ -710,13 +715,101 @@ function Get-VtCardRefreshPlan {
     # Current/live artifact headings are deployment-bound authority surfaces,
     # just like the version and optional ManifestID. The shared reviewer owns
     # both parsing and the pure replacement candidate used by strict policy.
-    $artifactReview = Get-VtCardCurrentArtifactReview -Card $newBody -Targets @($ArtifactTarget)
+    $validationTargets = @($ArtifactTarget)
+    $artifactOwner = $null
+    if ($PSBoundParameters.ContainsKey('ArtifactTargets')) {
+        $validationTargets = @($ArtifactTargets)
+        $artifactOwner = ConvertTo-VtCardArtifactTarget $ArtifactTarget
+        $fullArtifactTargets = @($validationTargets | ForEach-Object { ConvertTo-VtCardArtifactTarget $_ })
+        $ownerRows = @($fullArtifactTargets | Where-Object {
+            [string]$_.ModId -ceq [string]$artifactOwner.ModId -and
+            [string]$_.Directory -ceq [string]$artifactOwner.Directory -and
+            [string]$_.WorkshopId -ceq [string]$artifactOwner.WorkshopId
+        })
+        $ownerFields = @('ModId','Directory','WorkshopId','Version','SourceCommit',
+            'RootBundle','RootBundleSha256','AssetFilename','AssetSha256')
+        $ownerMatches = $ownerRows.Count -eq 1 -and
+            [string]$artifactOwner.WorkshopId -ceq [string]$PublishedId -and
+            [string]$artifactOwner.Version -ceq [string]$cleanVersion
+        foreach ($field in $ownerFields) {
+            if ([string]::IsNullOrWhiteSpace([string]$artifactOwner.$field) -or
+                $ownerRows.Count -ne 1 -or
+                [string]$ownerRows[0].$field -cne [string]$artifactOwner.$field) { $ownerMatches = $false }
+        }
+        if (-not $ownerMatches) {
+            $result.Status = 'unparseable'
+            $result.Reason = 'publishing-artifact-context-mismatch'
+            return $result
+        }
+    }
+    $artifactReview = Get-VtCardCurrentArtifactReview -Card $newBody -Targets $validationTargets
     if ($artifactReview.Status -eq 'unparseable') {
         $result.Status = 'unparseable'
         $result.Reason = @($artifactReview.StructuralErrors) -join ', '
         $result.Changes = @()
         $result.NewBody = $null
         return $result
+    }
+    if ($artifactOwner) {
+        $ownerKey = [string]$artifactOwner.ModId
+        $siblingDrift = @($artifactReview.Claims | Where-Object {
+            [string]$_.Target -cne $ownerKey -and
+            -not ([string]$_.Claimed).Equals([string]$_.Expected, [StringComparison]::OrdinalIgnoreCase)
+        })
+        if ($siblingDrift.Count -gt 0) {
+            $result.Status = 'unparseable'
+            $result.Reason = 'sibling-current-artifact-drift:' + (($siblingDrift | ForEach-Object {
+                '{0}/{1}@line{2}' -f $_.Target, $_.Field, $_.Line
+            }) -join ', ')
+            return $result
+        }
+        # The shared reviewer owns parsing. Its claim ledger must also prove
+        # every changed line is exclusively this publisher's before accepting
+        # NewCard; full read authority never expands the mutation scope.
+        $beforeArtifactLines = @($newBody -split "`r?`n")
+        $afterArtifactLines = @([string]$artifactReview.NewCard -split "`r?`n")
+        $editsOwned = $beforeArtifactLines.Count -eq $afterArtifactLines.Count
+        for ($i = 0; $editsOwned -and $i -lt $beforeArtifactLines.Count; $i++) {
+            if ($beforeArtifactLines[$i] -ceq $afterArtifactLines[$i]) { continue }
+            $lineClaims = @($artifactReview.Claims | Where-Object { [int]$_.Line -eq ($i + 1) })
+            if ($lineClaims.Count -eq 0 -or @($lineClaims | Where-Object {
+                [string]$_.Target -cne $ownerKey
+            }).Count -gt 0) { $editsOwned = $false }
+        }
+        if (-not $editsOwned) {
+            $result.Status = 'unparseable'
+            $result.Reason = 'publishing-artifact-edit-ownership-unproven'
+            return $result
+        }
+        # Cover earlier version/Manifest edits too, including recognized typed
+        # receipts with NO artifact Claims. Only truly unqualified fields may
+        # inherit the validated final Build/banner's sole selected owner.
+        $finalArtifactBody = if ($artifactReview.Status -eq 'stale') { [string]$artifactReview.NewCard } else { $newBody }
+        $selectedArtifactTargets = @(Get-VtCardArtifactSelectedTargets -Card $finalArtifactBody -Targets $fullArtifactTargets)
+        $originalSegments = @([regex]::Split($Body, '(?<=\n)'))
+        $finalSegments = @([regex]::Split($finalArtifactBody, '(?<=\n)'))
+        $typedEditsOwned = $originalSegments.Count -eq $finalSegments.Count
+        for ($i = 0; $typedEditsOwned -and $i -lt $originalSegments.Count; $i++) {
+            if ($originalSegments[$i] -ceq $finalSegments[$i]) { continue }
+            $beforeInfo = Get-VtCardArtifactLineInfo -Line $originalSegments[$i].TrimEnd([char[]]"`r`n")
+            $afterInfo = Get-VtCardArtifactLineInfo -Line $finalSegments[$i].TrimEnd([char[]]"`r`n")
+            if ($beforeInfo.IsFeatureProvenance -or $afterInfo.IsFeatureProvenance) { $typedEditsOwned = $false; break }
+            if (-not $beforeInfo.IsTypedCurrent -and -not $afterInfo.IsTypedCurrent) { continue }
+            if (-not $beforeInfo.IsTypedCurrent -or -not $afterInfo.IsTypedCurrent -or
+                [string]$beforeInfo.Heading -cne [string]$afterInfo.Heading) { $typedEditsOwned = $false; break }
+            foreach ($lineInfo in @($beforeInfo,$afterInfo)) {
+                $lineText = if ($lineInfo -eq $beforeInfo) { $originalSegments[$i] } else { $finalSegments[$i] }
+                $lineOwners = @(Resolve-VtCardArtifactLineTargets -Line $lineText -Heading $lineInfo.Heading -Targets $fullArtifactTargets -NoImplicitSingleton)
+                if ($lineOwners.Count -eq 0 -and -not $lineInfo.HasQualifier -and $lineInfo.ItemIds.Count -eq 0 -and
+                    $selectedArtifactTargets.Count -eq 1) { $lineOwners = @($selectedArtifactTargets[0]) }
+                if ($lineOwners.Count -ne 1 -or [string]$lineOwners[0].ModId -cne $ownerKey) { $typedEditsOwned = $false; break }
+            }
+        }
+        if (-not $typedEditsOwned) {
+            $result.Status = 'unparseable'
+            $result.Reason = 'publishing-typed-or-provenance-edit-ownership-unproven'
+            return $result
+        }
     }
     if ($artifactReview.Status -eq 'stale') {
         $newBody = [string]$artifactReview.NewCard
@@ -1089,6 +1182,7 @@ function Test-VtRefreshManifestInputAllowed {
 # WOC exact banner); no gh/network so qa/run_selftests.ps1 stays CI-safe.
 # ---------------------------------------------------------------------------
 function Invoke-RefreshCardsSelfTest {
+    param([string]$SourcePath = $PSCommandPath)
     $script:__rcpass = $true
     function Assert($cond, $desc) {
         $verdict = if ($cond) { 'PASS' } else { 'FAIL' }
@@ -1689,6 +1783,292 @@ function Invoke-RefreshCardsSelfTest {
     Assert ($mixedEndingReview.Status -eq 'stale' -and $mixedEndingReview.NewCard -ceq $mixedEndingExpected) `
         'artifact repair preserves every original mixed line ending byte'
 
+    # Issue #1746 focused begin. Hermetic capture of #760's approved 2026-10-26
+    # metadata/body, plus minimal policy fixtures (not live authority proofs).
+    $siblingRecords = @(
+        [pscustomobject]@{
+            ModId='character_weapon_variants'; Dir='character_weapon_variants'; FriendlyName='Character Weapon Variants'
+            WorkshopId='3716869446'; Version='0.1.552-dev'
+            SourceCommit='8d9f4dc5368a937a47ecf17279c5f801351dd196'; RootBundle='0f038849957ad1b7.mod_bundle'
+            RootBundleSha256='d34d655bf1fa755f7c010a39b4de660a22635f3817314b930ad1c7977fead13c'
+            AssetFilename='character_weapon_variants.zip'; AssetSha256='a3e124f2ef7e76e1bbbf0743e59e3d4891ffcd311100f28326eeadf71f08003a'
+            LoadRoutes=@([pscustomobject]@{Marker='[cwv:LOAD]'}); ExactBannerRoutes=@(); CommandRoutes=@(); ReceiptRoutes=@(); MenuSurfaces=@()
+        },
+        [pscustomobject]@{
+            ModId='wt_dev'; Dir='weapon_tweaker_dev'; FriendlyName='Weapon Tweaker (Dev)'
+            WorkshopId='3748824853'; Version='0.12.339-dev'
+            SourceCommit='53a60eb8d92ca96cf369c0c0be97ea25863551ab'; RootBundle='d38aa5cd35c79c3d.mod_bundle'
+            RootBundleSha256='44a70864504f313be7c7651651f8797315bffdd4e68f1c16602aab6db36f4dcc'
+            AssetFilename='wt_dev.zip'; AssetSha256='6e24b2f0f03b0b3349ef92639f14c6305c38ee952afddcfa7c65fdb3ceeb5dc9'
+            LoadRoutes=@([pscustomobject]@{Marker='[wt:LOAD]'}); ExactBannerRoutes=@(); CommandRoutes=@(); ReceiptRoutes=@(); MenuSurfaces=@()
+        }
+    )
+    $exact760 = @'
+## CURRENT LIVE TEST
+
+**Build/banner:** Character Weapon Variants v0.1.552-dev, confirm `[cwv:LOAD] v0.1.552-dev`; Tweaker: Weapons Dev v0.12.339-dev, confirm `[wt:LOAD] v0.12.339-dev`
+**Topology:** Solo
+
+This is the solo visual/function gate. Do not enable public Tweaker: Weapons and Tweaker: Weapons Dev together; do not add a second player yet.
+
+1. In **Tweaker: Weapons Dev**, enable the **Outrider Grenade Launcher** for Witch Hunter Captain, Bounty Hunter, and Zealot. Equip it on each career.
+2. For each of those three Saltzpyre careers, inspect the weapon in the inventory character preview and owner third person. Compare with Kruber using the Outrider Grenade Launcher: Saltzpyre should use the Repeater Pistol body stance; Kruber should keep the Blunderbuss stance.
+3. In first and third person, fire, reload from partial and empty ammunition, block, bash, swap away and back, and transition from the Keep into a mission. Every action must remain functional and visually complete.
+4. As controls, confirm Warrior Priest and a native Trollhammer remain unchanged.
+5. Run `/cwv_regression_test`, exit normally, and attach the newest full log. Include every bounded `[cwv:760]` row and state the career/view/action for any visible mismatch.
+
+**Expected:** Witch Hunter Captain, Bounty Hunter, and Zealot use the Repeater Pistol body stance in preview and owner third person without changing the Outrider's first-person fire, reload, block, or bash behavior. Kruber, Warrior Priest, and native Trollhammer remain unchanged. `cwv_issue760_outrider_saltzpyre_repeater_stance` passes. `network_event_unavailable`, `unit_not_alive`, `dispatch_error`, a missing clip, or visibly wrong motion fails this gate. A solo pass advances the issue to a separate co-op remote-husk card.
+
+**Current Character Weapon Variants receipt:** Workshop item `3716869446`, ManifestID `2268385815225930742`; source `8d9f4dc5368a937a47ecf17279c5f801351dd196`, root `0f038849957ad1b7.mod_bundle` SHA-256 `d34d655bf1fa755f7c010a39b4de660a22635f3817314b930ad1c7977fead13c`, ZIP SHA-256 `a3e124f2ef7e76e1bbbf0743e59e3d4891ffcd311100f28326eeadf71f08003a`.
+
+**Feature provenance:** Earlier CWV source `b95132ab1a5ea12168359170a1f29fc7b063b39a`, root SHA-256 `54c204a8333ded51f7916264ae67d878b78a709315481a65ce1e7cafeb8920c2`, ZIP SHA-256 `34a25e52e9eabb71e018160ee5843d3eba719a74ff75f115c509835a35b1af63`; these are historical references, not the current deployment identifiers.
+
+**Current Weapon Tweaker (Dev) receipt:** Tweaker: Weapons Dev `v0.12.339-dev`, Workshop item `3748824853`, ManifestID `4278357008422959585`; source `53a60eb8d92ca96cf369c0c0be97ea25863551ab`; root `d38aa5cd35c79c3d.mod_bundle` SHA-256 `44a70864504f313be7c7651651f8797315bffdd4e68f1c16602aab6db36f4dcc`.
+
+**Feature provenance (historical WT artifact, not current deployment):** WT Dev source `5139b0a22f859d67797546a55e5ec672786a2610`, root `d38aa5cd35c79c3d.mod_bundle` SHA-256 `9ab53ef47abd8fa8f23c7368fee2f2a91ee0a0d84ed91d824e83c15e97334e87`, ZIP SHA-256 `b7f62aa437ca92c1ffb0eccc77825ceb73f4f92383a6de56e8b17548de7126a0`.
+'@
+    # LF is canonical for the capture regardless of this script's CRLF checkout.
+    $exact760 = $exact760.Replace("`r`n", "`n")
+    $siblingPlanArgs = @{
+        PublishedId='3716869446'; NewVersion='0.1.552-dev'; LoadTag='cwv'
+        StreamIdentity='Character Weapon Variants'; NewManifest='2268385815225930742'
+        ArtifactTarget=$siblingRecords[0]; ArtifactTargets=$siblingRecords
+    }
+    $old760 = $exact760.Replace('ManifestID `2268385815225930742`', 'ManifestID `4572388077344785045`')
+    $siblingPlan = Get-VtCardRefreshPlan -Body $old760 @siblingPlanArgs
+    Assert ($siblingPlan.Status -eq 'refresh' -and $siblingPlan.NewBody -ceq $exact760) `
+        '#1746 actual760 metadata refresh preserves the full approved body except its owned ManifestID'
+    $siblingAgain = Get-VtCardRefreshPlan -Body $siblingPlan.NewBody @siblingPlanArgs
+    Assert ($siblingAgain.Status -eq 'current' -and $siblingAgain.NewBody -ceq $exact760 -and $siblingAgain.Changes.Count -eq 0) `
+        '#1746 current typed sibling card is byte-identical and idempotent'
+    $crlf760 = $exact760.Replace("`n", "`r`n")
+    $siblingCrlf = Get-VtCardRefreshPlan -Body $crlf760 @siblingPlanArgs
+    Assert ($siblingCrlf.Status -eq 'current' -and $siblingCrlf.NewBody -ceq $crlf760) '#1746 CRLF current card stays byte-identical'
+    $ownDrift = $exact760.Replace($siblingRecords[0].SourceCommit, ('a' * 40)).Replace(
+        $siblingRecords[0].RootBundleSha256, ('b' * 64)).Replace($siblingRecords[0].AssetSha256, ('c' * 64))
+    $ownRefresh = Get-VtCardRefreshPlan -Body $ownDrift @siblingPlanArgs
+    Assert ($ownRefresh.Status -eq 'refresh' -and $ownRefresh.NewBody -ceq $exact760) '#1746 owner source/root/ZIP advance without changing any sibling bytes'
+    $reverseArgs1746 = $siblingPlanArgs.Clone()
+    $reverseArgs1746.PublishedId='3748824853'; $reverseArgs1746.NewVersion='0.12.339-dev'; $reverseArgs1746.LoadTag='wt'
+    $reverseArgs1746.StreamIdentity='Tweaker: Weapons Dev'; $reverseArgs1746.NewManifest='4278357008422959585'
+    $reverseArgs1746.ArtifactTarget=$siblingRecords[1]
+    $reverseCard1746 = $exact760.Replace($siblingRecords[1].RootBundleSha256, ('e' * 64))
+    $reversePlan1746 = Get-VtCardRefreshPlan -Body $reverseCard1746 @reverseArgs1746
+    Assert ($reversePlan1746.Status -eq 'refresh' -and $reversePlan1746.NewBody -ceq $exact760) '#1746 reverse publisher advances WT-owned artifacts without touching CWV'
+    $recordBefore = $siblingRecords | ConvertTo-Json -Depth 8 -Compress
+    foreach ($field in @('SourceCommit','RootBundle','RootBundleSha256')) {
+        $replacement = if ($field -eq 'RootBundle') { 'foreign.mod_bundle' } elseif ($field -eq 'SourceCommit') { 'f' * 40 } else { 'e' * 64 }
+        $staleSibling = $exact760.Replace([string]$siblingRecords[1].$field, $replacement)
+        $rejected = Get-VtCardRefreshPlan -Body $staleSibling @siblingPlanArgs
+        Assert ($rejected.Status -eq 'unparseable' -and $rejected.Reason -like 'sibling-current-artifact-drift:*' -and
+            $null -eq $rejected.NewBody -and $rejected.Changes.Count -eq 0) "#1746 stale sibling $field is rejected, never repaired"
+    }
+    $siblingZipCard = $exact760.Replace('ManifestID `4278357008422959585`;',
+        ('ManifestID `4278357008422959585`; ZIP `' + $siblingRecords[1].AssetFilename + '` SHA-256 `' + $siblingRecords[1].AssetSha256 + '`;'))
+    foreach ($field in @('AssetFilename','AssetSha256')) {
+        $replacement = if ($field -eq 'AssetFilename') { 'foreign.zip' } else { 'd' * 64 }
+        $rejected = Get-VtCardRefreshPlan -Body $siblingZipCard.Replace([string]$siblingRecords[1].$field, $replacement) @siblingPlanArgs
+        Assert ($rejected.Status -eq 'unparseable' -and $rejected.Reason -like 'sibling-current-artifact-drift:*' -and
+            $null -eq $rejected.NewBody) "#1746 stale sibling $field is rejected"
+    }
+    foreach ($context in @(
+        ,@($siblingRecords[0]), ,@($siblingRecords[0],$siblingRecords[1],$siblingRecords[1]),
+        ,@($siblingRecords[0],$siblingRecords[0],$siblingRecords[1]), ,@()
+    )) {
+        $args1746 = $siblingPlanArgs.Clone(); $args1746.ArtifactTargets = $context
+        $rejected = Get-VtCardRefreshPlan -Body $exact760 @args1746
+        Assert ($rejected.Status -eq 'unparseable' -and $null -eq $rejected.NewBody) '#1746 missing/duplicate/empty sibling context fails closed'
+    }
+    foreach ($field in @('SourceCommit','RootBundleSha256','AssetSha256')) {
+        $badRecord = $siblingRecords[1] | Select-Object *; $badRecord.$field = $null
+        $args1746 = $siblingPlanArgs.Clone(); $args1746.ArtifactTargets = @($siblingRecords[0],$badRecord)
+        $rejected = Get-VtCardRefreshPlan -Body $siblingZipCard @args1746
+        Assert ($rejected.Status -eq 'unparseable' -and $null -eq $rejected.NewBody) "#1746 unavailable sibling $field fails closed"
+    }
+    foreach ($field in @('ModId','Dir','WorkshopId','Version','SourceCommit','RootBundle','RootBundleSha256','AssetFilename','AssetSha256')) {
+        $badOwner = $siblingRecords[0] | Select-Object *; $badOwner.$field = 'mismatched'
+        $args1746 = $siblingPlanArgs.Clone(); $args1746.ArtifactTarget = $badOwner
+        $rejected = Get-VtCardRefreshPlan -Body $exact760 @args1746
+        Assert ($rejected.Status -eq 'unparseable' -and $rejected.Reason -eq 'publishing-artifact-context-mismatch' -and
+            $null -eq $rejected.NewBody) "#1746 owner/context $field mismatch fails closed"
+    }
+    $unknownSibling = $exact760.Replace('3748824853','9999999999')
+    $rejected = Get-VtCardRefreshPlan -Body $unknownSibling @siblingPlanArgs
+    Assert ($rejected.Status -eq 'unparseable' -and $null -eq $rejected.NewBody) '#1746 unknown typed sibling Workshop item fails closed'
+    $ambiguousReceipt = $exact760.Replace('**Current Weapon Tweaker (Dev) receipt:**', '**Current receipt:**').Replace('Workshop item `3748824853`, ', '')
+    $rejected = Get-VtCardRefreshPlan -Body $ambiguousReceipt @siblingPlanArgs
+    Assert ($rejected.Status -eq 'unparseable' -and $null -eq $rejected.NewBody) '#1746 unattributed typed sibling is not guessed'
+    $mixedReceipt = $exact760.Replace('Workshop item `3748824853`,', 'Workshop item `3748824853`, Workshop item `3716869446`,')
+    $rejected = Get-VtCardRefreshPlan -Body $mixedReceipt @siblingPlanArgs
+    Assert ($rejected.Status -eq 'unparseable' -and $null -eq $rejected.NewBody) '#1746 mixed-owner typed receipt line remains ambiguous'
+    $hashBait1746 = $exact760.Replace('source `53a60eb8d92ca96cf369c0c0be97ea25863551ab`;', 'source `53a60eb8d92ca96cf369c0c0be97ea25863551ab`; opaque `aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa`;')
+    $rejected = Get-VtCardRefreshPlan -Body $hashBait1746 @siblingPlanArgs
+    Assert ($rejected.Status -eq 'unparseable' -and $null -eq $rejected.NewBody) '#1746 typed sibling hash bait remains rejected'
+    Assert (($siblingRecords | ConvertTo-Json -Depth 8 -Compress) -ceq $recordBefore) '#1746 validation never mutates authority record objects'
+
+    # A minimal command-free policy fixture exercises the actual whole-card
+    # authority helper independently of #760's richer bounded diagnostic routes.
+    $policy1746 = @'
+## CURRENT LIVE TEST
+
+**Build/banner:** Character Weapon Variants v0.1.552-dev, confirm `[cwv:LOAD] v0.1.552-dev`; Weapon Tweaker (Dev) v0.12.339-dev, confirm `[wt:LOAD] v0.12.339-dev`
+**Topology:** Solo
+
+1. Equip Kruber's Mace in the Keep.
+
+**Expected:** The weapon remains visible.
+'@
+    $policyAuthority1746 = [pscustomobject]@{Records=$siblingRecords}
+    Assert (Get-VtRefreshedCardAuthorityDecision -Body $policy1746 -Authority $policyAuthority1746).Valid '#1746 full current build authority accepts the minimal policy fixture'
+    $badPolicy1746 = $policy1746.Replace('0.12.339-dev','0.12.338-dev')
+    Assert (-not (Get-VtRefreshedCardAuthorityDecision -Body $badPolicy1746 -Authority $policyAuthority1746).Valid) '#1746 stale sibling build authority remains rejected'
+    $missingPolicy1746 = [pscustomobject]@{Records=@($siblingRecords[0])}
+    Assert (-not (Get-VtRefreshedCardAuthorityDecision -Body $policy1746 -Authority $missingPolicy1746).Valid) '#1746 missing sibling build authority remains rejected'
+    $public1746 = [pscustomobject]@{
+        ModId='wt'; Dir='weapon_tweaker'; FriendlyName='Weapon Tweaker'; WorkshopId='3712896117'; Version='0.12.338-beta'
+        SourceCommit='6f4c78e63e3318075fa6d2cd705accffccf8e51b'; RootBundle='ebaffd734a22c9a0.mod_bundle'
+        RootBundleSha256='9c300090d6ed5f17a759f4957b9c44b22b0f7d8b23689884329e4fe7ca4b0359'
+        AssetFilename='wt.zip'; AssetSha256='3f5d6959d4fbf483a9009fade895c20a21c2abd83784e529863fb3dfb1c7e9f3'
+        LoadRoutes=@([pscustomobject]@{Marker='[wt:LOAD]'}); ExactBannerRoutes=@(); CommandRoutes=@(); ReceiptRoutes=@(); MenuSurfaces=@()
+    }
+    $threeStreams1746 = @($siblingRecords) + @($public1746)
+    $threeCard1746 = $policy1746.Replace('**Topology:** Solo',
+        ('**Current public receipt:** Workshop item `3712896117`, ManifestID `555555`; source `' + $public1746.SourceCommit + '`; root `' + $public1746.RootBundle + '` SHA-256 `' + $public1746.RootBundleSha256 + '`.' + "`n**Topology:** Solo"))
+    $threeCard1746 = $threeCard1746.Replace('confirm `[wt:LOAD] v0.12.339-dev`',
+        'confirm `[wt:LOAD] v0.12.339-dev`; Weapon Tweaker v0.12.338-beta, confirm `[wt:LOAD] v0.12.338-beta`')
+    $threeArgs1746=$siblingPlanArgs.Clone(); $threeArgs1746.ArtifactTargets=$threeStreams1746
+    $threePlan1746=Get-VtCardRefreshPlan -Body $threeCard1746 @threeArgs1746
+    Assert ($threePlan1746.Status -eq 'current' -and $threePlan1746.NewBody -ceq $threeCard1746) '#1746 shared WT LOAD public/Dev siblings stay item-specific and byte-identical'
+    Assert (Get-VtRefreshedCardAuthorityDecision -Body $threeCard1746 -Authority ([pscustomobject]@{Records=$threeStreams1746})).Valid '#1746 current public/Dev sibling builds retain exact authority attribution'
+    # Exact 21 artifact tuples from captured mods-2026-10-26 manifest. Only
+    # participating LOAD routes are attached below; this fixture is not a new
+    # source/provider proof and has no external/ignored-path dependency.
+    $fullArtifacts1746 = '[{"ModId":"wt","Dir":"weapon_tweaker","FriendlyName":"Weapon Tweaker","Version":"0.12.338-beta","WorkshopId":"3712896117","SourceCommit":"6f4c78e63e3318075fa6d2cd705accffccf8e51b","RootBundle":"ebaffd734a22c9a0.mod_bundle","RootBundleSha256":"9c300090d6ed5f17a759f4957b9c44b22b0f7d8b23689884329e4fe7ca4b0359","AssetFilename":"wt.zip","AssetSha256":"3f5d6959d4fbf483a9009fade895c20a21c2abd83784e529863fb3dfb1c7e9f3"},{"ModId":"ct","Dir":"chaos_wastes_tweaker","FriendlyName":"Chaos Wastes Tweaker","Version":"0.7.132-beta","WorkshopId":"3712929235","SourceCommit":"dbf04904661b181f1745304fda7e3a0e6ae87523","RootBundle":"c37627d549d8ce88.mod_bundle","RootBundleSha256":"088edb0c485906a3e877ed7253aaacbc86e6b6a4a200010037f3f030a2f7d402","AssetFilename":"ct.zip","AssetSha256":"be0f0532f3075b48c32141f7947bfcd0b403464eec0e09f420c14c00fbbc0f44"},{"ModId":"ct_dev","Dir":"chaos_wastes_tweaker_dev","FriendlyName":"Chaos Wastes Tweaker (Dev)","Version":"0.7.353-dev","WorkshopId":"3733366926","SourceCommit":"88bada716ee4b3355af2b94f751f68fda5a72569","RootBundle":"195af59fc68656a5.mod_bundle","RootBundleSha256":"90dc563d08f3d0e0ce1e27041ccc5b62694b7a7c124f2eba509398c37e26078e","AssetFilename":"ct_dev.zip","AssetSha256":"6dabbd2df041ccd5645f1b0c871e585669570102f46c0e3cbebdbc9ccdea0cba"},{"ModId":"gt","Dir":"general_tweaker","FriendlyName":"General Tweaker","Version":"0.2.177","WorkshopId":"3713619122","SourceCommit":"af073843bd3572dec5d7ad27615d7cadf4b3d592","RootBundle":null,"RootBundleSha256":null,"AssetFilename":"gt.zip","AssetSha256":"840372b403723b46b250d13336eda5e34ee3f48fa649bfb43c5a348abd630e8e"},{"ModId":"gt_dev","Dir":"general_tweaker_dev","FriendlyName":"General Tweaker (Dev)","Version":"0.2.276-dev","WorkshopId":"3733367409","SourceCommit":"a4fdc05a36f6812bb36bbb654273a1d2c10bbde9","RootBundle":"e6ffaaca2a71199e.mod_bundle","RootBundleSha256":"63e23a872b5b51f1902a492ef627557ce10f22828a19f9c026de8808e9f1a28c","AssetFilename":"gt_dev.zip","AssetSha256":"0ad602273cba469c9d4da4a9addcd37167a01b19131a7d6abeed56c7fa23bc8c"},{"ModId":"gut","Dir":"gui_tweaker","FriendlyName":"GUI Tweaker","Version":"0.2.289","WorkshopId":"3732144878","SourceCommit":"16ce6e805224a31436d67b96b48acedf796928fc","RootBundle":"ff654aa303c38f8c.mod_bundle","RootBundleSha256":"79fab1481af7b92724c41189a0e1ba5aa266568b541855fa28f8ad7fd0573406","AssetFilename":"gut.zip","AssetSha256":"0e6c9014af552b08eac32ee57df31eb600a178d29b510fa4b709e4dffb00a7e8"},{"ModId":"gut_dev","Dir":"gui_tweaker_dev","FriendlyName":"GUI Tweaker (Dev)","Version":"0.2.364-dev","WorkshopId":"3751024698","SourceCommit":"1d2b3c58c42562a631e341e2fd61e836f4261866","RootBundle":"0e89c5285caab001.mod_bundle","RootBundleSha256":"d56b0d8396996a7d74b5104c9723f341763059d08c0fd0d9d5068056598a2a48","AssetFilename":"gut_dev.zip","AssetSha256":"4977d02e70b4d856014dc5dc584637845b043844454d913381bf435e2c4c0592"},{"ModId":"cosmetics_tweaker","Dir":"cosmetics_tweaker","FriendlyName":"Cosmetics Tweaker","Version":"0.9.227-dev","WorkshopId":"3715714222","SourceCommit":"2d61e826839b05b3f102aadebc9c6aa8cff07af4","RootBundle":"6448e4de51a26af1.mod_bundle","RootBundleSha256":"4eef472dfdbb47d906deb0e415417a2465f848a3d71339b3fac1a810f6fbeab3","AssetFilename":"cosmetics_tweaker.zip","AssetSha256":"322716cff6ca714a5c8685c26791c3675c00fd3ac556b67a78f2e56eb78d137f"},{"ModId":"dynamic_cosmetic_portraits","Dir":"dynamic_cosmetic_portraits","FriendlyName":"Dynamic Cosmetic Portraits","Version":"0.1.32-dev","WorkshopId":"3721036701","SourceCommit":"5c94c67b3d85bb07d6564baad913698a0fcfc417","RootBundle":"4b0d338589a2926c.mod_bundle","RootBundleSha256":"9fa84cd43f3b3d6d0391cf5a00d8dba412af173d89b13bc7b1dc26d86127df32","AssetFilename":"dynamic_cosmetic_portraits.zip","AssetSha256":"2a00eceb8bcb501ebbd202a5fef92452262934c832dad3f445ee9d0a6625272c"},{"ModId":"crt","Dir":"career_tweaker","FriendlyName":"Career Tweaker","Version":"0.4.34-beta","WorkshopId":"3716286199","SourceCommit":"a00a5bc914c81ce33f38ffb7ade5943195fdee69","RootBundle":"92ad046507348beb.mod_bundle","RootBundleSha256":"5232aff330afece728ad70a7736793a48a92e27b04d2ee4e4b87106aa450b823","AssetFilename":"crt.zip","AssetSha256":"5bd4ca08cde0b658fcb9609a922910bbdbb5eeb303e0df2cb7434c4b716b272c"},{"ModId":"enemy_tweaker","Dir":"enemy_tweaker","FriendlyName":"Enemy Tweaker","Version":"0.7.65-dev","WorkshopId":"3716780252","SourceCommit":"cd439285cfe7eb7b67eb7127f9b67f372c969ebe","RootBundle":"002586295f98ba25.mod_bundle","RootBundleSha256":"8f01e8ca7c4405e18a9a423bd6044841fb2451fe2c540df13104fa51ce265256","AssetFilename":"enemy_tweaker.zip","AssetSha256":"1a93178d0dc455470402546c2a5d2f0cae967cb77d6c76e5190067f1466adcc1"},{"ModId":"character_weapon_variants","Dir":"character_weapon_variants","FriendlyName":"Character Weapon Variants","Version":"0.1.552-dev","WorkshopId":"3716869446","SourceCommit":"8d9f4dc5368a937a47ecf17279c5f801351dd196","RootBundle":"0f038849957ad1b7.mod_bundle","RootBundleSha256":"d34d655bf1fa755f7c010a39b4de660a22635f3817314b930ad1c7977fead13c","AssetFilename":"character_weapon_variants.zip","AssetSha256":"a3e124f2ef7e76e1bbbf0743e59e3d4891ffcd311100f28326eeadf71f08003a"},{"ModId":"cim","Dir":"crafting_in_modded","FriendlyName":"Crafting In Modded","Version":"0.8.92","WorkshopId":"3721038774","SourceCommit":"f9539ef0f4d7b4647a8fe5bdcca9d78194d0f499","RootBundle":null,"RootBundleSha256":null,"AssetFilename":"cim.zip","AssetSha256":"f6ee6a4b547357473938b84d9660abb08ad320676906e28e37d8b16cd6c4845d"},{"ModId":"cim_dev","Dir":"crafting_in_modded_dev","FriendlyName":"Crafting In Modded (Dev)","Version":"0.8.144-dev","WorkshopId":"3733366851","SourceCommit":"fe7698d21eacba1c2389f1abf8e0e6568d8cf129","RootBundle":"05f34d542fe9a8ef.mod_bundle","RootBundleSha256":"c22b0d9b884d5fde120cbb96e43cc0091f115d70b0eaff0853ee740913a1a052","AssetFilename":"cim_dev.zip","AssetSha256":"8a34ec776ce6d97ae4b4fb12bb213bf96047ee615151a3399bccff2e7cc5db15"},{"ModId":"event_tweaker","Dir":"event_tweaker","FriendlyName":"Event Tweaker","Version":"0.4.54-dev","WorkshopId":"3721290755","SourceCommit":"5c94c67b3d85bb07d6564baad913698a0fcfc417","RootBundle":"ac2d7655ddc4f658.mod_bundle","RootBundleSha256":"db080250b414b775a9dc45f00fa84ebc0b248b78313ef46b6ec2803078a0ce4d","AssetFilename":"event_tweaker.zip","AssetSha256":"210a23d432cebd1300b280715362d8c9d8314eda3144f46f4eb03d0827191b60"},{"ModId":"verminious_dreams_lighting","Dir":"verminious_dreams_lighting","FriendlyName":"Verminious Dreams Lighting","Version":"1.0.7","WorkshopId":"3727221800","SourceCommit":null,"RootBundle":null,"RootBundleSha256":null,"AssetFilename":"verminious_dreams_lighting.zip","AssetSha256":"25c554a568b277168702454086737b1c9503fb018e725201d001b9a1f10a757b"},{"ModId":"verminious_dreams_lighting_dev","Dir":"verminious_dreams_lighting_dev","FriendlyName":"Verminious Dreams Lighting (Dev)","Version":"1.0.20-dev","WorkshopId":"3733366748","SourceCommit":"5c94c67b3d85bb07d6564baad913698a0fcfc417","RootBundle":"6b34ac1c97e5a1be.mod_bundle","RootBundleSha256":"6234553f804415397a0b9ed405915c0d25f9f417436b0607df2ae69ba339ee0d","AssetFilename":"verminious_dreams_lighting_dev.zip","AssetSha256":"7afaf496305f0fd8bc4ef4ec9fdb0286735b3654e231c18e89300ae41df97b5d"},{"ModId":"WOC","Dir":"weapons_of_chaos","FriendlyName":"Weapons of Chaos","Version":"0.1.62-dev","WorkshopId":"3753880932","SourceCommit":"a00a5bc914c81ce33f38ffb7ade5943195fdee69","RootBundle":"dcea08518941f940.mod_bundle","RootBundleSha256":"bd31472af4967c2d1a5d0b933dd8efdea9fe8bf7130a996400621659dfc18fea","AssetFilename":"WOC.zip","AssetSha256":"702d71a3112dbde87bf3d88611917f94da16a4544b3b6cffc60d16008a426fb0"},{"ModId":"mp","Dir":"modded_progression","FriendlyName":"Modded Progression","Version":"0.2.47-dev","WorkshopId":"3730422873","SourceCommit":"5b8e572f0dd8885c680b17c59bbab1e1e2d609a6","RootBundle":"c30cf98443ecafec.mod_bundle","RootBundleSha256":"d6fe249e9f6d2cca604b51723f8b5cc13ec5c8103ab2addc210e3e9e0e3d3252","AssetFilename":"mp.zip","AssetSha256":"9e5b0794c33dc8fbbcb38c63144f6ee33998d86cfb4f5bcb01a63a680d5bdab1"},{"ModId":"character_dialogue","Dir":"character_dialogue","FriendlyName":"Character Dialogue","Version":"0.1.14-dev","WorkshopId":"3765055148","SourceCommit":"28f1af7ef3c657f536a42ce8b4880dcf80a94419","RootBundle":"0e14765f298dd165.mod_bundle","RootBundleSha256":"c7ae8843649a265533a82f1b129411bbca6bc96f2141fe53df81fd0f47fdae60","AssetFilename":"character_dialogue.zip","AssetSha256":"5a6ac5dbf0574becb416044925dd1b9f84756207b318322f7a1fe2dd4e24b453"},{"ModId":"wt_dev","Dir":"weapon_tweaker_dev","FriendlyName":"Weapon Tweaker (Dev)","Version":"0.12.339-dev","WorkshopId":"3748824853","SourceCommit":"53a60eb8d92ca96cf369c0c0be97ea25863551ab","RootBundle":"d38aa5cd35c79c3d.mod_bundle","RootBundleSha256":"44a70864504f313be7c7651651f8797315bffdd4e68f1c16602aab6db36f4dcc","AssetFilename":"wt_dev.zip","AssetSha256":"6e24b2f0f03b0b3349ef92639f14c6305c38ee952afddcfa7c65fdb3ceeb5dc9"}]' | ConvertFrom-Json
+    foreach ($record1746 in $fullArtifacts1746) {
+        $marker1746 = if ($record1746.ModId -eq 'character_weapon_variants') { '[cwv:LOAD]' } elseif ($record1746.ModId -eq 'wt_dev') { '[wt:LOAD]' } else { $null }
+        $record1746 | Add-Member -NotePropertyName LoadRoutes -NotePropertyValue @()
+        if ($marker1746) { $record1746.LoadRoutes = @([pscustomobject]@{Marker=$marker1746}) }
+        foreach ($empty1746 in @('ExactBannerRoutes','CommandRoutes','ReceiptRoutes','MenuSurfaces')) { $record1746 | Add-Member -NotePropertyName $empty1746 -NotePropertyValue @() }
+    }
+    $fullArgs1746=$siblingPlanArgs.Clone(); $fullArgs1746.ArtifactTargets=$fullArtifacts1746
+    $line9321746=@(($issue932Card -split "`r?`n") | Where-Object { $_ -like '**Current receipt*' })[0]
+    $noItem9321746=$issue932Card.Replace($line9321746,
+        $line9321746.Replace('Workshop item `3716869446`, ManifestID `2764743062372452902`; ',''))
+    $oldOwner9321746=$noItem9321746.Replace('0.1.536-dev','0.1.551-dev')
+    $expectedOwner9321746=$oldOwner9321746.Replace('0.1.551-dev','0.1.552-dev').Replace(
+        '07899bb7fc6a2e7c0bb0c6d8156e610a8add14ef',$siblingRecords[0].SourceCommit).Replace(
+        '141990831137E45663B7EE20CF11DD22AEDE84FBBADDD5A8C502D882B8DFE16B',$siblingRecords[0].RootBundleSha256)
+    $owner9321746=Get-VtCardRefreshPlan -Body $oldOwner9321746 @fullArgs1746
+    Assert ($fullArtifacts1746.Count -eq 21 -and $owner9321746.Status -eq 'refresh' -and
+        $owner9321746.NewBody -ceq $expectedOwner9321746) '#1746 ordinary unqualified no-ID receipt preserves old-to-new owner version refresh under full21 context'
+    Assert (Get-VtRefreshedCardAuthorityDecision -Body $owner9321746.NewBody -Authority ([pscustomobject]@{Records=$fullArtifacts1746})).Valid '#1746 refreshed ordinary single-owner card retains complete final build authority'
+    foreach ($heading1746 in @('Current Weapon Tweaker (Dev) receipt','Current Unknown Stream receipt')) {
+        $edge1746=$oldOwner9321746+"`n`n**$heading1746"+':** v0.1.551-dev; ManifestID `4278357008422959585`.'
+        $rejected=Get-VtCardRefreshPlan -Body $edge1746 @fullArgs1746
+        Assert ($rejected.Status -eq 'unparseable' -and $rejected.Reason -eq 'publishing-typed-or-provenance-edit-ownership-unproven' -and
+            $null -eq $rejected.NewBody) "#1746 qualified heading-only Manifest cannot inherit final singleton owner: $heading1746"
+    }
+    $ownHeading1746=$oldOwner9321746+"`n`n"+'**Current Character Weapon Variants receipt:** v0.1.551-dev; ManifestID `2268385815225930742`.'
+    $ownHeadingPlan1746=Get-VtCardRefreshPlan -Body $ownHeading1746 @fullArgs1746
+    Assert ($ownHeadingPlan1746.Status -eq 'refresh' -and $ownHeadingPlan1746.NewBody -match 'receipt:\*\* v0\.1\.552-dev; ManifestID') '#1746 qualified owner Manifest-only line retains proven owned version update'
+    $collision1746=$exact760.Replace('Character Weapon Variants v0.1.552-dev, confirm `[cwv:LOAD] v0.1.552-dev`',
+        'Character Weapon Variants v0.1.551-dev, confirm `[cwv:LOAD] v0.1.551-dev`').Replace(
+        'receipt:** Tweaker: Weapons Dev `v0.12.339-dev`,','receipt:** Tweaker: Weapons Dev `v0.1.551-dev`,')
+    $rejected=Get-VtCardRefreshPlan -Body $collision1746 @fullArgs1746
+    Assert ($rejected.Status -eq 'unparseable' -and $rejected.Reason -eq 'publishing-typed-or-provenance-edit-ownership-unproven' -and
+        $null -eq $rejected.NewBody) '#1746 original-to-final fence catches earlier version sweep on a non-owner artifact line'
+    $history1746=$oldOwner9321746+"`n`n"+'**Feature provenance:** earlier v0.1.551-dev.'
+    $rejected=Get-VtCardRefreshPlan -Body $history1746 @fullArgs1746
+    Assert ($rejected.Status -eq 'unparseable' -and $null -eq $rejected.NewBody) '#1746 earlier version sweep cannot rewrite recognized historical provenance'
+    $unknownItem1746=$oldOwner9321746+"`n`n"+'**Current receipt:** item `9999999999`, v0.1.551-dev; ManifestID `9876543210`.'
+    $rejected=Get-VtCardRefreshPlan -Body $unknownItem1746 @fullArgs1746
+    Assert ($rejected.Status -eq 'unparseable' -and $null -eq $rejected.NewBody) '#1746 explicit unknown item cannot use the unqualified selected-owner fallback'
+    $normalized1746=@($fullArtifacts1746 | ForEach-Object { ConvertTo-VtCardArtifactTarget $_ })
+    $sole1746=@($normalized1746 | Where-Object { $_.ModId -eq 'character_weapon_variants' })
+    $foreignLine1746='**Current Weapon Tweaker (Dev) receipt:** ManifestID `4278357008422959585`.'
+    $legacyResolved1746=@(Resolve-VtCardArtifactLineTargets -Line $foreignLine1746 -Heading 'Current Weapon Tweaker (Dev) receipt' -Targets $sole1746)
+    $strictResolved1746=@(Resolve-VtCardArtifactLineTargets -Line $foreignLine1746 -Heading 'Current Weapon Tweaker (Dev) receipt' -Targets $sole1746 -NoImplicitSingleton)
+    Assert ($legacyResolved1746.Count -eq 1 -and $legacyResolved1746[0].ModId -eq 'character_weapon_variants' -and
+        $strictResolved1746.Count -eq 0) '#1746 default singleton resolver behavior is unchanged; strict ownership opts out explicitly'
+    $manifestInfo1746=Get-VtCardArtifactLineInfo -Line $foreignLine1746
+    Assert ($manifestInfo1746.IsTypedCurrent -and $manifestInfo1746.HasQualifier -and $manifestInfo1746.Qualifier -ceq 'weapontweakerdev' -and
+        $manifestInfo1746.ItemIds.Count -eq 0) '#1746 shared classifier recognizes qualified Manifest-only fields without inventing claims'
+    $boundInfo1746=Get-VtCardArtifactLineInfo -Line ('**Current '+('x'*81)+' receipt:** value')
+    Assert ($boundInfo1746.Parsed -and -not $boundInfo1746.IsTypedCurrent -and $boundInfo1746.HasQualifier) '#1746 reviewer current-heading bound and resolver qualifier bound remain distinct'
+    Assert (-not (Get-VtCardArtifactLineInfo -Line ('**'+('x'*101)+':** value')).Parsed) '#1746 shared generic field limit remains exactly100 characters'
+    # No sibling Steam Manifest authority is invented: a changed sibling token
+    # is preserved, not refreshed or claimed independently current.
+    $otherManifest1746 = $exact760.Replace('4278357008422959585','1234567890')
+    $preserved1746 = Get-VtCardRefreshPlan -Body $otherManifest1746 @siblingPlanArgs
+    Assert ($preserved1746.Status -eq 'current' -and $preserved1746.NewBody -ceq $otherManifest1746) '#1746 sibling ManifestID is immutable, not independently authenticated'
+    # Issue #1746 installed setup begin. Parse our own complete source so the
+    # real caller handoff and verdict branches stay under durable CI coverage.
+    $wiredSource1746 = [IO.File]::ReadAllText($SourcePath)
+    $wiredTokens1746=$null; $wiredErrors1746=$null
+    $wiredAst1746=[Management.Automation.Language.Parser]::ParseInput($wiredSource1746,[ref]$wiredTokens1746,[ref]$wiredErrors1746)
+    if ($wiredErrors1746.Count) { throw ($wiredErrors1746 | Out-String) }
+    $wiredLoop1746=@($wiredAst1746.FindAll({param($n)
+        $n -is [Management.Automation.Language.ForEachStatementAst] -and
+        $n.Variable.Extent.Text -ceq '$issueNumber' -and $n.Condition.Extent.Text -ceq '$readyIssues'
+    },$true))
+    if ($wiredLoop1746.Count -ne 1) { throw 'Installed per-issue loop is ambiguous' }
+    $loopText1746=$wiredLoop1746[0].Extent.Text
+    $lineDiff1746=@($wiredAst1746.FindAll({param($n)
+        $n -is [Management.Automation.Language.FunctionDefinitionAst] -and $n.Name -eq 'Write-VtCardLineDiff'
+    },$true))
+    if ($lineDiff1746.Count -ne 1) { throw 'Installed line-diff owner is ambiguous' }
+    Invoke-Expression $lineDiff1746[0].Extent.Text
+    function Invoke-Installed1746 {
+        param([string]$LoopText,[string]$Body,$SourceRecords,$CardAuthority)
+        $installedIssue1746=[pscustomobject]@{State='OPEN';Comments=@([pscustomobject]@{
+            id='IC_TEST_1746';databaseId=5749497549;body=$Body;isPinned=$true;createdAt='2026-10-26T22:45:26Z'
+        })}
+        $before1746=$installedIssue1746 | ConvertTo-Json -Depth 8 -Compress
+        $writes1746=New-Object 'System.Collections.Generic.List[object]'
+        function Get-VtIssueStateAndComments { param($Owner,$Name,$Number) return $installedIssue1746 }
+        function Update-VtIssueComment { param($CommentNodeId,$NewBody) $writes1746.Add([pscustomobject]@{Id=$CommentNodeId;Body=$NewBody}) }
+        $readyIssues=@(760);$repoOwner='offline';$repoName='fixture';$ReconcileAllStreams=$false;$DryRun=$false
+        $PublishedId='3716869446';$NewVersion='0.1.552-dev';$LoadTag='cwv';$NewManifest='2268385815225930742'
+        $StreamIdentity='Character Weapon Variants';$sharedLoadTag=$false;$siblingPublishedIds=@();$siblingStreamIdentities=@()
+        $sourceAuthority=[pscustomobject]@{Records=$SourceRecords};$currentArtifactTarget=$siblingRecords[0]
+        $liveTestAuthority=$CardAuthority;$displayVersion='v0.1.552-dev'
+        $summary=@{refreshed=0;current=0;'skipped-unparseable'=0;'skipped-closed'=0;failed=0}
+        $cardsSeen=0;$issuesExamined=0;$exitCode=0
+        $null=Invoke-Expression $LoopText
+        if (($installedIssue1746 | ConvertTo-Json -Depth 8 -Compress) -cne $before1746) { throw 'Installed route mutated issue or pin fixture object' }
+        return [pscustomobject]@{Summary=$summary;Writes=@($writes1746.ToArray());Exit=$exitCode;InputExact=$true}
+    }
+    # Issue #1746 installed assertions begin.
+    $receiptLines1746=@(($exact760 -split "`n") | Where-Object {$_ -match '^\*\*Current '})
+    $policyWithArtifacts1746=$policy1746+"`n`n"+($receiptLines1746 -join "`n`n")
+    $oldPolicy1746=$policyWithArtifacts1746.Replace('ManifestID `2268385815225930742`','ManifestID `4572388077344785045`')
+    $installedGood1746=Invoke-Installed1746 $loopText1746 $oldPolicy1746 $siblingRecords $policyAuthority1746
+    Assert ($installedGood1746.Summary.refreshed -eq 1 -and $installedGood1746.Writes.Count -eq 1 -and
+        $installedGood1746.Writes[0].Id -ceq 'IC_TEST_1746' -and $installedGood1746.Writes[0].Body -ceq $policyWithArtifacts1746) `
+        '#1746 installed loop forwards complete context and changes only same comment owned metadata'
+    $installedCurrent1746=Invoke-Installed1746 $loopText1746 $policyWithArtifacts1746 $siblingRecords $policyAuthority1746
+    Assert ($installedCurrent1746.Summary.current -eq 1 -and $installedCurrent1746.Writes.Count -eq 0) '#1746 installed current valid card is a zero-write result'
+    $staleBuild1746=$policyWithArtifacts1746.Replace('0.12.339-dev','0.12.338-dev')
+    $installedBadCurrent1746=Invoke-Installed1746 $loopText1746 $staleBuild1746 $siblingRecords $policyAuthority1746
+    Assert ($installedBadCurrent1746.Summary.'skipped-unparseable' -eq 1 -and $installedBadCurrent1746.Summary.current -eq 0 -and
+        $installedBadCurrent1746.Writes.Count -eq 0) '#1746 installed current path rejects stale sibling build authority rather than reporting current'
+    $installedBadRefresh1746=Invoke-Installed1746 $loopText1746 $staleBuild1746.Replace('ManifestID `2268385815225930742`','ManifestID `4572388077344785045`') $siblingRecords $policyAuthority1746
+    Assert ($installedBadRefresh1746.Summary.'skipped-unparseable' -eq 1 -and $installedBadRefresh1746.Writes.Count -eq 0) '#1746 installed refresh path rejects stale sibling build authority before write'
+    $originalReview1746=${function:Get-VtCardCurrentArtifactReview}
+    try {
+        function Get-VtCardCurrentArtifactReview { param($Card,$Targets)
+            $r=& $originalReview1746 -Card $Card -Targets $Targets
+            if ($r.Status -ne 'unparseable') { $r.Status='stale';$r.NewCard=$r.NewCard.Replace('4278357008422959585','1111111111') }
+            return $r
+        }
+        $unownedEdit1746=Get-VtCardRefreshPlan -Body $exact760 @siblingPlanArgs
+        Assert ($unownedEdit1746.Status -eq 'unparseable' -and $unownedEdit1746.Reason -eq 'publishing-artifact-edit-ownership-unproven' -and
+            $null -eq $unownedEdit1746.NewBody) '#1746 claim ledger rejects reviewer alteration of non-owner Manifest bytes'
+    }
+    finally { Set-Item Function:Get-VtCardCurrentArtifactReview -Value $originalReview1746 }
+    Assert (${function:Get-VtCardCurrentArtifactReview}.ToString() -ceq $originalReview1746.ToString()) '#1746 reviewer ScriptBlock restored exactly after adversarial output'
+    # Issue #1746 focused end.
+
     $allStreams = @(
         [pscustomobject]@{ ModId='character_weapon_variants'; Directory='character_weapon_variants'; PublishedId='3716869446'; LoadTag='cwv'; Identity='Character Weapon Variants'; LegacyIdentities=@('Career Weapon Variants','Career Weapon Variants Dev'); Version='0.1.521-dev'; SourceCommit=$cwvArtifact.SourceCommit; RootBundle=$cwvArtifact.RootBundle; RootBundleSha256=$cwvArtifact.RootBundleSha256; AssetFilename=$cwvArtifact.AssetFilename; AssetSha256=$cwvArtifact.AssetSha256 },
         [pscustomobject]@{ ModId='tweaker_cosmetics'; Directory='tweaker_cosmetics'; PublishedId='3715714222'; LoadTag='cosmetics'; Identity='Tweaker: Cosmetics'; Version='0.9.215-dev' },
@@ -2237,7 +2617,7 @@ try {
                     -NewVersion $NewVersion -LoadTag $LoadTag -NewManifest $NewManifest `
                     -SharedLoadTag $sharedLoadTag -StreamIdentity $StreamIdentity `
                     -SiblingPublishedIds $siblingPublishedIds -SiblingStreamIdentities $siblingStreamIdentities `
-                    -ArtifactTarget $currentArtifactTarget
+                    -ArtifactTarget $currentArtifactTarget -ArtifactTargets @($sourceAuthority.Records)
             }
             if ($plan.Status -eq 'not-applicable') { continue }
             $cardsSeen++
@@ -2255,15 +2635,15 @@ try {
                     $exitCode = 1
                 }
                 'current' {
+                    $authorityDecision = Get-VtRefreshedCardAuthorityDecision -Body ([string]$card.body) -Authority $liveTestAuthority
+                    if (-not $authorityDecision.Valid) {
+                        Write-Host ("  ! {0}: skipped-unparseable -- current card fails deployed-source authority: {1}" -f `
+                            $cardRef, (@($authorityDecision.Errors) -join ', ')) -ForegroundColor Yellow
+                        $summary['skipped-unparseable']++
+                        $exitCode = 1
+                        continue
+                    }
                     if ($ReconcileAllStreams) {
-                        $authorityDecision = Get-VtRefreshedCardAuthorityDecision -Body ([string]$card.body) -Authority $liveTestAuthority
-                        if (-not $authorityDecision.Valid) {
-                            Write-Host ("  ! {0}: skipped-unparseable -- current card fails deployed-source authority: {1}" -f `
-                                $cardRef, (@($authorityDecision.Errors) -join ', ')) -ForegroundColor Yellow
-                            $summary['skipped-unparseable']++
-                            $exitCode = 1
-                            continue
-                        }
                         Write-Host ("  = {0}: current (all recognized surfaces pass authority)" -f $cardRef) -ForegroundColor DarkGray
                     }
                     else {

@@ -532,19 +532,57 @@ function ConvertTo-VtCardArtifactNameKey {
     return ([regex]::Replace($Value.ToLowerInvariant(), '[^a-z0-9]+', ''))
 }
 
-function Resolve-VtCardArtifactLineTargets {
-    param([string]$Line, [string]$Heading, $Targets)
-    $rows = @($Targets)
-    $itemIds = @([regex]::Matches($Line,
+# Shared lexical/classification owner for artifact fields. This is the exact
+# existing reviewer field grammar and resolver qualifier grammar, including
+# their distinct bounds. -Heading preserves the resolver's untrimmed input;
+# -Line preserves the reviewer's trimmed heading and raw value offsets.
+function Get-VtCardArtifactLineInfo {
+    param([string]$Line, [string]$Heading)
+    $parsed = $PSBoundParameters.ContainsKey('Heading')
+    $name = [string]$Heading
+    $value = $null
+    $valueOffset = 0
+    if (-not $parsed) {
+        $headingMatch = [regex]::Match($Line,
+            '^[ \t]*(?:[-*][ \t]+)?\*\*(?<heading>[^*\r\n]{1,100}?):\*\*[ \t]*(?<value>.*)$')
+        $parsed = $headingMatch.Success
+        if ($parsed) {
+            $name = $headingMatch.Groups['heading'].Value.Trim()
+            $value = [string]$headingMatch.Groups['value'].Value
+            $valueOffset = [int]$headingMatch.Groups['value'].Index
+        }
+    }
+    $feature = $parsed -and $name.Equals('Feature provenance', [StringComparison]::OrdinalIgnoreCase)
+    $current = $parsed -and (
+        $name.Equals('Exact live artifact', [StringComparison]::OrdinalIgnoreCase) -or
+        $name.Equals('Live artifact', [StringComparison]::OrdinalIgnoreCase) -or
+        $name.Equals('Exact source', [StringComparison]::OrdinalIgnoreCase) -or
+        $name.Equals('Current receipt', [StringComparison]::OrdinalIgnoreCase) -or
+        $name -match '(?i)^Current[ \t]+.{1,80}[ \t]+receipt$')
+    $qualifierMatch = [regex]::Match($name, '(?i)^Current[ \t]+(.+?)[ \t]+receipt$')
+    $qualifier = if ($qualifierMatch.Success) { ConvertTo-VtCardArtifactNameKey $qualifierMatch.Groups[1].Value } else { $null }
+    $itemIds = @([regex]::Matches([string]$Line,
         '(?i)\b(?:Workshop(?:\s+item)?|item|PublishedFileID)\s*(?:=|:)?\s*`?([0-9]{5,})`?') |
         ForEach-Object { [string]$_.Groups[1].Value } | Sort-Object -Unique)
+    return [pscustomobject][ordered]@{
+        Parsed=$parsed; Heading=$name; Value=$value; ValueOffset=$valueOffset
+        IsFeatureProvenance=$feature; IsTypedCurrent=$current
+        HasQualifier=$qualifierMatch.Success; Qualifier=$qualifier; ItemIds=$itemIds
+    }
+}
+
+function Resolve-VtCardArtifactLineTargets {
+    param([string]$Line, [string]$Heading, $Targets, [switch]$NoImplicitSingleton)
+    $rows = @($Targets)
+    $lineInfo = Get-VtCardArtifactLineInfo -Line $Line -Heading $Heading
+    $itemIds = @($lineInfo.ItemIds)
     if ($itemIds.Count -gt 0) {
         return @($rows | Where-Object { $itemIds -contains [string]$_.WorkshopId })
     }
-    if ($rows.Count -eq 1) { return $rows }
+    if ($rows.Count -eq 1 -and -not $NoImplicitSingleton) { return $rows }
 
-    if ($Heading -match '(?i)^Current[ \t]+(.+?)[ \t]+receipt$') {
-        $qualifier = ConvertTo-VtCardArtifactNameKey $Matches[1]
+    if ($lineInfo.HasQualifier) {
+        $qualifier = $lineInfo.Qualifier
         if ($qualifier) {
             return @($rows | Where-Object {
                 @($_.Names | Where-Object {
@@ -591,25 +629,18 @@ function Get-VtCardCurrentArtifactReview {
 
     for ($lineIndex = 0; $lineIndex -lt $lines.Count; $lineIndex++) {
         $line = [string]$lines[$lineIndex]
-        $headingMatch = [regex]::Match($line,
-            '^[ \t]*(?:[-*][ \t]+)?\*\*(?<heading>[^*\r\n]{1,100}?):\*\*[ \t]*(?<value>.*)$')
-        if (-not $headingMatch.Success) { continue }
-        $heading = $headingMatch.Groups['heading'].Value.Trim()
-        if ($heading.Equals('Feature provenance', [System.StringComparison]::OrdinalIgnoreCase)) {
+        $lineInfo = Get-VtCardArtifactLineInfo -Line $line
+        if (-not $lineInfo.Parsed) { continue }
+        $heading = $lineInfo.Heading
+        if ($lineInfo.IsFeatureProvenance) {
             $featureProvenanceLines++
             continue
         }
-        $typedCurrentHeading = $heading.Equals('Exact live artifact', [System.StringComparison]::OrdinalIgnoreCase) -or
-            $heading.Equals('Live artifact', [System.StringComparison]::OrdinalIgnoreCase) -or
-            $heading.Equals('Exact source', [System.StringComparison]::OrdinalIgnoreCase) -or
-            $heading.Equals('Current receipt', [System.StringComparison]::OrdinalIgnoreCase) -or
-            $heading -match '(?i)^Current[ \t]+.{1,80}[ \t]+receipt$'
-        if (-not $typedCurrentHeading) { continue }
+        if (-not $lineInfo.IsTypedCurrent) { continue }
         $recognizedHeadings++
 
-        $valueGroup = $headingMatch.Groups['value']
-        $value = [string]$valueGroup.Value
-        $valueOffset = [int]$valueGroup.Index
+        $value = [string]$lineInfo.Value
+        $valueOffset = [int]$lineInfo.ValueOffset
         $sourceHint = $heading.Equals('Exact source', [System.StringComparison]::OrdinalIgnoreCase) -or
             $value -match '(?i)\b(?:exact[ \t]+source|source(?:[ \t]+commit)?)\b'
         $rootHint = $value -match '(?i)\broot\b|\.mod_bundle\b'
