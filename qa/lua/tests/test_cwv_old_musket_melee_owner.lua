@@ -14,7 +14,7 @@ return function(H, root)
             local n, at = 0, 1
             while true do local pos = s:find(needle, at, true); if not pos then return n end; n, at = n + 1, pos + #needle end
         end
-        for _, name in ipairs({ "_cwv_old_musket_shot_owner", "_cwv_old_musket_melee_owner", "_lib_network_lookup" }) do
+        for _, name in ipairs({ "_cwv_old_musket_shot_owner", "_cwv_old_musket_melee_owner", "_cwv_profile_graph_transaction", "_cwv_guard428_old_musket_sweep", "_lib_network_lookup" }) do
             local token = 'mod:dofile("scripts/mods/character_weapon_variants/' .. name .. '")'
             H.equal(count(entry, token), 1); H.equal(count(runtime, token), 0); H.equal(count(module_code, token), 0)
         end
@@ -22,7 +22,7 @@ return function(H, root)
         H.truthy(module:find("-- Owned by: character_weapon_variants.lua entry point.", 1, true))
         H.truthy(module:find("-- Consumed via:", 1, true))
         local shot = assert(entry:find('_variant_install = _variant_install.bind(mod:dofile("scripts/mods/character_weapon_variants/_lib_network_lookup"))', 1, true))
-        local melee = assert(entry:find('_variant_install.melee_factory = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_melee_owner").bind(_variant_install.network_lookup)', 1, true))
+        local melee = assert(entry:find('_variant_install.melee_factory = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_melee_owner").bind(\n\t_variant_install.network_lookup,\n\tmod:dofile("scripts/mods/character_weapon_variants/_cwv_profile_graph_transaction"),\n\tmod:dofile("scripts/mods/character_weapon_variants/_cwv_guard428_old_musket_sweep"))', 1, true))
         local install = assert(entry:find('_variant_install = mod:dofile("scripts/mods/character_weapon_variants/_cwv_musket_runtime")', 1, true))
         local router = assert(entry:find('_variant_install.install_template_router()', 1, true))
         local equip = assert(entry:find('mod:dofile("scripts/mods/character_weapon_variants/_cwv_musket_equip_surface")', 1, true))
@@ -50,8 +50,8 @@ return function(H, root)
             local value = original(self, path)
             if path:match("/_cwv_old_musket_melee_owner$") then
                 local bind = value.bind
-                return { bind = function(helper)
-                    local new = bind(helper)
+                return { bind = function(helper, mechanics, sweep_guard_factory)
+                    local new = bind(helper, mechanics, sweep_guard_factory)
                     return function(opts)
                         if patch then patch(opts, c) end
                         local owner = new(opts)

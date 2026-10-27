@@ -1,5 +1,28 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.555-dev (2026-10-27) -- Retained Old Musket bayonet authority (#428) [not-started]
+
+- Extract shared graph snapshots and raw-cell transaction mechanics behind one
+  entry-loaded owner. The Old Musket retains its exact donor, scaling, fallback,
+  career-extension, finish and admission policy; helper references are private.
+- Share the existing scalar-clone math and audit implementation with a private
+  detached factory. Detached planning does not publish or merge live audit state.
+- Keep exact complete historical producers in tracked mandatory fixtures;
+  portable coverage cannot turn green by skipping absent comparison inputs.
+- Retain the seven bayonet actions' exact profile/lookup/start authority through
+  four native start, selector, sweep and finish boundaries. Reject stale cached
+  or queued damage IDs before hits; preserve healthy native selection and tuples.
+- Interrupt once only when cleanup authority is proven. Changed action metadata
+  cannot inject an inherited callback. Partial cleanup stays a visible terminal
+  failure; never reset native latches, repair registries or retry unsafe cleanup.
+- Preserve literal false hand values and weak instance ownership. An observed
+  but unrecorded active action fails its named check without being adopted or
+  allocating a per-frame record; positively witnessed lifecycle exits may skip.
+- Execute complete captured native callers and VMF hook dispatch in required
+  portable tests, including same-oracle disconnected and adversarial controls.
+  This does not add a Javelin consumer, establish Stingray ABI/render/peer
+  acceptance, rescue arbitrary pre-seam native errors or prove historical cause.
+
 ## 0.1.553-dev (2026-10-26) -- Atomic Old Musket construction and admission (#428) [not-started]
 
 - Publish the Old Musket shot profile and complete bayonet profile/template

@@ -2,6 +2,16 @@
 
 ## #428 Old Musket local construction/admission
 
+- `test_cwv_construction_prerequisite.lua` covers the extracted private graph/
+  journal seam and shared real scalar cloner. The bounded review driver compares
+  actual frozen-before/current Musket outcomes (healthy, write/readback rollback,
+  intervening generation, retained loss), captured-function mutation, and actual
+  old/new live/detached resolved/legacy/mixed/sparse math plus audit. Complete
+  historical core/Musket producers are required tracked fixtures with provenance;
+  missing inputs fail, with no ignored globals/review paths. Same-oracle rollback,
+  preimage, function-capture, sparse-target and audit disconnections must turn the
+  relevant changed-path checks red; unrelated suites are not this proof.
+
 - `test_cwv_old_musket_melee_owner.lua` executes the complete installed bayonet
   constructor against required tracked base6.13 resolved native profiles,
   complete Handgun/Tuskgor source and the exact native firing callback. The
@@ -29,11 +39,39 @@
   router keeps native-first/styles/Crowbill/regular precedence, and only proven
   ranged fallback is legal after melee authority loss; otherwise it deliberately
   errors before selection, not a claim of graceful recovery from all bad data.
+- `test_cwv_old_musket_retained_sweep.lua` executes the real entry/private
+  construction/admission path, complete native ActionBase/Sweep/WUE modules and
+  complete VMF hook module from required tracked native93dea/VMF81bb sources.
+  Engine vectors, units, physics, animation IDs and network delivery are explicit
+  ledger collaborators, not ABI/rendered acceptance. No outside source or
+  ignored review directory is needed and these core cases may not SKIP.
+  Cover all7 starts, nil/left/right selector-once, callback drift, selected
+  profile/root/pair/map/generation/caches/queued-ID loss, valid later append,
+  independent native degradation, real interrupted/direct final-flush cleanup,
+  reused epochs, partial install/nil VMF return, exact ordinary errors/tuple
+  holes, weak-key cycles and bounded graph/default equivalence.
+- An error AFTER native Sweep.finish returns must preserve the exact object
+  and native stopping latch, suppress every later hit, avoid cleanup retry and
+  remain a named-check failure. Never turn partially completed cleanup into
+  PASS or forcibly clear the native latch. Ordinary proc errors can leave native
+  WUE timing uninitialized before the guarded Sweep seam; preserve/report them,
+  not blanket-swallow them or claim a global no-crash guarantee.
+- `issue428_old_musket_retained_sweep` uses exact private bootstrap capture and
+  checks the latest observed Old Musket bayonet. Swing immediately before the
+  command; no target/positive exit skips, current missing/tampered authority or
+  partial cleanup fails. This is not whole-lobby or rendered/co-op acceptance.
+- `test_cwv_old_musket_retained_edges.lua` pins independent-review regressions:
+  false/nil/left/right native hand semantics and tuple holes; initial non-nil
+  action metadata denial; changed/protected metatable callback containment;
+  unrecorded active context FAIL versus real native exit/transition/death SKIP.
+  Missing-record observation allocates no new table/closure or epoch and never
+  adopts/cleans the action. Exact raw/meta state and native instance-cycle
+  collection remain part of the same oracle; no repair or fifth hook.
 - Actual `_cwv_career_weapon_actions` plus shared integration must preserve
   admission after canonical career reconciliation. Wrong source/claim/owner,
   foreign prefix-only actions and original weapon/stance/interrupt tampering
-  still fail. Native Sweep strict start/cache/hit containment, native-first
-  assertion rescue and arbitrary foreign/hot-reload enumerators remain unproven.
+  still fail. Native engine ABI/playback, native-first assertion rescue and
+  arbitrary foreign/hot-reload enumerators remain unproven.
 
 - `test_cwv_old_musket_shot_owner.lua` covers atomic publication/readback rollback,
   native degradation, exact-template admission/seed refusal and latched firing

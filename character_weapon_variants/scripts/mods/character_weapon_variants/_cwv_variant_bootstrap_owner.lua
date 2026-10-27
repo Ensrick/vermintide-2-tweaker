@@ -6,6 +6,7 @@ local function install(mod, ctx, musket_construction)
 		"cwv bootstrap owner requires variant_definitions")
 	local admit_old_musket = type(musket_construction) == "table" and musket_construction.admit_old_musket
 	local check_old_musket = type(musket_construction) == "table" and musket_construction.check_old_musket
+	local register_sweep_check = type(musket_construction) == "table" and musket_construction.register_sweep_check
 	local network_lookup = type(musket_construction) == "table" and musket_construction.network_lookup
 	local old_musket_builder
 	local function install_items(owner, dependencies)
@@ -24,6 +25,11 @@ local function install(mod, ctx, musket_construction)
 			local ok, entry = pcall(old_musket_builder, { item_key = "cwv_es_musket_old", template = "unproven_template", base_weapon = "es_handgun" })
 			if not ok or entry ~= nil then return "#428 item admission did not reject an unproven Old Musket template" end
 		end)
+		if type(register_sweep_check) == "function" then
+			register_sweep_check(register)
+		else
+			register("issue428_old_musket_retained_sweep", function() return "#428 private retained Sweep registrar disconnected" end)
+		end
 	end
 
 	-- ============================================================

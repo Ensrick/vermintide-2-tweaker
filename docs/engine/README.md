@@ -81,7 +81,7 @@ subsystem docs.
 
 | Mod | Doc | Sites | Links into docs/engine |
 |---|---|---|---|
-| character_weapon_variants | `character_weapon_variants/ENGINE_SURFACE.md` | 53 | 02 03 05 06 09 10 11 |
+| character_weapon_variants | `character_weapon_variants/ENGINE_SURFACE.md` | 98 source hook registrations (2026-10-26 lint census: 94 prior + 4 retained Sweep) | 02 03 05 06 09 10 11 |
 | cosmetics_tweaker | `cosmetics_tweaker/ENGINE_SURFACE.md` | ~70 | 02 03 05 06 09 11 |
 | weapon_tweaker | `weapon_tweaker/ENGINE_SURFACE.md` | 30 (25 live + 5 dormant BR) | 01 02 03 05 06 09 11 |
 | general_tweaker_dev | `general_tweaker_dev/ENGINE_SURFACE.md` | ~110 | 01 02 03 04 07 08 09 10 11 |

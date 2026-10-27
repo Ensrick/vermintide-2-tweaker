@@ -55,10 +55,50 @@ explicit engine-surface review:
   career handoff requires the exact shared clone-source token and canonical
   `ActionTemplates` references plus matching CWV claims, or exact inherited
   donor/canonical evidence; an arbitrary `action_career_*` name is not authority.
-  No retained native Sweep start/cache/hit safety or arbitrary foreign/hot-reload
-  enumerator safety is claimed. The router deliberately errors before selection
+  Retained local Sweep safety is separately bound below; arbitrary foreign/hot-reload
+  enumerator safety is not claimed. The router deliberately errors before selection
   if neither requested nor ranged authority exists; it is not a no-crash promise
   and cannot rescue a native-first assertion that already happened.
+- `_cwv_profile_graph_transaction.lua` is a pure graph/raw-cell leaf shared by
+  construction adapters. The entry loads it once and the Musket melee bind
+  captures its four function references privately; it owns no donor, math,
+  fallback, admission, hook or global owner registry. The Musket adapter remains
+  family-hardscoped and retains all of its finish/native/career policy.
+  Its opt-in `intact(snapshot, true)` requires an unfiltered capture and rejects
+  after at most captured-count+1 keys per table. Default exact transaction
+  readback is unchanged. Never capture a whole template in a frame callback.
+  `_cwv_core_templates.lua` now returns a private `detached_scalar_factory`
+  beside its existing live cloner. Both use the same math/audit implementation;
+  detached callers supply their own registries/source/publication journals and
+  receive an isolated audit check. Ordinary live audit and constructor ordering
+  are unchanged. No Javelin adapter/admission or live audit-merge consumer is
+  wired by this prerequisite; that remains a separately reviewed family change.
+- `_cwv_guard428_old_musket_sweep.lua` is entry-loaded once and passed by value
+  into the real melee construction owner. That owner compiles seven exact
+  action paths/four selected-profile snapshots; no public readiness predicate,
+  full-template frame census, registry repair or new shared framework exists.
+  Its four once-installed table-target hooks are WUE.start_action and
+  Sweep._get_damage_profile_name/_update_sweep/finish. Preserve existing hook
+  order and native selector's single invocation. Partial install denies fresh
+  admission while partial wrappers remain passthrough; VMF's nil hook return
+  is normal and does not prove live dispatch.
+  On owned loss, the private start token unwinds native continuation and the
+  canonical interrupted finish runs only with proven cleanup cells. During
+  finish, only the unsafe inner sweep is skipped. A returned Sweep.finish is
+  NOT proof that outer WUE cleanup completed: ordinary errors/latches remain
+  unchanged and partial cleanup is terminal, with no retry or later hits.
+  Weak-key record values contain no Sweep/extension/unit or back-reference.
+  Retain literal `action_hand=false` exactly (native uses its fallback); never
+  retain table/unit hand input. The seven admitted actions require nil metadata,
+  and changed action metatables prevent canonical cleanup without repair.
+  An unrecorded owned update stores only a constant row and weak latest Sweep:
+  it is suppressed, not adopted/cleaned, and its active named check fails.
+  Positively inactive/native-switched callers or destroyed units may skip.
+  `issue428_old_musket_retained_sweep` checks the most recent managed action;
+  legitimate lifecycle exit skips, active missing/tampered readback fails.
+  Native callbacks throwing before timings initialize can still make WUE.update
+  throw before the Sweep seam; this is explicitly not global exception rescue,
+  hot-reload adoption, engine ABI or co-op acceptance.
 - `_cwv_skin_registry.lua` owns base variant skin/combinations registration and
   the curated custom-illusion catalog. `_cwv_illusion_families.lua` immediately
   extends the returned `custom_skin_keys` table with the generated Spear,

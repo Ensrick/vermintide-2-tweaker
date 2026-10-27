@@ -912,6 +912,7 @@ local function _create_old_musket_template_melee()
 end
 
 _create_old_musket_template_melee()
+_old_musket_melee.install_sweep_guard(mod)
 end  -- end of do-block opened above _OLD_MUSKET_BAYONET_DAMAGE_MULT
 
 -- ============================================================
@@ -1011,11 +1012,11 @@ end)
 end
 
 return { network_lookup = _network_lookup, install_template_router = install_template_router, admit_old_musket = function(def)
-	return _old_musket_fire ~= nil and _old_musket_shot.admit(def) and _old_musket_melee.ready()
+	return _old_musket_fire ~= nil and _old_musket_shot.admit(def) and _old_musket_melee.runtime_admitted()
 end, check_old_musket = function()
 	if not _old_musket_fire then return "#428 existing Handgun callback was not installed" end
 	return _old_musket_shot.check(_old_musket_fire) or _old_musket_melee.check()
-end }
+end, register_sweep_check = _old_musket_melee.register_sweep_check }
 end
 
 return install

@@ -11,6 +11,8 @@ local MODULES_IN_INSTALL_ORDER = {
     "_cwv_musket_ammo_hud.lua",
     "_cwv_old_musket_shot_owner.lua",
     "_cwv_old_musket_melee_owner.lua",
+    "_cwv_profile_graph_transaction.lua",
+    "_cwv_guard428_old_musket_sweep.lua",
     "_cwv_musket_runtime.lua",
     "_cwv_musket_equip_surface.lua",
     "_cwv_husk_residency_owner.lua",

@@ -4,7 +4,8 @@
 -- an atomic boot transaction. Native donors, paired lookup IDs, source-map
 -- generation and the finished interrupt/stance template are retained proofs;
 -- native degradation requires the complete donor family, never unchecked names.
--- This owner adds no hooks and does not guard an already-started native Sweep.
+-- The private entry-bound guard consumes only this owner's seven action rows;
+-- construction proof and retained native action proof remain distinct.
 -- Later career reconciliation needs exact canonical references/claims; a
 -- career-looking action name alone never exempts a foreign addition.
 --
@@ -18,53 +19,24 @@ local CLONE_SOURCE = "__vt2_tweaker_career_action_clone_source"
 local CAREER_SOURCE = TEMPLATE .. "<-" .. DONOR
 local SOURCES = { heavy_slashing_tank = true, heavy_slashing_smiter_stab_polearm = true,
     medium_spear_smiter_stab = true, medium_slashing_linesman_spear = true }
+local ACTION_FIELDS = { "kind", "damage_profile", "damage_profile_left", "damage_profile_right",
+    "weapon_mode_key", "weapon_mode_overrides", "lookup_data", "buff_data", "finish_function",
+    "keep_block", "action_aborted_flow_event", "cooldown", "enter_function", "action_selector",
+    "baked_sweep", "baked_sweep_left", "baked_sweep_right", "damage_window_start", "damage_window_end",
+    "anim_end_event", "anim_end_event_1p", "anim_end_event_3p", "anim_end_event_condition_func", "looping_anim" }
+local CLEANUP_FIELDS = { "finish_function", "keep_block", "action_aborted_flow_event", "cooldown" }
+local CLEANUP_READS = { "kind", "buff_data", "anim_end_event", "anim_end_event_1p", "anim_end_event_3p",
+    "anim_end_event_condition_func", "looping_anim" }
 local function finite(value)
     return type(value) == "number" and value == value and value ~= math.huge and value ~= -math.huge
 end
 local function integer(value)
     return finite(value) and value >= 0 and value < 9007199254740991 and value % 1 == 0
 end
-local function capture(value, max_nodes, max_cells, include)
-    local nodes, seen, cells = {}, {}, 0
-    local function visit(t)
-        if seen[t] then return true end
-        if #nodes >= max_nodes then return false end
-        seen[t] = true
-        local row = { target = t, meta = getmetatable(t), fields = {}, count = 0, include = include }
-        nodes[#nodes + 1] = row
-        for key, child in next, t do
-            if not include or include(t, key) then
-            cells = cells + 1
-            if cells > max_cells then return false end
-            row.count = row.count + 1
-            row.fields[#row.fields + 1] = { key, child }
-            if type(child) == "table" and not visit(child) then return false end
-            end
-        end
-        return true
-    end
-    return type(value) == "table" and visit(value) and nodes or nil
-end
-local function intact(nodes)
-    if not nodes then return false end
-    for i = 1, #nodes do
-        local row, count = nodes[i], 0
-        if getmetatable(row.target) ~= row.meta then return false end
-        for j = 1, #row.fields do
-            local cell = row.fields[j]
-            if rawget(row.target, cell[1]) ~= cell[2] then return false end
-        end
-        for key in next, row.target do
-            if not row.include or row.include(row.target, key) then count = count + 1 end
-        end
-        if count ~= row.count then return false end
-    end
-    return true
-end
 local function career_key(key)
     return type(key) == "string" and key:sub(1, 14) == "action_career_"
 end
-local function template_proof(template)
+local function template_proof(template, capture)
     local actions = rawget(template, "actions")
     local initial = { claims = rawget(template, CLAIMS), source = rawget(template, CLONE_SOURCE), rows = {} }
     initial.claims_snapshot = type(initial.claims) == "table" and capture(initial.claims, 256, 2048)
@@ -78,7 +50,7 @@ local function template_proof(template)
     end
     return capture(template, 1024, 8192, include), initial
 end
-local function extensions_intact(proof, action_templates)
+local function extensions_intact(proof, action_templates, intact)
     local template, initial = proof.template, proof.extensions
     local actions = rawget(template, "actions")
     if type(actions) ~= "table" then return false end
@@ -120,13 +92,6 @@ local function extensions_intact(proof, action_templates)
     end
     return true
 end
-local function disjoint(a, b)
-    if not a or not b then return false end
-    local seen = {}
-    for i = 1, #a do seen[a[i].target] = true end
-    for i = 1, #b do if seen[b[i].target] then return false end end
-    return true
-end
 local function profile_shape(profile)
     if type(profile) ~= "table" or type(rawget(profile, "charge_value")) ~= "string" then return false end
     local cleave, armor, target = rawget(profile, "cleave_distribution"), rawget(profile, "armor_modifier"), rawget(profile, "default_target")
@@ -163,9 +128,82 @@ end
 
 function M.new(opts)
     local helper, state = assert(opts.lookup_helper), assert(opts.state)
+    local mechanics = assert(opts.mechanics, "Old Musket private graph mechanics missing")
+    local capture, intact = mechanics.capture, mechanics.intact
+    local disjoint, commit = mechanics.disjoint, mechanics.commit
+    local sweep_factory = assert(opts.sweep_guard_factory, "Old Musket private retained Sweep factory missing")
     local read, write = opts.read or rawget, opts.write or rawset
     local owned, failure, emitted = nil, "not_constructed", {}
     local C = {}
+    local function sweep_capability(proof)
+        local actions, by_action, paths, total = rawget(proof.template, "actions"), {}, {}, 0
+        for group_name, group in next, actions do
+            if type(group) == "table" then
+                for name, action in next, group do
+                    if type(action) == "table" and rawget(action, "kind") == "sweep" then
+                        -- Native7 are plain tables. Raw-absent cleanup cells
+                        -- cannot prove an inherited __index callback harmless.
+                        if getmetatable(action) ~= nil then return nil end
+                        local key = rawget(action, "damage_profile")
+                        local source = proof.mode == "custom" and type(key) == "string" and key:sub(#PREFIX + 1) or key
+                        local selected = proof.mode == "custom" and proof.custom[source] or proof.native[source]
+                        if not selected or by_action[action] then return nil end
+                        local row = { action = action, group = group, group_name = group_name, name = name,
+                            key = key, source = source, id = selected.id, profile = selected.profile, snapshot = selected.snapshot,
+                            meta = getmetatable(action), values = {}, cleanup_values = {}, lookup = rawget(action, "lookup_data") }
+                        for i = 1, #ACTION_FIELDS do row.values[i] = rawget(action, ACTION_FIELDS[i]) end
+                        for i = 1, #CLEANUP_READS do row.cleanup_values[i] = rawget(action, CLEANUP_READS[i]) end
+                        for i = 1, #CLEANUP_FIELDS do if rawget(action, CLEANUP_FIELDS[i]) ~= nil then return nil end end
+                        if rawget(action, "weapon_mode_key") ~= nil or rawget(action, "weapon_mode_overrides") ~= nil
+                                or rawget(action, "damage_profile_left") ~= nil or rawget(action, "damage_profile_right") ~= nil then return nil end
+                        row.lookup_snapshot = capture(row.lookup, 4, 16)
+                        local buff = rawget(action, "buff_data")
+                        row.buff_snapshot = buff ~= nil and capture(buff, 16, 64) or nil
+                        if not row.lookup_snapshot or (buff ~= nil and not row.buff_snapshot) then return nil end
+                        paths[group_name] = paths[group_name] or {}; paths[group_name][name] = row
+                        by_action[action], total = row, total + 1
+                    end
+                end
+            end
+        end
+        if total ~= 7 then return nil end
+        local function cleanup(row)
+            if getmetatable(row.action) ~= row.meta then return false end
+            for i = 1, #CLEANUP_FIELDS do if rawget(row.action, CLEANUP_FIELDS[i]) ~= nil then return false end end
+            for i = 1, #CLEANUP_READS do if rawget(row.action, CLEANUP_READS[i]) ~= row.cleanup_values[i] then return false end end
+            if row.buff_snapshot and not intact(row.buff_snapshot, true) then return false end
+            return true
+        end
+        local function valid(row)
+            if opts.profiles() ~= proof.profiles or opts.lookup() ~= proof.lookup or opts.weapons() ~= proof.weapons
+                    or rawget(proof.weapons, TEMPLATE) ~= proof.template or rawget(proof.template, "actions") ~= actions
+                    or rawget(actions, row.group_name) ~= row.group or rawget(row.group, row.name) ~= row.action
+                    or getmetatable(row.action) ~= row.meta then return false end
+            for i = 1, #ACTION_FIELDS do if rawget(row.action, ACTION_FIELDS[i]) ~= row.values[i] then return false end end
+            if not intact(row.lookup_snapshot, true) or (row.buff_snapshot and not intact(row.buff_snapshot, true))
+                    or rawget(proof.profiles, row.key) ~= row.profile or not intact(row.snapshot, true)
+                    or rawget(proof.lookup, row.key) ~= row.id or rawget(proof.lookup, row.id) ~= row.key then return false end
+            if proof.mode == "custom" then
+                local generation = rawget(state, "_cwv_damage_profile_generation")
+                if rawget(state, "_cwv_damage_profile_wire_source") ~= proof.map or not integer(generation)
+                        or generation < proof.generation or rawget(proof.map, row.key) ~= row.source
+                        or rawget(state, "_cwv_wire_fallback_profile_id") ~= proof.fallback then return false end
+            end
+            return true
+        end
+        return {
+            member = function(action) return by_action[action] end,
+            classify = function(root, group_name, name)
+                local group = type(root) == "table" and rawget(root, group_name)
+                local action = type(group) == "table" and rawget(group, name)
+                local row = root == actions and paths[group_name] and paths[group_name][name] or by_action[action]
+                if row and (root ~= actions or group_name ~= row.group_name or name ~= row.name) then return nil, true end
+                return row, row ~= nil
+            end,
+            valid = function(row) local ok, result = pcall(valid, row); return ok and result == true end,
+            cleanup = cleanup,
+        }
+    end
     local function emit(reason, mode)
         if emitted[reason] then return end
         local count = 0
@@ -198,7 +236,7 @@ function M.new(opts)
         if not proof or opts.profiles() ~= proof.profiles or opts.lookup() ~= proof.lookup
                 or opts.weapons() ~= proof.weapons or rawget(proof.weapons, TEMPLATE) ~= proof.template
                 or not intact(proof.template_snapshot)
-                or not extensions_intact(proof, opts.action_templates and opts.action_templates()) then return false end
+                or not extensions_intact(proof, opts.action_templates and opts.action_templates(), intact) then return false end
         if proof.mode == "native" then return native_intact(proof) end
         if rawget(state, "_cwv_damage_profile_wire_source") ~= proof.map
                 or not integer(rawget(state, "_cwv_damage_profile_generation"))
@@ -217,13 +255,15 @@ function M.new(opts)
         return ok and result == true
     end
     function C.template()
-        return C.ready() and owned.template or nil
+        return C.runtime_admitted() and owned.template or nil
     end
-    local function rollback(changes)
-        for i = #changes, 1, -1 do
-            local row = changes[i]
-            if row.attempted then rawset(row[1], row[2], row.before) end
-        end
+    function C.install_sweep_guard(mod) return owned and owned.guard.install(mod) == true or false end
+    function C.runtime_admitted() return C.ready() and owned.guard.ready() end
+    function C.register_sweep_check(register)
+        register("issue428_old_musket_retained_sweep", function()
+            if not owned then return "#428 Old Musket retained Sweep capability not constructed" end
+            return owned.guard.check()
+        end)
     end
     local function construct(source, finish, mode)
         local profiles, lookup, weapons = opts.profiles(), opts.lookup(), opts.weapons()
@@ -297,7 +337,7 @@ function M.new(opts)
         if records ~= 7 or unique ~= 4 then return false, "consumer_family_changed" end
         -- This includes stance callback, interrupt installation and lookup metadata.
         if finish(template) ~= true then return false, "template_finish_rejected" end
-        local template_snapshot, extensions = template_proof(template)
+        local template_snapshot, extensions = template_proof(template, capture)
         if not template_snapshot then return false, "finished_template_unproven" end
         if mode == "custom" then
             -- The production finish is pure, but it remains an injected owner
@@ -315,20 +355,17 @@ function M.new(opts)
         local proof = { mode = mode, profiles = profiles, lookup = lookup, weapons = weapons,
             template = template, template_snapshot = template_snapshot, extensions = extensions, source = source, native = donors,
             custom = custom, map = map, generation = mode == "custom" and generation + records, fallback = first }
-        local ok = pcall(function()
+        local capability = sweep_capability(proof)
+        if not capability then return false, "sweep_capability_unproven" end
+        proof.guard = sweep_factory(capability)
+        local ok = commit(changes, function()
             if opts.profiles() ~= profiles or opts.lookup() ~= lookup or opts.weapons() ~= weapons
                     or rawget(weapons, DONOR) ~= source or not intact(source_snapshot)
                     or not native_intact(proof) then error("source changed during construction") end
-            for i = 1, #changes do
-                local row = changes[i]
-                if rawget(row[1], row[2]) ~= row.before then error("preimage changed") end
-                row.attempted = true
-                write(row[1], row[2], row[3], row[4])
-                if read(row[1], row[2], row[4]) ~= row[3] then error("publication readback rejected") end
-            end
+        end, function()
             if not retained(proof) then error("complete retained proof rejected") end
-        end)
-        if not ok then rollback(changes); return false, "family_commit_rejected" end
+        end, read, write)
+        if not ok then return false, "family_commit_rejected" end
         owned, failure = proof, nil
         emit("constructed", mode)
         return true
@@ -349,13 +386,23 @@ function M.new(opts)
     end
     return C
 end
-function M.bind(helper)
+function M.bind(helper, mechanics, sweep_guard_factory)
     assert(type(helper) == "table" and type(helper.register) == "function", "Old Musket melee lookup helper missing")
     local register = helper.register
+    assert(type(sweep_guard_factory) == "function", "Old Musket private retained Sweep factory missing")
+    local guard_factory = sweep_guard_factory
+    local captured = {}
+    for _, name in ipairs({ "capture", "intact", "disjoint", "commit" }) do
+        local value = type(mechanics) == "table" and rawget(mechanics, name)
+        assert(type(value) == "function", "Old Musket private graph function missing: " .. name)
+        captured[name] = value
+    end
     return function(opts)
         local private = {}
         for key, value in pairs(opts) do private[key] = value end
         private.lookup_helper = { register = register }
+        private.mechanics = captured
+        private.sweep_guard_factory = guard_factory
         return M.new(private)
     end
 end
