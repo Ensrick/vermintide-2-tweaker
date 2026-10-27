@@ -930,10 +930,10 @@ end)
 -- overflow threshold). This guard FAILS if a real setting-READ for that toggle is
 -- reintroduced (gating the feature again). It checks the setting-read shape, not the
 -- bare string, so the explanatory comment naming the removed toggle does not trip it.
--- Anchored on mod.on_setting_changed (a `mod.` field in the MAIN file). Split needle;
--- no-op when source unreadable.
+-- Anchored on the existing opener in the same menu-shell owner as compaction.
+-- Split needle; no-op when source unreadable.
 _rt_register("mod_tweaker_compact_esc_implicit", function()
-    local ok, info = pcall(debug.getinfo, mod.on_setting_changed or function() end, "S")
+    local ok, info = pcall(debug.getinfo, mod.gut_open_mod_tweaker or function() end, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
     local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip

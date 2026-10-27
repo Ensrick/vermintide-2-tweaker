@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "purpose": "mandatory exact portable old-path fixture, not a reconstructed algorithm",
+  "source_commit": "8e18cafd2523af9b217e4515d8a5252d3be6a5d9",
+  "current_context_commit": "a288f05142bb2bccaf12ecb76c9279616212b620",
+  "also_exact_source": "87c6786a8bf77f78a713e8c31f72e32363f2572b",
+  "source_path": "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/gui_tweaker_dev.lua",
+  "source_git_blob": "5b5e4822862a097ba0c8a3ff92f31c2f63c65e99",
+  "first_physical_line": 436,
+  "last_physical_line": 806,
+  "normalization": "Git LF source bytes; trailing blank separator excluded",
+  "fixture_path": "qa/lua/fixtures/gut_saved_loadout_commands_gui365.lua",
+  "fixture_bytes": 18273,
+  "fixture_sha256": "5091420ef1b467db4fbc209d46261260a2c1ea39da902deafa415dbfff377caa",
+  "source_body_canonical_lines": 347
+}

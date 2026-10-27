@@ -1,5 +1,29 @@
 # Regression Checklist — gui_tweaker_dev
 
+## #2 native menu-shell owner
+
+- The entry remains at or below 1415 canonical lines; view remains at its 1685 ratchet.
+- Preserve the three private phase boundaries and all existing module/check/lifecycle order.
+- Focused actual-entry/complete-child cases compare callbacks, errors, late collaborators,
+  localization retries, compaction and raw host state with the exact portable GUI365 span.
+- Same-oracle disconnection/order controls and the real #93 forbidden-toggle source control fail.
+- The #153/#292 check remains registered in entry; only #93 follows its existing opener source.
+- Lua5.1 complete chunks compile within 200 locals. No graphics/input/ABI acceptance follows.
+
+
+## #2 legacy saved-loadout command owner
+
+- `test_gut_loadout_slot_policy.lua` retains its pure capability cases and drives
+  the complete owner through the real entry span, all three registered commands,
+  exact portable old body, live globals, errors, publication and return traces.
+- Retain private table-reference capture, late `policy.validate` lookup, #619
+  registration position and existing log/help/storage semantics. Disconnected
+  install/policy/set/publish controls must fail the same normal owner oracle.
+- The child loads no module and owns no hook/lifecycle/new public API. Keep
+  view1685, native-loadout and stable-stream boundaries unchanged. No live
+  renderer/backend acceptance is inferred from this partial #2 extraction.
+
+
 ## #2 standalone category-catalog ownership
 
 - `test_gut_view_catalog.lua` loads the complete catalog child through the actual

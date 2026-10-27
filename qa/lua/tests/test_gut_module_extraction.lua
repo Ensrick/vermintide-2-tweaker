@@ -53,6 +53,7 @@ return function(H, repo_root)
                 { source = state, name = "_mod_tweaker_state_interaction" },
             }
             if stream.dialogue then
+                owners[#owners + 1] = { source = main, name = "_gut_mod_tweaker_shell", api = "bind" }
                 owners[#owners + 1] = { source = view, name = "_mod_tweaker_view_rows" }
                 owners[#owners + 1] = { source = view, name = "_mod_tweaker_view_catalog", api = "bind" }
             end
@@ -186,5 +187,21 @@ return function(H, repo_root)
             H.truthy(package:find('"' .. stream.module_path .. '*"', 1, true),
                 "root Lua package glob was lost")
         end
+    end)
+
+    H.test("GUT saved-loadout owner bounded manifest inventory and neutral hook boundary", function()
+        local root = "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/"
+        local entry = read(root .. "gui_tweaker_dev.lua")
+        local child = read(root .. "_gut_saved_loadout_commands.lua")
+        H.equal(occurrences(entry, "scripts/mods/gui_tweaker_dev/_gut_saved_loadout_commands"), 1)
+        H.equal(occurrences(entry, "scripts/mods/gui_tweaker_dev/_gut_loadout_slot_policy"), 1)
+        H.truthy(child:find("function M.install(deps)", 1, true))
+        H.truthy(child:find("Owned by: gui_tweaker_dev.lua. Consumed via:", 1, true))
+        for _, needle in ipairs({ "mod:dofile(", "mod:hook(", "mod:hook_safe(", "function mod.on_", "function mod.update" }) do
+            H.equal(child:find(needle, 1, true), nil, "saved-loadout child acquired another authority")
+        end
+        H.equal(entry:find("local function _apply_loadout(", 1, true), nil)
+        H.truthy(read("gui_tweaker_dev/resource_packages/gui_tweaker_dev/gui_tweaker_dev.package")
+            :find('"scripts/mods/gui_tweaker_dev/*"', 1, true))
     end)
 end

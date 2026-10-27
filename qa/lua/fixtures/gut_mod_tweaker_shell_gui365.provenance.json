@@ -1,0 +1,17 @@
+{
+  "schema": 1,
+  "kind": "mandatory complete bounded historical entry span",
+  "repository_commit": "8e18cafd2523af9b217e4515d8a5252d3be6a5d9",
+  "source_path": "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/gui_tweaker_dev.lua",
+  "source_blob": "5b5e4822862a097ba0c8a3ff92f31c2f63c65e99",
+  "source_lines_inclusive": [1218, 1794],
+  "fixture_path": "qa/lua/fixtures/gut_mod_tweaker_shell_gui365.lua",
+  "fixture_bytes": 32620,
+  "fixture_sha256": "287742a070559c431378b4cee65312a6da1a02205cf26821fff6a05900a954d2",
+  "payload_bytes": 32574,
+  "payload_sha256": "61591cde82477955f7b71e75cde441e7cfa9daeee703cbdb802bd0189f45d2b4",
+  "packaging_trailer": "-- End of exact published menu-shell payload.\n",
+  "encoding": "UTF-8 without BOM, LF; exact published payload followed by the explicit 46-byte trailer",
+  "equivalence": "The consumer requires and removes the complete literal trailer before execution and error-line calculation. The complete 577-line payload is unchanged from published source, including its final blank line. No algorithm reconstruction, whole-entry copy, external checkout, runtime Git dependency or core SKIP.",
+  "consumer": "qa/lua/tests/test_gut_mod_tweaker_keep_routing.lua via gut_mod_tweaker_shell_harness.lua"
+}

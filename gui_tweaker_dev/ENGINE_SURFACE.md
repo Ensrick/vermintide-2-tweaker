@@ -107,6 +107,39 @@ state and stable GUI are unchanged. This is another partial #2 split, not the
 1,500-line target or live GUI acceptance. `test_gut_view_catalog.lua` exercises the
 complete child through actual parent binding/rebuild with detached table inputs.
 
+### Native Mod Tweaker menu-shell owner (#2)
+
+`_gut_mod_tweaker_shell.lua` is inert until its entry-owned private handoff.
+Its three fixed phases preserve API install/dogfood/ESC, routing/localization,
+and compaction at their original positions. The entry retains the real API
+load, #630 probe load/new, #153/#292 named-check registration, contracts/UI
+integration loads, lifecycle handlers and late LA keepalive assignment.
+Fixed literal entry suppliers retain lazy view loads and retrying localization
+loads; a captured getter reads the entry's uninitialized-then-assigned LA cell.
+Managers, Localize, THP providers and dependency methods stay call-time reads.
+No new hook, public mod field, renderer/input policy or gameplay feature is added.
+
+The #93 compaction source check follows the existing `gut_open_mod_tweaker`
+function into this owner; the neighboring CIM write-through check stays anchored
+to entry. `test_gut_mod_tweaker_keep_routing.lua` drives the complete child and
+actual entry phases against a mandatory exact published GUI365 bounded fixture;
+`test_gut_engine_ui_loc.lua` retains localization data and owner-source checks.
+The entry ratchet is 1415 lines; the existing 1685-line view ratchet is unchanged.
+This is structural extraction, not whole-GUI completion or live acceptance.
+
+### Legacy saved-loadout command owner (#2, partial decomposition)
+
+`_gut_saved_loadout_commands.lua` receives the entry-loaded slot-policy table,
+registrar and debug helpers once and installs only the existing save/load/list
+commands plus `issue619_saved_loadout_live_slot_capability`, at their old order.
+Native globals and the existing presentation publisher remain call-time reads;
+gear/cosmetic namespaces, four-value apply results, pcall boundaries and storage
+policy are unchanged. New legacy command logic belongs here, not in the entry.
+Native loadouts remain in `_gut_native_loadouts.lua`; HUD, lifecycle, view and
+stable GUI owners are untouched. Portable actual-entry/old-body controls live in
+`test_gut_loadout_slot_policy.lua`. This is structural host proof, not game or
+backend acceptance; the exact lowered entry ratchet remains a partial #2 phase.
+
 ## Hook table
 
 ~135 registration sites across ~35 modules, grouped below into rows-of-concern.

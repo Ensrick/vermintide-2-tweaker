@@ -1,5 +1,23 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.366-dev (2026-10-26) -- Retain entry command and menu owners (#2) [not-started]
+
+- Give the existing saved-loadout commands and native-menu shell explicit
+  private owners, preserving command registration, save/load/list behavior,
+  late engine and policy reads, menu routing, localization and lifecycle order.
+- Keep actual module loading and the contracts/UI integration at their original
+  entry locations. Preserve the adjacent CIM contract; the existing menu-source
+  check follows its real opener into the new owner without weakening its oracle.
+- Add portable published-body comparisons, complete-owner behavioral coverage
+  and disconnected, registration-order, late-read and raw-state adversaries.
+  Preserve the existing slot, localization and module-inventory assertions.
+- Lower the entry's exact ceiling from2252 to1415 lines; the new owners are361
+  and543 lines. The standalone view remains1685 lines and #2 is still partial.
+  No new hooks, settings, public GUI changes or human-test lifecycle is added.
+- Source and offline fixture proof do not establish installed game startup,
+  renderer/input, ABI or player acceptance. Normal build, protected QA and
+  canonical publication remain required before this version is current.
+
 ## 0.2.365-dev (2026-10-26) -- Retain category catalog owner (#2) [not-started]
 
 - Give the standalone view's existing category assembly one explicit owner.

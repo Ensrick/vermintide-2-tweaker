@@ -26,13 +26,13 @@
             RequiredModules = @('_gt_bot_update_fixes.lua', '_gt_bot_aid_owner.lua')
         }
         @{
-            # #2 partial slice: only the three mission-map check registrations
-            # move; the oversized Dev entry remains pending further owners.
+            # #2 entry slices: mission-map checks, legacy saved-loadout commands,
+            # and the native menu shell. Other GUI parents remain partial.
             Name = 'gui_tweaker_dev_map_checks'
             State = 'partial'
             Entry = 'gui_tweaker_dev/scripts/mods/gui_tweaker_dev/gui_tweaker_dev.lua'
-            CeilingLines = 2252
-            RequiredModules = @('_gut_runtime_checks_mission_map.lua')
+            CeilingLines = 1415
+            RequiredModules = @('_gut_runtime_checks_mission_map.lua', '_gut_saved_loadout_commands.lua', '_gut_mod_tweaker_shell.lua')
         }
         @{
             # #2 partial view slice: retained setting-row and category-catalog owners.

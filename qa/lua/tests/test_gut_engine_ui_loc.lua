@@ -50,19 +50,20 @@ return function(H, repo_root)
 
     H.test("GUT #153/#292 main file supplies the keys to the engine localizer", function()
         local main = read("gui_tweaker_dev/scripts/mods/gui_tweaker_dev/gui_tweaker_dev.lua")
+        local owner = read("gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_mod_tweaker_shell.lua")
         for _, key in ipairs(ENGINE_UI_LOC_KEYS) do
-            H.truthy(main:find('"' .. key .. '"', 1, true),
+            H.truthy(owner:find('"' .. key .. '"', 1, true),
                 key .. " absent from the ENGINE_UI_LOC_KEYS supply list")
         end
-        H.truthy(main:find(':gsub("%%%%", "%%")', 1, true),
+        H.truthy(owner:find(':gsub("%%%%", "%%")', 1, true),
             "the VMF %% escape collapse is missing")
-        H.truthy(main:find("pcall(loc.append_backend_localizations, loc, _engine_ui_localizations())",
+        H.truthy(owner:find("pcall(loc.append_backend_localizations, loc, _engine_ui_localizations())",
             1, true), "engine-UI keys are not appended to the backend localizer")
         H.truthy(main:find('"issue153_292_engine_ui_loc_supplied"', 1, true),
             "in-game loc-resolution regression check is missing")
         -- Re-registration path: the supply call must live inside the same
         -- function the LocalizationManager.init re-init hook drives.
-        H.truthy(main:find('mod:hook_safe("LocalizationManager", "init"', 1, true),
+        H.truthy(owner:find('mod:hook_safe("LocalizationManager", "init"', 1, true),
             "LocalizationManager re-init re-registration is gone")
     end)
 end
