@@ -8,16 +8,29 @@ local function install(mod, ctx, musket_construction)
 	local check_old_musket = type(musket_construction) == "table" and musket_construction.check_old_musket
 	local register_sweep_check = type(musket_construction) == "table" and musket_construction.register_sweep_check
 	local network_lookup = type(musket_construction) == "table" and musket_construction.network_lookup
+	local javelin = ctx.javelin_construction
+	local admit_javelin = type(javelin) == "table" and javelin.admit_javelin
+	local check_javelin = type(javelin) == "table" and javelin.check_javelin
 	local old_musket_builder
 	local function install_items(owner, dependencies)
 		local private = {}; for key, value in next, dependencies do private[key] = value end
 		private.old_musket_admission = admit_old_musket
+		private.javelin_admission = admit_javelin
 		private.network_lookup = network_lookup
 		local result = owner(mod, private)
 		old_musket_builder = _om.item_registration and _om.item_registration.build_entry
 		return result
 	end
 	local function register_checks(register)
+		register("issue428_tuskgor_javelin_construction", function()
+			if type(check_javelin) ~= "function" then return "#428 private Javelin construction owner disconnected" end
+			local verdict = check_javelin(); if verdict then return verdict end
+			if type(old_musket_builder) ~= "function" then return "#428 private item builder disconnected" end
+			for _, key in ipairs({ "cwv_es_javelin", "cwv_wh_javelin" }) do
+				local ok, entry = pcall(old_musket_builder, { item_key = key, template = "unproven_template", base_weapon = "we_javelin" })
+				if not ok or entry ~= nil then return "#428 item admission did not reject an unproven Tuskgor Javelin template" end
+			end
+		end)
 		register("issue428_old_musket_construction", function()
 			if type(check_old_musket) ~= "function" then return "#428 private Old Musket construction owner disconnected" end
 			local verdict = check_old_musket(); if verdict then return verdict end

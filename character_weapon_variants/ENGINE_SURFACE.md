@@ -516,3 +516,14 @@ API. It is not live owner/preview/husk/peer, physics, animation or package proof
 The whole render-registration fixture supplies only detached picker-install,
 log and memory-count collaborators at its existing startup tail; it executes no
 unrelated captured engine-facing checks or real picker installation.
+
+### #428 Javelin construction-only private boundary
+
+`_cwv_javelin_construction_owner.lua` adds no hook, command, RPC or asset. It is
+entry-loaded once with private graph/lookup/core-factory references. The existing
+runtime callback prepares the detached clone at its original install position;
+raw-cell publication/readback includes donor preview and private audit cells.
+Native source93dea911: complete javelin.lua, the four woods donor literals and
+complete native profile-resolution loop are tracked test inputs only. The sole
+PlayerProjectileUnitExtension.init/#1186 and #424 fire/ammo/spawn hooks remain
+byte-equivalent. Construction ownership is not retained projectile/engine ABI proof.

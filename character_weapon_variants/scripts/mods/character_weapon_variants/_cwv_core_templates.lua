@@ -63,7 +63,7 @@ local function new_profile_audit(PowerLevelTemplates)
 			return "skip: no numeric CWV clone construction was observed this session"
 		end
 	end
-	return audit_profile, check
+	return audit_profile, check, multiplier_audit
 end
 
 local function new_profile_cloner(DamageProfileTemplates, PowerLevelTemplates, record_source, register, audit_profile)
@@ -152,7 +152,7 @@ return function(mod, deps)
 	-- Retain the constructor's actual read-back proof, before another mod may
 	-- intentionally tune these profiles again. No synthetic engine writes and
 	-- no later comparison against a donor changed by WT's optional modifiers.
-	local audit_profile, profile_multiplier_check = new_profile_audit(PowerLevelTemplates)
+	local audit_profile, profile_multiplier_check, live_audit = new_profile_audit(PowerLevelTemplates)
 	_om._cwv_profile_multiplier_check = profile_multiplier_check
 
 -- Single registration site for every profile this module mints (multiplier
@@ -1394,10 +1394,32 @@ end  -- #284: end outrider grenade-launcher do-block
 			assert(type(profiles) == "table", "detached scalar profiles missing")
 			assert(type(record) == "function" and type(register) == "function",
 				"detached scalar journals missing")
-			local audit, check = new_profile_audit(levels)
+			local before = { profiles = rawget(live_audit, "profiles"), comparisons = rawget(live_audit, "comparisons"),
+				failure = rawget(live_audit, "failure") }
+			local audit, check, delta = new_profile_audit(levels)
+			local appended = false
 			return {
 				clone_damage_profile = new_profile_cloner(profiles, levels, record, register, audit),
 				check = check,
+				-- Only this private closure can contribute the detached audit to the
+				-- live ledger. The caller commits these raw cells in its SAME journal;
+				-- no cloner/source-generation/math replay occurs after publication.
+				append_live_audit_changes = function(changes)
+					assert(type(changes) == "table" and not appended, "detached audit journal reused")
+					assert(check() == nil, "detached audit contribution unproven")
+					for _, key in ipairs({ "profiles", "comparisons", "failure" }) do
+						assert(rawget(live_audit, key) == before[key], "live audit preimage changed")
+					end
+					assert(type(before.profiles) == "number" and type(before.comparisons) == "number", "live audit counter shape unproven")
+					local values = { profiles = before.profiles + delta.profiles, comparisons = before.comparisons + delta.comparisons }
+					values.failure = before.failure
+					if delta.failure ~= nil then values.failure = before.failure or delta.failure end
+					for _, key in ipairs({ "profiles", "comparisons", "failure" }) do
+						changes[#changes + 1] = { live_audit, key, values[key], "audit:" .. key, before = before[key] }
+					end
+					appended = true
+					return true
+				end,
 			}
 		end,
 	}

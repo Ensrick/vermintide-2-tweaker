@@ -180,6 +180,6 @@ return function(H, root)
         H.truthy(owner:find("captured[name] = value",1,true))
         H.truthy(entry:find("local _core_template_construction = mod:dofile(",1,true))
         H.truthy(entry:find("local _clone_damage_profile = _core_template_construction.clone_damage_profile",1,true))
-        H.equal(count(entry,"detached_scalar_factory"),0,"no Javelin consumer/admission rewrite yet")
+        H.equal(count(entry,"detached_scalar_factory"),1,"one private Javelin consumer binding")
     end)
 end

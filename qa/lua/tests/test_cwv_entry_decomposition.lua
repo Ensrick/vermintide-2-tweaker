@@ -150,6 +150,7 @@ return function(H, repo_root)
             "_cwv_illusion_families",
             "_cwv_husk_residency_owner",
             "_cwv_custom_mesh_runtime",
+            "_cwv_javelin_construction_owner",
             "_cwv_javelin_runtime_owner",
             "_cwv_rapier_runtime_owner",
             "_cwv_variant_bootstrap_owner",

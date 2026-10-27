@@ -1,5 +1,24 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.556-dev (2026-10-27) -- Atomic Tuskgor Javelin construction (#428) [not-started]
+
+- Prepare the complete Javelin profile/template family off-registry and publish
+  its lookup pairs, multiplier audit and source bookkeeping as one bounded
+  transaction. Reject foreign destinations and changed donor graphs without
+  overwriting their state; preserve the healthy constructor's native math,
+  first-encounter order, preview transforms and recovery behavior.
+- Admit fresh Javelin item and Blacksmith seed entries only from the exact
+  proven construction result. Unavailable saved crafts stay pending in CIM;
+  no deleting, rerolling or substituting owned items.
+- Preserve original nil preimages for prepared legacy power destinations so
+  prepare-time or later collisions cannot silently borrow a foreign cell.
+- Require the complete tracked native closure and prior-constructor identity
+  before ordinary Lua suites. Unreadable or altered required inputs fail the
+  actual checker with exit 2; missing comparison data is never a passing skip.
+- Keep shared graph/scalar helpers private and the Old Musket authority intact.
+  Portable construction/admission proof does not establish retained projectile
+  behavior, engine ABI, rendering, peer acceptance or historical crash cause.
+
 ## 0.1.555-dev (2026-10-27) -- Retained Old Musket bayonet authority (#428) [not-started]
 
 - Extract shared graph snapshots and raw-cell transaction mechanics behind one

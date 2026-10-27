@@ -2176,3 +2176,19 @@ fields, is idempotent, restores independently, and composes into WT's lifecycle
 callback owner. Source provenance: VT2
 `scripts/settings/equipment/weapon_templates/2h_axes.lua:185-1048`,
 `dual_wield_axes.lua:348-1775`, and `scripts/helpers/action_utils.lua:23-28`.
+
+## #428 finite-stack Javelin construction owner
+
+The entry manifest loads `_cwv_javelin_construction_owner` once, immediately
+before the existing Javelin runtime. It privately captures the already-loaded
+lookup helper, graph leaf and core detached scalar factory by value. The runtime
+prepares its original ammo/timing/animation clone without registry writes. One
+journal publishes four profiles, paired IDs, seven source encounters, the final
+template, selected donor preview cells and the live core audit contribution.
+
+Fresh `cwv_es_javelin`/`cwv_wh_javelin` item and Blacksmith construction consume
+that same private admission through the existing bootstrap/builder. Saved exact
+records remain untouched/pending on denial. Foreign templates/hot reload are not
+adopted. Add future construction policy here, not into projectile hooks. The
+existing #424/#1186 projectile/resource/wire seams and disabled bomb remain
+unchanged; retained native launch/finish/impact safety is separate and unproven.

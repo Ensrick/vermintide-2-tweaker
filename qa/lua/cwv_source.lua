@@ -17,6 +17,7 @@ local MODULES_IN_INSTALL_ORDER = {
     "_cwv_musket_equip_surface.lua",
     "_cwv_husk_residency_owner.lua",
     "_cwv_custom_mesh_runtime.lua",
+    "_cwv_javelin_construction_owner.lua",
     "_cwv_javelin_runtime_owner.lua",
     "_cwv_javelin_recovery_contract.lua",
     "_cwv_projectile_tunes.lua",

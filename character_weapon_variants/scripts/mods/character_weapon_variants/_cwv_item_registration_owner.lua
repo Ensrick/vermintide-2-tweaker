@@ -77,6 +77,8 @@ local _cwv_career_weapon_actions = ctx.cwv_career_weapon_actions
 local _career_action_owner = ctx.career_action_owner
 local _old_musket_admission = ctx.old_musket_admission
 local _old_musket_denials = 0
+local _javelin_admission = ctx.javelin_admission
+local _javelin_denials = 0
 
 -- ============================================================
 -- Item creation helper (shared by give command)
@@ -243,6 +245,21 @@ _om._cwv_key_for_item = function(backend_id, item_data)
 end
 
 local function _build_entry(def, backend_id)
+	-- #428: reject only NEW exact Javelin publication when its private family
+	-- proof is absent/lost. Saved user records remain untouched/pending; this
+	-- does not make arbitrary foreign/hot-reload enumerators safe.
+	if def and (def.item_key == "cwv_es_javelin" or def.item_key == "cwv_wh_javelin") then
+		local existing = ItemMasterList and rawget(ItemMasterList, def.item_key)
+		local ok, ready = pcall(_javelin_admission, def)
+		if (existing ~= nil and existing ~= _registered_keys[def.item_key]) or not ok or ready ~= true then
+			if _javelin_denials < 16 then
+				_javelin_denials = _javelin_denials + 1
+				pcall(printf, "[cwv:428] owner=javelin_item edge=build_entry admission=denied existing=%s count=%d/16",
+					tostring(existing ~= nil), _javelin_denials)
+			end
+			return nil
+		end
+	end
 	if def and def.item_key == "cwv_es_musket_old" then
 		local existing = ItemMasterList and rawget(ItemMasterList, def.item_key)
 		local ok, ready = pcall(_old_musket_admission, def)

@@ -230,6 +230,7 @@ local suites = {
     "test_cwv_candidate_diagnostic_route",
     "test_cwv_acquisition",
     "test_cwv_acquisition_runtime",
+    "test_cwv_javelin_construction",
     "test_cwv_javelin_pickup",
     "test_cwv_javelin_recovery_contract",
     "test_cwv_resolved_profile_multipliers",

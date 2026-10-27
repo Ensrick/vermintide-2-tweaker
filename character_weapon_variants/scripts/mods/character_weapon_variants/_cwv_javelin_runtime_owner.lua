@@ -6,6 +6,13 @@ local function install(mod, ctx)
 	local _dbg = assert(ctx.dbg, "cwv javelin owner requires dbg")
 	local _clone_damage_profile = assert(ctx.clone_damage_profile,
 		"cwv javelin owner requires clone_damage_profile")
+	local _construction = assert(ctx.construction_factory, "cwv Javelin private construction factory missing")({
+		state = _om, profiles = function() return DamageProfileTemplates end,
+		power_levels = function() return PowerLevelTemplates end,
+		lookup = function() return NetworkLookup and NetworkLookup.damage_profiles end,
+		weapons = function() return Weapons end, action_templates = ActionTemplates,
+		clone = function(value) return table.clone(value, true) end,
+	})
 	local _recovery = mod:dofile(
 		"scripts/mods/character_weapon_variants/_cwv_javelin_recovery_contract").new({
 		inventory_for = function(unit)
@@ -841,53 +848,6 @@ local function install(mod, ctx)
 		return func(self, pickup_unit, link_position, link_rotation, hit_unit, node_index)
 	end)
 
-	local function _clone_inline_throw_profile(source_name, prefix, damage_mult)
-		if not DamageProfileTemplates then return source_name end
-		local source = DamageProfileTemplates[source_name]
-		if not source then return source_name end
-
-		local new_name = prefix .. source_name
-		_om._record_cwv_dp_source(new_name, source_name)   -- issue 423 wire-safe map
-		if DamageProfileTemplates[new_name] then return new_name end
-
-		local clone = table.clone(source, true)
-
-		-- thrown_javelin shape (verified against
-		-- damage_profile_templates_dlc_woods.lua:263): default_target carries
-		-- power_distribution_near / power_distribution_far, each with .attack
-		-- (damage) and .impact (stagger). We multiply only .attack so "double
-		-- damage" doesn't accidentally amp stagger too. Also handle the generic
-		-- power_distribution case in case a future thrown profile uses it.
-		local function scale_target(target)
-			if type(target) ~= "table" then return end
-			if target.power_distribution_near and target.power_distribution_near.attack then
-				target.power_distribution_near.attack = target.power_distribution_near.attack * damage_mult
-			end
-			if target.power_distribution_far and target.power_distribution_far.attack then
-				target.power_distribution_far.attack = target.power_distribution_far.attack * damage_mult
-			end
-			if target.power_distribution and target.power_distribution.attack then
-				target.power_distribution.attack = target.power_distribution.attack * damage_mult
-			end
-		end
-
-		scale_target(clone.default_target)
-		if type(clone.targets) == "table" then
-			for _, t in ipairs(clone.targets) do scale_target(t) end
-		end
-
-		DamageProfileTemplates[new_name] = clone
-
-		if NetworkLookup and NetworkLookup.damage_profiles and not rawget(NetworkLookup.damage_profiles, new_name) then
-			local tbl = NetworkLookup.damage_profiles
-			local idx = #tbl + 1
-			rawset(tbl, idx, new_name)
-			rawset(tbl, new_name, idx)
-		end
-
-		return new_name
-	end
-
 	-- Module-scope so it can't be re-created per call (Lua closure identity matters
 	-- for VMF hook bookkeeping, and the function is small enough to share).
 	local function _always_false() return false end
@@ -958,14 +918,7 @@ local function install(mod, ctx)
 
 	-- ANIM ADDENDUM: this function only touches stats + (eventually) 3P fields.
 	-- 1P is universal across characters — see top-of-file ANIMATION ARCHITECTURE.
-	local function _create_tuskgor_javelin_template()
-		if not Weapons or not Weapons.javelin_template then
-			mod:warning("javelin_template not found — Tuskgor Javelin stat modifications unavailable")
-			return
-		end
-		if Weapons.tuskgor_javelin_template then return end
-
-		local template = table.clone(Weapons.javelin_template, true)
+	local function _prepare_tuskgor_javelin_template(template, _clone_damage_profile, _clone_inline_throw_profile)
 
 		-- Ammo system rewrite: finite stack, vanilla pickups refill.
 		if template.ammo_data then
@@ -1081,20 +1034,17 @@ local function install(mod, ctx)
 			template.wield_anim_career_3p[career] = wield
 		end
 
-		Weapons.tuskgor_javelin_template = template
+		return true
+	end
 
-		-- BASE TEMPLATE PATCH: HeroPreviewer (inventory character preview) reads
-		-- the base javelin_template's wield_anim_career_3p, NOT our clone's, so
-		-- the menu preview pose follows the vanilla javelin wield unless we
-		-- patch the base. Scoped tightly to Kruber + Saltzpyre careers so elf
-		-- careers fall through to the original wield_anim. Same pattern as
-		-- _create_imperial_dual_swords_template / _create_elven_sword_shield_template.
-		local base = Weapons.javelin_template
-		if base then
-			base.wield_anim_career_3p = base.wield_anim_career_3p or {}
-			for career, wield in pairs(_tj_wield_3p_by_career) do
-				base.wield_anim_career_3p[career] = wield
-			end
+	local function _create_tuskgor_javelin_template()
+		if not Weapons or not Weapons.javelin_template then
+			mod:warning("javelin_template not found — Tuskgor Javelin stat modifications unavailable")
+			return
+		end
+		if not _construction.construct(_prepare_tuskgor_javelin_template, _tj_wield_3p_by_career) then
+			mod:warning("Tuskgor Javelin construction denied; no new variant item or seed will be published")
+			return
 		end
 		mod:info("Created tuskgor_javelin_template (max_ammo=%d, ammo_pickups=on, no auto-catch, link_pickup stick, %.0f%% dmg, %.0f%% action speed, %.0f%% projectile speed, 3p wield=es_*->to_es_deus_01, wh_*->to_1h_sword_shield, wh_priest->to_1h_hammer_shield)",
 			_TJ_MAX_AMMO, _TJ_DAMAGE_MULT * 100, _TJ_SPEED_MULT * 100, _TJ_PROJECTILE_SPEED_MULT * 100)
@@ -1540,6 +1490,8 @@ local function install(mod, ctx)
 
 	return {
 		always_false = _always_false,
+		admit_javelin = _construction.admit,
+		check_javelin = _construction.check,
 	}
 end
 
