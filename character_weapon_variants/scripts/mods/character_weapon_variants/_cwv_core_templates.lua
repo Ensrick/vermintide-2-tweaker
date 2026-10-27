@@ -2,7 +2,10 @@
 --
 -- This module receives every entry-owned engine table explicitly, installs the
 -- original template constructors once in their original order, and returns only
--- the shared damage-profile clone used by later template families. It owns no
+-- the shared live damage-profile clone and a private detached scalar factory.
+-- Both use one math/audit implementation; ordinary live construction is unchanged.
+-- The detached factory has its own audit and requires caller-owned journals.
+-- It owns no
 -- hooks, commands, appearance decisions, or peer transport.
 --
 -- Owned by: character_weapon_variants.lua entry point.
@@ -11,23 +14,7 @@
 local _clone_damage_profile
 local _register_cwv_damage_profile
 
-return function(mod, deps)
-	deps = deps or {}
-	local _om = deps.om
-	local Weapons = deps.Weapons
-	local DamageProfileTemplates = deps.DamageProfileTemplates
-	local PowerLevelTemplates = deps.PowerLevelTemplates
-	local NetworkLookup = deps.NetworkLookup
-	local ItemMasterList = deps.ItemMasterList
-	local AttachmentNodeLinking = deps.AttachmentNodeLinking
-	local Projectiles = deps.Projectiles
-	local ActionTemplates = deps.ActionTemplates
-	local printf = deps.printf
-
-	assert(type(_om) == "table", "_cwv_core_templates requires deps.om")
-	-- Retain the constructor's actual read-back proof, before another mod may
-	-- intentionally tune these profiles again. No synthetic engine writes and
-	-- no later comparison against a donor changed by WT's optional modifiers.
+local function new_profile_audit(PowerLevelTemplates)
 	local multiplier_audit = { comparisons = 0, profiles = 0 }
 	local function power_row(value)
 		if type(value) == "string" then
@@ -70,50 +57,23 @@ return function(mod, deps)
 			end
 		end
 	end
-	_om._cwv_profile_multiplier_check = function()
+	local function check()
 		if multiplier_audit.failure then return "#1676 constructor read-back: " .. multiplier_audit.failure end
 		if multiplier_audit.profiles == 0 or multiplier_audit.comparisons == 0 then
 			return "skip: no numeric CWV clone construction was observed this session"
 		end
 	end
-
--- Single registration site for every profile this module mints (multiplier
--- clones and the #916 burn scrub): template row plus the bidirectional wire
--- index. Returns true once the profile is registered.
-_register_cwv_damage_profile = function(new_name, clone)
-	if not DamageProfileTemplates then return false end
-	DamageProfileTemplates[new_name] = clone
-
-	if NetworkLookup and NetworkLookup.damage_profiles and not rawget(NetworkLookup.damage_profiles, new_name) then
-		local tbl = NetworkLookup.damage_profiles
-		local idx = #tbl + 1
-		rawset(tbl, idx, new_name)
-		rawset(tbl, new_name, idx)
-	end
-	return true
+	return audit_profile, check
 end
 
--- ============================================================
--- Imperial Longsword template (modified Kruber Greatsword template)
--- -15% damage, +15% speed, +15% cleave, -15% stagger
--- ============================================================
-
--- CLARIFY: Damage-profile clone. Each cwv template clone calls this once per
--- sub-action's damage_profile string; the function is idempotent (early-return
--- on existing clone) so the same source profile shared across multiple
--- sub-actions is cloned only once.
--- Prefix-collision risk: prefixes are tied to the specific multiplier set
--- ("cwv_il_" = imperial longsword, "cwv_ess_" = elven sword+shield). DO NOT
--- reuse a prefix with different `mults` — the second caller will reuse the
--- first caller's already-mutated PowerLevelTemplates entry and silently inherit
--- the wrong multipliers.
-_clone_damage_profile = function(source_name, prefix, mults)
+local function new_profile_cloner(DamageProfileTemplates, PowerLevelTemplates, record_source, register, audit_profile)
+return function(source_name, prefix, mults)
 	if not DamageProfileTemplates then return source_name end
 	local source = DamageProfileTemplates[source_name]
 	if not source then return source_name end
 
 	local new_name = prefix .. source_name
-	_om._record_cwv_dp_source(new_name, source_name)   -- issue 423 wire-safe map
+	record_source(new_name, source_name)   -- issue 423 wire-safe map
 	if DamageProfileTemplates[new_name] then
 		audit_profile(new_name, source, DamageProfileTemplates[new_name], mults)
 		return new_name
@@ -168,11 +128,67 @@ _clone_damage_profile = function(source_name, prefix, mults)
 	end)
 	clone.critical_strike = scaled_reference(clone.critical_strike, scale_target)
 
-	_register_cwv_damage_profile(new_name, clone)
+	register(new_name, clone)
 	audit_profile(new_name, source, DamageProfileTemplates[new_name], mults)
 
 	return new_name
 end
+end
+
+return function(mod, deps)
+	deps = deps or {}
+	local _om = deps.om
+	local Weapons = deps.Weapons
+	local DamageProfileTemplates = deps.DamageProfileTemplates
+	local PowerLevelTemplates = deps.PowerLevelTemplates
+	local NetworkLookup = deps.NetworkLookup
+	local ItemMasterList = deps.ItemMasterList
+	local AttachmentNodeLinking = deps.AttachmentNodeLinking
+	local Projectiles = deps.Projectiles
+	local ActionTemplates = deps.ActionTemplates
+	local printf = deps.printf
+
+	assert(type(_om) == "table", "_cwv_core_templates requires deps.om")
+	-- Retain the constructor's actual read-back proof, before another mod may
+	-- intentionally tune these profiles again. No synthetic engine writes and
+	-- no later comparison against a donor changed by WT's optional modifiers.
+	local audit_profile, profile_multiplier_check = new_profile_audit(PowerLevelTemplates)
+	_om._cwv_profile_multiplier_check = profile_multiplier_check
+
+-- Single registration site for every profile this module mints (multiplier
+-- clones and the #916 burn scrub): template row plus the bidirectional wire
+-- index. Returns true once the profile is registered.
+_register_cwv_damage_profile = function(new_name, clone)
+	if not DamageProfileTemplates then return false end
+	DamageProfileTemplates[new_name] = clone
+
+	if NetworkLookup and NetworkLookup.damage_profiles and not rawget(NetworkLookup.damage_profiles, new_name) then
+		local tbl = NetworkLookup.damage_profiles
+		local idx = #tbl + 1
+		rawset(tbl, idx, new_name)
+		rawset(tbl, new_name, idx)
+	end
+	return true
+end
+
+-- ============================================================
+-- Imperial Longsword template (modified Kruber Greatsword template)
+-- -15% damage, +15% speed, +15% cleave, -15% stagger
+-- ============================================================
+
+-- CLARIFY: Damage-profile clone. Each cwv template clone calls this once per
+-- sub-action's damage_profile string; the function is idempotent (early-return
+-- on existing clone) so the same source profile shared across multiple
+-- sub-actions is cloned only once.
+-- Prefix-collision risk: prefixes are tied to the specific multiplier set
+-- ("cwv_il_" = imperial longsword, "cwv_ess_" = elven sword+shield). DO NOT
+-- reuse a prefix with different `mults` — the second caller will reuse the
+-- first caller's already-mutated PowerLevelTemplates entry and silently inherit
+-- the wrong multipliers.
+_clone_damage_profile = new_profile_cloner(DamageProfileTemplates, PowerLevelTemplates,
+    function(name, source) return _om._record_cwv_dp_source(name, source) end,
+    function(name, clone) return _register_cwv_damage_profile(name, clone) end,
+    audit_profile)
 
 -- ============================================================
 -- Infantry Spear (Kerillian spear moveset on Kruber's unshielded CW spear)
@@ -1369,5 +1385,20 @@ end  -- #284: end outrider grenade-launcher do-block
 
 	return {
 		clone_damage_profile = _clone_damage_profile,
+		-- Private construction planner only: callers supply detached registries
+		-- and publication/source journals. Its audit cannot mutate the live ledger.
+		detached_scalar_factory = function(options)
+			assert(type(options) == "table", "detached scalar options missing")
+			local profiles, levels = options.profiles, options.power_levels
+			local record, register = options.record_source, options.register
+			assert(type(profiles) == "table", "detached scalar profiles missing")
+			assert(type(record) == "function" and type(register) == "function",
+				"detached scalar journals missing")
+			local audit, check = new_profile_audit(levels)
+			return {
+				clone_damage_profile = new_profile_cloner(profiles, levels, record, register, audit),
+				check = check,
+			}
+		end,
 	}
 end

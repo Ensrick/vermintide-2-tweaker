@@ -29,11 +29,51 @@ career extension is accepted only through the exact clone-source token, current
 `ActionTemplates` identity and CWV shared claims (or exact inherited native
 donor/canonical proof); original weapon/stance/interrupt cells remain pinned.
 
-Native `ActionSweep.client_owner_start_action:171-193` still performs strict
-profile/lookup reads, and later Sweep code uses cached profile/ID state. No new
-action hook or retained-start/cache/hit guarantee belongs to this bounded
-construction/stance change. #423 sender containment and #474 visual calibration
-remain independent acceptance boundaries.
+## Old Musket retained local Sweep (#428)
+
+The private `_cwv_guard428_old_musket_sweep` factory is loaded once by the entry,
+bound by value through the real melee owner and installed after construction.
+The capability contains seven exact native action paths/four selected rows,
+bounded flat snapshots, source/map/generation and paired lookup cells. Custom
+and independently proven native-degraded modes have distinct authority.
+Unrelated valid later profile appends are permitted; shared registries are never
+repaired. Default graph transaction semantics remain exact; opt-in bounded
+readback stops at captured-count+1 keys and has no frame-time graph capture.
+
+| New singleton | Native93dea boundary | Containment / preserved behavior |
+|---|---|---|
+| `WeaponUnitExtension.start_action` | `weapon_unit_extension.lua:336-607`; native action call529, timings560+, enter572+ | Exact private synchronous start rejection unwinds before continuation; complete tuples/ordinary errors preserved. Known borrowed/replaced rows refuse before mutation. |
+| `ActionSweep._get_damage_profile_name` | `action_sweep.lua:1542-1544`, called171 after Base procs31-40, before strict176/178 | Check owned effective fields first; call the exact native selector once only. No native-profile init/restart or duplicated procs/FX. |
+| `ActionSweep._update_sweep` | `action_sweep.lua:347-365`, final flush1453-1458 | Prove active epoch, cached profile/ID and queued ID before overlap/replay. Lost authority canonically interrupts once; inside finish skip only the inner unsafe sweep. |
+| `ActionSweep.finish` | `action_sweep.lua:1450-1509`; outer WUE stop661-669 and cleanup671-740 | Private finish phase handles direct same-hand cleanup. Sweep return is not outer success: preserve ordinary errors/stuck native latch, retain terminal failure, no cleanup retry. |
+
+No existing CWV hook targeted these four methods before this slice. Table-form
+targets/methods are preflighted before any attempt; fresh once-install disables
+partial wrappers until all attempts return. VMF81bb4ce0 `core/hooks.lua:197-310`
+returns nil on success; complete VMF-dispatch tests, not a registration marker,
+cover the installed callback chain. Third-party duplicate refusal/hot-reload is
+not adopted or claimed safe. Missing install denies new Old Musket admission.
+Native selector1542-1544 treats false hand as fallback while start173 retains
+false; the guard preserves that literal without retaining foreign table/unit
+inputs. Initial action metadata must be nil, and a later metatable change
+blocks native cleanup, including inherited missing-field callbacks.
+
+Weak-key values contain only capability rows/scalars, not Sweep/caller/unit
+back-references (Lua5.1 is not ephemeron-safe). Named
+`issue428_old_musket_retained_sweep` checks the most recent observed managed
+action, not a lobby census; wield/swing immediately before checking. No active
+observation, successful lifecycle exit or destroyed unit skips; active authority
+loss and partial cleanup fail. An unrecorded owned update is itself an
+observation: suppress hits and report active start context unproven, without
+adoption, cleanup or a new frame record. Only a positively inactive/native-
+switched caller or destroyed unit skips. Complete native modules execute with
+explicit engine collaborators in tests, not Stingray ABI/physics proof. Ordinary callback
+errors before native timing initialization may make WUE.update fail before the
+Sweep hook; no extra broad catch/latch repair is introduced. #423 sender,
+#474/#1155 visual calibration and #1211 Wwise remain independent acceptance.
+Arbitrary foreign mutation of dispatch `action.kind` can likewise make native
+WUE.update876 fail before the inner fence; selected-profile safety is not a
+guarantee against all action-table mutation. No fifth hook is introduced.
 
 ## Greatsword remote post-wield retained adapter (#660)
 

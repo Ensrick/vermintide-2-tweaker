@@ -241,6 +241,12 @@ return function(H, root)
         MeleeNative.load(env, root, c.lookup)
         env.NetworkLookup = { damage_profiles = c.lookup, item_names = {} }
         env.ActionHandgun = { client_owner_post_update = function() end }
+        -- Constructor-only target shapes. Retained Sweep tests replace these
+        -- BEFORE entry installation with complete native modules + real VMF
+        -- dispatch; these no-op bodies are not a runtime/ABI proof.
+        env.WeaponUnitExtension = { start_action = function() end }
+        env.ActionSweep = { _get_damage_profile_name = function() end,
+            _update_sweep = function() end, finish = function() end }
         env.ItemMasterList = { es_handgun = { name = "es_handgun", key = "es_handgun", template = "handgun_template_1",
             item_type = "es_handgun", slot_type = "ranged", can_wield = {} } }
         local function load(name) return run(read(prefix .. name .. ".lua"), env, name) end

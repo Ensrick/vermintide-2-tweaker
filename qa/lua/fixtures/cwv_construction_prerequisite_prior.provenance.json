@@ -1,0 +1,33 @@
+{
+  "format": "VT2 required historical producer fixtures v1",
+  "purpose": "Complete unmodified before-extraction producers for the actual old/new construction prerequisite oracle; test-only, not runtime dependencies or native ABI evidence.",
+  "historical_core_context_commit": "4f1ea0c796c6d64b5e83a711765656abf8e2d766",
+  "fixtures": [
+    {
+      "path": "qa/lua/fixtures/cwv_construction_prerequisite_prior_core.lua",
+      "bytes": 63575,
+      "sha256": "920169d6f8bc694c38ae42786abd865a3cafe88ee064b4ce037ef7b54165d9b2",
+      "source_path": "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_core_templates.lua",
+      "source_git_commit": "4f1ea0c796c6d64b5e83a711765656abf8e2d766",
+      "source_git_blob": "72766ac135946d792653a1daabd8db9bc6fa6a8a"
+    },
+    {
+      "path": "qa/lua/fixtures/cwv_construction_prerequisite_prior_melee.lua",
+      "bytes": 19807,
+      "sha256": "86e3a64bed403c7df3a8b0b33e872694318539b67de8918ebe2d24485fde9a60",
+      "source_path": "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_melee_owner.lua",
+      "source_git_commit": "92b7b24d2e8d814f88b2fbf6671a4a0f622eca12",
+      "source_git_blob": "9e931d4540031603eb19e546709ff304d817519c",
+      "source_candidate": "issue428-combined-gui365-context/candidate",
+      "source_binding_sha256": "0a802826cc1f26ba3bd7f24e0944a45255bf21a1c827e3700694cd152c0f8b87",
+      "source_patch_sha256": "ee6ca28b9fd0872d9f3a048e073a32b5588211bc57bde1a8e89494c38e0a8e06",
+      "normalized_git_blob": "9e931d4540031603eb19e546709ff304d817519c"
+    }
+  ],
+  "rules": [
+    "These are exact complete source copies, without fixture-only rewrites or synthetic reconstruction.",
+    "The mandatory test reads both tracked fixtures directly; missing files fail suite loading, never skip healthy equivalence.",
+    "The older ranged-runtime fixture does not include the later bayonet finish-preimage transaction and is not a substitute.",
+    "Existing unchanged algorithm/control evidence belongs to the original prerequisite review; the portable-loader revision separately proves required loading without external source paths."
+  ]
+}

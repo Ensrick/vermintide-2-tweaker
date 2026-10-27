@@ -1,0 +1,56 @@
+[
+  {
+    "captured_utf8_sha256": "38e8fb06203cd4503ffbd3ea16a903d32f184beb6f427a7f28883edc56aeb5fd",
+    "raw_bytes": 5280,
+    "complete": true,
+    "key": "base",
+    "source": "scripts/unit_extensions/weapons/actions/action_base.lua",
+    "raw_sha256": "bb1dbb9bd3429ca24ab7f05c6cc91984e769d705e42118bfac9604de600985d0",
+    "root": "C:\\Users\\danjo\\source\\repos\\Vermintide-2-Source-Code"
+  },
+  {
+    "captured_utf8_sha256": "3b68314ea09f80fcd978fe5b0612a0a63e4d0b22f50e951122bda7fefa8dbd71",
+    "raw_bytes": 67385,
+    "complete": true,
+    "key": "sweep",
+    "source": "scripts/unit_extensions/weapons/actions/action_sweep.lua",
+    "raw_sha256": "7727965359b33667bcdc31282ae98c4c0190c24c151822708ffa316cadb697d0",
+    "root": "C:\\Users\\danjo\\source\\repos\\Vermintide-2-Source-Code"
+  },
+  {
+    "captured_utf8_sha256": "f3a72365973c0b4af11bcac0fb43b992c7fd01e98c3e459ac7cbc9422596a8be",
+    "raw_bytes": 54075,
+    "complete": true,
+    "key": "weapon",
+    "source": "scripts/unit_extensions/weapons/weapon_unit_extension.lua",
+    "raw_sha256": "f6513cc60766c7c9d96b250f9bb09c86514dceb6e5fd265406bdf44ac97e017d",
+    "root": "C:\\Users\\danjo\\source\\repos\\Vermintide-2-Source-Code"
+  },
+  {
+    "captured_utf8_sha256": "c5102ba3a691b81df2c1000dd39bffa0b1fb78d65541c0b1e3246f927bd11cd3",
+    "raw_bytes": 41592,
+    "complete": false,
+    "key": "utils",
+    "source": "scripts/helpers/action_utils.lua",
+    "raw_sha256": "c5f6176d6e59fd56b7a629c4b1a529cf73fa7e3096194ee010f0584d0155bd0a",
+    "root": "C:\\Users\\danjo\\source\\repos\\Vermintide-2-Source-Code"
+  },
+  {
+    "captured_utf8_sha256": "ba6eb69f85c222e6336f95c1d987838262a010dec0de0a3c69ab5434f35c4dde",
+    "raw_bytes": 13366,
+    "complete": false,
+    "key": "weapons",
+    "source": "scripts/settings/equipment/weapons.lua",
+    "raw_sha256": "55cd18e768d7e3ebdfb8dad3f436505dbe8a6de5200466f9bd783aac9468e0c5",
+    "root": "C:\\Users\\danjo\\source\\repos\\Vermintide-2-Source-Code"
+  },
+  {
+    "captured_utf8_sha256": "b6f7e6872e336c4ccfa8042a32a078d0c242d37c54077f53eab566d4f741792c",
+    "raw_bytes": 18976,
+    "complete": true,
+    "key": "vmf",
+    "source": "vmf/scripts/mods/vmf/modules/core/hooks.lua",
+    "raw_sha256": "b6f7e6872e336c4ccfa8042a32a078d0c242d37c54077f53eab566d4f741792c",
+    "root": "C:\\Users\\danjo\\source\\repos\\Vermintide-Mod-Framework"
+  }
+]

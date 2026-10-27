@@ -10,6 +10,8 @@
                 'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_musket_runtime.lua'
                 'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_shot_owner.lua'
                 'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_melee_owner.lua'
+                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_profile_graph_transaction.lua'
+                'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_guard428_old_musket_sweep.lua'
                 'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_variant_bootstrap_owner.lua'
                 'character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_item_registration_owner.lua'
             )
@@ -37,7 +39,7 @@
                     }
                     ReplayEdges = @{
                         instance_load = @{ Disposition='covered'; Evidence='actual private builder/seed refusal and exact CIM missing-master restore/retry preserve saved records without publishing an unproven fresh item' }
-                        initial_spawn = @{ Disposition='deferred'; Reason='native spawn and native Sweep start are not executed by this source admission contract' }
+                        initial_spawn = @{ Disposition='deferred'; Reason='complete native Sweep start is executed with ledger collaborators; actual unit spawn/Stingray ABI and rendered acceptance remain unproven' }
                         equip = @{ Disposition='deferred'; Reason='actual equipment spawn/destruction ABI remains live acceptance' }
                         wield = @{ Disposition='covered'; Evidence='the installed stance callback refuses an unproven target before mod_data, publication, ammo or destroy/add/wield; native rebuilt geometry remains unverified' }
                         customize = @{ Disposition='not-applicable'; Reason='this owner does not mutate model/illusion/glow customization' }
@@ -55,6 +57,15 @@
                         mod_disable_restore = @{ Disposition='not-applicable'; Reason='boot admission has no supported hot-reload/mod-disable registry replacement contract' }
                     }
                     Tests = @(
+                        @{
+                            Path = 'qa/lua/tests/test_cwv_old_musket_retained_sweep.lua'
+                            Names = @(
+                                '#428 retained Sweep healthy final native flush is not suppressed'
+                                '#428 retained Sweep outer error after Sweep returns retains terminal without cleanup retry'
+                            )
+                            Surfaces = @('owner_1p')
+                            ReplayEdges = @('wield')
+                        }
                         @{
                             Path = 'qa/lua/tests/test_cwv_old_musket_melee_owner.lua'
                             Names = @(
