@@ -36,7 +36,7 @@ mod._cim959_accessory_property_policy = mod:dofile(
 local _BULK_ACCESSORY_CRAFT = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_bulk_accessory_craft")
 _MEM_PROBE_T0_CIMD = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.8.144-dev"
+local MOD_VERSION = "0.8.145-dev"
 local _bootstrap = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_bootstrap_runtime")({
         mod = mod,
@@ -114,7 +114,11 @@ mod.CIM244_PROPERTY_VALUE_POLICY_MARKER_v0_8_74 = true
 -- Standard Keep crafting — same Athanor pattern: mutations are session-only because
 -- we block PlayFab commits while the forge is open. v0.2.0 crashed because we left
 -- the commit alive and PlayFab's anti-tamper rejected the modified inventory state.
-local _ok_sf, _err_sf = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded_dev/standard_forge")
+-- Canonical Apply and its private installation closure load once, before Forge.
+local _CIM_APPLY = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_illusion_apply_presentation").bind(
+    mod, mod:dofile("scripts/mods/crafting_in_modded_dev/_lib_local_illusion_apply"))
+local _ok_sf, _err_sf = _CIM_APPLY.install_forge_loaded(
+    pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded_dev/standard_forge"))
 if not _ok_sf then mod:error("Failed to load standard_forge: %s", tostring(_err_sf)) end
 
 -- #617: the Athanor list draws inventory icons on ui_top_renderer with the
@@ -141,7 +145,8 @@ end
 -- Modded-realm illusion swap (migrated from cosmetics_tweaker v0.8.49).
 -- Must load AFTER the forge core so `mod._cim_*` helpers are defined when
 -- the craft hook fires.
-local _ok_is, _err_is = pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded_dev/illusion_swap")
+local _ok_is, _err_is = _CIM_APPLY.install_loaded(
+    pcall(mod.dofile, mod, "scripts/mods/crafting_in_modded_dev/illusion_swap"))
 if not _ok_is then mod:error("Failed to load illusion_swap: %s", tostring(_err_is)) end
 
 -- SaveWeapon mod importer. One-shot chat command (and bindable VMF keybind)

@@ -46,6 +46,8 @@ DLC ownership is respected: skins with a `required_dlc` field in
 ItemMasterList only unlock if the player owns that DLC.
 ]]
 
+-- Owned by: Dev entry. Consumed via: its original protected illusion boundary.
+return function(Apply)
 local mod = get_mod("cim_dev")
 local _is_modded_realm = mod._cim_is_modded_realm or function() return false end
 local _with_eac_off = mod._cim_with_eac_off or function(func, self, ...)
@@ -277,8 +279,7 @@ end)
 -- ============================================================
 -- 2-4. Exact customization Apply presentation owner (#1465)
 -- ============================================================
-local _APPLY_PRESENTATION = mod:dofile(
-    "scripts/mods/crafting_in_modded_dev/_cim_illusion_apply_presentation")
+local _APPLY_PRESENTATION = Apply
 local _apply_owner = _APPLY_PRESENTATION.new({
     is_modded_realm = _is_modded_realm,
     with_eac_off = _with_eac_off,
@@ -615,3 +616,4 @@ end)
 -- earlier registration/load error therefore leaves Cosmetics on its own
 -- fail-closed fallback instead of advertising a partial CIM owner.
 _APPLY_PRESENTATION.install(mod, _apply_owner, mod._cim_rt_register)
+end

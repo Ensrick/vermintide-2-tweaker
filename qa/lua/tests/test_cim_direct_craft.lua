@@ -12,6 +12,7 @@ return function(H, repo_root)
     local context = fixture.context
     local with_craft_surface_globals = fixture.with_craft_surface_globals
     local make_craft_surface_mod = fixture.make_craft_surface_mod
+    local install_standard_forge = fixture.install_standard_forge
     local cwv_seed_fixture = fixture.cwv_seed_fixture
 
     H.test("CIM #1141 direct craft entry paths share the guarded commit owner", function()
@@ -103,7 +104,7 @@ return function(H, repo_root)
             },
         }
         with_craft_surface_globals(mod, master, nil, function()
-            assert(loadfile(root .. "standard_forge.lua"))()
+            install_standard_forge(mod)
             mod._cim_craft_via_synth({ melee = true }, "weapon")
             mod._cim_craft_via_synth({ melee = true }, "weapon")
         end)
@@ -153,7 +154,7 @@ return function(H, repo_root)
             }))
 
             with_craft_surface_globals(mod, fixture.master, nil, function()
-                assert(loadfile(root .. "standard_forge.lua"))()
+                install_standard_forge(mod)
                 mod._cim_standard_forge_active = true
                 local crafting = {
                     _last_id = 0,
@@ -203,7 +204,7 @@ return function(H, repo_root)
                 note_craft = function() noted = noted + 1 end,
             }))
             with_craft_surface_globals(mod, fixture.master, nil, function(surface)
-                assert(loadfile(root .. "standard_forge.lua"))()
+                install_standard_forge(mod)
                 mod._cim_standard_forge_active = true
                 local native_get = Managers.backend.get_interface
                 local sources_read, observer_hits, receipts = 0, 0, 0
@@ -358,7 +359,7 @@ return function(H, repo_root)
                     end
                     return info(self, message, ...)
                 end
-                assert(loadfile(root .. "standard_forge.lua"))()
+                install_standard_forge(mod)
                 mod._cim_standard_forge_active = true
                 local prior = { "prior-request" }
                 local crafting = {
@@ -495,7 +496,7 @@ return function(H, repo_root)
             local in_flight = { state = "in-flight" }
             local crafting
             with_craft_surface_globals(mod, fixture.master, nil, function(surface)
-                assert(loadfile(root .. "standard_forge.lua"))()
+                install_standard_forge(mod)
                 mod._cim_standard_forge_active = true
                 crafting = {
                     _last_id = 40,
@@ -573,7 +574,7 @@ return function(H, repo_root)
         local unrelated = { state = "older-complete" }
         local in_flight = { state = "in-flight" }
         with_craft_surface_globals(mod, master, nil, function(surface)
-            assert(loadfile(root .. "standard_forge.lua"))()
+            install_standard_forge(mod)
             mod._cim_standard_forge_active = true
             local crafting = {
                 _last_id = 90,
@@ -693,7 +694,7 @@ return function(H, repo_root)
             local older = { state = "older-complete" }
             local in_flight = { state = "in-flight" }
             with_craft_surface_globals(mod, case.master, nil, function(surface)
-                assert(loadfile(root .. "standard_forge.lua"))()
+                install_standard_forge(mod)
                 mod._cim_standard_forge_active = true
                 if case.arrange then case.arrange() end
                 local crafting = {
@@ -746,7 +747,7 @@ return function(H, repo_root)
         }
         local unrelated = { state = "pending" }
         with_craft_surface_globals(mod, master, nil, function(surface)
-            assert(loadfile(root .. "standard_forge.lua"))()
+            install_standard_forge(mod)
             mod._cim_standard_forge_active = true
             local crafting = {
                 _last_id = 5,

@@ -188,3 +188,7 @@ uses engine `printf` rather than VMF mod logging; no backend, native realm or
 settings state is changed. The host suite executes the actual entry adapter
 and registered diagnostic callback in private environments, including native
 denials, absent-native fallbacks and a changed authority between two opens.
+
+## Private Apply installation closure (#1465)
+
+The entry once-loads canonical `_lib_local_illusion_apply` and inert `_cim_illusion_apply_presentation`, binding dependencies privately before the existing Forge boundary. The complete Forge/illusion bodies are inert installers. Their original `pcall(mod.dofile, mod, literal)` expressions evaluate first; only actual returned installers enter a second pcall. The facade retains bound VERSION/SCHEMA/new/install signatures, a single state callback at its old Forge position, and a private whole-Forge/count/raw-handler completion gate before UI/check/provider publication. Realm V2, native readonly/clamp, late entry commit guard and legacy craft/Temper/persistence owners stay unchanged. Existing Forge helper loads are pre-existing debt; no new nested load is added. A nil hook return certifies neither success nor rejection. Failed/repeated private attempts deny NEW UI publication, not legacy-hook rollback or prior-provider revocation.

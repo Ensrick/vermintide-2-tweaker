@@ -240,6 +240,9 @@ return function(H, repo_root)
         end
         function mod:command() end
         function mod:dofile(path)
+            if path == "scripts/mods/crafting_in_modded_dev/standard_forge" then
+                return assert(loadfile(root .. "standard_forge.lua"))()
+            end
             if path:find("_cim_direct_craft_owner", 1, true) then
                 return install_direct_owner
             end
@@ -269,6 +272,21 @@ return function(H, repo_root)
             return nil
         end
         return mod
+    end
+
+    -- Execute the complete actual Forge on this exact fixture mod. The
+    -- private capsule must observe its real state-handoff; no readiness stub.
+    local function install_standard_forge(mod)
+        local Facade = assert(loadfile(root .. "_cim_illusion_apply_presentation.lua"))()
+        local Shared = assert(loadfile(root .. "_lib_local_illusion_apply.lua"))()
+        local apply = Facade.bind(mod, Shared)
+        local ok, problem = apply.install_forge_loaded(pcall(mod.dofile, mod,
+            "scripts/mods/crafting_in_modded_dev/standard_forge"))
+        H.equal(ok, true, tostring(problem))
+        H.equal(type(mod.hooks._update_state_craft_button), "function")
+        H.equal(type(mod.hooks.craft), "function")
+        H.equal(type(mod._cim_craft_via_synth), "function")
+        return apply
     end
 
     local function cwv_seed_fixture(suffix)
@@ -372,6 +390,7 @@ return function(H, repo_root)
         with_globals = with_globals,
         with_craft_surface_globals = with_craft_surface_globals,
         make_craft_surface_mod = make_craft_surface_mod,
+        install_standard_forge = install_standard_forge,
         cwv_seed_fixture = cwv_seed_fixture,
     }
 end

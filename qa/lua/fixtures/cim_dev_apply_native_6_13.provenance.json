@@ -1,0 +1,85 @@
+{
+  "schema": 1,
+  "scope": "Mandatory Dev Apply native6.13/complete VMF closure; no external fallback or gameplay acceptance",
+  "original_frozen_binding": "2c0cadc8185924fb4e39ba4b148e1449b1d8f2b1e05003dbdc4ff3b14becfc70",
+  "source_records": [
+    {
+      "repository": "native",
+      "commit": "93dea911a4cc464a0eb51cfdc3a443297bfc4550",
+      "path": "scripts/ui/views/hero_view/windows/hero_window_item_customization.lua",
+      "git_blob": "be11367c20c292bc36eecf33f715dbdff0cab47d",
+      "bytes": 84694,
+      "sha256": "7abc1091dc03dacfb168c44033d5fed7461d2baff62b000bf906e85033e50538"
+    },
+    {
+      "repository": "native",
+      "commit": "93dea911a4cc464a0eb51cfdc3a443297bfc4550",
+      "path": "scripts/ui/views/hero_view/windows/definitions/hero_window_item_customization_definitions.lua",
+      "git_blob": "4592c49aabbf7ff6f03b50384d942598d032f928",
+      "bytes": 41033,
+      "sha256": "a9eba4233d7c3450f8956395e5eb21b937339c456477443373eec7f48f252f42"
+    },
+    {
+      "repository": "native",
+      "commit": "93dea911a4cc464a0eb51cfdc3a443297bfc4550",
+      "path": "scripts/ui/views/menu_input_description_ui.lua",
+      "git_blob": "67ae2680b3e87b42bccda87175d775cecc50c4f8",
+      "bytes": 14698,
+      "sha256": "b390cd6b83b40dfe25797d9c4444dbc36a5511c98fb79a07a1bfd5b8cdc1781a"
+    },
+    {
+      "repository": "Vermintide-Mod-Framework",
+      "commit": "81bb4ce0d84e0060cc8a848f48aa7e6e635c2168",
+      "path": "vmf/scripts/mods/vmf/modules/core/safe_calls.lua",
+      "git_blob": "547c7b8188e4d706e2751663692a0e8d3f7050cd",
+      "bytes": 3484,
+      "sha256": "98ded4ea935ea2d65ab5b8235a24d459338f7a9746d73cb5eeb3d741d1eef1ae"
+    }
+  ],
+  "decoded": [
+    {
+      "name": "native_bind",
+      "bytes": 64,
+      "sha256": "508552236ac696c154dfa7562ea1596a861fabe04af40528862463bbaa6e6e03"
+    },
+    {
+      "name": "native_actions",
+      "bytes": 2578,
+      "sha256": "1c64c72bd73c40aa21d4a3e23797bd13082fd2bac551be920c7c8e24ba7f138e"
+    },
+    {
+      "name": "native_pressed",
+      "bytes": 1868,
+      "sha256": "3ab9ef1f68ff483970add8fa031115075a0b7474aef3ea52ae872307288a1ac5"
+    },
+    {
+      "name": "native_enable",
+      "bytes": 1123,
+      "sha256": "6de7da50da97b76f1630e78d005ea5b92f80ace30c093a3834780d948fac2ab4"
+    },
+    {
+      "name": "native_state",
+      "bytes": 1445,
+      "sha256": "6d5d7bbbbb4933a7e029efa6b7be9dba320822950871a5ce4881ad5b5572a12b"
+    },
+    {
+      "name": "native_gamepad",
+      "bytes": 828,
+      "sha256": "da5b158c357f12ea051963a39fb33136646b5c6da7751e68d25e22514ab4a86d"
+    },
+    {
+      "name": "native_action_setter",
+      "bytes": 199,
+      "sha256": "3cc9fd94c24b15132637cb2c59150bc9f88631248fb030688e69577532909691"
+    },
+    {
+      "name": "vmf_safe_calls",
+      "bytes": 3484,
+      "sha256": "98ded4ea935ea2d65ab5b8235a24d459338f7a9746d73cb5eeb3d741d1eef1ae"
+    }
+  ],
+  "fixture_bytes": 12941,
+  "fixture_sha256": "2d6ccbc0e3e8319e2abecad99c16ae75800a1f532978a166cc055c85b1a9ed92",
+  "recipe": "Exact quoted fields selected without reconstruction from the bound existing native fixture; original prior-public runtime fields deliberately omitted.",
+  "host_limit": "Only native vararg-xpcall support is supplied to complete unchanged VMF source; lower engine services and hook registry are host collaborators, not game/VMF hook ABI."
+}

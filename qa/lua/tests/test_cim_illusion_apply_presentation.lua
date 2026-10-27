@@ -3,10 +3,10 @@ return function(H, repo_root)
         .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_illusion_apply_presentation.lua"
     local Presentation = dofile(repo_root .. "/tools/shared_lib/_lib_local_illusion_apply.lua")
     local facade_loader = assert(loadfile(dev_path))
-    setfenv(facade_loader, setmetatable({
-        get_mod = function() return { dofile = function() return Presentation end } end,
-    }, { __index = _G }))
-    local CimPresentation = facade_loader()
+    setfenv(facade_loader, setmetatable({ get_mod = function() error("facade evaluation must be inert") end }, { __index = _G }))
+    local Facade = facade_loader()
+    local CimPresentation = Facade.bind({ hook = function() end }, Presentation)
+    local DevInstalled = dofile(repo_root .. "/qa/lua/fixtures/cim_dev_apply_installed.lua")
     local CosmeticsSwap = dofile(repo_root
         .. "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_modded_illusion_swap.lua")
 
@@ -279,25 +279,14 @@ return function(H, repo_root)
     end)
 
     H.test("CIM actual forge callback delegates Apply to the shared owner and preserves native returns", function()
-        local source = read(repo_root
-            .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/standard_forge.lua")
-        local helper_start = assert(source:find("local function _pack_results(...)", 1, true))
-        local helper_end = assert(source:find("\nend", helper_start, true)) + 3
-        local first = assert(source:find(
-            'mod:hook("HeroWindowItemCustomization", "_update_state_craft_button", function(', 1, true))
-        local last = assert(source:find("\nend)", first, true)) + 4
-        H.truthy(helper_start < first, "the real pack helper must be lexically available to the callback")
-        local install = assert(loadstring("return function(mod)\n"
-            .. source:sub(helper_start, helper_end) .. "\n" .. source:sub(first, last) .. "\nend"))()
+        local f = DevInstalled.installed(repo_root, { skip_illusion = true })
+        H.equal(#f.errors, 0)
         local state, owner, window, native_pressed = fixture()
         state.read_only_backend = true
         owner.on_pressed(native_pressed, window, 2, false, false)
-        local callback
-        install({ _cim_standard_forge_active = true, _cim_illusion_apply_presentation_owner = owner,
-            hook = function(_, class, method, fn)
-                H.equal(class, "HeroWindowItemCustomization"); H.equal(method, "_update_state_craft_button")
-                callback = fn
-            end })
+        f.mod._cim_standard_forge_active = true
+        f.mod._cim_illusion_apply_presentation_owner = owner
+        local callback = assert(f.hooks["HeroWindowItemCustomization._update_state_craft_button"])
         local a, b, c = callback(function(view)
             view._widgets_by_name.craft_button.content.button_hotspot.disable_button = true
             view._menu_input_description:change_generic_actions(state.actions.default)
@@ -309,22 +298,12 @@ return function(H, repo_root)
     end)
 
     H.test("CIM compatibility facade resolves exactly the bundled canonical owner", function()
-        local loader = assert(loadfile(dev_path))
-        local calls = 0
-        setfenv(loader, setmetatable({ get_mod = function(id)
-            H.equal(id, "cim_dev")
-            return { dofile = function(_, path)
-                calls = calls + 1
-                H.equal(path, "scripts/mods/crafting_in_modded_dev/_lib_local_illusion_apply")
-                return Presentation
-            end }
-        end }, { __index = _G }))
-        local facade = loader()
-        H.equal(facade.new, Presentation.new)
-        H.equal(facade.SCHEMA, Presentation.SCHEMA)
-        H.equal(Presentation.install, nil, "shared behavior must not bundle CIM-only hook registration")
-        H.equal(type(facade.install), "function")
-        H.equal(calls, 1)
+        local loader, calls = assert(loadfile(dev_path)), 0
+        setfenv(loader, setmetatable({ get_mod = function() calls = calls + 1; error("inert facade loaded dependency") end }, { __index = _G }))
+        local facade = loader().bind({ hook = function() end }, Presentation)
+        H.equal(facade.new, Presentation.new); H.equal(facade.SCHEMA, Presentation.SCHEMA)
+        H.equal(Presentation.install, nil, "shared behavior must not bundle CIM hook registration")
+        H.equal(type(facade.install), "function"); H.equal(calls, 0)
     end)
 
     local function chain(callbacks, vanilla)
@@ -341,13 +320,14 @@ return function(H, repo_root)
         state.hostile_enable = modded
         state.hostile_after_selection = modded
 
-        local dev_hooks = {}
-        local dev_mod = {
-            hook = function(_, _, method, callback)
-                dev_hooks[method] = callback
-            end,
+        local installed = DevInstalled.installed(repo_root, { skip_illusion = true })
+        H.equal(#installed.errors, 0)
+        local dev_mod = installed.mod
+        installed.capsule.install(dev_mod, owner, dev_mod._cim_rt_register)
+        local dev_hooks = {
+            _enable_craft_button = assert(installed.hooks["HeroWindowItemCustomization._enable_craft_button"]),
+            _on_illusion_index_pressed = assert(installed.hooks["HeroWindowItemCustomization._on_illusion_index_pressed"]),
         }
-        CimPresentation.install(dev_mod, owner, function() end)
 
         local cosmetics_hooks = {}
         local glow_refreshes = 0
@@ -673,85 +653,73 @@ return function(H, repo_root)
 
     H.test("CIM Dev #1465 publishes no provider after incomplete installation", function()
         local _, owner = fixture()
+        local function prepared()
+            local f = DevInstalled.installed(repo_root, { skip_illusion = true })
+            H.equal(#f.errors, 0)
+            H.equal(f.mod._cim_illusion_swap_provider, nil)
+            return f
+        end
         for _, contract in ipairs({
             { failure = "first-hook", hooks = 1, checks = 0 },
             { failure = "second-hook", hooks = 2, checks = 0 },
             { failure = "runtime-check", hooks = 2, checks = 1 },
         }) do
-            local hook_calls = 0
-            local check_calls = 0
-            local mod = {
-                hook = function()
-                    hook_calls = hook_calls + 1
-                    if contract.failure == "first-hook" and hook_calls == 1 then
-                        error("hook-registration-boom")
-                    end
-                    if contract.failure == "second-hook" and hook_calls == 2 then
-                        error("hook-registration-boom")
-                    end
-                end,
-            }
-            local function register_check()
-                check_calls = check_calls + 1
-                if contract.failure == "runtime-check" then
-                    error("check-registration-boom")
+            local f, hook_calls, check_calls = prepared(), 0, 0
+            local mod = f.mod
+            mod.hook = function()
+                hook_calls = hook_calls + 1
+                if (contract.failure == "first-hook" and hook_calls == 1)
+                        or (contract.failure == "second-hook" and hook_calls == 2) then
+                    error("hook-registration-boom")
                 end
             end
-            local ok = pcall(CimPresentation.install, mod, owner, register_check)
+            local function register_check()
+                check_calls = check_calls + 1
+                if contract.failure == "runtime-check" then error("check-registration-boom") end
+            end
+            local ok, failure = pcall(f.capsule.install, mod, owner, register_check)
             H.equal(ok, false)
-            H.equal(hook_calls, contract.hooks)
-            H.equal(check_calls, contract.checks)
+            H.truthy(failure:find(contract.failure == "runtime-check" and "check-registration-boom"
+                or "hook-registration-boom", 1, true), "keep original registration-failure cause")
+            H.equal(hook_calls, contract.hooks); H.equal(check_calls, contract.checks)
             H.equal(mod._cim_illusion_apply_presentation_owner, nil)
             H.equal(mod._cim_illusion_swap_provider, nil)
         end
-
-        local missing_hook_calls = 0
-        local missing_check = { hook = function()
-            missing_hook_calls = missing_hook_calls + 1
-        end }
-        H.equal(pcall(CimPresentation.install, missing_check, owner, nil), false)
+        local f, missing_hook_calls = prepared(), 0
+        local missing_check = f.mod
+        missing_check.hook = function() missing_hook_calls = missing_hook_calls + 1 end
+        local ok, failure = pcall(f.capsule.install, missing_check, owner, nil)
+        H.equal(ok, false); H.truthy(failure:find("requires a runtime-check registrar", 1, true))
         H.equal(missing_hook_calls, 0)
         H.equal(missing_check._cim_illusion_apply_presentation_owner, nil)
         H.equal(missing_check._cim_illusion_swap_provider, nil)
-
-        local incomplete_hook_calls = 0
-        local incomplete_mod = { hook = function()
-            incomplete_hook_calls = incomplete_hook_calls + 1
-        end }
-        H.equal(pcall(CimPresentation.install, incomplete_mod, {
-            on_enable = function() end,
-            on_pressed = function() end,
+        local incomplete, incomplete_hook_calls = prepared(), 0
+        local incomplete_mod = incomplete.mod
+        incomplete_mod.hook = function() incomplete_hook_calls = incomplete_hook_calls + 1 end
+        ok, failure = pcall(incomplete.capsule.install, incomplete_mod, {
+            on_enable = function() end, on_pressed = function() end,
             owns_illusion_swap = function() return true end,
-        }, function() end), false)
-        H.equal(incomplete_hook_calls, 0)
-        H.equal(incomplete_mod._cim_illusion_swap_provider, nil)
-
-        H.equal(pcall(CimPresentation.install, incomplete_mod, {
-            on_enable = owner.on_enable,
-            on_pressed = owner.on_pressed,
-            owns_illusion_swap = owner.owns_illusion_swap,
-            runtime_check = owner.runtime_check,
-        }, function() end), false, "a missing state-writer seam cannot publish a capability")
-        H.equal(incomplete_hook_calls, 0)
-
-        local calls = {}
-        local installed = {
-            hook = function(_, class, method, callback)
-                calls[#calls + 1] = { class, method, callback }
-            end,
-        }
-        local provider = CimPresentation.install(installed, owner, function(name, callback)
+        }, function() end)
+        H.equal(ok, false); H.truthy(failure:find("owner is incomplete", 1, true))
+        H.equal(incomplete_hook_calls, 0); H.equal(incomplete_mod._cim_illusion_swap_provider, nil)
+        ok, failure = pcall(incomplete.capsule.install, incomplete_mod, {
+            on_enable = owner.on_enable, on_pressed = owner.on_pressed,
+            owns_illusion_swap = owner.owns_illusion_swap, runtime_check = owner.runtime_check,
+        }, function() end)
+        H.equal(ok, false, "missing state-writer seam cannot publish a capability")
+        H.truthy(failure:find("owner is incomplete", 1, true)); H.equal(incomplete_hook_calls, 0)
+        local complete, calls = prepared(), {}
+        local installed = complete.mod
+        installed.hook = function(_, class, method, callback) calls[#calls + 1] = { class, method, callback } end
+        local provider = complete.capsule.install(installed, owner, function(name, callback)
             calls[#calls + 1] = { name, callback }
         end)
         H.equal(#calls, 3)
-        H.equal(calls[1][2], "_enable_craft_button")
-        H.equal(calls[2][2], "_on_illusion_index_pressed")
-        H.equal(calls[3][1], "issue1465_illusion_apply_presentation")
-        H.equal(calls[3][2], owner.runtime_check)
+        H.equal(calls[1][2], "_enable_craft_button"); H.equal(calls[2][2], "_on_illusion_index_pressed")
+        H.equal(calls[3][1], "issue1465_illusion_apply_presentation"); H.equal(calls[3][2], owner.runtime_check)
         H.equal(installed._cim_illusion_apply_presentation_owner, owner)
         H.equal(installed._cim_illusion_swap_provider, provider)
-        H.equal(provider.schema, 1)
-        H.equal(provider.owns_illusion_swap(), true)
+        H.equal(provider.schema, 1); H.equal(provider.owns_illusion_swap(), true)
     end)
 
     H.test("CIM Dev #1465 production wiring exposes one provider and named check", function()
@@ -759,15 +727,16 @@ return function(H, repo_root)
             .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/illusion_swap.lua")
         local forge_source = read(repo_root
             .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/standard_forge.lua")
-        H.truthy(source:find(
-            "scripts/mods/crafting_in_modded_dev/_cim_illusion_apply_presentation",
-            1, true) ~= nil)
+        local entry = read(repo_root .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua")
+        H.truthy(entry:find("scripts/mods/crafting_in_modded_dev/_cim_illusion_apply_presentation", 1, true))
+        H.truthy(source:find("local _APPLY_PRESENTATION = Apply", 1, true))
+        H.truthy(forge_source:find("Apply.install_forge_state()", 1, true))
         local install = "_APPLY_PRESENTATION.install(mod, _apply_owner, mod._cim_rt_register)"
         local install_at = source:find(install, 1, true)
         local last_command = source:find('mod:command("mirror_dump"', 1, true)
         H.truthy(install_at ~= nil)
         H.truthy(last_command ~= nil and install_at > last_command)
-        H.truthy(source:sub(install_at + #install):match("^%s*$") ~= nil)
+        H.truthy(source:sub(install_at + #install):match("^%s*end%s*$") ~= nil)
         H.equal(source:find("mod._cim_illusion_swap_provider =", 1, true), nil)
         H.truthy(source:find(
             "_apply_owner.complete(self, \"craft-complete\")", 1, true) ~= nil)
