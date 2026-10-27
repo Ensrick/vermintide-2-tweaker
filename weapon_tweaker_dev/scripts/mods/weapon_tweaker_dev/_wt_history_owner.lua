@@ -4,6 +4,7 @@
 -- historical state is their baseline. Reconciliation later reverts the
 -- ordinary 1H-Axe overlay, reprojects history, then reapplies that overlay.
 local M = {}
+local installed = setmetatable({}, { __mode = "k" })
 
 local function report(format, ...)
     local printer = rawget(_G, "printf")
@@ -15,9 +16,14 @@ end
 function M.install(config)
     local mod = assert(config.mod, "mod required")
     local module_root = assert(config.module_root, "module root required")
+    local retained = installed[mod]
+    if retained then return retained.owner, retained.verify end
     local catalog_module = mod:dofile(module_root .. "_wt_history_catalog")
     local policy = mod:dofile(module_root .. "_wt_history_policy")
     local runtime_module = mod:dofile(module_root .. "_wt_history_runtime")
+    local profile_transaction = config.profile_transaction
+    local dependencies = config.profile_dependencies
+    local lookup = type(dependencies) == "table" and dependencies.lookup or nil
     local catalog, catalog_error = catalog_module.load(mod)
     local owner = {
         catalog_error = catalog_error,
@@ -25,8 +31,9 @@ function M.install(config)
         runtime = nil,
     }
 
+    local verify
     if catalog then
-        owner.runtime = runtime_module.install({
+        owner.runtime, verify = runtime_module.install({
             catalog = catalog,
             is_server = function()
                 local managers = rawget(_G, "Managers")
@@ -35,6 +42,8 @@ function M.install(config)
             end,
             mod = mod,
             policy = policy,
+            profile_transaction = profile_transaction,
+            profile_dependencies = { lookup = lookup },
             roots = function()
                 return {
                     BuffTemplates = rawget(_G, "BuffTemplates"),
@@ -131,7 +140,17 @@ function M.install(config)
     mod._wt_reconcile_history_owner_stack = function(reason)
         return owner:reconcile(reason)
     end
-    return owner
+    -- Capture the named check here; registration stays at its old entry position.
+    local runtime = owner.runtime
+    local function named_check()
+        if not runtime then
+            return "#1436: historical weapon runtime was not installed"
+        end
+        if type(verify) ~= "function" then return "history verifier unavailable" end
+        return verify()
+    end
+    installed[mod] = { owner = owner, verify = named_check }
+    return owner, named_check
 end
 
 return M

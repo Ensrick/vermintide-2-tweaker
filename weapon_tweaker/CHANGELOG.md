@@ -1,5 +1,27 @@
 # Weapon Tweaker Changelog
 
+## 0.12.339-beta (2026-10-27) -- atomic historical profile publication (#428)
+
+### Changed
+
+- Prepare historical damage-profile families and their paired network lookup
+  entries as one bounded transaction instead of publishing partial state.
+- Keep native donor graphs, source identities, append order, callbacks and
+  existing pre-patch catalog/multiplier behavior. Reject changed authority and
+  roll back attempted publication instead of adopting foreign entries.
+- Pass the installed owner's private verification capability through the
+  existing composition; mutable public fields cannot replace that proof.
+- Preserve the independent Fire Sword, weapon-rework and mixed-peer fallback
+  behavior from the previous public beta. No new setting, hook or RPC.
+
+### Verification boundary
+
+- Source-qualified catalog, transaction, rollback and disconnection evidence is
+  covered by automated regression checks; final integrated gates are required.
+- The unrelated CWV native-career construction correction is not in this build.
+  Actual game startup, gameplay and peer acceptance remain unverified locally
+  because the VT2 executable is not installed. No engine ABI claim is implied.
+
 ## 0.12.338-beta (2026-10-26) -- Fire Sword heat and rework ownership (#942, #428, #1737)
 
 ### Why

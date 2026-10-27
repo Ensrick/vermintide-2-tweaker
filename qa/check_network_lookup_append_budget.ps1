@@ -243,7 +243,8 @@ try {
     }
 
     $supplemental = Assert-KnownUnscannedLookupOwners -RepoRoot $root -InventoryPath $SupplementalInventoryPath
-    if ($null -eq $supplemental -or $supplemental.Count -ne 2 -or $supplemental.Complete -ne $false) {
+    if ($null -eq $supplemental -or $supplemental.Count -ne 2 -or $supplemental.Complete -ne $false -or
+            $supplemental.ManualCount -notin @(0,2) -or $supplemental.MigratedCount -ne (2-$supplemental.ManualCount)) {
         throw 'supplemental owner validation did not return its exact bounded result'
     }
     $allRows = @()
@@ -274,8 +275,9 @@ try {
         if ($null -eq $currentTotal) { $currentTotal = 0 }
         if ($null -eq $baselineTotal) { $baselineTotal = 0 }
         Write-Host "[check_network_lookup_append_budget] heuristic_detected=$currentTotal baseline=$baselineTotal owners=$($current.Count)"
-        $minimum = $currentTotal + $supplemental.Count
-        Write-Host "[check_network_lookup_append_budget] pinned_unscanned=$($supplemental.Count) minimum_known_present=$minimum global_completeness=unproved"
+        $minimum = $currentTotal + $supplemental.ManualCount
+        Write-Host "[check_network_lookup_append_budget] pinned_unscanned=$($supplemental.ManualCount) minimum_known_present=$minimum global_completeness=unproved"
+        Write-Host "[check_network_lookup_append_budget] reviewed_history=$($supplemental.Count) history_manual=$($supplemental.ManualCount) history_migrated=$($supplemental.MigratedCount) historical_known_minimum_before_migration=48 global_completeness=unproved"
         foreach ($reduction in $comparison.Reductions) {
             Write-Host "  migration progress: $reduction" -ForegroundColor Green
         }

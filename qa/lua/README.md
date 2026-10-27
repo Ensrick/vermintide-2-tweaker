@@ -435,3 +435,12 @@ card remain required. The runner lists the suite explicitly.
   identities/order, live native-first authority and official tuple/error parity.
   Its #840 matrix uses the actual shared legacy bracket and unchanged Fresh
   assertions, including inactive/unsupported branches and raw flag restoration.
+
+- 'tests/test_wt_history_profile_transaction.lua': #428 executes the complete
+  production history owner/transaction and actual entry-installed named check
+  in isolated dependencies. All77 publication writes are independently made
+  throwing, discarded or proxy-routed; malformed/foreign/retained state and
+  metadata/raw/metatable rollback are behavioral cases. Existing source-oracle,
+  selected history, native fallback, parity and Axe composition cases remain.
+  'fixtures/wt_history_dependencies.lua' supplies real transaction/helper
+  dependencies to legacy direct-runtime cases; it substitutes no algorithm.

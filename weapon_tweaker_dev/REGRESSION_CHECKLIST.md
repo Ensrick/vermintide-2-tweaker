@@ -890,3 +890,18 @@ through all three native firing actions, OFF control, and the separate #431
 matched/mixed lobby recovery/floor checks. Offline identity preservation is not
 a fresh proof of network capacity or human gameplay acceptance. #428 remains
 an open repository architecture umbrella, outside the in-game test queue.
+
+### History batch transaction (#428)
+
+- Offline: execute actual history composition and original named callback in
+  both streams, exact sorted19 identities/order/content/native fallbacks,
+  every publication-write failure and exact raw/metatable rollback, missing or
+  foreign tuples, retained/pre-install method tamper and readiness-loss restore.
+- Keep Current no-write, selected-history/ordinary-Axe composition, exact
+  #431 catalog identity and sender floor, and later legitimate content tuning.
+- Preserve the47-block heuristic allowance. The two strict history pins are
+  explicitly source-reviewed migrated composites (local subset manual0,
+  migrated2), not deletions or a claim of a complete repository census.
+- Live acceptance remains the existing #1436 selected-weapon behavior and
+  reversed-role #431 multiplayer checks. No in-game acceptance is inferred
+  from this offline transaction proof.

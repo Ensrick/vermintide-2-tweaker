@@ -75,3 +75,39 @@ exact catalog and unconditional sender floor remain independent. Detached
 tests execute whole old/new balance modules, native data/clone snapshots,
 real entry call expressions and complete #431 capture/callback/floor owners;
 they do not establish actual game launch, projectile rendering or co-op play.
+
+## Historical profile batch local authority (#428)
+
+The existing history installation position now calls one
+'_wt_history_profile_transaction' child, using the manifested canonical
+'_lib_network_lookup.register' on a detached shadow before live publication.
+Its sorted nineteen private names, numeric order, initial profile contents and
+native fallback names remain unchanged. Current still performs no gameplay
+projection and this owner never writes PowerLevelTemplates. The original
+history-before-Bretonnian/balance/Axe-before-#431 order is unchanged; no hook,
+RPC, setting, private profile name or wire-floor policy is introduced.
+
+All profile/pair/fallback writes are read back as one batch. Rejected,
+discarded, throwing or partially foreign state restores the exact prior raw
+fields and metatables. Only previously published object identities may be
+reused. Same owning-module install repeats retain the original owner and
+profiles; this is not support for VMF hot reload. Module-private records are
+session ownership, not a claim about Lua5.1 weak-table ephemeron collection.
+
+The existing named 'issue1436_historical_weapon_patch_versions' callback
+receives the privately retained verification closure through the existing
+entry declaration, never a mutable public 'runtime.verify' fallback. Retained
+readiness checks publication tuple/metadata/primitive identity, not a deep
+freeze of later combat tuning. Axe and Bretonnian overlays clone their
+selected historical donor before modification; thermal direct-damage
+application does not edit that donor. If tuple authority is lost, reapply
+restores only still-owned history ledger leaves, reports failure, and never
+overwrites third-party drift.
+
+Source basis: native damage-profile lookup construction is
+'scripts/network_lookup/network_lookup.lua:2209', strict missing reads at
+':2360-2367'; the existing sender resolves and decodes profile integers at
+'scripts/systems/weapon/weapon_system.lua:182,243'. Detached production-owner
+tests establish local publication, identity and rollback. They do not establish
+historical crash causality, live animation/balance behavior or multiplayer
+acceptance; #431 parity/catalog/floor remains an independent authority.

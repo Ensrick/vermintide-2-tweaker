@@ -19,6 +19,9 @@
 #   3. Run `qa/check_build_receipts.ps1 -Staged` on EVERY non-empty commit.
 #      Exact staged runtime inputs and the root bundle must match the BuildOnly
 #      receipt; any source edit after BuildOnly is rejected until rebuilt.
+#   3a. On either exact file-size baseline JSON change (including deletion or
+#      rename), run check_file_sizes.ps1 -BaselineOnly -Staged before fast-return.
+#      This checks index JSON and changed-row Lua only, without a full scan.
 #   Then read `git diff --cached --name-only`. If no staged file matches
 #      `*.lua`, `*.cfg`, `*.ps1`, or `*.mod`, skip the remaining gates — pure
 #      docs / asset commits don't need them.
@@ -65,13 +68,37 @@ try {
 # We only care about commits that touch lua source, cfg, hook scripts, or
 # .mod entry points. Anything else (markdown, png, bundle binaries) is
 # either out of scope for these checks or already covered by CI on push.
+# #1751: exact baseline paths also matter on JSON-only/deletion/rename commits.
+# --no-renames exposes both sides as D/A; the ordinary source selector stays ACMR.
+$baselinePaths = @('qa/baselines/file_sizes.json', 'qa/baselines/file_sizes_target.json')
+try {
+    $previousPreference = $ErrorActionPreference
+    $ErrorActionPreference = 'Continue'
+    try {
+        $baselineNames = @(& git --no-optional-locks diff --cached --name-only --no-renames --diff-filter=ACMDT -z -- @baselinePaths 2>&1)
+        $baselineCode = $LASTEXITCODE
+    }
+    finally { $ErrorActionPreference = $previousPreference }
+    if ($baselineCode -ne 0) { throw "Cannot determine staged baseline paths (git exit $baselineCode)." }
+    $baselineTouched = @((($baselineNames -join "`n").Split([char[]]@([char]0), [StringSplitOptions]::RemoveEmptyEntries)) |
+        Where-Object { $baselinePaths -ccontains $_ })
+}
+catch {
+    Write-Host "[pre-commit] baseline watch failed: $($_.Exception.Message) -- aborting commit." -ForegroundColor Red
+    exit 1
+}
+
 $relevantExts = @('.lua', '.cfg', '.ps1', '.mod')
 $staged = & git diff --cached --name-only --diff-filter=ACMR 2>$null
 if ($LASTEXITCODE -ne 0) {
+    if ($baselineTouched.Count -gt 0) {
+        Write-Host "[pre-commit] git diff failed after a known baseline mutation; aborting commit." -ForegroundColor Red
+        exit 1
+    }
     Write-Host "[pre-commit] git diff failed; skipping." -ForegroundColor DarkYellow
     exit 0
 }
-if (-not $staged) {
+if (-not $staged -and $baselineTouched.Count -eq 0) {
     # Empty stage (e.g. amending a committed-message-only change). Nothing
     # to check; let git decide whether the commit itself is valid.
     exit 0
@@ -144,6 +171,23 @@ if ($buildReceiptExit -ne 0) {
     Write-Host "Pre-commit blocked by check_build_receipts (exit $buildReceiptExit)." -ForegroundColor Red
     Write-Host "Re-run ship.ps1 -Mod <name> -BuildOnly after the final source edit, then stage source, root, and receipt together." -ForegroundColor Yellow
     exit 1
+}
+
+# #1751: validate only the affected indexed baseline rows before JSON fast-return.
+if ($baselineTouched.Count -gt 0) {
+    $sizeScript = Join-Path $repoRoot 'qa\check_file_sizes.ps1'
+    if (-not (Test-Path -LiteralPath $sizeScript -PathType Leaf)) {
+        Write-Host "[pre-commit] missing $sizeScript -- cannot verify staged baselines." -ForegroundColor Red
+        exit 1
+    }
+    Write-Host '[pre-commit] staged file-size baselines: index-only validation' -ForegroundColor Cyan
+    $sizeOutput = & pwsh -NoProfile -File $sizeScript -BaselineOnly -Staged 2>&1
+    $sizeExit = $LASTEXITCODE
+    $sizeOutput | ForEach-Object { Write-Host $_ }
+    if ($sizeExit -ne 0) {
+        Write-Host "Pre-commit blocked by staged file-size baseline validation (exit $sizeExit)." -ForegroundColor Red
+        exit 1
+    }
 }
 
 $relevant = @($staged | Where-Object {

@@ -6,6 +6,8 @@
 # `tools/hooks/pre-commit.ps1`. The PowerShell wrapper first checks the exact
 # staged patch for whitespace defects, then runs `qa/run_all.ps1 -Quick
 # -SkipLua` and `tools/mod-lint/lint-mod.ps1` for relevant source changes.
+# Exact file-size baseline JSON changes get an index-only baseline/affected-row
+# check before the source-extension fast-return (#1751); docs keep the fast path.
 # It blocks commits that would have failed the CI QA workflow.
 #
 # Re-running this script is a no-op when the hook is already installed.

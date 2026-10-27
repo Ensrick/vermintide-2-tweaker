@@ -91,7 +91,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.338-beta"
+local MOD_VERSION = "0.12.339-beta"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -123,10 +123,14 @@ local _wt_skullsplitter_hand_policy = mod:dofile("scripts/mods/weapon_tweaker/_w
 
 -- #1436: install history before every ordinary balance owner. Private
 -- profiles are registered here so #431 fingerprints a stable catalog later.
-local _wt_history_owner = mod:dofile(
+local _wt_history_owner, _wt_history_verify = mod:dofile(
     "scripts/mods/weapon_tweaker/_wt_history_owner").install({
         mod = mod,
         module_root = "scripts/mods/weapon_tweaker/",
+        profile_transaction = mod:dofile(
+            "scripts/mods/weapon_tweaker/_wt_history_profile_transaction"),
+        profile_dependencies = { lookup = mod:dofile(
+            "scripts/mods/weapon_tweaker/_lib_network_lookup") },
     })
 local _wt_history_runtime = _wt_history_owner.runtime
 -- Bret Sword & Shield damage buff (self-applies at load when wt_brett_sword_shield_buff is ON;
@@ -1345,12 +1349,7 @@ local _wt_runtime_check_deps = {
     fire_sword_policy = _wt_fire_sword_policy,
 }
 _wt_runtime_checks.install(mod, _rt_register, _wt_runtime_check_deps, _wt_balance_registration_verify)
-_rt_register("issue1436_historical_weapon_patch_versions", function()
-    if not _wt_history_runtime then
-        return "#1436: historical weapon runtime was not installed"
-    end
-    return _wt_history_runtime:verify()
-end)
+_rt_register("issue1436_historical_weapon_patch_versions", _wt_history_verify)
 -- WT_PUBLIC_OVERLAY_BEGIN:public-beta-surface-regression
 _rt_register("issue635_public_beta_dev_surface_absent", function()
     local wt = mod._wt or {}

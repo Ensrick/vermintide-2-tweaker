@@ -49,139 +49,6 @@ local function clone(value, seen)
     return copy
 end
 
-local function derive_no_damage(source)
-    local copy = clone(source)
-    for _, target in ipairs(copy.targets or {}) do
-        local distribution = type(target) == "table" and target.power_distribution
-        if type(distribution) == "table" and distribution.attack ~= nil then
-            distribution.attack = 0
-        end
-    end
-    local default = copy.default_target
-    local distribution = type(default) == "table" and default.power_distribution
-    if type(distribution) == "table" and distribution.attack ~= nil then
-        distribution.attack = 0
-    end
-    return copy
-end
-
-local function valid_lookup_row(lookup, name)
-    local index = type(lookup) == "table" and rawget(lookup, name)
-    return type(index) == "number" and index > 0 and math.floor(index) == index
-        and rawget(lookup, index) == name
-end
-
-local function register_private_profiles(mod, catalog, policy)
-    local profiles = rawget(_G, "DamageProfileTemplates")
-    local lookup_root = rawget(_G, "NetworkLookup")
-    local lookup = lookup_root and lookup_root.damage_profiles
-    if type(profiles) ~= "table" or type(lookup) ~= "table" then
-        return nil, "DamageProfileTemplates/NetworkLookup unavailable"
-    end
-
-    local prepared, private_by_state_name = {}, {}
-    for state_id, specs in pairs(catalog.profile_specs or {}) do
-        private_by_state_name[state_id] = private_by_state_name[state_id] or {}
-        for native_name, spec in pairs(specs) do
-            if not valid_lookup_row(lookup, native_name)
-                    or type(rawget(profiles, native_name)) ~= "table" then
-                return nil, "native profile unavailable " .. native_name
-            end
-            local profile = clone(spec.historical_profile)
-            profile.name = spec.private_name
-            prepared[spec.private_name] = {
-                fallback = native_name,
-                profile = profile,
-                state_id = state_id,
-            }
-            private_by_state_name[state_id][native_name] = spec.private_name
-        end
-    end
-    for state_id, specs in pairs(catalog.derived_profiles or {}) do
-        private_by_state_name[state_id] = private_by_state_name[state_id] or {}
-        for native_name, spec in pairs(specs) do
-            local source_private = private_by_state_name[state_id][spec.source_profile]
-            local source = source_private and prepared[source_private]
-            if not source or spec.derivation ~= "native_no_damage_clone"
-                    or not valid_lookup_row(lookup, native_name) then
-                return nil, "derived profile source unavailable " .. native_name
-            end
-            local profile = derive_no_damage(source.profile)
-            profile.name = spec.private_name
-            prepared[spec.private_name] = {
-                fallback = native_name,
-                profile = profile,
-                state_id = state_id,
-            }
-            private_by_state_name[state_id][native_name] = spec.private_name
-        end
-    end
-
-    local names = sorted_keys(prepared)
-    local fallback_map = mod._wt431_custom_profile_fallback
-    if fallback_map ~= nil and type(fallback_map) ~= "table" then
-        return nil, "custom-profile fallback registry is not a table"
-    end
-    fallback_map = fallback_map or {}
-    local additions = {}
-    for _, private_name in ipairs(names) do
-        local row = prepared[private_name]
-        local existing_profile = rawget(profiles, private_name)
-        local existing_index = rawget(lookup, private_name)
-        if existing_profile ~= nil
-                and (type(existing_profile) ~= "table"
-                    or not policy.deep_equal(existing_profile, row.profile)) then
-            return nil, "private profile content collision " .. private_name
-        end
-        if existing_index ~= nil and not valid_lookup_row(lookup, private_name) then
-            return nil, "private lookup collision " .. private_name
-        end
-        local existing_fallback = rawget(fallback_map, private_name)
-        if existing_fallback ~= nil and existing_fallback ~= row.fallback then
-            return nil, "private fallback collision " .. private_name
-        end
-    end
-
-    for _, private_name in ipairs(names) do
-        local row = prepared[private_name]
-        local added_profile, added_lookup = false, false
-        if rawget(profiles, private_name) == nil then
-            local ok, write_error = pcall(rawset, profiles, private_name, row.profile)
-            if not ok then
-                for index = #additions, 1, -1 do
-                    local prior = additions[index]
-                    if prior.lookup then
-                        rawset(lookup, prior.index, nil)
-                        rawset(lookup, prior.name, nil)
-                    end
-                    if prior.profile then rawset(profiles, prior.name, nil) end
-                end
-                return nil, "private profile write failed: " .. tostring(write_error)
-            end
-            added_profile = true
-        end
-        if rawget(lookup, private_name) == nil then
-            local index = #lookup + 1
-            rawset(lookup, index, private_name)
-            rawset(lookup, private_name, index)
-            added_lookup = true
-        end
-        additions[#additions + 1] = {
-            index = rawget(lookup, private_name),
-            lookup = added_lookup,
-            name = private_name,
-            profile = added_profile,
-        }
-        rawset(fallback_map, private_name, row.fallback)
-    end
-    mod._wt431_custom_profile_fallback = fallback_map
-    return {
-        count = #names,
-        names = names,
-        private_by_state_name = private_by_state_name,
-    }
-end
-
 local function collect_profile_routes(template, template_name, family, state_id,
         wanted, found)
     local routes, active = {}, {}
@@ -251,10 +118,20 @@ function M.install(config)
         log_error("catalog rejected: %s", tostring(validation_error))
     end
 
-    local registration
+    local registration, registration_verify
     if not runtime.fatal_error then
         local registration_error
-        registration, registration_error = register_private_profiles(mod, catalog, policy)
+        local transaction = config.profile_transaction
+        local safe, result, verifier, problem = pcall(function()
+            assert(type(transaction) == "table" and type(transaction.install) == "function",
+                "history profile transaction missing")
+            return transaction.install(mod, catalog, policy, config.profile_dependencies)
+        end)
+        if safe then registration, registration_verify, registration_error = result, verifier, problem
+        else registration_error = tostring(result) end
+        if registration and type(registration_verify) ~= "function" then
+            registration, registration_error = nil, "history registration verifier missing"
+        end
         if not registration then
             runtime.fatal_error = registration_error
             runtime.last_error = registration_error
@@ -297,7 +174,15 @@ function M.install(config)
         return roots
     end
 
+    local function registration_ready()
+        if runtime.registration ~= registration then return false end
+        if type(registration_verify) ~= "function" then return false end
+        local safe, valid = pcall(registration_verify)
+        return safe and valid == true
+    end
+
     function runtime:_profiles_allowed()
+        if not registration_ready() then return false end
         if type(self.mod._wt431_profiles_allowed) ~= "function" then return false end
         local ok, allowed = pcall(self.mod._wt431_profiles_allowed)
         return ok and allowed == true
@@ -458,6 +343,8 @@ function M.install(config)
 
     function runtime:_apply_all(force_current)
         if self.fatal_error then return nil, self.fatal_error end
+        local registration_lost = not registration_ready()
+        force_current = force_current or registration_lost
         local roots, roots_error = self:_refresh_roots()
         if not roots then self.last_error = roots_error; return nil, roots_error end
         local changed, historical, gated, refused, writes = false, 0, 0, 0, 0
@@ -478,6 +365,10 @@ function M.install(config)
                     writes = writes + #(self.ledgers[family.id] or {})
                 end
             end
+        end
+        if registration_lost then
+            self.last_error = "history registration authority lost"
+            return nil, self.last_error
         end
         if refused == 0 then self.last_error = nil end
         log_info(self.mod,
@@ -549,8 +440,10 @@ function M.install(config)
         return rows
     end
 
-    function runtime:verify()
+    local function verify()
+        local self = runtime
         if self.fatal_error then return self.fatal_error end
+        if not registration_ready() then return "history registration authority lost" end
         if self.last_error then return self.last_error end
         for _, family in ipairs(self.catalog.families) do
             local selected = self.boot_selections[family.setting_id]
@@ -567,9 +460,10 @@ function M.install(config)
         return nil
     end
 
+    runtime.verify = verify
     runtime.family_by_id = family_by_id
     if not runtime.fatal_error then runtime:_apply_all(false) end
-    return runtime
+    return runtime, verify
 end
 
 return M
