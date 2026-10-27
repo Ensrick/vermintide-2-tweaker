@@ -79,6 +79,8 @@ local _old_musket_admission = ctx.old_musket_admission
 local _old_musket_denials = 0
 local _javelin_admission = ctx.javelin_admission
 local _javelin_denials = 0
+local _shortsword_admission = ctx.shortsword_admission
+local _shortsword_denials = 0
 
 -- ============================================================
 -- Item creation helper (shared by give command)
@@ -268,6 +270,18 @@ local function _build_entry(def, backend_id)
 				_old_musket_denials = _old_musket_denials + 1
 				pcall(printf, "[cwv:428] owner=old_musket_item edge=build_entry admission=denied existing=%s count=%d/16",
 					tostring(existing ~= nil), _old_musket_denials)
+			end
+			return nil
+		end
+	end
+	if def and def.item_key == "cwv_es_shortsword" then
+		local existing = ItemMasterList and rawget(ItemMasterList, def.item_key)
+		local ok, ready = pcall(_shortsword_admission, def)
+		if (existing ~= nil and existing ~= _registered_keys[def.item_key]) or not ok or ready ~= true then
+			if _shortsword_denials < 16 then
+				_shortsword_denials = _shortsword_denials + 1
+				pcall(printf, "[cwv:428] owner=shortsword_item edge=build_entry admission=denied existing=%s count=%d/16",
+					tostring(existing ~= nil), _shortsword_denials)
 			end
 			return nil
 		end

@@ -34,10 +34,10 @@ local function intact(nodes, bounded)
         -- Opt-in retained-frame readback never runs an include callback or an
         -- unbounded added-key census. The default transaction proof is exact.
         if bounded and row.include ~= nil then return false end
-        if getmetatable(row.target) ~= row.meta then return false end
+        if not rawequal(getmetatable(row.target), row.meta) then return false end
         for j = 1, #row.fields do
             local cell = row.fields[j]
-            if rawget(row.target, cell[1]) ~= cell[2] then return false end
+            if not rawequal(rawget(row.target, cell[1]), cell[2]) then return false end
         end
         for key in next, row.target do
             if not row.include or row.include(row.target, key) then count = count + 1 end
@@ -65,10 +65,10 @@ local function commit(changes, before, after, read, write)
         before()
         for i = 1, #changes do
             local row = changes[i]
-            if rawget(row[1], row[2]) ~= row.before then error("preimage changed") end
+            if not rawequal(rawget(row[1], row[2]), row.before) then error("preimage changed") end
             row.attempted = true
             write(row[1], row[2], row[3], row[4])
-            if read(row[1], row[2], row[4]) ~= row[3] then error("publication readback rejected") end
+            if not rawequal(read(row[1], row[2], row[4]), row[3]) then error("publication readback rejected") end
         end
         after()
     end)

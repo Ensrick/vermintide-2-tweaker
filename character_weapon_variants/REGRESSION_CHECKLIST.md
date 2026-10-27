@@ -1635,3 +1635,36 @@ private wiring and unrelated native/Outrider controls are required negatives.
 `issue428_tuskgor_javelin_construction` checks retained construction authority and
 real builder rejection. This is not a runtime-ready card or proof of retained
 throw/finish/init/impact safety; #424/#1186 and human gameplay acceptance remain separate.
+
+## #428 Shortsword construction and admission (source-only)
+
+`test_cwv_shortsword_construction` must execute the complete reconstructed
+prior/current core installer with required tracked native dagger callbacks,
+five donor profiles and exact native resolution. Compare seven encounters,
+all math/baked cells, aliases/metatables/callback behavior, paired lookup and
+private live audit; do not replace this with prebuilt profile assertions.
+
+The real foreign-prefix constructor/builder/Blacksmith-seed falsifier must
+deny all fresh family publication without replacing the foreign object.
+Every journal write/readback edge, prepared legacy-power collision, lost
+private handoff, source drift and retained tamper must refuse exact admission.
+Saved CIM records stay pending/untouched. Canonical career-installer claims
+and later unrelated valid profile appends remain permitted controls.
+
+The ordinary PowerShell gate checks complete prior-core identity before
+suite execution using the same strict reconstructor as tests. Core-before-
+Musket publisher order, single inert helper loads and captured identities
+must remain explicit. `issue428_shortsword_construction` is a construction
+diagnostic only; no retained Sweep/native ABI or human acceptance is implied.
+
+`test_cwv_career_envelope` covers real public/dev WT availability/reconciliation
+and shared CWV install/release before/after construction, both source and
+clone, exact three-provider ownership, missing/throwing captured resolution,
+claims/metas/canonical-root/object/provenance and unrelated graph negatives.
+Keep explicit LIMIT positives for content changes to the same canonical
+career row; do not mistake canonical identity for gameplay/body safety.
+
+`test_cwv_raw_reference_identity` must reject distinct equal-comparing canonical
+rows/roots/claim values and unrelated graph child/metatable replacements.
+Stale equal-comparing preimages cannot write; foreign equal-comparing
+readbacks roll back. Healthy alias/function/metatable identity stays valid.

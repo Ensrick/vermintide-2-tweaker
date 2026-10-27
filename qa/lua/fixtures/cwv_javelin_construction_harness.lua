@@ -58,6 +58,7 @@ function M.new(H, root, config)
     local T = dofile(root .. "/qa/lua/tests/test_cwv_old_musket_shot_owner.lua")(quiet, root)
     local graph
     local c = T.installed(function(context)
+        if config.get_mod then context.env.get_mod = config.get_mod end
         local original = context.mod.dofile
         context.mod.dofile = function(self, name)
             local value = original(self, name)
@@ -136,9 +137,9 @@ function M.new(H, root, config)
     local original_load = c.mod.dofile
     c.mod.dofile = function(self, name)
         if name:match("/_cwv_javelin_construction_owner$") then
-            return { bind = function(helper, mechanics, detached)
-                factory = owner_module.bind(helper, mechanics, detached)
-                H.equal(helper, c.capsule.network_lookup); H.equal(mechanics, graph); H.equal(detached, scalar_factory)
+            return { bind = function(helper, mechanics, detached, envelope)
+                factory = owner_module.bind(helper, mechanics, detached, envelope)
+                H.equal(helper, c.capsule.network_lookup); H.equal(mechanics, graph); H.equal(detached, scalar_factory); H.equal(envelope, c.career_envelope)
                 return wrapped
             end }
         end
@@ -157,9 +158,9 @@ function M.new(H, root, config)
             local entry = c.entry
             local a = assert(entry:find('local _javelin_factory = mod:dofile(', 1, true))
             local b = assert(entry:find("\nlocal _always_false = _javelin_runtime.always_false", a, true))
-            local bind = T.run("return function(mod, _om, _dbg, _variant_install, _core_template_construction, _cwv_profile_graph, _clone_damage_profile)\n"
+            local bind = T.run("return function(mod, _om, _dbg, _variant_install, _core_template_construction, _cwv_profile_graph, _clone_damage_profile, _cwv_career_envelope)\n"
                 .. entry:sub(a, b - 1) .. "\nreturn _javelin_runtime end", env, "actual-entry-Javelin-private-wiring")
-            c.runtime = bind(c.mod, om, function() end, c.capsule, core, graph, core.clone_damage_profile)
+            c.runtime = bind(c.mod, om, function() end, c.capsule, core, graph, core.clone_damage_profile, c.career_envelope)
         end
         c.template = env.Weapons.tuskgor_javelin_template
         return c
@@ -197,10 +198,10 @@ function M.new(H, root, config)
         b = assert(entry:find("\n", a, true)); local phases = entry:sub(a, b - 1)
         a = assert(entry:find('_variant_install.install_items(mod:dofile("scripts/mods/character_weapon_variants/_cwv_item_registration_owner")', b, true))
         b = assert(entry:find("\n})", a, true)) + 3
-        local bind = T.run("return function(mod, _om, _variant_definitions, _variant_install, _javelin_runtime, _rt_register)\n"
+        local bind = T.run("return function(mod, _om, _variant_definitions, _variant_install, _javelin_runtime, _rt_register, _core_template_construction)\n"
             .. "local _custom_skin_keys, _dbg, _dbg_alert = {}, function() end, function() end\n"
             .. bootstrap .. "\n" .. phases .. "\nreturn function()\n" .. entry:sub(a, b) .. "\nend end", env, "actual-entry-private-Javelin-admission")
-        local install = bind(c.mod, om, defs, c.capsule, c.runtime, function(name, fn) checks[name] = fn end)
+        local install = bind(c.mod, om, defs, c.capsule, c.runtime, function(name, fn) checks[name] = fn end, c.core)
         if config.after_bind then config.after_bind(c) end
         install()
         return defs, om.item_registration.build_entry, checks

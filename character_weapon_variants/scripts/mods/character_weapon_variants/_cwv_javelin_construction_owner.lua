@@ -13,7 +13,6 @@ local TEMPLATE, DONOR, PREFIX = "tuskgor_javelin_template", "javelin_template", 
 local SOURCES = { medium_javelin_smiter_stab = true, medium_javelin_smiter_stab_bleed = true,
     heavy_javelin_smiter_stab_bleed = true, thrown_javelin = true }
 local ITEMS = { cwv_es_javelin = true, cwv_wh_javelin = true }
-local CLAIMS, CLONE_SOURCE = "__vt2_tweaker_career_action_claims", "__vt2_tweaker_career_action_clone_source"
 local function integer(value)
     return type(value) == "number" and value == value and value >= 0
         and value < 9007199254740991 and value % 1 == 0
@@ -40,69 +39,15 @@ local function profile_shape(profile, levels)
     end
     return found
 end
-local function career_key(key)
-    return type(key) == "string" and key:sub(1, 14) == "action_career_"
-end
-local function template_proof(template, capture)
-    local actions = rawget(template, "actions")
-    if type(actions) ~= "table" then return nil end
-    local extension = { claims = rawget(template, CLAIMS), source = rawget(template, CLONE_SOURCE), rows = {} }
-    extension.snapshot = type(extension.claims) == "table" and capture(extension.claims, 256, 2048)
-    for key, row in next, actions do
-        if career_key(key) then extension.rows[key] = { value = row, snapshot = capture(row, 256, 2048) } end
-    end
-    local function include(t, key)
-        return not ((t == template and (key == CLAIMS or key == CLONE_SOURCE)) or (t == actions and career_key(key)))
-    end
-    return capture(template, 4096, 32768, include), extension
-end
-local function extensions_intact(proof, canonical, intact)
-    local template, initial = proof.template, proof.extensions
-    local actions = rawget(template, "actions")
-    if type(actions) ~= "table" then return false end
-    local same = rawget(template, CLAIMS) == initial.claims and rawget(template, CLONE_SOURCE) == initial.source
-        and (initial.claims == nil or (initial.snapshot and intact(initial.snapshot)))
-    for name, row in next, initial.rows do
-        if rawget(actions, name) ~= row.value or not intact(row.snapshot) then same = false end
-    end
-    for name in next, actions do if career_key(name) and not initial.rows[name] then same = false end end
-    if same then return true end
-    if type(canonical) ~= "table" or rawget(template, CLONE_SOURCE) ~= TEMPLATE .. "<-" .. DONOR then return false end
-    local claims = rawget(template, CLAIMS)
-    if type(claims) ~= "table" or getmetatable(claims) ~= nil then return false end
-    local function claimed(name, value)
-        local row = rawget(claims, name)
-        return type(row) == "table" and rawget(row, "value") == value
-            and type(rawget(row, "baseline_present")) == "boolean"
-            and type(rawget(row, "owners")) == "table"
-            and rawget(rawget(row, "owners"), "character_weapon_variants") == true
-    end
-    local count = 0
-    for name, value in next, actions do
-        if career_key(name) then
-            count = count + 1
-            local expected = rawget(canonical, name)
-            local inherited = initial.rows[name] and rawget(proof.source.actions, name) == expected
-            if count > 64 or type(expected) ~= "table" or value ~= expected
-                    or (not inherited and not claimed(name, expected)) then return false end
-        end
-    end
-    count = 0
-    for name in next, claims do
-        count = count + 1
-        local value = career_key(name) and rawget(canonical, name)
-        if count > 64 or type(value) ~= "table" or rawget(actions, name) ~= value or not claimed(name, value) then return false end
-    end
-    return true
-end
-function M.bind(helper, mechanics, scalar_factory)
+function M.bind(helper, mechanics, scalar_factory, envelope)
     local register = assert(helper and helper.register, "Javelin lookup helper missing")
     local capture, intact, disjoint, commit = assert(mechanics.capture), assert(mechanics.intact),
         assert(mechanics.disjoint), assert(mechanics.commit)
     local scalar = assert(scalar_factory, "Javelin detached scalar factory missing")
+    local career_capture, career_intact = assert(envelope.capture), assert(envelope.intact)
     return function(options)
         local profiles_for, levels_for, lookup_for, weapons_for = options.profiles, options.power_levels, options.lookup, options.weapons
-        local state, clone, canonical = assert(options.state), assert(options.clone), options.action_templates
+        local state, clone = assert(options.state), assert(options.clone)
         local read, write = options.read or rawget, options.write or rawset
         local owned, failure = nil, "not_constructed"
         local function pair(lookup, key, id)
@@ -111,8 +56,8 @@ function M.bind(helper, mechanics, scalar_factory)
         local function retained(p)
             if profiles_for() ~= p.profiles or levels_for() ~= p.levels or lookup_for() ~= p.lookup
                     or weapons_for() ~= p.weapons or rawget(p.weapons, DONOR) ~= p.source
-                    or rawget(p.weapons, TEMPLATE) ~= p.template or not intact(p.template_snapshot)
-                    or not extensions_intact(p, canonical, intact) or not intact(p.source_snapshot)
+                    or rawget(p.weapons, TEMPLATE) ~= p.template or not career_intact(p.template_snapshot)
+                    or not career_intact(p.source_snapshot)
                     or rawget(state, "_cwv_damage_profile_wire_source") ~= p.map
                     or not integer(rawget(state, "_cwv_damage_profile_generation"))
                     or rawget(state, "_cwv_damage_profile_generation") < p.generation
@@ -150,9 +95,9 @@ function M.bind(helper, mechanics, scalar_factory)
             if not source_before or not map_before then return false, "source_graph_unproven" end
             local preview_before = rawget(source, "wield_anim_career_3p")
             if preview_before ~= nil and type(preview_before) ~= "table" then return false, "preview_shape_unproven" end
-            local source_snapshot = capture(source, 4096, 32768, function(t, key)
+            local source_snapshot = career_capture(source, { role = "source", include = function(t, key)
                 return not ((t == source and key == "wield_anim_career_3p") or (t == preview_before and wields[key] ~= nil))
-            end)
+            end })
             local detached_profiles, detached_levels, detached_lookup, donors, power, destinations = {}, {}, {}, {}, {}, {}
             for key, value in next, lookup do detached_lookup[key] = value end
             local initial_max = #detached_lookup
@@ -274,7 +219,7 @@ function M.bind(helper, mechanics, scalar_factory)
                     changes[#changes + 1] = { levels, key, value, "power:" .. key, before = before }
                 end
             end
-            local template_snapshot, extensions = template_proof(template, capture)
+            local template_snapshot = career_capture(template, { role = "clone", source = source, token = TEMPLATE .. "<-" .. DONOR })
             assert(template_snapshot and source_snapshot, "prepared template graph unproven")
             assert(rawget(state, "_cwv_damage_profile_wire_source") == map
                 and rawget(state, "_cwv_damage_profile_generation") == generation
@@ -288,7 +233,7 @@ function M.bind(helper, mechanics, scalar_factory)
             assert(append_audit(changes) == true, "private live audit rejected")
             local proof = { profiles = profiles, levels = levels, lookup = lookup, weapons = weapons,
                 source = source, source_snapshot = source_snapshot, template = template, template_snapshot = template_snapshot,
-                extensions = extensions, donors = donors, custom = custom, power = power, map = map,
+                donors = donors, custom = custom, power = power, map = map,
                 generation = generation + #events, fallback = first, preview = preview, preview_meta = getmetatable(preview), wields = stable_wields }
             local ok = commit(changes, function()
                 assert(profiles_for() == profiles and levels_for() == levels and lookup_for() == lookup and weapons_for() == weapons

@@ -891,7 +891,7 @@ return function(H, repo_root)
             "for _, pending in ipairs(pending_defs) do"), 2)
         H.equal(count_plain(entry,
             "scripts/mods/character_weapon_variants/_lib_network_lookup"), 1)
-        H.truthy(entry:find('_variant_install = _variant_install.bind(mod:dofile("scripts/mods/character_weapon_variants/_lib_network_lookup"))', 1, true))
+        H.truthy(entry:find('_variant_install = _variant_install.bind(_cwv_network_lookup)', 1, true))
         H.truthy(registration:find(
             "local _network_lookup = assert(ctx.network_lookup,", 1, true))
         H.equal(count_plain(entry, "local idx = #NetworkLookup.item_names + 1"), 0)
@@ -910,7 +910,7 @@ return function(H, repo_root)
         -- bound exactly once in the entry and never rebound.
         H.truthy(registration:find("local function install(mod, ctx)", 1, true))
         H.truthy(entry:find("dbg_alert = _dbg_alert,", 1, true))
-        H.truthy(entry:find('_variant_install = _variant_install.bind(mod:dofile("scripts/mods/character_weapon_variants/_lib_network_lookup"))', 1, true))
+        H.truthy(entry:find('_variant_install = _variant_install.bind(_cwv_network_lookup)', 1, true))
         H.truthy(entry:find("cwv_career_weapon_actions = _cwv_career_weapon_actions,", 1, true))
         H.truthy(entry:find("career_action_owner = _career_action_owner,", 1, true))
 

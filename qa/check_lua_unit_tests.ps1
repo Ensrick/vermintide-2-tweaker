@@ -94,6 +94,46 @@ function Assert-JavelinPriorRuntimeIdentity {
     }
     finally { $process.Dispose(); $hash.Dispose() }
 }
+
+# Same fixed exporter protocol; complete prior core bytes never persist.
+function Assert-ShortswordPriorCoreIdentity {
+    param([string]$LuaExecutable, [string]$Exporter, [string]$Repository)
+    foreach ($value in @($LuaExecutable, $Exporter, $Repository)) {
+        if ($value.Contains('"') -or $value.Contains([string][char]10) -or $value.Contains([string][char]13)) { throw 'Invalid fixed Shortsword exporter path' }
+    }
+    $fixture = Join-Path (Split-Path -Parent $Exporter) 'cwv_shortsword_construction_source.lua'
+    $utf8 = New-Object Text.UTF8Encoding($false, $true)
+    $hash = [Security.Cryptography.SHA256]::Create()
+    $process = New-Object Diagnostics.Process
+    try {
+        $text = [IO.File]::ReadAllText($fixture).Replace(([string][char]13 + [char]10), [string][char]10)
+        $actual = ([BitConverter]::ToString($hash.ComputeHash($utf8.GetBytes($text)))).Replace('-', '').ToLowerInvariant()
+        if ($actual -cne 'd9a9b62746679ee6bfd5eefff02213ecb29ac82047d8e1f775ff6f8d3aeeaf53') { throw 'Required Shortsword native closure hash mismatch' }
+        $start = New-Object Diagnostics.ProcessStartInfo
+        $start.FileName = $LuaExecutable
+        $start.Arguments = '"' + $Exporter + '" --export-prior-shortsword-core "' + $Repository + '"'
+        $start.UseShellExecute = $false
+        $start.CreateNoWindow = $true
+        $start.RedirectStandardOutput = $true
+        $start.RedirectStandardError = $true
+        $start.StandardOutputEncoding = $utf8
+        $start.StandardErrorEncoding = $utf8
+        $process.StartInfo = $start
+        if (-not $process.Start()) { throw 'Shortsword identity exporter did not start' }
+        $stdout = $process.StandardOutput.ReadToEndAsync()
+        $stderr = $process.StandardError.ReadToEndAsync()
+        if (-not $process.WaitForExit(10000)) { $process.Kill(); throw 'Shortsword identity exporter timed out' }
+        $output = $stdout.GetAwaiter().GetResult()
+        $errorText = $stderr.GetAwaiter().GetResult()
+        if ($process.ExitCode -ne 0) { throw ('Shortsword identity exporter failed: ' + $errorText) }
+        $normalized = $output.Replace(([string][char]13 + [char]10), [string][char]10)
+        $bytes = $utf8.GetBytes($normalized)
+        $actual = ([BitConverter]::ToString($hash.ComputeHash($bytes))).Replace('-', '').ToLowerInvariant()
+        # The pinned historical owner is LF UTF8 without BOM: raw == normalized.
+        if ($bytes.Length -ne 66493 -or $actual -cne 'db221e2396ba9054475ce730cce9880785d47e334ea3b26b8dc3f0bd1a9cb35a') { throw 'Complete prior Shortsword runtime identity mismatch' }
+    }
+    finally { $process.Dispose(); $hash.Dispose() }
+}
 $tempParent = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\', '/')
 $inventoryRoot = [IO.Path]::GetFullPath((Join-Path $tempParent ('vt2-lua-suite-' + [guid]::NewGuid().ToString('N'))))
 $inventoryCreated = $false
@@ -102,6 +142,8 @@ try {
     if (-not $SelfTest) {
         $exporter = Join-Path $luaRoot 'fixtures\cwv_javelin_construction_harness.lua'
         Assert-JavelinPriorRuntimeIdentity -LuaExecutable $luaExe -Exporter $exporter -Repository (Split-Path -Parent $PSScriptRoot)
+        $shortswordExporter = Join-Path $luaRoot 'fixtures\cwv_shortsword_construction_harness.lua'
+        Assert-ShortswordPriorCoreIdentity -LuaExecutable $luaExe -Exporter $shortswordExporter -Repository (Split-Path -Parent $PSScriptRoot)
     }
     [void][IO.Directory]::CreateDirectory($inventoryRoot)
     $inventoryCreated = $true

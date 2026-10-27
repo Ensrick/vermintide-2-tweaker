@@ -11,11 +11,15 @@ local function install(mod, ctx, musket_construction)
 	local javelin = ctx.javelin_construction
 	local admit_javelin = type(javelin) == "table" and javelin.admit_javelin
 	local check_javelin = type(javelin) == "table" and javelin.check_javelin
+	local shortsword = ctx.shortsword_construction
+	local admit_shortsword = type(shortsword) == "table" and shortsword.admit_shortsword
+	local check_shortsword = type(shortsword) == "table" and shortsword.check_shortsword
 	local old_musket_builder
 	local function install_items(owner, dependencies)
 		local private = {}; for key, value in next, dependencies do private[key] = value end
 		private.old_musket_admission = admit_old_musket
 		private.javelin_admission = admit_javelin
+		private.shortsword_admission = admit_shortsword
 		private.network_lookup = network_lookup
 		local result = owner(mod, private)
 		old_musket_builder = _om.item_registration and _om.item_registration.build_entry
@@ -43,6 +47,13 @@ local function install(mod, ctx, musket_construction)
 		else
 			register("issue428_old_musket_retained_sweep", function() return "#428 private retained Sweep registrar disconnected" end)
 		end
+		register("issue428_shortsword_construction", function()
+			if type(check_shortsword) ~= "function" then return "#428 private Shortsword construction owner disconnected" end
+			local verdict = check_shortsword(); if verdict then return verdict end
+			if type(old_musket_builder) ~= "function" then return "#428 private item builder disconnected" end
+			local ok, entry = pcall(old_musket_builder, { item_key = "cwv_es_shortsword", template = "unproven_template", base_weapon = "bw_dagger" })
+			if not ok or entry ~= nil then return "#428 item admission did not reject an unproven Shortsword template" end
+		end)
 	end
 
 	-- ============================================================

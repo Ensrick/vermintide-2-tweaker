@@ -527,3 +527,24 @@ Native source93dea911: complete javelin.lua, the four woods donor literals and
 complete native profile-resolution loop are tracked test inputs only. The sole
 PlayerProjectileUnitExtension.init/#1186 and #424 fire/ammo/spawn hooks remain
 byte-equivalent. Construction ownership is not retained projectile/engine ABI proof.
+
+### #428 Shortsword construction-only private boundary
+
+The entry evaluates lookup/graph leaves once before core construction and
+captures the new family factory by value. Those modules are inert; core then
+Musket publisher order, existing hooks and registry source-event/ID order
+remain unchanged. The relocated detached scalar factory retains its original
+body/live audit closure. There is no new hook, RPC, command, asset or setting.
+
+Construction/admission consumes five native dagger analog profiles, seven
+encounters, one prepared template and the same private audit journal. Exact
+fresh item/seed denial preserves saved records; foreign/hot-reload state is
+unproven, never adopted. Source/native retained engine safety and #423 sender
+finalization remain separate; this does not claim historical crash causality.
+
+The private `_cwv_career_envelope` is shared by Shortsword/Javelin source and
+clone proofs. It has no engine-facing hook or mutation. Entry-captured
+get_mod resolves only public/dev WT identities late; the existing canonical
+shared career install/release protocol is recognized without a prefix-only
+exception. Every unrelated donor/template/profile/preview cell stays pinned.
+Canonical action content is deliberately delegated, not engine-ABI validated.
