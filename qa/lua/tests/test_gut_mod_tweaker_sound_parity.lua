@@ -249,12 +249,19 @@ return function(H, repo_root)
 
     H.test("GUT #1670 the command really is the sub-state route: the inject module re-registers it later", function()
         local main = read("gui_tweaker_dev.lua")
+        local shell = read("_gut_mod_tweaker_shell.lua")
         local inject = read("_ba_heroview_inject.lua")
         H.truthy(inject:find('mod:command("mod_tweaker"', 1, true), "inject module registers /mod_tweaker")
         H.truthy(inject:find('menu_state_name = "gut_mod_tweaker"', 1, true), "and it opens the sub-state")
-        local entry_cmd = main:find('mod:command("mod_tweaker"', 1, true)
+        local routing = shell:find("local function install_routing()", 1, true)
+        local command = shell:find('mod:command("mod_tweaker"', 1, true)
+        local compaction = shell:find("local function install_compaction()", 1, true)
+        H.truthy(routing and command and compaction and routing < command and command < compaction,
+            "the actual command remains in the synchronous routing phase")
+        local bind = main:find('"scripts/mods/gui_tweaker_dev/_gut_mod_tweaker_shell").bind({', 1, true)
+        local routing_call = main:find("_gut_menu_shell.install_routing()", 1, true)
         local inject_load = main:find('"scripts/mods/gui_tweaker_dev/_ba_heroview_inject"', 1, true)
-        H.truthy(entry_cmd and inject_load and inject_load > entry_cmd,
-            "the inject module loads after the entry registration, so its handler wins (VMF commands.lua:15-28)")
+        H.truthy(bind and routing_call and inject_load and bind < routing_call and routing_call < inject_load,
+            "the inject module loads after the routing registration, so its handler wins (VMF commands.lua:30-42)")
     end)
 end
