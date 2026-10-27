@@ -1,5 +1,21 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.559-dev (2026-10-27) -- Elven shield and Greataxe construction (#428)
+
+- Prepare Elven shield and Greataxe variants through private construction owners
+  with exact native-source, career-action and retained-template admission.
+- Admit the finite supported native-history and installed Weapons Tweaker
+  Greataxe critical-chance producers. Preserve independent donor/clone baselines;
+  reject foreign providers, replaced callbacks and unrelated template mutations.
+- Normalize only detached construction inputs to the authored Current baseline.
+  Do not rewrite native historical weapons or alter damage-profile math, lookup
+  order, first-person behavior or network identities.
+- Preserve historical fixtures with separate strict reverse adapters. Add real
+  installed-producer and settings/history lifecycle regression coverage.
+- Coordinate with Weapons beta 0.12.340-beta and Dev 0.12.341-dev. Portable source
+  tests are not native ABI, launch, rendered-model or co-op acceptance; the VT2
+  executable is not installed and no new live-test readiness is claimed.
+
 ## 0.1.558-dev (2026-10-27) -- Finite native-history compatibility (#428)
 
 - Retain Shortsword and Tuskgor Javelin construction/admission authority when

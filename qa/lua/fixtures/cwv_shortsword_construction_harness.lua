@@ -45,7 +45,7 @@ end
 function M.prior_source(root, reader)
     reader = reader or raw_read
     return M.reconstruct(reader(root .. "/" .. REL .. "_cwv_core_templates.lua"),
-        reader(root .. "/qa/lua/fixtures/cwv_shortsword_history_prior.reverse.patch"))
+        reader(root .. "/qa/lua/fixtures/cwv_shortsword_greataxe_producer_prior.reverse.patch"))
 end
 if arg and arg[1] == "--export-prior-shortsword-core" then
     assert(type(arg[2]) == "string" and arg[3] == nil, "fixed prior-core exporter arguments required")

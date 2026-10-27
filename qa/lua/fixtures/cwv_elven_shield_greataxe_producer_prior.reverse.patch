@@ -1,0 +1,98 @@
+--- a/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_core_templates.lua
++++ b/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_core_templates.lua
+@@ -158,1 +158,0 @@
+-	local history_producer_binding = deps.history_producer_binding
+@@ -160,2 +159,0 @@
+-	local elven_shield_factory, elven_shield_owner = deps.elven_shield_factory
+-	local greataxe_factory, greataxe_owner = deps.greataxe_factory
+@@ -435,1 +432,8 @@
+-local function _prepare_elven_sword_shield_template(template, clone_scalar)
++local function _create_elven_sword_shield_template()
++	if not Weapons or not Weapons.one_handed_sword_shield_template_1 then
++		mod:warning("one_handed_sword_shield_template_1 not found — Elven Sword+Shield stat modifications unavailable")
++		return
++	end
++	if Weapons.elven_sword_shield_template then return end
++
++	local template = table.clone(Weapons.one_handed_sword_shield_template_1, true)
+@@ -446,1 +450,1 @@
+-							sub_action.damage_profile = clone_scalar(sub_action.damage_profile, "cwv_ess_", {
++							sub_action.damage_profile = _clone_damage_profile(sub_action.damage_profile, "cwv_ess_", {
+@@ -467,2 +471,1 @@
+-	return true
+-end
++	Weapons.elven_sword_shield_template = template
+@@ -470,15 +473,0 @@
+-local function _create_elven_sword_shield_template()
+-	if not Weapons or not Weapons.one_handed_sword_shield_template_1 then
+-		mod:warning("one_handed_sword_shield_template_1 not found — Elven Sword+Shield stat modifications unavailable")
+-		return
+-	end
+-	if type(elven_shield_factory) ~= "function" then return end
+-	elven_shield_owner = elven_shield_factory({
+-		state = _om, scalar_factory = detached_scalar_factory, action_templates = ActionTemplates,
+-		profiles = function() return rawget(_G, "DamageProfileTemplates") end,
+-		power_levels = function() return rawget(_G, "PowerLevelTemplates") end,
+-		lookup = function() local network = rawget(_G, "NetworkLookup"); return network and rawget(network, "damage_profiles") end,
+-		weapons = function() return rawget(_G, "Weapons") end,
+-		clone = function(value) return table.clone(value, true) end,
+-	})
+-	if not elven_shield_owner.construct(_prepare_elven_sword_shield_template) then return end
+@@ -491,0 +479,13 @@
++	local elf_wield_3p = {
++		we_waywatcher  = "to_1h_spear_shield",
++		we_maidenguard = "to_1h_spear_shield",
++		we_shade       = "to_1h_spear_shield",
++		we_thornsister = "to_1h_spear_shield",
++	}
++	local base = Weapons.one_handed_sword_shield_template_1
++	if base then
++		base.wield_anim_career_3p = base.wield_anim_career_3p or {}
++		for k, v in pairs(elf_wield_3p) do
++			base.wield_anim_career_3p[k] = v
++		end
++	end
+@@ -497,0 +498,1 @@
++
+@@ -1184,14 +1186,11 @@
+-		if type(greataxe_factory) ~= "function" then return end
+-		greataxe_owner = greataxe_factory({ family = greataxe,
+-			weapons = function() return rawget(_G, "Weapons") end,
+-			clone = function(value) return table.clone(value, true) end,
+-		})
+-		-- Exact native gameplay graph; only these four authored wield fields differ.
+-		if not greataxe_owner.construct(function(template)
+-			template.wield_anim_career_3p = template.wield_anim_career_3p or {}
+-			for _, career in ipairs(greataxe.DEFAULT_CAREERS) do
+-				template.wield_anim_career_3p[career] = "to_2h_hammer"
+-			end
+-
+-			return true
+-		end) then return end
++		if Weapons[greataxe.TEMPLATE_KEY] then return end
++
++		-- No timing or damage-profile edits: #597 requires an exact gameplay
++		-- analogue of Bardin's Greataxe. Only receiver-local 3P fields differ.
++		local template = table.clone(Weapons.two_handed_axes_template_1, true)
++		template.wield_anim_career_3p = template.wield_anim_career_3p or {}
++		for _, career in ipairs(greataxe.DEFAULT_CAREERS) do
++			template.wield_anim_career_3p[career] = "to_2h_hammer"
++		end
++
++		Weapons[greataxe.TEMPLATE_KEY] = template
+@@ -1439,15 +1438,0 @@
+-		history_producer_binding = history_producer_binding,
+-		greataxe_construction = {
+-			admit_greataxe = function(def) return greataxe_owner ~= nil and greataxe_owner.admit(def) end,
+-			check_greataxe = function()
+-				if not greataxe_owner then return "#428 private Greataxe construction owner disconnected" end
+-				return greataxe_owner.check()
+-			end,
+-		},
+-		elven_shield_construction = {
+-			admit_elven_shield = function(def) return elven_shield_owner ~= nil and elven_shield_owner.admit(def) end,
+-			check_elven_shield = function()
+-				if not elven_shield_owner then return "#428 private Elven shield construction owner disconnected" end
+-				return elven_shield_owner.check()
+-			end,
+-		},

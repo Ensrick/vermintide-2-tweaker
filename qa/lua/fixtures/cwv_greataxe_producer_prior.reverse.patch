@@ -1,0 +1,41 @@
+--- a/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_core_templates.lua
++++ b/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_core_templates.lua
+@@ -158,1 +158,0 @@
+-	local history_producer_binding = deps.history_producer_binding
+@@ -161,1 +160,0 @@
+-	local greataxe_factory, greataxe_owner = deps.greataxe_factory
+@@ -1184,14 +1182,11 @@
+-		if type(greataxe_factory) ~= "function" then return end
+-		greataxe_owner = greataxe_factory({ family = greataxe,
+-			weapons = function() return rawget(_G, "Weapons") end,
+-			clone = function(value) return table.clone(value, true) end,
+-		})
+-		-- Exact native gameplay graph; only these four authored wield fields differ.
+-		if not greataxe_owner.construct(function(template)
+-			template.wield_anim_career_3p = template.wield_anim_career_3p or {}
+-			for _, career in ipairs(greataxe.DEFAULT_CAREERS) do
+-				template.wield_anim_career_3p[career] = "to_2h_hammer"
+-			end
+-
+-			return true
+-		end) then return end
++		if Weapons[greataxe.TEMPLATE_KEY] then return end
++
++		-- No timing or damage-profile edits: #597 requires an exact gameplay
++		-- analogue of Bardin's Greataxe. Only receiver-local 3P fields differ.
++		local template = table.clone(Weapons.two_handed_axes_template_1, true)
++		template.wield_anim_career_3p = template.wield_anim_career_3p or {}
++		for _, career in ipairs(greataxe.DEFAULT_CAREERS) do
++			template.wield_anim_career_3p[career] = "to_2h_hammer"
++		end
++
++		Weapons[greataxe.TEMPLATE_KEY] = template
+@@ -1439,8 +1434,0 @@
+-		history_producer_binding = history_producer_binding,
+-		greataxe_construction = {
+-			admit_greataxe = function(def) return greataxe_owner ~= nil and greataxe_owner.admit(def) end,
+-			check_greataxe = function()
+-				if not greataxe_owner then return "#428 private Greataxe construction owner disconnected" end
+-				return greataxe_owner.check()
+-			end,
+-		},

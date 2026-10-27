@@ -1,5 +1,17 @@
 # Weapon Tweaker Changelog
 
+## 0.12.340-beta (2026-10-27) -- bounded Greataxe producer proof (#428)
+
+- Expose a private, installation-bound query for the existing Greataxe light
+  critical-chance adjustment, so CWV can distinguish that supported producer
+  from unrelated or stale weapon-template changes.
+- Keep the existing setting, four light-attack values, callbacks and restoration
+  behavior. No new hook, RPC, network lookup or gameplay multiplier.
+- Coordinate with CWV 0.1.559-dev and mirror the runtime change in Weapons Dev.
+  Source-qualified producer, construction and lifecycle cases are covered by
+  regression fixtures. Game startup, combat and co-op acceptance remain unverified
+  locally because the VT2 executable is not installed.
+
 ## 0.12.339-beta (2026-10-27) -- atomic historical profile publication (#428)
 
 ### Changed

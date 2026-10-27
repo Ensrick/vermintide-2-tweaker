@@ -16,7 +16,17 @@ return function(H, repo_root)
         H.equal(policy.BASE_WEAPON, "dr_2h_axe")
         H.equal(policy.TEMPLATE_KEY, "cwv_greataxe_template")
         local source = cwv_source
-        H.truthy(source:find("table.clone(Weapons.two_handed_axes_template_1, true)", 1, true))
+        local F = dofile(repo_root .. "/qa/lua/fixtures/cwv_greataxe_construction_harness.lua")
+        local c = F.new(H, repo_root)
+        H.truthy(c.greataxe_source); H.truthy(c.greataxe_template)
+        H.equal(rawequal(c.greataxe_template, c.greataxe_source), false, "independent native clone")
+        H.equal(c.greataxe_owner.check(), nil)
+        local expected = c.env.table.clone(c.greataxe_source, true)
+        expected.wield_anim_career_3p = expected.wield_anim_career_3p or {}
+        for _, career in ipairs(policy.DEFAULT_CAREERS) do
+            expected.wield_anim_career_3p[career] = "to_2h_hammer"
+        end
+        H.deep_equal(c.greataxe_template, expected, "complete actual native graph plus only four authored wield redirects")
         H.equal(source:find("_POLEAXE_SPEED_MULT", 1, true), nil)
         H.equal(source:find("_POLEAXE_POWER_MULT", 1, true), nil)
         H.equal(source:find('item_key        = "cwv_es_poleaxe"', 1, true), nil)

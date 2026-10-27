@@ -957,3 +957,24 @@ Javelin finite history compatibility uses mandatory existing native fixtures
 and actual WT producer code. Its separate seven-route policy preserves actual
 parity-false ledgers and restore behavior; shared binding tests retain the
 Shortsword positives and owned-fallback negatives. No runtime-ready claim.
+
+### Required Elven Shield constructor identity (#428)
+
+`check_lua_unit_tests.ps1` blocks before suite discovery when the bounded
+portable native closure or complete prior R3 core identity is missing/corrupt.
+The sole strict inverse implementation is the existing Lua harness helper;
+the fixed new exporter reuses it, and the PS gate hashes its complete output.
+The original Shortsword prior identity is preserved, not rebaselined.
+`-SelfTest` discovery behavior is unchanged. Actual integrated PS5/PS7
+positive/failure-exit2 execution remains required after source integration.
+
+The finite Elven history suite executes real public/Dev Owner expressions and
+Catalog.load/merge with a QA-only genuine family projection, not all13
+catalogs or engine ABI. It covers before/after construction, both parities,
+restore/removal, exact raw ledger/path/meta rejection and real unrelated
+AuthenticPistol fallback append. New separate phase adapters preserve both
+older Short fixtures and the original67523-byte Elven prior.
+
+### Required Greataxe producer/native identity (#428)
+
+The required portable native fixture and same-exporter prior identity fail before suite discovery inside the existing checker try. The two persistent suites exercise full old/new native graph/callback equality, rollback, actual constructor/item/seed admission, private producer handoff, resets, real co-install conflicts and invalid present authority. The two suites contain56 cases:27 construction plus26 phased producer and3 genuine lifecycle cases. One helper executes the real public/Dev M.install; the complete accepted4512-byte direct-install oracle remains embedded verbatim. No ignored review directory, readiness stub or optional missing core fixture is allowed.

@@ -2275,3 +2275,40 @@ Identity failure denies fresh item/seed publication without repair.
 Shortsword likewise checks true registry/getter references with `rawequal`;
 its existing `metas` proof owns observable root/map metatables without a new
 field or plain-root restriction. Scalar/history/math policies do not change.
+
+### #428 closed Elven Sword and Shield construction
+
+The entry loads `_cwv_elven_shield_construction_owner` once through the existing
+private core dependency table. The family captures graph/lookup/career-envelope
+functions by value and receives the already-created detached scalar/audit
+factory at its unchanged constructor point. No new root local, registry,
+nested module load, hook or transport is introduced. Six unique profiles and
+seven original pairs encounters retain math/IDs/order/remaps and callbacks.
+One journal covers profile/power/source/pair cells, generation/fallback, live
+audit, template and four elf preview cells plus exact nil/false root preimage.
+A separate preview proof pins all nonowner cells/root; the donor envelope
+does not broadly exempt the preview table. Native source/preview metatables
+must be nil at construction; unsupported foreign shapes fail closed.
+Private bootstrap admission gates only new exact normal/veteran Elven Shield
+items and seeds; saved denied records are retained/pending. No repair or
+arbitrary foreign/hot-reload enumerator guarantee is implied. #423 sender
+and retained native action acceptance remain separate; #1676 audit is reused.
+
+### #428 finite native Elven donor history
+
+`_cwv_elven_shield_history_envelope` is one entry-manifest dependency, bound
+by value into the private family factory. It reuses the unchanged pure WT
+producer binding. Only the six source-qualified native Sword-and-Shield
+cells are delegated to real finite catalog/ledger semantics:5_1_1 has six,
+5_2_0 and5_6_1 have five; both parity states retain literal results. The
+custom detached clone is normalized to authored Current before unchanged
+seven-encounter/six-profile math. No live source normalization, broad graph
+exemption, origin/body attestation or retained-action guarantee is added.
+Full immediate source-before/precommit ownership stays strict. Current
+restoration accepts the real empty ledger despite historical boot metadata.
+Both prior Short adapters stay immutable; a new separately named Elven
+phase adapter still reconstructs original66493/db221, never a rebaseline.
+
+### #428 finite Greataxe producer QA
+
+The future Greataxe private crit envelope consumes the coordinated public/Dev WT real-install query, not a ready boolean. Persistent tests execute complete M.install, the real private family factory and both item/seed routes. The finite four-cell semantic delegation does not attest writer origin, gameplay bodies, arbitrary reload or native ABI. Prototype production comments remain unchanged.

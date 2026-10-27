@@ -488,6 +488,73 @@ function M.install(mod)
     mod._wt_reset_axe_balance_baselines = function()
         return state:reset_baselines()
     end
+    -- PROTOTYPE: inserted inside the existing M.install, after its real reset
+    -- publication and before its unchanged first _wt_apply_axe_balance call.
+    -- Finite semantic evidence, not cryptographic producer-origin attestation.
+    -- No caller receives state.greataxe_crit_originals or a mutable owner row.
+    local installation = function() end
+    local applied = mod._wt_apply_axe_balance
+    local reset = mod._wt_reset_axe_balance_baselines
+    local names = { "light_attack_left", "light_attack_right", "light_attack_up", "light_attack_bopp" }
+    local field = "additional_critical_strike_chance"
+    local function finite(value)
+        return value == nil or (type(value) == "number" and value == value
+            and value > -math.huge and value < math.huge)
+    end
+    mod._wt_query_greataxe_light_crit = function(weapons, key, template)
+        if not rawequal(rawget(mod, "_wt_apply_axe_balance"), applied)
+                or not rawequal(rawget(mod, "_wt_reset_axe_balance_baselines"), reset)
+                or not rawequal(Weapons, weapons) or type(weapons) ~= "table"
+                or (key ~= "two_handed_axes_template_1" and key ~= "cwv_greataxe_template")
+                or type(template) ~= "table" or not rawequal(rawget(weapons, key), template) then
+            return nil, "greataxe_installation_or_tuple_unproven"
+        end
+        local actions = rawget(template, "actions")
+        local one = type(actions) == "table" and rawget(actions, "action_one")
+        local originals = rawget(state, "greataxe_crit_originals")
+        local enabled = rawget(state, "greataxe_crit_enabled")
+        if type(one) ~= "table" or type(originals) ~= "table"
+                or getmetatable(originals) ~= nil or type(enabled) ~= "boolean" then
+            return nil, "greataxe_state_unproven"
+        end
+        local rows = {}
+        for i = 1, 4 do
+            local action = rawget(one, names[i])
+            if type(action) ~= "table" or rawget(action, "kind") ~= "sweep" then
+                return nil, "greataxe_action_unproven"
+            end
+            local value, original = rawget(action, field), rawget(originals, action)
+            if not finite(value) then return nil, "greataxe_scalar_unproven" end
+            local row = { name = names[i], action = action, present = value ~= nil,
+                value = value, claimed = original ~= nil }
+            if original ~= nil then
+                if not enabled or type(original) ~= "table" or getmetatable(original) ~= nil
+                        or type(rawget(original, "had_value")) ~= "boolean" then
+                    return nil, "greataxe_original_unproven"
+                end
+                local baseline = rawget(original, "value")
+                if not finite(baseline) or rawget(original, "had_value") ~= (baseline ~= nil) then
+                    return nil, "greataxe_baseline_unproven"
+                end
+                for name in next, original do
+                    if name ~= "had_value" and name ~= "value" then
+                        return nil, "greataxe_original_shape_unproven"
+                    end
+                end
+                row.baseline_present = rawget(original, "had_value")
+                row.baseline_value = baseline
+                row.applied_value = math.max(baseline or 0, 0.10)
+                if not rawequal(value, row.applied_value) then
+                    return nil, "greataxe_claimed_value_changed"
+                end
+            end
+            rows[i] = row
+        end
+        return { schema = "wt.greataxe_light_crit.v1", installation = installation,
+            apply = applied, reset = reset, weapons = weapons, template_key = key,
+            template = template, actions = actions, action_one = one,
+            enabled = enabled, rows = rows }
+    end
     mod._wt_apply_axe_balance(nil, false)
     return state
 end

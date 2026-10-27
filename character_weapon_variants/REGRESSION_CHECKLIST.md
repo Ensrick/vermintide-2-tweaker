@@ -1678,3 +1678,18 @@ readbacks roll back. Healthy alias/function/metatable identity stays valid.
   seeds survive real Current/history/parity-false/reconcile/restore transitions.
   Unknown, partial or tampered routes still deny; no donor or lookup repair.
   Keep this source-only proof distinct from later solo/co-op engine testing.
+
+### #428 Elven Sword and Shield transaction
+
+Run `test_cwv_elven_shield_construction`: complete prior/current native math,
+alias/callback/ID/audit/order equivalence; both exact item+seed gates; every
+journal write/readback/finalize rollback; nil versus false/existing preview
+roots, unrelated preview cells, legacy named-power interposition and retained
+readback; real shared career install/release; disconnected captured capability.
+Required portable native closure and exact complete67523-byte prior R3 core
+are preflighted before suites. Original Shortsword66493-byte/db221e authority
+remains unchanged through the composed strict reverse. No external-path SKIP.
+
+### #428 Greataxe persistent offline matrix
+
+Run test_cwv_greataxe_construction and test_cwv_greataxe_producer through the canonical suite:27 inherited construction cases,26 unique phased producer cases and3 genuine lifecycle cases (56 total;29 in the producer suite). Three newly named strict inverses must reconstruct exact68110/d110baa4,66493/db221e23 and67523/2aeb3673 before discovery. Old phase files remain immutable. Physical PS5/PS7 preflight, canonical build and game/co-op acceptance are separate gates.

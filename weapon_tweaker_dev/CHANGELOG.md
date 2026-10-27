@@ -1,5 +1,15 @@
 # Weapon Tweaker Changelog
 
+## 0.12.341-dev (2026-10-27) -- mirror Greataxe producer proof (#428)
+
+- Mirror public beta 0.12.340-beta's private, installation-bound Greataxe
+  light-critical query without changing its existing balance setting or values.
+- Preserve the Dev namespace, friends-only Workshop item, preview and existing
+  diagnostic differences. Coordinate with CWV 0.1.559-dev.
+- Automated source-qualified construction, producer and lifecycle fixtures do
+  not establish native ABI, local game startup, combat or co-op acceptance.
+  The VT2 executable is absent; normal integrated release gates remain required.
+
 ## 0.12.340-dev (2026-10-27) -- mirror atomic historical profile publication (#428)
 
 ### Changed

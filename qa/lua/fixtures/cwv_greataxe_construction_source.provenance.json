@@ -1,0 +1,48 @@
+{
+  "native_commit": "93dea911a4cc464a0eb51cfdc3a443297bfc4550",
+  "purpose": "required portable Greataxe native constructor oracle; no external checkout or missing-fixture SKIP at runtime",
+  "sources": [
+    {
+      "path": "scripts/settings/equipment/weapon_templates/2h_axes.lua",
+      "blob": "af7a091251bb695daafe517b5746d889ec4ad59d",
+      "bytes": 30800,
+      "raw_sha256": "96d58731860c7a45db3308114689b7503068ccb6523c8da17401c2e6c796d6b7",
+      "lf_sha256": "3902202a57be264dbf2c17e4f4b7ea099bf04cc9551e63cc9dba3fbd3bc2681d"
+    },
+    {
+      "path": "scripts/settings/equipment/hit_mass_counts.lua",
+      "blob": "93197396b1f4e5f04b11f3d25445bd22c645c51c",
+      "bytes": 2511,
+      "raw_sha256": "962c780750b980433fdd7222c1c46546f8e291d8bc5ed8be3aa07d0e8ea69cb9",
+      "lf_sha256": "32c0131c723e3f0ca785e14fbab337af1dcf7436b37993216fd060eb09f2e580"
+    },
+    {
+      "path": "scripts/settings/equipment/item_master_list_exported.lua",
+      "blob": "1d0e1d7482196fd9a37a658481bb3e2f8f70f94f",
+      "bytes": 383486,
+      "raw_sha256": "b58ac97d625067369ece256c091d150ecf5e103cdfeefda60d90421d9bbc7bda",
+      "lf_sha256": "86b1b2af853bc7bd0f4f1ac4b2888f763333368f3c1db7c986854a7693ac87ca"
+    }
+  ],
+  "decoded": [
+    {
+      "name": "axe",
+      "bytes": 30797,
+      "sha256": "3902202a57be264dbf2c17e4f4b7ea099bf04cc9551e63cc9dba3fbd3bc2681d"
+    },
+    {
+      "name": "mass",
+      "bytes": 308,
+      "sha256": "5a35eb426f7afaf4205d242f15aa19a62acfaaa2978afb77f4cc7b11567cf410"
+    },
+    {
+      "name": "item",
+      "bytes": 605,
+      "sha256": "43e47daa5fd851172bd706c76c9612d56ae19adbcfb01431c1c1f4ddcd661fee"
+    }
+  ],
+  "fixture_path": "qa/lua/fixtures/cwv_greataxe_construction_source.lua",
+  "fixture_bytes": 31910,
+  "fixture_sha256": "215cfae8dca6a05008c783c9b1773b7d8ad801665538c013cdf5246bce2001d2",
+  "limits": "Native complete functions/source execute with the already tracked clone/class/attachment/damage-type host collaborators. No deferred native action, renderer, physics, VMF runtime or callback ABI acceptance."
+}
