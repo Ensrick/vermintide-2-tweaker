@@ -17,7 +17,9 @@
 #     the workshop_log confirmed for THIS upload;
 #   * `Current receipt`, `Current <stream> receipt`, `Exact live artifact`,
 #     `Live artifact`, and `Exact source` fields are bound to the hosted
-#     release manifest's source commit, root bundle/SHA-256, and ZIP/SHA-256.
+#     release manifest's source commit, root bundle/SHA-256, ZIP/SHA-256, and
+#     optional exact version. Already-current source-resolved builds may repair
+#     only uniquely owned typed receipts without changing shared-tag anchors.
 #     Exact `Feature provenance` and every untyped evidence heading remain
 #     historical and byte-identical.
 #   * full deployed artifact authority validates typed sibling claims without
@@ -420,6 +422,12 @@ function Get-VtCardRefreshPlan {
     }
     if (-not (Test-VtCurrentLiveTestCard $Body)) { return $result }
 
+    if ($PSBoundParameters.ContainsKey('ArtifactTargets')) {
+        $receiptPlan = Get-VtCurrentReceiptRefreshPlan -Body $Body -PublishedId $PublishedId `
+            -NewVersion $NewVersion -NewManifest $NewManifest -ArtifactTarget $ArtifactTarget -ArtifactTargets $ArtifactTargets
+        if ($null -ne $receiptPlan) { return $receiptPlan }
+    }
+
     $cleanVersion = if ($NewVersion) { $NewVersion.TrimStart('v', 'V') } else { '' }
     $pidEsc = if ($PublishedId) { [regex]::Escape($PublishedId) } else { $null }
     $pidPresent = $false
@@ -742,7 +750,16 @@ function Get-VtCardRefreshPlan {
             return $result
         }
     }
+    if ($artifactOwner -and -not (Test-VtCardTypedEditsOwned -Before $Body -After $newBody `
+        -OwnerKey ([string]$artifactOwner.ModId) -Targets $fullArtifactTargets)) {
+        $result.Status='unparseable'; $result.Reason='publishing-typed-or-provenance-edit-ownership-unproven'; return $result
+    }
     $artifactReview = Get-VtCardCurrentArtifactReview -Card $newBody -Targets $validationTargets
+    if (-not $PSBoundParameters.ContainsKey('ArtifactTargets') -and @($artifactReview.Claims | Where-Object {
+        $_.Field -ceq 'version' -and [string]$_.Claimed -ine [string]$_.Expected
+    }).Count -gt 0) {
+        $result.Status='unparseable'; $result.Reason='publishing-version-context-required'; return $result
+    }
     if ($artifactReview.Status -eq 'unparseable') {
         $result.Status = 'unparseable'
         $result.Reason = @($artifactReview.StructuralErrors) -join ', '
@@ -785,26 +802,7 @@ function Get-VtCardRefreshPlan {
         # receipts with NO artifact Claims. Only truly unqualified fields may
         # inherit the validated final Build/banner's sole selected owner.
         $finalArtifactBody = if ($artifactReview.Status -eq 'stale') { [string]$artifactReview.NewCard } else { $newBody }
-        $selectedArtifactTargets = @(Get-VtCardArtifactSelectedTargets -Card $finalArtifactBody -Targets $fullArtifactTargets)
-        $originalSegments = @([regex]::Split($Body, '(?<=\n)'))
-        $finalSegments = @([regex]::Split($finalArtifactBody, '(?<=\n)'))
-        $typedEditsOwned = $originalSegments.Count -eq $finalSegments.Count
-        for ($i = 0; $typedEditsOwned -and $i -lt $originalSegments.Count; $i++) {
-            if ($originalSegments[$i] -ceq $finalSegments[$i]) { continue }
-            $beforeInfo = Get-VtCardArtifactLineInfo -Line $originalSegments[$i].TrimEnd([char[]]"`r`n")
-            $afterInfo = Get-VtCardArtifactLineInfo -Line $finalSegments[$i].TrimEnd([char[]]"`r`n")
-            if ($beforeInfo.IsFeatureProvenance -or $afterInfo.IsFeatureProvenance) { $typedEditsOwned = $false; break }
-            if (-not $beforeInfo.IsTypedCurrent -and -not $afterInfo.IsTypedCurrent) { continue }
-            if (-not $beforeInfo.IsTypedCurrent -or -not $afterInfo.IsTypedCurrent -or
-                [string]$beforeInfo.Heading -cne [string]$afterInfo.Heading) { $typedEditsOwned = $false; break }
-            foreach ($lineInfo in @($beforeInfo,$afterInfo)) {
-                $lineText = if ($lineInfo -eq $beforeInfo) { $originalSegments[$i] } else { $finalSegments[$i] }
-                $lineOwners = @(Resolve-VtCardArtifactLineTargets -Line $lineText -Heading $lineInfo.Heading -Targets $fullArtifactTargets -NoImplicitSingleton)
-                if ($lineOwners.Count -eq 0 -and -not $lineInfo.HasQualifier -and $lineInfo.ItemIds.Count -eq 0 -and
-                    $selectedArtifactTargets.Count -eq 1) { $lineOwners = @($selectedArtifactTargets[0]) }
-                if ($lineOwners.Count -ne 1 -or [string]$lineOwners[0].ModId -cne $ownerKey) { $typedEditsOwned = $false; break }
-            }
-        }
+        $typedEditsOwned = Test-VtCardTypedEditsOwned -Before $Body -After $finalArtifactBody -OwnerKey $ownerKey -Targets $fullArtifactTargets
         if (-not $typedEditsOwned) {
             $result.Status = 'unparseable'
             $result.Reason = 'publishing-typed-or-provenance-edit-ownership-unproven'

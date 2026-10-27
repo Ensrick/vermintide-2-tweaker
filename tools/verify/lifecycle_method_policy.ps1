@@ -641,6 +641,11 @@ function Get-VtCardCurrentArtifactReview {
 
         $value = [string]$lineInfo.Value
         $valueOffset = [int]$lineInfo.ValueOffset
+        $semver = '\d+\.\d+\.\d+(?:\.\d+)?(?:-[A-Za-z0-9.]+)?'
+        $versionMatches = if (@($normalizedTargets | Where-Object { $_.Version }).Count -gt 0) {
+            @([regex]::Matches($value,
+                ('(?i)(?<![0-9A-Za-z.-])[vV]?(?<value>'+$semver+')(?![0-9A-Za-z-])(?!\.[0-9A-Za-z])')))
+        } else { @() }
         $sourceHint = $heading.Equals('Exact source', [System.StringComparison]::OrdinalIgnoreCase) -or
             $value -match '(?i)\b(?:exact[ \t]+source|source(?:[ \t]+commit)?)\b'
         $rootHint = $value -match '(?i)\broot\b|\.mod_bundle\b'
@@ -648,10 +653,15 @@ function Get-VtCardCurrentArtifactReview {
         $hashMatches = @([regex]::Matches($value,
             '(?i)(?<![0-9a-f])(?:[0-9a-f]{64}|[0-9a-f]{40})(?![0-9a-f])'))
         if (-not $sourceHint -and -not $rootHint -and -not $zipHint -and
-            $hashMatches.Count -eq 0) { continue }
+            $hashMatches.Count -eq 0 -and $versionMatches.Count -eq 0) { continue }
 
         $lineNumber = $lineIndex + 1
         $lineTargets = @(Resolve-VtCardArtifactLineTargets -Line $line -Heading $heading -Targets $cardTargets)
+        if ($versionMatches.Count -gt 0) {
+            $lineTargets = @(Resolve-VtCardArtifactLineTargets -Line $line -Heading $heading -Targets $cardTargets -NoImplicitSingleton)
+            if ($lineTargets.Count -eq 0 -and -not $lineInfo.HasQualifier -and
+                $lineInfo.ItemIds.Count -eq 0 -and $cardTargets.Count -eq 1) { $lineTargets=@($cardTargets[0]) }
+        }
         if ($lineTargets.Count -ne 1) {
             $structuralErrors.Add("current-artifact-target-ambiguous:$heading@line$lineNumber")
             continue
@@ -660,6 +670,38 @@ function Get-VtCardCurrentArtifactReview {
         $targetKey = if ($target.ModId) { [string]$target.ModId } else { [string]$target.WorkshopId }
         $lineEdits = New-Object System.Collections.Generic.List[object]
         $parsedHashRanges = New-Object System.Collections.Generic.List[object]
+
+        # #1102: a typed current receipt can lag independently of LOAD anchors.
+        # Preserve its original v-prefix; absent versions add no new claim.
+        if ($versionMatches.Count -gt 0) {
+            $qualified = @(if ($lineInfo.HasQualifier) {
+                @(Get-VtCardReceiptQualifierTargets -LineInfo $lineInfo -Targets $normalizedTargets)
+            })
+            $distinctVersions = @($versionMatches | ForEach-Object { $_.Groups['value'].Value } | Sort-Object -Unique)
+            if ($lineInfo.ItemIds.Count -gt 1 -or $qualified.Count -gt 1 -or ($qualified.Count -eq 1 -and
+                [string]$qualified[0].ModId -cne [string]$target.ModId)) {
+                $structuralErrors.Add("current-artifact-version-owner-conflict:$targetKey@line$lineNumber")
+            }
+            elseif ($distinctVersions.Count -ne 1) {
+                $structuralErrors.Add("current-artifact-version-ambiguous:$targetKey@line$lineNumber")
+            }
+            elseif ([string]$target.Version -notmatch ('^' + $semver + '$')) {
+                $structuralErrors.Add("current-artifact-version-authority-unavailable:$targetKey@line$lineNumber")
+            }
+            else {
+                foreach ($versionMatch in $versionMatches) {
+                    $group = $versionMatch.Groups['value']
+                    $claimed = [string]$group.Value
+                    $expected = [string]$target.Version
+                    $claims.Add([pscustomobject]@{Field='version';Claimed=$claimed;Expected=$expected;Target=$targetKey;Line=$lineNumber})
+                    if (-not $claimed.Equals($expected, [StringComparison]::OrdinalIgnoreCase)) {
+                        $driftErrors.Add("current-artifact-version-drift:$targetKey@line$lineNumber")
+                        $lineEdits.Add([pscustomobject]@{Index=$valueOffset+[int]$group.Index;Length=[int]$group.Length;Replacement=$expected})
+                        $changes.Add("line $lineNumber`: $targetKey version $claimed -> $expected")
+                    }
+                }
+            }
+        }
 
         if ($sourceHint) {
             $sourceMatches = if ($heading.Equals('Exact source', [System.StringComparison]::OrdinalIgnoreCase)) {
@@ -830,6 +872,159 @@ function Get-VtCardCurrentArtifactReview {
         Changes = @($changes.ToArray())
         NewCard = $newCard
     }
+}
+
+# Shared original-to-final ownership fence, including pre-review legacy sweeps.
+function Test-VtCardTypedEditsOwned {
+    param([string]$Before, [string]$After, [string]$OwnerKey, $Targets)
+    $selectedArtifactTargets = @(Get-VtCardArtifactSelectedTargets -Card $After -Targets $Targets)
+    $originalSegments = @([regex]::Split($Before, '(?<=\n)'))
+    $finalSegments = @([regex]::Split($After, '(?<=\n)'))
+    $typedEditsOwned = $originalSegments.Count -eq $finalSegments.Count
+    for ($i = 0; $typedEditsOwned -and $i -lt $originalSegments.Count; $i++) {
+        if ($originalSegments[$i] -ceq $finalSegments[$i]) { continue }
+        $beforeInfo = Get-VtCardArtifactLineInfo -Line $originalSegments[$i].TrimEnd([char[]]"`r`n")
+        $afterInfo = Get-VtCardArtifactLineInfo -Line $finalSegments[$i].TrimEnd([char[]]"`r`n")
+        if ($beforeInfo.IsFeatureProvenance -or $afterInfo.IsFeatureProvenance) { $typedEditsOwned = $false; break }
+        if (-not $beforeInfo.IsTypedCurrent -and -not $afterInfo.IsTypedCurrent) { continue }
+        if (-not $beforeInfo.IsTypedCurrent -or -not $afterInfo.IsTypedCurrent -or
+            [string]$beforeInfo.Heading -cne [string]$afterInfo.Heading) { $typedEditsOwned = $false; break }
+        foreach ($lineInfo in @($beforeInfo,$afterInfo)) {
+            $lineText = if ($lineInfo -eq $beforeInfo) { $originalSegments[$i] } else { $finalSegments[$i] }
+            $lineOwners = @(Resolve-VtCardArtifactLineTargets -Line $lineText -Heading $lineInfo.Heading -Targets $Targets -NoImplicitSingleton)
+            if ($lineOwners.Count -eq 0 -and -not $lineInfo.HasQualifier -and $lineInfo.ItemIds.Count -eq 0 -and
+                $selectedArtifactTargets.Count -eq 1) { $lineOwners = @($selectedArtifactTargets[0]) }
+            if ($lineOwners.Count -ne 1 -or [string]$lineOwners[0].ModId -cne $OwnerKey) { $typedEditsOwned = $false; break }
+        }
+    }
+    return $typedEditsOwned
+}
+
+function Get-VtCardReceiptQualifierTargets {
+    param($LineInfo, $Targets)
+    if (-not $LineInfo.HasQualifier) { return @() }
+    # "Current WT receipt" is not the public stream when WT is a shared
+    # runtime tag. An exact item may disambiguate it, but the shared tag alone
+    # cannot. Derive this from real markers, not a new display-name alias.
+    $runtimeOwners=@($Targets | Where-Object {
+        @($_.Markers | Where-Object {
+            $_ -match '^\[([A-Za-z][A-Za-z0-9_-]*)(?::LOAD)?\]$' -and
+            (ConvertTo-VtCardArtifactNameKey $Matches[1]) -ceq $LineInfo.Qualifier
+        }).Count -gt 0
+    })
+    if ($runtimeOwners.Count -gt 1) {
+        if ($LineInfo.ItemIds.Count -eq 1 -and @($runtimeOwners | Where-Object {
+            [string]$_.WorkshopId -ceq [string]$LineInfo.ItemIds[0]
+        }).Count -eq 1) { return @() }
+        return $runtimeOwners
+    }
+    return @(Resolve-VtCardArtifactLineTargets -Line '' -Heading $LineInfo.Heading -Targets $Targets -NoImplicitSingleton)
+}
+
+# #1102: only current, fully source-resolved builds admit this receipt-only path.
+# The normal caller still validates the complete final card before mutation.
+function Get-VtCurrentReceiptRefreshPlan {
+    param([string]$Body, [string]$PublishedId, [string]$NewVersion,
+        [string]$NewManifest, $ArtifactTarget, [object[]]$ArtifactTargets)
+    if (-not (Test-VtCurrentLiveTestCard $Body) -or -not $ArtifactTargets) { return $null }
+    $owner = ConvertTo-VtCardArtifactTarget $ArtifactTarget
+    $targets = @($ArtifactTargets | ForEach-Object { ConvertTo-VtCardArtifactTarget $_ })
+    $rows = @($targets | Where-Object {
+        [string]$_.ModId -ceq [string]$owner.ModId -and
+        [string]$_.Directory -ceq [string]$owner.Directory -and
+        [string]$_.WorkshopId -ceq [string]$owner.WorkshopId
+    })
+    $result = [pscustomobject]@{Status='unparseable';MatchedBy='typed-current-receipt';
+        Reason='publishing-artifact-context-mismatch';NewBody=$null;Changes=@()}
+    $valid = $rows.Count -eq 1 -and [string]$owner.WorkshopId -ceq $PublishedId -and
+        [string]$owner.Version -ceq $NewVersion.TrimStart('v','V')
+    foreach ($field in @('ModId','Directory','WorkshopId','Version','SourceCommit',
+        'RootBundle','RootBundleSha256','AssetFilename','AssetSha256')) {
+        if ([string]::IsNullOrWhiteSpace([string]$owner.$field) -or $rows.Count -ne 1 -or
+            [string]$rows[0].$field -cne [string]$owner.$field) { $valid = $false }
+    }
+    if ([string]$owner.SourceCommit -cnotmatch '^[0-9a-f]{40}$' -or
+        [string]$owner.RootBundle -notmatch '^[A-Za-z0-9._-]+\.mod_bundle$' -or
+        [string]$owner.RootBundleSha256 -cnotmatch '^[0-9a-f]{64}$' -or
+        [string]$owner.AssetFilename -notmatch '^[A-Za-z0-9._-]+\.zip$' -or
+        [string]$owner.AssetSha256 -cnotmatch '^[0-9a-f]{64}$') { $valid=$false }
+    if (-not $valid) { return $result }
+    $build = Resolve-VtBuildAuthorityTargets -BuildBanner (Get-VtCardField -Card $Body -Name 'Build/banner') `
+        -Authority ([pscustomobject]@{Records=$ArtifactTargets})
+    if ($build.Errors.Count -ne 0 -or @($build.Targets | Where-Object {
+        [string]$_.ModId -ceq [string]$owner.ModId
+    }).Count -ne 1) { return $null }
+    $review = Get-VtCardCurrentArtifactReview -Card $Body -Targets $ArtifactTargets
+    if ($review.Status -eq 'unparseable') {
+        $result.Reason = @($review.StructuralErrors) -join ', '
+        return $result
+    }
+    $siblingDrift=@($review.Claims | Where-Object {
+        [string]$_.Target -cne [string]$owner.ModId -and
+        -not ([string]$_.Claimed).Equals([string]$_.Expected,[StringComparison]::OrdinalIgnoreCase)
+    })
+    if ($siblingDrift.Count -gt 0) {
+        $result.Reason='sibling-current-artifact-drift:'+(($siblingDrift|ForEach-Object {'{0}/{1}@line{2}' -f $_.Target,$_.Field,$_.Line}) -join ', ')
+        return $result
+    }
+    $candidate = if ($review.Status -eq 'stale') { [string]$review.NewCard } else { $Body }
+    $before = @([regex]::Split($Body,'(?<=\n)'))
+    $after = @([regex]::Split($candidate,'(?<=\n)'))
+    if ($before.Count -ne $after.Count) { $result.Reason='receipt-line-shape-drift'; return $result }
+    $changes = @($review.Changes)
+    $recognized = $false
+    for ($i=0; $i -lt $before.Count; $i++) {
+        $line = [string]$before[$i]
+        if ($line -cne $after[$i]) {
+            $lineClaims=@($review.Claims | Where-Object {[int]$_.Line -eq ($i+1)})
+            if ($lineClaims.Count -eq 0 -or @($lineClaims | Where-Object {
+                [string]$_.Target -cne [string]$owner.ModId
+            }).Count -gt 0) { $result.Reason='publishing-artifact-edit-ownership-unproven'; return $result }
+        }
+        $info = Get-VtCardArtifactLineInfo -Line $line.TrimEnd([char[]]"`r`n")
+        if (-not $info.IsTypedCurrent) {
+            if ($line -cne $after[$i]) { $result.Reason='receipt-edit-not-typed'; return $result }
+            continue
+        }
+        $owners = @(Resolve-VtCardArtifactLineTargets -Line $line -Heading $info.Heading -Targets $targets -NoImplicitSingleton)
+        if ($owners.Count -eq 0 -and -not $info.HasQualifier -and $info.ItemIds.Count -eq 0 -and
+            $build.Targets.Count -eq 1) { $owners=@(ConvertTo-VtCardArtifactTarget $build.Targets[0]) }
+        if ($owners.Count -ne 1) { $result.Reason='receipt-owner-ambiguous'; return $result }
+        $qualified = @(if ($info.HasQualifier) {
+            @(Get-VtCardReceiptQualifierTargets -LineInfo $info -Targets $targets)
+        })
+        if ($qualified.Count -gt 1 -or ($qualified.Count -eq 1 -and
+            [string]$qualified[0].ModId -cne [string]$owners[0].ModId)) {
+            $result.Reason='receipt-owner-conflict'; return $result
+        }
+        $owned = [string]$owners[0].ModId -ceq [string]$owner.ModId
+        if (-not $owned) {
+            if ($line -cne $after[$i]) { $result.Reason='publishing-artifact-edit-ownership-unproven'; return $result }
+            continue
+        }
+        $recognized = $true
+        if ($NewManifest -and $line -match '(?i)\bmanifest') {
+            $pattern = '(?i)(\bitem[ \t]+`?' + [regex]::Escape($PublishedId) + '`?[ \t]*,[ \t]*manifest(?:id)?[ \t]+`?)(?<id>\d+)'
+            $manifestMatches = @([regex]::Matches($after[$i],$pattern))
+            $manifestTokens = @([regex]::Matches($after[$i],'(?i)\bmanifest(?:id)?[ \t]*(?:=|:)?[ \t]*`?\d+'))
+            if ($info.ItemIds.Count -ne 1 -or $manifestMatches.Count -ne 1 -or
+                $manifestTokens.Count -ne 1 -or $NewManifest -notmatch '^\d{5,}$') {
+                $result.Reason='receipt-manifest-unparseable'; return $result
+            }
+            $m=$manifestMatches[0]; $g=$m.Groups['id']
+            if ($g.Value -cne $NewManifest) {
+                $after[$i]=$after[$i].Substring(0,$g.Index)+$NewManifest+$after[$i].Substring($g.Index+$g.Length)
+                $changes += "line $($i+1): $($owner.ModId) manifest $($g.Value) -> $NewManifest"
+            }
+        }
+    }
+    if (-not $recognized) { return $null }
+    if (-not (Test-VtCardTypedEditsOwned -Before $Body -After ($after -join '') -OwnerKey $owner.ModId -Targets $targets)) {
+        $result.Reason='publishing-typed-or-provenance-edit-ownership-unproven'; return $result
+    }
+    $result.Status = if ($changes.Count) { 'refresh' } else { 'current' }
+    $result.Reason=$null; $result.NewBody=$after -join ''; $result.Changes=@($changes)
+    return $result
 }
 
 function Test-VtNativeChatMarkerException {
@@ -1154,7 +1349,7 @@ function Get-VtLiveTestCardSelection {
                 $authorityAdvisories.Add($manifestAdvisory)
             }
             if($Authority){
-                $currentArtifactReview=Get-VtCardCurrentArtifactReview -Card $card -Targets $targets
+                $currentArtifactReview=Get-VtCardCurrentArtifactReview -Card $card -Targets $Authority.Records
                 foreach($artifactError in @($currentArtifactReview.Errors)){
                     $authorityErrors.Add($artifactError)
                 }

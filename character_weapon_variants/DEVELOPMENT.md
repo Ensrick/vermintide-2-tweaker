@@ -2222,6 +2222,23 @@ collaborators, not claimed as engine animation/physics/ABI acceptance.
 
 ### Shared finite career envelope (Shortsword and Javelin)
 
+The entry also loads `_cwv_shortsword_history_envelope` once as the private
+fourth Shortsword factory argument. It delegates only the native dagger
+heavy-right profile cell to fixed WT public/Dev history runtime evidence;
+the clone and immediate whole-source transaction proofs remain exact.
+This is finite scalar semantics, not writer-origin or gameplay attestation.
+Actual restore/removal can validate the original scalar after the runtime
+empties its ledger; all other source cells and metatables remain pinned.
+Family-specific history compatibility stays in each finite leaf, never a
+broad graph exception or a post-failure donor resnapshot.
+The entry once-loads `_cwv_history_producer_binding`, captures it privately
+through the core return, and value-binds it to Shortsword and Javelin leaves.
+Only fixed WT discovery and runtime/policy/registration/fallback-reference
+proof are shared. `_cwv_javelin_history_envelope` separately owns seven
+native source routes, exact synthetic ledgers, parity-false degradation
+and actual restore/removal. Detached normalization precedes unchanged math;
+the immediate full source-before commit proof never excludes these cells.
+
 The entry loads `_cwv_career_envelope` once and both family factories capture
 its functions privately by value. `get_mod` itself is captured at that point;
 only literal `wt`/`wt_dev` IDs are queried late under `pcall`, since those mods
@@ -2248,3 +2265,13 @@ never table `==`/`~=`: shared `__eq` metamethods are not reference authority.
 The graph applies this to snapshot child/metatable identity and transaction
 preimage/readback. Canonical career body CONTENT remains delegated; replacing
 the row/root with an equal-comparing foreign table does not inherit authority.
+
+Javelin retained/precommit registry references use `rawequal`, never Lua
+metamethod equality. Stored graph snapshots cannot prove a replaced live
+registry cell still points to their original. The observable shared source-map
+metatable is captured once; unrelated rows remain shared producer content.
+Identity failure denies fresh item/seed publication without repair.
+
+Shortsword likewise checks true registry/getter references with `rawequal`;
+its existing `metas` proof owns observable root/map metatables without a new
+field or plain-root restriction. Scalar/history/math policies do not change.

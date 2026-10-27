@@ -1,5 +1,23 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.558-dev (2026-10-27) -- Finite native-history compatibility (#428)
+
+- Retain Shortsword and Tuskgor Javelin construction/admission authority when
+  the supported native historical weapon settings are applied or restored.
+  Match the exact finite donor cells and real history ledger; unrelated source
+  changes, foreign tables, stale providers and owned-state conflicts still fail.
+- Normalize only detached CWV construction inputs to their authored Current
+  behavior. Do not rewrite native historical weapons or change CWV damage,
+  stagger, attack timing, profile encounter order or lookup allocation.
+- Share pure private producer-binding mechanics while keeping each weapon's
+  history, parity, fallback and restore rules separate. Use raw object identity
+  at retained, preparation and precommit boundaries, including metatable proof.
+- Preserve the original historical Shortsword fixture; a separate derived
+  adapter reconstructs the exact same original source from the updated core.
+- Retire unpublished 0.1.557-dev rather than renew its reservation or receipt.
+  Portable construction proof is not native ABI, rendered/co-op acceptance or
+  evidence establishing the cause of an earlier game crash.
+
 ## 0.1.557-dev (2026-10-27) -- Atomic Shortsword and career compatibility (#428) [not-started]
 
 - Prepare Shortsword profiles and its template off-registry, then commit the

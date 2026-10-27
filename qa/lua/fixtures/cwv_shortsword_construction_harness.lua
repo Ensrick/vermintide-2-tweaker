@@ -45,7 +45,7 @@ end
 function M.prior_source(root, reader)
     reader = reader or raw_read
     return M.reconstruct(reader(root .. "/" .. REL .. "_cwv_core_templates.lua"),
-        reader(root .. "/qa/lua/fixtures/cwv_shortsword_construction_prior.reverse.patch"))
+        reader(root .. "/qa/lua/fixtures/cwv_shortsword_history_prior.reverse.patch"))
 end
 if arg and arg[1] == "--export-prior-shortsword-core" then
     assert(type(arg[2]) == "string" and arg[3] == nil, "fixed prior-core exporter arguments required")
@@ -114,10 +114,10 @@ function M.new(H, root, config)
             if config.prior and key == "_cwv_core_templates" then value = T.run(M.prior_source(root, read), env, "exact-reconstructed-prior-core")
             else value = original_load(self, name) end
             if key == "_cwv_shortsword_construction_owner" then
-                return { bind = function(helper, mechanics, envelope)
+                return { bind = function(helper, mechanics, envelope, history)
                     H.equal(helper, captured_helper); H.equal(mechanics, graph)
                     H.equal(envelope, c.career_envelope)
-                    local factory = value.bind(helper, mechanics, envelope)
+                    local factory = value.bind(helper, mechanics, envelope, history)
                     return function(input)
                         options = input
                         if config.options then config.options(input, c) end

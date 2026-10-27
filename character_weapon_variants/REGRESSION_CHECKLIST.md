@@ -1668,3 +1668,13 @@ career row; do not mistake canonical identity for gameplay/body safety.
 rows/roots/claim values and unrelated graph child/metatable replacements.
 Stale equal-comparing preimages cannot write; foreign equal-comparing
 readbacks roll back. Healthy alias/function/metatable identity stays valid.
+
+- Shortsword with WT historical Sienna dagger: actual item and Blacksmith seed
+  survive the finite native H2 profile transition and actual restore/removal.
+  `test_cwv_shortsword_history_envelope` retains wrong-cell/value/reference and
+  metatable negatives; the named construction check still covers admission.
+
+- Javelin with WT 5.1.1 history: Kruber and Saltzpyre items and Blacksmith
+  seeds survive real Current/history/parity-false/reconcile/restore transitions.
+  Unknown, partial or tampered routes still deny; no donor or lookup repair.
+  Keep this source-only proof distinct from later solo/co-op engine testing.
