@@ -444,3 +444,29 @@ card remain required. The runner lists the suite explicitly.
   selected history, native fallback, parity and Axe composition cases remain.
   'fixtures/wt_history_dependencies.lua' supplies real transaction/helper
   dependencies to legacy direct-runtime cases; it substitutes no algorithm.
+
+`test_cwv_shortsword_history_envelope` covers the finite native dagger history
+axis with actual WT public/Dev owner/runtime/policy/transaction, one selected
+canonical catalog, and real Shortsword private item/acquisition-seed admission.
+No full game registry or callback ABI acceptance is implied.
+`test_cwv_shortsword_history_fallback` adds the actual AuthenticPistol shared-map
+append and real nonzero history-registration ownership checks after restore.
+The projected Javelin profiles are pure registration evidence, not a Javelin fix.
+
+`test_cwv_javelin_history_envelope` runs the complete real WT Owner expression
+with Catalog.load/merge over the verbatim 5.2 Javelin family/profile projection,
+actual policy/runtime/profile transaction, both private items and seeds, and
+the existing complete native callback observer. Current and historical math/ID
+comparisons register the same four WT profiles. No all13/default aggregate,
+real peer parity, historical gameplay-body or engine ABI acceptance is claimed.
+
+`test_cwv_javelin_history_root_identity` exercises raw getter/registry/power/
+preview/map identities and observable metatables on actual item+seed routes,
+with equal-comparing raw-distinct replacements and healthy same-object controls.
+The native named-power row uses the existing real resolved-row compatibility
+fixture, not invented donor math. No native ABI acceptance is implied.
+
+`test_cwv_shortsword_root_identity` covers the actual Short item/seed route
+with raw-distinct equal-comparing getter/cell/metatable replacements, a healthy
+shared-meta control and precommit abort. Existing real history/restore/Authentic
+positives remain separate affected controls; no native ABI proof is implied.

@@ -28,11 +28,13 @@ local function profile_shape(profile, levels)
     local power = rawget(target, "power_distribution")
     return type(power) == "table" and finite(rawget(power, "attack")) and finite(rawget(power, "impact"))
 end
-function M.bind(helper, mechanics, envelope)
+function M.bind(helper, mechanics, envelope, history)
     local register = assert(helper and helper.register, "Shortsword lookup helper missing")
     local capture, intact, disjoint, commit = assert(mechanics.capture), assert(mechanics.intact),
         assert(mechanics.disjoint), assert(mechanics.commit)
     local career_capture, career_intact = assert(envelope.capture), assert(envelope.intact)
+    local history_capture, history_intact, history_include, history_prepare = assert(history.capture), assert(history.intact),
+        assert(history.include), assert(history.prepare_clone)
     return function(options)
         local profiles_for, levels_for, lookup_for, weapons_for = options.profiles, options.power_levels, options.lookup, options.weapons
         local state, clone, scalar = assert(options.state), assert(options.clone), assert(options.scalar_factory)
@@ -41,25 +43,29 @@ function M.bind(helper, mechanics, envelope)
         local function pair(lookup, name, id)
             return integer(id) and id > 0 and rawget(lookup, name) == id and rawget(lookup, id) == name
         end
+        -- #428 Current/no-WT root probe admitted a raw-distinct lookup via __eq.
+        -- Stored graph snapshots inspect originals, not current registry cells.
+        -- Raw references/observable metas deny new items and seeds on drift;
+        -- they never repair, adopt or relax scalar/history/math authority.
         local function retained(p)
-            if not p or profiles_for() ~= p.profiles or levels_for() ~= p.levels or lookup_for() ~= p.lookup or weapons_for() ~= p.weapons
-                    or rawget(p.weapons, DONOR) ~= p.source or rawget(p.weapons, TEMPLATE) ~= p.template
-                    or not career_intact(p.source_snapshot) or not career_intact(p.template_snapshot)
-                    or rawget(state, "_cwv_damage_profile_wire_source") ~= p.map
+            if not p or not rawequal(profiles_for(), p.profiles) or not rawequal(levels_for(), p.levels) or not rawequal(lookup_for(), p.lookup) or not rawequal(weapons_for(), p.weapons)
+                    or not rawequal(rawget(p.weapons, DONOR), p.source) or not rawequal(rawget(p.weapons, TEMPLATE), p.template)
+                    or not career_intact(p.source_snapshot) or not history_intact(p.history_snapshot) or not career_intact(p.template_snapshot)
+                    or not rawequal(rawget(state, "_cwv_damage_profile_wire_source"), p.map)
                     or not integer(rawget(state, "_cwv_damage_profile_generation"))
                     or rawget(state, "_cwv_damage_profile_generation") < p.generation
                     or rawget(state, "_cwv_wire_fallback_profile_id") ~= p.fallback then return false end
             for name, meta in next, p.metas do
-                if getmetatable(p[name]) ~= meta.value then return false end
+                if not rawequal(getmetatable(p[name]), meta.value) then return false end
             end
             for name, donor in next, p.donors do
                 local selected = p.custom[name]
-                if rawget(p.profiles, name) ~= donor.profile or not intact(donor.snapshot) or not pair(p.lookup, name, donor.id)
-                        or rawget(p.profiles, PREFIX .. name) ~= selected.profile or not intact(selected.snapshot)
+                if not rawequal(rawget(p.profiles, name), donor.profile) or not intact(donor.snapshot) or not pair(p.lookup, name, donor.id)
+                        or not rawequal(rawget(p.profiles, PREFIX .. name), selected.profile) or not intact(selected.snapshot)
                         or not pair(p.lookup, PREFIX .. name, selected.id) or rawget(p.map, PREFIX .. name) ~= name then return false end
             end
             for _, row in ipairs(p.power) do
-                if rawget(p.levels, row.key) ~= row.value or not intact(row.snapshot) then return false end
+                if not rawequal(rawget(p.levels, row.key), row.value) or not intact(row.snapshot) then return false end
             end
             return true
         end
@@ -73,7 +79,10 @@ function M.bind(helper, mechanics, envelope)
             local source = rawget(weapons, DONOR)
             if type(source) ~= "table" or rawget(weapons, TEMPLATE) ~= nil then return false, "template_source_or_foreign" end
             local source_before, map_before = capture(source, 4096, 32768), capture(map, 2048, 8192)
-            local source_snapshot = career_capture(source, { role = "source" })
+            local history_snapshot = history_capture(source, weapons)
+            if not history_snapshot then return false, "source_history_unproven" end
+            local source_snapshot = career_capture(source, { role = "source",
+                include = function(t, key) return history_include(history_snapshot, t, key) end })
             if not source_snapshot or not map_before then return false, "source_graph_unproven" end
             local metas = {}
             for name, value in next, { profiles = profiles, levels = levels, lookup = lookup, weapons = weapons, map = map } do
@@ -147,6 +156,7 @@ function M.bind(helper, mechanics, envelope)
                 assert(planner.append_live_audit_changes, "Shortsword private audit handoff missing")
             local template = clone(source)
             assert(disjoint(source_before, capture(template, 4096, 32768)), "template clone aliases source")
+            assert(history_prepare(history_snapshot, template) == true, "clone history normalization rejected")
             assert(prepare(template, clone_scalar) == true, "template preparation rejected")
             assert(#events == 7 and check_scalar() == nil, "Shortsword encounter or scalar audit rejected")
             local count = 0; for _ in next, custom do count = count + 1 end
@@ -165,7 +175,7 @@ function M.bind(helper, mechanics, envelope)
             end
             local template_snapshot = career_capture(template, { role = "clone", source = source, token = TEMPLATE .. "<-" .. DONOR })
             assert(template_snapshot, "prepared template graph unproven")
-            assert(rawget(state, "_cwv_damage_profile_wire_source") == map
+            assert(rawequal(rawget(state, "_cwv_damage_profile_wire_source"), map)
                 and rawget(state, "_cwv_damage_profile_generation") == generation
                 and rawget(state, "_cwv_wire_fallback_profile_id") == captured_first, "source preimage changed during prepare")
             stage(state, "_cwv_damage_profile_generation", generation + #events, "generation", generation)
@@ -173,14 +183,14 @@ function M.bind(helper, mechanics, envelope)
             stage(weapons, TEMPLATE, template, "template")
             assert(append_audit(changes) == true, "private live audit rejected")
             local proof = { profiles = profiles, levels = levels, lookup = lookup, weapons = weapons, map = map, metas = metas,
-                source = source, source_snapshot = source_snapshot, template = template, template_snapshot = template_snapshot,
+                source = source, source_snapshot = source_snapshot, history_snapshot = history_snapshot, template = template, template_snapshot = template_snapshot,
                 donors = donors, custom = custom, power = power, events = events,
                 generation = generation + #events, fallback = first }
             local ok = commit(changes, function()
-                assert(profiles_for() == profiles and levels_for() == levels and lookup_for() == lookup and weapons_for() == weapons
-                    and rawget(weapons, DONOR) == source and intact(source_before) and intact(map_before), "source graph changed before commit")
+                assert(rawequal(profiles_for(), profiles) and rawequal(levels_for(), levels) and rawequal(lookup_for(), lookup) and rawequal(weapons_for(), weapons)
+                    and rawequal(rawget(weapons, DONOR), source) and intact(source_before) and intact(map_before), "source graph changed before commit")
                 for name, row in next, donors do
-                    assert(rawget(profiles, name) == row.profile and intact(row.snapshot) and pair(lookup, name, row.id), "donor changed before commit")
+                    assert(rawequal(rawget(profiles, name), row.profile) and intact(row.snapshot) and pair(lookup, name, row.id), "donor changed before commit")
                 end
             end, function()
                 assert(rawget(state, "_cwv_damage_profile_generation") == proof.generation and retained(proof), "family readback rejected")

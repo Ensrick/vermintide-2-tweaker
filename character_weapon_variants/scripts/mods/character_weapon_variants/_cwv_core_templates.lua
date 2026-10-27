@@ -155,6 +155,7 @@ return function(mod, deps)
 	local audit_profile, profile_multiplier_check, live_audit = new_profile_audit(PowerLevelTemplates)
 	_om._cwv_profile_multiplier_check = profile_multiplier_check
 
+	local history_producer_binding = deps.history_producer_binding
 	local shortsword_factory, shortsword_owner = deps.shortsword_factory
 	local detached_scalar_factory = function(options)
 			assert(type(options) == "table", "detached scalar options missing")
@@ -1435,6 +1436,7 @@ end  -- #284: end outrider grenade-launcher do-block
 		-- Private construction planner only: callers supply detached registries
 		-- and publication/source journals. Its audit cannot mutate the live ledger.
 		detached_scalar_factory = detached_scalar_factory,
+		history_producer_binding = history_producer_binding,
 		shortsword_construction = {
 			admit_shortsword = function(def) return shortsword_owner ~= nil and shortsword_owner.admit(def) end,
 			check_shortsword = function()

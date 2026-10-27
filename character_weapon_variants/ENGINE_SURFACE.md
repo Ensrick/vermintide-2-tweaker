@@ -542,6 +542,14 @@ fresh item/seed denial preserves saved records; foreign/hot-reload state is
 unproven, never adopted. Source/native retained engine safety and #423 sender
 finalization remain separate; this does not claim historical crash causality.
 
+The private `_cwv_shortsword_history_envelope` adds no engine contact. Its
+one native donor profile-cell delegation reads the actual fixed WT history
+runtime/ledger. The shared pure producer-binding leaf and separate seven-route
+Javelin leaf add no hook, RPC, registry, setting or engine contact. Javelin
+validates real parity-false active ledgers and exact native restored state;
+no owned clone/profile/lookup is exempted. This does not
+prove arbitrary writer origin, native action ABI, or gameplay acceptance.
+
 The private `_cwv_career_envelope` is shared by Shortsword/Javelin source and
 clone proofs. It has no engine-facing hook or mutation. Entry-captured
 get_mod resolves only public/dev WT identities late; the existing canonical

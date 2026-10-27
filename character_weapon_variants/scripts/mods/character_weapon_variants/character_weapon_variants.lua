@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.557-dev"
+local MOD_VERSION = "0.1.558-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
 mod._cwv_dev_anim_picker = mod:dofile("scripts/mods/character_weapon_variants/cwv_dev_anim_picker")
@@ -501,10 +501,15 @@ local _cwv_network_lookup = mod:dofile("scripts/mods/character_weapon_variants/_
 local _cwv_profile_graph = mod:dofile("scripts/mods/character_weapon_variants/_cwv_profile_graph_transaction")
 local _cwv_career_envelope = mod:dofile("scripts/mods/character_weapon_variants/_cwv_career_envelope").bind(
 	_cwv_profile_graph, function() return ActionTemplates end, get_mod)
-local _core_template_construction = mod:dofile(
+local _core_template_construction = mod:dofile("scripts/mods/character_weapon_variants/_cwv_history_producer_binding").bind(
+	_cwv_profile_graph, get_mod)
+_core_template_construction = mod:dofile(
 	"scripts/mods/character_weapon_variants/_cwv_core_templates")(mod, {
 	shortsword_factory = mod:dofile("scripts/mods/character_weapon_variants/_cwv_shortsword_construction_owner").bind(
-		_cwv_network_lookup, _cwv_profile_graph, _cwv_career_envelope),
+		_cwv_network_lookup, _cwv_profile_graph, _cwv_career_envelope,
+		mod:dofile("scripts/mods/character_weapon_variants/_cwv_shortsword_history_envelope").bind(
+			_cwv_profile_graph, _core_template_construction)),
+	history_producer_binding = _core_template_construction,
 	om = _om,
 	Weapons = Weapons,
 	DamageProfileTemplates = DamageProfileTemplates,
@@ -869,7 +874,9 @@ mod:dofile("scripts/mods/character_weapon_variants/_cwv_custom_mesh_runtime")(mo
 -- finite-stack weapon template, and the grenade-slot variant share one owner.
 -- Capture shared factories by value before the bootstrap reuses _variant_install.
 local _javelin_factory = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_construction_owner").bind(
-	_variant_install.network_lookup, _cwv_profile_graph, _core_template_construction.detached_scalar_factory, _cwv_career_envelope)
+	_variant_install.network_lookup, _cwv_profile_graph, _core_template_construction.detached_scalar_factory, _cwv_career_envelope,
+	mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_history_envelope").bind(
+		_cwv_profile_graph, _core_template_construction.history_producer_binding))
 local _javelin_runtime =
 	mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_runtime_owner")(mod, {
 		om = _om,

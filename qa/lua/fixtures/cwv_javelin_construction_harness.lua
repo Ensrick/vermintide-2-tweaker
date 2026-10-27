@@ -104,10 +104,16 @@ function M.new(H, root, config)
         end
     end
     om.combat_style_policy = {}
-    local core = c.load("_cwv_core_templates")(c.mod, { om = om, Weapons = env.Weapons,
+    local init_start = assert(c.entry:find("local _core_template_construction = mod:dofile(", 1, true))
+    local init_end = assert(c.entry:find("\n_core_template_construction = mod:dofile(", init_start, true))
+    local initialize = T.run("return function(mod, _cwv_profile_graph)\n" .. c.entry:sub(init_start, init_end - 1)
+        .. "\nreturn _core_template_construction end", env, "actual-entry-history-binding")
+    local history_binding = initialize(c.mod, graph)
+    local core = c.load("_cwv_core_templates")(c.mod, { om = om, Weapons = env.Weapons, history_producer_binding = history_binding,
         DamageProfileTemplates = env.DamageProfileTemplates, PowerLevelTemplates = env.PowerLevelTemplates,
         NetworkLookup = env.NetworkLookup, ItemMasterList = env.ItemMasterList, AttachmentNodeLinking = env.AttachmentNodeLinking,
         Projectiles = env.Projectiles, ActionTemplates = env.ActionTemplates, printf = env.printf })
+    H.equal(core.history_producer_binding, history_binding); c.history_binding = history_binding
     c.core = core
     env.ProjectileUnits, env.Pickups, env.AllPickups = {}, { ammo = {}, grenades = {} }, {}
     env.WeaponSkins = { skins = {} }
@@ -137,8 +143,8 @@ function M.new(H, root, config)
     local original_load = c.mod.dofile
     c.mod.dofile = function(self, name)
         if name:match("/_cwv_javelin_construction_owner$") then
-            return { bind = function(helper, mechanics, detached, envelope)
-                factory = owner_module.bind(helper, mechanics, detached, envelope)
+            return { bind = function(helper, mechanics, detached, envelope, history)
+                factory = owner_module.bind(helper, mechanics, detached, envelope, history)
                 H.equal(helper, c.capsule.network_lookup); H.equal(mechanics, graph); H.equal(detached, scalar_factory); H.equal(envelope, c.career_envelope)
                 return wrapped
             end }

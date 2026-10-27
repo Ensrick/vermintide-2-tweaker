@@ -190,8 +190,17 @@ return function(H,root)
         local token='mod:dofile("scripts/mods/character_weapon_variants/_cwv_career_envelope")'
         local at=assert(entry:find(token,1,true));H.equal(entry:find(token,at+#token,true),nil)
         H.truthy(entry:find('_cwv_profile_graph, function() return ActionTemplates end, get_mod)',at,true))
-        H.truthy(entry:find('_cwv_network_lookup, _cwv_profile_graph, _cwv_career_envelope)',at,true))
-        H.truthy(entry:find('_core_template_construction.detached_scalar_factory, _cwv_career_envelope)',at,true))
+        H.truthy(entry:find('_cwv_network_lookup, _cwv_profile_graph, _cwv_career_envelope,',at,true))
+        local history='mod:dofile("scripts/mods/character_weapon_variants/_cwv_shortsword_history_envelope")'
+        local history_at=assert(entry:find(history,at,true));H.equal(entry:find(history,history_at+#history,true),nil)
+        H.truthy(entry:find('_cwv_profile_graph, _core_template_construction)),',history_at,true))
+        local common='mod:dofile("scripts/mods/character_weapon_variants/_cwv_history_producer_binding")'
+        local common_at=assert(entry:find(common,1,true));H.equal(entry:find(common,common_at+#common,true),nil)
+        H.truthy(common_at<history_at);H.truthy(entry:find('history_producer_binding = _core_template_construction,',history_at,true))
+        H.truthy(entry:find('_core_template_construction.detached_scalar_factory, _cwv_career_envelope,',at,true))
+        local javelin='mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_history_envelope")'
+        local javelin_at=assert(entry:find(javelin,history_at,true));H.equal(entry:find(javelin,javelin_at+#javelin,true),nil)
+        H.truthy(entry:find('_cwv_profile_graph, _core_template_construction.history_producer_binding))',javelin_at,true))
         for _,name in ipairs({"_cwv_shortsword_construction_owner.lua","_cwv_javelin_construction_owner.lua"})do
             local source=read(prefix..name)
             H.truthy(source:find('local career_capture, career_intact = assert(envelope.capture), assert(envelope.intact)',1,true))
