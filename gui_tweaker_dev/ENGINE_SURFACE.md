@@ -584,3 +584,35 @@ module source - match crash logs by function name, not line. This documents
 numbers - promotion is user-triggered and the two streams drift. Structural
 template is `character_weapon_variants/ENGINE_SURFACE.md`; keep the section shape
 (hook table -> subsystem notes -> dead ends) stable.
+
+### Standalone staged settings/profile module contract (#2 partial slice)
+
+The entry's existing native-menu `load_view` field loads the inert
+`_mod_tweaker_view_pending.lua` once and binds only its private
+`bind_view_supplier` adapter. The isolated Dialogue and exclusive-group
+runtime contracts also consume that same private binder on each fresh
+diagnostic class, without caching or stubbing staged methods. The original late
+`pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_mod_tweaker_view")`
+expression still evaluates once before return adaptation. No existing module
+load, hook, command, renderer, lifecycle or embedded-state owner moves.
+
+The view's first return remains its class. Its private second return captures
+the real view-local helpers/table identities; the entry-owned adapter installs
+the verbatim staged-change, Apply, DEFAULT and profile methods before the shell
+can construct that class. The adapter consumes only that private second return,
+preserving explicit arity and trailing nil holes. Actual VMF
+`modules/core/safe_calls.lua:41-57` strips its internal failure status and
+returns zero module values on a swallowed chunk error: the unchanged outer
+pcall therefore returns the one-value tuple `(true)`. A new binder failure is
+an explicit private-protocol failure, not falsely relabeled VMF dofile logging.
+Failure of the new entry-loaded owner remains an entry dependency failure;
+only unsuccessful lazy view attachments retry through the existing shell.
+
+Where new code goes: pending edits, commit/default/profile orchestration belong
+in this closed owner; widget rendering/input stay in rows/interaction and
+engine-free commit/profile/default policy stays in its existing modules. Keep
+late `get_mod`, `Managers.popup`, `Localize` and the two bare `printf`
+batch logs late; do not merge them into captured `_printf`. Do not add a
+nested dofile or publish this handoff on the mod table. The view's registered
+ceiling falls from1685 to1370; entry remains1415. This is not full #2 adoption
+or live renderer/game acceptance.

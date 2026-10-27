@@ -510,7 +510,13 @@ _rt_register("mod_tweaker_exclusive_group_api", function()
         return "radio presentation without label was not rejected"
     end
     -- Enforcement is wired: the standalone view class carries the sweep method.
-    local ok_v, V = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_mod_tweaker_view")
+    local pending = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_view_pending")
+    local ok_v, V
+    if type(pending) == "table" and type(pending.bind_view_supplier) == "function" then
+        ok_v, V = pending.bind_view_supplier(function()
+            return pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_mod_tweaker_view")
+        end)()
+    end
     if not ok_v or type(V) ~= "table" or type(V._enforce_exclusive) ~= "function" then
         return "ModTweakerView:_enforce_exclusive missing (enforcement not wired)"
     end

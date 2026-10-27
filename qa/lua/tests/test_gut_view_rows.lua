@@ -97,6 +97,7 @@ return function(H, repo_root, source_override)
             _mod_tweaker_search = true, _mod_tweaker_ordering = true,
             _mod_tweaker_label_policy = true, _mod_tweaker_exclusive_layout = true,
             _mod_tweaker_view_catalog = true,
+            _mod_tweaker_view_pending = true,
         }
         local function load_source(path)
             local chunk = assert(loadstring(read(path), "@" .. path)); setfenv(chunk, env); return chunk()
@@ -130,7 +131,9 @@ return function(H, repo_root, source_override)
         env.get_mod = function(id) H.equal(id, "gut_dev"); return mod end
         env.class = function(class) class = class or {}; class.__index = class; return class end
         env.printf = function(...) printed[#printed + 1] = pack(...) end
-        local Class = load_source(view_path)
+        local pending = load_source(root .. "_mod_tweaker_view_pending.lua")
+        local ok, Class = pending.bind_view_supplier(function() return pcall(load_source, view_path) end)()
+        H.truthy(ok, Class)
         H.equal(loads._mod_tweaker_view_rows, 1, "view must load the real child once")
         H.equal(install_count, 1, "view must install the real child once")
         H.equal(type(Class._build_node_row), "function"); H.equal(type(Class._append_row), "function")
@@ -355,4 +358,5 @@ return function(H, repo_root, source_override)
             H.equal(f.view._max_scroll, 0)
         end)
     end
+    return { fixture = fixture, read = read }
 end

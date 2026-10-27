@@ -51,6 +51,11 @@ return function(root, persisted)
         set = function() f.gut_writes = f.gut_writes + 1 end }
     function gut:dofile(path)
         if path:match("_mod_tweaker_definitions$") then return defs end
+        if path == "scripts/mods/gui_tweaker_dev/_mod_tweaker_view" then
+            local chunk = assert(loadfile(root .. "/gui_tweaker_dev/" .. path .. ".lua"))
+            setfenv(chunk, env)
+            return chunk() -- Preserve the private second return on this raw boundary.
+        end
         return load("gui_tweaker_dev/" .. path)
     end
     env.get_mod = function(id)
@@ -58,7 +63,12 @@ return function(root, persisted)
         if id == "character_dialogue" and not f.absent then return cd end
     end
     f.cd, f.env, f.defs = cd, env, defs
-    f.View = gut:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_view")
+    local pending = gut:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_view_pending")
+    local loaded, View = pending.bind_view_supplier(function()
+        return pcall(gut.dofile, gut, "scripts/mods/gui_tweaker_dev/_mod_tweaker_view")
+    end)()
+    assert(loaded, View)
+    f.View = View
     f.UI = gut:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_dialogue")
     f.category = { mod_id = "character_dialogue", widgets = { { type = "dialogue_browser" } } }
     function f:new_view()

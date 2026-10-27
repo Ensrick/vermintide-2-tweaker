@@ -1,5 +1,22 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.367-dev (2026-10-27) -- Retain pending and profile owner (#2) [not-started]
+
+- Extract the standalone Mod Tweaker view's existing staged settings, apply,
+  cancel, defaults and profile behavior into one private pending-state owner.
+  Preserve the original method bodies, callback timing, late policy reads,
+  transaction behavior and exact loader return tuples.
+- Bind that owner before constructing each view, including isolated runtime
+  checks; add no hook, setting, shared registry or public GUI behavior. Keep
+  the entry ceiling at1415 and lower the view ceiling from1685 to1370
+  canonical lines.
+- Add portable source-qualified owner coverage and meaningful disconnected,
+  error/tuple, cancellation and profile controls. Keep every existing CWV
+  construction/career/identity suite and current released source pin intact.
+- This is a bounded source/ownership refactor, not runtime acceptance or
+  completion of #2. Game startup, renderer/input and native ABI remain
+  unverified; no new in-game testing lifecycle is claimed.
+
 ## 0.2.366-dev (2026-10-26) -- Retain entry command and menu owners (#2) [not-started]
 
 - Give the existing saved-loadout commands and native-menu shell explicit

@@ -362,6 +362,11 @@ return function(H, repo_root)
             local file = assert(io.open(repo_root .. paths[i], "rb"))
             local source = file:read("*a")
             file:close()
+            local lifecycle_source = source
+            if paths[i] == "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view.lua" then
+                file = assert(io.open(repo_root .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view_pending.lua", "rb"))
+                source = file:read("*a"); file:close()
+            end
             H.truthy(source:find("if complete then", 1, true)
                 and source:find("self._pending[mid] = {}", 1, true),
                 paths[i] .. " clears an owner only after completion")
@@ -391,7 +396,7 @@ return function(H, repo_root)
                 paths[i] .. " cannot enable Apply for a reseed-only transaction")
             H.truthy(source:find("default_reset.finish(", 1, true),
                 paths[i] .. " never completes the official reseed transaction")
-            H.truthy(source:find("default_reset.clear(self)", 1, true),
+            H.truthy(lifecycle_source:find("default_reset.clear(self)", 1, true),
                 paths[i] .. " can leak a discarded reseed intent across view sessions")
         end
     end)

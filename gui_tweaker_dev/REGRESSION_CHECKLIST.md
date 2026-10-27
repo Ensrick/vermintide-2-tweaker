@@ -637,3 +637,26 @@ Last updated: 2026-09-14.
 | Repro | Run `/gut_all_languages_status` with and without the standalone Support All Languages mod enabled. |
 | Expected post-fix | The command reports all eight font rows, prints six visual language-family samples, and logs bounded per-player UTF-8 metrics without logging or rewriting names. |
 | Detection | Offline `test_gut_all_languages_diagnostics.lua`; `/gut_regression_test`: `all_languages_defer_340`; solo visual confirmation required after deployment. |
+
+## Standalone pending/profile owner (#2 source-only)
+
+`test_gut_view_pending` executes complete actual VMF safe_calls, the whole
+standalone view, its real rows/diagnostics/interaction installers, the private
+staged owner, the exact entry supplier and the actual shell attach function.
+The native Lua5.1 host explicitly supplies VMF's engine vararg-xpcall calling
+convention; rendering, class construction and WWise remain boundary ledgers,
+not engine ABI/graphics/audio proof.
+
+Required controls cover VMF zero versus nil returns, trailing holes, late
+dofile getter errors outside pcall, exact thrown objects, failed attach retry,
+missing/throwing binders and installation before constructor. Preserve false
+staging, merged partial Apply, keybind registration/persistence/generation,
+reseed-only DEFAULT, profile replay failure/retry, Dialogue refusal, popup
+cancel/confirm/error order, captured identities and late globals. The required
+small published-span/complete-VMF fixture has no external checkout fallback.
+Its fixed inverse reconstructs the old complete view in memory; outside
+review binds that whole result to its published SHA, while the installed Lua
+oracle asserts exact anchors/length and verbatim closed-span identity rather
+than claiming an installed SHA256 implementation. Parent lifecycle-clear
+assertions remain on the parent, not the extracted child. Package membership
+and live UI feel still need the normal integrated build and user acceptance.

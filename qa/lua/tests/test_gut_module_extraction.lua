@@ -54,6 +54,7 @@ return function(H, repo_root)
             }
             if stream.dialogue then
                 owners[#owners + 1] = { source = main, name = "_gut_mod_tweaker_shell", api = "bind" }
+                owners[#owners + 1] = { source = main, name = "_mod_tweaker_view_pending", api = "bind_view_supplier" }
                 owners[#owners + 1] = { source = view, name = "_mod_tweaker_view_rows" }
                 owners[#owners + 1] = { source = view, name = "_mod_tweaker_view_catalog", api = "bind" }
             end
@@ -72,7 +73,8 @@ return function(H, repo_root)
             local view = read(stream.root .. "_mod_tweaker_view.lua")
             local view_interaction = read(stream.root .. "_mod_tweaker_view_interaction.lua")
             local rows = stream.dialogue and read(stream.root .. "_mod_tweaker_view_rows.lua") or ""
-            assert_unique_methods(view .. rows, view_interaction, "ModTweakerView")
+            local pending = stream.dialogue and read(stream.root .. "_mod_tweaker_view_pending.lua") or ""
+            assert_unique_methods(view .. rows .. pending, view_interaction, "ModTweakerView")
 
             local state = read(stream.root .. "_mod_tweaker_state.lua")
             local state_interaction = read(stream.root .. "_mod_tweaker_state_interaction.lua")

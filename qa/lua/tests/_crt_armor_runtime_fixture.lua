@@ -89,6 +89,7 @@ return function(root, initial, vmf_settings_path, options)
     local embedded = options.surface == "embedded"
     local class = embedded and "HeroViewStateModTweaker" or "ModTweakerView"
     local view_source = read(gui .. (embedded and "_mod_tweaker_state.lua" or "_mod_tweaker_view.lua"))
+    local pending_source = embedded and view_source or read(gui .. "_mod_tweaker_view_pending.lua")
     local profiles = assert(loadfile(root .. "/" .. gui .. "_mod_tweaker_profiles.lua"))()
     local methods = {}
     local profile_values = clone(options.profile_values or {})
@@ -99,11 +100,11 @@ return function(root, initial, vmf_settings_path, options)
         profile_values[key] = clone(value)
     end
     install(slice(view_source, "local function _owner(category, setting_id)", "-- Native menu sound feedback.")
-        .. slice(view_source, "local function _cat_key(category)", "-- Read a setting's EFFECTIVE value:")
-        .. slice(view_source, "function " .. class .. ":_active_category_dirty()", "-- Recompute the APPLY button")
-        .. slice(view_source, "function " .. class .. ":_profile_snapshot(category, defaults)",
+        .. slice(pending_source, "local function _cat_key(category)", "-- Read a setting's EFFECTIVE value:")
+        .. slice(pending_source, "function " .. class .. ":_active_category_dirty()", "-- Recompute the APPLY button")
+        .. slice(pending_source, "function " .. class .. ":_profile_snapshot(category, defaults)",
             embedded and "-- APPLY: commit" or "-- (#446) Mutually-exclusive group enforcement.")
-        .. slice(view_source, "function " .. class .. ":apply_pending(category)", "-- (v0.2.148-dev) RESTORE DEFAULTS:"), {
+        .. slice(pending_source, "function " .. class .. ":apply_pending(category)", "-- (v0.2.148-dev) RESTORE DEFAULTS:"), {
             ModTweakerView = methods, HeroViewStateModTweaker = methods, mod = store, profiles = profiles,
             transactions = assert(loadfile(root .. "/" .. gui .. "_mod_tweaker_transaction.lua"))(),
             profile_runtime = assert(loadfile(root .. "/" .. gui .. "_mod_tweaker_profile_runtime.lua"))(),

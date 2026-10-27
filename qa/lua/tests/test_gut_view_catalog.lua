@@ -93,7 +93,9 @@ return function(H, repo_root, source_override)
             if name == "_mod_tweaker_sound" then return { new_probe = function() return {} end, play = function() end } end
             return { install = function() end }
         end
-        local Class = load_source(view_path)
+        local pending = load_source(root .. "_mod_tweaker_view_pending.lua")
+        local ok, Class = pending.bind_view_supplier(function() return pcall(load_source, view_path) end)()
+        H.truthy(ok, Class)
         H.equal(loads._mod_tweaker_view_catalog, 1, "actual parent must load the complete child once")
         H.equal(bind_count, 1, "actual parent must bind once")
         H.equal(type(bound), "function")

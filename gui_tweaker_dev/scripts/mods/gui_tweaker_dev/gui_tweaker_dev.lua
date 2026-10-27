@@ -40,7 +40,7 @@ end
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.366-dev"
+local MOD_VERSION = "0.2.367-dev"
 local GUT_RPC_SCHEMA = 1 -- Bump only when a GUT positional wire shape changes.
 mod._GUT_RPC_SCHEMA = GUT_RPC_SCHEMA
 
@@ -862,9 +862,9 @@ local _gut_menu_shell = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_mod_tweake
     mod = mod,
     dbg = _dbg,
     dbg_alert = _dbg_alert,
-    load_view = function()
+    load_view = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_view_pending").bind_view_supplier(function()
         return pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_mod_tweaker_view")
-    end,
+    end),
     load_localization = function()
         return pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/gui_tweaker_dev_localization")
     end,

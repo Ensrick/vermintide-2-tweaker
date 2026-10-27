@@ -59,6 +59,10 @@ return function(H, repo_root)
             local file = assert(io.open(root .. name, "rb"))
             local source = file:read("*a")
             file:close()
+            if name == "_mod_tweaker_view.lua" then
+                file = assert(io.open(root .. "_mod_tweaker_view_pending.lua", "rb"))
+                source = file:read("*a"); file:close()
+            end
             local switch_at = assert(string.find(source, ":_switch_profile(slot)", 1, true))
             local switch_end = assert(string.find(source, "\nfunction ", switch_at + 1, true))
             local block = string.sub(source, switch_at, switch_end - 1)

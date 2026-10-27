@@ -438,7 +438,11 @@ return function(H, repo_root)
             local dofile = f.mod.dofile
             local view = {late="replacement-view"}
             f.mod.dofile = function(self, path)
-                if path:find("_mod_tweaker_view",1,true) then return {new=function()return view end}, "extra-load-result" end
+                if path:find("_mod_tweaker_view",1,true) then
+                    local class = {new=function()return view end}
+                    if old then return class, "extra-load-result" end
+                    return class, function(install) return install(class, {}) end, "extra-load-result"
+                end
                 return dofile(self,path)
             end
             local ui = Shell.ui("hero_view")
