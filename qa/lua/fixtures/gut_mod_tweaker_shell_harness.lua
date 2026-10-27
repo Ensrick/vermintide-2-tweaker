@@ -128,6 +128,8 @@ return function(repo_root)
                     end
                     return decorated
                 end }
+            elseif name == "_mod_tweaker_view_pending" then
+                return chunk(read(base .. name .. ".lua"), base .. name .. ".lua")
             elseif name == "_mod_tweaker" then
                 if opts.api_error then error(opts.api_error, 0) end
                 if opts.api_non_table then return false end
@@ -136,13 +138,15 @@ return function(repo_root)
                 f.view_calls = f.view_calls + 1
                 if opts.view_load_error then error(opts.view_load_error, 0) end
                 if opts.view_non_table then return false end
-                return { new = function(_, ctx)
+                local class = { new = function(_, ctx)
                     event("view:new"); f.view_context = ctx
                     if opts.view_new_error then error(opts.view_new_error, 0) end
                     if opts.view_false then return false end
                     if opts.view_nil then return nil end
                     return opts.view_result or { value = "actual-view-constructor-result" }
                 end }
+                if opts.old then return class end
+                return class, function(install) return install(class, {}) end
             elseif name == "gui_tweaker_dev_localization" then
                 f.loc_calls = f.loc_calls + 1
                 if opts.loc_error then error(opts.loc_error, 0) end
@@ -182,7 +186,8 @@ return function(repo_root)
     local function normalized_ledger(f)
         local t = {}
         for _, value in ipairs(f.ledger) do
-            if value ~= "load:_gut_mod_tweaker_shell" and not value:find("phase:", 1, true) then
+            if value ~= "load:_gut_mod_tweaker_shell" and value ~= "load:_mod_tweaker_view_pending"
+                    and not value:find("phase:", 1, true) then
                 t[#t + 1] = value
             end
         end

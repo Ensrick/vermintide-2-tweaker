@@ -36,7 +36,16 @@ function M.install(register)
         local problem = M.owner_problem(cd)
         if problem then return problem end
         local Setting = cd:dofile("scripts/mods/character_dialogue/_cd_isolation_setting")
-        local View = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_view")
+        local pending = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_view_pending")
+        if type(pending) ~= "table" or type(pending.bind_view_supplier) ~= "function" then
+            return "ModTweakerView staged supplier unavailable"
+        end
+        local ok_view, View = pending.bind_view_supplier(function()
+            return pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_mod_tweaker_view")
+        end)()
+        if not ok_view or type(View) ~= "table" then
+            return "ModTweakerView staged owner unavailable: " .. tostring(View)
+        end
         local UI = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_dialogue")
         local Transaction = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_transaction")
         local saved, writes, reconciles = false, 0, 0

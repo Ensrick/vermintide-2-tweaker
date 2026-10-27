@@ -1,0 +1,21 @@
+{
+  "schema": 1,
+  "purpose": "Required portable exact published GUI365 staged cluster and complete actual VMF safe_calls; test-only data",
+  "published_span": {
+    "path": "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view.lua",
+    "source_commit": "8e18cafd2523af9b217e4515d8a5252d3be6a5d9",
+    "source_raw_sha256": "bd3d95b706589fcc1c65d02fb77a96a2138f5935865ad2e0ccb428807a356138",
+    "span_sha256": "62e1836e3476b7ce828b861371723f9ea8c4c795566c30484582da3efdc7a3fe",
+    "boundary": "local function _cat_key(category) through final _check_reset_popup end; before next separator",
+    "canonical_lines": 322
+  },
+  "vmf": {
+    "repository": "Vermintide-Mod-Framework",
+    "commit": "81bb4ce0d84e0060cc8a848f48aa7e6e635c2168",
+    "path": "vmf/scripts/mods/vmf/modules/core/safe_calls.lua",
+    "raw_bytes": 3484,
+    "raw_sha256": "98ded4ea935ea2d65ab5b8235a24d459338f7a9746d73cb5eeb3d741d1eef1ae",
+    "scope": "Complete source, no statement or return rewriting"
+  },
+  "host_limit": "Native Lua5.1 host supplies VMF-required vararg xpcall convention explicitly; not a general engine/ABI simulation"
+}

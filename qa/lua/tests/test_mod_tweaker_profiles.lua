@@ -169,6 +169,10 @@ return function(H, repo_root)
         for _, name in ipairs({ "_mod_tweaker_view.lua", "_mod_tweaker_state.lua" }) do
             local file = assert(io.open(repo_root .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/" .. name, "rb"))
             local source = file:read("*a"); file:close()
+            if name == "_mod_tweaker_view.lua" then
+                file = assert(io.open(repo_root .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view_pending.lua", "rb"))
+                source = file:read("*a"); file:close()
+            end
             H.truthy(source:find("profile_runtime.switch_profile(self, slot", 1, true))
             H.truthy(source:find("profile_runtime.ensure_profile(self,", 1, true))
             H.truthy(source:find("profiles.capture_owners(out, category, _owner, defaults)", 1, true))
