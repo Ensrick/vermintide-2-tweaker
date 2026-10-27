@@ -54,11 +54,55 @@ function Get-LuaSuiteNames {
     return $names
 }
 
+# Required historical-owner identity is proven BEFORE its new healthy oracle.
+# The tracked Lua harness owns the sole strict reverse-delta implementation.
+function Assert-JavelinPriorRuntimeIdentity {
+    param([string]$LuaExecutable, [string]$Exporter, [string]$Repository)
+    foreach ($value in @($LuaExecutable, $Exporter, $Repository)) {
+        if ($value.Contains('"') -or $value.Contains([string][char]10) -or $value.Contains([string][char]13)) { throw 'Invalid fixed Javelin exporter path' }
+    }
+    $fixture = Join-Path (Split-Path -Parent $Exporter) 'cwv_javelin_construction_source.lua'
+    $utf8 = New-Object Text.UTF8Encoding($false, $true)
+    $hash = [Security.Cryptography.SHA256]::Create()
+    $process = New-Object Diagnostics.Process
+    try {
+        $text = [IO.File]::ReadAllText($fixture).Replace(([string][char]13 + [char]10), [string][char]10)
+        $actual = ([BitConverter]::ToString($hash.ComputeHash($utf8.GetBytes($text)))).Replace('-', '').ToLowerInvariant()
+        if ($actual -cne '5fecf5a102b910f7b15a9a4eda309dccc0836c354816b56f784eea2e35671911') { throw 'Required Javelin native closure hash mismatch' }
+        $start = New-Object Diagnostics.ProcessStartInfo
+        $start.FileName = $LuaExecutable
+        $start.Arguments = '"' + $Exporter + '" --export-prior-javelin "' + $Repository + '"'
+        $start.UseShellExecute = $false
+        $start.CreateNoWindow = $true
+        $start.RedirectStandardOutput = $true
+        $start.RedirectStandardError = $true
+        $start.StandardOutputEncoding = $utf8
+        $start.StandardErrorEncoding = $utf8
+        $process.StartInfo = $start
+        if (-not $process.Start()) { throw 'Javelin identity exporter did not start' }
+        $stdout = $process.StandardOutput.ReadToEndAsync()
+        $stderr = $process.StandardError.ReadToEndAsync()
+        if (-not $process.WaitForExit(10000)) { $process.Kill(); throw 'Javelin identity exporter timed out' }
+        $output = $stdout.GetAwaiter().GetResult()
+        $errorText = $stderr.GetAwaiter().GetResult()
+        if ($process.ExitCode -ne 0) { throw ('Javelin identity exporter failed: ' + $errorText) }
+        $normalized = $output.Replace(([string][char]13 + [char]10), [string][char]10)
+        $bytes = $utf8.GetBytes($normalized)
+        $actual = ([BitConverter]::ToString($hash.ComputeHash($bytes))).Replace('-', '').ToLowerInvariant()
+        # The pinned historical owner is LF UTF8 without BOM: raw == normalized.
+        if ($bytes.Length -ne 82213 -or $actual -cne '09f5ff3e8378bb9ef81780e69f6b410a09be3ad72dcad01f13bdd3ba07608d92') { throw 'Complete prior Javelin runtime identity mismatch' }
+    }
+    finally { $process.Dispose(); $hash.Dispose() }
+}
 $tempParent = [IO.Path]::GetFullPath([IO.Path]::GetTempPath()).TrimEnd('\', '/')
 $inventoryRoot = [IO.Path]::GetFullPath((Join-Path $tempParent ('vt2-lua-suite-' + [guid]::NewGuid().ToString('N'))))
 $inventoryCreated = $false
 $exitCode = 2
 try {
+    if (-not $SelfTest) {
+        $exporter = Join-Path $luaRoot 'fixtures\cwv_javelin_construction_harness.lua'
+        Assert-JavelinPriorRuntimeIdentity -LuaExecutable $luaExe -Exporter $exporter -Repository (Split-Path -Parent $PSScriptRoot)
+    }
     [void][IO.Directory]::CreateDirectory($inventoryRoot)
     $inventoryCreated = $true
     $inventoryPath = Join-Path $inventoryRoot 'suites.txt'

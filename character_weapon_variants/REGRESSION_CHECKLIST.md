@@ -1622,3 +1622,16 @@ any remote-husk or bot verification.
   order and unchanged entry/owner ceilings are source QA obligations. No live
   readiness, stable promotion, #660 umbrella completion or future style family
   is claimed by these host checks.
+
+## #428 finite-stack Tuskgor Javelin construction (source-only)
+
+Offline `test_cwv_javelin_construction` runs the actual old/new complete installer
+and native donor/template closure, then the real private bootstrap/item builder.
+Check seven encounter order/four profiles, unchanged callback/baked identity,
+paired IDs, damage2x/ammo10/speed0.5/projectile0.9, preview writes and live audit.
+Every journal write/readback failure must restore exact raw/metatable preimages
+and deny both fresh items/seeds. Missing/foreign state, source/audit races, lost
+private wiring and unrelated native/Outrider controls are required negatives.
+`issue428_tuskgor_javelin_construction` checks retained construction authority and
+real builder rejection. This is not a runtime-ready card or proof of retained
+throw/finish/init/impact safety; #424/#1186 and human gameplay acceptance remain separate.

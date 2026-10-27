@@ -1,0 +1,59 @@
+{
+  "schema": 1,
+  "purpose": "Required portable Javelin construction QA source inputs; never bundled or used as game code",
+  "native_commit": "93dea911a4cc464a0eb51cfdc3a443297bfc4550",
+  "fixture_encoded_bytes": 74851,
+  "javelin": {
+    "path": "scripts/settings/equipment/weapon_templates/javelin.lua",
+    "raw_bytes": 41647,
+    "raw_sha256": "1838a969653b9ef962ae4575745425c0bac12f2a58e0f1ebed6e30709e69aeaf",
+    "decoded_bytes": 41644,
+    "decoded_sha256": "5a8605532a208c49e24234d622168ec32a8f752182e54fd87cd280ddd6ca8cae",
+    "decode": "UTF8 BOM removed by the established text reader; all complete native statements/callbacks retained"
+  },
+  "four_donors": {
+    "path": "scripts/settings/equipment/damage_profile_templates_dlc_woods.lua",
+    "source_raw_sha256": "342be24a182be7b1d3cbb1fd8651e1a1aaaf4ed565d58b8b1d7db29714fa4abe",
+    "lines": "85-343",
+    "slice_bytes": 4104,
+    "slice_sha256": "1b794bf3a70044994f9745fcdea9b7d9120b50b97559640929ab2f74640eb560",
+    "names": [
+      "medium_javelin_smiter_stab",
+      "medium_javelin_smiter_stab_bleed",
+      "heavy_javelin_smiter_stab_bleed",
+      "thrown_javelin"
+    ],
+    "encoding": "Exact literal rows only; no unrelated woods profiles or copied numerical math"
+  },
+  "resolution": {
+    "path": "scripts/settings/equipment/damage_profile_templates.lua",
+    "source_raw_sha256": "d8f363a06382867e174beda889eae571fe9e89a3bbf227cc5be4e35ec4424282",
+    "slice_bytes": 2160,
+    "slice_sha256": "c2d6b322b034b1885a4adac3237da489d410968644167a42474b436e1118161e",
+    "boundary": "Complete for-name damage-profile resolution loop through final end, before local no_damage_templates"
+  },
+  "by_reference": {
+    "path": "qa/lua/fixtures/wt_authentic_pistol_native_6_13.lua",
+    "sha256": "10c4c5213f5094e2863eb161408cd3ba74d11f4c9cd5b8a1131dbc5980dbfcf1",
+    "fields": [
+      "clone",
+      "is_class_instance"
+    ],
+    "copied": false
+  },
+  "excluded": [
+    "historical82213B Javelin runtime owner",
+    "duplicate old constructor bodies",
+    "unrelated native files",
+    "repositories",
+    "artwork"
+  ],
+  "historical_owner_reconstruction": {
+    "delta": "cwv_javelin_construction_prior.reverse.patch",
+    "bytes": 7284,
+    "sha256": "5f3bef9a15f94498f014471d7dcca78527ad9752d26f8725f28569695e9c8b7b",
+    "expected_complete_raw_and_normalized_sha256": "09f5ff3e8378bb9ef81780e69f6b410a09be3ad72dcad01f13bdd3ba07608d92",
+    "authority": "Same strict Lua reconstructor used by runtime harness and mandatory .NET hash preflight; context consumes and reproduces exact bytes with paired opcodes for Git whitespace safety; in-memory only, no external source fallback"
+  },
+  "fixture_encoded_sha256": "5fecf5a102b910f7b15a9a4eda309dccc0836c354816b56f784eea2e35671911"
+}

@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.555-dev"
+local MOD_VERSION = "0.1.556-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
 mod._cwv_dev_anim_picker = mod:dofile("scripts/mods/character_weapon_variants/cwv_dev_anim_picker")
@@ -639,10 +639,10 @@ end
 -- Bind one private factory/helper before its consumer; retain that helper for item registration.
 local _variant_install = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_shot_owner")
 _variant_install = _variant_install.bind(mod:dofile("scripts/mods/character_weapon_variants/_lib_network_lookup"))
-_variant_install.melee_factory = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_melee_owner").bind(
-	_variant_install.network_lookup,
-	mod:dofile("scripts/mods/character_weapon_variants/_cwv_profile_graph_transaction"),
-	mod:dofile("scripts/mods/character_weapon_variants/_cwv_guard428_old_musket_sweep"))
+_variant_install.melee_factory = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_melee_owner")
+local _cwv_profile_graph = mod:dofile("scripts/mods/character_weapon_variants/_cwv_profile_graph_transaction")
+_variant_install.melee_factory = _variant_install.melee_factory.bind(_variant_install.network_lookup,
+	_cwv_profile_graph, mod:dofile("scripts/mods/character_weapon_variants/_cwv_guard428_old_musket_sweep"))
 _variant_install = mod:dofile("scripts/mods/character_weapon_variants/_cwv_musket_runtime")(mod, { om = _om, dbg = _dbg, old_musket_shot_factory = _variant_install })
 
 -- ============================================================
@@ -861,11 +861,15 @@ mod:dofile("scripts/mods/character_weapon_variants/_cwv_custom_mesh_runtime")(mo
 -- ============================================================
 -- Registration, pickup/projectile wire containment, carrier visuals, the
 -- finite-stack weapon template, and the grenade-slot variant share one owner.
+-- Capture shared factories by value before the bootstrap reuses _variant_install.
+local _javelin_factory = mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_construction_owner").bind(
+	_variant_install.network_lookup, _cwv_profile_graph, _core_template_construction.detached_scalar_factory)
 local _javelin_runtime =
 	mod:dofile("scripts/mods/character_weapon_variants/_cwv_javelin_runtime_owner")(mod, {
 		om = _om,
 		dbg = _dbg,
 		clone_damage_profile = _clone_damage_profile,
+		construction_factory = _javelin_factory,
 	})
 local _always_false = _javelin_runtime.always_false
 
@@ -886,6 +890,7 @@ _variant_install =
 	mod:dofile("scripts/mods/character_weapon_variants/_cwv_variant_bootstrap_owner")(mod, {
 		om = _om,
 		variant_definitions = _variant_definitions,
+		javelin_construction = _javelin_runtime,
 	}, _variant_install)
 -- Skin/illusion registrars stay at their original load-bearing registration boundary.
 -- CWV_SKIN_REGISTRY_INSTALL_ONCE_v1
