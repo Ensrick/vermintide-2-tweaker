@@ -36,7 +36,7 @@ local function register(H, repo_root)
     local patch_4_1_1_catalog = assert(loadfile(runtime_root
         .. "_wt_history_4_1_1_catalog.lua"))()
     local Policy = assert(loadfile(runtime_root .. "_wt_history_policy.lua"))()
-    local Runtime = assert(loadfile(runtime_root .. "_wt_history_runtime.lua"))()
+    local Runtime = require("fixtures.wt_history_dependencies").load(runtime_root)
 
     local function fail(message)
         error(message, 2)

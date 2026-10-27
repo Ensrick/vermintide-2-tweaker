@@ -12,7 +12,7 @@ local function register(H, repo_root)
     local script_root = repo_root
         .. "/weapon_tweaker/scripts/mods/weapon_tweaker/"
     local Policy = assert(loadfile(script_root .. "_wt_history_policy.lua"))()
-    local Runtime = assert(loadfile(script_root .. "_wt_history_runtime.lua"))()
+    local Runtime = require("fixtures.wt_history_dependencies").load(script_root)
     local CatalogUI = assert(loadfile(script_root .. "_wt_history_catalog.lua"))()
 
     local function clone(value, seen)

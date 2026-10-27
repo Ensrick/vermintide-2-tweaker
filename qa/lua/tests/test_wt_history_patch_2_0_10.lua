@@ -6,7 +6,7 @@ local function register(H, repo_root)
     local dev_root = repo_root
         .. "/weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/"
     local Policy = assert(loadfile(script_root .. "_wt_history_policy.lua"))()
-    local Runtime = assert(loadfile(script_root .. "_wt_history_runtime.lua"))()
+    local Runtime = require("fixtures.wt_history_dependencies").load(script_root)
 
     local function read_file(path)
         local file = assert(io.open(path, "rb"))

@@ -22,6 +22,27 @@ after merging an older branch. Public 0.12.336-beta is a version-only mirror.
 
 ---
 
+## Historical profile publication module contract (#428)
+
+The ordered weapon_tweaker_dev.lua entry manifest loads
+`_wt_history_profile_transaction` and `_lib_network_lookup` once at the existing
+pre-balance history installation boundary. It passes those exact references by
+private config to `_wt_history_owner`; no new History child `mod:dofile` is
+permitted. This is once for the new History binding, not a global once-load claim:
+pre-existing Fire Sword, Moonfire, Authentic Brace and Priest Punch helper loads
+remain legacy debt outside this correction.
+The transaction owns sorted profile/lookup/fallback publication, rollback and
+retained tuple proof. The history owner captures the runtime verifier and returns
+the named-check wrapper; the entry registers it at the original post-runtime-
+checks location, not during early history installation. Public runtime methods
+are not readiness authority. Existing catalog/policy/runtime child loads are
+legacy debt, not permission to add more.
+
+Place future historical publication/rollback changes in the transaction and
+lifecycle composition in the owner. Keep pure data in the catalog/policy, wire
+new dependencies from the entry, and preserve named-check order plus public/Dev
+runtime parity. Do not move profile registration past #431 catalog capture.
+
 ## Design direction (2026-05-23)
 
 weapon_tweaker's role is **full-freedom cross-character weapons**: a wielder

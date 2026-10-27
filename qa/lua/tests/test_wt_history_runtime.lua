@@ -1098,7 +1098,8 @@ local function register(H, context)
             return true
         end
 
-        local owner = HistoryOwner.install({ mod = mod, module_root = "test/" })
+        local owner = HistoryOwner.install({ mod = mod, module_root = "test/",
+            profile_transaction = {}, profile_dependencies = { lookup = {} } })
         H.equal(owner.runtime, runtime)
         H.equal(mod._wt_history_runtime, runtime)
         H.equal(runtime_config.catalog, catalog)

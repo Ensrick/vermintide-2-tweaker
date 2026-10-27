@@ -15,6 +15,8 @@
 # Exit codes: 0 = all within target (or only frozen/baselined hard overages),
 #             1 = frozen target-tier debt remains (advisory),
 #             2 = a new threshold crossing or growth beyond either baseline.
+# -BaselineOnly -Staged validates required indexed JSON and affected indexed Lua
+# rows only; valid scope exits 0, invalid/unreadable scope exits 2. No update authority.
 
 [CmdletBinding()]
 param(
@@ -24,13 +26,24 @@ param(
     [switch]$Quiet,
     [switch]$UpdateBaseline,
     [switch]$UpdateTargetBaseline,
-    [switch]$SelfTest
+    [switch]$SelfTest,
+    [switch]$BaselineOnly,
+    [switch]$Staged
 )
 
 $ErrorActionPreference = "Stop"
 $scriptRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
 if ([string]::IsNullOrWhiteSpace($RepoRoot)) { $RepoRoot = Join-Path $scriptRoot '..' }
-$repoRoot = (Resolve-Path $RepoRoot).Path
+if ($BaselineOnly -or $Staged) {
+    try {
+        if (-not ($BaselineOnly -and $Staged) -or $SelfTest -or $UpdateBaseline -or $UpdateTargetBaseline) {
+            throw '-BaselineOnly requires -Staged and cannot be combined with SelfTest or update modes.'
+        }
+        $repoRoot = (Resolve-Path -LiteralPath $RepoRoot -ErrorAction Stop).Path
+    }
+    catch { Write-Host "[check_file_sizes] ERROR -- $($_.Exception.Message)" -ForegroundColor Red; exit 2 }
+}
+else { $repoRoot = (Resolve-Path $RepoRoot).Path }
 $baselinePath = Join-Path $scriptRoot "baselines\file_sizes.json"
 $targetBaselinePath = Join-Path $scriptRoot "baselines\file_sizes_target.json"
 $overTarget = @()
@@ -99,11 +112,12 @@ function Find-ModLuas {
 # JSON-friendly). Normalize any runtime path to that form before comparison.
 function Normalize-RelPath([string]$p) { return $p.Replace('\', '/') }
 
-function Measure-LuaSize([string]$path) {
+function Measure-LuaSize {
+    param([string]$path, [AllowEmptyCollection()][string[]]$Lines)
     # Preserve the historical baseline metric exactly. Measure-Object -Line
     # excludes empty strings but includes strings containing only whitespace.
-    return [int]((Get-Content -LiteralPath $path -ErrorAction Stop |
-        Measure-Object -Line).Lines)
+    $content = if ($PSBoundParameters.ContainsKey('Lines')) { $Lines } else { Get-Content -LiteralPath $path -ErrorAction Stop }
+    return [int](($content | Measure-Object -Line).Lines)
 }
 
 function Load-Baseline([string]$path) {
@@ -187,6 +201,102 @@ function Test-BaselineIntegrity {
         if ($HardBaseline.ContainsKey($rel)) { $errors += "path appears in both hard and target baselines: $rel" }
     }
     return @($errors)
+}
+
+# #1751: this mode reads index objects only; normal/full scans retain their path.
+function Read-FileSizeGitLines {
+    param([string[]]$Arguments)
+    $encoding = [Console]::OutputEncoding
+    try {
+        [Console]::OutputEncoding = New-Object Text.UTF8Encoding($false)
+        return @(Invoke-QAStateGit -RepoRoot $repoRoot -Arguments (@('--no-optional-locks') + $Arguments))
+    }
+    finally { [Console]::OutputEncoding = $encoding }
+}
+
+function Read-FileSizeIndexBlob {
+    param([string]$Path, [switch]$Required)
+    $rows = @((@(Read-FileSizeGitLines -Arguments @('-c', 'core.quotepath=false', 'ls-files', '--stage', '-z', '--', $Path)) -join "`n").Split(
+        [char[]]@([char]0), [StringSplitOptions]::RemoveEmptyEntries))
+    if ($rows.Count -eq 0) {
+        if ($Required) { throw "Required indexed baseline is absent: $Path" }
+        return [pscustomobject]@{ Present = $false; Lines = [string[]]@() }
+    }
+    if ($rows.Count -ne 1 -or $rows[0] -notmatch '^(100644|100755) ([0-9a-f]{40,64}) 0\t(.+)$' -or $Matches[3] -cne $Path) {
+        throw "Unmerged or non-regular indexed file: $Path"
+    }
+    $object = $Matches[2]
+    return [pscustomobject]@{ Present = $true; Lines = [string[]]@(Read-FileSizeGitLines -Arguments @('cat-file', 'blob', $object)) }
+}
+
+function ConvertFrom-FileSizeBaselineText {
+    param([string]$Text, [string]$Name, [switch]$TargetTier)
+    if ([string]::IsNullOrWhiteSpace($Text)) { throw "Required baseline is empty: $Name" }
+    $value = $Text | ConvertFrom-Json -ErrorAction Stop
+    if ($null -eq $value -or $value -isnot [pscustomobject] -or $value.files -isnot [pscustomobject]) {
+        throw "Baseline must contain an object-valued files map: $Name"
+    }
+    foreach ($field in @('hard_limit') + $(if ($TargetTier) { @('target') } else { @() })) {
+        $number = $value.$field
+        $expected = if ($field -eq 'target') { $Target } else { $HardLimit }
+        if (($number -isnot [int] -and $number -isnot [long]) -or $number -ne $expected) {
+            throw "Invalid baseline metadata ${Name}: $field"
+        }
+    }
+    $map = @{}
+    foreach ($row in $value.files.PSObject.Properties) {
+        $key = $row.Name
+        if ([string]::IsNullOrWhiteSpace($key) -or $key -notmatch '\.lua$' -or $key -match '[:\\\x00-\x1f]' -or
+            $key.StartsWith('/') -or $key.Contains('//') -or @($key.Split('/') | Where-Object { $_ -eq '.' -or $_ -eq '..' }).Count) {
+            throw "Invalid baseline path in ${Name}: $key"
+        }
+        if (($row.Value -isnot [int] -and $row.Value -isnot [long]) -or $row.Value -le 0 -or $row.Value -gt [int]::MaxValue) {
+            throw "Invalid integer baseline count in ${Name}: $key"
+        }
+        $map[$key] = [int]$row.Value
+    }
+    return $map
+}
+
+function Invoke-StagedFileSizeBaselines {
+    . (Join-Path $scriptRoot 'worktree_state.ps1')
+    $paths = @('qa/baselines/file_sizes.json', 'qa/baselines/file_sizes_target.json')
+    $before, $after = @(), @()
+    foreach ($path in $paths) {
+        $index = Read-FileSizeIndexBlob -Path $path -Required
+        $old = @(Read-FileSizeGitLines -Arguments @('show', ('HEAD:' + $path))) -join "`n"
+        $before += ,(ConvertFrom-FileSizeBaselineText -Text $old -Name ('HEAD:' + $path) -TargetTier:($path -eq $paths[1]))
+        $after += ,(ConvertFrom-FileSizeBaselineText -Text ($index.Lines -join "`n") -Name (':' + $path) -TargetTier:($path -eq $paths[1]))
+    }
+    $errors = @(Test-BaselineIntegrity -HardBaseline $after[0] -TargetBaseline $after[1])
+    if ($errors.Count) { throw ($errors -join '; ') }
+    $changed = @{}
+    for ($tier = 0; $tier -lt 2; $tier++) {
+        foreach ($key in @($before[$tier].Keys) + @($after[$tier].Keys)) {
+            if (-not $before[$tier].ContainsKey($key) -or -not $after[$tier].ContainsKey($key) -or $before[$tier][$key] -ne $after[$tier][$key]) {
+                $changed[$key] = $true
+            }
+        }
+    }
+    $observed, $scopedHard, $scopedTarget = @{}, @{}, @{}
+    $hard, $targetRows = @(), @()
+    foreach ($key in @($changed.Keys | Sort-Object)) {
+        if ($after[0].ContainsKey($key)) { $scopedHard[$key] = $after[0][$key] }
+        if ($after[1].ContainsKey($key)) { $scopedTarget[$key] = $after[1][$key] }
+        $blob = Read-FileSizeIndexBlob -Path $key
+        if (-not $blob.Present) { continue }
+        $count = Measure-LuaSize -Lines $blob.Lines
+        $observed[$key] = $count
+        $row = [pscustomobject]@{ Path = $key; Rel = $key; Lines = $count }
+        if ($count -gt $HardLimit) { $hard += $row }
+        elseif ($count -gt $Target) { $targetRows += $row }
+    }
+    $result = Get-FileSizeClassification -TargetFindings $targetRows -HardFindings $hard -Observed $observed `
+        -HardBaseline $scopedHard -TargetBaseline $scopedTarget
+    if (@($result.NewHard).Count -or @($result.GrownHard).Count -or @($result.NewTarget).Count -or @($result.GrownTarget).Count) {
+        throw 'Indexed baseline changes leave an affected Lua path above its applicable indexed ceiling.'
+    }
+    Write-Host "[check_file_sizes] STAGED BASELINES OK -- $($changed.Count) affected Lua row(s); no repository scan or baseline-update authorization."
 }
 
 function Invoke-SelfTest {
@@ -303,6 +413,18 @@ function Invoke-SelfTest {
     Assert ($classification.FrozenTarget.Count -eq 1 -and $classification.FrozenTarget[0].Rel -eq 'frozen.lua') 'target-tier shrinkage above target remains allowed'
     Assert ($classification.RetiredTarget.Count -eq 2 -and @($classification.RetiredTarget.Rel) -contains 'shrunk.lua' -and @($classification.RetiredTarget.Rel) -contains 'removed.lua') 'below-target and removed files retire cleanly from target debt'
 
+    try {
+        . (Join-Path $scriptRoot 'fixtures/file_sizes_staged.ps1')
+        $stagedArgs = @{
+            CheckerSource = [IO.File]::ReadAllText((Join-Path $scriptRoot 'check_file_sizes.ps1'))
+            HookSource = [IO.File]::ReadAllText((Join-Path $repoRoot 'tools/hooks/pre-commit.ps1'))
+            HelperSource = [IO.File]::ReadAllText((Join-Path $scriptRoot 'worktree_state.ps1'))
+        }
+        $stagedResult = Invoke-FileSizeStagedSelfTest @stagedArgs
+        Assert $stagedResult 'actual index-only baseline checker and hook contracts'
+    }
+    catch { Assert $false ("staged baseline fixture failed: " + $_.Exception.Message) }
+
     if ($script:FileSizeSelfTestPass) {
         Write-Host '[check_file_sizes -SelfTest] OK -- dual-tier ratchet and worktree exclusion intact.' -ForegroundColor Green
         return 0
@@ -312,6 +434,10 @@ function Invoke-SelfTest {
 }
 
 if ($SelfTest) { exit (Invoke-SelfTest) }
+if ($BaselineOnly) {
+    try { Invoke-StagedFileSizeBaselines; exit 0 }
+    catch { Write-Host "[check_file_sizes] ERROR -- $($_.Exception.Message)" -ForegroundColor Red; exit 2 }
+}
 
 foreach ($lua in Find-ModLuas) {
     $lineCount = Measure-LuaSize $lua.FullName

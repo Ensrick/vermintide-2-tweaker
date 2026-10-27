@@ -121,6 +121,65 @@ $cases=@(
     @{name='heuristic reduction still accepted';exit=0;pattern='migration progress:.*2 -> 1';edit={param($r) Write-OwnedText (Join-Path $r $control) (Get-AppendBlock 'a')}},
     @{name='new owner not offset by reduction';exit=2;pattern='new manual append owner';edit={param($r) Write-OwnedText (Join-Path $r $control) ((Get-AppendBlock 'a')+(Get-AppendBlock 'b' 'item_names'))}}
 )
+function New-MigratedFixture([string]$Root) {
+    $runtime="local M={};function M.install(c) return c.profile_transaction.install() end;return M`n"
+    $child="local M={};function M.install() return true end;return M`n"
+    $composition="return function(runtime,transaction) return runtime.install({profile_transaction=transaction}) end`n"
+    $rows=@()
+    foreach($path in $paths) {
+        $transaction=$path.Replace('_wt_history_runtime.lua','_wt_history_profile_transaction.lua')
+        $owner=$path.Replace('_wt_history_runtime.lua','_wt_history_owner.lua')
+        Write-OwnedText (Join-Path $Root $path) $runtime
+        Write-OwnedText (Join-Path $Root $transaction) $child
+        Write-OwnedText (Join-Path $Root $owner) $composition
+        $rows+="@{path='$path';axis='damage_profiles';count=0;sha256='$(Get-NormalizedDigest $runtime)';historical_count=1;migration='history-batch-composite-v1';transaction_path='$transaction';transaction_sha256='$(Get-NormalizedDigest $child)';composition_path='$owner';composition_sha256='$(Get-NormalizedDigest $composition)'}"
+    }
+    Write-OwnedText (Join-Path $Root 'pins.psd1') ("@{schema=2;issue=428;coverage='explicit-source-pins-not-complete-census';rows=@("+($rows -join ',')+")}")
+}
+# Keep the original 46 cases per host unchanged; these prove the explicit,
+# source-pinned classification transition, not a generic ownership detector.
+$cases+=@(
+    @{name='reviewed migrated pair counts separately';exit=0;pattern='reviewed_history=2 history_manual=0 history_migrated=2 historical_known_minimum_before_migration=48 global_completeness=unproved';edit={param($r) New-MigratedFixture $r}},
+    @{name='migration does not offset heuristic growth';exit=2;pattern='owner grew';edit={param($r) New-MigratedFixture $r;Write-OwnedText (Join-Path $r $control) ((Get-AppendBlock 'a')+(Get-AppendBlock 'b')+(Get-AppendBlock 'c'))}},
+    @{name='migration requires exact child path';exit=2;pattern='migration schema/path/hash';edit={param($r) New-MigratedFixture $r;Edit-Pins $r {param($s) $s.Replace('_wt_history_profile_transaction.lua','_foreign.lua')}}},
+    @{name='migration requires exact composition path';exit=2;pattern='migration schema/path/hash';edit={param($r) New-MigratedFixture $r;Edit-Pins $r {param($s) $s.Replace('_wt_history_owner.lua','_foreign.lua')}}},
+    @{name='migration child drift is not pin refresh';exit=2;pattern='migrated owner source drift';edit={param($r) New-MigratedFixture $r;Write-OwnedText (Join-Path $r ($paths[0].Replace('_wt_history_runtime.lua','_wt_history_profile_transaction.lua'))) 'return {}'}},
+    @{name='migration dropped child fails';exit=2;pattern='source missing';edit={param($r) New-MigratedFixture $r;Remove-Item -LiteralPath (Join-Path $r ($paths[0].Replace('_wt_history_runtime.lua','_wt_history_profile_transaction.lua')))}},
+    @{name='migration composition drift fails';exit=2;pattern='migrated owner source drift';edit={param($r) New-MigratedFixture $r;Write-OwnedText (Join-Path $r ($paths[0].Replace('_wt_history_runtime.lua','_wt_history_owner.lua'))) 'return {}'}},
+    @{name='migration wrong classification fails';exit=2;pattern='migration schema/path/hash';edit={param($r) New-MigratedFixture $r;Edit-Pins $r {param($s) $s.Replace('history-batch-composite-v1','unreviewed')}}},
+    @{name='migration count cannot remain manual';exit=2;pattern='count/hash';edit={param($r) New-MigratedFixture $r;Edit-Pins $r {param($s) $s.Replace('count=0','count=1')}}},
+    @{name='migration historical count retained';exit=2;pattern='migration schema/path/hash';edit={param($r) New-MigratedFixture $r;Edit-Pins $r {param($s) $s.Replace('historical_count=1','historical_count=0')}}},
+    @{name='migration unknown row schema fails';exit=2;pattern='schema fields';edit={param($r) New-MigratedFixture $r;Edit-Pins $r {param($s) $s.Replace('count=0',"extra='x';count=0")}}},
+    @{name='migration row Keys shadow fails';exit=2;pattern='schema fields';edit={param($r) New-MigratedFixture $r;Edit-Pins $r {param($s) $s.Replace('@{path=',"@{Keys=@('path');path=")}}}
+)
+# Collection comparisons are filters in PowerShell, not scalar predicates.
+# Exercise real imported data-file values, including duplicate correct strings.
+foreach($field in @('migration','transaction_path','composition_path')) {
+    foreach($shape in @('empty-array','duplicate-array')) {
+        $edit={
+            param($r,$fieldValue,$shapeValue)
+            New-MigratedFixture $r
+            $inventory=Join-Path $r 'pins.psd1'
+            $source=[IO.File]::ReadAllText($inventory)
+            $pattern="(?<![a-zA-Z0-9_])"+[regex]::Escape($fieldValue)+"='([^']*)'"
+            $matches=[regex]::Matches($source,$pattern)
+            if($matches.Count -ne 2){throw 'scalar metadata fixture field drift'}
+            $source=[regex]::Replace($source,$pattern,[Text.RegularExpressions.MatchEvaluator]{
+                param($match)
+                $value=$match.Groups[1].Value
+                if($shapeValue -eq 'empty-array'){return $fieldValue+'=@()'}
+                return $fieldValue+"=@('$value','$value')"
+            })
+            Write-OwnedText $inventory $source
+        }
+        $cases+=@{name="migration scalar $field $shape rejected";exit=2;pattern='migration schema/path/hash';edit=$edit;field=$field;shape=$shape}
+    }
+}
+# Preserve all prior 128 host cases; these cover the inherited root scalar.
+$cases+=@(
+    @{name='inventory coverage empty-array rejected';exit=2;pattern='schema/issue/coverage invalid';edit={param($r) New-MigratedFixture $r;Edit-Pins $r {param($s) $s.Replace("coverage='explicit-source-pins-not-complete-census'","coverage=@()")}}},
+    @{name='inventory coverage duplicate-array rejected';exit=2;pattern='schema/issue/coverage invalid';edit={param($r) New-MigratedFixture $r;Edit-Pins $r {param($s) $s.Replace("coverage='explicit-source-pins-not-complete-census'","coverage=@('explicit-source-pins-not-complete-census','explicit-source-pins-not-complete-census')")}}}
+)
 $gate=Join-Path $CandidateRoot 'qa/check_network_lookup_append_budget.ps1'
 if($Mode -ne 'green') {
     $mutant=Join-Path $ownedRoot 'mutant/qa/check_network_lookup_append_budget.ps1'
@@ -146,10 +205,11 @@ try {
         foreach($case in $cases) {
             $caseRoot=Join-Path $ownedRoot ($hostName+'-'+($case.name -replace '[^a-zA-Z0-9]','_'))
             New-Fixture $caseRoot
-            & $case.edit $caseRoot
+            if($case.ContainsKey('field')) { & $case.edit $caseRoot $case.field $case.shape }
+            else { & $case.edit $caseRoot }
             $result=Invoke-Gate $hostPath $gate $caseRoot
             $success=$result.exit -eq $case.exit -and $result.text -match $case.pattern
-            $pinRejection=$case.exit -ne 0 -and $case.name -notin @('heuristic growth still rejected','new owner not offset by reduction')
+            $pinRejection=$case.exit -ne 0 -and $case.name -notin @('heuristic growth still rejected','new owner not offset by reduction','migration does not offset heuristic growth')
             if($pinRejection -and $result.text -match 'minimum_known_present='){$success=$false}
             if($success){$pass++;Write-Output "[PASS] $hostName $($case.name)"}
             else {$fail++;Write-Output "[FAIL] $hostName $($case.name): expected=$($case.exit), actual=$($result.exit) $($result.text.Trim())"}

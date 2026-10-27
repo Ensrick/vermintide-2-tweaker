@@ -1,5 +1,25 @@
 # Weapon Tweaker Changelog
 
+## 0.12.340-dev (2026-10-27) -- mirror atomic historical profile publication (#428)
+
+### Changed
+
+- Mirror public beta 0.12.339-beta's bounded historical damage-profile and
+  paired-lookup publication transaction, private installed-owner proof and
+  fail-closed rollback without changing the existing catalogs or multipliers.
+- Keep normalized public/Dev runtime parity while preserving the Dev namespace,
+  friends-only Workshop item, preview and Dev-only diagnostics.
+- Preserve the previous Fire Sword, weapon-rework and mixed-peer fallback
+  contracts. No new setting, hook, RPC or publication-tool change.
+
+### Verification boundary
+
+- Automated source-qualified transaction/catalog/disconnection coverage is
+  retained; normal integrated gates and canonical build remain required.
+- The unrelated CWV native-career construction correction is not included.
+  Local startup, gameplay, rendered models and peer acceptance are not claimed:
+  the VT2 executable is absent and source proof does not establish engine ABI.
+
 ## 0.12.339-dev (2026-10-26) -- mirror Fire Sword and rework ownership (#942, #428, #1737)
 
 ### Why
