@@ -1,5 +1,40 @@
 # character_weapon_variants - engine contact surface
 
+## Old Musket bayonet construction/admission (#428)
+
+`_cwv_old_musket_melee_owner.lua` owns four resolved native profiles and the
+finished melee template as one boot transaction. Base 6.13 raw definitions are
+`damage_profile_templates.lua:209,346,530,569`; the native PowerLevel resolution
+loop at5571-5618 replaces authored names with tables. The base melee armor rows
+have five entries (`power_level_templates.lua:461-475,2593-2607,2725-2739,3483-3497`),
+not the ranged owner's six-entry shape. Actual native Tuskgor attacks contain
+seven profile occurrences and four unique donors (`2h_heavy_spears.lua:240,394,
+549,702,866,1025,1169`). The owner preserves clone encounter IDs, attack-only0.9
+math and seven source-generation events; no registration runs during selection.
+
+The existing consolidated `BackendUtils.get_item_template` hook is registered
+once by the Musket owner's private installer at its original entry position.
+Native-first/styles/Crowbill/regular Musket ordering is unchanged. Only the
+Old Musket branch requires retained requested/ranged authority; neither proven
+means an explicit error before selection, not a nil or unchecked donor return.
+Native `BackendInterfaceItem.get_item_template:769-791` / `ItemHelper:41-65`
+assertions can already happen before this wrapper's selection branch; this is
+not arbitrary foreign/hot-reload IML repair or a no-crash guarantee.
+
+Both effective-template owners gate fresh `_build_entry` and Blacksmith seeds.
+Target stance preflight precedes mod_data/wire/ammo/destroy-add-wield mutations.
+Missing own master rows leave persisted CIM records pending under its existing
+`crafting_in_modded_dev.lua:919-933,1056-1144` restore/retry code. Canonical later
+career extension is accepted only through the exact clone-source token, current
+`ActionTemplates` identity and CWV shared claims (or exact inherited native
+donor/canonical proof); original weapon/stance/interrupt cells remain pinned.
+
+Native `ActionSweep.client_owner_start_action:171-193` still performs strict
+profile/lookup reads, and later Sweep code uses cached profile/ID state. No new
+action hook or retained-start/cache/hit guarantee belongs to this bounded
+construction/stance change. #423 sender containment and #474 visual calibration
+remain independent acceptance boundaries.
+
 ## Greatsword remote post-wield retained adapter (#660)
 
 The existing planner/wire/coalescer remain unchanged. The husk post-spawn

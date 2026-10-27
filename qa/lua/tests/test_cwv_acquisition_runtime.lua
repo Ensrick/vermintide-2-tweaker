@@ -3,6 +3,8 @@
 return function(H, repo_root)
     local root = repo_root .. "/character_weapon_variants/scripts/mods/character_weapon_variants/"
     local acquisition = assert(loadfile(root .. "_cwv_acquisition.lua"))()
+    local quiet = setmetatable({ test = function() end, test_if = function() end }, { __index = H })
+    local T = dofile(repo_root .. "/qa/lua/tests/test_cwv_old_musket_shot_owner.lua")(quiet, repo_root)
     local function read(name)
         local file = assert(io.open(root .. name, "rb"))
         local text = file:read("*a")
@@ -33,6 +35,11 @@ return function(H, repo_root)
     end
     local key = "cwv_es_musket_old"
     local function run_case(options)
+        -- The Old Musket builder now requires its real retained construction capsule.
+        -- Keep the acquisition oracle intact; use the actual entry/factory installer
+        -- rather than an always-ready predicate or a parallel template fixture.
+        local construction = T.installed()
+        H.equal(construction.capsule.check_old_musket(), nil, "healthy construction fixture")
         local events = { added = {}, removed = {}, reads = {}, messages = {} }
         local records = options.records or {}
         local live, snapshots = {}, {}
@@ -96,7 +103,8 @@ return function(H, repo_root)
         end
         mods.MoreItemsLibrary = mil
         local hooks = {}
-        local mod = { _cwv_acquisition = acquisition }
+        local mod = construction.mod
+        mod._cwv_acquisition = acquisition
         function mod:get() return true end
         function mod:hook_safe(class, method, fn) hooks[class .. "." .. method] = fn end
         function mod:hook(class, method, fn) hooks[class .. "." .. method] = fn end
@@ -104,10 +112,13 @@ return function(H, repo_root)
         mod.warning, mod.error = mod.info, mod.info
         local item_master = { es_handgun = { key = "es_handgun", name = "es_handgun",
             slot_type = "ranged", item_type = "handgun", template = "handgun_template_1" } }
-        local env = setmetatable({
+        -- Extend the SAME engine environment retained by the constructor. All
+        -- profile/weapon/lookup/state roots remain its actual owned objects.
+        local env = construction.env
+        local registration_context = {
             get_mod = function(name) return mods[name] end,
-            ItemMasterList = item_master, NetworkLookup = { item_names = {} },
-            Weapons = {}, CareerSettings = {}, ActionTemplates = {},
+            ItemMasterList = item_master, NetworkLookup = construction.env.NetworkLookup,
+            Weapons = construction.env.Weapons, CareerSettings = {},
             table = setmetatable({ clone = clone }, { __index = table }),
             printf = function() end,
             WeaponSkins = { skins = {}, skin_combinations = {},
@@ -120,20 +131,32 @@ return function(H, repo_root)
                     return { get_all_inventory_items = function() return live end }
                 end,
             } },
-        }, { __index = _G })
+        }
+        for name, value in next, registration_context do env[name] = value end
         env._G = env
-        local om = { infantry_spear = { ITEM_KEY = "cwv_es_infantry_spear" },
-            deus_identity = { install = function()
-                return { installed = 0, existing = 0, degraded = 0, skipped = {} }
-            end } }
-        local definitions = { { item_key = key, base_weapon = "es_handgun", instances = 3 } }
-        registration_loader(env)(mod, {
+        local om = construction.state
+        om.infantry_spear = { ITEM_KEY = "cwv_es_infantry_spear" }
+        om.deus_identity = { install = function()
+            return { installed = 0, existing = 0, degraded = 0, skipped = {} }
+        end }
+        local definitions = { { item_key = key, base_weapon = "es_handgun",
+            template = "old_musket_template", instances = 3 } }
+        -- Execute the exact bootstrap prefix that captures the private capsule
+        -- by value, through its real install_items handoff. Localization/skin
+        -- phases are outside this installed registration/migration oracle.
+        local bootstrap = read("_cwv_variant_bootstrap_owner.lua")
+        local stop = assert(bootstrap:find("\tlocal function register_checks", 1, true))
+        local bind = T.run(bootstrap:sub(1, stop - 1)
+            .. "\nreturn { install_items = install_items }\nend\nreturn install", env,
+            "exact-bootstrap-private-item-handoff")
+        local handoff = bind(mod, { om = om, variant_definitions = definitions }, construction.capsule)
+        -- Public capsule mutation after binding must not replace the captured
+        -- real admission or canonical NetworkLookup helper.
+        construction.capsule.admit_old_musket = function() error("late public admission reread") end
+        construction.capsule.network_lookup = {}
+        handoff.install_items(registration_loader(env), {
             om = om, dbg = function() end, dbg_alert = function() end,
             variant_definitions = definitions, custom_skin_keys = {},
-            network_lookup = { register_named = function(lookup, name, value)
-                local index = #lookup[name] + 1
-                lookup[name][index], lookup[name][value] = value, index
-            end },
             cwv_career_weapon_actions = { install = function()
                 return { ok = true, template_count = 0 }
             end },

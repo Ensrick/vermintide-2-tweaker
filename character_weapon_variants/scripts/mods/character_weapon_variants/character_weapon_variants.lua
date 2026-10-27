@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.552-dev"
+local MOD_VERSION = "0.1.553-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
 mod._cwv_dev_anim_picker = mod:dofile("scripts/mods/character_weapon_variants/cwv_dev_anim_picker")
@@ -633,9 +633,13 @@ end
 -- toggle, remote fire-report observation and shared reserve-ammo pool live in
 -- `_cwv_musket_runtime`. Loaded HERE, at the exact point the inline block ran,
 -- so template registration and hook order are unchanged. The consolidated
--- BackendUtils.get_item_template hook stays below: it also routes combat-style
+-- BackendUtils.get_item_template hook installs below: it also routes combat-style
 -- and Crowbill templates, and VMF drops a second hook on the same pair.
-mod:dofile("scripts/mods/character_weapon_variants/_cwv_musket_runtime")(mod, { om = _om, dbg = _dbg })
+-- Bind one private factory/helper before its consumer; retain that helper for item registration.
+local _variant_install = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_shot_owner")
+_variant_install = _variant_install.bind(mod:dofile("scripts/mods/character_weapon_variants/_lib_network_lookup"))
+_variant_install.melee_factory = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_melee_owner").bind(_variant_install.network_lookup)
+_variant_install = mod:dofile("scripts/mods/character_weapon_variants/_cwv_musket_runtime")(mod, { om = _om, dbg = _dbg, old_musket_shot_factory = _variant_install })
 
 -- ============================================================
 -- Musket template-swap hook (BackendUtils.get_item_template)
@@ -647,64 +651,7 @@ mod:dofile("scripts/mods/character_weapon_variants/_cwv_musket_runtime")(mod, { 
 -- cycle, which makes vanilla call get_item_template again, which we
 -- intercept here to return musket_template_melee on melee stance.
 
-mod:hook("BackendUtils", "get_item_template", function(func, item_data, backend_id)
-	local template = func(item_data, backend_id)
-	if not item_data then return template end
-	-- #620: one per-instance style owner chooses among pre-registered immutable
-	-- templates. This remains in the existing singleton BackendUtils hook so a
-	-- second VMF registration cannot shadow the musket/Crowbill paths.
-	if _om.combat_styles and _om.combat_styles.resolve_template then
-		local style_template = _om.combat_styles:resolve_template(item_data, backend_id)
-		if style_template then return style_template end
-	end
-	-- #604: local owner selects one of two pre-registered Crowbill templates.
-	-- Remote equipment remains the vanilla source template on the wire.
-	if _om.crowbill_runtime and _om.crowbill_runtime.resolve_template then
-		local crowbill_template = _om.crowbill_runtime.resolve_template(item_data, backend_id)
-		if crowbill_template then return crowbill_template end
-	end
-
-	-- v0.1.301: identify variant family — cwv_es_musket vs cwv_es_musket_old.
-	-- Both use mod_data.cwv_musket_stance as the per-item stance flag (it's
-	-- per-item via mod_data so no name collision); we just return different
-	-- template pairs depending on which family.
-	local is_old_musket = false
-	local is_musket     = false
-	local canonical_key = _om._cwv_key_for_item
-		and _om._cwv_key_for_item(item_data.backend_id or backend_id, item_data)
-	if canonical_key == "cwv_es_musket_old" then
-		is_old_musket = true
-	elseif canonical_key == "cwv_es_musket" then
-		is_musket = true
-	elseif item_data.template == "old_musket_template" or item_data.template == "old_musket_template_melee" then
-		is_old_musket = true
-	elseif item_data.template == "musket_template" or item_data.template == "musket_template_melee" then
-		is_musket = true
-	else
-		local bid = item_data.backend_id or backend_id
-		if type(bid) == "string" then
-			if bid:match("^cwv_es_musket_old_") then
-				is_old_musket = true
-			elseif bid:match("^cwv_es_musket_") then
-				is_musket = true
-			end
-		end
-	end
-	if not (is_musket or is_old_musket) then return template end
-
-	-- Read stance from mod_data; default to ranged.
-	local stance = item_data.mod_data and item_data.mod_data.cwv_musket_stance or "ranged"
-	if is_old_musket then
-		if stance == "melee" and Weapons.old_musket_template_melee then
-			return Weapons.old_musket_template_melee
-		end
-		return Weapons.old_musket_template or template
-	end
-	if stance == "melee" and Weapons.musket_template_melee then
-		return Weapons.musket_template_melee
-	end
-	return Weapons.musket_template or template
-end)
+_variant_install.install_template_router()
 
 -- ============================================================
 -- Musket equip-surface owner, phase 1 (#1159)
@@ -931,11 +878,11 @@ mod:dofile("scripts/mods/character_weapon_variants/_cwv_rapier_runtime_owner")(m
 
 -- Variant localization/unlock bootstrap. Its returned phases preserve the
 -- historical skin-registration and item-registration boundaries below.
-local _finish_variant_skins =
+_variant_install =
 	mod:dofile("scripts/mods/character_weapon_variants/_cwv_variant_bootstrap_owner")(mod, {
 		om = _om,
 		variant_definitions = _variant_definitions,
-	})
+	}, _variant_install)
 -- Skin/illusion registrars stay at their original load-bearing registration boundary.
 -- CWV_SKIN_REGISTRY_INSTALL_ONCE_v1
 local _skin_state = mod:dofile(
@@ -963,7 +910,7 @@ mod:dofile("scripts/mods/character_weapon_variants/_cwv_illusion_families")(mod,
 	NetworkLookup = NetworkLookup,
 })
 
-local _finish_variant_registration = _finish_variant_skins(_custom_skin_keys)
+_variant_install = _variant_install.after_skins(_custom_skin_keys, _rt_register)
 
 -- ============================================================
 -- Item registration owner (#1159)
@@ -981,12 +928,10 @@ local _finish_variant_registration = _finish_variant_skins(_custom_skin_keys)
 -- at load time. The give command and the shared preview / illusion-browser
 -- descriptors stay in this entry: command surface and the #1158
 -- exact-appearance channel respectively, not registration.
-mod:dofile("scripts/mods/character_weapon_variants/_cwv_item_registration_owner")(mod, {
+_variant_install.install_items(mod:dofile("scripts/mods/character_weapon_variants/_cwv_item_registration_owner"), {
 	om = _om,
 	dbg = _dbg,
 	dbg_alert = _dbg_alert,
-	network_lookup = mod:dofile(
-		"scripts/mods/character_weapon_variants/_lib_network_lookup"),
 	variant_definitions = _variant_definitions,
 	custom_skin_keys = _custom_skin_keys,
 	career_weapon_actions = _career_weapon_actions,
@@ -994,7 +939,7 @@ mod:dofile("scripts/mods/character_weapon_variants/_cwv_item_registration_owner"
 	career_action_owner = _career_action_owner,
 })
 
-local _variant_runtime = _finish_variant_registration()
+local _variant_runtime = _variant_install.after_registration()
 local _detect_companion_mods = assert(_variant_runtime.detect_companion_mods, "cwv variant bootstrap did not export detect_companion_mods")
 local _find_def, _give_variant = _variant_runtime.find_def, _variant_runtime.give_variant
 -- ============================================================

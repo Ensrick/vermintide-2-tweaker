@@ -243,6 +243,8 @@ local suites = {
     "test_cwv_appearance_lifecycle",
 	"test_cwv_combat_style_appearance",
 	"test_cwv_greatsword_husk_retained",
+	"test_cwv_old_musket_shot_owner",
+	"test_cwv_old_musket_melee_owner",
 	"test_cwv_native_shield_identity",
     "test_cwv_identity_peer_pull",
     "test_cwv_residency_ledger",

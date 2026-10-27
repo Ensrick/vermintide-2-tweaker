@@ -760,7 +760,8 @@ function Get-TopChangelogEntry {
 }
 
 # Decide what (if anything) to label from a shipped entry. Returns
-# @{ Skip; Label; Refs; Coop; CoopRequired }.
+# @{ Skip; Label; Refs; ContextRefs; Coop; CoopRequired }.
+# Only header refs authorize issue mutations. Body-only refs remain advisory.
 # `Coop` is only the legacy heuristic/reminder.
 #   * loc-sweep headers are skipped: their #N refs are tag CONTEXT, not
 #     shipped work (same heuristic as qa/check_issue_status_labels.ps1).
@@ -775,16 +776,16 @@ function Get-TopChangelogEntry {
 function Get-ShipLabelPlan {
     param([string]$Header, [string]$Entry)
     if ($Header -match '(?i)(localization|loc sweep|status-tag doctrine|menu wording|localization audit|loc audit)') {
-        return @{ Skip = 'loc-sweep'; Label = $null; Refs = @(); Coop = $false; CoopRequired = $false; RepositoryLabels = @() }
+        return @{ Skip = 'loc-sweep'; Label = $null; Refs = @(); ContextRefs = @(); Coop = $false; CoopRequired = $false; RepositoryLabels = @() }
     }
     $repositoryLabels = if ($Header -match '(?i)\[(?:docs|documentation)\]') { @('tooling', 'documentation') }
         elseif ($Header -match '(?i)\[tooling\]') { @('tooling') }
         else { @() }
     if ($repositoryLabels.Count -gt 0) {
-        return @{ Skip = 'tooling-entry'; Label = $null; Refs = @(); Coop = $false; CoopRequired = $false; RepositoryLabels = @() }
+        return @{ Skip = 'tooling-entry'; Label = $null; Refs = @(); ContextRefs = @(); Coop = $false; CoopRequired = $false; RepositoryLabels = @() }
     }
     if ($Header -match '(?i)\[verify-fix-coop\]') {
-        return @{ Skip = 'retired-lifecycle-marker'; Label = $null; Refs = @(); Coop = $false; CoopRequired = $false; RepositoryLabels = @() }
+        return @{ Skip = 'retired-lifecycle-marker'; Label = $null; Refs = @(); ContextRefs = @(); Coop = $false; CoopRequired = $false; RepositoryLabels = @() }
     }
     $explicit = @()
     if ($Header -match '(?i)\[not-started\]') { $explicit += 'not-started' }
@@ -794,13 +795,22 @@ function Get-ShipLabelPlan {
     $coopRequired = [bool]($Header -match '(?i)\[coop-required\]')
     $coop = [bool]($Entry -match '(?i)(host *[/+] *(1 *)?client|non-\w+ +peer|husk|hot.join|2\+? *(player|tester|people)|two player|both peers|client CTD|CTDs? +a +client|desync|wire.safe|send.queue)')
     $numSet = @{}
-    foreach ($m in [regex]::Matches($Entry, '#(\d+)')) { $numSet[[int]$m.Groups[1].Value] = $true }
+    foreach ($m in [regex]::Matches($Header, '#(\d+)')) { $numSet[[int]$m.Groups[1].Value] = $true }
     $refs = @($numSet.Keys | Sort-Object)
-    if ($refs.Count -eq 0) { return @{ Skip = 'no-refs'; Label = $null; Refs = @(); Coop = $coop; CoopRequired = $coopRequired; RepositoryLabels = $repositoryLabels } }
-    if ($explicit.Count -eq 0) { return @{ Skip = 'missing-lifecycle-marker'; Label = $null; Refs = $refs; Coop = $coop; CoopRequired = $coopRequired; RepositoryLabels = $repositoryLabels } }
-    if ($explicit.Count -ne 1) { return @{ Skip = 'ambiguous-lifecycle-marker'; Label = $null; Refs = $refs; Coop = $coop; CoopRequired = $coopRequired; RepositoryLabels = $repositoryLabels } }
+    $contextSet = @{}
+    foreach ($m in [regex]::Matches($Entry, '#(\d+)')) {
+        $n = [int]$m.Groups[1].Value
+        if (-not $numSet.ContainsKey($n)) { $contextSet[$n] = $true }
+    }
+    $contextRefs = @($contextSet.Keys | Sort-Object)
+    if ($refs.Count -eq 0) {
+        $skip = if ($contextRefs.Count -gt 0) { 'context-only-refs' } else { 'no-refs' }
+        return @{ Skip = $skip; Label = $null; Refs = @(); ContextRefs = $contextRefs; Coop = $coop; CoopRequired = $coopRequired; RepositoryLabels = $repositoryLabels }
+    }
+    if ($explicit.Count -eq 0) { return @{ Skip = 'missing-lifecycle-marker'; Label = $null; Refs = $refs; ContextRefs = $contextRefs; Coop = $coop; CoopRequired = $coopRequired; RepositoryLabels = $repositoryLabels } }
+    if ($explicit.Count -ne 1) { return @{ Skip = 'ambiguous-lifecycle-marker'; Label = $null; Refs = $refs; ContextRefs = $contextRefs; Coop = $coop; CoopRequired = $coopRequired; RepositoryLabels = $repositoryLabels } }
     $label = $explicit[0]
-    return @{ Skip = $null; Label = $label; Refs = $refs; Coop = $coop; CoopRequired = $coopRequired; RepositoryLabels = $repositoryLabels }
+    return @{ Skip = $null; Label = $label; Refs = $refs; ContextRefs = $contextRefs; Coop = $coop; CoopRequired = $coopRequired; RepositoryLabels = $repositoryLabels }
 }
 
 $LifecycleLabels = @('not-started', 'verify-fix', 'diagnostics-armed')
@@ -857,6 +867,14 @@ function Get-ShipIssueTransitionDecision {
     $isRepositoryOnly = Test-VtRepositoryOnlyLabels $effectiveLabels
     if ($isRepositoryOnly) {
         return @{ Ok = $false; Reason = 'tooling-issue-not-auto-labeled'; IsRepositoryOnly = $true }
+    }
+    # A new partial ship is not evidence that an existing live card became
+    # unready. Revocation needs an explicit evidence-backed tracker operation,
+    # not automatic changelog aftercare, even when the header names the issue.
+    if ($Requested -eq 'not-started' -and @($Existing | Where-Object {
+        $_ -in @('verify-fix', 'diagnostics-armed', 'verify-fix-coop')
+    }).Count -gt 0) {
+        return @{ Ok = $false; Reason = 'automatic-readiness-revocation-forbidden'; IsRepositoryOnly = $false }
     }
     if (($Existing -contains 'blocked') -and $Requested -ne 'not-started') {
         return @{ Ok = $false; Reason = 'blocked-issue-not-ready'; IsRepositoryOnly = $false }
@@ -1005,7 +1023,17 @@ function Invoke-ShipSelfTest {
     $plan = Get-ShipLabelPlan -Header ($top.Header + ' [verify-fix]') -Entry $top.Entry
     Assert ($null -eq $plan.Skip) "fix entry is not skipped"
     Assert ($plan.Label -eq 'verify-fix') "fix entry labels verify-fix"
-    Assert (($plan.Refs -join ',') -eq '294,322') "refs harvested, deduped, sorted (294,322)"
+    Assert (($plan.Refs -join ',') -eq '294') "only explicit header refs authorize shipped issue mutations"
+    Assert (($plan.ContextRefs -join ',') -eq '322') "body-only refs remain visible advisory context"
+
+    $partialOwner = Get-ShipLabelPlan -Header '## 0.1.552-dev (2026-10-26) -- Retained Greatsword remote post-wield pose (#660) [not-started]' -Entry 'This does not close #660 or its separate #786/#657/#474 acceptance leaves.'
+    Assert (($partialOwner.Refs -join ',') -eq '660' -and ($partialOwner.ContextRefs -join ',') -eq '474,657,786') "#750 recurrence: a partial owner ship cannot relabel its acceptance leaves"
+    $bodyOnly = Get-ShipLabelPlan -Header '## 0.7.222-dev [not-started] partial owner' -Entry 'Hook #2 does not close #786.'
+    Assert ($bodyOnly.Skip -eq 'context-only-refs' -and $bodyOnly.Refs.Count -eq 0 -and ($bodyOnly.ContextRefs -join ',') -eq '2,786') "body-only issue refs fail closed without disappearing"
+    foreach ($ready in @('verify-fix', 'diagnostics-armed', 'verify-fix-coop')) {
+        $revoke = Get-ShipIssueTransitionDecision -Existing @($ready, 'coop-required') -Requested 'not-started' -CoopRequired $false -Comments @() -Body ''
+        Assert (-not $revoke.Ok -and $revoke.Reason -eq 'automatic-readiness-revocation-forbidden' -and -not $revoke.ContainsKey('Edit') -and -not $revoke.ContainsKey('CoopEdit')) "automatic ship aftercare preserves $ready and its co-op card routing"
+    }
 
     $planD = Get-ShipLabelPlan -Header '## 0.7.225-dev - #144 [diag] retire trace, add [ct:vaul] probe' -Entry 'probe work for #144'
     Assert ($planD.Label -eq 'diagnostics-armed') "probe-marker header labels diagnostics-armed"
@@ -2723,8 +2751,8 @@ catch {
 # ---------------------------------------------------------------------------
 # Doctrine (PROJECT_STANDARDS section 11): when a fix or probe ships, the
 # matching status label (not-started / verify-fix / diagnostics-armed) goes on the issue in
-# the SAME pass. This step mechanizes it: harvest every #N referenced in the
-# CHANGELOG entry just shipped and add the label via gh. Heuristics, printed
+# the SAME pass. This step mechanizes it: select only #N targets named in the
+# CHANGELOG HEADER just shipped and add the label via gh. Rules, printed
 # per issue so the user can correct a misjudgment by hand:
 #   * Dev-stream ships only (-dev/-alpha/-beta/-rc suffix). A clean stable
 #     promotion re-ships work that was labeled when its dev build shipped.
@@ -2736,10 +2764,13 @@ catch {
 #     [verify-fix], or [diagnostics-armed]/[diag]. Prose never supplies a
 #     default, and missing/mixed intent fails closed. Co-op routing is derived
 #     from the validated CURRENT LIVE TEST card.
-#     A MIXED entry (fix for one issue, probe for
-#     another) gets one label for all refs -- correct the odd one out by hand.
-#   * CLOSED and non-existent numbers are skipped (footnote "#2"-style false
-#     positives resolve to nothing).
+#     A MIXED header gets one label for its explicit targets. Split entries or
+#     perform evidence-backed manual tracker edits for different outcomes.
+#   * Body-only refs are advisory, never mutation targets. A header with no
+#     explicit target fails closed rather than inferring intent from prose.
+#   * Existing ready lifecycles cannot become not-started automatically;
+#     revoke readiness through an explicit evidence-backed tracker operation.
+#   * CLOSED and non-existent header numbers are skipped.
 # This step NEVER fails the ship -- the upload already succeeded. Any labeling
 # problem is a yellow warning for manual follow-up.
 Write-Host ""
@@ -2783,10 +2814,14 @@ try {
             else {
                 $clHeader = $top.Header
                 $plan = Get-ShipLabelPlan -Header $top.Header -Entry $top.Entry
+                if ($plan.ContextRefs.Count -gt 0) {
+                    Write-Host ("  advisory body refs (no issue mutations): #{0}" -f ($plan.ContextRefs -join ', #')) -ForegroundColor DarkGray
+                }
                 if ($plan.Skip) {
                     $reason = switch ($plan.Skip) {
                         'loc-sweep' { 'its refs are tag context, not shipped work' }
                         'no-refs' { 'the entry has no issue references' }
+                        'context-only-refs' { 'issue refs appear only in the body; name intended targets explicitly in the header' }
                         'missing-lifecycle-marker' { 'the header must name exactly one of [not-started], [verify-fix], or [diagnostics-armed]/[diag]' }
                         'ambiguous-lifecycle-marker' { 'the header names more than one lifecycle' }
                         'retired-lifecycle-marker' { '[verify-fix-coop] is retired; use [verify-fix] and a co-op CURRENT LIVE TEST card' }
@@ -2825,6 +2860,7 @@ try {
                                     'invalid-current-live-test-card' { 'newest exact CURRENT LIVE TEST card is missing or fails deployed-source authority' }
                                     'live-card-authority-unavailable' { 'immutable deployed-source authority is unavailable' }
                                     'unevidenced-verify-downgrade' { 'verify-to-diagnostics downgrade lacks failed-verification evidence in the selected replacement method' }
+                                    'automatic-readiness-revocation-forbidden' { 'existing live-test readiness requires explicit evidence-backed revocation, not automatic ship aftercare; card and co-op routing preserved' }
                                     'tooling-issue-not-auto-labeled' { 'tooling/docs work never receives live-test labels from ship automation' }
                                     'blocked-issue-not-ready' { 'blocked issues must remain not-started and outside the live-test queue' }
                                     default { "transition policy rejected '$($decision.Reason)'" }
@@ -2855,7 +2891,11 @@ try {
                                     if ($LASTEXITCODE -ne 0) { $editOk = $false }
                                 }
                                 if ($editOk) {
-                                    $transitionEvidence = "Lifecycle transition evidence: shipped entry '$clHeader' validated the newest exact CURRENT LIVE TEST card; target lifecycle '$($edit.Target)'."
+                                    $transitionEvidence = if ($edit.Target -eq 'not-started') {
+                                        "Lifecycle transition evidence: shipped header '$clHeader' explicitly requests 'not-started'; no live-test readiness is claimed or revoked by this automatic operation."
+                                    } else {
+                                        "Lifecycle transition evidence: shipped header '$clHeader' validated the newest exact CURRENT LIVE TEST card; target lifecycle '$($edit.Target)'."
+                                    }
                                     & gh issue comment $n --repo $ghRepo --body $transitionEvidence 2>$null | Out-Null
                                     $editOk = ($LASTEXITCODE -eq 0)
                                 }
@@ -2867,7 +2907,8 @@ try {
                             if ($editOk) {
                                 $qualifierText = if ($wantCoopQualifier) { " + 'coop-required'" } else { '' }
                                 Write-Host ("  + #{0}: lifecycle '{1}'{2}; competing lifecycle labels removed" -f $n, $edit.Target, $qualifierText) -ForegroundColor Green
-                                $methodSummary = if ($isRepositoryOnly) { 'autonomous method validated' } else { 'runtime method validated' }
+                                $methodSummary = if ($edit.Target -eq 'not-started') { 'explicit header intent; no ready card claimed' }
+                                    elseif ($isRepositoryOnly) { 'autonomous method validated' } else { 'runtime method validated' }
                                 $labelSummary += ("#{0} ->{1}{2} ({3})" -f $n, $edit.Target, $(if ($wantCoopQualifier) { '+coop-required' } else { '' }), $methodSummary)
                             } else {
                                 Write-Host ("  ! #{0}: lifecycle evidence comment or issue edit failed; inspect before retry" -f $n) -ForegroundColor Yellow

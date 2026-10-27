@@ -1,5 +1,54 @@
 # Regression Checklist — character_weapon_variants
 
+## #428 Old Musket local construction/admission
+
+- `test_cwv_old_musket_melee_owner.lua` executes the complete installed bayonet
+  constructor against required tracked base6.13 resolved native profiles,
+  complete Handgun/Tuskgor source and the exact native firing callback. The
+  resolved donor data is captured from raw definitions and actual native
+  `PowerLevelTemplates` resolution, with source/hash provenance.
+  It preserves four unique profile IDs in actual clone encounter order, seven
+  generation events, first fallback, native damage/impact math and every authored
+  callback's behavior. The complete historical ranged installer is a required
+  tracked fixture: missing inputs fail rather than skipping the healthy oracle.
+  Ordinary repository/CI hosts run the core tests without an outside checkout;
+  only the additional external-source provenance comparison may skip.
+- Family tests reject every profile/numeric/reverse/source publication and
+  readback failure, generation/fallback/template failure, finished interrupt
+  rejection, aliasing, foreign state, unsupported reload and final retained-state
+  tampering. Rollback retains exact raw fields/metatables and native fallback is
+  complete-family only. Actual private builder/seed and CIM missing-master
+  restore/retry prove refusal does not delete/reroll saved crafts.
+- `#428 bayonet finish preimages preserve intervening source authority` drives
+  the actual constructor finish seam with changed generation, map root or first
+  fallback. Custom preparation refuses without overwriting that intervening
+  state; only the independently proven native family may publish afterward.
+- The existing named `issue428_old_musket_construction` check now requires both
+  effective templates. Target stance preflight precedes mod_data allocation,
+  mode publication, ammo capture and destroy/add/wield. The actual consolidated
+  router keeps native-first/styles/Crowbill/regular precedence, and only proven
+  ranged fallback is legal after melee authority loss; otherwise it deliberately
+  errors before selection, not a claim of graceful recovery from all bad data.
+- Actual `_cwv_career_weapon_actions` plus shared integration must preserve
+  admission after canonical career reconciliation. Wrong source/claim/owner,
+  foreign prefix-only actions and original weapon/stance/interrupt tampering
+  still fail. Native Sweep strict start/cache/hit containment, native-first
+  assertion rescue and arbitrary foreign/hot-reload enumerators remain unproven.
+
+- `test_cwv_old_musket_shot_owner.lua` covers atomic publication/readback rollback,
+  native degradation, exact-template admission/seed refusal and latched firing
+  quarantine through the actual private entry/bootstrap/Handgun callback route.
+- Entry loads both the shot factory and lookup helper once; no child reloads
+  either. Mutable capsule changes must not replace captured readiness authority.
+- `issue428_old_musket_construction` verifies retained profile/template state,
+  probes the exact registered callback with an ephemeral invalid-start action,
+  and confirms the actual builder rejects an unproven Old-only template.
+- Whole native-goto auto-registration is parser-only in the PUC5.1 harness;
+  actual builder/seed composition is covered separately. Native engine/live
+  gameplay acceptance remains pending a separately published exact receipt.
+- Do not merge #423 sender/catalog, #474 visual calibration or #1211 Wwise
+  acceptance into this local profile-owner check.
+
 ## #660 Greatsword remote post-wield retained slice
 
 - [ ] `test_cwv_greatsword_husk_retained.lua` drives the actual planner,

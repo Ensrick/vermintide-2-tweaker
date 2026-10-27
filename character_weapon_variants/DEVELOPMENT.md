@@ -21,10 +21,44 @@ explicit engine-surface review:
   appearance, parity, or lifecycle behavior.
 - `_cwv_musket_runtime.lua` owns both Musket template families, their stance and
   remote-fire behavior, and the install boundary for the Old Musket ammo pool.
+  It returns a private `install_template_router` closure, invoked once by the
+  entry at the original singleton hook position. Native-first resolution,
+  Combat Styles, Crowbill and regular Musket precedence remain unchanged.
   `_cwv_musket_ammo_pool.lua` owns gameplay reserve state by exact player and
   slot. `_cwv_musket_ammo_hud.lua` is its presentation-only consumer: it may
   select an active exact extension for the two native HUDs, but may not mutate
   ammo, add an update loop, or widen the network surface.
+- `_cwv_old_musket_shot_owner.lua` owns only the Old Musket ranged profile's
+  composite transaction, retained template/admission proof and existing-hook
+  firing guard (#428). The entry manifest loads its pure factory and the
+  canonical lookup helper exactly once before the Musket installer, binding
+  both privately. The same captured helper reaches item registration through
+  the bootstrap context; never reload either module from a child or publish a
+  mutable global readiness predicate. The after-skins phase registers the named
+  check at its existing position, before item registration captures the builder.
+- `_cwv_old_musket_melee_owner.lua` owns the Old Musket bayonet's complete
+  four-profile/seven-source-occurrence construction transaction, finished
+  interrupt/stance template, readback and target-stance admission (#428).
+  The entry loads/binds its factory once with the same private canonical helper;
+  the Musket installer captures it by value before later bootstrap phases.
+  Healthy native `pairs` encounter IDs, attack-only 0.9 scaling, range 1.2,
+  seven generation events and conditional first fallback are preserved. A
+  rejected custom family may use only a completely proven native donor family;
+  failed template construction/publication rolls the custom family back.
+  Before staging post-finish generation/fallback writes, reject any change to
+  the captured source-map root, generation or first-fallback preimage. The
+  installed finish currently has no source-map write/reentrant callback, but
+  an unexpected replacement must not rewind another producer's generation.
+  Fresh Old Musket item/seed admission requires both effective-template owners.
+  Existing saved records lacking a published master remain pending in CIM.
+  The retained graph pins original weapon, stance and interrupt cells. A later
+  career handoff requires the exact shared clone-source token and canonical
+  `ActionTemplates` references plus matching CWV claims, or exact inherited
+  donor/canonical evidence; an arbitrary `action_career_*` name is not authority.
+  No retained native Sweep start/cache/hit safety or arbitrary foreign/hot-reload
+  enumerator safety is claimed. The router deliberately errors before selection
+  if neither requested nor ranged authority exists; it is not a no-crash promise
+  and cannot rescue a native-first assertion that already happened.
 - `_cwv_skin_registry.lua` owns base variant skin/combinations registration and
   the curated custom-illusion catalog. `_cwv_illusion_families.lua` immediately
   extends the returned `custom_skin_keys` table with the generated Spear,
@@ -79,6 +113,17 @@ use `qa/lua/cwv_source.lua`. Tests concerned specifically with entry size or
 load order should read the entry file directly.
 
 ## Where new code goes
+
+- Extend Old Musket ranged-profile ownership in `_cwv_old_musket_shot_owner.lua`,
+  not another menu/transport guard. Preserve healthy math/order, private helper
+  binding and the single existing Handgun callback. Other profile publishers,
+  #423 sender safety and #474 appearance acceptance remain separate work.
+- Extend bayonet family construction/readback in
+  `_cwv_old_musket_melee_owner.lua`; preserve the private manifest/helper bind.
+  Stance and singleton template routing stay in `_cwv_musket_runtime.lua`.
+  Never append/retry a profile during stance selection or add a native Sweep
+  hook under this construction contract. Broader retained consumer work needs
+  its own source-qualified action-start/cache/finish design and review.
 
 - Put core weapon-template and damage-profile construction for the extracted
   Infantry Spear-through-Outrider family in `_cwv_core_templates.lua`; inject a

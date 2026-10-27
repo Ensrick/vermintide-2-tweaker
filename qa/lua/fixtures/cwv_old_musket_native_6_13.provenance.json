@@ -1,0 +1,61 @@
+{
+  "native_commit": "93dea911a4cc464a0eb51cfdc3a443297bfc4550",
+  "native_inputs": [
+    {
+      "path": "scripts/settings/equipment/weapon_templates/handguns.lua",
+      "git_blob": "547f75e51dbf656184ed351ecd261714db4f25fe",
+      "bytes": 9364,
+      "sha256": "6e057c955f7169e3817f180717585410dde200c01ab4226d1c472f8c3747e795"
+    },
+    {
+      "path": "scripts/settings/equipment/weapon_templates/2h_heavy_spears.lua",
+      "git_blob": "7575b5035a40d9957514667538d253af46e18c9a",
+      "bytes": 37472,
+      "sha256": "2f1474b024093c697897ce2c1a303d771bceef1fe677ebca75b3d3fbcfd729b7"
+    },
+    {
+      "path": "scripts/unit_extensions/weapons/actions/action_handgun.lua",
+      "git_blob": "8533f1aa78c313637f7db602ca810931d9f5fe6c",
+      "bytes": 10350,
+      "sha256": "a8f0980655ea26f292a96a010201239e18c40791d128d9914b59a52357976aa6"
+    },
+    {
+      "path": "scripts/settings/equipment/damage_profile_templates.lua",
+      "git_blob": "e8330328d0085f6aee09e0495ba88fdc0211d5aa",
+      "bytes": 123916,
+      "sha256": "f333aad4c94ee0b313afcf6dd94885c01dc84e655bd02c6f602e7ddb1c8c4a80"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "git_blob": "6eba753d985ea80057947ed1ae1a25214204783e",
+      "bytes": 94711,
+      "sha256": "5e66d0feb82326bb3f274cc54662cfd21b95b81586843651f495ac3e0e314766"
+    }
+  ],
+  "donor_resolution": "Actual cwv_old_musket_native_melee.load of pinned rawDPT+PowerLevel prefix/resolution; sorted serialization only, no copied math/synthetic donor values",
+  "native_source_fields": {
+    "handguns": {
+      "bytes": 9361,
+      "sha256": "9154a8fbdf14c9668216f826ed1d6e7c6a1bf97cd477872cf0048c709ddd8c58"
+    },
+    "tuskgor": {
+      "bytes": 37469,
+      "sha256": "620428a6484f6e0686c0f43a1d5c9b23b9b113d01fc897558c6322e421c3eb0e"
+    },
+    "handgun_post_update": {
+      "bytes": 6012,
+      "sha256": "e13a25e2bed9cc9c966a7d834a47e6069b409a40acdd07d9f7dc6c0dfe1ca5e6"
+    }
+  },
+  "resolved_profile_data_sha256": "bc5e3e4408d75b90a76125a3231658d1732793c339a1077dfffff4dccff2f909",
+  "fixture": {
+    "bytes": 57682,
+    "sha256": "d8cfc3b6f0819496dc4ddedcafa1c0446b6c9cca71b50cd176c0f1813fcc33d2"
+  },
+  "prior_runtime": {
+    "source": "C:\\Users\\danjo\\source\\repos\\.vt2-issue-review-20261026\\issue428-old-musket-construction-boundary\\revision2\\candidate\\character_weapon_variants\\scripts\\mods\\character_weapon_variants\\_cwv_musket_runtime.lua",
+    "bytes": 45908,
+    "sha256": "b37c6f2ffa54aa9814fd1036d2fbe51363319b830b1964f97f7afe297cb5cec0",
+    "binding_sha256": "de85a538b6257d23924e204c78f8467e838d32c0424d06decf85432fec812a3a"
+  }
+}

@@ -489,8 +489,22 @@ return function(H, repo_root)
 		local helper_path = "scripts/mods/character_weapon_variants/_lib_network_lookup"
 		H.equal(count_plain(entry, helper_path), 1,
 			"CWV entry must inject the helper into item registration exactly once")
-		H.truthy(entry:find("network_lookup = mod:dofile(", 1, true),
-			"CWV entry does not inject the shared helper")
+		H.truthy(entry:find('_variant_install = _variant_install.bind(mod:dofile("scripts/mods/character_weapon_variants/_lib_network_lookup"))', 1, true),
+			"CWV entry does not bind its one manifested shared helper")
+		local runtime = read(repo_root
+			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_musket_runtime.lua")
+		local bootstrap = read(repo_root
+			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_variant_bootstrap_owner.lua")
+		H.truthy(runtime:find('local _network_lookup = assert(_old_musket_factory.network_lookup,', 1, true),
+			"CWV Musket owner does not retain its exact private helper")
+		H.truthy(runtime:find('return { network_lookup = _network_lookup,', 1, true),
+			"CWV Musket capsule does not transfer the retained helper")
+		H.truthy(bootstrap:find('local network_lookup = type(musket_construction) == "table" and musket_construction.network_lookup', 1, true),
+			"CWV bootstrap does not capture the private helper")
+		H.truthy(bootstrap:find('private.network_lookup = network_lookup', 1, true),
+			"CWV bootstrap does not inject its captured helper into item registration")
+		H.equal(count_plain(runtime, helper_path), 0, "Musket owner must not reload the helper")
+		H.equal(count_plain(bootstrap, helper_path), 0, "Bootstrap must not reload the helper")
 		H.truthy(owner:find("local _network_lookup = assert(ctx.network_lookup,", 1, true),
 			"CWV item registration does not require its injected helper")
 		H.truthy(owner:find(
