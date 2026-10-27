@@ -230,6 +230,8 @@ return function(H, repo_root)
         local cim = read("/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua")
         local swap = read("/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/illusion_swap.lua")
         local forge = read("/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/standard_forge.lua")
+        local facade = read(
+            "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_illusion_apply_presentation.lua")
         local presentation = read(
             "/tools/shared_lib/_lib_local_illusion_apply.lua")
         local cosmetics = read(
@@ -254,8 +256,9 @@ return function(H, repo_root)
         H.truthy(swap:find("_is_modded_realm()", 1, true) ~= nil)
         H.truthy(swap:find("with_eac_off = _with_eac_off", 1, true) ~= nil)
         H.truthy(presentation:find("deps.with_eac_off(func", 1, true) ~= nil)
-        H.truthy(forge:find("mod._cim_illusion_apply_presentation_owner", 1, true) ~= nil)
-        H.truthy(forge:find("owner.on_state_update(func", 1, true) ~= nil)
+        H.truthy(forge:find("Apply.install_forge_state()", 1, true) ~= nil)
+        H.truthy(facade:find("mod._cim_illusion_apply_presentation_owner", 1, true) ~= nil)
+        H.truthy(facade:find("owner.on_state_update(func", 1, true) ~= nil)
         H.equal(cosmetics:find("_lib_modded_realm_authority", 1, true), nil)
         local cosmetics_realm = read(
             "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_realm_authority.lua")

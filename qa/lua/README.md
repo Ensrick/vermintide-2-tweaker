@@ -445,6 +445,8 @@ card remain required. The runner lists the suite explicitly.
   'fixtures/wt_history_dependencies.lua' supplies real transaction/helper
   dependencies to legacy direct-runtime cases; it substitutes no algorithm.
 
+Dev Apply installation coverage (`test_cim_dev_forge_installation`) executes the actual ordered entry spans, complete Forge/illusion installers and facade with mandatory portable native6.13/full VMF inputs. It asserts private whole-Forge completion before UI/check/provider publication, exact loader/getter/error tuples, retained callback behavior and raw host isolation; VMF hook registration/ABI and game acceptance remain unproven.
+
 `test_cwv_shortsword_history_envelope` covers the finite native dagger history
 axis with actual WT public/Dev owner/runtime/policy/transaction, one selected
 canonical catalog, and real Shortsword private item/acquisition-seed admission.

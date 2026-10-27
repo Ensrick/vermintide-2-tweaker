@@ -1,5 +1,22 @@
 # Crafting in Modded Changelog
 
+## 0.8.145-dev (2026-10-27) -- Private Forge completion (#1465, #1530) [not-started]
+
+- Finish the standard Forge and illusion installers before publishing their
+  completion capability, installing the dependent UI checks, or exposing the
+  provider. Capture the completed private callbacks by value; a partial or
+  throwing installer does not advertise successful initialization.
+- Keep the modern illusion Apply presentation behind the same canonical
+  shared class used by Cosmetics, through CIM's private compatibility facade.
+  Preserve original callback tuples/errors and native-first realm handling.
+- Add source-qualified installed Forge/illusion coverage using the actual
+  6.13 callback templates, including idempotence, completion ordering and
+  same-oracle disconnected/throwing capability controls. Ratchet the entry
+  and Forge sizes downward without weakening other decomposition contracts.
+- This is the friends-only development stream. Stable CIM 0.8.92 is unchanged;
+  its separate public promotion authorization remains required. Actual game
+  startup, native/VMF ABI and live crafting acceptance are not claimed here.
+
 ## 0.8.144-dev (2026-10-25) -- Installed Keep-forge regression proof (#1689, #624)
 
 - Strengthen the existing `issue624_keep_forge_interaction` check: retain its

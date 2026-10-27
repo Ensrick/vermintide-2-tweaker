@@ -21,6 +21,8 @@ Mutations are session-only. On game restart PlayFab reloads the canonical invent
 and reverts everything. This matches how the Athanor handles property/trait edits.
 ]]
 
+-- Owned by: Dev entry. Consumed via: its original protected Forge boundary.
+return function(Apply)
 local mod = get_mod("cim_dev")
 mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_salvage_modded_button")
 local _craft_dispatch = mod:dofile(
@@ -164,25 +166,7 @@ local function _pack_results(...)
     return { n = select("#", ...), ... }
 end
 
-mod:hook("HeroWindowItemCustomization", "_update_state_craft_button", function(func, self, recipe_name, ...)
-    local owner = mod._cim_illusion_apply_presentation_owner
-    local results
-    if owner and type(owner.on_state_update) == "function" then
-        results = _pack_results(owner.on_state_update(func, self, recipe_name, ...))
-    else
-        results = _pack_results(func(self, recipe_name, ...))
-    end
-    if mod._cim_standard_forge_active and recipe_name ~= "apply_weapon_skin" then
-        local btn = self._widgets_by_name and self._widgets_by_name.craft_button
-        if btn then
-            local has_all = self._has_all_crafting_requirements
-            if has_all == nil then has_all = true end
-            local force_disable = select(3, ...)
-            btn.content.button_hotspot.disable_button = force_disable or not has_all or false
-        end
-    end
-    return unpack(results, 1, results.n)
-end)
+Apply.install_forge_state()
 
 -- ============================================================
 -- One-shot trim: existing items in the mirror with >2 properties
@@ -1849,3 +1833,4 @@ mod:hook_safe("HeroWindowCrafting", "update", function(self, dt, t)
     _show_std_forge_buttons(self, true)
     _handle_std_forge_button_clicks(self)
 end)
+end
