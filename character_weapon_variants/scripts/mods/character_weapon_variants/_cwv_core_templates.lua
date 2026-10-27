@@ -155,6 +155,43 @@ return function(mod, deps)
 	local audit_profile, profile_multiplier_check, live_audit = new_profile_audit(PowerLevelTemplates)
 	_om._cwv_profile_multiplier_check = profile_multiplier_check
 
+	local shortsword_factory, shortsword_owner = deps.shortsword_factory
+	local detached_scalar_factory = function(options)
+			assert(type(options) == "table", "detached scalar options missing")
+			local profiles, levels = options.profiles, options.power_levels
+			local record, register = options.record_source, options.register
+			assert(type(profiles) == "table", "detached scalar profiles missing")
+			assert(type(record) == "function" and type(register) == "function",
+				"detached scalar journals missing")
+			local before = { profiles = rawget(live_audit, "profiles"), comparisons = rawget(live_audit, "comparisons"),
+				failure = rawget(live_audit, "failure") }
+			local audit, check, delta = new_profile_audit(levels)
+			local appended = false
+			return {
+				clone_damage_profile = new_profile_cloner(profiles, levels, record, register, audit),
+				check = check,
+				-- Only this private closure can contribute the detached audit to the
+				-- live ledger. The caller commits these raw cells in its SAME journal;
+				-- no cloner/source-generation/math replay occurs after publication.
+				append_live_audit_changes = function(changes)
+					assert(type(changes) == "table" and not appended, "detached audit journal reused")
+					assert(check() == nil, "detached audit contribution unproven")
+					for _, key in ipairs({ "profiles", "comparisons", "failure" }) do
+						assert(rawget(live_audit, key) == before[key], "live audit preimage changed")
+					end
+					assert(type(before.profiles) == "number" and type(before.comparisons) == "number", "live audit counter shape unproven")
+					local values = { profiles = before.profiles + delta.profiles, comparisons = before.comparisons + delta.comparisons }
+					values.failure = before.failure
+					if delta.failure ~= nil then values.failure = before.failure or delta.failure end
+					for _, key in ipairs({ "profiles", "comparisons", "failure" }) do
+						changes[#changes + 1] = { live_audit, key, values[key], "audit:" .. key, before = before[key] }
+					end
+					appended = true
+					return true
+				end,
+			}
+		end
+
 -- Single registration site for every profile this module mints (multiplier
 -- clones and the #916 burn scrub): template row plus the bidirectional wire
 -- index. Returns true once the profile is registered.
@@ -891,14 +928,7 @@ local _SHORTSWORD_FX_SWAP = {
 	},
 }
 
-local function _create_shortsword_template()
-	if not Weapons or not Weapons.one_handed_daggers_template_1 then
-		mod:warning("one_handed_daggers_template_1 not found — Shortsword template unavailable")
-		return
-	end
-	if Weapons.shortsword_template then return end
-
-	local template = table.clone(Weapons.one_handed_daggers_template_1, true)
+local function _prepare_shortsword_template(template, clone_scalar)
 
 	if template.actions then
 		for _, action_group in pairs(template.actions) do
@@ -922,7 +952,7 @@ local function _create_shortsword_template()
 						end
 						-- Step 2: scale power on the (possibly swapped) damage_profile.
 						if sub_action.damage_profile then
-							sub_action.damage_profile = _clone_damage_profile(sub_action.damage_profile, "cwv_shortsword_", {
+							sub_action.damage_profile = clone_scalar(sub_action.damage_profile, "cwv_shortsword_", {
 								damage = _SHORTSWORD_POWER_MULT, stagger = _SHORTSWORD_POWER_MULT,
 							})
 						end
@@ -945,7 +975,24 @@ local function _create_shortsword_template()
 		end
 	end
 
-	Weapons.shortsword_template = template
+	return true
+end
+
+local function _create_shortsword_template()
+	if not Weapons or not Weapons.one_handed_daggers_template_1 then
+		mod:warning("one_handed_daggers_template_1 not found — Shortsword template unavailable")
+		return
+	end
+	if type(shortsword_factory) ~= "function" then return end
+	shortsword_owner = shortsword_factory({
+		state = _om, scalar_factory = detached_scalar_factory, action_templates = ActionTemplates,
+		profiles = function() return rawget(_G, "DamageProfileTemplates") end,
+		power_levels = function() return rawget(_G, "PowerLevelTemplates") end,
+		lookup = function() local network = rawget(_G, "NetworkLookup"); return network and rawget(network, "damage_profiles") end,
+		weapons = function() return rawget(_G, "Weapons") end,
+		clone = function(value) return table.clone(value, true) end,
+	})
+	if not shortsword_owner.construct(_prepare_shortsword_template) then return end
 	mod:info("Created shortsword_template (spd=%.0f%% power=%.0f%%, fire DoT removed)",
 		_SHORTSWORD_SPEED_MULT * 100, _SHORTSWORD_POWER_MULT * 100)
 end
@@ -1387,40 +1434,13 @@ end  -- #284: end outrider grenade-launcher do-block
 		clone_damage_profile = _clone_damage_profile,
 		-- Private construction planner only: callers supply detached registries
 		-- and publication/source journals. Its audit cannot mutate the live ledger.
-		detached_scalar_factory = function(options)
-			assert(type(options) == "table", "detached scalar options missing")
-			local profiles, levels = options.profiles, options.power_levels
-			local record, register = options.record_source, options.register
-			assert(type(profiles) == "table", "detached scalar profiles missing")
-			assert(type(record) == "function" and type(register) == "function",
-				"detached scalar journals missing")
-			local before = { profiles = rawget(live_audit, "profiles"), comparisons = rawget(live_audit, "comparisons"),
-				failure = rawget(live_audit, "failure") }
-			local audit, check, delta = new_profile_audit(levels)
-			local appended = false
-			return {
-				clone_damage_profile = new_profile_cloner(profiles, levels, record, register, audit),
-				check = check,
-				-- Only this private closure can contribute the detached audit to the
-				-- live ledger. The caller commits these raw cells in its SAME journal;
-				-- no cloner/source-generation/math replay occurs after publication.
-				append_live_audit_changes = function(changes)
-					assert(type(changes) == "table" and not appended, "detached audit journal reused")
-					assert(check() == nil, "detached audit contribution unproven")
-					for _, key in ipairs({ "profiles", "comparisons", "failure" }) do
-						assert(rawget(live_audit, key) == before[key], "live audit preimage changed")
-					end
-					assert(type(before.profiles) == "number" and type(before.comparisons) == "number", "live audit counter shape unproven")
-					local values = { profiles = before.profiles + delta.profiles, comparisons = before.comparisons + delta.comparisons }
-					values.failure = before.failure
-					if delta.failure ~= nil then values.failure = before.failure or delta.failure end
-					for _, key in ipairs({ "profiles", "comparisons", "failure" }) do
-						changes[#changes + 1] = { live_audit, key, values[key], "audit:" .. key, before = before[key] }
-					end
-					appended = true
-					return true
-				end,
-			}
-		end,
+		detached_scalar_factory = detached_scalar_factory,
+		shortsword_construction = {
+			admit_shortsword = function(def) return shortsword_owner ~= nil and shortsword_owner.admit(def) end,
+			check_shortsword = function()
+				if not shortsword_owner then return "#428 private Shortsword construction owner disconnected" end
+				return shortsword_owner.check()
+			end,
+		},
 	}
 end

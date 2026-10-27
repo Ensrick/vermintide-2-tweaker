@@ -1,0 +1,290 @@
+{
+  "schema": 1,
+  "purpose": "required bounded portable native Shortsword constructor inputs; no resolved graph serialization",
+  "native_commit": "93dea911a4cc464a0eb51cfdc3a443297bfc4550",
+  "path": "qa/lua/fixtures/cwv_shortsword_construction_source.lua",
+  "bytes": 44434,
+  "sha256": "d9a9b62746679ee6bfd5eefff02213ecb29ac82047d8e1f775ff6f8d3aeeaf53",
+  "native_inputs": [
+    {
+      "path": "scripts/settings/equipment/weapon_templates/1h_dagger_wizard.lua",
+      "raw_bytes": 36285,
+      "raw_sha256": "1f0826141e4d67f241d5bcdf2d022a2259ea79127ba918aeb56944e4ed4d2429",
+      "normalized_sha256": "25a5941110a2098ed7f137b0d90e119c06a5260f42e04cb15f63c2b12c2e448b"
+    },
+    {
+      "path": "scripts/settings/equipment/power_level_templates.lua",
+      "raw_bytes": 100650,
+      "raw_sha256": "f27d8a59d5473807ba5aa1a431ce2ea04001ccfd20835df0c2ec547c4af8b4d6",
+      "normalized_sha256": "35f8ccfbb078f322010d89f03f789c43c5ba271ea39b534b072b5343065ad5fa"
+    },
+    {
+      "path": "scripts/settings/equipment/damage_profile_templates.lua",
+      "raw_bytes": 129566,
+      "raw_sha256": "d8f363a06382867e174beda889eae571fe9e89a3bbf227cc5be4e35ec4424282",
+      "normalized_sha256": "d1edf69f722cf142d4a3940589000363c8d106edb24ebbbafadc1a239b5935ec"
+    },
+    {
+      "path": "scripts/settings/equipment/item_master_list_exported.lua",
+      "raw_bytes": 397276,
+      "raw_sha256": "9bfae4a7f6c8794219d1a8d46938e7050c2b09712543073c17103f418db4fff0",
+      "normalized_sha256": "86b1b2af853bc7bd0f4f1ac4b2888f763333368f3c1db7c986854a7693ac87ca"
+    }
+  ],
+  "decoded": [
+    {
+      "name": "dagger",
+      "bytes": 34859,
+      "sha256": "25a5941110a2098ed7f137b0d90e119c06a5260f42e04cb15f63c2b12c2e448b"
+    },
+    {
+      "name": "power",
+      "bytes": 4659,
+      "sha256": "f6162c045395d849d16900b081a29bea0f3d6774ee74d8265967535ce5bfcac1"
+    },
+    {
+      "name": "profiles",
+      "bytes": 1918,
+      "sha256": "7767e6dbe984eeacde8cf07dfad46a8ae01a6aed033063a9c45af841f92e36f1"
+    },
+    {
+      "name": "resolve",
+      "bytes": 2111,
+      "sha256": "a74935cd40a15fd692bb4a8973ed285de7114702b381ee27bcf080b874dd6d3f"
+    },
+    {
+      "name": "item",
+      "bytes": 601,
+      "sha256": "a4712467e37c3f0966062b58822325cbbf345a71c199b5611ea7870fa87e8beb"
+    }
+  ],
+  "selected_spans": [
+    {
+      "name": "medium_slashing_linesman",
+      "start_line": 184,
+      "end_line": 191,
+      "bytes": 318,
+      "sha256": "bfc68b4c7849383686981aaecfd6bacea1a036e8e39e2cc7e56a63000af1f614"
+    },
+    {
+      "name": "medium_slashing_smiter_stab",
+      "start_line": 521,
+      "end_line": 527,
+      "bytes": 301,
+      "sha256": "6a99824ebc75c913e5c74e01b603156cc1c16b91bc4798a076dc1b12433a1205"
+    },
+    {
+      "name": "medium_slashing_smiter_stab.melee_boost_override",
+      "start_line": 528,
+      "end_line": 528,
+      "bytes": 77,
+      "sha256": "e63c4465a185528de28bd13fdb4e038c161a08be916f3de3545a55d3b50c8d92"
+    },
+    {
+      "name": "light_fencer_stab",
+      "start_line": 595,
+      "end_line": 603,
+      "bytes": 362,
+      "sha256": "c0eddc6ff2c435b52ba491eb0f9ffa1c5cabd91daccc281713407f7f9860946e"
+    },
+    {
+      "name": "dagger_1h_light_linesman",
+      "start_line": 1125,
+      "end_line": 1132,
+      "bytes": 388,
+      "sha256": "a3e58636ed9578c0d62a42a17572ed64d51828d5e03d710c1100765abbea2155"
+    },
+    {
+      "name": "dagger_1h_light_smiter_stab",
+      "start_line": 1133,
+      "end_line": 1141,
+      "bytes": 438,
+      "sha256": "899ff5544bec0b12bc774c55a5ed007e31957ddd9729d7a77ebb1cf3271f5f05"
+    },
+    {
+      "name": "PowerLevelTemplates.critical_strike_linesman_M",
+      "start_line": 872,
+      "end_line": 887,
+      "bytes": 178,
+      "sha256": "7fbc489332322eded2f7adce1b4308b888879b280f84a0154c80b243c68f144e"
+    },
+    {
+      "name": "PowerLevelTemplates.cleave_distribution_linesman_M",
+      "start_line": 888,
+      "end_line": 891,
+      "bytes": 73,
+      "sha256": "fcd073fc890c4c7d02c63dc22782fd5164540720a965d73430b7d9f1897d7308"
+    },
+    {
+      "name": "PowerLevelTemplates.armor_modifier_linesman_M",
+      "start_line": 892,
+      "end_line": 907,
+      "bytes": 137,
+      "sha256": "5d5c3cbffacd18554a63fb20829332550e2fe01c982a90ba3d3e7864ec3d51be"
+    },
+    {
+      "name": "PowerLevelTemplates.default_target_linesman_M",
+      "start_line": 908,
+      "end_line": 916,
+      "bytes": 230,
+      "sha256": "2f714e399ce28d00a8be466f3eccab5b3ecc61a6f8544c18deda122c6f60f7d6"
+    },
+    {
+      "name": "PowerLevelTemplates.targets_linesman_M",
+      "start_line": 917,
+      "end_line": 944,
+      "bytes": 593,
+      "sha256": "3b5861641ff68d9e5cb3645bb7972e93821bc5379484557b771b2290d9648ed8"
+    },
+    {
+      "name": "PowerLevelTemplates.cleave_distribution_smiter_default",
+      "start_line": 1733,
+      "end_line": 1736,
+      "bytes": 80,
+      "sha256": "f7a1c2ac242737a7ba8a11e4a321876d9f8f90de77735c86364bbdb54e07944a"
+    },
+    {
+      "name": "PowerLevelTemplates.critical_strike_stab_smiter_M",
+      "start_line": 2545,
+      "end_line": 2560,
+      "bytes": 179,
+      "sha256": "3bbf456aa205aa320cdeb806a6ec89ad956984009f85040b64b76b475ffb50ad"
+    },
+    {
+      "name": "PowerLevelTemplates.armor_modifier_stab_smiter_M",
+      "start_line": 2593,
+      "end_line": 2608,
+      "bytes": 149,
+      "sha256": "2d4c06c003a77053c2915af86a6d9b973ee5e1315cf75446207190dc15eb9a5e"
+    },
+    {
+      "name": "PowerLevelTemplates.default_target_stab_smiter_M",
+      "start_line": 2609,
+      "end_line": 2618,
+      "bytes": 246,
+      "sha256": "3e1706a89bbc6e8247537832a7d13830f1731e1c168383aa5ca40d784ca05e0e"
+    },
+    {
+      "name": "PowerLevelTemplates.critical_strike_fencer_stab_L",
+      "start_line": 2807,
+      "end_line": 2822,
+      "bytes": 181,
+      "sha256": "d549c591574c41ad069fd97f72a1c46b4d7d75b59332e07eaac4c883cd2f0e1c"
+    },
+    {
+      "name": "PowerLevelTemplates.armor_modifier_fencer_stab_L_AP",
+      "start_line": 2839,
+      "end_line": 2854,
+      "bytes": 152,
+      "sha256": "f1695f089880a92570c2480e87e1553bdd6bf51211d68be3c33dc2602ef8e573"
+    },
+    {
+      "name": "PowerLevelTemplates.default_target_fencer_stab_L",
+      "start_line": 2855,
+      "end_line": 2863,
+      "bytes": 223,
+      "sha256": "1f799d2e4b3902cf240f35434032045dcd9a934b9e9fd9485f758ece22b0e43a"
+    },
+    {
+      "name": "PowerLevelTemplates.targets_fencer_stab_L",
+      "start_line": 2864,
+      "end_line": 2876,
+      "bytes": 312,
+      "sha256": "19a999fc7c33e182ba7a4d87d1ce15d12295b5c7cf478de5d78102588a7bc420"
+    },
+    {
+      "name": "PowerLevelTemplates.dagger_1h_light_linesman_critical_strike",
+      "start_line": 5069,
+      "end_line": 5084,
+      "bytes": 192,
+      "sha256": "06eff2047e531b43483ff369562aed3139fb79544f50a5a348f1a923bafd1cb3"
+    },
+    {
+      "name": "PowerLevelTemplates.dagger_1h_light_linesman_cleave_distribution",
+      "start_line": 5085,
+      "end_line": 5088,
+      "bytes": 87,
+      "sha256": "788d2b6e4b53f74c5e8b4da3a7517ab6fda4cd86e92ec3f41e34df285ef4623d"
+    },
+    {
+      "name": "PowerLevelTemplates.dagger_1h_light_linesman_armor_modifier",
+      "start_line": 5089,
+      "end_line": 5104,
+      "bytes": 151,
+      "sha256": "06c53b737d20959188d6ddd7061050678f3f19c0bb737b2a45face420c26ff08"
+    },
+    {
+      "name": "PowerLevelTemplates.dagger_1h_light_linesman_default_target",
+      "start_line": 5105,
+      "end_line": 5112,
+      "bytes": 202,
+      "sha256": "35a64c563557f0cd86187b2541a67aed47399c600fb6796b6ec373b599885157"
+    },
+    {
+      "name": "PowerLevelTemplates.dagger_1h_light_linesman_targets",
+      "start_line": 5113,
+      "end_line": 5123,
+      "bytes": 253,
+      "sha256": "05af108c8bbeaef9158548b35ec27fa57ce00602298303f25a411e29b9997545"
+    },
+    {
+      "name": "PowerLevelTemplates.dagger_1h_light_smiter_stab_critical_strike",
+      "start_line": 5124,
+      "end_line": 5139,
+      "bytes": 195,
+      "sha256": "4877419ee45215547052b8265b5c4ffb3f591e6a124ca6908fae11f6b7525758"
+    },
+    {
+      "name": "PowerLevelTemplates.dagger_1h_light_smiter_stab_cleave_distribution",
+      "start_line": 5140,
+      "end_line": 5143,
+      "bytes": 93,
+      "sha256": "5d0c57a561936e0484136ab14c4c5f83e62b7cd3d6e3afe9858ea69a0f1b175a"
+    },
+    {
+      "name": "PowerLevelTemplates.dagger_1h_light_smiter_stab_armor_modifier",
+      "start_line": 5144,
+      "end_line": 5159,
+      "bytes": 163,
+      "sha256": "581921601ca199723771b87c5476f3ee0a53e1e5aa1d6f381ac9a39249108e8d"
+    },
+    {
+      "name": "PowerLevelTemplates.dagger_1h_light_smiter_stab_default_target",
+      "start_line": 5160,
+      "end_line": 5168,
+      "bytes": 237,
+      "sha256": "a6235630896747fd2ee4bbdf2afe59e2af9ad9a79d87ae627ad66ab8bb8cf7d8"
+    },
+    {
+      "name": "PowerLevelTemplates.dagger_1h_light_smiter_stab_targets",
+      "start_line": 5169,
+      "end_line": 5181,
+      "bytes": 326,
+      "sha256": "a2dc404ad3861c3ddc7b49ddb6847f2527d4e4dd5c593e77d208bfc189b96923"
+    },
+    {
+      "name": "complete_native_resolver",
+      "start_line": 5571,
+      "end_line": 5618,
+      "bytes": 2111,
+      "sha256": "a74935cd40a15fd692bb4a8973ed285de7114702b381ee27bcf080b874dd6d3f"
+    },
+    {
+      "name": "ItemMasterList.bw_dagger",
+      "start_line": 7121,
+      "end_line": 7140,
+      "bytes": 601,
+      "sha256": "a4712467e37c3f0966062b58822325cbbf345a71c199b5611ea7870fa87e8beb"
+    }
+  ],
+  "existing_by_reference": [
+    "qa/lua/fixtures/wt_authentic_pistol_native_6_13.lua:clone+is_class_instance",
+    "qa/lua/fixtures/cwv_old_musket_native_6_13.lua",
+    "qa/lua/tests/test_cwv_old_musket_shot_owner.lua:T.installed/private_items/run"
+  ],
+  "exclusions": [
+    "No full PowerLevel/DPT/ItemMasterList/core source copy.",
+    "No DLC loader, no_damage derivative or native whole-weapon finalizer.",
+    "Native module includes complete callbacks; engine/animation/network ABI not claimed."
+  ]
+}

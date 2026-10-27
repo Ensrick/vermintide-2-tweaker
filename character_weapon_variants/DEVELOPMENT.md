@@ -2192,3 +2192,59 @@ records remain untouched/pending on denial. Foreign templates/hot reload are not
 adopted. Add future construction policy here, not into projectile hooks. The
 existing #424/#1186 projectile/resource/wire seams and disabled bomb remain
 unchanged; retained native launch/finish/impact safety is separate and unproven.
+
+## #428 closed Shortsword construction and exact admission
+
+The entry loads the inert lookup and graph leaves once before the core
+constructors, then injects `_cwv_shortsword_construction_owner.bind` privately.
+This deliberately moves pure helper evaluation earlier; actual publishers
+still run core before Musket. The existing scalar factory is declared earlier
+without changing its body, math, source encounter order or audit semantics.
+
+The family owns five native dagger analogs and seven scalar encounters. One
+raw-cell journal covers detached profiles, paired IDs, exact source map,
+generation/first fallback, prepared template, any actually prepared legacy
+PowerLevel destinations and the private live audit contribution. Foreign
+preexisting/intervening cells are never adopted or overwritten. No native
+fallback or repair is inferred. Later valid unrelated appends remain allowed.
+
+Fresh Shortsword items and Blacksmith seeds use the same retained private
+admission through bootstrap and the builder; denied saved exact CIM records
+stay untouched/pending. The named `issue428_shortsword_construction` check
+proves retained construction/admission only, not gameplay or retained Sweep.
+
+Required CI input is one complete native dagger module, five donor literals,
+their minimal PowerLevel statements and the complete native resolver from
+93dea911. A strict reverse delta reconstructs the complete prior core only in
+memory; the ordinary gate hashes it before tests. Source provenance preserves
+raw/decoded hashes and aliases. Native callbacks are exercised with explicit
+collaborators, not claimed as engine animation/physics/ABI acceptance.
+
+### Shared finite career envelope (Shortsword and Javelin)
+
+The entry loads `_cwv_career_envelope` once and both family factories capture
+its functions privately by value. `get_mod` itself is captured at that point;
+only literal `wt`/`wt_dev` IDs are queried late under `pcall`, since those mods
+may become available after CWV construction. WT owner tokens are exactly the
+shared installer's `weapon_tweaker:` plus the actual returned mod identity.
+
+Source and clone roles preserve all unrelated raw graph cells/metatables.
+Unchanged initial noncanonical native career rows stay pinned, not invented
+canonical. Supported transitions require raw canonical ActionTemplates row
+identity plus plain exact claims/known owners. Install/release/coownership
+follows the real shared helper; source clone markers never change, while a
+clone permits only its exact target<-donor provenance. Unknown owner names,
+wrong canonical root/object, bad claims/meta and unrelated source mutations
+deny fresh item/seed admission. The envelope never repairs shared state.
+
+Explicit limit: canonical career-action CONTENT remains delegated to the
+captured/current ActionTemplates registry, as in the shared installer. This
+proves identity and supported ownership, not semantic validity or gameplay
+safety of a canonical action body. Noncareer weapon/profile authority remains
+strict. No global shared-library copies or other mods are modified here.
+
+Raw identity in the career envelope and graph transaction uses `rawequal`,
+never table `==`/`~=`: shared `__eq` metamethods are not reference authority.
+The graph applies this to snapshot child/metatable identity and transaction
+preimage/readback. Canonical career body CONTENT remains delegated; replacing
+the row/root with an equal-comparing foreign table does not inherit authority.

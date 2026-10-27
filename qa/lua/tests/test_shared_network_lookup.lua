@@ -15,6 +15,21 @@ local function count_plain(text, needle)
 	end
 end
 
+local function cwv_helper_adoption_errors(entry)
+	local errors = {}
+	local path = "scripts/mods/character_weapon_variants/_lib_network_lookup"
+	local load = 'local _cwv_network_lookup = mod:dofile("' .. path .. '")'
+	local bind = '_variant_install = _variant_install.bind(_cwv_network_lookup)'
+	local load_at, bind_at = entry:find(load, 1, true), entry:find(bind, 1, true)
+	if count_plain(entry, path) ~= 1 then errors[#errors + 1] = "helper_load_count" end
+	if count_plain(entry, load) ~= 1 then errors[#errors + 1] = "private_load_binding" end
+	if count_plain(entry, bind) ~= 1 then errors[#errors + 1] = "installer_binding" end
+	if not load_at or not bind_at or load_at >= bind_at then
+		errors[#errors + 1] = "private_helper_order"
+	end
+	return errors, load, bind
+end
+
 local function woc_cursed_adoption_errors(entry, owner_source, rarity_source)
 	local errors = {}
 	local helper_path = "scripts/mods/weapons_of_chaos/_lib_network_lookup"
@@ -489,8 +504,8 @@ return function(H, repo_root)
 		local helper_path = "scripts/mods/character_weapon_variants/_lib_network_lookup"
 		H.equal(count_plain(entry, helper_path), 1,
 			"CWV entry must inject the helper into item registration exactly once")
-		H.truthy(entry:find('_variant_install = _variant_install.bind(mod:dofile("scripts/mods/character_weapon_variants/_lib_network_lookup"))', 1, true),
-			"CWV entry does not bind its one manifested shared helper")
+		H.equal(#cwv_helper_adoption_errors(entry), 0,
+			"CWV entry does not once-load and privately bind its one manifested shared helper")
 		local runtime = read(repo_root
 			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_musket_runtime.lua")
 		local bootstrap = read(repo_root
@@ -518,6 +533,48 @@ return function(H, repo_root)
 			"CWV still owns the legacy append index")
 		H.equal(owner:find("rawset(NetworkLookup.item_names", 1, true), nil,
 			"CWV still mutates item_names outside the canonical helper")
+	end)
+
+	H.test("CWV #428 private helper source guard rejects disconnected and duplicate bindings", function()
+		local entry = read(repo_root
+			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua")
+		local errors, load, bind = cwv_helper_adoption_errors(entry)
+		H.equal(#errors, 0)
+		local function replace_once(text, old, new)
+			local at = assert(text:find(old, 1, true))
+			return text:sub(1, at - 1) .. new .. text:sub(at + #old)
+		end
+		for _, broken in ipairs({
+			replace_once(entry, load, "local _cwv_network_lookup = {}"),
+			replace_once(entry, bind, "_variant_install = _variant_install.bind({})"),
+			entry .. '\nmod:dofile("scripts/mods/character_weapon_variants/_lib_network_lookup")\n',
+			entry .. "\n" .. bind .. "\n",
+			bind .. "\n" .. replace_once(entry, bind, "-- disconnected original binding"),
+		}) do
+			H.truthy(#cwv_helper_adoption_errors(broken) > 0,
+				"source guard accepted a planted load/bind ownership regression")
+		end
+	end)
+
+	H.test("CWV #428 actual private helper load and installer bind preserve identity once", function()
+		local entry = read(repo_root
+			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua")
+		local errors, load, bind = cwv_helper_adoption_errors(entry)
+		H.equal(#errors, 0)
+		local helper, installed, loads, binds = {}, {}, 0, 0
+		local chunk = assert(loadstring(load .. "\n" .. bind .. "\nreturn _variant_install",
+			"actual-CWV-private-helper-load-and-bind"))
+		setfenv(chunk, {
+			mod = { dofile = function(_, name)
+				H.equal(name, "scripts/mods/character_weapon_variants/_lib_network_lookup")
+				loads = loads + 1; return helper
+			end },
+			_variant_install = { bind = function(value)
+				H.equal(rawequal(value, helper), true); binds = binds + 1; return installed
+			end },
+		})
+		H.equal(rawequal(chunk(), installed), true)
+		H.equal(loads, 1); H.equal(binds, 1)
 	end)
 
 	H.test("Career Tweaker #428 shared registration preserves all 36 legacy rows", function()

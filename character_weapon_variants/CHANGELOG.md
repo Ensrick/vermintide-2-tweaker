@@ -1,5 +1,27 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.557-dev (2026-10-27) -- Atomic Shortsword and career compatibility (#428) [not-started]
+
+- Prepare Shortsword profiles and its template off-registry, then commit the
+  lookup pairs, source bookkeeping, multiplier audit and template as one bounded
+  transaction. Conflicting destinations and changed donors reject admission
+  without overwriting foreign state or deleting saved crafts.
+- Preserve supported CWV/Weapons Tweaker career-action installation and release
+  on both Shortsword and Tuskgor Javelin. Canonical action references and exact
+  provider claims remain required; unrelated donor and clone data stay pinned.
+- Use true table identity for retained references and graph transactions, so
+  distinct foreign tables with equal-comparison metatables cannot inherit
+  construction authority or evade preimage/readback validation.
+- Require the tracked native Shortsword closure and complete historical source
+  identity before ordinary Lua suites. Preserve original nil and false state,
+  healthy math, native callbacks, aliases and lookup encounter order.
+- Version 0.1.556-dev was deliberately never published: focused native-source
+  review exposed its supported-career compatibility rejection. This fresh
+  higher reservation replaces it; no old claim or receipt is renewed.
+- Construction and admission coverage is not native engine ABI, rendered model,
+  gameplay/co-op acceptance or proof of any historical crash's cause. Retained
+  projectile/action and sender boundaries remain separate work.
+
 ## 0.1.556-dev (2026-10-27) -- Atomic Tuskgor Javelin construction (#428) [not-started]
 
 - Prepare the complete Javelin profile/template family off-registry and publish

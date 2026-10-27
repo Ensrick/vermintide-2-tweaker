@@ -275,10 +275,16 @@ return function(H, root)
         if alter then alter(c) end
         local call_start = assert(entry:find('local _variant_install = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_shot_owner")', 1, true))
         local call_end = assert(entry:find("\n\n", call_start, true))
-        local call = entry:sub(call_start, call_end-1)
-        local capsule = run("return function(mod, _om, _dbg)\n" .. call .. "\nreturn _variant_install end",
-            env, "actual-entry-musket-private-binding")(mod, om, function() end)
+        local helper_start = assert(entry:find('local _cwv_network_lookup = mod:dofile(', 1, true))
+        local graph_start = assert(entry:find('local _cwv_profile_graph = mod:dofile(', helper_start, true))
+        local helper_end = assert(entry:find("local _core_template_construction = mod:dofile(", graph_start, true)) - 1
+        local call = entry:sub(helper_start, helper_end)
+            .. "\nif before_musket then before_musket(_cwv_network_lookup, _cwv_profile_graph, _cwv_career_envelope) end\n"
+            .. entry:sub(call_start, call_end-1)
+        local capsule, career_envelope = run("return function(mod, _om, _dbg, before_musket)\n" .. call .. "\nreturn _variant_install, _cwv_career_envelope end",
+            env, "actual-entry-musket-private-binding")(mod, om, function() end, c.before_musket)
         H.equal(loads._cwv_old_musket_shot_owner, 1); H.equal(loads._lib_network_lookup, 1)
+        c.career_envelope = career_envelope
         c.mod, c.hooks, c.capsule, c.hook_count, c.entry, c.loads = mod, hooks, capsule, count, entry, loads
         local template = env.Weapons.old_musket_template
         c.action = template and template.actions and template.actions.action_one.default
@@ -416,18 +422,18 @@ return function(H, root)
         b = assert(entry:find("\n})", a, true)) + 3
         local items = entry:sub(a, b)
         local checks = {}
-        local bind = run("return function(mod, _om, _variant_definitions, _variant_install, _rt_register)\n"
+        local bind = run("return function(mod, _om, _variant_definitions, _variant_install, _rt_register, _core_template_construction)\n"
             .. "local _custom_skin_keys, _dbg, _dbg_alert = {}, function() end, function() end\n"
             .. bootstrap .. "\n" .. phases .. "\nreturn function()\n" .. items .. "\nend end",
             c.env, "exact-entry-bootstrap-items-private-wiring")
-        local install_items = bind(c.mod, om, { old, control }, c.capsule, function(name, fn) checks[name] = fn end)
+        local install_items = bind(c.mod, om, { old, control }, c.capsule, function(name, fn) checks[name] = fn end, c.core or {})
         -- Alter only the now-public capsule after the lexical bind. A private
         -- retained predicate/check must not reread this mutable table.
         c.capsule.admit_old_musket, c.capsule.check_old_musket = function() return true end, function() end
         c.capsule.network_lookup = { register = function() error("foreign helper must not be reread") end }
         install_items()
         H.equal(c.loads._cwv_old_musket_shot_owner, 1); H.equal(c.loads._lib_network_lookup, 1)
-        return old, control, om.item_registration.build_entry, assert(checks.issue428_old_musket_construction)
+        return old, control, om.item_registration.build_entry, assert(checks.issue428_old_musket_construction), checks
     end
     H.test_if(native_available, "#428 actual private bootstrap admission and seed reject authority loss before publication", function()
         local c = installed(); local old, control, build, check = private_items(c)
