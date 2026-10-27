@@ -610,21 +610,19 @@ function Find-ForwardRefIssues {
         $start = $c.StartLine
         $end   = $c.EndLine
         if ($end -le $start) { continue }
-        $sb = New-Object 'System.Text.StringBuilder'
+        # A returned installer encloses its own declarations and later calls.
+        # Only an actual identifier before the declaration is a forward use.
         for ($k = $start - 1; $k -lt $end -and $k -lt $lines.Count; $k++) {
-            [void]$sb.AppendLine($lines[$k])
-        }
-        $body = $sb.ToString()
-        $matches = $idRx.Matches($body)
-        foreach ($m in $matches) {
-            $name = $m.Groups[1].Value
-            if (-not $localDefs.ContainsKey($name)) { continue }
-            $defLine = $localDefs[$name]
-            if ($start -ge $defLine) { continue }
-            if ($forwardDecl.ContainsKey($name) -and $forwardDecl[$name] -lt $start) { continue }
+            foreach ($m in $idRx.Matches($lines[$k])) {
+                $name = $m.Groups[1].Value
+                if (-not $localDefs.ContainsKey($name)) { continue }
+                $defLine = $localDefs[$name]
+                if ($start -ge $defLine -or ($k + 1) -ge $defLine) { continue }
+                if ($forwardDecl.ContainsKey($name) -and $forwardDecl[$name] -lt $start) { continue }
 
-            if (-not $nameToWitness.ContainsKey($name) -or $start -lt $nameToWitness[$name]) {
-                $nameToWitness[$name] = $start
+                if (-not $nameToWitness.ContainsKey($name) -or $start -lt $nameToWitness[$name]) {
+                    $nameToWitness[$name] = $start
+                }
             }
         }
     }
@@ -1381,6 +1379,23 @@ function Invoke-LateLocalSelfTest {
     $hit = @($found | Where-Object { $_.Name -eq 'MY_TABLE' })
     $detail = if ($hit.Count -eq 0) { "" } else { "false positive on line $($hit[0].FirstUseLine)" }
     _Record -Name 'good: obj.NAME field-access does not trigger' -Pass ($hit.Count -eq 0) -Detail $detail
+
+    # Forward-reference cases use the same stripped-text scanner, in LF/CRLF.
+    $forwardCases = Import-PowerShellDataFile -LiteralPath (Join-Path $PSScriptRoot 'test_fixtures/forward_ref_cases.psd1')
+    foreach ($forwardCase in $forwardCases.Cases) {
+        foreach ($newline in @("`n", "`r`n")) {
+            $source = $forwardCase.Source -replace "`r?`n", $newline
+            $stripped = Strip-LuaCommentsAndStrings -Text $source
+            $found = Find-ForwardRefIssues -File '(forward-ref fixture)' -RawText $source -StripText $stripped
+            $actual = @($found | ForEach-Object { $_.Name } | Sort-Object)
+            $expected = @($forwardCase.ExpectedNames | Sort-Object)
+            $actualNames = [string]::Join(',', [string[]]$actual)
+            $expectedNames = [string]::Join(',', [string[]]$expected)
+            $suffix = if ($newline -eq "`n") { 'LF' } else { 'CRLF' }
+            _Record -Name ("forward-ref: {0} ({1})" -f $forwardCase.Name, $suffix) `
+                -Pass ($actualNames -ceq $expectedNames) -Detail ("expected={0}; actual={1}" -f $expectedNames, $actualNames)
+        }
+    }
 
     # --- Network-bound mutation fixtures (Pattern A + B + escape hatches) ---
     Write-Host ""
