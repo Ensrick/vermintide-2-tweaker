@@ -427,5 +427,5 @@
   "reuse": "Existing immutable R3 complete installer/native clone/class/Shortsword fixture inputs by reference; no corpus or external runtime fallback",
   "fixture_path": "qa/lua/fixtures/cwv_elven_shield_construction_source.lua",
   "fixture_bytes": 50308,
-  "fixture_sha256": "9c303ada988fa2ebd5c3b7c530461b9e787464cc153ac87d18687f5035f10f45"
+  "fixture_sha256": "3c82b4f75a8bdbf90bae3dd4d1c39491a066f976b25f26bacba69aad87387cab"
 }

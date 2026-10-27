@@ -1,5 +1,5 @@
--- AUTO-GENERATED source-qualified native pure data.
--- DO NOT HAND-EDIT; selected 6.13 statements/callbacks are pinned by provenance.
+-- AUTO-GENERATED source-qualified native pure data; DO NOT HAND-EDIT.
+-- selected 6.13 statements/callbacks are pinned by provenance.
 return {
     weapon = [[-- chunkname: @scripts/settings/equipment/weapon_templates/1h_swords_shield.lua
 

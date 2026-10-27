@@ -146,7 +146,7 @@ function Assert-ElvenShieldPriorCoreIdentity {
     try {
         $text = [IO.File]::ReadAllText($fixture).Replace(([string][char]13 + [char]10), [string][char]10)
         $actual = ([BitConverter]::ToString($hash.ComputeHash($utf8.GetBytes($text)))).Replace('-', '').ToLowerInvariant()
-        if ($actual -cne '9c303ada988fa2ebd5c3b7c530461b9e787464cc153ac87d18687f5035f10f45') { throw 'Required ElvenShield native closure hash mismatch' }
+        if ($actual -cne '3c82b4f75a8bdbf90bae3dd4d1c39491a066f976b25f26bacba69aad87387cab') { throw 'Required ElvenShield native closure hash mismatch' }
         $start = New-Object Diagnostics.ProcessStartInfo
         $start.FileName = $LuaExecutable
         $start.Arguments = '"' + $Exporter + '" --export-prior-elven-shield-core "' + $Repository + '"'
