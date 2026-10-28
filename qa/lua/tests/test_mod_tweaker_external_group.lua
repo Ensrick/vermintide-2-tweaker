@@ -114,16 +114,32 @@ return function(H, repo_root)
     end)
 
     H.test("both presentations consume the shared live-tree and profile policy", function()
+        local root = repo_root .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/"
+        local function read(name)
+            local file = assert(io.open(root .. name, "rb"))
+            local source = file:read("*a"); file:close()
+            return (source:gsub("\r\n", "\n"))
+        end
+        local entry, catalog = read("gui_tweaker_dev.lua"), read("_mod_tweaker_view_catalog.lua")
+        local pending = read("_mod_tweaker_view_pending.lua")
+        H.truthy(entry:find('local _gut_category_catalog = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_view_catalog")', 1, true))
+        H.truthy(entry:find('load_view = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_view_pending").bind_view_supplier(function()', 1, true))
+        H.truthy(entry:find('return pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_mod_tweaker_view")\n    end,\n        _gut_category_catalog.bind)', 1, true))
+        H.truthy(pending:find("function M.bind_view_supplier(original_supplier, bind_catalog)", 1, true))
+        H.truthy(pending:find("pcall(binder, install_pending, bind_catalog)", 1, true))
+        H.truthy(entry:find('_gut_category_catalog.bind_state_result(pcall(mod.dofile, mod,\n    "scripts/mods/gui_tweaker_dev/_mod_tweaker_state"))', 1, true))
+        H.truthy(catalog:find("local bind_catalog = M.bind", 1, true))
+        H.truthy(catalog:find("pcall(binder, bind_catalog)", 1, true))
         for _, name in ipairs({ "_mod_tweaker_view.lua", "_mod_tweaker_state.lua" }) do
-            local file = assert(io.open(repo_root
-                .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/" .. name, "rb"))
-            local source = file:read("*a")
-            file:close()
-            if name == "_mod_tweaker_view.lua" then
-                H.truthy(source:find('mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_view_catalog")', 1, true))
-                file = assert(io.open(repo_root .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view_catalog.lua", "rb"))
-                source = file:read("*a"); file:close()
-            end
+            local parent = read(name)
+            local signature = name == "_mod_tweaker_view.lua"
+                and "return ModTweakerView, function(install, bind_catalog)"
+                or 'return { class_name = "HeroViewStateModTweaker" }, function(bind_catalog)'
+            H.truthy(parent:find(signature, 1, true), name .. " must export its actual private binder")
+            H.truthy(parent:find("_vmf_categories = bind_catalog({", 1, true))
+            H.truthy(parent:find("disabled_sections = disabled_sections, external_group = external_group,", 1, true))
+            H.truthy(parent:find("local ok_vmf, vmf_cats = pcall(_vmf_categories)", 1, true))
+            local source = catalog
             H.truthy(source:find("external_group.find_mod_list", 1, true))
             H.truthy(source:find("external_group.replace_group_children", 1, true))
             H.truthy(source:find("external_group.bridge_known_fallback", 1, true))

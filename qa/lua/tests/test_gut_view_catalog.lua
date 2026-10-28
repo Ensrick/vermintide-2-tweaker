@@ -93,8 +93,9 @@ return function(H, repo_root, source_override)
             if name == "_mod_tweaker_sound" then return { new_probe = function() return {} end, play = function() end } end
             return { install = function() end }
         end
+        local catalog = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_view_catalog")
         local pending = load_source(root .. "_mod_tweaker_view_pending.lua")
-        local ok, Class = pending.bind_view_supplier(function() return pcall(load_source, view_path) end)()
+        local ok, Class = pending.bind_view_supplier(function() return pcall(load_source, view_path) end, catalog.bind)()
         H.truthy(ok, Class)
         H.equal(loads._mod_tweaker_view_catalog, 1, "actual parent must load the complete child once")
         H.equal(bind_count, 1, "actual parent must bind once")
@@ -110,7 +111,8 @@ return function(H, repo_root, source_override)
     end
     H.test("GUT catalog has one deferred hook-neutral owner and actual parent pcall", function()
         local parent, child = read(view_path), read(child_path)
-        H.equal(count(parent, 'mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_view_catalog")'), 1)
+        H.equal(count(parent, 'mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_view_catalog")'), 0)
+        H.equal(count(read(root .. "gui_tweaker_dev.lua"), 'mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_view_catalog")'), 1)
         H.equal(count(parent, "local function _vmf_categories"), 0)
         H.equal(count(parent, "local function _synthesize_equipment"), 0)
         H.truthy(parent:find("pcall(_vmf_categories)", 1, true))

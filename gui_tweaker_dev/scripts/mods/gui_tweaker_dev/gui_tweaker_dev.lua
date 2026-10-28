@@ -40,7 +40,7 @@ end
 -- the end of this file.
 mod._gut_mem_t0 = collectgarbage("count")
 
-local MOD_VERSION = "0.2.367-dev"
+local MOD_VERSION = "0.2.368-dev"
 local GUT_RPC_SCHEMA = 1 -- Bump only when a GUT positional wire shape changes.
 mod._GUT_RPC_SCHEMA = GUT_RPC_SCHEMA
 
@@ -858,13 +858,16 @@ end)
 
 -- #2: closed native-menu shell; entry retains all load/check/lifecycle boundaries.
 local _gut_la_keepalive
+local _gut_category_catalog = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_view_catalog")
 local _gut_menu_shell = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_mod_tweaker_shell").bind({
     mod = mod,
     dbg = _dbg,
     dbg_alert = _dbg_alert,
+    register = _rt_register,
     load_view = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_view_pending").bind_view_supplier(function()
         return pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_mod_tweaker_view")
-    end),
+    end,
+        _gut_category_catalog.bind),
     load_localization = function()
         return pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/gui_tweaker_dev_localization")
     end,
@@ -882,41 +885,14 @@ mod._gut_dx12_fence630 = _gut_dx12_fence630.new({
     emit = function(line) printf("%s", line) end,
 })
 
-local ENGINE_UI_LOC_KEYS, _engine_ui_localizations = _gut_menu_shell.install_routing()
+_gut_menu_shell.install_routing()
 
--- (#153/#292) Lock: every engine-rendered gut UI key must resolve through the
--- GLOBAL localizer path (same structure as issue352's loc validation in
--- _gut_original_thp_names.lua). FAILS whenever a key is missing from the loc
--- file, still carries a VMF %% escape, or is not being served by the engine
--- localizer (Localize falls through to "<key>" when unsupplied).
-_rt_register("issue153_292_engine_ui_loc_supplied", function()
-    local strings = _engine_ui_localizations()
-    for _, key in ipairs(ENGINE_UI_LOC_KEYS) do
-        local text = strings[key]
-        if type(text) ~= "string" then
-            return "engine-UI localization source missing key: " .. key
-        end
-        if text:find("%%%%") then
-            return "engine-UI localization still carries a VMF %% escape: " .. key
-        end
-    end
-    local localize = rawget(_G, "Localize")
-    if type(localize) ~= "function" then
-        return "global Localize unavailable (engine-UI keys cannot resolve)"
-    end
-    for _, key in ipairs(ENGINE_UI_LOC_KEYS) do
-        local ok, resolved = pcall(localize, key)
-        if not ok or resolved ~= strings[key] then
-            return string.format("engine localizer does not serve %s (got %s)",
-                key, tostring(resolved))
-        end
-    end
-end)
 
 _gut_menu_shell.install_compaction()
 
 mod:dofile("scripts/mods/gui_tweaker_dev/_gut_mod_tweaker_contracts").install({
     register = _rt_register,
+    load_view = _gut_menu_shell.load_view,
     src_read = _rt_src_read,
 })
 local _gut_ui_tweaks = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_ui_tweaks_integration").install({
@@ -1408,7 +1384,11 @@ pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_gut_simple_ui_compat")
 -- state_name -> global class at transition time. The standalone in-mission
 -- ModTweakerView (_mod_tweaker_view) is unchanged and stays the mission path.
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_ba_compendium_state")
-pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_mod_tweaker_state")
+local ok_state, state_error = _gut_category_catalog.bind_state_result(pcall(mod.dofile, mod,
+    "scripts/mods/gui_tweaker_dev/_mod_tweaker_state"))
+if not ok_state then
+    printf("[gut:2] Mod Tweaker state load/bind failed: %s", tostring(state_error))
+end
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_ba_heroview_inject")
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_ba_compendium")
 

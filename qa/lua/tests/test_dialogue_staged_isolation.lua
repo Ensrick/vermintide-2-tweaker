@@ -213,12 +213,17 @@ return function(H, root)
         local chunk = assert(loadfile(root .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_dialogue_contract.lua"))
         setfenv(chunk, f.env)
         local check
-        chunk().install(function(name, fn)
+        local function register(name, fn)
             H.equal("issue998_dialogue_staged_isolation", name)
             check = fn
-        end)
+        end
+        chunk().install(register, f.load_view)
         H.equal(nil, check())
         H.equal(0, f.writes, "runtime check must not write the real CD owner")
+        -- Omitted supplier must still fail closed after the real owner is ready.
+        chunk().install(register)
+        H.equal(check(), "ModTweakerView staged supplier unavailable")
+        H.equal(f.writes, 0); H.equal(f.gut_writes, 0)
     end)
     H.test("998 unavailable Wwise preserves v5 setter compatibility but fails new Apply", function()
         local f = fixture(root)

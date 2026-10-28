@@ -486,3 +486,10 @@ fixture, not invented donor math. No native ABI acceptance is implied.
 with raw-distinct equal-comparing getter/cell/metatable replacements, a healthy
 shared-meta control and precommit abort. Existing real history/restore/Authentic
 positives remain separate affected controls; no native ABI proof is implied.
+
+The #2 shared category handoff uses one inert root catalog and independent View/State
+closures. `test_gut_category_handoff.lua` drives complete real VMF return transport,
+actual parent loader/binders and State rebuild against a required portable old span.
+It retains existing catalog/Pending goldens and treats State refusal as observable
+controller fallback, not screen quarantine. Table renderer/constructor boundaries
+are explicit; no offline case proves installed VMF binary or live GUI acceptance.

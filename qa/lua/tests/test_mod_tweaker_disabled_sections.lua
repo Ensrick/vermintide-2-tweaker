@@ -77,8 +77,12 @@ return function(H, repo_root)
                 local file = assert(io.open(stream.root .. filename, "rb"))
                 local source = file:read("*a")
                 file:close()
-                if stream.name == "dev" and filename == "_mod_tweaker_view.lua" then
-                    H.truthy(source:find('mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_view_catalog")', 1, true))
+                if stream.name == "dev" then
+                    H.truthy(source:find("_vmf_categories = bind_catalog({", 1, true),
+                        filename .. " must consume its independently bound shared catalog")
+                    H.truthy(source:find("disabled_sections = disabled_sections, external_group = external_group,", 1, true))
+                    H.equal(nil, source:find("local _MY_MODS", 1, true), "parent must not duplicate authored-mod aliases")
+                    H.equal(nil, source:find("local _EQUIP_ROLE", 1, true), "parent must not duplicate Equipment aliases")
                     file = assert(io.open(stream.root .. "_mod_tweaker_view_catalog.lua", "rb"))
                     source = file:read("*a"); file:close()
                 end

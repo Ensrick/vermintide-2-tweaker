@@ -3,6 +3,7 @@
 -- Consumed via: a private factory, with no host globals or package mutation.
 return function(repo_root)
     local base = repo_root .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/"
+    local function pack(...) return { n = select("#", ...), ... } end
     local function read(path)
         local f = assert(io.open(path, "rb"), "required menu-shell source absent: " .. path)
         local s = f:read("*a"); f:close()
@@ -118,16 +119,20 @@ return function(repo_root)
                     local bound = M.bind(config)
                     f.bound = bound
                     if opts.after_bind then opts.after_bind(f, config) end
-                    local decorated = {}
+                    local decorated = { load_view = bound.load_view }
                     for _, phase in ipairs({ "install_api", "install_routing", "install_compaction" }) do
                         local real = bound[phase]
                         decorated[phase] = function(...)
                             event("phase:" .. phase)
-                            return real(...)
+                            local result = pack(real(...))
+                            if phase == "install_routing" then f.routing_result = result end
+                            return unpack(result, 1, result.n)
                         end
                     end
                     return decorated
                 end }
+            elseif name == "_mod_tweaker_view_catalog" then
+                return chunk(read(base .. name .. ".lua"), base .. name .. ".lua")
             elseif name == "_mod_tweaker_view_pending" then
                 return chunk(read(base .. name .. ".lua"), base .. name .. ".lua")
             elseif name == "_mod_tweaker" then
@@ -170,11 +175,13 @@ return function(repo_root)
             return {}
         end
         local span = opts.old and prior or current
+        local active_tail = opts.old and tail:gsub("    load_view = _gut_menu_shell.load_view,\n", "", 1) or tail
         local fn = assert(loadstring("local mod, _dbg, _dbg_alert, _rt_register, _rt_src_read = ...\n"
-            .. span .. tail .. "\nreturn { keys = ENGINE_UI_LOC_KEYS, harvest = _engine_ui_localizations }\n",
+            .. span .. active_tail .. "\nreturn { keys = ENGINE_UI_LOC_KEYS, harvest = _engine_ui_localizations }\n",
             "@" .. (opts.old and prior_path or base .. "gui_tweaker_dev.lua")))
         setfenv(fn, f.env)
         f.private = fn(f.mod, f.dbg, f.alert, register, source_read)
+        if not opts.old then f.private = { keys = f.routing_result[1], harvest = f.routing_result[2] } end
         local error_source = opts.old and prior or f.sources[owner_path]
         local at = assert(error_source:find('error("ingame_ui_settings not in package.loaded;', 1, true))
         local line = select(2, error_source:sub(1, at):gsub("\n", "")) + 1 + (opts.old and 1 or 0)
@@ -186,7 +193,7 @@ return function(repo_root)
     local function normalized_ledger(f)
         local t = {}
         for _, value in ipairs(f.ledger) do
-            if value ~= "load:_gut_mod_tweaker_shell" and value ~= "load:_mod_tweaker_view_pending"
+            if value ~= "load:_gut_mod_tweaker_shell" and value ~= "load:_mod_tweaker_view_pending" and value ~= "load:_mod_tweaker_view_catalog"
                     and not value:find("phase:", 1, true) then
                 t[#t + 1] = value
             end

@@ -1,5 +1,27 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.368-dev (2026-10-28) -- Share category assembly across menu frontends (#2) [not-started]
+
+- Bind the existing category catalog independently into the standalone view and
+  native-menu state. Remove the duplicated State category implementation while
+  preserving call-time provider discovery, Equipment ownership, CKC/UI Tweaks
+  folding, ordering and per-owner settings/profile behavior.
+- Keep the catalog inert at load, consume the State's protected loader tuple
+  explicitly, and retain the existing shared view supplier. Move the unchanged
+  engine-UI localization check into its menu-shell owner using the same registry.
+  Add no hook, setting, command or public GUI behavior.
+- Add a source-qualified legacy category fixture, cold-load/tuple handoff and
+  disconnected-owner coverage. Lower the reduced size contracts and retire the
+  State's old target-size exception without raising another ceiling. Preserve
+  all existing progression suites, source guards and published-source pins.
+- Align the existing cross-suite callers and source oracles with the shared
+  catalog and staged-view supplier. Preserve policy assertions, optional-CD
+  skips and explicit missing-supplier refusal; the full inventory remains a
+  required pre-compilation gate.
+- This is a bounded ownership refactor, not completion of #2 or acceptance of
+  installed game startup, renderer/input or native ABI. Public GUI is unchanged;
+  no new in-game testing lifecycle is asserted.
+
 ## 0.2.367-dev (2026-10-27) -- Retain pending and profile owner (#2) [not-started]
 
 - Extract the standalone Mod Tweaker view's existing staged settings, apply,

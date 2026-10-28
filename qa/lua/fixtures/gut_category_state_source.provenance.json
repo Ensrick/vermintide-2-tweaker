@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "scope": "Required portable old closed State span and complete native class; test-only pure data",
+  "state": {
+    "commit": "1b90f730c36cf19a477a4c2e917e81229dab5674",
+    "path": "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_state.lua",
+    "raw_sha256": "d8db84519027d40a4cc76e376266123e4fd04ae88c2c968610754e177325123b",
+    "normalized_bytes": 101558,
+    "normalized_sha256": "d8db84519027d40a4cc76e376266123e4fd04ae88c2c968610754e177325123b",
+    "span_bytes": 19667,
+    "span_sha256": "955df1ff01959ae55ad11903fbe9ac2323c0927fe5036b799e5be8f885f8ff7c",
+    "physical_span": "210-590",
+    "nonempty_span": 364
+  },
+  "native_class": {
+    "commit": "93dea911a4cc464a0eb51cfdc3a443297bfc4550",
+    "path": "foundation/scripts/util/class.lua",
+    "raw_bytes": 1326,
+    "raw_sha256": "d74a9d615582dccb7c128d3d44b4129d86b4f0040525ac032be0881af21664a9",
+    "decoded_normalized_bytes": 1249,
+    "decoded_normalized_sha256": "bb5c28203c0cb07c1b6ba7f64259a9edf66f75ec348e319533d60d5aa2d1224a",
+    "decode": "UTF8; remove only BOM if present; normalize CRLF to LF; no statement changes"
+  },
+  "vmf": {
+    "reuse": "qa/lua/fixtures/gut_view_pending_source.lua:vmf_safe_calls",
+    "bytes": 3484,
+    "sha256": "98ded4ea935ea2d65ab5b8235a24d459338f7a9746d73cb5eeb3d741d1eef1ae"
+  },
+  "limits": "Old whole State reconstructed only in memory. Runtime length/span anchors plus outside mandatory whole hash exporter; no full old source copy or installed-engine ABI claim."
+}

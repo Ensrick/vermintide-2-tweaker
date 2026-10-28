@@ -980,3 +980,10 @@ older Short fixtures and the original67523-byte Elven prior.
 ### Required Greataxe producer/native identity (#428)
 
 The required portable native fixture and same-exporter prior identity fail before suite discovery inside the existing checker try. The two persistent suites exercise full old/new native graph/callback equality, rollback, actual constructor/item/seed admission, private producer handoff, resets, real co-install conflicts and invalid present authority. The two suites contain56 cases:27 construction plus26 phased producer and3 genuine lifecycle cases. One helper executes the real public/Dev M.install; the complete accepted4512-byte direct-install oracle remains embedded verbatim. No ignored review directory, readiness stub or optional missing core fixture is allowed.
+
+The #2 shared category handoff uses one inert root catalog and independent View/State
+closures. `test_gut_category_handoff.lua` drives complete real VMF return transport,
+actual parent loader/binders and State rebuild against a required portable old span.
+It retains existing catalog/Pending goldens and treats State refusal as observable
+controller fallback, not screen quarantine. Table renderer/constructor boundaries
+are explicit; no offline case proves installed VMF binary or live GUI acceptance.

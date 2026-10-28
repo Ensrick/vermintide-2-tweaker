@@ -7,8 +7,8 @@ return function(H, root)
         setfenv(chunk, f.env)
         local checks = {}
         local function register(name, fn) checks[name] = fn end
-        if all then chunk().install({ register = register, src_read = function() return nil end })
-        else chunk().install(register) end
+        if all then chunk().install({ register = register, src_read = function() return nil end, load_view = f.load_view })
+        else chunk().install(register, f.load_view) end
         return assert(checks[all and "mod_tweaker_exclusive_group_api" or "issue998_dialogue_staged_isolation"])
     end
     H.test("actual registered446 binds moved enforcement on fresh uncached view", function()
@@ -25,8 +25,8 @@ return function(H, root)
             f:load_live_cd()
             local gut = f.env.get_mod("gut_dev")
             local original = gut.dofile
+            if mode == "owner_absent" then f.load_view = nil end
             gut.dofile = function(self, p)
-                if mode == "owner_absent" and p == prefix .. "_mod_tweaker_view_pending" then return end
                 if p == prefix .. "_mod_tweaker_view" then
                     if mode == "empty_view" then return nil, "tail", nil end
                     if mode == "binder_absent" then return {} end

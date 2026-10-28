@@ -56,7 +56,7 @@ return function(H, repo_root)
                 owners[#owners + 1] = { source = main, name = "_gut_mod_tweaker_shell", api = "bind" }
                 owners[#owners + 1] = { source = main, name = "_mod_tweaker_view_pending", api = "bind_view_supplier" }
                 owners[#owners + 1] = { source = view, name = "_mod_tweaker_view_rows" }
-                owners[#owners + 1] = { source = view, name = "_mod_tweaker_view_catalog", api = "bind" }
+                owners[#owners + 1] = { source = main, name = "_mod_tweaker_view_catalog", api = "bind" }
             end
             for _, owner in ipairs(owners) do
                 H.equal(occurrences(owner.source, stream.module_path .. owner.name), 1,

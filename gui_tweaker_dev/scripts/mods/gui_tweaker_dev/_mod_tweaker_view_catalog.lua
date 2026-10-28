@@ -1,9 +1,9 @@
--- _mod_tweaker_view_catalog.lua - deferred standalone category assembly.
+-- _mod_tweaker_view_catalog.lua - deferred shared presentation category assembly.
 --
 -- Owns VMF discovery, CKC/UI Tweaks folds and Equipment synthesis. The parent
 -- binds its existing collaborators once; discovery still runs only inside the
 -- rebuild pcall. No hooks, lifecycle, settings writes or eager live-tree reads.
--- Owned by: _mod_tweaker_view.lua. Consumed once via its explicit dofile/bind.
+-- Owned by: entry manifest. Consumed via private independent View/State binders.
 local M = {}
 
 function M.bind(deps)
@@ -397,6 +397,17 @@ function M.bind(deps)
     end
 
     return _vmf_categories
+end
+
+-- Entry-only fixed State tuple adapter; never loads a module or caches a class.
+local bind_catalog = M.bind
+function M.bind_state_result(status, ...)
+    if not status or type((...)) ~= "table" then return status, ... end
+    local metadata, binder = ...
+    if type(binder) ~= "function" then return false, "private state category binder unavailable" end
+    local bound, err = pcall(binder, bind_catalog)
+    if not bound then return false, err end
+    return status, metadata, select(3, ...)
 end
 
 return M

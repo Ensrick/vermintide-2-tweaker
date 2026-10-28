@@ -1591,3 +1591,10 @@ Pipeline lives at `C:\Users\danjo\source\repos\misc-vermintide-mods\_scratch\` (
 - **AnyWeapon reference mod**: `C:\Users\danjo\source\repos\vermintide-mods\AnyWeapon\` (reference for weapon unlock pattern)
 - **VT2 bundle unpacker**: `C:\Tools\vt2_bundle_unpacker\target\release\unpacker.exe` (see § External tools)
 - **Workshop Lua extract pipeline**: `C:\Users\danjo\source\repos\misc-vermintide-mods\_scratch\` (see § External tools)
+
+The #2 shared category handoff uses one inert root catalog and independent View/State
+closures. `test_gut_category_handoff.lua` drives complete real VMF return transport,
+actual parent loader/binders and State rebuild against a required portable old span.
+It retains existing catalog/Pending goldens and treats State refusal as observable
+controller fallback, not screen quarantine. Table renderer/constructor boundaries
+are explicit; no offline case proves installed VMF binary or live GUI acceptance.

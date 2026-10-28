@@ -18,7 +18,32 @@ local function slice(source, first, after)
 end
 -- Only this fixed structural extraction is reversed, in memory. The outside
 -- source proof binds its complete old result to the published view's raw SHA.
+function M.catalog_prior_view(current)
+    local newer = "return ModTweakerView, function(install, bind_catalog)\n    _vmf_categories = bind_catalog({\n        mod = mod, get_mod = function(...) return get_mod(...) end, nf = _nf,\n        disabled_sections = disabled_sections, external_group = external_group,\n        printf = _printf, math = math,\n    })"
+    if not current:find(newer, 1, true) then return current end
+    local function replace_once(before, after)
+        local from = assert(current:find(before, 1, true), "catalog inverse anchor absent")
+        assert(not current:find(before, from + #before, true), "catalog inverse anchor ambiguous")
+        current = current:sub(1, from - 1) .. after .. current:sub(from + #before)
+    end
+    replace_once(newer, "return ModTweakerView, function(install)")
+    replace_once("local _vmf_categories\n", "local CategoryCatalog = mod:dofile(\"scripts/mods/gui_tweaker_dev/_mod_tweaker_view_catalog\")\nlocal _vmf_categories = CategoryCatalog.bind({\n    mod = mod, get_mod = function(...) return get_mod(...) end, nf = _nf,\n    disabled_sections = disabled_sections, external_group = external_group,\n    printf = _printf, math = math,\n})\n")
+    return current
+end
+function M.prior_state(current, fixture)
+    local function replace_once(before, after)
+        local from = assert(current:find(before, 1, true), "State inverse anchor absent")
+        assert(not current:find(before, from + #before, true), "State inverse anchor ambiguous")
+        current = current:sub(1, from - 1) .. after .. current:sub(from + #before)
+    end
+    replace_once("local _vmf_categories", fixture.state_span)
+    replace_once("\n\n\nlocal function _nf(node, key)", "\n\n-- Third-party mod whose options fold into a gut category (NOT a tab). #339.\nlocal _CKC_NAME = \"Crosshair Kill Confirmation\"\n\nlocal function _nf(node, key)")
+    replace_once("return { class_name = \"HeroViewStateModTweaker\" }, function(bind_catalog)\n    _vmf_categories = bind_catalog({\n        mod = mod, get_mod = function(...) return get_mod(...) end, nf = _nf,\n        disabled_sections = disabled_sections, external_group = external_group,\n        printf = _printf, math = math,\n    })\nend\n", "return { class_name = \"HeroViewStateModTweaker\" }\n")
+    assert(#current == fixture.state_normalized_bytes, "complete prior State length")
+    return current
+end
 function M.prior_view(current, fixture)
+    current = M.catalog_prior_view(current)
     local function replace_once(before, after)
         local at = assert(current:find(before, 1, true), "prior view inverse anchor absent")
         assert(not current:find(before, at + #before, true), "prior view inverse anchor ambiguous")
@@ -44,7 +69,9 @@ function M.new(H, root, options)
     options = options or {}
     local quiet = setmetatable({ test = function() end }, { __index = H })
     local Rows = assert(loadfile(root .. "/qa/lua/tests/test_gut_view_rows.lua"))()(quiet, root, options.sources)
-    local f = Rows.fixture(options.rows)
+    local row_options = { defer_parent = true }
+    for key, value in pairs(options.rows or {}) do row_options[key] = value end
+    local f = Rows.fixture(row_options)
     local env, mod, dispatch = f.env, f.mod, f.mod.dofile
     local source = assert(loadfile(root .. "/qa/lua/fixtures/gut_view_pending_source.lua"))()
     assert(type(source.vmf_safe_calls) == "string" and type(source.published_span) == "string")
@@ -86,6 +113,9 @@ function M.new(H, root, options)
         local chunk = assert(loadstring(text, "@" .. name)); setfenv(chunk, env); return chunk()
     end
     local real = {
+        _mod_tweaker_view_catalog = true, _mod_tweaker_state_interaction = true,
+        _mod_tweaker_tab_labels = true, _mod_tweaker_disabled_sections = true,
+        _mod_tweaker_external_group = true,
         _mod_tweaker_view_pending = true, _mod_tweaker_transaction = true,
         _mod_tweaker_default_reset = true, _mod_tweaker_profiles = true,
         _mod_tweaker_profile_runtime = true, _mod_tweaker_dialogue = true,
@@ -102,11 +132,36 @@ function M.new(H, root, options)
             if options.prior then return run(M.prior_view(text, source), "published-complete-view") end
             local class, binder = run(text, REL .. name .. ".lua")
             if options.disconnect_binder then return class end
-            return class, function(install)
+            return class, function(install, bind_catalog)
+                f.view_catalog_factory = bind_catalog
                 return binder(function(target, deps)
                     f.deps = deps
                     if options.installer then return options.installer(install, target, deps) end
                     return install(target, deps)
+                end, function(deps)
+                    f.view_catalog_deps = deps
+                    local value = bind_catalog(deps)
+                    f.view_catalog_function = value
+                    if options.factory_return then return options.factory_return.value end
+                    return value
+                end)
+            end
+        end
+        if name == "_mod_tweaker_state" then
+            if f.state_raw_return then return f.state_raw_return() end
+            local metadata, binder = run(current(REL .. name .. ".lua"), REL .. name .. ".lua")
+            f.State = env.HeroViewStateModTweaker
+            if options.disconnect_state then return metadata end
+            if options.noop_state then return metadata, function() end end
+            return metadata, function(bind_catalog)
+                if options.state_bind_error then error(options.state_bind_error, 0) end
+                f.state_catalog_factory = bind_catalog
+                return binder(function(deps)
+                    f.state_catalog_deps = deps
+                    local value = bind_catalog(deps)
+                    f.state_catalog_function = value
+                    if options.factory_return then return options.factory_return.value end
+                    return value
                 end)
             end
         end
@@ -140,6 +195,10 @@ function M.new(H, root, options)
         end
         return rawget(proto, key)
     end })
+    if options.native_class then
+        local native = assert(loadfile(root .. "/qa/lua/fixtures/gut_category_state_source.lua"))()
+        run(native.native_class, "foundation/scripts/util/class.lua")
+    end
     local class_factory = env.class
     env.class = function(base)
         local class = class_factory(base)
@@ -164,7 +223,11 @@ function M.new(H, root, options)
     local body = assert(supplier:match('(        return pcall%(mod%.dofile, mod, "scripts/mods/gui_tweaker_dev/_mod_tweaker_view"%))'))
     f.legacy_load = run("return function(mod) return function()\n" .. body .. "\nend end", "original-supplier-expression")(mod)
     if options.prior then f.load_view = f.legacy_load
-    else f.load_view = run("return function(mod) return {\n" .. supplier .. "} end\n", "actual-entry-supplier")(mod).load_view end
+    else
+        local catalog = assert(entry:match('(local _gut_category_catalog = mod:dofile%("scripts/mods/gui_tweaker_dev/_mod_tweaker_view_catalog"%))'))
+        local api = run("return function(mod)\n" .. catalog .. "\nreturn {\n" .. supplier .. "catalog = _gut_category_catalog } end\n", "actual-entry-supplier")(mod)
+        f.catalog, f.load_view = api.catalog, api.load_view
+    end
     -- The real shell's full attach function, not an invented constructor flow.
     local shell = current(REL .. "_gut_mod_tweaker_shell.lua"):gsub("\r\n", "\n")
     local attach = slice(shell, "        local function _attach_view(self, ctx_arg)",
@@ -173,6 +236,7 @@ function M.new(H, root, options)
         "actual-shell-attach")(f.load_view, function(...) trace("attach_debug", ...) end,
         function(...) trace("attach_alert", ...) end)
     f.pack, f.read, f.run = pack, current, run
+    f.defs.create_tab = function(label, index) return { content = { text = label, index = index } } end
     function f.instance()
         local result = pack(f.load_view()); H.equal(result.n, 2); H.equal(result[1], true)
         local class = result[2]; H.equal(type(class), "table")
@@ -180,6 +244,30 @@ function M.new(H, root, options)
         view._search_note_setting = function(_, category, setting) trace("search", category.mod_id, setting) end
         view._build_rows = function(_, category) trace("rebuild", category.mod_id) end
         return view, class
+    end
+    function f.load_state()
+        local body = slice(entry,
+            "local ok_state, state_error = _gut_category_catalog.bind_state_result(pcall(mod.dofile, mod,",
+            '-- UI Tweaks (HideBuffs) absorbed features')
+        return run("return function(mod, _gut_category_catalog)\n" .. body .. "\nreturn ok_state, state_error end",
+            "actual-entry-State-supplier")(mod, f.catalog)
+    end
+    function f.state_instance(prior)
+        local Class = assert(f.State)
+        if prior then
+            local fixture = assert(loadfile(root .. "/qa/lua/fixtures/gut_category_state_source.lua"))()
+            local saved = rawget(env, "HeroViewStateModTweaker")
+            env.HeroViewStateModTweaker = nil
+            local ok, err = pcall(run, M.prior_state(current(REL .. "_mod_tweaker_state.lua"), fixture), "published-complete-State")
+            Class = rawget(env, "HeroViewStateModTweaker")
+            rawset(env, "HeroViewStateModTweaker", saved)
+            assert(ok, err)
+        end
+        local instance = Class:new({ ui_renderer = {} }) -- explicit constructor boundary ledger
+        instance._layout_tabs = function() end
+        instance._build_rows = function(self, category) self.built = category; self._rows = {} end
+        instance._profile_ensure = function() end
+        return instance, Class
     end
     return f
 end
