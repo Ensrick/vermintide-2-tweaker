@@ -137,6 +137,8 @@ local suites = {
     "test_mp_daily_reroll",
     "test_mp_daily_ui",
     "test_mp_calendar_login_guard",
+    "test_mp_login_authority",
+    "test_mp_progression_authority",
     "test_mp_daily_calendar_composition",
     "test_mp_shilling_ui_policy",
     "test_mp_emporium_purchase",

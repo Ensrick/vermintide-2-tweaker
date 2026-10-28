@@ -1,5 +1,33 @@
 # Regression Checklist — modded_progression
 
+## Remaining backend writer authority (#1684)
+
+- Single/multiple backend quest claims require exact official false; modded
+  or unknown authority must not enter native generateQuestRewards or allocate
+  its poll id. Existing local daily UI ownership remains unchanged.
+- Purchase delegation likewise requires exact official false. Known-modded
+  SM retains its existing local transaction; unsupported currency or unknown
+  authority refuses without grant/queue mutation and calls an available
+  native-shaped failure callback once with exactly false. Reader/callback
+  throws remain direct. No account-protection flag or shared boolean API change.
+- getQuests is a read/refresh request, not an established account-write claim.
+  Only validated false enters its native producer. True retains existing local
+  ensure/callback behavior; unknown returns before ensure/callback/timer flags.
+
+## Login request authority direction (#1684)
+
+- Native delegation requires an exact known false login authority. A raw
+  present malformed realm value is unknown, not official. Preserve the
+  absent-native pre-6.12 fallback, including false/no-signal delegation.
+- Peddler and legacy-popup claim-action reader throws preserve the exact
+  error before native. Popup creation stays native-first, then reads
+  authority. The calendar retains its existing pcall-denial policy. One
+  private query supplies all login surfaces; no shared boolean helper changes.
+- `issue1684_login_request_authority` uses private arguments only;
+  `test_mp_login_authority.lua` composes the real query/helper/installed
+  callback with the complete native producer and a non-dispatching queue.
+  Historical #589 acceptance is distinct from this malformed-authority gap.
+
 ## Calendar login claim pre-action boundary (#1684; historical #589 safety)
 
 - The exact native calendar action must not run in modded/unreadable authority:

@@ -163,14 +163,13 @@ without a TODO is the failure mode.
 
 ### U-8. Build hygiene
 
-- [ ] `MOD_VERSION` (line 3 of `character_weapon_variants.lua`)
-  bumped — required for visual confirmation the build loaded.
+- [ ] Broker-owned `MOD_VERSION` applied under the [claim contract](../tools/ship/CLAIMS.md)
+  — required for visual confirmation the build loaded.
 - [ ] `CHANGELOG.md` entry added with concrete fix description (the
   repo's style is "what changed and why", not "fixed bug").
-- [ ] Built (`vmb.js build character_weapon_variants ...`).
-- [ ] `bundleV2/` files regenerated (timestamp check).
-- [ ] Deployed to
-  `C:\Program Files (x86)\Steam\steamapps\workshop\content\552500\3716869446`.
+- [ ] Canonical `BuildOnly` and exact source/output authority reviewed under [PROJECT_STANDARDS.md §6.6](../PROJECT_STANDARDS.md#66-ship-doctrine-keyed-off-the-mod_version-suffix-canonical-2026-07-01); documentation edits remain owning-mod build inputs.
+- [ ] Source and authority committed together; protected merge follows successful hosted QA.
+- [ ] Clean-default-branch canonical ship and applicable deployment/Workshop verification completed under that same owner. No manual Workshop-content write.
 
 ### U-9. Live verification matrix
 

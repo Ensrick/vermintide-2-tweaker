@@ -186,10 +186,10 @@ Merge keys; do not clobber. Other careers may have already added entries.
 
 ## Step 8 — Build, deploy, test
 
-1. **Bump `MOD_VERSION`** in `character_weapon_variants.lua` (every build, no exceptions — required for visual hot-reload confirmation).
+1. **Claim and version:** follow [PROJECT_STANDARDS.md §6.6](../PROJECT_STANDARDS.md#66-ship-doctrine-keyed-off-the-mod_version-suffix-canonical-2026-07-01) and the [claim contract](../tools/ship/CLAIMS.md); the broker owns `MOD_VERSION` and the newest release identity.
 2. **Forward-reference audit** — confirm every function/local referenced is defined above its use. Five crashes from this bug class alone in this codebase.
-3. Build: `node C:/Users/danjo/source/repos/vmb/vmb.js build character_weapon_variants --no-workshop --cwd`. Verify `bundleV2/` output has fresh files.
-4. Deploy to Workshop folder. CWV's Workshop ID is `3716869446`.
+3. **Build and review:** follow [PROJECT_STANDARDS.md §6.6](../PROJECT_STANDARDS.md#66-ship-doctrine-keyed-off-the-mod_version-suffix-canonical-2026-07-01) for canonical `BuildOnly`, source/output authority review, and the source-plus-authority commit.
+4. **Land and ship:** protected merge and successful exact-head QA precede the clean-default-branch canonical ship. That transaction owns deployment and Workshop verification; do not copy files into a Workshop directory.
 5. **Full game restart.** Hot-reload is unsafe for CWV (engine-level C++ resource locks).
 6. In-game: re-equip the weapon (the wield-tracker hook must fire to pick up the new template / career).
 7. `/animlog` — confirm `[MISSING]` is gone for the events you remapped, and `REMAP` markers fire on the right events.

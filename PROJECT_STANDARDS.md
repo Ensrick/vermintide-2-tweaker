@@ -1396,8 +1396,14 @@ says `public`. There is no suffix-vs-visibility contradiction to tie-break.
   descriptors
   (both the root and the `bundleV2/` copy) are LF. Remaining drifted mods are
   tracked in issue #1085.
-- A real deploy-verify mismatch after a CONFIRMED upload is a Steam reconcile
-  race, not a ship failure: do one local re-deploy, then continue.
+- A deploy-verify mismatch after a confirmed upload is a failed transaction,
+  not automatic evidence of a Steam reconcile race. Preserve the authenticated
+  upload receipt, exact source/output/deployed hashes, and original error.
+  Diagnose and resume only through `tools\ship\ship.ps1` under the current
+  claim and exact-source/hosted authorization. If the claim or authorization
+  has expired, obtain a fresh reviewed candidate through the same
+  claim/build/review/merge/ship pipeline. Do not directly re-deploy or manually
+  write Workshop content.
 - Test refresh (user ruling 2026-07-13): after a subscribed ship, the author on
   PC-A uses the hash-verified local deploy without restarting Steam. After a
   publication-only ship, the author first subscribes/refreshes because no local

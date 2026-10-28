@@ -82,6 +82,36 @@ function Test-IsHistoricalDocument {
         $leaf -match "(?i)(?:AUDIT|ROOT_CAUSE|LOG_ANALYSIS|INVESTIGATION|DIAGNOSIS|HANDOFF)"
 }
 
+function Test-IsRawVmbBuildAdviceLine {
+    param([AllowEmptyString()][string]$Line)
+
+    # A complete raw build command has a target. A quoted command fragment in
+    # checker/incident discussion is not an executable build instruction.
+    $rawBuild = '(?i)(?:^|[\s\\/\x60"''(])vmb\.js(?:["''\x60])?\s+build\b\s+["'']?(?:<[^>\r\n]+>|[A-Za-z0-9_.-]+)'
+    foreach ($sentence in ($Line -split '(?<=[.!?])\s+')) {
+        if ($sentence -notmatch $rawBuild) { continue }
+        # Sentence-local: a prohibition cannot hide a later affirmative command.
+        if ($sentence -match "(?i)\b(?:do not|don't|never|prohibit\w*|unsupported|not supported|no longer (?:the )?supported)\b") { continue }
+        return $true
+    }
+    return $false
+}
+
+function Test-IsUnguardedConfirmedUploadRecoveryParagraph {
+    param([AllowEmptyString()][string]$Paragraph)
+
+    # The actual owner advice wrapped across two lines. This narrow prose rule
+    # shares existing active/historical scope; it is not a shell parser or an
+    # incident-cause classifier. A confirmed upload does not prove deploy parity.
+    if ($Paragraph -notmatch '(?i)\b(?:confirmed\s+upload|post-upload|deploy-verify\s+mismatch)\b') { return $false }
+    foreach ($sentence in ($Paragraph -split '(?<=[.!?])\s+')) {
+        # Do not let a prohibition in a different sentence hide affirmative advice.
+        if ($sentence -match "(?i)\b(?:do not|don't|never|must not|forbidden|unsupported|not supported)\b") { continue }
+        if ($sentence -match '(?i)\b(?:not a ship failure|do (?:one|a) local re-?deploy|re-?deploy\b.{0,80}\bthen continue)\b') { return $true }
+    }
+    return $false
+}
+
 function Get-DoctrineViolations {
     param([object[]]$Documents)
 
@@ -135,9 +165,28 @@ function Get-DoctrineViolations {
             }
         }
 
+        # #1025: catch the actual canonical-owner prose bypass even without a
+        # launcher command. Existing historical exclusions apply before this scan.
+        $recoveryLines = @($document.Lines)
+        for ($i = 0; $i -lt $recoveryLines.Count; $i++) {
+            if ([string]::IsNullOrWhiteSpace($recoveryLines[$i])) { continue }
+            $end = $i
+            while ($end + 1 -lt $recoveryLines.Count -and
+                    -not [string]::IsNullOrWhiteSpace($recoveryLines[$end + 1])) { $end++ }
+            $paragraph = ($recoveryLines[$i..$end] -join ' ') -replace '\s+', ' '
+            if (Test-IsUnguardedConfirmedUploadRecoveryParagraph $paragraph) {
+                $violations += "$($document.Path):$($i + 1): unguarded confirmed-upload recovery advice"
+            }
+            $i = $end
+        }
+
         $lineNumber = 0
         foreach ($line in @($document.Lines)) {
             $lineNumber++
+
+            if (Test-IsRawVmbBuildAdviceLine $line) {
+                $violations += "$($document.Path):${lineNumber}: raw VMB build advice bypasses canonical ship"
+            }
 
             if (Test-IsHardcodedLauncherPathLine $line) {
                 $debtKey = Get-KnownLauncherPathDebtKey $document.Path $line
@@ -254,6 +303,98 @@ if ($SelfTest) {
                 (${retiredPath} + ':1: hardcoded launcher executable path') -or
                 (Get-KnownLauncherPathDebtCount $retired) -ne 0) {
             throw "retired prerelease launcher-path debt was still exempt: $retiredPath"
+        }
+    }
+
+    # #1025: exact active CWV examples, not synthetic replacements.
+    foreach ($rawBuildLine in @(
+        '3. Build: `node C:/Users/danjo/source/repos/vmb/vmb.js build character_weapon_variants --no-workshop --cwd`. Verify `bundleV2/` output has fresh files.',
+        '- Build with `node vmb.js build <mod> --no-workshop --cwd`.',
+        '- [ ] **Build:** `node C:/Users/danjo/source/repos/vmb/vmb.js build character_weapon_variants --no-workshop --cwd`',
+        'node C:/Users/danjo/source/repos/vmb/vmb.js build character_weapon_variants --no-workshop --cwd',
+        '- [ ] Built (`vmb.js build character_weapon_variants ...`).',
+        'Run node "C:\legacy path\vmb.js" build character_weapon_variants.',
+        'Do not run `node vmb.js build old_mod`. Run `node vmb.js build current_mod`.'
+    )) {
+        $rawBuildFixture = @([pscustomobject]@{ Path = 'mod/DEVELOPMENT.md'; Lines = @($rawBuildLine) })
+        if ((Get-DoctrineViolations $rawBuildFixture) -notcontains
+                'mod/DEVELOPMENT.md:1: raw VMB build advice bypasses canonical ship') {
+            throw "planted complete raw VMB build advice was not rejected: $rawBuildLine"
+        }
+    }
+    $rawBuildAllowed = @([pscustomobject]@{
+        Path = 'CLAUDE.md'
+        Lines = @(
+            'The `node vmb.js build <mod> --no-workshop --cwd` invocations and the raw Stingray SDK compile pipeline that previously lived in this section are no longer the supported path.',
+            'Never run `node vmb.js build example_mod` directly.',
+            'Follow PROJECT_STANDARDS.md section 6.6 for claim, BuildOnly, review, merge, and ship.',
+            'The checker has no raw `vmb.js build` predicate.'
+        )
+    })
+    if ((Get-DoctrineViolations $rawBuildAllowed).Count -ne 0) {
+        throw 'canonical/prohibited/fragment raw VMB evidence was rejected'
+    }
+    foreach ($historicalPath in @('mod/CHANGELOG.md', '_archive/BUILD.md', 'mod/_investigating/BUILD.md', 'mod/ROOT_CAUSE.md')) {
+        $rawBuildHistory = @([pscustomobject]@{ Path = $historicalPath; Lines = @('Run node vmb.js build old_mod') })
+        if ((Get-DoctrineViolations $rawBuildHistory).Count -ne 0) {
+            throw "historical raw VMB evidence was scanned as active advice: $historicalPath"
+        }
+    }
+
+    # #1025 R2: exact old owner bullet must not bypass the recovery guard.
+    $oldOwnerRecovery = @([pscustomobject]@{
+        Path = 'PROJECT_STANDARDS.md'
+        Lines = @(
+            '- A real deploy-verify mismatch after a CONFIRMED upload is a Steam reconcile',
+            '  race, not a ship failure: do one local re-deploy, then continue.'
+        )
+    })
+    if ((Get-DoctrineViolations $oldOwnerRecovery) -notcontains
+            'PROJECT_STANDARDS.md:1: unguarded confirmed-upload recovery advice') {
+        throw 'actual canonical-owner redeploy prose bypass was not rejected'
+    }
+    $guardedOwnerRecovery = @([pscustomobject]@{
+        Path = 'PROJECT_STANDARDS.md'
+        Lines = @(
+            '- A deploy-verify mismatch after a confirmed upload is a failed transaction,',
+            '  not automatic evidence of a Steam reconcile race. Preserve the authenticated',
+            '  upload receipt, exact source/output/deployed hashes, and original error.',
+            '  Diagnose and resume only through `tools\ship\ship.ps1` under the current',
+            '  claim and exact-source/hosted authorization. If the claim or authorization',
+            '  has expired, obtain a fresh reviewed candidate through the same',
+            '  claim/build/review/merge/ship pipeline. Do not directly re-deploy or manually',
+            '  write Workshop content.'
+        )
+    })
+    if ((Get-DoctrineViolations $guardedOwnerRecovery).Count -ne 0) {
+        throw 'canonical evidence-preserving recovery owner was rejected'
+    }
+    $recoveryProhibition = @([pscustomobject]@{
+        Path = 'PROJECT_STANDARDS.md'
+        Lines = @('After a confirmed upload, do not say a mismatch is not a ship failure or do one local re-deploy, then continue.')
+    })
+    if ((Get-DoctrineViolations $recoveryProhibition).Count -ne 0) {
+        throw 'explicit confirmed-upload recovery prohibition was rejected'
+    }
+    $mixedRecovery = @([pscustomobject]@{
+        Path = 'PROJECT_STANDARDS.md'
+        Lines = @('Do not directly re-deploy. After a confirmed upload, do one local re-deploy, then continue.')
+    })
+    if ((Get-DoctrineViolations $mixedRecovery) -notcontains
+            'PROJECT_STANDARDS.md:1: unguarded confirmed-upload recovery advice') {
+        throw 'a separate prohibition masked affirmative recovery advice'
+    }
+    $nonPublishingBuild = @([pscustomobject]@{
+        Path = 'CLAUDE.md'
+        Lines = @('Non-publishing local build:', 'Run & $env:VT2_SHIP_VMB_LAUNCHER build example_mod.')
+    })
+    if ((Get-DoctrineViolations $nonPublishingBuild).Count -ne 0) {
+        throw 'non-publishing canonical bare build guidance was rejected'
+    }
+    foreach ($historicalPath in @('mod/CHANGELOG.md', '_archive/BUILD.md', 'mod/_investigating/BUILD.md', 'mod/ROOT_CAUSE.md')) {
+        $historicalRecovery = @([pscustomobject]@{ Path = $historicalPath; Lines = $oldOwnerRecovery[0].Lines })
+        if ((Get-DoctrineViolations $historicalRecovery).Count -ne 0) {
+            throw "historical confirmed-upload recovery evidence was scanned as active advice: $historicalPath"
         }
     }
 
