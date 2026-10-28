@@ -20,8 +20,8 @@ return function(H, repo)
         -- source_override is used only by the separately selected old-source
         -- same-oracle control. No historical checkout/external-source fallback.
         local source = options.source_override or entry
-        local query_at = source:find("local function _login_realm(", 1, true)
-        local helpers = section(source, query_at and "local function _login_realm("
+        local query_at = source:find("local function _progression_realm(", 1, true)
+        local helpers = section(source, query_at and "local function _progression_realm("
             or "local function _route_store_login_claim_for_realm(",
             '\n_rt_register("mp589_store_login_claim_request_boundary"')
         local backend_at = assert(source:find('mod:hook("BackendInterfacePeddlerPlayFab", "claim_login_rewards"', 1, true))
@@ -68,7 +68,7 @@ return function(H, repo)
             if options.reader then return options.reader() end
             return Realm.is_modded(s.flag, 0, options.development, env)
         end
-        local result = query_at and "return _login_realm" or "return nil"
+        local result = query_at and "return _progression_realm" or "return nil"
         local loader = assert(loadstring("return function(mod, _is_mp_realm, _capture, _dbg_alert, _rt_register)\n"
             .. helpers .. "\n" .. source:sub(backend_at, backend_stop) .. "\n"
             .. popup .. "\n" .. runtime .. "\n" .. result .. "\nend", "@actual-mp-login-boundaries"))

@@ -17,7 +17,7 @@ return function(H, repo)
     local daily_block = section('mod:dofile("scripts/mods/modded_progression/_mp_daily_ui_runtime").install(mod, {',
         "-- #1684: exact plain-SM UI/action owner")
     local calendar_block = section("local CalendarLoginGuard = mod:dofile(", "-- Vanilla keep crafting bench:")
-    local login_query_block = section("local function _login_realm(", "local function _route_store_login_claim_for_realm(")
+    local login_query_block = section("local function _progression_realm(", "local function _route_store_login_claim_for_realm(")
     local expected = {
         "HeroViewStateAchievements._create_entries",
         "HeroViewStateAchievements._handle_claim_all_challenges",

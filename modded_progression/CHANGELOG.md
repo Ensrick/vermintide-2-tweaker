@@ -1,5 +1,27 @@
 # Modded Progression — Changelog
 
+## 0.2.49-dev (2026-10-27) -- Require known realm authority for requests (#1684) [not-started]
+
+- Extend the unchanged native-first private query to single/multiple quest
+  claims, purchases and quest refresh. Only exact known official false may
+  delegate; unknown authority cannot become permission for native requests.
+- Preserve known-modded local Silver Shilling purchase routing. Unsupported
+  or unknown purchases call an available function-valued callback once with
+  exactly false, without invoking native retry/refresh handlers. Unknown quest
+  refresh has no local ensure, callback, native timer or queue effects.
+- Preserve official arguments, tuples and errors, absent-native legacy
+  fallback, shared helpers and account-protection flags. The conditional
+  alternate-caller exposure is source-proven, not an observed historical crash
+  cause or proof that the ordinary UI reached the backend.
+- Nine complete PUC5.1 chunks compile; 42 focused cases pass. Six deliberate
+  defects fail the same actual recording-queue assertion. Queues never dispatch.
+  These checks do not establish engine ABI, startup, live rewards or account safety.
+- `/mp_regression_test` retains its private login-boundary checks. Additional
+  writer routing is tested offline: forcing real claims/purchases/refreshes
+  from a live verification command would risk an official account. No new
+  live-test invitation is made; broader local-grant acceptance remains pending.
+- Supersedes the unpublished 0.2.48-dev precursor; its evidence is preserved.
+
 ## 0.2.48-dev (2026-10-27) -- Fail closed at login request authority (#1684) [not-started]
 
 - Share one native-first private realm query across the existing peddler,

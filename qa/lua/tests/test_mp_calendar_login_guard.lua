@@ -28,7 +28,7 @@ return function(H, repo_root)
         local last = assert(entry:find('\n_rt_register("mp589_store_login_claim_request_boundary"', first, true))
         local hook_first = assert(entry:find('mod:hook("BackendInterfacePeddlerPlayFab", "claim_login_rewards"', 1, true))
         local hook_last = assert(entry:find("\nend)", hook_first, true)) + 4
-        local source = "return function(mod, _login_realm, _capture, _dbg_alert)\n"
+        local source = "return function(mod, _progression_realm, _capture, _dbg_alert)\n"
             .. entry:sub(first, last - 1) .. "\n" .. entry:sub(hook_first, hook_last) .. "\nend"
         local callback
         assert(loadstring(source, "@actual-mp-login-backend"))()({
@@ -177,7 +177,7 @@ return function(H, repo_root)
     H.test("MP calendar actual entry supplies native-first tri-state authority and named check", function()
         local first = assert(entry:find('local CalendarLoginGuard = mod:dofile(', 1, true))
         local last = assert(entry:find("-- Vanilla keep crafting bench:", first, true))
-        local query_first = assert(entry:find("local function _login_realm(", 1, true))
+        local query_first = assert(entry:find("local function _progression_realm(", 1, true))
         local query_last = assert(entry:find("local function _route_store_login_claim_for_realm(", query_first, true))
         local block = entry:sub(query_first, query_last - 1) .. entry:sub(first, last - 1)
         for _, case in ipairs({

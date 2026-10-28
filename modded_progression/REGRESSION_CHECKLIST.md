@@ -1,5 +1,19 @@
 # Regression Checklist — modded_progression
 
+## Remaining backend writer authority (#1684)
+
+- Single/multiple backend quest claims require exact official false; modded
+  or unknown authority must not enter native generateQuestRewards or allocate
+  its poll id. Existing local daily UI ownership remains unchanged.
+- Purchase delegation likewise requires exact official false. Known-modded
+  SM retains its existing local transaction; unsupported currency or unknown
+  authority refuses without grant/queue mutation and calls an available
+  native-shaped failure callback once with exactly false. Reader/callback
+  throws remain direct. No account-protection flag or shared boolean API change.
+- getQuests is a read/refresh request, not an established account-write claim.
+  Only validated false enters its native producer. True retains existing local
+  ensure/callback behavior; unknown returns before ensure/callback/timer flags.
+
 ## Login request authority direction (#1684)
 
 - Native delegation requires an exact known false login authority. A raw

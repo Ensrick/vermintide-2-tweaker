@@ -437,6 +437,13 @@ card remain required. The runner lists the suite explicitly.
   legacy fallback/throws, tuples and dynamic reads; no backend dispatch.
   The new named check uses explicit private inputs, never live-global edits.
 
+- `tests/test_mp_progression_authority.lua`: actual quest/purchase writers and
+  the getQuests read/refresh callback share private progression authority.
+  Complete native producers/timer readers stop at a nondispatching queue.
+  Unknown refresh has no ensure/callback/flag effects; known realm behavior,
+  official tuples/errors, native poll-id isolation, once-false purchase denial
+  and local-SM collaborator handoff remain covered. No server/grant semantics.
+
 - `tests/test_mp_daily_calendar_composition.lua`: executes both actual entry
   installer blocks together; checks five unique callbacks, exact named-check
   identities/order, live native-first authority and official tuple/error parity.

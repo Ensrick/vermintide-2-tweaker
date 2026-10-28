@@ -30,7 +30,7 @@ local RealmAuthority = mod:dofile(
 -- at the bottom of this same chunk, so no _G or cross-file exposure is needed.
 local _MEM_PROBE_T0_MP = collectgarbage("count")
 
-local MOD_VERSION = "0.2.48-dev"
+local MOD_VERSION = "0.2.49-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([mp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -843,11 +843,11 @@ end)
 -- payload needs the durable mirror-overlay inventory transaction that remains
 -- under construction. Fail closed at BOTH the UI action and backend request
 -- boundary. Official-realm calls run the original function byte-for-byte.
--- #1684: login actions need known official authority, not merely denied
+-- #1684: progression requests need known official authority, not merely denied
 -- modded permission. Explicit private inputs keep the detached check off live
 -- globals; production calls use this same closure with no arguments. Legacy
 -- fallback throws remain direct; only the calendar owner pcall-denies them.
-local function _login_realm(environment, legacy)
+local function _progression_realm(environment, legacy)
     local native = rawget(environment or _G, "MODDED_REALM")
     if native ~= nil then
         if type(native) == "boolean" then return native end
@@ -863,7 +863,7 @@ local function _route_store_login_claim_for_realm(is_modded, func, self, ...)
 end
 
 local function _route_store_login_claim(func, self, ...)
-    return _route_store_login_claim_for_realm(_login_realm(), func, self, ...)
+    return _route_store_login_claim_for_realm(_progression_realm(), func, self, ...)
 end
 
 local function _disable_store_login_claim(popup)
@@ -903,7 +903,7 @@ _rt_register("issue1684_login_request_authority", function()
     local calls = 0
     local native = function() calls = calls + 1; return "official", nil, 3, nil end
     for _, value in ipairs({ true, "false", 0, {} }) do
-        local realm = _login_realm({ MODDED_REALM = value }, function() error("unexpected legacy read") end)
+        local realm = _progression_realm({ MODDED_REALM = value }, function() error("unexpected legacy read") end)
         if _route_store_login_claim_for_realm(realm, native, nil) or calls ~= 0 then
             return "unknown/modded login authority reached native"
         end
@@ -911,18 +911,18 @@ _rt_register("issue1684_login_request_authority", function()
     if _route_store_login_claim_for_realm(nil, native, nil) then
         return "nil login authority reached native"
     end
-    local official = _login_realm({ MODDED_REALM = false }, function() error("unexpected legacy read") end)
+    local official = _progression_realm({ MODDED_REALM = false }, function() error("unexpected legacy read") end)
     local allowed, n, values = _route_store_login_claim_for_realm(official, native, nil)
     if not allowed or calls ~= 1 or n ~= 4 or values[1] ~= "official"
             or values[2] ~= nil or values[3] ~= 3 or values[4] ~= nil then
         return "known official login tuple changed"
     end
-    if _login_realm({}, function() return true end) ~= true
-            or _login_realm({}, function() return false end) ~= false then
+    if _progression_realm({}, function() return true end) ~= true
+            or _progression_realm({}, function() return false end) ~= false then
         return "absent-native login legacy fallback changed"
     end
     local failure = {}
-    local ok, err = pcall(_login_realm, {}, function() error(failure) end)
+    local ok, err = pcall(_progression_realm, {}, function() error(failure) end)
     if ok or err ~= failure then return "legacy login reader exception changed" end
 end)
 
@@ -977,7 +977,9 @@ end)
 -- Rotate/ensure the local roster and run QuestManager's refresh callback
 -- immediately instead. This is the zero-PlayFab half of the same boundary.
 mod:hook("BackendInterfaceQuestsPlayfab", "update_quests", function(func, self, quests_updated_cb, ...)
-    return QuestBoundary.refresh(_is_mp_realm(), Dailies.ensure, quests_updated_cb,
+    local realm = _progression_realm()
+    if type(realm) ~= "boolean" then return nil end
+    return QuestBoundary.refresh(realm, Dailies.ensure, quests_updated_cb,
         function(cb) return func(self, cb) end)
 end)
 
@@ -1100,10 +1102,15 @@ local function _mp577_local_exchange(self, item_id, price, callback_fn)
 end
 
 mod:hook("BackendInterfacePeddlerPlayFab", "exchange_chips", function(func, self, item_id, chip_type, price, callback_fn, ...)
-    if _is_mp_realm() and chip_type == Dailies.REWARD_KIND then
+    local realm = _progression_realm()
+    if realm == false then return func(self, item_id, chip_type, price, callback_fn, ...) end
+    if realm == true and chip_type == Dailies.REWARD_KIND then
         return _mp577_local_exchange(self, item_id, price, callback_fn)
     end
-    return func(self, item_id, chip_type, price, callback_fn, ...)
+    -- Native purchase failure is exactly external_cb(false); no request,
+    -- local grant or native poll state may precede this refusal.
+    if type(callback_fn) == "function" then callback_fn(false) end
+    return nil
 end)
 
 _rt_register("mp577_backend_free_emporium_purchase", function()
@@ -1171,7 +1178,7 @@ end)
 -- while MP owns the modded-realm surface. These hooks should be unreachable for
 -- normal UI claims; the alert identifies a missed caller without crashing out.
 mod:hook("BackendInterfaceQuestsPlayfab", "claim_quest_rewards", function(func, self, key, ...)
-    if _is_mp_realm() then
+    if _progression_realm() ~= false then
         _dbg_alert("blocked backend single quest claim key=%s (generateQuestRewards suppressed)", tostring(key))
         return nil
     end
@@ -1179,7 +1186,7 @@ mod:hook("BackendInterfaceQuestsPlayfab", "claim_quest_rewards", function(func, 
 end)
 
 mod:hook("BackendInterfaceQuestsPlayfab", "claim_multiple_quest_rewards", function(func, self, keys, ...)
-    if _is_mp_realm() then
+    if _progression_realm() ~= false then
         _dbg_alert("blocked backend quest claim-all count=%d (generateQuestRewards suppressed)", type(keys) == "table" and #keys or 0)
         return nil
     end
@@ -1301,7 +1308,7 @@ EmporiumUi.install(mod, {
 -- after creation. Also guard the action itself against direct/gamepad callers.
 mod:hook("StoreLoginRewardsPopup", "_create_ui_elements", function(func, self, ...)
     local n, results = _capture(func(self, ...))
-    if _login_realm() ~= false then _disable_store_login_claim(self) end
+    if _progression_realm() ~= false then _disable_store_login_claim(self) end
     return unpack(results, 1, n)
 end)
 
@@ -1320,7 +1327,7 @@ end)
 -- mods (boot.lua:387-404,1321; hero_view_state_store.lua:7).
 local CalendarLoginGuard = mod:dofile("scripts/mods/modded_progression/_mp_calendar_login_guard")
 CalendarLoginGuard.install(mod, {
-    is_modded_realm = _login_realm,
+    is_modded_realm = _progression_realm,
     print_log = printf,
     rt_register = _rt_register,
 })
