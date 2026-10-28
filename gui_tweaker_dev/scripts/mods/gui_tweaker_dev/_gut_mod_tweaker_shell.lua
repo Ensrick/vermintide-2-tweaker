@@ -8,6 +8,7 @@ function M.bind(config)
     local mod = config.mod
     local _dbg = config.dbg
     local _dbg_alert = config.dbg_alert
+    local _rt_register = config.register
     local load_view = config.load_view
     local load_localization = config.load_localization
     local get_la_keepalive = config.get_la_keepalive
@@ -452,6 +453,34 @@ function M.bind(config)
         mod:hook_safe("IngameView", "on_enter", function()
             _register_button_loc()
         end)
+        -- (#153/#292) Lock: every engine-rendered gut UI key must resolve through the
+        -- GLOBAL localizer path (same structure as issue352's loc validation in
+        -- _gut_original_thp_names.lua). FAILS whenever a key is missing from the loc
+        -- file, still carries a VMF %% escape, or is not being served by the engine
+        -- localizer (Localize falls through to "<key>" when unsupplied).
+        _rt_register("issue153_292_engine_ui_loc_supplied", function()
+            local strings = _engine_ui_localizations()
+            for _, key in ipairs(ENGINE_UI_LOC_KEYS) do
+                local text = strings[key]
+                if type(text) ~= "string" then
+                    return "engine-UI localization source missing key: " .. key
+                end
+                if text:find("%%%%") then
+                    return "engine-UI localization still carries a VMF %% escape: " .. key
+                end
+            end
+            local localize = rawget(_G, "Localize")
+            if type(localize) ~= "function" then
+                return "global Localize unavailable (engine-UI keys cannot resolve)"
+            end
+            for _, key in ipairs(ENGINE_UI_LOC_KEYS) do
+                local ok, resolved = pcall(localize, key)
+                if not ok or resolved ~= strings[key] then
+                    return string.format("engine localizer does not serve %s (got %s)",
+                        key, tostring(resolved))
+                end
+            end
+        end)
         return ENGINE_UI_LOC_KEYS, _engine_ui_localizations
     end
 
@@ -557,6 +586,7 @@ function M.bind(config)
 
     return {
         install_api = install_api,
+        load_view = load_view,
         install_routing = install_routing,
         install_compaction = install_compaction,
     }

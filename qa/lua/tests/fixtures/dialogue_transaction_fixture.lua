@@ -63,10 +63,12 @@ return function(root, persisted)
         if id == "character_dialogue" and not f.absent then return cd end
     end
     f.cd, f.env, f.defs = cd, env, defs
+    local catalog = gut:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_view_catalog")
     local pending = gut:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_view_pending")
-    local loaded, View = pending.bind_view_supplier(function()
+    f.load_view = pending.bind_view_supplier(function()
         return pcall(gut.dofile, gut, "scripts/mods/gui_tweaker_dev/_mod_tweaker_view")
-    end)()
+    end, catalog.bind)
+    local loaded, View = f.load_view()
     assert(loaded, View)
     f.View = View
     f.UI = gut:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_dialogue")

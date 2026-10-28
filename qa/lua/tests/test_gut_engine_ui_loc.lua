@@ -59,7 +59,7 @@ return function(H, repo_root)
             "the VMF %% escape collapse is missing")
         H.truthy(owner:find("pcall(loc.append_backend_localizations, loc, _engine_ui_localizations())",
             1, true), "engine-UI keys are not appended to the backend localizer")
-        H.truthy(main:find('"issue153_292_engine_ui_loc_supplied"', 1, true),
+        H.truthy(owner:find('"issue153_292_engine_ui_loc_supplied"', 1, true),
             "in-game loc-resolution regression check is missing")
         -- Re-registration path: the supply call must live inside the same
         -- function the LocalizationManager.init re-init hook drives.

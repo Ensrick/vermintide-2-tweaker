@@ -616,3 +616,15 @@ batch logs late; do not merge them into captured `_printf`. Do not add a
 nested dofile or publish this handoff on the mod table. The view's registered
 ceiling falls from1685 to1370; entry remains1415. This is not full #2 adoption
 or live renderer/game acceptance.
+
+### Shared category private composition (#2)
+
+Entry owns one inert `_mod_tweaker_view_catalog` evaluation. Its captured factory
+binds independent View/State closures; discovery stays inside each rebuild pcall.
+The State metadata/private second return is consumed before HeroView injection.
+False load/bind status emits one neutral printf then retains controller fallback;
+this does not remove the global State class or certify whole-screen readiness.
+The localization check now belongs to shell routing after its final existing hook
+and before compaction. Both staged diagnostics reuse the private entry supplier;
+raw source/static-only View checks retain their independent local classes.
+New private dependency failures are not relabeled old VMF logs.

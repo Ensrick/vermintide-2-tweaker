@@ -586,6 +586,7 @@ local suites = {
     "test_gut_view_rows",
     "test_gut_view_pending",
     "test_gut_view_catalog",
+    "test_gut_category_handoff",
     "test_gut_runtime_checks_mission_map",
     "test_gt_regression_module",
     "test_gut_exclusive_radio",

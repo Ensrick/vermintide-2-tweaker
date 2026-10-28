@@ -15,7 +15,8 @@ function M.install(api)
     local _rt_register = assert(api.register, "Mod Tweaker contracts require register")
     local _rt_src_read = assert(api.src_read, "Mod Tweaker contracts require src_read")
     local math = math
-    mod:dofile("scripts/mods/gui_tweaker_dev/_gut_dialogue_contract").install(_rt_register)
+    local load_view = api.load_view
+    mod:dofile("scripts/mods/gui_tweaker_dev/_gut_dialogue_contract").install(_rt_register, load_view)
 
 _rt_register("issue605_dialogue_collapse_and_tristate", function()
     local dialogue = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_dialogue")
@@ -510,12 +511,9 @@ _rt_register("mod_tweaker_exclusive_group_api", function()
         return "radio presentation without label was not rejected"
     end
     -- Enforcement is wired: the standalone view class carries the sweep method.
-    local pending = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_view_pending")
     local ok_v, V
-    if type(pending) == "table" and type(pending.bind_view_supplier) == "function" then
-        ok_v, V = pending.bind_view_supplier(function()
-            return pcall(mod.dofile, mod, "scripts/mods/gui_tweaker_dev/_mod_tweaker_view")
-        end)()
+    if type(load_view) == "function" then
+        ok_v, V = load_view()
     end
     if not ok_v or type(V) ~= "table" or type(V._enforce_exclusive) ~= "function" then
         return "ModTweakerView:_enforce_exclusive missing (enforcement not wired)"

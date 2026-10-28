@@ -18,7 +18,7 @@ return function(H, root)
         chunk().install(function(name, fn)
             H.equal("issue998_dialogue_staged_isolation", name)
             check = fn
-        end)
+        end, f.load_view)
         H.equal(type(check), "function", "contract did not register its check")
         return check
     end

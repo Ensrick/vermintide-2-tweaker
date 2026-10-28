@@ -131,8 +131,14 @@ return function(H, repo_root, source_override)
         env.get_mod = function(id) H.equal(id, "gut_dev"); return mod end
         env.class = function(class) class = class or {}; class.__index = class; return class end
         env.printf = function(...) printed[#printed + 1] = pack(...) end
+        if options.defer_parent then
+            return { category = { mod_id = "gut_equipment", mod_obj = provider, _flat = true },
+                provider = provider, values = values, defs = defs, trace = trace,
+                printed = printed, warnings = warnings, token = token, env = env, mod = mod }
+        end
+        local catalog = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_view_catalog")
         local pending = load_source(root .. "_mod_tweaker_view_pending.lua")
-        local ok, Class = pending.bind_view_supplier(function() return pcall(load_source, view_path) end)()
+        local ok, Class = pending.bind_view_supplier(function() return pcall(load_source, view_path) end, catalog.bind)()
         H.truthy(ok, Class)
         H.equal(loads._mod_tweaker_view_rows, 1, "view must load the real child once")
         H.equal(install_count, 1, "view must install the real child once")

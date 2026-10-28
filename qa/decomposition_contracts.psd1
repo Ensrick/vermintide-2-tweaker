@@ -32,7 +32,7 @@
             State = 'partial'
             Entry = 'gui_tweaker_dev/scripts/mods/gui_tweaker_dev/gui_tweaker_dev.lua'
             CeilingLines = 1415
-            RequiredModules = @('_gut_runtime_checks_mission_map.lua', '_gut_saved_loadout_commands.lua', '_gut_mod_tweaker_shell.lua', '_mod_tweaker_view_pending.lua')
+            RequiredModules = @('_gut_runtime_checks_mission_map.lua', '_gut_saved_loadout_commands.lua', '_gut_mod_tweaker_shell.lua', '_mod_tweaker_view_pending.lua', '_mod_tweaker_view_catalog.lua')
         }
         @{
             # #2 partial view slice: retained setting-row and category-catalog owners.
@@ -40,7 +40,15 @@
             State = 'partial'
             Entry = 'gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_view.lua'
             CeilingLines = 1370
-            RequiredModules = @('_mod_tweaker_view_rows.lua', '_mod_tweaker_view_catalog.lua', '_mod_tweaker_view_diagnostics.lua', '_mod_tweaker_view_interaction.lua')
+            RequiredModules = @('_mod_tweaker_view_rows.lua', '_mod_tweaker_view_diagnostics.lua', '_mod_tweaker_view_interaction.lua')
+        }
+        @{
+            # #2 shared catalog: State is below target; root owns its private factory.
+            Name = 'gui_tweaker_dev_state_catalog'
+            State = 'complete'
+            Entry = 'gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_state.lua'
+            CeilingLines = 1419
+            RequiredModules = @('_mod_tweaker_state_interaction.lua')
         }
         @{
             # Structural phase completed at 0.9.207-dev (#1159): the entry is

@@ -352,13 +352,14 @@ end
 
 end
 
-function M.bind_view_supplier(original_supplier)
+function M.bind_view_supplier(original_supplier, bind_catalog)
     local install_pending = install
     local function finish(status, ...)
         if not status or type((...)) ~= "table" then return status, ... end
         local class, binder = ...
         if type(binder) ~= "function" then return false, "private staged-view binder unavailable" end
-        local bound, err = pcall(binder, install_pending)
+        if type(bind_catalog) ~= "function" then return false, "private category catalog binder unavailable" end
+        local bound, err = pcall(binder, install_pending, bind_catalog)
         if not bound then return false, err end
         return status, class, select(3, ...)
     end

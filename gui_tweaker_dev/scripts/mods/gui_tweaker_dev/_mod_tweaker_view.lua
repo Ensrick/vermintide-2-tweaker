@@ -465,12 +465,7 @@ local function _play_close() _play_event("Play_hud_button_close") end
 
 -- Category assembly keeps the existing deferred rebuild pcall boundary.
 -- Rows, transactions and lifecycle remain in this presentation owner.
-local CategoryCatalog = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_view_catalog")
-local _vmf_categories = CategoryCatalog.bind({
-    mod = mod, get_mod = function(...) return get_mod(...) end, nf = _nf,
-    disabled_sections = disabled_sections, external_group = external_group,
-    printf = _printf, math = math,
-})
+local _vmf_categories
 
 -- ---------------------------------------------------------------
 -- STAGED-CHANGE model (v0.2.70-dev). Native Options stages every edit in
@@ -1451,7 +1446,12 @@ Interaction.install(ModTweakerView, {
     slider_drag_edge = mod:dofile(
         "scripts/mods/gui_tweaker_dev/_mod_tweaker_slider_drag_edge"),
 })
-return ModTweakerView, function(install)
+return ModTweakerView, function(install, bind_catalog)
+    _vmf_categories = bind_catalog({
+        mod = mod, get_mod = function(...) return get_mod(...) end, nf = _nf,
+        disabled_sections = disabled_sections, external_group = external_group,
+        printf = _printf, math = math,
+    })
     return install(ModTweakerView, {
         mod = mod, transactions = transactions, default_reset = default_reset,
         profiles = profiles, profile_runtime = profile_runtime, DialogueUI = DialogueUI,
