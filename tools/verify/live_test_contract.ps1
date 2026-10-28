@@ -742,10 +742,35 @@ rawset(_G, "printf", mod.debug)
             $routes = @($currentMp577.ReceiptRoutes | Where-Object { [string]$_.Signature -ceq $signature })
             Assert-VtContractFixture ($routes.Count -ge 1 -and @($routes | Where-Object { -not $_.Bound }).Count -eq 0) '#577 current helper receipt was not bounded by its consumed override.'
         }
+        # Compatibility spellings are exercised against the actual helper and
+        # consumed matcher, not treated as evidence of any deployed tree. The
+        # independently enforced singleton pin still selects deployment bytes.
+        $mp577PredicateBodies = @(
+            "if _is_mp_realm() and chip_type == Dailies.REWARD_KIND then`n        return _mp577_local_exchange(self, item_id, price, callback_fn)",
+            "if realm == true and chip_type == Dailies.REWARD_KIND then`n        return _mp577_local_exchange(self, item_id, price, callback_fn)"
+        )
+        $mp577CurrentPredicate = @($mp577PredicateBodies | Where-Object { $mp577Source.Contains($_) })
+        Assert-VtContractFixture ($mp577CurrentPredicate.Count -eq 1) '#577 actual exchange predicate is not one supported exact source spelling.'
+        $mp577AndReturn = "and chip_type == Dailies.REWARD_KIND then`n        return _mp577_local_exchange(self, item_id, price, callback_fn)"
+        $mp577OrReturn = "or chip_type == Dailies.REWARD_KIND then`n        return _mp577_local_exchange(self, item_id, price, callback_fn)"
+        foreach ($predicate in $mp577PredicateBodies) {
+            $compatibleSource = $mp577Source.Replace($mp577CurrentPredicate[0], $predicate)
+            $compatible = & $invokeCurrentMp577 $compatibleSource
+            foreach ($signature in @($mp577Reject[0].Signature, $mp577Commit[0].Signature)) {
+                $routes = @($compatible.ReceiptRoutes | Where-Object { [string]$_.Signature -ceq $signature })
+                Assert-VtContractFixture ($routes.Count -ge 1 -and @($routes | Where-Object { -not $_.Bound }).Count -eq 0) '#577 old/new predicate compatibility lost consumed family bounds.'
+            }
+            $changed = $compatibleSource.Replace($mp577AndReturn, $mp577OrReturn)
+            Assert-VtContractFixture ($changed -cne $compatibleSource) '#577 old/new predicate control did not change the exchange handoff.'
+            $rejected = $false
+            try { & $invokeCurrentMp577 $changed | Out-Null }
+            catch { $rejected = [string]$_.Exception.Message -match 'anchor drift' }
+            Assert-VtContractFixture $rejected '#577 old/new predicate OR drift did not fail closed.'
+        }
         $mp577Mutations = @(
             @('local function _mp577_local_exchange(self, item_id, price, callback_fn)', 'local function _mp577_other_exchange(self, item_id, price, callback_fn)'),
             @('return _mp577_local_exchange(self, item_id, price, callback_fn)', '_mp577_local_exchange(self, item_id, price, callback_fn)'),
-            @('if _is_mp_realm() and chip_type == Dailies.REWARD_KIND then', 'if _is_mp_realm() or chip_type == Dailies.REWARD_KIND then'),
+            @($mp577AndReturn, $mp577OrReturn),
             @('local granted, balance_or_reason = Dailies.purchase(plan)', 'local granted, balance_or_reason = Dailies.other_purchase(plan)'),
             @('local overlaid, overlay_reason = _mp577_sync_overlay(self)', 'local overlaid, overlay_reason = _mp577_other_overlay(self)'),
             @('if callback_fn then callback_fn(true, { granted }) end', 'if callback_fn then callback_fn(false, { granted }) end'),

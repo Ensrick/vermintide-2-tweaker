@@ -228,7 +228,7 @@
             GuardAnchors=@(
                 'local function _mp577_local_exchange(self, item_id, price, callback_fn)'
                 'mod:hook("BackendInterfacePeddlerPlayFab", "exchange_chips"'
-                'if _is_mp_realm() and chip_type == Dailies.REWARD_KIND then return _mp577_local_exchange(self, item_id, price, callback_fn) end'
+                'and chip_type == Dailies.REWARD_KIND then return _mp577_local_exchange(self, item_id, price, callback_fn) end'
                 'tostring(reason)) if callback_fn then callback_fn(false) end return end'
                 'tostring(balance_or_reason)) if callback_fn then callback_fn(false) end return end'
             )
@@ -245,7 +245,7 @@
             GuardAnchors=@(
                 'local function _mp577_local_exchange(self, item_id, price, callback_fn)'
                 'mod:hook("BackendInterfacePeddlerPlayFab", "exchange_chips"'
-                'if _is_mp_realm() and chip_type == Dailies.REWARD_KIND then return _mp577_local_exchange(self, item_id, price, callback_fn) end'
+                'and chip_type == Dailies.REWARD_KIND then return _mp577_local_exchange(self, item_id, price, callback_fn) end'
                 'local granted, balance_or_reason = Dailies.purchase(plan)'
                 'local overlaid, overlay_reason = _mp577_sync_overlay(self)'
                 'if callback_fn then callback_fn(true, { granted }) end end mod:hook("BackendInterfacePeddlerPlayFab", "exchange_chips"'

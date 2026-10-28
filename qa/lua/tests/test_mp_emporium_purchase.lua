@@ -11,6 +11,122 @@ return function(H, repo_root)
         }
     end
 
+    local function pack(...) return { n = select("#", ...), ... } end
+    local function production_source()
+        local file = assert(io.open(root .. "modded_progression.lua", "rb"))
+        local source = file:read("*a"); file:close()
+        return (source:gsub("\r\n", "\n"))
+    end
+    local function section(source, first, last)
+        local at = assert(source:find(first, 1, true), first)
+        local stop = assert(source:find(last, at + #first, true), last)
+        H.equal(source:find(first, at + #first, true), nil, "duplicate #577 source owner")
+        return source:sub(at, stop - 1)
+    end
+    local function installed_exchange(stage, options, source)
+        options, source = options or {}, source or production_source()
+        -- Execute the complete production helper, installed hook and authority
+        -- query. Only ledger persistence, overlay sync and native delegation
+        -- are recording collaborators; this does not prove a live item grant.
+        local query = section(source, "local function _progression_realm(",
+            "local function _route_store_login_claim_for_realm(")
+        local transaction = section(source, "local function _mp577_local_exchange(",
+            '_rt_register("mp577_backend_free_emporium_purchase"')
+        local s = { receipts = {}, callbacks = {}, purchase_calls = 0, overlay_calls = 0,
+            native_calls = 0, fallback_calls = 0, owner = {}, peddler = {}, result = nil }
+        s.peddler._peddler_stock = stage == "plan_reject" and {} or { offer("receipt_hat", 25) }
+        s.peddler._backend_mirror = {}
+        function s.owner:hook(class, method, fn)
+            H.equal(class, "BackendInterfacePeddlerPlayFab")
+            H.equal(method, "exchange_chips"); H.equal(s.hook, nil)
+            s.hook = fn
+        end
+        local env = setmetatable({}, { __index = _G }); env._G = env
+        env.MODDED_REALM = options.realm
+        if options.realm == nil then env.MODDED_REALM = true end
+        env.Managers = false -- never inherit a live manager through __index
+        env.printf = function(format, ...)
+            s.receipts[#s.receipts + 1] = { format = format, args = pack(...) }
+            if options.print_error then error(options.print_error) end
+        end
+        local dailies = {
+            REWARD_KIND = "SM", balance = function() return 60 end,
+            purchase = function(plan)
+                s.purchase_calls = s.purchase_calls + 1; s.plan = plan
+                if not plan or stage == "purchase_reject" then return nil, "persist_refused" end
+                return plan.item, 35
+            end,
+        }
+        local loader = assert(loadstring("return function(mod, _is_mp_realm, Dailies, Emporium, _mp577_ui, _mp577_mirror_ready, _mp577_sync_overlay)\n"
+            .. query .. "\n" .. transaction .. "\nend", "@actual-mp577-helper-and-hook"))
+        setfenv(loader, env)
+        loader()(s.owner, function() s.fallback_calls = s.fallback_calls + 1; return false end,
+            dailies, Policy, { local_owned = function() return false end },
+            function(mirror) H.equal(mirror, s.peddler._backend_mirror); return true end,
+            function(peddler)
+                H.equal(peddler, s.peddler); s.overlay_calls = s.overlay_calls + 1
+                return options.overlay_ready ~= false, "mirror_pending"
+            end)
+        H.equal(type(s.hook), "function")
+        local callback
+        if not options.no_callback then
+            callback = function(...)
+                s.callbacks[#s.callbacks + 1] = pack(...)
+                if options.callback_error then error(options.callback_error) end
+            end
+        end
+        s.callback = callback
+        s.ok, s.failure = pcall(function()
+            s.result = pack(s.hook(function(...)
+                s.native_calls = s.native_calls + 1; s.native_args = pack(...)
+                return "native", nil, s, nil
+            end, s.peddler, "receipt_hat", options.currency or "SM", 25, callback, "tail"))
+        end)
+        return s
+    end
+    local function assert_attempt(stage, options, source)
+        options = options or {}
+        local s = installed_exchange(stage, options, source)
+        local committed = stage == "commit"
+        -- These SAME oracles are used by the deliberate source controls below.
+        H.equal(#s.receipts, 1, "#577 once-per-attempt receipt count")
+        H.equal(s.native_calls, 0, "#577 local attempt delegated to native")
+        H.equal(s.purchase_calls, stage == "plan_reject" and 0 or 1, "#577 no post-plan-rejection purchase")
+        H.equal(s.overlay_calls, committed and 1 or 0, "#577 no post-rejection overlay")
+        H.equal(#s.callbacks, options.no_callback and 0 or 1, "#577 once-per-attempt callback count")
+        H.equal(s.fallback_calls, 0)
+        local receipt = s.receipts[1]
+        H.equal(receipt.format, committed
+            and "[mp:577] purchase_committed item=%s price=%d balance=%d overlay=%s backend=none"
+            or "[mp:577] purchase_rejected item=%s reason=%s backend=none")
+        H.equal(receipt.args[1], "receipt_hat")
+        H.equal(receipt.args.n, committed and 4 or 2)
+        if committed then
+            H.equal(receipt.args[2], 25); H.equal(receipt.args[3], 35)
+            H.equal(receipt.args[4], options.overlay_ready == false and "mirror_pending" or "ready")
+            H.equal(s.owner._mp577_last_purchase.item_key, "receipt_hat")
+            H.equal(s.owner._mp577_last_purchase.backend_id, s.plan.item.ItemInstanceId)
+            H.equal(s.owner._mp577_last_purchase.balance, 35)
+            H.equal(s.owner._mp577_last_purchase.overlaid, options.overlay_ready ~= false)
+        else
+            H.equal(receipt.args[2], stage == "plan_reject" and "offer_unavailable" or "persist_refused")
+            H.equal(s.owner._mp577_last_purchase, nil)
+        end
+        if not options.no_callback then
+            H.equal(s.callbacks[1][1], committed)
+            H.equal(s.callbacks[1].n, committed and 2 or 1)
+            if committed then H.equal(#s.callbacks[1][2], 1); H.equal(s.callbacks[1][2][1], s.plan.item) end
+        end
+        if options.callback_error then
+            H.equal(s.ok, false, "#577 callback throw was swallowed")
+            H.equal(s.failure, options.callback_error, "#577 callback error identity")
+        else
+            H.equal(s.ok, true, "#577 actual helper/hook execution failed")
+            H.equal(s.result.n, 0, "#577 local helper fell through to denial")
+        end
+        return s
+    end
+
     local function load_dailies()
         local storage, fail_next = {}, false
         local fake_mod = {
@@ -209,6 +325,71 @@ return function(H, repo_root)
         H.truthy(source:find("official unlock was deleted or replaced", 1, true))
         H.equal(source:find("\n        offer.owned = true", 1, true), nil)
     end)
+
+    for _, name in ipairs({ "plan_reject", "purchase_reject", "commit" }) do
+        local stage = name
+        H.test("#577 actual helper and hook emits one terminal receipt " .. stage, function()
+            assert_attempt(stage)
+        end)
+        H.test("#577 actual helper receipt survives absent callback " .. stage, function()
+            assert_attempt(stage, { no_callback = true })
+        end)
+        H.test("#577 actual helper callback throw stays once and exact " .. stage, function()
+            assert_attempt(stage, { callback_error = {} })
+        end)
+    end
+    H.test("#577 actual helper pending overlay still has one committed terminal", function()
+        assert_attempt("commit", { overlay_ready = false })
+    end)
+    H.test("#577 actual helper receipt logger throw cannot repeat callback", function()
+        assert_attempt("commit", { print_error = {} })
+    end)
+    H.test("#577 actual installed hook preserves official tuple without local receipt", function()
+        local s = installed_exchange("commit", { realm = false })
+        H.equal(s.ok, true); H.equal(s.native_calls, 1); H.equal(#s.receipts, 0)
+        H.equal(s.fallback_calls, 0)
+        H.equal(s.purchase_calls, 0); H.equal(s.overlay_calls, 0); H.equal(#s.callbacks, 0)
+        H.equal(s.result.n, 4); H.equal(s.result[1], "native"); H.equal(s.result[2], nil)
+        H.equal(s.result[3], s); H.equal(s.result[4], nil)
+        H.equal(s.native_args.n, 6); H.equal(s.native_args[1], s.peddler)
+        H.equal(s.native_args[2], "receipt_hat"); H.equal(s.native_args[3], "SM")
+        H.equal(s.native_args[4], 25); H.equal(s.native_args[5], s.callback)
+        H.equal(s.native_args[6], "tail")
+    end)
+    H.test("#577 actual installed hook refuses unsupported currency without transaction receipt", function()
+        local s = installed_exchange("commit", { currency = "VS" })
+        H.equal(s.ok, true); H.equal(s.native_calls, 0); H.equal(#s.receipts, 0)
+        H.equal(s.fallback_calls, 0)
+        H.equal(s.purchase_calls, 0); H.equal(s.overlay_calls, 0)
+        H.equal(#s.callbacks, 1); H.equal(s.callbacks[1].n, 1); H.equal(s.callbacks[1][1], false)
+        H.equal(s.result.n, 1); H.equal(s.result[1], nil)
+    end)
+    local terminal_controls = {
+        { name = "plan return", stage = "plan_reject", oracle = "#577 once-per-attempt receipt count",
+            from = "tostring(item_id), tostring(reason))\n        if callback_fn then callback_fn(false) end\n        return",
+            to = "tostring(item_id), tostring(reason))\n        if callback_fn then callback_fn(false) end" },
+        { name = "purchase return", stage = "purchase_reject", oracle = "#577 no post-rejection overlay",
+            from = "tostring(item_id), tostring(balance_or_reason))\n        if callback_fn then callback_fn(false) end\n        return",
+            to = "tostring(item_id), tostring(balance_or_reason))\n        if callback_fn then callback_fn(false) end" },
+        { name = "hook return", stage = "commit", oracle = "#577 once-per-attempt callback count",
+            from = "return _mp577_local_exchange(self, item_id, price, callback_fn)",
+            to = "_mp577_local_exchange(self, item_id, price, callback_fn)" },
+        { name = "duplicate committed receipt", stage = "commit", oracle = "#577 once-per-attempt receipt count",
+            from = 'pcall(printf, "[mp:577] purchase_committed item=%s price=%d balance=%d overlay=%s backend=none",',
+            to = 'pcall(printf, "[mp:577] purchase_committed item=%s price=%d balance=%d overlay=%s backend=none"); pcall(printf, "[mp:577] purchase_committed item=%s price=%d balance=%d overlay=%s backend=none",' },
+    }
+    for _, spec in ipairs(terminal_controls) do
+        local control = spec
+        H.test("#577 same terminal oracle rejects source control " .. control.name, function()
+            local source = production_source()
+            local at = assert(source:find(control.from, 1, true), control.name)
+            H.equal(source:find(control.from, at + #control.from, true), nil, "ambiguous terminal control")
+            local changed = source:sub(1, at - 1) .. control.to .. source:sub(at + #control.from)
+            local ok, failure = pcall(assert_attempt, control.stage, nil, changed)
+            H.equal(ok, false, "#577 control escaped the unchanged terminal oracle")
+            H.truthy(tostring(failure):find(control.oracle, 1, true), "#577 control failed outside its terminal oracle")
+        end)
+    end
 
     H.test("Emporium overlay waits for peddler registration without warning probes", function()
         local file = assert(io.open(root .. "modded_progression.lua", "rb"))
