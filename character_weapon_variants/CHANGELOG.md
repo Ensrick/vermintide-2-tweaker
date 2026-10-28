@@ -1,5 +1,18 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.560-dev (2026-10-27) -- Canonical publication documentation (#1025)
+
+- Replace five remaining raw VMB build/deploy examples across the construction
+  guides with the existing claim, canonical BuildOnly, protected review and
+  clean-default publication workflow. No launcher or uploader behavior changes.
+- Correct root recovery doctrine: a confirmed upload followed by a local
+  deploy mismatch remains a failed transaction, not an assumed Steam race or
+  permission for direct redeployment. Preserve evidence and canonical authority.
+- Extend the existing publication-doctrine guard with finite command/recovery
+  fixtures, retaining historical-document boundaries and exact existing debt.
+- This owning build binds the changed compiler-input documentation. No weapon
+  behavior, model, network identity or native/gameplay acceptance is changed.
+
 ## 0.1.559-dev (2026-10-27) -- Elven shield and Greataxe construction (#428)
 
 - Prepare Elven shield and Greataxe variants through private construction owners

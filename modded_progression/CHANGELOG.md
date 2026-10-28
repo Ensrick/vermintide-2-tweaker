@@ -1,5 +1,21 @@
 # Modded Progression — Changelog
 
+## 0.2.48-dev (2026-10-27) -- Fail closed at login request authority (#1684) [not-started]
+
+- Share one native-first private realm query across the existing peddler,
+  legacy login-popup and calendar boundaries. Only exact known official false
+  may delegate a login claim; malformed present native state is not permission
+  to enqueue an official store-reward request.
+- Preserve absent-native legacy fallback, complete native tuples/errors and
+  popup creation's native-first timing. Do not change the shared boolean realm
+  helper, add backend requests, invent local login rewards or alter schedules.
+- Add thirteen installed-boundary cases with the complete source-qualified
+  native request producer and a nondispatching recording queue. Whole-entry
+  native PUC compilation, twenty focused cases and three deliberate same-case
+  controls pass; these do not establish engine ABI, launch or live account safety.
+- Broader daily/calendar/local-grant acceptance remains unverified. No new
+  in-game test-readiness claim is made by these detached checks.
+
 ## 0.2.47-dev (2026-10-25) -- Own modern daily rows and calendar claim boundary (#1684, #573) [not-started]
 
 - Build current unclaimed local daily rows through native quest widgets and

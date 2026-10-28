@@ -17,6 +17,7 @@ return function(H, repo)
     local daily_block = section('mod:dofile("scripts/mods/modded_progression/_mp_daily_ui_runtime").install(mod, {',
         "-- #1684: exact plain-SM UI/action owner")
     local calendar_block = section("local CalendarLoginGuard = mod:dofile(", "-- Vanilla keep crafting bench:")
+    local login_query_block = section("local function _login_realm(", "local function _route_store_login_claim_for_realm(")
     local expected = {
         "HeroViewStateAchievements._create_entries",
         "HeroViewStateAchievements._handle_claim_all_challenges",
@@ -47,7 +48,7 @@ return function(H, repo)
             end,
         }
         local chunk=assert(loadstring("return function(mod, Dailies, _local_claim, _is_mp_realm, _rt_register, FreshProfile, _with_eac_off)\n"
-            ..daily_block.."\n"..calendar_block.."\nend", "@actual-mp-two-slice-installers"))
+            ..login_query_block.."\n"..daily_block.."\n"..calendar_block.."\nend", "@actual-mp-two-slice-installers"))
         setfenv(chunk,env)
         chunk()(mod,{find_by_id=function() return nil end,quest_data=function() return nil end},
             function() state.claims=state.claims+1; error("unexpected local claim") end,

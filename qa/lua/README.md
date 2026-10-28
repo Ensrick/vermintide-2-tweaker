@@ -430,6 +430,13 @@ card remain required. The runner lists the suite explicitly.
   authority, no UI writes, exact tuple/error identity and bounded denial logging.
   This does not implement reward schedules or local login grants.
 
+- `tests/test_mp_login_authority.lua`: #1684 executes the actual shared private
+  login query and all four existing installed targets. The complete native
+  peddler claim body reaches only a private recording queue. Covers known
+  official false, modded true, malformed/unknown, preserved absent-native
+  legacy fallback/throws, tuples and dynamic reads; no backend dispatch.
+  The new named check uses explicit private inputs, never live-global edits.
+
 - `tests/test_mp_daily_calendar_composition.lua`: executes both actual entry
   installer blocks together; checks five unique callbacks, exact named-check
   identities/order, live native-first authority and official tuple/error parity.

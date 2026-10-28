@@ -422,16 +422,9 @@ short index pointing back into this file's reference content.
 
 ### Build and deploy
 
-```powershell
-Set-Location "C:\Users\danjo\source\repos\vermintide-2-tweaker"
-node C:/Users/danjo/source/repos/vmb/vmb.js build character_weapon_variants --no-workshop --cwd
-# Deploy to workshop folder
-$wsDir = "C:\Program Files (x86)\Steam\steamapps\workshop\content\552500\3716869446"
-Get-ChildItem "character_weapon_variants\bundleV2" -File | ForEach-Object { Copy-Item $_.FullName (Join-Path $wsDir $_.Name) -Force }
-```
+Follow [PROJECT_STANDARDS.md §6.6](../PROJECT_STANDARDS.md#66-ship-doctrine-keyed-off-the-mod_version-suffix-canonical-2026-07-01) and the [claim contract](../tools/ship/CLAIMS.md) for the broker-owned version, canonical `BuildOnly`, source/output review and commit, protected merge, and clean-default-branch canonical ship. Do not run a raw compiler pipeline or manually copy files into Workshop content.
 
-Bump `MOD_VERSION` (line 3 of `character_weapon_variants.lua`) on every
-build. Hot-reload is unsafe — full game restart after every deploy. See
+Hot-reload is unsafe — use a full game restart after verified deployment. See
 `feedback_version_bump.md` and `feedback_hot_reload_unfixable.md`.
 
 ## Rarity
@@ -864,7 +857,7 @@ Each entry only needs three fields plus career list — everything else is clone
 
 ### Step 4: Build and deploy
 
-Same as variant weapons — VMB build, copy to Workshop folder, full game restart (no hot-reload).
+Use the same [PROJECT_STANDARDS.md §6.6](../PROJECT_STANDARDS.md#66-ship-doctrine-keyed-off-the-mod_version-suffix-canonical-2026-07-01) claim/build/review/merge/ship boundary as variant weapons; no manual Workshop-folder copy. After verified deployment, use a full game restart (no hot-reload).
 
 ### What NOT to do
 

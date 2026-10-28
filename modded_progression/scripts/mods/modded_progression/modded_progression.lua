@@ -30,7 +30,7 @@ local RealmAuthority = mod:dofile(
 -- at the bottom of this same chunk, so no _G or cross-file exposure is needed.
 local _MEM_PROBE_T0_MP = collectgarbage("count")
 
-local MOD_VERSION = "0.2.47-dev"
+local MOD_VERSION = "0.2.48-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([mp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -843,14 +843,27 @@ end)
 -- payload needs the durable mirror-overlay inventory transaction that remains
 -- under construction. Fail closed at BOTH the UI action and backend request
 -- boundary. Official-realm calls run the original function byte-for-byte.
+-- #1684: login actions need known official authority, not merely denied
+-- modded permission. Explicit private inputs keep the detached check off live
+-- globals; production calls use this same closure with no arguments. Legacy
+-- fallback throws remain direct; only the calendar owner pcall-denies them.
+local function _login_realm(environment, legacy)
+    local native = rawget(environment or _G, "MODDED_REALM")
+    if native ~= nil then
+        if type(native) == "boolean" then return native end
+        return nil
+    end
+    return (legacy or _is_mp_realm)()
+end
+
 local function _route_store_login_claim_for_realm(is_modded, func, self, ...)
-    if is_modded then return false, 0, nil end
+    if is_modded ~= false then return false, 0, nil end
     local n, results = _capture(func(self, ...))
     return true, n, results
 end
 
 local function _route_store_login_claim(func, self, ...)
-    return _route_store_login_claim_for_realm(_is_mp_realm(), func, self, ...)
+    return _route_store_login_claim_for_realm(_login_realm(), func, self, ...)
 end
 
 local function _disable_store_login_claim(popup)
@@ -884,6 +897,33 @@ _rt_register("mp589_store_login_claim_ui_disabled", function()
     if popup._widgets_by_name.claim_button.content.button_hotspot.disable_button ~= true then
         return "modded login-reward claim button remained enabled"
     end
+end)
+
+_rt_register("issue1684_login_request_authority", function()
+    local calls = 0
+    local native = function() calls = calls + 1; return "official", nil, 3, nil end
+    for _, value in ipairs({ true, "false", 0, {} }) do
+        local realm = _login_realm({ MODDED_REALM = value }, function() error("unexpected legacy read") end)
+        if _route_store_login_claim_for_realm(realm, native, nil) or calls ~= 0 then
+            return "unknown/modded login authority reached native"
+        end
+    end
+    if _route_store_login_claim_for_realm(nil, native, nil) then
+        return "nil login authority reached native"
+    end
+    local official = _login_realm({ MODDED_REALM = false }, function() error("unexpected legacy read") end)
+    local allowed, n, values = _route_store_login_claim_for_realm(official, native, nil)
+    if not allowed or calls ~= 1 or n ~= 4 or values[1] ~= "official"
+            or values[2] ~= nil or values[3] ~= 3 or values[4] ~= nil then
+        return "known official login tuple changed"
+    end
+    if _login_realm({}, function() return true end) ~= true
+            or _login_realm({}, function() return false end) ~= false then
+        return "absent-native login legacy fallback changed"
+    end
+    local failure = {}
+    local ok, err = pcall(_login_realm, {}, function() error(failure) end)
+    if ok or err ~= failure then return "legacy login reader exception changed" end
 end)
 
 _rt_register("modded_daily_realm_boundary", function()
@@ -1261,7 +1301,7 @@ EmporiumUi.install(mod, {
 -- after creation. Also guard the action itself against direct/gamepad callers.
 mod:hook("StoreLoginRewardsPopup", "_create_ui_elements", function(func, self, ...)
     local n, results = _capture(func(self, ...))
-    if _is_mp_realm() then _disable_store_login_claim(self) end
+    if _login_realm() ~= false then _disable_store_login_claim(self) end
     return unpack(results, 1, n)
 end)
 
@@ -1280,14 +1320,7 @@ end)
 -- mods (boot.lua:387-404,1321; hero_view_state_store.lua:7).
 local CalendarLoginGuard = mod:dofile("scripts/mods/modded_progression/_mp_calendar_login_guard")
 CalendarLoginGuard.install(mod, {
-    is_modded_realm = function()
-        local native = rawget(_G, "MODDED_REALM")
-        if native ~= nil then
-            if type(native) == "boolean" then return native end
-            return nil
-        end
-        return _is_mp_realm()
-    end,
+    is_modded_realm = _login_realm,
     print_log = printf,
     rt_register = _rt_register,
 })

@@ -1,5 +1,19 @@
 # Regression Checklist — modded_progression
 
+## Login request authority direction (#1684)
+
+- Native delegation requires an exact known false login authority. A raw
+  present malformed realm value is unknown, not official. Preserve the
+  absent-native pre-6.12 fallback, including false/no-signal delegation.
+- Peddler and legacy-popup claim-action reader throws preserve the exact
+  error before native. Popup creation stays native-first, then reads
+  authority. The calendar retains its existing pcall-denial policy. One
+  private query supplies all login surfaces; no shared boolean helper changes.
+- `issue1684_login_request_authority` uses private arguments only;
+  `test_mp_login_authority.lua` composes the real query/helper/installed
+  callback with the complete native producer and a non-dispatching queue.
+  Historical #589 acceptance is distinct from this malformed-authority gap.
+
 ## Calendar login claim pre-action boundary (#1684; historical #589 safety)
 
 - The exact native calendar action must not run in modded/unreadable authority:

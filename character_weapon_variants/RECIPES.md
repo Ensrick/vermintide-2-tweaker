@@ -2169,7 +2169,7 @@ common = {
 
 ### Verify before flagging done
 
-- Build with `node vmb.js build <mod> --no-workshop --cwd`.
+- Follow [PROJECT_STANDARDS.md §6.6](../PROJECT_STANDARDS.md#66-ship-doctrine-keyed-off-the-mod_version-suffix-canonical-2026-07-01) for the broker claim, canonical `BuildOnly`, reviewed source/output authority, protected merge, and canonical ship.
   Successful build = zero engine compile errors.
 - Bundle output should include all three resource sizes: ~6–7MB
   unit (FBX geometry), ~1MB textures (5x DXT5), ~7KB lua/mod.
@@ -2217,17 +2217,16 @@ in the inventory until replaced.
 
 Before every build:
 
-- [ ] **`MOD_VERSION` bumped** at line 3. Required to confirm the build
-      loaded — see `feedback_version_bump.md`.
+- [ ] **Broker-owned `MOD_VERSION` applied** via the [claim contract](../tools/ship/CLAIMS.md).
+      Required to confirm the build loaded — see `feedback_version_bump.md`.
 - [ ] **`CHANGELOG.md` entry added** under a new `## 0.1.X-dev (YYYY-MM-DD)` heading.
 - [ ] **Forward-reference audit.** Every function/local you call must be
       defined ABOVE the call site. Lua 5.1 has no hoisting. This
       codebase has shipped 5+ crashes from this single bug class —
       see `feedback_lua_forward_reference.md`. Skim from your edit
       down to file end.
-- [ ] **Build:** `node C:/Users/danjo/source/repos/vmb/vmb.js build character_weapon_variants --no-workshop --cwd`
-- [ ] **Bundle output verified** — `bundleV2/` should have fresh files.
-- [ ] **Deploy** to `C:\Program Files (x86)\Steam\steamapps\workshop\content\552500\3716869446`.
+- [ ] **Canonical build and review:** use [PROJECT_STANDARDS.md §6.6](../PROJECT_STANDARDS.md#66-ship-doctrine-keyed-off-the-mod_version-suffix-canonical-2026-07-01) for `BuildOnly` and exact source/output authority; timestamps alone are not build proof.
+- [ ] **Protected landing and ship:** commit source and authority together, pass hosted QA, merge, then use the clean-default-branch canonical transaction. No manual Workshop-folder copy.
 - [ ] **Full game restart.** Hot-reload is unsafe — see
       `feedback_hot_reload_unfixable.md`.
 
