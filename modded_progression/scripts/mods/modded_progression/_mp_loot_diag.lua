@@ -1,9 +1,9 @@
 -- Bounded, observation-only loot diagnostics for issue #607.
 --
--- The native mission award and chest roll are produced by PlayFab CloudScript,
--- not Lua. A successful FunctionResult therefore cannot be the diagnostic's
--- trigger in the modded realm: the request is normally rejected at the EAC
--- boundary first. This pure helper owns the bounded event ledger used by the
+-- The native readonly guard normally skips the mission-award producer before
+-- its PlayFab request. Direct downstream loot calls can still reach the EAC
+-- boundary; neither entry nor a successful FunctionResult is a completion or
+-- local-award contract. This pure helper owns the bounded event ledger used by the
 -- runtime adapters at mission-end, request enqueue, chest-open, backend
 -- rejection, callback success, and MP's local inventory seam. It never opens a
 -- chest, queues a request, grants an item, or mutates a backend mirror.
@@ -21,6 +21,7 @@ M.LOCAL_CONTAINER_AWARD_IMPLEMENTED = false
 M.LOCAL_CONTAINER_OPEN_IMPLEMENTED = false
 
 M.EVENTS = {
+    end_condition_entry = true,
     end_level = true,
     pre_request = true,
     open = true,
@@ -55,6 +56,13 @@ function M.realm_is_modded(modded_realm, legacy_is_modded)
     if type(legacy_is_modded) ~= "function" then return false end
     local ok, result = pcall(legacy_is_modded)
     return ok and result == true
+end
+
+-- A snapshot at native end-condition ENTRY, never an award/completion result.
+function M.end_condition_reason(read_only_backend)
+    if read_only_backend == true then return "readonly_award_gate_at_entry" end
+    if read_only_backend == false then return "award_gate_open_at_entry" end
+    return "award_gate_unknown_at_entry"
 end
 
 function M.request_flow(request_name)
@@ -327,8 +335,15 @@ function M.diagnose(ledger)
     local saw_open_request = false
     local saw_local_ledger = false
     local latest_local_containers = 0
-
-    for _, record in ipairs(normalized.records) do
+    local latest_entry, entry_reason = 1, nil
+    -- Only the newest observed entry window is diagnosed. This is not a
+    -- mission identity, checkpoint completion or durable reward transaction.
+    for i, record in ipairs(normalized.records) do
+        if record.event == "end_condition_entry" then latest_entry = i end
+    end
+    for i = latest_entry, #normalized.records do
+        local record = normalized.records[i]
+        if record.event == "end_condition_entry" then entry_reason = record.reason end
         if record.event == "end_level" then saw_end_level = true end
         if record.event == "open" then saw_open = true end
         if record.event == "pre_request" and record.flow == "end_level" then
@@ -354,6 +369,8 @@ function M.diagnose(ledger)
         if not M.LOCAL_CONTAINER_OPEN_IMPLEMENTED then return "local_chest_open" end
         return "local_loot_roll"
     end
+    if entry_reason == "readonly_award_gate_at_entry" then return entry_reason end
+    if entry_reason ~= nil then return "end_condition_entry_only" end
     return "awaiting_mission_end"
 end
 

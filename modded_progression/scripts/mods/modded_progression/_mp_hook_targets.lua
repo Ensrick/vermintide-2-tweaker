@@ -69,6 +69,7 @@ M.TARGETS = {
     { "PlayFabRequestQueue", "enqueue" },
     { "QuestManager", "_increment_quest_stats" },
     { "QuestManager", "get_data_by_id" },
+    { "StateInGameRunning", "gm_event_end_conditions_met" },
     { "StoreItemPurchasePopup", "_create_ui_elements" },
     { "StoreItemPurchasePopup", "_populate_item_widget" },
     { "StoreItemPurchasePopup", "_poll_result_on_enter" },

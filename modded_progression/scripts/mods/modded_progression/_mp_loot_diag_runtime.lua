@@ -33,12 +33,25 @@ function Runtime.install(mod, deps)
         "item_master_list is required")
     local now = assert(deps.now, "now is required")
 
-    -- Instrumentation is subordinate to all six native call paths. This is the
+    -- Automatic output is finite independently of the rolling twelve-record
+    -- ledger. Each installation starts one window; only the existing explicit
+    -- diagnostic reset rearms it. Count attempts before calling a logger that
+    -- can throw, including observer-failure receipts from that same failure.
+    local automatic_print_attempts = 0
+    local function take_print_attempt()
+        if automatic_print_attempts >= 12 then return false end
+        automatic_print_attempts = automatic_print_attempts + 1
+        return true
+    end
+
+    -- Instrumentation is subordinate to native entry and all six downstream paths.
+    -- This is the
     -- observer boundary: realm/context/store reads, persistence, summaries,
     -- and printf formatting all run inside its pcall. Its own failure report
     -- is also contained because logging must never become a behavior dependency.
     local function report_observer_error(stage)
         pcall(function()
+            if not take_print_attempt() then return end
             print_log("[mp:607] event=instrument_error stage=%s " ..
                 "reason=observer_failed backend=none", stage)
         end)
@@ -98,14 +111,16 @@ function Runtime.install(mod, deps)
                 error("diagnostic persistence verification failed", 0)
             end
             local first_missing = LootDiag.diagnose(verified)
-            print_log("[mp:607] event=%s serial=%d flow=%s request=%s reason=%s chest=%s " ..
-                "items=%d local_items=%d local_containers=%d local_uses=%d " ..
-                "award_capable=%s open_capable=%s first_missing=%s backend=%s",
-                record.event, record.serial, record.flow, record.request_name,
-                record.reason, record.chest_key, record.item_count, record.local_items,
-                record.local_containers, record.local_container_uses,
-                tostring(record.local_award_capable), tostring(record.local_open_capable),
-                first_missing, record.backend)
+            if take_print_attempt() then
+                print_log("[mp:607] event=%s serial=%d flow=%s request=%s reason=%s chest=%s " ..
+                    "items=%d local_items=%d local_containers=%d local_uses=%d " ..
+                    "award_capable=%s open_capable=%s first_missing=%s backend=%s",
+                    record.event, record.serial, record.flow, record.request_name,
+                    record.reason, record.chest_key, record.item_count, record.local_items,
+                    record.local_containers, record.local_container_uses,
+                    tostring(record.local_award_capable), tostring(record.local_open_capable),
+                    first_missing, record.backend)
+            end
             return record
         end)
     end
@@ -127,6 +142,35 @@ function Runtime.install(mod, deps)
     end
 
     -- `_mp607_consolidated_loot_layer_diagnostics`: one hook per actual seam.
+    -- Native 6.13.0 state_ingame_running.lua:510-762 enters before its commit
+    -- callback's read_only_backend award guard. Checkpoint/early returns and
+    -- native errors still mean ENTRY only. No native arguments/IDs are retained.
+    mod:hook("StateInGameRunning", "gm_event_end_conditions_met",
+        function(func, self, reason, checkpoint_available, percentages_completed, ...)
+            observe("end_condition_entry", function()
+                if not LootDiag.should_capture(is_modded_realm() == true) then return end
+                local settings = rawget(_G, "GameSettingsDevelopment")
+                local read_only_backend
+                if type(settings) == "table" then
+                    read_only_backend = rawget(settings, "read_only_backend")
+                end
+                local facts = LootDiag.local_ledger_facts(get_inventory_store())
+                emit("end_condition_entry", {
+                    flow = "end_level",
+                    reason = LootDiag.end_condition_reason(read_only_backend),
+                    backend = "none",
+                    local_items = facts.items,
+                    local_containers = facts.containers,
+                    local_container_uses = facts.container_uses,
+                    local_award_capable = facts.award_capable,
+                    local_open_capable = facts.open_capable,
+                })
+            end)
+            local results = pack_results(func(self, reason, checkpoint_available,
+                percentages_completed, ...))
+            return unpack_results(results, 1, results.n)
+        end)
+
     -- The end-level wrapper names every current vanilla parameter and forwards
     -- future trailing arguments so instrumentation cannot change reward behavior.
     mod:hook("BackendInterfaceLootPlayfab", "generate_end_of_level_loot",
@@ -309,6 +353,14 @@ function Runtime.install(mod, deps)
             facts.award_capable or facts.open_capable then
             return "#607 local-ledger census or honest capability state failed"
         end
+        local entry = LootDiag.record(nil, "end_condition_entry", {
+            flow = "end_level", reason = LootDiag.end_condition_reason(true),
+        }, 1)
+        if LootDiag.diagnose(entry) ~= "readonly_award_gate_at_entry" or
+                LootDiag.end_condition_reason(false) ~= "award_gate_open_at_entry" or
+                LootDiag.end_condition_reason(nil) ~= "award_gate_unknown_at_entry" then
+            return "#607 end-condition entry was not distinguished from completion"
+        end
         local diagnostic = LootDiag.record(nil, "end_level", {
             flow = "end_level", request_name = "generateEndOfLevelLoot",
         }, 1)
@@ -369,6 +421,7 @@ function Runtime.install(mod, deps)
         function(action)
             if action == "reset" then
                 mod:set(SETTING, LootDiag.empty(), false)
+                automatic_print_attempts = 0
                 mod:echo("#607 loot-layer diagnostic reset. " ..
                     "Passive modded-realm observation remains active.")
                 return

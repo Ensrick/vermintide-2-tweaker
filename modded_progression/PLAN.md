@@ -158,34 +158,60 @@ Mission ends
         backend_mirror:set_read_only_data(hero.."_experience", v, true)
 ```
 
-### Issue #607 diagnostic boundary (v0.2.35-dev)
+### Issue #607 diagnostic source contract (0.2.50-dev): native entry is not reward completion
 
-The complete local mission-container feature remains unbuilt. The earlier
-observation probe waited for `loot_chest_rewards_request_cb`, but that callback
-requires a successful `generateLootChestRewards` result and therefore cannot
-name a failure when the modded realm is rejected first. The current bounded
-diagnostic observes six existing local seams without changing them:
+The complete local mission-container feature remains unbuilt. The preceding
+reward-producer diagram is conditional: native 6.13
+`StateInGameRunning.gm_event_end_conditions_met`
+(`scripts/game_state/state_ingame_running.lua:510-762`) enters before the
+deferred commit callback's `read_only_backend` award guard at `:718-724`.
+An ordinary protected modded path can therefore skip the reward producer
+without reaching a loot request or backend rejection.
 
-1. `BackendInterfaceLootPlayfab.generate_end_of_level_loot` (mission reward entry),
+The diagnostic automatically records `end_condition_entry` when that native
+method is entered and the existing modded capture gate is open. Its reason is
+`readonly_award_gate_at_entry`, `award_gate_open_at_entry`, or
+`award_gate_unknown_at_entry`, according to the entry snapshot only.
+Checkpoint/early-return and native-error paths can also produce this receipt.
+It proves neither completion nor the flag's value when the deferred callback
+later runs, and retains no native reason/checkpoint/player/request identifiers.
+
+The six existing downstream observations remain optional, unchanged evidence:
+
+1. `BackendInterfaceLootPlayfab.generate_end_of_level_loot` (reward-producer entry),
 2. `PlayFabRequestQueue.enqueue` for the two loot CloudScript names,
-3. `BackendInterfaceLootPlayfab.open_loot_chest` (Spoils of War entry),
+3. `BackendInterfaceLootPlayfab.open_loot_chest` (a genuinely reached open path),
 4. `BackendManagerPlayFab.playfab_eac_error` / `playfab_api_error` (rejection),
-5. the optional native loot callback (successful-result R&D only), and
+5. the native loot callback (successful-result R&D only), and
 6. MP's persisted `inventory` store (sanitized container/use census).
 
-Every observer read/write/log action is pcall-contained and cannot prevent or
-alter the native call or its complete Lua return tuple. Queue attribution is
-also evidence-gated: `pre_request` exists only when vanilla `enqueue` returns a
-finite positive numeric id; request arguments alone never prove acceptance.
-Observer-failure receipts use only a controlled stage and fixed
-`observer_failed` reason, never raw exception text or identifiers.
+Do not force an unavailable loot screen, fabricate a chest, clear a protected
+flag, or originate a request to obtain one of those downstream observations.
+Every observer read/write/log action is pcall-contained; native arguments,
+call count, complete Lua return tuple, and native errors remain unchanged.
+`pre_request` requires an actual finite positive numeric enqueue result.
 
-One completed modded mission can therefore distinguish a missing mission-end
-call, a missing enqueue, and the current first unbuilt local layer
-(`local_container_award`) without any backend success. The diagnostic never
-adds a request or mutates loot state. `award_capable=false` and
-`open_capable=false` are explicit until those behavioral layers are actually
-implemented.
+Only the newest observed-entry window is diagnosed; this is not a durable
+mission or transaction identity. With no downstream event in that window,
+a true read-only entry reports `first_missing=readonly_award_gate_at_entry`;
+the false/unknown snapshots report `first_missing=end_condition_entry_only`.
+If downstream events really occur, their existing missing-layer diagnosis
+still applies. `local_container_award` and local opening remain unimplemented;
+receipt capability facts stay `award_capable=false` / `open_capable=false`.
+
+Two independent limits apply: at most 12 retained sanitized ledger records,
+and at most 12 automatic print attempts shared by normal receipts and
+`instrument_error` per runtime installation or explicit diagnostic-reset
+window. Attempts are consumed before logger invocation, including throwing
+logs; exhaustion does not stop ledger capture or native forwarding.
+The existing `/mp_loot_diag reset` rearms printing only after its existing
+ledger write returns; a throwing write does not rearm it. User-invoked reports
+remain available and do not consume or reset the automatic budget.
+
+The exact deployed subtree, emitter and actual print guard must still satisfy
+immutable source-authority policy before any new live-test card or ready label.
+An unchanged format or passing regression check alone is not deployment or
+game acceptance. No new command or reward schedule is introduced.
 
 ## Interception map
 

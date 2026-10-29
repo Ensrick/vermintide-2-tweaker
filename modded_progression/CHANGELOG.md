@@ -1,5 +1,24 @@
 # Modded Progression — Changelog
 
+## 0.2.50-dev (2026-10-28) -- Observe native loot entry with finite output (#607) [not-started]
+
+- Observe the actual native end-condition entry before the deferred read-only
+  award guard. Record a sanitized true/false/unknown flag snapshot, not mission
+  completion, award success or proof that a backend request was reached.
+- Keep the six downstream observations optional. Native arguments, complete
+  return tuples, errors, account-protection flags and reward behavior stay
+  unchanged; no request, chest, item grant or opening is introduced.
+- Separate the rolling twelve-record ledger from a real shared twelve-attempt
+  automatic logger budget. Consume attempts before normal/error logging; keep
+  capture and native forwarding working after exhaustion. The existing explicit
+  reset rearms the budget after its ledger write returns; reports remain usable.
+- Extend the existing offline suite with the complete native method/commit
+  fixture, repeated entry/reset/fault cases and same-callsite disconnection
+  controls. Source tests and regression markers are not game/account acceptance.
+- Local mission-container awards/opening remain unimplemented. Exact deployed
+  source, meaningful output-guard anchors and live acceptance remain separate;
+  this entry makes no new testing-ready or completion claim.
+
 ## 0.2.49-dev (2026-10-27) -- Require known realm authority for requests (#1684) [not-started]
 
 - Extend the unchanged native-first private query to single/multiple quest
