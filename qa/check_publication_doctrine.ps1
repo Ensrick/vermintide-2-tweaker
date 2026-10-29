@@ -6,6 +6,7 @@
 [CmdletBinding()]
 param(
     [string]$RepoRoot,
+    [string]$ReposHubPath,
     [switch]$Quiet,
     [switch]$SelfTest
 )
@@ -291,7 +292,127 @@ function Get-ActiveDocuments {
     return @($documents)
 }
 
+function Get-ReposHubDoctrineDocument {
+    param([string]$Path, [string[]]$Lines)
+
+    # The parent hub routes many independent projects. Retain only monorepo
+    # table rows and explicitly VT2-scoped prose blocks, preserving file line
+    # numbers. Adjacent bullets/table rows are independent even without blanks.
+    $scoped = New-Object 'string[]' $Lines.Count
+    for ($i = 0; $i -lt $Lines.Count; $i++) {
+        if ([string]::IsNullOrWhiteSpace($Lines[$i])) { continue }
+        $end = $i
+        $tableRow = $Lines[$i] -match '^\s*\|'
+        while (-not $tableRow -and $end + 1 -lt $Lines.Count -and
+                -not [string]::IsNullOrWhiteSpace($Lines[$end + 1]) -and
+                $Lines[$end + 1] -notmatch '^\s*(?:\||#{1,6}\s)|^(?:[-*+]|\d+[.)])\s') { $end++ }
+        $block = $Lines[$i..$end] -join ' '
+        $inScope = if ($tableRow) {
+            $Lines[$i] -match '(?i)^\s*\|[^|]*\bvermintide-2-tweaker(?:[\\/]|\b)'
+        }
+        else {
+            $block -match '(?i)\bVT2\b|vermintide-2-tweaker[\\/]|steamapps[\\/]workshop[\\/]content[\\/]552500\b'
+        }
+        if ($inScope) {
+            for ($at = $i; $at -le $end; $at++) { $scoped[$at] = $Lines[$at] }
+        }
+        $i = $end
+    }
+    return [pscustomobject]@{ Path = $Path; Lines = $scoped }
+}
+
+function Get-ReposHubDoctrineViolations {
+    param([string]$Path, [string[]]$Lines)
+
+    $document = Get-ReposHubDoctrineDocument $Path $Lines
+    $violations = @(Get-DoctrineViolations @($document))
+    # The old hub used "after a successful ship" rather than "after upload",
+    # and advertised these bypasses in prose. Keep these additions scoped to
+    # this routing surface; no repository detector or debt exemption changes.
+    for ($i = 0; $i -lt $document.Lines.Count; $i++) {
+        if ([string]::IsNullOrWhiteSpace($document.Lines[$i])) { continue }
+        $end = $i
+        while ($end + 1 -lt $document.Lines.Count -and
+                -not [string]::IsNullOrWhiteSpace($document.Lines[$end + 1]) -and
+                $document.Lines[$end + 1] -notmatch '^\s*(?:\||#{1,6}\s)|^(?:[-*+]|\d+[.)])\s') { $end++ }
+        $paragraph = $document.Lines[$i..$end] -join ' '
+        foreach ($sentence in ($paragraph -split '(?<=[.!?])\s+')) {
+            # A prohibition in another sentence cannot mask affirmative advice.
+            if ($sentence -match "(?i)\b(?:do not|don't|never|must not|forbidden|prohibit\w*|unsupported|not supported|not (?:an? )?alternatives?|without restarting)\b") { continue }
+            if ($sentence -match '(?i)\bTHEN\s+git\s+add/commit/push\b|\bafter\s+(?:a\s+)?(?:successful\s+)?ship\b.{0,100}\b(?:commit|push)\b') {
+                $violations += "${Path}:$($i + 1): repos-hub post-ship source landing advice"
+            }
+            if ($sentence -match '(?i)(?:^|[^\w])-SkipGitHub\b') {
+                $violations += "${Path}:$($i + 1): repos-hub prohibited SkipGitHub advice"
+            }
+            if ($sentence -match '(?i)\bafter\s+(?:a\s+)?(?:successful\s+)?(?:ship|upload)\b.{0,120}\b(?:fully\s+)?restart\s+Steam\b') {
+                $violations += "${Path}:$($i + 1): repos-hub routine Steam restart advice"
+            }
+            if ($sentence -match '(?i)\bdo\s+(?:one|a)\s+local\s+re-?deploy\b|\bmanually\s+re-?deploy\b|\bre-?deploy\b.{0,60}\bthen\s+continue\b') {
+                $violations += "${Path}:$($i + 1): repos-hub manual redeploy recovery advice"
+            }
+        }
+        $i = $end
+    }
+    return @($violations | Select-Object -Unique)
+}
+
 if ($SelfTest) {
+    # Exact withdrawn hub bullet, not an invented shorter replacement. Its
+    # conflicts must be caught outside the repository document enumeration.
+    $oldHub = '- **VT2 release pipeline = `tools\ship\ship.ps1 -Mod <name>`, THEN git add/commit/push in the SAME pass.** The user rule (2026-07-01): always deploy, upload, AND commit to GitHub on every ship. `ship.ps1` is the CANONICAL release path: it runs `VMBLauncher.exe all <mod>` (build + deploy + Workshop upload), then `publish-release.ps1` (GitHub release for `vt2-mod-updater` consumers), then VERIFIES the deploy (SHA256 bundle vs Workshop content folder) and the upload. `workshop_log.txt` is the source of truth for the upload, NOT the file size: `ugc_tool` prints `Upload finished` even when content did not transfer, so confirm `Uploaded new content` in the log. Immediately after a successful ship, commit the source: `git add`/`commit`/`push`. Prefer this over chaining `all` + `publish-release` by hand. Flags: `-AllowPublic` (public items), `-NoRemote` (skip PC-B; use ONLY when PC-B is unreachable, and say so), `-SkipGitHub`. If deploy-verify reports a SHA256 hash mismatch AFTER `workshop_log.txt` has confirmed `Uploaded new content`, do ONE local re-deploy and continue. After a successful ship the author MUST fully restart Steam (tray -> Exit, reopen): Steam re-downloads a self-authored item only on a full Steam restart, not a game relaunch and not via deploy.'
+    $hubViolations = @(Get-ReposHubDoctrineViolations '../CLAUDE.md' @('', $oldHub))
+    foreach ($errorText in @(
+        'direct launcher publication advice',
+        'repos-hub post-ship source landing advice',
+        'repos-hub prohibited SkipGitHub advice',
+        'repos-hub routine Steam restart advice',
+        'repos-hub manual redeploy recovery advice'
+    )) {
+        if ($hubViolations -notcontains ('../CLAUDE.md:2: ' + $errorText)) {
+            throw "exact withdrawn repos-hub advice was not rejected: $errorText"
+        }
+    }
+    $adjacentHub = @('- **VT2 publication:** Follow PROJECT_STANDARDS.md section 6.6.', $oldHub)
+    $adjacentViolations = @(Get-ReposHubDoctrineViolations '../CLAUDE.md' $adjacentHub)
+    foreach ($errorText in @(
+        'direct launcher publication advice',
+        'repos-hub post-ship source landing advice',
+        'repos-hub prohibited SkipGitHub advice',
+        'repos-hub routine Steam restart advice',
+        'repos-hub manual redeploy recovery advice'
+    )) {
+        if ($adjacentViolations -notcontains ('../CLAUDE.md:2: ' + $errorText)) {
+            throw "adjacent hub bullet lost exact source line: $errorText"
+        }
+    }
+    $hubCurrent = @(
+        '- **VT2 publication has ONE procedure:** `vermintide-2-tweaker/PROJECT_STANDARDS.md` section 6.6. Read it before every resumed release. `tools/ship/ship.ps1` alone owns publication through the approved VMBLauncher: claimed source plus generated authority proof land through protected GitHub integration BEFORE the final clean-default-HEAD ship. This hub is a routing document, not a second release recipe. Direct launcher publication, raw SDK/VMB publication, `-SkipGitHub`, post-upload source landing, manual redeploy recovery, and routine Steam restarts are not alternatives. Keep successful GitHub publication distinct from authenticated Workshop transfer, local deployment, and game acceptance. The author normally tests the verified local deployment without restarting Steam; volunteer refresh and exceptional recovery follow the owner procedure.',
+        '- **VT2 deployment targets:** use only the canonical transaction''s configured targets and current `-NoRemote` policy; PC-B is not implicitly required for every operation. Never rewrite shared launcher settings or invent raw `scp`/`ssh` deployment pipelines. Publication-only mode must not create missing Steam subscription directories.',
+        '| `vermintide-2-tweaker/tools/vmb-launcher/` (machine-local binary mount) | Approved VMBLauncher CLI/GUI installation; launcher source is maintained separately | Before any VT2 build/deploy/upload, read `vermintide-2-tweaker/PROJECT_STANDARDS.md` section 6.6 and `docs/PORTABLE_SETUP.md`. Do not assume this mount contains launcher source or CLAUDE.md. Historical `vmb-launcher-*` folders with broken Git pointers are not current source authority. |',
+        '- VMB Launcher binary (approved installation): `vermintide-2-tweaker\tools\vmb-launcher\bin\Release\net9.0-windows\win-x64\publish\VMBLauncher.exe`. Resolve and verify it through `vermintide-2-tweaker/docs/PORTABLE_SETUP.md`; do not rebuild or replace the approved publisher as an upload workaround. Launcher development requires its separately verified current source checkout.',
+        '- **SHCDE releases:** After publishing, commit and push the source.',
+        '| `doomrocket/` | Independent VT2 mod | Run VMBLauncher.exe all doomrocket. |'
+    )
+    if ((Get-ReposHubDoctrineViolations '../CLAUDE.md' $hubCurrent).Count -ne 0) {
+        throw 'correct repos-hub routing or independent sibling instructions were rejected'
+    }
+    $hubWrapped = @(
+        '- **VT2 publication:**',
+        '  After a successful ship,',
+        '  commit and push the source.',
+        '- **SHCDE releases:** After publishing, commit and push the source.'
+    )
+    if ((Get-ReposHubDoctrineViolations '../CLAUDE.md' $hubWrapped) -notcontains
+            '../CLAUDE.md:1: repos-hub post-ship source landing advice') {
+        throw 'wrapped repos-hub source landing advice was not rejected'
+    }
+    $hubMixed = @('- **VT2 publication:** Never use -SkipGitHub. Flags: -SkipGitHub.')
+    if ((Get-ReposHubDoctrineViolations '../CLAUDE.md' $hubMixed) -notcontains
+            '../CLAUDE.md:1: repos-hub prohibited SkipGitHub advice') {
+        throw 'separate prohibition masked affirmative repos-hub bypass advice'
+    }
+
     $good = @(
         [pscustomobject]@{
             Path = "CLAUDE.md"
@@ -642,6 +763,24 @@ if ($SelfTest) {
 $repoPath = (Resolve-Path -LiteralPath $RepoRoot).Path
 $documents = @(Get-ActiveDocuments $repoPath)
 $violations = @(Get-DoctrineViolations $documents)
+
+# The local repos hub is outside Git and absent from normal clean clones/CI.
+# Discover only the immediate parent, never crawl sibling repositories. An
+# explicit path is rooted at RepoRoot and must exist rather than silently skip.
+if ([string]::IsNullOrWhiteSpace($ReposHubPath)) {
+    $candidate = Join-Path ([IO.Path]::GetDirectoryName($repoPath.TrimEnd('\', '/'))) 'CLAUDE.md'
+    if (Test-Path -LiteralPath $candidate -PathType Leaf) { $ReposHubPath = $candidate }
+}
+else {
+    if (-not [IO.Path]::IsPathRooted($ReposHubPath)) { $ReposHubPath = Join-Path $repoPath $ReposHubPath }
+    if (-not (Test-Path -LiteralPath $ReposHubPath -PathType Leaf)) {
+        throw "explicit repos hub does not exist: $ReposHubPath"
+    }
+}
+if (-not [string]::IsNullOrWhiteSpace($ReposHubPath)) {
+    $ReposHubPath = (Resolve-Path -LiteralPath $ReposHubPath).Path
+    $violations += @(Get-ReposHubDoctrineViolations $ReposHubPath ([IO.File]::ReadAllLines($ReposHubPath, [Text.Encoding]::UTF8)))
+}
 
 $standardsPath = Join-Path $repoPath "PROJECT_STANDARDS.md"
 $standards = if (Test-Path -LiteralPath $standardsPath) {
