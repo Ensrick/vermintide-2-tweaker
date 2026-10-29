@@ -40,6 +40,7 @@ return function(H, repo_root)
     H.test("Cosmetics entry installs each extracted runtime owner once", function()
         for _, name in ipairs({
             "_cos_diag_glow", "_cos_la_commands", "_cos_runtime_checks", "_cos_command_owner",
+            "_cos_runtime_checks_persistence",
             "_cos_modded_illusion_swap", "_cos_glow_editor_button",
         }) do
             local call = 'mod:dofile("scripts/mods/cosmetics_tweaker/' .. name .. '")'
@@ -121,6 +122,7 @@ return function(H, repo_root)
         local weapon_appearance = { apply = function() end, apply_report = function() end }
         mod._cos = { weapon_appearance = weapon_appearance }
         local deps = {
+            persistence_checks = assert(loadfile(base .. "_cos_runtime_checks_persistence.lua"))(),
             la_persist = {}, score_identity = {}, rpc_schema = 1,
             composite_icons = {}, custom_hats = {}, la_bridge = {}, gk_set = {},
             glow_picker = {}, weapon_poses = {}, shield_icon_owner_item_types = {},
@@ -191,6 +193,84 @@ return function(H, repo_root)
         H.equal(count_plain(runtime_source, 'mod:command("verify_gk_set"'), 1)
     end)
 
+    H.test("Cosmetics persistence checks retain lazy exact-instance captures", function()
+        local owner = assert(loadfile(base .. "_cos_runtime_checks_persistence.lua"))()
+        local mod, commands = command_mod()
+        local reads, names, callbacks = 0, {}, {}
+        local persist = setmetatable({}, { __index = function()
+            reads = reads + 1
+        end })
+        local active_skin, selections = function() error("must stay lazy") end, {}
+        local deps = { la_persist = persist, active_skin = active_skin, offhand_selection = selections }
+        owner.install(mod, function(name, callback)
+            names[#names + 1], callbacks[#callbacks + 1] = name, callback
+        end, deps)
+        H.equal(reads, 0, "installer inspected persistence before the regression run")
+        H.equal(#commands, 0)
+        local expected = { "cos_la_offhand_persistence_roundtrip",
+            "cos_la_cosmetic_persistence_roundtrip", "cos_la_cold_load_contract_25" }
+        H.equal(#names, 3)
+        for index, name in ipairs(expected) do
+            H.equal(names[index], name)
+            H.equal(type(callbacks[index]), "function")
+        end
+        local function captured(callback, wanted)
+            for index = 1, 20 do
+                local name, value = debug.getupvalue(callback, index)
+                if name == wanted then return value end
+                if not name then break end
+            end
+        end
+        deps.la_persist, deps.active_skin, deps.offhand_selection = {}, nil, {}
+        H.equal(captured(callbacks[1], "LA_PERSIST"), persist)
+        H.equal(captured(callbacks[3], "mod"), mod)
+        H.equal(captured(callbacks[3], "LA_PERSIST"), persist)
+        H.equal(captured(callbacks[3], "ACTIVE_SKIN"), active_skin)
+        H.equal(captured(callbacks[3], "OFFHAND_SELECTION"), selections)
+        H.equal(callbacks[1](), "offhand API missing")
+        H.equal(callbacks[2](), "cosmetic API missing")
+        H.equal(callbacks[3](), "persistence cold-reload API missing")
+    end)
+
+    H.test("Cosmetics registrar delegates persistence once in place and preserves errors", function()
+        local module = assert(loadfile(base .. "_cos_runtime_checks.lua"))()
+        local mod = command_mod()
+        local persist, active_skin, selections = {}, function() end, {}
+        local calls, names = 0, {}
+        local deps = { la_persist = persist, active_skin = active_skin, offhand_selection = selections }
+        deps.persistence_checks = { install = function(received_mod, register, received)
+            calls = calls + 1
+            H.equal(received_mod, mod)
+            H.equal(received.la_persist, persist)
+            H.equal(received.active_skin, active_skin)
+            H.equal(received.offhand_selection, selections)
+            register("cos_la_offhand_persistence_roundtrip", function() end)
+            register("cos_la_cosmetic_persistence_roundtrip", function() end)
+            register("cos_la_cold_load_contract_25", function() end)
+        end }
+        module.install(mod, function(name)
+            names[#names + 1] = name
+            if #names == 1 then
+                deps.persistence_checks, deps.la_persist, deps.active_skin, deps.offhand_selection = nil, {}, nil, {}
+            end
+        end, deps)
+        H.equal(calls, 1)
+        H.equal(#names, 64)
+        local window = { "cos_la_revert_recv_deletes_entry", "cos_la_offhand_persistence_roundtrip",
+            "cos_la_cosmetic_persistence_roundtrip", "cos_la_cold_load_contract_25",
+            "cos_la_loadout_equip_capture_wired" }
+        for index, name in ipairs(window) do H.equal(names[11 + index], name) end
+
+        local ok, err = pcall(module.install, command_mod(), function() end, {})
+        H.equal(ok, false)
+        H.truthy(tostring(err):find("Cosmetics persistence runtime-check owner missing", 1, true))
+        ok, err = pcall(module.install, command_mod(), function() end, {
+            persistence_checks = { install = function() error("planted persistence owner failure") end },
+        })
+        H.equal(ok, false)
+        H.truthy(tostring(err):find("planted persistence owner failure", 1, true),
+            "registrar swallowed a child installation error")
+    end)
     H.test("Cosmetics extracted command modules retain their exact surfaces", function()
         local mod, glow_commands = command_mod()
         local glow = assert(loadfile(base .. "_cos_diag_glow.lua"))()

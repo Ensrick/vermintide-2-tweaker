@@ -104,7 +104,7 @@ local UI_DUMP    = mod:dofile("scripts/mods/cosmetics_tweaker/_ui_dump")
 -- ([174:loadout] retired with #174/#500; _diag_probe renamed per §2.2b/#499.)
 local PROBE      = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_diag_lasync")
 
-local MOD_VERSION = "0.9.227-dev"
+local MOD_VERSION = "0.9.229-dev"
 -- #45: RPC schema version (VMF_RECIPES § 10). Prepended as the FIRST positional
 -- arg of every mod:network_send this mod emits, and validated as the first arg
 -- of every mod:network_register callback. On mismatch the receiver drops the
@@ -1551,7 +1551,7 @@ mod:dofile("scripts/mods/cosmetics_tweaker/_cos_local_wield_runtime").install(mo
 
 local _cos_runtime_checks = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_runtime_checks")
 _cos_runtime_checks.install(mod, _rt_register, {
-    la_persist = LA_PERSIST, score_identity = SCORE_IDENTITY,
+    persistence_checks = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_runtime_checks_persistence"), la_persist = LA_PERSIST, score_identity = SCORE_IDENTITY,
     husk_identity = mod._cos_husk_identity,
     rpc_schema = COS_RPC_SCHEMA, composite_icons = COMPOSITE_ICONS,
     custom_hats = CUSTOM_HATS, appearance_fade = mod._cos_appearance_fade,
