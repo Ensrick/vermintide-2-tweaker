@@ -10,7 +10,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 | 2 | Never auto-launch VT2 or any game/interactive app without explicit user permission. |
 | 3 | Edit ONLY the `*_dev/` dir for the 5 promotion-pair mods (ct, cim, gt, gut, vdl). Weapon Tweaker is a special mirror pair: feature work lands in public-beta `weapon_tweaker/`, then `weapon_tweaker_dev/` is refreshed by exact runtime parity while preserving its `wt_dev` namespace, friends-only ID, and preview. |
 | 4 | Ship doctrine keys off the MOD_VERSION suffix. `-dev`/`-alpha`/`-beta` = FULL pipeline every build, NO ask. Clean version (no suffix) = stable: needs a fresh per-build ship signal naming the version. |
-| 5 | Bump MOD_VERSION (3-segment semver + suffix) every build; write the CHANGELOG entry and doc updates in the SAME response. |
+| 5 | For a new mod source candidate, claim first and use the broker-selected MOD_VERSION (3-segment semver + suffix); write the CHANGELOG entry and doc updates in the SAME response. Recompiling or publishing the unchanged candidate keeps that claimed version under section 6.6's current gates. |
 | 6 | VMBLauncher is the ONLY build/deploy boundary; `tools/ship/ship.ps1` is the ONLY publication entry point. Never raw `node vmb.js`, `ugc_tool`, direct launcher `all`/`upload`, GUI publication, `scp`, or hand-wrapped SDK. |
 | 7 | Never write into `steamapps/workshop/content/552500/<real_id>/` by hand - Steam reconciles foreign writes and may wipe the folder. |
 | 8 | Before ANY `mod:hook`/`mod:hook_safe`: grep for existing hooks on that `(Class, method)`. VMF silently drops the 2nd - merge into the existing body. |
@@ -256,7 +256,7 @@ CLIs and read-only API checks; no GUI publication or incidental game launch.
 
 ### Version bumping
 
-**Always increment `MOD_VERSION` before every build** - the version string is echoed in-game on load, confirming the correct build is running. Without a bump, you can't visually confirm the new code deployed.
+**Use the broker-selected version for a new mod source candidate.** Update `MOD_VERSION`, CHANGELOG and docs together. Recompiling or publishing the unchanged candidate (including BuildOnly and the final clean rebuild) keeps that same claimed version, only as permitted by the claim/source/receipt/authorization and resume gates in [section 6.6](PROJECT_STANDARDS.md#66-ship-doctrine-keyed-off-the-mod_version-suffix-canonical-2026-07-01). A compiler invocation alone does not allocate a new version.
 
 **`MOD_VERSION` is the canonical source for the mod's Workshop title.** As of 2026-05-22, every Workshop upload appends/refreshes a trailing ` v<MOD_VERSION>` suffix on `itemV2.cfg`'s `title` field. Format: `<base_title> v<MOD_VERSION>`. Example: `Tweaker: Cosmetics v0.9.8.8`. The launcher's `upload` verb performs this rewrite automatically; the local cfg file's `title` is rewritten on each upload.
 

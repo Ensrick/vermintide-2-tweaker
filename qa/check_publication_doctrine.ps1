@@ -207,6 +207,9 @@ function Get-DoctrineViolations {
             if ($path -eq 'CLAUDE.md' -and $paragraph -match '(?i)Always check Workshop page file size after upload|if in doubt eyeball the Workshop page in Steam') {
                 $violations += "$($document.Path):$($i + 1): obsolete manual Workshop verification"
             }
+            if ($path -eq 'CLAUDE.md' -and $paragraph -match '(?i)\bBump MOD_VERSION \(3-segment semver \+ suffix\) every build\b|\bAlways increment `?MOD_VERSION`? before every build\b') {
+                $violations += "$($document.Path):$($i + 1): compiler-invocation version bump advice"
+            }
             if ($path -eq 'docs/PORTABLE_SETUP.md' -and $paragraph -match '(?i)approved side-by-side launcher 0\.6\.2 does not replace the existing default 0\.6\.1|pending 0\.6\.1 claims/artifacts must finish') {
                 $violations += "$($document.Path):$($i + 1): obsolete launcher rollout instruction"
             }
@@ -593,6 +596,8 @@ if ($SelfTest) {
         @{ Path = 'PROJECT_STANDARDS.md'; Text = 'Issue #1426 adds only its receipt-gated publication consumer; deploy, updater/recovery consumption, and bootstrap remain disabled.'; Error = 'obsolete receipt deployment prohibition' },
         @{ Path = 'CLAUDE.md'; Text = 'For friends_only/private items, if in doubt eyeball the Workshop page in Steam.'; Error = 'obsolete manual Workshop verification' },
         @{ Path = 'CLAUDE.md'; Text = 'Always check Workshop page file size after upload.'; Error = 'obsolete manual Workshop verification' },
+        @{ Path = 'CLAUDE.md'; Text = '| 5 | Bump MOD_VERSION (3-segment semver + suffix) every build; write the CHANGELOG entry and doc updates in the SAME response. |'; Error = 'compiler-invocation version bump advice' },
+        @{ Path = 'CLAUDE.md'; Text = '**Always increment `MOD_VERSION` before every build**'; Error = 'compiler-invocation version bump advice' },
         @{ Path = 'docs/PORTABLE_SETUP.md'; Text = 'The approved side-by-side launcher 0.6.2 does not replace the existing default 0.6.1 installation.'; Error = 'obsolete launcher rollout instruction' },
         @{ Path = 'docs/PORTABLE_SETUP.md'; Text = 'Pending 0.6.1 claims/artifacts must finish their existing publications.'; Error = 'obsolete launcher rollout instruction' },
         @{ Path = 'CLAUDE.md'; Text = '.\tools\ship\ship.ps1 -Mod <name>'; Error = 'secondary ship recipe without owner cwd context' }
@@ -620,7 +625,9 @@ if ($SelfTest) {
     $currentAdvice = @([pscustomobject]@{
         Path = 'CLAUDE.md'
         Lines = @('VMBLauncher 0.6.3 is required. Receipt authority may use the separately hosted local_deploy boundary.',
-            'Use bounded same-transaction logs and an authenticated hosted-result reread; follow PROJECT_STANDARDS.md section 6.6.')
+            'Use bounded same-transaction logs and an authenticated hosted-result reread; follow PROJECT_STANDARDS.md section 6.6.',
+            '| 5 | For a new mod source candidate, claim first and use the broker-selected MOD_VERSION (3-segment semver + suffix); write the CHANGELOG entry and doc updates in the SAME response. Recompiling or publishing the unchanged candidate keeps that claimed version under section 6.6''s current gates. |',
+            '**Use the broker-selected version for a new mod source candidate.** Update `MOD_VERSION`, CHANGELOG and docs together. Recompiling or publishing the unchanged candidate (including BuildOnly and the final clean rebuild) keeps that same claimed version, only as permitted by the claim/source/receipt/authorization and resume gates in [section 6.6](PROJECT_STANDARDS.md#66-ship-doctrine-keyed-off-the-mod_version-suffix-canonical-2026-07-01). A compiler invocation alone does not allocate a new version.')
     })
     if ((Get-DoctrineViolations $currentAdvice).Count -ne 0) {
         throw 'current launcher/receipt-local/authenticated-result guidance was rejected'
