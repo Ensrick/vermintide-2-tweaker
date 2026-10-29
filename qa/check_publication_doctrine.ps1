@@ -118,11 +118,20 @@ function Get-PublicationOwnerLinkViolations {
 
     $violations = @()
     $anchor = '#66-ship-doctrine-keyed-off-the-mod_version-suffix-canonical-2026-07-01'
-    foreach ($path in @('CLAUDE.md', 'docs/PORTABLE_SETUP.md')) {
+    # The tracked Codex entrypoint is required; the external parent hub remains
+    # optional and is checked separately. Deleting AGENTS.md must fail closed.
+    foreach ($path in @('AGENTS.md', 'CLAUDE.md', 'docs/PORTABLE_SETUP.md')) {
         $document = @($Documents | Where-Object { $_.Path.Replace('\', '/') -ieq $path })
-        $prefix = if ($path -eq 'CLAUDE.md') { '' } else { '../' }
+        if ($path -eq 'AGENTS.md' -and $document.Count -ne 1) {
+            $violations += 'AGENTS.md: missing or duplicate Codex instruction entrypoint'
+            continue
+        }
+        $prefix = if ($path -eq 'docs/PORTABLE_SETUP.md') { '../' } else { '' }
         $target = '](' + $prefix + 'PROJECT_STANDARDS.md' + $anchor + ')'
         $guide = if ($document.Count -eq 1) { @($document[0].Lines) -join "`n" } else { '' }
+        if ($path -eq 'AGENTS.md' -and -not $guide.Contains('](CLAUDE.md)')) {
+            $violations += 'AGENTS.md: invalid technical entrypoint link'
+        }
         if (-not $guide.Contains($target) -or
                 -not $Standards.Contains('### 6.6 Ship doctrine: keyed off the MOD_VERSION suffix (canonical, 2026-07-01)')) {
             $violations += "${path}: invalid publication owner link"
@@ -139,6 +148,7 @@ function Get-DoctrineViolations {
     $launcherDebtCounts = @{}
     foreach ($document in $Documents) {
         if (Test-IsHistoricalDocument $document.Path) { continue }
+        $rootGuide = $document.Path.Replace('\', '/') -in @('AGENTS.md', 'CLAUDE.md')
 
         # #1025: this is a current setup-guide contract, not a global phrase
         # blacklist. Historical incident/recovery descriptions remain evidence.
@@ -169,7 +179,7 @@ function Get-DoctrineViolations {
         # identifying a partial-upload/hash failure are recovery scope; ordinary
         # non-publishing build/deploy examples keep their existing contract.
         $rootRecoveryLines = @{}
-        if ($document.Path.Replace('\', '/') -ieq 'CLAUDE.md') {
+        if ($rootGuide) {
             $rootLines = @($document.Lines)
             for ($i = 0; $i -lt $rootLines.Count; $i++) {
                 if ([string]::IsNullOrWhiteSpace($rootLines[$i])) { continue }
@@ -197,7 +207,7 @@ function Get-DoctrineViolations {
             # #1025: exact current prose contradictions, not a general version
             # blacklist. The historical exclusion above remains unchanged.
             $path = $document.Path.Replace('\', '/')
-            if ($path -in @('CLAUDE.md', 'PROJECT_STANDARDS.md')) {
+            if ($rootGuide -or $path -eq 'PROJECT_STANDARDS.md') {
                 if ($paragraph -match '(?i)publication probe requires VMBLauncher 0\.6\.[0-2]\b|VMBLauncher 0\.6\.[0-2]\b.{0,180}minimum accepted publication boundary') {
                     $violations += "$($document.Path):$($i + 1): stale launcher publication minimum"
                 }
@@ -205,10 +215,10 @@ function Get-DoctrineViolations {
                     $violations += "$($document.Path):$($i + 1): obsolete receipt deployment prohibition"
                 }
             }
-            if ($path -eq 'CLAUDE.md' -and $paragraph -match '(?i)Always check Workshop page file size after upload|if in doubt eyeball the Workshop page in Steam') {
+            if ($rootGuide -and $paragraph -match '(?i)Always check Workshop page file size after upload|if in doubt eyeball the Workshop page in Steam') {
                 $violations += "$($document.Path):$($i + 1): obsolete manual Workshop verification"
             }
-            if ($path -eq 'CLAUDE.md' -and $paragraph -match '(?i)\bBump MOD_VERSION \(3-segment semver \+ suffix\) every build\b|\bAlways increment `?MOD_VERSION`? before every build\b') {
+            if ($rootGuide -and $paragraph -match '(?i)\bBump MOD_VERSION \(3-segment semver \+ suffix\) every build\b|\bAlways increment `?MOD_VERSION`? before every build\b') {
                 $violations += "$($document.Path):$($i + 1): compiler-invocation version bump advice"
             }
             if ($path -eq 'docs/PORTABLE_SETUP.md' -and $paragraph -match '(?i)approved side-by-side launcher 0\.6\.2 does not replace the existing default 0\.6\.1|pending 0\.6\.1 claims/artifacts must finish') {
@@ -224,7 +234,7 @@ function Get-DoctrineViolations {
         foreach ($line in @($document.Lines)) {
             $lineNumber++
 
-            if ($document.Path.Replace('\', '/') -ieq 'CLAUDE.md' -and
+            if ($rootGuide -and
                     $line -match '^\s*\.\\tools\\ship\\(?:claim|ship)\.ps1\b') {
                 $violations += "$($document.Path):${lineNumber}: secondary ship recipe without owner cwd context"
             }
@@ -730,17 +740,79 @@ if ($SelfTest) {
     }
     $ownerHeading = '### 6.6 Ship doctrine: keyed off the MOD_VERSION suffix (canonical, 2026-07-01)'
     $anchor = '#66-ship-doctrine-keyed-off-the-mod_version-suffix-canonical-2026-07-01'
+    $codexEntryLines = @(
+        '# Repository instructions',
+        '',
+        'Read [CLAUDE.md](CLAUDE.md) and',
+        '[PROJECT_STANDARDS.md](PROJECT_STANDARDS.md) before working here.',
+        '',
+        ('[PROJECT_STANDARDS.md section 6.6](PROJECT_STANDARDS.md' + $anchor + ')'),
+        'is the sole owner of VT2 build/deploy/publication, verification, recovery',
+        'and resume rules. Re-read it before resuming or retrying a release.',
+        'If other project or hub text conflicts, follow that section.',
+        'This file routes to the owners; do not duplicate release recipes here.'
+    )
     $ownerGuides = @(
         [pscustomobject]@{ Path = 'CLAUDE.md'; Lines = @('[Owner](PROJECT_STANDARDS.md' + $anchor + ')') },
-        [pscustomobject]@{ Path = 'docs/PORTABLE_SETUP.md'; Lines = @('[Owner](../PROJECT_STANDARDS.md' + $anchor + ')') }
+        [pscustomobject]@{ Path = 'docs/PORTABLE_SETUP.md'; Lines = @('[Owner](../PROJECT_STANDARDS.md' + $anchor + ')') },
+        [pscustomobject]@{ Path = 'AGENTS.md'; Lines = $codexEntryLines }
     )
     if ((Get-PublicationOwnerLinkViolations $ownerGuides $ownerHeading).Count -ne 0) {
         throw 'valid root/relative canonical owner links were rejected'
     }
     foreach ($badTarget in @('CLAUDE.md', 'PROJECT_STANDARDS.md#missing', ('../PROJECT_STANDARDS.md' + $anchor))) {
-        $badGuides = @([pscustomobject]@{ Path = 'CLAUDE.md'; Lines = @('[Owner](' + $badTarget + ')') }, $ownerGuides[1])
+        $badGuides = @([pscustomobject]@{ Path = 'CLAUDE.md'; Lines = @('[Owner](' + $badTarget + ')') }, $ownerGuides[1], $ownerGuides[2])
         if ((Get-PublicationOwnerLinkViolations $badGuides $ownerHeading) -notcontains 'CLAUDE.md: invalid publication owner link') {
             throw "invalid publication owner link was not rejected: $badTarget"
+        }
+    }
+    if ((Get-DoctrineViolations @($ownerGuides[2])).Count -ne 0) {
+        throw 'routing-only Codex entrypoint was rejected'
+    }
+    $missingCodexGuide = @($ownerGuides[0], $ownerGuides[1])
+    if ((Get-PublicationOwnerLinkViolations $missingCodexGuide $ownerHeading) -notcontains
+            'AGENTS.md: missing or duplicate Codex instruction entrypoint') {
+        throw 'missing/deleted Codex entrypoint was not rejected'
+    }
+    foreach ($badTarget in @('CLAUDE.md', 'PROJECT_STANDARDS.md#missing', ('../PROJECT_STANDARDS.md' + $anchor))) {
+        $badGuide = [pscustomobject]@{
+            Path = 'AGENTS.md'; Lines = @('[Technical](CLAUDE.md)', ('[Owner](' + $badTarget + ')'))
+        }
+        $badGuides = @($ownerGuides[0], $ownerGuides[1], $badGuide)
+        if ((Get-PublicationOwnerLinkViolations $badGuides $ownerHeading) -notcontains
+                'AGENTS.md: invalid publication owner link') {
+            throw "invalid Codex publication owner link was not rejected: $badTarget"
+        }
+    }
+    foreach ($technicalLine in @('', '[Technical](../CLAUDE.md)')) {
+        $badGuide = [pscustomobject]@{
+            Path = 'AGENTS.md'; Lines = @($technicalLine, ('[Owner](PROJECT_STANDARDS.md' + $anchor + ')'))
+        }
+        $badGuides = @($ownerGuides[0], $ownerGuides[1], $badGuide)
+        if ((Get-PublicationOwnerLinkViolations $badGuides $ownerHeading) -notcontains
+                'AGENTS.md: invalid technical entrypoint link') {
+            throw 'missing/wrong Codex technical entrypoint link was not rejected'
+        }
+    }
+    # Correct routing must not mask a second, contradictory release recipe.
+    foreach ($case in @(
+        @{ Text = 'Run VMBLauncher.exe all example_mod'; Error = 'direct launcher publication advice' },
+        @{ Text = 'After publishing, commit and push the source.'; Error = 'post-upload source landing advice' },
+        @{ Text = '.\tools\ship\ship.ps1 -Mod <name>'; Error = 'secondary ship recipe without owner cwd context' },
+        @{ Text = 'After a confirmed upload, run VMBLauncher.exe deploy example_mod.'; Error = 'direct launcher recovery bypass' },
+        @{ Text = 'The publication probe requires VMBLauncher 0.6.0 plus the lease guards.'; Error = 'stale launcher publication minimum' },
+        @{ Text = 'The prepared `receipt` mode is publication-only: it never deploys.'; Error = 'obsolete receipt deployment prohibition' },
+        @{ Text = 'Always check Workshop page file size after upload.'; Error = 'obsolete manual Workshop verification' },
+        @{ Text = '**Always increment `MOD_VERSION` before every build**'; Error = 'compiler-invocation version bump advice' }
+    )) {
+        $badGuide = [pscustomobject]@{ Path = 'AGENTS.md'; Lines = @($codexEntryLines) + @('', $case.Text) }
+        $badGuides = @($ownerGuides[0], $ownerGuides[1], $badGuide)
+        if ((Get-PublicationOwnerLinkViolations $badGuides $ownerHeading).Count -ne 0) {
+            throw 'Codex contradiction fixture lost its valid owner links'
+        }
+        $expected = 'AGENTS.md:' + ($codexEntryLines.Count + 2) + ': ' + $case.Error
+        if ((Get-DoctrineViolations @($badGuide)) -notcontains $expected) {
+            throw "Codex entrypoint contradiction was not rejected: $($case.Text)"
         }
     }
     $currentAdvice = @([pscustomobject]@{
