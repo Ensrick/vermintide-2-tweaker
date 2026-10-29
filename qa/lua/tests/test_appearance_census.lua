@@ -216,6 +216,29 @@ return function(H, repo_root)
 			"the unsupported bench row must preserve its exact source boundary")
 	end)
 
+	H.test("CWV #645 Sword census keeps unproven rendering and transition cells unsupported", function()
+		local census = dofile(repo_root .. "/" .. CENSUS_FILES.character_weapon_variants)
+		local family = census.families.one_handed_swords
+		H.truthy(type(family) == "table", "registered reciprocal Sword needs its own census")
+		local matrix, errors = D.expand_matrix(family.matrix,
+			"character_weapon_variants.one_handed_swords.matrix")
+		H.equal(#errors, 0, table.concat(errors, "\n"))
+		local pairs_seen = 0
+		D.each_pair(matrix, function(surface, edge, state, note)
+			pairs_seen = pairs_seen + 1
+			H.equal(state, "unsupported", "one_handed_swords." .. surface .. "." .. edge)
+			H.truthy(type(note) == "string" and note:find("#645", 1, true)
+				and note:find("offline source tests do not establish", 1, true)
+				and note:find("physical native sword", 1, true)
+				and note:find("live native behavior", 1, true)
+				and note:find("saved style dormant", 1, true),
+				"every unproven Sword cell needs the source-only limit and native fallback")
+		end)
+		H.equal(pairs_seen, #D.CELLS * #D.EDGES,
+			"Sword must retain every canonical surface and transition edge")
+		H.equal(pairs_seen, 136, "17 surfaces x 8 edges remain unsupported, not rendering proof")
+	end)
+
 	H.test("CWV #1155 Old Musket census pins the authored-material lifecycle matrix", function()
 		local census = dofile(repo_root .. "/character_weapon_variants/scripts/mods/"
 			.. "character_weapon_variants/_cwv_appearance_census.lua")

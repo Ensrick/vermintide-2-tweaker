@@ -27,9 +27,11 @@ ours relative to the monorepo root. Every claim cites file:line or is marked [un
 | OURS: `crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua` | Craft persistence (`_forge_save` :454) + boot re-injection via `add_item` (`_athanor_inject_item` :4903-4978). Exact Salvage/delete dispatch lives at :5975 and maintains CIM's indexed `modded_loadout` references through the helper at :1449. |
 | OURS: `character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua` | Registers variant items with synthetic bids `<key>_NNN` via MoreItemsLibrary (:9491-9530); wire-safety substitutions (:10351-10447); husk base+career re-key (:10044-10113). |
 
-Realm signal: `script_data["eac-untrusted"]` - the backend itself stamps `realm = "modded"` /
-`"official"` from it (backend_manager_playfab.lua:66-70). gut's `_in_modded_realm()` reads the
-same flag (`_gut_native_loadouts.lua:193-196`).
+Native realm signal: `MODDED_REALM` - the backend stamps `realm = "modded"` /
+`"official"` from it (backend_manager_playfab.lua:66-70). gut delegates realm
+detection to its boot guard (`_gut_native_loadouts.lua:279-280`); its policy gives
+the native boolean priority and retains metadata/legacy-flag fallback only when
+that boolean is absent (`_gut_official_loadout_boot_policy.lua:6-15`).
 
 ---
 
@@ -91,9 +93,9 @@ same flag (`_gut_native_loadouts.lua:193-196`).
 `commit(skip_queue, cb)` queues (delay = `_commit_limit_total * 5` s, :2762-2774) then
 `_commit_internal` builds the payload (:2801-2916):
 
-| Payload | Built from | EAC-gated? |
+| Payload | Built from | Read-only-backend gated? |
 |---|---|---|
-| Stats (`savePlayerStatistics3`) | `statistics` interface `get_stat_save_request` | YES - skipped when `script_data["eac-untrusted"]` (:2826-2837) |
+| Stats (`savePlayerStatistics3`) | `statistics` interface `get_stat_save_request` | YES - skipped when `GameSettingsDevelopment.read_only_backend` (:2826-2837) |
 | Weave user data | weaves interface dirty data | YES (:2839-2855) |
 | Equipped weapon pose skins | items interface `_dirty_weapon_pose_skins` | YES (:2857-2873) |
 | `keep_decorations` + characters_data (`updateHeroAttributes`) | `_check_career_data(_career_data, _career_data_mirror)` diff (:2875-2909) | **NO** |
@@ -187,9 +189,11 @@ Save: commit calls `statistics` interface `save()` only when `in_hub_level`
 (playfab_mirror_base.lua:2818-2822), which flattens + filters `dirty` stats with a
 `database_name` (backend_interface_statistics_playfab.lua:40-101) into `savePlayerStatistics3`;
 on ack, `clear_dirty_flags` + `statistics_db:apply_persistant_stats()` fold session values
-into persistent (:3017-3035; statistics_database.lua:714). In the modded realm this entire
-push is EAC-gated off (2.3) - vanilla progression is frozen, which is what `mp` exists to
-work around (repo CLAUDE.md, Mod Directory).
+into persistent (:3017-3035; statistics_database.lua:714). The push is suppressed when
+`GameSettingsDevelopment.read_only_backend` is true (2.3); native settings enable it
+under `MODDED_REALM` (`scripts/settings/game_settings_development.lua:49-52`).
+`mp` supplies modded progression rather than relying on this cloud write path
+(repo CLAUDE.md, Mod Directory).
 
 ---
 
@@ -206,7 +210,7 @@ work around (repo CLAUDE.md, Mod Directory).
 | Local Salvage removal: `_cim_salvage_local_boundary.lua` -> `mod._cim277_delete_owned_ids` (`crafting_in_modded_dev.lua:5977`) -> `_cim_owned_deletion.execute` -> `_cim_craft_dispatch.execute` | Vanilla `remove_item` clears new markers and `_inventory_items[id]` (:2547-2555; `item_helper.lua:160-192`). CIM snapshots the exact rows plus both PlayerData marker layers and removes the complete owned+foreign selection directly. The synth returns an internal `committed` bit while the hook preserves the public `(id, recipe)` shape. | Do not use `add_item` or item-interface `_refresh` as rollback: they normalize/mutate skin/new/favorite metadata and can autosave (`playfab_mirror_base.lua:2494-2545`; `backend_interface_item_playfab.lua:37-105`). CIM compensates with `rawset`; transaction and enclosing craft dirtification both require success. |
 | Item mutation: `mirror:update_item(bid, item)` / `update_item_field` (:2557-2574) | Used by cim's apply/extract-skin synth (`standard_forge.lua:567-606`). | Both `fassert` if the bid is unknown (:2561, :2569). |
 | `LoadoutUtils.sync_loadout_slot` (loadout_utils.lua:13) | TABLE-form hook (`LoadoutUtils = LoadoutUtils or {}` plain table). THE wire-safety choke point for loadout-panel sync: swap non-vanilla `item.key`/`rarity` for wire-stable vanilla values on a SHADOW copy, then call `func` (cwv :10381-10408; cim rarity coercion :764-806). | Wire-safety substitutions must be UNCONDITIONAL, never behind a feature toggle - v0.8.15 gated the rarity rewrite and crashed every vanilla client (BUG_CLASSES.md 31; memory `reference_vt2_wire_safety_never_toggle_gated`). |
-| `StatisticsDatabase` methods + RPC receivers (statistics_database.lua:381-663) | String-form class hooks; receivers ARE hookable because NetworkEventDelegate dispatch is dynamic (memory `reference_vt2_rpc_dispatch_dynamic_hookable`). | In modded realm the backend save is EAC-gated off (2.3); local stat writes are session-only there. |
+| `StatisticsDatabase` methods + RPC receivers (statistics_database.lua:381-663) | String-form class hooks; receivers ARE hookable because NetworkEventDelegate dispatch is dynamic (memory `reference_vt2_rpc_dispatch_dynamic_hookable`). | The native cloud save is suppressed by `GameSettingsDevelopment.read_only_backend` (2.3); do not confuse local stat mutation with cloud persistence. |
 
 ---
 
@@ -234,15 +238,17 @@ work around (repo CLAUDE.md, Mod Directory).
   snapshot and writes it to read-only data, and `verify_career_loadouts_cb` writes returned
   `characters_data` directly (base :1579-1659/:3292-3344; Adventure :90-119). Own their two
   request methods too, because callback-only suppression cannot undo CloudScript mutation.
-- **`script_data["eac-untrusted"]` is not a stable nested-call realm authority**: CIM briefly
-  clears it to pass native customization UI checks. BackendManagerPlayFab records the actual
-  session realm once in `_metadata.realm` (:61-70); use that value first and fall back to the
-  script flag only before the manager exists.
+- **The legacy `script_data["eac-untrusted"]` flag is not the current native realm authority**:
+  prefer the native `MODDED_REALM` boolean (including explicit false), then initialized
+  backend metadata and the legacy flag only when that boolean is absent. This is the
+  current gut source policy (`_gut_official_loadout_boot_policy.lua:6-15`); native backend
+  metadata is stamped from `MODDED_REALM` (`backend_manager_playfab.lua:66-70`).
 - **`_check_career_data` on a career missing from `_career_data` = deliberate crash dump**
   ("You will crash now", playfab_mirror_base.lua:3551-3598). Never remove career tables from
   the live mirror; gut serves reads instead of mutating.
-- **EAC gating is asymmetric** (2.3): stats/weaves/poses never push from modded, but
-  characters_data (`updateHeroAttributes`) and user data DO. "Modded realm" is not "offline";
+- **Read-only-backend gating is asymmetric** (2.3): stats/weaves/poses are suppressed by
+  `GameSettingsDevelopment.read_only_backend`, but characters_data (`updateHeroAttributes`)
+  and user-data diff paths are not guarded by that flag. "Modded realm" is not "offline";
   isolation must be enforced by keeping the diff clean, not by assuming no commits happen.
 - **`ItemMasterList` / `NetworkLookup.*` strict `__index`** - always `rawget` cold reads
   (BUG_CLASSES.md 4; cim :5274-5283, cwv :9538-9544).
@@ -290,7 +296,8 @@ Remaining friction:
    `verifyCareerLoadouts` when a snapshot already exists. It consumes an already-in-flight
    callback without applying its returned rows. A first-use account with no official snapshot
    is allowed one paired vanilla bootstrap so the backend can initialize normally. The guard
-   reads `Managers.backend._metadata.realm` before the mutable EAC flag and is Adventure-only.
+   prioritizes native `MODDED_REALM`, with metadata/legacy fallback only when absent
+   (`_gut_official_loadout_boot_policy.lua:6-15`), and is Adventure-only.
 3. **Career-nil `set_career_read_only_data` passes through in modded** (:711-714). That is
    the hero-attributes `career`/`bot_career` write (backend_interface_hero_attributes_playfab.lua:100-101),
    which lands in `_characters_data`, diffs dirty (playfab_mirror_base.lua:3435-3441) and

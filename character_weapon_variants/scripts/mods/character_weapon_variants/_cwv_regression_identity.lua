@@ -449,7 +449,7 @@ _rt_register("issue645_reciprocal_style_descriptors", function()
 		return "reciprocal Empire/Bretonnian Sword and Shield donor template missing"
 	end
 	for _, item_key in ipairs({ "dr_1h_axe", "wh_1h_axe", "we_1h_axe",
-			"we_2h_axe", "dr_2h_axe", "es_1h_sword", "we_1h_sword", "we_spear" }) do
+			"we_2h_axe", "dr_2h_axe", "we_spear" }) do
 		if policy.member(item_key) ~= nil or policy.diagnostic_candidate(item_key) == nil then
 			return "unproven family escaped fail-closed diagnostics: " .. item_key
 		end

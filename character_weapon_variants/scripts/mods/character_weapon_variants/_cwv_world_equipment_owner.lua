@@ -1,4 +1,5 @@
 local function install(mod, ctx)
+	local function pack(...) return { n = select("#", ...), ... } end
 	local _om = assert(ctx.om, "cwv world equipment owner requires om")
 	local _dbg = assert(ctx.dbg, "cwv world equipment owner requires dbg")
 	local _resolve_field = assert(ctx.resolve_field,
@@ -31,8 +32,18 @@ local function install(mod, ctx)
 	end
 	_om._appearance_world_seen = setmetatable({}, { __mode = "k" })
 	mod:hook("GearUtils", "create_equipment", function(func, world, slot_name, item_data, unit_1p, unit_3p, is_bot, unit_template, extra_extension_data, ammo_percent, override_item_template, override_item_units, career_name)
-		local result = func(world, slot_name, item_data, unit_1p, unit_3p, is_bot, unit_template, extra_extension_data, ammo_percent, override_item_template, override_item_units, career_name)
-		if not result then return result end
+		local values
+		local actor = _om.style_actor_admission
+		if actor and actor.with_creation then
+			values = pack(actor:with_creation(item_data, unit_3p, slot_name, is_bot, career_name,
+				func, world, slot_name, item_data, unit_1p, unit_3p, is_bot, unit_template,
+				extra_extension_data, ammo_percent, override_item_template, override_item_units, career_name))
+		else
+			values = pack(func(world, slot_name, item_data, unit_1p, unit_3p, is_bot, unit_template,
+				extra_extension_data, ammo_percent, override_item_template, override_item_units, career_name))
+		end
+		local result = values[1]
+		if not result then return unpack(values, 1, values.n) end
 
 		local item_mod_data = type(item_data) == "table"
 			and type(item_data.mod_data) == "table" and item_data.mod_data or nil
@@ -41,7 +52,7 @@ local function install(mod, ctx)
 		local key_ok, cwv_key = _run_post_native("key", function()
 			return _om._cwv_key_for_item(backend_id, item_data)
 		end)
-		if not key_ok then return result end
+		if not key_ok then return unpack(values, 1, values.n) end
 		local descriptor
 		if cwv_key then
 			local reason
@@ -54,7 +65,7 @@ local function install(mod, ctx)
 				_run_post_native("fade_after_descriptor_error", function()
 					return _om.appearance_fade.created(unit_3p, result, is_bot)
 				end)
-				return result
+				return unpack(values, 1, values.n)
 			end
 			if not descriptor then
 				pcall(printf,
@@ -64,7 +75,7 @@ local function install(mod, ctx)
 				_run_post_native("fade_after_descriptor_declined", function()
 					return _om.appearance_fade.created(unit_3p, result, is_bot)
 				end)
-				return result
+				return unpack(values, 1, values.n)
 			end
 			local observed_unit = result.right_unit_3p or result.left_unit_3p
 			if observed_unit and not _om._appearance_world_seen[observed_unit] then
@@ -129,7 +140,7 @@ local function install(mod, ctx)
 			_run_post_native("fade", function()
 				return _om.appearance_fade.created(unit_3p, result, is_bot)
 			end)
-			return result
+			return unpack(values, 1, values.n)
 		end
 		local def = _om._cwv_world_transform_decision(
 			item_data, result.skin, result.right_hand_unit_name)
@@ -153,7 +164,7 @@ local function install(mod, ctx)
 						_crowbill_transform_miss_total)
 				end
 			end
-			return result
+			return unpack(values, 1, values.n)
 		end
 
 		_dbg("Applying transforms (slot=%s, skin=%s, item_key=%s, 3p_only=%s)",
@@ -212,7 +223,7 @@ local function install(mod, ctx)
 				return _om.appearance_fade.created(unit_3p, result, is_bot)
 			end)
 		end
-		return result
+		return unpack(values, 1, values.n)
 	end)
 end
 

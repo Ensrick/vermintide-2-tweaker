@@ -91,7 +91,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.341-dev"
+local MOD_VERSION = "0.12.342-dev"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -277,6 +277,20 @@ _migrate_legacy_debug_setting()
 -- mod._wt_tf_*, ...) are a SEPARATE key namespace and are untouched.
 mod._wt = mod._wt or {}
 mod._wt.MOD_VERSION = MOD_VERSION
+
+-- #348 retained producer begin: VMF dofile is not a singleton.
+local _wt348_source_owner = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_sword_push_combo_owner")
+local _wt348_source_install = assert(_wt348_source_owner.install)
+local function _wt348_apply_push_combo(weapons, patch)
+    local wt = rawget(mod, "_wt")
+    if type(wt) ~= "table" or rawget(wt, "apply_sword_push_combo") ~= _wt348_apply_push_combo then
+        return nil, "entry-capability-replaced"
+    end
+    return _wt348_source_install(mod, weapons,
+        function() return mod:get("wt_revert_1h_sword_push_combo") end, patch)
+end
+mod._wt.apply_sword_push_combo = _wt348_apply_push_combo
+-- #348 retained producer end
 
 -- /wt_regression_test harness (_RT_CHECKS + rt_register + the command). Loads
 -- FIRST so every inline `_rt_register(...)` check registration below the

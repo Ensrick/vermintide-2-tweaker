@@ -5,6 +5,17 @@
 -- keyed by exact backend item id. Runtime transitions rebuild the equipped slot
 -- once; peers receive one bounded family/style edge and never a template table.
 local M = {}
+function M.is_sword_item(key) return key == "es_1h_sword" or key == "we_1h_sword" end
+local function sword_family(family_id)
+	local empire, elven = M.member("es_1h_sword"), M.member("we_1h_sword")
+	return family_id ~= nil and (family_id == empire or family_id == elven)
+end
+function M.is_sword_identity(row)
+	if type(row) ~= "table" or not M.is_sword_item(row.base_item_key) then return false end
+	return (row.provider == "cwv_style" and M.is_sword_item(row.item_key or row.variant_key))
+		or sword_family(M.decode_style_rider(row.style or row.style_rider))
+		or (row.provider == "" and row.item_key == "" and row.style == "")
+end
 
 M.SETTING_KEY = "cwv_combat_style_state"
 M.CHANNEL = "cwv_combat_style_v1"
@@ -101,10 +112,6 @@ M.DIAGNOSTIC_CANDIDATES = {
 		members = { we_2h_axe = true, dr_2h_axe = true },
 		reason = "different resources; reciprocal remaps unproven",
 	},
-	one_handed_swords = {
-		members = { es_1h_sword = true, we_1h_sword = true },
-		reason = "Empire and Elven action graphs need reciprocal remap evidence",
-	},
 	elf_tuskgor_spears = {
 		members = { we_spear = true, es_2h_heavy_spear = true },
 		reason = "spear and polearm resources need reciprocal remap evidence",
@@ -149,6 +156,20 @@ function M.bounded_style_actions(source, capacity)
 end
 
 M.FAMILIES = {
+	one_handed_swords = {
+		styles = {
+			empire = { label = "Empire Sword Combat Style", template = "one_handed_swords_template_1",
+				resource = "units/beings/player/first_person_base/state_machines/melee/1h_sword",
+				receivers = { we_1h_sword = { template = "cwv_645_empire_sword_style" } } },
+			elven = { label = "Elven Sword Combat Style", template = "we_one_hand_sword_template_1",
+				resource = "units/beings/player/first_person_base/state_machines/melee/1h_sword",
+				receivers = { es_1h_sword = { template = "cwv_645_elven_sword_style" } } },
+		},
+		members = {
+			es_1h_sword = { default = "empire", order = { "empire", "elven" } },
+			we_1h_sword = { default = "elven", order = { "elven", "empire" } },
+		},
+	},
 	greatsword = {
 		styles = {
 			greatsword = { label = "Greatsword Combat Style", template = "two_handed_swords_template_1",
@@ -544,7 +565,13 @@ end
 local function console_row(runtime, parent_content, suffix)
 	local item = type(parent_content) == "table" and parent_content["item" .. suffix]
 	if not item or type(runtime) ~= "table" or type(runtime.describe) ~= "function" then return nil end
-	local ok, row = pcall(runtime.describe, runtime, item, item.backend_id)
+	local actor = type(runtime.console_actor) == "function" and runtime:console_actor(parent_content) or nil
+	local ok, row = pcall(runtime.describe, runtime, item, item.backend_id, actor)
+	if ok and row and M.is_sword_item(row.item_key) then
+		if type(runtime.next_style) ~= "function" then return nil end
+		local ready, next_id = pcall(runtime.next_style, runtime, row.item_key, row.style_id)
+		if not ready or next_id == nil or next_id == row.style_id then return nil end
+	end
 	return ok and row or nil
 end
 
@@ -1162,6 +1189,63 @@ function M.install(mod, deps)
 		or { OK = "ok", succeeded = function(status) return status == "ok" end }
 	local runtime = { store = store, remote = remote, pending = {}, pending_remote = {},
 		fallback_remote = {}, diagnostic_counts = {}, diagnostic_seen = {} }
+	local actor_admission = deps.actor_admission
+	local sword_owner = deps.sword_family
+	local sword_package = type(sword_owner) == "table" and sword_owner.package or nil
+	function runtime:package(key, selected)
+		local package = M.package(key, selected)
+		if not package or not M.is_sword_item(key) then return package end
+		if type(sword_package) ~= "function" then return nil end
+		local ok, name, value = pcall(sword_package, sword_owner, key, package.style_id)
+		local weapons = rawget(_G, "Weapons")
+		if not ok or name ~= package.template or type(value) ~= "table" or type(weapons) ~= "table"
+				or not rawequal(rawget(weapons, name), value) then return nil end
+		return package
+	end
+	function runtime:actor_admitted(key, item, backend_id, actor)
+		if not M.is_sword_item(key) then return true end
+		if type(actor_admission) ~= "table" or type(actor_admission.admit) ~= "function" then return false end
+		local ok, admitted = pcall(actor_admission.admit, actor_admission, key, item, backend_id, actor)
+		return ok and admitted == true
+	end
+	function runtime:loadout_actor(window)
+		return function() return actor_admission and actor_admission:selected_profile(window) end
+	end
+	function runtime:console_actor(content)
+		if type(content) == "table" and type(content.cwv_style_actor) == "function" then return content.cwv_style_actor end
+		return function() return actor_admission and actor_admission:console_profile(content) end
+	end
+	function runtime:remote_actor_admitted(peer_id, slot_name, key, family_id, style_id)
+		if not M.is_sword_item(key) and not sword_family(family_id) then return true end
+		if type(actor_admission) ~= "table" or type(actor_admission.slot) ~= "function" then return false end
+		local ok, item = pcall(actor_admission.slot, actor_admission, peer_id, slot_name)
+		local physical = ok and type(item) == "table" and item.name or nil
+		if not M.is_sword_item(physical) or (key ~= nil and key ~= physical) then return false end
+		if not self:actor_admitted(physical, item, nil, function() return actor_admission:peer_profile(peer_id) end) then return false end
+		if style_id == nil then return true end -- actor-only query, not selection authority
+		local package = type(self.package) == "function" and self:package(physical, style_id) or nil
+		if not package or (family_id ~= nil and package.family_id ~= family_id) then return false end
+		return true, package
+	end
+	function runtime:queued_style_admitted(peer_id, slot_name, key, family_id, style_id)
+		local row = remote[peer_id] and remote[peer_id][slot_name]
+		if not row or row.family_id ~= family_id or row.style_id ~= style_id then return false end
+		return self:remote_actor_admitted(peer_id, slot_name, key, family_id, style_id)
+	end
+	function runtime:descriptor_actor_admitted(peer_id, slot_name, descriptor)
+		if type(descriptor) ~= "table" then return false end
+		if not M.is_sword_identity(descriptor) then return true end
+		local family_id, style_id = descriptor.style_family, descriptor.style_id
+		if style_id == nil then family_id, style_id = M.decode_style_rider(descriptor.style or descriptor.style_rider) end
+		if descriptor.provider == "" then
+			local _, _, member = M.member(descriptor.base_item_key)
+			family_id, style_id = M.member(descriptor.base_item_key), member and member.default
+		end
+		if style_id == nil or type(self.remote_actor_admitted) ~= "function" then return false end
+		local allowed, package = self:remote_actor_admitted(peer_id, slot_name, descriptor.base_item_key, family_id, style_id)
+		return allowed == true and package ~= nil
+			and (descriptor.effective_template == nil or descriptor.effective_template == package.template)
+	end
 
 	local function remote_refresh_key(peer_id, slot_name)
 		return tostring(peer_id) .. "|" .. tostring(slot_name)
@@ -1182,6 +1266,9 @@ function M.install(mod, deps)
 	-- produced post-drain and lands on `pending.verdict`, which `step()`
 	-- consumes below. Never synthesize a synchronous success here.
 	function runtime:_enqueue_remote_refresh(pending)
+		if not self:remote_actor_admitted(pending.peer_id, pending.slot_name, nil, pending.family_id, pending.style_id) then
+			return false, "actor unavailable"
+		end
 		if type(deps.rebuild_remote) ~= "function" then
 			return false, "remote rebuild unavailable"
 		end
@@ -1229,6 +1316,10 @@ function M.install(mod, deps)
 			self.pending_remote[key] = nil
 			return false, "no style state"
 		end
+		if not self:remote_actor_admitted(peer_id, slot_name, nil, state.family_id, state.style_id) then
+			self.pending_remote[key] = nil
+			return false, "actor unavailable"
+		end
 		local pending = {
 			peer_id = peer_id,
 			slot_name = slot_name,
@@ -1257,6 +1348,7 @@ function M.install(mod, deps)
 			local current = remote[armed.peer_id] and remote[armed.peer_id][armed.slot_name]
 			armed.elapsed = armed.elapsed + dt
 			if not current or current.token ~= armed.token
+					or not self:remote_actor_admitted(armed.peer_id, armed.slot_name, nil, armed.family_id, armed.style_id)
 					or current.owner == "identity" then
 				self.fallback_remote[key] = nil
 			elseif armed.elapsed >= M.STYLE_IDENTITY_GRACE then
@@ -1274,7 +1366,8 @@ function M.install(mod, deps)
 			local current = remote[pending.peer_id]
 				and remote[pending.peer_id][pending.slot_name]
 			pending.elapsed = pending.elapsed + dt
-			if not current or current.token ~= pending.token then
+			if not current or current.token ~= pending.token
+					or not self:remote_actor_admitted(pending.peer_id, pending.slot_name, nil, pending.family_id, pending.style_id) then
 				-- The style moved on (or the peer left). A newer edge owns its
 				-- own ledger entry; this one must not keep re-wielding.
 				self.pending_remote[key] = nil
@@ -1363,6 +1456,8 @@ function M.install(mod, deps)
 		if not M.valid_wire(M.SCHEMA, "state", slot_name, family_id, style_id) then
 			return false, nil
 		end
+		-- Unknown actor must not consume a token, dedupe row, grace or generation.
+		if not self:remote_actor_admitted(peer_id, slot_name, nil, family_id, style_id) then return false, nil end
 		if descriptor ~= nil and (type(descriptor) ~= "table"
 				or descriptor.provider ~= "cwv_style"
 				or descriptor.style_family ~= family_id
@@ -1371,6 +1466,10 @@ function M.install(mod, deps)
 				or descriptor.fingerprint == "") then
 			return false, nil
 		end
+		if descriptor ~= nil and sword_family(family_id)
+				and (not M.is_sword_item(descriptor.base_item_key)
+					or not M.is_sword_identity(descriptor)
+					or not self:descriptor_actor_admitted(peer_id, slot_name, descriptor)) then return false, nil end
 		local by_slot = remote[peer_id] or {}
 		remote[peer_id] = by_slot
 		local token = family_id .. ":" .. style_id
@@ -1444,12 +1543,14 @@ function M.install(mod, deps)
 		return nil
 	end
 
-	function runtime:describe(item, backend_id)
+	function runtime:describe(item, backend_id, actor)
 		local key = item_key(item, backend_id)
 		local identity = item_identity(item, backend_id)
 		if not key or not identity then return nil end
+		if not self:actor_admitted(key, item, backend_id, actor) then return nil end
 		local saved = self.store.items[identity]
-		local package = M.package(key, saved)
+		local package = self:package(key, saved)
+		if not package then return nil end
 		local style_id, style, family_id, member = package.style_id, package.style,
 			package.family_id, package.member
 		return { item_key = key, identity = identity, style_id = style_id, style = style,
@@ -1468,17 +1569,48 @@ function M.install(mod, deps)
 	end
 
 	function runtime:next_style(item_key_value, current)
-		return M.next_style(item_key_value, current, deps.owns_dlc)
+		local next_id, row, family = M.next_style(item_key_value, current, deps.owns_dlc)
+		if M.is_sword_item(item_key_value) and next_id and not self:package(item_key_value, next_id) then
+			local selected, style = M.style(item_key_value, current)
+			return selected, style, family
+		end
+		return next_id, row, family
 	end
 
 	function runtime:moveset_indicator(item_key_value, current, compact)
+		if M.is_sword_item(item_key_value) then
+			local selected, _, _, member = M.style(item_key_value, current)
+			local index, total = nil, 0
+			for _, id in ipairs(member.order) do
+				if self:package(item_key_value, id) then
+					total = total + 1
+					if id == selected then index = total end
+				end
+			end
+			if not index then return nil end
+			return compact and string.format("%d / %d", index, total) or string.format("Moveset %d / %d", index, total)
+		end
 		return M.moveset_indicator(item_key_value, current, deps.owns_dlc, compact)
 	end
 
 	function runtime:resolve_template(item, backend_id)
-		local row = self:describe(item, backend_id)
+		local key = item_key(item, backend_id)
+		local actor
+		if M.is_sword_item(key) and self.husk_context then
+			local context = self.husk_context
+			if context.family_id == nil or context.style_id == nil then return nil end
+			if not self:remote_actor_admitted(context.peer_id, context.slot_name, key, context.family_id, context.style_id) then return nil end
+			local package = self:package(key, context.style_id)
+			local weapons = rawget(_G, "Weapons")
+			return package and weapons and weapons[package.template] or nil
+		end
+		if M.is_sword_item(key) and actor_admission and actor_admission.creation ~= nil then
+			actor = function() return actor_admission:creation_profile(item) end
+		end
+		local row = self:describe(item, backend_id, actor)
 		local weapons = rawget(_G, "Weapons")
 		if row then
+			if M.is_sword_item(row.item_key) then return weapons and weapons[row.package.template] or nil end
 			local descriptor = type(deps.local_style_descriptor) == "function"
 				and deps.local_style_descriptor(row.identity) or nil
 			local template_name = descriptor
@@ -1500,7 +1632,7 @@ function M.install(mod, deps)
 				and type(context.descriptor.effective_template) == "string" then
 			return weapons and weapons[context.descriptor.effective_template] or nil
 		end
-		local package = M.package(key, context.style_id)
+		local package = self:package(key, context.style_id)
 		return package and weapons and weapons[package.template] or nil
 	end
 
@@ -1519,16 +1651,24 @@ function M.install(mod, deps)
 			local key = remote_row and item_key(item, backend_id)
 			local family_id = key and M.member(key)
 			if remote_row and family_id == remote_row.family_id then
+				if not self:remote_actor_admitted(peer_id, slot_name, key, family_id, remote_row.style_id) then return nil end
+				if M.is_sword_item(key) then
+					local package = self:package(key, remote_row.style_id)
+					return package and package.template or nil
+				end
 				if remote_row.descriptor
 						and remote_row.descriptor.base_item_key == key then
 					return remote_row.descriptor.effective_template
 				end
-				local package = M.package(key, remote_row.style_id)
+				local package = self:package(key, remote_row.style_id)
 				if package then return package.template end
 			end
 		end
 		local row = self:describe(item, backend_id)
+		if row and M.is_sword_item(row.item_key) and owner_unit ~= nil
+				and (not actor_admission or not actor_admission:is_local_unit(owner_unit)) then return nil end
 		if not row then return nil end
+		if M.is_sword_item(row.item_key) then return row.package.template end
 		local descriptor = type(deps.local_style_descriptor) == "function"
 			and deps.local_style_descriptor(row.identity) or nil
 		if descriptor and descriptor.style_family == row.family_id
@@ -1542,8 +1682,19 @@ function M.install(mod, deps)
 		local owner = inventory and (inventory._unit or inventory.owner_unit)
 		local peer_id = type(deps.peer_for_owner) == "function" and deps.peer_for_owner(owner) or nil
 		local row = peer_id and remote[peer_id] and remote[peer_id][slot_name]
+		if row and not self:remote_actor_admitted(peer_id, slot_name, nil, row.family_id, row.style_id) then row = nil end
+		local equipment = inventory and inventory._equipment
+		local slot = equipment and equipment.slots and equipment.slots[slot_name]
+		local key = slot and item_key(slot.item_data)
+		if M.is_sword_item(key) then
+			-- A denied/early Sword husk context shadows any viewer-local item.
+			self.husk_context = { peer_id = peer_id, slot_name = slot_name,
+				family_id = row and row.family_id, style_id = row and row.style_id,
+				descriptor = row and row.descriptor }
+			return row ~= nil
+		end
 		self.husk_context = row and { peer_id = peer_id, family_id = row.family_id,
-			style_id = row.style_id, descriptor = row.descriptor } or nil
+			slot_name = slot_name, style_id = row.style_id, descriptor = row.descriptor } or nil
 		return self.husk_context ~= nil
 	end
 
@@ -1556,6 +1707,7 @@ function M.install(mod, deps)
 	function runtime:transform_decision(item, backend_id)
 		local row = self:describe(item, backend_id)
 		if not row then return nil end
+		if M.is_sword_item(row.item_key) then return false end
 		if type(deps.local_style_descriptor) == "function"
 				and type(deps.style_descriptor_transform) == "function" then
 			local descriptor = deps.local_style_descriptor(row.identity)
@@ -1614,6 +1766,8 @@ function M.install(mod, deps)
 		local peer_id = deps.peer_for_owner(owner_unit)
 		local row = peer_id and remote[peer_id] and remote[peer_id][slot_name]
 		if not row then return nil end
+		if not self:remote_actor_admitted(peer_id, slot_name, nil, row.family_id, row.style_id) then return nil end
+		if sword_family(row.family_id) then return false end
 		if row.descriptor and type(deps.style_descriptor_transform) == "function" then
 			return deps.style_descriptor_transform(row.descriptor, "3p")
 		end
@@ -1622,7 +1776,7 @@ function M.install(mod, deps)
 			local key = item_key(item)
 			local family_id = key and M.member(key)
 			if family_id ~= row.family_id then return nil end
-			local package = M.package(key, row.style_id)
+			local package = self:package(key, row.style_id)
 			presentation = package and package.presentation
 		else
 			-- Compatibility for observation-only callers that do not own the
@@ -1688,7 +1842,8 @@ function M.install(mod, deps)
 	end
 
 	function runtime:publish(inventory, slot_name, item, recipient, reason)
-		local row = self:describe(item)
+		-- inventory is the real event caller, including initial extensions_ready.
+		local row = self:describe(item, nil, function() return actor_admission and actor_admission:inventory_profile(inventory, slot_name, item) end)
 		if not row then return false end
 		local ok = send(recipient, "state", slot_name, row.family_id, row.style_id)
 		if ok then pcall(printf, "[cwv:786] style tx slot=%s family=%s style=%s recipient=%s reason=%s",
@@ -1698,6 +1853,24 @@ function M.install(mod, deps)
 	end
 
 	-- Owner-side style axis for one of the LOCAL player's slots, resolved
+	function runtime:local_descriptor_actor_admitted(descriptor, identity)
+		local key = type(descriptor) == "table" and descriptor.base_item_key
+		if not M.is_sword_identity(descriptor) then return true end
+		local family_id, style_id = descriptor.style_family, descriptor.style_id
+		if style_id == nil then family_id, style_id = M.decode_style_rider(descriptor.style or descriptor.style_rider) end
+		local inventory = local_equipment()
+		local equipment = inventory and inventory:equipment()
+		for _, slot_name in ipairs({ "slot_melee", "slot_ranged" }) do
+			local slot = equipment and equipment.slots and equipment.slots[slot_name]
+			local row = slot and self:describe(slot.item_data)
+			if row and row.item_key == key and (identity == nil or row.identity == identity)
+					and (descriptor.slot == nil or descriptor.slot == slot_name)
+					and (descriptor.provider == "" or (row.family_id == family_id and row.style_id == style_id))
+					and (descriptor.effective_template == nil or descriptor.effective_template == row.package.template) then return true end
+		end
+		return false
+	end
+
 	-- exactly the way the #474 musket wire resolves its stance rider (through
 	-- `local_equipment`, never a new resolver). `identity_key` is the payload's
 	-- own item identity, so a bot payload published from this peer -- or a slot
@@ -1713,11 +1886,12 @@ function M.install(mod, deps)
 		return M.encode_style_rider(row.family_id, row.style_id)
 	end
 
-	function runtime:set_item_style(item, backend_id, desired, reason, rebuild)
-		local row = self:describe(item, backend_id)
+	function runtime:set_item_style(item, backend_id, desired, reason, rebuild, actor)
+		local row = self:describe(item, backend_id, actor)
 		if not row then return false, "unsupported item" end
 		local resolved, family_ok, descriptor_family = M.style(row.item_key, desired), true, row.family_id == "greatsword"
 		if resolved ~= desired then return false, "unsupported style" end
+		if not self:package(row.item_key, desired) then return false, "construction unavailable" end
 		if type(deps.style_descriptor_family) == "function" then family_ok, descriptor_family = pcall(deps.style_descriptor_family, row.family_id) elseif deps.style_descriptor_family ~= nil then family_ok = false end
 		if not family_ok or type(descriptor_family) ~= "boolean" then return false, "appearance family unavailable" end
 		local inventory, equipment, slot_name, live_item
@@ -1741,6 +1915,8 @@ function M.install(mod, deps)
 				end
 			end
 		end
+		if not self:actor_admitted(row.item_key, item, backend_id, actor) then return false, "actor unavailable" end
+		if not self:package(row.item_key, desired) then return false, "construction unavailable" end
 		local changed, err = M.set(store, row.identity, row.item_key, desired)
 		if not changed then return false, err or "unchanged" end
 		row.item_data.mod_data = row.item_data.mod_data or {}
@@ -1802,17 +1978,18 @@ function M.install(mod, deps)
 		return true
 	end
 
-	function runtime:request_item_style(item, backend_id, desired, reason, rebuild, complete)
-		local row = self:describe(item, backend_id)
+	function runtime:request_item_style(item, backend_id, desired, reason, rebuild, complete, actor)
+		local row = self:describe(item, backend_id, actor)
 		if not row then return false, "unsupported item" end
 		if self.pending[row.identity] then return false, "transition pending" end
 		local resolved, style = M.style(row.item_key, desired)
 		if resolved ~= desired then return false, "unsupported style" end
 		if not self:owns_style(style) then return false, "required DLC unavailable" end
-		local package = M.package(row.item_key, desired)
+		local package = self:package(row.item_key, desired)
+		if not package then return false, "construction unavailable" end
 		local resource = package and package.resource
 		if not (rebuild and resource) then
-			local changed, err = self:set_item_style(item, backend_id, desired, reason, rebuild)
+			local changed, err = self:set_item_style(item, backend_id, desired, reason, rebuild, actor)
 			if type(complete) == "function" then complete(changed, err) end
 			return changed, err
 		end
@@ -1828,7 +2005,7 @@ function M.install(mod, deps)
 			settled = true
 			if runtime.pending[tx.identity] ~= tx then return end
 			runtime.pending[tx.identity] = nil
-			local current = runtime:describe(item, backend_id)
+			local current = runtime:describe(item, backend_id, actor)
 			if not ready or not current or current.identity ~= tx.identity
 					or current.item_key ~= tx.item_key or current.style_id ~= tx.from then
 				local err = load_err or "stale transition"
@@ -1837,7 +2014,7 @@ function M.install(mod, deps)
 				if type(complete) == "function" then complete(false, err) end
 				return
 			end
-			local changed, err = runtime:set_item_style(item, backend_id, tx.desired, reason, rebuild)
+			local changed, err = runtime:set_item_style(item, backend_id, tx.desired, reason, rebuild, actor)
 			if type(complete) == "function" then complete(changed, err) end
 		end
 		local ok, accepted, acquire_err = pcall(acquire, resource, finish)
@@ -1848,12 +2025,12 @@ function M.install(mod, deps)
 		return true, "transition pending"
 	end
 
-	function runtime:cycle_item(item, backend_id, reason, rebuild, complete)
-		local row = self:describe(item, backend_id)
+	function runtime:cycle_item(item, backend_id, reason, rebuild, complete, actor)
+		local row = self:describe(item, backend_id, actor)
 		if not row then return false, "unsupported item" end
 		local next_id = self:next_style(row.item_key, row.style_id)
 		if not next_id or next_id == row.style_id then return false, "no available alternate style" end
-		return self:request_item_style(item, backend_id, next_id, reason, rebuild, complete)
+		return self:request_item_style(item, backend_id, next_id, reason, rebuild, complete, actor)
 	end
 
 	function runtime:cycle_wielded()
@@ -1866,7 +2043,7 @@ function M.install(mod, deps)
 	end
 
 	function runtime:on_local_wield(inventory, slot_name, item)
-		local row = self:describe(item)
+		local row = self:describe(item, nil, function() return actor_admission and actor_admission:inventory_profile(inventory, slot_name, item) end)
 		if not row then return false end
 		item.mod_data = item.mod_data or {}
 		item.mod_data.cwv_combat_style = row.style_id
@@ -1920,353 +2097,10 @@ function M.install(mod, deps)
 	return runtime
 end
 
--- Adds one contextual control to the mouse/keyboard hero loadout bar. The
--- vanilla module captures these definition tables by reference, so mutating
--- the cached tables before a HeroWindowLoadout instance is created is enough;
--- no copied view or custom renderer is introduced.
-function M.install_loadout_ui(mod, runtime)
-	if M._ui_installed or type(runtime) ~= "table" then return false end
-	local emit_mission_ui = M.new_mission_ui_probe_sink(function(probe, count, cap)
-		pcall(printf, "[cwv:774] surface=%s stage=%s item=%s raw_id=%s identity=%s family=%s style=%s row=%s detail=%s event=%d/%d",
-			probe.surface, probe.stage, probe.item_key, probe.raw_identity, probe.identity,
-			probe.family, probe.style, probe.row, probe.detail, count, cap)
-	end)
-	local function mission_view_active()
-		local managers = rawget(_G, "Managers")
-		local game_mode = managers and managers.state and managers.state.game_mode
-		local in_keep = rawget(_G, "DamageUtils") and DamageUtils.is_in_inn or false
-		return game_mode ~= nil and not in_keep
-	end
-	local function report_mission_ui(surface, stage, item, row, suffix, detail)
-		if not mission_view_active() then return false end
-		local probe = M.mission_ui_probe(surface, stage, item, row, suffix, detail)
-		return emit_mission_ui(probe)
-	end
-	local desktop_ok, definitions = pcall(local_require,
-		"scripts/ui/views/hero_view/windows/definitions/hero_window_loadout_definitions")
-	local scenegraph = desktop_ok and definitions and definitions.scenegraph_definition
-	local widgets = desktop_ok and definitions and definitions.widgets
-
-	if type(scenegraph) == "table" and type(widgets) == "table" then
-		scenegraph.cwv_combat_style_button = scenegraph.cwv_combat_style_button or {
-		parent = "loadout_background",
-		horizontal_alignment = "center",
-		vertical_alignment = "bottom",
-		size = { 390, 46 },
-		position = { 0, 122, 30 },
-	}
-		widgets.cwv_combat_style_button = widgets.cwv_combat_style_button or {
-		scenegraph_id = "cwv_combat_style_button",
-		element = { passes = {
-			{ pass_type = "hotspot", content_id = "button_hotspot", content_check_function = function(content) return content.visible end },
-			{ pass_type = "rect", style_id = "background", content_check_function = function(content) return content.visible end },
-			{ pass_type = "rect", style_id = "border", content_check_function = function(content) return content.visible end },
-			{ pass_type = "text", text_id = "button_text", style_id = "button_text", content_check_function = function(content) return content.visible end },
-			{ pass_type = "text", text_id = "button_text", style_id = "button_text_shadow", content_check_function = function(content) return content.visible end },
-		} },
-		content = { visible = false, button_hotspot = {}, button_text = "" },
-		style = {
-			background = { color = { 220, 32, 38, 40 }, offset = { 2, 2, 2 }, size = { 386, 42 } },
-			border = { color = { 255, 160, 146, 101 }, offset = { 0, 0, 1 }, size = { 390, 46 } },
-			button_text = { font_type = "hell_shark", font_size = 22,
-				horizontal_alignment = "center", vertical_alignment = "center",
-				text_color = { 255, 255, 255, 255 }, offset = { 0, 2, 4 }, size = { 390, 46 } },
-			button_text_shadow = { font_type = "hell_shark", font_size = 22,
-				horizontal_alignment = "center", vertical_alignment = "center",
-				text_color = { 255, 0, 0, 0 }, offset = { 2, 0, 3 }, size = { 390, 46 } },
-		},
-		}
-		scenegraph.cwv_combat_style_status = scenegraph.cwv_combat_style_status or {
-			parent = "loadout_background",
-			horizontal_alignment = "center",
-			vertical_alignment = "bottom",
-			size = { 390, 24 },
-			position = { 0, 172, 31 },
-		}
-		widgets.cwv_combat_style_status = widgets.cwv_combat_style_status or {
-			scenegraph_id = "cwv_combat_style_status",
-			element = { passes = {
-				{ pass_type = "text", text_id = "status_text", style_id = "status_text",
-					content_check_function = function(content) return content.visible end },
-				{ pass_type = "text", text_id = "status_text", style_id = "status_text_shadow",
-					content_check_function = function(content) return content.visible end },
-			} },
-			content = { visible = false, status_text = "" },
-			style = {
-				status_text = { font_type = "hell_shark", font_size = 17,
-					horizontal_alignment = "center", vertical_alignment = "center",
-					text_color = { 235, 225, 215, 190 }, offset = { 0, 1, 2 }, size = { 390, 24 } },
-				status_text_shadow = { font_type = "hell_shark", font_size = 17,
-					horizontal_alignment = "center", vertical_alignment = "center",
-					text_color = { 190, 0, 0, 0 }, offset = { 1, 0, 1 }, size = { 390, 24 } },
-			},
-		}
-	end
-
-	local function selected(window)
-		local parent = window and window.parent
-		local index = parent and parent.get_selected_loadout_slot_index
-			and parent:get_selected_loadout_slot_index()
-		local item = index and window._equipment_items and window._equipment_items[index]
-		return item, index
-	end
-
-	local function refresh(window)
-		local item, index = selected(window)
-		local widget = window and window._widgets_by_name
-			and window._widgets_by_name.cwv_combat_style_button
-		local status_widget = window and window._widgets_by_name
-			and window._widgets_by_name.cwv_combat_style_status
-		if not widget then
-			report_mission_ui("desktop", "widget_missing", item, nil, index)
-			return
-		end
-		local row = item and runtime:describe(item, item.backend_id)
-		if item then
-			report_mission_ui("desktop", row and "selected_supported" or "selected_unresolved",
-				item, row, index)
-		end
-		widget.content.visible = row ~= nil
-		if status_widget then status_widget.content.visible = row ~= nil end
-		if row then
-			local _, next_style
-			if type(runtime.next_style) == "function" then
-				_, next_style = runtime:next_style(row.item_key, row.style_id)
-			else
-				_, next_style = M.next_style(row.item_key, row.style_id)
-			end
-			widget.content.button_text = "Switch to: " .. (next_style and next_style.label or row.style.label)
-			widget.content.button_hotspot.disable_button = false
-			if status_widget then
-				status_widget.content.status_text = runtime:moveset_indicator(
-					row.item_key, row.style_id) or ""
-			end
-		end
-	end
-
-	local function on_ui_transition_complete(window, changed)
-		if not changed then return end
-		local parent = window and window.parent
-		if parent then parent.loadout_sync_id = (parent.loadout_sync_id or 0) + 1 end
-		pcall(function() window:_play_sound("play_gui_equipment_selection_click") end)
-	end
-
-	if type(scenegraph) == "table" and type(widgets) == "table" then
-		mod:hook("HeroWindowLoadout", "_populate_loadout", function(func, self, ...)
-			local result = func(self, ...)
-			refresh(self)
-			return result
-		end)
-		mod:hook("HeroWindowLoadout", "_handle_input", function(func, self, ...)
-			local r1, r2, r3, r4 = func(self, ...)
-			refresh(self)
-			local widget = self._widgets_by_name and self._widgets_by_name.cwv_combat_style_button
-			local hotspot = widget and widget.content and widget.content.button_hotspot
-			local selected_item, selected_index = selected(self)
-			local selected_row = selected_item and runtime:describe(selected_item,
-				selected_item.backend_id)
-			if hotspot and hotspot.on_pressed then
-				report_mission_ui("desktop", "input_pressed", selected_item, selected_row,
-					selected_index)
-			end
-			if widget and widget.content.visible and hotspot and hotspot.on_release then
-				hotspot.on_release = false
-				local item = selected(self)
-				local row = item and runtime:describe(item, item.backend_id)
-				report_mission_ui("desktop", "input_release", item, row, selected_index)
-				if item then
-					local callback_called = false
-					local accepted, err = runtime:cycle_item(item, item.backend_id,
-						"inventory_button", true, function(changed, complete_err)
-						callback_called = true
-						on_ui_transition_complete(self, changed)
-						report_mission_ui("desktop", changed and "transition_complete"
-							or "transition_rejected", item,
-							runtime:describe(item, item.backend_id), selected_index,
-							complete_err)
-					end)
-					if not accepted and not callback_called then
-						report_mission_ui("desktop", err == "transition pending"
-							and "transition_deferred" or "transition_rejected", item, row,
-							selected_index, err)
-					end
-				end
-				refresh(self)
-			end
-			return r1, r2, r3, r4
-		end)
-	end
-
-	local console_ok, console_definitions = pcall(local_require,
-		"scripts/ui/views/hero_view/windows/definitions/hero_window_loadout_console_definitions")
-	local console_installed = false
-	if console_ok and type(console_definitions) == "table"
-			and type(console_definitions.create_loadout_grid_func) == "function" then
-		local original_create_grid = console_definitions.create_loadout_grid_func
-		console_definitions.create_loadout_grid_func = function(...)
-			local widget_def = original_create_grid(...)
-			M.decorate_console_grid(widget_def, runtime)
-			return widget_def
-		end
-
-		local actions = console_definitions.generic_input_actions
-		for _, pair in ipairs({ { "default", "cwv_style" },
-				{ "default_no_customization", "cwv_style_no_customization" } }) do
-			local source = actions and actions[pair[1]]
-			if type(source) == "table" then
-				local list = M.bounded_style_actions(source, M.INPUT_DESCRIPTION_CAPACITY)
-				actions[pair[2]] = list
-			end
-		end
-
-		local function console_widget(window)
-			return window and window._widgets_by_name and window._widgets_by_name.loadout_grid
-		end
-
-		local function selected_console_candidate(window)
-			local widget = console_widget(window)
-			local content = widget and widget.content
-			if not content then return nil end
-			for i = 1, tonumber(content.rows) or 0 do
-				for k = 1, tonumber(content.columns) or 0 do
-					local suffix = "_" .. tostring(i) .. "_" .. tostring(k)
-					local slot = content["hotspot" .. suffix]
-					if slot and slot.is_selected then
-						local item = content["item" .. suffix]
-						return item, suffix, console_row(runtime, content, suffix)
-					end
-				end
-			end
-			return nil
-		end
-
-		local function selected_console_item(window)
-			local item, suffix, row = selected_console_candidate(window)
-			if row then return item, suffix, row end
-			return nil
-		end
-
-		local function refresh_console(window)
-			local widget = console_widget(window)
-			local item, suffix, row = selected_console_candidate(window)
-			if not widget then
-				report_mission_ui("console", "widget_missing", item, row, suffix)
-				return 0
-			end
-			if item then
-				report_mission_ui("console", row and "selected_supported"
-					or "selected_unresolved", item, row, suffix)
-			end
-			return M.refresh_console_row_layout(widget, runtime)
-		end
-
-		mod:hook("HeroWindowLoadoutConsole", "_populate_loadout", function(func, self, ...)
-			local result = func(self, ...)
-			refresh_console(self)
-			return result
-		end)
-
-		mod:hook("HeroWindowLoadoutConsole", "_update_input_description", function(func, self, ...)
-			local result = func(self, ...)
-			local item = selected_console_item(self)
-			if item and self._menu_input_description then
-				local customizable = self._is_selected_item_customizable
-					and self:_is_selected_item_customizable()
-				local wanted = customizable and "cwv_style" or "cwv_style_no_customization"
-				local list = actions and actions[wanted]
-				if list and self._current_input_desc ~= wanted then
-					local widgets = self._menu_input_description.console_input_description_widgets
-					local capacity = type(widgets) == "table" and #widgets
-						or M.INPUT_DESCRIPTION_CAPACITY
-					local safe_list = M.bounded_style_actions(list, capacity)
-					self._menu_input_description:change_generic_actions(safe_list)
-					self._current_input_desc = wanted
-				end
-			end
-			return result
-		end)
-
-		mod:hook("HeroWindowLoadoutConsole", "_handle_input", function(func, self, ...)
-			refresh_console(self)
-			local widget = console_widget(self)
-			local candidate, candidate_suffix, candidate_row = selected_console_candidate(self)
-			local candidate_hotspot = widget and candidate_suffix and widget.content
-				and widget.content["cwv_style_hotspot" .. candidate_suffix]
-			if candidate_hotspot and candidate_hotspot.on_pressed then
-				report_mission_ui("console", "input_pressed", candidate, candidate_row,
-					candidate_suffix)
-			end
-			if candidate_hotspot and candidate_hotspot.on_release then
-				report_mission_ui("console", "input_release", candidate, candidate_row,
-					candidate_suffix)
-			end
-			local item, suffix, row
-			if widget then item, suffix, row = M.consume_console_style_press(widget.content, runtime) end
-			if item then
-				local callback_called = false
-				local accepted, err = runtime:cycle_item(item, item.backend_id,
-					"equipment_style_button", true, function(changed, complete_err)
-						callback_called = true
-						on_ui_transition_complete(self, changed)
-						report_mission_ui("console", changed and "transition_complete"
-							or "transition_rejected", item,
-							runtime:describe(item, item.backend_id), suffix, complete_err)
-						if changed then
-							pcall(printf, "[cwv:620] equipment style button item=%s family=%s row=%s",
-								tostring(row.identity), tostring(row.family_id), tostring(suffix))
-						elseif complete_err then
-							pcall(printf, "[cwv:620] equipment style button rejected item=%s reason=%s",
-								tostring(row.identity), tostring(complete_err))
-						end
-					end)
-				if not accepted and not callback_called then
-					report_mission_ui("console", err == "transition pending"
-						and "transition_deferred" or "transition_rejected", item, row,
-						suffix, err)
-					pcall(printf, "[cwv:620] equipment style button deferred item=%s reason=%s",
-						tostring(row.identity), tostring(err))
-				end
-				return
-			end
-			return func(self, ...)
-		end)
-
-		mod:hook("HeroWindowLoadoutConsole", "_handle_gamepad_input", function(func, self, ...)
-			refresh_console(self)
-			local input = self._input_service and self:_input_service()
-			local item, _, row = selected_console_item(self)
-			if item and input and input:get("special_1", true) then
-				report_mission_ui("console", "controller_pressed", item, row)
-				local callback_called = false
-				local accepted, err = runtime:cycle_item(item, item.backend_id,
-					"equipment_style_controller", true, function(changed, complete_err)
-						callback_called = true
-						on_ui_transition_complete(self, changed)
-						report_mission_ui("console", changed and "transition_complete"
-							or "transition_rejected", item,
-							runtime:describe(item, item.backend_id), nil, complete_err)
-						if not changed and complete_err then
-							pcall(printf, "[cwv:620] controller style rejected item=%s reason=%s",
-								tostring(row.identity), tostring(complete_err))
-						end
-					end)
-				if not accepted and not callback_called then
-					report_mission_ui("console", err == "transition pending"
-						and "transition_deferred" or "transition_rejected", item, row,
-						nil, err)
-					pcall(printf, "[cwv:620] controller style deferred item=%s reason=%s",
-						tostring(row.identity), tostring(err))
-				end
-				return
-			end
-			return func(self, ...)
-		end)
-		console_installed = true
-	end
-
-	M._ui_installed = (type(scenegraph) == "table" and type(widgets) == "table") or console_installed
-	M._console_ui_installed = console_installed
-	return M._ui_installed
+-- The private UI owner receives this policy and its exact row resolver.
+function M.install_loadout_ui(mod, runtime, installer)
+	if type(installer) ~= "function" then return false end
+	return installer(M, console_row, mod, runtime)
 end
 
 return M

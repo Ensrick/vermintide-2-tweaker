@@ -94,6 +94,7 @@ function M.new(ctx)
         local presentation = transform_key and _om.combat_styles
             and _om.combat_styles:presentation(transform_key) or nil
         return _om.combat_style_appearance.build({ descriptor = _om.appearance_descriptor,
+            package_for = function(key, style) return _om.combat_styles and _om.combat_styles:package(key, style) end,
             encode_style_rider = _om.combat_style_policy.encode_style_rider }, {
             slot_name = slot_name, row = row, world = world, base = base,
             base_item_key = base_item_key, presentation = presentation,
@@ -163,7 +164,21 @@ function M.new(ctx)
             local member_family = _om.combat_style_policy.member(payload.item_key)
             if not _om.combat_style_appearance.supports_family(family_id)
                     or member_family ~= family_id then return nil, "style_identity" end
-            local package = _om.combat_style_policy.package(payload.item_key, style_id)
+            local package
+            if _om.combat_style_policy.is_sword_item(payload.item_key) then
+                local runtime = _om.combat_styles
+                if not runtime or type(runtime.remote_actor_admitted) ~= "function"
+                        or not runtime:remote_actor_admitted(sender_peer_id, payload.slot,
+                            payload.item_key, family_id, style_id) then
+                    return nil, "actor unavailable"
+                end
+                package = type(runtime.package) == "function"
+                    and runtime:package(payload.item_key, style_id) or nil
+            else
+                -- Existing non-Sword families keep their original policy-only
+                -- package path; Sword's new constructor is not their authority.
+                package = _om.combat_style_policy.package(payload.item_key, style_id)
+            end
             if not package or package.style_id ~= style_id then return nil, "style_package" end
             local row = { item_key = payload.item_key, family_id = family_id,
                 style_id = style_id, package = package }

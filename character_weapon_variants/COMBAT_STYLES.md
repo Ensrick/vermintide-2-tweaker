@@ -14,6 +14,7 @@ properties, traits, and CWV identity do not change.
 | Tuskgor Spear | Native Kruber Tuskgor Spear; migrated legacy Infantry Spear UUIDs | Hunter, Infantry |
 | Spear and Shield | Native Kruber Chaos Wastes Spear and Shield and Kerillian Spear and Shield | Kruber, Elven |
 | Sword and Shield | Native Empire Sword and Shield and Bretonnian Sword and Shield | Empire, Bretonnian |
+| One-handed Sword | Native Empire `es_1h_sword` and Elven `we_1h_sword` | Empire item: Empire, Elven. Elven item: Elven, Empire. |
 
 Kerillian Greatsword style deep-clones the donor template and every referenced
 damage profile before applying its package: 15% slower attack actions, 25%
@@ -67,9 +68,13 @@ shield-free Spear+Shield models now belong to Tuskgor Spear's illusion pool.
 ## Runtime ownership
 
 `_cwv_combat_styles.lua` owns the catalogue, exact-instance store, template
-selection, contextual inventory button, hotkey transition, peer state, and
-diagnostics. `BackendUtils.get_item_template` remains CWV's one consolidated
-template seam. A transition preflights both hands, ends active weapon actions
+selection, hotkey transition, peer state, and diagnostics. Its consumed
+`_cwv_combat_style_loadout_ui.lua` owner binds the desktop/controller loadout
+controls to that same runtime. `_cwv_style_actor_admission.lua` supplies actual
+carrier admission; `_cwv_sword_family.lua` owns serial Sword construction,
+immutable catalogue admission, and retained constructed-template authority.
+`BackendUtils.get_item_template` remains CWV's one consolidated template seam.
+A transition preflights both hands, ends active weapon actions
 through vanilla `WeaponUnitExtension:stop_action("interrupted")`, and then
 rebuilds the currently wielded slot once through vanilla
 `destroy_slot -> add_equipment -> wield`. A failed rebuild rolls persistence
@@ -230,8 +235,45 @@ state-machine/package/rebuild boundary, not a WT 3P remap symptom.
 [src: `scripts/settings/equipment/weapon_templates/1h_spears_shield.lua:1425-1433,1484-1485`;
 `scripts/settings/equipment/weapon_templates/es_deus_01.lua:1371-1379,1749-1750`]
 
-One-handed axes, Glaive/Great Axe, Empire/Elven one-handed swords, and
-Elf/Tuskgor spears are not registered as styles yet. They remain in a separate
+### Reciprocal one-handed Sword
+
+The `one_handed_swords` family keeps the physical item authoritative:
+`es_1h_sword` defaults to Empire and cycles Empire/Elven only on an
+`empire_soldier` carrier; `we_1h_sword` defaults to Elven and cycles Elven/Empire
+only on a `wood_elf` carrier. Admission uses native career/profile and actual
+inventory/player facts, not `can_wield`, item prefixes, or the viewing hero.
+Both valid melee slots use the existing synchronous creation wrapper; a bare
+backend preview without actor facts retains native behavior.
+
+The custom direction is a detached authored-Current construction. It
+normalizes only verified owned WT history, applied #348, and shared career
+mutations on the clone; native donor tables are never normalized in place.
+Native restoration independently selects the actual live donor, preserving its
+current WT history and applied #348 state rather than writing captured Current
+back. Both custom directions must retain their constructor `C.template`
+authority and the immutable family/member/default/order/receiver catalogue.
+UI, local set/request, template, planner/rider/send, receive/husk, asynchronous
+completion, and deferred queue consumers also re-prove actor admission.
+Unknown actors or lost authority keep live native behavior and the exact saved
+style dormant, without erasing it, rebuilding, or burning a remote retry edge.
+
+Selector decoration happens before the constructor snapshot. Elven style on
+Empire consumes WT's six Elven-to-Empire 3P mappings; Empire style on Elf uses
+the exact per-node and predecessor-chain H1/H3 mapping, not a global inverse.
+Only 3P selectors change; native first-person fallback remains.
+No native mesh, resource, grip, or physical 1.15-scale change is introduced.
+The named read-only check is
+`issue645_reciprocal_one_handed_sword_family`.
+
+The 71 offline source cases establish bounded construction, admission,
+lifetime, and selector contracts, not engine rendering or transition
+acceptance. The appearance census therefore keeps every Sword surface/edge
+unsupported with its native fallback. Installed-game first/third-person,
+preview, restart, animation and co-op acceptance remain separate. Mace-on-Sword
+and Tuskgor-on-Elf-Spear remain outstanding #645 work.
+
+One-handed axes, Glaive/Great Axe, and Elf/Tuskgor spears are not registered as
+styles yet. They remain in a separate
 diagnostic allow-list. The existing pre-RPC 3P action seam records each distinct
 owner event once, up to 32 rows per candidate family per session, using
 `[cwv:645]`; it does not load resources, mutate templates, or expose UI rows.

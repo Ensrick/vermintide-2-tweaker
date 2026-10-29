@@ -13,7 +13,7 @@ local M = {}
 
 M.PROVIDER = "cwv_style"
 M.FAMILY = "greatsword"
-M.SUPPORTED_FAMILIES = { greatsword = true, sword_shield = true }
+M.SUPPORTED_FAMILIES = { greatsword = true, sword_shield = true, one_handed_swords = true }
 function M.supports_family(family_id)
 	return M.SUPPORTED_FAMILIES[family_id] == true
 end
@@ -68,6 +68,12 @@ function M.build(deps, args)
 	if type(row) ~= "table" or not M.supports_family(row.family_id)
 			or type(row.package) ~= "table" then
 		return nil, "family unsupported"
+	end
+	if row.family_id == "one_handed_swords" then
+		if type(deps.package_for) ~= "function" then return nil, "Sword authority unavailable" end
+		local ok, package = pcall(deps.package_for, row.item_key, row.style_id)
+		if not ok or type(package) ~= "table" or package.template ~= row.package.template
+				or package.resource ~= row.package.resource then return nil, "Sword authority unavailable" end
 	end
 	if type(world) ~= "table" or type(base) ~= "table" then
 		return nil, "appearance unavailable"

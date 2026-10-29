@@ -133,12 +133,12 @@ and a duplicate-entry `ferror` on re-init (:2346-2356). Always `rawget`/`rawset`
    `game_scripts` (boot.lua:136-145).
 4. Foundation scripts: `class` before `table` (table.lua:3 requires class.lua), then
    managers (boot.lua:516-519). Base managers instantiated (`Managers.time/world/token/state_machine`, boot.lua:522-528);
-   `Managers.persistent_event = EventManager:new()` (boot.lua:1541).
+   `Managers.persistent_event = EventManager:new()` (boot.lua:1545).
 5. DLC packages load, then `DLCUtils.require_list("additional_settings")` and
    `DLCUtils.merge("script_data", script_data)` (boot.lua:386-388).
-6. `Game:require_game_scripts()` (boot.lua:389, defined :1290-1322): utils, settings,
+6. `Game:require_game_scripts()` (boot.lua:389, defined :1294-1326): utils, settings,
    `entity_system`, all game states, ~40 managers, helpers, network,
-   `network_lookup` (:1320) - i.e. EVERY vanilla class table gets defined here.
+   `network_lookup` (:1324) - i.e. EVERY vanilla class table gets defined here.
 7. `init_mods` state: `ModManager:new` is created LAST (boot.lua:399-405) and boot waits
    for `all_mods_loaded` (:406-414).
 
@@ -158,7 +158,7 @@ why hooking a base class is dead code (3.1) and why settings overlays are safe.
   StateLoading (scripts/game_state/state_loading.lua:168) and StateIngame
   (scripts/game_state/state_ingame.lua:2207-2209). Any registration against
   `Managers.state.event` dies at the next transition. `Managers.persistent_event`
-  (boot.lua:1541) survives; state-event triggers pass through to it
+  (boot.lua:1545) survives; state-event triggers pass through to it
   (event_manager.lua:46-48).
 - Venture group = Chaos Wastes expedition lifetime; `Managers.on_venture_start/end`
   broadcast to all managers implementing those methods (managers.lua:98-104).
@@ -166,7 +166,7 @@ why hooking a base class is dead code (3.1) and why settings overlays are safe.
 ### 2.3 Game states
 
 `GameStateMachine = class(GameStateMachine, StateMachine)` (scripts/game_state/game_state_machine.lua:5)
-drives StateSplashScreen/StateLoading/StateIngame/StateDemoEnd (required boot.lua:1296).
+drives StateSplashScreen/StateLoading/StateIngame/StateDemoEnd (required boot.lua:1300).
 The foundation `StateMachine` instantiates the next state class (`new_state:new()`),
 sets `.parent`, calls `on_enter(params)` (state_machine.lua:40-68); a state's `update`
 returning a class table triggers the transition (state_machine.lua:74-80). Related trap:
@@ -213,7 +213,7 @@ locally readable (Workshop bundle only); VMF-side mechanics below cite `docs/VMF
 | Base class with derived classes | Hook the DERIVED class(es) too - vanilla pairs we already pair-hook: `HeroPreviewer` + `MenuWorldPreviewer` (cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua:5310+5346, :5455-5456, :9417-9418) | class.lua:51-57 copies parent methods at definition time; `MenuWorldPreviewer = class(MenuWorldPreviewer, HeroPreviewer)` (scripts/ui/views/menu_world_previewer.lua:7) ran at boot, so a base-only hook NEVER fires on the keep inventory previewer (BUG_CLASSES.md class 1b, docs/BUG_CLASSES.md:71; burned wt v0.12.16) |
 | Plain-table dispatchers (`BackendUtils`, `GearUtils`, `DamageUtils`) | Table-form hook with nil guard; for LA-cloned backends hook the post-LA table reference (docs/CROSS_MOD_ARCHITECTURE.md "LA bridge") | String-form misses runtime-reassigned functions; `BackendUtils.can_wield_item` is not hookable at all - mutate `ItemMasterList[key].can_wield` instead (CLAUDE.md "Hooking") |
 | `Managers.state.event` events (`on_player_joined_party` etc.) | Register a named method on a long-lived object (`mod`), re-register when the manager pointer changes - gt's dispatcher is the house pattern (general_tweaker/scripts/mods/general_tweaker/general_tweaker.lua:1929-1976) | Manager is rebuilt every state transition (state_ingame.lua:2209); one boot-time register silently dies after first map load. 3rd arg must be a method-name string (class 3b). One `(object, event)` pair per manager - last-writer-wins (gt's three lobby modules collided exactly here, general_tweaker.lua:1920-1927) |
-| `Managers.persistent_event` | Same API, survives transitions (boot.lua:1541) - use for whole-session subscriptions | Passthrough means state-event triggers ALSO reach persistent registrations (event_manager.lua:46-48) - do not double-register the same event on both |
+| `Managers.persistent_event` | Same API, survives transitions (boot.lua:1545) - use for whole-session subscriptions | Passthrough means state-event triggers ALSO reach persistent registrations (event_manager.lua:46-48) - do not double-register the same event on both |
 | Settings tables (`DifficultySettings`, `Breeds`, `HordeCompositions`...) | Overlay values in place at mod load; vanilla reads at call time | Some tables are captured as upvalues/locals at require time by consumers (e.g. enemy pacing `threat_values` upvalue - enemy_tweaker/DEVELOPMENT.md); mutate BEFORE first consumer read or patch the consumer |
 | `NetworkLookup.*` | `rawget`/`rawset` only; append with paired forward+reverse entries | Strict `__index` errors on any miss (network_lookup.lua:2360-2367); modded keys on vanilla RPCs CTD non-modded peers (BUG_CLASSES.md class 31, docs/BUG_CLASSES.md:1307) - sender-side substitution, never toggle-gated |
 | New unit extensions | Define a GLOBAL class + register into the system's extension list (vanilla resolves `rawget(_G, name)`, script_unit.lua:99) | Global name = cross-mod collision surface; use the idempotent `Foo = class(Foo)` form so double-load re-assigns methods instead of erroring (our _material_hijack_embedded_anim.lua:28 precedent) |

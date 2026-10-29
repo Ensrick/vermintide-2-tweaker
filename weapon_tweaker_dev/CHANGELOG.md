@@ -1,5 +1,18 @@
 # Weapon Tweaker Changelog
 
+## 0.12.342-dev (2026-10-29) -- Mirror Sword producer evidence (#645)
+
+- Mirror public beta 0.12.341-beta's private boot/applied Sword push-combo
+  identity record, preserving normalized runtime parity and the existing
+  setting, action values and restoration behavior.
+- Keep the Dev namespace, friends-only Workshop item, preview and diagnostic
+  overlay. Coordinate with CWV 0.1.561-dev; no new hook or RPC is added.
+- Retain the same private once-per-install producer and fail-closed record,
+  source and chain checks across balance initialization re-entry. Preserve
+  original first-attempt exceptions and never recapture a failed boot.
+- Automated source-qualified coverage does not establish game startup,
+  first/third-person rendering, transitions, combat or co-op acceptance.
+
 ## 0.12.341-dev (2026-10-27) -- mirror Greataxe producer proof (#428)
 
 - Mirror public beta 0.12.340-beta's private, installation-bound Greataxe

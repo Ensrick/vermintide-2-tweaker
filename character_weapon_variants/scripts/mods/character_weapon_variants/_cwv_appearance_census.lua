@@ -224,6 +224,18 @@ end
 
 local families = {}
 
+-- #645 reciprocal one-handed Sword has source admission/lifetime evidence,
+-- not engine rendering or lifecycle acceptance. Do not inherit the optimistic
+-- owner/preview defaults from older families while those cells are unproven.
+local SWORD_SOURCE_ONLY_NOTE = "#645: Rendering and transition acceptance is unproven; offline source tests do not establish it. " ..
+	"The physical native sword, skin and grip are unchanged. Missing actor or constructed-template authority selects live native behavior " ..
+	"and keeps the saved style dormant; no custom appearance replay is claimed."
+local sword_matrix = matrix(SWORD_SOURCE_ONLY_NOTE)
+for surface in pairs(sword_matrix) do
+	sword_matrix[surface] = row(UNSUP, SWORD_SOURCE_ONLY_NOTE)
+end
+families.one_handed_swords = { matrix = sword_matrix }
+
 -- Combat-Style / greatsword-family illusions -------------------------------
 -- cwv_es_longsword, cwv_es_longsword_blackguard, cwv_es_longsword_nordland.
 -- item_type cwv_imperial_longsword; retired (cwv_retired) + promo, now carried

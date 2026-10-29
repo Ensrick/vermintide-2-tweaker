@@ -157,6 +157,24 @@ toggles default ON when CWV is installed and cover CWV's own variant items per c
   per-template 3P remap. Missing, disabled, failed, unsupported, or unregistered
   providers fall back to the item's native template; WT never duplicates style
   family mappings.
+- **Sword applied-history evidence (#645/#348):** WT publishes the narrow
+  read-only `mod._wt348_sword_push_combo` record at its existing #348 boot
+  producer. Schema 1 binds `setting_id`, `boot_enabled`, `weapons`, `source`,
+  `action`, `before`, and `applied` to the actual donor/action/chain objects.
+  A pending saved checkbox is not evidence that the mutation was applied.
+  CWV admits the record only while those actual identities and the verified WT
+  history/shared-career ownership remain intact. Detached reciprocal Sword
+  clones normalize those verified owned mutations to authored Current; native
+  restoration reads the actual live donor and never writes captured Current
+  back. Missing WT remains optional, not invented applied-state authority.
+  This is a private read-only producer/consumer lifetime contract, not a new
+  RPC, hook, or replacement for the existing effective-template fallback.
+  WT entry retains `_wt_sword_push_combo_owner` once and passes its installation
+  capability to the existing balance position; VMF `mod:dofile` is not assumed
+  to cache modules. Re-entry preserves the exact boot record without rereading
+  a pending checkbox. Unknown record/source/chain or lost private authority is
+  refused without repair; a first producer exception remains an exception, not
+  transactional rollback or successful authority.
 - **cosmetics_tweaker:** cosmetics detects CWV directly and discovers authored
   dual-family offhand pools. CWV's companion-detection return values remain
   diagnostic-only.

@@ -6,8 +6,8 @@ paths are relative to this monorepo. Unverified statements are tagged `[unverifi
 
 The single most important fact in this doc: **mods tick OUTSIDE the game-state
 machine.** `Boot.game_update` calls `Managers.mod:update(dt)` first thing every
-frame (`scripts/boot.lua:748-750`), before the state machine (`:772`, `:786`) and
-before `Managers.world:update` (`:788`). Your `mod.update` therefore runs on every
+frame (`scripts/boot.lua:750-752`), before the state machine (`:774`, `:788`) and
+before `Managers.world:update` (`:790`). Your `mod.update` therefore runs on every
 frame of every state - splash, title, loading, ingame, AND the frames between
 states where the level world does not exist. Every per-frame consumer must be
 written for that reality.
@@ -18,7 +18,7 @@ written for that reality.
 
 | File (vanilla) | Class / global | Single responsibility |
 |---|---|---|
-| `scripts/boot.lua` | `Boot`, `Game` | Engine entry points `init`/`update`/`render`/`shutdown` (`:557-592`); boot package loading + `ModManager` creation (`:399-414`); the master per-frame update loop `Boot.game_update` (`:744-915`); render loop `Boot.game_render` (`:530-543`); global manager creation `Game._init_managers` (`:1538-1631`) |
+| `scripts/boot.lua` | `Boot`, `Game` | Engine entry points `init`/`update`/`render`/`shutdown` (`:559-594`); boot package loading + `ModManager` creation (`:399-414`); the master per-frame update loop `Boot.game_update` (`:746-917`); render loop `Boot.game_render` (`:530-543`); global manager creation `Game._init_managers` (`:1542-1635`) |
 | `foundation/scripts/util/state_machine.lua` | `StateMachine` | Minimal FSM: `_change_state` runs old `on_exit` then `new_state:new()` then `on_enter` synchronously (`:40-68`); `update` swaps state when a state's `update` returns a class (`:74-80`) |
 | `scripts/game_state/game_state_machine.lua` | `GameStateMachine` | `StateMachine` subclass that notifies `Managers.mod:on_game_state_changed("exit"/"enter", NAME, state)` around every transition (`:13-28`) and on destroy (`:60-68`) |
 | `foundation/scripts/managers/managers.lua` | `Managers` | Global registry with three lifecycle groups `global`/`venture`/`state` (`:10-14`); creation order recorded via `__newindex` metatables (`:106-195`); group destroy runs in reverse creation order (`:26-44`); `Managers.state.destroy` / `Managers.venture.destroy` group wipes (`:82-88`); `on_round_start/end`, `on_venture_start/end` broadcasts (`:90-104`) |
@@ -26,7 +26,7 @@ written for that reality.
 | `scripts/game_state/state_ingame.lua` | `StateIngame` | The playable state (keep AND missions - the keep is just a `hub_level`, `:133-135`). Builds the whole `Managers.state.*` context (`:2178-2424`), per-player `StateInGameRunning` sub-machines (`:388`), tears everything down in `on_exit` (`:1847-2120`) |
 | `scripts/game_state/state_ingame_running.lua` | `StateInGameRunning` | Per-local-player sub-state inside StateIngame (`state_ingame.lua:388`); owns `ingame_ui` and player-facing flow. NAME at `state_ingame_running.lua:26` |
 | `scripts/game_state/state_loading.lua` | `StateLoading` | Level-transition state: loads packages, spawns the next `level_world` asynchronously (`:1396-1419`), runs sub-state machine (`_setup_state_machine`, `:644`) with variants `StateLoadingRunning` / `StateLoadingRestartNetwork` / `StateLoadingMigrateHost` / `StateLoadingVersusMigration` (`scripts/game_state/loading_sub_states/win32/*.lua`); hands the spawned world/level to StateIngame through `loading_context` (`:1680-1681`) |
-| `scripts/game_state/components/level_transition_handler.lua` | `LevelTransitionHandler` (`Managers.level_transition_handler`) | GLOBAL manager (created `boot.lua:1614`) that owns which level is current/next, level package load/unload (`:181-246`, `:518-591`), level seed/difficulty/mechanism data (`:379-433`), and the four synced package loaders (`:33-36`) |
+| `scripts/game_state/components/level_transition_handler.lua` | `LevelTransitionHandler` (`Managers.level_transition_handler`) | GLOBAL manager (created `boot.lua:1618`) that owns which level is current/next, level package load/unload (`:181-246`, `:518-591`), level seed/difficulty/mechanism data (`:379-433`), and the four synced package loaders (`:33-36`) |
 | `scripts/utils/async_level_spawner.lua` | `AsyncLevelSpawner` | Creates the `level_world` (deactivated) and time-sliced-spawns the level into it (`:5-8`, `:63-65`) |
 | `scripts/managers/mod/mod_manager.lua` | `ModManager` (`Managers.mod`) | Loads Workshop mods at boot; in state `done` relays per-frame `update` (`:130-137`) and `on_game_state_changed` (`:491-503`) to every enabled mod's callback table |
 | `scripts/game_state/state_title_screen.lua`, `state_splash_screen.lua`, `state_demo_end.lua`, `state_dedicated_server*.lua` | title/splash/demo/dedicated states | Pre-game states. NAMEs: `StateSplashScreen` (`state_splash_screen.lua:12`), `StateTitleScreen` (`state_title_screen.lua:16`), `StateDemoEnd`, `StateDedicatedServer*` |
@@ -34,13 +34,13 @@ written for that reality.
 
 ### State graph (PC client)
 
-`StateSplashScreen` -> `StateTitleScreen` -> `StateLoading` -> `StateIngame` (keep) -> `StateLoading` -> `StateIngame` (mission) -> ... (starting state selected at `boot.lua:1744-1801`). Every keep<->mission move passes through StateLoading. There is no separate "keep state" - keep = StateIngame with `LevelSettings[level_key].hub_level` (`state_ingame.lua:133-135`).
+`StateSplashScreen` -> `StateTitleScreen` -> `StateLoading` -> `StateIngame` (keep) -> `StateLoading` -> `StateIngame` (mission) -> ... (starting state selected at `boot.lua:1748-1805`). Every keep<->mission move passes through StateLoading. There is no separate "keep state" - keep = StateIngame with `LevelSettings[level_key].hub_level` (`state_ingame.lua:133-135`).
 
 ### World inventory (name -> creator -> lifetime)
 
 | World name | Created | Destroyed | Lifetime |
 |---|---|---|---|
-| `boot_world` | `boot.lua:594-609` | `boot.lua:656-664` at boot end | boot only |
+| `boot_world` | `boot.lua:596-611` | `boot.lua:658-666` at boot end | boot only |
 | `top_ingame_view` | `transition_manager.lua:66-74` (TransitionManager, global) | app shutdown | **whole session** - safe to cache |
 | `music_world` | `music_manager.lua:36` (MusicManager, global) | app shutdown | **whole session** - safe to cache |
 | `level_world` (`LevelHelper.INGAME_WORLD_NAME`, `scripts/helpers/level_helper.lua:4`) | `AsyncLevelSpawner` during StateLoading (`state_loading.lua:1408`, `async_level_spawner.lua:63`) | `StateIngame._teardown_world` -> `Managers.world:destroy_world` (`state_ingame.lua:719`); or by StateLoading itself on abort/reload (`state_loading.lua:1756-1760`, `:1933-1937`) | one venture leg; **a new same-named world is a DIFFERENT handle every mission** |
@@ -49,7 +49,7 @@ written for that reality.
 
 ### Manager lifecycle groups
 
-- **global** (`Managers.X`): created in `Boot._init_managers` (`boot.lua:522-528`: time, world, token, state_machine, url_loader) and `Game._init_managers` (`boot.lua:1538-1631`: backend, music, transition, player, party, mechanism, lobby, level_transition_handler, ui, matchmaking is created later in StateIngame, etc.). Live for the whole session.
+- **global** (`Managers.X`): created in `Boot._init_managers` (`boot.lua:522-528`: time, world, token, state_machine, url_loader) and `Game._init_managers` (`boot.lua:1542-1635`: backend, music, transition, player, party, mechanism, lobby, level_transition_handler, ui, matchmaking is created later in StateIngame, etc.). Live for the whole session.
 - **venture** (`Managers.venture.X`): venture = one keep-plus-missions play session. Started via `Managers.mechanism:check_venture_start` at StateIngame enter (`state_ingame.lua:103`), ended via `check_venture_end` at exit (`state_ingame.lua:2119`). `Managers.venture.statistics` is read at `state_ingame.lua:156`; group destroy = `managers.lua:86-88` [unverified exactly which mechanism call destroys the group].
 - **state** (`Managers.state.X`): rebuilt EVERY state. StateIngame builds ~25 of them in `_setup_state_context` (`state_ingame.lua:2178-2424`); StateLoading builds only `Managers.state.event` (`state_loading.lua:167-169`). Wiped by `Managers.state:destroy()` at StateIngame on_exit `:1937` and StateLoading on_exit `:1788` - reverse creation order (`managers.lua:26-44`).
 
@@ -57,20 +57,20 @@ written for that reality.
 
 ## 2. Lifecycle and data flow
 
-### 2.1 The per-frame loop (Boot.game_update, boot.lua:744-915)
+### 2.1 The per-frame loop (Boot.game_update, boot.lua:746-917)
 
 Order within one frame (client, Windows):
 
-1. `Managers.mod:update(dt)` - **all mod.update callbacks** (`:748-750`, dispatch at `mod_manager.lua:130-137`)
-2. `UPDATE_RESOLUTION_LOOKUP`, perfhud, updator, `Managers.time:update` (`:752-758`)
-3. DLC manager `pre_update`s (`:762-770`)
-4. `machine:pre_update` -> `StateIngame.pre_update` (`:772`; POSITION_LOOKUP refresh + network receive at `state_ingame.lua:804-829`)
-5. `Managers.package:update`, `token:update` (`:773-774`)
-6. `machine:update` -> `StateIngame.update` - **state transitions happen inside this call** (`:786`, `state_machine.lua:74-80`)
-7. `Managers.state_machine:update`, **`Managers.world:update`** (ScriptWorld/physics/anim step, `:787-788`)
-8. Platform managers, weave/news/transition/telemetry/etc. (`:797-866`)
-9. `machine:post_update` -> `StateIngame.post_update` (unit spawn queue flush, RPC transmit, `:898`, `state_ingame.lua:1783-1809`)
-10. `FrameTable.swap_and_clear()` (`:899`)
+1. `Managers.mod:update(dt)` - **all mod.update callbacks** (`:750-752`, dispatch at `mod_manager.lua:130-137`)
+2. `UPDATE_RESOLUTION_LOOKUP`, perfhud, updator, `Managers.time:update` (`:754-760`)
+3. DLC manager `pre_update`s (`:764-772`)
+4. `machine:pre_update` -> `StateIngame.pre_update` (`:774`; POSITION_LOOKUP refresh + network receive at `state_ingame.lua:804-829`)
+5. `Managers.package:update`, `token:update` (`:775-776`)
+6. `machine:update` -> `StateIngame.update` - **state transitions happen inside this call** (`:788`, `state_machine.lua:74-80`)
+7. `Managers.state_machine:update`, **`Managers.world:update`** (ScriptWorld/physics/anim step, `:789-790`)
+8. Platform managers, weave/news/transition/telemetry/etc. (`:799-868`)
+9. `machine:post_update` -> `StateIngame.post_update` (unit spawn queue flush, RPC transmit, `:900`, `state_ingame.lua:1783-1809`)
+10. `FrameTable.swap_and_clear()` (`:901`)
 
 Render is separate: `Boot.game_render` runs `machine:pre_render`, `Managers.world:render`, `machine:render`, `machine:post_render` (`boot.lua:530-543`).
 
@@ -131,9 +131,9 @@ Everything above happens in ONE `machine:update` call. Mods never observe a half
 | `level_world` | no | no | late + deactivated (`state_loading.lua:1408-1419`) | yes | NO |
 | `Managers.state.event` | no | [unverified] | yes (`state_loading.lua:167-169`) | yes | no |
 | `Managers.state.network/entity/game_mode/conflict/...` | no | no | no | yes (`state_ingame.lua:2178-2424`) | no |
-| `Managers.player` (manager object) | yes (`boot.lua:1604`) | yes | yes | yes | yes - but players removed, `is_server` nil (`player_manager.lua:170-181`) |
+| `Managers.player` (manager object) | yes (`boot.lua:1608`) | yes | yes | yes | yes - but players removed, `is_server` nil (`player_manager.lua:170-181`) |
 | `Managers.input` | nil | state-owned | yes (`state_loading.lua:184`) | yes (`state_ingame.lua:108`) | NIL (`state_ingame.lua:2104`) |
-| `Managers.backend`, `Managers.mechanism`, `Managers.level_transition_handler`, `Managers.lobby`, `Managers.party`, `Managers.ui` | yes (global, `boot.lua:1538-1631`) | yes | yes | yes | yes |
+| `Managers.backend`, `Managers.mechanism`, `Managers.level_transition_handler`, `Managers.lobby`, `Managers.party`, `Managers.ui` | yes (global, `boot.lua:1542-1635`) | yes | yes | yes | yes |
 | POSITION_LOOKUP freshness | n/a | stale | stale | fresh (`state_ingame.lua:808`) | stale (BUG_CLASSES 21) |
 
 ---
@@ -142,7 +142,7 @@ Everything above happens in ONE `machine:update` call. Mods never observe a half
 
 | Seam | Fires | Safe pattern | Traps |
 |---|---|---|---|
-| `mod.update(dt)` (VMF callback; dispatched `mod_manager.lua:130-137` from `boot.lua:748-750`) | every frame, EVERY state, including between states | Treat as stateless poll. Probe everything: `Managers.world:has_world(name)` before `:world(name)`; nil-check `Managers.state.X`, `Managers.input`, `Managers.player:local_player()`. Use ONE registry per mod (see section 5) | runs before state machine + world update; `Managers.time:time("game")` errors outside StateIngame; POSITION_LOOKUP stale (BUG_CLASSES 21) |
+| `mod.update(dt)` (VMF callback; dispatched `mod_manager.lua:130-137` from `boot.lua:750-752`) | every frame, EVERY state, including between states | Treat as stateless poll. Probe everything: `Managers.world:has_world(name)` before `:world(name)`; nil-check `Managers.state.X`, `Managers.input`, `Managers.player:local_player()`. Use ONE registry per mod (see section 5) | runs before state machine + world update; `Managers.time:time("game")` errors outside StateIngame; POSITION_LOOKUP stale (BUG_CLASSES 21) |
 | `mod.on_game_state_changed(status, state_name)` (VMF; engine relay `game_state_machine.lua:13-28` + `mod_manager.lua:491-503`) | "exit" BEFORE old state's on_exit; "enter" AFTER new state's on_enter | Release world-tied resources (LineObjects, screen GUIs, spawned units, cached handles) on `("exit", "StateIngame")` - world still alive. Arm/initialize on `("enter", "StateIngame")` - full context exists | do NOT do world work on `("enter", "StateLoading")` - no level world; notification skipped while mods still loading (`mod_manager.lua:500-502`) |
 | `StateIngame.on_enter` / `on_exit` hook (`state_ingame.lua:75`, `:1847`) | once per venture leg | `mod:hook_safe("StateIngame", "on_enter", ...)` post-fires with everything built. For on_exit, a PRE-wrapper (`mod:hook`) sees the live world; a `hook_safe` post-callback sees it destroyed | grep for existing hooks first (NON-NEGOTIABLE 8); prefer the VMF state-changed callback - it already gives you both edges without hooking |
 | `GameModeManager` / round events: `Managers:on_round_start/on_round_end` (`managers.lua:90-96`, called `state_ingame.lua:1849`) | round boundaries | define `on_round_end` on your own manager-like object only if you register it into a Managers group [not recommended for mods]; otherwise hook a consumer | round_end fires before ANY teardown - good early-warning if you already hook something with that name |
@@ -157,7 +157,7 @@ Everything above happens in ONE `machine:update` call. Mods never observe a half
 
 ## 4. Traps and crash classes
 
-1. **Dead-world dispatch (issue #459; the class this doc exists for).** `LineObject.dispatch(world, lo)`, `World.destroy_unit(world, u)`, `Gui.*` on a gui of a destroyed world, or ANY C-side call through a freed world pointer is a 0xc0000005 access violation that **pcall cannot catch** (the AV is on the crashing C stack). Timeline: StateIngame.on_exit destroys `level_world` (`state_ingame.lua:1939` -> `world_manager.lua:95`) while mod.update keeps ticking (`boot.lua:748-750`). Two required gates, both shipped in gt-dev:
+1. **Dead-world dispatch (issue #459; the class this doc exists for).** `LineObject.dispatch(world, lo)`, `World.destroy_unit(world, u)`, `Gui.*` on a gui of a destroyed world, or ANY C-side call through a freed world pointer is a 0xc0000005 access violation that **pcall cannot catch** (the AV is on the crashing C stack). Timeline: StateIngame.on_exit destroys `level_world` (`state_ingame.lua:1939` -> `world_manager.lua:95`) while mod.update keeps ticking (`boot.lua:750-752`). Two required gates, both shipped in gt-dev:
    - existence: `wm:has_world("level_world")` before `wm:world(...)` - `world()` fasserts on a missing name (`world_manager.lua:112`) (`general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_debug_highlights.lua:214-221`);
    - **identity**: the cached handle must be `==` the currently-live world - a NEW same-named world next mission passes `has_world` but does not validate the OLD handle (`general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_teleport_lab.lua:995-1022`, `_gt_debug_highlights.lua:234-259`).
    Candidate for a BUG_CLASSES entry of its own; nearest existing entries are 22/23 (docs/BUG_CLASSES.md).
@@ -170,8 +170,8 @@ Everything above happens in ONE `machine:update` call. Mods never observe a half
 8. **Keep-only Gui materials drawn mid-mission** = draw fatal, and mission-substituted UI worlds AV in `ShadingEnvironment.blend`: BUG_CLASSES 23 and 22. Both are "world/state changed under a cached UI resource" cousins of #459.
 9. **`Managers.state.event` is rebuilt per state** (`state_loading.lua:167-169`, `state_ingame.lua:2207-2209`) and the whole state group dies at `state_ingame.lua:1937` / `state_loading.lua:1788`. Event registrations do not survive transitions; re-register on `("enter", ...)`. Also note BUG_CLASSES 3b (`event:register` 3rd-arg form).
 10. **Mod "exit" notification order.** `on_game_state_changed("exit", ...)` fires BEFORE teardown (`game_state_machine.lua:16-21`) - resources released there need no dead-world dance. But anything you KEEP past that callback must survive the full teardown ordering in section 2.4.
-11. **`Boot.flow_return_table` cleared every frame** (`boot.lua:886`) and `FrameTable.swap_and_clear` (`boot.lua:899`) - never retain engine frame-table values across frames (same family as the Vector3 stack-temporary rule, BUG_CLASSES 12).
-12. **Application shutdown path** = `GameStateMachine.destroy(true)` -> `on_exit(application_shutdown=true)` (`boot.lua:917-919`, `state_machine.lua:82-86`): mods get an "exit" notification with NO "enter" ever following (`game_state_machine.lua:60-68`). Do not assume enter/exit pairing.
+11. **`Boot.flow_return_table` cleared every frame** (`boot.lua:888`) and `FrameTable.swap_and_clear` (`boot.lua:901`) - never retain engine frame-table values across frames (same family as the Vector3 stack-temporary rule, BUG_CLASSES 12).
+12. **Application shutdown path** = `GameStateMachine.destroy(true)` -> `on_exit(application_shutdown=true)` (`boot.lua:919-924`, `state_machine.lua:82-86`): mods get an "exit" notification with NO "enter" ever following (`game_state_machine.lua:60-68`). Do not assume enter/exit pairing.
 
 ---
 

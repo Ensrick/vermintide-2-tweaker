@@ -3,9 +3,10 @@
 Audience: maintainers and AI agents working on crt / ct / bt-descendant code. Every claim
 cites a file:line. Vanilla paths are relative to
 `C:\Users\danjo\source\repos\Vermintide-2-Source-Code`; our paths are relative to
-`C:\Users\danjo\source\repos\vermintide-2-tweaker`. Line numbers are against the decompile
-as of 2026-07-18; re-verify after a game patch. Anything not verified is tagged
-`[unverified]`.
+`C:\Users\danjo\source\repos\vermintide-2-tweaker`. Original narrative verification was
+2026-07-18. The provenance manifest's later seed refresh is not a blanket audit
+of this document; re-verify deeper citations after game patches (see README.md).
+Anything not verified is tagged `[unverified]`.
 
 ---
 
@@ -32,7 +33,7 @@ as of 2026-07-18; re-verify after a game patch. Anything not verified is tagged
 |---|---|---|
 | `scripts/unit_extensions/default_player_unit/buffs/buff_extension.lua` | `BuffExtension` | Per-unit buff store. `add_buff` :165, stacking :520, stat-buff registry `_add_stat_buff` :635, update/tick loop :713, `remove_buff` :889, proc dispatch `trigger_procs` :1303, stat readers `apply_buffs_to_value` :1391 / `get_buff_value` :1367, sync-id machinery :1519-1687 |
 | `scripts/entity_system/systems/buff/buff_system.lua` | `BuffSystem` | Networked buff add/remove. `add_buff` :277 (server-controlled ids :206-237), `rpc_add_buff` :417, group buffs :472-540, volume buffs :353-415, param-packing synced buffs `add_buff_synced` :849 + `rpc_add_buff_synced*` :890-1043, hot-join sync :66 / :1067 |
-| `scripts/unit_extensions/default_player_unit/buffs/buff_templates.lua` | `BuffTemplates`, `StatBuffApplicationMethods` :26-167, `ProcEvents` :186, `ProcFunctions` :323, `StackingBuffFunctions` :4149 | The template data + the proc function registry. End-of-file merges: `OldTalentBuffTemplates` :9578, per-hero `TalentBuffTemplates` :9580-9582, weapon/weave trait+property buffs :9584-9587 |
+| `scripts/unit_extensions/default_player_unit/buffs/buff_templates.lua` | `BuffTemplates`, `StatBuffApplicationMethods` :26-167, `ProcEvents` :186, `ProcFunctions` :323, `StackingBuffFunctions` :4149 | The template data + the proc function registry. End-of-file merges: `OldTalentBuffTemplates` :9579, per-hero `TalentBuffTemplates` :9581-9583, weapon/weave trait+property buffs :9585-9588 |
 | `scripts/unit_extensions/default_player_unit/buffs/buff_function_templates.lua` | `BuffFunctionTemplates.functions` :97 | apply/update/remove function bodies referenced by name from templates (`apply_buff_func` etc.) |
 | `scripts/unit_extensions/default_player_unit/buffs/buff_utils.lua` | `BuffUtils` | `get_buff_template(name, mechanism)` :256 - THE template resolver (reads `BuffTemplates[name]`, applies `MechanismOverrides`); balefire DoT variant generator :267 |
 | `scripts/network_lookup/network_lookup.lua` | `NetworkLookup.buff_templates` :1144 | int<->name table for every buff RPC. Built by `create_lookup` :38-47 (a bare `pairs()` walk of `BuffTemplates`), then sealed with an ERROR-on-missing-key `__index` metatable :2346-2367 applied to every lookup table :2386-2388 |
@@ -66,7 +67,7 @@ as of 2026-07-18; re-verify after a game patch. Anything not verified is tagged
 
 1. `BuffTemplates` is populated at file parse (`buff_templates.lua:4362`), then merged with
    `OldTalentBuffTemplates`, every hero's `TalentBuffTemplates`, and weapon/weave
-   trait/property buffs (`buff_templates.lua:9578-9587`). Deus (CW) boon buffs merge in via
+   trait/property buffs (`buff_templates.lua:9579-9588`). Deus (CW) boon buffs merge in via
    `table.merge_recursive(dlc_settings.buff_templates, DeusPowerUpBuffTemplates)`
    (`scripts/settings/dlcs/morris/morris_buff_settings.lua:7310`).
 2. `NetworkLookup.buff_templates` is then built from the merged table by a bare `pairs()`
@@ -307,7 +308,7 @@ MUTATE consumption math per-toggle at runtime (feature gating).
 
 `TalentBuffTemplates`, `OldTalentBuffTemplates`, `DeusPowerUpBuffTemplates`,
 `WeaponTraits/WeaveTraits.buff_templates` are all merged INTO `BuffTemplates` at parse
-time (`buff_templates.lua:9578-9587`, `morris_buff_settings.lua:7310`). Post-boot writes
+time (`buff_templates.lua:9579-9588`, `morris_buff_settings.lua:7310`). Post-boot writes
 must target `BuffTemplates` (and `NetworkLookup`) directly; write the source table too
 only for introspection symmetry (ct's live example is
 `chaos_wastes_tweaker_dev.lua:10301-10310`).

@@ -1,5 +1,23 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.561-dev (2026-10-29) -- Reciprocal one-handed Sword admission (#645)
+
+- Add the Empire/Elven one-handed Sword family through dedicated construction,
+  actor-admission and loadout-control owners, preserving the physical item and
+  native fallback whenever carrier or retained-template authority is unavailable.
+- Normalize only verified owned WT history, applied Sword push-combo and shared
+  career mutations on detached custom templates. Native restoration reads the
+  actual live donor rather than overwriting it with a captured Current graph.
+- Recheck family, actor and constructor authority at local/remote selectors,
+  asynchronous completion and deferred queues; unknown actors retain dormant
+  saved styles without consuming a remote retry edge.
+- Add exact 3P selector routing and source-qualified construction, producer,
+  actor, rollback and installed-consumer coverage. Keep all 136 new appearance
+  census cells unsupported until engine rendering and transitions are verified.
+- Coordinate with Weapons beta 0.12.341-beta and Dev 0.12.342-dev. Mace-on-Sword
+  and Tuskgor-on-Elven-Spear remain separate unfinished work. Offline tests do
+  not establish native ABI, game startup, first/third-person or co-op acceptance.
+
 ## 0.1.560-dev (2026-10-27) -- Canonical publication documentation (#1025)
 
 - Replace five remaining raw VMB build/deploy examples across the construction
