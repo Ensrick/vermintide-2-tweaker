@@ -217,7 +217,7 @@
         # local purchase, and overlay synchronization only.
         @{
             Marker='[mp:577]'; ModId='mp'
-            ModTrees=@{mp='03e9db68bef463cdbaf106a260aa281b64611dd6'}
+            ModTrees=@{mp='e7de927db92d6266033c6bfed5681af1ad9a1010'}
             SourcesByMod=@{mp='modded_progression/scripts/mods/modded_progression/modded_progression.lua'}
             Signature='[mp:577] purchase_rejected item=%s reason=%s backend=none'
             Bound='at most one rejection receipt per explicit modded-realm Silver Shilling exchange attempt; both failure branches return before subsequent terminal routes'
@@ -235,7 +235,7 @@
         }
         @{
             Marker='[mp:577]'; ModId='mp'
-            ModTrees=@{mp='03e9db68bef463cdbaf106a260aa281b64611dd6'}
+            ModTrees=@{mp='e7de927db92d6266033c6bfed5681af1ad9a1010'}
             SourcesByMod=@{mp='modded_progression/scripts/mods/modded_progression/modded_progression.lua'}
             Signature='[mp:577] purchase_committed item=%s price=%d balance=%d overlay=%s backend=none'
             Bound='at most one commit receipt per explicit modded-realm Silver Shilling exchange attempt after successful validation and purchase'
@@ -517,17 +517,101 @@
         }
         @{
             Marker='[mp:607]'; ModId='mp'
-            ModTrees=@{mp='03e9db68bef463cdbaf106a260aa281b64611dd6'}
+            ModTrees=@{mp='e7de927db92d6266033c6bfed5681af1ad9a1010'}
             SourcesByMod=@{mp='modded_progression/scripts/mods/modded_progression/_mp_loot_diag_runtime.lua'}
             Signature='[mp:607] event=%s serial=%d flow=%s request=%s reason=%s chest=%s items=%d local_items=%d local_containers=%d local_uses=%d award_capable=%s open_capable=%s first_missing=%s backend=%s'
-            Bound='one-mission observer events are persisted in a twelve-record bounded ledger'
+            Bound='at most twelve automatic print attempts shared by normal and instrument-error receipts per Runtime.install or existing explicit diagnostic-reset window; attempts are consumed before logging; ledger capture/native forwarding continue and explicit reports are not budgeted'
             EmitterAnchors=@(
                 @{Tokens=@('print_log','(','String:[mp:607] event=%s serial=%d flow=%s request=%s reason=%s chest=%s ')}
-                @{Source='modded_progression/scripts/mods/modded_progression/modded_progression.lua';Tokens=@('print_log','=','printf')}
+                # Bind printf to THIS actual installer, not another generic print_log=printf.
+                @{Source='modded_progression/scripts/mods/modded_progression/modded_progression.lua';Tokens=@(
+                    'mod',':','dofile','(','String:scripts/mods/modded_progression/_mp_loot_diag_runtime',')','.',
+                    'install','(','mod',',','{','loot_diag','=','LootDiag',',',
+                    'get_inventory_store','=','get_inventory_store',',','rt_register','=','_rt_register',',',
+                    'is_modded_realm','=','function','(',')','return','LootDiag','.','realm_is_modded','(',
+                    'rawget','(','_G',',','String:MODDED_REALM',')',',','_is_mp_realm',')','end',',',
+                    'print_log','=','printf'
+                )}
+            )
+            # Scalar Lua literals retain the complete exact-token proof while reducing
+            # native import value visits; actual default-limit gates remain required.
+            GuardAnchors=@(
+                'local automatic_print_attempts = 0
+local function take_print_attempt()
+if automatic_print_attempts >= 12 then return false end
+automatic_print_attempts = automatic_print_attempts + 1
+return true
+end'
+                'if take_print_attempt() then
+print_log("[mp:607] event=%s serial=%d flow=%s request=%s reason=%s chest=%s " ..
+"items=%d local_items=%d local_containers=%d local_uses=%d " ..
+"award_capable=%s open_capable=%s first_missing=%s backend=%s",
+record.event, record.serial, record.flow, record.request_name,
+record.reason, record.chest_key, record.item_count, record.local_items,
+record.local_containers, record.local_container_uses,
+tostring(record.local_award_capable), tostring(record.local_open_capable),
+first_missing, record.backend)
+end
+return record'
+                'local function report_observer_error(stage)
+pcall(function()
+if not take_print_attempt() then return end
+print_log("[mp:607] event=instrument_error stage=%s " ..
+"reason=observer_failed backend=none", stage)
+end)
+end'
+                'mod:command("mp_loot_diag", "Show or reset bounded issue #607 loot diagnostics",
+function(action)
+if action == "reset" then
+mod:set(SETTING, LootDiag.empty(), false)
+automatic_print_attempts = 0
+mod:echo("#607 loot-layer diagnostic reset. " ..
+"Passive modded-realm observation remains active.")
+return
+end'
+            )
+        }
+        @{
+            Marker='[mp:607]'; ModId='mp'
+            ModTrees=@{mp='e7de927db92d6266033c6bfed5681af1ad9a1010'}
+            SourcesByMod=@{mp='modded_progression/scripts/mods/modded_progression/_mp_loot_diag_runtime.lua'}
+            Signature='[mp:607] event=instrument_error stage=%s reason=observer_failed backend=none'
+            Bound='at most twelve automatic print attempts shared with normal receipts per Runtime.install or existing explicit diagnostic-reset window; the same helper consumes attempts before this protected error logger, including logger faults'
+            EmitterAnchors=@(
+                @{Tokens=@('print_log','(','String:[mp:607] event=instrument_error stage=%s ','..','String:reason=observer_failed backend=none',',','stage',')')}
+                # Bind printf to THIS actual installer, not another generic print_log=printf.
+                @{Source='modded_progression/scripts/mods/modded_progression/modded_progression.lua';Tokens=@(
+                    'mod',':','dofile','(','String:scripts/mods/modded_progression/_mp_loot_diag_runtime',')','.',
+                    'install','(','mod',',','{','loot_diag','=','LootDiag',',',
+                    'get_inventory_store','=','get_inventory_store',',','rt_register','=','_rt_register',',',
+                    'is_modded_realm','=','function','(',')','return','LootDiag','.','realm_is_modded','(',
+                    'rawget','(','_G',',','String:MODDED_REALM',')',',','_is_mp_realm',')','end',',',
+                    'print_log','=','printf'
+                )}
             )
             GuardAnchors=@(
-                @{Tokens=@('LootDiag','.','MAX_RECORDS','~=','12')}
-                @{Tokens=@('if','#','success_ledger','.','records','~=','LootDiag','.','MAX_RECORDS','then')}
+                'local automatic_print_attempts = 0
+local function take_print_attempt()
+if automatic_print_attempts >= 12 then return false end
+automatic_print_attempts = automatic_print_attempts + 1
+return true
+end'
+                'local function report_observer_error(stage)
+pcall(function()
+if not take_print_attempt() then return end
+print_log("[mp:607] event=instrument_error stage=%s " ..
+"reason=observer_failed backend=none", stage)
+end)
+end'
+                'mod:command("mp_loot_diag", "Show or reset bounded issue #607 loot diagnostics",
+function(action)
+if action == "reset" then
+mod:set(SETTING, LootDiag.empty(), false)
+automatic_print_attempts = 0
+mod:echo("#607 loot-layer diagnostic reset. " ..
+"Passive modded-realm observation remains active.")
+return
+end'
             )
         }
         @{
@@ -586,7 +670,7 @@
             Signature='[cwv:786] style rx peer=%s slot=%s family=%s style=%s source=%s changed=%s'
             Bound='one receive receipt per explicit synchronized style edge'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[cwv:786] style rx peer=%s slot=%s family=%s style=%s source=%s changed=%s')})
-            GuardAnchors=@(@{Tokens=@('function','runtime',':','accept_style_edge','(','peer_id',',','slot_name',',','family_id',',','style_id',',','source',',','descriptor',')')})
+            GuardAnchors=@('function runtime:accept_style_edge(peer_id, slot_name, family_id, style_id, source, descriptor)')
         }
         @{
             Marker='[cwv:786]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='cd698acdf82c72f102f7e0b05e4b8ce1059f2261'}
@@ -1168,7 +1252,7 @@
             )
             GuardAnchors=@(
                 @{Tokens=@('mod',':','hook','(','String:DeusChestExtension',',','String:_generate_upgraded_weapon',',','function')}
-                @{Tokens=@('local','a',',','b','=','func','(','self',',','weapon',',','slot_name',',','rarity',',','eff_go_id',',','profile_index',',','career_index',')')}
+                'local a, b = func(self, weapon, slot_name, rarity, eff_go_id, profile_index, career_index)'
                 @{Tokens=@('return','a',',','b','end',')')}
             )
         }
@@ -1243,7 +1327,7 @@
             EmitterAnchors=@(
                 @{Tokens=@('local','pf','=','rawget','(','_G',',','String:printf',')')}
                 @{Tokens=@('pf','(','String:[cos:518] ','..','fmt',',','...',')')}
-                @{Tokens=@('mod','.','_cos518_emit','(','String:wield',',','tostring','(','item_key',')','..','String:|','..','tostring','(','skin',')',',','String:OWNER-WIELD slot=%s item=%s skin=%s deus_yield=%s')}
+                'mod._cos518_emit("wield", tostring(item_key) .. "|" .. tostring(skin), "OWNER-WIELD slot=%s item=%s skin=%s deus_yield=%s"'
             )
             GuardAnchors=@(
                 @{Tokens=@('if','ch','.','seen','[','dedupe_key',']','or','ch','.','count','>=','16','then','return','false','end')}
@@ -1311,7 +1395,7 @@
             GuardAnchors=@(
                 @{Tokens=@('mod',':','command','(','String:woc_pose',',')}
                 @{Tokens=@('mod',':','command','(','String:woc_pose_reset',',')}
-                @{Tokens=@('local','function','_pose_set','(','x',',','y',',','z',',','rx',',','ry',',','rz',',','scale',',','scale_1p',')')}
+                'local function _pose_set(x, y, z, rx, ry, rz, scale, scale_1p)'
             )
         }
         @{
@@ -1387,7 +1471,7 @@
             )
             GuardAnchors=@(
                 @{Tokens=@('local','DIAG_OFFSETS','=','{','5',',','15','}','local','DIAG_MAX_UNITS','=','4')}
-                @{Tokens=@('entry','.','next','=','entry','.','next','+','1','if','not','ok','or','keep','==','false','or','entry','.','next','>','#','DIAG_OFFSETS','then','table','.','remove','(','_tracked',',','i',')')}
+                'entry.next = entry.next + 1 if not ok or keep == false or entry.next > #DIAG_OFFSETS then table.remove(_tracked, i)'
             )
         }
         @{
