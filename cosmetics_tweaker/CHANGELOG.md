@@ -1,5 +1,18 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.229-dev (2026-10-29) -- Isolate persistence regression ownership (#2)
+
+- Extract the three existing offhand, cosmetic and cold-load persistence checks
+  into one private install-only owner at their original registration position.
+  Preserve the same captured state instances, callbacks and 64-check order;
+  installation performs no persistence reads, writes or reloads.
+- Reduce the parent regression owner from 2,180 to 1,959 canonical lines and
+  ratchet its target baseline down. The new private owner has 244 canonical
+  lines; package wildcard inclusion and decomposition reachability are covered.
+- Add host-side registration/reference/error-propagation coverage and update
+  the module map. This ownership refactor does not claim live-game acceptance
+  or resolve the remaining oversized-module debt in #2.
+
 ## 0.9.227-dev (2026-10-25) -- Source-qualified native shield appearance admission (#657) [not-started]
 
 - Resolve committed native Sword-and-Shield offhands through twelve explicit
