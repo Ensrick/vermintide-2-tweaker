@@ -132,7 +132,7 @@ technical entry point; from here, follow the tree to the topic-specific referenc
   - `ENGINE_SURFACE.md` - the mod's engine contact surface: every vanilla (Class, method) wt hooks, mapped to what the engine does there, centered on the cross-character 3P animation firing layer (`Unit.animation_event` / `anim_event_3p` / `wield_anim_career_3p`) and the three redirect layers, with `docs/engine/` links and the paid-for dead ends. Read before adding a hook or auditing a crash class.
 
 **Tier 4 - tooling:**
-- **VMBLauncher doctrine** (verbs, flags, preflight gates, visibility-public safety, remote-deploy config) lives in the **separate launcher repository's** `CLAUDE.md`, not in this monorepo - `tools/vmb-launcher/` is an empty machine-local mount point.
+- **Publication doctrine** is owned by [PROJECT_STANDARDS.md section 6.6](PROJECT_STANDARDS.md#66-ship-doctrine-keyed-off-the-mod_version-suffix-canonical-2026-07-01). The separate launcher's `CLAUDE.md` owns implementation/tests; `tools/vmb-launcher/` is an ignored machine-local mount point.
 - `docs/PORTABLE_SETUP.md` - launcher + `.vmbrc` resolution for ships from any checkout or linked worktree; `VT2_SHIP_VMB_LAUNCHER` / `VT2_SHIP_VMBRC` overrides. Read before troubleshooting "launcher not found".
 - `tools/review/README.md` - canonical cross-culture content-manifest grammar and command for freezing implementation/review candidates; hand-written hashing recipes are forbidden.
 - `tools/publish-release/README.md` - GitHub-release pipeline that publishes built bundles for `vt2-mod-updater` consumers.
@@ -225,176 +225,34 @@ namespace/version identity are stripped, every common file must be byte-exact.
 
 **Caveat - per-mod-id RPC channels.** Anything keyed by mod_id (network channels, lobby data slots, the `GT_LOBBY_RPC_SCHEMA` constant in `gt`) is automatically isolated between stable and dev because the mod_ids differ. That's the desired isolation in most cases, but it means **dev and stable can't talk to each other over a lobby RPC**. If a session needs the lobby/MOTD/slot-reservation surface, every peer should pin to the same stream (all dev or all stable). Don't mix.
 
-**Upload doctrine** - governed by the "Ship doctrine" section under Build Commands (the MOD_VERSION suffix decides). Two split-mod-specific gates:
-
-- **Dev uploads** target the friends-only Workshop item (`visibility = "friends_only"` in the dev clone's `itemV2.cfg`) and carry the `-dev` suffix, so they ship the full pipeline every build with NO ask. Dev clones must NEVER be promoted to public visibility under any circumstance; the launcher does not take `--allow-public` for them.
-- **Stable uploads** target the stable Workshop item at whatever visibility its current `itemV2.cfg` declares. Two INDEPENDENT gates apply (user ruling 2026-07-04, closed #328): `-AllowPublic` keys off `visibility = "public"`, and the fresh per-build ship signal keys off a CLEAN (no-suffix) MOD_VERSION only. A pre-release-suffixed build living on a stable/public item (e.g. ct `0.7.130-beta`) ships per the suffix rule - full pipeline, no ask. Workshop visibility is user-dictated per item; it is NEVER inferred from the version, directory, or stream, and no guard may couple the two.
-- **GitHub release** is part of the canonical `ship.ps1` path, run for either stream so `vt2-mod-updater` consumers stay in sync (Workshop propagation to the friends cohort is unreliable).
+**Upload doctrine** - [PROJECT_STANDARDS.md section 6.6](PROJECT_STANDARDS.md#66-ship-doctrine-keyed-off-the-mod_version-suffix-canonical-2026-07-01)
+owns suffix approval, visibility flags, claims, BuildOnly, merge, deployment,
+publication and verification. Dev clones remain friends-only; stable-item
+visibility comes from the actual `itemV2.cfg`, never a version or directory.
+Do not recreate the procedure in this technical reference.
 
 ## Build Commands
 
-### Required: VMBLauncher headless CLI
+### Canonical build and publication owner
 
-VMBLauncher is **the only** sanctioned implementation boundary for building and
-deploying VT2 mods in this repo. Operators publish only through
-`tools/ship/ship.ps1`; direct launcher `upload`/`all` and GUI publication are not
-alternate workflows. Do NOT invent ad-hoc PowerShell pipelines, raw
-`node vmb.js`, raw `ugc_tool` calls, raw `scp` to PC-B, or wrap the SDK compiler
-by hand. Every one of those one-off paths has burned multiple iterations in the
-past (hash-unverified deploys, stale PC-B, missed UTF-8 BOM, 0x2
-empty-content-directory, wrong scp protocol, etc.). If the approved launcher
-binary is missing, canonical shipping stops; install the reviewed, versioned
-binary through the launcher release process. Do not fall back to a raw uploader
-or create an ad hoc publication binary inside a ship.
+[PROJECT_STANDARDS.md section 6.6](PROJECT_STANDARDS.md#66-ship-doctrine-keyed-off-the-mod_version-suffix-canonical-2026-07-01)
+is the sole procedure for approval, claims, BuildOnly, protected source landing,
+tracked/receipt deployment, upload verification and recovery. Follow it rather
+than maintaining a second ship recipe here. The separate launcher repository
+owns implementation/tests; [PORTABLE_SETUP.md](docs/PORTABLE_SETUP.md) owns
+machine-local dependency resolution, not publication policy.
 
-The launcher lives in its **own repository**, not this one. `tools/vmb-launcher/`
-is an intentionally empty mount point: the checkout is machine-local and
-git-ignored (relocated ~2026-07-30). `tools/vmb-launcher-path.ps1` resolves the
-binary deterministically - `VT2_SHIP_VMB_LAUNCHER` when set, then the invoking
-worktree, the `ProjectRoot` recorded in VMBLauncher settings, then the primary
-git worktree. A set-but-invalid override is a hard failure, never a silent
-fallback. Full resolution doctrine: `docs/PORTABLE_SETUP.md`.
+Use the explicitly verified invoking repository root as the working directory,
+never a mod folder or the launcher repository. For the primary checkout:
 
 ```powershell
-# Optional explicit override: configure the current reviewed executable outside
-# this repository as documented in docs/PORTABLE_SETUP.md. Never paste a dated
-# checkout or machine-local executable path into tracked guidance.
-$exe = $env:VT2_SHIP_VMB_LAUNCHER
-if ([string]::IsNullOrWhiteSpace($exe)) {
-    throw "Use the canonical resolver; see docs/PORTABLE_SETUP.md."
-}
-& $exe list                                          # list discovered mods
-& $exe info   general_tweaker                        # cfg + bundle state
-& $exe doctor                                        # diagnostics
-& $exe build  general_tweaker                        # VMB build -> bundleV2/
-& $exe deploy general_tweaker                        # hash-verified local copy + every enabled remote target
+Set-Location -LiteralPath 'C:\Users\danjo\source\repos\vermintide-2-tweaker'
+git --no-optional-locks rev-parse --show-toplevel
 ```
 
-The internal launcher `upload`/`all` verbs and GUI publication controls cannot
-publish without the exact short-lived receipt hosted on the canonical GitHub
-release by `ship.ps1`; a claim or hand-authored JSON is insufficient. The
-launcher independently downloads the receipt and validates the SDK staging
-bytes immediately before `ugc_tool`. Headless build/deploy streams output live
-and preserves exit codes 0/1/2/3. Agent/default verification and publication
-must open no WPF, Explorer, or other interactive window and must not run a real
-build/deploy as an incidental smoke test. A visible launcher window is a tooling
-defect; stop before publication. **Read `PROJECT_STANDARDS.md` section 6.6 and
-the separate VMBLauncher repository's `CLAUDE.md` for the full doctrine.**
-
-Both `ship.ps1 -BuildOnly` and final publication hold one continuous
-`Global\Ensrick.VMBLauncher.Transaction.v1` lease from before the first
-settings/VMB mutation through final parity, deploy, release, upload, Workshop
-verification, card refresh, and claim finalization. Required lock order is
-machine transaction -> GitHub-release mutex -> legacy upload semaphore. The
-publication probe requires VMBLauncher 0.6.0 plus
-`machine-transaction-lease-v1` and `crash-safe-upload-acl-journal-v1`; 0.5.9
-cannot pass. Canonical ship never rewrites shared launcher `settings.json`: it
-reads it once for dependency discovery and passes every launcher child the same
-durable private `--config` bound to the exact worktree.
-
-Mutating descendants inherit the transaction's kill-on-close Windows Job. A
-hard-kill recovery polls the persisted named job's `ActiveProcesses` count,
-closing each temporary query handle immediately; it never treats the Job as a
-zero-process synchronization signal. Normal release
-drains authenticated residue and deletes its authenticated owner record while
-still holding the mutex. Every acquisition recovers any pre-existing durable
-record even if Windows destroyed the crashed sole owner's named object and a
-fresh non-abandoned mutex was created. Never parallel-retry VMB,
-delete transaction/ACL journals, manually reset staging ACLs, or downgrade an
-ambiguous recovery failure. The launcher alone owns the exact journaled and
-legacy-v0.5.9 ACL recovery lanes.
-If abandoned-owner recovery itself fails, the dedicated mutex thread must exit
-without `ReleaseMutex` while a retained kernel handle preserves abandonment;
-never normally release (which normalizes the failure) or leave a live owner
-thread blocked until process exit. Repeated contenders must re-enter the same
-fail-closed recovery gate.
-
-### Ship doctrine (2026-07-01 canonical)
-
-**The ship decision keys off the MOD_VERSION suffix, nothing else** - not the directory, not Workshop visibility.
-
-**`-dev` / `-alpha` / `-beta` suffix (= every currently active mod):** EVERY update ships the FULL pipeline with NO per-build approval. The release is merge-first:
-
-```powershell
-.\tools\ship\claim.ps1 -Mod <name>
-# bump MOD_VERSION to the CLAIMED number and write the newest CHANGELOG entry, make source changes
-.\tools\ship\ship.ps1 -Mod <name> -BuildOnly    # run for EVERY changed mod before committing
-# commit source + its exact authority proof (tracked bundle or schema-3 receipt) together
-# push feature branch, pass hosted qa-gate, merge
-.\tools\ship\ship.ps1 -Mod <name>     # from clean exact default-branch HEAD
-```
-
-Claim BEFORE bumping: the broker owns the number and it can exceed master+1
-(see `PROJECT_STANDARDS.md` section 6.6 "The claim broker owns the version
-number"). Permanent retention is prospective per-mod migration under #724;
-an unactivated legacy broker still forgets released/stale allocations. Do not
-reuse protected queued numbers through it. Explicit reviewed initialization,
-unchanged claim adoption and fresh higher versions for stale work are documented
-in `tools/ship/CLAIMS.md`; no timestamp renewal is authorized. If the change touches TWO mods, `-BuildOnly` BOTH before committing -
-`qa/check_release_bundle_atomicity.ps1` (issues #724/#1412) requires each mod's
-source change and exact authority proof in the same commit: the root
-`.mod_bundle` for `tracked`, or the schema-3 receipt and typed output transition
-for `receipt`.
-BuildOnly also writes `<mod>/.build-receipt.json` (issues #1278/#1400). Schema 3
-binds both the exact raw runtime bytes Stingray consumed and the Git-clean blobs
-staging must preserve to the complete normalized `bundleV2` output set: every
-filename, length, SHA-256, canonical root, source-qualified descriptor, builder
-version, aggregate fingerprint, and normalization-policy identity. Raw bytes
-that Git cannot reproduce, a source edit after BuildOnly, an extra/missing or
-changed output, descriptor drift, builder drift, or policy drift all fail
-closed. All inventory rows remain explicitly `BundleAuthority = 'tracked'`, so
-the complete receipt proof augments rather than weakens tracked parity. Untouched
-schema-2 receipts remain valid during the shadow transition; rerun BuildOnly for
-any changed mod instead of committing stale source/output evidence.
-The prepared `receipt` mode is publication-only: it requires a launcher with
-`receipt-authority-publication-v1`, clean-builds before exact receipt-byte
-capture, and never deploys, updates, recovers, or bootstraps a Workshop item.
-No active row has migrated; see `docs/BUNDLE_AUTHORITY.md`.
-
-The publishing invocation fails closed unless HEAD is the live default-branch commit, an associated PR merged that exact commit, hosted `qa-gate` completed successfully on it, the machine-global mod/version claim matches, and a clean build exactly reproduces either every tracked `bundleV2` blob or the committed receipt-authority output map. Tracked authority then runs separate deploy and upload actions. Receipt authority skips every deploy target and may only upload through its hosted receipt. Both record authorization evidence in the GitHub release manifest. Add `-AllowPublic` when the mod's `itemV2.cfg` has `visibility = public`. Add `-NoRemote` only when intentionally skipping an otherwise-enabled tracked deploy target, and say which target was skipped. If no remote target is enabled, no override is needed; report that the deploy was local-only.
-
-**Clean version, no suffix (including stable promotions):** requires a fresh, explicit, per-build ship signal from the user naming the version (e.g. "ship cim v0.8.34 now"). A "ship it" from earlier does NOT carry forward. Default for these is `build` + `deploy` only; treat upload like `git push --force`. This guards subscribers - reflex uploads of unstable mid-fix builds cost ~80 cim subscribers in May 2026.
-
-| Intent | Verbs |
-|---|---|
-| Update a `-dev`/`-alpha`/`-beta` build (any active mod) | claim; `ship.ps1 -BuildOnly`; commit source plus its tracked bundle or schema-3 receipt; push; pass hosted `qa-gate`; merge; then `ship.ps1 -Mod <name>` from exact clean default-branch HEAD. No ask. |
-| ...when the target mod's current `itemV2.cfg` says `visibility = "public"` | add `-AllowPublic` |
-| ...while intentionally skipping an enabled remote | add `-NoRemote` and SAY WHICH target was skipped |
-| Confirm a build only compiles | `& $env:VT2_SHIP_VMB_LAUNCHER build <mod>` |
-| Promote a clean stable version | ONLY on a fresh per-build ship signal naming the version; then `ship.ps1 -Mod <mod>` plus `-AllowPublic` iff the cfg is public |
-
-`ship.ps1` flags: `-AllowPublic` (public itemV2.cfg visibility) and
-`-NoRemote` (skip enabled remote targets for that invocation). `-SkipGitHub`
-and emergency publication are prohibited because Workshop upload cannot bypass
-exact clean default-head, merged-PR, hosted-QA, and release-provenance checks;
-use `-BuildOnly` for nonpublishing work. Dev clones are `friends_only` and
-never take `-AllowPublic`.
-
-**Post-ship verification (both load-bearing - `ugc_tool` prints success even on failure):**
-1. `C:\Program Files (x86)\Steam\logs\workshop_log.txt` must show `Uploaded new content` for the item. For `friends_only`/`private` items the public Steam API returns blank fields, so if in doubt eyeball the Workshop page in Steam.
-2. `ship.ps1` hash-verifies the authorized deploy. A hash mismatch after a confirmed upload is an incomplete transaction, not proof of a Steam reconcile race or permission to declare success. Preserve the authenticated upload result and exact file hashes; use only the guarded recovery in `PROJECT_STANDARDS.md` section 6.6 through `tools/ship/ship.ps1` when its source, claim and lease gates authorize it. Do not bypass that recovery with a direct launcher deploy, manual Steam-folder writes or a spent version claim. Do not recommend restarting Steam unless the log shows an actually stale loaded build.
-
-**Protected source landing (issues #540/#724).** `master` requires the strict
-`qa-gate` context, applies the rule to administrators, forbids force-push and
-deletion, and requires conversation resolution. Do not attempt a direct push or
-disable protection to preserve the old workflow. A ship is source-consistent
-only after its source and generated bundle merge through the protected PR. The
-merge-triggered `master` `qa-gate` must succeed before Workshop upload; the
-publisher rechecks that exact commit immediately before upload.
-
-**Every deploy hits every enabled remote target automatically.** As of launcher v0.4.0, `deploy` (and `all`/`ship.ps1`) push the bundle to each enabled `RemoteDeployTargets` entry in `%APPDATA%\VMBLauncher\settings.json` right after the local Workshop-folder copy. A disabled target is intentionally out of scope and must not be reported as updated. For co-op debugging, enable the tester target before deploying so host and client stay in lockstep. Skip otherwise-enabled remotes for one invocation with `-NoRemote`/`--no-remote`; disable a target persistently with `Enabled = false` in settings.
-
-`ship.ps1` is the canonical publishing path; it invokes VMBLauncher's sanctioned `build`, `deploy`, and `upload` verbs separately so reviewed bundle parity can be checked before upload. Do not use the launcher's `all` verb for publication. The visibility-regression guard lives in the launcher's `upload` verb, which `ship.ps1` calls. The legacy per-mod wrappers were removed; extend the launcher / `ship.ps1` instead. Use `& $env:VT2_SHIP_VMB_LAUNCHER deploy <mod>` for a bare non-publishing deploy.
-
-**Historical user quotes** (SUPERSEDED for `-dev` builds by the 2026-06-19 / 2026-07-01 rules above; still binding for clean stable promotions):
-- 2026-05-25 morning: "stop reflexively uploading to the workshop. Only do so when directed."
-- 2026-05-25 EOD: "no workshop uploads take place unless I approve them."
-
-### Legacy raw pipelines (archived - DO NOT USE)
-
-The `node vmb.js build <mod> --no-workshop --cwd` invocations and the raw Stingray SDK compile pipeline that previously lived in this section are no longer the supported path. Use `& $env:VT2_SHIP_VMB_LAUNCHER build <mod>` for a bare build and `tools\ship\ship.ps1` for the publication pipeline. The launcher already wraps `node vmb.js` internally, so if you're tempted to invoke `node` directly you're skipping hash verification, enabled-remote deployment, BOM handling on staged cfgs, and the rest of the protective layers documented in the launcher repository.
-
-The one exception is the deprecated `tweaker` mod (Workshop ID 3704660429) - it pre-dates the VMB migration and only builds via raw SDK. Treat it as frozen: don't iterate on it, don't try to graft it onto the launcher.
+A linked worktree uses its own verified root instead. Before resuming or retrying,
+perform the owner's resume/context check in section 6.6. Agents use scripts,
+CLIs and read-only API checks; no GUI publication or incidental game launch.
 
 ### Version bumping
 
@@ -602,7 +460,7 @@ For weapon DLCs (Bogenhafen / Karak Azgaraz / Lake), grep `scripts/settings/dlcs
 - **Hot-reload crashes**: Ctrl+Shift+R is NOT safe for weapon_tweaker or cosmetics_tweaker - both hook unit creation paths (`GearUtils.create_equipment`, `BackendUtils.get_item_units`) and cosmetics_tweaker has non-Lua resources (materials/textures). The engine holds C++-level locks on spawned units that cannot be released from Lua. Always do a full game restart for these mods. chaos_wastes_tweaker, general_tweaker, and career_tweaker are Lua-only and may survive hot-reload, but a restart is still safest.
 - **Never clean `.build/` unless file lock errors** - incremental builds work. Cleaning forces recovery.
 - **Verify bundle output before deploying** - the compiler shows minimal console output; check the bundle dir for files.
-- **Workshop upload verification**: `ugc_tool` prints "Upload finished" even when content fails to transfer. Always check Workshop page file size after upload.
+- **Workshop upload verification**: follow [PROJECT_STANDARDS.md section 6.6](PROJECT_STANDARDS.md#66-ship-doctrine-keyed-off-the-mod_version-suffix-canonical-2026-07-01) for the bounded same-transaction log evidence and authenticated hosted-result reread. A launcher success string or manual page inspection is not the publication proof.
 - **Deploy via `& $env:VT2_SHIP_VMB_LAUNCHER deploy <mod>`** - the launcher handles every active mod (VMB-layout `bundleV2/`). It lives in a separate repository; resolve the binary per `docs/PORTABLE_SETUP.md` rather than assuming a `PATH` entry or an in-repo path. The historical `deploy_all.ps1` shim was archived 2026-05-21 to `_archive/legacy_deploy_scripts/`; it only forwarded each `-Mods` entry to the launcher's `deploy` verb.
 
 ## Key Reference Files

@@ -112,6 +112,24 @@ function Test-IsUnguardedConfirmedUploadRecoveryParagraph {
     return $false
 }
 
+function Get-PublicationOwnerLinkViolations {
+    param([object[]]$Documents, [string]$Standards)
+
+    $violations = @()
+    $anchor = '#66-ship-doctrine-keyed-off-the-mod_version-suffix-canonical-2026-07-01'
+    foreach ($path in @('CLAUDE.md', 'docs/PORTABLE_SETUP.md')) {
+        $document = @($Documents | Where-Object { $_.Path.Replace('\', '/') -ieq $path })
+        $prefix = if ($path -eq 'CLAUDE.md') { '' } else { '../' }
+        $target = '](' + $prefix + 'PROJECT_STANDARDS.md' + $anchor + ')'
+        $guide = if ($document.Count -eq 1) { @($document[0].Lines) -join "`n" } else { '' }
+        if (-not $guide.Contains($target) -or
+                -not $Standards.Contains('### 6.6 Ship doctrine: keyed off the MOD_VERSION suffix (canonical, 2026-07-01)')) {
+            $violations += "${path}: invalid publication owner link"
+        }
+    }
+    return @($violations)
+}
+
 function Get-DoctrineViolations {
     param([object[]]$Documents)
 
@@ -174,6 +192,24 @@ function Get-DoctrineViolations {
             while ($end + 1 -lt $recoveryLines.Count -and
                     -not [string]::IsNullOrWhiteSpace($recoveryLines[$end + 1])) { $end++ }
             $paragraph = ($recoveryLines[$i..$end] -join ' ') -replace '\s+', ' '
+
+            # #1025: exact current prose contradictions, not a general version
+            # blacklist. The historical exclusion above remains unchanged.
+            $path = $document.Path.Replace('\', '/')
+            if ($path -in @('CLAUDE.md', 'PROJECT_STANDARDS.md')) {
+                if ($paragraph -match '(?i)publication probe requires VMBLauncher 0\.6\.[0-2]\b|VMBLauncher 0\.6\.[0-2]\b.{0,180}minimum accepted publication boundary') {
+                    $violations += "$($document.Path):$($i + 1): stale launcher publication minimum"
+                }
+                if ($paragraph -match '(?i)prepared `?receipt`? mode is publication-only|Receipt authority skips every deploy target|receipt-gated publication consumer; deploy, updater/recovery consumption, and bootstrap remain disabled') {
+                    $violations += "$($document.Path):$($i + 1): obsolete receipt deployment prohibition"
+                }
+            }
+            if ($path -eq 'CLAUDE.md' -and $paragraph -match '(?i)Always check Workshop page file size after upload|if in doubt eyeball the Workshop page in Steam') {
+                $violations += "$($document.Path):$($i + 1): obsolete manual Workshop verification"
+            }
+            if ($path -eq 'docs/PORTABLE_SETUP.md' -and $paragraph -match '(?i)approved side-by-side launcher 0\.6\.2 does not replace the existing default 0\.6\.1|pending 0\.6\.1 claims/artifacts must finish') {
+                $violations += "$($document.Path):$($i + 1): obsolete launcher rollout instruction"
+            }
             if (Test-IsUnguardedConfirmedUploadRecoveryParagraph $paragraph) {
                 $violations += "$($document.Path):$($i + 1): unguarded confirmed-upload recovery advice"
             }
@@ -183,6 +219,11 @@ function Get-DoctrineViolations {
         $lineNumber = 0
         foreach ($line in @($document.Lines)) {
             $lineNumber++
+
+            if ($document.Path.Replace('\', '/') -ieq 'CLAUDE.md' -and
+                    $line -match '^\s*\.\\tools\\ship\\(?:claim|ship)\.ps1\b') {
+                $violations += "$($document.Path):${lineNumber}: secondary ship recipe without owner cwd context"
+            }
 
             if (Test-IsRawVmbBuildAdviceLine $line) {
                 $violations += "$($document.Path):${lineNumber}: raw VMB build advice bypasses canonical ship"
@@ -543,6 +584,48 @@ if ($SelfTest) {
         }
     }
 
+    # #1025: the actual conflicting secondary prose must not return.
+    foreach ($case in @(
+        @{ Path = 'CLAUDE.md'; Text = 'The publication probe requires VMBLauncher 0.6.0 plus the lease guards.'; Error = 'stale launcher publication minimum' },
+        @{ Path = 'PROJECT_STANDARDS.md'; Text = 'VMBLauncher 0.6.0 plus machine-transaction-lease-v1 and crash-safe-upload-acl-journal-v1 is the minimum accepted publication boundary.'; Error = 'stale launcher publication minimum' },
+        @{ Path = 'CLAUDE.md'; Text = 'The prepared `receipt` mode is publication-only: it never deploys.'; Error = 'obsolete receipt deployment prohibition' },
+        @{ Path = 'CLAUDE.md'; Text = 'Receipt authority skips every deploy target and may only upload through its hosted receipt.'; Error = 'obsolete receipt deployment prohibition' },
+        @{ Path = 'PROJECT_STANDARDS.md'; Text = 'Issue #1426 adds only its receipt-gated publication consumer; deploy, updater/recovery consumption, and bootstrap remain disabled.'; Error = 'obsolete receipt deployment prohibition' },
+        @{ Path = 'CLAUDE.md'; Text = 'For friends_only/private items, if in doubt eyeball the Workshop page in Steam.'; Error = 'obsolete manual Workshop verification' },
+        @{ Path = 'CLAUDE.md'; Text = 'Always check Workshop page file size after upload.'; Error = 'obsolete manual Workshop verification' },
+        @{ Path = 'docs/PORTABLE_SETUP.md'; Text = 'The approved side-by-side launcher 0.6.2 does not replace the existing default 0.6.1 installation.'; Error = 'obsolete launcher rollout instruction' },
+        @{ Path = 'docs/PORTABLE_SETUP.md'; Text = 'Pending 0.6.1 claims/artifacts must finish their existing publications.'; Error = 'obsolete launcher rollout instruction' },
+        @{ Path = 'CLAUDE.md'; Text = '.\tools\ship\ship.ps1 -Mod <name>'; Error = 'secondary ship recipe without owner cwd context' }
+    )) {
+        $fixture = @([pscustomobject]@{ Path = $case.Path; Lines = @($case.Text) })
+        if ((Get-DoctrineViolations $fixture) -notcontains ($case.Path + ':1: ' + $case.Error)) {
+            throw "planted publication contradiction was not rejected: $($case.Text)"
+        }
+    }
+    $ownerHeading = '### 6.6 Ship doctrine: keyed off the MOD_VERSION suffix (canonical, 2026-07-01)'
+    $anchor = '#66-ship-doctrine-keyed-off-the-mod_version-suffix-canonical-2026-07-01'
+    $ownerGuides = @(
+        [pscustomobject]@{ Path = 'CLAUDE.md'; Lines = @('[Owner](PROJECT_STANDARDS.md' + $anchor + ')') },
+        [pscustomobject]@{ Path = 'docs/PORTABLE_SETUP.md'; Lines = @('[Owner](../PROJECT_STANDARDS.md' + $anchor + ')') }
+    )
+    if ((Get-PublicationOwnerLinkViolations $ownerGuides $ownerHeading).Count -ne 0) {
+        throw 'valid root/relative canonical owner links were rejected'
+    }
+    foreach ($badTarget in @('CLAUDE.md', 'PROJECT_STANDARDS.md#missing', ('../PROJECT_STANDARDS.md' + $anchor))) {
+        $badGuides = @([pscustomobject]@{ Path = 'CLAUDE.md'; Lines = @('[Owner](' + $badTarget + ')') }, $ownerGuides[1])
+        if ((Get-PublicationOwnerLinkViolations $badGuides $ownerHeading) -notcontains 'CLAUDE.md: invalid publication owner link') {
+            throw "invalid publication owner link was not rejected: $badTarget"
+        }
+    }
+    $currentAdvice = @([pscustomobject]@{
+        Path = 'CLAUDE.md'
+        Lines = @('VMBLauncher 0.6.3 is required. Receipt authority may use the separately hosted local_deploy boundary.',
+            'Use bounded same-transaction logs and an authenticated hosted-result reread; follow PROJECT_STANDARDS.md section 6.6.')
+    })
+    if ((Get-DoctrineViolations $currentAdvice).Count -ne 0) {
+        throw 'current launcher/receipt-local/authenticated-result guidance was rejected'
+    }
+
     if (-not $Quiet) {
         Write-Host "[check_publication_doctrine] SELFTEST OK"
     }
@@ -560,13 +643,15 @@ $standards = if (Test-Path -LiteralPath $standardsPath) {
 else {
     ""
 }
+$violations += @(Get-PublicationOwnerLinkViolations $documents $standards)
 foreach ($required in @(
     "Agent/headless publication is noninteractive.",
     "tools\ship\ship.ps1",
     "BuildOnly",
     "exact live default-branch",
     "Global\Ensrick.VMBLauncher.Transaction.v1",
-    "VMBLauncher 0.6.0",
+    "VMBLauncher 0.6.3",
+    "Owner resume/context check (#1025)",
     "never rewrites shared launcher settings",
     "Do not run a parallel retry",
     "manually reset SDK ACLs"

@@ -1072,8 +1072,8 @@ bumping, not after; a bump chosen first usually has to be redone.
    build, authority parity, authorization-backed GitHub release, Workshop
    upload, and transfer verification in that order. Tracked authority deploys
    first when a target is enabled. Receipt authority with an existing local
-   subscription requires explicit `-NoRemote`, approved launcher 0.6.2 or newer
-   with `receipt-authority-local-deploy-v1`, and a separate short-lived schema-3
+   subscription requires explicit `-NoRemote`, the same approved launcher with
+   `receipt-authority-local-deploy-v1`, and a separate short-lived schema-3
    `local_deploy` receipt hosted as `deployment-receipt-<folder>.json` on an
    already-published canonical GitHub release. This scoped asset is constructed
    from the exact committed build/source/output proof under the owning machine
@@ -1096,6 +1096,24 @@ There is no pre-merge or hosted-QA publication override. `-SkipGitHub` and
 bypass exact clean default HEAD, its merged PR, successful hosted `qa-gate`,
 release provenance, the machine-global claim, or authority-selected output
 parity.
+
+**Owner resume/context check (#1025).** Work from the explicitly verified
+invoking repository root (primary checkout:
+`C:\Users\danjo\source\repos\vermintide-2-tweaker`; linked worktrees use
+their own root). Record current branch/HEAD and index/worktree state; original
+claim owner, version and expiry; exact source/cfg/build-receipt/output identities;
+and the last canonical job's terminal exit, log and completed mutation stages.
+Check current network availability with a scoped authenticated read-only GitHub
+request in the actual execution context, not a restricted probe's failure.
+Do not replay a completed successful publication. A transient network failure
+before release/upload is not proof that Steam or the uploader is broken.
+Preserve the original failure; retry only through the canonical transaction
+when its current claim, source, hosted authorization and lease gates allow it.
+Do not parallel-retry an active job, renew a claim timestamp, bypass an expired
+claim, or change dependencies to work around an unavailable authorization check.
+Scripts, CLIs and read-only API checks only for routine publication; no
+incidental UI automation or game launch. Separately user-authorized interactive
+work remains outside publication.
 
 The hosted-check lookup is fully paginated (issue #1109). Issue and tracker
 workflows can attach more than GitHub's default 30 check runs to one commit, so
@@ -1121,9 +1139,10 @@ filesystem mutation and retain it continuously through build, authority parity,
 deploy, GitHub-release mutation, SDK staging/upload, Workshop verification,
 card refresh, and claim finalization. The lock order is machine transaction,
 then the publisher's GitHub-release mutex, then the launcher's legacy upload
-semaphore. VMBLauncher 0.6.0 plus `machine-transaction-lease-v1` and
-`crash-safe-upload-acl-journal-v1` is the minimum accepted publication
-boundary; 0.5.9 fails before release mutation.
+semaphore. VMBLauncher 0.6.3 or newer is required, with
+`machine-transaction-lease-v1` and `crash-safe-upload-acl-journal-v1`.
+The same approved launcher must satisfy the Steamworks readiness guard;
+older builds fail before release mutation.
 
 Canonical ship reads global launcher settings once for approved dependency
 discovery, then writes one durable, PID/start-identified private `--config`
@@ -1257,9 +1276,10 @@ or dirty commit id. Every inventory row explicitly remains
 `BundleAuthority = 'tracked'`; schema 3 shadows and strengthens existing tracked
 parity rather than replacing it, while untouched schema-2 receipts remain
 admissible during migration. Issue #1412 prepares the second exact mode,
-`receipt`, without switching any active row. Issue #1426 adds only its
-receipt-gated publication consumer; deploy, updater/recovery consumption, and
-bootstrap remain disabled. Issue #1430 adds an additive durable recovery
+`receipt`, without switching any active row. Receipt authority uses the
+publication and separately hosted local-deployment boundaries above; remote
+deployment, updater/recovery consumption and bootstrap remain disabled.
+Issue #1430 adds an additive durable recovery
 record to new release entries only when the immutable publication snapshot has
 an exact committed schema-3 receipt. That record is producer metadata, not a
 historical resolver or restore authority; tracked schema-2/missing receipts
