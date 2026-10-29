@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.560-dev"
+local MOD_VERSION = "0.1.561-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
 mod._cwv_dev_anim_picker = mod:dofile("scripts/mods/character_weapon_variants/cwv_dev_anim_picker")
@@ -529,6 +529,15 @@ _core_template_construction = mod:dofile(
 	printf = printf,
 })
 local _clone_damage_profile = _core_template_construction.clone_damage_profile
+_om.sword_family = mod:dofile("scripts/mods/character_weapon_variants/_cwv_sword_family").install(mod, {
+	om = _om, core = _core_template_construction, graph = _cwv_profile_graph,
+	network_lookup = _cwv_network_lookup, career = _cwv_career_envelope,
+	career_actions = _career_weapon_actions, policy = _om.combat_style_policy,
+	profiles = function() return DamageProfileTemplates end, power_levels = function() return PowerLevelTemplates end,
+	lookup = function() return NetworkLookup.damage_profiles end, weapons = function() return Weapons end,
+	action_templates = function() return ActionTemplates end, clone = function(value) return table.clone(value, true) end,
+	rt_register = _rt_register,
+})
 
 -- ============================================================
 -- Crossbow base-template patches for Kruber (v0.1.347-dev)
@@ -1022,6 +1031,12 @@ local _resolve_cwv_def            = _om.weapon_transform.resolve_cwv_def
 -- damage/power rows, so no vanilla or sibling style table is ever mutated.
 do
 	local policy = _om.combat_style_policy
+	_om.style_actor_admission = mod:dofile("scripts/mods/character_weapon_variants/_cwv_style_actor_admission").bind({
+		profiles = function() return SPProfiles end, careers = function() return CareerSettings end,
+		managers = function() return Managers end, peer_resolver = _om.peer_resolver,
+		find_profile_index = function(name) return FindProfileIndex(name) end,
+		inventory_for_unit = function(unit) return ScriptUnit.has_extension(unit, "inventory_system") end,
+	})
 	local bretonnian_greatsword, bretonnian_greatsword_err =
 		policy.build_bretonnian_greatsword_template(Weapons,
 			function(value) return table.clone(value, true) end, _clone_damage_profile)
@@ -1094,6 +1109,10 @@ do
 		policy = policy, coalescer = mod._cwv_rewield, printf = printf,
 		unit_api = Unit, script_unit = ScriptUnit, probe_state = {},
 		style_resource_resident = style_resource_resident,
+		actor_admitted = function(peer_id, slot_name, item_key, family_id, style_id)
+			if not _om.combat_styles then return false end
+			return _om.combat_styles:queued_style_admitted(peer_id, slot_name, item_key, family_id, style_id)
+		end,
 		peer_player = function(peer_id) return _om.peer_resolver.peer_player(
 			Managers and Managers.player, peer_id, 1) end,
 		item_key = function(item_data) return _om.combat_styles
@@ -1109,6 +1128,8 @@ do
 	}, Vector3, Quaternion, _rt_register)
 
 	_om.combat_styles = policy.install(mod, {
+		actor_admission = _om.style_actor_admission,
+		sword_family = _om.sword_family,
 		cwv_key_for_item = function(backend_id, item_data)
 			return _om._cwv_key_for_item(backend_id, item_data)
 		end,
@@ -1184,7 +1205,7 @@ do
 	mod.cycle_combat_style = function()
 		return _om.combat_styles and _om.combat_styles:cycle_wielded()
 	end
-	policy.install_loadout_ui(mod, _om.combat_styles)
+	policy.install_loadout_ui(mod, _om.combat_styles, mod:dofile("scripts/mods/character_weapon_variants/_cwv_combat_style_loadout_ui"))
 
 	-- #620 legacy retirement: preserve every exact CIM UUID and its complete
 	-- forged payload while rewriting only the item family and corresponding

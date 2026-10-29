@@ -184,12 +184,22 @@ function M.request_peer_rewield(peer_id, slot, deps)
     end
     if inventory.wielded_slot ~= slot then return false, "slot-not-wielded" end
     local on_verify = deps.on_verify
+    local before_wield = deps.before_wield
     local tag = deps.tag or ("identity-arrival:" .. tostring(slot))
     return M.request(unit, tag, function()
         local wield_error
         if inventory.wielded_slot == slot then
-            local ok, err = pcall(inventory.wield, inventory, slot)
-            if not ok then wield_error = err end
+            local allowed, reason = true, nil
+            if before_wield ~= nil then
+                local ok, result, detail = pcall(before_wield, unit, inventory, slot)
+                allowed, reason = ok and result == true, ok and detail or result
+            end
+            if allowed then
+                local ok, err = pcall(inventory.wield, inventory, slot)
+                if not ok then wield_error = err end
+            else
+                wield_error = reason or "pre-wield admission refused"
+            end
         else
             wield_error = "slot-not-wielded"
         end

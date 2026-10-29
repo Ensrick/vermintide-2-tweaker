@@ -427,8 +427,12 @@ local function _patch_kruber_1h_sword_push_combo_revert()
     _dbg("[wt:tpl_patch] event=applied template=one_handed_swords_template_1 feature=revert_push_combo issue=348")
 end
 
-if mod:get("wt_revert_1h_sword_push_combo") then
-    _patch_kruber_1h_sword_push_combo_revert()
+do
+    -- The entry retains the private owner once. A missing handoff never recaptures
+    -- a public record, and pending checkbox changes cannot replay the producer.
+    local wt = rawget(mod, "_wt")
+    local apply = type(wt) == "table" and rawget(wt, "apply_sword_push_combo")
+    if type(apply) == "function" then apply(Weapons, _patch_kruber_1h_sword_push_combo_revert) end
 end
 
 -- ============================================================

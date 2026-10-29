@@ -151,6 +151,9 @@ local function install(mod, ctx)
 			for _, slot_name in ipairs({ "slot_melee", "slot_ranged" }) do
 				local retained = _om._cwv_local_style_descriptor_by_slot[slot_name]
 				if retained and retained.identity == identity then
+					if _om.combat_style_policy.is_sword_identity(retained.descriptor)
+							and (not _om.combat_styles or not _om.combat_styles:local_descriptor_actor_admitted(
+								retained.descriptor, identity)) then return nil end
 					return retained.descriptor
 				end
 			end
@@ -168,6 +171,12 @@ local function install(mod, ctx)
 			resolve_local = planner.resolve_local,
 			resolve_remote = planner.resolve_remote,
 			send = function(recipient, schema, payload, edge)
+				-- Retry payloads are not continuing actor authority. Keep their
+				-- existing bounded retry owner; do not emit a stale Sword rider.
+				if _om.combat_style_policy.is_sword_identity(payload)
+						and (not _om.combat_styles or not _om.combat_styles:local_descriptor_actor_admitted(payload)) then
+					return false
+				end
 				-- #474: stance rides the delivering channel. Stamped only on Old
 				-- Musket payloads so every other item's wire shape is unchanged;
 				-- receivers without this build ignore the extra field.
@@ -213,17 +222,32 @@ local function install(mod, ctx)
 		end
 
 		_om._cwv_accept_identity = function(sender_peer_id, schema, payload)
+			-- Preflight before lifecycle:accept can alter even a negative cache.
+			if _om.combat_style_policy.is_sword_identity(payload)
+					and (not _om.combat_styles or type(_om.combat_styles.descriptor_actor_admitted) ~= "function"
+						or not _om.combat_styles:descriptor_actor_admitted(
+						sender_peer_id, payload.slot, payload)) then
+				return false, nil, "actor unavailable"
+			end
 			return lifecycle:accept(sender_peer_id, schema, payload)
+		end
+		local function current_descriptor(peer_id, slot_name, base_name)
+			local descriptor, state = lifecycle:descriptor(peer_id, slot_name, base_name)
+			if _om.combat_style_policy.is_sword_identity(descriptor)
+					and (not _om.combat_styles or type(_om.combat_styles.descriptor_actor_admitted) ~= "function"
+						or not _om.combat_styles:descriptor_actor_admitted(
+						peer_id, slot_name, descriptor)) then return nil, "actor unavailable" end
+			return descriptor, state
 		end
 
 		_om._cwv_identity_descriptor_for_peer = function(peer_id, slot_name, base_name)
-			return lifecycle:descriptor(peer_id, slot_name, base_name)
+			return current_descriptor(peer_id, slot_name, base_name)
 		end
 
 		mod._cwv_peer_appearance = { schema = 1, resolve_peer = _om._cwv_identity_descriptor_for_peer }
 
 		_om._cwv_identity_def_for_peer = function(peer_id, slot_name, base_name)
-			local descriptor, state = lifecycle:descriptor(peer_id, slot_name, base_name)
+			local descriptor, state = current_descriptor(peer_id, slot_name, base_name)
 			local def = descriptor and _find_def(descriptor.variant_key)
 			return def, state
 		end
@@ -249,7 +273,7 @@ local function install(mod, ctx)
 						tostring(slot_name), tostring(source))
 				end
 			end
-			return lifecycle:descriptor(peer_id, slot_name, base_name)
+			return current_descriptor(peer_id, slot_name, base_name)
 		end
 
 		_om._husk_identity_def = function(owner_unit_3p, slot_name, base_name)

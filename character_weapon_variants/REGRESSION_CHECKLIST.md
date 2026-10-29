@@ -1693,3 +1693,36 @@ remains unchanged through the composed strict reverse. No external-path SKIP.
 ### #428 Greataxe persistent offline matrix
 
 Run test_cwv_greataxe_construction and test_cwv_greataxe_producer through the canonical suite:27 inherited construction cases,26 unique phased producer cases and3 genuine lifecycle cases (56 total;29 in the producer suite). Three newly named strict inverses must reconstruct exact68110/d110baa4,66493/db221e23 and67523/2aeb3673 before discovery. Old phase files remain immutable. Physical PS5/PS7 preflight, canonical build and game/co-op acceptance are separate gates.
+
+### #645 reciprocal one-handed Sword source contracts
+
+The finite offline matrix has 38 constructor cases (including 24 donor-envelope
+cases), 18 actor-admission cases, and 15 integrated consumer cases: 71 unique
+normal cases. Three same-case controls are separate expected failures, not
+extra successful behaviors. They bypass retained-template admission, mask a
+native actor false fact, or corrupt a 3P predecessor selector; the unchanged
+consumer oracles must reject them. Preserve exact source/native/host bindings and failed-run
+history; do not replay a spent execution authorization.
+
+Keep the actual WT full-history/applied-#348 and shared-career producers,
+Current-only detached custom construction, live-native restoration,
+mid-commit preimages/full raw rollback, immutable catalogue, inherited native
+actor methods, both melee slots, installed creation/UI/receiver paths, and
+unknown-actor/no-burn plus async/queue re-resolution assertions. The consumed
+read-only runtime check is
+`issue645_reciprocal_one_handed_sword_family`; it checks retained source
+authority, not rendered animation or a game launch.
+
+The additional census-policy case requires all 136 Sword surface/edge cells
+to remain unsupported with the native fallback until separately evidenced.
+Neither the 71 cases nor that declaration establishes installed-game/ABI,
+menu, first/third-person rendering, input, restart, transition, or co-op
+acceptance. Canonical LuaJIT structural/whole-suite QA, lint, WT stream parity,
+build/receipt authority and normal protected integration gates remain required.
+Mace-on-Sword and Tuskgor-on-Elf-Spear remain outstanding.
+
+The canonical suite must reach the donor-envelope child through tracked
+`require` registration. Keep legacy Greatsword and native shield receiver tests,
+the real initial/retained transform composition, and WT whole-balance re-entry
+checks in this integration gate. Extracted fixture functions must retain their
+actual production closure dependencies, not unconditional admission stubs.

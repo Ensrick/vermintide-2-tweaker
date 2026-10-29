@@ -134,10 +134,17 @@ return function(H, repo_root)
                 resolve_def = function() return nil end, plan_transform = plan, model_by_unit = {}, hand_unit = A.hand_unit })
             om._cwv_select_husk_transform_def, om._cwv_husk_transform_apply_plan = bound.select, bound.plan
             local policy_source = source("_cwv_combat_styles")
-            local remote_env = setmetatable({ runtime = {},
+            local remote_env = setmetatable({ runtime = om.combat_styles, M = Policy,
                 deps = { peer_for_owner = function() return "sender" end, style_descriptor_transform = A.transform_decision },
-                remote = { sender = { slot_melee = { descriptor = descriptor } } } }, { __index = env })
-            local remote_chunk = assert(loadstring(between(policy_source, "\tfunction runtime:remote_transform", "\n\tlocal function persist")
+                remote = { sender = { slot_melee = { descriptor = descriptor,
+                    family_id = "greatsword", style_id = style } } } }, { __index = env })
+            -- Retain the real new closure dependencies, not an unconditional
+            -- fixture admission stub. This still exercises native non-Sword
+            -- behavior through the production actor helper and transform.
+            local remote_chunk = assert(loadstring(
+                between(policy_source, "local function sword_family", "\nfunction M.is_sword_identity")
+                .. between(policy_source, "\tfunction runtime:remote_actor_admitted", "\n\tfunction runtime:queued_style_admitted")
+                .. between(policy_source, "\tfunction runtime:remote_transform", "\n\tlocal function persist")
                 .. "\nreturn runtime.remote_transform", "=actual-style-remote-transform"))
             setfenv(remote_chunk, remote_env)
             om.combat_styles.remote_transform = remote_chunk()
@@ -195,7 +202,8 @@ return function(H, repo_root)
     end)
     H.test("#660 unmodified Greatsword control is observed without pose writes", function()
         local f = fixture({ control = true, initial_writer = true, after_spawn = function(u) u.position = { 7, 8, 9 } end })
-        H.equal(f.queue(), "ok")
+        local status, detail = f.queue()
+        H.equal(status, "ok", tostring(detail) .. "\n" .. table.concat(f.logs, "\n"))
         H.equal(#f.writes, 0); H.deep_equal(f.unit().position, { 7, 8, 9 })
         H.truthy(f.checks.issue660_greatsword_husk_retained():find("^skip:"))
     end)
@@ -274,7 +282,8 @@ return function(H, repo_root)
         local f = fixture({ initial_writer = true, after_spawn = function(u)
             initial = clone(u.position); u.position = { 7, 8, 9 }
         end })
-        H.equal(f.queue(), "ok")
+        local status, detail = f.queue()
+        H.equal(status, "ok", tostring(detail) .. "\n" .. table.concat(f.logs, "\n"))
         H.equal(string.format("%.5f,%.5f,%.5f", unpack(initial)), "0.50000,0.30000,0.90000",
             "actual initial writer must run after baseline capture")
         H.deep_equal(f.unit().position, initial, "retained repair must not add the offset twice")

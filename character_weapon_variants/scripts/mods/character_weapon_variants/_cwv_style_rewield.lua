@@ -535,6 +535,14 @@ function M.queue_rebuild(deps, peer_id, slot_name, family_id, style_id, on_verdi
 	local wearer, reason = M.resolve_wearer(deps, peer_id, slot_name)
 	if not wearer then return false, reason end
 	local item_key = M.slot_item_key(deps, wearer.inventory, slot_name)
+	local restricted = type(deps.policy.is_sword_item) == "function" and deps.policy.is_sword_item(item_key)
+	local sword_package
+	if restricted then
+		if type(deps.actor_admitted) ~= "function" then return false, "actor unavailable" end
+		local admitted
+		admitted, sword_package = deps.actor_admitted(peer_id, slot_name, item_key, family_id, style_id)
+		if admitted ~= true or type(sword_package) ~= "table" then return false, "actor/construction unavailable" end
+	end
 	local expectation, expect_err
 	if descriptor ~= nil and type(deps.descriptor_expectation) == "function" then
 		local ok
@@ -550,6 +558,7 @@ function M.queue_rebuild(deps, peer_id, slot_name, family_id, style_id, on_verdi
 			deps.policy, family_id, style_id, item_key)
 	end
 	if not expectation then return false, expect_err end
+	if restricted and expectation.template ~= sword_package.template then return false, "stale construction expectation" end
     M.probe_residency(deps, deps.probe_state, family_id, style_id)
     local settled = false
     local _, why = coalescer.request_peer_rewield(peer_id, slot_name, {
@@ -557,6 +566,17 @@ function M.queue_rebuild(deps, peer_id, slot_name, family_id, style_id, on_verdi
 			.. ":" .. tostring(expectation.fingerprint or "legacy"),
         managers = deps.managers, unit_api = deps.unit_api,
         script_unit = deps.script_unit,
+		before_wield = restricted and function(unit, inventory)
+			local current = M.resolve_wearer(deps, peer_id, slot_name)
+			if not current or current.unit ~= unit or current.inventory ~= inventory
+					or M.slot_item_key(deps, inventory, slot_name) ~= item_key then return false, "stale actor/item" end
+			if type(deps.actor_admitted) ~= "function" then return false, "actor unavailable" end
+			local admitted, package = deps.actor_admitted(peer_id, slot_name, item_key, family_id, style_id)
+			if admitted ~= true or type(package) ~= "table" or package.template ~= expectation.template then
+				return false, "actor/construction unavailable"
+			end
+			return true
+		end or nil,
         on_verify = function(unit, inventory, _, wield_error)
             if settled then return end
             settled = true

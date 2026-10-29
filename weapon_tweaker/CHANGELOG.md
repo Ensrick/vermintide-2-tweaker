@@ -1,5 +1,19 @@
 # Weapon Tweaker Changelog
 
+## 0.12.341-beta (2026-10-29) -- Applied Sword producer evidence (#645)
+
+- Expose a narrow read-only boot/applied identity record from the existing
+  one-handed Sword push-combo producer. CWV can distinguish that supported
+  mutation from a pending checkbox, replaced owner or unrelated graph change.
+- Preserve the existing setting, action values and restoration behavior; no
+  new hook, RPC, balance multiplier or development-only control is promoted.
+- Retain the producer privately from entry initialization. Repeated balance
+  initialization preserves the exact boot record and ignores pending checkbox
+  changes; lost record, source or chain authority refuses without recapture.
+  First producer errors remain visible and do not grant or retry authority.
+- Coordinate with CWV 0.1.561-dev and mirror the runtime evidence contract in
+  Weapons Dev 0.12.342-dev. Source coverage is not game or co-op acceptance.
+
 ## 0.12.340-beta (2026-10-27) -- bounded Greataxe producer proof (#428)
 
 - Expose a private, installation-bound query for the existing Greataxe light

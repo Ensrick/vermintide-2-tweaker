@@ -68,6 +68,14 @@ return function(H, root)
             if not cache[leaf] then local chunk=assert(loadfile(f.prefix..leaf..".lua"));setfenv(chunk,f.env);cache[leaf]=chunk() end
             return cache[leaf]
         end
+        -- Actual entry DI retains #348's module once. This fixture stays cached;
+        -- test_wt_sword_push_combo_owner.lua separately covers uncached VMF dofile.
+        local entry_file=assert(io.open(f.prefix..ns..".lua","rb"))
+        local entry_source=entry_file:read("*a");entry_file:close()
+        local boot_start=assert(entry_source:find("local _wt348_source_owner =",1,true))
+        local boot_end=assert(entry_source:find("\n-- #348 retained producer end",boot_start,true))
+        local boot=assert(loadstring("return function(mod)\n"..entry_source:sub(boot_start,boot_end-1).."\nend"))
+        setfenv(boot,f.env);boot()(f.mod)
         f.module=f.mod:dofile("scripts/mods/"..ns.."/_wt_authentic_pistol_owner")
         function f:install(deps) deps=deps or {};deps.globals=self.env;return self.module.install(self.mod,deps) end
         function f:balance(old)
