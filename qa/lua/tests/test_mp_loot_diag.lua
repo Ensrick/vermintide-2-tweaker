@@ -232,6 +232,8 @@ H.test("MP #607 production instruments actual local seams with bounded printf", 
     local main = read_source(
         "/modded_progression/scripts/mods/modded_progression/modded_progression.lua")
     H.equal(count_plain(source,
+        'mod:hook("StateInGameRunning", "gm_event_end_conditions_met"'), 1)
+    H.equal(count_plain(source,
         'mod:hook("BackendInterfaceLootPlayfab", "generate_end_of_level_loot"'), 1)
     H.equal(count_plain(source,
         'mod:hook("BackendInterfaceLootPlayfab", "open_loot_chest"'), 1)
@@ -496,5 +498,360 @@ H.test("MP #607 observer throws cannot alter any of the six native wrappers", fu
 
     H.equal(native_calls, 6)
     H.equal(table.concat(logs, "\n"):find("planted", 1, true), nil)
+end)
+
+-- Complete native end-condition body + actual installed observer. These caller
+-- globals/commit storage are recording fixtures, never a backend dispatcher.
+local function native_end_rig(options)
+    options = options or {}
+    local D, saved, logs, hooks = load_module(), {}, {}, {}
+    if options.inactive then D.ACTIVE = false end
+    local quiet = setmetatable({ test = function() end, test_if = function() end }, { __index = H })
+    local realm = assert(loadfile(repo_root .. "/qa/lua/tests/test_mp_loot_diag_realm_gate.lua"))()(quiet, repo_root)
+    local realm_query = realm.shipped_realm_query()
+    local c = { D = D, saved = saved, logs = logs, hooks = hooks, native_calls = 0,
+        commits = 0, awards = 0, queue = {}, errors = 0, screens = 0, effects = {},
+        commands = {}, echoes = {}, print_attempts = 0, attempted_formats = {} }
+    local read_only = options.read_only
+    if read_only == nil then read_only = true end
+    local env = setmetatable({}, { __index = _G }); env._G = env
+    env.MODDED_REALM = not options.official
+    env.GameSettingsDevelopment = { read_only_backend = read_only, achievements_disabled = true }
+    env.script_data = { ["eac-untrusted"] = "unchanged-legacy-flag" }
+    env.GameSettings = { transition_fade_in_speed = 1 }
+    env.GameModeSettings = { adventure = { end_mission_rewards = true }, versus = { end_mission_rewards = true } }
+    env.DialogueSystem = { stateless_global_context = {} }
+    env.IS_PS4, env.IS_XB1 = false, false
+    env.print = function() end
+    local function effect(key) c.effects[key] = (c.effects[key] or 0) + 1 end
+    env.LevelUnlockUtils = { completed_level_difficulty_index = function() return 0 end }
+    env.StatisticsUtil = {
+        register_complete_level = function() effect("complete_stat") end,
+        reset_mission_streak = function() effect("reset_streak") end,
+    }
+    env.LoreBookHelper = { save_new_pages = function() effect("lore") end }
+    env.callback = function(self, name, ...)
+        c.deferred = { self = self, name = name, n = select("#", ...), ... }
+        return function() end
+    end
+    local ui = { handle_transition = function(_, name) H.equal(name, "close_active"); effect("close") end,
+        activate_end_screen_ui = function() c.screens = c.screens + 1 end }
+    local mission = { set_percentage_completed = function(_, value) H.equal(value, c.percentages); effect("percentage") end }
+    local stats = { save = function() effect("save") end }
+    local backend = {
+        get_interface = function(_, name) H.equal(name, "statistics"); return stats end,
+        commit = function(_, force, fn) H.equal(force, true); c.commits = c.commits + 1; c.commit_callback = fn end,
+        commit_error = function() c.errors = c.errors + 1 end,
+    }
+    env.Managers = {
+        transition = { hide_loading_icon = function() effect("hide") end, fade_out = function() effect("fade") end },
+        mechanism = { is_final_round = function() return true end, load_end_screen_resources = function() effect("resources") end },
+        ui = { temporary_get_ingame_ui_called_from_state_ingame_running = function() return ui end },
+        backend = backend,
+        state = { difficulty = { get_difficulty = function() return "hard" end },
+            game_mode = { level_key = function() return "level_key" end,
+                evaluate_end_condition_outcome = function(_, reason, player)
+                    H.equal(reason, c.reason); H.equal(player, c.player)
+                    if options.native_error then error(options.native_error, 0) end
+                    return true, false
+                end,
+                get_end_screen_config = function() return "win", "config", {} end },
+            entity = { system = function(_, name) H.equal(name, "mission_system"); return mission end },
+            achievement = { evaluate_end_of_level_achievements = function() effect("achievement") end } },
+    }
+    c.env, c.percentages, c.reason = env, { private = "sensitive_percentage" }, "sensitive_reason"
+    c.player = { stats_id = function() return "sensitive_stats_id" end }
+    c.state = { is_server = true, game_mode_key = "adventure", _game_has_started = true,
+        player = c.player, statistics_db = {}, parent = { parent = { loading_context = {} } },
+        _award_end_of_level_rewards = function(_, ...)
+            c.awards = c.awards + 1
+            -- Records the continuation the actual native guard admits, no IO.
+            c.queue[#c.queue + 1] = { name = "native_award_continuation", n = select("#", ...) }
+        end }
+    if options.early then c.state.is_server = false; c.state.game_mode_key = "versus" end
+    local native_chunk = assert(loadfile(repo_root .. "/qa/lua/fixtures/mp607_end_conditions_native.lua"))
+    setfenv(native_chunk, env)
+    local class = native_chunk()
+    local native = class.gm_event_end_conditions_met
+    class.gm_event_end_conditions_met = function(self, ...)
+        c.native_calls = c.native_calls + 1
+        return native(self, ...)
+    end
+    local mod = {}
+    function mod:hook(name, method, fn)
+        H.equal(hooks[name .. "." .. method], nil, "one installed hook per target")
+        hooks[name .. "." .. method] = fn
+        if name == "StateInGameRunning" and type(class[method]) == "function" then
+            local original = class[method]
+            class[method] = function(...) return fn(original, ...) end
+        end
+    end
+    function mod:command(name, _, fn) c.commands[name] = fn end
+    function mod:echo(fmt, ...) c.echoes[#c.echoes + 1] = string.format(fmt, ...) end
+    function mod:get(key)
+        if options.observer_throw == "read" then error("sensitive observer read", 0) end
+        return saved[key]
+    end
+    function mod:set(key, value)
+        if options.observer_throw == "write" then error("sensitive observer write", 0) end
+        saved[key] = value
+    end
+    local runtime_source = read_source("/modded_progression/scripts/mods/modded_progression/_mp_loot_diag_runtime.lua")
+    if options.disconnect then
+        local needle = 'mod:hook("StateInGameRunning", "gm_event_end_conditions_met",'
+        H.equal(count_plain(runtime_source, needle), 1, "one actual production hook mutation")
+        local at = assert(runtime_source:find(needle, 1, true))
+        runtime_source = runtime_source:sub(1, at - 1)
+            .. 'mod:hook("StateInGameRunning", "_mp607_disconnected_end_conditions",'
+            .. runtime_source:sub(at + #needle)
+    end
+    if options.disconnect_budget then
+        local needle = "if automatic_print_attempts >= 12 then return false end"
+        H.equal(count_plain(runtime_source, needle), 1, "one actual print admission guard")
+        local at = assert(runtime_source:find(needle, 1, true))
+        runtime_source = runtime_source:sub(1, at - 1)
+            .. "if false then return false end" .. runtime_source:sub(at + #needle)
+    end
+    local runtime_chunk = assert(loadstring(runtime_source, "@mp607_actual_runtime"))
+    setfenv(runtime_chunk, env)
+    if not options.no_observer then runtime_chunk().install(mod, {
+        loot_diag = D, get_inventory_store = function()
+            if options.observer_throw == "inventory" then error("sensitive inventory read", 0) end
+            return { sensitive_inventory_id = { ItemId = "es_sword" } }
+        end,
+        rt_register = function() end,
+        is_modded_realm = function()
+            if options.observer_throw == "realm" then error("sensitive realm read", 0) end
+            return realm_query(D, env, function() return false end)
+        end,
+        print_log = function(fmt, ...)
+            c.print_attempts = c.print_attempts + 1
+            c.attempted_formats[#c.attempted_formats + 1] = fmt
+            if options.observer_throw == "log" then error("sensitive log", 0) end
+            logs[#logs + 1] = string.format(fmt, ...)
+        end,
+        item_master_list = function() return {} end,
+        now = function()
+            if options.observer_throw == "clock" then error("sensitive clock", 0) end
+            return 1
+        end,
+    }) end
+    local function pack(...) return { n = select("#", ...), ... } end
+    function c.run()
+        return pack(class.gm_event_end_conditions_met(c.state, c.reason, true, c.percentages))
+    end
+    function c.complete(status) return assert(c.commit_callback, "real native commit callback")(status or "commit_done") end
+    function c.flags()
+        H.equal(env.GameSettingsDevelopment.read_only_backend, read_only)
+        H.equal(env.GameSettingsDevelopment.achievements_disabled, true)
+        H.equal(env.MODDED_REALM, not options.official)
+        H.equal(env.script_data["eac-untrusted"], "unchanged-legacy-flag")
+    end
+    return c
+end
+
+local function readonly_entry_case(disconnect)
+    local c = native_end_rig({ disconnect = disconnect })
+    H.equal(c.run().n, 0, "complete native function naturally returns no results")
+    H.equal(c.native_calls, 1); H.equal(c.commits, 1)
+    H.equal(c.awards, 0); H.equal(#c.queue, 0); H.equal(c.screens, 0)
+    c.complete()
+    H.equal(c.screens, 1); H.equal(c.awards, 0); H.equal(#c.queue, 0); c.flags()
+    local rows = c.saved.issue607_loot_diag_v1 and c.saved.issue607_loot_diag_v1.records or {}
+    H.truthy(rows[1] and rows[1].event == "end_condition_entry",
+        "actual end-condition entry receipt before readonly award gate")
+    H.equal(#rows, 1, "no fabricated completion/backend request")
+    H.equal(rows[1].reason, "readonly_award_gate_at_entry")
+    H.equal(rows[1].request_name, "unknown"); H.equal(rows[1].backend, "none")
+    H.equal(rows[1].local_items, 1); H.equal(rows[1].local_containers, 0)
+    H.equal(rows[1].local_award_capable, false); H.equal(rows[1].local_open_capable, false)
+    H.equal(c.D.diagnose(c.saved.issue607_loot_diag_v1), "readonly_award_gate_at_entry")
+    H.equal(contains(c.saved, "sensitive"), false)
+    H.equal(contains(table.concat(c.logs, "\n"), "sensitive"), false)
+    return c
+end
+
+H.test("MP #607 end-condition reasons and latest entry never imply completion", function()
+    local D = load_module()
+    H.equal(D.end_condition_reason(true), "readonly_award_gate_at_entry")
+    H.equal(D.end_condition_reason(false), "award_gate_open_at_entry")
+    H.equal(D.end_condition_reason(nil), "award_gate_unknown_at_entry")
+    H.equal(D.end_condition_reason("true"), "award_gate_unknown_at_entry")
+    local ledger = D.record(nil, "end_level", { flow = "end_level" }, 1)
+    ledger = D.record(ledger, "pre_request", { flow = "end_level" }, 2)
+    ledger = D.record(ledger, "end_condition_entry", { flow = "end_level",
+        reason = D.end_condition_reason(true), ignored_player_id = "sensitive" }, 3)
+    H.equal(D.diagnose(ledger), "readonly_award_gate_at_entry")
+    H.equal(contains(ledger, "sensitive"), false); H.equal(D.MAX_RECORDS, 12)
+    ledger = D.record(ledger, "end_condition_entry", { reason = D.end_condition_reason(nil) }, 4)
+    H.equal(D.diagnose(ledger), "end_condition_entry_only")
+end)
+
+H.test("MP #607 actual native readonly commit path records entry without a loot request", function()
+    readonly_entry_case(false)
+end)
+
+H.test("MP #607 same native receipt oracle rejects disconnected production entry hook", function()
+    local ok, failure = pcall(readonly_entry_case, true)
+    H.equal(ok, false, "disconnected observer must not fake a passing receipt")
+    H.truthy(tostring(failure):find("actual end-condition entry receipt before readonly award gate", 1, true),
+        "control must fail the same receipt oracle, not setup/native behavior")
+end)
+
+H.test("MP #607 native early return is observed as entry never completion", function()
+    local c = native_end_rig({ early = true })
+    H.equal(c.run().n, 0); H.equal(c.native_calls, 1); H.equal(c.commits, 0)
+    H.equal(c.state.end_conditions_met, nil); H.equal(c.awards, 0); H.equal(#c.queue, 0)
+    H.equal(c.deferred.name, "gm_event_end_conditions_met"); H.equal(c.deferred.n, 3)
+    H.equal(c.deferred[1], c.reason); H.equal(c.deferred[2], true); H.equal(c.deferred[3], c.percentages)
+    H.equal(c.D.diagnose(c.saved.issue607_loot_diag_v1), "readonly_award_gate_at_entry"); c.flags()
+end)
+
+H.test("MP #607 actual commit error remains native and entry is not success", function()
+    local c = native_end_rig()
+    c.run(); c.complete("commit_error")
+    H.equal(c.errors, 1); H.equal(c.screens, 0); H.equal(c.awards, 0); H.equal(#c.queue, 0)
+    H.equal(#c.saved.issue607_loot_diag_v1.records, 1)
+    H.equal(c.saved.issue607_loot_diag_v1.records[1].event, "end_condition_entry"); c.flags()
+end)
+
+H.test("MP #607 official and retired capture preserve actual native callback behavior", function()
+    for _, options in ipairs({ { official = true, read_only = false }, { inactive = true } }) do
+        local direct_options = { official = options.official, read_only = options.read_only, no_observer = true }
+        local baseline, c = native_end_rig(direct_options), native_end_rig(options)
+        H.equal(c.run().n, baseline.run().n); c.complete(); baseline.complete()
+        H.equal(c.native_calls, baseline.native_calls); H.equal(c.commits, baseline.commits)
+        H.equal(c.awards, baseline.awards); H.equal(#c.queue, #baseline.queue)
+        H.equal(c.screens, baseline.screens); c.flags()
+        H.equal(c.saved.issue607_loot_diag_v1, nil); H.equal(#c.logs, 0)
+    end
+end)
+
+H.test("MP #607 observer faults cannot alter complete native readonly path", function()
+    for _, fault in ipairs({ "realm", "inventory", "read", "write", "clock", "log" }) do
+        local c = native_end_rig({ observer_throw = fault })
+        H.equal(c.run().n, 0, fault); c.complete()
+        H.equal(c.native_calls, 1, fault); H.equal(c.commits, 1, fault); H.equal(c.screens, 1, fault)
+        H.equal(c.awards, 0, fault); H.equal(#c.queue, 0, fault); c.flags()
+        H.equal(contains(table.concat(c.logs, "\n"), "sensitive"), false, fault)
+    end
+end)
+
+H.test("MP #607 entry wrapper preserves all arguments nil-hole tuples and exact native errors", function()
+    local c, self, checkpoint, percentages, tail = native_end_rig(), {}, {}, {}, {}
+    local hook = assert(c.hooks["StateInGameRunning.gm_event_end_conditions_met"])
+    local calls, received = 0
+    local function pack(...) return { n = select("#", ...), ... } end
+    local values = pack(hook(function(...)
+        calls = calls + 1; received = pack(...)
+        return nil, "second", nil, false, nil
+    end, self, "reason", checkpoint, percentages, nil, tail, nil))
+    H.equal(calls, 1); H.equal(received.n, 7)
+    H.equal(received[1], self); H.equal(received[2], "reason")
+    H.equal(received[3], checkpoint); H.equal(received[4], percentages)
+    H.equal(received[5], nil); H.equal(received[6], tail); H.equal(received[7], nil)
+    H.equal(values.n, 5); H.equal(values[1], nil); H.equal(values[2], "second")
+    H.equal(values[3], nil); H.equal(values[4], false); H.equal(values[5], nil)
+    local sentinel = {}
+    local failing = native_end_rig({ native_error = sentinel })
+    local ok, failure = pcall(failing.run)
+    H.equal(ok, false); H.equal(failure, sentinel); H.equal(failing.native_calls, 1)
+    H.equal(failing.commits, 0); H.equal(failing.awards, 0); H.equal(#failing.queue, 0); failing.flags()
+end)
+
+
+local function bounded_native_entry_case(disconnect_budget)
+    local c = native_end_rig({ disconnect_budget = disconnect_budget })
+    for _ = 1, 13 do
+        H.equal(c.run().n, 0)
+        c.complete()
+    end
+    H.equal(c.native_calls, 13); H.equal(c.commits, 13); H.equal(c.screens, 13)
+    H.equal(c.awards, 0); H.equal(#c.queue, 0); c.flags()
+    local ledger = assert(c.saved.issue607_loot_diag_v1)
+    H.equal(ledger.serial, 13, "printing exhaustion must not stop ledger capture")
+    H.equal(#ledger.records, 12)
+    for _, row in ipairs(ledger.records) do
+        H.equal(row.event, "end_condition_entry")
+        H.equal(row.reason, "readonly_award_gate_at_entry")
+    end
+    local before_prints = c.print_attempts
+    c.commands.mp_loot_diag()
+    H.equal(#c.echoes, 13, "explicit report remains available after automatic exhaustion")
+    H.equal(c.print_attempts, before_prints, "explicit report must not consume automatic budget")
+    -- Every native/callback/ledger/report assertion above is identical for the
+    -- control. The one intended failure is too many logger attempts here.
+    H.equal(c.print_attempts, 12, "automatic receipt print-attempt cap")
+    H.equal(#c.logs, 12)
+    return c
+end
+
+H.test("MP #607 repeated real native entries exhaust prints not ledger or native flow", function()
+    bounded_native_entry_case(false)
+end)
+
+H.test("MP #607 existing explicit reset rearms exactly one automatic print window", function()
+    local c = bounded_native_entry_case(false)
+    c.commands.mp_loot_diag("reset")
+    H.equal(c.saved.issue607_loot_diag_v1.serial, 0)
+    H.equal(#c.saved.issue607_loot_diag_v1.records, 0)
+    H.equal(c.print_attempts, 12, "reset reply is not an automatic logger call")
+    for _ = 1, 13 do H.equal(c.run().n, 0); c.complete() end
+    H.equal(c.native_calls, 26); H.equal(c.commits, 26); H.equal(c.screens, 26)
+    H.equal(c.awards, 0); H.equal(#c.queue, 0); c.flags()
+    H.equal(c.print_attempts, 24, "exactly twelve attempts in each explicit window")
+    H.equal(#c.logs, 24)
+    H.equal(c.saved.issue607_loot_diag_v1.serial, 13)
+    H.equal(#c.saved.issue607_loot_diag_v1.records, 12)
+end)
+
+H.test("MP #607 shared attempt cap includes throwing logs and instrument errors", function()
+    for _, fault in ipairs({ "realm", "inventory", "read", "write", "clock", "log" }) do
+        local c = native_end_rig({ observer_throw = fault })
+        for _ = 1, 13 do H.equal(c.run().n, 0, fault); c.complete() end
+        H.equal(c.native_calls, 13, fault); H.equal(c.commits, 13, fault)
+        H.equal(c.screens, 13, fault); H.equal(c.awards, 0, fault)
+        H.equal(#c.queue, 0, fault); c.flags()
+        H.equal(c.print_attempts, 12, "all automatic routes share attempts: " .. fault)
+        if fault == "log" then
+            H.equal(#c.logs, 0, "throwing logger has no successful receipt")
+            H.equal(c.saved.issue607_loot_diag_v1.serial, 13)
+            H.equal(#c.saved.issue607_loot_diag_v1.records, 12)
+            H.truthy(c.attempted_formats[2]:find("event=instrument_error", 1, true),
+                "logger failure must exercise the same capped observer-error sink")
+        else
+            H.equal(#c.logs, 12, fault)
+            H.truthy(c.logs[1]:find("event=instrument_error", 1, true), fault)
+        end
+        H.equal(contains(table.concat(c.logs, "\n"), "sensitive"), false, fault)
+    end
+end)
+
+H.test("MP #607 throwing reset cannot rearm prints before its existing ledger write returns", function()
+    local options = { observer_throw = "log" }
+    local c = native_end_rig(options)
+    for _ = 1, 13 do c.run(); c.complete() end
+    H.equal(c.print_attempts, 12)
+    options.observer_throw = "write"
+    local ok, failure = pcall(c.commands.mp_loot_diag, "reset")
+    H.equal(ok, false); H.truthy(tostring(failure):find("sensitive observer write", 1, true))
+    H.equal(c.native_calls, 13)
+    options.observer_throw = nil
+    c.run(); c.complete()
+    H.equal(c.print_attempts, 12, "failed reset must not reopen the automatic sink")
+    H.equal(c.saved.issue607_loot_diag_v1.serial, 14)
+    c.commands.mp_loot_diag("reset")
+    c.run(); c.complete()
+    H.equal(c.print_attempts, 13)
+    H.equal(c.saved.issue607_loot_diag_v1.serial, 1)
+    H.equal(c.native_calls, 15); H.equal(c.commits, 15); H.equal(c.screens, 15)
+    H.equal(c.awards, 0); H.equal(#c.queue, 0); c.flags()
+end)
+
+H.test("MP #607 disconnected actual print gate fails only the same attempted-receipt oracle", function()
+    local ok, failure = pcall(bounded_native_entry_case, true)
+    H.equal(ok, false, "disconnected print gate must not survive")
+    H.truthy(tostring(failure):find("automatic receipt print-attempt cap: expected 12, got 13", 1, true),
+        "control must fail the attempted-receipt count after native/ledger/report checks")
 end)
 end

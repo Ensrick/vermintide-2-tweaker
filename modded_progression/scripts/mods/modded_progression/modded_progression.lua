@@ -1,11 +1,11 @@
 --[[
-modded_progression (mp) — re-enables 100% of vanilla Vermintide 2's
-progression systems in the modded realm. All state persisted locally
-via VMF settings; the real PlayFab account is never written to.
+modded_progression (mp) — locally owned progression components for
+Vermintide 2's modded realm. Implemented state lives in VMF settings;
+source instrumentation is not proof of complete local grants or account safety.
 
 Full design: modded_progression/PLAN.md.
 
-Status (v0.2.39-dev): selected local quest/Emporium paths and bounded runtime
+Implementation boundary: selected local quest/Emporium paths and bounded runtime
 diagnostics are wired; the complete local mission-loot feature is not. No
 mission chest is awarded or opened locally by the issue #607 instrumentation.
 The Fresh profile routes ONE slice (items/loadouts) to MP-owned state (#840);
@@ -30,7 +30,7 @@ local RealmAuthority = mod:dofile(
 -- at the bottom of this same chunk, so no _G or cross-file exposure is needed.
 local _MEM_PROBE_T0_MP = collectgarbage("count")
 
-local MOD_VERSION = "0.2.49-dev"
+local MOD_VERSION = "0.2.50-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([mp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -1360,14 +1360,12 @@ mod:hook("AchievementManager", "trigger_event", _with_eac_off)
 -- ============================================================
 -- Diagnostic commands
 -- ============================================================
--- Issue #607 diagnostic boundary. A callback-only probe cannot run honestly in
--- the modded realm because both mission awards and chest rolls enqueue an EAC-
--- challenged CloudScript request before their success callbacks
--- [src: backend_interface_loot_playfab.lua:27-47,153-191]. Observe the local
--- chain instead: mission/open entry, queue enqueue, EAC rejection, optional
--- callback success, and MP's own persisted inventory. The adapters never
--- originate a request or grant/mutate loot, and the bounded ledger retains no
--- backend/player ids.
+-- Issue #607 diagnostic boundary: native end-condition ENTRY precedes the
+-- read_only_backend award guard [state_ingame_running.lua:510-762]. It is not
+-- completion. The six downstream loot/queue/error/callback observations remain
+-- optional evidence [backend_interface_loot_playfab.lua:27-47,153-191]. The
+-- adapters never originate a request, change protected flags, or grant/open loot;
+-- the bounded local ledger retains no backend/player ids.
 local LootDiag = mod:dofile("scripts/mods/modded_progression/_mp_loot_diag")
 mod:dofile("scripts/mods/modded_progression/_mp_loot_diag_runtime").install(mod, {
     loot_diag = LootDiag,

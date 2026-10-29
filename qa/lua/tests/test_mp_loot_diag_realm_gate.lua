@@ -202,4 +202,5 @@ H.test("MP #1692 no loot-diag source reads the raw realm flag", function()
     H.equal(main:find("realm_state =", 1, true), nil)
     H.equal(count_plain(main, 'LootDiag.realm_is_modded(rawget(_G, "MODDED_REALM"), _is_mp_realm)'), 1)
 end)
+return { shipped_realm_query = shipped_realm_query }
 end
