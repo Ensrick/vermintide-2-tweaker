@@ -144,21 +144,18 @@ When migrating an existing checkout, preserve the old `.vmbrc` before updating,
 then restore it as the ignored local file. Existing `%APPDATA%` launcher settings
 and remote targets require no migration.
 
-### Receipt-local deployment rollout and builder identity
+### Receipt-local deployment and builder identity
 
-All current inventory rows remain `tracked`; the receipt-local branch is dormant
-until a separately reviewed authority migration. The approved side-by-side
-launcher 0.6.2 does not replace the existing default 0.6.1 installation. A
-schema-3 build receipt binds the exact builder informational version: pending
-0.6.1 claims/artifacts must finish their existing publications before any
-mutating 0.6.2 operation can introduce a newer-format local deployment journal.
-Do not reinterpret or rewrite those receipts, mix launchers across one ship, or
-replace the global default to bypass a builder mismatch. After serialization,
-a new claimed build may select the approved side-by-side executable through the
-existing explicit launcher override, then follow the normal BuildOnly/review/
-merge/publication sequence. Source-only integration requires none of those
-mutations. See PROJECT_STANDARDS section 6.6 for the separate hosted
-`local_deploy` receipt and mandatory `-NoRemote` policy.
+All current inventory rows remain `tracked`; a receipt-authority migration
+requires separate review. Current deployment modes and approval gates are owned
+by [PROJECT_STANDARDS.md section 6.6](../PROJECT_STANDARDS.md#66-ship-doctrine-keyed-off-the-mod_version-suffix-canonical-2026-07-01),
+including the separate hosted `local_deploy` receipt and mandatory `-NoRemote`
+boundary. This setup guide does not prescribe a second rollout sequence.
+
+A schema-3 build receipt retains its exact builder informational-version binding.
+Preserve historical receipts as evidence; do not reinterpret/rewrite them, mix
+launchers within one transaction, or change the default to bypass builder parity.
+Use the owner's current claim/source/receipt resume check before any mutation.
 
 As of 2026-09-17 the approved default installation is launcher 0.6.3 (release
 asset SHA-256 `5f9fb10f751238253b57ce3bf15db85336b2e8869e6a8307190d645a4ab4f040`),
@@ -167,5 +164,5 @@ installed after the last 0.6.1 claims went stale under the 24-hour rule, and
 validates the x86 Steamworks `ActiveProcess` registration in `doctor`, upload
 preflight, and immediately before the SDK uploader boundary (#1548). The
 previous binary is retained beside it as `VMBLauncher.exe.bak.v0.6.1`; it is
-not an approved candidate and must not publish. Stale 0.6.1 claims are
-reissued higher and rebuilt, never reinterpreted.
+not an approved candidate and must not publish. Claim recovery and any required
+fresh build follow the current section 6.6 owner, not a historical rollout.
