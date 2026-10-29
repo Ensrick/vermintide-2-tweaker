@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "verifiedAtUtc": "2026-07-17T09:29:57Z",
+  "verifiedAtUtc": "2026-10-29T16:26:05Z",
   "source": {
     "repositoryUrl": "https://github.com/Aussiemon/Vermintide-2-Source-Code",
-    "commit": "c5e4968b1fbb00c49884e56d640ef990a9c04dd0",
-    "gameVersion": "6.11.2",
+    "commit": "93dea911a4cc464a0eb51cfdc3a443297bfc4550",
+    "gameVersion": "6.13.0",
     "extractionMethod": "Third-party decompiled-script repository snapshot; the upstream repository does not publish an extractor name or version."
   },
   "runtime": {

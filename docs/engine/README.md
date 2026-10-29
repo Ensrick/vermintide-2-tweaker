@@ -1,10 +1,14 @@
 # Engine reference set - index
 
-Eleven subsystem references for the VT2/Stingray engine as our mods actually use it,
-verified against the decompiled snapshot pinned in
-[`SOURCE_PROVENANCE.json`](SOURCE_PROVENANCE.json). The manifest records the source
-commit, game/runtime revisions, extraction provenance, verification time, and a seed
-set of stable symbol anchors. Each doc follows the same shape:
+Eleven subsystem references for the VT2/Stingray engine as our mods actually use it.
+[`SOURCE_PROVENANCE.json`](SOURCE_PROVENANCE.json) pins the native source identity
+and a seed set of stable symbol anchors. Its `verifiedAtUtc` covers that source
+identity and the declared anchors, not a fresh audit of every narrative or deeper
+citation in all eleven documents. Original per-document verification dates remain
+historical; re-read the load-bearing native seams before acting (maintenance rule 4).
+The manifest's separately dated `runtime` block is historical captured evidence,
+not a claim that the pinned source was tested in that runtime or freshly launched.
+Each doc follows the same shape:
 architecture map, lifecycle/data flow, hookable seams, traps and crash classes, and
 "implications for our mods" (the per-lane improvement candidates, now merged and
 prioritized in `IMPROVEMENT_BACKLOG.md`).
@@ -27,7 +31,7 @@ Companion repo docs: `docs/BUG_CLASSES.md` (crash catalog), `docs/MECHANICS.md`,
 | [08_game_states_and_world_lifecycle.md](08_game_states_and_world_lifecycle.md) | Boot frame loop, GameStateMachine, StateIngame teardown order, world inventory/handles, manager lifetime table | Writing any `mod.update` consumer, caching world handles, or chasing a Leave-Game / dead-world AV (issue #459 class) |
 | [09_ui_views_and_widgets.md](09_ui_views_and_widgets.md) | IngameUI views/transitions, UIWidget/UIRenderer, material residency (create vs draw time), hero windows, input services | Building/attaching a view or overlay, augmenting widgets, or any `Material not found in Gui` / create_screen_gui fatal |
 | [10_damage_buffs_and_talents.md](10_damage_buffs_and_talents.md) | Damage pipeline order, buff templates/procs/stat buffs, three networked-buff mechanisms, talent application, heal/THP semantics | Registering buffs, hooking damage/heal paths, talent reworks, or peer-parity questions on buff RPCs (issues #425/#426) |
-| [11_backend_and_loadouts.md](11_backend_and_loadouts.md) | PlayFab mirror, commit/diff engine, EAC gating asymmetry, item bid->key->wire degrade, native saved loadouts, statistics round trip | Touching loadouts/backend items/persistence, modded-realm isolation (issue #402), or crafted-item identity (issue #474 mechanism 3) |
+| [11_backend_and_loadouts.md](11_backend_and_loadouts.md) | PlayFab mirror, commit/diff engine, read-only-backend gating asymmetry, item bid->key->wire degrade, native saved loadouts, statistics round trip | Touching loadouts/backend items/persistence, modded-realm isolation (issue #402), or crafted-item identity (issue #474 mechanism 3) |
 
 Merged, prioritized cross-lane work list: **[IMPROVEMENT_BACKLOG.md](IMPROVEMENT_BACKLOG.md)**
 (feeds the OOP professionalization program, `docs/OOP_REFACTOR_PLAN.md`).
