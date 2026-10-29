@@ -1389,6 +1389,13 @@ says `public`. There is no suffix-vs-visibility contradiction to tie-break.
   from the authenticated reread object, never mutable prose or the manifestless
   NoChange log line. These checks do not claim protection against a malicious
   process rewriting otherwise byte-identical trusted inputs.
+  Legacy console hints about checking the Workshop page's file size are not
+  an alternative verification route and do not authorize UI automation.
+  For UPLOADED results, the persisted candidate intentionally contains
+  `authenticated=false` (`tools/ship/workshop-upload-result.ps1:160`). Only the
+  byte-validated hosted reread returns an authenticated authority wrapper
+  (`tools/ship/workshop-upload-result-release.ps1:114-143`); the producer's false
+  flag is neither a transfer failure nor caller-granted mutation authority.
 - **Publication-only mode (#1376/#1426):** canonical `ship.ps1` enters this mode
   when an existing item's real Steam-managed content directory is absent.
   Receipt authority with an existing local subscription instead requires the
