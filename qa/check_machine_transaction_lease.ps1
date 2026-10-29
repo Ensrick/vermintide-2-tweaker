@@ -183,6 +183,272 @@ function Invoke-MachineTransactionLeaseSelfTest {
     try {
         $helperText = [System.IO.File]::ReadAllText($helper, [System.Text.Encoding]::UTF8)
         $workerText = [IO.File]::ReadAllText($worker, [Text.Encoding]::UTF8)
+        # Exact production loop/helpers with typed fake native calls/current
+        # owner. Zero-budget loop cases forbid sleeps; real fixtures remain below.
+        $begin1328 = '    // BEGIN1328-RESIDUAL-HELPERS: exact source reused by deterministic fixtures.'
+        $end1328 = '    // END1328-RESIDUAL-HELPERS'
+        $at1328 = $helperText.IndexOf($begin1328, [StringComparison]::Ordinal)
+        $stop1328 = $helperText.IndexOf($end1328, [StringComparison]::Ordinal)
+        $outer1328 = '    public static void TerminateAndWaitForResidualDescendants(int timeoutMilliseconds)'
+        $outerAt1328 = $helperText.IndexOf($outer1328, [StringComparison]::Ordinal)
+        Assert-Fixture ($outerAt1328 -ge 0 -and $at1328 -gt $outerAt1328 -and $stop1328 -gt $at1328 -and
+            $outerAt1328 -eq $helperText.LastIndexOf($outer1328, [StringComparison]::Ordinal) -and
+            $at1328 -eq $helperText.LastIndexOf($begin1328, [StringComparison]::Ordinal) -and
+            $stop1328 -eq $helperText.LastIndexOf($end1328, [StringComparison]::Ordinal)) '1328 loop/helpers have one exact production extraction boundary'
+        $helpers1328 = $helperText.Substring($outerAt1328, $stop1328 - $outerAt1328)
+        $fixture1328 = @'
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Runtime.InteropServices;
+public static class VmbResidualFixture1328 {
+    private static readonly IntPtr Job = new IntPtr(19), Handle = new IntPtr(17);
+    private static readonly IntPtr _job = Job;
+    private const uint Owner = 7, Pid = 72;
+    private sealed class Process : IDisposable {
+        public int Id { get { return (int)Owner; } }
+        public static Process GetCurrentProcess() { return new Process(); }
+        public void Dispose() { }
+    }
+    private static class Thread {
+        public static void Sleep(int milliseconds) { throw new Exception("zero-budget fixture unexpectedly attempted a sleep"); }
+    }
+    private static string DescribeResidualTimeout(int owner, int budget, List<uint> residual) { return "fake-native-timeout-evidence"; }
+    private static uint ActualPid, Accounting;
+    private static uint[] Members;
+    private static bool Exited, Belongs, OpenFails, ExitOnMembership, ExitOnTerminate;
+    private static int OpenError, MemberError, PollError, KillError, CloseError, CensusError;
+    private static int Opens, Kills, Closes, Censuses, Polls, PollErrorAt, Passed;
+    private static Win32Exception OpenFault, KillFault;
+    private static readonly List<string> Trace = new List<string>();
+    private static void Check(bool value, string message) { if (!value) throw new Exception(message); Passed++; }
+    private static void Reset() {
+        ActualPid = Pid; Accounting = 2; Members = new uint[] { Owner, Pid };
+        Exited = false; Belongs = true; OpenFails = false; ExitOnMembership = false; ExitOnTerminate = false;
+        OpenError = MemberError = PollError = KillError = CloseError = CensusError = 0;
+        Opens = Kills = Closes = Censuses = Polls = 0; PollErrorAt = 1; OpenFault = KillFault = null; Trace.Clear();
+    }
+    private static void Same(IntPtr handle) { Check(handle == Handle, "operation changed retained process object"); }
+    private static IntPtr OpenResidualProcess(uint pid) {
+        Opens++; Trace.Add("open"); Check(pid == Pid, "wrong open PID");
+        if (OpenFails) { OpenFault = ResidualWin32Failure(OpenError, "open"); throw OpenFault; }
+        return Opens == 1 ? Handle : new IntPtr(99); // A reopened PID is a different object.
+    }
+    private static uint ReadResidualPid(IntPtr handle) { Same(handle); Trace.Add("pid"); return ActualPid; }
+    private static bool ResidualSignalled(IntPtr handle) {
+        Same(handle); Trace.Add("poll"); Polls++;
+        if (PollError != 0 && Polls >= PollErrorAt) throw new Win32Exception(PollError, "poll"); return Exited;
+    }
+    private static bool IsResidualInJob(IntPtr handle, IntPtr job) {
+        Same(handle); Check(job == Job, "wrong membership Job"); Trace.Add("member");
+        if (ExitOnMembership) Exited = true;
+        if (MemberError != 0) throw new Win32Exception(MemberError, "member"); return Belongs;
+    }
+    private static void TerminateResidual(IntPtr handle) {
+        Same(handle); Kills++; Trace.Add("terminate"); if (ExitOnTerminate) Exited = true;
+        if (KillError != 0) { KillFault = ResidualWin32Failure(KillError, "terminate"); throw KillFault; }
+    }
+    private static void CloseResidualHandle(IntPtr handle) {
+        Same(handle); Closes++; Trace.Add("close"); if (CloseError != 0) throw new Win32Exception(CloseError, "close");
+    }
+    private static uint[] QueryActive(IntPtr job) {
+        Check(job == Job, "wrong census Job"); Censuses++;
+        if (CensusError != 0) throw new Win32Exception(CensusError, "census");
+        ulong[] ids = new ulong[Members.Length]; for (int i = 0; i < ids.Length; i++) ids[i] = Members[i];
+        return DecodeFixture((uint)ids.Length, (uint)ids.Length, 8 + ids.Length * IntPtr.Size, ids);
+    }
+    private static uint QueryActiveCount(IntPtr job) { Check(job == Job, "wrong accounting Job"); return Accounting; }
+    private static uint[] DecodeFixture(uint assigned, uint listed, int returned, ulong[] ids) {
+        const int bytes = 65536; IntPtr memory = Marshal.AllocHGlobal(bytes);
+        try {
+            Marshal.WriteInt32(memory, 0, unchecked((int)assigned)); Marshal.WriteInt32(memory, 4, unchecked((int)listed));
+            for (int i = 0; i < ids.Length; i++) {
+                if (IntPtr.Size == 8) Marshal.WriteInt64(memory, 8 + i * 8, unchecked((long)ids[i]));
+                else Marshal.WriteInt32(memory, 8 + i * 4, unchecked((int)ids[i]));
+            }
+            return DecodeActive(memory, bytes, unchecked((uint)returned));
+        }
+        finally { Marshal.FreeHGlobal(memory); }
+    }
+    private static Exception Failure(Action action) {
+        try { action(); } catch (Exception error) { return error; }
+        throw new Exception("expected fail-closed refusal");
+    }
+    public static int Run() {
+        Passed = 0; Reset();
+        string[] operations = { "Could not open residual process", "Could not identify residual handle",
+            "Could not authenticate residual Job", "Could not poll residual handle",
+            "Could not terminate residual handle", "Could not close residual handle" };
+        int[] codes = { 5, 6, 87, 0, 1450, 5 };
+        for (int i = 0; i < operations.Length; i++) {
+            Win32Exception error = ResidualWin32Failure(codes[i], operations[i]);
+            string numeric = "(Win32 " + codes[i].ToString(System.Globalization.CultureInfo.InvariantCulture) + ")";
+            Check(error.NativeErrorCode == codes[i] && error.Message.Contains(numeric)
+                && error.Message.StartsWith(operations[i], StringComparison.Ordinal),
+                "actual production error formatter lost the captured numeric Win32 code");
+        }
+        Members = new uint[] { Owner }; Accounting = 1;
+        TerminateAndWaitForResidualDescendants(0);
+        Check(Opens == 0 && Censuses == 1, "actual loop must complete from fresh owner-only proof without opening targets");
+        Reset(); Members = new uint[] { Owner }; Accounting = 2;
+        Check(Failure(() => TerminateAndWaitForResidualDescendants(0)) is TimeoutException, "actual loop cannot complete from membership while accounting remains active");
+        Reset(); Members = new uint[0];
+        Check(Failure(() => TerminateAndWaitForResidualDescendants(0)) is InvalidOperationException, "actual release loop must reject an owner-absent generic census");
+        Reset();
+        Check(Failure(() => TerminateAndWaitForResidualDescendants(0)) is TimeoutException && Kills == 1 && Closes == 1,
+            "actual zero-budget loop retains its timeout after one authenticated kill; no stale-snapshot early success");
+        Reset(); Belongs = false;
+        Check(Failure(() => TerminateAndWaitForResidualDescendants(0)) is InvalidOperationException && Kills == 0 && Closes == 1,
+            "actual loop must propagate foreign-Job refusal before any target mutation");
+        Reset();
+        TerminateOwnedResidual(Job, Owner, Pid);
+        Check(Opens == 1 && Kills == 1 && Closes == 1, "owned live object uses one handle/kill/close");
+        Check(String.Join(",", Trace.ToArray()) == "open,pid,poll,member,terminate,close", "native operation order changed");
+        Check(!IsOwnedReleaseDrained(Job, Owner, Members), "termination initiation is not whole-Job completion");
+        Members = new uint[] { Owner }; Accounting = 2;
+        Check(!IsOwnedReleaseDrained(Job, Owner, Members), "lagging accounting cannot complete"); Accounting = 1;
+        Check(IsOwnedReleaseDrained(Job, Owner, Members), "fresh owner-only list plus accounting completes");
+        Reset(); Exited = true; TerminateOwnedResidual(Job, Owner, Pid);
+        Check(Kills == 0 && Closes == 1, "signalled object is not terminated again");
+        Check(!IsOwnedReleaseDrained(Job, Owner, Members), "single object exit is not global drain");
+        Reset(); KillError = 5; ExitOnTerminate = true; TerminateOwnedResidual(Job, Owner, Pid);
+        Check(Kills == 1 && Closes == 1, "same-handle signalled error5 race accepted");
+        Reset(); KillError = 5; CloseError = 6;
+        Win32Exception primary = Failure(() => TerminateOwnedResidual(Job, Owner, Pid)) as Win32Exception;
+        Check(Object.ReferenceEquals(primary, KillFault) && primary.NativeErrorCode == 5 && primary.Data.Contains("ResidualCloseFailure"), "close fault replaced primary live-access failure");
+        Check(primary.Message.Contains("(Win32 5)"), "escaping actual helper fault must retain its code in Message-only release reporting");
+        Check(Closes == 1, "failed handle close was retried");
+        Reset(); KillError = 5; PollError = 6; PollErrorAt = 2;
+        primary = Failure(() => TerminateOwnedResidual(Job, Owner, Pid)) as Win32Exception;
+        Check(Object.ReferenceEquals(primary, KillFault) && primary.Data.Contains("ResidualExitFailure") && Closes == 1,
+            "failed same-handle exit proof must preserve the exact termination fault");
+        Reset(); KillError = 87; ExitOnTerminate = true;
+        Check(((Win32Exception)Failure(() => TerminateOwnedResidual(Job, Owner, Pid))).NativeErrorCode == 87, "unknown terminate error became exit proof");
+        Reset(); PollError = 6;
+        Failure(() => TerminateOwnedResidual(Job, Owner, Pid)); Check(Kills == 0 && Closes == 1, "failed poll permitted mutation");
+        Reset(); Belongs = false;
+        Failure(() => TerminateOwnedResidual(Job, Owner, Pid)); Check(Kills == 0 && Closes == 1, "foreign/PID-reused live object was terminated");
+        Reset(); ActualPid = 73;
+        Failure(() => TerminateOwnedResidual(Job, Owner, Pid)); Check(Kills == 0 && Closes == 1, "mismatched process identity was terminated");
+        Reset(); Failure(() => TerminateOwnedResidual(Job, Owner, Owner)); Check(Opens == 0, "owner target was opened");
+        Reset(); Failure(() => TerminateOwnedResidual(Job, Owner, 0)); Check(Opens == 0, "zero target was opened");
+        Reset(); MemberError = 5; ExitOnMembership = true; TerminateOwnedResidual(Job, Owner, Pid);
+        Check(Kills == 0 && Closes == 1, "membership exit race mutated a process");
+        Reset(); Belongs = false; ExitOnMembership = true; TerminateOwnedResidual(Job, Owner, Pid);
+        Check(Kills == 0 && Closes == 1, "false membership plus same-handle exit must not terminate");
+        Reset(); MemberError = 5; primary = Failure(() => TerminateOwnedResidual(Job, Owner, Pid)) as Win32Exception;
+        Check(primary != null && primary.NativeErrorCode == 5 && Kills == 0, "live membership denial was accepted");
+        Reset(); OpenFails = true; OpenError = 5;
+        primary = Failure(() => TerminateOwnedResidual(Job, Owner, Pid)) as Win32Exception;
+        Check(primary != null && primary.NativeErrorCode == 5 && Censuses == 1 && Closes == 0, "open denial became death proof");
+        Reset(); OpenFails = true; OpenError = 87; Members = new uint[] { Owner };
+        TerminateOwnedResidual(Job, Owner, Pid); Check(Censuses == 1 && Kills == 0 && Closes == 0, "complete fresh absence mishandled");
+        Check(!IsOwnedReleaseDrained(Job, Owner, Members), "absence alone ignored accounting");
+        Reset(); OpenFails = true; OpenError = 5; Members = new uint[] { Owner, 73 };
+        TerminateOwnedResidual(Job, Owner, Pid);
+        Check(!IsOwnedReleaseDrained(Job, Owner, Members) && Kills == 0 && Closes == 0,
+            "target absence after access denial cannot hide another owned residual");
+        Reset(); OpenFails = true; OpenError = 5; CensusError = 6;
+        primary = Failure(() => TerminateOwnedResidual(Job, Owner, Pid)) as Win32Exception;
+        Check(Object.ReferenceEquals(primary, OpenFault) && primary.NativeErrorCode == 5 && primary.Data.Contains("ResidualCensusFailure"), "census fault replaced open fault");
+        Reset(); OpenFails = true; OpenError = 5; Members = new uint[0];
+        primary = Failure(() => TerminateOwnedResidual(Job, Owner, Pid)) as Win32Exception;
+        Check(Object.ReferenceEquals(primary, OpenFault) && primary.Data.Contains("ResidualCensusFailure"),
+            "generic empty Job cannot authorize absence in this owned release context");
+        Reset(); OpenFails = true; OpenError = 0;
+        Failure(() => TerminateOwnedResidual(Job, Owner, Pid)); Check(Censuses == 0, "malformed open result authorized absence lookup");
+        Reset(); CloseError = 6;
+        Check(((Win32Exception)Failure(() => TerminateOwnedResidual(Job, Owner, Pid))).NativeErrorCode == 6 && Closes == 1, "close-only fault was swallowed");
+        Check(DecodeFixture(0, 0, 8, new ulong[0]).Length == 0, "generic empty Job rejected");
+        uint[] foreign = DecodeFixture(2, 2, 8 + 2 * IntPtr.Size, new ulong[] { 72, 73 });
+        Check(foreign.Length == 2, "generic owner-absent Job rejected");
+        Failure(() => IsOwnedReleaseDrained(Job, Owner, foreign));
+        Failure(() => IsOwnedReleaseDrained(Job, Owner, new uint[0]));
+        Failure(() => IsOwnedReleaseDrained(Job, Owner, new uint[] { Owner, Owner }));
+        Failure(() => DecodeFixture(2, 1, 8 + IntPtr.Size, new ulong[] { 72 }));
+        Failure(() => DecodeFixture(1, 1, 7, new ulong[] { 72 }));
+        Failure(() => DecodeFixture(1, 1, 65537, new ulong[] { 72 }));
+        Failure(() => DecodeFixture(UInt32.MaxValue, UInt32.MaxValue, 8, new ulong[0]));
+        Failure(() => DecodeFixture(1, 1, 8 + IntPtr.Size, new ulong[] { 0 }));
+        Failure(() => DecodeFixture(2, 2, 8 + 2 * IntPtr.Size, new ulong[] { 72, 72 }));
+        if (IntPtr.Size == 8) Failure(() => DecodeFixture(1, 1, 16, new ulong[] { 0x100000000UL }));
+        return Passed;
+    }
+'@
+        $fixture1328 += $helpers1328 + "`n}"
+        Add-Type -TypeDefinition $fixture1328
+        $passed1328 = [VmbResidualFixture1328]::Run()
+        Assert-Fixture ($passed1328 -gt 0) "1328 exact loop/helper identity/census/completion contracts ($passed1328 assertions; typed fake native calls, not ABI proof)"
+        # Sensitivity controls reuse that same actual loop/helper fixture. Each
+        # mutant starts from its unmodified source; only its fixture class name
+        # and one exact production preimage change. Setup/compile cannot count
+        # as a killed mutant: only an existing normal Run assertion may do so.
+        $controls1328 = @(
+            @{
+                Name = 'foreign-job-check'; Class = 'VmbResidualFixture1328ForeignJobMutant'
+                From = '            if (!belongs) {'
+                To = '            if (belongs && !belongs) {'
+                Assertion = 'actual loop must propagate foreign-Job refusal before any target mutation'
+            },
+            @{
+                Name = 'accounting-proof'; Class = 'VmbResidualFixture1328AccountingMutant'
+                From = '        return members.Length == 1 && QueryActiveCount(job) == 1;'
+                To = '        return members.Length == 1;'
+                Assertion = 'expected fail-closed refusal'
+            },
+            @{
+                Name = 'partial-census'; Class = 'VmbResidualFixture1328PartialCensusMutant'
+                From = '        if (assigned != listed || listed > (uint)((bytes - 8) / IntPtr.Size)'
+                To = '        if (assigned < listed || listed > (uint)((bytes - 8) / IntPtr.Size)'
+                Assertion = 'expected fail-closed refusal'
+            },
+            @{
+                Name = 'win32-code-formatter'; Class = 'VmbResidualFixture1328FormatterMutant'
+                From = 'error.ToString(System.Globalization.CultureInfo.InvariantCulture)'
+                To = '"lost"'
+                Assertion = 'actual production error formatter lost the captured numeric Win32 code'
+            }
+        )
+        $class1328 = 'public static class VmbResidualFixture1328 {'
+        $classAt1328 = $fixture1328.IndexOf($class1328, [StringComparison]::Ordinal)
+        if ($classAt1328 -lt 0 -or $classAt1328 -ne $fixture1328.LastIndexOf($class1328, [StringComparison]::Ordinal)) {
+            throw '1328 mutation setup requires one exact fixture class declaration'
+        }
+        $killed1328 = @()
+        foreach ($control1328 in $controls1328) {
+            $from1328 = [string]$control1328.From
+            $helperAt1328 = $helpers1328.IndexOf($from1328, [StringComparison]::Ordinal)
+            $fixtureAt1328 = $fixture1328.IndexOf($from1328, [StringComparison]::Ordinal)
+            if ($helperAt1328 -lt 0 -or $helperAt1328 -ne $helpers1328.LastIndexOf($from1328, [StringComparison]::Ordinal) -or
+                    $fixtureAt1328 -lt 0 -or $fixtureAt1328 -ne $fixture1328.LastIndexOf($from1328, [StringComparison]::Ordinal)) {
+                throw "1328 mutation '$($control1328.Name)' requires one exact production preimage"
+            }
+            $mutant1328 = $fixture1328.Replace($from1328, [string]$control1328.To).Replace(
+                $class1328, ('public static class ' + $control1328.Class + ' {'))
+            # Intentionally outside the Run-only catch. Compiler or reflection
+            # setup failures fail this suite; they never satisfy sensitivity.
+            $compiled1328 = @(Add-Type -TypeDefinition $mutant1328 -PassThru -ErrorAction Stop)
+            $types1328 = @($compiled1328 | Where-Object { $_.FullName -ceq $control1328.Class })
+            if ($types1328.Count -ne 1) { throw "1328 mutation '$($control1328.Name)' compiled no unique fixture type" }
+            $run1328 = $types1328[0].GetMethod('Run', ([Reflection.BindingFlags]::Public -bor [Reflection.BindingFlags]::Static))
+            if ($null -eq $run1328) { throw "1328 mutation '$($control1328.Name)' has no actual Run method" }
+            $failure1328 = $null
+            try { $null = $run1328.Invoke($null, $null) }
+            catch {
+                $failure1328 = $_.Exception
+                while ($null -ne $failure1328.InnerException) { $failure1328 = $failure1328.InnerException }
+            }
+            $normalAssertion1328 = $null -ne $failure1328 -and $failure1328.GetType() -eq [Exception] -and
+                $failure1328.Message -ceq [string]$control1328.Assertion
+            $observed1328 = if ($null -eq $failure1328) { '<Run returned without a normal assertion>' } else {
+                $failure1328.GetType().FullName + ': ' + $failure1328.Message
+            }
+            Assert-Fixture $normalAssertion1328 "1328 mutation $($control1328.Name) must fail its normal Run assertion; observed=$observed1328"
+            $killed1328 += [string]$control1328.Name
+        }
+        Assert-Fixture ($killed1328.Count -eq 4) '1328 all four compiled typed-fake mutation controls are killed by normal assertions'
+        Write-Host ("[machine_transaction_lease:1328] normal_assertions={0} mutation_controls_killed={1} controls={2}" -f
+            $passed1328, $killed1328.Count, ($killed1328 -join ','))
         foreach ($completionCase in @('Success', 'LauncherFailure', 'TransactionFailure')) {
             $completionPrefix = Join-Path $temp ('completion-' + $completionCase)
             $completion = Start-Process -FilePath $hostPath -ArgumentList @('-NoProfile','-NonInteractive','-File',

@@ -1156,6 +1156,17 @@ weaken an ambiguous recovery failure. Only the exact journaled descriptor or
 exact legacy 0.5.9 launcher DENY recovery lane may repair staging ACLs.
 In short: canonical ship never rewrites shared launcher settings.
 
+**Normal cleanup identity (#1328).** Retain one minimum-rights native process
+handle across PID/Job validation, zero-time exit polling and termination; a
+`HasExited` observation followed by later `Process.Handle` access is not stable
+identity. An access-denied termination result is benign only when that same held
+object is signalled. Failure to open a target is not exit proof: only a fresh,
+complete census of the same owned Job may establish its absence. Normal release
+requires complete owner-only membership and active accounting of one before
+unlocking. Abandoned-owner recovery retains its separate zero-active contract.
+Preserve captured Win32 codes in the primary error message. Do not increase the
+timeout or treat a successful per-process operation as whole-Job drainage.
+
 **First-upload bootstrap is identity allocation, not a test release.** A
 reviewed `published_id = 0L` commit may use the constrained hosted bootstrap
 receipt so Steam can allocate one ID. After the launcher compare-and-swaps only

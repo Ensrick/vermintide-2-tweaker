@@ -3754,6 +3754,29 @@ VMB, Stingray, upload tools, or grandchildren can outlive it.
   and crash-safe ACL journal. #647/#683 own exact worktree/dependency identity;
   #724 owns reviewed publication provenance.
 
+### Exit between observation and handle use (#1328)
+
+The recorded private guard trials reproduced `Process.get_Handle` failing after
+the process exited between `HasExited` and handle access. A post-exit termination
+can also return access denied. These are separately proven races, not the
+historical GUI363 timeout's established cause.
+
+- Bind one non-inheritable, minimum-rights native handle; validate its PID and
+  exact Job before terminating through that same handle. A signalled held object
+  needs no second termination. An error category alone is never exit evidence.
+- On open failure, only fresh complete same-Job absence can discard a stale
+  snapshot member. Preserve the original error if absence cannot be established.
+  Generic census decoding accepts well-formed empty or owner-absent Jobs; only
+  the normal owned-release context requires the exact owner once and final
+  owner-only membership plus active accounting of one.
+- Close each acquired handle once and preserve the primary failure, including
+  its numeric Win32 code in `Message`. Secondary `Data` is helper-only evidence;
+  the existing release boundary does not promise to print it.
+- The existing machine-transaction self-test exercises the actual loop/helpers
+  through typed fake native calls and retains private real-Job fixtures on both
+  PowerShell hosts. Compile/setup failures do not count as mutation sensitivity.
+  This is tooling coverage, not a sacrificial upload or historical-cause proof.
+
 ### Partial-publication counterpart (#1328/#1548)
 
 A successfully recorded GitHub manifest can survive an SDK crash while the

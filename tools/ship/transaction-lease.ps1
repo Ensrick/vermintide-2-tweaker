@@ -193,18 +193,11 @@ public static class VmbTransactionProcessTreeGuard
             DateTime deadline = DateTime.UtcNow.AddMilliseconds(timeoutMilliseconds);
             while (true) {
                 uint[] active = QueryActive(_job);
+                if (IsOwnedReleaseDrained(_job, (uint)current.Id, active)) return;
                 System.Collections.Generic.List<uint> residual = new System.Collections.Generic.List<uint>();
                 foreach (uint pid in active) if (pid != (uint)current.Id) residual.Add(pid);
-                if (residual.Count == 0) return;
                 foreach (uint pid in residual) {
-                    try { using (Process p = Process.GetProcessById((int)pid)) {
-                        if (!p.HasExited) {
-                            bool belongs;
-                            if (!IsProcessInJob(p.Handle, _job, out belongs)) Throw("authenticate residual process job membership");
-                            if (belongs) p.Kill();
-                        }
-                    } }
-                    catch (ArgumentException) { }
+                    TerminateOwnedResidual(_job, (uint)current.Id, pid);
                 }
                 if (DateTime.UtcNow >= deadline) {
                     string detail;
@@ -214,6 +207,176 @@ public static class VmbTransactionProcessTreeGuard
                 }
                 Thread.Sleep(20);
             }
+        }
+    }
+
+    // BEGIN1328-RESIDUAL-HELPERS: exact source reused by deterministic fixtures.
+    private static void ValidateOwnedReleaseMembers(IntPtr job, uint owner, uint[] members)
+    {
+        if (job == IntPtr.Zero || owner == 0 || members == null)
+            throw new InvalidOperationException("Invalid owned release census; refusing mutation.");
+        int owners = 0;
+        foreach (uint pid in members) if (pid == owner) owners++;
+        if (owners != 1)
+            throw new InvalidOperationException("Owned release census must contain the exact owner once; refusing mutation.");
+    }
+
+    private static bool IsOwnedReleaseDrained(IntPtr job, uint owner, uint[] members)
+    {
+        ValidateOwnedReleaseMembers(job, owner, members);
+        return members.Length == 1 && QueryActiveCount(job) == 1;
+    }
+
+    private static System.ComponentModel.Win32Exception ResidualWin32Failure(int error, string operation)
+    {
+        return new System.ComponentModel.Win32Exception(error, operation + " (Win32 "
+            + error.ToString(System.Globalization.CultureInfo.InvariantCulture) + "); refusing mutation.");
+    }
+
+    private static void RememberResidualFailure(Exception primary, string key, Exception secondary)
+    {
+        try {
+            string text = secondary.GetType().FullName + ": " + secondary.Message;
+            primary.Data[key] = text.Substring(0, Math.Min(1024, text.Length));
+        }
+        catch { } // Evidence bookkeeping must never replace the primary fault.
+    }
+
+    private static void TerminateOwnedResidual(IntPtr job, uint owner, uint pid)
+    {
+        if (job == IntPtr.Zero || owner == 0 || pid == 0 || pid == owner)
+            throw new InvalidOperationException("Invalid residual identity; refusing mutation.");
+        IntPtr handle;
+        try { handle = OpenResidualProcess(pid); }
+        catch (System.ComponentModel.Win32Exception openFailure) {
+            if (openFailure.NativeErrorCode == 0) throw;
+            bool absent = false;
+            try {
+                uint[] fresh = QueryActive(job);
+                ValidateOwnedReleaseMembers(job, owner, fresh);
+                absent = Array.IndexOf(fresh, pid) < 0;
+            }
+            catch (Exception censusFailure) {
+                RememberResidualFailure(openFailure, "ResidualCensusFailure", censusFailure);
+            }
+            if (!absent) throw;
+            return; // No longer in this complete Job census, NOT process-exit proof.
+        }
+        Exception primary = null;
+        try {
+            uint actualPid = ReadResidualPid(handle);
+            if (actualPid != pid || actualPid == owner)
+                throw new InvalidOperationException("Residual handle identity changed; refusing mutation.");
+            if (ResidualSignalled(handle)) return;
+            bool belongs;
+            try { belongs = IsResidualInJob(handle, job); }
+            catch (System.ComponentModel.Win32Exception membershipFailure) {
+                if (membershipFailure.NativeErrorCode == 0) throw;
+                try { if (ResidualSignalled(handle)) return; }
+                catch (Exception exitFailure) {
+                    RememberResidualFailure(membershipFailure, "ResidualExitFailure", exitFailure);
+                }
+                throw;
+            }
+            if (!belongs) {
+                if (ResidualSignalled(handle)) return;
+                throw new InvalidOperationException("Residual handle belongs to a foreign Job; refusing mutation.");
+            }
+            try { TerminateResidual(handle); }
+            catch (System.ComponentModel.Win32Exception terminationFailure) {
+                if (terminationFailure.NativeErrorCode != 5) throw;
+                try { if (ResidualSignalled(handle)) return; }
+                catch (Exception exitFailure) {
+                    RememberResidualFailure(terminationFailure, "ResidualExitFailure", exitFailure);
+                }
+                throw;
+            }
+        }
+        catch (Exception failure) { primary = failure; throw; }
+        finally {
+            try { CloseResidualHandle(handle); }
+            catch (Exception closeFailure) {
+                if (primary == null) throw;
+                RememberResidualFailure(primary, "ResidualCloseFailure", closeFailure);
+            }
+        }
+    }
+
+    private static uint[] DecodeActive(IntPtr memory, int bytes, uint returned)
+    {
+        if (memory == IntPtr.Zero || bytes < 8 || returned < 8 || returned > (uint)bytes)
+            throw new InvalidOperationException("Invalid Job membership buffer; refusing mutation.");
+        uint assigned = unchecked((uint)Marshal.ReadInt32(memory, 0));
+        uint listed = unchecked((uint)Marshal.ReadInt32(memory, 4));
+        if (assigned != listed || listed > (uint)((bytes - 8) / IntPtr.Size)
+                || 8UL + (ulong)listed * (uint)IntPtr.Size > returned)
+            throw new InvalidOperationException("Incomplete Job membership buffer; refusing mutation.");
+        uint[] result = new uint[(int)listed];
+        HashSet<uint> seen = new HashSet<uint>();
+        for (int i = 0; i < result.Length; i++) {
+            int offset = 8 + i * IntPtr.Size;
+            ulong raw = IntPtr.Size == 8 ? unchecked((ulong)Marshal.ReadInt64(memory, offset))
+                : unchecked((uint)Marshal.ReadInt32(memory, offset));
+            if (raw == 0 || raw > UInt32.MaxValue || !seen.Add((uint)raw))
+                throw new InvalidOperationException("Invalid Job member PID; refusing mutation.");
+            result[i] = (uint)raw;
+        }
+        return result; // Generic decoder: empty and owner-absent Jobs are valid.
+    }
+    // END1328-RESIDUAL-HELPERS
+
+    // #1328 observed Handle/exit race: bind one native object, not HasExited then
+    // a later full-access Process.Handle. No error category alone proves exit.
+    private static IntPtr OpenResidualProcess(uint pid)
+    {
+        IntPtr handle = OpenProcess(0x00101001, false, pid);
+        if (handle == IntPtr.Zero) {
+            int error = Marshal.GetLastWin32Error();
+            throw ResidualWin32Failure(error, "Could not open residual process");
+        }
+        return handle;
+    }
+    private static uint ReadResidualPid(IntPtr handle)
+    {
+        uint pid = GetProcessId(handle);
+        if (pid == 0) {
+            int error = Marshal.GetLastWin32Error();
+            throw ResidualWin32Failure(error, "Could not identify residual handle");
+        }
+        return pid;
+    }
+    private static bool IsResidualInJob(IntPtr handle, IntPtr job)
+    {
+        bool belongs;
+        if (!IsProcessInJob(handle, job, out belongs)) {
+            int error = Marshal.GetLastWin32Error();
+            throw ResidualWin32Failure(error, "Could not authenticate residual Job");
+        }
+        return belongs;
+    }
+    private static bool ResidualSignalled(IntPtr handle)
+    {
+        uint result = WaitForSingleObject(handle, 0);
+        if (result == 0) return true;
+        if (result == 258) return false;
+        if (result == UInt32.MaxValue) {
+            int error = Marshal.GetLastWin32Error();
+            throw ResidualWin32Failure(error, "Could not poll residual handle");
+        }
+        throw new InvalidOperationException("Unexpected process wait result; refusing mutation.");
+    }
+    private static void TerminateResidual(IntPtr handle)
+    {
+        if (!TerminateProcess(handle, 0xffffffffu)) {
+            int error = Marshal.GetLastWin32Error();
+            throw ResidualWin32Failure(error, "Could not terminate residual handle");
+        }
+    }
+    private static void CloseResidualHandle(IntPtr handle)
+    {
+        if (!CloseHandle(handle)) {
+            int error = Marshal.GetLastWin32Error();
+            throw ResidualWin32Failure(error, "Could not close residual handle");
         }
     }
 
@@ -263,10 +426,7 @@ public static class VmbTransactionProcessTreeGuard
         try {
             uint returned;
             if (!QueryInformationJobObject(job, 3, memory, bytes, out returned)) Throw("query transaction process-tree membership");
-            int active = Marshal.ReadInt32(memory, 4);
-            uint[] result = new uint[active];
-            for (int i = 0; i < active; i++) result[i] = (uint)Marshal.ReadIntPtr(memory, 8 + i * IntPtr.Size).ToInt64();
-            return result;
+            return DecodeActive(memory, bytes, returned);
         }
         finally { Marshal.FreeHGlobal(memory); }
     }
@@ -359,6 +519,10 @@ public static class VmbTransactionProcessTreeGuard
     [DllImport("kernel32.dll", SetLastError=true)] private static extern bool SetInformationJobObject(IntPtr j, int c, IntPtr i, uint l);
     [DllImport("kernel32.dll", SetLastError=true)] private static extern bool AssignProcessToJobObject(IntPtr j, IntPtr p);
     [DllImport("kernel32.dll", SetLastError=true)] private static extern bool CloseHandle(IntPtr h);
+    [DllImport("kernel32.dll", SetLastError=true)] private static extern IntPtr OpenProcess(uint access, bool inherit, uint pid);
+    [DllImport("kernel32.dll", SetLastError=true)] private static extern uint GetProcessId(IntPtr process);
+    [DllImport("kernel32.dll", SetLastError=true)] private static extern uint WaitForSingleObject(IntPtr handle, uint milliseconds);
+    [DllImport("kernel32.dll", SetLastError=true)] private static extern bool TerminateProcess(IntPtr process, uint exitCode);
 }
 '@
 }
