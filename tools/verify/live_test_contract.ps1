@@ -709,6 +709,166 @@ rawset(_G, "printf", mod.debug)
         Assert-VtContractFixture $rejected 'Duplicate release mod_id was accepted.'
 
         $exceptions = Import-PowerShellDataFile (Join-Path $PSScriptRoot 'live_test_contract_exceptions.psd1')
+        # Public #1190: exercise the consumed exact-route declarations against
+        # fixed audited source excerpts, using the existing scanner/override
+        # owner. Never substitute an unpublished WT worktree for deployment.
+        # This is not a hosted-manifest or runtime-verifier execution.
+        $wt1190Overrides = @($exceptions.ReceiptRouteOverrides | Where-Object {
+            [string]$_.ModId -ceq 'wt' -and [string]$_.Marker -ceq '[wt:1190]'
+        })
+        $wt1190Signatures = @(
+            '[wt:1190] verify result=not-ready'
+            '[wt:1190] verify result=%s %s'
+            '[wt:1190] action=%s career=%s row=%s slot=%s weapon=%s result=%s'
+        )
+        Assert-VtContractFixture ($wt1190Overrides.Count -eq 3) '#1190 must expose exactly three public WT route declarations.'
+        $wt1190Trees = @($wt1190Overrides.ModTree | Sort-Object -Unique -CaseSensitive)
+        Assert-VtContractFixture ($wt1190Trees.Count -eq 1 -and $wt1190Trees[0] -cmatch '^[0-9a-f]{40}$') '#1190 routes must share one immutable public WT tree.'
+        $wt1190Tree = [string]$wt1190Trees[0]
+        foreach ($pin in @(Get-VtConsumedModTreePins -Exceptions $exceptions -ModId 'wt')) {
+            Assert-VtContractFixture (@($pin.Trees) -ccontains $wt1190Tree) '#1190 public WT tree disagrees with a consumed sibling pin.'
+        }
+        foreach ($signature in $wt1190Signatures) {
+            $exact = @($wt1190Overrides | Where-Object { [string]$_.Signature -ceq $signature })
+            Assert-VtContractFixture ($exact.Count -eq 1 -and -not $exact[0].AddRoute) '#1190 exact existing signature was missing, duplicated, or synthetic.'
+        }
+        Assert-VtContractFixture (@(@($exceptions.ReceiptFamilyOverrides) + @($exceptions.ReceiptDiscoveryOverrides) |
+            Where-Object { [string]$_.Marker -ceq '[wt:1190]' }).Count -eq 0) '#1190 received a family/discovery bypass.'
+        $wt1190Diagnostic = 'weapon_tweaker/scripts/mods/weapon_tweaker/_wt_diagnostics.lua'
+        $wt1190Backend = 'weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_backend.lua'
+        $wt1190Entry = 'weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua'
+        $wt1190Sources = @{}
+        # Independent literal excerpts from source0306ee6d (not generated from
+        # the declarations/anchors under test). These are lexer inputs only.
+        # Diagnostics303-321 is one contiguous callback. Backend26 +112-145
+        # retains the complete trace/reset bodies with only unrelated spans
+        # omitted. Entry1189 is the exact installation statement.
+        $wt1190Sources[$wt1190Diagnostic] = @'
+mod:command("verify_wt_loadout_cache",
+    "Verify Weapon Tweaker loadout-row cache isolation (use reset before testing).",
+    function(action)
+        local backend = WT and WT.weapon_backend
+        local verify = backend and backend.verify_loadout_cache
+        if type(verify) ~= "function" then
+            mod:echo("[verify_wt_loadout_cache] NOT READY - backend hooks are not installed")
+            printf("[wt:1190] verify result=not-ready")
+            return
+        end
+        local status, summary = verify(action)
+        local labels = {
+            pass = "CORE PASS", fail = "FAIL", ["not-run"] = "CORE NOT RUN",
+            ["not-ready"] = "NOT READY", armed = "ARMED",
+        }
+        printf("[wt:1190] verify result=%s %s", tostring(status), tostring(summary))
+        mod:echo("[verify_wt_loadout_cache] %s - %s",
+            labels[status] or string.upper(tostring(status)), tostring(summary))
+    end)
+'@
+        $wt1190Sources[$wt1190Backend] = @'
+local M = {}
+function M.install(mod, weapon_unlock_map, apply_weapon_unlocks, patch_career_actions_on_weapons)
+    local _trace_seen = {}
+    local _trace_count = 0
+    local _TRACE_LIMIT = 64
+    local function trace_1190(action, career_name, loadout_index, slot_name, weapon_key, result)
+        local signature = table.concat({
+            tostring(action), tostring(career_name), tostring(loadout_index),
+            tostring(slot_name), tostring(weapon_key), tostring(result),
+        }, "|")
+        if _trace_seen[signature] or _trace_count >= _TRACE_LIMIT then return end
+        _trace_seen[signature] = true
+        _trace_count = _trace_count + 1
+        printf("[wt:1190] action=%s career=%s row=%s slot=%s weapon=%s result=%s",
+            tostring(action), tostring(career_name), tostring(loadout_index),
+            tostring(slot_name), tostring(weapon_key), tostring(result))
+    end
+    local _observations = { epoch = 0, armed = false, events = {} }
+    local _OBSERVATION_LIMIT = 192
+    M.issue1190_observations = _observations
+    local function reset_observations()
+        _observations.epoch = _observations.epoch + 1
+        _observations.armed = true
+        _observations.sequence = 0
+        _observations.events = {}
+        _observations.overflow = false
+        _observations.invalidated = nil
+        _observations.last_reads = {}
+        _observations.last_previews = {}
+        return _observations.epoch
+    end
+end
+return M
+'@
+        $wt1190Sources[$wt1190Entry] = 'weapon_backend.install(mod, weapon_unlock_map, apply_weapon_unlocks, patch_career_actions_on_weapons)'
+        $invokeCurrentWt1190 = {
+            param([hashtable]$Sources = $wt1190Sources, [string]$Tree = $wt1190Tree, $Overrides = $wt1190Overrides)
+            $documents = @(); $commands = @()
+            $receipts = New-Object System.Collections.Generic.List[object]
+            foreach ($path in @($Sources.Keys)) {
+                $document = [pscustomobject]@{ RelativePath=$path; Content=$Sources[$path]; Tokens=@(Get-VtLuaTokens -Content $Sources[$path]) }
+                $documents += $document
+                $scan = Get-VtDirectLuaCallRoutes -Document $document
+                $commands += @($scan.CommandRoutes)
+                foreach ($route in @($scan.ReceiptRoutes)) { $receipts.Add($route) }
+            }
+            Set-VtStructuralReceiptBounds -Documents $documents -Routes $receipts
+            Set-VtReceiptOverrideBounds -ModId 'wt' -ModTree $Tree -Documents $documents -Routes $receipts `
+                -CommandRoutes $commands -Exceptions @{ ReceiptRouteOverrides=@($Overrides) }
+            return [pscustomobject]@{ ModId='wt'; ModTree=$Tree; ReceiptRoutes=@($receipts.ToArray()) }
+        }
+        $currentWt1190 = & $invokeCurrentWt1190
+        $wt1190Routes = @($currentWt1190.ReceiptRoutes | Where-Object { [string]$_.Marker -ceq '[wt:1190]' })
+        Assert-VtContractFixture ($wt1190Routes.Count -eq 3 -and @($wt1190Routes | Where-Object {
+            -not $_.Bound -or [string]$_.BoundProof -notlike 'override:*'
+        }).Count -eq 0) '#1190 audited-excerpt three-route family was not certified by its consumed overrides.'
+        foreach ($route in $wt1190Routes) {
+            $owners = @($route.ActionCommands)
+            $isVerdict = [string]$route.Source -ceq $wt1190Diagnostic
+            Assert-VtContractFixture (($isVerdict -and $owners.Count -eq 1 -and $owners[0] -ceq '/verify_wt_loadout_cache') -or
+                (-not $isVerdict -and [string]$route.Source -ceq $wt1190Backend -and $owners.Count -eq 0)) '#1190 command ownership was missing or loaned to the automatic trace.'
+        }
+        $wt1190Mutations = @(
+            @{ Path=$wt1190Backend; Old='local _TRACE_LIMIT = 64'; New='local _TRACE_LIMIT = 65' }
+            @{ Path=$wt1190Backend; Old='_trace_count >= _TRACE_LIMIT'; New='_trace_count > _TRACE_LIMIT' }
+            @{ Path=$wt1190Backend; Old='_trace_count = _trace_count + 1'; New='_trace_count = _trace_count + 0' }
+            @{ Path=$wt1190Backend; Old='_observations.events = {}'; New='_observations.events = {}; _trace_count = 0' }
+            @{ Path=$wt1190Diagnostic; Old='printf("[wt:1190] verify result=%s %s",'; New='printf("[wt:1190] verify result=%s",'; Pattern='anchor drift' }
+            @{ Path=$wt1190Diagnostic; Old='printf("[wt:1190] verify result=not-ready")'; New='while true do printf("[wt:1190] verify result=not-ready") end'; Pattern='guard anchor drift' }
+            @{ Path=$wt1190Diagnostic; Old='"verify_wt_loadout_cache",'; New='"wt_wrong1190",'; Pattern='unregistered action command' }
+            @{ Path=$wt1190Entry; Old='weapon_backend.install(mod, weapon_unlock_map, apply_weapon_unlocks, patch_career_actions_on_weapons)'; New='weapon_backend.other_install(mod, weapon_unlock_map, apply_weapon_unlocks, patch_career_actions_on_weapons)' }
+        )
+        foreach ($case in $wt1190Mutations) {
+            $sources = $wt1190Sources.Clone()
+            $sources[$case.Path] = $sources[$case.Path].Replace($case.Old, $case.New)
+            Assert-VtContractFixture ($sources[$case.Path] -cne $wt1190Sources[$case.Path]) '#1190 source mutation did not affect the audited excerpt.'
+            $pattern = if ($case.Pattern) { [string]$case.Pattern } else { 'guard anchor drift' }
+            $rejected = $false
+            try { & $invokeCurrentWt1190 $sources | Out-Null }
+            catch { $rejected = [string]$_.Exception.Message -match $pattern }
+            Assert-VtContractFixture $rejected "#1190 source mutation did not fail closed: $($case.Old)"
+        }
+        $rejected = $false
+        try { & $invokeCurrentWt1190 $wt1190Sources ('a' * 40) | Out-Null }
+        catch { $rejected = [string]$_.Exception.Message -match 'tree drift' }
+        Assert-VtContractFixture $rejected '#1190 wrong deployed tree was accepted.'
+        $missingWt1190Source = $wt1190Sources.Clone()
+        $missingWt1190Source.Remove($wt1190Backend)
+        $rejected = $false
+        try { & $invokeCurrentWt1190 $missingWt1190Source | Out-Null }
+        catch { $rejected = [string]$_.Exception.Message -match 'source missing' }
+        Assert-VtContractFixture $rejected '#1190 missing backend source was accepted.'
+        $noWt1190TraceOverride = @($wt1190Overrides | Where-Object { [string]$_.Source -cne $wt1190Backend })
+        $uncertifiedWt1190 = & $invokeCurrentWt1190 $wt1190Sources $wt1190Tree $noWt1190TraceOverride
+        Assert-VtContractFixture (@($uncertifiedWt1190.ReceiptRoutes | Where-Object {
+            [string]$_.Marker -ceq '[wt:1190]' -and -not $_.Bound
+        }).Count -eq 1) '#1190 automatic trace borrowed a command verdict bound after its own override was removed.'
+        $extraWt1190Sources = $wt1190Sources.Clone()
+        $extraWt1190Sources[$wt1190Backend] = "function mod.update() printf('[wt:1190] forged=unbounded') end`n" + $extraWt1190Sources[$wt1190Backend]
+        $extraWt1190 = & $invokeCurrentWt1190 $extraWt1190Sources
+        $extraWt1190Routes = @($extraWt1190.ReceiptRoutes | Where-Object { [string]$_.Marker -ceq '[wt:1190]' })
+        Assert-VtContractFixture ($extraWt1190Routes.Count -eq 4 -and @($extraWt1190Routes | Where-Object {
+            [string]$_.Signature -ceq '[wt:1190] forged=unbounded' -and -not $_.Bound
+        }).Count -eq 1) '#1190 exact overrides certified an unrelated unbounded sibling.'
         $legacy577 = @($exceptions.LegacyMarkerFamilyAudits | Where-Object { [string]$_.Marker -ceq '[mp:577]' })
         Assert-VtContractFixture ($legacy577.Count -eq 0) '#577 still relies on the non-consumed legacy marker audit.'
         $mp577Routes = @($exceptions.ReceiptFamilyOverrides | Where-Object { [string]$_.Marker -ceq '[mp:577]' })
