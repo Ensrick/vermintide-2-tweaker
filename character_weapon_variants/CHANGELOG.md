@@ -1,5 +1,45 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.564-dev (2026-10-30) -- Retained Tuskgor construction and career diagnostics (#645)
+
+- Stage the qualified Tuskgor-on-Kerillian-Spear constructor/history envelope
+  behind a separate private owner. Defer its first source capture until all
+  mod scripts have loaded; initialize once and never reconstruct from checks
+  or enable callbacks. Preserve existing Sword/Mace ownership and ordering.
+- Add the read-only `issue645_tuskgor_retained_construction` check consumed by
+  `/cwv_regression_test`. Keep all style catalogue, actor, appearance, inventory,
+  resource and UI admission closed for this unfinished family. No new item,
+  selectable style, hook chain or network channel is introduced.
+- The detached constructor qualification passed 17 cases, 20 reached journal
+  faults and five actual-source sensitivity controls. Correct its invalid
+  native-clone comparison to require exact donor-root/raw-graph integrity;
+  that comparison had already failed before construction. No constructor or
+  gameplay-value change was needed for this test correction.
+- Compose the existing typed career source/clone envelope and actual shared
+  clone preparer. Allow legitimate completed install/release without copying
+  source ownership, but retain strict source/template checks during preparation
+  and commit. Reject foreign owners, malformed claims and partial dependency
+  wiring without broad exemptions, repair or recapture. Both CWV + public WT
+  and CWV + Dev WT co-ownership run in separate real producer contexts.
+- The integrated canonical Lua gate passed 6,665 cases with zero skips. The
+  original two failed runs remain recorded: a zero-return diagnostic print and
+  an invalid dual-history-publisher test fixture, both corrected in tests only.
+  All 13 fresh source-mutation controls also reached their intended normal
+  assertions, including separate source/template post-commit guards, canonical
+  clone preparation and valid career release. Exact source-read counts were
+  enforced; setup/compiler failures did not count as detection.
+- Definition-of-Done deferrals: full third-person/carrier routing and selectable
+  family/DLC/resource/lifecycle admission are not qualified. Scorpion data is not a
+  DLC grant, unlock or resource load. U-9/G-3P-ANIM/G-APPEARANCE still require
+  actual game/VMF playback, preview, transition and later peer evidence; the
+  game is not installed here. Existing issue #645 owns those remaining gates.
+
+**DoD:** At source preparation, the detached offline construction subset is
+qualified; integrated career source-contract tests and fresh 13-control
+sensitivity checks pass separately. U-8 build/receipt/protected publication
+and U-9 live verification remain pending. No new live-test invitation or full-family
+acceptance is claimed.
+
 ## 0.1.563-dev (2026-10-30) -- Mace combat style on Kruber's Sword (#645)
 
 - Add the Mace combat-style option to Kruber's one-handed Sword only, using

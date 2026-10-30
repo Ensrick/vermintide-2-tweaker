@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.563-dev"
+local MOD_VERSION = "0.1.564-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
 mod._cwv_dev_anim_picker = mod:dofile("scripts/mods/character_weapon_variants/cwv_dev_anim_picker")
@@ -511,7 +511,15 @@ _core_template_construction = mod:dofile(
 	printf = printf,
 })
 local _clone_damage_profile = _core_template_construction.clone_damage_profile
-_om.sword_family = mod:dofile("scripts/mods/character_weapon_variants/_cwv_sword_family").install(mod, {
+local _tuskgor_family
+_om.sword_family, _tuskgor_family = mod:dofile(
+    "scripts/mods/character_weapon_variants/_cwv_family_bootstrap").install(mod, {
+    sword_install = mod:dofile("scripts/mods/character_weapon_variants/_cwv_sword_family").install,
+    prepare_tuskgor = function(family_ctx)
+        return mod:dofile("scripts/mods/character_weapon_variants/_cwv_tuskgor_spear_family").bind(
+            mod:dofile("scripts/mods/character_weapon_variants/_cwv_tuskgor_spear_style_construction"),
+            mod:dofile("scripts/mods/character_weapon_variants/_cwv_tuskgor_history_envelope"))(family_ctx)
+    end,
 	om = _om, core = _core_template_construction, graph = _cwv_profile_graph,
 	mace_factory = mod:dofile("scripts/mods/character_weapon_variants/_cwv_mace_sword_family").bind(
 		mod:dofile("scripts/mods/character_weapon_variants/_cwv_mace_sword_donor_envelope"), mod:dofile("scripts/mods/character_weapon_variants/_cwv_mace_sword_construction"),
@@ -913,6 +921,7 @@ _variant_install =
 		shortsword_construction = _core_template_construction.shortsword_construction,
 		elven_shield_construction = _core_template_construction.elven_shield_construction,
 		greataxe_construction = _core_template_construction.greataxe_construction,
+		tuskgor_family = _tuskgor_family,
 	}, _variant_install)
 -- Skin/illusion registrars stay at their original load-bearing registration boundary.
 -- CWV_SKIN_REGISTRY_INSTALL_ONCE_v1

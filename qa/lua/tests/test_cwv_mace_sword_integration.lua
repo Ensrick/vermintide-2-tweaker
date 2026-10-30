@@ -45,7 +45,7 @@ return function(H, root)
                     careers, c.env.ActionTemplates, "character_weapon_variants").ok, true)
             end
         end
-        local policy_env = setmetatable({}, { __index = _G })
+        local policy_env = c.retained_combat_style_policy and c.env or setmetatable({}, { __index = _G })
         local s = Actors.fixture(policy_env, c)
         s.om, s.hooks, s.loads, s.refs = c.state, {}, {}, {}
         s.om.combat_styles, s.om.style_actor_admission = s.runtime, s.actor
@@ -704,4 +704,5 @@ return function(H, root)
         H.equal(s.player.player_unit, s.unit)
         H.equal(s.speed(), 4.2, "actual native post-ownership hook must capture initial Mace without later wield or polling")
     end, "optional sibling native ordered spawn/ownership source absent")
+    return { fixture = fixture }
 end

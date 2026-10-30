@@ -148,6 +148,30 @@ explicit engine-surface review:
   `/cwv_regression_test` command surface, and decomposed modules never dofile
   one another.
 
+- `_cwv_family_bootstrap.lua` is the small private entry context handoff:
+  it invokes the unchanged Sword/Mace install first, preserves its exceptions,
+  then contains only the unrelated dormant Tuskgor setup and returns two private
+  values. It is not a family registry or an admission API.
+- `_cwv_tuskgor_spear_family.lua` owns one attempted-before-bind initialization
+  after the preserved all-mods-loaded chain and the named
+  `issue645_tuskgor_retained_construction` check. Checks never construct/retry.
+  `_cwv_tuskgor_spear_style_construction.lua` and
+  `_cwv_tuskgor_history_envelope.lua` retain the source-qualified constructor
+  and exact WT block-cost authority. This unused template has no catalogue,
+  actor, UI, resource, appearance, item or native-restoration admission.
+  Both native weapon roots and the receiver-derived clone use the existing
+  typed career envelope for legitimate shared install/release. The actual
+  shared clone preparer discards copied claims and restores canonical career
+  row identity before the clone proof is captured; construction installs no
+  dormant-item claim. Only the donor delegates its exact history block-cost
+  cell. Unrelated raw state and foreign ownership still refuse without repair.
+  Full source/prepared-template snapshots remain strict during preparation AND
+  commit readback; lifetime protocol permission is not mid-transaction permission.
+  The installed family requires all captured career dependencies. Omitting all
+  three retains only the detached tests' strict-native constructor contract;
+  partial installed wiring must never fall back. No third-person/carrier or
+  actual ability-playback acceptance is implied by this dormant boundary.
+
 Offline source-contract tests that need the historical composed surface must
 use `qa/lua/cwv_source.lua`. Tests concerned specifically with entry size or
 load order should read the entry file directly.

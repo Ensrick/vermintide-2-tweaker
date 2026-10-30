@@ -1,5 +1,30 @@
 # character_weapon_variants - engine contact surface
 
+## Dormant retained Tuskgor construction (#645)
+
+The private family handoff preserves Sword/Mace installation first and contains
+only unrelated Tuskgor setup failure. Existing all-mods-loaded chaining invokes
+one attempted-before-bind initializer; checks and enable callbacks never retry
+or reconstruct it. VMF's actual loader gates its event on `Managers.mod._state`
+being `done` (`vmf_loader.lua:59-76`); `modules/core/events.lua:152-154` dispatches
+`on_all_mods_loaded`. No engine hook or additional VMF event is registered here.
+
+The constructor delegates the donor's exact WT block-cost cell to the existing
+history proof and both native weapon/clone career surfaces to the existing
+private career envelope. The captured shared `prepare_inherited_clone` operates
+only on the detached receiver-derived clone with its exact receiver token;
+construction creates no dormant-item ownership claim. Original clone/profile
+disjointness precedes intentional canonical career-row aliasing. Full raw source
+and prepared-template snapshots remain strict both before publication and in
+commit readback, independently of later valid install/release transitions.
+The shared helper and generic career envelope are unchanged.
+
+This owns an unused template and `issue645_tuskgor_retained_construction`, not a
+selectable family. No new item, UI, actor, resource, appearance, network channel
+or Scorpion entitlement is admitted. Offline callback/source contracts do not
+establish installed VMF/native ability execution, visible animation, preview,
+mission transition or peer acceptance. Those gates remain with the open issue.
+
 ## Mace combat style on Kruber Sword (#645)
 
 The physical carrier remains the exact es_1h_sword instance. The authored Mace

@@ -49,6 +49,7 @@ function M.new(H, root, config)
         local module_root = "scripts/mods/" .. dir .. "/"
         local enabled = parity == true
         local saved = { [SETTING] = state or "current", [SSETTING] = "current",
+            wt_history_tuskgor_spear = config.tuskgor_history or "current",
             wt_revert_1h_sword_push_combo = false }
         local mod = { _wt = { dbg = function() end }, get = function(_, key)
             if saved[key] ~= nil then return saved[key] end
@@ -59,15 +60,19 @@ function M.new(H, root, config)
             if path ~= module_root .. "_wt_history_catalog" then return actual end
             return { load = function(actual_mod)
                 H.truthy(rawequal(actual_mod, mod))
-                local original, problem = actual.load(mod, { module_root .. "_wt_history_5_2_catalog" })
+                local modules = { module_root .. "_wt_history_5_2_catalog" }
+                if config.with_tuskgor then modules[#modules + 1] = module_root .. "_wt_history_3_1_catalog" end
+                local original, problem = actual.load(mod, modules)
                 H.truthy(original, problem)
                 local picked, seen = {}, {}
                 for _, family in ipairs(original.families) do
-                    if family.id == FAMILY or family.id == SFAMILY then
+                    if family.id == FAMILY or family.id == SFAMILY
+                            or (config.with_tuskgor and family.id == "tuskgor_spear") then
                         H.equal(seen[family.id], nil); seen[family.id] = true; picked[#picked + 1] = family
                     end
                 end
                 H.truthy(seen[FAMILY] and seen[SFAMILY], "both actual catalog families")
+                H.truthy(not config.with_tuskgor or seen.tuskgor_spear, "actual Tuskgor catalog family")
                 local selected = {}; for key, value in next, original do selected[key] = value end
                 selected.families, selected.states, selected.profile_specs, selected.derived_profiles = picked, {}, {}, {}
                 for _, family in ipairs(picked) do for _, sid in ipairs(family.state_order) do
@@ -104,6 +109,7 @@ function M.new(H, root, config)
     end
     local c = F.new(H, root, {
         get_mod = resolver,
+        prepare_core = config.prepare_core,
         after_native = function(current)
             -- Fill canonical empty seeds before any retained Sword/Mace proof.
             -- Existing native aliases keep their root identity; no source recapture.
@@ -139,6 +145,8 @@ function M.new(H, root, config)
             end
             H.truthy(not rawequal(current.env.Weapons[MACE].actions,
                 current.env.Weapons.one_handed_hammer_template_2.actions), "native table.clone is recursive")
+            -- Additional actual sources must precede every retained proof and WT boot.
+            if config.prepare_sources then config.prepare_sources(current) end
             current.oracle = { mace = current.env.table.clone(current.env.Weapons[MACE], true),
                 sword = current.env.table.clone(current.env.Weapons[SWORD], true), profiles = {} }
             for _, name in ipairs(PROFILES) do

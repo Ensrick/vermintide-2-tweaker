@@ -106,7 +106,11 @@ function M.new(H, root, config)
         current.before_musket = function(helper, graph, envelope)
             current.helper, current.graph, current.career_envelope = helper, graph, envelope
             current.env.PowerLevelTemplates = {}
-            current.state.combat_style_policy = {}
+            if config.prepare_core then
+                config.prepare_core(current)
+            else
+                current.state.combat_style_policy = {}
+            end
             local entry = T.read(root .. PREFIX .. "character_weapon_variants.lua")
             local a = assert(entry:find("local _core_template_construction = mod:dofile(", 1, true))
             local b = assert(entry:find("\nlocal _clone_damage_profile = _core_template_construction.clone_damage_profile", a, true))
