@@ -221,7 +221,7 @@
         # local purchase, and overlay synchronization only.
         @{
             Marker='[mp:577]'; ModId='mp'
-            ModTrees=@{mp='e7de927db92d6266033c6bfed5681af1ad9a1010'}
+            ModTrees=@{mp='6325090f4667757eb97e7b4011a5406aa375acc9'}
             SourcesByMod=@{mp='modded_progression/scripts/mods/modded_progression/modded_progression.lua'}
             Signature='[mp:577] purchase_rejected item=%s reason=%s backend=none'
             Bound='at most one rejection receipt per explicit modded-realm Silver Shilling exchange attempt; both failure branches return before subsequent terminal routes'
@@ -239,7 +239,7 @@
         }
         @{
             Marker='[mp:577]'; ModId='mp'
-            ModTrees=@{mp='e7de927db92d6266033c6bfed5681af1ad9a1010'}
+            ModTrees=@{mp='6325090f4667757eb97e7b4011a5406aa375acc9'}
             SourcesByMod=@{mp='modded_progression/scripts/mods/modded_progression/modded_progression.lua'}
             Signature='[mp:577] purchase_committed item=%s price=%d balance=%d overlay=%s backend=none'
             Bound='at most one commit receipt per explicit modded-realm Silver Shilling exchange attempt after successful validation and purchase'
@@ -521,7 +521,7 @@
         }
         @{
             Marker='[mp:607]'; ModId='mp'
-            ModTrees=@{mp='e7de927db92d6266033c6bfed5681af1ad9a1010'}
+            ModTrees=@{mp='6325090f4667757eb97e7b4011a5406aa375acc9'}
             SourcesByMod=@{mp='modded_progression/scripts/mods/modded_progression/_mp_loot_diag_runtime.lua'}
             Signature='[mp:607] event=%s serial=%d flow=%s request=%s reason=%s chest=%s items=%d local_items=%d local_containers=%d local_uses=%d award_capable=%s open_capable=%s first_missing=%s backend=%s'
             Bound='at most twelve automatic print attempts shared by normal and instrument-error receipts per Runtime.install or existing explicit diagnostic-reset window; attempts are consumed before logging; ledger capture/native forwarding continue and explicit reports are not budgeted'
@@ -577,7 +577,7 @@ end'
         }
         @{
             Marker='[mp:607]'; ModId='mp'
-            ModTrees=@{mp='e7de927db92d6266033c6bfed5681af1ad9a1010'}
+            ModTrees=@{mp='6325090f4667757eb97e7b4011a5406aa375acc9'}
             SourcesByMod=@{mp='modded_progression/scripts/mods/modded_progression/_mp_loot_diag_runtime.lua'}
             Signature='[mp:607] event=instrument_error stage=%s reason=observer_failed backend=none'
             Bound='at most twelve automatic print attempts shared with normal receipts per Runtime.install or existing explicit diagnostic-reset window; the same helper consumes attempts before this protected error logger, including logger faults'
