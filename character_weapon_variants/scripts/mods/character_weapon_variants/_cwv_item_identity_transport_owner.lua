@@ -423,22 +423,28 @@ local function install(mod, ctx)
 		mod._cwv_skin_wire_surfaces = {}
 
 		mod:hook("SimpleInventoryExtension", "game_object_initialized", function(func, self, unit, unit_go_id)
+			if _om.mace_sword_runtime then _om.mace_sword_runtime:invalidate_inventory(self) end
 			local slots = self and self._equipment and self._equipment.slots
+			local function ready(...)
+				if slots then
+					if _om._exact_pair_publish_inventory then
+						_om._exact_pair_publish_inventory(self, "game_object_initialized")
+					end
+					peer_pull.request(unit, "game_object_initialized_ready")
+				end
+				if _om.mace_sword_runtime then _om.mace_sword_runtime:refresh(self) end
+				return ...
+			end
 			if not slots then
-				return func(self, unit, unit_go_id)
+				return ready(func(self, unit, unit_go_id))
 			end
 			_send_identity_slots(slots, "game_object_initialized", true)
-			local r1, r2, r3, r4 = _wire_null_skins(slots, function()
+			return ready(_wire_null_skins(slots, function()
 				return func(self, unit, unit_go_id)
-			end, "game_object_initialized")
-			if _om._exact_pair_publish_inventory then
-				_om._exact_pair_publish_inventory(self, "game_object_initialized")
-			end
+			end, "game_object_initialized"))
 			-- Fatshark initializes and sends the complete vanilla equipment snapshot
 			-- inside the wrapped function.  Request exact peer identities only after
 			-- that boundary, and only for this VM's local human unit.
-			peer_pull.request(unit, "game_object_initialized_ready")
-			return r1, r2, r3, r4
 		end)
 		mod._cwv_skin_wire_surfaces.game_object_initialized = true
 		mod._cwv_identity_surfaces.game_object_initialized = true
@@ -446,22 +452,27 @@ local function install(mod, ctx)
 		mod._cwv_identity_surfaces.mission_transition_peer_pull = true
 
 		mod:hook("SimpleInventoryExtension", "_spawn_resynced_loadout", function(func, self, equipment_to_spawn, skip_wield)
+			local movement_slot = equipment_to_spawn and equipment_to_spawn.slot_id
+			if _om.mace_sword_runtime then _om.mace_sword_runtime:invalidate_inventory(self, movement_slot) end
+			local function ready(...)
+				if equipment_to_spawn and equipment_to_spawn.skin and _om._exact_pair_publish_inventory then
+					_om._exact_pair_publish_inventory(self, "spawn_resynced_loadout")
+				end
+				if _om.mace_sword_runtime then _om.mace_sword_runtime:refresh(self, movement_slot) end
+				return ...
+			end
 			if equipment_to_spawn and equipment_to_spawn.slot_id then
 				-- #476 Defect B: single-slot resync = PARTIAL publish; no native record for the absent slot (see lifecycle module).
 				_send_identity_slots({ [equipment_to_spawn.slot_id] = equipment_to_spawn },
 					"spawn_resynced_loadout", false, nil, true)
 			end
 			if not (equipment_to_spawn and equipment_to_spawn.skin) then
-				return func(self, equipment_to_spawn, skip_wield)
+				return ready(func(self, equipment_to_spawn, skip_wield))
 			end
 			-- Single slot-shaped table; wrap in a one-element array for the helper.
-			local r1, r2, r3, r4 = _wire_null_skins({ equipment_to_spawn }, function()
+			return ready(_wire_null_skins({ equipment_to_spawn }, function()
 				return func(self, equipment_to_spawn, skip_wield)
-			end, "spawn_resynced_loadout")
-			if _om._exact_pair_publish_inventory then
-				_om._exact_pair_publish_inventory(self, "spawn_resynced_loadout")
-			end
-			return r1, r2, r3, r4
+			end, "spawn_resynced_loadout"))
 		end)
 		mod._cwv_skin_wire_surfaces.spawn_resynced_loadout = true
 		mod._cwv_identity_surfaces.spawn_resynced_loadout = true

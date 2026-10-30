@@ -1,7 +1,7 @@
 local mod = get_mod("character_weapon_variants")
 _MEM_PROBE_T0_CWV = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.1.561-dev"
+local MOD_VERSION = "0.1.563-dev"
 mod._cwv_acquisition = mod:dofile("scripts/mods/character_weapon_variants/_cwv_acquisition")
 mod._cwv_old_musket_interrupt = mod:dofile("scripts/mods/character_weapon_variants/_cwv_old_musket_interrupt")
 mod._cwv_dev_anim_picker = mod:dofile("scripts/mods/character_weapon_variants/cwv_dev_anim_picker")
@@ -384,26 +384,8 @@ end
 -- `feedback_1p_animations_universal.md` for the full rationale.
 -- ============================================================================
 
--- ============================================================
--- Cross-character weapon analogues (public API)
--- ============================================================
--- Vanilla weapon items that are mechanically analogous and may share
--- cosmetic/visual assets when this mod is loaded. Other mods (e.g.
--- cosmetics_tweaker) read this to expand cosmetic targeting beyond a
--- single character.
-
--- v0.1.329-dev: removed unused public exports `mod.weapon_analogues` table
--- and `mod.get_analogues(item_key)` function. Repo grep + sibling-mod scan
--- (cosmetics_tweaker LA bridge, weapon_tweaker, gt_lobby manifest -- formerly lobby_tweaker, retired 2026-05-25)
--- confirmed zero external consumers. Cleanup per audit roadmap #13.
---
--- KNOWN PENDING (this file): 22 bare-global function/data declarations in
--- the Old Musket section (~line 4500+) need conversion to local forward-decl
--- pattern. Attempted in v0.1.330/331 today but introduced a Stingray
--- bundler crash; reverted. See:
---   https://github.com/Ensrick/vermintide-2-tweaker/issues/1
--- Plus an 8800-line file size that needs split per RECIPES.md:
---   https://github.com/Ensrick/vermintide-2-tweaker/issues/2
+-- Current ownership is described in ENGINE_SURFACE.md; live work is on GitHub.
+-- Removed exports and the musket namespace migration remain in CHANGELOG.md.
 
 -- ============================================================
 -- Policy-backed catalog is isolated so the entry file remains orchestration.
@@ -531,6 +513,9 @@ _core_template_construction = mod:dofile(
 local _clone_damage_profile = _core_template_construction.clone_damage_profile
 _om.sword_family = mod:dofile("scripts/mods/character_weapon_variants/_cwv_sword_family").install(mod, {
 	om = _om, core = _core_template_construction, graph = _cwv_profile_graph,
+	mace_factory = mod:dofile("scripts/mods/character_weapon_variants/_cwv_mace_sword_family").bind(
+		mod:dofile("scripts/mods/character_weapon_variants/_cwv_mace_sword_donor_envelope"), mod:dofile("scripts/mods/character_weapon_variants/_cwv_mace_sword_construction"),
+		mod:dofile("scripts/mods/character_weapon_variants/_cwv_mace_sword_runtime"), mod:dofile("scripts/mods/character_weapon_variants/_cwv_mace_sword_movement")),
 	network_lookup = _cwv_network_lookup, career = _cwv_career_envelope,
 	career_actions = _career_weapon_actions, policy = _om.combat_style_policy,
 	profiles = function() return DamageProfileTemplates end, power_levels = function() return PowerLevelTemplates end,
@@ -747,6 +732,11 @@ _om.DUAL_WEAPON_FP_RESIDENCY = {
 		path = "units/beings/player/first_person_base/state_machines/melee/dual_hammers_priest",
 		ref = "cwv_dual_fp_sm_priest_hammers",
 		items = { cwv_es_dual_warpriest_hammers = true },
+	},
+	{
+		path = "units/beings/player/first_person_base/state_machines/melee/1h_hammer",
+		ref = "cwv_mace_sword_fp",
+		items = { es_1h_sword = true },
 	},
 }
 
@@ -1084,11 +1074,9 @@ do
 			tostring(spear_shield_err))
 	end
 
-	-- Owner-side style resource ownership plus the #786 Stage C observer-side
-	-- residency read. Both live in the policy module next to the authored
-	-- allowlist they are derived from.
+	-- Private resource owner receives the actual authored catalogue once.
 	local acquire_style_resource, style_resource_resident =
-		policy.new_resource_acquirer(function() return Managers and Managers.package end)
+		mod:dofile("scripts/mods/character_weapon_variants/_cwv_style_resource_owner")(policy.FAMILIES, function() return Managers and Managers.package end)
 
 	local imperial_transform = _type_transforms.cwv_imperial_longsword
 	local inverse_bretonnian_scale = {
@@ -1130,6 +1118,7 @@ do
 	_om.combat_styles = policy.install(mod, {
 		actor_admission = _om.style_actor_admission,
 		sword_family = _om.sword_family,
+		before_style_commit = _om.sword_family.before_style_commit,
 		cwv_key_for_item = function(backend_id, item_data)
 			return _om._cwv_key_for_item(backend_id, item_data)
 		end,
@@ -1205,6 +1194,8 @@ do
 	mod.cycle_combat_style = function()
 		return _om.combat_styles and _om.combat_styles:cycle_wielded()
 	end
+	_om.mace_sword_runtime = _om.sword_family:install_mace_runtime(mod, _om.combat_styles,
+		_om.style_actor_admission, CharacterStateHelper, Unit, ScriptUnit, function() return Managers end)
 	policy.install_loadout_ui(mod, _om.combat_styles, mod:dofile("scripts/mods/character_weapon_variants/_cwv_combat_style_loadout_ui"))
 
 	-- #620 legacy retirement: preserve every exact CIM UUID and its complete

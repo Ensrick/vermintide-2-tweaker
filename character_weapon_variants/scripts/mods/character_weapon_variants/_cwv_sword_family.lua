@@ -160,7 +160,16 @@ function M.install(mod, ctx)
     local _rt_register = assert(ctx.rt_register)
     local families = assert(policy.FAMILIES)
     local catalogue = assert(rawget(families, FAMILY), "#645 authored Sword catalogue missing")
-    local catalogue_snapshot = assert(graph.capture(catalogue, 64, 512), "#645 catalogue unbounded")
+    local styles, members = assert(catalogue.styles), assert(catalogue.members)
+    local empire, elven = assert(styles.empire), assert(styles.elven)
+    local empire_member, elf_member = assert(members.es_1h_sword), assert(members.we_1h_sword)
+    local empire_order = assert(empire_member.order)
+    local catalogue_meta, styles_meta, members_meta = getmetatable(catalogue), getmetatable(styles), getmetatable(members)
+    local empire_meta, order_meta = getmetatable(empire_member), getmetatable(empire_order)
+    -- Only published reciprocal Sword-owned rows are sealed here. Mace owns its
+    -- own row/order/construction and must not poison these two directions.
+    local catalogue_snapshot = assert(graph.capture({ empire, elven, elf_member }, 64, 512),
+        "#645 Sword catalogue unbounded")
     local package_for, member_for, style_for = policy.package, policy.member, policy.style
     local owner, constructors = {}, {}
     local donor = mod:dofile("scripts/mods/character_weapon_variants/_cwv_sword_donor_envelope").bind(
@@ -187,8 +196,23 @@ function M.install(mod, ctx)
         constructors[spec.id] = constructor
         constructor.construct()
     end
+    local mace = ctx.mace_factory and ctx.mace_factory(ctx, donor) or nil
+    function owner.before_style_commit(row, desired)
+        if mace then return mace:before_style_commit(row, desired) end
+    end
+    function owner:install_mace_runtime(...)
+        if mace then return mace:install_runtime(...) end
+    end
     local function catalogue_intact()
         return rawequal(policy.FAMILIES, families) and rawget(families, FAMILY) == catalogue
+            and rawequal(catalogue.styles, styles) and rawequal(catalogue.members, members)
+            and rawequal(styles.empire, empire) and rawequal(styles.elven, elven)
+            and rawequal(members.es_1h_sword, empire_member) and rawequal(members.we_1h_sword, elf_member)
+            and empire_member.default == "empire" and rawequal(empire_member.order, empire_order)
+            and empire_order[1] == "empire" and empire_order[2] == "elven"
+            and rawequal(getmetatable(catalogue), catalogue_meta) and rawequal(getmetatable(styles), styles_meta)
+            and rawequal(getmetatable(members), members_meta) and rawequal(getmetatable(empire_member), empire_meta)
+            and rawequal(getmetatable(empire_order), order_meta)
             and policy.package == package_for and policy.member == member_for
             and policy.style == style_for and graph.intact(catalogue_snapshot)
     end
@@ -204,6 +228,10 @@ function M.install(mod, ctx)
         local member = rawget(catalogue.members, key)
         if not member then return nil end
         local chosen = rawget(catalogue.styles, selected) and selected or member.default
+        if chosen == "mace" then
+            if mace then return mace:package(key, chosen) end
+            return nil
+        end
         local package = package_for(key, chosen)
         if type(package) ~= "table" or package.family_id ~= FAMILY
             or package.style_id ~= chosen or package.member ~= member

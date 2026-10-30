@@ -1,5 +1,88 @@
 # character_weapon_variants - engine contact surface
 
+## Mace combat style on Kruber Sword (#645)
+
+The physical carrier remains the exact es_1h_sword instance. The authored Mace
+row belongs only to its member order, never the shared Sword family's Elf member.
+_cwv_mace_sword_family binds the real private constructor after both published
+Sword directions, with the actual #599 and WT producer envelopes. Its own row,
+order, source, constructor and registry identities are retained independently;
+Mace-only failure does not revoke the published Sword pair. Six isolated Sword
+damage-profile clones preserve literal native target attack-template IDs and
+unity damage/stagger/cleave. No AttackTemplates registration or schema change.
+Persisted style admission remains family-based for legacy non-Sword items;
+the closed member order applies only to the new one-handed Sword family.
+Sword cycling scans its bounded order for an admitted package, so an
+unavailable Mace does not hide the healthy reciprocal Sword choices.
+The carrier's existing career-action row is restored by the actual shared
+inherited-clone protocol, not copied into an unregistered provider. Native
+inspect/wield graph contents and callback identities remain complete. Source
+anchors are weapons.lua:236-265, lake/career_settings_lake.lua:3,
+lake/action_templates_lake.lua:3-29 and 1h_hammers.lua:1350-1351.
+
+Saved initial equip uses the existing synchronous #586 residency catalogue with
+one distinct cwv_mace_sword_fp reference to the native 1h_hammer state machine
+(scripts/network_lookup/inventory_package_list.lua:248). Initial native equip
+calls private _wield_slot, not the public wield callback
+(simple_inventory_extension.lua:162-192). Therefore asynchronous UI resource
+acquisition alone is not first-equip proof. The extracted private
+_cwv_style_resource_owner receives the authored catalogue once; its previous
+lazy allowlist, callback tuples and load-error behavior remain unchanged.
+
+The new _cwv_mace_sword_runtime owns one local-human snapshot. Existing
+game_object_initialized, _spawn_resynced_loadout (including early no-skin and
+no-slots paths) and the sole public wield callback invalidate/refresh it only
+against the current inventory and actually wielded admitted slot. The closed
+slot_melee/slot_ranged pair supports Grail Knight's native secondary melee slot
+(lake/career_settings_lake.lua:89-95). Non-wielded callbacks cannot replace an
+active snapshot; two Mace instances still give one active1.05 factor.
+The native selection path remains the existing
+world wrapper -> consolidated BackendUtils router -> GearUtils slot's exact
+item_template (gear_utils.lua:9,85). No constructor/graph discovery runs in
+movement. Raw slot/template and actual registry-root replacement revoke the
+snapshot without recapture. Identity-bearing tables use raw identity; native
+unit userdata keeps its engine equality semantics.
+
+Two new singleton hooks wrap CharacterStateHelper table methods:
+move_on_ground:196-213 and move_in_air:461-497. They scale only the supplied
+native speed by 1.05 for admitted ordinary walking/jumping/falling. Optional
+forced-air arguments, pending/disabled states, bots, remote units and stale
+actors retain native speed. Native calls, complete tuples/nil holes and ordinary
+error identity are preserved for those adapters. Inventory wire branches retain
+the actual shared with_safe_slots helper's four return positions, nil holes,
+skin restoration and original errors; direct no-skin branches add no tuple
+collapse. The shared wire helper is unchanged (native init/resync are void).
+There is no buff/getter lease, new RPC, native
+state write, per-frame table/graph allocation or second inventory hook.
+
+Initial GO synchronization is pre-ownership: BulldozerPlayer.spawn calls
+spawn_unit at365, UnitSpawner.spawn_network_unit synchronizes extensions at349,
+EntityManager2.sync_unit_extensions calls inventory GO init at187, and native
+ownership is assigned later at bulldozer_player.lua:393. The new sole
+PlayerManager.assign_unit_ownership safe hook captures only after successful
+native completion, which sets player.player_unit at player_manager.lua:199
+through BulldozerPlayer.set_player_unit:44-46. It requires the exact current
+manager/local player/unit and existing retained admission. No polling, fake
+preownership assignment, readiness bit or ownership reconstruction is added.
+
+The existing style transaction calls the private callback immediately before
+its first store write. Preflight refusals keep healthy admission; accepted
+writes invalidate first; rollback/error does not silently re-admit. Existing
+state-exit/disable/unload callbacks clear without engine access. Enable acquires
+#586 and reapplies actual #599 before fresh capture. Named checks are
+issue645_reciprocal_one_handed_sword_family and
+issue645_mace_on_kruber_sword_family, with separate failure domains.
+
+Host tests exercise real entry/constructor/actor/callers and recording engine
+boundaries. Sibling-native source cases load complete methods and exact ordered
+spawn caller statements, not copied spawn algorithms; unrelated spawn cosmetics
+and telemetry remain outside that bounded ordering proof. All native source
+cases must run locally with zero skips, while clean CI may report them as
+optional provenance. Neither layer proves VMF/Stingray ABI, actual unit spawn/
+attachment, rendering, audio, animation,
+real player feel, persistence or multiplayer acceptance. #645 also includes
+unfinished Tuskgor work; this slice alone is not umbrella readiness.
+
 ## Old Musket bayonet construction/admission (#428)
 
 `_cwv_old_musket_melee_owner.lua` owns four resolved native profiles and the

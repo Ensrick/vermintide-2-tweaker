@@ -504,6 +504,7 @@ end
 -- top-level `mod.on_game_state_changed = function(status, state_name)` slot.
 _om._dual_axes_fp_game_state_retry_installed = true
 mod.on_game_state_changed = function(status, state_name)
+	if status == "exit" and _om.mace_sword_runtime then _om.mace_sword_runtime:clear() end
 	if status == "exit" and _om.old_musket_appearance then
 		_om.old_musket_appearance.disconnect()
 		_om._cwv_cim_latest_generation = nil
@@ -586,9 +587,11 @@ mod.on_enabled = function()
 	-- assignment is the final VMF callback value.
 	_om._apply_mace_hammer_identity(
 		mod:get(_om.mace_hammer_identity_policy.SETTING_ID) ~= false)
+	if _om.mace_sword_runtime then _om.mace_sword_runtime:set_enabled(true) end
 end
 
 mod.on_disabled = function()
+	if _om.mace_sword_runtime then _om.mace_sword_runtime:set_enabled(false) end
 	if _om.old_musket_appearance then _om.old_musket_appearance.disconnect() end
 	_om._cwv_cim_latest_generation = nil
 	if _om.crowbill_runtime and _om.crowbill_runtime.set_enabled then
@@ -599,6 +602,7 @@ mod.on_disabled = function()
 end
 
 mod.on_unload = function()
+	if _om.mace_sword_runtime then _om.mace_sword_runtime:set_enabled(false) end
 	if _om.old_musket_appearance then _om.old_musket_appearance.disconnect() end
 	_om._cwv_cim_latest_generation = nil
 	if _om.crowbill_runtime and _om.crowbill_runtime.set_enabled then

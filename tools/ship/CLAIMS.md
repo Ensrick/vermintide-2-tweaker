@@ -164,6 +164,15 @@ fingerprint of the invoking worktree for a normal manual shell. Verification
 and release both require the exact same owner; a foreign task cannot consume or
 erase a same-version live claim.
 
+For canonical work, use the same scoped owner environment before acquiring and
+shipping, and omit the broker's `-Session` override. Environment resolution adds
+an owner-kind prefix (`explicit:`, `claude:`, or `codex:`); `-Session` instead
+stores its literal argument. Mixing a raw `-Session` claim with the normal
+environment-derived publisher therefore produces different owners. Do not edit
+or renew that claim to compensate: retire only your own unusable reservation
+through the broker and allocate a fresh version under the normal owner path.
+The publication procedure remains solely in `PROJECT_STANDARDS.md` section 6.6.
+
 ## Usage (claim -> bump -> ship -> release)
 
 ```powershell
