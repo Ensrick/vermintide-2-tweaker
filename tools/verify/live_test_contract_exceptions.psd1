@@ -925,6 +925,115 @@ end'
     # exact token anchors. These authorize only Signature, never Marker-wide
     # siblings.
     ReceiptRouteOverrides = @(
+        # Public WT341: three exact existing routes, not marker-wide permission.
+        # Explicit verdicts own /verify_wt_loadout_cache; automatic trace shares
+        # one 64-attempt budget per installed backend closure, including resets.
+        @{
+            ModId='wt'; ModTree='ba2cdbc1f5dfc20b34c635ae6247508dd4c615c7'
+            Source='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_diagnostics.lua'
+            Marker='[wt:1190]'; Signature='[wt:1190] verify result=not-ready'
+            Bound='at most one verdict per explicit /verify_wt_loadout_cache invocation; unavailable-backend branch returns before the normal verdict'
+            ActionCommands=@('/verify_wt_loadout_cache')
+            EmitterAnchors=@('printf("[wt:1190] verify result=not-ready")')
+            GuardAnchors=@(
+@'
+mod:command("verify_wt_loadout_cache",
+    "Verify Weapon Tweaker loadout-row cache isolation (use reset before testing).",
+    function(action)
+        local backend = WT and WT.weapon_backend
+        local verify = backend and backend.verify_loadout_cache
+        if type(verify) ~= "function" then
+            mod:echo("[verify_wt_loadout_cache] NOT READY - backend hooks are not installed")
+            printf("[wt:1190] verify result=not-ready")
+            return
+        end
+        local status, summary = verify(action)
+        local labels = {
+            pass = "CORE PASS", fail = "FAIL", ["not-run"] = "CORE NOT RUN",
+            ["not-ready"] = "NOT READY", armed = "ARMED",
+        }
+        printf("[wt:1190] verify result=%s %s", tostring(status), tostring(summary))
+        mod:echo("[verify_wt_loadout_cache] %s - %s",
+            labels[status] or string.upper(tostring(status)), tostring(summary))
+    end)
+'@
+            )
+        }
+        @{
+            ModId='wt'; ModTree='ba2cdbc1f5dfc20b34c635ae6247508dd4c615c7'
+            Source='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_diagnostics.lua'
+            Marker='[wt:1190]'; Signature='[wt:1190] verify result=%s %s'
+            Bound='at most one verdict per explicit /verify_wt_loadout_cache invocation; one verifier call and one normal printf after the unavailable-backend branch returns'
+            ActionCommands=@('/verify_wt_loadout_cache')
+            EmitterAnchors=@('printf("[wt:1190] verify result=%s %s", tostring(status), tostring(summary))')
+            GuardAnchors=@(
+@'
+mod:command("verify_wt_loadout_cache",
+    "Verify Weapon Tweaker loadout-row cache isolation (use reset before testing).",
+    function(action)
+        local backend = WT and WT.weapon_backend
+        local verify = backend and backend.verify_loadout_cache
+        if type(verify) ~= "function" then
+            mod:echo("[verify_wt_loadout_cache] NOT READY - backend hooks are not installed")
+            printf("[wt:1190] verify result=not-ready")
+            return
+        end
+        local status, summary = verify(action)
+        local labels = {
+            pass = "CORE PASS", fail = "FAIL", ["not-run"] = "CORE NOT RUN",
+            ["not-ready"] = "NOT READY", armed = "ARMED",
+        }
+        printf("[wt:1190] verify result=%s %s", tostring(status), tostring(summary))
+        mod:echo("[verify_wt_loadout_cache] %s - %s",
+            labels[status] or string.upper(tostring(status)), tostring(summary))
+    end)
+'@
+            )
+        }
+        @{
+            ModId='wt'; ModTree='ba2cdbc1f5dfc20b34c635ae6247508dd4c615c7'
+            Source='weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_backend.lua'
+            Marker='[wt:1190]'; Signature='[wt:1190] action=%s career=%s row=%s slot=%s weapon=%s result=%s'
+            Bound='at most 64 automatic trace attempts per installed backend closure; deduplication and budget consumption precede printf, and verifier reset does not replenish the trace budget'
+            EmitterAnchors=@('printf("[wt:1190] action=%s career=%s row=%s slot=%s weapon=%s result=%s",')
+            GuardAnchors=@(
+                'function M.install(mod, weapon_unlock_map, apply_weapon_unlocks, patch_career_actions_on_weapons)'
+@'
+local _trace_seen = {}
+local _trace_count = 0
+local _TRACE_LIMIT = 64
+local function trace_1190(action, career_name, loadout_index, slot_name, weapon_key, result)
+    local signature = table.concat({
+        tostring(action), tostring(career_name), tostring(loadout_index),
+        tostring(slot_name), tostring(weapon_key), tostring(result),
+    }, "|")
+    if _trace_seen[signature] or _trace_count >= _TRACE_LIMIT then return end
+    _trace_seen[signature] = true
+    _trace_count = _trace_count + 1
+    printf("[wt:1190] action=%s career=%s row=%s slot=%s weapon=%s result=%s",
+        tostring(action), tostring(career_name), tostring(loadout_index),
+        tostring(slot_name), tostring(weapon_key), tostring(result))
+end
+'@
+@'
+local function reset_observations()
+    _observations.epoch = _observations.epoch + 1
+    _observations.armed = true
+    _observations.sequence = 0
+    _observations.events = {}
+    _observations.overflow = false
+    _observations.invalidated = nil
+    _observations.last_reads = {}
+    _observations.last_previews = {}
+    return _observations.epoch
+end
+'@
+                @{
+                    Source='weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker.lua'
+                    Tokens=@('weapon_backend','.','install','(','mod',',','weapon_unlock_map',',','apply_weapon_unlocks',',','patch_career_actions_on_weapons',')')
+                }
+            )
+        }
         @{
             ModId='gut_dev'; ModTrees=@('38c3d7f770665f5578c36ff9eda5cdbbfa51fadf')
             Source='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_camera.lua'
