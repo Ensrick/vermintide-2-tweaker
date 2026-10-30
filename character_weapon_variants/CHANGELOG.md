@@ -1,5 +1,29 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.567-dev (2026-10-30) -- Finite Crowbill observations (#719)
+
+- Bound the existing Crowbill check to 32 keyed roster observations plus one
+  completion lookahead. This is diagnostic work capacity, not a game/player
+  limit. Unvisited peers require SKIP; an encountered real defect still FAILs.
+- Keep raw identity/model/mode comparisons separate from printable display
+  projections. Cap atoms, per-holder text, `[cwv:719]` output attempts, sampled reasons and
+  runner-visible results. Clipped data or a missing/throwing evidence sink
+  cannot turn an incomplete observation into PASS. Budgets are invocation-local,
+  including repeated and reentrant checks; opaque live-leg errors stay opaque.
+- Extend the actual child and installed-chain suites for dense/keyed 5/32/33
+  rosters, dead/malformed entries, omitted samples, raw unequal models, opaque
+  fields/sinks, all 256 byte values with an independent numeric oracle, and
+  recovery. Focused qualification passed 82 cases with zero skips; five
+  in-memory faults reached their intended normal assertions. Six owned child
+  processes drained and all 86 source inputs plus 12 host/driver/claim guards
+  stayed unchanged. The original candidate's pattern-runtime failure remains
+  preserved separately; it is not counted as a qualified fault control.
+- **DoD:** existing diagnostic only. The published #1656 isolation owner,
+  registration/runner semantics, gameplay, models, hooks, transport and resources
+  are unchanged. Compilation/publication and an instrument verdict do not prove
+  live Crowbill appearance or remote continuity. #719 remains outside the live
+  test queue until deployed-source/card qualification is complete.
+
 ## 0.1.566-dev (2026-10-30) -- Repeatable semantic-identity checks (#1656)
 
 - Isolate the fixed synthetic peer used by the Crowbill, Sword+Mace transition

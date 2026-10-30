@@ -339,12 +339,14 @@ return function(H, root, controls)
         om._husk_custom_bundle_unit = family.is_bundled_unit
         local child = load(cwv .. "_cwv_issue719_transaction_check.lua", env)(mod, { om = om, env = env })
         H.equal(type(child), "function")
-        local child_calls, peer_legs, inject = 0, 0, false
+        local child_calls, peer_legs, budget_legs, inject = 0, 0, 0, false
         local opaque = setmetatable({}, { __tostring = function() error("opaque child error stringified") end })
         local printf = env.printf
         env.printf = function(fmt, ...)
             if fmt == "[cwv:719] peer observation SKIP reason=no_player_manager" then
                 peer_legs = peer_legs + 1
+            elseif fmt == "[cwv:719] peer observation SKIP reason=diagnostic_budget" then
+                budget_legs = budget_legs + 1
             end
             return printf(fmt, ...)
         end
@@ -402,6 +404,22 @@ return function(H, root, controls)
         inject = false; H.equal(callback(), first_verdict); unchanged()
         H.equal(child_calls, 4, "actual #719 child remains recoverable after opaque error")
         H.equal(peer_legs, 4, "all four invocations reached the actual live leg")
+        -- The SAME actual named callback must now reach a different real-child
+        -- SKIP, not reuse a no-manager result or lose the published isolation.
+        local players = {}
+        for index = 1, 33 do players["budget-entry-" .. index] = {} end
+        env.Managers.player.human_players = function() return players end
+        local budget_verdict = callback(); unchanged()
+        H.truthy(type(budget_verdict) == "string" and budget_verdict:sub(1, 5) == "skip:"
+            and budget_verdict:find("reason=diagnostic_budget", 1, true),
+            "actual named #719 must preserve the real child's incomplete-roster SKIP")
+        H.equal(callback(), budget_verdict); unchanged()
+        inject = true; ok, err = pcall(callback)
+        H.equal(ok, false); H.equal(rawequal(err, opaque), true); unchanged()
+        inject = false; H.equal(callback(), budget_verdict); unchanged()
+        H.equal(child_calls, 8, "all repeats and errors reached the actual installed child")
+        H.equal(peer_legs, 4, "budget observations cannot be counted as no-manager observations")
+        H.equal(budget_legs, 4, "actual budget leg is reached on repeat/error/recovery")
     end)
 
     local function establish(s)
