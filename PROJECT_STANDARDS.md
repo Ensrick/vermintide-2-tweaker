@@ -1473,6 +1473,22 @@ says `public`. There is no suffix-vs-visibility contradiction to tie-break.
   deploy was claimed. Volunteer testers unsubscribe/resubscribe through the dev
   collection. Confirm every tester's loaded version from the newest console
   log.
+- **VT2 publication-to-testing boundary (#1025):** For this monorepo's
+  Workshop/volunteer path, the agent host need not have VT2 (Steam app
+  `552500`) installed or perform the candidate's first game launch before a
+  live-test invitation. This project-specific rule takes precedence over
+  conflicting generic agent-first-launch guidance. That absence alone is
+  neither evidence of an SDK/upload failure nor a live-test blocker.
+  Exact-source authorization, QA, artifact/receipt validation, authenticated
+  Workshop verification and section 11's current-card gates remain mandatory;
+  an invitation still requires a complete candidate fix or bounded runnable
+  diagnostic, with current deployed/source authority and the tester refresh
+  and loaded-version confirmation required here. Publication/QA success is not
+  gameplay acceptance or evidence that a runtime issue is fixed or complete.
+  Do not launch the game or restart Steam unsolicited. Genuine missing
+  source-qualified empirical prerequisites (for example native 3P baseline
+  captures needed to construct/admit the candidate) remain blockers; they are
+  distinct from the agent host's installation state.
 
 ---
 
