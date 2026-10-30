@@ -1219,6 +1219,31 @@ and all publication gates. Missing-manifest reconstruction is separate from pin
 recovery (#1434). GitHub provenance alone never confirms Workshop transfer or
 permits refreshing held test cards.
 
+**Reviewed route-source retention (#1777).** An explicit protected source+artifact
+PR may declare exactly two reviewed immutable same-mod route trees in
+`ReviewedRouteTransitions`: canonical `ModId`, ancestor `FromSourceCommit`,
+`CandidateModTree`, and exact committed schema-3 `CandidateReceiptSha256`.
+The existing authorized SourceCommit supplies the candidate subtree and complete
+receipt/source/output proof; no final-commit self-reference or caller boolean
+is authority. Ancestry proves source provenance, NOT historical publication.
+Every marked route must independently name the identical distinct lowercase
+two-tree pair; family/discovery ownership is ineligible. Validate declarations,
+committed bindings, normal definitions and immutable source anchors BEFORE
+current-tree membership. Malformed/mismatched/foreign/third/mixed policy fails
+with original bytes retained. A valid pair containing the actual current tree
+is a byte-exact no-op; valid policy missing current takes ordinary recovery and
+the reviewed metadata-PR stop, never adds a third retained tree. That repair PR
+must retire/replace the stale declaration. Unmarked legacy behavior is unchanged.
+Only the fresh authenticated manifest selects active source authority; unchanged
+selected-source path/signature/emitter/guard checks still apply. The pair grants
+no historical recovery, replay, Workshop, card, claim-release or ship authority.
+Retain at most this one reviewed candidate generation, with no accumulating
+history: abandonment/revocation and the next source candidate explicitly prune
+or replace the declaration in protected review. Metadata-only HEAD advancement
+still requires the new exact clean-source/default/hosted authorization. Hard-
+death recovery uses the existing fresh-server/owning-lease/mutex boundaries.
+No active declaration or sacrificial publication is introduced by this tooling.
+
 **Pinned-card refresh is stream-specific, not load-tag-specific.** A runtime
 tag such as `[wt:LOAD]` may be intentionally shared by public and development
 streams. The post-ship refresher must bind a version rewrite to the exact mod

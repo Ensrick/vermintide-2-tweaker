@@ -6,9 +6,10 @@
 #
 # PIN REPOINTING (issue #1328): the ModTree/ModTrees values in the three
 # CONSUMED structures (ReceiptFamilyOverrides / ReceiptRouteOverrides /
-# ReceiptDiscoveryOverrides) are provenance, not policy - they name the exact
-# deployed <mod>/scripts/mods subtree the finite-output proof was audited
-# against. A changed deployed subtree therefore requires repointing. Canonical
+# ReceiptDiscoveryOverrides) normally name the exact deployed scripts/mods
+# subtree audited by the finite-output proof. #1777's explicit, source/receipt-
+# bound ReviewedRouteTransitions alone may retain two reviewed route trees;
+# see the sole policy owner PROJECT_STANDARDS.md section 6.6. Canonical
 # ship reconciles confirmed GitHub publication even if later Workshop work
 # fails. After hard process death, its next authorized pre-build entry proves
 # all consumed pins against the fresh current published manifest, without
@@ -23,6 +24,9 @@
 # does not establish Workshop transfer or make a new build ready for testing.
 
 @{
+    # #1777 route-only opt-in. No active transitions; never infer declarations.
+    ReviewedRouteTransitions = @()
+
     # Immutable deployed subtrees for the complete-emitter family audits below.
     # Any deployment that changes one byte in an audited mod fails closed until
     # its finite-output proof is reviewed and this pin is intentionally moved.
