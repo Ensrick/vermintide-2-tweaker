@@ -1,6 +1,6 @@
 -- Issue #1656: the cwv harness-defect rows of the 2026-09-21 triage. Each case runs the
 -- SHIPPED check body (the whole render module installed, or the check lifted verbatim out of
--- its owner with that owner's own `local x = ctx.y` header) against a world assembled from
+-- its owner with that owner's actual context/registrar header) against a world assembled from
 -- production modules: the real variant catalog, appearance lifecycle, exact-appearance
 -- resolver, husk transform policy, Crowbill runtime, the entry's own #423 recorder and the
 -- registration owner's own #482 ladder. Before the fix every case below FAILS the same way the
@@ -88,24 +88,32 @@ return function(H, repo_root)
         return source:sub(line_start, block_end + 5)
     end
 
-    -- The owner's own `local x = ctx.y` header, so the lifted check binds exactly what ships.
+    -- Execute the actual context/registrar header, including its real scoped factory.
     local function owner_header(source)
         local lines = {}
         for line in source:match("return function%(mod, ctx%)\n(.-)\n\n"):gmatch("[^\n]+") do
-            H.truthy(line:match("^local [%w_]+ = ctx%.[%w_]+$"), "unexpected header line: " .. line)
+            H.truthy(line:match("^local [%w_]+ = ctx%.[%w_]+$")
+                or line == "local _rt_register = ctx.regression_fixtures.isolated_register(ctx.rt_register, _om)",
+                "unexpected header line: " .. line)
             lines[#lines + 1] = line
         end
         return table.concat(lines, "\n")
     end
 
-    local function run_identity_check(name, mod, ctx)
+    local function capture_identity_check(name, mod, ctx, environment)
         local source = read("_cwv_regression_identity.lua")
         local chunk = assert(loadstring("local mod, ctx = ...\n" .. owner_header(source) .. "\n"
             .. lift_check(source, name), "@" .. name))
         local captured
         ctx.rt_register = function(_, fn) captured = fn end
+        if environment then setfenv(chunk, environment) end
         chunk(mod, ctx)
         H.equal(type(captured), "function", name .. " did not register")
+        return captured
+    end
+
+    local function run_identity_check(name, mod, ctx)
+        local captured = capture_identity_check(name, mod, ctx)
         local ok, verdict = pcall(captured)
         H.truthy(ok, name .. " raised instead of returning a verdict: " .. tostring(verdict))
         return verdict
@@ -323,7 +331,11 @@ return function(H, repo_root)
                 end
                 return payloads
             end,
-            _cwv_accept_identity = function(peer, schema, payload) return lifecycle:accept(peer, schema, payload) end,
+            _cwv_accept_identity = function(peer, schema, payload)
+                local changed, descriptor, reason = lifecycle:accept(peer, schema, payload)
+                if opts.after_accept then opts.after_accept(peer, payload) end
+                return changed, descriptor, reason
+            end,
             _cwv_identity_descriptor_for_peer = function(peer, slot, base) return lifecycle:descriptor(peer, slot, base) end,
             _cwv_request_peer_identities = function() end,
             _husk_resolve_display_def = function(base, _, skin)
@@ -416,6 +428,221 @@ return function(H, repo_root)
     end)
 
     -- ------------------------------------------------------------------------------------
+    -- Stateful checks use the real factory/header and real lifecycle. A #474
+    -- downstream-unready verdict is deliberate: it is not audio/fire acceptance.
+    local function pack_values(...) return { n = select("#", ...), ... } end
+    local ISOLATED_CHECKS = {
+        { "issue719_imperial_crowbill_remote_identity", "rt719-peer" },
+        { "issue416_483_transition_generated_skin_identity", "rt416-peer" },
+        { "issue474_old_musket_hot_join_identity_and_remote_fire", "rt474-peer" },
+    }
+    local function actual_trio()
+        local policy = dofile(root .. "_cwv_appearance_lifecycle.lua")
+        local descriptor = { variant_key = "fixture_owned", base_item_key = "fixture_base",
+            provider = "cwv", fingerprint = "fixture:isolated" }
+        local lifecycle = policy.new({ resolve_remote = function() return descriptor end })
+        local om = {
+            _appearance_lifecycle = lifecycle,
+            _cwv_accept_identity = function(...) return lifecycle:accept(...) end,
+            _cwv_identity_descriptor_for_peer = function(...) return lifecycle:descriptor(...) end,
+        }
+        local payload = { slot = "slot_melee", item_key = descriptor.variant_key,
+            base_item_key = descriptor.base_item_key, provider = "cwv",
+            fingerprint = descriptor.fingerprint, skin_key = "" }
+        return om, lifecycle, policy, payload
+    end
+
+    H.test("CWV isolated registration forwards unrelated functions options and registrar tuples", function()
+        local fixtures = dofile(root .. "_cwv_regression_fixtures.lua")
+        local seen, token, options = {}, {}, {}
+        local original = function() end
+        local register = fixtures.isolated_register(function(...)
+            seen = pack_values(...); return nil, token, nil
+        end, {}) -- missing transport must not affect unrelated registrations
+        H.deep_equal(pack_values(register("unrelated", original, options, nil)),
+            { n = 3, nil, token, nil })
+        H.equal(seen.n, 4); H.equal(seen[1], "unrelated")
+        H.equal(rawequal(seen[2], original), true)
+        H.equal(rawequal(seen[3], options), true)
+    end)
+
+    H.test("CWV isolated checks restore raw absent false and prior peers on all verdicts", function()
+        local fixtures = dofile(root .. "_cwv_regression_fixtures.lua")
+        for _, row in ipairs(ISOLATED_CHECKS) do
+            for _, initial in ipairs({ "absent", "false", "record" }) do
+                local om, lifecycle, policy, payload = actual_trio()
+                local remote = lifecycle._remote
+                local previous = initial == "record" and setmetatable({ slot_ranged = {} }, {}) or nil
+                if initial == "false" then previous = false end
+                local foreign, inherited = {}, {}
+                local mt = { __index = function() return inherited end,
+                    __newindex = function() error("raw peer writes must not invoke __newindex") end }
+                setmetatable(remote, mt)
+                rawset(remote, row[2], previous); rawset(remote, "foreign-peer", foreign)
+                local sent, deliveries, requests = {}, {}, {}
+                lifecycle._sent.foreign, lifecycle._deliveries.foreign = sent, deliveries
+                lifecycle._accepted_requests.foreign = requests
+                local callback, calls, mode = nil, 0, "tuple"
+                local token, opaque = {}, setmetatable({}, { __tostring = function() error("opaque error stringified") end })
+                fixtures.isolated_register(function(_, fn) callback = fn end, om)(row[1], function(...)
+                    calls = calls + 1
+                    local owned = rawget(remote, row[2])
+                    H.equal(type(owned), "table"); H.equal(next(owned), nil)
+                    H.equal(rawequal(owned, previous), false)
+                    H.equal(rawequal(remote[row[2]], owned), true, "inherited peer must be hidden")
+                    H.equal(om._cwv_accept_identity(row[2], policy.SCHEMA, payload), true)
+                    if mode == "error" then error(opaque, 0) end
+                    if mode == "none" then return end
+                    if mode == "reason" then return "intentional diagnostic reason" end
+                    if mode == "skip" then return "skip: intentional unavailable boundary" end
+                    return nil, select(1, ...), nil, token, nil
+                end)
+                local function unchanged()
+                    H.equal(rawequal(lifecycle._remote, remote), true)
+                    H.equal(rawequal(rawget(remote, row[2]), previous), true, "prior raw peer restored")
+                    H.equal(next(inherited), nil, "inherited foreign record was not mutated")
+                    H.equal(rawequal(rawget(remote, "foreign-peer"), foreign), true)
+                    H.equal(rawequal(getmetatable(remote), mt), true)
+                    H.equal(rawequal(lifecycle._sent.foreign, sent), true)
+                    H.equal(rawequal(lifecycle._deliveries.foreign, deliveries), true)
+                    H.equal(rawequal(lifecycle._accepted_requests.foreign, requests), true)
+                end
+                H.deep_equal(pack_values(callback("argument")), { n = 5, nil, "argument", nil, token, nil }); unchanged()
+                mode = "none"; H.equal(pack_values(callback()).n, 0); unchanged()
+                mode = "reason"; H.equal(callback(), "intentional diagnostic reason"); unchanged()
+                mode = "skip"; H.equal(callback(), "skip: intentional unavailable boundary"); unchanged()
+                mode = "error"; local ok, err = pcall(callback)
+                H.equal(ok, false); H.equal(rawequal(err, opaque), true); unchanged()
+                mode = "none"; H.equal(pack_values(callback()).n, 0); unchanged()
+                H.equal(calls, 6, "same registered function remains recoverable")
+            end
+        end
+    end)
+
+    H.test("CWV isolated checks refuse foreign captured transport and methods before writes", function()
+        local fixtures = dofile(root .. "_cwv_regression_fixtures.lua")
+        for _, fault in ipairs({ "lifecycle", "accept", "resolver", "accept_method",
+                "descriptor_method", "coherent_before_registration", "coherent_after_registration", "initially_missing" }) do
+            local om, lifecycle = actual_trio()
+            local original = { om._appearance_lifecycle, om._cwv_accept_identity,
+                om._cwv_identity_descriptor_for_peer, lifecycle.accept, lifecycle.descriptor }
+            if fault == "initially_missing" then om._appearance_lifecycle = nil end
+            local callback, calls = nil, 0
+            local register = fixtures.isolated_register(function(_, fn) callback = fn end, om)
+            local foreign_om, foreign_lifecycle = actual_trio()
+            local equality = { __eq = function() return true end }
+            setmetatable(lifecycle, equality); setmetatable(foreign_lifecycle, equality)
+            local prior, foreign_prior = {}, {}
+            rawset(lifecycle._remote, "rt719-peer", prior)
+            rawset(foreign_lifecycle._remote, "rt719-peer", foreign_prior)
+            local function replace()
+                if fault == "lifecycle" then om._appearance_lifecycle = foreign_lifecycle
+                elseif fault == "accept" then om._cwv_accept_identity = foreign_om._cwv_accept_identity
+                elseif fault == "resolver" then om._cwv_identity_descriptor_for_peer = foreign_om._cwv_identity_descriptor_for_peer
+                elseif fault == "accept_method" then lifecycle.accept = foreign_lifecycle.accept
+                elseif fault == "descriptor_method" then lifecycle.descriptor = foreign_lifecycle.descriptor
+                else
+                    om._appearance_lifecycle = foreign_lifecycle
+                    om._cwv_accept_identity = foreign_om._cwv_accept_identity
+                    om._cwv_identity_descriptor_for_peer = foreign_om._cwv_identity_descriptor_for_peer
+                end
+            end
+            if fault == "coherent_before_registration" then replace() end
+            register("issue719_imperial_crowbill_remote_identity", function() calls = calls + 1 end)
+            if fault ~= "coherent_before_registration" then replace() end
+            local ok, err = pcall(callback)
+            H.equal(ok, false); H.truthy(type(err) == "string" and err:find(
+                "CWV regression isolation owner changed or missing:", 1, true))
+            H.equal(calls, 0, "foreign transport refused before callback")
+            H.equal(rawequal(rawget(lifecycle._remote, "rt719-peer"), prior), true)
+            H.equal(rawequal(rawget(foreign_lifecycle._remote, "rt719-peer"), foreign_prior), true)
+            om._appearance_lifecycle, om._cwv_accept_identity, om._cwv_identity_descriptor_for_peer =
+                original[1], original[2], original[3]
+            lifecycle.accept, lifecycle.descriptor = original[4], original[5]
+        end
+    end)
+
+    H.test("CWV isolated checks late-read only the same owned lifecycle remote table", function()
+        local fixtures = dofile(root .. "_cwv_regression_fixtures.lua")
+        local om, lifecycle, policy, payload = actual_trio()
+        local callback
+        fixtures.isolated_register(function(_, fn) callback = fn end, om)(
+            "issue719_imperial_crowbill_remote_identity", function()
+                H.equal(om._cwv_accept_identity("rt719-peer", policy.SCHEMA, payload), true)
+            end)
+        local old, previous = lifecycle._remote, {}
+        lifecycle._remote = { ["rt719-peer"] = previous }
+        callback()
+        H.equal(rawequal(lifecycle._remote["rt719-peer"], previous), true)
+        H.equal(next(old), nil, "old remote container was not used")
+        local current = lifecycle._remote; lifecycle._remote = nil
+        local ok, err = pcall(callback)
+        H.equal(ok, false); H.truthy(type(err) == "string" and err:find(
+            "CWV regression isolation ledger missing:", 1, true))
+        H.equal(rawequal(current["rt719-peer"], previous), true, "missing ledger cannot touch prior state")
+        lifecycle._remote = current; callback()
+        H.equal(rawequal(current["rt719-peer"], previous), true)
+    end)
+
+    local function private_identity_world(options)
+        local mod, ctx, globals = identity_world(options)
+        local env = setmetatable(globals, { __index = _G }); env._G = env
+        env.Weapons = {}
+        local chunk = assert(loadfile(root .. "_cwv_regression_fixtures.lua"))
+        setfenv(chunk, env); ctx.regression_fixtures = chunk()
+        return mod, ctx, env
+    end
+    local function retained_peer_assertion(ctx, peer)
+        local lifecycle = ctx.om._appearance_lifecycle
+        local previous, foreign, mt = { slot_melee = {}, slot_ranged = {} }, {}, {}
+        setmetatable(previous, mt)
+        rawset(lifecycle._remote, peer, previous)
+        rawset(lifecycle._remote, "foreign-repeat-peer", foreign)
+        return function()
+            H.equal(rawequal(rawget(lifecycle._remote, peer), previous), true, "actual check restores prior peer")
+            H.equal(rawequal(getmetatable(previous), mt), true)
+            H.equal(rawequal(rawget(lifecycle._remote, "foreign-repeat-peer"), foreign), true)
+        end
+    end
+
+    H.test("CWV #416 same callback repeats and restores its peer after actual accept error", function()
+        local owner, skin = "cwv_es_sword_and_mace", "cwv_es_sword_and_mace_wpn_pair_fixture"
+        local options = { extra_item_master = { [skin] = { cwv_owner_item_type = owner } },
+            extra_skins = { [skin] = { right_hand_unit = "units/sword_fixture", left_hand_unit = "units/mace_fixture" } } }
+        local mod, ctx, env = private_identity_world(options)
+        local unchanged = retained_peer_assertion(ctx, "rt416-peer")
+        local calls, inject, opaque = 0, false, {}
+        options.after_accept = function(peer)
+            H.equal(peer, "rt416-peer"); calls = calls + 1
+            if inject then error(opaque, 0) end
+        end
+        local check = capture_identity_check("issue416_483_transition_generated_skin_identity", mod, ctx, env)
+        H.equal(check(), nil); unchanged()
+        H.equal(check(), nil); unchanged()
+        inject = true; local ok, err = pcall(check)
+        H.equal(ok, false); H.equal(rawequal(err, opaque), true); unchanged()
+        inject = false; H.equal(check(), nil); unchanged()
+        H.equal(calls, 4, "both repeats and recovery reached real lifecycle accepts")
+    end)
+
+    H.test("CWV #474 same callback repeats honest downstream failure and restores both slots", function()
+        local options = {}
+        local mod, ctx, env = private_identity_world(options)
+        local unchanged = retained_peer_assertion(ctx, "rt474-peer")
+        local calls, inject, opaque = 0, false, {}
+        options.after_accept = function(peer, payload)
+            H.equal(peer, "rt474-peer"); calls = calls + 1
+            if inject and payload.slot == "slot_ranged" then error(opaque, 0) end
+        end
+        local check = capture_identity_check("issue474_old_musket_hot_join_identity_and_remote_fire", mod, ctx, env)
+        H.equal(check(), "Old Musket ranged actions missing"); unchanged()
+        H.equal(check(), "Old Musket ranged actions missing"); unchanged()
+        inject = true; local ok, err = pcall(check)
+        H.equal(ok, false); H.equal(rawequal(err, opaque), true); unchanged()
+        inject = false; H.equal(check(), "Old Musket ranged actions missing"); unchanged()
+        H.equal(calls, 8, "four invocations reached both actual slot accepts")
+    end)
+
     -- cwv_key_resolution_uuid_safe rung 3 against the registration owner's own ladder.
     -- ------------------------------------------------------------------------------------
 

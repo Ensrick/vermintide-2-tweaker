@@ -1,5 +1,26 @@
 # Regression Checklist — character_weapon_variants
 
+## #1656 Scoped semantic-identity check state
+
+- Existing host owners: `test_cwv_regression_harness_1656.lua` and
+  `test_cwv_dual_axes_installed_chain.lua`. Execute the actual factory/header
+  and actual named callbacks repeatedly in the same lifecycle, not fresh
+  fixtures for each call or a healthy replacement child.
+- Cover raw absent/false/prior peer entries, inherited state and metatables,
+  unrelated peers/request/delivery maps, nil-hole/trailing return tuples,
+  returned failure/SKIP, opaque errors and recovery. A missing/replaced captured
+  transport or method must refuse before a callback or peer write.
+- Same-owned-lifecycle remote-table replacement remains readable; a foreign
+  lifecycle/alias/method is not learned. Unmapped registrations retain the
+  original callback identity, options, order and registrar return tuple.
+- The real Crowbill child must still reach its honest no-player-manager SKIP
+  on an engine-free host. The Old Musket fixture's downstream-unready result
+  is not audio/fire acceptance. Keep every unrelated FAIL/SKIP/XFAIL visible.
+- After publication, run the existing command twice in the same game session
+  and compare the three named verdicts. Actual remote model/transition/style
+  behavior remains with #719, #416 and #474; no game or peer pass is implied
+  by this state-isolation check or by canonical compilation/publication.
+
 ## #2 Deferred husk residency owner
 
 - Offline ownership/behavior checks: `test_cwv_residency_ledger.lua`,

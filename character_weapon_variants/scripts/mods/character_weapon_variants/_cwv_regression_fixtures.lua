@@ -12,9 +12,12 @@
 -- composed by hand: their keys are a rarity-sorted zip of the live vanilla skin
 -- pools (_cwv_illusion_families.lua:1279-1292) and move when a pool grows.
 --
--- Pure and engine-free: the selectors take the live tables as arguments, and
--- the live_* adapters only read the engine globals they would otherwise be
--- handed. Offline proof: qa/lua/tests/test_cwv_regression_harness_1656.lua.
+-- Engine-free selectors and scoped regression isolation. The live_* selectors
+-- only read their engine globals; isolated_register temporarily substitutes
+-- one caller-owned synthetic peer entry and restores its exact raw value.
+-- No engine globals are mutated. Offline proof:
+-- qa/lua/tests/test_cwv_regression_harness_1656.lua and
+-- qa/lua/tests/test_cwv_dual_axes_installed_chain.lua.
 local M = {}
 
 local function nonempty(value)
@@ -73,6 +76,56 @@ function M.generated_pair_skin(item_master, weapon_skins, owner_item_type)
 		end
 	end
 	return best
+end
+
+-- These three checks exercise lifecycle:accept against fixed synthetic peers.
+-- Only accept's private remote entry belongs to this scope; clear_peer would
+-- also alter request/delivery state and must not be used as test cleanup.
+local ISOLATED_PEERS = {
+	issue719_imperial_crowbill_remote_identity = "rt719-peer",
+	issue416_483_transition_generated_skin_identity = "rt416-peer",
+	issue474_old_musket_hot_join_identity_and_remote_fire = "rt474-peer",
+}
+
+local function pack(...)
+	return { n = select("#", ...), ... }
+end
+
+function M.isolated_register(register, om)
+	-- Entry installs this coherent transport trio before the regression owner.
+	-- Capture once: never learn a foreign pair at registration or invocation.
+	local lifecycle = type(om) == "table" and rawget(om, "_appearance_lifecycle")
+	local accept = type(om) == "table" and rawget(om, "_cwv_accept_identity")
+	local resolve = type(om) == "table" and rawget(om, "_cwv_identity_descriptor_for_peer")
+	local accept_method = type(lifecycle) == "table" and rawget(lifecycle, "accept")
+	local descriptor_method = type(lifecycle) == "table" and rawget(lifecycle, "descriptor")
+	return function(name, callback, ...)
+		local peer = ISOLATED_PEERS[name]
+		if not peer then return register(name, callback, ...) end
+		return register(name, function(...)
+			if type(lifecycle) ~= "table" or type(accept) ~= "function"
+					or type(resolve) ~= "function" or type(om) ~= "table"
+					or type(accept_method) ~= "function" or type(descriptor_method) ~= "function"
+					or not rawequal(rawget(om, "_appearance_lifecycle"), lifecycle)
+					or not rawequal(rawget(om, "_cwv_accept_identity"), accept)
+					or not rawequal(rawget(om, "_cwv_identity_descriptor_for_peer"), resolve)
+					or not rawequal(rawget(lifecycle, "accept"), accept_method)
+					or not rawequal(rawget(lifecycle, "descriptor"), descriptor_method) then
+				error("CWV regression isolation owner changed or missing: " .. name, 0)
+			end
+			-- accept/resolve access this same owned lifecycle's current table.
+			local remote = rawget(lifecycle, "_remote")
+			assert(type(remote) == "table", "CWV regression isolation ledger missing: " .. name)
+			local previous = rawget(remote, peer)
+			-- A present private table blocks inherited __index state as well as
+			-- a retained exact record; raw nil would not isolate a metatable.
+			rawset(remote, peer, {})
+			local result = pack(pcall(callback, ...))
+			rawset(remote, peer, previous)
+			if not result[1] then error(result[2], 0) end
+			return unpack(result, 2, result.n)
+		end, ...)
+	end
 end
 
 function M.live_owner(definitions, registered_keys)

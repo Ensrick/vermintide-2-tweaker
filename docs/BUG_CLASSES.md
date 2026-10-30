@@ -3483,7 +3483,7 @@ cosmetics `_mh_package_lifecycle.lua`).
 **Lives in:** any `_rt_register` check, `/verify_<feature>` command, or offline
 QA gate whose verdict is used to decide whether a fix landed.
 
-The bug is in the INSTRUMENT, not the code it measures. Six sub-patterns have
+The bug is in the INSTRUMENT, not the code it measures. Seven sub-patterns have
 bitten this repo:
 
 **(a) Setter-success or self-derived expectation.** The check asserts that a
@@ -3537,6 +3537,19 @@ two stance cells and retained only the equipped backend identity. Vanilla
 mip streaming. The repaired evidence unit is therefore one bounded
 previewer/item identity plus generation and final visible edge; owner and
 inventory surfaces retain their real two-stance requirements.
+
+**(g) Retained synthetic state across repeated checks.** A check writes a fixed
+synthetic peer into the real semantic-identity ledger and requires its first
+accept to report a change. Repeating the command correctly deduplicates the
+same retained record, but the check misreports receiver failure before reaching
+its actual observation leg (#1656 / #719; also #416 and #474). Isolate only the
+owned synthetic entry, restore its exact raw previous value on every verdict
+and error, and preserve the real downstream leg. Use a present private table
+to hide inherited state; clearing to nil can expose a metatable's foreign row.
+Capture the original lifecycle/transport bindings and reject replacement before
+writing, rather than learning a foreign ledger. Test the same actual callback
+repeatedly, with prior state and errors; fresh fixtures per call hide this bug.
+Never clear unrelated request/delivery routes or weaken normal deduplication.
 
 ### Symptoms
 - An offline suite is green (or a `/verify_*` prints PASS) while the user
