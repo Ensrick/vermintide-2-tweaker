@@ -23,6 +23,9 @@ return function(H, repo_root)
     local catalog = read("_cwv_variant_catalog.lua")
     local cross_access = read("_cwv_cross_access.lua")
     local core_templates = read("_cwv_core_templates.lua")
+    local family_bootstrap = read("_cwv_family_bootstrap.lua")
+    local tuskgor_family = read("_cwv_tuskgor_spear_family.lua")
+    local sword_family = read("_cwv_sword_family.lua")
     local skin_registry = read("_cwv_skin_registry.lua")
     local illusion_families = read("_cwv_illusion_families.lua")
     local husk = read("_cwv_husk_path.lua")
@@ -98,6 +101,19 @@ return function(H, repo_root)
 		"issue1204_deus_identity_uses_committed_parity",
 	}
 
+    H.test("CWV dormant Tuskgor composition stays separate from Sword and admission", function()
+        H.equal(count_plain(entry, '"scripts/mods/character_weapon_variants/_cwv_family_bootstrap"'), 1)
+        H.equal(count_plain(entry, '"scripts/mods/character_weapon_variants/_cwv_tuskgor_spear_family"'), 1)
+        local first = assert(family_bootstrap:find("ctx.sword_install(mod, ctx)", 1, true))
+        local second = assert(family_bootstrap:find("ctx.prepare_tuskgor(ctx)", 1, true))
+        H.truthy(first < second, "published Sword install must precede contained Tuskgor setup")
+        H.equal(sword_family:find("tuskgor", 1, true), nil, "Sword retains its unrelated ownership boundary")
+        H.equal(count_plain(tuskgor_family, '"issue645_tuskgor_retained_construction"'), 1)
+        for _, forbidden in ipairs({ "mod:hook", "mod:command", "network_send", "Managers.package",
+                "function owner:package", "function owner:admit" }) do
+            H.equal(tuskgor_family:find(forbidden, 1, true), nil, "dormant owner cannot expose runtime admission")
+        end
+    end)
     H.test("CWV entry remains below its frozen line baseline", function()
         local lines = 0
         for _ in entry:gmatch("[^\r\n]+") do lines = lines + 1 end

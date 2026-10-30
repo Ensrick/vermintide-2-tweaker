@@ -12,7 +12,9 @@ return function(H, root)
     local function fixture(policy_env, construction)
         policy_env = policy_env or setmetatable({}, { __index = _G })
         policy_env._G = policy_env
-        local P, Actor = load("_cwv_combat_styles", policy_env), load("_cwv_style_actor_admission")
+        local retained_policy = construction and construction.retained_combat_style_policy
+        local P = retained_policy or load("_cwv_combat_styles", policy_env)
+        local Actor = load("_cwv_style_actor_admission")
         H.equal(P.member("es_1h_sword"), "one_handed_swords", "real authored catalogue required")
         H.equal(P.member("we_1h_sword"), "one_handed_swords")
         local s = { local_pi = 7, local_ci = 1, remote_pi = 7, remote_ci = 1,
@@ -79,15 +81,26 @@ return function(H, root)
         c.state.combat_style_policy = P
         local file = assert(io.open(dir .. "character_weapon_variants.lua", "rb"))
         local entry = file:read("*a"); file:close()
-        local first = '_om.sword_family = mod:dofile("scripts/mods/character_weapon_variants/_cwv_sword_family").install(mod, {'
+        local first = 'local _tuskgor_family\n_om.sword_family, _tuskgor_family = mod:dofile('
         local at = assert(entry:find(first, 1, true))
         H.equal(entry:find(first, at + 1, true), nil, "one actual Sword owner installation")
         local finish = assert(entry:find("\n})", at, true)) + 2
         local bootstrap = c.T.run("return function(mod, _om, _core_template_construction, _cwv_profile_graph, "
             .. "_cwv_network_lookup, _cwv_career_envelope, _career_weapon_actions, _rt_register)\n"
-            .. entry:sub(at, finish) .. "\nreturn _om.sword_family end", c.env, "actual-entry-Sword-family-bootstrap")
-        s.sword_family = bootstrap({
-            dofile = function(_, name) return load(assert(name:match("([^/]+)$"))) end,
+            .. entry:sub(at, finish) .. "\nreturn _om.sword_family, _tuskgor_family end", c.env, "actual-entry-Sword-family-bootstrap")
+        s.sword_family, s.tuskgor_family = bootstrap({
+            dofile = function(_, name)
+                if c.family_module_fault then c.family_module_fault(name) end
+                local module = load(assert(name:match("([^/]+)$")))
+                if c.record_tuskgor_bind and name:match("/_cwv_tuskgor_history_envelope$") then
+                    local bind = module.bind
+                    module.bind = function(...)
+                        c.record_tuskgor_bind()
+                        return bind(...)
+                    end
+                end
+                return module
+            end,
         }, c.state, c.core, c.graph, c.helper, c.career_envelope, load("_lib_career_weapon_actions"),
             function(name, fn)
                 if name == "issue645_reciprocal_one_handed_sword_family" then s.family_check = fn

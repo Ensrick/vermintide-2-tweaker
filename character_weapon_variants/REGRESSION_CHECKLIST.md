@@ -1726,3 +1726,47 @@ The canonical suite must reach the donor-envelope child through tracked
 the real initial/retained transform composition, and WT whole-balance re-entry
 checks in this integration gate. Extracted fixture functions must retain their
 actual production closure dependencies, not unconditional admission stubs.
+
+## Dormant Tuskgor retained construction
+
+Run the three Tuskgor suites through the canonical Lua gate. Native/VMF sibling
+source cases use the existing optional-CI convention; local qualification must
+report zero skips with the actual pinned source inputs. Preserve the 17 original
+construction/history normal cases and 20 reached journal fault subcases, plus
+their five actual-source sensitivity controls and exact failure assertions.
+Requalify all nine constructor/history/bootstrap controls plus four career
+controls against the current complete target files, actual normal suite and
+native/VMF inputs. The strict transaction case reads the constructor twice per
+mode: source-commit bypass must reach four reads, template-commit bypass six;
+the other eleven controls consume once. Require those exact counts and the
+intended normal assertion, never merely a nonzero exit or positive read count.
+
+The bootstrap suite must exercise the actual entry/private composition, one
+real WT producer and actual finite VMF callbacks in both script orders. Preserve
+prior-callback error identity, attempted-before-bind terminal failure, no
+check/on-enabled recapture, no owned graph/lookup/audit growth on reentry,
+WT restore/reapply versus pending settings, and native Elf inspect/career data.
+Record published Sword/Mace verdicts before/after late WT separately; never call
+a real early-capture refusal healthy. WT-first healthy ownership must remain
+healthy when Tuskgor setup/bind/construction fails.
+
+The consumed runtime check is `issue645_tuskgor_retained_construction`.
+It verifies the unused retained source capability, not a selectable style.
+Drive the actual shared career preparer/install/release on donor, receiver and
+clone. Test CWV plus each actual WT stream in six fresh single-producer contexts;
+assert the other stream is absent, first-owner retention, last injected-owner
+removal, baseline-present retention and canonical row identity. Do not install
+two independent history publishers merely to manufacture owner identities:
+their private profile-publication proofs correctly reject the other's tuple.
+Keep all 21 foreign/raw drift cells and all three reached prepare/source-commit/
+clone-commit interruptions. Legitimate completed-lifetime transitions may pass;
+the same writes during the constructor transaction must refuse with owned
+rollback and the disclosed external write preserved. Partial career wiring must
+not select the detached strict-native fallback. Never replace these assertions
+with a broad career-prefix exemption, recapture or unconditional admission.
+Keep Elf native restoration live-native and Scorpion access gated before any
+future admission. Keep the new
+reciprocal Elf/Tuskgor family diagnostic-only; existing native keys and already
+published styles are unchanged. No constructor check
+establishes 3P remap/carrier playback, game launch, visual acceptance or #645
+umbrella readiness.

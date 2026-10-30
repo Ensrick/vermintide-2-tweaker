@@ -21,6 +21,16 @@ local function install(mod, ctx, musket_construction)
 	local admit_greataxe = type(greataxe) == "table" and greataxe.admit_greataxe
 	local check_greataxe = type(greataxe) == "table" and greataxe.check_greataxe
 	local old_musket_builder
+	local tuskgor = ctx.tuskgor_family
+	local initialize_tuskgor = type(tuskgor) == "table" and rawget(tuskgor, "initialize_once")
+	local register_tuskgor = type(tuskgor) == "table" and rawget(tuskgor, "register_check")
+	local previous_all_loaded = mod.on_all_mods_loaded
+	-- First capture belongs after every mod script, never the diagnostic/check.
+	-- A prior callback exception is preserved and leaves Tuskgor honestly pending.
+	function mod.on_all_mods_loaded(...)
+		if previous_all_loaded then previous_all_loaded(...) end
+		if type(initialize_tuskgor) == "function" then initialize_tuskgor() end
+	end
 	local function install_items(owner, dependencies)
 		local private = {}; for key, value in next, dependencies do private[key] = value end
 		private.old_musket_admission = admit_old_musket
@@ -78,6 +88,15 @@ local function install(mod, ctx, musket_construction)
 			local ok, entry = pcall(old_musket_builder, { item_key = "cwv_es_shortsword", template = "unproven_template", base_weapon = "bw_dagger" })
 			if not ok or entry ~= nil then return "#428 item admission did not reject an unproven Shortsword template" end
 		end)
+		if type(register_tuskgor) == "function" then
+			register_tuskgor(register)
+		else
+			register("issue645_tuskgor_retained_construction", function()
+				local problem = type(tuskgor) == "table" and rawget(tuskgor, "setup_error")
+				return type(problem) == "string" and problem
+					or "#645 private Tuskgor retained owner disconnected"
+			end)
+		end
 	end
 
 	-- ============================================================
