@@ -1,5 +1,31 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.566-dev (2026-10-30) -- Repeatable semantic-identity checks (#1656)
+
+- Isolate the fixed synthetic peer used by the Crowbill, Sword+Mace transition
+  and Old Musket identity checks. A second `/cwv_regression_test` in one session
+  previously encountered the first run's exact record and could report receiver
+  failure before reaching its real observation leg. The qualified #719 baseline
+  reproduced this on the actual installed transport and actual transaction child.
+- Restore the exact prior raw peer entry on every verdict and opaque error;
+  preserve return holes, inherited state, unrelated peers and request/delivery
+  ledgers. Capture the installed transport owner once and refuse replacement
+  before invoking a selected check. Unrelated registrations remain unchanged.
+- Extend the existing offline suites to run the actual factory/header and all
+  three actual callbacks repeatedly, including failure, SKIP and error recovery.
+  Focused qualification passed 52 cases with no skips/failures; five in-memory
+  faults reached their intended normal behavioral assertions. Source and all
+  reviewed host/driver inputs stayed unchanged across that qualification.
+  This is an instrument-state repair: no model, gameplay, wire, hook, command,
+  resource, acceptance threshold or live-check name is changed. Existing command
+  verdicts are the observable check; no new apply-site log is needed for this
+  temporary synthetic-only scope. Compare the three named checks across two
+  command runs; retain every unrelated failure/skip and the real live-peer leg.
+- **DoD:** existing regression instrumentation only; no new weapon or appearance
+  surface. Offline qualification and canonical publication do not establish
+  Crowbill rendering, Sword+Mace transitions, Old Musket audio/fire or co-op
+  acceptance. Those remain with #719, #416 and #474.
+
 ## 0.1.565-dev (2026-10-30) -- Deferred husk residency ownership (#2)
 
 - Move the existing resource-truth, donor/override leases, spawnability and

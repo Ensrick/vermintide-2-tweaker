@@ -186,6 +186,30 @@ Offline source-contract tests that need the historical composed surface must
 use `qa/lua/cwv_source.lua`. Tests concerned specifically with entry size or
 load order should read the entry file directly.
 
+## Scoped semantic-identity regression checks (#1656)
+
+`_cwv_regression_fixtures.lua` also owns the closed registration decorator for
+the Crowbill, Sword+Mace transition, and Old Musket semantic-identity checks.
+The identity owner binds it through its existing registrar alias; registration
+order, names, options, unrelated callbacks and the entry manifest are unchanged.
+
+The decorator captures the already-installed lifecycle, accept/resolver aliases
+and lifecycle methods. A selected invocation refuses lost/replaced ownership
+before calling the check. It late-reads only that same owned lifecycle's remote
+table, hides the fixed synthetic peer behind a fresh raw table, and restores
+the exact previous raw value on every verdict or error. Nil holes, trailing
+returns, opaque error identity, metatables and unrelated peers remain intact.
+Do not use random peer IDs, change acceptance/deduplication semantics, or call
+`clear_peer` as cleanup: that API also changes request/delivery routes.
+
+This scope intentionally excludes the Dual Axes receiver check, whose broader
+receiver/cleanup effects require separate treatment. It is an instrument-state
+repair, not a Crowbill mesh, network-delivery or native-rendering fix. Keep the
+real transaction/live-observation leg and its honest unavailable-state verdicts.
+Never adopt a foreign transport during a check or treat a component PASS as
+gameplay evidence. Restart normally after an updated CWV build; hot reload is
+not an ownership-rebinding protocol.
+
 ## Where new code goes
 
 - Keep husk resource truth and bounded donor/override leases in the existing

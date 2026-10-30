@@ -3,7 +3,7 @@ return function(mod, ctx)
 local MOD_VERSION = ctx.mod_version
 local _om = ctx.om
 local _dbg = ctx.dbg
-local _rt_register = ctx.rt_register
+local _rt_register = ctx.regression_fixtures.isolated_register(ctx.rt_register, _om)
 local _variant_definitions = ctx.variant_definitions
 local _registered_keys = ctx.registered_keys
 local _display_names = ctx.display_names

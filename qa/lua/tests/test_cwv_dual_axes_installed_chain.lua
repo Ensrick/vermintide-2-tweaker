@@ -186,6 +186,7 @@ return function(H, root, controls)
             -- than substituting a UUID -> family answer. The fixture's two
             -- registered membership rows come from the real catalog above.
             local registered = {}
+            e.registered_for_regression_check = registered
             for _, key in ipairs(FAMILIES) do
                 assert(find_def(key) and not find_def(key).cwv_retired)
                 registered[key] = true
@@ -312,6 +313,96 @@ return function(H, root, controls)
         end
         return s
     end
+
+    H.test("719 actual identity callback repeats real child and restores prior peer state", function()
+        local world = fixture("cwv_es_dual_axes")
+        local endpoint = world.observer
+        local env, om, mod = endpoint.env, endpoint.om, endpoint.mod
+        local family = assert(om_catalog.crowbill_family)
+        local def = assert(find_def("cwv_es_imperial_crowbill"))
+        H.truthy(not def.cwv_retired and not def.skin_only, "Crowbill fixture is registered")
+        H.equal(def.base_weapon, family.SOURCE_ITEM)
+        -- Actual authored Crowbill rows; this small source-template table is
+        -- only the installed fixture's stand-in native spawn identity token.
+        endpoint.registered_for_regression_check[def.item_key] = true
+        endpoint.items[family.SOURCE_ITEM] = { name = family.SOURCE_ITEM,
+            item_type = family.SOURCE_ITEM, template = family.SOURCE_TEMPLATE,
+            right_hand_unit = family.PLACEHOLDER_UNIT, can_wield = { "bw_adept" } }
+        endpoint.items[def.item_key] = { name = def.base_weapon, key = def.item_key,
+            item_type = def.item_key, template = def.template,
+            right_hand_unit = def.right_hand_unit }
+        env.Weapons[family.SOURCE_TEMPLATE] = { name = family.SOURCE_TEMPLATE,
+            right_hand_attachment_node_linking = { third_person = { wielded = {} } } }
+        H.equal(def.template, family.SOURCE_TEMPLATE)
+        om.crowbill_family = family
+        om.crowbill_runtime = load(cwv .. "_cwv_crowbill_runtime.lua", env)
+        om._husk_custom_bundle_unit = family.is_bundled_unit
+        local child = load(cwv .. "_cwv_issue719_transaction_check.lua", env)(mod, { om = om, env = env })
+        H.equal(type(child), "function")
+        local child_calls, peer_legs, inject = 0, 0, false
+        local opaque = setmetatable({}, { __tostring = function() error("opaque child error stringified") end })
+        local printf = env.printf
+        env.printf = function(fmt, ...)
+            if fmt == "[cwv:719] peer observation SKIP reason=no_player_manager" then
+                peer_legs = peer_legs + 1
+            end
+            return printf(fmt, ...)
+        end
+        local callback
+        local ctx = { om = om, find_def = find_def,
+            regression_fixtures = load(cwv .. "_cwv_regression_fixtures.lua", env),
+            rt_register = function(name, fn)
+                H.equal(name, "issue719_imperial_crowbill_remote_identity")
+                H.equal(callback, nil, "named callback loaded once"); callback = fn
+            end,
+            issue719_transaction_check = function(...)
+                child_calls = child_calls + 1
+                local result = pack(child(...)) -- always run the real child before any injected error
+                if inject then error(opaque, 0) end
+                return unpack(result, 1, result.n)
+            end,
+        }
+        -- Existing #1656 protocol: execute the actual header and named check
+        -- verbatim. No duplicate payload, identity policy, or child algorithm.
+        local identity_path = cwv .. "_cwv_regression_identity.lua"
+        local identity = read(identity_path)
+        local header = assert(identity:match("return function%(mod, ctx%)\n(.-)\n\n"))
+        local anchor = '_rt_register("issue719_imperial_crowbill_remote_identity", function()'
+        local first = assert(identity:find(anchor, 1, true))
+        H.equal(identity:find(anchor, first + 1, true), nil, "named registration unique")
+        local last = assert(identity:find("\nend)\n", first, true))
+        local lifted = assert(loadstring("local mod, ctx = ...\n" .. header .. "\n"
+            .. identity:sub(first, last + 5), "@" .. identity_path))
+        setfenv(lifted, env); lifted(mod, ctx)
+        H.equal(type(callback), "function")
+        local lifecycle = assert(om._appearance_lifecycle)
+        local remote = assert(rawget(lifecycle, "_remote"))
+        local mt, previous, foreign = {}, { slot_melee = {}, slot_ranged = {} }, {}
+        local prior_melee, prior_ranged = previous.slot_melee, previous.slot_ranged
+        setmetatable(previous, mt)
+        rawset(remote, "rt719-peer", previous); rawset(remote, "foreign-719-peer", foreign)
+        local function unchanged()
+            H.equal(rawequal(rawget(remote, "rt719-peer"), previous), true, "actual #719 restores prior raw peer")
+            H.equal(rawequal(rawget(previous, "slot_melee"), prior_melee), true,
+                "actual #719 preserves prior melee record")
+            H.equal(rawequal(rawget(previous, "slot_ranged"), prior_ranged), true,
+                "actual #719 preserves prior ranged record")
+            H.equal(rawequal(getmetatable(previous), mt), true)
+            H.equal(rawequal(rawget(remote, "foreign-719-peer"), foreign), true)
+        end
+        local first_verdict = callback(); unchanged()
+        H.truthy(type(first_verdict) == "string" and first_verdict:find(
+            "skip: legs 1-2 passed; no player manager to observe peers", 1, true) == 1,
+            "real #719 child must reach honest live-peer SKIP, not a fixture substitute")
+        H.equal(callback(), first_verdict); unchanged()
+        H.equal(child_calls, 2, "same lifecycle reaches real #719 transaction on both calls")
+        H.equal(peer_legs, 2, "same lifecycle reaches real peer observation on both calls")
+        inject = true; local ok, err = pcall(callback)
+        H.equal(ok, false); H.equal(rawequal(err, opaque), true); unchanged()
+        inject = false; H.equal(callback(), first_verdict); unchanged()
+        H.equal(child_calls, 4, "actual #719 child remains recoverable after opaque error")
+        H.equal(peer_legs, 4, "all four invocations reached the actual live leg")
+    end)
 
     local function establish(s)
         H.equal(s.owner.commit(s.left_skin, AXE_LEFT), true)
