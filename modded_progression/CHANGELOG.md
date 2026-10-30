@@ -1,5 +1,24 @@
 # Modded Progression — Changelog
 
+## 0.2.51-dev (2026-10-30) -- Inspect cached login rewards without requests (#1684)
+
+- Add `/mp_login_diag <day/index>` to the existing read-only census owner.
+  Read only raw fields of the current backend's already-cached login response
+  after exact known Modded authority; no fetch, refresh, claim, queue or grant.
+- Keep personal-time and calendar response fields distinct. Inspect at most
+  eight reward cells, note only ninth-cell presence, and leave the tail unscanned.
+  Emit at most eleven ASCII rows, each at most 700 bytes, after whole-output
+  validation. Catalogue keys are not owned-instance identifiers.
+- Missing, sparse or malformed rows return an explicit data-status result;
+  raw-field helpers preserve one nil value at native `type()` call boundaries.
+- Retain native login claim denial, calendar input-lock prevention and modern
+  account-protection flags. No schedule, local eligibility or reward transaction
+  is invented; observed cache data is not proof of service freshness.
+- Extend the existing census suite with actual command/realm/cache boundaries
+  and complete source-qualified native init, ready, queue, callback and getter
+  functions. Qualification results and deployed live-card authority remain
+  separate; this source change does not close the broader issue.
+
 ## 0.2.50-dev (2026-10-28) -- Observe native loot entry with finite output (#607) [not-started]
 
 - Observe the actual native end-condition entry before the deferred read-only

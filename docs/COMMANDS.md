@@ -184,8 +184,14 @@ vdl_dump, vdl_save, vdl_level, vdl_help
 
 ### `mp` (modded_progression)
 ```
-mp_dump, mp_loot_diag, mp_reset
+mp_dump, mp_loot_diag, mp_reset, mp_login_diag <day/index>
 ```
+
+`mp_login_diag` is a private-stream, read-only snapshot of already-cached native
+login metadata and at most eight reward cells for the explicit positive index.
+It does not fetch, claim, reset, prove eligibility, or grant rewards. Run only after
+normal backend initialization; unavailable/unsupported data is not a PASS. Output
+is raw `[mp:1684]` console-log data, limited to eleven rows per command invocation.
 
 ### `dcp` (dynamic_cosmetic_portraits)
 ```

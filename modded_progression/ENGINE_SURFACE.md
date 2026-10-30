@@ -94,6 +94,31 @@ Calendar login safety is a separate pre-action denial owner, not a local grant.
 | `HeroWindowGotwfOverview._claim_daily_reward` [hook; `_mp_calendar_login_guard.lua`] | Native calendar claim calls the peddler, then unconditionally latches `_awaiting_result` and blocks parent input; only its callback releases it [src 6.13.0: `scripts/ui/views/hero_view/windows/hero_window_gotwf_overview.lua:818-840,842-895`] | Deny modded/unreadable authority before any native UI/backend reads or writes; only explicit official false delegates with native tuples/errors | Prevents the no-callback calendar input lock while #589 retains request suppression; no local login grant, schedule, fake callback or forced unblock. Class is loaded before ModManager by `boot.lua:387-404,1321` and store require-list; event activity is not a class-load gate |
 | `HeroWindowItemCustomization._enable_craft_button` / `_update_state_craft_button` [hooks] | Native craft visibility and hotspot state read `read_only_backend` [src 6.13.0: `scripts/ui/views/hero_view/windows/hero_window_item_customization.lua:1877-1905,1928`] | Retains the existing Fresh-aware legacy wrapper | Not a current native-menu crafting implementation; keep account protection unchanged and treat a local crafting transaction/presentation adapter as separate work |
 
+### Cached-only login evidence (issue 1684)
+
+`/mp_login_diag <day/index>` extends the existing `_mp_diag_fresh_profile.lua`
+owner; it adds no hook. After one private native-first realm query, exact known
+Modded authority permits raw reads of the current backend `_interfaces.peddler`
+and `_login_rewards`. No `ready`, `get_interface`, getter, refresh, claim or
+request is called to obtain data. At most eight selected reward cells and
+ninth-cell presence produce eleven validated ASCII rows (700 bytes per row).
+Opaque values are type-only and no payload/interface reference is retained.
+
+Native 6.13.0 `BackendInterfacePeddlerPlayFab.init:15-35` calls
+`refresh_login_rewards`; that method queues `getStoreRewards` without an EAC
+challenge at `backend_interface_peddler_playfab.lua:783-791`. Its callback
+replaces `_login_rewards` at 793-801, and getter 803-805 only returns the cache.
+`ready:37-39` and `BackendManagerPlayFab._interfaces_ready:959-979` gate normal
+initialization on current interfaces. These complete source functions are
+pinned in the mandatory offline fixture, not reimplemented as a backend.
+
+Personal-time fields and calendar fields stay distinct. An `observed_cache`
+record is not freshness, local eligibility or a completed grant; unavailable
+or unsupported data is not PASS. #589 request denial and the calendar
+pre-input-lock denial remain unchanged. No Official warmup or forced refresh
+is a diagnostic prerequisite. The explicit index/cached-response timing is the
+command-only exception; #840's automatic backend-ready census is unchanged.
+
 ### Bounded mission-loot layer diagnostics (issue 607)
 
 `_mp_loot_diag_runtime.lua` owns this complete adapter set; the entry point has

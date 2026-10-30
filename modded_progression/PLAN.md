@@ -17,6 +17,14 @@ Internal id: `mp`. Target: a fully local modded-realm progression universe with 
 > slices remain separate unfinished work. Local UI source/fixture coverage is
 > not live acceptance or completion of all #1684/#573 requirements.
 
+Cached-login evidence (#1684): `/mp_login_diag <day/index>` inspects only the
+current native peddler response, using the existing census owner. The explicit
+index avoids guessing a current reward day. It makes no request or grant and
+does not establish eligibility or cache freshness. Native source admits the
+read-only `getStoreRewards` population route without an Official-mode warmup;
+actual current-session payload still requires observation. Mixed local reward
+transactions and mission containers remain unfinished, separate owners.
+
 ## Goal
 
 Make modded realm a fully distinct, self-contained progression universe. Earn XP, level careers, accumulate currency, open chests, claim Okri's Challenges, buy from Lohner's, craft and salvage at the keep bench — all the systems vanilla offers, all working, all writing to local VMF settings instead of PlayFab.
