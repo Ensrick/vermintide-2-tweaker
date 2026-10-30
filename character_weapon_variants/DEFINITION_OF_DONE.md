@@ -12,7 +12,9 @@ If a gate cannot be satisfied right now, you must either:
 1. Fix it before declaring complete, OR
 2. Record an explicit deferral in `CHANGELOG.md` for that version with
    (a) the gate name, (b) the failure mode (dump output, repro steps),
-   and (c) the reason for deferral. Then add a `TODO.md` entry.
+   and (c) the reason for deferral. Track the remaining work on an existing
+   GitHub issue (search before opening one), following the lifecycle doctrine
+   in the root `CLAUDE.md`. Do not create a floating `TODO.md` entry.
 
 A variant landed without walking these gates IS the bug class this
 file exists to prevent. Version history is full of variants that
@@ -140,10 +142,10 @@ package preloads.
 
 - [ ] Variant has its own `inventory_icon` and `hud_icon`, OR
 - [ ] Variant explicitly points at the source weapon's vanilla icons
-  AND a `TODO.md` entry exists for custom icons.
+  AND a GitHub issue tracks the custom-icon work.
 
 A variant without any icon plan is NOT done. "I'll do icons later"
-without a TODO is the failure mode.
+without tracked follow-up is the failure mode.
 
 ### U-6. Localization
 
@@ -423,14 +425,15 @@ If 3P animation work is non-trivial (new closed vocabulary, new
 remap table entries) and would block shipping otherwise polished
 work, defer with:
 
-- `TODO.md` entry naming the variant and missing events.
+- An existing GitHub issue naming the variant and missing events.
 - `CHANGELOG.md` entry naming the gap explicitly: e.g.
   `Known issue: 3P L3 no-ops for X career (body holds previous idle —
-  see feedback_vt2_no_tpose_default_stance); fix tracked in TODO.md`.
+  see feedback_vt2_no_tpose_default_stance); tracked in GitHub issue #<number>`.
 
-A 3P animation gap is the ONE gate where shipping with explicit
-deferral is acceptable — every other gate in this file must be
-either fixed or explicitly TODO'd before declaring complete.
+An isolated 3P animation gap may ship with this explicit deferral; known
+crashes, invalid source admission and asset/wire-safety failures are not
+covered by that exception. Deferred gates stay pending in the changelog and
+linked GitHub issue; do not declare the variant complete without evidence.
 
 ---
 
@@ -568,8 +571,8 @@ When a variant is declared complete (or substantially updated),
 the CHANGELOG entry must end with:
 
 ```
-**DoD:** Universal walked. Trait gates: <list, e.g. G-DUAL, G-CROSS-CHAR>.
-Deferrals: <none, OR list with TODO refs>.
+**DoD:** Universal: <walked gates and any pending gates>. Trait gates: <list>.
+Deferrals: <none, OR list with GitHub issue refs>.
 ```
 
 Examples:
@@ -577,7 +580,7 @@ Examples:
 ```
 **DoD:** Universal walked. Trait gates: G-RANGED, G-CROSS-CHAR.
 Deferrals: G-3P-ANIM — H2 plays as base spear thrust on Bardin;
-TODO.md "Tuskgor Javelin Bardin H2 anim".
+GitHub issue #<number>, "Tuskgor Javelin Bardin H2 anim".
 ```
 
 ```

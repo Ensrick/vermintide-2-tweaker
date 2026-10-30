@@ -153,7 +153,7 @@ return function(H, repo_root)
 		for key, expected in pairs({ es_1h_sword = "empire", we_1h_sword = "elven" }) do
 			local family_id, family, member = policy.member(key)
 			H.equal(family_id, "one_handed_swords"); H.equal(member.default, expected)
-			H.equal(#member.order, 2); H.equal(member.order[1], expected)
+			H.equal(#member.order, key == "es_1h_sword" and 3 or 2); H.equal(member.order[1], expected)
 			H.equal(policy.diagnostic_candidate(key), nil)
 			H.equal(family.styles.empire.receivers.we_1h_sword.template, "cwv_645_empire_sword_style")
 			H.equal(family.styles.elven.receivers.es_1h_sword.template, "cwv_645_elven_sword_style")

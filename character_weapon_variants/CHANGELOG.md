@@ -1,5 +1,40 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.563-dev (2026-10-30) -- Mace combat style on Kruber's Sword (#645)
+
+- Add the Mace combat-style option to Kruber's one-handed Sword only, using
+  retained native Mace attack chains with the Sword's damage, stagger, cleave
+  and impact effects. Preserve native career, inspect and wield actions.
+- Apply one 5% movement factor to the admitted local human's wielded Mace-style
+  Sword in either melee-capable weapon slot. Preserve native movement limits,
+  forced-input behavior, return tuples and original errors.
+- Capture initial equipment after native player ownership is assigned; reject
+  stale callbacks and equal-comparing replacement tables. Existing residency,
+  inventory, style transactions and lifecycle owners remain responsible for
+  resource acquisition, invalidation, restoration and teardown.
+- Keep the published reciprocal Sword pair independent of Mace-only failures.
+  Add construction, movement and actual-caller integration coverage. These
+  offline checks do not establish VMF/Stingray ABI or in-game acceptance.
+- Preserve legacy Greatsword style persistence and skip an unavailable Mace
+  when cycling the still-admitted reciprocal Sword choices. Document actual
+  creation-context ordering in the portable secondary-slot rebuild fixture.
+- Remove obsolete entry-point notes for already-removed exports and the
+  completed Musket namespace migration (recorded in 0.1.329 and 0.1.357).
+  Preserve the existing 1490-line ratchet; no executable statements are packed
+  or removed and no ceiling is raised.
+- Reservation 0.1.562-dev was retired unused after an owner-format mismatch
+  stopped canonical BuildOnly before compilation. Its number remains burned;
+  this fresh reservation uses the publisher's normal environment-derived owner.
+- Definition-of-Done deferrals: U-9/G-3P-ANIM/G-APPEARANCE still require actual
+  game launch, animation/preview/transition and later peer verification; no
+  installed game is available here. Track those gates and the unfinished
+  Elf/Tuskgor family in existing issue #645, not a new live-test invitation.
+
+**DoD:** At source review, the Universal offline subset was checked; U-8 artifact/publication
+and U-9 live verification pending. Trait gates: G-3P-ANIM and G-APPEARANCE pending.
+Deferrals: GitHub #645 tracks actual launch, animation, preview, transition and
+peer acceptance; the separate Elf/Tuskgor family is unfinished.
+
 ## 0.1.561-dev (2026-10-29) -- Reciprocal one-handed Sword admission (#645)
 
 - Add the Empire/Elven one-handed Sword family through dedicated construction,

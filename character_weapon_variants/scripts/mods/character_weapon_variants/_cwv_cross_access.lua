@@ -357,6 +357,7 @@ local _candidate_diagnostic_probe = nil
 -- fires every wield, the registration fires once at module load.
 _cwv_wield_hook_registration_count = _cwv_wield_hook_registration_count + 1
 mod:hook_safe("SimpleInventoryExtension", "wield", function(self, slot_name)
+	if _om.mace_sword_runtime then _om.mace_sword_runtime:invalidate_inventory(self, slot_name) end
 	-- (1) Cross-access local weapon tracking (slot_melee only, local player only).
 	-- Feeds the network-bound WeaponUnitExtension remap hook below.
 	if slot_name == "slot_melee" then
@@ -415,6 +416,7 @@ mod:hook_safe("SimpleInventoryExtension", "wield", function(self, slot_name)
 	if _om._exact_pair_publish_inventory then
 		_om._exact_pair_publish_inventory(self, "wield")
 	end
+	if _om.mace_sword_runtime then _om.mace_sword_runtime:refresh(self, slot_name) end
 end)
 
 -- Resolve the local player's 3P body unit fresh each call (the unit can

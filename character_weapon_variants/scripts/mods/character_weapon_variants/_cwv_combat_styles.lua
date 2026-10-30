@@ -164,9 +164,12 @@ M.FAMILIES = {
 			elven = { label = "Elven Sword Combat Style", template = "we_one_hand_sword_template_1",
 				resource = "units/beings/player/first_person_base/state_machines/melee/1h_sword",
 				receivers = { es_1h_sword = { template = "cwv_645_elven_sword_style" } } },
+			mace = { label = "Mace Combat Style", template = "one_handed_hammer_template_1",
+				resource = "units/beings/player/first_person_base/state_machines/melee/1h_hammer",
+				receivers = { es_1h_sword = { template = "cwv_645_mace_sword_style" } } },
 		},
 		members = {
-			es_1h_sword = { default = "empire", order = { "empire", "elven" } },
+			es_1h_sword = { default = "empire", order = { "empire", "elven", "mace" } },
 			we_1h_sword = { default = "elven", order = { "elven", "empire" } },
 		},
 	},
@@ -395,7 +398,17 @@ end
 function M.style(item_key, stored_style)
 	local family_id, family, member = M.member(item_key)
 	if not family_id then return nil end
-	local style_id = family.styles[stored_style] and stored_style or member.default
+	local style_id = member.default
+	if not M.is_sword_item(item_key) then
+		if family.styles[stored_style] then style_id = stored_style end
+	else
+		for _, candidate in ipairs(member.order) do
+			if candidate == stored_style and family.styles[candidate] then
+				style_id = candidate
+				break
+			end
+		end
+	end
 	return style_id, family.styles[style_id], family_id, member
 end
 
@@ -1123,61 +1136,6 @@ function M.build_spear_shield_templates(weapons, clone)
 	}
 end
 
--- Owner-side style resource ownership, moved out of the entry so the authored
--- allowlist lives next to FAMILIES.
---
--- A style can replace the first-person state machine even though the base
--- item's career packages did not load it (Tuskgor Hunter -> Infantry is the
--- concrete case). Own one reference per curated vanilla resource and invoke the
--- transition only from PackageManager's completion callback. Never pass
--- arbitrary item/UI data to PackageManager: a nonexistent package faults in the
--- engine's async queue outside Lua's pcall boundary.
---
--- Returns (acquire, resident). `resident` is the #786 Stage C OBSERVER-side
--- read: same PackageManager, no reference name so any holder counts, acquires
--- nothing and gates nothing. `package_manager` is a lazy getter because this
--- binds before Managers.package necessarily exists.
-function M.new_resource_acquirer(package_manager)
-	local allowlist, held, REFERENCE = {}, {}, "cwv_combat_styles"
-	for _, family in pairs(M.FAMILIES) do
-		for _, style in pairs(family.styles) do
-			if type(style.resource) == "string" then allowlist[style.resource] = true end
-		end
-	end
-	local function manager()
-		return type(package_manager) == "function" and package_manager() or nil
-	end
-	local function acquire(path, callback)
-		if not allowlist[path] then return false, "resource is not authored" end
-		local packages = manager()
-		if not packages then return false, "package manager unavailable" end
-		if held[path] then
-			local loaded = false
-			pcall(function() loaded = packages:has_loaded(path, REFERENCE) and true or false end)
-			callback(loaded, loaded and nil or "held resource lost")
-			return loaded
-		end
-		held[path] = true
-		packages:load(path, REFERENCE, function()
-			local loaded = false
-			pcall(function() loaded = packages:has_loaded(path, REFERENCE) and true or false end)
-			callback(loaded, loaded and nil or "resource completion was not resident")
-		end, true, true)
-		return true
-	end
-	local function resident(path)
-		if not allowlist[path] then return nil end
-		local packages = manager()
-		if type(packages) ~= "table" or type(packages.has_loaded) ~= "function" then
-			return nil
-		end
-		local ok, loaded = pcall(packages.has_loaded, packages, path)
-		if not ok then return nil end
-		return loaded == true
-	end
-	return acquire, resident
-end
-
 function M.install(mod, deps)
 	deps = deps or {}
 	local store = M.normalize_store(mod:get(M.SETTING_KEY))
@@ -1570,11 +1528,16 @@ function M.install(mod, deps)
 
 	function runtime:next_style(item_key_value, current)
 		local next_id, row, family = M.next_style(item_key_value, current, deps.owns_dlc)
-		if M.is_sword_item(item_key_value) and next_id and not self:package(item_key_value, next_id) then
-			local selected, style = M.style(item_key_value, current)
-			return selected, style, family
+		if not M.is_sword_item(item_key_value) then return next_id, row, family end
+		local _, _, member = M.member(item_key_value)
+		if not member or not next_id then return next_id, row, family end
+		for _ = 1, #member.order do
+			if self:package(item_key_value, next_id) then return next_id, row, family end
+			next_id, row, family = M.next_style(item_key_value, next_id, deps.owns_dlc)
+			if not next_id then break end
 		end
-		return next_id, row, family
+		local selected, style = M.style(item_key_value, current)
+		return selected, style, family
 	end
 
 	function runtime:moveset_indicator(item_key_value, current, compact)
@@ -1917,6 +1880,10 @@ function M.install(mod, deps)
 		end
 		if not self:actor_admitted(row.item_key, item, backend_id, actor) then return false, "actor unavailable" end
 		if not self:package(row.item_key, desired) then return false, "construction unavailable" end
+		if deps.before_style_commit ~= nil then
+			if type(deps.before_style_commit) ~= "function" then return false, "style boundary unavailable" end
+			deps.before_style_commit(row, desired)
+		end
 		local changed, err = M.set(store, row.identity, row.item_key, desired)
 		if not changed then return false, err or "unchanged" end
 		row.item_data.mod_data = row.item_data.mod_data or {}

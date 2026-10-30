@@ -90,11 +90,16 @@ return function(H, root)
             dofile = function(_, name) return load(assert(name:match("([^/]+)$"))) end,
         }, c.state, c.core, c.graph, c.helper, c.career_envelope, load("_lib_career_weapon_actions"),
             function(name, fn)
-                H.equal(name, "issue645_reciprocal_one_handed_sword_family")
-                s.family_check = fn
+                if name == "issue645_reciprocal_one_handed_sword_family" then s.family_check = fn
+                elseif name == "issue645_mace_on_kruber_sword_family" then s.mace_check = fn
+                else error("unexpected family check: " .. tostring(name)) end
             end)
         H.equal(s.family_check(), nil, "real serial construction and retained owner required")
+        local before_expression = assert(entry:match("\n\t\tbefore_style_commit = ([^\n]+),\n"))
+        local before_commit = c.T.run("return function(_om) return " .. before_expression .. " end",
+            c.env, "actual-entry-before-style-commit-value")(c.state)
         s.runtime = P.install(s.mod, { actor_admission = s.actor, sword_family = s.sword_family,
+            before_style_commit = before_commit,
             local_equipment = function() return s.inventory end,
             peer_for_owner = function(unit) return unit == s.remote_unit and "remote" or unit == s.unit and "local" or nil end,
             acquire_style_resource = function(_, callback) s.complete = callback; return true end,
