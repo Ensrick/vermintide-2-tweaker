@@ -1,5 +1,28 @@
 # Regression Checklist — character_weapon_variants
 
+## #719 Finite peer observation
+
+- Run the existing child/installed-chain/isolation and actual runner suites.
+  Keep raw field/metatable/error restoration checks; do not replace the child
+  with a healthy shim or count a tooling verdict as model/network acceptance.
+- Five and 32 valid holders may complete; 33 dense or keyed roster entries
+  must SKIP. Dead/malformed entries spend the same scan budget. An encountered
+  real defect wins over missing text, missing logging or an unvisited tail.
+- Require printable ASCII, at most 33 attempted `[cwv:719]` rows, each at most 768
+  bytes, aggregate at most 25,344 formatted bytes and result at most 2,048.
+  Unproven counts survive omitted samples. No complex __tostring is executed.
+  Exercise every input byte against an independent numeric printable-range
+  oracle; a syntax-only parse cannot validate a Lua pattern at runtime.
+  Existing production `[cwv:660]` log-once evidence is a separate unchanged
+  route; this is not a byte cap for the whole regression command or nested calls.
+- Repeat and reenter the same real callback; missing/throwing sinks must SKIP
+  otherwise healthy observations, then recover after the same sink is restored.
+  Preserve genuine FAIL and opaque uncaught-error identities.
+- Qualify the five documented source faults through their actual normal
+  assertions. New source, parser success or added tests alone are not evidence.
+  Keep #719 not-started until canonical publication and exact finite-source/card
+  admission. Solo owner evidence comes before reversed-role co-op acceptance.
+
 ## #1656 Scoped semantic-identity check state
 
 - Existing host owners: `test_cwv_regression_harness_1656.lua` and

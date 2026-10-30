@@ -210,6 +210,20 @@ Never adopt a foreign transport during a check or treat a component PASS as
 gameplay evidence. Restart normally after an updated CWV build; hot reload is
 not an ownership-rebinding protocol.
 
+The existing #719 transaction child bounds live observation independently of
+game/BTMP capacity: 32 keyed roster entries plus one completion lookahead per
+invocation. Partial rosters, clipped display evidence and missing/throwing
+engine logging produce SKIP, never PASS; encountered defects remain FAIL.
+Identity/model/mode comparisons use raw values, not their printable display
+projections. Per-call budgets also survive same-closure reentry independently.
+Its `[cwv:719]` sink permits at most 33 attempted rows of 768 bytes,
+1,536 sampled-reason bytes and a
+2,048-byte runner result are retained; omitted reasons still count as unproven.
+The existing literal sinks remain source-owned, with no global printf swap.
+The separate production `[cwv:660]` log-once route, #1656 decorator, transport
+owners and actual gameplay are not changed. The cap is not for the entire
+regression command; nested invocations each have their own diagnostic budget.
+
 ## Where new code goes
 
 - Keep husk resource truth and bounded donor/override leases in the existing

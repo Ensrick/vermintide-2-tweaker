@@ -29,13 +29,17 @@
 --      pick/hammer rotation is the presentation owner's last write.
 -- Verdict: FAIL on any defect; PASS only when at least one Crowbill holder was
 -- proven and none was left unproven; otherwise a `skip:` verdict (#1656 runner
--- sentinel) naming every reason, so a PASS row on either peer proves its leg ran.
+-- sentinel) with bounded samples/counts, so a PASS row proves its leg ran and
+-- the whole diagnostic roster budget completed. This is not a gameplay cap.
 -- Diagnostics go through engine printf only; nothing here writes a global.
 -- `ctx.env` is the offline seam: a table consulted before the engine global of
 -- the same name (Managers, Unit, ScriptUnit, Quaternion, Weapons, printf).
 return function(_, ctx)
 	local _om = ctx.om
 	local SLOT = "slot_melee"
+	local MAX_ROSTER_ENTRIES, MAX_ATOM_BYTES = 32, 160
+	local MAX_DETAIL_BYTES, MAX_LINE_BYTES, MAX_RESULT_BYTES = 512, 768, 2048
+	local MAX_SAMPLE_BYTES, MAX_EMISSIONS = 1536, 33
 	-- Raw _om fields leg 1 replaces for its duration and always restores.
 	local SWAPPED = { "_appearance_husk_wield_context", "_husk_identity_descriptor",
 		"_husk_apply_cwv_transform", "_probe_579_hand_compare", "_probe_279_spawn" }
@@ -46,32 +50,63 @@ return function(_, ctx)
 		return rawget(_G, name)
 	end
 
-	local function emit(fmt, ...)
+	-- Display only: never compare this projection as identity. Copy the bounded
+	-- prefix before scanning bytes, and never invoke an engine object's tostring.
+	-- Every mutable budget belongs to one returned-callback INVOCATION.
+	local function bounded_text(value, limit, budget)
+		local kind, raw = type(value), nil
+		if kind == "string" then raw = value
+		elseif kind == "number" or kind == "boolean" or kind == "nil" then raw = tostring(value)
+		else raw = "<" .. kind .. ">"; budget.lossy = true end
+		local clipped = #raw > limit
+		local prefix = clipped and raw:sub(1, limit - 1) .. "~" or raw
+		-- Keep the pattern itself NUL-free for the approved Lua 5.1 host.
+		local clean, replaced = prefix:gsub("[^ -~]", "?")
+		if clipped or replaced > 0 then budget.lossy = true end
+		return clean
+	end
+	local function atom(value, budget) return bounded_text(value, MAX_ATOM_BYTES, budget) end
+
+	local function emit(fmt, budget, ...)
+		-- Literal formats stay at their existing call sites. The holder format
+		-- has 48 fixed bytes + role<=8 + peer<=160 + verdict<=8 + detail<=512:
+		-- <=736 bytes. Guard the actual formatted line as well, before the sink.
+		if budget.emitted >= MAX_EMISSIONS then budget.lossy = true; return end
+		budget.emitted = budget.emitted + 1
+		local line = string.format(fmt, ...)
+		if #line > MAX_LINE_BYTES or line:find("[^ -~]") then
+			budget.lossy = true
+			return
+		end
 		local sink = global("printf")
-		if type(sink) == "function" then pcall(sink, fmt, ...) end
+		if type(sink) ~= "function" then budget.lossy = true; return end
+		local ok = pcall(sink, fmt, ...)
+		if not ok then budget.lossy = true end
 	end
 
 	-- A copy whose fingerprint can never equal a real peer's, so the shared
 	-- `660_preselect:<fingerprint>` log-once key and its text stay distinct.
-	local function synthetic(descriptor)
+	local function synthetic(descriptor, budget)
 		local copy = {}
 		for key, value in pairs(descriptor) do copy[key] = value end
-		copy.fingerprint = "rt719:" .. tostring(descriptor.fingerprint or descriptor.variant_key)
+		-- Only this synthetic diagnostic/log key is projected; real descriptor
+		-- fields and all model/identity comparisons below remain raw.
+		copy.fingerprint = "rt719:" .. atom(descriptor.fingerprint or descriptor.variant_key, budget)
 		return copy
 	end
 
 	local function quiet() end
 
-	local function transaction(descriptor, family, model, career, template_name)
+	local function transaction(descriptor, family, model, career, template_name, budget)
 		local weapons = global("Weapons")
 		template_name = template_name or family.SOURCE_TEMPLATE
 		local item_template = type(weapons) == "table" and weapons[family.SOURCE_TEMPLATE] or nil
 		local expected_template = type(weapons) == "table" and weapons[template_name] or nil
 		if type(item_template) ~= "table" or type(expected_template) ~= "table" then
 			return "#719 Crowbill weapon templates are not registered: "
-				.. tostring(family.SOURCE_TEMPLATE) .. ", " .. tostring(template_name)
+				.. atom(family.SOURCE_TEMPLATE, budget) .. ", " .. atom(template_name, budget)
 		end
-		local probe = synthetic(descriptor)
+		local probe = synthetic(descriptor, budget)
 		local owner = {}
 		local item_data = { name = family.SOURCE_ITEM }
 		local item_units = { right_hand_unit = family.PLACEHOLDER_UNIT }
@@ -122,11 +157,11 @@ return function(_, ctx)
 		for index, field in ipairs(SWAPPED) do rawset(_om, field, saved[index]) end
 		if not transaction_ok then
 			return "#719 production husk spawn transaction failed: "
-				.. tostring(transaction_error)
+				.. atom(transaction_error, budget)
 		end
 		if selected_template ~= expected_template then
 			return "#719 production husk spawn handed vanilla a template other than the"
-				.. " variant's declared " .. tostring(template_name)
+				.. " variant's declared " .. atom(template_name, budget)
 		end
 		if transform_calls ~= 1 then
 			return "#719 post-spawn presentation adapter did not run exactly once"
@@ -136,7 +171,7 @@ return function(_, ctx)
 	-- Leg 2: drive the production rebuild against a recording inventory. The
 	-- only acceptable trace is the announced destroy followed by vanilla's own
 	-- re-equip sender carrying the same item; a local add/wield is the defect.
-	local function owner_wire(family)
+	local function owner_wire(family, budget)
 		local runtime = _om.crowbill_runtime
 		if type(runtime) ~= "table" or type(runtime.rebuild_slot) ~= "function" then
 			return "#719 Crowbill Weapon Special rebuild owner is not installed"
@@ -144,14 +179,14 @@ return function(_, ctx)
 		local calls, resynced = {}, nil
 		local inv = {
 			destroy_slot = function(_, slot_name, allow)
-				calls[#calls + 1] = "destroy:" .. tostring(slot_name) .. ":" .. tostring(allow)
+				calls[#calls + 1] = "destroy:" .. atom(slot_name, budget) .. ":" .. atom(allow, budget)
 			end,
 			add_equipment = function() calls[#calls + 1] = "local_add" end,
 			wield = function() calls[#calls + 1] = "local_wield" end,
 			_spawn_resynced_loadout = function(_, row, skip_wield)
 				resynced = row
-				calls[#calls + 1] = "resync:" .. tostring(row and row.slot_id)
-					.. ":" .. tostring(skip_wield)
+				calls[#calls + 1] = "resync:" .. atom(row and row.slot_id, budget)
+					.. ":" .. atom(skip_wield, budget)
 			end,
 		}
 		local item = { name = family.SOURCE_ITEM }
@@ -160,7 +195,7 @@ return function(_, ctx)
 		if ok ~= true or trace ~= "destroy:" .. SLOT .. ":true,resync:" .. SLOT .. ":false"
 				or not resynced or resynced.item_data ~= item then
 			return "#719 Weapon Special rebuild does not re-add the slot for observers: "
-				.. tostring(why or trace)
+				.. atom(why or trace, budget)
 		end
 	end
 
@@ -219,7 +254,7 @@ return function(_, ctx)
 	-- Observers return (fail, detail, proven): `fail` is a defect, `detail`
 	-- with proven=true is a completed leg, `detail` with proven=false is a
 	-- Crowbill holder this peer could not prove, and (nil, nil) is no holder.
-	local function observe_remote(player, unit, family)
+	local function observe_remote(player, unit, family, budget)
 		local descriptor, state = nil, "none"
 		if _om._husk_identity_descriptor then
 			descriptor, state = _om._husk_identity_descriptor(unit, SLOT, family.SOURCE_ITEM, player)
@@ -233,26 +268,27 @@ return function(_, ctx)
 			-- the remote that would render Sienna's donor, so it is never a PASS.
 			local held = type(slots) == "table" and slots[SLOT] and slots[SLOT].item_data
 			if state ~= "native" and held and held.name == family.SOURCE_ITEM then
-				return nil, family.SOURCE_ITEM .. " held with identity state="
-					.. tostring(state), false
+				return nil, atom(family.SOURCE_ITEM, budget) .. " held with identity state="
+					.. atom(state, budget), false
 			end
 			return nil, nil, false
 		end
 		local key = descriptor.variant_key
+		local label = atom(key, budget)
 		local wielded = inv and (inv.wielded_slot or (equipment and equipment.wielded_slot))
-		if wielded ~= SLOT then return nil, key .. " held, not wielded", false end
+		if wielded ~= SLOT then return nil, label .. " held, not wielded", false end
 		if type(slots) ~= "table" or slots[SLOT] == nil then
-			return "#719 observer lost the remote " .. key .. " slot while it is wielded"
+			return "#719 observer lost the remote " .. label .. " slot while it is wielded"
 				.. " (the Weapon Special rebuild never re-added it): weapon invisible"
 		end
 		local item_data = slots[SLOT].item_data
 		if not (item_data and item_data.name == family.SOURCE_ITEM) then
-			return nil, key .. " identity retained, slot holds "
-				.. tostring(item_data and item_data.name), false
+			return nil, label .. " identity retained, slot holds "
+				.. atom(item_data and item_data.name, budget), false
 		end
 		local weapon = equipment.right_hand_wielded_unit_3p
 		if not alive(weapon) then
-			return "#719 observer has no live 3P unit for the wielded remote " .. key
+			return "#719 observer has no live 3P unit for the wielded remote " .. label
 		end
 		local hand_unit = _om.combat_style_appearance
 			and type(_om.combat_style_appearance.hand_unit) == "function"
@@ -261,33 +297,33 @@ return function(_, ctx)
 		local expected = type(hand_unit) == "string" and hand_unit .. "_3p" or nil
 		local observed = observed_unit_name(weapon, unit, expected, family)
 		if observed == family.PLACEHOLDER_UNIT .. "_3p" then
-			return "#719 observer renders Sienna's donor Crowbill for the remote " .. key
+			return "#719 observer renders Sienna's donor Crowbill for the remote " .. label
 		end
 		if expected and observed ~= expected then
-			return "#719 observer renders " .. tostring(observed) .. " for the remote "
-				.. key .. ", expected " .. expected
+			return "#719 observer renders " .. atom(observed, budget) .. " for the remote "
+				.. label .. ", expected " .. atom(expected, budget)
 		end
 		local presentation = _om.crowbill_presentation_owner
 		local record = presentation and presentation.record and presentation:record(weapon)
 		if not record or record.surface ~= "remote_husk" then
-			return "#719 remote " .. key .. " spawned without the husk pick/hammer presentation"
+			return "#719 remote " .. label .. " spawned without the husk pick/hammer presentation"
 		end
 		local state_mode = _om.crowbill_mode_state and _om.crowbill_mode_state:mode(record.identity)
 		if state_mode and record.mode ~= state_mode then
-			return "#719 remote " .. key .. " shows the " .. tostring(record.mode)
-				.. " face while its owner chose " .. tostring(state_mode)
+			return "#719 remote " .. label .. " shows the " .. atom(record.mode, budget)
+				.. " face while its owner chose " .. atom(state_mode, budget)
 		end
 		local retained = rotation_retained(weapon, record.expected_rotation)
 		if retained == false then
-			return "#719 remote " .. key .. " lost its " .. tostring(record.mode)
+			return "#719 remote " .. label .. " lost its " .. atom(record.mode, budget)
 				.. " rotation after the presentation write"
 		end
-		local detail = key .. " unit=" .. tostring(observed) .. " mode=" .. tostring(record.mode)
+		local detail = label .. " unit=" .. atom(observed, budget) .. " mode=" .. atom(record.mode, budget)
 			.. " rotation=" .. (retained == nil and "unread" or "retained")
 		return nil, detail, retained == true
 	end
 
-	local function observe_owner(unit, family)
+	local function observe_owner(unit, family, budget)
 		local runtime = _om.crowbill_runtime
 		local _, equipment = inventory_of(unit)
 		local slot = equipment and equipment.slots and equipment.slots[SLOT]
@@ -300,63 +336,93 @@ return function(_, ctx)
 		for _, payload in ipairs(payloads) do
 			if payload.slot == SLOT and payload.item_key == key
 					and type(payload.fingerprint) == "string" and payload.fingerprint ~= "" then
-				return nil, key .. " publishes exact identity", true
+				return nil, atom(key, budget) .. " publishes exact identity", true
 			end
 		end
-		return "#719 owner's equipped " .. key .. " does not publish exact identity:"
+		return "#719 owner's equipped " .. atom(key, budget) .. " does not publish exact identity:"
 			.. " every observer would fall back to Sienna's donor"
 	end
 
-	local function peer_observation(family)
+	local function peer_observation(family, budget)
 		local managers = global("Managers")
 		local resolver = _om.peer_resolver
 		local players = resolver and resolver.human_players(managers and managers.player)
 		if type(players) ~= "table" then
-			emit("[cwv:719] peer observation SKIP reason=no_player_manager")
+			emit("[cwv:719] peer observation SKIP reason=no_player_manager", budget)
 			return "skip: legs 1-2 passed; no player manager to observe peers"
 				.. " (reason=no_player_manager)"
 		end
-		local proven, unproven = 0, {}
-		for _, player in pairs(players) do
+		local proven, unproven_count, omitted, sample_bytes = 0, 0, 0, 0
+		local samples, cursor, scanned, complete = {}, nil, 0, false
+		-- A work budget, not a four-player or BTMP capacity assertion. Count
+		-- every keyed entry; one lookahead below proves exact completion at 32.
+		for scan_index = 1, 32 do
+			local key, player = next(players, cursor)
+			if key == nil then complete = true; break end
+			cursor, scanned = key, scan_index
 			local unit = type(player) == "table" and player.player_unit
 			if alive(unit) then
 				local role = player.remote and "observer" or "owner"
-				local peer = tostring(resolver.player_peer_id(player))
+				local peer = atom(resolver.player_peer_id(player), budget)
 				local err, detail, ok_leg
 				if player.remote then
-					err, detail, ok_leg = observe_remote(player, unit, family)
+					err, detail, ok_leg = observe_remote(player, unit, family, budget)
 				else
-					err, detail, ok_leg = observe_owner(unit, family)
+					err, detail, ok_leg = observe_owner(unit, family, budget)
 				end
+				if err then err = bounded_text(err, MAX_DETAIL_BYTES, budget) end
+				if detail then detail = bounded_text(detail, MAX_DETAIL_BYTES, budget) end
 				if err or detail then
 					emit("[cwv:719] peer observation role=%s peer=%s verdict=%s %s",
-						role, peer, err and "FAIL" or (ok_leg and "ok" or "unproven"),
-						tostring(err or detail))
+						budget, role, peer, err and "FAIL" or (ok_leg and "ok" or "unproven"),
+						err or detail)
 				end
+				-- An actually encountered defect outranks any diagnostic loss.
 				if err then return err end
 				if ok_leg then
 					proven = proven + 1
 				elseif detail then
-					unproven[#unproven + 1] = "role=" .. role .. " peer=" .. peer .. " " .. detail
+					unproven_count = unproven_count + 1
+					local sample = "role=" .. role .. " peer=" .. peer .. " " .. detail
+					local extra = #sample + (#samples > 0 and 2 or 0)
+					if sample_bytes + extra <= MAX_SAMPLE_BYTES then
+						samples[#samples + 1], sample_bytes = sample, sample_bytes + extra
+					else omitted = omitted + 1 end
 				end
 			end
 		end
-		if #unproven > 0 then
+		if not complete then complete = next(players, cursor) == nil end
+		if not complete then
+			emit("[cwv:719] peer observation SKIP reason=diagnostic_budget", budget)
+			return "skip: legs 1-2 passed; peer observation incomplete"
+				.. " (reason=diagnostic_budget scanned=" .. scanned .. " limit=" .. MAX_ROSTER_ENTRIES
+				.. " proven=" .. proven .. " unproven=" .. unproven_count .. ")"
+		end
+		if budget.lossy then
+			emit("[cwv:719] peer observation SKIP reason=diagnostic_text_budget", budget)
+			return "skip: legs 1-2 passed; diagnostic evidence was not fully representable"
+				.. " (reason=diagnostic_text_budget scanned=" .. scanned
+				.. " proven=" .. proven .. " unproven=" .. unproven_count .. ")"
+		end
+		if unproven_count > 0 then
 			return "skip: legs 1-2 passed; Crowbill holder not proven ("
-				.. table.concat(unproven, "; ") .. ") -- wield the Crowbill and rerun on both peers"
+				.. table.concat(samples, "; ") .. ") sampled=" .. #samples .. " omitted=" .. omitted
+				.. " unproven=" .. unproven_count .. " -- wield the Crowbill and rerun on both peers"
 		end
 		if proven == 0 then
-			emit("[cwv:719] peer observation SKIP reason=no_crowbill_peer")
+			emit("[cwv:719] peer observation SKIP reason=no_crowbill_peer", budget)
 			return "skip: legs 1-2 passed; no Crowbill holder observed (reason=no_crowbill_peer)"
 				.. " -- equip and wield the Imperial or Dawi Crowbill on one peer, rerun on both"
 		end
 	end
 
 	return function(descriptor, family, model, career, template_name)
-		local err = transaction(descriptor, family, model, career, template_name)
-		if err then return err end
-		err = owner_wire(family)
-		if err then return err end
-		return peer_observation(family)
+		local budget = { lossy = false, emitted = 0 }
+		local err = transaction(descriptor, family, model, career, template_name, budget)
+		if err then return bounded_text(err, MAX_RESULT_BYTES, budget) end
+		err = owner_wire(family, budget)
+		if err then return bounded_text(err, MAX_RESULT_BYTES, budget) end
+		err = peer_observation(family, budget)
+		if err then return bounded_text(err, MAX_RESULT_BYTES, budget) end
 	end
 end

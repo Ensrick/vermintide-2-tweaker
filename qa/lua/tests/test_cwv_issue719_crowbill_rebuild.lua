@@ -219,9 +219,10 @@ return function(H, repo_root)
 	end)
 
 	-- Live legs of the named in-game check, driven through ctx.env only.
-	local function check_world(opts)
+	local function check_fixture(opts)
 		opts = opts or {}
 		local lines = {}
+		local stats = { owner = 0, observer = 0 }
 		local mode_state = policy.new()
 		local om = {
 			crowbill_runtime = load_runtime(),
@@ -261,14 +262,26 @@ return function(H, repo_root)
 		if opts.owner_mode then mode_state:set_mode(identity, opts.owner_mode) end
 		if opts.replay then om.crowbill_presentation_owner:reapply(identity, opts.owner_mode) end
 		if opts.drifted then weapon.rotation = { q = "drifted" } end
-		local descriptor = { variant_key = IMPERIAL, right_hand_unit = model.right_hand_unit,
+		local descriptor = { variant_key = IMPERIAL, right_hand_unit = opts.hand_unit or model.right_hand_unit,
 			fingerprint = "fp:719" }
 		om._husk_identity_descriptor = function(unit, slot_name, base)
 			if unit == husk and slot_name == SLOT and base == family.SOURCE_ITEM then
+				stats.observer = stats.observer + 1
 				if opts.remote_state then return nil, opts.remote_state end
 				return descriptor, "exact"
 			end
 			return nil, "none"
+		end
+		if opts.evidence_name ~= nil then
+			om._husk_observed_unit_evidence = function() return opts.evidence_name end
+		end
+		if opts.display_mode ~= nil then
+			local record = om.crowbill_presentation_owner.record
+			om.crowbill_presentation_owner.record = function(self, observed_weapon)
+				local row = record(self, observed_weapon)
+				if row then row.mode = opts.display_mode end
+				return row
+			end
 		end
 
 		local owner_item = { backend_id = "imperial-719", cwv_key = IMPERIAL,
@@ -277,17 +290,20 @@ return function(H, repo_root)
 		function owner_inv:equipment() return self._equipment end
 		local owner_unit = { alive = true, inventory = owner_inv }
 		om._cwv_identity_payloads = function(slots)
+			stats.owner = stats.owner + 1
 			local item_data = slots[SLOT] and slots[SLOT].item_data
 			return { { slot = SLOT, fingerprint = "fp:owner",
 				item_key = opts.collapsed and family.SOURCE_ITEM or item_data.cwv_key } }
 		end
 
+		local remote_player = { remote = true, peer_id = "peer-host", player_unit = husk }
+		local owner_player = { peer_id = "peer-local", player_unit = owner_unit }
 		local players = {}
 		if not opts.no_remote then
-			players[#players + 1] = { remote = true, peer_id = "peer-host", player_unit = husk }
+			players[#players + 1] = remote_player
 		end
 		if not opts.no_owner then
-			players[#players + 1] = { peer_id = "peer-local", player_unit = owner_unit }
+			players[#players + 1] = owner_player
 		end
 		local env = {
 			Managers = { player = { human_players = function() return players end } },
@@ -303,8 +319,19 @@ return function(H, repo_root)
 		}
 		local check = assert(loadfile(mod_root .. "_cwv_issue719_transaction_check.lua"))()(
 			nil, { om = om, env = env })
-		local err = check(descriptor, family, model, "es_mercenary")
-		return err, table.concat(lines, "\n")
+		local fixture = { players = players, owner_player = owner_player, remote_player = remote_player,
+			lines = lines, stats = stats, om = om, env = env, descriptor = descriptor }
+		function fixture.invoke() return check(descriptor, family, model, "es_mercenary") end
+		function fixture.run()
+			for index = #lines, 1, -1 do lines[index] = nil end
+			stats.owner, stats.observer = 0, 0
+			local err = fixture.invoke()
+			return err, table.concat(lines, "\n")
+		end
+		return fixture
+	end
+	local function check_world(opts)
+		return check_fixture(opts).run()
 	end
 
 	H.test("#719 live check passes both peers on the authored model and face", function()
@@ -381,5 +408,236 @@ return function(H, repo_root)
 		H.equal(check_world({ no_remote = true }), nil)
 		local err = check_world({ remote_state = "none" })
 		H.truthy(is_skip(err, "identity state=none"), tostring(err))
+	end)
+
+	local function roster(f, count, kind, keyed)
+		for key in pairs(f.players) do f.players[key] = nil end
+		local original = kind == "observer" and f.remote_player or f.owner_player
+		for index = 1, count do
+			local player = {}
+			for key, value in pairs(original) do player[key] = value end
+			player.peer_id = "budget-peer-" .. index
+			f.players[keyed and ("entry-" .. index) or index] = player
+		end
+	end
+	local function bounded(f, err)
+		H.truthy(err == nil or (type(err) == "string" and #err <= 2048), "#719 result exceeds 2048 bytes")
+		if err then H.equal(err:find("[^ -~]"), nil, "#719 result must be printable ASCII") end
+		H.truthy(#f.lines <= 33, "#719 emits at most 33 lines per invocation")
+		local bytes = 0
+		for _, line in ipairs(f.lines) do
+			H.truthy(#line <= 768, "#719 sink line exceeds 768 bytes")
+			H.equal(line:find("[^ -~]"), nil, "#719 sink must be printable ASCII")
+			bytes = bytes + #line
+		end
+		H.truthy(bytes <= 25344, "#719 formatted sink budget exceeds 25344 bytes")
+	end
+
+	H.test("#719 diagnostic roster budget is 32, not a four-player gameplay cap", function()
+		for _, keyed in ipairs({ false, true }) do
+			for _, count in ipairs({ 5, 32, 33 }) do
+				local f = check_fixture({ no_remote = true })
+				roster(f, count, "owner", keyed)
+				local before = {}; for key, value in pairs(f.players) do before[key] = value end
+				local err = f.run()
+				if count <= 32 then H.equal(err, nil)
+				else H.truthy(is_skip(err, "reason=diagnostic_budget"), "33 entries must SKIP, never PASS") end
+				H.equal(f.stats.owner, math.min(count, 32), "only 32 roster entries may be observed")
+				for key, value in pairs(before) do H.equal(rawequal(rawget(f.players, key), value), true) end
+				for key, value in pairs(f.players) do H.equal(rawequal(rawget(before, key), value), true) end
+				bounded(f, err)
+			end
+		end
+	end)
+
+	H.test("#719 malformed and dead roster entries spend the diagnostic budget", function()
+		for _, keyed in ipairs({ false, true }) do
+			local f = check_fixture({ no_remote = true })
+			for key in pairs(f.players) do f.players[key] = nil end
+			for index = 1, 33 do
+				local value
+				if index % 2 == 0 then value = false
+				else value = { peer_id = "dead", player_unit = { alive = false } } end
+				f.players[keyed and ("dead-" .. index) or index] = value
+			end
+			local err = f.run()
+			H.truthy(is_skip(err, "reason=diagnostic_budget"), "dead entries cannot evade the scan cap")
+			H.equal(f.stats.owner + f.stats.observer, 0)
+			bounded(f, err)
+			f.players[keyed and "one-holder" or 34] = f.owner_player
+			err = f.run()
+			H.truthy(is_skip(err, "reason=diagnostic_budget"), "a partial roster can never PASS")
+			bounded(f, err)
+		end
+	end)
+
+	H.test("#719 lossy fields SKIP, but huge and opaque genuine failures still FAIL safely", function()
+		local huge = string.rep("x", 4096) .. "\n%\000\255"
+		local f = check_fixture({ no_remote = true })
+		f.owner_player.peer_id = huge
+		local err = f.run()
+		H.truthy(is_skip(err, "reason=diagnostic_text_budget"), "lossy peer evidence cannot PASS")
+		bounded(f, err)
+		f = check_fixture({ no_owner = true, remote_state = huge })
+		err = f.run(); H.truthy(is_skip(err, "reason=diagnostic_text_budget")); bounded(f, err)
+		local stringifications = 0
+		local opaque = setmetatable({}, { __tostring = function()
+			stringifications = stringifications + 1; error("complex diagnostic tostring ran")
+		end })
+		f = check_fixture({ no_owner = true, remote_state = opaque })
+		err = f.run(); H.truthy(is_skip(err, "reason=diagnostic_text_budget")); bounded(f, err)
+		for _, fingerprint in ipairs({ huge, opaque }) do
+			f = check_fixture({ no_remote = true }); f.descriptor.fingerprint = fingerprint
+			err = f.run(); H.truthy(is_skip(err, "reason=diagnostic_text_budget")); bounded(f, err)
+		end
+		for _, mode in ipairs({ huge, opaque }) do
+			f = check_fixture({ no_owner = true, display_mode = mode })
+			err = f.run()
+			H.truthy(type(err) == "string" and not is_skip(err, "")
+				and err:find("face while its owner chose", 1, true), "a genuine mode mismatch remains FAIL")
+			bounded(f, err)
+		end
+		f = check_fixture({ no_owner = true, evidence_name = "bad\000%\255unit" })
+		err = f.run()
+		H.truthy(type(err) == "string" and err:find("#719 observer renders ", 1, true) == 1)
+		bounded(f, err)
+		H.equal(stringifications, 0, "complex fields must never invoke __tostring")
+		f = check_fixture({ no_owner = true })
+		f.om._husk_identity_descriptor = function() error(opaque, 0) end
+		local ok, failure = pcall(f.run)
+		H.equal(ok, false); H.equal(rawequal(failure, opaque), true,
+			"an uncaught live-leg error must retain its raw shape")
+		H.equal(stringifications, 0)
+	end)
+
+	H.test("#719 model comparisons use raw fields, never equal clipped prefixes", function()
+		local prefix = string.rep("a", 200)
+		local f = check_fixture({ no_owner = true, hand_unit = prefix .. "expected",
+			evidence_name = prefix .. "observed_3p" })
+		local err = f.run()
+		H.truthy(type(err) == "string" and not is_skip(err, "")
+			and err:find("#719 observer renders ", 1, true) == 1, "raw model mismatch must remain FAIL")
+		bounded(f, err)
+	end)
+
+	H.test("#719 a real observer FAIL wins before the roster budget ends", function()
+		local f = check_fixture({ no_owner = true, destroyed = true })
+		roster(f, 33, "observer", true) -- every possible first entry has the real defect
+		for _, player in pairs(f.players) do player.peer_id = string.rep("p", 200) end
+		local err = f.run()
+		H.truthy(type(err) == "string" and err:find("lost the remote " .. IMPERIAL .. " slot", 1, true),
+			"lossy diagnostics and an oversized roster cannot suppress an encountered FAIL")
+		H.equal(f.stats.observer, 1)
+		bounded(f, err)
+	end)
+
+	H.test("#719 bounded unproven samples cannot hide incomplete observer legs", function()
+		local f = check_fixture({ not_wielded = true })
+		roster(f, 31, "observer", true)
+		f.players.owner = f.owner_player
+		local err = f.run()
+		H.truthy(is_skip(err, "unproven=31"), "omitted observer samples must still SKIP")
+		H.truthy(tonumber(err:match(" omitted=(%d+)")) > 0, "fixture must exhaust the sample budget")
+		H.equal(f.stats.owner, 1); H.equal(f.stats.observer, 31)
+		bounded(f, err)
+	end)
+
+	H.test("#719 budgets reset on the same callback and stay separate during reentry", function()
+		local f = check_fixture({ no_remote = true })
+		roster(f, 33, "owner", true)
+		local first = f.run()
+		H.truthy(is_skip(first, "reason=diagnostic_budget"))
+		H.equal(f.run(), first, "same callback repeats the honest budget verdict")
+		roster(f, 1, "owner", false)
+		H.equal(f.run(), nil, "a prior depleted budget must not survive the invocation")
+		f.players[1] = f.owner_player
+		f.owner_player.peer_id = string.rep("outer", 100)
+		local plan, entered, inner_err = f.om._cwv_identity_payloads, false, "not-called"
+		f.om._cwv_identity_payloads = function(slots)
+			if not entered then
+				entered = true
+				local outer = f.owner_player.peer_id
+				f.owner_player.peer_id = "inner"
+				inner_err = f.invoke() -- SAME actual child closure; no test reset between invocations
+				f.owner_player.peer_id = outer
+			end
+			return plan(slots)
+		end
+		local err = f.run()
+		H.equal(inner_err, nil, "outer lossy state must not leak into reentrant invocation")
+		H.truthy(is_skip(err, "reason=diagnostic_text_budget"), "inner success cannot clear outer loss")
+		bounded(f, err)
+	end)
+
+	H.test("#719 missing or throwing evidence sinks cannot produce PASS and can recover", function()
+		local f = check_fixture({ no_remote = true })
+		roster(f, 32, "owner", true)
+		local healthy = f.env.printf
+		f.env.printf = false -- explicit ctx.env value, never fall through to a host/global logger
+		local err = f.run()
+		H.truthy(is_skip(err, "reason=diagnostic_text_budget"), "missing sink must SKIP a completed proof")
+		H.equal(f.stats.owner, 32, "missing evidence must not suppress actual holder checks")
+		H.equal(#f.lines, 0)
+		bounded(f, err)
+		f.env.printf = healthy
+		H.equal(f.run(), nil, "same closure can PASS after the evidence sink is restored")
+		H.equal(f.stats.owner, 32); H.equal(#f.lines, 32); bounded(f, nil)
+
+		local attempts, stringifications = {}, 0
+		local opaque = setmetatable({}, { __tostring = function()
+			stringifications = stringifications + 1; error("opaque sink error stringified")
+		end })
+		local function throwing(fmt, ...)
+			attempts[#attempts + 1] = string.format(fmt, ...)
+			error(opaque, 0)
+		end
+		f.env.printf = throwing
+		err = f.run()
+		H.truthy(is_skip(err, "reason=diagnostic_text_budget"), "throwing sink must SKIP a completed proof")
+		H.equal(f.stats.owner, 32, "throwing evidence must not suppress actual holder checks")
+		H.equal(#attempts, 33, "32 holder attempts plus one bounded terminal attempt")
+		H.equal(#f.lines, 0)
+		bounded({ lines = attempts }, err) -- guards bytes/ASCII for EVERY attempted sink call
+		H.equal(stringifications, 0, "sink error objects must never invoke __tostring")
+		f.env.printf = healthy
+		H.equal(f.run(), nil, "same closure must recover after an opaque sink error")
+		H.equal(f.stats.owner, 32); H.equal(#f.lines, 32); bounded(f, nil)
+		H.equal(#attempts, 33, "restored sink must replace, not retain, the throwing closure")
+
+		for _, sink in ipairs({ false, throwing }) do
+			attempts = {}
+			local broken = check_fixture({ no_owner = true, destroyed = true })
+			broken.env.printf = sink
+			err = broken.run()
+			H.truthy(type(err) == "string" and not is_skip(err, "")
+				and err:find("lost the remote " .. IMPERIAL .. " slot", 1, true),
+				"a genuine observer FAIL must outrank a missing/throwing evidence sink")
+			H.equal(broken.stats.observer, 1)
+			bounded(broken, err); bounded({ lines = attempts }, err)
+		end
+		H.equal(stringifications, 0)
+	end)
+
+	H.test("#719 actual display projection handles every byte with an independent numeric oracle", function()
+		local f = check_fixture({ no_remote = true })
+		for byte = 0, 255 do
+			f.owner_player.peer_id = "peer-" .. string.char(byte) .. "-end"
+			local err = f.run()
+			if byte >= 32 and byte <= 126 then
+				H.equal(err, nil, "printable byte must retain complete evidence")
+			else
+				H.truthy(is_skip(err, "reason=diagnostic_text_budget"),
+					"nonprintable byte must require SKIP")
+			end
+			H.equal(f.stats.owner, 1, "every byte reaches the actual owner leg")
+			bounded(f, err)
+			for _, line in ipairs(f.lines) do
+				for index = 1, #line do
+					local actual = line:byte(index)
+					H.truthy(actual >= 32 and actual <= 126,
+						"actual projected byte must be printable ASCII")
+				end
+			end
+		end
 	end)
 end
