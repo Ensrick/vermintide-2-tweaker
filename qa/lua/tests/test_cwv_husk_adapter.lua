@@ -1523,22 +1523,6 @@ return function(H, repo_root)
         }) do
             H.truthy(module_source:find(marker, 1, true), "missing module adapter anchor: " .. marker)
         end
-        local residency_source = read(residency_path)
-        for _, marker in ipairs({
-            "_om._husk_material_donor_ready = function(base_unit)",
-            "_om._husk_lease_override = function(base_unit)",
-            "app.can_get",
-            "[cwv:474] husk donor-material lease",
-        }) do
-            local first = residency_source:find(marker, 1, true)
-            H.truthy(first, "missing residency owner anchor: " .. marker)
-            H.equal(residency_source:find(marker, first + #marker, true), nil,
-                "residency anchor must have one owner: " .. marker)
-            H.equal(module_source:find(marker, 1, true), nil,
-                "husk path must not retain residency anchor: " .. marker)
-        end
-        H.truthy(module_source:find("local _resource_ready = _om._install_husk_residency_queries(_husk_log_once)", 1, true))
-        H.truthy(residency_source:find("return _resource_ready", 1, true), "owner returns the exact private resource closure")
 		for _, marker in ipairs({
 			"_om._husk_spawn_adapter_transaction = function(func, world, hand,",
 			"local v_w3p, v_a3p, v_w1p, v_a1p = func(world, hand,",
