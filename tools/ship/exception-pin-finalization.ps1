@@ -1,5 +1,221 @@
 # Issue #1328: GitHub provenance reconciliation, never Workshop readiness.
 
+# #1777: narrow opt-in route retention; provenance is not publication authority.
+function ConvertFrom-VtExceptionPinText {
+    param([Parameter(Mandatory)][string]$Text)
+    $temporary = Join-Path ([IO.Path]::GetTempPath()) ('vt2-pin-data-' + [guid]::NewGuid().ToString('N') + '.psd1')
+    try {
+        [IO.File]::WriteAllText($temporary, $Text, (New-Object Text.UTF8Encoding($false)))
+        return Import-PowerShellDataFile -LiteralPath $temporary
+    }
+    finally { Remove-Item -LiteralPath $temporary -Force -ErrorAction SilentlyContinue }
+}
+
+function Get-VtReviewedRouteTransitionDeclarations {
+    param([Parameter(Mandatory)][AllowEmptyCollection()]$Data)
+    $keys = @($Data.Keys | Where-Object { [string]$_ -ieq 'ReviewedRouteTransitions' })
+    if ($keys.Count -eq 0) { return @() }
+    if ($keys.Count -ne 1 -or [string]$keys[0] -cne 'ReviewedRouteTransitions' -or
+        $Data[$keys[0]] -isnot [array]) { throw '[route-transition] invalid declaration section' }
+    $seen = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::OrdinalIgnoreCase)
+    foreach ($declaration in @($Data.ReviewedRouteTransitions)) {
+        $fields = @('ModId','FromSourceCommit','CandidateModTree','CandidateReceiptSha256')
+        if ($declaration -isnot [System.Collections.IDictionary] -or $declaration.Count -ne $fields.Count) {
+            throw '[route-transition] declaration must contain exactly four fields'
+        }
+        foreach ($field in $fields) {
+            if (@($declaration.Keys) -cnotcontains $field -or $declaration[$field] -isnot [string]) {
+                throw "[route-transition] missing, mistyped or wrong-case field '$field'"
+            }
+        }
+        if ($declaration.ModId -cnotmatch '^[A-Za-z][A-Za-z0-9_]*$' -or
+            $declaration.FromSourceCommit -cnotmatch '^[0-9a-f]{40}$' -or
+            $declaration.CandidateModTree -cnotmatch '^[0-9a-f]{40}$' -or
+            $declaration.CandidateReceiptSha256 -cnotmatch '^[0-9a-f]{64}$' -or
+            -not $seen.Add($declaration.ModId)) { throw '[route-transition] malformed or duplicate declaration' }
+        $declaration
+    }
+}
+
+function Test-VtRouteTransitionDataEqual {
+    param($Left, $Right, [int]$Depth = 0)
+    if ($Depth -gt 16) { return $false }
+    if ($null -eq $Left -or $null -eq $Right) { return $null -eq $Left -and $null -eq $Right }
+    if ($Left -is [System.Collections.IDictionary]) {
+        if ($Right -isnot [System.Collections.IDictionary] -or $Left.Count -ne $Right.Count) { return $false }
+        foreach ($key in $Left.Keys) {
+            if (@($Right.Keys) -cnotcontains $key -or
+                -not (Test-VtRouteTransitionDataEqual $Left[$key] $Right[$key] ($Depth + 1))) { return $false }
+        }
+        return $true
+    }
+    if ($Left -is [array]) {
+        if ($Right -isnot [array] -or $Left.Count -ne $Right.Count) { return $false }
+        for ($i = 0; $i -lt $Left.Count; $i++) {
+            if (-not (Test-VtRouteTransitionDataEqual $Left[$i] $Right[$i] ($Depth + 1))) { return $false }
+        }
+        return $true
+    }
+    return $Left.GetType() -eq $Right.GetType() -and $Left -ceq $Right
+}
+
+function Assert-VtReviewedRouteTransitionRows {
+    param([Parameter(Mandatory)][AllowEmptyCollection()]$Data, [Parameter(Mandatory)][string]$ModId,
+          [Parameter(Mandatory)][string]$FromTree, [Parameter(Mandatory)][string]$ToTree)
+    foreach ($family in @($Data.ReceiptFamilyOverrides)) {
+        $familyIds = @($family.ModId) + @($family.ModIds)
+        if ($family.ModTrees) { $familyIds += @($family.ModTrees.Keys) }
+        if ($family.SourcesByMod) { $familyIds += @($family.SourcesByMod.Keys) }
+        if (@($familyIds | Where-Object { [string]$_ -ieq $ModId }).Count) {
+            throw '[route-transition] family/discovery ownership is not eligible'
+        }
+    }
+    if (@($Data.ReceiptDiscoveryOverrides | Where-Object { [string]$_.ModId -ieq $ModId }).Count) {
+        throw '[route-transition] family/discovery ownership is not eligible'
+    }
+    $rows = @($Data.ReceiptRouteOverrides | Where-Object { [string]$_.ModId -ieq $ModId })
+    if ($FromTree -ceq $ToTree -or $rows.Count -eq 0) { throw '[route-transition] two distinct trees and route ownership required' }
+    $seenRoutes = New-Object 'System.Collections.Generic.HashSet[string]' ([StringComparer]::Ordinal)
+    foreach ($row in $rows) {
+        if ($row -isnot [System.Collections.IDictionary] -or -not $seenRoutes.Add(([string]$row.Source + [char]10 + [string]$row.Signature))) {
+            throw '[route-transition] malformed or duplicate route identity'
+        }
+        $trees = @($row.ModTrees)
+        if ([string]$row.ModId -cne $ModId -or @($row.Keys) -cnotcontains 'ModTrees' -or
+            $row.ContainsKey('ModTree') -or $row.ModTrees -isnot [array] -or
+            $trees.Count -ne 2 -or @($trees | Where-Object { $_ -isnot [string] -or $_ -cnotmatch '^[0-9a-f]{40}$' }).Count -or
+            @($trees | Sort-Object -Unique -CaseSensitive).Count -ne 2 -or
+            $trees -cnotcontains $FromTree -or $trees -cnotcontains $ToTree) {
+            throw '[route-transition] every route must name exactly the same reviewed pair'
+        }
+    }
+    return @($rows)
+}
+
+# Only existing canonical owners call this constructor. It reads the exact
+# authorized commit and actual text; no boolean or user-declared prefix is proof.
+function New-VtReviewedRouteTransitionProofs {
+    param([Parameter(Mandatory)][string]$RepoRoot, [Parameter(Mandatory)][string]$SourceCommit,
+          [Parameter(Mandatory)][string]$ExceptionsText)
+    $data = ConvertFrom-VtExceptionPinText $ExceptionsText
+    $declarations = @(Get-VtReviewedRouteTransitionDeclarations $data)
+    $proofs = @{}
+    if ($declarations.Count -eq 0) { return $proofs }
+    . (Join-Path $PSScriptRoot 'build-receipt.ps1')
+    . (Join-Path $PSScriptRoot 'build-output-normalization.ps1')
+    . (Join-Path $PSScriptRoot '..\verify\live_test_source_authority.ps1')
+    if ($SourceCommit -cnotmatch '^[0-9a-f]{40}$' -or
+        (Get-VtGitScalar -RepoRoot $RepoRoot -Arguments @('rev-parse','HEAD') -Description 'Transition source HEAD') -cne $SourceCommit -or
+        (Get-VtGitScalar -RepoRoot $RepoRoot -Arguments @('diff','--name-only',$SourceCommit,'--','tools/mod-inventory.psd1') -Description 'Transition inventory cleanliness')) {
+        throw '[route-transition] exact canonical source/inventory context required'
+    }
+    $committedText = Get-VtGitScalar -RepoRoot $RepoRoot -Arguments @('show',($SourceCommit + ':tools/verify/live_test_contract_exceptions.psd1')) -Description 'Committed transition policy'
+    $committed = ConvertFrom-VtExceptionPinText $committedText
+    $committedDeclarations = @(Get-VtReviewedRouteTransitionDeclarations $committed)
+    if (-not (Test-VtRouteTransitionDataEqual $declarations $committedDeclarations)) {
+        throw '[route-transition] declaration differs from authorized source'
+    }
+    $inventory = Import-PowerShellDataFile -LiteralPath (Join-Path $RepoRoot 'tools/mod-inventory.psd1')
+    foreach ($declaration in $declarations) {
+        $id = [string]$declaration.ModId
+        $entries = @($inventory.Mods | Where-Object { [string]$_.ModId -ieq $id })
+        if ($entries.Count -ne 1 -or [string]$entries[0].ModId -cne $id) { throw '[route-transition] canonical inventory identity missing or ambiguous' }
+        $entry = $entries[0]
+        $authority = Assert-VtBundleAuthorityEntry -Entry $entry
+        $dir = [string]$entry.Dir
+        $relativeRoot = $dir + '/scripts/mods'
+        $from = [string]$declaration.FromSourceCommit
+        if ((Get-VtGitScalar -RepoRoot $RepoRoot -Arguments @('cat-file','-t',$from) -Description 'Transition ancestor object') -cne 'commit') {
+            throw '[route-transition] FromSourceCommit is not a commit'
+        }
+        $null = Get-VtGitScalar -RepoRoot $RepoRoot -Arguments @('merge-base','--is-ancestor',$from,$SourceCommit) -Description 'Transition same-history ancestor'
+        $fromTree = Get-VtGitScalar -RepoRoot $RepoRoot -Arguments @('rev-parse',($from + ':' + $relativeRoot)) -Description 'Transition From tree'
+        $toTree = Get-VtGitScalar -RepoRoot $RepoRoot -Arguments @('rev-parse',($SourceCommit + ':' + $relativeRoot)) -Description 'Transition candidate tree'
+        if ($fromTree -cnotmatch '^[0-9a-f]{40}$' -or $toTree -cne [string]$declaration.CandidateModTree) {
+            throw '[route-transition] inventory-qualified candidate tree mismatch'
+        }
+        foreach ($tree in @($fromTree,$toTree)) {
+            if ((Get-VtGitScalar -RepoRoot $RepoRoot -Arguments @('cat-file','-t',$tree) -Description 'Transition subtree type') -cne 'tree') {
+                throw '[route-transition] source subtree is not a tree'
+            }
+        }
+        $rows = @(Assert-VtReviewedRouteTransitionRows $data $id $fromTree $toTree)
+        $committedRows = @(Assert-VtReviewedRouteTransitionRows $committed $id $fromTree $toTree)
+        if (-not (Test-VtRouteTransitionDataEqual $rows $committedRows)) { throw '[route-transition] routes differ from authorized source' }
+        foreach ($row in $rows) {
+            $paths = @([string]$row.Source)
+            foreach ($anchor in @($row.EmitterAnchors) + @($row.GuardAnchors)) {
+                $paths += Get-VtReceiptAnchorSource -Anchor $anchor -DefaultSource ([string]$row.Source)
+            }
+            foreach ($path in $paths) {
+                if (-not $path.StartsWith(($relativeRoot + '/'),[StringComparison]::Ordinal)) { throw '[route-transition] foreign route/anchor source' }
+            }
+        }
+        $receiptPath = $dir + '/.build-receipt.json'
+        $receiptBlob = Get-VtGitScalar -RepoRoot $RepoRoot -Arguments @('rev-parse',($SourceCommit + ':' + $receiptPath)) -Description 'Transition committed receipt'
+        $receiptHash = Get-VtBuildGitBlobSha256 -RepoRoot $RepoRoot -GitBlob $receiptBlob
+        if ($receiptHash -cne [string]$declaration.CandidateReceiptSha256) { throw '[route-transition] candidate receipt digest mismatch' }
+        $receiptJson = Get-VtGitScalar -RepoRoot $RepoRoot -Arguments @('show',($SourceCommit + ':' + $receiptPath)) -Description 'Transition receipt bytes'
+        $receipt = ConvertFrom-VtBuildReceiptJson -Json $receiptJson
+        $sourceMap = Get-VtBuildCommitSourceMap -RepoRoot $RepoRoot -Mod $dir -Commit $SourceCommit
+        if ($authority -ceq 'tracked') {
+            $outputs = Get-VtBuildCommitOutputSet -RepoRoot $RepoRoot -Mod $dir -Commit $SourceCommit -SourceMap $sourceMap -InventoryEntry $entry
+        }
+        else {
+            if (Get-VtGitScalar -RepoRoot $RepoRoot -Arguments @('ls-tree','-r',$SourceCommit,'--',($dir + '/bundleV2')) -Description 'Receipt-authority tracked output absence') {
+                throw '[route-transition] receipt authority has tracked output'
+            }
+            $outputs = Get-VtBuildReceiptDeclaredOutputSet -Receipt $receipt -ExpectedMod $dir
+        }
+        $normalization = New-BuildOutputNormalizationPolicyProof -ModEntry $entry
+        $valid = Test-VtBuildReceiptProof -Receipt $receipt -ExpectedMod $dir -SourceMap $sourceMap -OutputSet $outputs -NormalizationPolicy $normalization -MinimumSchema 3
+        if (-not $valid.Ok) { throw ('[route-transition] candidate schema-3 proof invalid: ' + ($valid.Problems -join '; ')) }
+        # Retention validation only: the unchanged consumer still selects and
+        # discovers active routes exclusively from the current manifest.
+        foreach ($commit in @($from,$SourceCommit)) {
+            $required = @(Get-VtExceptionSourcePaths -Exceptions $data -ModId $id)
+            $documents = @(Get-VtDeployedLuaDocuments -RepoRoot $RepoRoot -Treeish $commit -RelativeRoot $relativeRoot -RequiredRelativePaths $required)
+            $byPath = @{}
+            foreach ($document in $documents) { $byPath[[string]$document.RelativePath] = $document }
+            foreach ($row in $rows) {
+                Test-VtReceiptOverrideDefinition -Override $row -Context 'reviewed route retention'
+                Test-VtDocumentAnchors -ByPath $byPath -Override $row -DefaultSource ([string]$row.Source) -Context 'Reviewed route retention'
+            }
+        }
+        $proofs[$id] = [pscustomobject]@{
+            ModId=$id; FromTree=$fromTree; ToTree=$toTree; SourceCommit=$SourceCommit
+            Declaration=$declaration; Rows=$rows; ReceiptSha256=$receiptHash
+        }
+    }
+    return $proofs
+}
+
+
+function Get-VtReviewedRoutePlanningTransition {
+    param([Parameter(Mandatory)][string]$ExceptionsText, [Parameter(Mandatory)][string]$ModId,
+          [Parameter(Mandatory)][AllowEmptyCollection()][hashtable]$TransitionProofs, [switch]$AllRows)
+    $data = ConvertFrom-VtExceptionPinText $ExceptionsText
+    $declarations = @(Get-VtReviewedRouteTransitionDeclarations $data)
+    if ($declarations.Count -ne $TransitionProofs.Count) { throw '[route-transition] exact constructed proof set required' }
+    $selected = $null
+    foreach ($declaration in $declarations) {
+        $id = [string]$declaration.ModId
+        if (-not $TransitionProofs.ContainsKey($id)) { throw '[route-transition] exact constructed proof set required' }
+        $proof = $TransitionProofs[$id]
+        if ($null -eq $proof -or [string]$proof.ModId -cne $id -or
+            [string]$proof.SourceCommit -cnotmatch '^[0-9a-f]{40}$' -or
+            -not (Test-VtRouteTransitionDataEqual $declaration $proof.Declaration)) {
+            throw '[route-transition] declaration differs from constructed proof'
+        }
+        if ($AllRows -or $id -ceq $ModId) {
+            $rows = @(Assert-VtReviewedRouteTransitionRows $data $id $proof.FromTree $proof.ToTree)
+            if (-not (Test-VtRouteTransitionDataEqual $rows $proof.Rows)) { throw '[route-transition] planned rows differ from constructed proof' }
+        }
+        if ($id -ceq $ModId) { $selected = $proof }
+    }
+    return $selected
+}
+
 # Issue #1328: pure planner for the step-5b exception-pin repoint. Takes the
 # CURRENT text of tools/verify/live_test_contract_exceptions.psd1, the shipped
 # mod's exception ModId, and the freshly deployed scripts/mods subtree hash
@@ -14,27 +230,27 @@
 #   * The stale-value set is computed SEMANTICALLY (Import-PowerShellDataFile)
 #     from entries pinning this exact ModId, then replaced TEXTUALLY so every
 #     comment, ordering, and unrelated pin survives byte-identical. A pinned
-#     multi-tree array collapses to the single deployed tree: only one deployed
-#     record exists per mod, so any other member is stale by construction.
+#     unmarked multi-tree array collapses to the single deployed tree. #1777
+#     explicitly reviewed route pairs alone may retain an unused member after
+#     committed source/receipt/pair proof; the manifest still selects authority.
 #   * The rewrite is verified by re-parsing: any pin for this mod that still
 #     lacks the deployed tree is returned in .Unresolved for a loud warning.
 function Get-VtExceptionPinRepointPlan {
     param(
         [Parameter(Mandatory=$true)][string]$ExceptionsText,
         [Parameter(Mandatory=$true)][string]$ModId,
-        [Parameter(Mandatory=$true)][string]$DeployedTree
+        [Parameter(Mandatory=$true)][string]$DeployedTree,
+        [hashtable]$TransitionProofs = @{}
     )
     if ($DeployedTree -notmatch '^[0-9a-f]{40}$') { throw "Deployed tree must be a full 40-hex hash, got '$DeployedTree'." }
     if ($ModId -notmatch '^[A-Za-z0-9_]+$') { throw "Exception ModId must be a bare identifier, got '$ModId'." }
 
+    # Bind the actual text being planned, including the primary destination.
+    # An active declaration without constructor-produced facts cannot fall back.
+    $transition = Get-VtReviewedRoutePlanningTransition -ExceptionsText $ExceptionsText -ModId $ModId -TransitionProofs $TransitionProofs
     function Get-PinTuples {
         param([string]$Text)
-        $tmp = Join-Path ([IO.Path]::GetTempPath()) ('vt2-pin-repoint-' + [guid]::NewGuid().ToString('N') + '.psd1')
-        try {
-            [IO.File]::WriteAllText($tmp, $Text, (New-Object System.Text.UTF8Encoding($false)))
-            $data = Import-PowerShellDataFile -LiteralPath $tmp
-        }
-        finally { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
+        $data = ConvertFrom-VtExceptionPinText $Text
         $tuples = @()
         foreach ($o in @($data.ReceiptFamilyOverrides)) {
             if ($o -and $o.ModTrees -and $o.ModTrees.ContainsKey($ModId)) {
@@ -56,6 +272,12 @@ function Get-VtExceptionPinRepointPlan {
     }
 
     $pins = @(Get-PinTuples -Text $ExceptionsText)
+    if ($transition -and @($transition.FromTree,$transition.ToTree) -ccontains $DeployedTree) {
+        return [pscustomobject]@{
+            PinCount=$pins.Count; StaleTrees=@(); Changed=$false; RewriteCount=0
+            NewText=$ExceptionsText; Unresolved=@()
+        }
+    }
     $stale = @{}
     foreach ($pin in $pins) {
         foreach ($tree in @($pin.Trees)) {
@@ -297,7 +519,8 @@ function Invoke-VtPublishedPinFinalization {
     if ($file.Attributes -band [IO.FileAttributes]::ReparsePoint) { throw 'Exception pins cannot be a reparse point.' }
     $original = [IO.File]::ReadAllBytes($path)
     $text = [Text.Encoding]::UTF8.GetString($original).TrimStart([char]0xfeff)
-    $plan = Get-VtExceptionPinRepointPlan -ExceptionsText $text -ModId $record.ModId -DeployedTree $record.ModTree
+    $transitionProofs = New-VtReviewedRouteTransitionProofs -RepoRoot $record.RepoRoot -SourceCommit $record.SourceCommit -ExceptionsText $text
+    $plan = Get-VtExceptionPinRepointPlan -ExceptionsText $text -ModId $record.ModId -DeployedTree $record.ModTree -TransitionProofs $transitionProofs
     if (@($plan.Unresolved).Count -gt 0) {
         throw "Exception pins remain unresolved; original bytes retained: $($plan.Unresolved -join ', ')"
     }

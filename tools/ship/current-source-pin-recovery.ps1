@@ -24,8 +24,12 @@ function Get-VtCurrentSourcePinPlan {
     param(
         [Parameter(Mandatory)][string]$RepoRoot,
         [Parameter(Mandatory)]$DeploymentManifest,
-        [Parameter(Mandatory)][string]$ExceptionsText
+        [Parameter(Mandatory)][string]$ExceptionsText,
+        [Parameter(Mandatory)][string]$SourceCommit
     )
+    # Validate every declaration/binding/row before any membership decision or
+    # write, using this owner's already-authorized exact source context.
+    $transitionProofs = New-VtReviewedRouteTransitionProofs -RepoRoot $RepoRoot -SourceCommit $SourceCommit -ExceptionsText $ExceptionsText
     $inputs = Get-VtDeploymentSourceInputs -RepoRoot $RepoRoot -DeploymentManifest $DeploymentManifest
     $ids = @(Get-VtConsumedExceptionPinIds -Exceptions $inputs.Exceptions)
     Invoke-VtDeploymentSourcePrefetch -RepoRoot $RepoRoot -SourceInputs $inputs -ModIds $ids
@@ -36,7 +40,7 @@ function Get-VtCurrentSourcePinPlan {
         # tree hash is fabricated into a commit-bearing publication context.
         $proof = Get-VtDeployedModSourceProof -RepoRoot $RepoRoot -InventoryEntry $inputs.InventoryById[$id] `
             -ManifestRow $inputs.DeployedById[$id] -LegacyByKey $inputs.LegacyByKey
-        $plan = Get-VtExceptionPinRepointPlan -ExceptionsText $text -ModId $id -DeployedTree $proof.ModTree
+        $plan = Get-VtExceptionPinRepointPlan -ExceptionsText $text -ModId $id -DeployedTree $proof.ModTree -TransitionProofs $transitionProofs
         if (@($plan.Unresolved).Count) { throw "Current source pins for '$id' remain unresolved: $($plan.Unresolved -join ', ')." }
         if ($plan.Changed) {
             $changes.Add([pscustomobject]@{ ModId = $id; ModTree = $proof.ModTree; PinCount = $plan.PinCount; RewriteCount = $plan.RewriteCount })
@@ -44,7 +48,7 @@ function Get-VtCurrentSourcePinPlan {
         $text = $plan.NewText
     }
     # All rows are proved before the caller may write even the first pin.
-    return [pscustomobject]@{ Changed = ($text -cne $ExceptionsText); NewText = $text; Changes = @($changes.ToArray()); ModIds = $ids }
+    return [pscustomobject]@{ Changed = ($text -cne $ExceptionsText); NewText = $text; Changes = @($changes.ToArray()); ModIds = $ids; TransitionProofs = $transitionProofs }
 }
 
 function Assert-VtSourcePinRecoveryOwner {
@@ -103,7 +107,7 @@ function Invoke-VtCurrentSourcePinReconciliation {
         $sourcePath = Join-Path $RepoRoot $relative
         $sourceBytes = [IO.File]::ReadAllBytes($sourcePath)
         $sourceText = [Text.Encoding]::UTF8.GetString($sourceBytes).TrimStart([char]0xfeff)
-        $plan = Get-VtCurrentSourcePinPlan -RepoRoot $RepoRoot -DeploymentManifest $manifest -ExceptionsText $sourceText
+        $plan = Get-VtCurrentSourcePinPlan -RepoRoot $RepoRoot -DeploymentManifest $manifest -ExceptionsText $sourceText -SourceCommit $SourceCommit
         if ([Convert]::ToBase64String([IO.File]::ReadAllBytes($sourcePath)) -cne [Convert]::ToBase64String($sourceBytes)) {
             throw 'Invoking source pins changed while current manifest provenance was being checked.'
         }
@@ -116,10 +120,13 @@ function Invoke-VtCurrentSourcePinReconciliation {
         # A clean linked checkout may have different Git-supported line endings.
         # Reuse the proven target identities on the destination's own text;
         # never copy its sibling checkout's formatting over the primary.
+        # Validate all retained rows against this actual destination BEFORE a
+        # planned legacy/current rewrite can alter any pair in memory.
+        $null = Get-VtReviewedRoutePlanningTransition -ExceptionsText $primaryText -ModId $plan.Changes[0].ModId -TransitionProofs $plan.TransitionProofs -AllRows
         $primaryCandidate = $primaryText
         foreach ($change in $plan.Changes) {
             $destinationPlan = Get-VtExceptionPinRepointPlan -ExceptionsText $primaryCandidate `
-                -ModId $change.ModId -DeployedTree $change.ModTree
+                -ModId $change.ModId -DeployedTree $change.ModTree -TransitionProofs $plan.TransitionProofs
             if (@($destinationPlan.Unresolved).Count -or $destinationPlan.PinCount -ne $change.PinCount) {
                 throw 'Primary source pins require manual reconciliation; original bytes retained.'
             }
