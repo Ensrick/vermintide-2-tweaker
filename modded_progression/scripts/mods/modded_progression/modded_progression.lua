@@ -19,7 +19,7 @@ Major sections (search by name to jump):
   * Mirror overlay (STUB)             — boot-time hydration from VMF → backend_mirror
   * Serialization (STUB)              — mirror mutation → VMF write-back
   * Sibling API surface               — what CWV / cosmetics_tweaker call into
-  * Diagnostic commands               — mp_dump, mp_reset
+  * Diagnostic commands               — mp_dump, mp_reset, mp_login_diag
 ]]
 
 local mod = get_mod("mp")
@@ -30,7 +30,7 @@ local RealmAuthority = mod:dofile(
 -- at the bottom of this same chunk, so no _G or cross-file exposure is needed.
 local _MEM_PROBE_T0_MP = collectgarbage("count")
 
-local MOD_VERSION = "0.2.50-dev"
+local MOD_VERSION = "0.2.51-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([mp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -1421,6 +1421,34 @@ end
 
 mod:command("mp_fresh_profile_census", "Audit fresh-profile backend interface coverage", function()
     _mp840_emit_fresh_profile_census("command")
+end)
+
+-- #1684 cached-only login census: no refresh/claim/queue call and no new hook.
+-- A cache observation is not eligibility, a local grant, or a current service proof.
+mod:command("mp_login_diag", "Read cached login rewards: /mp_login_diag <day/index>", function(index)
+    local known, realm = pcall(_progression_realm)
+    if not known then realm = nil end
+    local managers = rawget(_G, "Managers")
+    local backend = type(managers) == "table" and rawget(managers, "backend") or nil
+    local ok, lines, count = pcall(FreshProfileCensus.login_cache_lines, backend, realm, index)
+    if not ok or type(lines) ~= "table" or type(count) ~= "number"
+            or count < 1 or count > 11 or count ~= math.floor(count) then
+        printf("[mp:1684] status=projection_unavailable request=none eligibility=unproven grant=none")
+        return
+    end
+    -- Validate the complete finite projection before emitting any supplied row.
+    for i = 1, 11 do
+        if i <= count then
+            local line = rawget(lines, i)
+            if type(line) ~= "string" or #line > 700 or line:find("[^ -~]") then
+                printf("[mp:1684] status=projection_unavailable reason=invalid_rows request=none grant=none")
+                return
+            end
+        end
+    end
+    for i = 1, 11 do
+        if i <= count then printf("[mp:1684] %s", rawget(lines, i)) end
+    end
 end)
 
 local _mp840_census_backend

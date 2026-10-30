@@ -1,5 +1,24 @@
 # Regression Checklist — modded_progression
 
+## Cached-only login census (#1684)
+
+- Exact known Modded authority and an explicit positive integer index are
+  required. Official, unknown or throwing authority must not sample the cache.
+  Missing/malformed/unsupported cache returns a bounded non-success record.
+- Read only raw current cache fields; no inherited lookup, object formatting,
+  backend getter/ready/refresh/claim/queue operation or retained reference.
+- Keep personal-time/calendar schemas separate; inspect exactly eight cells
+  plus ninth-cell presence, without scanning the remaining response. Exclude
+  owned/account identifiers; catalogue keys are bounded sanitized strings.
+- Validate all rows before any projected output: at most eleven ASCII rows,
+  700 bytes each. Logger errors are not retried or converted into backend work.
+- The existing census suite composes actual private realm/command/census code
+  with complete pinned native population functions and nondispatching queues.
+  Cache replacement, absent responses and callback errors are distinct cases.
+  Offline checks are not a fresh account response or live reward acceptance.
+- Preserve #589 claim denial, calendar pre-action denial and all native account
+  protections. Local login eligibility, schedules and grants remain separate.
+
 ## Remaining backend writer authority (#1684)
 
 - Single/multiple backend quest claims require exact official false; modded
