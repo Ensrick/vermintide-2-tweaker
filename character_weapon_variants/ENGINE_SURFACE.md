@@ -1,5 +1,22 @@
 # character_weapon_variants - engine contact surface
 
+## Deferred husk residency ownership (#2)
+
+The already entry-loaded `_cwv_husk_residency_owner.lua` now also defines the
+existing resource-truth, donor/override lease, spawnability and preview helpers
+through one private initializer. `_cwv_husk_path.lua` calls it at the unchanged
+late setup boundary with its exact log-once closure and privately captures the
+returned resource-truth closure for its existing re-key callers. No hook, package, entry
+order, lease/refcount policy, wire or render admission changes. The two runtime
+lease sites remain attempted-before-load; the two boot sites retain their
+success ledger and bounded retry. All collaborators stay late-bound.
+
+Source review of VMF81bb `modules/core/safe_calls.lua:41-44,51-58,82-88`
+shows ordinary global `dofile` delegation without per-file environment rebinding.
+This supports shared-global behavior under Lua5.1; it is not exact installed
+VMF/native loader or in-game renderer acceptance. The behavioral fixtures use
+the actual two installers and retain this limit rather than adding a shim.
+
 ## Dormant retained Tuskgor construction (#645)
 
 The private family handoff preserves Sword/Mace installation first and contains

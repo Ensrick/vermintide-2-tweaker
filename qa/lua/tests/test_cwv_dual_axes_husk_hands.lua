@@ -78,8 +78,13 @@ return function(H, repo_root)
     local function fixture()
         local om = { HUSK_OVERRIDE_REF = "cwv_husk_override_units" }
         local lines = {}
+        local boot = { lines = {}, leases = {}, hooks = {} }
+        local booting = true
         local env = {
-            printf = function(fmt, ...) lines[#lines + 1] = string.format(fmt, ...) end,
+            printf = function(fmt, ...)
+                local target = booting and boot.lines or lines
+                target[#target + 1] = string.format(fmt, ...)
+            end,
             ScriptUnit = {
                 has_extension = function() return false end,
                 extension = function() return nil end,
@@ -92,14 +97,27 @@ return function(H, repo_root)
             } },
             Weapons = {},
             Managers = { package = {
-                load = function() end,
+                load = function(_, path, ref)
+                    assert(booting, "resident hand fixture must not need runtime leases")
+                    boot.leases[#boot.leases + 1] = { path = path, ref = ref }
+                end,
                 has_loaded = function() return true end,
             } },
             Application = { can_get = function() return true end },
             NetworkLookup = { anims = {} },
         }
-        with_env(env, function()
-            assert(loadfile(mod_root .. "_cwv_husk_path.lua"))()(nil, {
+        setmetatable(env, { __index = _G }); env._G = env
+        env._residency_boot = boot
+        local mod = { hook = function(_, class, method, callback)
+            assert(class == "SimpleHuskInventoryExtension" and method == "start_weapon_fx")
+            boot.hooks[#boot.hooks + 1] = callback
+        end }
+        local owner = assert(loadfile(mod_root .. "_cwv_husk_residency_owner.lua"))
+        setfenv(owner, env); owner()(mod, { om = om, variant_definitions = { PAIR } })
+        booting = false
+        local husk = assert(loadfile(mod_root .. "_cwv_husk_path.lua"))
+        setfenv(husk, env)
+        husk()(mod, {
                 om = om,
                 variant_definitions = { PAIR },
                 find_def = function(key) return key == PAIR.item_key and PAIR or nil end,
@@ -107,7 +125,6 @@ return function(H, repo_root)
                 apply_cwv_hand_transform = function() return true end,
                 triplet_text = function() return "t" end,
             })
-        end)
         return om, lines, env
     end
 

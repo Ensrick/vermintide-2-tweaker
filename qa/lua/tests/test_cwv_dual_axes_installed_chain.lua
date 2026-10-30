@@ -88,6 +88,8 @@ return function(H, root, controls)
         local function endpoint(id, remote)
             local e = { id = id, remote = remote, hooks = {}, network = {},
                 native = {}, rewields = 0, writes = 0, spawns = {}, logs = {} }
+            e.residency_boot = { logs = {}, hooks = {} }
+            local residency_booting = false
             e.owner = {}; e.local_unit = {}
             e.player = { peer_id = remote, _local_player_id = 1,
                 player_unit = e.owner, is_player_controlled = function() return true end,
@@ -122,7 +124,10 @@ return function(H, root, controls)
                 Managers = { player = { owner = function(_, unit)
                     if unit == e.owner then return e.player end
                 end }, },
-                printf = function(fmt, ...) e.logs[#e.logs + 1] = string.format(fmt, ...) end,
+                printf = function(fmt, ...)
+                    local target = residency_booting and e.residency_boot.logs or e.logs
+                    target[#target + 1] = string.format(fmt, ...)
+                end,
             }, { __index = _G })
             e.env._G = e.env
             local function register(kind, class, method, callback)
@@ -130,6 +135,9 @@ return function(H, root, controls)
                 assert(not e.hooks[token], "duplicate production hook " .. token)
                 e.hooks[token] = callback
                 e.hooks[token .. ":kind"] = kind
+                if residency_booting then
+                    e.residency_boot.hooks[#e.residency_boot.hooks + 1] = token
+                end
             end
             e.cos_mod = { _cos = {}, info = function() end, debug = function() end,
                 localize = function(_, key) return key end,
@@ -226,6 +234,12 @@ return function(H, root, controls)
                     error("unexpected module " .. path)
                 end,
             }
+            -- Keep the real catalogue and the owner's boot prefix distinct from
+            -- the existing installed publish/receiver/spawn observations.
+            residency_booting = true
+            load(cwv .. "_cwv_husk_residency_owner.lua", e.env)(e.mod, {
+                om = e.om, variant_definitions = defs })
+            residency_booting = false
             local spawn_phase = load(cwv .. "_cwv_musket_equip_surface.lua", e.env)(e.mod, {
                 om = e.om, dbg = function() end, variant_definitions = defs })
             spawn_phase()

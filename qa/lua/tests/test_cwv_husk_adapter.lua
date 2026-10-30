@@ -15,6 +15,7 @@ return function(H, repo_root)
     local mod_root = repo_root
         .. "/character_weapon_variants/scripts/mods/character_weapon_variants/"
     local module_path = mod_root .. "_cwv_husk_path.lua"
+    local residency_path = mod_root .. "_cwv_husk_residency_owner.lua"
 	local transaction_path = mod_root .. "_cwv_husk_spawn_transaction.lua"
 	local issue719_check_path = mod_root .. "_cwv_issue719_transaction_check.lua"
     local main_path = mod_root .. "character_weapon_variants.lua"
@@ -96,8 +97,13 @@ return function(H, repo_root)
         local om = { HUSK_OVERRIDE_REF = "cwv_husk_override_units" }
         local lines = {}
         local leases = {}
+        local boot = { lines = {}, leases = {}, hooks = {} }
+        local booting = true
         local env = {
-            printf = function(fmt, ...) lines[#lines + 1] = string.format(fmt, ...) end,
+            printf = function(fmt, ...)
+                local target = booting and boot.lines or lines
+                target[#target + 1] = string.format(fmt, ...)
+            end,
             ScriptUnit = {
                 has_extension = function() return true end,
                 extension = function()
@@ -132,13 +138,26 @@ return function(H, repo_root)
             },
             Managers = {
                 package = {
-                    load = function(_, path, ref) leases[#leases + 1] = { path = path, ref = ref } end,
+                    load = function(_, path, ref)
+                        local target = booting and boot.leases or leases
+                        target[#target + 1] = { path = path, ref = ref }
+                    end,
                     has_loaded = function() return false end,
                 },
             },
 			NetworkLookup = { anims = {} },
         }
-        assert(loadfile(module_path))()(nil, {
+        setmetatable(env, { __index = _G }); env._G = env
+        env._residency_boot = boot
+        local mod = { hook = function(_, class, method, callback)
+            assert(class == "SimpleHuskInventoryExtension" and method == "start_weapon_fx")
+            boot.hooks[#boot.hooks + 1] = callback
+        end }
+        local owner = assert(loadfile(residency_path)); setfenv(owner, env)
+        owner()(mod, { om = om, variant_definitions = DEFS })
+        booting = false
+        local husk = assert(loadfile(module_path)); setfenv(husk, env)
+        husk()(mod, {
             om = om,
             variant_definitions = DEFS,
             find_def = find_def,
@@ -847,6 +866,51 @@ return function(H, repo_root)
         H.equal(item_units2.right_hand_unit, AXE_OVERRIDE)
     end)
 
+    H.test("CWV #2 re-key retains private resource truth after export replacement", function()
+        for _, forced in ipairs({ false, true }) do
+            for _, verdict in ipairs({ "true", "false", "absent", "throw" }) do
+                local om, lines, leases, env = fixture()
+                om._husk_identity_descriptor = exact_descriptor("cwv_fix_axe", AXE_OVERRIDE)
+                om._resident_override_3p = forced and function() return AXE_OVERRIDE .. "_3p" end or nil
+                if verdict == "absent" then
+                    env.Application = false
+                else
+                    env.Application = { can_get = function(kind, name)
+                        H.equal(kind, "unit")
+                        if verdict == "throw" then error({}) end
+                        if name == AXE_OVERRIDE .. "_3p" then return verdict == "true" end
+                        return true -- retained BASE remains spawnable
+                    end }
+                end
+                env.Managers.package.has_loaded = function(self, path, ...)
+                    H.equal(self, env.Managers.package)
+                    H.equal(select("#", ...), 0)
+                    H.truthy(path == BASE_UNIT .. "_3p" or path == AXE_OVERRIDE .. "_3p")
+                    return true
+                end
+                om._husk_resource_ready = function() error("mutable export must not replace private capture") end
+                env._resource_ready = function() error("global resource helper must not replace private capture") end
+                local units = { right_hand_unit = BASE_UNIT }
+                local suppress
+                local call_ok = pcall(function()
+                    with_env(env, function()
+                        suppress = om._husk_rekey_units("right", { name = "fix_base" }, units, {}, "slot_melee")
+                    end)
+                end)
+                H.equal(call_ok, true, "actual re-key private resource call must complete")
+                H.equal(suppress, nil)
+                local admitted = verdict == "true" or (forced and verdict ~= "false")
+                H.equal(units.right_hand_unit, admitted and AXE_OVERRIDE or BASE_UNIT,
+                    "private re-key verdict survives export tampering: " .. tostring(forced) .. "/" .. verdict)
+                H.equal(#leases, not forced and not admitted and 2 or 0,
+                    "only unproven non-forced overrides queue the bounded lease")
+                H.truthy(joined(lines):find(admitted and "[cwv:474] husk re-keyed hand="
+                    or "[cwv:474] husk re-key DEFERRED (residency):", 1, true),
+                    "actual caller emits its retained normal verdict receipt")
+            end
+        end
+    end)
+
     H.test("#399 ammo-nil decision order: descriptor overrules, base+career falls back", function()
         local om, _, _, env = fixture()
         env.Application = { can_get = function() return true end }
@@ -1453,16 +1517,28 @@ return function(H, repo_root)
 			"_om._husk_adapter_post = function(hand, item_data, item_units, slot_name, owner_unit_3p, v_w3p, v_a3p, spawn_evidence)",
             "_om._husk_strip_cwv_ammo(item_data, owner_unit_3p, v_a3p, slot_name, item_units)",
             "_om._husk_apply_cwv_transform(hand, item_data, item_units, v_w3p, owner_unit_3p, slot_name)",
-            "_om._husk_material_donor_ready = function(base_unit)",
-            "_om._husk_lease_override = function(base_unit)",
-            "app.can_get",   -- weapons_of_chaos residency-truth recipe
-            "[cwv:474] husk donor-material lease",
             "[cwv:399] husk ammo-nil pre-spawn",
             "[cwv:398] husk template identity",
             "[cwv:579] husk hand-compare",
         }) do
             H.truthy(module_source:find(marker, 1, true), "missing module adapter anchor: " .. marker)
         end
+        local residency_source = read(residency_path)
+        for _, marker in ipairs({
+            "_om._husk_material_donor_ready = function(base_unit)",
+            "_om._husk_lease_override = function(base_unit)",
+            "app.can_get",
+            "[cwv:474] husk donor-material lease",
+        }) do
+            local first = residency_source:find(marker, 1, true)
+            H.truthy(first, "missing residency owner anchor: " .. marker)
+            H.equal(residency_source:find(marker, first + #marker, true), nil,
+                "residency anchor must have one owner: " .. marker)
+            H.equal(module_source:find(marker, 1, true), nil,
+                "husk path must not retain residency anchor: " .. marker)
+        end
+        H.truthy(module_source:find("local _resource_ready = _om._install_husk_residency_queries(_husk_log_once)", 1, true))
+        H.truthy(residency_source:find("return _resource_ready", 1, true), "owner returns the exact private resource closure")
 		for _, marker in ipairs({
 			"_om._husk_spawn_adapter_transaction = function(func, world, hand,",
 			"local v_w3p, v_a3p, v_w1p, v_a1p = func(world, hand,",

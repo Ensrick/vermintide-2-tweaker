@@ -31,6 +31,8 @@ return function(H, repo_root)
             return reconciler
         end
         local writes, logs, checks = {}, {}, {}
+        local residency_boot = { logs = {}, hooks = {} }
+        local residency_booting = false
         local owner = { alive = true }
         local unit_api = {
             alive = function(u)
@@ -63,7 +65,10 @@ return function(H, repo_root)
         local WA = load("_lib_weapon_appearance").new({ unit = unit_api, vector_new = vector,
             vector_to_elements = vector.to_elements, quaternion = quaternion, matrix4x4 = matrix })
         env.Unit, env.Vector3, env.Quaternion = unit_api, vector, quaternion
-        env.printf = function(fmt, ...) logs[#logs + 1] = string.format(fmt, ...) end
+        env.printf = function(fmt, ...)
+            local target = residency_booting and residency_boot.logs or logs
+            target[#target + 1] = string.format(fmt, ...)
+        end
         env.ScriptUnit = { extension = function() error("unexpected extension") end }
         env.Managers = { package = { has_loaded = function() return true end },
             player = { player_from_peer_id = function() return { player_unit = owner } end } }
@@ -149,7 +154,14 @@ return function(H, repo_root)
             setfenv(remote_chunk, remote_env)
             om.combat_styles.remote_transform = remote_chunk()
         end
-        load("_cwv_husk_path")(nil, { om = om, variant_definitions = {}, find_def = function() end,
+        env.mod.hook = function(_, class, method, callback)
+            assert(class == "SimpleHuskInventoryExtension" and method == "start_weapon_fx")
+            residency_boot.hooks[#residency_boot.hooks + 1] = callback
+        end
+        residency_booting = true
+        load("_cwv_husk_residency_owner")(env.mod, { om = om, variant_definitions = {} })
+        residency_booting = false
+        load("_cwv_husk_path")(env.mod, { om = om, variant_definitions = {}, find_def = function() end,
             is_unit = unit_api.alive, apply_cwv_hand_transform = apply_initial or function() error("isolated legacy writer") end,
             triplet_text = function() return "unused" end })
         -- Controlled isolated cases deliberately disconnect the legacy sibling;
@@ -172,6 +184,7 @@ return function(H, repo_root)
         local f = { D = D, A = A, payload = payload, descriptor = descriptor, life = life,
             reconcile_axes = reconcile_axes,
             om = om, owner = owner, retained = retained, checks = checks, logs = logs, writes = writes,
+            residency_boot = residency_boot,
             equipment = equipment, inventory = inventory, spawn = spawn, options = opts }
         function f.set_current(value, why) current, state = value, why or "exact" end
         function f.unit() return last_unit end
@@ -188,6 +201,8 @@ return function(H, repo_root)
     end
     H.test("#660 actual planner receiver queued callback repairs Greatsword pose", function()
         local f = fixture()
+        H.equal(#f.residency_boot.logs, 1, "missing-base boot observation is retained separately")
+        H.equal(#f.residency_boot.hooks, 1, "actual early owner registers its existing FX hook")
         H.equal(f.descriptor.generation, 0, "wire semantic generation remains unchanged")
         H.equal(f.payload.fingerprint, f.descriptor.fingerprint)
         local status = f.queue(); H.equal(status, "ok")

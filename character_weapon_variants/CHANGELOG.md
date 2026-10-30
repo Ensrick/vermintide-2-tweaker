@@ -1,5 +1,29 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.565-dev (2026-10-30) -- Deferred husk residency ownership (#2)
+
+- Move the existing resource-truth, donor/override leases, spawnability and
+  preview closures from the oversized husk path into the already-loaded husk
+  residency owner. One private initializer runs at their original late boundary
+  with the same logger; entry order, closure bodies, hook/command/log surface,
+  resource admission and load/error/attempt policies remain unchanged.
+- Return the exact resource-truth closure to the husk re-key's private local;
+  its two existing direct queries do not read a mutable test-facing export.
+- Preserve call-time global and shared-owner reads, fresh per-install ledgers,
+  custom-bundle exclusion and the separate boot success/bounded-retry policy.
+  Retire only this husk-path target-tier debt row after measured size review.
+- Focused offline qualification passed 180 cases across 11 actual suites with
+  no failures/skips. Seven exact-source controls reached their intended normal
+  behavioral assertions, including dropped private capture and mutable-export
+  forwarding; no setup/load error counted as a qualified negative. An earlier
+  163-case focus lacked one direct fixture and is retained as partial evidence.
+  Source review also caught and corrected the outward lexical dependency before
+  any build/publication. No native engine, visual, transition or co-op acceptance
+  is claimed by these structural checks.
+- **DoD:** structural existing-owner extraction only; no new variant, resource,
+  template, appearance, career or network surface. Runtime acceptance remains
+  with existing issue-specific cards, not this architectural slice.
+
 ## 0.1.564-dev (2026-10-30) -- Retained Tuskgor construction and career diagnostics (#645)
 
 - Stage the qualified Tuskgor-on-Kerillian-Spear constructor/history envelope

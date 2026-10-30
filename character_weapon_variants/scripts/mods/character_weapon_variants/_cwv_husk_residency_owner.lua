@@ -1,5 +1,5 @@
 -- _cwv_husk_residency_owner.lua
--- CWV cross-character husk package-residency owner (#1159).
+-- CWV cross-character husk package-residency owner (#1159/#2).
 --
 -- Owns every boot-time load that makes a remote-player (husk) spawn of a CWV
 -- cross-character variant survivable and correct on a client that is not
@@ -13,7 +13,12 @@
 --     derives from and the attempt-capped `mod.on_all_mods_loaded` retry;
 --   * the `SimpleHuskInventoryExtension.start_weapon_fx` nil-slot guard, the
 --     belt-and-suspenders crash floor behind those loads (#280).
--- Extracted verbatim from the entry file; behavior is unchanged.
+-- Also owns the late resource-truth/donor/override-lease/preview closures.
+-- The private deferred initializer receives the husk path's exact logger and
+-- runs at its original definition boundary, not at this earlier boot install.
+-- Existing closure bodies, load policy and per-install ledgers are unchanged.
+-- Returns the exact resource-truth closure for the husk re-key's private capture;
+-- later replacement of the test-facing _om export must not redirect that caller.
 --
 -- Registers exactly one hook: SimpleHuskInventoryExtension.start_weapon_fx.
 -- The sibling SimpleHuskInventoryExtension._wield_slot husk-wield diagnostic
@@ -40,15 +45,14 @@
 -- every construct-then-call pair below read as a closure capturing its own
 -- body. See the same note in _cwv_musket_runtime.lua.
 --
--- resource-safety: cwv1159-husk-residency-force-load
--- One file-level marker covers BOTH `Managers.package:load` boundaries below
--- (the issue 280 base-unit pass and the issues 396/401 override pass) instead
--- of two inline annotations, so the 248 moved lines stay byte-identical to what
--- the entry ran - that byte-identity is this slice's behavior-neutrality proof.
+-- resource-safety: cwv1159-husk-residency-force-load -- boot and deferred leases
+-- One file-level marker covers all FOUR `Managers.package:load` boundaries:
+-- the two boot passes and the deferred donor/override runtime leases.
 -- check_native_resource_safety collects markers per FILE, and its own self-test
 -- pins the one-marker-covers-many-calls case. Evidence lives in
--- qa/lua/tests/test_cwv_residency_ledger.lua, which locks the load-before-ledger
--- ordering, the bounded retry cap, and the presence of this marker.
+-- qa/lua/tests/test_cwv_residency_ledger.lua: boot records successful loads
+-- with bounded retries; runtime leases consume attempts before protected loads.
+-- The moved query/lease bodies retain late global/_om reads and original errors.
 local function install(mod, ctx)
 local _om = ctx.om
 local _variant_definitions = ctx.variant_definitions
@@ -301,6 +305,135 @@ mod:hook("SimpleHuskInventoryExtension", "start_weapon_fx", function(func, self,
 	return func(self, fx_name)
 end)
 _cwv_husk_fx_guard_installed = true
+
+_om._install_husk_residency_queries = function(_husk_log_once)
+	-- ============================================================
+	-- Residency truth + leases (fail-closed) -- issues 474/476/482/401
+	-- ============================================================
+	-- Direct engine resource truth, the weapons_of_chaos recipe
+	-- (_woc_mod_unit_preview.lua:16-19 / _woc_blightreaper_pulse.lua:41-45):
+	-- Application.can_get asks the resource system whether the resource is
+	-- obtainable RIGHT NOW under any reference. Package-reference bookkeeping
+	-- (has_loaded) can miss a resource another path already made resident, and
+	-- a custom-bundle unit can be resident while its donor material is not.
+	-- Returns true/false, or nil when the API is unavailable (offline tests).
+	local function _resource_ready(kind, name)
+		local app = rawget(_G, "Application")
+		local can_get = app and app.can_get
+		if type(can_get) ~= "function" then return nil end
+		local ok, ready = pcall(can_get, kind, name)
+		if not ok then return nil end
+		return ready == true
+	end
+	_om._husk_resource_ready = _resource_ready   -- exposed for tests/regression
+
+	-- Optional donor-material gate for future borrowed-material custom meshes.
+	-- Old Musket was removed from this table by #1155: its .unit now binds the
+	-- same CWV-owned material as every other self-contained imported family.
+	-- Keeping a donor declaration would make remote husks depend on an unrelated
+	-- vanilla Handgun package and would recreate the renderer-scope race.
+	local _CUSTOM_UNIT_MATERIAL_DONORS = {}
+	_om._husk_custom_unit_material_donors = _CUSTOM_UNIT_MATERIAL_DONORS
+	local _donor_lease_attempted = {}
+	_om._husk_material_donor_ready = function(base_unit)
+		if type(base_unit) ~= "string" or base_unit == "" then return false end
+		-- The husk spawn appends "_3p"; gate on the 3P donor form.
+		local donor = _CUSTOM_UNIT_MATERIAL_DONORS[base_unit .. "_3p"]
+			or _CUSTOM_UNIT_MATERIAL_DONORS[base_unit]
+		if not donor then return true end   -- no donor declared: nothing to gate
+		if _resource_ready("material", donor) == true then return true end
+		-- FAIL-CLOSED (unknown counts as missing) + one bounded donor lease. The
+		-- donor is a vanilla per-unit package (the same shape the boot force-load
+		-- pass loads), NEVER the units/cwv_* path itself (#403 boot fatal).
+		if Managers and Managers.package and not _donor_lease_attempted[donor] then
+			_donor_lease_attempted[donor] = true
+			local ok = pcall(function()
+				Managers.package:load(donor, _om.HUSK_OVERRIDE_REF, nil, true, true)
+			end)
+			_husk_log_once("474_donor_lease:" .. donor,
+				"[cwv:474] husk donor-material lease %s: %s (ref=%s) -- custom mesh kept BASE identity this wield (fail-closed residency)",
+				ok and "queued" or "FAILED", donor, tostring(_om.HUSK_OVERRIDE_REF))
+		end
+		return false
+	end
+
+	-- (#476/#482) Bounded lease for a positively-identified vanilla override
+	-- outside the def force-load set (pairing/illusion-skin units, crafted exact
+	-- units): base identity renders this wield, the next wield finds it resident.
+	local _override_lease_attempted = {}
+	_om._husk_lease_override = function(base_unit)
+		if type(base_unit) ~= "string" or base_unit == "" then return false end
+		if base_unit:find("units/weapons/player/", 1, true) ~= 1 then return false end
+		if base_unit:find("wpn_invisible_weapon", 1, true) then return false end
+		if not (Managers and Managers.package) then return false end
+		local queued = false
+		for _, path in ipairs({ base_unit, base_unit .. "_3p" }) do
+			if not _override_lease_attempted[path] then
+				_override_lease_attempted[path] = true
+				local ok = pcall(function()
+					Managers.package:load(path, _om.HUSK_OVERRIDE_REF, nil, true, true)
+				end)
+				queued = queued or (ok == true)
+				_husk_log_once("husk_lease:" .. path,
+					"[cwv:476] husk override lease %s: %s (ref=%s) -- base identity kept this wield (fail-closed residency)",
+					ok and "queued" or "FAILED", path, tostring(_om.HUSK_OVERRIDE_REF))
+			end
+		end
+		return queued
+	end
+
+	-- #478 crash-floor residency predicate. Can vanilla spawn_inventory_unit spawn
+	-- this unit's "_3p" form on THIS peer without an async C-assert? DISTINCT from
+	-- _om._resident_override_3p (issue 418), which demands cwv's OWN force-load
+	-- reference: the crash-floor only asks whether the resource is resident under
+	-- ANY reference -- a naturally game-loaded base mesh counts (has_loaded with no
+	-- reference_name returns the plain loaded flag, package_manager.lua:286-293).
+	-- A cwv custom-bundle mesh (units/cwv_*) is unit-resident while the mod is
+	-- loaded. Self-contained families pass immediately; any future mesh that
+	-- explicitly borrows a foreign material routes through the donor gate. Used by the husk re-key to
+	-- suppress a spawn that would otherwise error at gear_utils.lua:189
+	-- (weapon_unit_name .. "_3p" over a missing package).
+	_om._husk_unit_spawnable = function(base_unit)
+		if type(base_unit) ~= "string" or base_unit == "" then return false end
+		if _om._husk_custom_bundle_unit and _om._husk_custom_bundle_unit(base_unit) then
+			-- (#719) The donor gate is the ONLY variable for a mod-bundle mesh.
+			-- Unit residency is structural: these paths ship in CWV's master
+			-- package, which VMF loads with the mod, so this code cannot run while
+			-- they are absent -- and asking the global resource system about a
+			-- Workshop bundle path is exactly the lookup that does not answer
+			-- reliably. A mesh that borrows a foreign material still fails closed
+			-- on that material; self-contained Old Musket/Greataxe/Crowbill units
+			-- declare no donor and pass.
+			return _om._husk_material_donor_ready(base_unit)
+		end
+		local ready = _resource_ready("unit", base_unit .. "_3p")
+		if ready ~= nil then return ready end
+		if not (Managers and Managers.package) then return false end
+		local ok, res = pcall(Managers.package.has_loaded, Managers.package, base_unit .. "_3p")
+		return ok and res == true
+	end
+
+	-- (#237/#419) Preview-time resolved-3p gate for the two solo-keep preview
+	-- adapters (_cwv_preview_meshswap_apply "hand_flags" and
+	-- _cwv_browser_meshswap_apply "base_identity" in the entry).
+	-- _om._resident_override_3p demands HUSK_OVERRIDE_REF residency, which only
+	-- the boot force-load pass and the husk leases above (:379/:402) establish --
+	-- outside that set the old adapter call sites collapsed a nil resolver answer
+	-- into a blind `base .. "_3p"` spawn target, silently voiding the documented
+	-- degrade-to-base contract (entry :8900-:8907). This predicate keeps the husk
+	-- resolver's answer when it speaks (co-op unchanged) and otherwise applies the
+	-- #478 crash floor above (_om._husk_unit_spawnable, incl. the optional #474
+	-- donor-material gate for explicitly borrowed custom meshes). Old Musket's
+	-- self-contained material closure can no longer reach World.spawn_unit with an unresolved donor through
+	-- a preview). Decision shape is pure and shared with the offline lock:
+	-- exact_appearance.resolve_preview_3p. _om fields are read at CALL time so
+	-- entry-load order stays irrelevant.
+	_om._preview_override_3p = function(base_unit)
+		return _om.exact_appearance.resolve_preview_3p(base_unit,
+			_om._resident_override_3p, _om._husk_unit_spawnable)
+	end
+	return _resource_ready
+end
 
 end
 

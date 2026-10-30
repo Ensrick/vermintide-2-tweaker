@@ -836,8 +836,39 @@ return function(H, repo_root)
         H.truthy(husk_residency:find("[cwv husk-override-residency] force-loaded %s (ref=%s, resident=%s, for=%s.%s)", 1, true))
         H.truthy(husk_residency:find("[cwv husk-fx-guard] SKIP start_weapon_fx", 1, true))
 
-        -- BOUNDARY: the two husk owners must not overlap. Residency owns the
-        -- boot force-loads; husk_path owns the per-spawn display adapters. The
+
+        -- Deferred helpers have one source owner and one original-position
+        -- activation edge; early owner install must not become eager queries.
+        for _, marker in ipairs({
+            "_om._husk_resource_ready = _resource_ready",
+            "_om._husk_custom_unit_material_donors = _CUSTOM_UNIT_MATERIAL_DONORS",
+            "_om._husk_material_donor_ready = function",
+            "_om._husk_lease_override = function",
+            "_om._husk_unit_spawnable = function",
+            "_om._preview_override_3p = function",
+        }) do
+            H.equal(count_plain(husk_residency, marker), 1, "deferred owner owns " .. marker)
+            H.equal(count_plain(husk, marker), 0, "husk path must not duplicate " .. marker)
+            H.equal(count_plain(entry, marker), 0, "entry must not duplicate " .. marker)
+        end
+        H.equal(count_plain(husk, "local _resource_ready = _om._install_husk_residency_queries(_husk_log_once)"), 1)
+        H.equal(count_plain(husk_residency, "return _resource_ready"), 1)
+        local before = assert(husk:find("_om._husk_preselect_units = function", 1, true))
+        local call = assert(husk:find("_om._install_husk_residency_queries(_husk_log_once)", 1, true))
+        local after = assert(husk:find("_om._husk_rekey_units = function", 1, true))
+        H.truthy(before < call and call < after, "deferred call stays between preselection and re-key")
+        local function canonical_lines(text)
+            local n = 0
+            for line in (text:gsub("\r\n", "\n") .. "\n"):gmatch("([^\n]*)\n") do
+                if line ~= "" then n = n + 1 end
+            end
+            return n
+        end
+        H.truthy(canonical_lines(husk) <= 1470, "husk-path owner must retire its target debt")
+        H.truthy(canonical_lines(husk_residency) <= 450, "residency owner stays bounded")
+
+        -- BOUNDARY: residency owns boot loads plus deferred resource queries;
+        -- husk_path continues to own the per-spawn display adapters.
 		-- The executable husk wield owner lives with the spawn ledger it consumes;
 		-- the entry retains only the one installer call.
         H.equal(count_plain(husk_residency, "_om._husk_adapter_pre"), 0,
