@@ -588,6 +588,113 @@ public static class VmbResidualFixture1328 {
         Assert-Fixture ($captured.Contains('planted reader failure') -and
             $readEvidence.Disposed -eq 4) 'diagnostic readers close even when an opened stream fails'
         $fixtureText = [IO.File]::ReadAllText($PSCommandPath, [Text.Encoding]::UTF8)
+        # #1328 deterministic checks of the EXACT R4 formatter, not a Process
+        # or clock model. Later real-worker cases retain the process boundary.
+        $normalBlockStart = $fixtureText.LastIndexOf('$normalMutex = ')
+        $normalBlockEnd = $fixtureText.LastIndexOf('$evidenceMarker = Join-Path')
+        $normalFormatStart = $fixtureText.LastIndexOf('                # BEGIN1328-NORMAL-RELEASE-EVIDENCE:')
+        $normalFormatEnd = $fixtureText.LastIndexOf('                # END1328-NORMAL-RELEASE-EVIDENCE')
+        Assert-Fixture ($normalBlockStart -ge 0 -and $normalFormatStart -gt $normalBlockStart -and
+            $normalFormatEnd -gt $normalFormatStart -and $normalBlockEnd -gt $normalFormatEnd) 'normal-release formatter markers resolve only the later actual fixture block'
+        $normalBlock = $fixtureText.Substring($normalBlockStart,$normalBlockEnd-$normalBlockStart)
+        $normalFormatSource = $fixtureText.Substring($normalFormatStart,$normalFormatEnd-$normalFormatStart)
+        $normalPredicate = '$normalPassed = (Test-Path -LiteralPath $normalContenderMarker) -and [string]::IsNullOrWhiteSpace((Read-WorkerError $normalContenderMarker))'
+        Assert-Fixture ([regex]::Matches($normalBlock,[regex]::Escape($normalPredicate)).Count -eq 1 -and
+            [regex]::Matches($normalBlock,'\bRead-WorkerError\b').Count -eq 1 -and
+            $normalBlock.IndexOf($normalPredicate) -lt $normalBlock.IndexOf('if (-not $normalPassed)') -and
+            $normalBlock.IndexOf('if (-not $normalPassed)') -lt $normalBlock.IndexOf('# BEGIN1328-') -and
+            $normalBlock.IndexOf('# END1328-') -lt $normalBlock.IndexOf('Assert-Fixture $normalPassed') -and
+            $normalBlock.Contains('Assert-Fixture $normalPassed (''normal release drains lingering child/grandchild before contender mutation'' + $normalEvidence)')) 'normal-release truth is captured once before failure-only evidence and reaches the original assertion'
+        $normalSequence = @(
+            '$normalOwner = Start-Worker $normalMutex $normalRecord ''ship'' ''mod-a'' 3000 $normalMarker $normalRelease $normalPids ''SuccessWithResidue''',
+            'Wait-Marker $normalMarker $normalOwner',
+            '$normalContender = Start-Worker $normalMutex $normalRecord ''deploy'' ''mod-b'' 5000 $normalContenderMarker '''' '''' ''Success'' $normalPids',
+            'Start-Sleep -Milliseconds 150',
+            '[IO.File]::WriteAllText($normalRelease, ''release'')',
+            '$normalOwner.WaitForExit()',
+            '$normalContender.WaitForExit()'
+        )
+        $normalPrevious = -1
+        foreach ($needle in $normalSequence) {
+            $at = $normalBlock.IndexOf($needle,[StringComparison]::Ordinal)
+            Assert-Fixture ($at -gt $normalPrevious -and $at -eq $normalBlock.LastIndexOf($needle,[StringComparison]::Ordinal)) 'normal-release worker actions, wait calls, budgets and ordering remain unchanged'
+            $normalPrevious = $at
+        }
+        Assert-Fixture ($helperText.Contains('::TerminateAndWaitForResidualDescendants(10000)')) 'normal-release evidence does not change the production drain budget'
+        $normalReadCalls = @(
+            'Read-FixtureEvidence ($normalMarker + ''.stdout.txt'') -Limit 1024',
+            'Read-FixtureEvidence ($normalMarker + ''.stderr.txt'') -Limit 1024',
+            'Read-FixtureEvidence ($normalContenderMarker + ''.stdout.txt'') -Limit 1024',
+            'Read-FixtureEvidence ($normalContenderMarker + ''.stderr.txt'') -Limit 1024',
+            'Read-FixtureEvidence $normalPids -Limit 256',
+            'Read-FixtureEvidence $normalRecord -Limit 2048'
+        )
+        foreach ($needle in $normalReadCalls) {
+            Assert-Fixture ([regex]::Matches($normalFormatSource,[regex]::Escape($needle)).Count -eq 1) 'normal-release formatter uses each exact field-specific bounded read once'
+        }
+        Assert-Fixture ([regex]::Matches($normalFormatSource,'\bRead-FixtureEvidence\b').Count -eq 6) 'normal-release formatter has exactly six bounded payload reads'
+        $normalFormatter = [scriptblock]::Create($normalFormatSource)
+        $normalSnapshot = @{OwnerPid=101;OwnerExit='unavailable';ContenderPid=202;ContenderExit=5}
+        $normalReadyMs=11; $normalContenderStartMs=22; $normalReleaseMs=33
+        $normalOwnerExitMs=44; $normalContenderExitMs=55
+        $normalExpectedPrefix = '; owner_pid=101 owner_exit=unavailable contender_pid=202 contender_exit=5 ready_ms=11 contender_start_ms=22 release_ms=33 owner_exit_ms=44 contender_exit_ms=55'
+        $normalMarker=Join-Path $temp 'format-missing-owner'
+        $normalContenderMarker=Join-Path $temp 'format-missing-contender'
+        $normalPids=Join-Path $temp 'format-missing-pids'
+        $normalRecord=Join-Path $temp 'format-missing-record'
+        . $normalFormatter
+        Assert-Fixture ($normalEvidence.StartsWith($normalExpectedPrefix,[StringComparison]::Ordinal) -and
+            $normalEvidence.Contains('owner_marker=False contender_marker=False owner_finally=False contender_finally=False pids_exist=False record_exists=False')) 'normal-release formatter preserves scalar labels/values and missing-file states'
+        foreach ($label in @('owner_stdout','owner_stderr','contender_stdout','contender_stderr','pids','record')) {
+            Assert-Fixture ($normalEvidence.Contains(($label+'=[]'))) 'normal-release missing payloads remain explicit empty fields'
+        }
+        $normalMarker=Join-Path $temp 'format-long-owner'
+        $normalContenderMarker=Join-Path $temp 'format-long-contender'
+        $normalPids=Join-Path $temp 'format-long-pids'
+        $normalRecord=Join-Path $temp 'format-long-record'
+        foreach ($path in @($normalMarker,$normalContenderMarker,($normalMarker+'.finally'),($normalContenderMarker+'.finally'))) {
+            [IO.File]::WriteAllText($path,'fixture',(New-Object Text.UTF8Encoding($false)))
+        }
+        $normalPayloads = @(
+            @{Label='owner_stdout';Path=($normalMarker+'.stdout.txt');Text=('A'*1100);Expected=(('A'*1024)+'<truncated>')},
+            @{Label='owner_stderr';Path=($normalMarker+'.stderr.txt');Text=('B'*1100);Expected=(('B'*1024)+'<truncated>')},
+            @{Label='contender_stdout';Path=($normalContenderMarker+'.stdout.txt');Text=('C'*1100);Expected=(('C'*1024)+'<truncated>')},
+            @{Label='contender_stderr';Path=($normalContenderMarker+'.stderr.txt');Text=('D'*1100);Expected=(('D'*1024)+'<truncated>')},
+            @{Label='pids';Path=$normalPids;Text=('P'*400);Expected=(('P'*256)+'<truncated>')},
+            @{Label='record';Path=$normalRecord;Text=('R'*2200);Expected=(('R'*2048)+'<truncated>')}
+        )
+        foreach ($payload in $normalPayloads) { [IO.File]::WriteAllText($payload.Path,$payload.Text,(New-Object Text.UTF8Encoding($false))) }
+        $assertNormalFormatter = {
+            Assert-Fixture ($normalEvidence.StartsWith($normalExpectedPrefix,[StringComparison]::Ordinal)) 'normal-release formatter preserves exact scalar labels and values'
+            Assert-Fixture ($normalEvidence.Contains('owner_marker=True contender_marker=True owner_finally=True contender_finally=True pids_exist=True record_exists=True')) 'normal-release formatter preserves present-file states'
+            foreach ($payload in $normalPayloads) {
+                Assert-Fixture ($normalEvidence.Contains(($payload.Label+'=['+$payload.Expected+']'))) ('normal-release formatter preserves field-specific truncation for '+$payload.Label)
+            }
+        }
+        . $normalFormatter
+        & $assertNormalFormatter
+        # Compile/setup/IO stay OUTSIDE the normal-assertion catch. Controls
+        # mutate one unique actual formatter preimage, never a copied algorithm.
+        $normalEvidenceControls = @(
+            @{Name='owner-exit-label';From='owner_exit=$($normalSnapshot.OwnerExit)';To='owner_exit_lost=$($normalSnapshot.OwnerExit)';Assertion='fixture failed: normal-release formatter preserves exact scalar labels and values'},
+            @{Name='stdout-limit';From=$normalReadCalls[0];To='Read-FixtureEvidence ($normalMarker + ''.stdout.txt'') -Limit 32';Assertion='fixture failed: normal-release formatter preserves field-specific truncation for owner_stdout'}
+        )
+        $normalEvidenceKilled=0
+        foreach ($control in $normalEvidenceControls) {
+            Assert-Fixture ([regex]::Matches($normalFormatSource,[regex]::Escape($control.From)).Count -eq 1) 'normal-release control requires a unique actual source preimage'
+            $normalMutant = [scriptblock]::Create($normalFormatSource.Replace($control.From,$control.To))
+            . $normalMutant
+            $normalFailure=''
+            try { & $assertNormalFormatter }
+            catch { $normalFailure=$_.Exception.Message }
+            Assert-Fixture ($normalFailure -ceq $control.Assertion) ('normal-release control must fail its normal formatter assertion: '+$control.Name)
+            $normalEvidenceKilled++
+            . $normalFormatter
+            & $assertNormalFormatter
+        }
+        Assert-Fixture ($normalEvidenceKilled -eq 2) 'normal-release formatter controls are killed only by their normal assertions'
+        Write-Host ("[machine_transaction_lease:normal-evidence] real_file_cases=2 controls_killed={0} controls={1}" -f
+            $normalEvidenceKilled,($normalEvidenceControls.Name -join ','))
         $repeatBlockStart = $fixtureText.LastIndexOf("`$repeatMutex = 'Global\Ensrick.VMBLauncher.Tests.'")
         $repeatBlockEnd = $fixtureText.LastIndexOf("`$queuedMutex = 'Global\Ensrick.VMBLauncher.Tests.'")
         $repeatBlock = $fixtureText.Substring($repeatBlockStart, $repeatBlockEnd - $repeatBlockStart)
@@ -956,18 +1063,43 @@ public static class VmbResidualFixture1328 {
         $normalMarker = Join-Path $temp 'normal-owner.marker'
         $normalRelease = Join-Path $temp 'normal-owner.release'
         $normalPids = Join-Path $temp 'normal-pids.txt'
+        $normalWatch = [Diagnostics.Stopwatch]::StartNew()
         $normalOwner = Start-Worker $normalMutex $normalRecord 'ship' 'mod-a' 3000 $normalMarker $normalRelease $normalPids 'SuccessWithResidue'
         $children += $normalOwner
         Wait-Marker $normalMarker $normalOwner
+        $normalReadyMs = $normalWatch.ElapsedMilliseconds
         $normalContenderMarker = Join-Path $temp 'normal-contender.marker'
+        $normalContenderStartMs = $normalWatch.ElapsedMilliseconds
         $normalContender = Start-Worker $normalMutex $normalRecord 'deploy' 'mod-b' 5000 $normalContenderMarker '' '' 'Success' $normalPids
         $children += $normalContender
         Start-Sleep -Milliseconds 150
         Assert-Fixture (-not (Test-Path -LiteralPath $normalContenderMarker)) 'normal contender waits while owner has lingering descendant'
+        $normalReleaseMs = $normalWatch.ElapsedMilliseconds
         [IO.File]::WriteAllText($normalRelease, 'release')
         $normalOwner.WaitForExit()
+        $normalOwnerExitMs = $normalWatch.ElapsedMilliseconds
         $normalContender.WaitForExit()
-        Assert-Fixture ((Test-Path -LiteralPath $normalContenderMarker) -and [string]::IsNullOrWhiteSpace((Read-WorkerError $normalContenderMarker))) 'normal release drains lingering child/grandchild before contender mutation'
+        $normalContenderExitMs = $normalWatch.ElapsedMilliseconds
+        # Capture the unchanged, short-circuiting assertion truth ONCE before
+        # diagnostic reads. Reporting must never replace that primary failure.
+        $normalPassed = (Test-Path -LiteralPath $normalContenderMarker) -and [string]::IsNullOrWhiteSpace((Read-WorkerError $normalContenderMarker))
+        $normalEvidence = ''
+        if (-not $normalPassed) {
+            try {
+                $normalOwnerExit = 'unavailable'; $normalContenderExit = 'unavailable'
+                try { if ($null -ne $normalOwner.ExitCode) { $normalOwnerExit = [string]$normalOwner.ExitCode } } catch { }
+                try { if ($null -ne $normalContender.ExitCode) { $normalContenderExit = [string]$normalContender.ExitCode } } catch { }
+                $normalSnapshot = @{ OwnerPid=$normalOwner.Id; OwnerExit=$normalOwnerExit; ContenderPid=$normalContender.Id; ContenderExit=$normalContenderExit }
+                # BEGIN1328-NORMAL-RELEASE-EVIDENCE: scalar snapshot + real files.
+                $normalEvidence = "; owner_pid=$($normalSnapshot.OwnerPid) owner_exit=$($normalSnapshot.OwnerExit) contender_pid=$($normalSnapshot.ContenderPid) contender_exit=$($normalSnapshot.ContenderExit) ready_ms=$normalReadyMs contender_start_ms=$normalContenderStartMs release_ms=$normalReleaseMs owner_exit_ms=$normalOwnerExitMs contender_exit_ms=$normalContenderExitMs"
+                $normalEvidence += "; owner_marker=$(Test-Path -LiteralPath $normalMarker) contender_marker=$(Test-Path -LiteralPath $normalContenderMarker) owner_finally=$(Test-Path -LiteralPath ($normalMarker + '.finally')) contender_finally=$(Test-Path -LiteralPath ($normalContenderMarker + '.finally')) pids_exist=$(Test-Path -LiteralPath $normalPids) record_exists=$(Test-Path -LiteralPath $normalRecord)"
+                $normalEvidence += "; owner_stdout=[$(Read-FixtureEvidence ($normalMarker + '.stdout.txt') -Limit 1024)] owner_stderr=[$(Read-FixtureEvidence ($normalMarker + '.stderr.txt') -Limit 1024)] contender_stdout=[$(Read-FixtureEvidence ($normalContenderMarker + '.stdout.txt') -Limit 1024)] contender_stderr=[$(Read-FixtureEvidence ($normalContenderMarker + '.stderr.txt') -Limit 1024)]"
+                $normalEvidence += "; pids=[$(Read-FixtureEvidence $normalPids -Limit 256)] record=[$(Read-FixtureEvidence $normalRecord -Limit 2048)]"
+                # END1328-NORMAL-RELEASE-EVIDENCE
+            }
+            catch { $normalEvidence = '; evidence_unavailable=' + $_.Exception.GetType().FullName }
+        }
+        Assert-Fixture $normalPassed ('normal release drains lingering child/grandchild before contender mutation' + $normalEvidence)
         Assert-WorkerExitPath $normalMarker $normalOwner $false
 
         $evidenceMarker = Join-Path $temp 'timeout-evidence.marker'
