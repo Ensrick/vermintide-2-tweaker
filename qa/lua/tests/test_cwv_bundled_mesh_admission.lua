@@ -20,6 +20,7 @@ return function(H, repo_root)
     local mod_root = repo_root
         .. "/character_weapon_variants/scripts/mods/character_weapon_variants/"
     local husk_path = mod_root .. "_cwv_husk_path.lua"
+    local residency_path = mod_root .. "_cwv_husk_residency_owner.lua"
     local Crowbill = assert(loadfile(mod_root .. "_cwv_crowbill_family.lua"))()
     local Greataxe = assert(loadfile(mod_root .. "_cwv_greataxe.lua"))()
 
@@ -104,8 +105,13 @@ return function(H, repo_root)
     local function fixture()
         local om = { HUSK_OVERRIDE_REF = "cwv_husk_override_units" }
         local lines, leases = {}, {}
+        local boot = { lines = {}, leases = {}, hooks = {} }
+        local booting = true
         local env = {
-            printf = function(fmt, ...) lines[#lines + 1] = string.format(fmt, ...) end,
+            printf = function(fmt, ...)
+                local target = booting and boot.lines or lines
+                target[#target + 1] = string.format(fmt, ...)
+            end,
             ScriptUnit = { has_extension = function() return false end,
                 extension = function() return nil end },
             Unit = { alive = function() return true end },
@@ -117,12 +123,25 @@ return function(H, repo_root)
             Weapons = {},
             Managers = {
                 package = {
-                    load = function(_, path, ref) leases[#leases + 1] = { path = path, ref = ref } end,
+                    load = function(_, path, ref)
+                        local target = booting and boot.leases or leases
+                        target[#target + 1] = { path = path, ref = ref }
+                    end,
                     has_loaded = function() return false end,
                 },
             },
         }
-        assert(loadfile(husk_path))()(nil, {
+        setmetatable(env, { __index = _G }); env._G = env
+        env._residency_boot = boot
+        local mod = { hook = function(_, class, method, callback)
+            assert(class == "SimpleHuskInventoryExtension" and method == "start_weapon_fx")
+            boot.hooks[#boot.hooks + 1] = callback
+        end }
+        local owner = assert(loadfile(residency_path)); setfenv(owner, env)
+        owner()(mod, { om = om, variant_definitions = DEFS })
+        booting = false
+        local husk = assert(loadfile(husk_path)); setfenv(husk, env)
+        husk()(mod, {
             om = om,
             variant_definitions = DEFS,
             find_def = find_def,

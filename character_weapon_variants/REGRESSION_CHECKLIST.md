@@ -1,5 +1,28 @@
 # Regression Checklist — character_weapon_variants
 
+## #2 Deferred husk residency owner
+
+- Offline ownership/behavior checks: `test_cwv_residency_ledger.lua`,
+  `test_cwv_husk_adapter.lua` and `test_cwv_entry_decomposition.lua`; existing
+  bundled-mesh, dual-hand, installed-chain, ammo and transform fixtures retain
+  their actual producer/consumer coverage.
+- Execute the actual early residency installer and late husk installer in the
+  same fixture environment. The early install must not create the late helper
+  closures/tables; the later one resets its own attempts and uses its logger.
+- Preserve exact resource truth (true/false/unknown), borrowed-material refusal,
+  vanilla-only override leases, attempt-before-load even on errors, tuples and
+  late collaborator reads. Custom-bundle units never enter package loading.
+- Execute the real re-key caller's direct-resource gates: it retains the private
+  returned closure even if the mutable test-facing `_om` export is replaced.
+- Keep existing real re-key/preview/installed-chain oracles and update source
+  ownership assertions, not blanket combined-source searches. Resource-safety
+  proof covers four real load sites, not only the two unchanged boot passes.
+- Keep husk path <=1470 and residency owner <=450 canonical lines; remove only
+  the retired husk-path target baseline. Entry order/hook/command/log identities
+  remain unchanged apart from the broker-selected release version.
+- Source/behavioral proof is structural, not native graphics, residency,
+  animation, transition or co-op acceptance.
+
 ## #428 Old Musket local construction/admission
 
 - `test_cwv_construction_prerequisite.lua` covers the extracted private graph/

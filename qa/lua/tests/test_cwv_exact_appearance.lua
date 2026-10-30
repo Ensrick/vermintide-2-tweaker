@@ -333,12 +333,22 @@ return function(H, repo_root)
             -- nil answer the old call sites collapsed into blind base.."_3p").
             '_om._preview_override_3p, "hand_flags"',
             '_om._preview_override_3p, "base_identity"',
-            '_om._preview_override_3p = function',
         }) do
             H.truthy(source:find(marker, 1, true), "missing canonical surface route: " .. marker)
         end
         H.equal(source:find('_om._resident_override_3p, "', 1, true), nil,
             "raw resident resolver must never be passed to a preview adapter (#237/#419)")
+        local base = repo_root .. "/character_weapon_variants/scripts/mods/character_weapon_variants/"
+        local function read_owner(name)
+            local file = assert(io.open(base .. name, "rb"))
+            local text = file:read("*a"); file:close(); return text
+        end
+        local marker = "_om._preview_override_3p = function"
+        local owner = read_owner("_cwv_husk_residency_owner.lua")
+        local at = assert(owner:find(marker, 1, true))
+        H.equal(owner:find(marker, at + #marker, true), nil, "preview resolver has one source owner")
+        H.equal(read_owner("_cwv_husk_path.lua"):find(marker, 1, true), nil,
+            "husk path must not duplicate the deferred preview definition")
     end)
 
     H.test("CWV #579 explicit render identity wins over stale stores", function()

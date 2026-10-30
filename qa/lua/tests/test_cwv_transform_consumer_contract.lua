@@ -118,6 +118,8 @@ return function(H, repo_root)
 	local function fixture692(options)
 		options = options or {}
 		local hooks, writes, env, mod, om = {}, {}, {}, {}, {}
+		local residency_boot = { logs = {}, hooks = {} }
+		local residency_booting = false
 		local function node_zero(node) assert(node == 0, "wrong transform node") end
 		local unit_api = {
 			alive = function(unit) return type(unit) == "table" and unit.alive == true end,
@@ -139,7 +141,12 @@ return function(H, repo_root)
 		local private_table = setmetatable({ clone = clone }, { __index = table })
 		setmetatable(env, { __index = _G })
 		env._G, env.Unit, env.Vector3, env.table = env, unit_api, vector, private_table
-		env.printf = function() end
+		env.printf = function(fmt, ...)
+			if residency_booting then
+				residency_boot.logs[#residency_boot.logs + 1] = string.format(fmt, ...)
+			end
+		end
+		env._residency_boot, env.Managers = residency_boot, false
 		env.Quaternion = {
 			from_euler_angles_xyz = function(x, y, z) return { x, y, z, 1 } end,
 		}
@@ -170,6 +177,9 @@ return function(H, repo_root)
 			local key = class .. "." .. method
 			assert(hooks[key] == nil, "duplicate fixture hook " .. key)
 			hooks[key] = callback
+			if residency_booting then
+				residency_boot.hooks[#residency_boot.hooks + 1] = key
+			end
 		end
 		mod.hook, mod.hook_safe = hook, hook
 		local store = { schema = 1, items = {} }
@@ -234,6 +244,9 @@ return function(H, repo_root)
 		om.mod_unit_preview = { apply_loot_fallbacks = function() end }
 		om._old_musket_preview_descriptor = function() end
 		load("_cwv_menu_preview_owner")(mod, ctx)
+		residency_booting = true
+		load("_cwv_husk_residency_owner")(mod, { om = om, variant_definitions = {} })
+		residency_booting = false
 		load("_cwv_husk_path")(mod, {
 			om = om, variant_definitions = {}, find_def = function() end,
 			is_unit = unit_api.alive, apply_cwv_hand_transform = apply,

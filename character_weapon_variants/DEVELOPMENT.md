@@ -125,6 +125,16 @@ explicit engine-surface review:
   and bot presentation surface, including transform-miss evidence and complete
   fade enrollment. Keep it separate from the transform producer and menu/husk
   consumers.
+- `_cwv_husk_residency_owner.lua` owns the existing boot residency passes and
+  private `_install_husk_residency_queries` deferred initializer. The later
+  `_cwv_husk_path.lua` invokes it at the original helper-definition boundary
+  with its exact log-once closure. Resource truth, donor/override attempts,
+  spawnability and preview closures then bind against that same `_om`; their
+  three ledgers reset per husk-path install, not per early owner load. Globals
+  and `_om` collaborators remain call-time reads. Its returned resource-truth
+  closure retains the re-key consumer's original private capture; the exposed
+  test field is not authority to replace that closure. Never add a child `dofile`,
+  eager load/query, shared cache, retry policy or new hook for this boundary.
 - `_cwv_commands_lifecycle.lua` owns diagnostic commands and the final
   `on_game_state_changed`, `on_enabled`, `on_disabled`, and `on_unload`
   callbacks. Appearance replay, dual-weapon package leases, Crowbill state,
@@ -177,6 +187,11 @@ use `qa/lua/cwv_source.lua`. Tests concerned specifically with entry size or
 load order should read the entry file directly.
 
 ## Where new code goes
+
+- Keep husk resource truth and bounded donor/override leases in the existing
+  residency owner; call its deferred initializer only from the husk path's
+  established late boundary. Mesh identity/re-key and transforms stay in the
+  husk-path owner. Do not grow that owner back past the target-tier limit.
 
 - Extend Old Musket ranged-profile ownership in `_cwv_old_musket_shot_owner.lua`,
   not another menu/transport guard. Preserve healthy math/order, private helper
@@ -1418,6 +1433,13 @@ Consequence: **any fix written only on the owner path, or that reads
 must live in the `spawn_inventory_unit` hook and resolve via positive signals.
 
 ### Residency doctrine — force-load the OVERRIDE units, not the base
+
+The boot passes and later runtime resource/lease closures share
+`_cwv_husk_residency_owner.lua`. The late closures still install only when
+`_cwv_husk_path.lua` passes its logger; moving their source did not make them
+boot work. Preserve the distinction between boot success/retry ledgers and
+runtime attempted-before-load ledgers, including a failed load consuming its
+one attempt. This structural boundary grants no additional resource admission.
 
 The mesh a husk actually spawns for a curated variant is the **synced skin's**
 per-hand units. `_register_variant_skins` sets `skin.right_hand_unit =
