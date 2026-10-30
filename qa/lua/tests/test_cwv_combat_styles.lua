@@ -11,6 +11,53 @@ return function(H, repo_root)
 		return copy
 	end
 
+	H.test("CWV #645 active Combat Style member keys are unique", function()
+		local policy = assert(loadfile(repo_root
+			.. "/character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_combat_styles.lua"))()
+		local function audit_active_members(families)
+			local owners = {}
+			for family_id, family in pairs(families) do
+				for member_key in pairs(family.members) do
+					H.equal(owners[member_key], nil,
+						"duplicate active Combat Style member " .. tostring(member_key))
+					owners[member_key] = family_id
+				end
+			end
+		end
+
+		local families_before = clone(policy.FAMILIES)
+		local diagnostics_before = clone(policy.DIAGNOSTIC_CANDIDATES)
+		audit_active_members(policy.FAMILIES)
+		-- Diagnostic membership is observation-only, not a second active family.
+		local candidate_id, candidate = policy.diagnostic_candidate("es_2h_heavy_spear")
+		H.equal(candidate_id, "elf_tuskgor_spears")
+		H.equal(candidate.members.es_2h_heavy_spear, true)
+		H.equal(candidate.members.we_spear, true)
+		H.equal(policy.member("we_spear"), nil)
+		H.equal(policy.member("es_2h_heavy_spear"), "spear")
+		H.deep_equal(policy.FAMILIES.spear.members.es_2h_heavy_spear,
+			{ default = "hunter", order = { "hunter", "infantry" } })
+		H.equal(policy.style("es_2h_heavy_spear"), "hunter")
+		H.equal(policy.next_style("es_2h_heavy_spear", "hunter"), "infantry")
+		H.equal(policy.next_style("es_2h_heavy_spear", "infantry"), "hunter")
+		H.equal(policy.LEGACY_MIGRATIONS.cwv_es_infantry_spear.target_item,
+			"es_2h_heavy_spear")
+		H.equal(policy.LEGACY_MIGRATIONS.cwv_es_infantry_spear.style_id, "infantry")
+
+		-- Plant an independently well-formed member in a private copy of the
+		-- actual catalogue. Only the normal audit assertion is inside pcall.
+		local duplicated = clone(policy.FAMILIES)
+		duplicated.one_handed_swords.members.es_2h_heavy_spear =
+			clone(duplicated.one_handed_swords.members.we_1h_sword)
+		local ok, failure = pcall(audit_active_members, duplicated)
+		H.equal(ok, false, "active-member audit accepted a planted duplicate")
+		H.truthy(type(failure) == "string" and failure:find(
+			"duplicate active Combat Style member es_2h_heavy_spear", 1, true),
+			"planted duplicate did not reach the normal membership assertion")
+		H.deep_equal(policy.FAMILIES, families_before)
+		H.deep_equal(policy.DIAGNOSTIC_CANDIDATES, diagnostics_before)
+	end)
+
 	H.test("CWV Combat Styles expose deterministic multi-style family cycles", function()
 		local current, style, family = policy.style("es_2h_sword")
 		H.equal(current, "greatsword")
