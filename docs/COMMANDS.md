@@ -3,35 +3,55 @@
 Per-mod inventory of all chat commands registered via `mod:command(...)`
 across this monorepo.
 
-Every entry is the literal first argument of `mod:command("name", ...)` —
+Entries are registered command names, including explicitly listed finite aliases,
 typed in chat as `/<name>` directly (NO mod-id prefix; see CLAUDE.md "Lua
 Environment" section on the chat command syntax rule).
 
-**Snapshot date:** 2026-08-13 (lobby_tweaker retired -- its commands absorbed into gt as `/gt_lobby_*`; bt + gut / others not re-audited). Refresh after any mod adds/renames commands — grep `mod:command\(` across `**/*.lua` to
+**Snapshot date:** 2026-08-13 (lobby_tweaker retired -- its commands absorbed into gt as `/gt_lobby_*`; bt + gut / others not re-audited). The WT/WTDev section alone was re-audited on 2026-10-30; this is not a refresh of the other mods. Refresh after any mod adds/renames commands — grep `mod:command\(` across `**/*.lua` to
 regenerate.
 
 ---
 
 ## By mod
 
-### `wt` (weapon_tweaker)
+### `wt` / `wt_dev` (Weapon Tweaker streams)
+
+Shared by the public-beta `weapon_tweaker/` and Dev `weapon_tweaker_dev/`:
+
 ```
-info, animlog, force3p, force1p, sm_probe,
+info, sm_probe,
 brace_to_repeater_skin, brace_to_repeater_dump,
 dump, dump_actions, dump_weapons,
 wt_regression_test, wt_dump_wielded,
-wt_dump_anim_picks, wt_coverage,                  -- anim tuning loop (export + skeleton probe)
-wt_dev_hp_apply, wt_dev_hp_reset, wt_dump_hold_pose, -- hold-pose tuner
-wt_audit_universal_compatibility                  -- #948 U-state compatibility census
+verify_wt_loadout_cache, verify_wt_availability_sort
 ```
 
-The historical `/wt_audit_kruber_3p`, `/wt_audit_bardin_3p`,
+Additional commands registered **only by WTDev**:
+
+```
+animlog, force3p, force1p,
+wt_dump_anim_picks, wt_coverage, verify_wt_anim_picker_sources,
+wt_dev_hp_apply, wt_dev_hp_reset, wt_dump_hold_pose,
+wt_audit_universal_compatibility
+```
+
+The WTDev-only historical `/wt_audit_kruber_3p`, `/wt_audit_bardin_3p`,
 `/wt_audit_kerillian_3p`, `/wt_audit_saltzpyre_3p`, and
 `/wt_audit_warrior_priest_3p` names remain harmless deprecated aliases. They
 report the relevant #948 receiver census with every cell in `U` (untested);
 they no longer run at startup or infer Working from static routing tables.
+The public beta does not register these aliases or the Dev-only commands.
 
-*(wt section refreshed 2026-07-22 for the #948 compatibility reset.)*
+`/force3p <event>` probes the local third-person body and bypasses WT's remap
+hook when its original animation callback is available. Its `exists=true` /
+`fired` output is not proof of visible playback, complete action chains or
+remote playback. `/wt_coverage` and `/wt_dump_anim_picks` cover only entries in
+the Dev animation picker, not every weapon. In particular, the Tuskgor Spear
+has no picker entry as of this section's audit (#645).
+
+Sources: both streams' `_wt_diagnostics.lua`, `_wt_anim_remap.lua`,
+`_wt_runtime_checks.lua` and entry point; WTDev's `wt_dev_anim_picker.lua` and
+`wt_dev_hold_pose.lua`. Stream separation is tracked by #635.
 
 ### `gt` (general_tweaker_dev)
 *(2026-07-13: ordinary commands omit the `gt_` prefix. `gt_regression_test` remains prefixed because bare `regression_test` collides with gui_tweaker's, and bounded issue-specific diagnostics such as `gt_chest_pickup_probe` keep the prefix for log clarity. `lobby_*` names retain their subsystem prefix.)*
