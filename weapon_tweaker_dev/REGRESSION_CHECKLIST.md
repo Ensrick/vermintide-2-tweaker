@@ -1,5 +1,17 @@
 # Regression Checklist — weapon_tweaker
 
+## #942 - Finite calculation capture (mirrored)
+
+- Apply the public checklist to the exact Dev mirror, keeping namespace,
+  friends-only item, preview and existing Dev diagnostic overlay unchanged.
+- Actual owner/command, native selection/helper, strict armor, #664, tuple/error,
+  byte-range and post-arm raw identity cases must run for both streams.
+- Qualify the nine bounded source faults with normal assertions, not setup or
+  parser failures. No claimed result exists until execution is recorded.
+- Build both streams before the atomic source/root/receipt commit; publication,
+  finite-source and sole current localized card gates remain mandatory.
+  Solo proof precedes co-op. No game or network acceptance is implied.
+
 ## #428 - Atomic Priest punch registration (mirrored)
 
 | Field | Check |

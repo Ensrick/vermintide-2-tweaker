@@ -22,9 +22,15 @@ Shared by the public-beta `weapon_tweaker/` and Dev `weapon_tweaker_dev/`:
 info, sm_probe,
 brace_to_repeater_skin, brace_to_repeater_dump,
 dump, dump_actions, dump_weapons,
-wt_regression_test, wt_dump_wielded,
+wt_regression_test, wt_dump_wielded, wt_heat_capture,
 verify_wt_loadout_cache, verify_wt_availability_sort
 ```
+
+`/wt_heat_capture arm`, `/wt_heat_capture dump` and `/wt_heat_capture clear`
+control an explicit local Flame Sword calculation capture. One arm retains at
+most eight observations; its validated one-shot dump emits at most ten log
+lines. It changes no settings or gameplay authority. Calculated values are not
+final health loss, and an empty dump is not an executed-operation PASS.
 
 Additional commands registered **only by WTDev**:
 

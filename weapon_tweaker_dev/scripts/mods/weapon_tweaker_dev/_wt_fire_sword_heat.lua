@@ -37,15 +37,36 @@ function M.config(read)
         cleave = cleave / 100, damage = damage / 100, threshold = threshold }
 end
 
-function M.heat(unit, extension, alive)
+-- One getter invocation serves both contracts. The scalar API still returns
+-- exactly one value; diagnostic status never grants gameplay authorization.
+local function read_heat(unit, extension, alive)
+    local status = "no-unit"
     local ok, value, _, maximum = pcall(function()
-        if unit == nil or alive(unit) ~= true then return end
+        if unit == nil then return end
+        status = "not-alive"
+        if alive(unit) ~= true then return end
+        status = "extension-missing"
         local oc = extension(unit, "overcharge_system")
         if not oc or type(oc.current_overcharge_status) ~= "function" then return end
+        status = "sampled"
         return oc:current_overcharge_status()
     end)
-    if not ok or not finite(value) or not finite(maximum) or maximum <= 0 then return 0 end
-    return math.max(0, math.min(value, maximum))
+    if not ok then return 0, nil, nil, "reader-error" end
+    if not finite(value) then return 0, nil, finite(maximum) and maximum or nil,
+        status == "sampled" and "value-invalid" or status end
+    if not finite(maximum) or maximum <= 0 then
+        return 0, value, finite(maximum) and maximum or nil, "maximum-invalid"
+    end
+    return math.max(0, math.min(value, maximum)), value, maximum, "ok"
+end
+
+function M.heat(unit, extension, alive)
+    local amount = read_heat(unit, extension, alive)
+    return amount
+end
+
+function M.sample_heat(unit, extension, alive)
+    return read_heat(unit, extension, alive)
 end
 
 local function direct(profile)
@@ -84,18 +105,33 @@ function M.new(weapons, profiles, clone, register, fallbacks, armor_reference)
     assert(type(armor_reference) == "table" and type(armor_reference.attack) == "table"
         and finite(armor_reference.attack[2]) and armor_reference.attack[2] > 0,
         "#942 resolved native armor reference missing")
-    local state = { rows = {}, owned = {}, actions = {}, clones = {}, profiles = profiles }
+    local state = { rows = {}, owned = {}, actions = {}, clones = {}, profiles = profiles,
+        labels = {}, action_labels = {} }
+    local function remember(map, value, name)
+        if type(value) ~= "table" or type(name) ~= "string" then return end
+        local previous = map[value]
+        map[value] = previous == nil and name or previous == name and name or "ambiguous"
+    end
+    remember(state.labels, rawget(profiles, "burning_dot"), "burning_dot")
     local template = rawget(weapons, M.TEMPLATE)
     local sources, action_rows = {}, {}
-    for _, group in pairs(type(template) == "table" and template.actions or {}) do
+    for group_name, group in pairs(type(template) == "table" and template.actions or {}) do
         if type(group) == "table" then
-            for _, action in pairs(group) do
+            for action_name, action in pairs(group) do
+                if type(group_name) == "string" and type(action_name) == "string" then
+                    remember(state.action_labels, action, group_name .. "." .. action_name)
+                end
+                if type(action) == "table" then
+                    local aoe = rawget(action, "damage_profile_aoe")
+                    if type(aoe) == "string" then remember(state.labels, rawget(profiles, aoe), aoe) end
+                end
                 if type(action) == "table" and (action.kind == "sweep"
                         or action.kind == "charged_sweep" or action.kind == "shield_slam") then
                     for _, field in ipairs(FIELDS) do
                         local source = rawget(action, field)
                         if type(source) == "string" and direct(rawget(profiles, source)) then
                             sources[source] = true
+                            remember(state.labels, rawget(profiles, source), source)
                             action_rows[#action_rows + 1] = { action = action, field = field, source = source }
                         end
                     end
@@ -129,6 +165,7 @@ function M.new(weapons, profiles, clone, register, fallbacks, armor_reference)
         local data = pending[key]
         profiles[key], fallbacks[key] = data.profile, data.source
         state.owned[data.profile] = data
+        remember(state.labels, data.profile, key)
         register(key)
     end
     for _, row in ipairs(action_rows) do

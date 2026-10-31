@@ -399,3 +399,47 @@ mod:command("verify_wt_loadout_cache",
         mod:echo("[verify_wt_loadout_cache] %s - %s",
             labels[status] or string.upper(tostring(status)), tostring(summary))
     end)
+-- #942: one explicit dump owns every raw capture receipt. Native hooks only
+-- retain eight bounded primitive rows; no hook emits or acquires authority.
+mod:command("wt_heat_capture", "Finite Flame Sword calculation capture: arm, dump or clear",
+    function(action, ...)
+        if select("#", ...) ~= 0 or (action ~= "arm" and action ~= "dump" and action ~= "clear") then
+            mod:echo("[wt_heat_capture] usage: arm, dump or clear")
+            return
+        end
+        local owner = rawget(mod, "_wt942_owner")
+        local capture = type(owner) == "table" and rawget(owner, "capture")
+        if type(capture) ~= "function" then
+            mod:echo("[wt_heat_capture] owner not ready")
+            return
+        end
+        local ok, data, status = pcall(capture, owner, action)
+        if not ok then mod:echo("[wt_heat_capture] capture unavailable"); return end
+        if action ~= "dump" or type(data) ~= "table" then
+            mod:echo("[wt_heat_capture] %s", data == true and status or "not ready/no pending capture")
+            return
+        end
+        local function bounded(value)
+            return type(value) == "string" and #value <= 960
+                and not value:find("[^ -~]")
+        end
+        if type(data.count) ~= "number" or data.count < 0 or data.count > 8
+                or data.count % 1 ~= 0 or type(data.rows) ~= "table" or not bounded(data.header) then
+            mod:echo("[wt_heat_capture] malformed capture refused")
+            return
+        end
+        -- Validate all rows before emitting any: at most eight plus two framing
+        -- rows, each <1024 ASCII bytes including the literal prefix/newline.
+        for index = 1, 8 do
+            if index <= data.count and not bounded(rawget(data.rows, index)) then
+                mod:echo("[wt_heat_capture] malformed row refused")
+                return
+            end
+        end
+        printf("[wt:942:capture] begin %s", data.header)
+        for index = 1, 8 do
+            if index > data.count then break end
+            printf("[wt:942:capture] row=%s", rawget(data.rows, index))
+        end
+        printf("[wt:942:capture] end count=%d", data.count)
+    end)

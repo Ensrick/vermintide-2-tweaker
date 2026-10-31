@@ -1,5 +1,20 @@
 # Weapon Tweaker — Development Notes
 
+## Finite Flame Sword calculation capture (#942)
+
+Mirror the public owner/runtime/policy and explicit
+`/wt_heat_capture arm|dump|clear` command. One arm retains at most eight shared
+960-byte printable rows; the validated one-shot dump emits at most ten lines.
+No hook prints, protocol query grants authority, setting is written or new
+poll/hook/RPC is installed. Preserve native tuples/errors and #664/#943 behavior.
+
+At existing observed boundaries, one bounded raw local-human resolver proves
+the retained unit still is the current local identity. Loss freezes partial
+evidence and drops the unit; explicit rearm is required. Five inspected entries
+are diagnostic capacity, not a game/BTMP player limit. Idle invalidation is not
+claimed. The public development notes own the detailed bounds/native provenance.
+Offline tests and calculated values do not prove game, final-HP or peer behavior.
+
 Architecture, gotchas, and conventions for `weapon_tweaker`. Read alongside
 `CHANGELOG.md` (history), `CODE_REVIEW.md` (current health), `REGRESSION_CHECKLIST.md`
 (pre-release gates), and `CROSS_CHARACTER_PORT_RECIPE.md` (the seven-step procedure

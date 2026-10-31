@@ -1,5 +1,23 @@
 # Regression Checklist — weapon_tweaker
 
+## #942 - Finite calculation capture
+
+- Run both actual heat preparation/integration suites, including the verbatim
+  native selection/helper bodies. Keep independent arithmetic and numeric
+  0..255 byte oracles; a parse or healthy substitute is not behavioral proof.
+- Require one shared eight-row cap across start/cleave/damage, unchanged armed
+  exclusion controls, no fabricated after-record on native error, one-shot
+  validated output, nested restoration and raw tuple/error preservation.
+- Exercise post-arm still-alive unit replacement, foreign/ambiguous/malformed/
+  throwing/over-budget rosters at every existing boundary in both streams.
+  Freeze partial evidence, preserve native calls, and require explicit rearm.
+- Qualify the nine specified faults through the intended actual normal
+  assertions and exact target-load/API/cell consumption; preserve failures.
+- Build BOTH streams and validate source/receipt/root together before commit.
+  Keep #942 outside the live queue until canonical publication and exact
+  finite-route/current-card qualification. Solo numerical work comes first;
+  offline proofs and captured calculated values are not final HP acceptance.
+
 ## #428 - Atomic Priest punch registration
 
 | Field | Check |

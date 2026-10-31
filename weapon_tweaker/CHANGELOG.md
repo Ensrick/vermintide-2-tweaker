@@ -1,5 +1,26 @@
 # Weapon Tweaker Changelog
 
+## 0.12.342-beta (2026-10-30) -- Finite Flame Sword observations (#942)
+
+- Add explicit `/wt_heat_capture arm`, `dump` and `clear` operations through
+  the existing Fire Sword owners and diagnostic command registry. Hooks retain
+  at most eight shared primitive observations and never print; one validated
+  dump consumes its token before emitting at most ten bounded ASCII lines.
+- Record actual raw/clamped heat, native cleave inputs/results and calculated
+  damage before/after #942. Preserve existing gameplay, proof-call ordering,
+  armor thresholds, #664 composition, tuples/errors and the independent #943
+  settings. Calculated damage is not final health loss; cleave is not bodies hit.
+- Revalidate raw current local-unit identity at existing observed boundaries;
+  freeze partial evidence on loss and require explicit rearm. No new poll,
+  hook, RPC, lookup profile, settings default or automatic startup output.
+- Add source-qualified native selection/helper, nested-context, exclusion,
+  arithmetic, tuple, opaque-error, byte-range, ownership and mirror coverage.
+  Focused qualification passed 76 mandatory cases with zero skips and nine
+  intended assertion-failure controls; all ten children drained, with all 47
+  source inputs and 14 host guards unchanged. Preserve the first run's four
+  test-fixture failures separately. Canonical build/publication and live
+  numerical, game or peer acceptance remain pending; #942 remains unready.
+
 ## 0.12.341-beta (2026-10-29) -- Applied Sword producer evidence (#645)
 
 - Expose a narrow read-only boot/applied identity record from the existing
