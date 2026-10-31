@@ -257,14 +257,89 @@ public static class VtLiveCardLuaLexerV2 {
         return spans.ToArray();
     }
     public static VtLiveCardLuaSpanV2[] ScanFunctionSpans(VtLiveCardLuaTokenV2[] a) { return ScanBlockSpans(a,true); }
-    public static VtLiveCardLuaSpanV2[] ScanLoopSpans(VtLiveCardLuaTokenV2[] a) { return ScanBlockSpans(a,false); }
+    private static bool SimpleRepeatName(VtLiveCardLuaTokenV2[] a, int at) {
+        if(!T(a,at,null,"Identifier"))return false;
+        switch(a[at].Text) {
+            case "and":case "break":case "do":case "else":case "elseif":case "end":
+            case "false":case "for":case "function":case "goto":case "if":case "in":
+            case "local":case "nil":case "not":case "or":case "repeat":case "return":
+            case "then":case "true":case "until":case "while":return false;
+            default:return true;
+        }
+    }
+    private static int SimpleRepeatConditionEnd(VtLiveCardLuaTokenV2[] a, int start, int limit) {
+        if(start<0||start>=limit)return -1;
+        bool name=SimpleRepeatName(a,start);
+        if(!name&&!T(a,start,"true","Identifier")&&!T(a,start,"false","Identifier")&&!T(a,start,"nil","Identifier"))return -1;
+        int next=start+1;
+        if(name)while(T(a,next,".")) {
+            if(!SimpleRepeatName(a,next+1))return -1;
+            next+=2;
+        }
+        if(next==limit)return next;
+        if(next>limit)return -1;
+        // A newline is never an expression boundary. Only a complete simple
+        // atom/member chain followed by a proven statement/block boundary is.
+        switch(a[next].Text) {
+            case ";":case "break":case "do":case "else":case "elseif":case "end":
+            case "for":case "if":case "local":case "repeat":case "return":case "until":
+            case "while":return next;
+        }
+        if(SimpleRepeatName(a,next)) {
+            int call=next+1;
+            while(T(a,call,".")&&SimpleRepeatName(a,call+1))call+=2;
+            if(T(a,call,":")&&SimpleRepeatName(a,call+1))call+=2;
+            if(T(a,call,"(")) {
+                int close=MatchClose(a,call);
+                if(close>=call&&close<limit)return next;
+            }
+        }
+        return -1;
+    }
+    public static VtLiveCardLuaSpanV2[] ScanLoopSpans(VtLiveCardLuaTokenV2[] a) {
+        var spans=new List<VtLiveCardLuaSpanV2>(ScanBlockSpans(a,false));if(a==null)return spans.ToArray();
+        var functions=ScanBlockSpans(a,true);var matched=new HashSet<int>();
+        foreach(var span in spans)if(span.Kind=="repeat")matched.Add(span.Start);
+        // An unmatched repeat must not erase its uncertain tail from proof.
+        for(int i=0;i<a.Length;i++)if(T(a,i,"repeat","Identifier")&&!matched.Contains(i))
+            spans.Add(new VtLiveCardLuaSpanV2 { Kind="repeat",Start=i,End=-1 });
+        foreach(var span in spans) {
+            if(span.Kind!="repeat")continue;
+            int limit=a.Length;
+            foreach(var owner in functions)if(owner.Kind=="function"&&owner.Start<span.Start&&owner.End>span.Start&&
+                owner.Start>=0&&owner.End<a.Length&&T(a,owner.Start,"function","Identifier")&&T(a,owner.End,"end","Identifier"))
+                limit=Math.Min(limit,owner.End);
+            int until=span.End;
+            int proven=T(a,until,"until","Identifier")?SimpleRepeatConditionEnd(a,until+1,limit):-1;
+            // End is exclusive for receipt membership. Unknown conditions stay
+            // unproven through this function, never an unrelated sibling owner.
+            span.End=proven>until&&proven<=limit?proven:limit;
+        }
+        return spans.ToArray();
+    }
     public static VtLiveCardLuaSpanV2[] ScanCommandCallbacks(VtLiveCardLuaTokenV2[] a, VtLiveCardLuaSpanV2[] functions) {
         var spans=new List<VtLiveCardLuaSpanV2>();if(a==null||functions==null)return spans.ToArray();
+        var functionEnds=new Dictionary<int,int>();
+        foreach(var span in functions) {
+            if(span==null||!String.Equals(span.Kind,"function",StringComparison.Ordinal)||
+                span.Start<0||span.End<=span.Start||span.End>=a.Length||
+                !T(a,span.Start,"function","Identifier")||!T(a,span.End,"end","Identifier"))continue;
+            int existing;
+            if(functionEnds.TryGetValue(span.Start,out existing)) {
+                if(existing!=span.End)return spans.ToArray();
+            } else functionEnds.Add(span.Start,span.End);
+        }
         for(int i=0;i+4<a.Length;i++) {
             int open,close,name;
             if(!TryCommandCall(a,i,out open,out close,out name)||!ValidCommandName(a[name].Value))continue;
             int depth=0,lastStart=open+1;
             for(int j=open+1;j<close;j++) {
+                // A function expression is one argument; its body commas are
+                // not separators in the surrounding command call.
+                int functionEnd;
+                if(functionEnds.TryGetValue(j,out functionEnd)&&functionEnd<close) {
+                    j=functionEnd;continue;
+                }
                 string text=a[j].Text;
                 if(text=="("||text=="{"||text=="[")depth++;
                 else if(text==")"||text=="}"||text=="]")depth--;
@@ -1197,27 +1272,24 @@ function Set-VtStructuralReceiptBounds {
         $functions=@(Get-VtLuaFunctionSpans -Tokens $tokens)
         $callbacks=@(Get-VtLuaCommandCallbackSpans -Tokens $tokens -FunctionSpans $functions)
         $loops=@(Get-VtLuaLoopSpans -Tokens $tokens)
-        $proofByOwner=@{}
         $commandsByOwner=@{}
         foreach($route in @($Routes|Where-Object{[string]$_.Source -ceq [string]$path})){
             $at=[int]$route.TokenIndex
             $owner=@($functions|Where-Object{$_.Start -lt $at -and $_.End -gt $at}|Sort-Object{[int]$_.End-[int]$_.Start}|Select-Object -First 1)
             $ownerKey=if($owner.Count -eq 0){'top'}else{"$([int]$owner[0].Start):$([int]$owner[0].End)"}
-            if(-not$proofByOwner.ContainsKey($ownerKey)){
-                $calculated=Get-VtStructuralReceiptBound -Document $document -Route $route -FunctionSpans $functions -CallbackSpans $callbacks -LoopSpans $loops
-                $proofByOwner[$ownerKey]=if($calculated){$calculated}else{''}
+            if(-not$commandsByOwner.ContainsKey($ownerKey)){
                 $ownerCallbacks=if($owner.Count -eq 1){@($callbacks|Where-Object{
                     [int]$_.Start -eq [int]$owner[0].Start -and [int]$_.End -eq [int]$owner[0].End
                 })}else{@()}
                 $commandsByOwner[$ownerKey]=@($ownerCallbacks.Command|Where-Object{$_}|Sort-Object -Unique)
             }
-            $proof=$proofByOwner[$ownerKey]
             if(@($commandsByOwner[$ownerKey]).Count -gt 0){
                 $route|Add-Member -NotePropertyName ActionCommands -NotePropertyValue @($commandsByOwner[$ownerKey]) -Force
             }
-            if($proof){
-                $route.Bound=$true;$route.BoundProof=$proof
-            }
+            # Loop membership is route-local; only command ownership is cached.
+            $proof=Get-VtStructuralReceiptBound -Document $document -Route $route -FunctionSpans $functions -CallbackSpans $callbacks -LoopSpans $loops
+            $route.Bound=[bool]$proof
+            $route.BoundProof=if($proof){$proof}else{$null}
         }
     }
 }

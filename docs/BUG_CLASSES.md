@@ -3483,7 +3483,7 @@ cosmetics `_mh_package_lifecycle.lua`).
 **Lives in:** any `_rt_register` check, `/verify_<feature>` command, or offline
 QA gate whose verdict is used to decide whether a fix landed.
 
-The bug is in the INSTRUMENT, not the code it measures. Seven sub-patterns have
+The bug is in the INSTRUMENT, not the code it measures. Eight sub-patterns have
 bitten this repo:
 
 **(a) Setter-success or self-derived expectation.** The check asserts that a
@@ -3551,6 +3551,24 @@ writing, rather than learning a foreign ledger. Test the same actual callback
 repeatedly, with prior state and errors; fresh fixtures per call hide this bug.
 Never clear unrelated request/delivery routes or weaken normal deduplication.
 
+**(h) Structural proof loses emitter context.** The deployed live-card verifier
+computes whether an individual receipt is inside a loop, then caches that answer
+by its enclosing function. An outside-first emitter lends its finite proof to a
+loop emitter; reversing the traversal can reject the valid outside line instead
+(#1120, `Set-VtStructuralReceiptBounds`). Command ownership can still be correct,
+so an owner assertion alone misses the defect. Independent original-scanner
+traces also found two parsing gaps: a bare comma inside a callback body was
+mistaken for an outer registration-argument separator, and a `repeat` span ended
+at `until`, excluding an emitter in the repeatedly evaluated condition. The
+[Lua 5.1 control-structure contract](https://www.lua.org/manual/5.1/manual.html#2.4.4)
+includes that condition in the loop block. These are verifier defects, not
+evidence that the measured game behavior failed. Preserve each failed run;
+derive expectations from literal source semantics rather than the classifier.
+Recompute route-dependent proof for every emitter, keep only genuinely
+owner-invariant metadata cached, and require conservative complete block and
+callback boundaries. Compare deployed routes and current ready cards before
+rollout; never compensate with blanket exceptions or automatic label stripping.
+
 ### Symptoms
 - An offline suite is green (or a `/verify_*` prints PASS) while the user
   reproduces the defect in a live session, or the inverse: a permanent FAIL on
@@ -3585,6 +3603,11 @@ Never clear unrelated request/delivery routes or weaken normal deduplication.
    lifecycle. If the player cannot select the asserted mode on that surface,
    the cell is invented; require the exact visible lifecycle the adapter owns
    and keep mode coverage on the surfaces that genuinely expose it.
+7. For structural classifiers, test sibling emitters in both traversal orders,
+   fresh and previously classified state, separate documents with identical
+   token positions, and loop conditions as well as bodies. A complete callback
+   body is one outer argument even when it contains comma-bearing statements.
+   Passing an isolated emitter fixture does not establish context isolation.
 
 ### Fix template
 - Rewrite the check per `PROJECT_STANDARDS.md` §5.1d "Postcondition-first
@@ -3604,6 +3627,8 @@ Never clear unrelated request/delivery routes or weaken normal deduplication.
   scope-break), #1153 (return-shape mismatch), #233 (inert self-heal), #154
   (`_dbg`-gated needle), #579 / #719 (offline PASS vs live co-op FAIL), #660
   (appearance-unification program; setter-success false-positive class).
+- #1120 (route-local receipt proof, callback-argument and repeat-condition
+  boundaries); #750 (source-backed impact review, not automatic queue changes).
 - Adjacent classes: 57 (one-shot transform reset by animation) and 58 (partial
   setter success) are the transform-side mechanics that (a) misreported.
 
