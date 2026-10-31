@@ -141,6 +141,342 @@ function Get-VtReceiptFamilyPinnedTree {
 }
 
 function Invoke-VtDeployedSourceContractSelfTest {
+    param([switch]$StructuralBoundsOnly)
+    # #1120: all source below is lexer input, never executed as Lua. The
+    # explicit selector stops before the existing broad Temp/Git fixtures;
+    # the default still runs this matrix AND every existing check below.
+    $structuralTopSource=@'
+printf("[fx:cache-top] outside-before")
+while mod._fixture_loop do printf("[fx:cache-top] in-loop") end
+printf("[fx:cache-top] outside-after")
+'@
+    $structuralCases=@(
+        @{ Name='outside-first'; Source=@'
+mod:command("fx_cache_outside", "fixture", function()
+    printf("[fx:cache-outside] outside-before")
+    while mod._fixture_loop do printf("[fx:cache-outside] in-loop") end
+    printf("[fx:cache-outside] outside-after")
+end)
+'@
+            Expected=@{
+                '[fx:cache-outside] outside-before'=@($true,'/fx_cache_outside')
+                '[fx:cache-outside] in-loop'=@($false,'/fx_cache_outside')
+                '[fx:cache-outside] outside-after'=@($true,'/fx_cache_outside')
+            }
+        },
+        @{ Name='inside-first'; Source=@'
+mod:command("fx_cache_inside", "fixture", function()
+    while mod._fixture_loop do printf("[fx:cache-inside] in-loop") end
+    printf("[fx:cache-inside] outside-after")
+end)
+'@
+            Expected=@{
+                '[fx:cache-inside] in-loop'=@($false,'/fx_cache_inside')
+                '[fx:cache-inside] outside-after'=@($true,'/fx_cache_inside')
+            }
+        },
+        @{ Name='loop-kinds'; Source=@'
+mod:command("fx_cache_loops", "fixture", function()
+    printf("[fx:cache-loops] outside-before")
+    for index = 1, 2 do printf("[fx:cache-loops] numeric-for") end
+    while mod._fixture_loop do printf("[fx:cache-loops] while") end
+    repeat printf("[fx:cache-loops] repeat") until mod._fixture_done
+    for index = 1, 2 do
+        while mod._fixture_loop do printf("[fx:cache-loops] nested-loop") end
+    end
+    printf("[fx:cache-loops] outside-after")
+end)
+'@
+            Expected=@{
+                '[fx:cache-loops] outside-before'=@($true,'/fx_cache_loops')
+                '[fx:cache-loops] numeric-for'=@($false,'/fx_cache_loops')
+                '[fx:cache-loops] while'=@($false,'/fx_cache_loops')
+                '[fx:cache-loops] repeat'=@($false,'/fx_cache_loops')
+                '[fx:cache-loops] nested-loop'=@($false,'/fx_cache_loops')
+                '[fx:cache-loops] outside-after'=@($true,'/fx_cache_loops')
+            }
+        },
+        @{ Name='nested-function'; Source=@'
+mod:command("fx_cache_nested", "fixture", function()
+    printf("[fx:cache-nested] outside-before")
+    local function retained() printf("[fx:cache-nested] retained") end
+    mod._fixture_retained = retained
+    printf("[fx:cache-nested] outside-after")
+end)
+'@
+            Expected=@{
+                '[fx:cache-nested] outside-before'=@($true,'/fx_cache_nested')
+                '[fx:cache-nested] retained'=@($false,'')
+                '[fx:cache-nested] outside-after'=@($true,'/fx_cache_nested')
+            }
+        },
+        @{ Name='goto-owner'; Source=@'
+mod:command("fx_cache_goto", "fixture", function()
+    printf("[fx:cache-goto] before-label")
+    ::again::
+    printf("[fx:cache-goto] after-label")
+    goto again
+end)
+'@
+            Expected=@{
+                '[fx:cache-goto] before-label'=@($false,'/fx_cache_goto')
+                '[fx:cache-goto] after-label'=@($false,'/fx_cache_goto')
+            }
+        },
+        @{ Name='framework-main'; Source=$structuralTopSource; Proof='framework-main-module-evaluation'
+            Expected=@{
+                '[fx:cache-top] outside-before'=@($true,'')
+                '[fx:cache-top] in-loop'=@($false,'')
+                '[fx:cache-top] outside-after'=@($true,'')
+            }
+        },
+        @{ Name='repeatable-helper'; Source=$structuralTopSource; Path='fixture_mod/scripts/mods/fixture_mod/_cache_helper.lua'
+            Expected=@{
+                '[fx:cache-top] outside-before'=@($false,'')
+                '[fx:cache-top] in-loop'=@($false,'')
+                '[fx:cache-top] outside-after'=@($false,'')
+            }
+        },
+        @{ Name='multiple-owners-protected-callback'; Source=@'
+mod:command("fx_cache_a", "fixture", function()
+    printf("[fx:cache-multi] a-before")
+    while mod._fixture_loop do printf("[fx:cache-multi] a-loop") end
+    printf("[fx:cache-multi] a-after")
+end)
+pcall(mod.command, mod, "fx_cache_b", "fixture", function()
+    while mod._fixture_loop do printf("[fx:cache-multi] b-loop") end
+    printf("[fx:cache-multi] b-after")
+end)
+local function ordinary() printf("[fx:cache-multi] ordinary") end
+'@
+            Expected=@{
+                '[fx:cache-multi] a-before'=@($true,'/fx_cache_a')
+                '[fx:cache-multi] a-loop'=@($false,'/fx_cache_a')
+                '[fx:cache-multi] a-after'=@($true,'/fx_cache_a')
+                '[fx:cache-multi] b-loop'=@($false,'/fx_cache_b')
+                '[fx:cache-multi] b-after'=@($true,'/fx_cache_b')
+                '[fx:cache-multi] ordinary'=@($false,'')
+            }
+        },
+        @{ Name='callback-in-lexical-loop'; Source=@'
+for index = 1, 2 do
+    mod:command("fx_cache_lexical", "fixture", function()
+        printf("[fx:cache-lexical] callback")
+    end)
+end
+'@
+            Expected=@{'[fx:cache-lexical] callback'=@($false,'/fx_cache_lexical')}
+        },
+        @{ Name='assignment-commas'; Source=@'
+mod:command("fx_cache_assignment", "fixture", function(first, second)
+    printf("[fx:cache-assignment] outside-before")
+    local left, right = first, second
+    printf("[fx:cache-assignment] outside-after")
+end)
+'@
+            Expected=@{
+                '[fx:cache-assignment] outside-before'=@($true,'/fx_cache_assignment')
+                '[fx:cache-assignment] outside-after'=@($true,'/fx_cache_assignment')
+            }
+        }
+    )
+    # Repeat-condition extent: literal semantic oracles, never executed as Lua.
+    $structuralCases+=@{ Name='repeat-condition-direct'; Source=@'
+mod:command("fx_repeat_condition", "fixture", function()
+    printf("[fx:repeat-condition] outside-before")
+    repeat until printf("[fx:repeat-condition] condition") and false
+end)
+'@
+        Expected=@{
+            '[fx:repeat-condition] outside-before'=@($true,'/fx_repeat_condition')
+            '[fx:repeat-condition] condition'=@($false,'/fx_repeat_condition')
+        }
+    }
+    foreach($atom in @(
+        @{Name='true';Expression='true'},@{Name='false';Expression='false'},
+        @{Name='nil';Expression='nil'},@{Name='member';Expression='mod._fixture_done'}
+    )){
+        $command='fx_repeat_atom_'+$atom.Name;$marker='[fx:repeat-atom-'+$atom.Name+']'
+        $before=$marker+' before';$bodySame=$marker+' body-same';$afterSame=$marker+' after-same'
+        $bodyNew=$marker+' body-newline';$afterNew=$marker+' after-newline'
+        $structuralCases+=@{Name=('repeat-atom-'+$atom.Name);Source=@"
+mod:command("$command", "fixture", function()
+    printf("$before")
+    repeat printf("$bodySame") until $($atom.Expression) printf("$afterSame")
+    repeat printf("$bodyNew") until $($atom.Expression)
+    printf("$afterNew")
+end)
+"@
+            Expected=@{
+                $before=@($true,('/'+$command));$bodySame=@($false,('/'+$command));$afterSame=@($true,('/'+$command))
+                $bodyNew=@($false,('/'+$command));$afterNew=@($true,('/'+$command))
+            }
+        }
+    }
+    foreach($binary in @(
+        @{Name='plus';Operator='+'},@{Name='minus';Operator='-'},@{Name='multiply';Operator='*'},
+        @{Name='divide';Operator='/'},@{Name='modulo';Operator='%'},@{Name='power';Operator='^'},
+        @{Name='concat';Operator='..'},@{Name='lt';Operator='<'},@{Name='le';Operator='<='},
+        @{Name='gt';Operator='>'},@{Name='ge';Operator='>='},@{Name='equal';Operator='=='},
+        @{Name='unequal';Operator='~='},@{Name='and';Operator='and'},@{Name='or';Operator='or'}
+    )){
+        $command='fx_repeat_binary_'+$binary.Name;$marker='[fx:repeat-binary-'+$binary.Name+']'
+        $condition=$marker+' condition';$after=$marker+' uncertain-after'
+        $structuralCases+=@{Name=('repeat-binary-'+$binary.Name);Source=@"
+mod:command("$command", "fixture", function()
+    repeat until mod._fixture_value $($binary.Operator)
+        printf("$condition")
+    printf("$after")
+end)
+"@
+            Expected=@{$condition=@($false,('/'+$command));$after=@($false,('/'+$command))}
+        }
+    }
+    foreach($tail in @(
+        @{Name='unary-not';Expression='not __RECEIPT__'},@{Name='unary-minus';Expression='-__RECEIPT__'},
+        @{Name='unary-length';Expression='#__RECEIPT__'},@{Name='call';Expression='mod._gate(__RECEIPT__)'},
+        @{Name='index';Expression='mod._gate[__RECEIPT__]'},@{Name='member-call';Expression='mod._gate.member(__RECEIPT__)'},
+        @{Name='table-call';Expression='mod._gate { __RECEIPT__ }'},
+        @{Name='table-value';Expression='{ __RECEIPT__ }'},
+        @{Name='string-call';Expression='mod._gate "fixture" and __RECEIPT__'},
+        @{Name='parenthesized';Expression='(__RECEIPT__)'},
+        @{Name='function-call';Expression='(function() return __RECEIPT__ end)()';Nested=$true},
+        @{Name='function-value';Expression='function() return __RECEIPT__ end';Nested=$true}
+    )){
+        $command='fx_repeat_tail_'+$tail.Name.Replace('-','_');$marker='[fx:repeat-tail-'+$tail.Name+']'
+        $condition=$marker+' condition';$after=$marker+' uncertain-after'
+        $expression=$tail.Expression.Replace('__RECEIPT__',('printf("'+$condition+'")'))
+        $conditionOwner=if($tail.ContainsKey('Nested') -and $tail.Nested){''}else{'/'+$command}
+        $structuralCases+=@{Name=('repeat-tail-'+$tail.Name);Source=@"
+mod:command("$command", "fixture", function()
+    repeat until $expression
+    printf("$after")
+end)
+"@
+            Expected=@{$condition=@($false,$conditionOwner);$after=@($false,('/'+$command))}
+        }
+    }
+    foreach($bad in @(
+        @{Name='missing-until';Loop='repeat printf("__AFTER__")'},
+        @{Name='missing-condition';Loop='repeat until ; printf("__AFTER__")'},
+        @{Name='malformed-member';Loop='repeat until mod. + printf("__AFTER__")'}
+    )){
+        $command='fx_repeat_bad_'+$bad.Name.Replace('-','_');$marker='[fx:repeat-bad-'+$bad.Name+']'
+        $before=$marker+' before';$after=$marker+' unproven-tail'
+        $loop=$bad.Loop.Replace('__AFTER__',$after)
+        $structuralCases+=@{Name=('repeat-bad-'+$bad.Name);Source=@"
+mod:command("$command", "fixture", function()
+    printf("$before")
+    $loop
+end)
+"@
+            Expected=@{$before=@($true,('/'+$command));$after=@($false,('/'+$command))}
+        }
+    }
+    $structuralCases+=@{Name='repeat-fallback-sibling-isolation';Source=@'
+mod:command("fx_repeat_scope_a", "fixture", function()
+    repeat until printf("[fx:repeat-scope] condition") and false
+end)
+mod:command("fx_repeat_scope_b", "fixture", function()
+    printf("[fx:repeat-scope] sibling-callback")
+end)
+local function sibling()
+    printf("[fx:repeat-scope] sibling-function")
+end
+'@
+        Expected=@{
+            '[fx:repeat-scope] condition'=@($false,'/fx_repeat_scope_a')
+            '[fx:repeat-scope] sibling-callback'=@($true,'/fx_repeat_scope_b')
+            '[fx:repeat-scope] sibling-function'=@($false,'')
+        }
+    }
+    $structuralCases+=@{Name='repeat-framework-main-eof';Proof='framework-main-module-evaluation';Source=@'
+printf("[fx:repeat-main] before")
+repeat until printf("[fx:repeat-main] condition") and false
+printf("[fx:repeat-main] uncertain-after")
+'@
+        Expected=@{
+            '[fx:repeat-main] before'=@($true,'')
+            '[fx:repeat-main] condition'=@($false,'')
+            '[fx:repeat-main] uncertain-after'=@($false,'')
+        }
+    }
+    $invokeStructuralCase={
+        param($Items,[bool]$Reverse,[bool]$Stale)
+        $documents=@();$oracle=@{};$receipts=New-Object System.Collections.Generic.List[object]
+        foreach($item in @($Items)){
+            $path=if($item.ContainsKey('Path')){[string]$item.Path}else{'fixture_mod/scripts/mods/fixture_mod/fixture_mod.lua'}
+            $document=[pscustomobject]@{RelativePath=$path;Content=$item.Source;Tokens=@(Get-VtLuaTokens -Content $item.Source)}
+            $documents+= $document
+            $scan=Get-VtDirectLuaCallRoutes -Document $document
+            foreach($route in @($scan.ReceiptRoutes)){$receipts.Add($route)}
+            foreach($signature in @($item.Expected.Keys)){
+                $spec=@($item.Expected[$signature]);$key=$path+"`n"+$signature
+                Assert-VtContractFixture (-not $oracle.ContainsKey($key)) 'Duplicate structural fixture oracle.'
+                $oracle[$key]=@{Bound=[bool]$spec[0];Command=[string]$spec[1];Name=[string]$item.Name
+                    Proof=if($item.ContainsKey('Proof')){[string]$item.Proof}else{'explicit-command-callback'}}
+            }
+        }
+        $routes=@($receipts.ToArray())
+        Assert-VtContractFixture ($routes.Count -eq $oracle.Count) 'Structural fixture actual route census drift.'
+        if($Reverse){[Array]::Reverse($routes)}
+        if($Stale){foreach($route in $routes){$route.Bound=$true;$route.BoundProof='fixture-stale-proof'}}
+        Set-VtStructuralReceiptBounds -Documents $documents -Routes $routes
+        foreach($route in $routes){
+            $key=[string]$route.Source+"`n"+[string]$route.Signature
+            Assert-VtContractFixture ($oracle.ContainsKey($key)) 'Unexpected actual structural fixture route.'
+            $expected=$oracle[$key]
+            $context=$expected.Name+' reverse='+$Reverse+' stale='+$Stale+' '+$route.Signature+' token='+$route.TokenIndex
+            Assert-VtContractFixture ([bool]$route.Bound -eq $expected.Bound) ("Route-local Bound mismatch: $context expected=$($expected.Bound) actual=$($route.Bound)")
+            $proofOk=if($expected.Bound){[string]$route.BoundProof -ceq $expected.Proof}else{$null -eq $route.BoundProof}
+            Assert-VtContractFixture $proofOk ("Route-local BoundProof mismatch: $context")
+            $commands=@($route.ActionCommands)
+            $commandsOk=if($expected.Command){$commands.Count -eq 1 -and [string]$commands[0] -ceq $expected.Command}else{$commands.Count -eq 0}
+            Assert-VtContractFixture $commandsOk ("Exact callback ownership mismatch: $context")
+        }
+        return $routes.Count
+    }
+    $structuralChecks=0
+    foreach($structuralCase in $structuralCases){foreach($reverse in @($false,$true)){foreach($stale in @($false,$true)){
+        $structuralChecks+= & $invokeStructuralCase -Items @($structuralCase) -Reverse $reverse -Stale $stale
+    }}}
+    # Same signatures, different documents: 'top' and function keys are file-local.
+    foreach($reverse in @($false,$true)){foreach($stale in @($false,$true)){
+        $structuralChecks+= & $invokeStructuralCase -Items @($structuralCases[5],$structuralCases[6]) -Reverse $reverse -Stale $stale
+    }}
+    Assert-VtContractFixture ($structuralCases.Count -eq 47 -and $structuralChecks -eq 500) 'Structural matrix execution census drift.'
+
+    $structuralOverrideSource=@'
+mod:command("fx_cache_override", "fixture", function()
+    for index = 1, 2 do printf("[fx:cache-override] audited") end
+    while mod._fixture_loop do printf("[fx:cache-override] unsafe-sibling") end
+end)
+'@
+    $structuralOverridePath='fixture_mod/scripts/mods/fixture_mod/fixture_mod.lua'
+    $structuralOverrideDoc=[pscustomobject]@{RelativePath=$structuralOverridePath;Content=$structuralOverrideSource;Tokens=@(Get-VtLuaTokens -Content $structuralOverrideSource)}
+    $structuralOverrideScan=Get-VtDirectLuaCallRoutes -Document $structuralOverrideDoc
+    $structuralOverrideRoutes=New-Object System.Collections.Generic.List[object]
+    foreach($route in @($structuralOverrideScan.ReceiptRoutes)){$structuralOverrideRoutes.Add($route)}
+    Set-VtStructuralReceiptBounds -Documents @($structuralOverrideDoc) -Routes $structuralOverrideRoutes
+    $structuralExactOverride=@{
+        ModId='fixture';ModTree=('a'*40);Source=$structuralOverridePath;Marker='[fx:cache-override]';Signature='[fx:cache-override] audited'
+        Bound='at most two receipts from this exact closed numeric-for loop';ActionCommands=@('/fx_cache_override')
+        EmitterAnchors=@('printf("[fx:cache-override] audited")')
+        GuardAnchors=@('for index = 1, 2 do printf("[fx:cache-override] audited") end')
+    }
+    Set-VtReceiptOverrideBounds -ModId 'fixture' -ModTree ('a'*40) -Documents @($structuralOverrideDoc) -Routes $structuralOverrideRoutes `
+        -CommandRoutes @($structuralOverrideScan.CommandRoutes) -Exceptions @{ReceiptRouteOverrides=@($structuralExactOverride)}
+    Assert-VtContractFixture ($structuralOverrideRoutes.Count -eq 2) 'Exact structural override route census drift.'
+    foreach($route in $structuralOverrideRoutes){
+        $audited=[string]$route.Signature -ceq '[fx:cache-override] audited'
+        Assert-VtContractFixture ([bool]$route.Bound -eq $audited) 'An exact structural override authorized an unsafe sibling or lost its audited route.'
+        $proofOk=if($audited){[string]$route.BoundProof -ceq ('override:'+$structuralExactOverride.Bound)}else{$null -eq $route.BoundProof}
+        Assert-VtContractFixture $proofOk 'Exact structural override proof provenance drift.'
+        Assert-VtContractFixture (@($route.ActionCommands).Count -eq 1 -and [string]$route.ActionCommands[0] -ceq '/fx_cache_override') 'Exact override/loop command ownership drift.'
+    }
+    Write-Host '[live-test-contract] structural bounds matrix passed: 192 matrix classifications, 500 route checks, 2 exact-override routes.'
+    if($StructuralBoundsOnly){return}
+
     $tempBase = [IO.Path]::GetTempPath()
     $tmp = Join-Path $tempBase ('vt2-live-card-contract-' + [guid]::NewGuid().ToString('N'))
     $utf8 = New-Object Text.UTF8Encoding($false)
