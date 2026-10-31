@@ -69,6 +69,58 @@ function M.install(mod, heavy_policy, balance_policy, dependencies)
     owner.heavy = previous943
     local previous_apply = mod._wt_apply_fire_sword
     local runtime, transport
+
+    -- Diagnostic validity only: no reconciliation, protocol query or authority write.
+    local function capture_owner_valid()
+        if not rawequal(rawget(mod, "_wt942_owner"), owner) or not owner.committed or owner.terminal
+                or owner.disabled or owner.suspended or owner.forced or deps.enabled() ~= true then
+            return false
+        end
+        local weapons = deps.get_weapons()
+        return rawequal(weapons, owner.weapons) and type(weapons) == "table"
+            and rawequal(rawget(weapons, deps.heat.TEMPLATE), owner.template)
+    end
+    -- Shared diagnostic work bound: four rows plus a fifth rejection witness.
+    -- This is not a gameplay population limit; no protocol query is performed.
+    local function local_capture_unit()
+        local humans, me = deps.humans(), deps.local_peer()
+        if type(humans) ~= "table" or type(me) ~= "string" or me == "" then return nil end
+        local found, count = nil, 0
+        for _, player in next, humans do
+            count = count + 1
+            if count > 4 or type(player) ~= "table" then return nil end
+            local peer, local_player = rawget(player, "peer_id"), rawget(player, "local_player")
+            if type(peer) ~= "string" or peer == "" then return nil end
+            if peer == me then
+                if found ~= nil or local_player ~= true then return nil end
+                found = rawget(player, "player_unit")
+                if found == nil or deps.alive(found) ~= true then return nil end
+            elseif local_player ~= nil and local_player ~= false then
+                return nil
+            end
+        end
+        return found
+    end
+    local function capture_valid(unit)
+        return capture_owner_valid() and unit ~= nil and rawequal(local_capture_unit(), unit)
+    end
+    function owner:capture(action)
+        if not runtime then return false, "not-ready" end
+        if action == "clear" then return runtime:capture_clear() end
+        if action == "dump" then return runtime:capture_dump() end
+        if action ~= "arm" then return false, "invalid-action" end
+        local ok, unit, details = pcall(function()
+            if not capture_owner_valid() then return nil end
+            local found = local_capture_unit()
+            if found == nil then return nil end
+            return found, { owner_committed = owner.committed,
+                sweep_opener = mod:get(heavy_policy.SWEEP_OPENER_SETTING),
+                nova_slowdown = mod:get(heavy_policy.NOVA_SLOWDOWN_SETTING) }
+        end)
+        if not ok or unit == nil then return false, "local-owner-unavailable" end
+        return runtime:capture_arm(unit, details)
+    end
+
     local function configuration()
         local config = deps.heat.config(function(id) return mod:get(id) end)
         if config and (owner.disabled or owner.suspended or owner.forced or deps.enabled() ~= true) then
@@ -90,6 +142,7 @@ function M.install(mod, heavy_policy, balance_policy, dependencies)
     end
     function owner:settings_changed(id)
         if id ~= nil and not self.settings[id] then return false end
+        if runtime then runtime:capture_stop("settings-changed") end
         self.setting_refresh = true
         local refreshed, problem = true, nil
         if transport then refreshed, problem = pcall(transport.settings_changed, transport) end
@@ -139,6 +192,7 @@ function M.install(mod, heavy_policy, balance_policy, dependencies)
             [deps.heat.CLEAVE] = true, [deps.heat.DAMAGE] = true, [deps.heat.THRESHOLD] = true }
         runtime = deps.application.new(mod, {
             policy = deps.heat, weapons = owner.weapons, profiles = deps.profiles,
+            capture_valid = capture_valid,
             clone = deps.clone, register = deps.register, fallbacks = deps.fallbacks,
             armor_reference = deps.armor_reference, alive = deps.alive, extension = deps.extension,
             catalog_allows = function()
@@ -200,6 +254,10 @@ function M.install(mod, heavy_policy, balance_policy, dependencies)
             if previous_update then return previous_update(dt, ...) end
         end)
         assign("_wt_apply_fire_sword", function(id, force_off)
+            if runtime and (id == nil or id == heavy_policy.SWEEP_OPENER_SETTING
+                    or id == heavy_policy.NOVA_SLOWDOWN_SETTING) then
+                runtime:capture_stop("fire-sword-apply")
+            end
             local values = pack(previous_apply(id, force_off))
             if id == nil or owner.settings[id] then
                 owner.forced = force_off == true

@@ -1,5 +1,19 @@
 # Weapon Tweaker Changelog
 
+## 0.12.343-dev (2026-10-30) -- Mirror finite Flame Sword observations (#942)
+
+- Mirror public 0.12.342-beta's explicit eight-observation Flame Sword capture
+  and validated one-shot dump, preserving the Dev namespace, friends-only item,
+  preview, existing diagnostic overlay and normalized runtime parity.
+- Retain current-local-unit raw identity at existing boundaries only. No new
+  hook, poll, RPC, balance/default change or automatic startup output.
+- Source-qualified native, arithmetic, tuple/error, byte-range and post-arm
+  ownership cases cover both streams. Focused qualification passed 76 mandatory
+  cases without skips plus nine intended failure controls; all ten children
+  drained and source/host guards stayed unchanged. The first run's four fixture
+  failures remain recorded. Canonical build/publication and live numeric,
+  game/peer acceptance remain pending; no readiness is claimed.
+
 ## 0.12.342-dev (2026-10-29) -- Mirror Sword producer evidence (#645)
 
 - Mirror public beta 0.12.341-beta's private boot/applied Sword push-combo

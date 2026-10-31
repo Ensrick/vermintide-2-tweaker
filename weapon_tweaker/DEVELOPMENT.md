@@ -1,5 +1,30 @@
 # Weapon Tweaker — Development Notes
 
+## Finite Flame Sword calculation capture (#942)
+
+The existing heat policy/runtime/owner and diagnostics registry own
+`/wt_heat_capture arm|dump|clear`. Capture does not query the parity protocol,
+change settings or acquire gameplay authority. Existing proof results and the
+one existing heat getter are observed, not repeated merely for logging.
+
+One arm retains at most eight shared primitive rows of at most 960 printable
+ASCII bytes. Hooks do not print. The command validates the entire dump before
+its first raw `printf`, consumes one token, and emits at most ten lines, each
+under 1,024 bytes including framing. Zero observations is not an operation PASS.
+Use a NUL-free ASCII predicate; a Lua syntax parse does not execute patterns.
+
+One shared local-human resolver examines at most five roster entries (four
+accepted diagnostic rows plus a rejection witness), not a gameplay player cap.
+At arm and existing start/cleave/damage/dump boundaries, the retained unit must
+be the current raw local identity. Loss freezes prior rows and drops the unit;
+repair does not resume without rearm. No immediate idle/death polling is added.
+
+Native selection/helper excerpts are pinned to source `93dea911`: ShieldSlam
+start lines 22-157 and ActionUtils lines 15-33. The separate Sweep helper seam
+is not invented inside ShieldSlam. Records describe actual passed cleave power
+and calculated pre/post-#942 damage, not visible target count, vanilla damage
+or final HP loss. Offline native collaborators do not establish game acceptance.
+
 ## Executioner's Sword light-headshot transaction (Issue #664)
 
 The native template has four light sweeps, including the push follow-up, and all

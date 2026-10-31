@@ -36,6 +36,7 @@ $WtPublicCommands = @(
     'verify_wt_availability_sort',
     'verify_wt_loadout_cache',
     'wt_dump_wielded',
+    'wt_heat_capture',
     'wt_regression_test'
 )
 
@@ -119,6 +120,18 @@ function Get-WtActiveLua {
     return ($parts -join "`n")
 }
 
+function Get-WtPublicCommandErrors {
+    param([string[]]$Commands)
+    $errors = @()
+    foreach ($command in $Commands) {
+        if ($WtPublicCommands -notcontains $command) { $errors += "public beta command is not read-only allowlisted: /$command" }
+    }
+    foreach ($command in $WtPublicCommands) {
+        if ($Commands -notcontains $command) { $errors += "documented public support command missing: /$command" }
+    }
+    return $errors
+}
+
 function Test-WtPublicSurface {
     param([string]$PublicLua)
     $errors = @()
@@ -142,12 +155,7 @@ function Test-WtPublicSurface {
     }
 
     $commands = @([regex]::Matches($active, 'mod:command\(\s*"([^"]+)"') | ForEach-Object { $_.Groups[1].Value } | Sort-Object -Unique)
-    foreach ($command in $commands) {
-        if ($WtPublicCommands -notcontains $command) { $errors += "public beta command is not read-only allowlisted: /$command" }
-    }
-    foreach ($command in $WtPublicCommands) {
-        if ($commands -notcontains $command) { $errors += "documented public support command missing: /$command" }
-    }
+    $errors += @(Get-WtPublicCommandErrors -Commands $commands)
 
     $dataPath = Join-Path $PublicLua 'weapon_tweaker_data.lua'
     $locPath = Join-Path $PublicLua 'weapon_tweaker_localization.lua'
@@ -179,6 +187,25 @@ function Test-WtDevOverlay {
 }
 
 function Invoke-SelfTest {
+    # Independently authored full support surface; do not derive this from the
+    # allowlist under test or an omitted command could agree with itself.
+    $commandFixture = @(
+        'brace_to_repeater_dump', 'brace_to_repeater_skin', 'dump',
+        'dump_actions', 'dump_weapons', 'info', 'sm_probe',
+        'verify_wt_availability_sort', 'verify_wt_loadout_cache',
+        'wt_dump_wielded', 'wt_heat_capture', 'wt_regression_test'
+    )
+    if (@(Get-WtPublicCommandErrors -Commands $commandFixture).Count -ne 0) {
+        throw 'reviewed public support commands were rejected'
+    }
+    $unknownErrors = @(Get-WtPublicCommandErrors -Commands @($commandFixture + 'wt_unreviewed_command'))
+    if ($unknownErrors.Count -ne 1 -or $unknownErrors[0] -cne 'public beta command is not read-only allowlisted: /wt_unreviewed_command') {
+        throw 'unreviewed public command was not rejected exactly'
+    }
+    $missingErrors = @(Get-WtPublicCommandErrors -Commands @($commandFixture | Where-Object { $_ -cne 'wt_heat_capture' }))
+    if ($missingErrors.Count -ne 1 -or $missingErrors[0] -cne 'documented public support command missing: /wt_heat_capture') {
+        throw 'missing finite heat-capture command was not rejected exactly'
+    }
     $public = @{ 'weapon_tweaker.lua' = Normalize-WtLua 'local mod = get_mod("wt"); local MOD_VERSION = "0.12.264-beta"; mod:dofile("scripts/mods/weapon_tweaker/x")' }
     $dev = @{ 'weapon_tweaker.lua' = Normalize-WtLua 'local mod = get_mod("wt_dev"); local MOD_VERSION = "0.12.265-dev"; mod:dofile("scripts/mods/weapon_tweaker_dev/x")' }
     if (@(Compare-WtLuaMaps $public $dev).Count -ne 0) { throw 'documented stream identity differences were rejected' }

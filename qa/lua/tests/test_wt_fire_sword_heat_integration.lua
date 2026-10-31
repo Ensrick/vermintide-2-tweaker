@@ -486,6 +486,402 @@ return function(H, root)
             H.equal(node:damage(direct(node)),10)
         end
     end)
+
+    local function local_capture_player(node)
+        for _, player in pairs(node.humans) do
+            if player.peer_id == node.id then
+                player.player_unit, player.local_player = node.unit, true
+            end
+        end
+    end
+    H.test("WT #942 actual owner arm is bounded local-only and stops on existing lifecycle", function()
+        local net,a=pair();local_capture_player(a)
+        local packets=#net.history
+        H.equal(a.owner:capture("arm"),true)
+        H.equal(a:damage(direct(a)),13)
+        local data=assert(a.owner:capture("dump"))
+        H.equal(data.count,1);H.truthy(data.header:find("owner_committed_at_arm=1",1,true))
+        H.equal(#net.history,packets,"arm/sample/dump cannot add protocol traffic")
+        H.equal(a.owner:capture("arm"),true);a:damage(direct(a))
+        a.mod.on_game_state_changed("exit","StateIngame")
+        data=assert(a.owner:capture("dump"))
+        H.equal(data.count,1);H.truthy(data.header:find("reason=settings-changed",1,true))
+        H.equal(a.owner:capture("arm"),false)
+        a.humans={};H.equal(a.owner:capture("arm"),false)
+    end)
+    H.test("WT #942 actual owner refuses ambiguous dead and foreign capture identities", function()
+        for _,fault in ipairs({"split","dead","foreign","over-cap","lost-owner"}) do
+            local _,a=pair();local_capture_player(a)
+            if fault=="split" then a.humans[#a.humans+1]={peer_id=a.id,player_unit=a.unit,local_player=true}
+            elseif fault=="dead" then a.dead=true
+            elseif fault=="foreign" then a.humans[1].peer_id="not-the-local-peer"
+            elseif fault=="over-cap" then for index=1,5 do a.humans[index]={peer_id="other"..index} end
+            else a.mod._wt942_owner={} end
+            H.equal(a.owner:capture("arm"),false)
+            H.equal(a.owner:capture("dump"),nil)
+        end
+    end)
+    H.test("WT #942 actual diagnostics owns one finite dump and closed command actions", function()
+        local _,a=pair();local_capture_player(a)
+        local commands,logs={},{}
+        a.mod.command=function(_,name,_,callback) commands[name]=callback end
+        local env=setmetatable({get_mod=function(id) if id=="wt" then return a.mod end end,
+            printf=function(format,...) logs[#logs+1]=string.format(format,...) end},{__index=_G})
+        env._G=env
+        local chunk=assert(loadfile(prefix.."_wt_diagnostics.lua"));setfenv(chunk,env);chunk()
+        local command=assert(commands.wt_heat_capture)
+        command("arm","extra");H.equal(#logs,0)
+        command("dump");H.equal(#logs,0)
+        command("arm");H.equal(a:damage(direct(a)),13)
+        command("dump");H.equal(#logs,3)
+        H.truthy(logs[1]:find("[wt:942:capture] begin ",1,true)==1)
+        H.truthy(logs[2]:find("pre_942_calculated_damage=10",1,true))
+        H.truthy(logs[2]:find("post_942_calculated_damage=13",1,true))
+        H.equal(logs[3],"[wt:942:capture] end count=1")
+        command("dump");command("clear");H.equal(#logs,3,"explicit dump is one shot")
+        local bytes=0;for _,line in ipairs(logs) do H.truthy(#line+1<=1024);bytes=bytes+#line+1 end
+        H.truthy(bytes<=10240)
+    end)
+
+    -- Actual owner/runtime/protocols, plus a native result-recording boundary.
+    -- The optional fixture installer supplies the REAL #664 policy, never an
+    -- identity/healthy substitute for a production WT module.
+    local function captured_pair(namespace, executioner_marker)
+        local stream_prefix = root .. "/" .. namespace .. "/scripts/mods/" .. namespace .. "/"
+        local function stream_load(name) return assert(loadfile(stream_prefix .. name .. ".lua"))() end
+        local net = Fixture.network(stream_load, Json)
+        local options = {
+            change_deps = function(_, node)
+                if executioner_marker then node.profiles.direct._wt_executioner_light_headshot_multiplier = 1.3 end
+            end,
+            mod_setup = function(_, node)
+                node.native_results, node.native_calls = pack(40, nil, "tail", nil), 0
+                node.classes.damage.calculate_damage = function(...)
+                    node.native_calls = node.native_calls + 1; node.native_damage = pack(...)
+                    if node.native_error then error(node.native_error, 0) end
+                    return unpack(node.native_results, 1, node.native_results.n)
+                end
+            end,
+            install = function(mod, heavy, _, deps)
+                return stream_load("_wt_fire_sword_owner").install(mod, heavy, stream_load("_wt_axe_balance"), deps)
+            end,
+        }
+        local a, b = net:add("host", options), net:add("client", options)
+        net:connect("host", "client"); net:settle()
+        local_capture_player(a); local_capture_player(b)
+        return net, a, b, stream_prefix
+    end
+    local function capture_contains(row, field)
+        H.truthy(type(row) == "string" and row:find(field, 1, true), "capture field absent: " .. field)
+    end
+    local function capture_number(row, key)
+        local value = assert(row:match(" " .. key .. "=([^ ]+)"), "numeric capture field absent: " .. key)
+        return tonumber(value) -- keep assert's diagnostic message out of tonumber's optional base.
+    end
+    local function near(actual, expected)
+        H.truthy(type(actual) == "number" and math.abs(actual - expected) < 1e-9, "actual calculated capture value differs")
+    end
+    local function command_capture(node, stream_prefix)
+        local commands, logs = {}, {}
+        node.mod.command = function(_, name, _, callback) commands[name] = callback end
+        local env = setmetatable({ get_mod = function() return node.mod end,
+            printf = function(fmt, ...) logs[#logs + 1] = string.format(fmt, ...) end }, { __index = _G })
+        env._G = env
+        local namespace = assert(stream_prefix:match("/scripts/mods/([^/]+)/$"))
+        node.mod.dofile = function(_, path)
+            local name = assert(path:match("^scripts/mods/" .. namespace .. "/([%w_]+)$"),
+                "command fixture refused a foreign stream module")
+            local helper = assert(loadfile(stream_prefix .. name .. ".lua"))
+            setfenv(helper, env)
+            return helper()
+        end
+        local chunk = assert(loadfile(stream_prefix .. "_wt_diagnostics.lua")); setfenv(chunk, env); chunk()
+        return assert(commands.wt_heat_capture), logs
+    end
+    local function clear_logs(logs) for index = #logs, 1, -1 do logs[index] = nil end end
+    local function numeric_ascii_lines(logs)
+        local bytes = 0
+        H.truthy(#logs <= 10, "explicit dump exceeds ten lines")
+        for _, line in ipairs(logs) do
+            H.truthy(#line + 1 <= 1024, "explicit dump line exceeds1024 bytes")
+            bytes = bytes + #line + 1
+            for index = 1, #line do
+                local byte = line:byte(index)
+                H.truthy(byte >= 32 and byte <= 126, "explicit dump contains a nonprintable byte")
+            end
+        end
+        H.truthy(bytes <= 10240, "explicit dump exceeds10KiB")
+    end
+
+    H.test("WT #942 actual singleton captures strict normal armor donor and delegated664 values", function()
+        for _, namespace in ipairs({ "weapon_tweaker", "weapon_tweaker_dev" }) do
+            local net, a, b = captured_pair(namespace)
+            local token = {}; a.native_results = pack(40, nil, token, nil)
+            -- Literal independently authored expected cells, not a recomputation
+            -- through state:damage_profile or the capture's own numeric formatter.
+            for _, cell in ipairs({
+                { threshold = 0, heat = 0, key = "direct", post = 40 },
+                { threshold = 0, heat = 12.5, key = "wt942_armored_direct", post = 45 },
+                { threshold = 25, heat = 24, key = "wt942_direct_direct", post = 49.6 },
+                { threshold = 25, heat = 25, key = "wt942_direct_direct", post = 50 },
+                { threshold = 25, heat = 26, key = "wt942_armored_direct", post = 50.4 },
+            }) do
+                for _, node in ipairs({ a, b }) do
+                    node.settings.wt_fire_sword_heat_armor_threshold = cell.threshold
+                    node.owner:settings_changed("wt_fire_sword_heat_armor_threshold")
+                end
+                net:settle(); a.heat = cell.heat; a.native_calls = 0
+                local packets = #net.history
+                H.equal(a.owner:capture("arm"), true)
+                local out = pack(a:damage(a.profiles.wt942_armored_direct)) -- deliberately latched armor input
+                H.equal(out.n, 4); near(out[1], cell.post)
+                H.equal(out[2], nil); H.equal(rawequal(out[3], token), true); H.equal(out[4], nil)
+                H.equal(a.native_calls, 1)
+                H.equal(rawequal(a.native_damage[9], a.profiles[cell.key]), true)
+                H.equal(a.native_damage[5], 600)
+                local data = assert(a.owner:capture("dump")); H.equal(data.count, 1)
+                capture_contains(data.rows[1], "selected_profile=" .. cell.key)
+                capture_contains(data.rows[1], "action_context=none action=unknown")
+                near(capture_number(data.rows[1], "heat_raw"), cell.heat)
+                near(capture_number(data.rows[1], "pre_942_calculated_damage"), 40)
+                near(capture_number(data.rows[1], "post_942_calculated_damage"), cell.post)
+                H.equal(#net.history, packets, "observing a settled calculation must not send extra packets")
+            end
+            local _, marked = captured_pair(namespace, true)
+            marked.heat = 12.5; H.equal(marked.owner:capture("arm"), true)
+            near(marked:damage(direct(marked)), 58.5)
+            local data = assert(marked.owner:capture("dump"))
+            near(capture_number(data.rows[1], "pre_942_calculated_damage"), 52)
+            near(capture_number(data.rows[1], "post_942_calculated_damage"), 58.5)
+        end
+    end)
+
+    H.test("WT #942 actual singleton retains zero nonnumeric nonfinite tuples and opaque errors", function()
+        for _, namespace in ipairs({ "weapon_tweaker", "weapon_tweaker_dev" }) do
+            local _, a = captured_pair(namespace); a.heat = 12.5
+            local token = {}
+            local cells = { { value = 0, ratio = "zero-input" }, { missing = true, ratio = "unavailable" },
+                { value = false, ratio = "unavailable" }, { value = "native-result", ratio = "unavailable" },
+                { value = math.huge, ratio = "unavailable" }, { value = 0/0, ratio = "unavailable", nan = true } }
+            for _, cell in ipairs(cells) do
+                a.native_results = pack(cell.value, nil, token, nil); a.native_calls = 0
+                H.equal(a.owner:capture("arm"), true)
+                local out = pack(a:damage(direct(a)))
+                H.equal(out.n, 4)
+                if cell.nan then H.truthy(type(out[1]) == "number" and out[1] ~= out[1])
+                else H.equal(out[1], cell.value) end
+                H.equal(out[2], nil); H.equal(rawequal(out[3], token), true); H.equal(out[4], nil)
+                H.equal(a.native_calls, 1)
+                local data = assert(a.owner:capture("dump")); H.equal(data.count, 1)
+                capture_contains(data.rows[1], "observed_damage_ratio=" .. cell.ratio)
+                local rendered = cell.value == 0 and "0" or "unavailable"
+                capture_contains(data.rows[1], "pre_942_calculated_damage=" .. rendered)
+                capture_contains(data.rows[1], "post_942_calculated_damage=" .. rendered)
+            end
+            local opaque = setmetatable({}, { __tostring = function() error("opaque damage error stringified") end })
+            a.native_error = opaque; a.native_calls = 0; H.equal(a.owner:capture("arm"), true)
+            local ok, failure = pcall(a.damage, a, direct(a))
+            H.equal(ok, false); H.equal(rawequal(failure, opaque), true); H.equal(a.native_calls, 1)
+            local data = assert(a.owner:capture("dump")); H.equal(data.count, 0,
+                "a thrown calculation must not manufacture an after-record")
+        end
+    end)
+
+    H.test("WT #942 actual command validates every byte with an independent numeric oracle", function()
+        for _, namespace in ipairs({ "weapon_tweaker", "weapon_tweaker_dev" }) do
+            local _, a, _, stream_prefix = captured_pair(namespace)
+            local command, logs = command_capture(a, stream_prefix)
+            local actual_capture, selected_byte = a.owner.capture, 0
+            -- Corrupt only a COPY returned by the real capture, after its real
+            -- one-shot token is consumed. No healthy owner/source shim is used.
+            a.owner.capture = function(self, action)
+                local data, status = actual_capture(self, action)
+                if action == "dump" and type(data) == "table" then
+                    H.equal(data.count, 1, "real capture row required before adversarial byte")
+                    data.rows[1] = data.rows[1] .. " byte=" .. string.char(selected_byte)
+                end
+                return data, status
+            end
+            for byte = 0, 255 do
+                selected_byte = byte; clear_logs(logs)
+                command("arm"); a:damage(direct(a)); command("dump")
+                if byte >= 32 and byte <= 126 then
+                    H.equal(#logs, 3, "printable evidence byte must retain one complete real dump")
+                else H.equal(#logs, 0, "nonprintable evidence byte must be refused before the first emission") end
+                numeric_ascii_lines(logs)
+                local count = #logs; command("dump")
+                H.equal(#logs, count, "malformed or valid data cannot replay a consumed real capture")
+            end
+        end
+    end)
+
+    H.test("WT #942 actual command emits one full capped dump and labels zero observations", function()
+        for _, namespace in ipairs({ "weapon_tweaker", "weapon_tweaker_dev" }) do
+            local net, a, _, stream_prefix = captured_pair(namespace)
+            local command, logs = command_capture(a, stream_prefix)
+            local packets = #net.history
+            command("arm")
+            for _ = 1, 9 do a:damage(direct(a)) end
+            command("dump"); H.equal(#logs, 10)
+            H.equal(logs[10], "[wt:942:capture] end count=8"); numeric_ascii_lines(logs)
+            command("dump"); H.equal(#logs, 10)
+            clear_logs(logs); command("arm"); command("dump")
+            H.equal(#logs, 2); capture_contains(logs[1], "count=0/8")
+            H.equal(logs[2], "[wt:942:capture] end count=0"); numeric_ascii_lines(logs)
+            H.equal(#net.history, packets, "command dump and arm do not create protocol traffic")
+        end
+    end)
+
+    local function unchanged_capture_native(node, profile, token)
+        local calls = node.native_calls
+        local out = pack(node:damage(profile))
+        H.equal(out.n, 4); H.equal(out[1], 40); H.equal(out[2], nil)
+        H.equal(rawequal(out[3], token), true); H.equal(out[4], nil)
+        H.equal(node.native_calls, calls + 1, "observer loss cannot duplicate or skip the native calculation")
+        local args = node.native_damage
+        H.equal(args.n, 12); H.equal(args[1], "output")
+        H.equal(rawequal(args[2], node.unit), true); H.equal(rawequal(args[3], node.unit), true)
+        H.equal(args[4], "head"); H.equal(args[5], 600); H.equal(args[6], nil)
+        H.equal(args[7], 1); H.equal(args[8], false); H.equal(rawequal(args[9], profile), true)
+        H.equal(args[10], nil); H.equal(args[11], "extra"); H.equal(args[12], nil)
+    end
+
+    H.test("WT #942 actual owner freezes post-arm identity loss with the old unit still alive", function()
+        for _, namespace in ipairs({ "weapon_tweaker", "weapon_tweaker_dev" }) do
+            for _, fault in ipairs({ "replacement", "foreign-peer", "foreign-local", "split",
+                    "malformed-row", "malformed-roster", "throwing-roster", "over-budget" }) do
+                local net, a, b = captured_pair(namespace)
+                local old, replacement, token, profile = a.unit, {}, {}, {}
+                local row, roster = a.humans[1], a.humans
+                H.equal(rawget(row, "peer_id"), a.id)
+                local reads, throwing, stringified, indexed = 0, false, 0, 0
+                local opaque = setmetatable({}, { __tostring = function()
+                    stringified = stringified + 1; error("roster error must not be stringified")
+                end })
+                -- Runtime retains the original fixture alive reader (old==a.unit).
+                -- The owner reader explicitly proves BOTH raw units alive, so
+                -- replacement cannot pass merely because the new unit is dead.
+                a.deps.alive = function(unit) return rawequal(unit, old) or rawequal(unit, replacement) end
+                a.deps.humans = function()
+                    reads = reads + 1
+                    if throwing then error(opaque, 0) end
+                    return a.humans
+                end
+                a.native_results = pack(40, nil, token, nil)
+                local packets, hooks = #net.history, a.hook_count()
+                H.equal(a.owner:capture("arm"), true); H.equal(reads, 1, "arm uses one shared resolver")
+                unchanged_capture_native(a, profile, token)
+                H.equal(reads, 2, "one armed boundary performs one bounded resolver call")
+                if fault == "replacement" then
+                    local alias = { __eq = function() return true end }
+                    setmetatable(old, alias); setmetatable(replacement, alias)
+                    H.equal(old == replacement, true); H.equal(rawequal(old, replacement), false)
+                    row.player_unit = replacement
+                elseif fault == "foreign-peer" then row.peer_id = "foreign"
+                elseif fault == "foreign-local" then roster[2].local_player = true
+                elseif fault == "split" then roster[3] = { peer_id = a.id, local_player = true, player_unit = old }
+                elseif fault == "malformed-row" then
+                    a.humans = { setmetatable({}, { __index = function()
+                        indexed = indexed + 1; error(opaque, 0)
+                    end }) }
+                elseif fault == "malformed-roster" then a.humans = false
+                elseif fault == "throwing-roster" then throwing = true
+                else
+                    a.humans = { row, { peer_id = "other1" }, { peer_id = "other2" },
+                        { peer_id = "other3" }, { peer_id = "other4" } }
+                end
+                H.equal(a.deps.alive(old), true); H.equal(a.deps.alive(replacement), true)
+                unchanged_capture_native(a, profile, token)
+                H.equal(reads, 3, "identity loss is checked at the next existing boundary")
+                H.equal(stringified, 0); H.equal(indexed, 0, "capture identity fields must remain raw")
+                local data = assert(a.owner:capture("dump"))
+                H.equal(data.count, 1, "lost identity must freeze exactly the prior observation")
+                capture_contains(data.header, "reason=owner-or-unit-lost")
+                capture_contains(data.rows[1], "phase=damage action_context=none")
+                H.equal(a.owner:capture("dump"), nil, "identity-loss evidence remains one-shot")
+                -- Repairing the roster does not silently resume the old arm.
+                throwing = false
+                a.humans = { { peer_id = a.id, local_player = true, player_unit = old }, { peer_id = b.id } }
+                unchanged_capture_native(a, profile, token)
+                H.equal(reads, 3, "stopped capture neither retains a live observer nor polls the roster")
+                H.equal(a.owner:capture("dump"), nil)
+                local native_calls = a.native_calls
+                a.native_error = opaque
+                local ok, failure = pcall(a.damage, a, profile)
+                a.native_error = nil
+                H.equal(ok, false); H.equal(rawequal(failure, opaque), true)
+                H.equal(a.native_calls, native_calls + 1); H.equal(reads, 3)
+                H.equal(a.owner:capture("arm"), true); H.equal(reads, 4)
+                unchanged_capture_native(a, profile, token)
+                data = assert(a.owner:capture("dump")); H.equal(data.count, 1)
+                capture_contains(data.header, "reason=dumped")
+                H.equal(a.owner.committed, true); H.equal(a.owner.terminal, false)
+                H.equal(a.hook_count(), hooks); H.equal(#net.history, packets)
+                H.equal(stringified, 0)
+            end
+        end
+    end)
+
+    H.test("WT #942 actual owner revalidates replacement at start cleave and dump boundaries", function()
+        for _, namespace in ipairs({ "weapon_tweaker", "weapon_tweaker_dev" }) do
+            for _, boundary in ipairs({ "start", "cleave", "dump" }) do
+                local net, a = captured_pair(namespace)
+                local old, replacement, token, profile = a.unit, {}, {}, {}
+                local row, reads = a.humans[1], 0
+                a.deps.alive = function(unit) return rawequal(unit, old) or rawequal(unit, replacement) end
+                a.deps.humans = function() reads = reads + 1; return a.humans end
+                a.native_results = pack(40, nil, token, nil)
+                local packets, data = #net.history, nil
+                H.equal(a.owner:capture("arm"), true)
+                if boundary ~= "cleave" then unchanged_capture_native(a, profile, token) end
+                if boundary == "start" then
+                    row.player_unit = replacement
+                    local action = { kind = "shield_slam", damage_profile = "direct",
+                        damage_profile_target = "target", damage_profile_aoe = "aoe" }
+                    local actor = { owner_unit = old }
+                    local out = pack(a.classes.slam.client_owner_start_action(actor, action, nil, token, nil))
+                    H.equal(out.n, 7); H.equal(out[1], "direct"); H.equal(out[2], "target")
+                    H.equal(out[3], "aoe"); H.equal(out[4], nil); H.equal(out[5], nil)
+                    H.equal(rawequal(out[6], token), true); H.equal(out[7], nil)
+                    H.equal(rawequal(actor.seen, action), true, "unindexed native action remains raw")
+                elseif boundary == "cleave" then
+                    local actual, calls = a.classes.utils.get_max_targets, 0
+                    -- One-hop adversarial boundary, not a WT module substitute:
+                    -- the actual installed helper hook and native run once.
+                    a.classes.utils.get_max_targets = function(...)
+                        calls = calls + 1; row.player_unit = replacement
+                        return actual(...)
+                    end
+                    local out = pack(a.classes.sweep.client_owner_start_action({ owner_unit = old },
+                        a.native.heavy_attack_left, token, nil))
+                    a.classes.utils.get_max_targets = actual
+                    H.equal(calls, 1); H.equal(out.n, 5); H.equal(out[1], 160)
+                    H.equal(out[2], nil); H.equal(out[3], "sweep")
+                    H.equal(rawequal(out[4], token), true); H.equal(out[5], nil)
+                else
+                    row.player_unit = replacement
+                    data = assert(a.owner:capture("dump"))
+                end
+                H.equal(a.deps.alive(old), true); H.equal(a.deps.alive(replacement), true)
+                H.equal(a.owner.runtime.context, nil)
+                data = data or assert(a.owner:capture("dump"))
+                H.equal(data.count, 1, "existing boundary preserves only the honest pre-loss row")
+                capture_contains(data.header, "reason=owner-or-unit-lost")
+                capture_contains(data.rows[1], boundary == "cleave" and "phase=start" or "phase=damage")
+                H.equal(a.owner:capture("dump"), nil)
+                local stopped_reads = reads
+                row.player_unit = old
+                unchanged_capture_native(a, profile, token)
+                H.equal(reads, stopped_reads, "replacement stop cannot resume without an explicit new arm")
+                H.equal(a.owner:capture("arm"), true)
+                unchanged_capture_native(a, profile, token)
+                data = assert(a.owner:capture("dump")); H.equal(data.count, 1)
+                capture_contains(data.header, "reason=dumped")
+                H.equal(#net.history, packets)
+            end
+        end
+    end)
+
     H.test("WT #942 throwing weapon-registry reader is distinguished from template replacement",function()
         local _,a=pair();a.deps.get_weapons=function() error("unavailable") end
         a.owner:reconcile();H.equal(a.owner.committed,false)

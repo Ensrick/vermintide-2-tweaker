@@ -1047,6 +1047,22 @@ full pipeline is:
    committed schema-3 receipt in the same commit, so a half-built pair fails
    the PR.
 
+**Multi-mod intermediate stops.** Post-build receipt and atomicity gates inspect
+the whole implicated dirty set; `-Mod` does not exclude an unbuilt sibling. A
+target can finish its clean compile and write a valid receipt, then stop solely
+because another planned mod still has its old proof. Preserve that nonzero
+result. Continue only after independently matching the target's exact current
+source and complete output to its fresh receipt, proving every reported mismatch
+belongs solely to an unbuilt planned sibling, and confirming unchanged reviewed
+source, original valid claims and normal drained-transaction guards. Finish the
+remaining planned mods through canonical BuildOnly, then rerun each earlier
+stopped mod so EVERY changed mod has a terminal-zero canonical BuildOnly with
+all final gates passing before staging or committing. This is not an error
+waiver: any target mismatch, unexpected sibling/output/policy error, source
+drift, failed compile/QA, invalid claim or ambiguous cleanup requires diagnosis
+and fresh review. Never hide siblings through partial staging, restrict a gate,
+skip a final check, or use direct launcher builds.
+
 **The claim broker owns the version number.** `tools\ship\claim.ps1` writes a
 machine-global claim at `%APPDATA%\VMBLauncher\ship_claims\<mod>.claim`, shared
 across every worktree and every concurrent session on the machine. The number it
