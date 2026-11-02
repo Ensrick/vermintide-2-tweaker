@@ -111,16 +111,20 @@ function Load-CommittedVanillaLocKeys {
     return $keys
 }
 
-# --- loc parser (same three patterns as check_localization.ps1) ---
+# --- loc parser (same three declaration forms as check_localization.ps1) ---
 function Parse-LocFile([string]$path) {
     $result = @{}
     if (-not (Test-Path $path)) { return $result }
     $text = Read-Utf8 $path
-    $rx1 = '(?m)^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*\{\s*en\s*=\s*"((?:[^"\\]|\\.)*)"\s*[,}]'
+    # Comments between the opening table and en are Lua trivia, not missing
+    # localization. Consume them atomically so a commented-out en assignment
+    # cannot be recovered by regex backtracking and masquerade as a real row.
+    $locTrivia = '(?>(?:\s|--\[(?<locCommentEquals>=*)\[(?s:.*?)\]\k<locCommentEquals>\]|--(?!\[=*\[)[^\r\n]*)*)'
+    $rx1 = '(?m)^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*\{' + $locTrivia + 'en\s*=\s*"((?:[^"\\]|\\.)*)"\s*[,}]'
     foreach ($m in [regex]::Matches($text, $rx1)) { $result[$m.Groups[1].Value] = $m.Groups[2].Value }
     $rx2 = '(?m)^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*en\s*\(\s*"((?:[^"\\]|\\.)*)"\s*\)'
     foreach ($m in [regex]::Matches($text, $rx2)) { $result[$m.Groups[1].Value] = $m.Groups[2].Value }
-    $rx3 = '(?m)^\s*loc\.([A-Za-z_][A-Za-z0-9_]*)\s*=\s*\{\s*en\s*=\s*"((?:[^"\\]|\\.)*)"\s*[,}]'
+    $rx3 = '(?m)^\s*loc\.([A-Za-z_][A-Za-z0-9_]*)\s*=\s*\{' + $locTrivia + 'en\s*=\s*"((?:[^"\\]|\\.)*)"\s*[,}]'
     foreach ($m in [regex]::Matches($text, $rx3)) { $result[$m.Groups[1].Value] = $m.Groups[2].Value }
     return $result
 }
@@ -367,6 +371,33 @@ function Invoke-SelfTest {
 return {
     mod_description = { en = "Self-test mod." },
     present_setting = { en = "Present Setting" },
+    commented_setting = { -- an inline annotation
+        -- a full-line annotation; en = "Not the actual value"
+        en = "Actual -- value",
+    },
+    commented_only_setting = { -- en = "Not a localization entry"
+        fr = "Not English",
+    },
+    long_comment_only_setting = { --[[
+        en = "Not an English row",
+    ]]
+        fr = "Not English",
+    },
+    long_commented_setting = { --[==[
+        en = "Not the actual value",
+        ]=] is not the matching delimiter
+    ]==]
+        en = "After long comment",
+    },
+}
+loc.assigned_commented_setting = {
+    -- assignment-style annotation
+    en = "Assigned value",
+}
+loc.assigned_long_comment_only_setting = { --[=[
+    en = "Not an assignment entry",
+]=]
+    fr = "Not English",
 }
 "@
         [System.IO.File]::WriteAllText((Join-Path $scriptsDir "${modName}_localization.lua"), $loc, (New-Object System.Text.UTF8Encoding $false))
@@ -379,6 +410,12 @@ return {
         widgets = {
             { setting_id = "present_setting", type = "checkbox", default_value = true },
             { setting_id = "planted_missing_setting", type = "checkbox", default_value = true },
+            { setting_id = "commented_setting", type = "checkbox", default_value = true },
+            { setting_id = "assigned_commented_setting", type = "checkbox", default_value = true },
+            { setting_id = "commented_only_setting", type = "checkbox", default_value = true },
+            { setting_id = "long_comment_only_setting", type = "checkbox", default_value = true },
+            { setting_id = "long_commented_setting", type = "checkbox", default_value = true },
+            { setting_id = "assigned_long_comment_only_setting", type = "checkbox", default_value = true },
         },
     },
 }
@@ -405,6 +442,20 @@ entry.description = "planted_annotated_fixture_key" -- name-integrity: non-rende
         $res = Invoke-IntegrityChecks -repoRoot $tmp -vanillaKeys $vanillaKeys -onlyMods @($modName)
 
         $check1Fired = ($res.errors | Where-Object { $_ -match '\[check1\].*planted_missing_setting' }).Count -gt 0
+        $commentedLoc = Parse-LocFile (Join-Path $scriptsDir "${modName}_localization.lua")
+        $commentedLocPass = $commentedLoc['commented_setting'] -ceq 'Actual -- value' -and
+            $commentedLoc['assigned_commented_setting'] -ceq 'Assigned value' -and
+            $commentedLoc['long_commented_setting'] -ceq 'After long comment'
+        $commentedOnlyRejected = -not $commentedLoc.ContainsKey('commented_only_setting') -and
+            @($res.errors | Where-Object { $_ -match '\[check1\].*commented_only_setting' }).Count -eq 1
+        $longCommentOnlyRejected = -not $commentedLoc.ContainsKey('long_comment_only_setting') -and
+            -not $commentedLoc.ContainsKey('assigned_long_comment_only_setting') -and
+            @($res.errors | Where-Object {
+                $_ -match "\[check1\].*setting_id '(?:long_comment_only_setting|assigned_long_comment_only_setting)'"
+            }).Count -eq 2
+        $commentedLocNoFalsePositive = @($res.errors | Where-Object {
+            $_ -match "\[check1\].*setting_id '(?:commented_setting|assigned_commented_setting|long_commented_setting)'"
+        }).Count -eq 0
         $check2Fired = ($res.errors | Where-Object { $_ -match '\[check2\].*planted_unresolvable_locless_key' }).Count -gt 0
         $check2FalsePos = ($res.errors | Where-Object { $_ -match '\[check2\].*weapon_skin' }).Count -gt 0
         $annotatedFalsePos = ($res.errors | Where-Object { $_ -match 'planted_annotated_fixture_key|planted_commented_example_key' }).Count -gt 0
@@ -446,6 +497,9 @@ entry.description = "planted_annotated_fixture_key" -- name-integrity: non-rende
 
         Write-Host ""
         Write-SelfTestResult "  CHECK 1 (missing setting_id loc entry) fired:        " $check1Fired
+        Write-SelfTestResult "  CHECK 1 reads commented table/assignment loc rows:  " ($commentedLocPass -and $commentedLocNoFalsePositive)
+        Write-SelfTestResult "  CHECK 1 rejects an en row inside a comment:         " $commentedOnlyRejected
+        Write-SelfTestResult "  CHECK 1 rejects English rows inside long comments: " $longCommentOnlyRejected
         Write-SelfTestResult "  CHECK 2 (unresolvable display_name) fired:           " $check2Fired
         Write-SelfTestResult "  CHECK 2 did NOT false-positive on vanilla item_type: " (-not $check2FalsePos)
         Write-SelfTestResult "  CHECK 2 ignores annotated fixtures and comments:       " (-not $annotatedFalsePos)
@@ -461,7 +515,7 @@ entry.description = "planted_annotated_fixture_key" -- name-integrity: non-rende
         Write-Host "  Raised errors:" -ForegroundColor DarkGray
         foreach ($e in $res.errors) { Write-Host "    - $e" -ForegroundColor DarkGray }
 
-        if ($check1Fired -and $check2Fired -and -not $check2FalsePos -and -not $annotatedFalsePos -and $offlineOracleComplete -eq 0 -and $movedCheck2MatchesBaseline -and -not $hatFalsePos -and $hatNearMissFired -and $hatOracleRemovalFired -and -not $chipsFalsePos -and $chipsNearMissFired -and $chipsOracleRemovalFired) {
+        if ($check1Fired -and $commentedLocPass -and $commentedLocNoFalsePositive -and $commentedOnlyRejected -and $longCommentOnlyRejected -and $check2Fired -and -not $check2FalsePos -and -not $annotatedFalsePos -and $offlineOracleComplete -eq 0 -and $movedCheck2MatchesBaseline -and -not $hatFalsePos -and $hatNearMissFired -and $hatOracleRemovalFired -and -not $chipsFalsePos -and $chipsNearMissFired -and $chipsOracleRemovalFired) {
             Write-Host "[check_name_integrity] SELF-TEST PASSED" -ForegroundColor Green
             return 0
         } else {
