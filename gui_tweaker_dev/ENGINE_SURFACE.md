@@ -183,6 +183,16 @@ Uses the engine's own `FreeFlightManager` (the "Photo Mode" mechanism); never to
 
 Direct-call seams (not hooks, but load-bearing): `_enter_free_flight` [src: `free_flight_manager.lua:584`] creates the detached viewport and calls `block_device_except_service("FreeFlight", ...)` on all three devices [src: `:610-612`] (gut immediately reverses it with `device_unblock_all_services`); `register_player` seeds the per-player data slot on spawn [src: `:537`]; on a world teardown mid-freecam the engine routes to `_clear_free_flight` [src: `:531`] which does NOT call `_exit_free_flight`, so gut's `on_game_state_changed` force-resets the flag (§32). Every world lookup routes through a `has_world`-gated `_live_world` (a bare `world()` FASSERTS in the no-world window, §32).
 
+Snapshot ownership (#1796): native exit and VMF setting callbacks can nest. A
+saved `third_person_mode` value is therefore restored only by a one-shot owned
+release, consumed before callbacks; nil/false are values, not ownership flags.
+Idle OFF and deferred cancellation never write another camera owner's state.
+Entry requires the current free-flight `input_manager` before native entry:
+native creates its viewport/observers before its input dereference [src:
+`foundation/scripts/managers/free_flight/free_flight_manager.lua:592-612`], and
+unregistration explicitly clears that field [src: same file, `:54-55`]. Do not
+cache/recreate another mod's services when unavailable.
+
 ### Surface 1c - Cutscene skip + fade + loading-monologue (owner: `docs/engine/08`; `_gut_cutscenes.lua`, `_gut_monologue.lua`)
 
 Migrated from `gt` (#106 skip 2026-06-25, #192 monologue 2026-06-29). All `CutsceneSystem` hooks are table-form, guarded `if CutsceneSystem`.

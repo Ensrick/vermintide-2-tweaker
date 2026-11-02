@@ -11,13 +11,15 @@ return function(H, repo_root)
             root = "gui_tweaker/scripts/mods/gui_tweaker/",
             package = "gui_tweaker/resource_packages/gui_tweaker/gui_tweaker.package",
             module_path = "scripts/mods/gui_tweaker/",
-            dialogue = false,
+            dialogue = true,
+            main = "gui_tweaker.lua",
         },
         {
             root = "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/",
             package = "gui_tweaker_dev/resource_packages/gui_tweaker_dev/gui_tweaker_dev.package",
             module_path = "scripts/mods/gui_tweaker_dev/",
             dialogue = true,
+            main = "gui_tweaker_dev.lua",
         },
     }
 
@@ -43,7 +45,7 @@ return function(H, repo_root)
 
     H.test("GUT size split installs each explicit module exactly once", function()
         for _, stream in ipairs(streams) do
-            local main = read(stream.root .. (stream.dialogue and "gui_tweaker_dev.lua" or "gui_tweaker.lua"))
+            local main = read(stream.root .. stream.main)
             local view = read(stream.root .. "_mod_tweaker_view.lua")
             local state = read(stream.root .. "_mod_tweaker_state.lua")
             local owners = {
@@ -179,7 +181,7 @@ return function(H, repo_root)
             H.truthy(stable:find(dependency, 1, true), "stable lacks " .. dependency)
             H.truthy(dev:find(dependency, 1, true), "dev lacks " .. dependency)
         end
-        H.equal(stable:find("deps.DialogueUI", 1, true), nil, "stable leaked dev dialogue UI")
+        H.truthy(stable:find("deps.DialogueUI", 1, true), "official Dialogue integration lost its renderer dependency")
         H.truthy(dev:find("deps.DialogueUI", 1, true), "dev dialogue UI dependency was lost")
     end)
 

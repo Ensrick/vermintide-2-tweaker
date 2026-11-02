@@ -80,6 +80,7 @@ local _pending_menu_close = false
 -- in _gut_camera.lua also drives this flag; unconditionally clearing it on freecam
 -- exit would break a co-active 3P camera).
 local _prev_third_person = nil
+local _owns_third_person = false
 local EXIT_KEY = "f8"
 
 local function _set_third_person(v)
@@ -89,6 +90,17 @@ local function _set_third_person(v)
 end
 local function _get_third_person()
     return Development._hardcoded_dev_params and Development._hardcoded_dev_params.third_person_mode
+end
+
+-- Exit callbacks and setting notifications can re-enter apply(false). Consume
+-- ownership before restoring so each session restores its exact nil/false/true
+-- baseline once; an idle OFF or cancelled menu request owns nothing to restore.
+local function _restore_third_person()
+    if not _owns_third_person then return end
+    local previous = _prev_third_person
+    _owns_third_person = false
+    _prev_third_person = nil
+    _set_third_person(previous)
 end
 
 local function _local_player()
@@ -212,6 +224,15 @@ mod._gut_apply_freecam = function(enabled)
             return
         end
         if _freecam_active or data.active then return end   -- already flying
+        -- Native entry creates its viewport/observers before using input_manager
+        -- (free_flight_manager.lua:592-612). Another mod can unregister that manager;
+        -- reject before acquiring anything, without repairing foreign input state.
+        if not Managers.free_flight.input_manager then
+            printf("[gut:FC] activation rejected: free-flight input manager not registered")
+            mod:echo("Free camera: unavailable (free-flight input is not registered).")
+            if mod:get("gut_freecam_enabled") then mod:set("gut_freecam_enabled", false) end
+            return
+        end
         -- MENU GATE: never enter free flight while a menu/view is open - the device
         -- re-route would cut all input to it (soft-lock class). Defer: mod.update
         -- completes the activation on the first frame after the menu closes.
@@ -229,11 +250,14 @@ mod._gut_apply_freecam = function(enabled)
         -- local body renders as 1P-only and is invisible from the free cam). Save the
         -- prior value so exit restores it (the 3P camera may already own this flag).
         _prev_third_person = _get_third_person()
+        _owns_third_person = true
         _set_third_person(true)
         local ok, err = pcall(Managers.free_flight._enter_free_flight, Managers.free_flight, player, data)
         if not ok then
             mod:echo("Free camera: failed to activate (%s).", tostring(err))
-            _set_third_person(_prev_third_person)
+            -- Native entry can fail after setting data.active. Roll back through
+            -- the normal live-world-gated exit even without a setting callback.
+            mod._gut_apply_freecam(false)
             if mod:get("gut_freecam_enabled") then mod:set("gut_freecam_enabled", false) end
             return
         end
@@ -279,7 +303,7 @@ mod._gut_apply_freecam = function(enabled)
     else
         local was_on = _freecam_active or _pending_menu_close
         _pending_menu_close = false
-        if player and data and data.active then
+        if _owns_third_person and player and data and data.active then
             if _live_world(data.viewport_world_name) then
                 pcall(Managers.free_flight._exit_free_flight, Managers.free_flight, player, data)
             else
@@ -292,8 +316,7 @@ mod._gut_apply_freecam = function(enabled)
                 printf("[gut:FC] skipped engine exit - free-flight world already destroyed (cleared flags instead)")
             end
         end
-        _set_third_person(_prev_third_person)
-        _prev_third_person = nil
+        _restore_third_person()
         _freecam_active = false
         if was_on then
             printf("[gut:FC] deactivated")
@@ -345,8 +368,7 @@ mod.update = function(dt)
         -- world torn down / player despawned mid-freecam: reset so input isn't left blocked
         _freecam_active = false
         if mod:get("gut_freecam_enabled") then mod:set("gut_freecam_enabled", false) end
-        _set_third_person(_prev_third_person)
-        _prev_third_person = nil
+        _restore_third_person()
         return
     end
     local ok, err = pcall(_drive_free_cam, dt, player, data)
@@ -387,11 +409,10 @@ end)
 -- (defensive: e.g. another mod, or a future path that lifts the gate). hook_safe,
 -- post-callback. Pre-flight: no other gut hook on FreeFlightManager.
 mod:hook_safe("FreeFlightManager", "_exit_free_flight", function(self, player, data)
-    if _freecam_active then
+    if _freecam_active and player == _local_player() then
         _freecam_active = false
         if mod:get("gut_freecam_enabled") then mod:set("gut_freecam_enabled", false) end
-        _set_third_person(_prev_third_person)
-        _prev_third_person = nil
+        _restore_third_person()
     end
 end)
 
@@ -425,7 +446,7 @@ do
             local ok_exit = pcall(mod._gut_apply_freecam, false)
             if not ok_exit then
                 -- apply failed mid-exit: still restore what we can by hand below
-                _set_third_person(_prev_third_person)
+                _restore_third_person()
             end
             if mod:get("gut_freecam_enabled") then mod:set("gut_freecam_enabled", false) end
             printf("[gut:FC] force-exited on game state change (%s %s)", tostring(status), tostring(state_name))
@@ -433,7 +454,7 @@ do
             -- is_input_blocked stay true into the next state.
             _freecam_active = false
             _exit_key_was_down = false
-            _prev_third_person = nil
+            _restore_third_person()
         end
         -- A deferred activation must not survive a level change either.
         _pending_menu_close = false
@@ -444,7 +465,8 @@ end
 mod.gut_freecam_toggle = function()
     local new_val = not mod:get("gut_freecam_enabled")
     mod:set("gut_freecam_enabled", new_val)
-    mod._gut_apply_freecam(new_val)   -- apply() owns the ON/OFF feedback
+    -- A synchronous callback may reject entry and reset the checkbox already.
+    mod._gut_apply_freecam(mod:get("gut_freecam_enabled"))   -- apply() owns the ON/OFF feedback
 end
 
 mod:command("freecam", "Toggle the detached free camera (F8 to exit)", function()

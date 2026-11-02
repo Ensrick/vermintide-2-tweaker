@@ -411,6 +411,15 @@ _rt_register("freecam_invariants", function()
     if not fc:find("_clear_free_flight", 1, true) then
         return "freecam dropped the _clear_free_flight dead-world release (class-32 force-exit regressed)"
     end
+    -- #1796: source availability is optional in retail; the actual-module host
+    -- suite proves nested/repeated release behavior without mutating a live cam.
+    if not fc:find("local _owns_third_person = false", 1, true)
+        or not fc:find("local function _restore_third_person()", 1, true) then
+        return "freecam lost its one-shot third-person snapshot ownership (#1796)"
+    end
+    if not fc:find("not Managers.free_flight.input_manager", 1, true) then
+        return "freecam lost its pre-entry native input-manager readiness gate (#1796)"
+    end
 end)
 
 -- (#313) Crosshair Kill Confirmation bridge regression tests. Split needles so the

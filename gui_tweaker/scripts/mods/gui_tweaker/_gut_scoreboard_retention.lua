@@ -1,10 +1,11 @@
--- Adventure disconnect/rejoin scoreboard retention (#437).
+-- _gut_scoreboard_retention.lua - Adventure disconnect/rejoin score retention.
 --
 -- Vanilla unregisters (and deletes) the player's StatisticsDatabase row, then
 -- registers an empty row when the same peer returns. Deus repairs that boundary
 -- with save_persisted_score/restore_persisted_score; Adventure does not. This
 -- module applies the same shape to only ScoreboardHelper's leaf paths, on the
 -- Adventure host, for the lifetime of one StateIngame session.
+-- Owned by: gui_tweaker.lua. Consumed via: mod:dofile from the entry point.
 local mod = get_mod("gut")
 local Policy = mod:dofile("scripts/mods/gui_tweaker/_gut_scoreboard_policy")
 local M = { rt_checks = {} }
@@ -12,8 +13,25 @@ local M = { rt_checks = {} }
 local MAX_PLAYERS = 8
 local MAX_PATHS = 64
 local LOG_CAP = 16
+local MAX_LISTENERS = 4
 local retained, order = {}, {}
 local active, log_count = false, 0
+local listeners = {}
+
+-- #1570-#1572: the host custom-statistics ledger mirrors this module's
+-- retain/evict/discard decisions so its rows never outlive the native rows.
+-- Listeners are notified only; they cannot alter capture or restore.
+function M.add_listener(fn)
+    if type(fn) ~= "function" or #listeners >= MAX_LISTENERS then return false end
+    listeners[#listeners + 1] = fn
+    return true
+end
+
+local function _notify(event, stats_id, kept)
+    for i = 1, #listeners do
+        pcall(listeners[i], event, stats_id, kept)
+    end
+end
 
 local function _enabled()
     return mod:get("gut_preserve_disconnected_scoreboard") ~= false
@@ -41,31 +59,36 @@ end
 local function _clear(reason)
     retained, order = {}, {}
     if reason then _log("cleared reason=%s", tostring(reason)) end
+    if reason == "disabled" then _notify("cleared", nil, false) end
 end
 
 local function _paths()
     local helper = rawget(_G, "ScoreboardHelper")
-    return Policy.collect_stat_paths(helper and helper.scoreboard_topic_stats,
-        MAX_PATHS)
+    local topics = Policy.build_topic_registry(
+        helper and helper.scoreboard_topic_stats or {})
+    return Policy.collect_stat_paths(topics, MAX_PATHS)
 end
 
 local function _capture(database, stats_id)
-    if not _is_adventure_host() or stats_id == nil then return end
+    if not _is_adventure_host() or stats_id == nil then return false end
     local paths = _paths()
     local records = Policy.capture_stat_values(paths, function(path)
         return database:get_stat(stats_id, unpack(path, 1, #path))
     end, MAX_PATHS)
-    if #records == 0 then return end
+    if #records == 0 then return false end
 
     if not retained[stats_id] then
         if #order >= MAX_PLAYERS then
-            retained[table.remove(order, 1)] = nil
+            local evicted = table.remove(order, 1)
+            retained[evicted] = nil
+            _notify("evicted", evicted, false)
         end
         order[#order + 1] = stats_id
     end
     retained[stats_id] = records
     _log("captured stats_id=%s fields=%d players=%d",
         tostring(stats_id), #records, #order)
+    return true
 end
 
 local function _restore(database, stats_id)
@@ -89,7 +112,8 @@ end
 -- Capture must occur before vanilla unregister deletes statistics[id]. Register
 -- can restore in a post-hook because vanilla has just created the empty row.
 mod:hook("StatisticsDatabase", "unregister", function(func, self, stats_id, ...)
-    _capture(self, stats_id)
+    local kept = _capture(self, stats_id) == true
+    _notify("unregister", stats_id, kept)
     return func(self, stats_id, ...)
 end)
 
@@ -98,8 +122,8 @@ mod:hook_safe("StatisticsDatabase", "register", function(self, stats_id)
 end)
 
 local prev_state = mod.on_game_state_changed
-mod.on_game_state_changed = function(status, state_name)
-    if prev_state then prev_state(status, state_name) end
+mod.on_game_state_changed = function(status, state_name, ...)
+    if prev_state then prev_state(status, state_name, ...) end
     if state_name ~= "StateIngame" then return end
     if status == "enter" then
         _clear(nil)
@@ -125,6 +149,9 @@ mod.on_disabled = function(...)
     _clear(nil)
 end
 
+-- Later owners (the #1570-#1572 custom ledger) attach listeners through this.
+mod._gut_scoreboard_retention = M
+
 M.rt_checks[#M.rt_checks + 1] = {
     name = "issue437_adventure_scoreboard_retention",
     fn = function()
@@ -135,6 +162,12 @@ M.rt_checks[#M.rt_checks + 1] = {
                 or type(Policy.capture_stat_values) ~= "function"
                 or type(Policy.restore_stat_values) ~= "function" then
             return "scoreboard retention policy incomplete"
+        end
+        local paths = Policy.collect_stat_paths(
+            Policy.build_topic_registry({}), MAX_PATHS)
+        if #paths ~= 2 or paths[1][1] ~= "aidings"
+                or paths[2][1] ~= "times_revived" then
+            return "supplemental scoreboard retention paths missing"
         end
     end,
 }

@@ -1,4 +1,4 @@
-return function(H, repo_root)
+local function suite(H, repo_root, stream)
     -- Repairs #153/#292: keys the ENGINE localizes (hidden-passive perk rows via
     -- global Localize, Video-tab profile title/tooltip/dropdown labels via
     -- localize=true widget fields) must be supplied to the engine backend
@@ -26,7 +26,7 @@ return function(H, repo_root)
     end
 
     local localization = assert(loadfile(repo_root
-        .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/gui_tweaker_dev_localization.lua"))()
+        .. "/" .. stream .. "/scripts/mods/" .. stream .. "/" .. stream .. "_localization.lua"))()
 
     H.test("GUT #153/#292 every engine-rendered key has an English string", function()
         for _, key in ipairs(ENGINE_UI_LOC_KEYS) do
@@ -49,8 +49,8 @@ return function(H, repo_root)
     end)
 
     H.test("GUT #153/#292 main file supplies the keys to the engine localizer", function()
-        local main = read("gui_tweaker_dev/scripts/mods/gui_tweaker_dev/gui_tweaker_dev.lua")
-        local owner = read("gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_mod_tweaker_shell.lua")
+        local main = read(stream .. "/scripts/mods/" .. stream .. "/" .. stream .. ".lua")
+        local owner = read(stream .. "/scripts/mods/" .. stream .. "/_gut_mod_tweaker_shell.lua")
         for _, key in ipairs(ENGINE_UI_LOC_KEYS) do
             H.truthy(owner:find('"' .. key .. '"', 1, true),
                 key .. " absent from the ENGINE_UI_LOC_KEYS supply list")
@@ -66,4 +66,8 @@ return function(H, repo_root)
         H.truthy(owner:find('mod:hook_safe("LocalizationManager", "init"', 1, true),
             "LocalizationManager re-init re-registration is gone")
     end)
+end
+return function(H, repo_root)
+    suite(H, repo_root, "gui_tweaker_dev")
+    suite(H, repo_root, "gui_tweaker")
 end

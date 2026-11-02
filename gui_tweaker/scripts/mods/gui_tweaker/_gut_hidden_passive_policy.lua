@@ -41,23 +41,33 @@ function Policy.entries(career_name, career_settings, passive_ability)
     return entries
 end
 
-function Policy.append_description(base_text, heading, entries, localize)
-    if type(base_text) ~= "string" or type(localize) ~= "function"
-            or type(entries) ~= "table" or #entries == 0 then
-        return base_text
+function Policy.presentation_perks(native_perks, entries, capacity, combined)
+    local rows = {}
+    for _, perk in ipairs(type(native_perks) == "table" and native_perks or {}) do
+        rows[#rows + 1] = perk
     end
 
-    local marker = "\n" .. tostring(heading) .. "\n"
-    if string.find(base_text, marker, 1, true) then
-        return base_text
+    entries = type(entries) == "table" and entries or {}
+    capacity = math.max(0, math.floor(tonumber(capacity) or 0))
+    local available = math.max(0, capacity - #rows)
+    if #entries > available and available == 1 and type(combined) == "table" then
+        rows[#rows + 1] = {
+            display_name = combined.title_key,
+            description = combined.description_key,
+            _gut_hidden_passive = true,
+        }
+        return rows
     end
 
-    local lines = { base_text, "", tostring(heading) }
-    for _, entry in ipairs(entries) do
-        lines[#lines + 1] = string.format("%s — %s",
-            localize(entry.title_key), localize(entry.description_key))
+    for index = 1, math.min(#entries, available) do
+        local entry = entries[index]
+        rows[#rows + 1] = {
+            display_name = entry.title_key,
+            description = entry.description_key,
+            _gut_hidden_passive = true,
+        }
     end
-    return table.concat(lines, "\n")
+    return rows
 end
 
 function Policy.inspect(careers, passive_by_name)

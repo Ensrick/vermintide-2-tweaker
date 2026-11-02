@@ -1,6 +1,43 @@
 local mod = get_mod("gut")
-
-local MOD_VERSION = "0.2.289"
+-- #402 installs before the rest of the large GUI entry point so a signin callback cannot
+-- outrun official-loadout containment while the remaining modules are still evaluating.
+local _gut_official_loadout_boot_guard = mod:dofile(
+    "scripts/mods/gui_tweaker/_gut_official_loadout_boot_guard")
+mod._gut_official_loadout_boot_guard = _gut_official_loadout_boot_guard
+-- #925: attach to the copied shared local-process presentation generation
+-- ledger. GUT publishes only when no inner provider (normally Cosmetics'
+-- existing BackendUtils hook) already published the same set_loadout action.
+mod._ui_presentation_refresh_lib = mod:dofile(
+    "scripts/mods/gui_tweaker/_lib_ui_presentation_refresh")
+mod._ui_presentation_refresh, mod._ui_presentation_refresh_error =
+    mod._ui_presentation_refresh_lib.attach(_G, "gut", 32)
+mod._gut925_generation = function()
+    local client = mod._ui_presentation_refresh
+    local stats = client and client:stats()
+    return stats and stats.generation or nil
+end
+mod._gut925_publish_if_unobserved = function(before_generation, career_name,
+        slot_name, backend_id, item)
+    local client = mod._ui_presentation_refresh
+    if not client then return end
+    local stats = client:stats()
+    if not mod._ui_presentation_refresh_lib.generation_unchanged(
+            before_generation, stats.generation) then
+        return -- an inner provider already published this exact mutation
+    end
+    local item_data = item and item.data
+    client:publish({
+        kind = "loadout",
+        reason = "saved-loadout-restore",
+        career_name = career_name,
+        slot_name = slot_name,
+        backend_id = backend_id,
+        item_key = item and (item.key or (item_data and item_data.name)),
+    })
+end
+local MOD_VERSION = "0.2.290"
+local GUT_RPC_SCHEMA = 1 -- Bump only when a GUT positional wire shape changes.
+mod._GUT_RPC_SCHEMA = GUT_RPC_SCHEMA
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- Both route through VMF's built-in logging, gated by VMF output_mode_debug /
@@ -12,10 +49,15 @@ local function _dbg(fmt, ...)
 end
 
 local function _dbg_alert(fmt, ...)
-    -- (warnings noise) demoted mod:warning -> mod:debug. These [gut:dbg] traces (e.g. HUD
+    -- (warnings noise) mod:warning was demoted here because these [gut:dbg] traces (e.g. HUD
     -- widget_init_skip when a scenegraph node isn't present in the keep) are diagnostics, not
-    -- real problems, and at warning level they spammed the in-game chat. Debug is off by default.
-    mod:debug("[gut:dbg] " .. fmt, ...)
+    -- real problems, and at warning level they spammed the in-game chat.
+    -- #427: mod:debug was the wrong landing spot -- it is gated off by default, so the alert
+    -- emitted nothing at all. Route to LOG-ONLY pcall-guarded engine printf like every other
+    -- migrated `_dbg_alert`: printf survives mod-logging-OFF and never reaches chat.
+    if not pcall(printf, "[gut:dbg] " .. fmt, ...) then
+        pcall(printf, "[gut:dbg] (alert format error: %s)", tostring(fmt))
+    end
 end
 
 -- Applied marker (PROJECT_STANDARDS.md § 3.6 "Applied marker line (universal)").
@@ -61,7 +103,7 @@ local function _settings_fingerprint()
     return string.format("%08x", h)
 end
 
-mod:info("[gut:LOAD] v%s enabled fp=%s OK", MOD_VERSION, _settings_fingerprint())
+pcall(printf, "[gut:LOAD] v%s enabled fp=%s OK", MOD_VERSION, _settings_fingerprint())
 
 -- Per PROJECT_STANDARDS § 3.6 + § 14a: dev/alpha/beta/0.x versions print
 -- version to chat on load so the user can see what's active. Stable
@@ -75,6 +117,7 @@ local _RT_CHECKS = {}
 local function _rt_register(name, fn)
     _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
 end
+mod._gut_rt_register = _rt_register
 
 -- (#511) io-safe source reader. The VMF retail sandbox exposes NO `io` library
 -- (mods are loadstring'd into the game's shared _G by mod_manager.lua:375-386, and
@@ -101,20 +144,43 @@ local function _rt_src_read(path)
     return t
 end
 mod:command("gut_regression_test", "GUI tweaker self-check", function()
-    local pass, fail = 0, 0
+    local pass, fail, skip = 0, 0, 0
     mod:echo("=== gut_regression_test (v%s) ===", MOD_VERSION)
     for _, c in ipairs(_RT_CHECKS) do
         local ok, err = pcall(c.fn)
         if ok and err == nil then
             mod:echo("  PASS: %s", c.name); pass = pass + 1
             mod:info("[regression] PASS %s", c.name)
+        elseif ok and type(err) == "string" and err:sub(1, 5) == "skip:" then
+            -- (#1652) ct-style sentinel (PROJECT_STANDARDS 5.1d rule 2): cannot run here, says why.
+            local why = err:sub(6):gsub("^%s+", "")
+            mod:echo("  SKIP: %s -- %s", c.name, why); skip = skip + 1
+            pcall(printf, "[regression] SKIP %s: %s", c.name, why)
         else
             local msg = (not ok and tostring(err)) or tostring(err)
             mod:echo("  FAIL: %s -- %s", c.name, msg); fail = fail + 1
             mod:warning("[regression] FAIL %s: %s", c.name, msg)
         end
     end
-    mod:echo("=== %d passed, %d failed ===", pass, fail)
+    mod:echo("=== %d passed, %d failed, %d skipped ===", pass, fail, skip)
+end)
+
+mod:command("lua_mem", "Print live Lua heap usage (per-mod memory measurement). Optional label: /lua_mem <label>", function(label)
+    -- Diagnostic for the VT2 1 GiB lua_heap cap crash ("Not enough memory
+    -- reserved for heap lua_heap", reserved 1073741824). Forces a full GC so the
+    -- reading is the LIVE footprint (not transient garbage), then reports
+    -- collectgarbage("count").
+    -- Find a heavy mod: disable all suspects -> launch -> load a level ->
+    --   /lua_mem baseline ; then enable ONE mod -> relaunch -> load a level ->
+    --   /lua_mem <modname>. The jump between readings is that mod's footprint.
+    -- The engine lua_heap holds bytecode + C-side Lua structures ON TOP of this,
+    -- so treat the number as a lower-bound proxy and compare DELTAS, not absolutes.
+    collectgarbage("collect")
+    collectgarbage("collect")
+    local kb = collectgarbage("count")
+    local lbl = (label and label ~= "") and (" | " .. tostring(label)) or ""
+    mod:echo("[lua_mem] %.1f MB live Lua (%.0f KB) -- lua_heap cap is ~1024 MB%s", kb / 1024, kb, lbl)
+    mod:info("[lua_mem] live_lua_mb=%.1f live_lua_kb=%.0f label=%s", kb / 1024, kb, tostring(label or ""))
 end)
 
 _rt_register("dbg_helpers_two_channel", function()
@@ -124,6 +190,21 @@ _rt_register("dbg_helpers_two_channel", function()
     if not ok then return "_dbg raised" end
     ok = pcall(_dbg_alert, "smoke test")
     if not ok then return "_dbg_alert raised" end
+end)
+
+_rt_register("issue925_loadout_presentation_publish", function()
+    if not mod._ui_presentation_refresh then
+        return "shared presentation ledger unavailable: "
+            .. tostring(mod._ui_presentation_refresh_error)
+    end
+    if type(mod._gut925_generation) ~= "function"
+            or type(mod._gut925_publish_if_unobserved) ~= "function" then
+        return "GUT saved-loadout presentation publisher missing"
+    end
+    local stats = mod._ui_presentation_refresh:stats()
+    if stats.capacity > 128 or stats.retained > stats.capacity then
+        return "shared presentation ledger exceeded its bounded capacity"
+    end
 end)
 
 _rt_register("lifecycle_chain_integrity", function()
@@ -154,110 +235,10 @@ _rt_register("lifecycle_chain_integrity", function()
     end
 end)
 
-_rt_register("mission_map_backdrop_swap", function()
-    -- (#336) Mid-mission map CTD guard: the can_get trust-protocol helper must be
-    -- wired and the vanilla window must still expose all three hooked methods (a vanilla
-    -- rename would silently orphan the swap and re-expose the crash).
-    if type(mod._gut_mm_can_get_level) ~= "function" then return "_gut_mm_can_get_level missing" end
-    if type(mod.gut_open_mission_map) ~= "function" then return "gut_open_mission_map missing" end
-    local w = rawget(_G, "StartGameWindowBackgroundConsole")
-    if type(w) ~= "table" then return "StartGameWindowBackgroundConsole class missing" end
-    if type(w._create_viewport_definition) ~= "function" then return "_create_viewport_definition missing" end
-    if type(w._update_object_sets) ~= "function" then return "_update_object_sets missing" end
-    if type(w._setup_object_sets) ~= "function" then return "_setup_object_sets missing" end
-    -- (#336 follow-up) The none tier must stay wired: the level-less-def branch marks
-    -- _gut_mm_none_backdrop, and the _setup_object_sets divert reads it. Introspect the
-    -- module source via the public open function; needle split so this line can't self-match.
-    local ok, info = pcall(debug.getinfo, mod.gut_open_mission_map, "S")
-    if ok and type(info) == "table" and info.source then
-        local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-        local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
-        if txt and not txt:find("_gut_mm_none" .. "_backdrop", 1, true) then
-            return "#336 regression: the none-tier marker _gut_mm_none_backdrop is gone (map fail-closes again when no backdrop level is resident)"
-        end
-    end
-end)
-
--- (#336 CRASH) Mid-mission map area-video guard: BOTH layers must survive. Layer 1 is the
--- AreaSettings video-material injection in _gut_gui_material_guard.lua (located as a
--- sibling of the map module); layer 2 is the video-widget skip guard on the two
--- area-selection windows in _gut_mission_map.lua. If either is removed, hovering an area
--- on the mid-mission map takes the uncatchable "Material 'area_video_*' not found in Gui"
--- draw fatal again (shipped ui_renderer.lua:1345; crash console-2026-07-06-03.24.08).
--- Split needles so this check can't self-match. No-op if files unreadable.
-_rt_register("area_video_guard_two_layers", function()
-    local ok, info = pcall(debug.getinfo, mod.gut_open_mission_map or function() end, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local map_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local read_all = _rt_src_read  -- (#511) io-safe; nil in retail sandbox => skip
-    -- Layer 2: the skip guard in the map module (both windows + the drawable check).
-    local map_txt = read_all(map_path)
-    if map_txt then
-        if not map_txt:find("_area_video" .. "_drawable", 1, true) then
-            return "#336 regression: _area_video_drawable is gone from the map module (area videos draw unguarded -> mid-mission draw fatal)"
-        end
-        if not map_txt:find('"_assign_video' .. '_player"', 1, true) then
-            return "#336 regression: the StartGameWindowAreaSelectionConsoleV2._assign_video_player skip guard is gone (console-layout area hover crashes mid-mission again)"
-        end
-        if not map_txt:find('"_setup_video' .. '_player"', 1, true) then
-            return "#336 regression: the StartGameWindowAreaSelection._setup_video_player skip guard is gone (PC-layout area hover crashes mid-mission again)"
-        end
-    end
-    -- Layer 1: the injection + publish in the sibling material guard.
-    local dir = map_path:match("^(.*[/\\])[^/\\]*$")
-    local guard_txt = dir and read_all(dir .. "_gut_gui_material_guard.lua")
-    if guard_txt then
-        if not guard_txt:find("_area_video" .. "_entries", 1, true) then
-            return "#336 regression: the AreaSettings video-material enumeration is gone from the GUI guard (no injection -> keep-only materials mid-mission)"
-        end
-        if not guard_txt:find("if append" .. "_areas then", 1, true) then
-            return "#336 regression: the append_areas residency gate is gone -- area videos no longer injected into ingame renderers"
-        end
-        if not guard_txt:find("mod._gut_area_videos" .. "_ingame", 1, true) then
-            return "#336 regression: the per-material publish (mod._gut_area_videos_ingame) is gone -- the map module's skip guard falls back to keep-only heuristics"
-        end
-    end
-    -- The two hooked vanilla methods must still exist (a vanilla rename would orphan the
-    -- guards and re-expose the crash). Classes load with ingame_ui at boot.
-    local v2 = rawget(_G, "StartGameWindowAreaSelectionConsoleV2")
-    if type(v2) == "table" and type(v2._assign_video_player) ~= "function" then
-        return "vanilla drift: StartGameWindowAreaSelectionConsoleV2._assign_video_player missing (skip guard orphaned)"
-    end
-    local pc = rawget(_G, "StartGameWindowAreaSelection")
-    if type(pc) == "table" and type(pc._setup_video_player) ~= "function" then
-        return "vanilla drift: StartGameWindowAreaSelection._setup_video_player missing (skip guard orphaned)"
-    end
-end)
-
--- (#336) Mid-mission map PREVIEW backdrop: the package-load + def-swap must survive. The
--- tier-2 swap mounts levels/ui_inventory_preview/world (gated on has_loaded of its managed
--- package under the module's own ref) so the map has a real, framebuffer-clearing menu
--- backdrop mid-mission; losing any piece regresses to the v0.2.198 black plate +
--- button-glow bleeding. Split needles so this check can't self-match. No-op if unreadable.
-_rt_register("mission_map_preview_backdrop", function()
-    -- (#511) Runtime marker: the map module's public entry must be wired (proves the
-    -- module loaded and ran). The source-text needles below are dev/CI-only (io-safe).
-    if type(mod.gut_open_mission_map) ~= "function" then
-        return "#336 regression: gut_open_mission_map not wired (mission map module failed to load -- preview backdrop gone)"
-    end
-    local ok, info = pcall(debug.getinfo, mod.gut_open_mission_map, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local map_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local txt = _rt_src_read(map_path)  -- (#511) io-safe; nil in retail sandbox => skip
-    if not txt then return end
-    if not txt:find("resource_packages/levels/ui_inventory" .. "_preview", 1, true) then
-        return "#336 regression: the preview-stage package path is gone from the map module (no backdrop package load)"
-    end
-    if not txt:find("_kick_preview_pkg" .. "_load", 1, true) then
-        return "#336 regression: the preview-package async load kick is gone (map never gets the preview backdrop)"
-    end
-    if not txt:find("has_loaded(PREVIEW" .. "_PKG, MM_PKG_REF)", 1, true) then
-        return "#336 regression: the has_loaded package gate is gone from the def-swap (v0.2.190 lesson: can_get('level') is false until the PACKAGE loads; ungated mount = C-fatal, gated absence = black plate)"
-    end
-    if not txt:find("level_name = PREVIEW" .. "_LEVEL", 1, true) then
-        return "#336 regression: the tier-2 def no longer mounts the preview level (black backdrop + glow bleeding return)"
-    end
-end)
+-- #2: register the existing map checks at their original manifest position.
+mod:dofile("scripts/mods/gui_tweaker/_gut_runtime_checks_mission_map").register({
+    mod = mod, register = _rt_register, read_source = _rt_src_read,
+})
 
 _rt_register("arrow_hover_native_size", function()
     -- (#92/#99) The arrow hover/glow overlay must be the BIGGER native sprite (30x35), NOT the
@@ -281,48 +262,19 @@ _rt_register("arrow_hover_native_size", function()
     end
 end)
 
+-- Layer 3 (2026-05-25): runtime twin of qa/check_localization.ps1, so an unescaped % in a
+-- loc string cannot ship even when the static gate is skipped. (#1651) The scan is PURE:
+-- the former `pcall(string.format, value)` probe rejected every legitimate placeholder
+-- ("Page %d/%d") and ran through whatever hooks the formatter slot (LA does, so the error
+-- surfaced from VMF hooks.lua:180 as a hook_chain argument error). Rules: _gut_loc_format.lua.
+local _gut_loc_format = mod:dofile("scripts/mods/gui_tweaker/_gut_loc_format")
+mod._gut_loc_format = _gut_loc_format
 _rt_register("localization_format_safe", function()
-    -- Layer 3 (2026-05-25): catch unescaped %-format chars in loc strings at
-    -- runtime. VMF's tooltip render path calls string.format on the loc value;
-    -- literal "%APPDATA%" / "5%" / "%USERNAME%" raises 'invalid option' and
-    -- shows as a red error tooltip in the VMF settings UI. Static check is
-    -- qa/check_localization.ps1 -- this is its runtime twin so the bug can't
-    -- ship even if the static check is skipped. RULE: any literal % in a loc
-    -- string must be doubled to %%.
     local ok, loc = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/gui_tweaker_localization")
-    if not ok or type(loc) ~= "table" then return end  -- can't reach loc; skip
-    for k, v in pairs(loc) do
-        if type(v) == "table" and type(v.en) == "string" then
-            local fmt_ok, fmt_err = pcall(string.format, v.en)
-            if not fmt_ok then
-                return string.format(
-                    "loc key %q has invalid format string (escape literal %% as %%%%): %s",
-                    k, tostring(fmt_err))
-            end
-        end
+    if not ok or type(loc) ~= "table" then
+        return "localization table could not be loaded: " .. tostring(loc)
     end
-end)
-
-_rt_register("issue314_simple_ui_window_confinement", function()
-    local compat = mod._gut_simple_ui_compat
-    local policy = mod._gut_simple_ui_bounds_policy
-    if type(compat) ~= "table" or compat.source_workshop_id ~= "1389872347" then
-        return "#314 Simple UI compatibility module/source identity is missing"
-    end
-    if compat.phase ~= 1 or type(compat.tick) ~= "function" then
-        return "#314 bounded phase-1 window recovery tick is not wired"
-    end
-    if type(policy) ~= "table" or type(policy.confine) ~= "function" then
-        return "#314 pure window-confinement policy is missing"
-    end
-    local fit = policy.confine({ -10, 1000 }, { 400, 300 }, 1920, 1080)
-    if not fit or fit.x ~= 0 or fit.y ~= 780 then
-        return "#314 fitted-window clamp no longer confines both axes"
-    end
-    local oversized = policy.confine({ 50, 50 }, { 2200, 1400 }, 1920, 1080)
-    if not oversized or oversized.x ~= 0 or oversized.y + 1400 ~= 1080 then
-        return "#314 oversized window no longer retains a reachable top/title edge"
-    end
+    return _gut_loc_format.scan(loc)
 end)
 
 -- (#140) "A Parting of the Waves" (dlc_dwarf_whaling) stray post-skip fade fix
@@ -344,9 +296,16 @@ _rt_register("cutscene_postskip_fade_swallow", function()
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
     local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
     if not txt then return end
-    local guard_needle = '_skipped_cutscene_system == self and name == "fx' .. '_fade"'
-    if not txt:find(guard_needle, 1, true) then
-        return "#140 regression: the post-skip fx_fade swallow guard is gone from flow_cb_cutscene_effect (stray black fade returns on 'A Parting of the Waves' / dlc_dwarf_whaling)"
+    -- ROUND 3 needle (issues 257/274 rework): the swallow site is the marker
+    -- comment `_gut_cutscene_fade_swallow_site` plus the episode classifier
+    -- call. The pre-rework expression needle (`_skipped_cutscene_system ==
+    -- self and name == "fx_fade"`) went stale when the policy274 refactor
+    -- renamed the guard read - marker comments survive refactors, expression
+    -- needles do not. Split so this registration site cannot self-match.
+    local marker_needle = "_gut_cutscene_fade_" .. "swallow_site"
+    local classifier_needle = "classify_" .. "fade(_sw_state"
+    if not txt:find(marker_needle, 1, true) or not txt:find(classifier_needle, 1, true) then
+        return "#140/#257 regression: the fx_fade swallow classification site is gone from flow_cb_cutscene_effect (stray black fade returns on 'A Parting of the Waves' / dlc_dwarf_whaling)"
     end
 end)
 -- (issue 275) The Skip Cutscenes feature must NEVER latch script_data.skippable_cutscenes
@@ -403,372 +362,18 @@ _rt_register("gut_cutscene_no_global_latch", function()
         return "issue 537 regression: on_setting_changed re-latches the engine skip gate (must restore the pre-gut value on disable, never latch on)"
     end
 end)
--- ============================================================
--- Loadout Save/Restore (v0.1)
--- ============================================================
--- Clean reimplementation of loadout_manager_vt2's save/restore. The legacy
--- mod OR-merged gear and cosmetics into a single backend_id-per-slot lookup
--- and iterated `slots_by_slot_index`, which routed weapon-skin items
--- (slot_type=melee) into gear slots like slot_ranged and triggered the
--- engine's "cannot equip item in this slot type" rejection. We keep the
--- two namespaces strictly separated: gear iterates `slots_by_ui_slot_index`,
--- cosmetics iterate `slots_by_cosmetic_index`, and each item is validated
--- against its OWN target slot before any write.
-
-local LOADOUT_SLOTS = 30
-
--- Local player + resolved career name. Returns (career_name, profile, career)
--- or (nil, reason) when no local player/profile is available.
-local function _get_current_career()
-    local pm = Managers.player
-    if not pm then return nil, "Managers.player not available (not in a level?)" end
-    local player = pm:local_player(1)
-    if not player then return nil, "no local player" end
-    local ok_pi, profile_index = pcall(player.profile_index, player)
-    local ok_ci, career_index = pcall(player.career_index, player)
-    if not (ok_pi and ok_ci and profile_index and career_index) then
-        return nil, "could not read profile/career index"
-    end
-    local profile = SPProfiles and SPProfiles[profile_index]
-    if not profile then return nil, "no profile for index " .. tostring(profile_index) end
-    local career = profile.careers and profile.careers[career_index]
-    if not career then return nil, "no career for index " .. tostring(career_index) end
-    return career.name, profile, career
-end
-
--- Localized career display name with safe fallback.
-local function _career_display_name(career)
-    if not career then return "?" end
-    local key = career.display_name or career.name
-    if not key then return "?" end
-    local ok, name = pcall(Localize, key)
-    return (ok and name) or key
-end
-
--- Validate item slot-type compatibility before equipping. Vanilla's backend
--- reads the live CareerSettings item_slot_types_by_slot_name map for this exact
--- decision (playfab_mirror_base.lua:1662-1713, 3387-3402). Reading it on every
--- restore lets Career Tweaker add/remove Foot Knight secondary melee at runtime
--- without a GUT mod-identity dependency, cached clone, or hardcoded career list.
+-- #2: closed legacy saved-loadout command owner; native loadouts stay separate.
+-- Policy remains entry-loaded; install synchronously at the old registration boundary.
 local _gut_loadout_slot_policy = mod:dofile(
     "scripts/mods/gui_tweaker/_gut_loadout_slot_policy"
 )
-
-local function _validate_item_for_slot(item, slot_name, career_name)
-    if type(_gut_loadout_slot_policy) ~= "table" or
-       type(_gut_loadout_slot_policy.validate) ~= "function" then
-        return false, "live career slot capability policy unavailable"
-    end
-
-    return _gut_loadout_slot_policy.validate(
-        item and item.data,
-        slot_name,
-        career_name,
-        CareerSettings
-    )
-end
-
-if type(printf) == "function" then
-    printf("[gut:619] saved-loadout validator=live_career_slot_capability")
-end
-
-_rt_register("issue619_saved_loadout_live_slot_capability", function()
-    if type(_gut_loadout_slot_policy) ~= "table" or
-       type(_gut_loadout_slot_policy.validate) ~= "function" then
-        return "loadout slot capability policy unavailable"
-    end
-
-    local career_settings = {
-        es_knight = {
-            item_slot_types_by_slot_name = {
-                slot_melee = { "melee" },
-                slot_ranged = { "ranged" },
-            },
-        },
-    }
-    local item_data = { slot_type = "melee", can_wield = { "es_knight" } }
-    local ok = _gut_loadout_slot_policy.validate(
-        item_data, "slot_ranged", "es_knight", career_settings
-    )
-    if ok then return "Foot Knight melee accepted without live slot capability" end
-
-    table.insert(career_settings.es_knight.item_slot_types_by_slot_name.slot_ranged, 1, "melee")
-    ok = _gut_loadout_slot_policy.validate(
-        item_data, "slot_ranged", "es_knight", career_settings
-    )
-    if not ok then return "Foot Knight melee rejected after live slot capability insertion" end
-
-    table.remove(career_settings.es_knight.item_slot_types_by_slot_name.slot_ranged, 1)
-    ok = _gut_loadout_slot_policy.validate(
-        item_data, "slot_ranged", "es_knight", career_settings
-    )
-    if ok then return "Foot Knight melee remained accepted after live slot capability removal" end
-end)
-
--- Snapshot the current loadout for `career_name`. Reads gear from
--- slots_by_ui_slot_index, cosmetics from slots_by_cosmetic_index, and
--- talents from the talents interface (cloned).
-local function _snapshot_loadout(career_name)
-    local items_iface = Managers.backend and Managers.backend:get_interface("items")
-    if not items_iface then return nil, "no items interface" end
-    local gear, cosmetics = {}, {}
-    local frame_id = nil
-    if InventorySettings and InventorySettings.slots_by_ui_slot_index then
-        for _, slot in pairs(InventorySettings.slots_by_ui_slot_index) do
-            local ok, id = pcall(items_iface.get_loadout_item_id, items_iface, career_name, slot.name)
-            if ok and id then gear[slot.name] = id end
-        end
-    end
-    if InventorySettings and InventorySettings.slots_by_cosmetic_index then
-        for _, slot in pairs(InventorySettings.slots_by_cosmetic_index) do
-            local ok, id = pcall(items_iface.get_loadout_item_id, items_iface, career_name, slot.name)
-            if ok and id then
-                cosmetics[slot.name] = id
-                if slot.name == "slot_frame" then frame_id = id end
-            end
-        end
-    end
-    local talents = nil
-    local talents_iface = Managers.backend and Managers.backend:get_interface("talents")
-    if talents_iface then
-        local ok, t = pcall(talents_iface.get_talents, talents_iface, career_name)
-        if ok and type(t) == "table" then talents = table.clone(t) end
-    end
-    return {
-        saved_at    = os.time(),
-        career_name = career_name,
-        frame       = frame_id,
-        gear        = gear,
-        cosmetics   = cosmetics,
-        talents     = talents or {},
-    }
-end
-
--- Apply a saved loadout. Cross-career restore is out of scope for v0.1 — we
--- reject if the snapshot's career doesn't match the current one. Returns
--- (gear_count, cosmetic_count, talents_applied_bool, error_count).
-local function _apply_loadout(loadout, current_career_name)
-    if not loadout then return 0, 0, false, 0 end
-    if loadout.career_name and loadout.career_name ~= current_career_name then
-        mod:echo(string.format("Loadout was saved for %s; switch to that career first (cross-career restore is not supported in v0.1).",
-            tostring(loadout.career_name)))
-        return 0, 0, false, 1
-    end
-    local items_iface = Managers.backend and Managers.backend:get_interface("items")
-    if not items_iface then
-        mod:echo("No items interface; cannot restore loadout.")
-        return 0, 0, false, 1
-    end
-    local gear_count, cos_count, errors = 0, 0, 0
-
-    -- Gear namespace -> slots_by_ui_slot_index only.
-    if loadout.gear and InventorySettings and InventorySettings.slots_by_ui_slot_index then
-        local gear_slot_names = {}
-        for _, slot in pairs(InventorySettings.slots_by_ui_slot_index) do
-            gear_slot_names[slot.name] = true
-        end
-        for slot_name, backend_id in pairs(loadout.gear) do
-            if not gear_slot_names[slot_name] then
-                mod:echo(string.format("Skipping gear slot %s -- not a known gear slot.", tostring(slot_name)))
-                -- _dbg: loadout_apply_skip
-                pcall(_dbg_alert, "[gui_tweaker] loadout_apply_skip: slot_name=%s reason=not_a_gear_slot",
-                    tostring(slot_name))
-                errors = errors + 1
-            else
-                local ok_item, item = pcall(items_iface.get_item_from_id, items_iface, backend_id)
-                if not (ok_item and item) then
-                    mod:echo(string.format("Skipping %s -- item %s no longer in backend.", slot_name, tostring(backend_id)))
-                    pcall(_dbg_alert, "[gui_tweaker] loadout_apply_skip: slot_name=%s reason=item_not_in_backend",
-                        tostring(slot_name))
-                    errors = errors + 1
-                else
-                    local valid, reason = _validate_item_for_slot(item, slot_name, current_career_name)
-                    if not valid then
-                        mod:echo(string.format("Skipping %s -- %s.", slot_name, tostring(reason)))
-                        pcall(_dbg_alert, "[gui_tweaker] loadout_apply_skip: slot_name=%s reason=%s",
-                            tostring(slot_name), tostring(reason))
-                        errors = errors + 1
-                    else
-                        local ok_set, err = pcall(BackendUtils.set_loadout_item, backend_id, current_career_name, slot_name)
-                        if ok_set then
-                            gear_count = gear_count + 1
-                            -- _dbg: loadout_apply_item
-                            pcall(_dbg, "[gui_tweaker] loadout_apply_item: slot_name=%s item=%s",
-                                tostring(slot_name), tostring(backend_id))
-                        else
-                            mod:echo(string.format("Skipping %s -- set_loadout_item failed: %s", slot_name, tostring(err)))
-                            pcall(_dbg_alert, "[gui_tweaker] loadout_apply_skip: slot_name=%s reason=set_loadout_item_failed:%s",
-                                tostring(slot_name), tostring(err))
-                            errors = errors + 1
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    -- Cosmetic namespace -> slots_by_cosmetic_index only.
-    if loadout.cosmetics and InventorySettings and InventorySettings.slots_by_cosmetic_index then
-        local cos_slot_names = {}
-        for _, slot in pairs(InventorySettings.slots_by_cosmetic_index) do
-            cos_slot_names[slot.name] = true
-        end
-        for slot_name, backend_id in pairs(loadout.cosmetics) do
-            if not cos_slot_names[slot_name] then
-                mod:echo(string.format("Skipping cosmetic slot %s -- not a known cosmetic slot.", tostring(slot_name)))
-                pcall(_dbg_alert, "[gui_tweaker] loadout_apply_skip: slot_name=%s reason=not_a_cosmetic_slot",
-                    tostring(slot_name))
-                errors = errors + 1
-            else
-                local ok_item, item = pcall(items_iface.get_item_from_id, items_iface, backend_id)
-                if not (ok_item and item) then
-                    mod:echo(string.format("Skipping %s -- item %s no longer in backend.", slot_name, tostring(backend_id)))
-                    pcall(_dbg_alert, "[gui_tweaker] loadout_apply_skip: slot_name=%s reason=item_not_in_backend",
-                        tostring(slot_name))
-                    errors = errors + 1
-                else
-                    local valid, reason = _validate_item_for_slot(item, slot_name, current_career_name)
-                    if not valid then
-                        mod:echo(string.format("Skipping %s -- %s.", slot_name, tostring(reason)))
-                        pcall(_dbg_alert, "[gui_tweaker] loadout_apply_skip: slot_name=%s reason=%s",
-                            tostring(slot_name), tostring(reason))
-                        errors = errors + 1
-                    else
-                        local ok_set, err = pcall(BackendUtils.set_loadout_item, backend_id, current_career_name, slot_name)
-                        if ok_set then
-                            cos_count = cos_count + 1
-                            pcall(_dbg, "[gui_tweaker] loadout_apply_item: slot_name=%s item=%s",
-                                tostring(slot_name), tostring(backend_id))
-                        else
-                            mod:echo(string.format("Skipping %s -- set_loadout_item failed: %s", slot_name, tostring(err)))
-                            pcall(_dbg_alert, "[gui_tweaker] loadout_apply_skip: slot_name=%s reason=set_loadout_item_failed:%s",
-                                tostring(slot_name), tostring(err))
-                            errors = errors + 1
-                        end
-                    end
-                end
-            end
-        end
-    end
-
-    -- Talents.
-    local talents_applied = false
-    if loadout.talents and #loadout.talents > 0 then
-        local talents_iface = Managers.backend and Managers.backend:get_interface("talents")
-        if talents_iface then
-            local ok_t, err_t = pcall(talents_iface.set_talents, talents_iface, current_career_name, loadout.talents)
-            if ok_t then
-                talents_applied = true
-            else
-                mod:echo("Talent restore failed: " .. tostring(err_t))
-                errors = errors + 1
-            end
-        end
-    end
-
-    return gear_count, cos_count, talents_applied, errors
-end
-
-local function _get_all_loadouts()
-    return mod:get("loadouts") or {}
-end
-
-local function _save_loadout_to_slot(career_name, n, loadout)
-    local all = _get_all_loadouts()
-    all[career_name] = all[career_name] or {}
-    all[career_name][n] = loadout
-    mod:set("loadouts", all)
-end
-
-local function _load_loadout_from_slot(career_name, n)
-    local all = _get_all_loadouts()
-    local by_career = all[career_name]
-    return by_career and by_career[n] or nil
-end
-
--- Parse + range-check the slot index argument. Returns (n, nil) or (nil, reason).
-local function _parse_slot_arg(arg)
-    local n = tonumber(arg)
-    if not n then return nil, "slot must be a number 1-" .. LOADOUT_SLOTS end
-    n = math.floor(n)
-    if n < 1 or n > LOADOUT_SLOTS then return nil, "slot must be 1-" .. LOADOUT_SLOTS end
-    return n
-end
-
-mod:command("save_loadout", "Save current loadout to slot N (1-30)", function(arg)
-    local n, reason = _parse_slot_arg(arg)
-    if not n then mod:echo("Save failed: " .. reason) return end
-    local career_name, profile_or_err, career = _get_current_career()
-    if not career_name then mod:echo("Save failed: " .. tostring(profile_or_err)) return end
-    local loadout, snap_err = _snapshot_loadout(career_name)
-    if not loadout then mod:echo("Save failed: " .. tostring(snap_err)) return end
-    _save_loadout_to_slot(career_name, n, loadout)
-    local gear_n, cos_n = 0, 0
-    for _ in pairs(loadout.gear) do gear_n = gear_n + 1 end
-    for _ in pairs(loadout.cosmetics) do cos_n = cos_n + 1 end
-    local talents_n = #(loadout.talents or {})
-    mod:echo(string.format("Saved loadout to slot %d for career %s (%d gear, %d cosmetics, %d talents)",
-        n, _career_display_name(career), gear_n, cos_n, talents_n))
-    -- _dbg: loadout_save
-    pcall(function()
-        _dbg("[gui_tweaker] loadout_save: slot=%d career=%s gear=%d cosmetics=%d talents=%d",
-            n, tostring(career_name), gear_n, cos_n, talents_n)
-        for slot_name, backend_id in pairs(loadout.gear) do
-            _dbg("[gui_tweaker]   gear.%s = %s", tostring(slot_name), tostring(backend_id))
-        end
-        for slot_name, backend_id in pairs(loadout.cosmetics) do
-            _dbg("[gui_tweaker]   cosmetics.%s = %s", tostring(slot_name), tostring(backend_id))
-        end
-        local talent_strs = {}
-        for i = 1, #(loadout.talents or {}) do talent_strs[i] = tostring(loadout.talents[i]) end
-        _dbg("[gui_tweaker]   talents = %s", table.concat(talent_strs, ","))
-    end)
-end)
-
-mod:command("load_loadout", "Load loadout from slot N (1-30) for current career", function(arg)
-    local n, reason = _parse_slot_arg(arg)
-    if not n then mod:echo("Load failed: " .. reason) return end
-    local career_name, profile_or_err, career = _get_current_career()
-    if not career_name then mod:echo("Load failed: " .. tostring(profile_or_err)) return end
-    local loadout = _load_loadout_from_slot(career_name, n)
-    if not loadout then
-        mod:echo(string.format("No loadout in slot %d for career %s", n, _career_display_name(career)))
-        return
-    end
-    local gear_n, cos_n, talents_ok, err_n = _apply_loadout(loadout, career_name)
-    mod:echo(string.format("Loaded slot %d for %s -- applied %d gear, %d cosmetics, talents %s, %d errors",
-        n, _career_display_name(career), gear_n, cos_n, talents_ok and "yes" or "no", err_n))
-    mod:echo("(Open the hero view to refresh the visual model in the keep.)")
-    -- _dbg: loadout_apply
-    pcall(_dbg, "[gui_tweaker] loadout_apply: slot=%d career=%s gear_applied=%d cosmetics_applied=%d talents_set=%s errors=%d",
-        n, tostring(career_name), gear_n, cos_n, talents_ok and "yes" or "no", err_n)
-end)
-
-mod:command("list_loadouts", "List saved loadouts for current career", function()
-    local career_name, profile_or_err, career = _get_current_career()
-    if not career_name then mod:echo("List failed: " .. tostring(profile_or_err)) return end
-    local all = _get_all_loadouts()
-    local by_career = all[career_name]
-    if not by_career then
-        mod:echo(string.format("No loadouts saved for %s", _career_display_name(career)))
-        return
-    end
-    local printed = 0
-    for n = 1, LOADOUT_SLOTS do
-        local lo = by_career[n]
-        if lo then
-            local gear_n, cos_n = 0, 0
-            for _ in pairs(lo.gear or {}) do gear_n = gear_n + 1 end
-            for _ in pairs(lo.cosmetics or {}) do cos_n = cos_n + 1 end
-            local ts = lo.saved_at and os.date("%Y-%m-%d %H:%M", lo.saved_at) or "?"
-            mod:echo(string.format("[%d] saved %s -- %d gear, %d cosmetics", n, ts, gear_n, cos_n))
-            printed = printed + 1
-        end
-    end
-    if printed == 0 then
-        mod:echo(string.format("No loadouts saved for %s", _career_display_name(career)))
-    end
-end)
+mod:dofile("scripts/mods/gui_tweaker/_gut_saved_loadout_commands").install({
+    mod = mod,
+    slot_policy = _gut_loadout_slot_policy,
+    register = _rt_register,
+    dbg = _dbg,
+    dbg_alert = _dbg_alert,
+})
 
 -- ============================================================
 -- Versus host-crash fix: UnitFrameUI.add_damage_feedback overflow (v0.2.9, Phase 0)
@@ -940,9 +545,8 @@ mod.on_setting_changed = function(setting_id)
         -- Write-through to cim's `allow_in_mission` setting (the widget moved out of
         -- cim into gut's In-Mission Menus, user direction 2026-07-02; cim's
         -- open_forge/open_standard_crafting gates still read cim's OWN setting, so
-        -- gut mirrors the value into cim's store on every change). Dev clone first:
-        -- the cohort runs cim_dev; stable id as fallback.
-        local cim = get_mod("cim_dev") or get_mod("cim")
+        -- Public GUT consumes the stable provider, never the isolated Dev clone.
+        local cim = get_mod("cim")
         if cim then
             cim:set("allow_in_mission", mod:get("gut_cim_bench_in_mission") and true or false)
         end
@@ -1180,480 +784,37 @@ _rt_register("hud_edit_mode_input_suspend_api", function()
     end
 end)
 
--- ============================================================
--- Mod Tweaker (v0.1 scaffold) -- replacement settings menu surface
--- exposed at `get_mod("gut").mod_tweaker`. v0.1 just stands up the API
--- and registry; the ESC entry, view rendering, and widget factories
--- arrive in follow-up tasks. Authors detect with:
---   local gut = get_mod("gut")
---   if gut and gut.mod_tweaker then
---       gut.mod_tweaker:register_category({ mod_id = "...", label = "...", widgets = {...} })
---   end
--- ============================================================
-
-local ok_mt, ModTweaker = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_mod_tweaker")
-if ok_mt and type(ModTweaker) == "table" then
-    local ok_install, install_err = pcall(ModTweaker.install, _dbg, _dbg_alert)
-    if ok_install then
-        mod.mod_tweaker = ModTweaker
-        _dbg("[gui_tweaker] mod_tweaker: installed (api version v0.1)")
-    else
-        _dbg_alert("[gui_tweaker] mod_tweaker install failed: %s", tostring(install_err))
-    end
-else
-    _dbg_alert("[gui_tweaker] mod_tweaker dofile failed: %s", tostring(ModTweaker))
-end
-
--- Dogfood category so the view renders real content (and proves the end-to-end:
--- open -> change -> persist -> on_change). gut's own demo settings live in the
--- Mod Tweaker keyspace (mt::gut::*). Replace/extend once per-mod registration (or
--- VMF auto-mirror) lands.
-if mod.mod_tweaker and not mod.mod_tweaker:is_registered("gut") then
-    mod.mod_tweaker:register_category({
-        mod_id = "gut",
-        label  = "Tweaker: GUI dev",
-        widgets = {
-            {
-                setting_id = "mt_demo_slider",
-                type       = "slider",
-                label      = "Demo slider (proof of render)",
-                default    = 5,
-                range      = { 0, 20 },
-                decimals   = 0,
-            },
-        },
-    })
-end
-
--- ESC menu entry injection. Hook the central layout consumer
--- (IngameViewLayoutLogic.setup_button_layout) so we catch every layout variant
--- the engine swaps through: alone / host / client / demo / tutorial / offline /
--- full_access, plus the chat-button injected case. Vanilla source:
--- scripts/ui/views/ingame_view_layout_logic.lua:17-60. hook_safe is correct
--- here because setup_button_layout doesn't return -- it mutates
--- self.active_button_data, which we extend after the iteration runs.
-mod:hook_safe("IngameViewLayoutLogic", "setup_button_layout", function(self, layout_data)
-    local entries = self.active_button_data
-    if type(entries) ~= "table" then return end
-    -- Don't double-insert if the hook re-fires on the same active_button_data
-    -- (layout swap during gameplay clears + rebuilds — safe to re-add).
-    for i = 1, #entries do
-        if entries[i].transition == "mod_tweaker_view" then return end
-    end
-    local insert_at = #entries + 1
-    -- Place above Options for visual grouping; if Options isn't in this layout
-    -- (e.g. console invert-controls demo), fall through to append.
-    for i = 1, #entries do
-        if entries[i].transition == "options_menu" then
-            insert_at = i
-            break
-        end
-    end
-    table.insert(entries, insert_at, {
-        -- display_name is a LOC KEY (resolved to "Mod Tweaker" via our
-        -- append_backend_localizations). Do NOT add a display_name_func returning the
-        -- resolved string: the MODERN menu (hero_window_ingame_view.lua:473) does
-        -- `text_field = display_name_func() or display_name` and then LOCALIZES
-        -- text_field — so a func returning "Mod Tweaker" gets re-localized into
-        -- "<Mod Tweaker>". The key path localizes correctly in BOTH menus.
-        display_name = "mod_tweaker_button_name",
-        fade         = true,
-        transition   = "mod_tweaker_view",
-    })
-    -- Diagnostic for the "ESC menu looks deprecated after leaving the Mod Tweaker"
-    -- report: log the full button list each time the layout is built, so we can see
-    -- if the count grows (accumulation) or the set changes after the Mod Tweaker.
-    local ts = {}
-    for i = 1, #entries do ts[#ts + 1] = tostring(entries[i].transition) end
-    mod:debug("[mt:esc] setup_button_layout -> %d buttons: [%s]", #entries, table.concat(ts, ", "))
-end)
-
--- Build + attach the Mod Tweaker view into an IngameUI instance's `views` table.
--- Idempotent. Used by BOTH the setup_views hook (early attempt) and the
--- transition closure (lazy, on demand). At transition time the IngameUI is fully
--- initialised (self.views populated, self.ingame_ui_context set at
--- ingame_ui.lua:138), so the lazy path is the reliable one — the setup_views
--- post-call hook's timing vs self.views shifted after the game's Versus update,
--- so it now sees self.views as not-yet-a-table and silently bails.
-local function _attach_view(self, ctx_arg)
-    if not self or type(self.views) ~= "table" then return false end
-    if self.views.mod_tweaker_view then return true end
-    local ctx = ctx_arg or self.ingame_ui_context
-    if not ctx then
-        ctx = {
-            ui_renderer     = self.ui_renderer,
-            ui_top_renderer = self.ui_top_renderer,
-            ingame_ui       = self,
-            input_manager   = self.input_manager,
-            world_manager   = self.world_manager,
-        }
-    end
-    if not (ctx.ui_renderer or ctx.ui_top_renderer) then
-        _dbg_alert("[mt] attach: no usable ui_renderer in context; cannot build view")
-        return false
-    end
-    local ok_view, ModTweakerView = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_mod_tweaker_view")
-    if not ok_view or type(ModTweakerView) ~= "table" then
-        _dbg_alert("[mt] attach: view dofile failed: %s", tostring(ModTweakerView))
-        return false
-    end
-    local ok_new, view_or_err = pcall(ModTweakerView.new, ModTweakerView, ctx)
-    if not ok_new then
-        _dbg_alert("[mt] attach: ModTweakerView:new raised: %s", tostring(view_or_err))
-        return false
-    end
-    self.views.mod_tweaker_view = view_or_err
-    _dbg("[mt] attach: ModTweakerView attached")
-    return true
-end
-
--- Forward-declared so the transition closure below (and the on_enter re-pin in
--- _mod_tweaker_view.lua) can defensively re-pin LA's atlas + log on every Mod
--- Tweaker open (v0.2.56). The keepalive module is dofile'd much later in this file;
--- this local is ASSIGNED at that dofile site (`_gut_la_keepalive = mod:dofile(...)`),
--- but DECLARED here so the closure captures it as an upvalue. `_mt_open_count` is a
--- module-level open counter for the instrumentation (shows 1st/2nd/3rd/4th open).
+-- #2: closed native-menu shell; entry retains all load/check/lifecycle boundaries.
 local _gut_la_keepalive
-local _mt_open_count = 0
+local _gut_category_catalog = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_view_catalog")
+local _gut_menu_shell = mod:dofile("scripts/mods/gui_tweaker/_gut_mod_tweaker_shell").bind({
+    mod = mod,
+    dbg = _dbg,
+    dbg_alert = _dbg_alert,
+    register = _rt_register,
+    load_view = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_view_pending").bind_view_supplier(function()
+        return pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_mod_tweaker_view")
+    end,
+        _gut_category_catalog.bind),
+    load_localization = function()
+        return pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/gui_tweaker_localization")
+    end,
+    get_la_keepalive = function() return _gut_la_keepalive end,
+})
+local ok_mt, ModTweaker = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_mod_tweaker")
+_gut_menu_shell.install_api(ok_mt, ModTweaker)
 
--- Re-pin LA's atlas package (pcall-guarded) + log the residency/renderer state on
--- every Mod Tweaker open. The Mod Tweaker BORROWS the long-lived IngameUI renderer
--- (does NOT recreate it), and the keepalive's premise that "LA unloads its own
--- package" means the atlas can go missing between opens — so a one-time pin on
--- StateInGameRunning.on_enter isn't enough; we re-pin on each open. The keepalive's
--- own `has_loaded` force-load guard stays intact (it NEVER force-loads a non-resident
--- LA package — that re-introduces the 0.2.54 crash). `self` is the IngameUI (site i)
--- or the ModTweakerView (site ii) — both expose ui_renderer/ui_top_renderer for the
--- renderer-identity probe. Exposed as mod._gut_mt_repin_la so the view module can
--- call the SAME path.
-local function _gut_mt_repin_la(self, site)
-    _mt_open_count = _mt_open_count + 1
-    local pm = Managers and Managers.package
-    local resident = "?"
-    if pm and pm.has_loaded then
-        local ok_r, r = pcall(pm.has_loaded, pm, "resource_packages/Loremasters-Armoury/Loremasters-Armoury")
-        resident = ok_r and tostring(r) or ("err:" .. tostring(r))
-    end
-    local pinned = "?"
-    if _gut_la_keepalive and _gut_la_keepalive.is_pinned then
-        local ok_p, p = pcall(_gut_la_keepalive.is_pinned)
-        pinned = ok_p and tostring(p) or ("err:" .. tostring(p))
-    end
-    mod:debug("[gut:la] mod-tweaker open #%d (site=%s): LA_resident=%s gut_pinned=%s ui_renderer=%s ui_top_renderer=%s",
-        _mt_open_count, tostring(site), resident, pinned,
-        tostring(self and self.ui_renderer), tostring(self and self.ui_top_renderer))
-    if _gut_la_keepalive and _gut_la_keepalive.pin then
-        local ok_pin, err_pin = pcall(_gut_la_keepalive.pin)
-        if not ok_pin then
-            mod:warning("[gut:la] re-pin pcall raised on open #%d: %s", _mt_open_count, tostring(err_pin))
-        end
-    end
-end
-mod._gut_mt_repin_la = _gut_mt_repin_la
+_gut_menu_shell.install_routing()
 
--- Transition + view registration. Two halves:
---   (a) transitions table -- mutated directly via package.loaded so the
---       upvalue `transitions` captured at ingame_ui.lua:50 sees the new entry.
---       The transition closure just sets self.current_view; vanilla pattern
---       is at ingame_ui_settings.lua:537 (options_menu).
---   (b) views table -- hook IngameUI.setup_views post-call (ingame_ui.lua:145)
---       and inject our view instance, mirroring how
---       view_settings.views_function builds the canonical map.
-local ok_settings_inject, settings_inject_err = pcall(function()
-    local settings = package.loaded["scripts/ui/views/ingame_ui_settings"]
-    if not settings or not settings.transitions then
-        error("ingame_ui_settings not in package.loaded; mod likely loaded too early")
-    end
-    if settings.transitions.mod_tweaker_view then
-        _dbg("[mt] transition mod_tweaker_view already registered (idempotent)")
-        return
-    end
-    settings.transitions.mod_tweaker_view = function(self)
-        -- CURRENT ROUTING: keep, mission, hotkey, and /mod_tweaker all use the standalone
-        -- ModTweakerView. The guarded HeroView sub-state branch below is retained only as
-        -- dormant source until its historical keep bounce is root-caused and a deliberate
-        -- re-enable is reviewed. Keep/inn detection matches _ba_heroview_inject.
-        local ctx = self.ingame_ui_context
-        local in_keep = not (ctx and ctx.is_in_inn == false)
-        -- v0.2.62-dev REVERT: the keep HeroView sub-state (build 2) reliably OPENED (rows
-        -- built) but the HeroView state machine immediately BOUNCED it back to
-        -- HeroViewStateOverview (log: overview -> gut_mod_tweaker on_enter rows=13 ->
-        -- overview), so it never stayed visible from the ESC button — the "doesn't open
-        -- from the main menu" regression. The STANDALONE ModTweakerView opens reliably (it
-        -- always did in-mission), and build-3's origin-capture exit (below) returns to the
-        -- modern hero_view menu rather than the deprecated bare one, so the sub-state is no
-        -- longer needed to avoid the deprecated look. Route the KEEP through the standalone
-        -- view too. HeroViewStateModTweaker stays registered only as a dormant parity
-        -- surface; the canonical /mod_tweaker command below also uses this standalone
-        -- transition. Flip _USE_KEEP_SUBSTATE back only after the sub-state bounce is
-        -- root-caused.
-        local _USE_KEEP_SUBSTATE = false
-        if _USE_KEEP_SUBSTATE and in_keep and self.transition_with_fade and rawget(_G, "HeroViewStateModTweaker") then
-            _dbg("[mt] ESC entry in keep -> hero_view sub-state gut_mod_tweaker")
-            -- force_open = true is LOAD-BEARING. The ESC "Mod Tweaker" button fires from
-            -- INSIDE the already-open keep ESC menu, which IS hero_view (the ingame_menu
-            -- window inside HeroViewStateOverview), so self.current_view == "hero_view"
-            -- ALREADY. Without force_open, IngameUI.handle_transition's guard
-            -- `if old_view ~= new_view or force_open` (ingame_ui.lua:953) is false→false,
-            -- so it SKIPS HeroView:on_enter / post_update_on_enter — and post_update_on_enter
-            -- is the ONLY path that reads menu_state_name (hero_view.lua:504-508). Result
-            -- (the reported bug): the fade plays but the gut_mod_tweaker sub-state never
-            -- opens. force_open forces the re-enter so menu_state_name is honored. This is
-            -- the EXACT vanilla keep-button flow: every keep ESC menu button (Inventory,
-            -- Loot, ...) uses transition="hero_view" + transition_state=<screen> +
-            -- force_open=true (ingame_view_menu_layout_console.lua:742-745).
-            self:transition_with_fade("hero_view", {
-                menu_state_name = "gut_mod_tweaker",
-                force_open = true,
-            })
-            return
-        end
 
-        -- In-mission path (or sub-state unavailable): standalone ModTweakerView.
-        -- DEFENSIVE re-pin LA's atlas + instrument BEFORE attaching/showing the view
-        -- (site i). The borrowed renderer is long-lived, so the atlas can be unloaded
-        -- between opens; re-pin every open (pcall-guarded, has_loaded-gated inside).
-        pcall(_gut_mt_repin_la, self, "transition")
-        -- Lazy-attach on demand: at click time the IngameUI is fully initialised, so
-        -- this is the reliable build point. Idempotent. Only switch if the view
-        -- actually attached, so a build failure stays a harmless no-op.
-        _attach_view(self)
-        if self.views and self.views.mod_tweaker_view then
-            -- Capture the ORIGIN menu so exit returns to it. In a mission ESC opens
-            -- EITHER the modern HeroView menu (current_view == "hero_view", the default
-            -- when use_pc_menu_layout=false) OR the legacy IngameView (current_view ==
-            -- "ingame_menu"). self.current_view is still the origin here — the engine
-            -- snapshots old_view BEFORE invoking this closure (ingame_ui.lua:946) — so
-            -- reading it now gives the menu the player actually opened. Hard-coding
-            -- "ingame_menu" dumped modern-menu players into the deprecated bare
-            -- IngameView on exit. ModTweakerView:exit already safely handles the
-            -- "hero_view" target (supplies { menu_state_name = "overview" }).
-            local origin = self.current_view
-            self.views.mod_tweaker_view._exit_transition =
-                (origin == "hero_view") and "hero_view" or "ingame_menu"
-            self.current_view = "mod_tweaker_view"
-        else
-            _dbg_alert("[mt] transition: view not attached; ESC entry is a no-op")
-        end
-    end
-    _dbg("[mt] transition registered: mod_tweaker_view")
-end)
-if not ok_settings_inject then
-    _dbg_alert("[mt] transitions injection failed: %s", tostring(settings_inject_err))
-end
-
--- ============================================================
--- Open the Mod Tweaker from gameplay (#125) — hotkey + chat command
--- ============================================================
--- The Mod Tweaker settings menu is reachable from the ESC menu's "Mod Tweaker"
--- button (the IngameViewLayoutLogic.setup_button_layout injection above). This
--- exposes a DIRECT opener so a function-call keybind + a chat command can open it
--- without going through the ESC menu first.
---
--- It drives the SAME `mod_tweaker_view` transition the ESC button uses (registered
--- just above), via Managers.ui:handle_transition — so there is NO new hook and NO
--- duplicated open logic. The transition closure handles attach + origin-capture +
--- current_view, and works from raw gameplay (current_view is nil there, so the
--- closure sets _exit_transition = "ingame_menu" as the FALLBACK only). With the
--- #124 change the view's exit always routes to "exit_menu" (game), so a hotkey-
--- opened menu — which has no originating menu — correctly returns to gameplay on
--- exit. Mirrors the sibling in-mission inventory/hero-select openers
--- (Managers.ui:handle_transition(..., { use_fade = true })).
---
--- SCOPE: keep AND mid-mission. The Mod Tweaker is a borrowed-renderer settings
--- LIST (not a preview world), so it is NOT subject to the keep-only preview-world
--- crash class that gates the hero-select/inventory features — the standalone
--- ModTweakerView already opens reliably in-mission via the ESC button, and this
--- reuses that exact path. No Chaos Wastes/deus gate is needed (no loadout surface).
--- (In-mission behavior still wants the user's in-game confirmation.)
-mod.gut_open_mod_tweaker = function()
-    if not (Managers.ui and Managers.ui.handle_transition) then
-        mod:echo("UI manager not available (not in-game?).")
-        return
-    end
-    local ok, err = pcall(function()
-        Managers.ui:handle_transition("mod_tweaker_view", { use_fade = true })
-    end)
-    if not ok then
-        mod:echo("Could not open the Mod Tweaker: " .. tostring(err))
-    end
-end
-
-mod:command("mod_tweaker", "Open the Mod Tweaker settings menu (works in the keep and mid-mission). Same as the gut_open_mod_tweaker_hotkey keybind and the ESC-menu 'Mod Tweaker' button.", function()
-    mod.gut_open_mod_tweaker()
-end)
-
--- NOTE the second param: IngameUI.init passes the context to setup_views as an
--- ARGUMENT (ingame_ui.lua:107) and does NOT store self.ingame_ui_context until
--- later, so reading self.ingame_ui_context here is nil — that nil context made
--- ModTweakerView:new throw, the view never attached, and transitioning to the
--- (missing) view crashed IngameUI at ingame_ui.lua:625. Capture the arg instead.
--- Early attach attempt. May no-op if self.views isn't populated yet at this
--- hook's timing (the transition lazy-attach is the guaranteed path).
-mod:hook_safe("IngameUI", "setup_views", function(self, ingame_ui_context)
-    _attach_view(self, ingame_ui_context)
-end)
-
--- The ESC-menu "Mod Tweaker" button is the raw key "mod_tweaker_button_name"
--- (ingame_view.lua:252 content.title_text = data.display_name, :138
--- title_text.localize = true), localized at draw by the engine localizer. VMF mod
--- loc is NOT in the engine tables, so it rendered as "<mod_tweaker_button_name>".
---
--- TWO prior HOOK fixes FAILED: (a) hooking _G.Localize — the global is set via
--- rawset in LocalizationManager.init, so a re-init blows the VMF wrapper away; and
--- (b) hooking LocalizationManager.lookup — the button's text pass ALSO localizes
--- via LocalizationManager.simple_lookup (ui_passes.lua:1599), a SIBLING method that
--- `lookup` never routes through. Both are interception; both miss a path.
---
--- ROOT-CAUSE FIX (workflow wf_8504e8ba): SUPPLY the string instead of intercepting.
--- LocalizationManager._base_lookup checks self._backend_localizations FIRST
--- (localization_manager.lua:50-51) and is the shared bottom of BOTH lookup and
--- simple_lookup, so registering the string there resolves on every path natively —
--- no wrapped closure to bypass. (LA already hooks _base_lookup in the field,
--- confirming that table is the universal chokepoint.)
-local function _register_button_loc()
-    local loc = Managers and Managers.localizer
-    if loc and loc.append_backend_localizations then
-        pcall(loc.append_backend_localizations, loc, { mod_tweaker_button_name = "Mod Tweaker" })
-        -- #352 uses the same native backend-localization path for the explicit
-        -- legacy THP names. Re-supply them after language/localizer re-init.
-        local thp_names = mod._gut_original_thp_names
-        if thp_names and thp_names.register_backend_localizations then
-            thp_names.register_backend_localizations()
-        end
-        -- PROBE: after registering, what does the engine localizer actually return
-        -- for the key? If this prints "Mod Tweaker", the append works and any <> the
-        -- user still sees is a DIFFERENT element (not this ESC button). If it prints
-        -- "<mod_tweaker_button_name>", the backend-loc path is NOT what this button
-        -- localizes through and we need a different fix.
-        local resolved = "?"
-        if rawget(_G, "Localize") then pcall(function() resolved = Localize("mod_tweaker_button_name") end) end
-        mod:info("[mt] registered backend loc; Localize('mod_tweaker_button_name') -> '%s'", tostring(resolved))
-        return true
-    end
-    mod:info("[mt] backend-loc register SKIPPED (Managers.localizer not ready at this point)")
-    return false
-end
--- Register at boot if the localizer is already up; otherwise on_all_mods_loaded (below)
--- and the IngameView.on_enter retry guarantee it's set before the ESC menu draws.
-_register_button_loc()
--- _backend_localizations is reset to {} in LocalizationManager.init (a mid-session
--- language switch re-inits), so re-register after any re-init. This is DATA, not a
--- wrapped closure — immune to the rawset/VMF-chain fragility that killed both hooks.
-mod:hook_safe("LocalizationManager", "init", function()
-    _register_button_loc()
-end)
--- Belt-and-suspenders: register when the ESC menu opens (Managers.localizer is
--- definitely up by then), so even if boot/on_all_mods_loaded missed, the key is set
--- before the button's title_text is drawn. (gut hooks HeroView.on_enter, not
--- IngameView.on_enter — distinct pair, no duplicate.)
-mod:hook_safe("IngameView", "on_enter", function()
-    _register_button_loc()
-end)
-
--- ESC/keep-menu button-overflow compaction (v0.2.56; REWRITTEN v0.2.64-dev — was
--- hooking the WRONG class for 8 versions).
---
--- DIAGNOSIS of why the prior fix never worked:
---   * The keep pause/ESC menu the user sees is NOT the legacy IngameView. The
---     reported button list (character_selection / spoils_of_war /
---     return_to_pc_menu_hero_view / quit_game_hero_view, 10 entries) is the MODERN
---     HeroView sub-window `HeroWindowIngameView` (hero_window_ingame_view.lua) — the
---     "Main Menu" screen inside hero_view. That class has NO set_background_height
---     method; the gut hook on `IngameView.set_background_height` therefore NEVER
---     FIRED for the keep menu. (Legacy IngameView is only the bare in-MISSION menu.)
---   * Even on the legacy IngameView path the logo branch was dead: IngameView.
---     create_ui_elements (ingame_view.lua:122-152) NEVER assigns self.logo — the logo
---     widget isn't even instantiated there (it has no `logo` widget def), so
---     `if self.logo ...` was always nil. The visible logo comes from the modern menu.
---
--- The modern menu lays out its button column + sizes its panel in
--- HeroWindowIngameView._update_presentation (hero_window_ingame_view.lua:490-515):
--- each title button gets `offset[2] = -(60 * index - 1)` (spacing = 60, line 504),
--- and the background panel grows to `total_height + 90` (line 513). With 10 buttons
--- the column runs `0 .. -540` and overflows off the bottom. The logo widget is
--- `_widgets_by_name.logo` (definitions :287, scenegraph node "logo").
---
--- FIX: hook_safe `HeroWindowIngameView._update_presentation` (runs AFTER vanilla
--- positions the column, so our shift/hide stick) and, once over the overflow
--- threshold: (a) lift the whole button column up by re-walking the same index→offset
--- math with a reduced spacing AND a positive top bias, and (b) hide the logo by
--- zeroing its style.color alpha. hook_safe is correct (the vanilla method returns
--- nothing; it mutates widget offsets + the scenegraph in place). This (Class,method)
--- pair is hooked NOWHERE ELSE in gut — grep-verified before adding (the only other
--- HeroView-family hook is HeroView.on_enter, a different class+method).
---
--- (#93) ALWAYS-ON implicit feature (2026-06-24): the `gut_compact_esc_menu` toggle +
--- setting were removed — this was never meant to be optional (gut itself adds the Mod
--- Tweaker ESC button that causes the overflow this fixes, so the fix should always run,
--- like wt's auto-vent). The hook is only a no-op below the overflow threshold anyway, so
--- there's nothing to gate. No setting read remains.
---
--- NOTE the COLUMN_SHIFT / SPACING numbers below are TUNE-IN-GAME values — they move
--- the column the right DIRECTION (up) but the exact lift needs an in-game eyeball.
-local _MT_ESC_OVERFLOW_THRESHOLD = 8   -- vanilla keep menu is ~8 buttons; gut + VMF push it to 10
-mod:hook_safe("HeroWindowIngameView", "_update_presentation", function(self)
-    local buttons = self._title_button_widgets
-    local layout_logic = self.layout_logic
-    if not (buttons and layout_logic) then return end
-    local ok_ld, layout_data = pcall(layout_logic.layout_data, layout_logic)
-    if not ok_ld or type(layout_data) ~= "table" then return end
-    local num = #layout_data
-    if num < _MT_ESC_OVERFLOW_THRESHOLD then return end
-
-    -- Re-pack the column tighter so all `num` buttons fit, and bias the whole stack
-    -- UP. Vanilla uses spacing = 60 starting near offset 0 (descending). We compress
-    -- spacing and add a positive top bias = half the saved height, re-centring the
-    -- shorter column. (Vanilla math: hero_window_ingame_view.lua:497-505.)
-    local VANILLA_SPACING = 60
-    local SPACING = 48                                  -- tighter rows (TUNE IN-GAME)
-    local saved = (VANILLA_SPACING - SPACING) * num     -- total height reclaimed
-    local TOP_BIAS = math.floor(saved / 2)              -- lift so the column re-centres
-    for index = 1, num do
-        local w = buttons[index]
-        if w and w.offset then
-            -- mirrors vanilla `-(spacing * index - 1)` with our spacing + the up-bias.
-            w.offset[2] = -(SPACING * index - 1) + TOP_BIAS
-        end
-    end
-
-    -- Hide the keep logo so the (now lifted) column has clear headroom. The logo
-    -- widget is _widgets_by_name.logo (definitions :287, built via
-    -- UIWidgets.create_simple_texture). create_simple_texture nests color under
-    -- style.texture_id.color, NOT style.color (ui_widgets.lua:5302-5318) — the prior
-    -- IngameView code read the wrong path, which was part of why "logo still shows".
-    -- VT2 color tables are {A,R,G,B}, so alpha is index [1]. Idempotent — re-zeroing
-    -- each presentation rebuild is harmless.
-    local wbn = self._widgets_by_name
-    local logo = wbn and wbn.logo
-    local lstyle = logo and logo.style and logo.style.texture_id
-    if lstyle and lstyle.color then
-        lstyle.color[1] = 0
-    end
-
-    -- Lift the keep separator/divider by the same amount as the button column so it
-    -- sits ABOVE the menu text instead of bleeding through it. _widgets_by_name.divider
-    -- is the upper rule (hero_window_ingame_view_definitions.lua:279,
-    -- UIWidgets.create_simple_texture("divider_01_top", "divider"); sg node "divider").
-    -- NOT divider_bottom (:280, the lower rule). It's registered into _widgets_by_name
-    -- in create_ui_elements (:161-169), so it's drawable/mutable here. The button
-    -- column was lifted +TOP_BIAS via each button widget's render offset[2] (:1096);
-    -- mutating the divider's render offset[2] the SAME {0,0,0} field keeps the shift
-    -- isolated to the divider texture (does NOT cascade to the logo/panel/buttons that
-    -- are scenegraph-parented to the "divider" node — a render-offset change doesn't
-    -- touch the scenegraph). Idempotent: TOP_BIAS is recomputed each presentation
-    -- rebuild and vanilla never resets this offset, so SET (not +=) to avoid drift.
-    local divider = wbn and wbn.divider
-    if divider and divider.offset then
-        divider.offset[2] = TOP_BIAS
-    end
-end)
+_gut_menu_shell.install_compaction()
 
 mod:dofile("scripts/mods/gui_tweaker/_gut_mod_tweaker_contracts").install({
     register = _rt_register,
+    load_view = _gut_menu_shell.load_view,
     src_read = _rt_src_read,
 })
-mod:dofile("scripts/mods/gui_tweaker/_gut_issue389_verifier").install(_RT_CHECKS)
+mod:dofile("scripts/mods/gui_tweaker/_gut_issue389_verifier").install(_RT_CHECKS, _rt_register, _gut_menu_shell.load_view)
 local _gut_ui_tweaks = mod:dofile("scripts/mods/gui_tweaker/_gut_ui_tweaks_integration").install({
     register = _rt_register,
     src_read = _rt_src_read,
@@ -1696,11 +857,9 @@ pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_gut_gui_material_guard")
 -- Assigns the forward-declared `_gut_la_keepalive` upvalue (declared above the Mod
 -- Tweaker transition closure so that closure + the view module can call its pin()).
 _gut_la_keepalive = mod:dofile("scripts/mods/gui_tweaker/_la_atlas_keepalive")
--- NumericUI ability-cooldown realtime fix: VT2 cooldown reduction speeds up the
--- countdown (decreases the value faster), so NumericUI's raw cooldown number visibly
--- speeds up. We divide the cooldown read (only while NumericUI is computing its
--- display) by the cooldown_regen multiplier so it shows accurate, real-time-paced
--- reduced seconds. No-op if NumericUI isn't installed. See _numericui_cooldown_realtime.lua.
+-- NumericUI compatibility: real-time ability cooldown plus #249 authoritative
+-- teammate ammo from the owner/husk InventoryExtension exact current/max pair.
+-- No-op if NumericUI isn't installed. See _numericui_cooldown_realtime.lua.
 local _gut_numericui_cd = mod:dofile("scripts/mods/gui_tweaker/_numericui_cooldown_realtime")
 local _gut_prev_on_all_mods_loaded = mod.on_all_mods_loaded
 mod.on_all_mods_loaded = function(...)
@@ -1722,7 +881,7 @@ mod.on_all_mods_loaded = function(...)
     -- NOT nil-based - VMF may materialize widget defaults, so a nil check can't tell
     -- "never adopted" from "default"), then on every later boot PUSH gut's value into
     -- cim's store so the two never drift (cim's readers keep reading cim's own key).
-    local cim = get_mod("cim_dev") or get_mod("cim")
+    local cim = get_mod("cim")
     if cim then
         if mod:get("gut_cim_bench_adopted") ~= true then
             mod:set("gut_cim_bench_in_mission", cim:get("allow_in_mission") and true or false)
@@ -1745,15 +904,16 @@ pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_gut_parry_indicator")
 
 -- Optional: large respawn countdown over a dead teammate's portrait (client-safe
 -- estimate anchored to the dead-skull state). Draws from IngameHud.update via a
--- mirrored-scenegraph UIWidget anchored on the frame's pivot slot (#285 fix,
+-- UIWidget anchored on the frame's own live portrait scenegraph (#285 fix,
 -- ported verbatim from Respawn CD 3747644100). See _gut_respawn_timer.lua.
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_gut_respawn_timer")
 
 -- (#285) Guards the respawn-timer #285 fix on THREE invariants:
 --   (a) the draw rides IngameHud.update (proven by "Respawn CD", 3747644100),
 --       never the broken UnitFrameUI.draw path (which rendered nothing);
---   (b) it draws the number via UIRenderer.draw_widget through a mirrored
---       scenegraph anchored on the frame's `pivot` LOCAL position -- NOT an
+--   (b) it draws the number via UIRenderer.draw_widget through the live team
+--       frame scenegraph and its canonical `portrait_pivot` -- NOT a mirrored
+--       copy and NOT an
 --       immediate draw_text at get_world_position, which double-applies the
 --       resolution scale and lands the number off the portrait (the "wrong
 --       spot / tiny red numbers over the health bar" report);
@@ -1775,13 +935,21 @@ _rt_register("respawn_timer_ingamehud_draw_path", function()
         return "respawn timer regressed: reintroduced the broken UnitFrameUI.draw hook (renders nothing) -- #285"
     end
     if not txt:find("UIRenderer.draw_widget", 1, true) then
-        return "respawn timer regressed: no longer draws via the mirrored-scenegraph widget path -- #285 wrong-position"
+        return "respawn timer regressed: no longer draws via the widget path -- #285 wrong-position"
     end
     if txt:find("get_world_position", 1, true) then
         return "respawn timer regressed: reintroduced get_world_position immediate-draw (double-scaled, wrong spot) -- #285"
     end
     if not txt:find("font_size%s*=%s*72") then  -- Lua pattern: whitespace-robust
         return "respawn timer regressed: teammate font base is no longer 72 (renders tiny) -- #285"
+    end
+    if not txt:find("frame_scenegraph", 1, true)
+        or not txt:find("frame_scenegraph.portrait_pivot", 1, true)
+        or not txt:find("widget.ui_scenegraph", 1, true) then
+        return "respawn timer regressed: draw no longer uses the live frame portrait scenegraph -- #285"
+    end
+    if txt:find("SCENEGRAPH_DEF", 1, true) then
+        return "respawn timer regressed: copied frame scenegraph reintroduced -- #285"
     end
 end)
 
@@ -1823,11 +991,50 @@ end)
 -- ._save_bot_equipment; gut's only HeroWindowLoadoutSelectionConsole hook is on
 -- ._show_context_menu in _gut_mission_inventory.lua). Inert in the official realm and in
 -- Versus. See _gut_native_loadouts.lua for the full isolation rationale.
+-- Post-DEFAULT active-career presentation reconcile (#1033): one bounded respawn /
+-- per-slot re-equip after reset_modded_loadouts' durable transaction, deferred to the
+-- next safe keep boundary when mission-side. MUST dofile BEFORE _gut_native_loadouts
+-- so mod._gut_reset_presentation is published when the reset owner's lazy lookup and
+-- rt check resolve. No engine hooks; chains mod.update (see module header).
+do
+    local ok, api = pcall(mod.dofile, mod,
+        "scripts/mods/gui_tweaker/_gut_reset_presentation")
+    if ok and type(api) == "table" then
+        for _, check in ipairs(api.rt_checks or {}) do
+            _rt_register(check.name, check.fn)
+        end
+    else
+        _dbg_alert("[gut:1033] reset presentation module failed: %s", tostring(api))
+    end
+end
+
 local _gut_native_loadouts = mod:dofile("scripts/mods/gui_tweaker/_gut_native_loadouts")
 if type(_gut_native_loadouts) == "table" and type(_gut_native_loadouts.rt_checks) == "table" then
     for _, c in ipairs(_gut_native_loadouts.rt_checks) do
         _rt_register(c.name, c.fn)
     end
+end
+
+-- Exit-time loadout/cosmetic persistence backstop (#354/#353/#287/#175). Re-read the live
+-- selected loadout and reconcile it into the modded store at bounded exit edges, so state
+-- mutated through a path that missed the equip-time capture (LA-cloned cosmetic dispatch, a
+-- WT cross-character weapon whose apply lands outside a captured equip) is not lost on quit.
+-- exit_snapshot is idempotent (a clean state writes nothing) and inert outside the modded
+-- Adventure realm; full rationale + isolation in _gut_native_loadouts.lua. These are VMF
+-- lifecycle callbacks CHAINED off the previous handler -- NOT engine hooks -- so there is no
+-- (Class, method) collision (NON-NEGOTIABLE 8). Every edge is pcall-guarded.
+if type(_gut_native_loadouts) == "table" and type(_gut_native_loadouts.exit_snapshot) == "function"
+    and type(_gut_native_loadouts.loadout_lifecycle_owner) == "table"
+    and type(_gut_native_loadouts.loadout_lifecycle_owner.bind_snapshot_edges) == "function" then
+    mod.on_game_state_changed, mod.on_unload =
+        _gut_native_loadouts.loadout_lifecycle_owner.bind_snapshot_edges({
+            snapshot = _gut_native_loadouts.exit_snapshot,
+            previous_state = mod.on_game_state_changed,
+            previous_unload = mod.on_unload,
+            report_error = function(edge, err)
+                printf("[gut:persist] edge=%s error=%s", tostring(edge), tostring(err))
+            end,
+        })
 end
 
 -- Bot designated-loadout victory pose (#232). PlayerBot.spawn passes is_bot for
@@ -1845,9 +1052,15 @@ do
     end
 end
 
--- Held-Tab weapon property refresh (#245). The v2 player list renders a
--- detached RPC loadout row; while visible, reconcile only the local equipped
--- melee/ranged properties from their exact live backend instances at 4 Hz.
+-- Held-Tab live-session loadout provider (#245 properties/traits, #246
+-- equipped illusion, #250 CW talents, #533 CW collectible rows). The v2 player
+-- list renders detached RPC loadout rows frozen at add_equipment time; while
+-- visible, the provider reconciles the local player's melee/ranged
+-- properties+traits+skin from their exact live backend instances at 4 Hz,
+-- decorates every player's row skin from the synchronized (wearer, slot)
+-- cosmetic identity, repairs the deus talent strip after vanilla populates it,
+-- and suppresses the adventure tome/grim/dice rows inside the deus mechanism.
+-- One module owns both IngamePlayerListUI hooks (see its header).
 do
     local ok, api = pcall(mod.dofile, mod,
         "scripts/mods/gui_tweaker/_gut_tab_property_refresh")
@@ -1856,17 +1069,19 @@ do
             _rt_register(check.name, check.fn)
         end
     else
-        _dbg_alert("[gut:245] Tab property refresh failed: %s", tostring(api))
+        _dbg_alert("[gut:245] Tab live-loadout provider failed: %s", tostring(api))
     end
 end
 
 -- Floating Damage Numbers (MIGRATED from general_tweaker 2026-06-29): client-side,
 -- networking-free numbers over enemies you damage, via the engine's own
 -- DamageNumbersUI + DamageUtils.add_unit_floating_damage_numbers. Registers its OWN
--- hooks on DamageUtils.add_damage_network / add_damage_network_player (PRE-FLIGHT:
--- gut has no other hook on either method — it only reads DamageUtils.is_in_inn), and
--- chains mod.on_setting_changed / mod.on_game_state_changed (dofile'd after both are
--- defined). See _gut_damage_numbers.lua.
+-- hooks on DamageUtils.add_damage_network / add_damage_network_player plus the #938
+-- burst-aggregation hook on DamageUtils.add_unit_floating_damage_numbers itself
+-- (PRE-FLIGHT: gut has no other hook on any of the three methods — it only reads
+-- DamageUtils.is_in_inn), and chains mod.update / mod.on_setting_changed /
+-- mod.on_game_state_changed (dofile'd after all are defined).
+-- See _gut_damage_numbers.lua.
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_gut_damage_numbers")
 
 -- Main Menu & Startup (MIGRATED from general_tweaker 2026-06-29, #190): two
@@ -1960,6 +1175,10 @@ pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_gut_mission_hero_select")
 -- chains mod.on_game_state_changed (preview-package arm). See _gut_mission_map.lua.
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_gut_mission_selection_manifest")
 
+-- #649: filter only late custom careers lacking boot-time completion definitions;
+-- StatisticsDatabase itself remains untouched. See guard module for source proof.
+
+
 -- Inventory character-preview lighting (#522): preserves the vanilla preview
 -- scene and installs one zero-allocation exposure callback on only
 -- HeroWindowCharacterPreview.world_previewer.world. The exact prior callback is
@@ -1974,18 +1193,44 @@ do  -- do-block: locals release back to the chunk (Lua 5.1 200-local ceiling)
     end
 end
 
--- Bounded scoreboard attribution repairs (#438, #1151).
-for _, spec in ipairs({
-    { 438, "revive-scoreboard", "scripts/mods/gui_tweaker/_gut_revive_scoreboard" },
-    { 1151, "damage-taken scoreboard", "scripts/mods/gui_tweaker/_gut_damage_taken_scoreboard" },
-}) do
-    local ok, api = pcall(mod.dofile, mod, spec[3])
+do
+    local ok_profiles, profiles = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_gut_video_profiles")
+    if ok_profiles and type(profiles) == "table" and type(profiles.rt_checks) == "table" then
+        for _, c in ipairs(profiles.rt_checks) do _rt_register(c.name, c.fn) end
+    elseif not ok_profiles then
+        printf("[gut:292] Video profile module failed to load: %s", tostring(profiles))
+    end
+end
+
+
+-- On Yer Feet, Mates! revive scoreboard attribution (#438). Vanilla's
+-- server-side rpc_request_revive omits the StatisticsUtil call used by ordinary
+-- revives and Comet's Gift. Repair only an unchanged revive count, so an
+-- upstream or parallel credit wins without duplication.
+do
+    local ok, api = pcall(mod.dofile, mod,
+        "scripts/mods/gui_tweaker/_gut_revive_scoreboard")
     if ok and type(api) == "table" then
         for _, check in ipairs(api.rt_checks or {}) do
             _rt_register(check.name, check.fn)
         end
     else
-        printf("[gut:%d] %s module failed: %s", spec[1], spec[2], tostring(api))
+        printf("[gut:438] revive-scoreboard module failed: %s", tostring(api))
+    end
+end
+
+-- End-score Damage Taken green-circle attribution (#1151). Vanilla seeds the
+-- candidate at zero before taking a minimum, so positive values can never win.
+-- The adapter recomputes only that row after vanilla has appended each player.
+do
+    local ok, api = pcall(mod.dofile, mod,
+        "scripts/mods/gui_tweaker/_gut_damage_taken_scoreboard")
+    if ok and type(api) == "table" then
+        for _, check in ipairs(api.rt_checks or {}) do
+            _rt_register(check.name, check.fn)
+        end
+    else
+        printf("[gut:1151] damage-taken scoreboard module failed: %s", tostring(api))
     end
 end
 
@@ -2004,7 +1249,8 @@ do
 end
 
 -- Source-confirmed hidden innate career bonuses (#153). Presentation only:
--- hooks run after vanilla population and never mutate career/passive tables.
+-- the wrapper supplies a temporary Perks collection to the synchronous vanilla
+-- population call, then restores the exact original table on success or error.
 do
     local ok, api = pcall(mod.dofile, mod,
         "scripts/mods/gui_tweaker/_gut_hidden_passives")
@@ -2037,7 +1283,11 @@ pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_gut_simple_ui_compat")
 -- state_name -> global class at transition time. The standalone in-mission
 -- ModTweakerView (_mod_tweaker_view) is unchanged and stays the mission path.
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_ba_compendium_state")
-pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_mod_tweaker_state")
+local ok_state, state_error = _gut_category_catalog.bind_state_result(pcall(mod.dofile, mod,
+    "scripts/mods/gui_tweaker/_mod_tweaker_state"))
+if not ok_state then
+    printf("[gut:2] Mod Tweaker state load/bind failed: %s", tostring(state_error))
+end
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_ba_heroview_inject")
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_ba_compendium")
 
@@ -2049,9 +1299,9 @@ pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/hb/hb_data")
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/hb/hide_elements")
 pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/hb/level_loading_screen")
 
--- Native live Tab statistics page (#272 phase 2). This consumes only the
--- ScoreboardHelper snapshot inventoried above and draws through the existing
--- IngamePlayerListUI lifecycle; no competing Tab input or custom transport.
+-- Native paged statistics (#272 phase 3 / #1414). This keeps the fixed eleven
+-- ScoreboardHelper rows intact, adds two detached StatisticsDatabase scalars,
+-- and draws through the existing Tab/end lifecycles without custom transport.
 do
     local ok, live_page = pcall(mod.dofile, mod,
         "scripts/mods/gui_tweaker/_gut_scoreboard_live")
@@ -2077,5 +1327,31 @@ do
         printf("[gut:437] scoreboard retention module failed: %s", tostring(retention))
     end
 end
+
+-- #1448: pull the host's grouped vanilla boss subtotal over one bounded v1
+-- channel and expose only a detached overlay to the existing Tab/end model.
+do
+    local ok, boss_sync = pcall(mod.dofile, mod,
+        "scripts/mods/gui_tweaker/_gut_boss_damage_sync")
+    if ok and type(boss_sync) == "table" then
+        mod._gut_boss_damage_sync = boss_sync
+        for _, check in ipairs(boss_sync.rt_checks or {}) do _rt_register(check.name, check.fn) end
+    else
+        printf("[gut:1448] boss snapshot module failed: %s", tostring(boss_sync))
+    end
+end
+do local ok, err = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_gut_custom_stats"); if not ok then printf("[gut:272] custom statistics module failed: %s", tostring(err)) end end -- #1570-#1572, self-registers after the owners above
+
+-- (#281) Confirm the absorbed UI Tweaks (HideBuffs) fork actually booted: it used to
+-- abort at load on a missing Penlight resource (hb_data.lua required a pl.* module
+-- that does not exist in the retail sandbox), leaving mod.SETTING_NAMES nil and the
+-- hide / loading-screen feature set silently dead. printf so it lands in the log with
+-- mod-logging OFF. stock_owns=true means the stock UI Tweaks mod is present+enabled
+-- and gut's fork is intentionally dormant (the #312 bridge owns the settings).
+printf("[gut:281] hb fork boot: SETTING_NAMES=%s ubersreik_lvls=%s stock_owns=%s fork_active=%s",
+    (type(mod.SETTING_NAMES) == "table") and "ok" or "NIL",
+    (type(mod.ubersreik_lvls) == "table" and type(mod.ubersreik_lvls.contains) == "function") and "ok" or "BAD",
+    tostring(mod.hb_stock_owns and mod.hb_stock_owns()),
+    tostring(mod.hb_fork_active and mod.hb_fork_active()))
 
 mod:info(string.format("gui_tweaker v%s ready (loadout save/restore + HUD edit mode + mod_tweaker api + bestiary/armory)", MOD_VERSION))

@@ -85,7 +85,7 @@ return function(root, initial, vmf_settings_path, options)
         mod = mod, _rt_register = function(_, callback) profile_check = callback end,
     }, "actual-crt-armor-runtime-check")
 
-    local gui = "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/"
+    local gui = options.gui or "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/"
     local embedded = options.surface == "embedded"
     local class = embedded and "HeroViewStateModTweaker" or "ModTweakerView"
     local view_source = read(gui .. (embedded and "_mod_tweaker_state.lua" or "_mod_tweaker_view.lua"))

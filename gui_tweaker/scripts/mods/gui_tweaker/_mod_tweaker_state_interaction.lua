@@ -18,9 +18,12 @@ function M.install(HeroViewStateModTweaker, deps)
     local UIInverseScaleVectorToResolution = assert(deps.UIInverseScaleVectorToResolution,
         "Mod Tweaker state interaction requires inverse resolution scaling")
     local math = assert(deps.math, "Mod Tweaker state interaction requires math")
+    local _mt = assert(deps.mt, "Mod Tweaker state interaction requires mt")
     local _cat_set = assert(deps.cat_set, "Mod Tweaker state interaction requires category setter")
     local _play_click = assert(deps.play_click, "Mod Tweaker state interaction requires click sound")
     local _play_hover = assert(deps.play_hover, "Mod Tweaker state interaction requires hover sound")
+    local SliderDragEdge = assert(deps.slider_drag_edge,
+        "Mod Tweaker state interaction requires slider drag edge")
 
 local _EDIT_MAX_LEN = 16
 
@@ -299,6 +302,12 @@ function HeroViewStateModTweaker:_handle_input(input_service)
         if self:_handle_dropdown_input(input_service) then return end
     end
 
+    -- (#167/#158) Shared-node release flags can remain true after a drag ends.
+    -- Swallow that stale release until a genuinely new press begins the next
+    -- input cycle, matching the standalone ModTweakerView path.
+    if Mouse.pressed(0) then self._dd_block_until_press = false end
+    if self._dd_block_until_press then return end
+
     -- Scroll: mouse wheel (1 notch ~= 1 row) + scrollbar thumb drag. The wheel reads
     -- scroll_axis off the menu input service; the thumb drag tracks the cursor like
     -- the vanilla scrollbar held_function (inverse-scaled cursor vs the track top).
@@ -405,13 +414,32 @@ function HeroViewStateModTweaker:_handle_input(input_service)
         end
     end
 
+    -- (#167) A slider drag is modal through its release frame. This prevents the
+    -- release from activating a different row under the cursor and keeps the
+    -- keep/hero-view path in lockstep with the standalone in-mission view.
+    self._slider_dragging = nil
+    for i = 1, #self._rows do
+        local r = self._rows[i]
+        local cc = r.content
+        if SliderDragEdge.is_modal(r._dragging,
+                cc and cc.track_hs and cc.track_hs.is_held) then
+            self._slider_dragging = r
+            break
+        end
+    end
+
     -- Rows. Persist on change via _cat_set (routes to the real VMF mod object, or
     -- the gut controller for the dogfood category).
     for i = 1, #self._rows do
         local row = self._rows[i]
+        local MT = _mt()
+        if MT and MT.apply_runtime_gate and row._setting_id then
+            MT:apply_runtime_gate(row, row._mod_id, row._setting_id)
+        end
         -- Skip rows culled this frame (outside the list_mask) so a click on a
         -- scrolled-away row can't register.
-        if not row._readonly and row._middle_visible ~= false then
+        if not row._readonly and row._middle_visible ~= false
+           and not (self._slider_dragging and row ~= self._slider_dragging) then
             local c = row.content
             if row._is_gear then
                 -- GEAR click: drill INTO this setting's advanced sub-options. Captures
@@ -537,25 +565,30 @@ function HeroViewStateModTweaker:_handle_input(input_service)
                     self:_begin_edit(row, click_x)
                     return
                 else
-                -- Draggable track. During the HOLD we only move the VISUAL; we STAGE
-                -- the min-anchored grid value ONLY on release. Some
+                -- Draggable track. During the HOLD we only move the VISUAL; we COMMIT
+                -- (mod:set -> the mod's on_setting_changed) ONLY on release. Some
                 -- handlers are heavy — ct's `starting_coins` broadcasts the entire
                 -- ~18KB config to clients — so firing it every drag frame floods the
                 -- network and crashes. One commit on release matches VMF's behaviour.
                 local ths = c.track_hs
-                if ths and (ths.is_held or ths.on_left_release) and c.track_w then
-                    local cursor = input_service and input_service:get("cursor")
-                    if cursor then
+                local held = not not (ths and ths.is_held and c.track_w)
+                local cursor = held and input_service and input_service:get("cursor")
+                local next_dragging, follow_cursor, drag_released =
+                    SliderDragEdge.step(row._dragging, held, cursor ~= nil)
+                row._dragging = next_dragging
+                if follow_cursor then
                         local anchor = UISceneGraph.get_world_position(self.ui_scenegraph, defs.list_sg)
                         local cx = UIInverseScaleVectorToResolution(cursor)[1]
                         local frac = math.clamp((cx - (anchor[1] + (c.track_x or 0))) / math.max(1, c.track_w), 0, 1)
                         cur = (c.min or 0) + frac * ((c.max or 1) - (c.min or 0))
-                        -- (#164/#389) The dormant Hero-state adapter must use the same
-                        -- min-anchored step grid as typed edits and the active standalone view.
                         cur = _snap_and_clamp(c, cur)
                         moved = true
-                        if ths.on_left_release then commit = true end  -- drag ended
-                    end
+                elseif drag_released then
+                    -- (#167) is_held is the real edge. on_left_release remains
+                    -- latched for several frames on this shared node, so using it
+                    -- repeated both cursor math and the commit/click sound.
+                    self._dd_block_until_press = true
+                    commit = true
                 end
                 if c.dec and (c.dec.on_release or c.dec.on_left_release) then cur = _snap_and_clamp(c, cur - (c.step or 1)); moved = true; commit = true end
                 if c.inc and (c.inc.on_release or c.inc.on_left_release) then cur = _snap_and_clamp(c, cur + (c.step or 1)); moved = true; commit = true end
@@ -651,7 +684,7 @@ function HeroViewStateModTweaker:_update_tooltip(dt, hover_row, hover_world_y, r
     if not (row and (self._tt_alpha or 0) > 0 and self._tooltip) then return end
     local ok = pcall(defs.layout_tooltip, self._tooltip, renderer,
         row._tip_title or (row.content and row.content.label) or "", row._tip_desc or "",
-        row._list_y or 0, hover_world_y or 0, self._tt_alpha)
+        row._list_y or 0, hover_world_y or 0, self._tt_alpha, row._tip_prefer_below)
     if ok then UIRenderer.draw_widget(renderer, self._tooltip) end
 end
 

@@ -88,6 +88,7 @@
                 "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_lib_resource_residency.lua"
                 "general_tweaker_dev/scripts/mods/general_tweaker_dev/_lib_resource_residency.lua"
                 "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_lib_resource_residency.lua"
+                "gui_tweaker/scripts/mods/gui_tweaker/_lib_resource_residency.lua"
                 "weapons_of_chaos/scripts/mods/weapons_of_chaos/_lib_resource_residency.lua"
             )
         }
@@ -135,6 +136,7 @@
                 "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_lib_ui_presentation_refresh.lua"
                 "dynamic_cosmetic_portraits/scripts/mods/dynamic_cosmetic_portraits/_lib_ui_presentation_refresh.lua"
                 "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_lib_ui_presentation_refresh.lua"
+                "gui_tweaker/scripts/mods/gui_tweaker/_lib_ui_presentation_refresh.lua"
             )
         }
     )

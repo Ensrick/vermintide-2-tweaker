@@ -1,5 +1,18 @@
 # Tweaker: GUI dev — Changelog
 
+## 0.2.369-dev (2026-11-02) -- Preserve third-person state after free camera (#1796)
+
+- Consume the saved third-person state exactly once when free camera releases
+  it. Checkbox, keybind, engine exit and synchronous setting callbacks can no
+  longer clear each other's saved value; idle OFF and deferred cancellation
+  leave unrelated third-person state untouched, including an explicit false.
+- Refuse activation before native viewport mutation when the free-flight input
+  manager is unavailable, as observed after Flight disabled its hooks in the
+  reporter's game 6.13.0 log. Do not recreate or retain foreign input services.
+- Add actual-module offline callback/lifecycle coverage. This is deterministic
+  state-transition proof, not in-game acceptance. The coordinated official
+  rollup remains a separate version and publication receipt.
+
 ## 0.2.368-dev (2026-10-28) -- Share category assembly across menu frontends (#2) [not-started]
 
 - Bind the existing category catalog independently into the standalone view and

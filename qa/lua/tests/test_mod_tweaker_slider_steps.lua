@@ -30,7 +30,7 @@ return function(Harness, repo_root)
             keystrokes = function() return {} end,
             released = function() return false end,
         }
-        _G.Mouse = { released = function() return false end }
+        _G.Mouse = { released = function() return false end, pressed = function() return false end }
         _G.Managers = {}
         math.clamp = function(value, min, max)
             if value < min then return min end
@@ -49,6 +49,8 @@ return function(Harness, repo_root)
                 UISceneGraph = { get_world_position = function() return { 0, 0, 0 } end },
                 UIInverseScaleVectorToResolution = function(cursor) return cursor end,
                 math = math,
+                mt = function() end,
+                slider_drag_edge = assert(loadfile(repo_root .. "/gui_tweaker/scripts/mods/gui_tweaker/_mod_tweaker_slider_drag_edge.lua"))(),
                 cat_set = function() end,
                 play_click = function() end,
                 play_hover = function() end,
@@ -79,6 +81,7 @@ return function(Harness, repo_root)
     Harness.test("stable resolves registered slider steps through each setting owner", function()
         for i = 1, #stable_files do
             local s = read(stable_files[i])
+            if i == 1 then s = s .. read("gui_tweaker/scripts/mods/gui_tweaker/_mod_tweaker_view_rows.lua") end
             Harness.truthy(s:match("base_power_level%s*=%s*25"), stable_files[i])
             Harness.truthy(s:match("starting_coins%s*=%s*25"), stable_files[i])
             Harness.truthy(s:match("cot_cost_amount%s*=%s*25"), stable_files[i])
@@ -98,6 +101,7 @@ return function(Harness, repo_root)
 
     Harness.test("issue 389 runtime check drives both integrated presentation seams", function()
         local contracts = read("gui_tweaker/scripts/mods/gui_tweaker/_gut_mod_tweaker_contracts.lua")
+            .. read("gui_tweaker/scripts/mods/gui_tweaker/_gut_issue389_verifier.lua")
         Harness.truthy(contracts:find('issue389_mod_tweaker_owner_aware_step', 1, true))
         Harness.truthy(contracts:find('mod_id = "gut_equipment"', 1, true))
         Harness.truthy(contracts:find('base_power_level = { mod_id = "cim" }', 1, true))
@@ -125,7 +129,7 @@ return function(Harness, repo_root)
 
         local entry = read("gui_tweaker/scripts/mods/gui_tweaker/gui_tweaker.lua")
         local verifier = read("gui_tweaker/scripts/mods/gui_tweaker/_gut_issue389_verifier.lua")
-        Harness.truthy(entry:find('mod:dofile("scripts/mods/gui_tweaker/_gut_issue389_verifier").install(_RT_CHECKS)', 1, true))
+        Harness.truthy(entry:find('mod:dofile("scripts/mods/gui_tweaker/_gut_issue389_verifier").install(_RT_CHECKS, _rt_register, _gut_menu_shell.load_view)', 1, true))
         Harness.truthy(verifier:find('mod:command("verify_gut_slider_step"', 1, true))
         Harness.truthy(verifier:find('local wanted = "issue389_mod_tweaker_owner_aware_step"', 1, true))
         Harness.truthy(verifier:find('pcall(printf, "[gut:issue389] verify=PASS")', 1, true))
@@ -134,7 +138,8 @@ return function(Harness, repo_root)
         Harness.equal(verifier:find('mod:warning("[gut:issue389]', 1, true), nil)
 
         local inject = read("gui_tweaker/scripts/mods/gui_tweaker/_ba_heroview_inject.lua")
-        Harness.truthy(entry:find('mod:command("mod_tweaker"', 1, true))
+        local shell = read("gui_tweaker/scripts/mods/gui_tweaker/_gut_mod_tweaker_shell.lua")
+        Harness.truthy(shell:find('mod:command("mod_tweaker"', 1, true))
         Harness.equal(inject:find('mod:command("mod_tweaker"', 1, true), nil)
     end)
 

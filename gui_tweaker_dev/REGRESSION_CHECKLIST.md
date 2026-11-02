@@ -1,5 +1,22 @@
 # Regression Checklist — gui_tweaker_dev
 
+## Third-person/free-camera ownership (#1796)
+
+- Offline actual-module coverage exercises checkbox/keybind/raw-exit paths,
+  synchronous setting callbacks, external engine exit, lost player data and
+  state changes. Releasing twice or while idle must preserve the exact prior
+  third-person value (true, false or absent), and callback chains still run.
+- Cancel deferred activation and try activation without a live world or a
+  registered free-flight input manager. Neither may acquire third-person state
+  or call native entry. Preserve the existing dead-world cleanup gate.
+- Live solo: enable Third-Person Camera, enter and exit Free Camera repeatedly
+  using both the checkbox and its hotkey. The view stays third-person after
+  every exit. Repeat with Third-Person Camera disabled: return to first-person.
+  With Flight installed, disable/re-enable Flight and repeat; unavailable
+  free-flight input must refuse entry cleanly, not change the chosen TPS mode.
+- Publication and offline passes are not game acceptance. Use the current
+  pinned issue card's exact stream/version after the coordinated release.
+
 ## #2 native menu-shell owner
 
 - The entry remains at or below 1415 canonical lines; view remains at its 1685 ratchet.
