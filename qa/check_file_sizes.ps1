@@ -377,7 +377,7 @@ function Invoke-SelfTest {
     $targetBaseline = Load-Baseline $targetBaselinePath
     $internalBaselineKeys = @($baseline.Keys | Where-Object { Test-RepositoryInternalWorktreePath $_ })
     $internalTargetBaselineKeys = @($targetBaseline.Keys | Where-Object { Test-RepositoryInternalWorktreePath $_ })
-    Assert ($baseline.Count -eq 2) 'baseline contains exactly the 2 remaining canonical oversized modules'
+    Assert ($baseline.Count -eq 1) 'baseline contains exactly the 1 remaining canonical oversized module'
     Assert ($internalBaselineKeys.Count -eq 0) 'baseline contains no nested-worktree entries'
     Assert ($targetBaseline.Count -gt 0) 'target-tier debt map is populated'
     Assert ($internalTargetBaselineKeys.Count -eq 0) 'target-tier debt map contains no nested-worktree entries'

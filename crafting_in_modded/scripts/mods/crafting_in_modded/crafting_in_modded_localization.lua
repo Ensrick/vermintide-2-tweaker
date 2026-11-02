@@ -5,6 +5,34 @@ return {
     mod_description = {
         en = "Craft any weapon your career can use, with the properties and traits you choose. Open the Athanor (B key by default) to reach the modded crafting menu.",
     },
+    ranalds_opener = { en = "COMMUNITY BUILDS" },
+    ranalds_title = { en = "RANALD'S GIFT COMMUNITY BUILDS" },
+    ranalds_career_prev = { en = "< CAREER" },
+    ranalds_career_next = { en = "CAREER >" },
+    ranalds_sort_likes = { en = "SORT: LIKES" },
+    ranalds_sort_recent = { en = "SORT: RECENT" },
+    ranalds_page_prev = { en = "< PAGE" },
+    ranalds_page_next = { en = "PAGE >" },
+    ranalds_page_label = { en = "PAGE %d / %d" },
+    ranalds_import = { en = "IMPORT SELECTED BUILD" },
+    ranalds_loading = { en = "Loading community builds..." },
+    ranalds_load_failed = { en = "Could not load builds: %s" },
+    ranalds_request_failed = { en = "Could not start request: %s" },
+    ranalds_loaded = { en = "Loaded %d community build(s)" },
+    ranalds_ignored = { en = "; ignored %d malformed" },
+    ranalds_bounded = { en = "; showing the bounded first 800" },
+    ranalds_row = { en = "%s\nby %s  |  Likes %d  |  %s" },
+    ranalds_unknown_date = { en = "Unknown date" },
+    ranalds_importing = { en = "Importing %s..." },
+    ranalds_import_failed = { en = "Import failed safely: %s" },
+    ranalds_import_rejected = { en = "Import rejected: %s" },
+    ranalds_imported = { en = "Imported and equipped: %s" },
+    -- #1141 Athanor Temper Item / Weapon Select button labels. The runtime
+    -- falls back to the same exact text when localization is unavailable.
+    temper_button_apply = { en = "APPLY" },
+    temper_button_craft = { en = "CRAFT" },
+    temper_button_unavailable = { en = "UNAVAILABLE" },
+    temper_button_craft_accessories = { en = "CRAFT MODDED ACCESSORIES" },
     forge_group = {
         en = "Athanor (Mod Weapon Crafting)",
     },
@@ -12,7 +40,7 @@ return {
         en = "Open Athanor Crafting Menu",
     },
     forge_hotkey_description = {
-        en = "Opens the Athanor (the Winds of Magic forge) as a modded weapon crafting menu. Always works in the Keep and the Chaos Wastes hub. Inside missions it is experimental and follows the 'Allow crafting bench in mission' option in Tweaker: GUI's In-Mission Menus, the same toggle the Standard Crafting Bench uses.",
+        en = "Opens the Athanor (the Winds of Magic forge) as a modded weapon crafting menu. Always works in the Keep and the Chaos Wastes hub. Inside missions it follows the 'Allow crafting bench in mission' option in Tweaker: GUI's In-Mission Menus, the same toggle the Standard Crafting Bench uses.",
     },
     standard_crafting_hotkey = {
         en = "Open Standard Crafting Bench",
@@ -33,7 +61,7 @@ return {
         en = "Base power level for new crafts",
     },
     base_power_level_description = {
-        en = "Power level given to every weapon and jewelry item you craft at the Athanor or the standard bench (0 to 950 in steps of 50, default 300). Normal weapons cap at 300, though Chaos Wastes pickups can push higher.",
+        en = "Power level given to every weapon and jewelry item you craft at the Athanor or the standard bench (0 to 950 in steps of 25 in Mod Tweaker, default 300). Normal weapons cap at 300, though Chaos Wastes pickups can push higher.",
     },
     prefill_random_properties = {
         en = "Pre-fill new crafts with random properties + trait",

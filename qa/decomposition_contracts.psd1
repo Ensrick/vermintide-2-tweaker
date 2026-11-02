@@ -115,6 +115,17 @@
             RequiredModules = @('_cim_illusion_apply_presentation.lua', '_cim_bootstrap_runtime.lua', '_cim_forge_state_owner.lua', '_cim_loadout_wire_owner.lua', '_cim_forge_preview.lua', '_cim_forge_preview_owner.lua', '_cim_forge_picker_owner.lua', '_cim_forge_ui_owner.lua', '_cim_inventory_filter.lua', '_cim_command_owner.lua', '_cim_weave_economy.lua', '_cim_modded_loadout_owner.lua', '_cim_weave_loadout_owner.lua', '_cim_regression_cleanup.lua', '_cim_regression_checks.lua', '_cim_regression_forge_surfaces.lua')
         }
         @{
+            # Public entry, decomposed by the 0.8.146 rollup (#1159): the entry is
+            # at or below the 1500-line target and the contract retains every
+            # extracted bootstrap, state, wire, forge, loadout, and regression
+            # owner.
+            Name = 'crafting_in_modded'
+            State = 'complete'
+            Entry = 'crafting_in_modded/scripts/mods/crafting_in_modded/crafting_in_modded.lua'
+            CeilingLines = 1369
+            RequiredModules = @('_cim_illusion_apply_presentation.lua', '_cim_bootstrap_runtime.lua', '_cim_forge_state_owner.lua', '_cim_loadout_wire_owner.lua', '_cim_forge_preview.lua', '_cim_forge_preview_owner.lua', '_cim_forge_picker_owner.lua', '_cim_forge_ui_owner.lua', '_cim_inventory_filter.lua', '_cim_command_owner.lua', '_cim_weave_economy.lua', '_cim_modded_loadout_owner.lua', '_cim_weave_loadout_owner.lua', '_cim_regression_cleanup.lua', '_cim_regression_checks.lua', '_cim_regression_forge_surfaces.lua')
+        }
+        @{
             # Completed by extracting host-state transport, run/backend
             # orchestration, adventure presentation, boon/grudge runtime, and
             # settings lifecycle into explicit owners. Entry is 1498 nonblank

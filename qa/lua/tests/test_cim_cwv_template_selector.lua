@@ -249,9 +249,8 @@ return function(H, repo_root)
 		local stable_file = assert(io.open(stable_path, "rb"))
 		local stable_source = stable_file:read("*a")
 		stable_file:close()
-		-- Stable remains promotion-only; this dev contract moves with the next
-		-- explicitly authorized CIM promotion rather than leaking into stable.
-		H.truthy(stable_source:find("mod._cim592_cwv_registration_only = true", 1, true))
-		H.equal(stable_source:find("mod._cim592_cwv_bounded_seed", 1, true), nil)
+		-- The bounded seed contract reached public through the 0.8.146 rollup.
+		H.truthy(stable_source:find("mod._cim592_cwv_bounded_seed = true", 1, true))
+		H.equal(stable_source:find("mod._cim592_cwv_registration_only", 1, true), nil)
     end)
 end

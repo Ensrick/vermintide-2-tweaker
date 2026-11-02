@@ -1,28 +1,24 @@
 --[[
-standard_forge — Hooks the Keep's standard crafting menus to work in modded realm
-without consuming crafting materials.
-
-In modded realm the player has zero crafting_material items in their PlayFab
-inventory, so every CraftPage's `setup_recipe_requirements` reports
-`_has_all_requirements = false` and disables the craft button. PlayFab also rejects
-any actual `craft()` request because the server-side ingredient check fails.
+standard_forge: the Keep's standard crafting menus in modded realm, without materials.
+The player has no crafting_material items there, so `setup_recipe_requirements` disables
+the craft button, and PlayFab rejects `craft()` on its server-side ingredient check.
 
 Strategy (same pattern as the Athanor):
-  1. UI layer — post-hook `setup_recipe_requirements` on each material-gated CraftPage
-     to force `_has_all_requirements = true` and re-enable the button.
-  2. Backend layer — when `HeroWindowCrafting` is open, set `_standard_forge_active`
-     and **block all PlayFab commits**. Without that, mutating an existing inventory
-     item triggers a "Backend rejected the challenge response -1" anti-tamper kick
-     (this is what crashed v0.2.0). Hook `BackendInterfaceCraftingPlayfab._get_valid_recipe`
-     to bypass material validation, and `craft()` to short-circuit the PlayFab queue
-     and synthesize results locally via per-recipe `synth.<recipe_name>` functions.
-
-Mutations are session-only. On game restart PlayFab reloads the canonical inventory
-and reverts everything. This matches how the Athanor handles property/trait edits.
+  1. UI: post-hook `setup_recipe_requirements` on each material-gated CraftPage to force
+     `_has_all_requirements = true` and re-enable the button.
+  2. Backend: while `HeroWindowCrafting` is open, set `_standard_forge_active` and block
+     all PlayFab commits (mutating an item otherwise causes an anti-tamper kick). Bypass
+     `_get_valid_recipe` validation and synthesize results locally via `synth.<recipe_name>`.
 ]]
 
+-- Owned by: Dev entry. Consumed via: its original protected Forge boundary.
+return function(Apply)
 local mod = get_mod("cim")
 mod:dofile("scripts/mods/crafting_in_modded/_cim_salvage_modded_button")
+local _craft_dispatch = mod:dofile(
+    "scripts/mods/crafting_in_modded/_cim_craft_dispatch")
+local _salvage_local = mod:dofile(
+    "scripts/mods/crafting_in_modded/_cim_salvage_local_boundary")
 local template_selector = mod:dofile("scripts/mods/crafting_in_modded/_cim_template_selector")
 local template_catalog = mod:dofile("scripts/mods/crafting_in_modded/_cim_template_catalog")
 mod._cim_template_selector = template_selector
@@ -35,8 +31,23 @@ mod._cim_template_catalog = template_catalog
 -- canonical resolver; hand it to the selector (contract loads first, entry
 -- line 263 < standard_forge line 291).
 local _contract = mod._cim_synthetic_item_contract
-if _contract and _contract.canonical_item_key then
+local _direct_craft_owner = mod:dofile(
+    "scripts/mods/crafting_in_modded/_cim_direct_craft_owner")({
+        mod = mod,
+        contract = _contract,
+        rt_register = mod._cim_rt_register,
+    })
+if _contract and _contract.canonical_item_key and _contract.craft_picker_role then
+    template_selector.set_identity_contract(_contract)
+elseif _contract and _contract.canonical_item_key then
     template_selector.set_canonical_key_resolver(_contract.canonical_item_key)
+end
+-- issues 628/682: declare this module's routed provider-gate surface at load
+-- so the contract's unrouted-walk census is boot-deterministic. The
+-- `_build_template_cache` validate_provider callback re-registers through
+-- `gate_item("blacksmith_list", ...)` at run time.
+if _contract and _contract.register_enumerator then
+    _contract.register_enumerator("blacksmith_list")
 end
 
 -- ============================================================
@@ -136,52 +147,16 @@ mod._cim_versus_shadowed = _cim_versus_shadowed
 -- ============================================================
 -- Customization menu (gear-icon → reroll properties / reroll traits)
 -- ============================================================
--- The gear-icon menu is `HeroWindowItemCustomization`. Its craft button
--- is gated by three conditions (`hero_window_item_customization.lua:1928`):
---   disable_button = force_disable or not has_all_requirements or script_data["eac-untrusted"]
--- In modded realm `script_data["eac-untrusted"] = true` → button always
--- greyed → user can't reroll props or traits via the cosmetics menu.
---
--- Two fixes:
---   1. Lifecycle hooks below also flip `_cim_standard_forge_active` so
---      cim's `craft()` hook intercepts the click (otherwise vanilla
---      tries to send a PlayFab request that the modded backend rejects
---      with the EAC-untrusted kick).
---   2. Wrapping hook on `_update_state_craft_button` does two jobs:
---      (a) For `apply_weapon_skin`: temporarily clears `eac-untrusted`
---          around the original call so vanilla's state check doesn't
---          bake in the modded gate (migrated from illusion_swap.lua to
---          prevent a duplicate `mod:hook*` on the same class+method —
---          VMF silently drops the second registration with a
---          "Attempting to rehook active hook" warning).
---      (b) When the standard forge UI is active: overrides the
---          disable_button write AFTER vanilla sets it, dropping the
---          eac-untrusted term but keeping force_disable + requirements.
-mod:hook("HeroWindowItemCustomization", "_update_state_craft_button", function(func, self, recipe_name, ...)
-    local result
-    if script_data["eac-untrusted"] and recipe_name == "apply_weapon_skin" then
-        local saved = script_data["eac-untrusted"]
-        script_data["eac-untrusted"] = false
-        result = func(self, recipe_name, ...)
-        script_data["eac-untrusted"] = saved
-    else
-        result = func(self, recipe_name, ...)
-    end
+-- Native 6.13's readonly backend disables customization presentation, but
+-- that protection must remain intact. The shared local Apply owner handles
+-- its complete widget/controller transaction; this forge owner still handles
+-- requirements for other local recipes. Missing Apply ownership stays native.
+-- The existing hook is retained, and all native returns preserve nil holes.
+local function _pack_results(...)
+    return { n = select("#", ...), ... }
+end
 
-    -- Post-write override: re-enable button for the standard forge UI
-    -- (gear-icon reroll-props / reroll-traits / upgrade / apply-skin tabs).
-    if mod._cim_standard_forge_active then
-        local btn = self._widgets_by_name and self._widgets_by_name.craft_button
-        if btn then
-            local has_all = self._has_all_crafting_requirements
-            if has_all == nil then has_all = true end
-            local force_disable = select(3, ...)  -- (button_text, glow_color, force_disable, offset)
-            btn.content.button_hotspot.disable_button = force_disable or not has_all or false
-        end
-    end
-
-    return result
-end)
+Apply.install_forge_state()
 
 -- ============================================================
 -- One-shot trim: existing items in the mirror with >2 properties
@@ -235,10 +210,6 @@ mod:hook("HeroWindowItemCustomization", "_update_property_option", function(func
     end
 end)
 
-local function _pack_results(...)
-    return { n = select("#", ...), ... }
-end
-
 for _, klass in ipairs({ "HeroWindowItemCustomization", "HeroWindowCrafting", "HeroWindowCraftingConsole" }) do
     local class_for_dump = klass
     -- #524: this MUST be a wrapping pre-hook. Both vanilla crafting windows
@@ -263,6 +234,11 @@ for _, klass in ipairs({ "HeroWindowItemCustomization", "HeroWindowCrafting", "H
         return unpack(results, 1, results.n)
     end)
     mod:hook_safe(klass, "on_exit", function(self)
+        local owner = mod._cim_illusion_apply_presentation_owner
+        if class_for_dump == "HeroWindowItemCustomization"
+                and type(owner) == "table" and type(owner.release) == "function" then
+            owner.release(self, "window-exit")
+        end
         mod._cim_standard_forge_active = false
     end)
 end
@@ -490,8 +466,8 @@ for i, r in ipairs(_RARITY_CHAIN) do _RARITY_INDEX[r] = i end
 local function _cim_base_power()
     local v = mod:get("base_power_level")
     if type(v) ~= "number" then return 300 end
-    -- Slider is 0-950 step 50; clamp belt-and-suspenders in case a stale config
-    -- ever held an out-of-range value.
+    -- Mod Tweaker steps by 25; this reader only clamps to 0-950, preserving
+    -- off-grid values entered through VMF rather than quantizing them here.
     if v < 0 then return 0 end
     if v > 950 then return 950 end
     return v
@@ -535,27 +511,21 @@ end
 -- layer so they don't get re-injected next launch, and clear any modded-loadout
 -- entry that points to the salvaged backend_id.
 synth.salvage = function(self, item_backend_ids)
-    local mirror = self._backend_mirror
-    local contract = mod._cim_synthetic_item_contract
-    local records = {}
-    for i = 1, #item_backend_ids do
-        local bid = item_backend_ids[i]
-        records[bid] = mod._cim_get_craft and mod._cim_get_craft(bid) or nil
+    local summary, err = _salvage_local.execute({
+        contract = mod._cim_synthetic_item_contract,
+        get_record = function(backend_id)
+            return mod._cim_get_craft and mod._cim_get_craft(backend_id)
+        end,
+        delete_owned_ids = mod._cim277_delete_owned_ids,
+    }, item_backend_ids)
+    if not summary then
+        mod:warning("[cim:628] salvage local transaction refused: %s",
+            tostring(err))
+        return {}, false
     end
-    local owned, foreign = contract.partition_exact_ids(item_backend_ids, records)
-
-    -- CIM-owned rows use the same exact-instance transaction as /forge_delete:
-    -- mirror removal + forged_weapons persistence + every CIM loadout/skin
-    -- reference are cleared once. Ordinary rows remain session-local only; no
-    -- PlayFab/official-backend request is made anywhere in this synth.
-    local deleted = 0
-    if #owned > 0 and mod._cim277_delete_owned_ids then
-        deleted = mod._cim277_delete_owned_ids(owned) or 0
-    end
-    for i = 1, #foreign do mirror:remove_item(foreign[i]) end
     mod:info("[cim:628] salvage local-only selected=%d owned=%d deleted=%d foreign=%d",
-        #item_backend_ids, #owned, deleted, #foreign)
-    return {}
+        summary.selected, summary.owned, summary.deleted, summary.foreign)
+    return {}, true
 end
 
 -- ---- apply_weapon_skin: weapon = item[1], skin = item[2]; set weapon.skin ----
@@ -1004,7 +974,7 @@ local function _make_craft_synth(allowed_slots)
         local career_name = _local_career_name()
         if not career_name then
             mod:echo("[cim] craft: no local career resolved")
-            return nil
+            return nil, false
         end
 
         -- Resolve the craft target. The player drops a weapon into the recipe
@@ -1013,6 +983,7 @@ local function _make_craft_synth(allowed_slots)
         -- clone whatever the player dropped, regardless of rarity. The vanilla
         -- recipe randomized within the slot type — modded users want to choose.
         local item_key
+        local raw_item_key
         local slots = allowed_slots
         if item_backend_ids[1] then
             local item_interface = Managers.backend:get_interface("items")
@@ -1033,7 +1004,7 @@ local function _make_craft_synth(allowed_slots)
                 if not ok then
                     mod:warning("[cim] Cannot craft " .. tostring(input_item.key or "?") ..
                         " — slot_type '" .. tostring(st) .. "' isn't a weapon/jewellery slot.")
-                    return nil
+                    return nil, false
                 end
                 slots = { [st] = true }
             end
@@ -1043,9 +1014,44 @@ local function _make_craft_synth(allowed_slots)
             -- represent a specific weapon type (Imperial Longsword, halberd,
             -- etc), not just "any melee weapon".
             if input_item then
-                item_key = input_item.key or input_item.ItemId
-                if not item_key and input_data then
-                    item_key = input_data.key or input_data.name
+                raw_item_key = input_item.key or input_item.ItemId
+                if not raw_item_key and input_data then
+                    raw_item_key = input_data.key or input_data.name
+                end
+                item_key = raw_item_key
+
+                -- #1141/#390: a real CWV Blacksmith seed deliberately keeps
+                -- its vanilla donor in key/ItemId.  Once synthetic twins are
+                -- suppressed, cloning that visible donor recreates the exact
+                -- wrong-weapon bug from Temper Item.  Reuse Temper's single
+                -- provider-authenticated classifier for any CWV-shaped input;
+                -- do not parse backend-id bands or trust UI stamps here.
+                local requires_call, requires_provider = pcall(
+                    _contract.temper_source_requires_cwv_provider,
+                    input_item, input_item, item_backend_ids[1])
+                if not requires_call then
+                    mod:warning("[cim] Cannot resolve selected craft identity: classifier exception")
+                    return nil, false
+                end
+                if requires_provider then
+                    local temper = mod._cim_temper_runtime_state
+                    local resolver = temper and temper.resolve_temper_action
+                    if type(resolver) ~= "function" then
+                        mod:warning("[cim] Cannot resolve selected CWV Blacksmith weapon: provider unavailable")
+                        return nil, false
+                    end
+                    local resolved, action, reason, source = pcall(resolver,
+                        input_item, item_backend_ids[1], input_item, input_item)
+                    if not resolved or action ~= "craft"
+                            or type(source) ~= "table"
+                            or type(source.item_key) ~= "string"
+                            or source.item_key == "" then
+                        local detail = resolved and reason or action
+                        mod:warning("[cim] Cannot resolve selected CWV Blacksmith weapon: "
+                            .. tostring(detail or "identity rejected"))
+                        return nil, false
+                    end
+                    item_key = source.item_key
                 end
                 if item_key then
                     mod:echo("[cim] Cloning chosen weapon: " .. tostring(item_key))
@@ -1056,20 +1062,28 @@ local function _make_craft_synth(allowed_slots)
         if not item_key then
             local eligible = {}
             local real_names = _cim_real_display_names()
+            -- issues 682/628: route the random-craft pool through the
+            -- registered provider gate so an immutable relic (or malformed
+            -- provider row) can never be drawn as the random pick and then
+            -- die at the mirror-injection boundary. Same gate the Athanor
+            -- and blacksmith lists consume.
+            local gate_contract = mod._cim_synthetic_item_contract
             for key, data in pairs(ItemMasterList) do
                 if slots[data.slot_type]
                    and data.can_wield and table.contains(data.can_wield, career_name)
                    and data.item_type ~= "weapon_skin"
                    and data.rarity ~= "magic" and data.rarity ~= "promo"
                    and not _item_requires_unowned_dlc(key)
-                   and not _cim_versus_shadowed(data, real_names) then
+                   and not _cim_versus_shadowed(data, real_names)
+                   and not (gate_contract and gate_contract.gate_item
+                        and gate_contract.gate_item("random_craft", key, data) == false) then
                     eligible[#eligible + 1] = key
                 end
             end
 
             if #eligible == 0 then
                 mod:warning("[cim] No eligible items for career " .. career_name)
-                return nil
+                return nil, false
             end
 
             item_key = eligible[math.random(1, #eligible)]
@@ -1108,7 +1122,6 @@ local function _make_craft_synth(allowed_slots)
         end
 
         local power_level = _cim_base_power()
-        local cjson_mod = rawget(_G, "cjson")
 
         -- issue 390: CWV variant crafts get a `cwv_<key>_NNN` backend_id so the
         -- CWV render-rescue hooks recognize them; everything else keeps a fresh
@@ -1118,93 +1131,45 @@ local function _make_craft_synth(allowed_slots)
             backend_id = _mint_cwv_backend_id(item_key)
         end
         backend_id = backend_id or Application.guid()
-        local contract = mod._cim_synthetic_item_contract
-        local master = rawget(ItemMasterList, item_key)
-        local record, record_err = contract and contract.normalize_record(backend_id, {
+        local weapon_data = {
             item_key = item_key,
             properties = rolled_props,
             traits = rolled_traits,
             power_level = power_level,
             rarity = "modded",
             via_mirror = true,
-        }, master)
-        if not record then
-            printf("[cim:628] craft rejected bid=%s key=%s reason=%s",
-                tostring(backend_id), tostring(item_key), tostring(record_err))
-            return nil
-        end
-        local encoder = cjson_mod and cjson_mod.encode
-        local item, payload_err = contract.build_mirror_payload(record, master, encoder)
-        if not item then
-            printf("[cim:628] craft payload rejected bid=%s key=%s reason=%s",
-                tostring(backend_id), tostring(item_key), tostring(payload_err))
-            return nil
-        end
-
-        local ok, err = pcall(self._backend_mirror.add_item, self._backend_mirror, backend_id, item)
-        if not ok then
-            -- v0.7.52-dev: mod:warning (was mod:echo, chat-suppressed) +
-            -- comprehensive synth-result probe so failures are visible.
-            mod:warning("[cim] add_item FAILED for " .. item_key .. ": " .. tostring(err))
+            career_name = career_name,
+        }
+        -- #1141: the standard forge used to add the row directly and then
+        -- ignore persistence failure. That could leave an unowned live mirror
+        -- row (or remove a foreign replacement during ad-hoc cleanup). Share
+        -- the Temper transaction: canonical injection returns an exact
+        -- ownership token, registration publishes only after save succeeds,
+        -- and every failure rolls back only that owned payload.
+        local committed, record_or_error = _direct_craft_owner.commit(
+            weapon_data, backend_id, {
+                source_backend_id = item_backend_ids[1],
+                raw_item_key = raw_item_key or item_key,
+            })
+        if not committed then
+            local err = record_or_error
+            mod:warning("[cim] craft transaction FAILED for " .. item_key
+                .. ": " .. tostring(err))
             if mod._cim_autodump_craft_synth_result then
-                local weapon_data_fail = {
-                    item_key = item_key,
-                    properties = rolled_props,
-                    traits = rolled_traits,
-                    power_level = power_level,
-                    rarity = "modded",
-                    via_mirror = true,
-                }
                 pcall(mod._cim_autodump_craft_synth_result, "standard_forge_FAIL",
-                    career_name, item_key, backend_id, weapon_data_fail, false, err)
+                    career_name, item_key, backend_id, weapon_data, false, err)
             end
-            return nil
+            return nil, false
         end
+        -- commit_craft returns the persisted normalized record. Keep using it
+        -- for diagnostics so every surface observes the same canonical state.
+        weapon_data = record_or_error
 
-        -- Persist so the item survives a game restart. Same save layer as the
-        -- Athanor — registered with `via_mirror = true` so `_athanor_inject_all`
-        -- re-creates it via backend_mirror:add_item on next session.
-        local weapon_data = record
-        if mod._cim_register_craft then
-            mod._cim_register_craft(backend_id, weapon_data)
-        end
-
-        -- Verify the item is actually in the mirror after add_item
-        local item_interface = Managers.backend:get_interface("items")
-        local stored = item_interface and item_interface:get_item_from_id(backend_id)
-        local stored_key = stored and (stored.key or (stored.data and stored.data.key)) or "<nil>"
-        local stored_rarity = stored and stored.rarity or "<nil>"
-        mod:echo("[cim] Crafted " .. item_key .. " (key=" .. tostring(stored_key) .. " rarity=" .. tostring(stored_rarity) .. " bid=" .. tostring(backend_id) .. ")")
-
-        -- v0.7.52-dev: comprehensive post-craft diagnostic + 2-frame-later
-        -- visibility check. Same probe as the Athanor `_equip_item` path so
-        -- both craft routes produce the same diagnostic trail.
-        if mod._cim_autodump_craft_synth_result then
-            pcall(mod._cim_autodump_craft_synth_result, "standard_forge_synth",
-                career_name, item_key, backend_id, weapon_data, true, nil)
-        end
-
-        -- issue 390: trace the CWV crafted copy's resolved units. The CWV entry
-        -- carries the variant mesh (and nils the inherited left-hand attachment
-        -- via no_left_hand); the BASE entry the vanilla equip path re-resolves
-        -- to via `item_data.name` carries the wrong mesh + attachments. Logging
-        -- both makes the divergence (and whether the rescue must bridge it)
-        -- visible. Always-on in dev; fires only on a craft action.
-        if _is_cwv_craft_key(item_key) then
-            do
-                local cwv_entry = rawget(ItemMasterList, item_key)
-                local base_entry = cwv_entry and cwv_entry.name and rawget(ItemMasterList, cwv_entry.name)
-                printf("[cim:390] crafted CWV key=%s bid=%s base_name=%s | cwv rhu=%s lhu=%s | BASE rhu=%s lhu=%s",
-                    tostring(item_key), tostring(backend_id),
-                    tostring(cwv_entry and cwv_entry.name),
-                    tostring(cwv_entry and cwv_entry.right_hand_unit),
-                    tostring(cwv_entry and cwv_entry.left_hand_unit),
-                    tostring(base_entry and base_entry.right_hand_unit),
-                    tostring(base_entry and base_entry.left_hand_unit))
-            end
-        end
-
-        return { { backend_id, [3] = 1 } }
+        -- #1141: diagnostics cannot revoke a committed craft before the
+        -- dispatch publishes its completion row. This owner contains every
+        -- post-commit read, echo, delayed probe and unit trace.
+        return _direct_craft_owner.finish_standard_craft(
+            item_key, backend_id, weapon_data, career_name)
     end
 end
 
@@ -1220,6 +1185,21 @@ synth.craft_jewellery   = _make_craft_synth({ trinket = true, ring = true, neckl
 synth.craft_necklace = _make_craft_synth({ necklace = true })
 synth.craft_charm    = _make_craft_synth({ ring = true })
 synth.craft_trinket  = _make_craft_synth({ trinket = true })
+
+-- These synth closures own newly-created inventory transactions.  A false
+-- commit from one of them is not a completed craft: the dispatch helper still
+-- allocates its normal monotonically-increasing request id, so the installed
+-- hook removes only that exact refused row before returning failure to the UI.
+-- Keep this identity set closure-based (rather than recipe-name based) so
+-- legacy synths and silent-drop compatibility requests retain their behavior.
+local _owned_direct_craft_synths = {
+    [synth.craft_random_item] = true,
+    [synth.craft_weapon] = true,
+    [synth.craft_jewellery] = true,
+    [synth.craft_necklace] = true,
+    [synth.craft_charm] = true,
+    [synth.craft_trinket] = true,
+}
 
 -- Issue 407: expose the synth-name set so /cim_regression_test can verify every
 -- recipe the console craft-item resolver derives (craft_weapon / craft_necklace /
@@ -1320,7 +1300,10 @@ local function _build_template_cache()
         validate_provider = function(item_key, master)
             local contract = mod._cim_synthetic_item_contract
             if not contract then return false, { "contract" } end
-            local ok, problems = contract.validate_provider(item_key, master)
+            -- issue 628: route through the REGISTERED gate (same validation
+            -- as validate_provider, plus routed-surface bookkeeping) so the
+            -- blacksmith list is a declared consumer of the provider schema.
+            local ok, problems = contract.gate_item("blacksmith_list", item_key, master)
             return ok, problems
         end,
         real_names = real_names,
@@ -1332,17 +1315,6 @@ local function _build_template_cache()
         suppressed = report.suppressed,
         career = career_name,
     }
-    printf("[cim:524] acquisition_templates eligible=%d families=%d suppressed=%d cwv=%d career=%s",
-        report.eligible, report.total, report.suppressed, report.cwv, tostring(career_name))
-    local collision_limit = math.min(#report.collisions, 12)
-    for i = 1, collision_limit do
-        local collision = report.collisions[i]
-        printf("[cim:524] dedupe family=%s keep=%s drop=%s",
-            tostring(collision.family), tostring(collision.kept), tostring(collision.dropped))
-    end
-    if #report.collisions > collision_limit then
-        printf("[cim:524] dedupe_more count=%d", #report.collisions - collision_limit)
-    end
     local rejected_limit = math.min(#report.rejected_providers, 24)
     for i = 1, rejected_limit do
         local rejected = report.rejected_providers[i]
@@ -1352,6 +1324,12 @@ local function _build_template_cache()
     if #report.rejected_providers > rejected_limit then
         printf("[cim:628] provider_rejected_more count=%d",
             #report.rejected_providers - rejected_limit)
+    end
+    -- issue 628 scope 3: capped self-report naming any expected enumerator
+    -- surface still bypassing the registered gate (currently cw_conversion).
+    local contract = mod._cim_synthetic_item_contract
+    if contract and contract.report_unrouted then
+        contract.report_unrouted(printf)
     end
 end
 
@@ -1365,6 +1343,21 @@ end
 
 -- Exposed for the consolidated `on_enter` hook above to invoke at call time.
 mod._cim_rebuild_template_cache = _build_template_cache
+
+local function _single_slot_filter(filter)
+    if type(filter) ~= "string" then return nil end
+    local found = {}
+    for slot in filter:gmatch("slot_type%s*==%s*([%w_]+)") do
+        found[slot] = true
+    end
+    local only
+    for slot in pairs(found) do
+        if only then return nil end
+        only = slot
+    end
+    if not only then return nil end
+    return { [only] = true }
+end
 
 -- Called from the shared `get_filtered_items` hook in crafting_in_modded.lua
 -- once it's finished its modded-only filtering pass. Returns the same items
@@ -1381,13 +1374,10 @@ mod._cim_rebuild_template_cache = _build_template_cache
 -- template for them -- they stay correctly non-craftable (get the look via the
 -- real family member + the Nordland illusion in the cosmetic picker).
 mod._cim390_inject_key_keyed = true
--- #592: CWV contributes definitions, never owned blacksmith items. Therefore
--- CIM's one key-keyed synthetic template is the sole acquisition selector.
-mod._cim592_cwv_registration_only = true
--- #524: the render-seam probe is wired into the inject seam below. The armed
--- regression check asserts both this flag and the diag module stay present, so
--- the rendered-list evidence can't be silently stripped while #524 is open.
-mod._cim524_render_probe_wired = true
+-- #592/#928: CWV contributes one real 5-power Blacksmith seed per definition.
+-- The selector policy below prefers that default-rarity row and suppresses its
+-- synthetic twin; CIM continues to own every additional crafted instance.
+mod._cim592_cwv_bounded_seed = true
 mod._cim_inject_templates = function(items, filter)
     if not _is_active() then return items end
     if type(filter) ~= "string" or not filter:find("can_craft_with", 1, true) then
@@ -1395,20 +1385,9 @@ mod._cim_inject_templates = function(items, filter)
     end
     if not next(_template_cache) then _build_template_cache() end
 
-    local pre_inject = type(items) == "table" and #items or 0
-    local result = template_selector.inject(items, _template_cache)
-    -- #524 render-seam probe: dump the FINAL rendered list (what the user sees),
-    -- classified per row + grouped for hard/soft duplicates. The catalog probe
-    -- above ([cim:524] acquisition_templates) only sees CIM's synthetic list, not
-    -- this injected result. Bounded + throttled inside the module; pcall so a
-    -- diagnostic can never break the picker.
-    if mod._cim_diag_524 then
-        pcall(mod._cim_diag_524.dump, result, {
-            career = _local_career_name(),
-            pre_inject = pre_inject,
-            picker = "native_craft_item",
-        })
-    end
+    local result = template_selector.inject(items, _template_cache, {
+        allowed_slots = _single_slot_filter(filter),
+    })
     return result
 end
 
@@ -1663,15 +1642,26 @@ mod:hook("BackendInterfaceCraftingPlayfab", "craft", function(func, self, career
             tostring(item_backend_ids[1])))
     end
 
-    self._last_id = (self._last_id or 0) + 1
-    local id = self._last_id
-    local result = synth_fn(self, item_backend_ids, recipe, recipe_override)
-    self._craft_requests[id] = result or {}
-
-    if Managers.backend and Managers.backend.dirtify_interfaces then
-        pcall(Managers.backend.dirtify_interfaces, Managers.backend)
+    local id, completed_recipe, committed = _craft_dispatch.execute({
+        invalidate = function()
+            if Managers.backend and Managers.backend.dirtify_interfaces then
+                Managers.backend:dirtify_interfaces()
+            end
+        end,
+    }, self, synth_fn, item_backend_ids, recipe, recipe_override)
+    if committed == false and _owned_direct_craft_synths[synth_fn] then
+        -- `_cim_craft_dispatch` has just allocated `id`; erase only that exact
+        -- refused request.  Existing/in-flight request rows and the monotonic
+        -- id counter remain untouched, while the caller receives an
+        -- unambiguous non-completion instead of a false successful craft.
+        if type(self._craft_requests) == "table" then
+            rawset(self._craft_requests, id, nil)
+        end
+        return nil, false
     end
-    return id, recipe
+    -- Preserve BackendInterfaceCraftingPlayfab.craft's public two-value shape;
+    -- committed/refused is internal to the dispatch contract.
+    return id, completed_recipe
 end)
 
 -- ============================================================
@@ -1833,3 +1823,4 @@ mod:hook_safe("HeroWindowCrafting", "update", function(self, dt, t)
     _show_std_forge_buttons(self, true)
     _handle_std_forge_button_clicks(self)
 end)
+end

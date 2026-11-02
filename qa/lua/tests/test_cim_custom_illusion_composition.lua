@@ -48,12 +48,11 @@ return function(H, repo_root)
                     settings[name] = value
                 end,
             }
-            -- Public CIM 0.8.92 has no realm authority; Cosmetics tells it apart by this.
-            if public_cim then cim._cim_is_modded_realm = nil end
             local cim_dir = public_cim and "crafting_in_modded"
                 or "crafting_in_modded_dev"
+            local cim_scripts = "scripts/mods/" .. cim_dir .. "/"
             function cim:dofile(path)
-                if not public_cim and path == "scripts/mods/crafting_in_modded_dev/_cim_salvage_modded_button" then return end
+                if path == cim_scripts .. "_cim_salvage_modded_button" then return end
                 return dofile(repo_root .. "/" .. cim_dir .. "/" .. path .. ".lua")
             end
 
@@ -91,19 +90,15 @@ return function(H, repo_root)
                 unlock = { is_dlc_unlocked = function() return true end },
             })
 
-            if public_cim then
-                dofile(repo_root .. "/" .. cim_dir .. "/scripts/mods/" .. cim_dir .. "/illusion_swap.lua")
-            else
-                local root = repo_root .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/"
-                local facade = dofile(root .. "_cim_illusion_apply_presentation.lua")
-                local shared = dofile(root .. "_lib_local_illusion_apply.lua")
-                local apply = facade.bind(cim, shared)
-                cim._cim_synthetic_item_contract = cim:dofile("scripts/mods/crafting_in_modded_dev/_cim_synthetic_item_contract")
-                local ok, failure = apply.install_forge_loaded(pcall(cim.dofile, cim, "scripts/mods/crafting_in_modded_dev/standard_forge"))
-                H.equal(ok, true, tostring(failure))
-                ok, failure = apply.install_loaded(pcall(cim.dofile, cim, "scripts/mods/crafting_in_modded_dev/illusion_swap"))
-                H.equal(ok, true, tostring(failure))
-            end
+            local root = repo_root .. "/" .. cim_dir .. "/" .. cim_scripts
+            local facade = dofile(root .. "_cim_illusion_apply_presentation.lua")
+            local shared = dofile(root .. "_lib_local_illusion_apply.lua")
+            local apply = facade.bind(cim, shared)
+            cim._cim_synthetic_item_contract = cim:dofile(cim_scripts .. "_cim_synthetic_item_contract")
+            local ok, failure = apply.install_forge_loaded(pcall(cim.dofile, cim, cim_scripts .. "standard_forge"))
+            H.equal(ok, true, tostring(failure))
+            ok, failure = apply.install_loaded(pcall(cim.dofile, cim, cim_scripts .. "illusion_swap"))
+            H.equal(ok, true, tostring(failure))
 
             local cosmetics = {
                 hook = function(_, class, method, callback)
@@ -205,7 +200,7 @@ return function(H, repo_root)
         end
     end)
 
-    H.test("legacy public CIM retains custom fake ownership in both hook orders", function()
+    H.test("public CIM owns Cosmetics custom fake identity in both hook orders", function()
         for _, cim_outermost in ipairs({ false, true }) do
             local result = production_case(cim_outermost, true, true)
             H.equal(result.skin_backend_id, "cim_fake_ct_test_custom_skin")

@@ -1,5 +1,68 @@
 # Crafting in Modded Changelog
 
+## 0.8.146 (2026-11-02) - PUBLIC RELEASE: full dev rollup (0.8.92-dev to 0.8.146-dev)
+
+Restores illusion Apply on game 6.12 and later, and promotes the entire dev line
+since 0.8.91. Most of these fixes passed offline checks but have not been
+confirmed in game, because the dev stream currently has no active testers. The
+maintainer chose to release them on that basis. Please report anything wrong.
+
+### Restored for game 6.12 and 6.13
+- Illusion Apply appears again on the gear-icon tab and the Keep forge. Game 6.12
+  stopped writing the old realm key and 6.13 forces Apply off in the modded realm;
+  CIM now reads the game's own realm state and owns Apply locally (issue 1465,
+  issue 1689, issue 1690, issue 1693).
+- The debug report names the realm correctly (issue 1694).
+- The forge finishes setting up before its illusion controls become available, so a
+  failed setup no longer offers a broken Apply.
+
+### New
+- Community Builds in the Athanor: browse and import Ranald's Gift builds for a
+  career (issue 1360).
+- Craft Modded Accessories clones all three equipped accessories (issue 1031,
+  issue 1032).
+
+### Crash fixes
+- Crafted weapons and illusions keep their render resources loaded while borrowed
+  by the Athanor, Hold-Tab and other views (issue 749).
+- Chaos Wastes trait particles keep their package loaded (issue 947).
+- Weapons of Chaos relics stay immutable and visible in the Athanor (issue 822).
+
+### Fixes
+- Temper Item stages behind Apply and refuses counts it cannot store; Craft works
+  from Blacksmith copies (issue 1141).
+- Crafted weapons keep their favorite state across restarts (issue 1001). A saved
+  craft that fails to restore is now named in the log rather than hidden (issue
+  1654, cause still under investigation).
+- Chaos Wastes traits no longer appear on accessories or dropped slots (issue 414).
+- The Base Power description states the real 25-point step (issue 1530).
+- Athanor trait and property pickers show their full pools; ranged previews stay
+  centred; weapon previews sit correctly in pickers and the mission overview (issue
+  404, issue 882).
+- Character Weapon Variants rows no longer render locked, and Blacksmith seeds are
+  bounded per weapon (issue 703, issue 928, issue 592).
+- Provider-owned weapon availability is preserved (issue 661). Crafted provider
+  identity survives saves (issue 484). Salvage of synthetic weapons is transactional
+  (issue 628).
+- Each accessory property applies on its own layer (issue 959). Accessory cleanup
+  and Dual Axes icons corrected (issue 277, issue 787). The accessory label no longer
+  overlaps the upgrade arrow (issue 1117).
+- Athanor icon refusals name their gate (issue 481). Host icon corrected (issue 921).
+  Cursed and modded Hold-Tab frames are safe and correct (issue 598). Cosmetics tab
+  presentation order fixed (issue 639, issue 629, issue 641).
+- Equipment reset is bounded (issue 1002). Community Builds use the game's Necromancer
+  keys (issue 1696).
+
+### Internal
+- Large files split into focused modules; the new modules ship with this release
+  (issue 1159, issue 504, issue 2, issue 540, issue 1122, issue 1227, issue 428).
+- Debug and telemetry cleanup: log-only alerts, retired probes and regression checks
+  that judge shipped policy (issue 427, issue 499, issue 500, issue 174, issue 511,
+  issue 823, issue 1656). Earlier HDR preview hardening (issue 73). Localization
+  status-tag audit (issue 301).
+- The unused stable-only `_cim_diag_524.lua` probe is removed; dev retired it earlier.
+- itemV2.cfg published_id and public visibility are unchanged.
+
 ## 0.8.92 (2026-08-01) - #48 custom-glow fallback notice [verify-fix]
 
 - When saved CIM weapons contain opaque custom-glow data but Tweaker:

@@ -78,6 +78,10 @@ function Convert-Id([string]$text) {
     foreach ($r in $replacements) {
         $text = [regex]::Replace($text, "\b" + [regex]::Escape($r.From) + "\b", $r.To)
     }
+    # A dev id used as a name prefix (cim_dev_cw_trait_fx, a package reference) has
+    # no trailing word boundary. Without this it reached stable unconverted, where
+    # a co-installed dev build would share the same reference name.
+    $text = [regex]::Replace($text, "\b" + [regex]::Escape($p.DevId + '_'), ($p.PubId + '_'))
     return $text
 }
 

@@ -33,7 +33,6 @@ if (-not (Test-Path -LiteralPath $releaseIdentityHelpers -PathType Leaf)) {
 # triplet and fails until both surfaces agree. Do not add new debt here.
 $descriptionVersionDebt = @{
     "chaos_wastes_tweaker"       = "0.7.131-beta|0.7.119-dev"
-    "crafting_in_modded"         = "0.8.34|0.8.33"
     "dynamic_cosmetic_portraits" = "0.1.25-dev|0.1.13"
 }
 

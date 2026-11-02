@@ -47,7 +47,8 @@
         # reached behind the live residency proof.
         @{ File='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_customization_view_lifecycle.lua'; Kind='shading'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_resource_residency_census.lua' }
         @{ File='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_customization_view_lifecycle.lua'; Kind='residency_proof'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_resource_residency_census.lua' }
-        @{ File='crafting_in_modded/scripts/mods/crafting_in_modded/_cim_athanor_icon_policy.lua'; Kind='gui_lookup'; Count=1; Policy='exact-gui-existing'; Evidence='qa/lua/tests/test_cim_athanor_icon_policy.lua' }
+        @{ File='crafting_in_modded/scripts/mods/crafting_in_modded/_cim_athanor_icon_policy.lua'; Kind='residency_proof'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_cim_athanor_icon_policy.lua' }
+        @{ File='crafting_in_modded/scripts/mods/crafting_in_modded/_cim_mission_forge_safety.lua'; Kind='residency_proof'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_cim_mission_forge_widget_safety.lua' }
         @{ File='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_athanor_icon_policy.lua'; Kind='residency_proof'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_cim_athanor_icon_policy.lua' }
         @{ File='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_mission_forge_safety.lua'; Kind='residency_proof'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_cim_mission_forge_widget_safety.lua' }
         @{ File='dynamic_cosmetic_portraits/scripts/mods/dynamic_cosmetic_portraits/dynamic_cosmetic_portraits.lua'; Kind='gui_lookup'; Count=2; Policy='exact-gui-existing'; Evidence='qa/lua/tests/test_resource_residency_census.lua' }

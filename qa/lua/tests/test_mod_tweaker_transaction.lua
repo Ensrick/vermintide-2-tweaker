@@ -325,32 +325,21 @@ return function(H, repo_root)
         end
     end)
 
-    H.test("CIM dev coalesces settings while stable fallback remains bounded", function()
-        local dev_path =
-            "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_settings_runtime.lua"
-        local Runtime = assert(loadfile(repo_root .. dev_path))()
-        local mod, applies, records = {}, 0, 0
-        Runtime.install(mod, function() applies = applies + 1 end,
-            function() records = records + 1 end)
-        mod.on_setting_changed("unrelated")
-        mod.on_setting_changed("movespeed_2pct_mode")
-        mod.on_settings_batch_changed({
-            "unrelated", "movespeed_2pct_mode", "movespeed_2pct_mode",
-        })
-        H.equal(applies, 2, "CIM dev applies once per completion path")
-        H.equal(records, 1, "CIM dev records one batch completion")
-
-        -- Stable split streams do not receive in-flight fixes. Its legacy
-        -- callback is nevertheless bounded: only one exact setting can invoke
-        -- the sole heavyweight re-apply during a per-setting fallback reset.
-        local stable_path =
-            "/crafting_in_modded/scripts/mods/crafting_in_modded/crafting_in_modded.lua"
-        local file = assert(io.open(repo_root .. stable_path, "rb"))
-        local stable = file:read("*a")
-        file:close()
-        H.truthy(stable:find(
-            'mod%.on_setting_changed = function%(setting_id%)%s+if setting_id == "movespeed_2pct_mode" then%s+_patch_movespeed_buff%(%)%s+end%s+end'
-        ), "stable CIM fallback must keep heavyweight work behind one exact setting")
+    H.test("CIM dev and public coalesce settings through the same runtime", function()
+        for _, stream in ipairs({ "crafting_in_modded_dev", "crafting_in_modded" }) do
+            local path = "/" .. stream .. "/scripts/mods/" .. stream .. "/_cim_settings_runtime.lua"
+            local Runtime = assert(loadfile(repo_root .. path))()
+            local mod, applies, records = {}, 0, 0
+            Runtime.install(mod, function() applies = applies + 1 end,
+                function() records = records + 1 end)
+            mod.on_setting_changed("unrelated")
+            mod.on_setting_changed("movespeed_2pct_mode")
+            mod.on_settings_batch_changed({
+                "unrelated", "movespeed_2pct_mode", "movespeed_2pct_mode",
+            })
+            H.equal(applies, 2, stream .. " applies once per completion path")
+            H.equal(records, 1, stream .. " records one batch completion")
+        end
     end)
 
     H.test("Both Mod Tweaker views retain failed owner buffers", function()

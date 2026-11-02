@@ -14,6 +14,8 @@ The autodumps are intentionally SEPARATE from the on-demand `/inv_dump` /
 `/mirror_dump` / `/cim_dump_loadout` / `/forge_list` / `/salvage_debug`
 commands — the commands echo to chat for interactive use; the autodumps go
 log-only and are tuned for diagnosing post-hoc from a forwarded log file.
+The bounded #1694 forge realm receipt uses raw engine printf so it remains
+available when VMF mod logging is disabled.
 ]]
 
 local mod = get_mod("cim")
@@ -316,13 +318,16 @@ mod._cim_autodump_forge_open = function(class_name, window_self)
         pcall(mod._cim_autodump_jewelry_probe, window_self, class_name)
     end
 
-    local eac      = script_data and script_data["eac-untrusted"] and "true" or "false"
+    -- #1694: 6.12+ publishes MODDED_REALM, not the retired EAC field
+    -- (application_parameter.lua:150-152). Reuse CIM's entry-owned authority
+    -- so explicit native denial and pre-6.12 fallbacks match the forge itself.
+    local realm    = mod._cim_is_modded_realm() and "true" or "false"
     local sf       = mod._cim_standard_forge_active and "true" or "false"
     local show_only = mod:get("show_only_modded_weapons") and "true" or "false"
     local mech     = Managers.mechanism and Managers.mechanism:current_mechanism_name() or "?"
     local career_name, profile_name = _local_career()
-    _info(label, "eac_untrusted=%s sf_active=%s show_only_modded=%s mech=%s career=%s/%s",
-        eac, sf, show_only, mech, tostring(profile_name), tostring(career_name))
+    printf("[cim:1694] forge_open class=%s modded_realm=%s sf_active=%s show_only_modded=%s mech=%s career=%s/%s",
+        tostring(class_name), realm, sf, show_only, mech, tostring(profile_name), tostring(career_name))
 
     -- Mirror health (modded vs vanilla item counts).
     local items_iface = Managers.backend and Managers.backend:get_interface("items")
@@ -414,7 +419,7 @@ mod._cim_autodump_salvage_open = function()
             if mod._cim_is_modded_item and mod._cim_is_modded_item(it) then n_mod = n_mod + 1 end
         end
     end
-    _info(label, "salvage filter result: total=%d modded=%d (cim's filter override adds modded items unconditionally)", n_total, n_mod)
+    _info(label, "salvage filter result: total=%d modded=%d (cim re-admits exact persisted crafts only after vanilla safety guards)", n_total, n_mod)
 end
 
 -- Restore pass completion (called from _restore_modded_loadout).
@@ -574,7 +579,7 @@ end
 -- the prior fixes trusted the display and missed it. Pairs the visible cap with
 -- the actual array so a future regression is visible in the log without code
 -- changes. `arr` is the live array; we snapshot its values for the log line.
-mod._cim_autodump_property_array = function(verb, key, arr, cap)
+mod._cim_autodump_property_array = function(verb, key, arr, cap, layer_size)
     if not _enabled() then return end
     local label = "property_array/" .. tostring(verb)
     local n = (type(arr) == "table") and #arr or -1
@@ -582,12 +587,26 @@ mod._cim_autodump_property_array = function(verb, key, arr, cap)
     if type(arr) == "table" then
         for i = 1, n do vals[i] = tostring(arr[i]) end
     end
-    local over = (type(cap) == "number" and n > cap) and " OVER-CAP!" or ""
+    -- #959: in the amulet editor (layer_size set) one key legitimately spans
+    -- layers, so the over-cap verdict compares the WORST single layer's count
+    -- against the cap - the old global-count compare false-flagged every legal
+    -- second-accessory write (Rain's 2026-08-03 log) and spammed chat warnings.
+    local worst = n
+    if type(layer_size) == "number" and layer_size > 0 and type(arr) == "table" then
+        local per_layer = {}
+        worst = 0
+        for i = 1, n do
+            local layer = math.ceil((tonumber(arr[i]) or 0) / layer_size)
+            per_layer[layer] = (per_layer[layer] or 0) + 1
+            if per_layer[layer] > worst then worst = per_layer[layer] end
+        end
+    end
+    local over = (type(cap) == "number" and worst > cap) and " OVER-CAP!" or ""
     _info(label, "key=%s persisted_slots=%d cap=%s indices=[%s]%s",
         tostring(key), n, tostring(cap), table.concat(vals, ","), over)
     if over ~= "" then
-        mod:warning("[cim:diag] Property '%s' persisted %d slot indices but cap is %s — it will occupy %d grid slots and block the rest. (#86 over-occupancy)",
-            tostring(key), n, tostring(cap), n)
+        mod:warning("[cim:diag] Property '%s' persisted %d slot indices in one layer but cap is %s — it will occupy %d grid slots and block the rest. (#86 over-occupancy)",
+            tostring(key), worst, tostring(cap), worst)
     end
 end
 
@@ -1199,6 +1218,24 @@ mod:hook_safe("HeroWindowWeaveProperties", "on_enter", function(self)
     -- (HeroWindowWeaveProperties, on_enter) registration (VMF drops the second).
     if mod._cim_suppress_skilltree_rings_in_mission and mod._cim_is_in_keep then
         mod._cim_suppress_skilltree_rings_in_mission(self, mod._cim_is_in_keep())
+    end
+    -- #404 always-on, bounded view-open census. The user's latest attached log
+    -- never entered this class, so it could not distinguish missing picker data
+    -- from missing widget passes. One line per property-editor open now proves
+    -- the selected slot, option data, and surviving draw-array sizes.
+    if printf then
+        local selected_ok, selected = pcall(self._selected_item, self)
+        local data = selected_ok and selected and selected.data or nil
+        local groups, rows = 0, 0
+        for _, options in pairs(self._menu_options or {}) do
+            groups = groups + 1
+            if type(options) == "table" then rows = rows + #options end
+        end
+        printf("[cim:404] properties entered key=%s slot=%s menu_groups=%d menu_rows=%d bottom_widgets=%d top_widgets=%d",
+            tostring((data and data.key) or (selected and selected.key) or "<amulet>"),
+            tostring((data and data.slot_type) or "amulet"), groups, rows,
+            type(self._bottom_widgets) == "table" and #self._bottom_widgets or 0,
+            type(self._top_widgets) == "table" and #self._top_widgets or 0)
     end
     if mod._cim_autodump_props_open then pcall(mod._cim_autodump_props_open, self) end
     if mod._cim_autodump_jewelry_probe then

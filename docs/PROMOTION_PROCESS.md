@@ -98,9 +98,21 @@ pwsh tools/promote/promote.ps1 -Mod crafting_in_modded -Apply -Version 0.9.0
 stable `itemV2.cfg` identity (`published_id`, `visibility` — NEVER copies the dev
 `published_id`; the upload gate aborts on collision), sets the version, and verifies the
 result is grep-clean of dev identity. It does **not** ship — run `ship.ps1` after
-the suffix rule authorizes it. See the script header for the full contract and the bundle-count gotcha
-(dev builds 4 bundles, stable 3 — an orphaned dev render_config bundle; not missing
-content). Reference: memory `reference_cim_dev_to_stable_promotion`.
+the suffix rule authorizes it. See the script header for the full contract. Stable tracks one more
+bundle than dev: the SDK's tool-only LUT sidecar, which dev's inventory row excludes. It is not
+missing content. Reference: memory `reference_cim_dev_to_stable_promotion`.
+
+A rollup also has to do what the script does not:
+
+1. Grep every mod for the dev id on each contract the port touches, and publish those consumers
+   BEFORE the stable mod. Normalization changes the id they compare against.
+2. Update gate data pinned to stable paths in the same PR: `tools/shared_lib/manifest.psd1`,
+   `qa/native_resource_contracts.psd1`, `qa/diagnostic_ownership.psd1`, `qa/baselines/*`,
+   `qa/decomposition_contracts.psd1`, and tests that pin the old stable code.
+3. Remove retired stable files by hand. The script never deletes.
+4. In the legacy claim lane, port at X-1, claim, then write X to Lua, cfg title, cfg banner and
+   CHANGELOG. Refresh the cfg description.
+5. Run full `qa/run_all.ps1`, not only `-Quick`. `check_file_sizes` does not run in BuildOnly.
 
 ---
 

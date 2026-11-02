@@ -31,9 +31,6 @@ $script:stableProseDebt = @{
         'inject_adventure_maps_tooltip = { en = "Experimental. Injected missions carry Chaos Wastes pickups and altars, and their tome and grimoire spots become Chests of Trials. Finale arenas, the Citadel of Eternity, and Belakor''s Temple are never replaced.\n\nHost-only. Requires game restart." },',
         'ct_blessed_bots_tooltip = { en = "Gives every bot three Chaos Wastes survival boons in any game mode to keep them alive longer: they gain power and healing when all allies are down, gain speed and brief damage protection at low health, and make downed allies near them invulnerable. Host-only. Experimental." },'
     )
-    'crafting_in_modded/scripts/mods/crafting_in_modded/crafting_in_modded_localization.lua' = @(
-        'en = "Opens the Athanor (the Winds of Magic forge) as a modded weapon crafting menu. Always works in the Keep and the Chaos Wastes hub. Inside missions it is experimental and follows the ''Allow crafting bench in mission'' option in Tweaker: GUI''s In-Mission Menus, the same toggle the Standard Crafting Bench uses.",'
-    )
     'general_tweaker/scripts/mods/general_tweaker/general_tweaker_localization.lua' = @(
         'gt_bot_rescue_awaiting_tooltip = { en = "Vanilla bots ignore a teammate waiting to be rescued at a respawn point; this sends them to go free that ally. Works only when you are the host; experimental, so verify it in game." },'
     )
