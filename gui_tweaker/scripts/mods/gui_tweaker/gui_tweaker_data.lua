@@ -20,6 +20,13 @@ local GUT_SCOREBOARD_SORT_OPTIONS = {
     { text = "gut_scoreboard_sort_kills", value = "kills_total" },
 }
 
+local GUT_SCOREBOARD_PAGE_OPTIONS = {
+    { text = "gut_scoreboard_page_1", value = 1 },
+    { text = "gut_scoreboard_page_2", value = 2 },
+    { text = "gut_scoreboard_page_3", value = 3 },
+    { text = "gut_scoreboard_page_4", value = 4 },
+}
+
 -- Inventory character-preview lighting (#522). The runtime module applies a
 -- world-local post-blend exposure multiplier without changing packages/levels.
 local GUT_INV_BACKDROP_OPTIONS = {
@@ -44,10 +51,11 @@ local GUT_INV_BACKDROP_OPTIONS = {
 -- fragile (VMF unfolds this data table at gut's registration; cim may not have
 -- registered yet), so fall back to the engine ModManager manifest, which is built
 -- from the full enabled-mod list BEFORE any mod's Lua runs (mod_manager.lua:278-343;
--- entries carry Workshop title `name` + `enabled`). "Crafting in Modded" covers cim
--- and cim_dev (both Workshop titles start with it).
+-- entries carry the numeric Workshop id and enabled flag). The stable and Dev
+-- Workshop titles are identical, so only the exact stable item identifies CIM.
+-- Source: scripts/managers/mod/mod_manager.lua:292,324-338.
 local function _cim_present()
-    if get_mod("cim") or get_mod("cim_dev") then
+    if get_mod("cim") then
         return true
     end
     local mod_mgr = rawget(_G, "Managers") and Managers.mod
@@ -55,8 +63,7 @@ local function _cim_present()
     if type(mods) == "table" then
         for i = 1, (mod_mgr._num_mods or #mods) do
             local entry = mods[i]
-            if entry and entry.enabled and type(entry.name) == "string"
-               and entry.name:find("Crafting in Modded", 1, true) then
+            if entry and entry.enabled and tonumber(entry.id) == 3721038774 then
                 return true
             end
         end
@@ -249,6 +256,14 @@ local options_data = {
                                         default_value = false,
                                         tooltip       = "gut_vanilla_persistent_ammo_tooltip",
                                     },
+                                    -- (#314 phase 2) Simple UI dropdown fitting; inert
+                                    -- without Simple UI. See _gut_simple_ui_dropdowns.lua.
+                                    {
+                                        setting_id    = "gut_simple_ui_fit_dropdowns",
+                                        type          = "checkbox",
+                                        default_value = true,
+                                        tooltip       = "gut_simple_ui_fit_dropdowns_tooltip",
+                                    },
                                 },
                             },
                         },
@@ -269,6 +284,52 @@ local options_data = {
                                 default_value = "player_name",
                                 options       = GUT_SCOREBOARD_SORT_OPTIONS,
                                 tooltip       = "gut_scoreboard_live_sort_tooltip",
+                            },
+                            {
+                                setting_id    = "gut_scoreboard_live_page",
+                                type          = "dropdown",
+                                default_value = 1,
+                                options       = GUT_SCOREBOARD_PAGE_OPTIONS,
+                                tooltip       = "gut_scoreboard_live_page_tooltip",
+                            },
+                            {
+                                setting_id      = "gut_scoreboard_next_page_hotkey",
+                                type            = "keybind",
+                                keybind_trigger = "pressed",
+                                keybind_type    = "function_call",
+                                function_name   = "gut_scoreboard_next_page",
+                                default_value   = {},
+                                tooltip         = "gut_scoreboard_next_page_hotkey_tooltip",
+                            },
+                            {
+                                setting_id    = "gut_scoreboard_custom_stats",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "gut_scoreboard_custom_stats_tooltip",
+                            },
+                            {
+                                setting_id  = "gut_scoreboard_topic_visibility_group",
+                                type        = "group",
+                                tooltip     = "gut_scoreboard_topic_visibility_group_tooltip",
+                                sub_widgets = {
+                                    { setting_id = "gut_scoreboard_topic_kills_elites_visible", type = "checkbox", default_value = true },
+                                    { setting_id = "gut_scoreboard_topic_kills_specials_visible", type = "checkbox", default_value = true },
+                                    { setting_id = "gut_scoreboard_topic_kills_total_visible", type = "checkbox", default_value = true },
+                                    { setting_id = "gut_scoreboard_topic_kills_melee_visible", type = "checkbox", default_value = true },
+                                    { setting_id = "gut_scoreboard_topic_kills_ranged_visible", type = "checkbox", default_value = true },
+                                    { setting_id = "gut_scoreboard_topic_damage_taken_visible", type = "checkbox", default_value = true },
+                                    { setting_id = "gut_scoreboard_topic_damage_dealt_visible", type = "checkbox", default_value = true },
+                                    { setting_id = "gut_scoreboard_topic_damage_dealt_bosses_visible", type = "checkbox", default_value = true },
+                                    { setting_id = "gut_scoreboard_topic_headshots_visible", type = "checkbox", default_value = true },
+                                    { setting_id = "gut_scoreboard_topic_saves_visible", type = "checkbox", default_value = true },
+                                    { setting_id = "gut_scoreboard_topic_revives_visible", type = "checkbox", default_value = true },
+                                    { setting_id = "gut_scoreboard_topic_aidings_visible", type = "checkbox", default_value = true },
+                                    { setting_id = "gut_scoreboard_topic_times_revived_visible", type = "checkbox", default_value = true },
+                                    { setting_id = "gut_scoreboard_topic_friendly_fire_damage_visible", type = "checkbox", default_value = true },
+                                    { setting_id = "gut_scoreboard_topic_melee_damage_dealt_visible", type = "checkbox", default_value = true },
+                                    { setting_id = "gut_scoreboard_topic_ranged_damage_dealt_visible", type = "checkbox", default_value = true },
+                                    { setting_id = "gut_scoreboard_topic_permanent_health_restored_visible", type = "checkbox", default_value = true },
+                                },
                             },
                         },
                     },

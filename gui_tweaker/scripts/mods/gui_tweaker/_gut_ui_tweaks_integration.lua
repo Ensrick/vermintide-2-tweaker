@@ -296,14 +296,13 @@ _rt_register("uitweaks_bridged_to_stock_settings", function()
     local call_form = "uitweaks_live_group" .. ".apply(out"
     for _, fn in ipairs({ "_mod_tweaker_view.lua", "_mod_tweaker_state.lua" }) do
         local txt = _gut_read_all(dir .. fn)
-        if txt then
-            if not txt:find(call_form, 1, true) then
-                return fn .. " no longer calls the shared UI Tweaks live-group owner (#312)"
-            end
-            if not txt:find("_profile_excluded_owners", 1, true) then
-                return fn .. " no longer keeps UI Tweaks out of GUT profile snapshots (#312)"
-            end
+        if txt and not txt:find("bind_catalog", 1, true) then
+            return fn .. " no longer binds the shared category catalog (#312)"
         end
+    end
+    local catalog = _gut_read_all(dir .. "_mod_tweaker_view_catalog.lua")
+    if catalog and not catalog:find(call_form, 1, true) then
+        return "shared catalog no longer calls the UI Tweaks live-group owner (#312)"
     end
     local owner = _gut_read_all(dir .. "_gut_uitweaks_live_group.lua")
     if owner and (not owner:find(marker, 1, true)
@@ -411,6 +410,15 @@ _rt_register("freecam_invariants", function()
     if not fc:find("_clear_free_flight", 1, true) then
         return "freecam dropped the _clear_free_flight dead-world release (class-32 force-exit regressed)"
     end
+    -- #1796: source availability is optional in retail; the actual-module host
+    -- suite proves nested/repeated release behavior without mutating a live cam.
+    if not fc:find("local _owns_third_person = false", 1, true)
+        or not fc:find("local function _restore_third_person()", 1, true) then
+        return "freecam lost its one-shot third-person snapshot ownership (#1796)"
+    end
+    if not fc:find("not Managers.free_flight.input_manager", 1, true) then
+        return "freecam lost its pre-entry native input-manager readiness gate (#1796)"
+    end
 end)
 
 -- (#313) Crosshair Kill Confirmation bridge regression tests. Split needles so the
@@ -470,7 +478,7 @@ _rt_register("issue528_ckc_vanilla_options_isolated", function()
         "prepare_settings_" .. "definition",
         "_gut_mt_focus_" .. "request",
     }
-    for _, fn in ipairs({ "_mod_tweaker_view.lua" }) do
+    for _, fn in ipairs({ "_gut_video_profiles.lua", "_mod_tweaker_view.lua" }) do
         local txt = _gut_read_all(dir .. fn)
         if txt then
             for _, needle in ipairs(forbidden) do
@@ -479,6 +487,10 @@ _rt_register("issue528_ckc_vanilla_options_isolated", function()
                 end
             end
         end
+    end
+    local video = _gut_read_all(dir .. "_gut_video_profiles.lua")
+    if video and not video:find("local built_definition = definition", 1, true) then
+        return "#528 non-Video Options definitions no longer pass through by identity"
     end
 end)
 

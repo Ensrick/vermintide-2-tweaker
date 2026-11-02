@@ -309,30 +309,20 @@ return function(H, repo_root)
             local file = assert(io.open(module_path, "rb"))
             local module_source = file:read("*a")
             file:close()
-            if stream == "gui_tweaker_dev" then
-                H.truthy(module_source:find(
-                    "snapshot, snapshot_detail = policy.snapshot_bot_loadout", 1, true))
-                H.truthy(module_source:find(
-                    "migration.entry.bot_loadout = migration.snapshot", 1, true))
-                H.truthy(module_source:find(
-                    "Runtime.snapshots_equal(bot[career_name], snapshot", 1, true))
-                H.truthy(module_source:find(
-                    "policy.snapshot_bot_loadout(snapshot, slot_names)", 1, true))
-                H.truthy(module_source:find(
-                    "bot[replacement.career_name] = replacement.snapshot", 1, true))
-                H.truthy(module_source:find('"get_bot_loadout"', 1, true),
-                    "dev bot consumer boundary is not hooked")
-                H.truthy(module_source:find('safe_overlay(self, "bot-read")', 1, true),
-                    "dev bot consumer boundary does not reconcile the runtime cache")
-            else
-                H.truthy(module_source:find(
-                    "entry.bot_loadout = policy.snapshot_bot_loadout", 1, true))
-                H.truthy(module_source:find(
-                    "bot[career_name] = policy.snapshot_bot_loadout(snapshot", 1, true),
-                    "stable detached snapshot behavior changed before promotion")
-                H.equal(module_source:find('"get_bot_loadout"', 1, true), nil,
-                    "in-flight dev bot-read repair leaked into stable")
-            end
+            H.truthy(module_source:find(
+                "snapshot, snapshot_detail = policy.snapshot_bot_loadout", 1, true))
+            H.truthy(module_source:find(
+                "migration.entry.bot_loadout = migration.snapshot", 1, true))
+            H.truthy(module_source:find(
+                "Runtime.snapshots_equal(bot[career_name], snapshot", 1, true))
+            H.truthy(module_source:find(
+                "policy.snapshot_bot_loadout(snapshot, slot_names)", 1, true))
+            H.truthy(module_source:find(
+                "bot[replacement.career_name] = replacement.snapshot", 1, true))
+            H.truthy(module_source:find('"get_bot_loadout"', 1, true),
+                stream .. " bot consumer boundary is not hooked")
+            H.truthy(module_source:find('safe_overlay(self, "bot-read")', 1, true),
+                stream .. " bot consumer boundary does not reconcile the runtime cache")
 
             local owner_path = repo_root .. "/" .. stream .. "/scripts/mods/"
                 .. stream .. "/_gut_native_loadouts.lua"
@@ -340,7 +330,18 @@ return function(H, repo_root)
             local owner_source = owner:read("*a")
             owner:close()
             H.truthy(owner_source:find("BotLoadoutSnapshot.install(mod", 1, true))
-            H.truthy(owner_source:find('name = "issue954_bot_loadout_snapshot"', 1, true))
+            if stream == "gui_tweaker" then
+                H.truthy(owner_source:find(
+                    'mod:dofile("scripts/mods/gui_tweaker/_gut_native_loadout_checks")', 1, true))
+                H.truthy(owner_source:find("M.rt_checks = NativeChecks.create(mod", 1, true))
+                local checks = assert(io.open(repo_root .. "/" .. stream .. "/scripts/mods/"
+                    .. stream .. "/_gut_native_loadout_checks.lua", "rb"))
+                local checks_source = checks:read("*a"); checks:close()
+                H.truthy(checks_source:find('name = "issue954_bot_loadout_snapshot"', 1, true))
+                H.truthy(checks_source:find("BotLoadoutSnapshot.live_check(", 1, true))
+            else
+                H.truthy(owner_source:find('name = "issue954_bot_loadout_snapshot"', 1, true))
+            end
         end
     end)
 

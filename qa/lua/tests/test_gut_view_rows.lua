@@ -1,7 +1,8 @@
 -- #2: execute the whole standalone owner, its installed row child and consumers.
 -- Factories are table-only boundary doubles, not an engine/renderer simulation.
-return function(H, repo_root, source_override)
-    local root = "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/"
+local function suite(H, repo_root, source_override, stream)
+    local root = stream .. "/scripts/mods/" .. stream .. "/"
+    local module_path = "scripts/mods/" .. stream .. "/"
     local view_path, rows_path = root .. "_mod_tweaker_view.lua", root .. "_mod_tweaker_view_rows.lua"
     local function read(path)
         if source_override and source_override[path] then return source_override[path] end
@@ -96,7 +97,8 @@ return function(H, repo_root, source_override)
         local pure = {
             _mod_tweaker_search = true, _mod_tweaker_ordering = true,
             _mod_tweaker_label_policy = true, _mod_tweaker_exclusive_layout = true,
-            _mod_tweaker_view_catalog = true,
+            _mod_tweaker_view_catalog = true, _gut_uitweaks_live_group = true,
+            _mod_tweaker_external_group = true, _mod_tweaker_disabled_sections = true,
             _mod_tweaker_view_pending = true,
         }
         local function load_source(path)
@@ -128,7 +130,7 @@ return function(H, repo_root, source_override)
             if name == "_gut_dx12_fence630" then return {} end
             return { install = function() end }
         end
-        env.get_mod = function(id) H.equal(id, "gut_dev"); return mod end
+        env.get_mod = function(id) H.equal(id, stream == "gui_tweaker" and "gut" or "gut_dev"); return mod end
         env.class = function(class) class = class or {}; class.__index = class; return class end
         env.printf = function(...) printed[#printed + 1] = pack(...) end
         if options.defer_parent then
@@ -136,7 +138,7 @@ return function(H, repo_root, source_override)
                 provider = provider, values = values, defs = defs, trace = trace,
                 printed = printed, warnings = warnings, token = token, env = env, mod = mod }
         end
-        local catalog = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_view_catalog")
+        local catalog = mod:dofile(module_path .. "_mod_tweaker_view_catalog")
         local pending = load_source(root .. "_mod_tweaker_view_pending.lua")
         local ok, Class = pending.bind_view_supplier(function() return pcall(load_source, view_path) end, catalog.bind)()
         H.truthy(ok, Class)
@@ -167,7 +169,7 @@ return function(H, repo_root, source_override)
     end
     H.test("GUT row child has one hook-free installed owner and retains method identities", function()
         local source, child = read(view_path), read(rows_path)
-        H.equal(count(source, 'mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_view_rows")'), 1)
+        H.equal(count(source, 'mod:dofile("' .. module_path .. '_mod_tweaker_view_rows")'), 1)
         H.equal(count(source, "function ModTweakerView:_build_node_row"), 0)
         H.equal(count(source, "function ModTweakerView:_append_row"), 0)
         for _, forbidden in ipairs({ "mod:dofile(", "mod:hook", "mod:command", "function mod.update", "function mod.on_" }) do
@@ -176,8 +178,8 @@ return function(H, repo_root, source_override)
         local f = fixture()
         H.equal(f.deps.mt(), f.mod.mod_tweaker)
         H.equal(f.deps.owner(f.category, "setting"), f.provider)
-        local package = read("gui_tweaker_dev/resource_packages/gui_tweaker_dev/gui_tweaker_dev.package")
-        H.truthy(package:find('"scripts/mods/gui_tweaker_dev/*"', 1, true))
+        local package = read(stream .. "/resource_packages/" .. stream .. "/" .. stream .. ".package")
+        H.truthy(package:find('"' .. module_path .. '*"', 1, true))
     end)
     H.test("GUT row header preserves five returns without a factory or warning", function()
         local f = fixture(); local result, offset = build(f, "header")
@@ -365,4 +367,9 @@ return function(H, repo_root, source_override)
         end)
     end
     return { fixture = fixture, read = read }
+end
+return function(H, repo_root, source_override)
+    local dev = suite(H, repo_root, source_override, "gui_tweaker_dev")
+    suite(H, repo_root, source_override, "gui_tweaker")
+    return dev
 end

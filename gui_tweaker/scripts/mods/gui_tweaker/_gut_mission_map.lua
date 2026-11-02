@@ -1,4 +1,5 @@
 local mod = get_mod("gut")
+local VotePolicy = mod:dofile("scripts/mods/gui_tweaker/_gut_mission_vote_policy")
 
 -- _gut_mission_map.lua -- in-mission mission-selection map access (#305).
 --
@@ -104,6 +105,25 @@ local mod = get_mod("gut")
 -- (GameModeManager.start_specific_level, game_mode_manager.lua:678-692): set_next_level was
 -- already called at :363, so promote alone completes the transition with NO win/loss.
 --
+-- MISSION-VOTE HUD (#700). AdventureMechanism deliberately reuses vanilla's
+-- `game_settings_vote` for the selection. That template is already present in
+-- NetworkLookup.voting_types on every peer, but its `ingame_vote` field is false
+-- because vanilla starts it from the keep. IngameVotingUI draws only while
+-- VoteManager.is_ingame_vote() is true, so after StartGameView closes, a client in
+-- a live mission has no accept/decline surface and times out to "no". The narrow
+-- vote-start hooks below promote only an active game-settings vote observed in a
+-- live Adventure mission. Promotion shallow-copies the active vote's template and
+-- flips `ingame_vote` on that per-vote copy: this satisfies BOTH the HUD draw gate
+-- (VoteManager.is_ingame_vote, vote_manager.lua:282) and the independent input gate
+-- (VoteManager.update, vote_manager.lua:334) without mutating VoteTemplates, changing
+-- the RPC payload, appending a NetworkLookup key, or altering keep voting.
+-- IngameVotingUI.start_vote localizes `template.text` only through the
+-- `modify_title_text` branch (ingame_voting_ui.lua:116-121), unlike the keep's
+-- MissionVotingUI. The promoted copy therefore supplies a bounded title modifier
+-- when vanilla supplied none. It prefers a usable native localization and otherwise
+-- returns GUT's dedicated localized title, so the HUD never depends on the blank
+-- `game_settings_vote` localization observed by both peers in #700.
+--
 -- TRANSITION (verified): Managers.ui:handle_transition("start_game_view_force",
 -- { menu_state_name = "play", use_fade = true }).
 --   * start_game_view_force sets current_view="start_game_view" + exit_to_game=true
@@ -152,14 +172,17 @@ local mod = get_mod("gut")
 -- windows (StartGameWindowAreaSelectionConsoleV2._assign_video_player,
 -- StartGameWindowAreaSelection._setup_video_player -- the #336 crash guards), plus one
 -- hook_safe on MatchmakingStateWaitForCountdown.on_enter (auto-start arm) and one full
--- hook on GameModeManager.complete_level (clean-transition divert). It also chains
+-- hook on GameModeManager.complete_level (clean-transition divert), plus two narrow
+-- VoteManager vote-start hooks and one IngameVotingUI.start_vote diagnostic hook
+-- (#700 client HUD bridge). It also chains
 -- mod.on_game_state_changed (preview-package arm; dofile'd after the main chunk defines
 -- it). HOOK PRE-FLIGHT (grep 2026-07-05, re-run 2026-07-06 for the area windows): gut
 -- registers no other hook on StartGameWindowBackgroundConsole, none on
 -- StartGameWindowAreaSelectionConsoleV2 / StartGameWindowAreaSelection (every other repo
 -- hit is a comment or CHANGELOG line), none on MatchmakingStateWaitForCountdown, and on
 -- GameModeManager only .has_activated_mutator (hb/hide_elements.lua -- a different
--- method, no collision).
+-- method, no collision), and no other hook on VoteManager._server_start_vote,
+-- VoteManager._start_vote_base, or IngameVotingUI.start_vote.
 
 local _pf = rawget(_G, "printf") or function(fmt, ...) print(string.format(fmt, ...)) end
 
@@ -170,6 +193,199 @@ local function _mech_label(mech)
     if mech == "weave" then return "a Winds of Magic weave" end
     return tostring(mech)
 end
+
+-- ---------------------------------------------------------------
+-- MISSION-VOTE HUD (#700). See the MISSION-VOTE HUD docstring above.
+-- ---------------------------------------------------------------
+
+local function _active_vote_context(self)
+    local candidate = type(self) == "table" and self.active_voting or nil
+    local active = VotePolicy.active_vote(candidate)
+    local gm = Managers.state and Managers.state.game_mode
+    local level_key = (gm and gm.level_key) and gm:level_key() or nil
+    local mechanism = Managers.mechanism and Managers.mechanism.current_mechanism_name
+        and Managers.mechanism:current_mechanism_name() or nil
+    local is_in_inn = rawget(_G, "DamageUtils") and DamageUtils.is_in_inn or false
+
+    return active, mechanism, level_key, is_in_inn
+end
+
+local function _resolve_mission_vote_title(template)
+    local source_key = type(template) == "table" and template.text or nil
+    local localize = rawget(_G, "Localize")
+    local native_title
+    if type(source_key) == "string" and type(localize) == "function" then
+        local ok, value = pcall(localize, source_key)
+        if ok then
+            native_title = value
+        end
+    end
+    if VotePolicy.usable_title(native_title, source_key) then
+        return native_title, "native"
+    end
+
+    local ok, fallback_title = pcall(mod.localize, mod, "gut_mission_vote_title")
+    if not ok then
+        fallback_title = nil
+    end
+    if VotePolicy.usable_title(fallback_title, "gut_mission_vote_title") then
+        return fallback_title, "gut"
+    end
+
+    return nil, "missing"
+end
+
+local function _promote_active_mission_vote(self)
+    local active, mechanism, level_key, is_in_inn = _active_vote_context(self)
+    local vote_name = active and active.name or nil
+    local active_template = active and active.template or nil
+
+    if VotePolicy.needs_ingame_hud(vote_name, mechanism, level_key, is_in_inn)
+        and type(active_template) == "table"
+        and active_template.ingame_vote ~= true then
+        local resolved_title, title_source = _resolve_mission_vote_title(active_template)
+        local template = VotePolicy.promote_template(active_template, resolved_title)
+        if not template then
+            _pf("[gut:700] mission vote title unavailable; promotion skipped: vote=%s mechanism=%s level=%s",
+                tostring(vote_name), tostring(mechanism), tostring(level_key))
+            return
+        end
+        template._gut700_title_source = title_source
+        active.template = template
+        _pf("[gut:700] mission vote promoted to localized IngameVotingUI: vote=%s mechanism=%s level=%s peer=%s title_source=%s",
+            tostring(vote_name), tostring(mechanism), tostring(level_key),
+            tostring(Network.peer_id()), tostring(title_source))
+    end
+end
+
+local _gut_consolidated_server_vote_start_hook = true
+mod:hook("VoteManager", "_server_start_vote", function(func, self, name, ignore_peer_list, data)
+    local returns = VotePolicy.pack_returns(func(self, name, ignore_peer_list, data))
+    _promote_active_mission_vote(self)
+    return VotePolicy.forward_returns(returns)
+end)
+
+local _gut_consolidated_client_vote_start_hook = true
+mod:hook("VoteManager", "_start_vote_base", function(func, self, peer_id, vote_type_id, sync_data, voters)
+    local returns = VotePolicy.pack_returns(
+        func(self, peer_id, vote_type_id, sync_data, voters))
+    _promote_active_mission_vote(self)
+    return VotePolicy.forward_returns(returns)
+end)
+
+-- IngameVotingUI.update invokes start_vote once at the vote-start edge. Keep a weak
+-- active-vote ledger as a second bound so a UI reconstruction cannot spam the log.
+local _gut700_reported_votes = setmetatable({}, { __mode = "k" })
+local _gut700_title_boundary_hook = true
+mod:hook_safe("IngameVotingUI", "start_vote", function(self, active_voting)
+    if type(active_voting) ~= "table" then
+        return
+    end
+    local template = active_voting.template
+    if type(template) ~= "table" or template._gut700_promoted ~= true
+        or _gut700_reported_votes[active_voting] then
+        return
+    end
+    _gut700_reported_votes[active_voting] = true
+
+    local source_key = template.text
+    local localized_input = template._gut700_title_input
+    local modifier_output = template._gut700_title_output
+    local background = type(self) == "table" and self.background or nil
+    local content = type(background) == "table" and background.content or nil
+    local final_title = type(content) == "table" and content.info_text or nil
+    local boundary = VotePolicy.title_boundary(
+        source_key, localized_input, modifier_output, final_title)
+    local data = active_voting.data
+    local mission_id = type(data) == "table" and data.mission_id or nil
+    local vote_options = template.vote_options
+    local accept = type(vote_options) == "table" and vote_options[1] or nil
+    local decline = type(vote_options) == "table" and vote_options[2] or nil
+    local accept_key = type(accept) == "table" and accept.text or nil
+    local decline_key = type(decline) == "table" and decline.text or nil
+
+    _pf("[gut:700] title-boundary source=%s title_source=%s input_len=%s modifier_len=%s final_len=%s final=%s mission=%s accept=%s decline=%s result=%s",
+        tostring(boundary.source), tostring(template._gut700_title_source),
+        tostring(boundary.input_len), tostring(boundary.modifier_len),
+        tostring(boundary.final_len), string.format("%q", tostring(final_title)),
+        tostring(mission_id),
+        tostring(accept_key), tostring(decline_key), tostring(boundary.result))
+end)
+
+mod._gut700_mission_vote_policy = VotePolicy
+mod._gut700_vote_popup_hooks_installed = _gut_consolidated_server_vote_start_hook
+    and _gut_consolidated_client_vote_start_hook and _gut700_title_boundary_hook
+_pf("[gut:700] hooks installed: VoteManager promotion + bounded IngameVotingUI title boundary")
+
+local rt_register = mod._gut_rt_register
+if type(rt_register) == "function" then
+    rt_register("issue700_mission_vote_client_popup", function()
+        if mod._gut700_vote_popup_hooks_installed ~= true then
+            return "VoteManager vote-start bridge marker missing"
+        end
+        local vote_manager = rawget(_G, "VoteManager")
+        local ingame_voting_ui = rawget(_G, "IngameVotingUI")
+        if type(vote_manager) ~= "table"
+            or type(vote_manager._server_start_vote) ~= "function"
+            or type(vote_manager._start_vote_base) ~= "function" then
+            return "VoteManager vote-start surfaces unavailable"
+        end
+        if type(ingame_voting_ui) ~= "table"
+            or type(ingame_voting_ui.start_vote) ~= "function" then
+            return "IngameVotingUI title-boundary surface unavailable"
+        end
+        if not VotePolicy.needs_ingame_hud("game_settings_vote", "adventure", "military", false) then
+            return "live Adventure game-settings vote was not promoted"
+        end
+        local promoted = VotePolicy.promote_template({
+            text = "game_settings_vote",
+            ingame_vote = false,
+        }, "Change Mission?")
+        if not promoted or promoted.ingame_vote ~= true
+            or type(promoted.modify_title_text) ~= "function"
+            or promoted.modify_title_text("") ~= "Change Mission?"
+            or promoted._gut700_promoted ~= true then
+            return "promoted vote title does not traverse the HUD localization path"
+        end
+        if VotePolicy.needs_ingame_hud("game_settings_vote", "adventure", "inn_level", true) then
+            return "keep game-settings vote was incorrectly promoted"
+        end
+        if VotePolicy.needs_ingame_hud("kick_player", "adventure", "military", false) then
+            return "unrelated ingame vote was incorrectly reclassified"
+        end
+    end)
+end
+
+mod:command("verify_gut_mission_vote", "Verify the in-mission mission-vote HUD bridge.", function()
+    local voting = Managers.state and Managers.state.voting
+    local active, mechanism, level_key, is_in_inn
+    if voting then
+        active, mechanism, level_key, is_in_inn = _active_vote_context(voting)
+    end
+    local vote_name = active and active.name or "none"
+    local should_promote = active and VotePolicy.needs_ingame_hud(
+        active.name, mechanism, level_key, is_in_inn) or false
+    local policy_ok = VotePolicy.needs_ingame_hud(
+        "game_settings_vote", "adventure", "military", false)
+        and not VotePolicy.needs_ingame_hud(
+            "game_settings_vote", "adventure", "inn_level", true)
+    local active_ready = not active or active.name ~= "game_settings_vote"
+        or (type(active.template) == "table" and active.template.ingame_vote == true
+            and active.template._gut700_promoted == true)
+    local title_ok, localized_title = pcall(
+        mod.localize, mod, "gut_mission_vote_title")
+    local title_ready = title_ok
+        and VotePolicy.usable_title(localized_title, "gut_mission_vote_title")
+    local pass = mod._gut700_vote_popup_hooks_installed == true and policy_ok
+        and active_ready and title_ready
+    local line = string.format(
+        "[gut:700] verify hooks=%s policy=%s title_ready=%s active_vote=%s active_promoted=%s mechanism=%s level=%s result=%s",
+        tostring(mod._gut700_vote_popup_hooks_installed == true), tostring(policy_ok),
+        tostring(title_ready), tostring(vote_name), tostring(should_promote),
+        tostring(mechanism), tostring(level_key), pass and "PASS" or "FAIL")
+    _pf("%s", line)
+    mod:echo(line)
+end)
 
 -- ---------------------------------------------------------------
 -- BACKDROP SWAP (#336). See the SAFETY docstring above for the crash mechanics.

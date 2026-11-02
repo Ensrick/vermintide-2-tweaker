@@ -37,9 +37,10 @@
 --   `PlayFabMirrorAdventure` (NOT `PlayFabMirrorBase`): class.lua copies parent methods into
 --   the child at definition time (class.lua:51-57), so a base-class hook would silently miss
 --   the live instance (dedicated servers use `PlayFabMirrorDedicated`; the user is P2P-only,
---   so dedicated is out of scope). Realm signal is `script_data["eac-untrusted"]`
---   (application_parameter.lua:150; named `in_modded_realm` at mod_manager.lua:22; VMF's own
---   dev_console gate uses it). Failsafe: if the realm can't be determined we go fully inert.
+--   so dedicated is out of scope). The boot guard owns realm authority:
+--   native MODDED_REALM first, with backend/legacy fallback before game 6.12.
+--   (application_parameter.lua:150-152, source 93dea911). Failsafe: if the realm
+--   can't be determined we go fully inert.
 --
 -- Cross-mod: cim hooks `BackendUtils.set_loadout_item` + `BackendInterfaceItemPlayfab.set_loadout_item`
 -- (equip capture) and cosmetics_tweaker hooks `BackendUtils.set_loadout_item` + the items
@@ -51,6 +52,13 @@
 
 local mod = get_mod("gut")
 local Policy = mod:dofile("scripts/mods/gui_tweaker/_gut_native_loadout_policy")
+local WTTraceCore = mod:dofile("scripts/mods/gui_tweaker/_gut_wt_loadout_trace_core")
+local SelectedLoadoutTraceCore = mod:dofile("scripts/mods/gui_tweaker/_gut_selected_loadout_trace_core")
+local BackendCommit = mod:dofile("scripts/mods/gui_tweaker/_gut_backend_commit")
+local ExitSnapshotCore = mod:dofile("scripts/mods/gui_tweaker/_gut_exit_snapshot_core")
+local LoadoutLifecycle = mod:dofile("scripts/mods/gui_tweaker/_gut_loadout_lifecycle_owner")
+local BootGuard = mod._gut_official_loadout_boot_guard or
+    mod:dofile("scripts/mods/gui_tweaker/_gut_official_loadout_boot_guard")
 
 local MARKER = "native_loadouts_v1"
 
@@ -93,12 +101,76 @@ local WEAPON_SLOT_SET = { slot_melee = true, slot_ranged = true }
 -- cosmetic-equivalent (cosmetic_utils.lua:87-94; set_loadout_item pose branch :661).
 local COSMETIC_SLOT_SET = { slot_skin = true, slot_hat = true, slot_frame = true, slot_pose = true }
 
+local function _is_loadout_slot(slot_name)
+    return GEAR_SLOT_SET[slot_name] or COSMETIC_SLOT_SET[slot_name]
+end
+
 -- The VMF settings key `characters_data` discriminates Adventure from Versus
 -- (`vs_characters_data`), set by the mirror subclass (playfab_mirror_adventure.lua).
 -- We scope the whole feature to the Adventure mirror; Versus stays vanilla.
 local ADVENTURE_DATA_KEY = "characters_data"
 
-local M = { MARKER = MARKER }
+local M = { MARKER = MARKER, loadout_lifecycle_owner = LoadoutLifecycle }
+
+-- Issue #354: an enabled WT cross-character weapon was reported to disappear from
+-- the active modded loadout intermittently across a process restart. There is no
+-- exit-save transaction: GUT captures at BackendUtils.set_loadout_item and persists
+-- immediately, while WT's lower interface hook keeps a separate session-only cache.
+-- Trace only enabled WT weapon/career pairs, only the selected row, and deduplicate
+-- each lifecycle outcome under a hard cap so normal inventory refreshes stay quiet.
+local _wt_trace = WTTraceCore.new(24)
+
+local function _wt_trace_context(career_name, backend_id)
+    local backend = Managers and Managers.backend
+    local iface = backend and backend._interfaces and backend._interfaces.items
+    local mirror = iface and iface._backend_mirror
+    local item = (iface and iface._items and iface._items[backend_id])
+        or (mirror and mirror._inventory_items and mirror._inventory_items[backend_id])
+    local data = item and (item.data or item)
+    local item_key = item and (item.key or (data and data.key))
+    local wt_dev = get_mod("wt_dev")
+    local wt = get_mod("wt")
+    if not item_key then
+        -- The most important failure outcome is precisely that the stored backend ID
+        -- is absent during launch. The item key cannot be recovered in that state, so
+        -- retain one explicit unresolved record when either WT build is installed.
+        return (wt_dev or wt) and "<unresolved>" or nil, "unknown"
+    end
+
+    local setting_id = "unlock_" .. tostring(career_name) .. "_" .. tostring(item_key)
+    local owner = wt_dev and wt_dev:get(setting_id) == true and wt_dev
+        or wt and wt:get(setting_id) == true and wt
+    if not owner then return nil end
+
+    local master = ItemMasterList and rawget(ItemMasterList, item_key)
+    local can_wield = master and master.can_wield or (data and data.can_wield)
+    local active = false
+    if type(can_wield) == "table" then
+        for i = 1, #can_wield do
+            if can_wield[i] == career_name then active = true; break end
+        end
+    end
+    return item_key, active
+end
+
+local function _trace_wt_loadout(phase, career_name, slot_name, idx, backend_id, result)
+    if not WEAPON_SLOT_SET[slot_name] or not backend_id then return end
+    local item_key, can_wield = _wt_trace_context(career_name, backend_id)
+    if not item_key then return end
+    local fields = {
+        phase = phase, career = career_name, slot = slot_name, index = idx,
+        backend_id = backend_id, item_key = item_key,
+        can_wield = can_wield, result = result,
+    }
+    if WTTraceCore.take(_wt_trace, fields) then
+        printf("[gut:354] phase=%s career=%s slot=%s idx=%s backend_id=%s item=%s wt_can_wield=%s result=%s trace=%d/24",
+            tostring(phase), tostring(career_name), tostring(slot_name), tostring(idx),
+            tostring(backend_id), tostring(item_key), tostring(can_wield), tostring(result),
+            _wt_trace.count)
+    end
+end
+
+M._issue354_trace_wired = true
 
 -- ------------------------------------------------------------------
 -- Store: VMF setting `native_loadouts`, kept in an in-memory working copy so the
@@ -107,6 +179,7 @@ local M = { MARKER = MARKER }
 --       selected_index = <int>,
 --       bot_index      = <int or nil>,
 --       bot_loadout    = <detached slot snapshot or nil>,
+--       _bot_designation_snapshot_v2 = <one-time native-import marker>,
 --       loadouts       = { [i] = { [slot_name] = backend_id, ..., talents = "1,2,.." } },
 --   }
 -- Each loadout entry mirrors `_career_data[career][i]` 1:1 (slots + "talents" key), so
@@ -204,8 +277,7 @@ end
 -- Realm detection + gate. Failsafe: any uncertainty => inert (official behavior).
 -- ------------------------------------------------------------------
 local function _in_modded_realm()
-    local sd = rawget(_G, "script_data")
-    return (sd and sd["eac-untrusted"]) and true or false
+    return BootGuard.in_modded_realm()
 end
 
 -- Tri-mode gate (2026-07-02 reorg: the store itself is INTRINSIC - no enable toggle):
@@ -247,12 +319,16 @@ local function _mirror_mode(mirror)
 end
 
 -- Interface/UI hooks lack the mirror on `self`; resolve it to check the same discriminator.
-local function _adventure_mode()
+local function _adventure_mode(items_iface)
     local m = _feature_mode()
     if m == MODE_OFF then return MODE_OFF end
-    local ok, mirror = pcall(function()
-        return Managers.backend:get_interface("items")._backend_mirror
-    end)
+    local mirror = items_iface and items_iface._backend_mirror
+    local ok = mirror ~= nil
+    if not mirror then
+        ok, mirror = pcall(function()
+            return Managers.backend:get_interface("items")._backend_mirror
+        end)
+    end
     return (ok and mirror and mirror._characters_data_key == ADVENTURE_DATA_KEY) and m or MODE_OFF
 end
 
@@ -286,29 +362,32 @@ end
 -- Now: a one-time `_seeded` flag marks a fully-imported entry. A fresh career takes a
 -- full official snapshot. A pre-existing PARTIAL entry (no flag -- either a bare
 -- BU-capture entry or a store persisted by the buggy build) is REPAIRED once: every
--- official loadout row the store is missing is added, and any row that lost its weapons
--- (the corrupt-partial signature -- a legitimately edited loadout ALWAYS keeps both
--- weapon slots) has its missing gear refilled from official. Rows the player genuinely
--- edited (both weapons present) are left untouched, so deliberate jewelry unequips are
--- preserved. Raw field reads only (mirror._career_data / _career_loadouts) -- no
--- interface methods, so no get_item_from_id recursion (v0.2.173 burn).
+-- official loadout row the store is missing is added, and any row that lost a slot
+-- vanilla can never leave empty (the corrupt-partial signature -- weapons fatal at
+-- spawn wield, skin/hat/frame/pose always resolve to some item) has its missing
+-- values refilled from official. Rows missing ONLY unequippable accessory slots
+-- (slot_necklace/slot_ring/slot_trinket_1, inventory_settings.lua:43/52/61) are
+-- HEALTHY, and the repair passes never refill those slots in place -- a deliberate
+-- jewelry unequip is indistinguishable from loss, so it is always preserved (issue
+-- #375 audit fix 2026-08-15; the pure contract lives in Policy.row_is_corrupt_partial
+-- / repair_missing_loadout_slots / repair_corrupt_row). Raw field reads only
+-- (mirror._career_data / _career_loadouts) -- no interface methods, so no
+-- get_item_from_id recursion (v0.2.173 burn).
 -- ------------------------------------------------------------------
 local function _row_is_corrupt_partial(row)
-    -- A legitimately edited loadout always retains both weapon slots; a row missing
-    -- either weapon is a partial capture from the pre-seed BU-equip bug (issue #375).
-    if type(row) ~= "table" then return true end
-    for slot in pairs(WEAPON_SLOT_SET) do
-        if row[slot] == nil then return true end
-    end
-    return false
+    return Policy.row_is_corrupt_partial(row, LOADOUT_SLOT_NAMES)
 end
 
-local function _ensure_seeded(mirror, career_name)
+local function _repair_missing_loadout_slots(entry, official_rows)
+    return Policy.repair_missing_loadout_slots(entry, official_rows, LOADOUT_SLOT_NAMES)
+end
+
+local function _ensure_seeded(mirror, career_name, defer_persist)
     local store = _store()
     local entry = store[career_name]
-    if entry and entry._seeded then return end  -- already fully imported
     local cd = mirror._career_data and mirror._career_data[career_name]
-    if type(cd) ~= "table" or cd[1] == nil then return end  -- official data not ready yet
+    if entry and entry._seeded and entry._slot_integrity_v2 then return false end
+    if type(cd) ~= "table" or cd[1] == nil then return false end
     local selected = (mirror._career_loadouts and mirror._career_loadouts[career_name]) or 1
     if not entry then
         store[career_name] = {
@@ -316,11 +395,14 @@ local function _ensure_seeded(mirror, career_name)
             bot_index = nil,
             loadouts = _deepcopy(cd),   -- array of { slot=id,..., talents=str }
             _seeded = true,
+            _slot_integrity_v2 = true,
         }
-        _persist()
-        printf("[gut:NATIVE_LOADOUTS] seeded career=%s loadouts=%d selected=%d from official (fresh)",
-            tostring(career_name), #cd, selected)
-        return
+        if not defer_persist then _persist() end
+        if not defer_persist then
+            printf("[gut:NATIVE_LOADOUTS] seeded career=%s loadouts=%d selected=%d from official (fresh)",
+                tostring(career_name), #cd, selected)
+        end
+        return true
     end
     -- Repair a partial/bare entry left by the pre-seed bug (issue #375).
     local rows_added, rows_repaired = 0, 0
@@ -331,19 +413,24 @@ local function _ensure_seeded(mirror, career_name)
             entry.loadouts[i] = _deepcopy(off_row)
             rows_added = rows_added + 1
         elseif _row_is_corrupt_partial(st_row) then
-            for k, v in pairs(off_row) do
-                if st_row[k] == nil then st_row[k] = v end
-            end
+            -- Refill every missing official key EXCEPT deliberately-emptiable
+            -- accessory slots (issue #375 audit fix; Policy.repair_corrupt_row).
+            Policy.repair_corrupt_row(st_row, off_row)
             rows_repaired = rows_repaired + 1
         end
     end
+    local slots_repaired = _repair_missing_loadout_slots(entry, cd)
     if entry.selected_index == nil or entry.loadouts[entry.selected_index] == nil then
         entry.selected_index = selected
     end
     entry._seeded = true
-    _persist()
-    printf("[gut:NATIVE_LOADOUTS] repaired career=%s partial store (issue #375): rows_added=%d rows_repaired=%d loadouts=%d selected=%d",
-        tostring(career_name), rows_added, rows_repaired, #entry.loadouts, entry.selected_index)
+    entry._slot_integrity_v2 = true
+    if not defer_persist then _persist() end
+    if not defer_persist then
+        printf("[gut:NATIVE_LOADOUTS] repaired career=%s partial store (issues #375/#402): rows_added=%d rows_repaired=%d slots_repaired=%d loadouts=%d selected=%d",
+            tostring(career_name), rows_added, rows_repaired, slots_repaired, #entry.loadouts, entry.selected_index)
+    end
+    return true
 end
 
 -- Tri-state gear-id resolution: "yes" (item PRESENTABLE right now), "no" (checkable and
@@ -427,6 +514,61 @@ local function _trace_should_emit(career_name, key, idx, value, source)
     end
     return false
 end
+
+-- Issue #375 regression boundary.  A selected native-loadout row has been observed
+-- serving one weapon from a different row after a row switch.  The existing #387
+-- trace identifies each slot independently, but cannot prove which selected row and
+-- caller requested the pair.  Emit one atomic snapshot at the mirror read boundary:
+-- requested/resolved/selected indices, both weapons in the resolved row, both weapons
+-- in the canonical selected row, the value actually returned, and the caller surface.
+-- Reads are hot, so the pure trace core deduplicates per caller/row/slot and caps the
+-- cache at 128 entries.  No command or menu toggle is required to collect evidence.
+local _selected_loadout_trace = SelectedLoadoutTraceCore.new(128)
+
+local function _selected_read_caller()
+    if not (debug and debug.getinfo) then return "unknown" end
+    for level = 3, 10 do
+        local ok, info = pcall(debug.getinfo, level, "nS")
+        if not ok or not info then break end
+        local source = tostring(info.short_src or info.source or "unknown")
+        if not string.find(source, "_gut_native_loadouts", 1, true)
+            and not string.find(source, "vmf_hook", 1, true)
+        then
+            local name = info.name and (":" .. tostring(info.name)) or ""
+            return source .. name
+        end
+    end
+    return "unknown"
+end
+
+local function _trace_selected_read(entry, career_name, key, requested_index, resolved_index, served_value, source)
+    if not (entry and WEAPON_SLOT_SET[key]) then return end
+    local row = entry.loadouts and entry.loadouts[resolved_index]
+    local selected_row = entry.loadouts and entry.loadouts[entry.selected_index]
+    local caller = _selected_read_caller()
+    local snapshot = {
+        career = career_name,
+        slot = key,
+        requested_index = requested_index,
+        resolved_index = resolved_index,
+        selected_index = entry.selected_index,
+        row_melee = row and row.slot_melee,
+        row_ranged = row and row.slot_ranged,
+        selected_melee = selected_row and selected_row.slot_melee,
+        selected_ranged = selected_row and selected_row.slot_ranged,
+        served_value = served_value,
+        source = source,
+        caller = caller,
+    }
+    if _selected_loadout_trace:record(snapshot) then
+        printf("[gut:NATIVE_LOADOUTS] #375 selected-read career=%s caller=%s requested=%s resolved=%s selected=%s row=[melee=%s ranged=%s] canonical=[melee=%s ranged=%s] served=[slot=%s value=%s source=%s]",
+            tostring(career_name), tostring(caller), tostring(requested_index),
+            tostring(resolved_index), tostring(entry.selected_index),
+            tostring(snapshot.row_melee), tostring(snapshot.row_ranged),
+            tostring(snapshot.selected_melee), tostring(snapshot.selected_ranged),
+            tostring(key), tostring(served_value), tostring(source))
+    end
+end
 M.trace_should_emit = _trace_should_emit   -- exported for the /gut_regression_test throttle check
 local function _trace_gear_read(career_name, key, idx, value, source)
     if _trace_should_emit(career_name, key, idx, value, source) then
@@ -447,9 +589,8 @@ end
 -- ("Tried to wield default slot ... contained no weapon").
 -- Translation: pass nil, so vanilla resolves the official SELECTED row via
 -- `_career_loadouts[career]` (:1911) -- a row that exists whenever official data exists.
--- Last resort for WEAPON slots only: the career's default loadout
--- (get_default_loadouts :1955-1966; array of rows, backend_interface_item_playfab.lua
--- :207-222). If even that is nil we printf loudly and serve nil rather than invent an id --
+-- Last resort for WEAPON slots only: career default loadout (get_default_loadouts :1955-1966;
+-- backend_interface_item_playfab.lua:207-222). If nil, printf loudly rather than invent an id --
 -- never spawn from a guess. `read_official` is the wrapped vanilla get_character_data.
 -- ------------------------------------------------------------------
 local function _official_gear_fallback(read_official, mirror, career_name, key, store_idx)
@@ -469,7 +610,7 @@ local function _official_gear_fallback(read_official, mirror, career_name, key, 
     return nil
 end
 M.official_gear_fallback = _official_gear_fallback   -- exported for the /gut_regression_test translation check
-
+mod._gut_recover_missing_weapon = mod:dofile("scripts/mods/gui_tweaker/_gut_spawn_weapon_recovery").install(mod, Policy, _adventure_mode, MODE_STORE)
 -- ------------------------------------------------------------------
 -- BackendUtils equip capture (v0.2.175). With Loremaster's Armoury installed, menu equips
 -- route through an LA-CLONED interface whose copied methods bypass class-level hooks, so
@@ -485,8 +626,25 @@ M.official_gear_fallback = _official_gear_fallback   -- exported for the /gut_re
 -- loadout interface and translate it exactly as vanilla does (`override_id or ItemId`,
 -- backend_interface_item_playfab.lua:656-663) before writing the modded store/overlay.
 -- ------------------------------------------------------------------
+-- True only when the durable items interface currently owns `slot_name`. BackendManager's
+-- per-slot dispatch is the authoritative boundary (backend_manager_playfab.lua:329-341);
+-- unknown/throwing resolution fails closed. Shared by the equip CAPTURE gate below (#273
+-- capture side) and the exit-time snapshot reads further down (#273 exit side).
+local function _slot_owned_by_items(slot_name)
+    local backend = Managers and Managers.backend
+    if not (backend and backend.get_loadout_interface_by_slot and backend.get_interface) then
+        return false
+    end
+    local ok, slot_interface, items_interface = pcall(function()
+        return backend:get_loadout_interface_by_slot(slot_name), backend:get_interface("items")
+    end)
+    return ok and ExitSnapshotCore.slot_owned_by_items(slot_interface, items_interface)
+end
+
 local _bu_capture_installed = false
 local _bu_unresolved_seen = {}
+local _bu_foreign_seen = {}
+local _bu_write_error_seen = {}
 
 local function _bu_canonical_value(backend_id, slot_name)
     if not Policy.is_cosmetic_slot(slot_name) then
@@ -526,6 +684,7 @@ local function _capture_bu_equip(mode, mirror, career_name, slot_name, value, so
     entry.loadouts[idx] = entry.loadouts[idx] or {}
     entry.loadouts[idx][slot_name] = value
     _persist()
+    _trace_wt_loadout("capture", career_name, slot_name, idx, value, "stored")
     printf("[gut:NATIVE_LOADOUTS] BU equip capture career=%s idx=%s slot=%s source=%s -> store",
         tostring(career_name), tostring(idx), tostring(slot_name), tostring(source))
 end
@@ -540,21 +699,46 @@ local function _install_bu_capture()
     mod:hook(BU, "set_loadout_item", function(func, backend_id, career_name, slot_name)
         -- 3-arg entry point, always the SELECTED loadout (no index arg by design).
         local mode = _adventure_mode()
-        local is_loadout_slot = GEAR_SLOT_SET[slot_name] or COSMETIC_SLOT_SET[slot_name]
-        if mode ~= MODE_OFF and career_name and backend_id and is_loadout_slot then
-            local ok_m, mirror = pcall(function() return Managers.backend:get_interface("items")._backend_mirror end)
-            local value, source = _bu_canonical_value(backend_id, slot_name)
-            if ok_m and mirror and value ~= nil then
-                _capture_bu_equip(mode, mirror, career_name, slot_name, value, source)
-            elseif COSMETIC_SLOT_SET[slot_name] then
-                -- Bounded evidence for an unexpected LA/item-registry timing miss. Never
-                -- persist the transient backend id into a cosmetic slot as a guess.
-                local token = tostring(slot_name) .. "\0" .. tostring(backend_id) .. "\0" .. tostring(source)
-                if not _bu_unresolved_seen[token] then
-                    _bu_unresolved_seen[token] = true
-                    printf("[gut:NATIVE_LOADOUTS] BU cosmetic capture SKIP career=%s slot=%s bid=%s reason=%s mirror=%s",
-                        tostring(career_name), tostring(slot_name), tostring(backend_id), tostring(source), tostring(ok_m and mirror ~= nil))
-                end
+        local is_loadout_slot = _is_loadout_slot(slot_name)
+        local result, reason = LoadoutLifecycle.capture_equip({
+            mode = mode,
+            mode_off = MODE_OFF,
+            career_name = career_name,
+            backend_id = backend_id,
+            slot_name = slot_name,
+            is_loadout_slot = is_loadout_slot,
+            capture_slot_durable = Policy.capture_slot_durable,
+            slot_owned_by_items = _slot_owned_by_items,
+            get_mirror = function()
+                return Managers.backend:get_interface("items")._backend_mirror
+            end,
+            canonical_value = _bu_canonical_value,
+            write = _capture_bu_equip,
+        })
+        if result == "unresolved" and COSMETIC_SLOT_SET[slot_name] then
+            -- Bounded evidence for an unexpected LA/item-registry timing miss. Never
+            -- persist the transient backend id into a cosmetic slot as a guess.
+            local token = tostring(slot_name) .. "\0" .. tostring(backend_id) .. "\0" .. tostring(reason)
+            if not _bu_unresolved_seen[token] then
+                _bu_unresolved_seen[token] = true
+                printf("[gut:NATIVE_LOADOUTS] BU cosmetic capture SKIP career=%s slot=%s bid=%s reason=%s",
+                    tostring(career_name), tostring(slot_name), tostring(backend_id), tostring(reason))
+            end
+        elseif result == "foreign-owner" then
+            -- Bounded evidence: a gear equip arrived while a mechanism interface (Deus)
+            -- owned the slot. The run-local id is dropped, never stored (class-73).
+            local token = tostring(career_name) .. "\0" .. tostring(slot_name)
+            if not _bu_foreign_seen[token] then
+                _bu_foreign_seen[token] = true
+                printf("[gut:NATIVE_LOADOUTS] BU gear capture SKIP career=%s slot=%s bid=%s reason=%s",
+                    tostring(career_name), tostring(slot_name), tostring(backend_id), tostring(reason))
+            end
+        elseif result == "write-error" then
+            local token = tostring(career_name) .. "\0" .. tostring(slot_name) .. "\0" .. tostring(reason)
+            if not _bu_write_error_seen[token] then
+                _bu_write_error_seen[token] = true
+                printf("[gut:NATIVE_LOADOUTS] BU capture ERROR career=%s slot=%s bid=%s reason=%s",
+                    tostring(career_name), tostring(slot_name), tostring(backend_id), tostring(reason))
             end
         end
         return func(backend_id, career_name, slot_name)
@@ -596,7 +780,10 @@ mod:hook("PlayFabMirrorAdventure", "get_character_data", function(func, self, ca
     end
     local idx = optional_loadout_index or entry.selected_index
     local lo = entry.loadouts[idx]
-    if lo == nil then return nil end
+    if lo == nil then
+        _trace_selected_read(entry, career_name, key, optional_loadout_index, idx, nil, "store-row-missing")
+        return nil
+    end
     local value = lo[key]
     -- Non-destructive gear fallback (2026-07-02 v0.2.172 spawn-fatal burn): a gear id that
     -- is empty or unresolvable RIGHT NOW is served from the OFFICIAL value for this read
@@ -612,7 +799,9 @@ mod:hook("PlayFabMirrorAdventure", "get_character_data", function(func, self, ca
         if value == nil then
             if WEAPON_SLOT_SET[key] then
                 _trace_gear_read(career_name, key, idx, value, "official-fallback-nil-weapon")  -- issue #387
-                return _official_gear_fallback(func, self, career_name, key, idx)
+                local served = _official_gear_fallback(func, self, career_name, key, idx)
+                _trace_selected_read(entry, career_name, key, optional_loadout_index, idx, served, "official-fallback-nil-weapon")
+                return served
             end
             _trace_gear_read(career_name, key, idx, value, "store-nil-jewelry")  -- issue #387
             return nil
@@ -622,8 +811,13 @@ mod:hook("PlayFabMirrorAdventure", "get_character_data", function(func, self, ca
         -- "official" there would bleed official gear into modded loadouts at boot.
         local rstate = _resolve_item_raw(value)
         if rstate == RESOLVE_NO then
+            if idx == entry.selected_index then
+                _trace_wt_loadout("apply", career_name, key, idx, value, "official-fallback-resolve-no")
+            end
             _trace_gear_read(career_name, key, idx, value, "official-fallback-resolve-no")  -- issue #387
-            return _official_gear_fallback(func, self, career_name, key, idx)
+            local served = _official_gear_fallback(func, self, career_name, key, idx)
+            _trace_selected_read(entry, career_name, key, optional_loadout_index, idx, served, "official-fallback-resolve-no")
+            return served
         end
         -- issue #387: split YES vs UNKNOWN. Empirically (console-2026-07-06-21.28) a weapon
         -- served on UNKNOWN can still fail at PRESENTATION (get_item_from_id -> nil), leaving
@@ -632,7 +826,13 @@ mod:hook("PlayFabMirrorAdventure", "get_character_data", function(func, self, ca
         -- the grid kept loadout-6's melee while the ranged slot updated normally). YES means
         -- the raw registry holds it right now; UNKNOWN means we could not inspect the registry.
         _trace_gear_read(career_name, key, idx, value, rstate == RESOLVE_YES and "store-yes" or "store-unknown")  -- issue #387
+        if idx == entry.selected_index then
+            _trace_wt_loadout("apply", career_name, key, idx, value,
+                rstate == RESOLVE_YES and "served-store-yes" or "served-store-unknown")
+        end
     end
+    _trace_selected_read(entry, career_name, key, optional_loadout_index, idx, value,
+        GEAR_SLOT_SET[key] and "store" or "store-non-gear")
     return value
 end)
 
@@ -868,11 +1068,19 @@ end)
 -- designation snapshot so later edits to the player's source row cannot change
 -- the bot, while leaving official/readonly behavior on the vanilla boundary.
 local BotLoadoutSnapshot = mod:dofile("scripts/mods/gui_tweaker/_gut_bot_loadout_snapshot")
+local function _native_bot_assignments()
+    local selection = PlayerData and PlayerData.loadout_selection
+    if type(selection) ~= "table" then return nil end
+    if selection.bot_equipment == nil then return {} end
+    if type(selection.bot_equipment) ~= "table" then return nil end
+    return selection.bot_equipment
+end
 BotLoadoutSnapshot.install(mod, {
     mode = _adventure_mode, store = _store, persist = _persist,
     policy = Policy, slot_names = LOADOUT_SLOT_NAMES,
     mode_off = MODE_OFF, mode_store = MODE_STORE, mode_readonly = MODE_READONLY,
-    log_prefix = "gut",
+    log_prefix = "gut", native_bot_assignments = _native_bot_assignments,
+    seed_career = function(iface, career) return _ensure_seeded(iface._backend_mirror, career, true) end,  -- #954 modded careers
 })
 
 -- ==================================================================
@@ -900,7 +1108,6 @@ BotLoadoutSnapshot.install(mod, {
 -- (NOT iface:get_item_from_id), so we never trip the get_item_from_id -> _refresh ->
 -- mirror-read recursion (v0.2.173 burn). Cosmetic slots are already nil-safe in
 -- vanilla, so we leave them untouched.
---
 -- Pre-flight (2026-07-06): grepped gui_tweaker for hooks on
 -- (HeroWindowLoadoutSelectionConsole, _populate_context_menu_loadout) -- NONE. gut's
 -- other hooks on this class target _save_bot_equipment (_gut_bot_loadout_snapshot.lua) and
@@ -979,219 +1186,258 @@ mod:hook("HeroWindowLoadoutSelectionConsole", "_populate_context_menu_loadout", 
 end)
 
 -- ==================================================================
--- Re-seed command. The seed is one-time by design, so a snapshot taken while the mirror
+-- Re-seed owner + command. The seed is one-time by design, so a snapshot taken while the mirror
 -- held bad data (e.g. blacksmith items committed to the cloud by the pre-isolation #174
 -- bleed, seen 2026-07-02 on merc Kruber slot_melee) is frozen until explicitly reset.
 -- /reset_modded_loadouts        -> wipe the whole modded store + cosmetic overlay
 -- /reset_modded_loadouts <career> -> wipe one career (e.g. es_mercenary)
--- Next loadout touch in modded re-seeds from the CURRENT official data. Official data is
--- never written; this only discards the modded-side copies (the STORE-mode loadouts AND the
--- READONLY cosmetic overlay from issue #287), including any modded-only edits.
+-- Issue #1033 additionally calls this owner after a confirmed Mod Tweaker DEFAULT
+-- transaction for WT/Cosmetics. It clears the modded copies and, when the Adventure
+-- mirror is live, clones every official career immediately with ONE final persistence
+-- write. Official data is read only; no backend method or cloud write is called.
 -- ==================================================================
-mod:command("reset_modded_loadouts", "Reset modded loadouts to re-seed from official (optional: career name)", function(career_arg)
+function M.reset_modded_loadouts(career_arg, source, echo_result)
     local store = _store()
     local overlay = _overlay()
-    if career_arg and career_arg ~= "" then
-        if not store[career_arg] and not overlay[career_arg] then
+    -- Issue #1033 presentation half: capture the pre-reset backend truth for the
+    -- ACTIVE career (skin identity) BEFORE the clear, so the post-transaction
+    -- reconcile can decide respawn-vs-per-slot. Lazy namespace read -- the module
+    -- is dofile'd from the entry manifest; absent = persistence-only (old behavior).
+    local presentation = mod._gut_reset_presentation
+    local before_ctx = presentation and presentation.capture_before
+        and presentation.capture_before() or nil
+    local cleared, explicit_found = Policy.clear_modded_loadouts(store, overlay, career_arg)
+    if career_arg and career_arg ~= "" and not explicit_found then
+        if echo_result then
             mod:echo("No modded loadout store for '" .. tostring(career_arg) .. "' (nothing to reset)")
-            printf("[gut:NATIVE_LOADOUTS] reset requested for unknown career=%s", tostring(career_arg))
-            return
         end
-        store[career_arg] = nil
-        overlay[career_arg] = nil
-        _persist()
-        _persist_overlay()
-        _dirtify()
-        mod:echo("Modded loadouts reset for " .. career_arg .. "; they re-seed from official on next use")
-        printf("[gut:NATIVE_LOADOUTS] store reset career=%s (will re-seed from official)", career_arg)
-    else
-        local seen = {}
-        for career_name in pairs(store) do seen[career_name] = true end
-        for career_name in pairs(overlay) do seen[career_name] = true end
-        local n = 0
-        for career_name in pairs(seen) do
-            store[career_name] = nil
-            overlay[career_name] = nil
-            n = n + 1
-        end
-        _persist()
-        _persist_overlay()
-        _dirtify()
-        mod:echo("Modded loadouts reset for " .. n .. " career(s); they re-seed from official on next use")
-        printf("[gut:NATIVE_LOADOUTS] store reset ALL (%d careers, will re-seed from official)", n)
+        printf("[gut:NATIVE_LOADOUTS] reset requested for unknown career=%s", tostring(career_arg))
+        return true, { cleared = 0, seeded = 0, mirror = false }
     end
-end)
 
--- ==================================================================
--- /gut_loadout_status (issue #375 diagnostics) -- echo the modded loadout store state
--- to CHAT (visible with mod-logging off) plus a per-row slot dump to the console log, so
--- "is the loadout system even working" is answerable at a glance: mode, realm, and for
--- each career whether it seeded, how many loadout rows exist, the selected index, and
--- (console) which gear/cosmetic slots each row actually holds.
--- ==================================================================
--- issue #387 presentation-side resolution probe. SAFE to call get_item_from_id here because
--- this runs in a chat-command context, NOT inside a mirror read hook (the v0.2.173 recursion
--- was get_item_from_id called from within the get_character_data hook). Returns the resolved
--- item key (or nil) so a dangling/unresolvable weapon id -- the id that leaves a slot stuck on
--- the previous weapon at switch time -- is visible per row.
-local function _probe_resolve(id)
-    if id == nil then return nil end
-    local ok, key = pcall(function()
-        local iface = Managers.backend:get_interface("items")
-        local item = iface and iface:get_item_from_id(id)
-        return item and item.data and (item.data.key or item.data.name)
+    local ok_mirror, mirror = pcall(function()
+        return Managers.backend:get_interface("items")._backend_mirror
     end)
-    return ok and key or nil
+    local adventure = ok_mirror and mirror
+        and mirror._characters_data_key == ADVENTURE_DATA_KEY
+    local seeded = 0
+    if adventure then
+        local careers = Policy.official_seed_careers(mirror, career_arg)
+        for i = 1, #careers do
+            if _ensure_seeded(mirror, careers[i], true) then seeded = seeded + 1 end
+        end
+    end
+    -- One bounded persistence transaction regardless of career count. The mirror
+    -- methods remain untouched, so the official cloud diff stays empty.
+    _persist()
+    _persist_overlay()
+    _dirtify()
+    if echo_result then
+        mod:echo(string.format(
+            "Modded loadouts reset for %d career(s); %d copied from official",
+            cleared, seeded))
+    end
+    printf("[gut:1033] source=%s cleared=%d seeded=%d adventure_mirror=%s writes=2 dirtify=1",
+        tostring(source or "command"), cleared, seeded, tostring(adventure and true or false))
+    -- Issue #1033 presentation half: ONE bounded active-career reconcile AFTER the
+    -- durable transaction (respawn on skin change, per-slot re-equip otherwise,
+    -- deferred to the next safe keep boundary when mission-side). Diff-based and
+    -- self-limiting: a reset that did not change the active career reconciles 0.
+    if presentation and presentation.reconcile then
+        if before_ctx and before_ctx.career_name then
+            local active_entry = store[before_ctx.career_name]
+            before_ctx.selected_row = active_entry and active_entry.selected_index or nil
+        end
+        pcall(presentation.reconcile, before_ctx, source or "command")
+    end
+    return true, { cleared = cleared, seeded = seeded, mirror = adventure and true or false }
 end
 
-mod:command("gut_loadout_status", "Show the modded loadout store state + resolve gear ids (issue #375/#387)", function(career_arg)
-    local mode = _adventure_mode()
-    mod:echo(string.format("[loadouts] realm_modded=%s mode=%s", tostring(_in_modded_realm()), tostring(mode)))
-    if mode == MODE_OFF then
-        mod:echo("  feature INERT here (official realm / Versus / not in a backend view) -- store is not consulted")
-    end
-    local filter = (career_arg and career_arg ~= "") and career_arg or nil
-    local store = _store()
-    local any = false
-    for career_name, entry in pairs(store) do
-        if not filter or career_name == filter then
-            any = true
-            local rows = entry.loadouts or {}
-            -- Count unresolvable WEAPON ids across rows (the #387 stuck-weapon signature).
-            local weapon_fail = 0
-            for i = 1, #rows do
-                local row = rows[i]
-                for slot in pairs(WEAPON_SLOT_SET) do
-                    local id = row and row[slot]
-                    if id ~= nil and _probe_resolve(id) == nil then weapon_fail = weapon_fail + 1 end
-                end
-            end
-            mod:echo(string.format("  %s: seeded=%s loadouts=%d selected=%s bot=%s weapon_ids_unresolvable=%d",
-                tostring(career_name), tostring(entry._seeded and true or false),
-                #rows, tostring(entry.selected_index), tostring(entry.bot_index), weapon_fail))
-            for i = 1, #rows do
-                local row = rows[i]
-                local filled = {}
-                for _, s in ipairs(LOADOUT_SLOT_NAMES) do
-                    if row and row[s] ~= nil then filled[#filled + 1] = s end
-                end
-                printf("[gut:NATIVE_LOADOUTS] status career=%s row=%d selected=%s slots=[%s] talents=%s",
-                    tostring(career_name), i, tostring(i == entry.selected_index),
-                    table.concat(filled, ","), tostring(row and row.talents))
-                -- issue #387: resolve each GEAR slot id both ways -- raw registry (what the
-                -- get_character_data fallback consults) AND get_item_from_id (what the hero-view
-                -- presentation consults). A slot with raw=UNKNOWN/YES but get_item_from_id=FAIL is
-                -- exactly the stuck-weapon case: served from the store, unpresentable at switch.
-                if row then
-                    for _, s in ipairs(GEAR_SLOT_NAMES) do
-                        local id = row[s]
-                        if id ~= nil then
-                            local raw = _resolve_item_raw(id)
-                            local rawname = (raw == RESOLVE_YES and "raw=YES") or (raw == RESOLVE_NO and "raw=NO") or "raw=UNKNOWN"
-                            local key = _probe_resolve(id)
-                            printf("[gut:NATIVE_LOADOUTS] status-resolve career=%s row=%d %s id=%s %s get_item_from_id=%s",
-                                tostring(career_name), i, s, tostring(id), rawname, tostring(key or "<FAIL>"))
-                        end
-                    end
-                end
-            end
-        end
-    end
-    if not any then
-        if filter then mod:echo("  no store entry for '" .. filter .. "'")
-        else mod:echo("  store EMPTY -- open a modded hero view (and switch a loadout slot) to seed from official") end
-    end
+mod._gut_reset_modded_loadouts = function(source)
+    return M.reset_modded_loadouts(nil, source or "api", false)
+end
+
+mod:command("reset_modded_loadouts", "Reset modded loadouts to re-seed from official (optional: career name)", function(career_arg)
+    M.reset_modded_loadouts(career_arg, "command", true)
 end)
 
+local NativeCommands = mod:dofile("scripts/mods/gui_tweaker/_gut_native_loadout_commands")
+local command_api = NativeCommands.install(mod, {
+    adventure_mode = _adventure_mode,
+    in_modded_realm = _in_modded_realm,
+    store = _store,
+    resolve_item_raw = _resolve_item_raw,
+    backend_commit = BackendCommit,
+    cosmetic_slot_set = COSMETIC_SLOT_SET,
+    weapon_slot_set = WEAPON_SLOT_SET,
+    loadout_slot_names = LOADOUT_SLOT_NAMES,
+    gear_slot_names = GEAR_SLOT_NAMES,
+    mode_off = MODE_OFF,
+    resolve_yes = RESOLVE_YES,
+    resolve_no = RESOLVE_NO,
+})
+
 -- ==================================================================
--- /scrub_official_loadouts (issue #402) -- OFFICIAL-realm repair for the pre-isolation #174
--- bleed: modded/dangling weapon + portrait-frame ids committed to the OFFICIAL cloud loadouts
--- BEFORE the modded-realm isolation (this file) existed. Audit 2026-07-06 (decompiled source):
--- every runtime write that diverges official _career_data from its mirror (and so reaches the
--- PlayFab cloud) funnels through PlayFabMirrorBase.set_character_data -- it writes _career_data
--- at :1933 BEFORE delegating to set_career_read_only_data at :1941, so it is the SOLE choke
--- point, and both the weapon AND the portrait FRAME (slot_frame is an ordinary loadout slot,
--- not a hero-attribute) persist through it. We hook it and no-op it in modded, so NO new leak
--- is possible. But rows already corrupted by the pre-isolation bleed never self-heal -- this
--- repairs them.
+-- EXIT-TIME SNAPSHOT BACKSTOP (issues #354, #353, #287, #175, #273).
 --
--- REPORT (default, read-only, safe anywhere): list every official loadout slot (slot_melee /
---   slot_ranged / slot_frame) whose stored id does NOT resolve via get_item_from_id -- the exact
---   ids the engine silently falls back on (merc Kruber -> Blacksmith greatsword).
--- APPLY (`/scrub_official_loadouts apply`): replace each broken slot's id with a resolvable id
---   the player ALREADY OWNS for that same slot (taken from another of their official loadout
---   rows). It writes ONLY a value it has verified resolves, into a slot that is CURRENTLY broken,
---   so it can never break a working slot; if no owned replacement resolves it reports and skips
---   (re-equip that slot manually). HARD-GATED to the OFFICIAL realm: in modded, set_character_data
---   is captured to the store, so the official write would never land -- refuse and say so.
+-- The store above is captured on EQUIP EVENTS only (the mirror write hooks + the outer
+-- BackendUtils.set_loadout_item capture), each persisted immediately. Any loadout/cosmetic
+-- state that reaches the LIVE backend interface through a path that fires NONE of those hooks
+-- (an LA-cloned cosmetic dispatch #353, a WT cross-character weapon whose enable/apply lands
+-- outside a captured equip #354) is never written to the store and is lost on quit. This is
+-- the BACKSTOP: at bounded exit edges (wired from gui_tweaker.lua to StateIngame exit /
+-- StateTitleScreen enter / on_unload) it re-reads the live selected loadout and reconciles any
+-- diverged slot into the SAME store via the SAME single writer (_persist / _persist_overlay).
+-- It is a second capture TRIGGER, never a second store or format. The pure diff arithmetic is
+-- _gut_exit_snapshot_core.lua (offline-tested); this half does the engine reads + persist.
+--
+-- NO NEW HOOK. Pre-flight (2026-07-18): this adds ZERO mod:hook / mod:hook_safe. It reads live
+-- values with plain BackendUtils.* function CALLS and writes through the existing store helpers,
+-- and is driven by VMF lifecycle callbacks (mod.on_game_state_changed / mod.on_unload) chained
+-- in the entry point -- so there is no (Class, method) collision to clear (NON-NEGOTIABLE 8).
+--
+-- ISOLATION. Before any BackendUtils read, the snapshot asks BackendManager which interface
+-- owns that slot and proceeds only when it is the durable `items` interface. A mechanism-owned
+-- slot (notably Deus melee/ranged) is a SKIP: its generated backend id is run-local and must
+-- never enter the Adventure store (#273). Cosmetics remain eligible in Deus because vanilla
+-- maps those slots to `items`. Eligible reads then go through BackendUtils.get_loadout_item_id /
+-- get_loadout_item -- the exact readers the hero view uses. These are NOT mirror-read hooks, so
+-- calling get_item_from_id underneath here does NOT recurse (the v0.2.173 1 GiB burn was
+-- get_item_from_id called from INSIDE the
+-- get_character_data hook; an exit edge is not a mirror read -- same safety /gut_loadout_status
+-- relies on). Gear reconciles only a value that resolves to a registered item RIGHT NOW
+-- (RESOLVE_YES); an unresolved live read is a SKIP, never a clear, so a late-registering
+-- synthetic id can never blank a stored id (#375/#387 non-destructive doctrine). Official realm
+-- / Versus / non-adventure backend => fully inert. Official cloud data is never written (the
+-- store/overlay are modded-only; #175 isolation guarantee is untouched).
 -- ==================================================================
-mod:command("scrub_official_loadouts", "Repair modded/dangling weapon+frame ids in OFFICIAL loadouts (issue #402; add 'apply' to write, default report-only)", function(arg)
-    local do_apply = (arg == "apply")
-    if do_apply and _in_modded_realm() then
-        mod:echo("[scrub] REFUSED -- you are in the MODDED realm; an official write is captured to the modded store here.")
-        mod:echo("[scrub] Enter the OFFICIAL (EAC-trusted) realm, open the hero view, then run: /scrub_official_loadouts apply")
-        return
+
+-- The per-slot owner gate `_slot_owned_by_items` is defined above the BackendUtils equip
+-- capture (its other #273 consumer); both the capture and these exit reads share it.
+
+-- Read one career+slot's LIVE equipped value, canonicalized to the store's format (gear = raw
+-- backend id; cosmetics = override_id or ItemId, the same identity the equip capture stores).
+-- Returns nil + a reason to SKIP the slot (foreign owner / no live value / unresolved) -- a nil
+-- never overwrites the store.
+local function _live_slot_value(career_name, slot_name)
+    if not _slot_owned_by_items(slot_name) then
+        return nil, "foreign-loadout-interface"
     end
-    local ok_m, mirror = pcall(function() return Managers.backend:get_interface("items")._backend_mirror end)
-    if not ok_m or not mirror or type(mirror._career_data) ~= "table" then
-        mod:echo("[scrub] backend not ready -- open the hero view first, then re-run")
-        return
+    local BU = rawget(_G, "BackendUtils")
+    if COSMETIC_SLOT_SET[slot_name] then
+        if not (BU and BU.get_loadout_item) then return nil end
+        -- get_loadout_item resolves the live equipped item through the per-slot (LA-aware)
+        -- interface; take vanilla's stored identity (override_id or ItemId), matching
+        -- Policy.canonical_equip_value. Safe here: exit edge, not a mirror read.
+        local ok, item = pcall(BU.get_loadout_item, career_name, slot_name, false)
+        if not ok or type(item) ~= "table" then return nil end
+        local v = item.override_id or item.ItemId
+        return (type(v) == "string" and v ~= "") and v or nil
     end
-    local SCRUB_SLOTS = { "slot_melee", "slot_ranged", "slot_frame" }
-    -- A replacement must itself resolve; only ever an id the player already owns for this slot.
-    local function _owned_replacement(slot, rows)
-        for i = 1, #rows do
-            local id = rows[i] and rows[i][slot]
-            if id ~= nil and _probe_resolve(id) ~= nil then return id end
+    if not (BU and BU.get_loadout_item_id) then return nil end
+    local ok, backend_id = pcall(BU.get_loadout_item_id, career_name, slot_name, false)
+    if not ok or backend_id == nil then return nil end
+    -- Gear: only a genuinely-registered live id (RESOLVE_YES). RESOLVE_NO/UNKNOWN => skip so a
+    -- transiently-unresolvable live read never overwrites a good stored id (raw tri-state, never
+    -- an interface method -- no get_item_from_id recursion).
+    if _resolve_item_raw(backend_id) ~= RESOLVE_YES then return nil end
+    return backend_id
+end
+
+-- Build the live selected-row values for one career over `slots` (nil entries omitted).
+local function _build_live_row(career_name, slots)
+    local row = {}
+    local foreign_slot_reads = 0
+    for i = 1, #slots do
+        local slot = slots[i]
+        local v, reason = _live_slot_value(career_name, slot)
+        if v ~= nil then row[slot] = v end
+        if reason == "foreign-loadout-interface" then
+            foreign_slot_reads = foreign_slot_reads + 1
         end
-        return nil
     end
-    mod:echo(string.format("[scrub] official loadout audit (%s)%s",
-        do_apply and "APPLY" or "report-only", _in_modded_realm() and " [WARN: modded realm -- report only]" or ""))
-    local broken, fixed, skipped = 0, 0, 0
-    for career_name, rows in pairs(mirror._career_data) do
-        if type(rows) == "table" then
-            for i = 1, #rows do
-                local row = rows[i]
-                if type(row) == "table" then
-                    for _, slot in ipairs(SCRUB_SLOTS) do
-                        local id = row[slot]
-                        if id ~= nil and _probe_resolve(id) == nil then
-                            broken = broken + 1
-                            printf("[gut:NATIVE_LOADOUTS] #402 official BROKEN career=%s row=%d slot=%s id=%s",
-                                tostring(career_name), i, slot, tostring(id))
-                            if do_apply then
-                                local repl = _owned_replacement(slot, rows)
-                                if repl ~= nil then
-                                    local ok_w = pcall(function() mirror:set_character_data(career_name, slot, repl, nil, i) end)
-                                    if ok_w then
-                                        fixed = fixed + 1
-                                        printf("[gut:NATIVE_LOADOUTS] #402 official REPAIRED career=%s row=%d slot=%s -> %s",
-                                            tostring(career_name), i, slot, tostring(repl))
-                                    else
-                                        skipped = skipped + 1
-                                    end
-                                else
-                                    skipped = skipped + 1
-                                    printf("[gut:NATIVE_LOADOUTS] #402 official NO-OWNED-REPLACEMENT career=%s row=%d slot=%s (re-equip this slot manually)",
-                                        tostring(career_name), i, slot)
-                                end
-                            end
-                        end
-                    end
+    return row, foreign_slot_reads
+end
+
+-- Resolve the live Adventure mirror at an exit edge (mirror-less `self` here). Returns nil for
+-- Versus / non-adventure / backend-down so the snapshot stays inert exactly where the mirror
+-- hooks do.
+local function _exit_adventure_mirror()
+    local ok, mirror = pcall(function() return Managers.backend:get_interface("items")._backend_mirror end)
+    if ok and mirror and mirror._characters_data_key == ADVENTURE_DATA_KEY then return mirror end
+    return nil
+end
+
+-- M.exit_snapshot(edge_name) -> total_diverged, wrote. Idempotent: a clean state diverges 0 and
+-- writes nothing. Bounded: <= #careers x #slots live reads, once per edge (never per frame).
+function M.exit_snapshot(edge_name)
+    local mode = _feature_mode()
+    if mode == MODE_OFF then return 0, false end
+    local mirror = _exit_adventure_mirror()
+    if not mirror then
+        printf("[gut:persist] edge=%s diverged=0 written=false (not adventure backend)", tostring(edge_name))
+        return 0, false
+    end
+
+    local total, wrote, foreign_slot_reads = 0, false, 0
+    if mode == MODE_STORE then
+        local store = _store()
+        local live_by_career = {}
+        for career_name in pairs(store) do
+            local live, foreign = _build_live_row(career_name, LOADOUT_SLOT_NAMES)
+            live_by_career[career_name] = live
+            foreign_slot_reads = foreign_slot_reads + foreign
+        end
+        local diverged, merged_rows, per_career =
+            ExitSnapshotCore.reconcile_selected(live_by_career, store, LOADOUT_SLOT_NAMES)
+        if diverged > 0 then
+            for career_name, merged in pairs(merged_rows) do
+                local entry = store[career_name]
+                entry.loadouts[entry.selected_index] = merged
+                printf("[gut:persist] edge=%s career=%s idx=%s reconciled=%d slots -> store",
+                    tostring(edge_name), tostring(career_name), tostring(entry.selected_index),
+                    tostring(per_career[career_name]))
+            end
+            _persist()
+            _dirtify()
+            wrote = true
+        end
+        total = diverged
+    elseif mode == MODE_READONLY then
+        -- #287: gameplay gear is official-read-only; only mod-owned cosmetics + exact CWV
+        -- instances live modded-side, in the overlay keyed by the official selected index. Back
+        -- up those for careers the overlay already tracks (first-touch is the eager capture's job).
+        local overlay = _overlay()
+        for career_name, career_ov in pairs(overlay) do
+            local idx = _official_index(mirror, career_name, nil)
+            local stored_row = career_ov[idx]
+            if type(stored_row) == "table" then
+                local live, foreign = _build_live_row(career_name, LOADOUT_SLOT_NAMES)
+                foreign_slot_reads = foreign_slot_reads + foreign
+                local filtered = {}
+                for slot, v in pairs(live) do
+                    if Policy.readonly_action(slot, v) == "preserve" then filtered[slot] = v end
+                end
+                local merged, dn = ExitSnapshotCore.diff_row(filtered, stored_row, LOADOUT_SLOT_NAMES)
+                if dn > 0 then
+                    career_ov[idx] = merged
+                    total = total + dn
+                    printf("[gut:persist] edge=%s career=%s idx=%s reconciled=%d slots -> readonly overlay",
+                        tostring(edge_name), tostring(career_name), tostring(idx), tostring(dn))
                 end
             end
         end
+        if total > 0 then
+            _persist_overlay()
+            _dirtify()
+            wrote = true
+        end
     end
-    if broken == 0 then
-        mod:echo("[scrub] official loadouts clean -- no broken weapon/frame ids")
-    elseif do_apply then
-        mod:echo(string.format("[scrub] repaired %d/%d broken slot(s)%s; stay in the menu a moment so it commits to the cloud",
-            fixed, broken, skipped > 0 and string.format(" (%d skipped -- re-equip manually)", skipped) or ""))
-    else
-        mod:echo(string.format("[scrub] found %d broken slot(s) -- see console for ids. To fix: enter the OFFICIAL realm and run /scrub_official_loadouts apply", broken))
-    end
-end)
+
+    printf("[gut:persist] edge=%s diverged=%d written=%s foreign_slot_reads=%d",
+        tostring(edge_name), total, tostring(wrote), foreign_slot_reads)
+    return total, wrote
+end
 
 -- ==================================================================
 -- Regression markers (issue #175 requirement 11). Registered by gui_tweaker.lua.
@@ -1206,214 +1452,48 @@ M.HOOK_TARGETS = {
     { "PlayFabMirrorAdventure", "add_loadout" },
     { "PlayFabMirrorAdventure", "delete_loadout" },
     { "BackendInterfaceItemPlayfab", "refresh_bot_loadouts" },
+    { "BackendInterfaceItemPlayfab", "get_bot_loadout" },
     { "HeroWindowLoadoutSelectionConsole", "_save_bot_equipment" },
     { "HeroWindowLoadoutSelectionConsole", "_populate_context_menu_loadout" },  -- issue #372 preview crash guard
     { "BackendUtils", "set_loadout_item" },  -- TABLE-form, installed deferred (_install_bu_capture)
 }
+for _, target in ipairs(BootGuard.HOOK_TARGETS or {}) do
+    M.HOOK_TARGETS[#M.HOOK_TARGETS + 1] = target
+end
 
-M.rt_checks = {
-    { name = "issue954_bot_loadout_snapshot", fn = function()
-        return BotLoadoutSnapshot.contract_check(Policy, LOADOUT_SLOT_NAMES)
-    end },
-    { name = "native_loadouts_installed", fn = function()
-        if M.MARKER ~= MARKER then return "marker mismatch" end
-        if type(_in_modded_realm) ~= "function" then return "realm detector missing" end
-        local ok = pcall(_in_modded_realm)
-        if not ok then return "_in_modded_realm raised" end
-    end },
-    { name = "native_loadouts_failsafe_inert", fn = function()
-        -- Tri-mode gate: OFF in official always; STORE is the modded default (implicit
-        -- feature, no enable toggle); READONLY when "Use non-modded loadouts" is ON.
-        if M.mode(false, false) ~= M.MODE_OFF then return "not inert in official realm" end
-        if M.mode(false, true) ~= M.MODE_OFF then return "not inert in official realm (use_non_modded on)" end
-        if M.mode(false, nil) ~= M.MODE_OFF then return "not inert in official realm (nil setting)" end
-        if M.mode(true, false) ~= M.MODE_STORE then return "modded default should be STORE" end
-        if M.mode(true, nil) ~= M.MODE_STORE then return "nil setting should read as STORE (default OFF)" end
-        if M.mode(true, true) ~= M.MODE_READONLY then return "use_non_modded on should be READONLY" end
-    end },
-    { name = "native_loadouts_mod_owned_exempt_readonly", fn = function()
-        -- issue #287: in READONLY, cosmetics and exact CWV instances stay editable through the
-        -- overlay; ordinary gameplay/talent writes stay blocked. COSMETIC_SLOT_SET must
-        -- be exactly LOADOUT_SLOT_NAMES minus GEAR_SLOT_NAMES, with no leak into the gear set.
-        if type(M.readonly_slot_editable) ~= "function" then return "readonly_slot_editable missing" end
-        if type(_overlay) ~= "function" or type(_overlay_get) ~= "function" or type(_overlay_set) ~= "function" then
-            return "cosmetic overlay helpers missing"
-        end
-        local in_loadout = {}
-        for _, s in ipairs(LOADOUT_SLOT_NAMES) do in_loadout[s] = true end
-        for s in pairs(COSMETIC_SLOT_SET) do
-            if not in_loadout[s] then return "cosmetic slot not a loadout slot: " .. s end
-            if GEAR_SLOT_SET[s] then return "cosmetic slot leaked into GEAR_SLOT_SET: " .. s end
-            if not M.readonly_slot_editable(s) then return "readonly_slot_editable false for cosmetic " .. s end
-        end
-        for _, s in ipairs(LOADOUT_SLOT_NAMES) do
-            -- Every loadout slot is exactly one of gear or cosmetic (partition): both or
-            -- neither is a bug. Normalize to booleans so nil (absent) compares correctly.
-            local is_gear = GEAR_SLOT_SET[s] == true
-            local is_cos = COSMETIC_SLOT_SET[s] == true
-            if is_gear == is_cos then
-                return "slot not partitioned gear/cosmetic: " .. s
-            end
-        end
-        -- Gameplay slots and talents must NOT be editable in READONLY.
-        if M.readonly_slot_editable("slot_melee") then return "gear slot_melee editable in readonly" end
-        if not M.readonly_slot_editable("slot_melee", "cwv_es_dual_axes_001") then
-            return "CWV melee instance not preserved in readonly"
-        end
-        if not M.readonly_slot_editable("slot_melee", "cwv_es_dual_maces_100") then
-            return "crafted CWV melee instance not preserved in readonly"
-        end
-        if M.readonly_slot_editable("slot_melee", "D12DB867521442B3") then
-            return "official melee instance editable in readonly"
-        end
-        if M.readonly_slot_editable("talents") then return "talents editable in readonly" end
-    end },
-    { name = "native_loadouts_la_cosmetic_outer_capture", fn = function()
-        -- issue #353: LA-cloned dispatch can miss the concrete mirror hook. The stable
-        -- BackendUtils seam must canonicalize all visual slots before store/overlay capture.
-        if type(_bu_canonical_value) ~= "function" or type(_capture_bu_equip) ~= "function" then
-            return "LA outer capture helpers missing"
-        end
-        local cases = {
-            { "slot_skin", "skin_override", { override_id = "skin_override", ItemId = "skin_item" } },
-            { "slot_hat", "hat_item", { ItemId = "hat_item" } },
-            { "slot_frame", "frame_item", { ItemId = "frame_item" } },
-            { "slot_pose", "pose_item", { ItemId = "pose_item" } },
-        }
-        for _, c in ipairs(cases) do
-            local value = Policy.canonical_equip_value(c[1], "transient_bid", c[3])
-            if value ~= c[2] then return c[1] .. " canonicalized to " .. tostring(value) end
-        end
-        local value = Policy.canonical_equip_value("slot_hat", "transient_bid", nil)
-        if value ~= nil then return "unresolved cosmetic retained transient backend id" end
-    end },
-    { name = "native_loadouts_no_hardcoded_6", fn = function()
-        local expected = InventorySettings and InventorySettings.MAX_NUM_CUSTOM_LOADOUTS
-        if type(expected) ~= "number" then return "MAX_NUM_CUSTOM_LOADOUTS unavailable" end
-        if M.max_loadouts() ~= expected then
-            return string.format("cap %s != InventorySettings.MAX_NUM_CUSTOM_LOADOUTS %s (hardcoded?)",
-                tostring(M.max_loadouts()), tostring(expected))
-        end
-    end },
-    { name = "native_loadouts_gear_fallback_nondestructive", fn = function()
-        -- Two prior burns (2026-07-02): destructive sanitize stripped poses (item keys)
-        -- then nulled a late-registering UUID melee id -> spawn fatal. Guard the shape:
-        -- no destructive pass exists, cosmetic slots stay out of the gear set, and the
-        -- weapon set (never-serve-empty) is a subset of the gear set.
-        if _sanitize_career ~= nil then return "destructive _sanitize_career reintroduced" end
-        -- v0.2.173 recursion burn: resolution must be raw-read tri-state, never interface methods.
-        if type(_resolve_item_raw) ~= "function" then return "_resolve_item_raw missing" end
-        local st = _resolve_item_raw("__rt_nonexistent_id__")
-        if st ~= RESOLVE_NO and st ~= RESOLVE_UNKNOWN then
-            return "tri-state resolve returned " .. tostring(st) .. " for nonexistent id"
-        end
-        local cosmetic = { slot_skin = true, slot_hat = true, slot_frame = true, slot_pose = true }
-        local in_loadout = {}
-        for _, s in ipairs(LOADOUT_SLOT_NAMES) do in_loadout[s] = true end
-        for _, s in ipairs(GEAR_SLOT_NAMES) do
-            if cosmetic[s] then return "cosmetic slot in GEAR_SLOT_NAMES: " .. s end
-            if not in_loadout[s] then return "unknown slot in GEAR_SLOT_NAMES: " .. s end
-            if not GEAR_SLOT_SET[s] then return "GEAR_SLOT_SET missing " .. s end
-        end
-        for s in pairs(WEAPON_SLOT_SET) do
-            if not GEAR_SLOT_SET[s] then return "weapon slot not in gear set: " .. s end
-        end
-    end },
-    { name = "native_loadouts_official_write_chokepoint", fn = function()
-        -- issue #402: the SOLE runtime write that diverges official _career_data from its mirror
-        -- (and thus reaches the PlayFab cloud) is PlayFabMirrorBase.set_character_data -- it writes
-        -- _career_data at playfab_mirror_base.lua:1933 BEFORE delegating to set_career_read_only_data
-        -- at :1941, and both weapons AND the portrait FRAME (slot_frame) persist through it. Blocking
-        -- these five in modded is the COMPLETE isolation guarantee, so each MUST stay a hooked target
-        -- (a dropped hook would re-open the leak). Audit source: the two 2026-07-06 investigations.
-        local want = { set_character_data = false, set_career_read_only_data = false,
-                       set_loadout_index = false, add_loadout = false, delete_loadout = false }
-        for _, t in ipairs(M.HOOK_TARGETS) do
-            if t[1] == "PlayFabMirrorAdventure" and want[t[2]] ~= nil then want[t[2]] = true end
-        end
-        for method, present in pairs(want) do
-            if not present then return "official-write choke point not hooked: " .. method end
-        end
-    end },
-    { name = "native_loadouts_hook_targets_unique", fn = function()
-        -- Singleton invariant proxy (NON-NEGOTIABLE 8): each (Class, method) declared once.
-        local seen = {}
-        for _, t in ipairs(M.HOOK_TARGETS) do
-            local key = t[1] .. "." .. t[2]
-            if seen[key] then return "duplicate hook target: " .. key end
-            seen[key] = true
-        end
-    end },
-    { name = "native_loadouts_fallback_index_translation", fn = function()
-        -- P0 (residual of issues 387/372): the MODE_STORE official gear fallback must NEVER
-        -- forward a store-space loadout index into the official read -- vanilla indexes
-        -- _career_data[career][index] directly and returns nil for a missing row
-        -- (playfab_mirror_base.lua:1909-1919); a nil weapon slot fatals at spawn wield.
-        -- Driven synthetically: a stub official read that only has a SELECTED row (nil index).
-        if type(M.official_gear_fallback) ~= "function" then return "official_gear_fallback missing" end
-        local seen_idx = "never-called"
-        local official = function(mirror, career, key, idx)
-            seen_idx = idx
-            if idx == nil then return "official_selected_" .. tostring(key) end
-            return nil   -- any explicit (store-space) index has no official row
-        end
-        local v = M.official_gear_fallback(official, {}, "__rt_career__", "slot_melee", 5)
-        if seen_idx ~= nil then
-            return "fallback forwarded index " .. tostring(seen_idx) .. " into the official read (must pass nil = selected row)"
-        end
-        if v ~= "official_selected_slot_melee" then
-            return "fallback did not serve the official selected row: " .. tostring(v)
-        end
-        -- Weapon-slot last resort: official selected row also nil -> career default loadout row 1.
-        local dead = function() return nil end
-        local mirror_with_defaults = { get_default_loadouts = function(self, career)
-            return { { slot_melee = "__rt_default_melee__" } }
-        end }
-        v = M.official_gear_fallback(dead, mirror_with_defaults, "__rt_career__", "slot_melee", 5)
-        if v ~= "__rt_default_melee__" then
-            return "weapon-slot last-resort default loadout not served: " .. tostring(v)
-        end
-        -- Non-weapon gear slot: nil is a legitimate final answer (no default forcing).
-        v = M.official_gear_fallback(dead, mirror_with_defaults, "__rt_career__", "slot_necklace", 5)
-        if v ~= nil then return "non-weapon gear slot must be allowed to resolve nil, got " .. tostring(v) end
-    end },
-    { name = "native_loadouts_trace_throttle_per_change", fn = function()
-        -- issue 480: the #387 gear-read trace flooded 20,120 lines in one session because the
-        -- cache was keyed (career, slot) only -- interleaved reads across loadout rows
-        -- re-emitted on every read. Contract: emit the first occurrence, suppress an identical
-        -- repeat, do NOT re-fire on interleaved rows, DO fire once on a genuine per-row
-        -- value/source change.
-        if type(M.trace_should_emit) ~= "function" then return "trace_should_emit missing" end
-        local c, s = "__rt480_career__", "__rt480_slot__"
-        -- Re-runnable: seed with a sentinel so a previous /gut_regression_test pass can't leave
-        -- the exact first tuple cached.
-        M.trace_should_emit(c, s, 1, "__seed__", "__seed__")
-        M.trace_should_emit(c, s, 2, "__seed__", "__seed__")
-        if not M.trace_should_emit(c, s, 1, "idA", "store-yes") then return "first occurrence suppressed" end
-        if M.trace_should_emit(c, s, 1, "idA", "store-yes") then return "identical repeat not throttled (the #480 flood)" end
-        if not M.trace_should_emit(c, s, 2, "idB", "store-yes") then return "first read of a different row suppressed" end
-        if M.trace_should_emit(c, s, 1, "idA", "store-yes") then return "interleaved row re-read re-emitted (the exact #480 flood shape)" end
-        if not M.trace_should_emit(c, s, 1, "idC", "store-yes") then return "genuine value change suppressed" end
-        if not M.trace_should_emit(c, s, 1, "idC", "official-fallback-resolve-no") then return "genuine source change suppressed" end
-    end },
-    { name = "native_loadouts_seed_repair_predicate", fn = function()
-        -- issue #375: the self-heal seed classifies a row as corrupt-partial iff it is
-        -- missing a WEAPON slot (a legitimately edited loadout always keeps both weapons,
-        -- so intentional jewelry unequips are NOT reclassified as corrupt).
-        if type(_row_is_corrupt_partial) ~= "function" then return "_row_is_corrupt_partial missing" end
-        if not _row_is_corrupt_partial(nil) then return "nil row must be corrupt-partial" end
-        if not _row_is_corrupt_partial({ slot_ranged = "r" }) then return "row missing slot_melee must be corrupt-partial" end
-        if not _row_is_corrupt_partial({ slot_melee = "m" }) then return "row missing slot_ranged must be corrupt-partial" end
-        -- Both weapons present, ring intentionally empty -> edited, NOT corrupt.
-        if _row_is_corrupt_partial({ slot_melee = "m", slot_ranged = "r" }) then
-            return "row with both weapons must NOT be corrupt-partial (would clobber edits)"
-        end
-        -- Every weapon slot must be a gear slot (repair reads gear from official).
-        for slot in pairs(WEAPON_SLOT_SET) do
-            if not GEAR_SLOT_SET[slot] then return "weapon slot not in gear set: " .. slot end
-        end
-    end },
-}
+local NativeChecks = mod:dofile("scripts/mods/gui_tweaker/_gut_native_loadout_checks")
+M.rt_checks = NativeChecks.create(mod, {
+    native = M,
+    policy = Policy,
+    wt_trace_core = WTTraceCore,
+    exit_snapshot_core = ExitSnapshotCore,
+    loadout_lifecycle = LoadoutLifecycle,
+    bot_loadout_snapshot = BotLoadoutSnapshot,
+    boot_guard = BootGuard,
+    marker = MARKER,
+    loadout_slot_names = LOADOUT_SLOT_NAMES,
+    gear_slot_names = GEAR_SLOT_NAMES,
+    gear_slot_set = GEAR_SLOT_SET,
+    cosmetic_slot_set = COSMETIC_SLOT_SET,
+    weapon_slot_set = WEAPON_SLOT_SET,
+    mode_off = MODE_OFF,
+    mode_store = MODE_STORE,
+    mode_readonly = MODE_READONLY,
+    resolve_no = RESOLVE_NO,
+    resolve_unknown = RESOLVE_UNKNOWN,
+    adventure_mode = _adventure_mode,
+    store = _store,
+    native_bot_assignments = _native_bot_assignments,
+    overlay = _overlay,
+    overlay_get = _overlay_get,
+    overlay_set = _overlay_set,
+    slot_owned_by_items = _slot_owned_by_items,
+    resolve_item_raw = _resolve_item_raw,
+    row_is_corrupt_partial = _row_is_corrupt_partial,
+    repair_missing_loadout_slots = _repair_missing_loadout_slots,
+    slot_resolves = command_api.slot_resolves,
+    in_modded_realm = _in_modded_realm,
+})
 
 printf("[gut:NATIVE_LOADOUTS] module loaded (%s) modded_realm=%s hooks=%d",
     MARKER, tostring(_in_modded_realm()), #M.HOOK_TARGETS)

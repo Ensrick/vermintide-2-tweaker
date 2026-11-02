@@ -77,8 +77,9 @@ return function(H, repo_root)
                 local file = assert(io.open(stream.root .. filename, "rb"))
                 local source = file:read("*a")
                 file:close()
-                if stream.name == "dev" then
-                    H.truthy(source:find("_vmf_categories = bind_catalog({", 1, true),
+                do
+                    H.truthy(source:find("_vmf_categories = bind_catalog({", 1, true)
+                        or source:find("_vmf_categories, _synthesize_equipment = bind_catalog({", 1, true),
                         filename .. " must consume its independently bound shared catalog")
                     H.truthy(source:find("disabled_sections = disabled_sections, external_group = external_group,", 1, true))
                     H.equal(nil, source:find("local _MY_MODS", 1, true), "parent must not duplicate authored-mod aliases")

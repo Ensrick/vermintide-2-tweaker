@@ -56,7 +56,7 @@ local function refresh(self)
                     if not logged[signature] and log_count < Policy.MAX_LOGS then
                         logged[signature] = true
                         log_count = log_count + 1
-                        mod:info("[gut:250] career=%s active=%s tiers=%s duplicates=%d unmapped=%d repair=%d/%d",
+                        pcall(printf, "[gut:250] career=%s active=%s tiers=%s duplicates=%d unmapped=%d repair=%d/%d",
                             tostring(career_name), Policy.fingerprint(original),
                             Policy.fingerprint(normalized), duplicates, unmapped,
                             log_count, Policy.MAX_LOGS)

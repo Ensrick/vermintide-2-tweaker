@@ -61,7 +61,8 @@
         @{ File='general_tweaker/scripts/mods/general_tweaker/_gt_solo_qol.lua'; Kind='shading'; Count=2; Policy='owned-world-existing'; Evidence='qa/lua/tests/test_resource_residency_census.lua' }
         @{ File='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_gui_material_guard.lua'; Kind='renderer_hook'; Count=1; Policy='shared-v2-global-preserve-unknown'; Evidence='qa/lua/tests/test_cos_resource_residency.lua' }
         @{ File='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_gui_material_guard.lua'; Kind='residency_proof'; Count=4; Policy='shared-v2-global-preserve-unknown'; Evidence='qa/lua/tests/test_cos_resource_residency.lua' }
-        @{ File='gui_tweaker/scripts/mods/gui_tweaker/_gut_gui_material_guard.lua'; Kind='renderer_hook'; Count=1; Policy='deferred-legacy'; Evidence='issue:#749' }
+        @{ File='gui_tweaker/scripts/mods/gui_tweaker/_gut_gui_material_guard.lua'; Kind='renderer_hook'; Count=1; Policy='shared-v2-global-preserve-unknown'; Evidence='qa/lua/tests/test_gut_public_rollup.lua' }
+        @{ File='gui_tweaker/scripts/mods/gui_tweaker/_gut_gui_material_guard.lua'; Kind='residency_proof'; Count=4; Policy='shared-v2-global-preserve-unknown'; Evidence='qa/lua/tests/test_gut_public_rollup.lua' }
         @{ File='verminious_dreams_lighting_dev/scripts/mods/verminious_dreams_lighting_dev/verminious_dreams_lighting_dev.lua'; Kind='shading'; Count=4; Policy='owned-world-existing'; Evidence='qa/lua/tests/test_resource_residency_census.lua' }
         @{ File='verminious_dreams_lighting/scripts/mods/verminious_dreams_lighting/verminious_dreams_lighting.lua'; Kind='shading'; Count=2; Policy='owned-world-existing'; Evidence='qa/lua/tests/test_resource_residency_census.lua' }
         @{ File='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_lib_weapon_appearance.lua'; Kind='texture'; Count=1; Policy='deferred-legacy'; Evidence='issue:#749' }

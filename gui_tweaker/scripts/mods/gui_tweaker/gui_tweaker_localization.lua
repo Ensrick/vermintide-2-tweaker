@@ -12,6 +12,24 @@ return {
         en = "Mod Tweaker",
     },
 
+    gut_video_profiles_header = { en = "Graphics Profiles" },
+    gut_video_profile_selector = { en = "Active Profile" },
+    gut_video_profile_selector_tooltip = {
+        en = "Select a saved graphics profile. A saved profile is staged into the normal Video settings; click Apply to activate it.",
+    },
+    gut_video_profile_action = { en = "Profile Action" },
+    gut_video_profile_action_tooltip = {
+        en = "Save the displayed Video settings to the active profile, or delete that profile. Choose an empty profile first to save as a new profile.",
+    },
+    gut_video_profile_action_none = { en = "Choose Action" },
+    gut_video_profile_action_save = { en = "Save Current" },
+    gut_video_profile_action_delete = { en = "Delete Selected" },
+    gut_video_profile_delete_title = { en = "Delete Graphics Profile" },
+    gut_video_profile_delete_body = {
+        en = "Delete the selected graphics profile? This cannot be undone.",
+    },
+    gut_video_profile_delete_confirm = { en = "Delete" },
+
     -- ============================================================
     -- 3rd-Person Camera (migrated from general_tweaker 2026-06-29, #191)
     -- ============================================================
@@ -98,6 +116,8 @@ return {
     -- HideBuffs "UI Tweaks" area)
     -- ============================================================
     gut_hide_hud_ui_group = {
+        -- Reorg 2026-07-02: former "Hide HUD & UI"; now the single HUD category
+        -- (absorbed the deleted "On-Screen Overlays"). setting_id unchanged.
         en = "HUD",
     },
 
@@ -112,8 +132,12 @@ return {
         en = "Expanded Scoreboard (Live + End Screen)",
     },
     gut_scoreboard_live_native_tooltip = {
-        en = "Adds the same expanded statistics panel while you hold Tab in an Adventure mission and on its end screen. It shows the eleven statistics Vermintide already tracks; no custom stat hooks or network messages are added. Disable the standalone Tab Scoreboard mod before using this page.",
+        en = "Adds the same expanded statistics panel while you hold Tab in an Adventure mission and on its end screen. By default, the first page shows Vermintide's eleven scoreboard rows and the second adds Aidings and Times Revived from existing native statistics. Host Statistics adds optional extra rows. Disable the standalone Tab Scoreboard mod before using this page.",
     },
+    gut_scoreboard_live_title = { en = "Mission Statistics" },
+    gut_scoreboard_live_statistic = { en = "Statistic" },
+    gut_scoreboard_live_page_label = { en = "Page" },
+    gut_scoreboard_live_none_selected = { en = "No statistics selected" },
     gut_scoreboard_live_sort = { en = "Sort players by" },
     gut_scoreboard_live_sort_tooltip = { en = "Orders the four player columns by the selected live statistic. Damage Taken sorts lowest first; other statistics sort highest first." },
     gut_scoreboard_sort_name = { en = "Player name" },
@@ -122,6 +146,41 @@ return {
     gut_scoreboard_sort_elites = { en = "Elite kills" },
     gut_scoreboard_sort_specials = { en = "Special kills" },
     gut_scoreboard_sort_kills = { en = "Total kills" },
+    gut_scoreboard_live_page = { en = "Scoreboard Page" },
+    gut_scoreboard_live_page_tooltip = { en = "Selects the statistics page shown on both the held-Tab and end-of-mission scoreboards. A page beyond the current visible page count safely clamps to the last available page." },
+    gut_scoreboard_page_1 = { en = "Page 1" },
+    gut_scoreboard_page_2 = { en = "Page 2" },
+    gut_scoreboard_page_3 = { en = "Page 3" },
+    gut_scoreboard_page_4 = { en = "Page 4" },
+    gut_scoreboard_next_page_hotkey = { en = "Next Scoreboard Page" },
+    gut_scoreboard_next_page_hotkey_tooltip = { en = "Optional hotkey that advances the saved scoreboard page. It is unbound by default." },
+    gut_scoreboard_custom_stats = { en = "Host Statistics" },
+    gut_scoreboard_custom_stats_tooltip = { en = "Adds Friendly Fire Damage, Melee Damage, Ranged Damage and Permanent Health Restored rows after Times Revived. The host records them for every player from the start of each Adventure mission. Friendly Fire Damage is damage dealt to other heroes; Melee Damage and Ranged Damage count damage to enemies using the game's melee and ranged kill rules; Permanent Health Restored credits the player who healed, including themselves, and ignores temporary health. When you are not the host, the rows are copied from a host who runs this mod; with any other host they show a dash." },
+    gut_scoreboard_topic_visibility_group = { en = "Visible Statistics" },
+    gut_scoreboard_topic_visibility_group_tooltip = { en = "Choose which statistics appear. If the selected sort statistic is hidden, players are sorted by name while your saved sort choice is preserved." },
+    gut_scoreboard_topic_kills_elites_visible = { en = "Elite Kills" },
+    gut_scoreboard_topic_kills_specials_visible = { en = "Special Kills" },
+    gut_scoreboard_topic_kills_total_visible = { en = "Total Kills" },
+    gut_scoreboard_topic_kills_melee_visible = { en = "Melee Kills" },
+    gut_scoreboard_topic_kills_ranged_visible = { en = "Ranged Kills" },
+    gut_scoreboard_topic_damage_taken_visible = { en = "Damage Taken" },
+    gut_scoreboard_topic_damage_dealt_visible = { en = "Damage Dealt" },
+    gut_scoreboard_topic_damage_dealt_bosses_visible = { en = "Boss Damage" },
+    gut_scoreboard_topic_headshots_visible = { en = "Headshots" },
+    gut_scoreboard_topic_saves_visible = { en = "Saves" },
+    gut_scoreboard_topic_revives_visible = { en = "Revives" },
+    gut_scoreboard_topic_aidings_visible = { en = "Aidings" },
+    gut_scoreboard_topic_times_revived_visible = { en = "Times Revived" },
+    gut_scoreboard_topic_friendly_fire_damage_visible = { en = "Friendly Fire Damage" },
+    gut_scoreboard_topic_melee_damage_dealt_visible = { en = "Melee Damage" },
+    gut_scoreboard_topic_ranged_damage_dealt_visible = { en = "Ranged Damage" },
+    gut_scoreboard_topic_permanent_health_restored_visible = { en = "Permanent Health Restored" },
+    gut_scoreboard_topic_aidings = { en = "Aidings" },
+    gut_scoreboard_topic_times_revived = { en = "Times Revived" },
+    gut_scoreboard_topic_friendly_fire_damage = { en = "Friendly Fire Damage" },
+    gut_scoreboard_topic_melee_damage_dealt = { en = "Melee Damage" },
+    gut_scoreboard_topic_ranged_damage_dealt = { en = "Ranged Damage" },
+    gut_scoreboard_topic_permanent_health_restored = { en = "Permanent Health Restored" },
     gut_preserve_disconnected_scoreboard = {
         en = "Preserve Disconnected Player Scores",
     },
@@ -157,6 +216,8 @@ return {
     gut_uitweaks_sync_tooltip      = { en = "With UI Tweaks (HideBuffs) installed, the HUD editor moves the buff, boss health, overcharge, and energy bars through UI Tweaks so the two never conflict. Requires UI Tweaks." },
     gut_vanilla_numeric_ui         = { en = "Numeric Health, Ammo, Cooldown" },
     gut_vanilla_numeric_ui_tooltip = { en = "Mirrors the vanilla Gameplay > HUD Customization option. Shows numeric health, ammo, and cooldown on the unit frames. Takes effect immediately." },
+    gut_simple_ui_fit_dropdowns         = { en = "Fit Simple UI Dropdowns" },
+    gut_simple_ui_fit_dropdowns_tooltip = { en = "With the Simple UI mod installed (used by UI Tweaks and other mods for their pop-up windows), keeps its dropdown lists on screen: a list opens upward when there is no room below it, shows only the rows that fit, scrolls with the mouse wheel, and reveals the selected option each time it opens. Window positions are kept on screen either way." },
     gut_vanilla_persistent_ammo         = { en = "Always Show Ammo Counter" },
     gut_vanilla_persistent_ammo_tooltip = { en = "Mirrors the vanilla Gameplay > HUD Customization option. Keeps your own ammo counter always visible. Requires a game restart." },
 
@@ -177,9 +238,9 @@ return {
     no_mission_objective             = { en = "Hide Mission Objective" },
     no_mission_objective_tooltip     = { en = "Hide the mission objective shown at the top of the screen." },
     hide_frames                      = { en = "Hide Portrait Frames" },
-    hide_frames_tooltip              = { en = "Hide portrait frames." },
+    hide_frames_tooltip              = { en = "Removes portrait-frame art from HUD unit frames while leaving the rest of the frame layout intact." },
     hide_levels                      = { en = "Hide Player Levels" },
-    hide_levels_tooltip              = { en = "Hide player levels." },
+    hide_levels_tooltip              = { en = "Removes player-level numbers from HUD unit frames." },
     HIDE_BOSS_HP_BAR                 = { en = "Hide Boss HP Bar" },
     HIDE_BOSS_HP_BAR_tooltip         = { en = "Hide the health bar on bosses." },
     HIDE_PICKUP_OUTLINES             = { en = "Hide Pickup Outlines" },
@@ -309,6 +370,9 @@ return {
     gut_mission_map_host_only_tooltip = {
         en = "When on, only the party host can open the mission map mid-mission; everyone else gets a short message instead. Off by default, so any player can open it to look around.",
     },
+    gut_mission_vote_title = {
+        en = "Change Mission?",
+    },
 
     -- ============================================================
     -- Inventory (#522): character-preview lighting dropdown.
@@ -375,10 +439,21 @@ return {
         en = "Loadouts",
     },
     gut_use_non_modded_loadouts = {
+        -- User-confirmed in-game 2026-07-02 (read-only official loadouts in modded).
+        -- #287 cosmetic-exemption fix awaiting in-game confirmation: .
         en = "Use non-modded loadouts",
     },
     gut_use_non_modded_loadouts_tooltip = {
         en = "While in the modded realm, use the loadouts saved in your non-modded (official) game, read-only: the I to VI bar shows your official gameplay loadouts, and gear, talent, loadout-switch and bot-designation changes all snap back so your official saves are never touched. Cosmetics (weapon illusion, hat, portrait frame, victory pose) stay changeable and are kept modded-side only. Turn off (default) to keep fully separate modded loadouts that never touch your official ones.",
+    },
+    -- #231 paged loadout bar (modded realm, thirty slots as five pages of six). The
+    -- context-menu header for slots past VI (vanilla has no custom_loadout_7..30_title)
+    -- and the page counter drawn above the add (+) button. %s = Roman numeral, %d = page.
+    gut_loadout_slot_title = {
+        en = "Loadout %s",
+    },
+    gut_loadout_page_label = {
+        en = "Page %d/%d",
     },
 
     -- Original career-specific temporary-health talent names (#352).
@@ -397,11 +472,12 @@ return {
     gut_surface_hidden_passives_tooltip = {
         en = "Shows source-confirmed innate career bonuses that the normal talent screen omits. Display only; talents and gameplay data are unchanged. On by default.",
     },
-    gut_hidden_passive_heading = { en = "Innate Perks" },
     gut_hidden_passive_whc_headshot_name = { en = "Power of Sigmar" },
     gut_hidden_passive_whc_headshot_desc = { en = "+25%% headshot damage." },
     gut_hidden_passive_whc_crit_name = { en = "Sigmar's Charm" },
     gut_hidden_passive_whc_crit_desc = { en = "+5%% base critical-strike chance." },
+    gut_hidden_passive_whc_combined_name = { en = "Power of Sigmar & Sigmar's Charm" },
+    gut_hidden_passive_whc_combined_desc = { en = "+25%% headshot damage and +5%% base critical-strike chance." },
 
     -- ============================================================
     -- Overlays (parry indicator, respawn timer, damage numbers) - now inside the

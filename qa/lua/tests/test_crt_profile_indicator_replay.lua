@@ -4,7 +4,7 @@
 -- profile and transaction code through the #221 runtime fixture. Every
 -- transaction case runs under forced `pairs` orders, because PUC Lua and
 -- LuaJIT iterate these tables differently.
-return function(H, repo_root)
+local function suite(H, repo_root, gui)
     local runtime = assert(loadfile(repo_root .. "/qa/lua/tests/_crt_armor_runtime_fixture.lua"))()
     local catalog = assert(loadfile(repo_root
         .. "/career_tweaker/scripts/mods/career_tweaker/_crt_tourney_catalog.lua"))()
@@ -61,7 +61,7 @@ return function(H, repo_root)
 
     local function world_for(surface, tourney_ids, with_catalog)
         local world = runtime(repo_root, {}, nil, {
-            surface = surface, ensrick = { [A] = {}, [B] = {} }, tourney = tourney_ids,
+            gui = gui, surface = surface, ensrick = { [A] = {}, [B] = {} }, tourney = tourney_ids,
             tourney_engine = with_catalog and { CATALOG = catalog, apply = function() end,
                 restore = function() end } or nil,
         })
@@ -240,4 +240,8 @@ return function(H, repo_root)
         H.equal(check(), nil)
         H.equal(world.calls.writes, writes, "the runtime check never writes player settings")
     end)
+end
+return function(H, repo_root)
+    suite(H, repo_root, "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/")
+    suite(H, repo_root, "gui_tweaker/scripts/mods/gui_tweaker/")
 end

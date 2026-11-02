@@ -1,16 +1,24 @@
 return function(H, repo_root)
-    local policy_path = repo_root
-        .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_boss_damage_sync_policy.lua"
-    local score_policy_path = repo_root
-        .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_scoreboard_policy.lua"
-    local runtime_path = repo_root
-        .. "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_boss_damage_sync.lua"
-    local mod_root = repo_root .. "/gui_tweaker_dev/"
+    for _, selected in ipairs({
+        { dir = "gui_tweaker_dev", id = "gut_dev" },
+        { dir = "gui_tweaker", id = "gut" },
+    }) do
+    local stream = selected
+    local base_harness = H
+    local H = setmetatable({
+        test = function(name, body) base_harness.test(stream.id .. ": " .. name, body) end,
+    }, { __index = base_harness })
+    local function qualify(path) return path:gsub("gui_tweaker_dev", stream.dir) end
+    local mod_root = repo_root .. "/" .. stream.dir .. "/"
+    local scripts = mod_root .. "scripts/mods/" .. stream.dir .. "/"
+    local policy_path = scripts .. "_gut_boss_damage_sync_policy.lua"
+    local score_policy_path = scripts .. "_gut_scoreboard_policy.lua"
+    local runtime_path = scripts .. "_gut_boss_damage_sync.lua"
     local Policy = assert(loadfile(policy_path))()
     local ScorePolicy = assert(loadfile(score_policy_path))()
 
     local function read(path)
-        local file = assert(io.open(path, "rb"))
+        local file = assert(io.open(qualify(path), "rb"))
         local source = file:read("*a")
         file:close()
         return source
@@ -528,7 +536,7 @@ return function(H, repo_root)
         end
 
         rawset(_G, "get_mod", function(name)
-            if name == "gut_dev" then return fake_mod end
+            if name == stream.id then return fake_mod end
             if name == "VMF" then
                 return { ping_vmf_users = function() state.pings = state.pings + 1 end }
             end
@@ -819,7 +827,7 @@ return function(H, repo_root)
             network_id = function() return "client-peer" end,
         }
         rawset(_G, "get_mod", function(name)
-            return name == "gut_dev" and fake_mod or nil
+            return name == stream.id and fake_mod or nil
         end)
         rawset(_G, "Managers", {
             mechanism = {
@@ -1021,9 +1029,10 @@ return function(H, repo_root)
             H.equal(executable:find("rpc_players_session_score", 1, true), nil)
             H.equal(executable:find("rpc_sync_statistics", 1, true), nil)
         end
-        H.equal(stable_entry:find("_gut_boss_damage_sync", 1, true), nil)
-        H.equal(stable_live:find("boss_scores", 1, true), nil)
+        H.truthy(stable_entry:find("_gut_boss_damage_sync", 1, true), "approved public boss transport is not wired")
+        H.truthy(stable_live:find("boss_scores", 1, true), "public presenter lost the boss overlay")
         H.truthy(retention:find("issue437_adventure_scoreboard_retention", 1, true) ~= nil)
         H.truthy(revive:find("issue438_on_yer_feet_revive_credit", 1, true) ~= nil)
     end)
+    end
 end

@@ -51,6 +51,36 @@
             RequiredModules = @('_mod_tweaker_state_interaction.lua')
         }
         @{
+            # Official 0.2.290 promotion retains selected private owners; this
+            # is a structural ratchet, not gameplay acceptance of the rollup.
+            Name = 'gui_tweaker_public_entry'
+            State = 'partial'
+            Entry = 'gui_tweaker/scripts/mods/gui_tweaker/gui_tweaker.lua'
+            CeilingLines = 1282
+            RequiredModules = @('_gut_runtime_checks_mission_map.lua', '_gut_saved_loadout_commands.lua', '_gut_mod_tweaker_shell.lua', '_mod_tweaker_view_pending.lua', '_mod_tweaker_view_catalog.lua', '_gut_issue389_verifier.lua')
+        }
+        @{
+            Name = 'gui_tweaker_public_view'
+            State = 'partial'
+            Entry = 'gui_tweaker/scripts/mods/gui_tweaker/_mod_tweaker_view.lua'
+            CeilingLines = 1347
+            RequiredModules = @('_mod_tweaker_view_rows.lua', '_mod_tweaker_view_diagnostics.lua', '_mod_tweaker_view_interaction.lua', '_mod_tweaker_keybind_capture.lua', '_gut_uitweaks_live_group.lua')
+        }
+        @{
+            Name = 'gui_tweaker_public_state'
+            State = 'partial'
+            Entry = 'gui_tweaker/scripts/mods/gui_tweaker/_mod_tweaker_state.lua'
+            CeilingLines = 1431
+            RequiredModules = @('_mod_tweaker_state_interaction.lua', '_gut_uitweaks_live_group.lua')
+        }
+        @{
+            Name = 'gui_tweaker_public_native_loadouts'
+            State = 'partial'
+            Entry = 'gui_tweaker/scripts/mods/gui_tweaker/_gut_native_loadouts.lua'
+            CeilingLines = 1416
+            RequiredModules = @('_gut_native_loadout_commands.lua', '_gut_native_loadout_checks.lua')
+        }
+        @{
             # Structural phase completed at 0.9.207-dev (#1159): the entry is
             # at or below the 1500-line target and every extracted owner is
             # retained by this machine-readable contract.

@@ -14,8 +14,88 @@ local M = {}
 function M.install(api)
     local _rt_register = assert(api.register, "Mod Tweaker contracts require register")
     local _rt_src_read = assert(api.src_read, "Mod Tweaker contracts require src_read")
-    mod._gut_rt_register = _rt_register
     local math = math
+    local load_view = api.load_view
+    mod:dofile("scripts/mods/gui_tweaker/_gut_dialogue_contract").install(_rt_register, load_view)
+
+_rt_register("issue605_dialogue_collapse_and_tristate", function()
+    local dialogue = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_dialogue")
+    if dialogue.next_expanded("kruber", "kruber") ~= nil then
+        return "active dialogue group cannot collapse to nil"
+    end
+    if dialogue.next_expanded("bardin", "kruber") ~= "kruber" then
+        return "dialogue group expansion did not select the requested speaker"
+    end
+    if dialogue.next_line_state(nil) ~= true
+       or dialogue.next_line_state(true) ~= false
+       or dialogue.next_line_state(false) ~= nil then
+        return "dialogue line tri-state transition lost true, false, or nil"
+    end
+end)
+
+_rt_register("issue167_slider_release_edge", function()
+    local ok, Edge = pcall(mod.dofile, mod,
+        "scripts/mods/gui_tweaker/_mod_tweaker_slider_drag_edge")
+    if not ok or type(Edge) ~= "table" or type(Edge.step) ~= "function"
+        or type(Edge.is_modal) ~= "function" then
+        return "#167 slider drag edge owner unavailable"
+    end
+    if not Edge.is_modal(false, true) or not Edge.is_modal(true, false)
+        or Edge.is_modal(false, false) then
+        return "#167 slider modal boundary drifted"
+    end
+
+    local state = {
+        dragging = false,
+        block_until_press = false,
+        cursor_moves = 0,
+        commits = 0,
+        sounds = 0,
+        other_row_activations = 0,
+    }
+
+    local function frame(held, cursor_available, other_row_release)
+        local next_dragging, follow_cursor, released, modal =
+            Edge.step(state.dragging, held, cursor_available)
+        state.dragging = next_dragging
+        if follow_cursor then state.cursor_moves = state.cursor_moves + 1 end
+        if released then
+            state.block_until_press = true
+            state.commits = state.commits + 1
+            state.sounds = state.sounds + 1
+        end
+        if other_row_release and not modal and not state.block_until_press then
+            state.other_row_activations = state.other_row_activations + 1
+        end
+        return released, modal
+    end
+
+    local released, modal = frame(true, true, false)
+    if released or not modal or not state.dragging or state.cursor_moves ~= 1 then
+        return "#167 held frame did not begin one modal cursor-follow cycle"
+    end
+
+    released, modal = frame(false, false, true)
+    if not released or not modal or state.dragging or not state.block_until_press
+        or state.commits ~= 1 or state.sounds ~= 1 or state.cursor_moves ~= 1
+        or state.other_row_activations ~= 0 then
+        return "#167 first release did not commit/sound once while suppressing the other row"
+    end
+
+    released, modal = frame(false, false, true)
+    if released or modal or state.commits ~= 1 or state.sounds ~= 1
+        or state.cursor_moves ~= 1 or state.other_row_activations ~= 0 then
+        return "#167 latched release repeated work or escaped the fresh-press block"
+    end
+
+    state.block_until_press = false
+    frame(true, true, false)
+    frame(false, false, false)
+    if state.commits ~= 2 or state.sounds ~= 2 or state.cursor_moves ~= 2
+        or state.other_row_activations ~= 0 then
+        return "#167 second physical drag did not produce exactly one new edge"
+    end
+end)
 
 _rt_register("mod_tweaker_esc_entry_hook", function()
     local logic_class = rawget(_G, "IngameViewLayoutLogic")
@@ -52,10 +132,13 @@ _rt_register("mod_tweaker_transition_registered", function()
     if type(settings.transitions.mod_tweaker_view) ~= "function" then
         return "transitions.mod_tweaker_view is not a function"
     end
-    -- Smoke the in-mission route: force is_in_inn=false and supply NO transition_with_fade
-    -- so the closure must take the standalone-ModTweakerView branch.
+    -- Smoke (IN-MISSION fallback, build 2): force is_in_inn=false and supply NO
+    -- transition_with_fade so the closure takes the standalone-ModTweakerView branch.
     -- Pre-seed views.mod_tweaker_view so _attach_view short-circuits (idempotent
-    -- early-return) without needing a real renderer; the closure must then set current_view.
+    -- early-return) without needing a real renderer; the closure must then set
+    -- current_view. (The keep route is asserted against the published routing policy
+    -- further down; the dormant sub-state parameters live in
+    -- mod_tweaker_keep_substate_routing.)
     local fake = {
         ingame_ui_context = { is_in_inn = false },
         views = { mod_tweaker_view = { _exit_transition = nil } },
@@ -88,24 +171,90 @@ _rt_register("mod_tweaker_transition_registered", function()
         return string.format("ingame_menu origin did not set _exit_transition = ingame_menu (got %s)", tostring(et_legacy))
     end
 
-    -- The keep route is intentionally standalone too (`_USE_KEEP_SUBSTATE = false`). Prove
-    -- that the registered dormant state cannot silently reclaim the active transition.
-    local substate_called = false
+    -- KEEP route (#1652): the hero_view sub-state route (v0.2.60-dev) has been gated OFF
+    -- since the v0.2.62-dev bounce revert (`_USE_KEEP_SUBSTATE = false`, published as
+    -- mod._gut_mt_keep_substate_routing), so in the keep (is_in_inn ~= false) the closure
+    -- opens the SAME standalone ModTweakerView and never calls transition_with_fade. The
+    -- old assertion demanded the dormant route whenever HeroViewStateModTweaker existed
+    -- (it always does: the state stays registered for /mod_tweaker) and drove the closure
+    -- with a keep fake that had no views, so it reported on a branch the code deliberately
+    -- does not take. Assert the keep route against the published policy instead; the
+    -- policy read must resolve (5.1d rule 2). The dormant sub-state parameters are
+    -- covered by mod_tweaker_keep_substate_routing below.
+    local policy = mod._gut_mt_keep_substate_routing
+    if type(policy) ~= "boolean" then
+        return "keep routing policy not published (mod._gut_mt_keep_substate_routing is "
+            .. type(policy) .. ")"
+    end
+    local fade_calls = 0
     local fake_keep = {
         current_view = "hero_view",
         ingame_ui_context = { is_in_inn = true },
         views = { mod_tweaker_view = { _exit_transition = nil } },
-        transition_with_fade = function() substate_called = true end,
+        transition_with_fade = function() fade_calls = fade_calls + 1 end,
     }
     settings.transitions.mod_tweaker_view(fake_keep)
-    if fake_keep.current_view ~= "mod_tweaker_view" then
-        return "keep transition did not use the standalone Mod Tweaker view"
+    if policy then
+        if fade_calls ~= 1 then
+            return "keep branch did not route through transition_with_fade while the sub-state policy is on"
+        end
+    else
+        if fade_calls ~= 0 then
+            return "keep branch called transition_with_fade while the sub-state policy is off"
+        end
+        if fake_keep.current_view ~= "mod_tweaker_view" then
+            return "keep transition did not use the standalone Mod Tweaker view (current_view = "
+                .. tostring(fake_keep.current_view) .. ")"
+        end
+        if fake_keep.views.mod_tweaker_view._exit_transition ~= "hero_view" then
+            return "keep branch did not capture the hero_view origin for exit"
+        end
     end
-    if fake_keep.views.mod_tweaker_view._exit_transition ~= "hero_view" then
-        return "keep standalone transition did not retain hero_view as its exit origin"
+end)
+
+-- (#1652) The dormant keep sub-state route: transition_with_fade("hero_view", {
+-- menu_state_name = "gut_mod_tweaker", force_open = true }). Dropping force_open was the
+-- v0.2.60-dev darken-then-open-nothing regression (the keep ESC menu IS hero_view, so
+-- without force_open IngameUI.handle_transition skips the re-enter and menu_state_name
+-- is ignored). This runs only while the published policy is on; otherwise it SKIPs with
+-- the reason, because the closure never takes this branch (v0.2.62-dev revert) and a
+-- FAIL there was a verdict on nothing.
+_rt_register("mod_tweaker_keep_substate_routing", function()
+    local settings = package.loaded["scripts/ui/views/ingame_ui_settings"]
+    if not settings or not settings.transitions
+        or type(settings.transitions.mod_tweaker_view) ~= "function" then
+        return "transitions.mod_tweaker_view is not registered"
     end
-    if substate_called then
-        return "dormant Hero-state transition unexpectedly became active"
+    local policy = mod._gut_mt_keep_substate_routing
+    if type(policy) ~= "boolean" then
+        return "keep routing policy not published (mod._gut_mt_keep_substate_routing is "
+            .. type(policy) .. ")"
+    end
+    if not policy then
+        return "skip: keep sub-state routing is gated off (_USE_KEEP_SUBSTATE = false since v0.2.62-dev); the keep ESC entry opens the standalone ModTweakerView"
+    end
+    if not rawget(_G, "HeroViewStateModTweaker") then
+        return "sub-state policy is on but HeroViewStateModTweaker is not defined"
+    end
+    local captured
+    local fake_keep = {
+        ingame_ui_context = { is_in_inn = true },
+        transition_with_fade = function(_self, transition, params)
+            captured = { transition = transition, params = params or {} }
+        end,
+    }
+    settings.transitions.mod_tweaker_view(fake_keep)
+    if not captured then
+        return "enabled HeroView sub-state did not call transition_with_fade"
+    end
+    if captured.transition ~= "hero_view" then
+        return string.format("keep branch transition not 'hero_view' (got %s)", tostring(captured.transition))
+    end
+    if captured.params.menu_state_name ~= "gut_mod_tweaker" then
+        return string.format("keep branch menu_state_name not 'gut_mod_tweaker' (got %s)", tostring(captured.params.menu_state_name))
+    end
+    if captured.params.force_open ~= true then
+        return "keep branch missing force_open = true (the darken-then-nothing regression)"
     end
 end)
 
@@ -135,7 +284,9 @@ _rt_register("mod_tweaker_api_present", function()
     local MT = mod.mod_tweaker
     if not MT then return "mod.mod_tweaker not set; install path failed" end
     for _, name in ipairs({ "register_category", "is_registered", "list_categories",
-                            "get_category", "get", "set" }) do
+                            "get_category", "get", "set", "register_runtime_gate",
+                            "unregister_runtime_gate", "runtime_gate_status",
+                            "apply_runtime_gate", "prune_runtime_gated_pending" }) do
         if type(MT[name]) ~= "function" then
             return string.format("mod.mod_tweaker:%s is not a function (got %s)",
                 name, type(MT[name]))
@@ -160,6 +311,31 @@ _rt_register("mod_tweaker_api_present", function()
     if not MT:is_registered(probe_id) then return "is_registered() false after register" end
     MT:set(probe_id, "probe_flag", true)
     if MT:get(probe_id, "probe_flag") ~= true then return "get() did not reflect set()" end
+end)
+
+_rt_register("issue371_runtime_gate_api", function()
+    local MT = mod.mod_tweaker
+    if not MT then return "mod.mod_tweaker not set; install path failed" end
+    local gate_id = "__mt_rt_gate_probe__"
+    MT:unregister_runtime_gate(gate_id)
+    local ok, err = MT:register_runtime_gate(gate_id, {
+        mod_id = "__mt_rt_probe__",
+        setting_ids = { "probe_flag" },
+        evaluate = function() return false, "Peer safety probe." end,
+    })
+    if not ok then return "runtime gate registration failed: " .. tostring(err) end
+    local blocked, reason = MT:runtime_gate_status("__mt_rt_probe__", "probe_flag")
+    MT:unregister_runtime_gate(gate_id)
+    if not blocked or reason ~= "Peer safety probe." then
+        return "runtime gate did not return its exact blocked reason"
+    end
+    return nil
+end)
+
+-- (#1670) The /mod_tweaker command route (keep sub-state) and the Esc route (standalone
+-- view) fire their menu sounds on the same wwise world. Body: _mod_tweaker_sound.lua.
+_rt_register("issue1670_command_route_sound_path", function()
+    return mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_sound").check_routes()
 end)
 
 -- (#525) Register the engine-free tab-label policy's live check once.
@@ -306,7 +482,10 @@ _rt_register("mod_tweaker_exclusive_group_api", function()
         return "radio presentation without label was not rejected"
     end
     -- Enforcement is wired: the standalone view class carries the sweep method.
-    local ok_v, V = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_mod_tweaker_view")
+    local ok_v, V
+    if type(load_view) == "function" then
+        ok_v, V = load_view()
+    end
     if not ok_v or type(V) ~= "table" or type(V._enforce_exclusive) ~= "function" then
         return "ModTweakerView:_enforce_exclusive missing (enforcement not wired)"
     end
@@ -440,7 +619,8 @@ end)
 -- (anchored at RANGE MIN, clamped to range). The two seeded consumers are ct starting_coins
 -- and cim base_power_level, both step 25 via the registry (VMF strips a custom `step` field
 -- off a foreign mod's widget, so the registry is the working path — see _resolve_step /
--- STEP_OVERRIDES comments). Guards against a regression that reverts the registry keys to
+-- STEP_OVERRIDES comments). Chest-of-Trials cost joins those consumers for #826. Guards
+-- against a regression that reverts the registry keys to
 -- directory names (which silently never match) or drops the min-anchoring.
 _rt_register("mod_tweaker_arrow_edge_latch_hold_repeat", function()
     -- (#152) Mod Tweaker slider arrows: a single click = ONE natural increment, EDGE-LATCHED
@@ -502,293 +682,6 @@ _rt_register("mod_tweaker_step_resolution", function()
     end
 end)
 
--- (#389) Exercise the actual owner-aware presentation seam, not only the detached step
--- resolver. A direct resolve({}, "cim", ...) check can pass while the merged Equipment
--- category still supplies "gut_equipment" in production, which is the official-v0.2.288
--- regression. Both presentation owners must derive CIM from category._owners here.
-_rt_register("issue389_mod_tweaker_owner_aware_step", function()
-    local ok_view, View = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_mod_tweaker_view")
-    if not ok_view or type(View) ~= "table" then return "view module unavailable" end
-    local view_resolve = View._resolve_owner_step
-    if type(view_resolve) ~= "function" then
-        return "standalone view owner-aware step resolver unavailable"
-    end
-    local view_snap = View._snap_and_clamp
-    if type(view_snap) ~= "function" then
-        return "standalone view snap helper unavailable"
-    end
-    local synthesize_equipment = View._synthesize_equipment
-    if type(synthesize_equipment) ~= "function" then
-        return "standalone Equipment synthesizer unavailable"
-    end
-
-    -- Recreate the real N>=2 Equipment topology, then drive the production row builder and
-    -- the installed typed-edit callback. This is deliberately more than a detached resolver
-    -- check: #389 existed because the helper was correct while its live caller supplied the
-    -- synthetic category id. The probe is local-only and stages into a fake sink.
-    local cim_owner = {
-        get = function(_, setting_id)
-            if setting_id == "base_power_level" then return 324 end
-        end,
-        localize = function(_, key) return tostring(key) end,
-    }
-    local base_power_node = {
-        setting_id = "base_power_level",
-        type = "numeric",
-        title = "Base Power Level",
-        range = { 0, 950 },
-        decimals_number = 0,
-        depth = 1,
-    }
-    local synthesized = synthesize_equipment({
-        {
-            mod_id = "cosmetics_tweaker",
-            mod_obj = { localize = function(_, key) return tostring(key) end },
-            enabled = true,
-            _flat = true,
-            widgets = { { setting_id = "cosmetics_header", type = "header" } },
-        },
-        {
-            mod_id = "cim",
-            mod_obj = cim_owner,
-            enabled = true,
-            _flat = true,
-            widgets = {
-                { setting_id = "cim_header", type = "header" },
-                base_power_node,
-            },
-        },
-    })
-    local equipment = nil
-    for _, category in ipairs(synthesized or {}) do
-        if category.mod_id == "gut_equipment" then equipment = category; break end
-    end
-    if type(equipment) ~= "table" then return "live Equipment synthesis did not produce a merged category" end
-    local owner = equipment._owners and equipment._owners.base_power_level
-    if type(owner) ~= "table" or owner.mod_id ~= "cim" or owner.mod_obj ~= cim_owner then
-        return "live Equipment synthesis lost Base Power Level ownership"
-    end
-    equipment._contract_probe = true -- never let synthetic evidence satisfy the live receipt.
-
-    local stage_count = 0
-    local fake_view = {
-        _pending = {},
-        _categories = { equipment },
-        _selected = 1,
-        _expanded = {},
-        _rows = {},
-        _tabs = {},
-        _profile_buttons = {},
-        _max_scroll = 0,
-    }
-    setmetatable(fake_view, { __index = View })
-    fake_view.stage_set = function(self, category, setting_id, value)
-        stage_count = stage_count + 1
-        return View.stage_set(self, category, setting_id, value)
-    end
-    local row, row_error = View._build_node_row(fake_view, base_power_node, equipment, { 0, 0, 0 }, 1)
-    if type(row) ~= "table" or type(row.content) ~= "table" then
-        return "live Base Power row build failed: " .. tostring(row_error)
-    end
-    if row.content.step ~= 25 or row.content.min ~= 0 or row.content.max ~= 950
-            or row.content.value ~= 324 then
-        return "live Base Power row did not carry owner step, bounds, and current value"
-    end
-    if row._category ~= equipment or row._setting_id ~= "base_power_level"
-            or row._mod_id ~= "gut_equipment" then
-        return "live Base Power row lost its merged-category metadata"
-    end
-    if type(View._commit_edit) ~= "function" then return "installed typed-edit callback unavailable" end
-    row.content.editing = true
-    row.content.edit_str = "324"
-    fake_view._editing_row = row
-    View._commit_edit(fake_view, row)
-    if stage_count ~= 1 or row.content.value ~= 325
-            or not fake_view._pending.cim or fake_view._pending.cim.base_power_level ~= 325
-            or fake_view._pending.gut_equipment ~= nil then
-        return "installed typed-edit callback did not snap and stage Base Power 324 to 325"
-    end
-
-    -- Drive the installed pointer-input owner too. A real row that starts off-grid at 324
-    -- must increment to 350, and a multi-frame release latch must not apply it twice.
-    if type(View._handle_input) ~= "function" then return "installed pointer-input callback unavailable" end
-    fake_view._pending = {}
-    stage_count = 0
-    local arrow_row, arrow_error = View._build_node_row(fake_view, base_power_node, equipment, { 0, 0, 0 }, 1)
-    if type(arrow_row) ~= "table" then return "live arrow row build failed: " .. tostring(arrow_error) end
-    if type(arrow_row.content) ~= "table" or type(arrow_row.content.inc) ~= "table"
-            or type(arrow_row.content.dec) ~= "table" then
-        return "live arrow row did not expose both pointer controls"
-    end
-    fake_view._rows = { arrow_row }
-    arrow_row.content.inc.on_release = true
-    View._handle_input(fake_view, nil)
-    if arrow_row.content.value ~= 350 or stage_count ~= 1
-            or not fake_view._pending.cim or fake_view._pending.cim.base_power_level ~= 350 then
-        return "installed increment callback did not snap and stage Base Power 324 to 350"
-    end
-    View._handle_input(fake_view, nil)
-    if arrow_row.content.value ~= 350 or stage_count ~= 1 then
-        return "installed increment callback repeated on one latched release"
-    end
-    arrow_row.content.inc.on_release = false
-    View._handle_input(fake_view, nil)
-    if arrow_row._arrow_latched then return "installed arrow latch did not release" end
-
-    fake_view._pending = {}
-    stage_count = 0
-    arrow_row.content.value = 324
-    arrow_row.content.dec.on_release = true
-    View._handle_input(fake_view, nil)
-    if arrow_row.content.value ~= 300 or stage_count ~= 1
-            or not fake_view._pending.cim or fake_view._pending.cim.base_power_level ~= 300 then
-        return "installed decrement callback did not snap and stage Base Power 324 to 300"
-    end
-
-    local merged = {
-        mod_id = "gut_equipment",
-        _owners = {
-            base_power_level = { mod_id = "cim" },
-        },
-    }
-    local non_owner = { mod_id = "gut_equipment" }
-    local normal = { mod_id = "ct" }
-    local normal_dev = { mod_id = "ct_dev" }
-    local normal_cim = { mod_id = "cim" }
-    local merged_dev = {
-        mod_id = "gut_equipment",
-        _owners = { base_power_level = { mod_id = "cim_dev" } },
-    }
-    local missing_owner_id = {
-        mod_id = "gut_equipment",
-        _owners = { base_power_level = {} },
-    }
-    local foreign_owner = {
-        mod_id = "gut_equipment",
-        _owners = { base_power_level = { mod_id = "foreign_crafter" } },
-    }
-    local unrelated_cim_setting = {
-        mod_id = "gut_equipment",
-        _owners = { another_integer = { mod_id = "cim" } },
-    }
-    local cases = { { "standalone view", view_resolve } }
-    -- The normal ESC/hotkey/chat route is standalone. Keep the registered but dormant
-    -- Hero-state implementation in the same source contract so a future deliberate re-enable
-    -- cannot revive the owner-boundary defect.
-    local State = rawget(_G, "HeroViewStateModTweaker")
-    local state_resolve = type(State) == "table" and State._resolve_owner_step
-    if type(state_resolve) ~= "function" then
-        return "keep-state owner-aware step resolver unavailable"
-    end
-    cases[#cases + 1] = { "keep-state", state_resolve }
-
-    -- Build the real dormant-state row and drive its installed pointer adapter. Resolver-only
-    -- coverage missed #389's production caller once already, and an off-grid stored value is
-    -- the discriminating case for the min-anchored #164 contract.
-    if type(State._build_node_row) ~= "function" or type(State._handle_input) ~= "function" then
-        return "keep-state row/input adapter unavailable"
-    end
-    local state_stage_count = 0
-    local fake_state = {
-        _pending = {},
-        _categories = { equipment },
-        _selected = 1,
-        _expanded = {},
-        _rows = {},
-        _tabs = {},
-        _profile_buttons = {},
-        _max_scroll = 0,
-    }
-    setmetatable(fake_state, { __index = State })
-    fake_state.stage_set = function(self, category, setting_id, value)
-        state_stage_count = state_stage_count + 1
-        return State.stage_set(self, category, setting_id, value)
-    end
-    local state_row, state_row_error = State._build_node_row(
-        fake_state, base_power_node, equipment, { 0, 0, 0 }, 1)
-    if type(state_row) ~= "table" or type(state_row.content) ~= "table" then
-        return "keep-state Base Power row build failed: " .. tostring(state_row_error)
-    end
-    if state_row.content.step ~= 25 or type(state_row.content.inc) ~= "table"
-            or type(state_row.content.dec) ~= "table" then
-        return "keep-state Base Power row did not carry owner step and pointer controls"
-    end
-    fake_state._rows = { state_row }
-    state_row.content.inc.on_release = true
-    State._handle_input(fake_state, nil)
-    if state_row.content.value ~= 350 or state_stage_count ~= 1
-            or not fake_state._pending.cim or fake_state._pending.cim.base_power_level ~= 350 then
-        return "keep-state increment did not snap and stage Base Power 324 to 350"
-    end
-    state_row.content.inc.on_release = false
-    state_row.content.value = 324
-    fake_state._pending = {}
-    state_stage_count = 0
-    state_row.content.dec.on_release = true
-    State._handle_input(fake_state, nil)
-    if state_row.content.value ~= 300 or state_stage_count ~= 1
-            or not fake_state._pending.cim or fake_state._pending.cim.base_power_level ~= 300 then
-        return "keep-state decrement did not snap and stage Base Power 324 to 300"
-    end
-
-    -- Compose the actual active-view owner result with the actual snap helper at CIM's
-    -- authored 0..950 bounds. This guards the configuration seam rather than retesting a
-    -- copied formula. Off-grid stored values display unchanged until the user supplies input.
-    local base_step = row.content.step
-    local base_row = row.content
-    if view_snap(base_row, 26) ~= 25 then return "Base Power 26 did not snap to 25" end
-    if view_snap(base_row, 324) ~= 325 then return "Base Power 324 did not snap to 325" end
-    if view_snap(base_row, 324 - base_step) ~= 300 then
-        return "Base Power decrement from off-grid 324 did not land on 300"
-    end
-    if view_snap(base_row, 324 + base_step) ~= 350 then
-        return "Base Power increment from off-grid 324 did not land on 350"
-    end
-    if view_snap(base_row, 949) ~= 950 then return "Base Power 949 did not snap to 950" end
-    if view_snap(base_row, 1000) ~= 950 then return "Base Power did not clamp to authored max 950" end
-
-    for _, case in ipairs(cases) do
-        local label, resolve_owner = case[1], case[2]
-        if resolve_owner({}, merged, "base_power_level", 0) ~= 25 then
-            return label .. " did not resolve merged Equipment base_power_level through CIM"
-        end
-        if resolve_owner({}, merged_dev, "base_power_level", 0) ~= 25 then
-            return label .. " did not resolve merged Equipment base_power_level through CIM Dev"
-        end
-        if resolve_owner({ content = { setting_id = "base_power_level" } }, merged, nil, 0) ~= 25 then
-            return label .. " did not use the widget setting id for owner lookup"
-        end
-        if resolve_owner({}, normal_cim, "base_power_level", 0) ~= 25 then
-            return label .. " regressed normal CIM category step resolution"
-        end
-        if resolve_owner({}, non_owner, "base_power_level", 0) ~= 1 then
-            return label .. " applied CIM's override without a source-qualified setting owner"
-        end
-        if resolve_owner({}, missing_owner_id, "base_power_level", 0) ~= 1 then
-            return label .. " applied CIM's override with a nil setting-owner id"
-        end
-        if resolve_owner({}, foreign_owner, "base_power_level", 0) ~= 1 then
-            return label .. " applied CIM's override to a foreign setting owner"
-        end
-        if resolve_owner({}, unrelated_cim_setting, "another_integer", 0) ~= 1 then
-            return label .. " applied Base Power's override to an unrelated CIM setting"
-        end
-        if math.abs(resolve_owner({}, foreign_owner, "base_power_level", 2) - 0.01) > 1e-9 then
-            return label .. " regressed natural decimal fallback for a foreign owner"
-        end
-        if resolve_owner({}, normal, "starting_coins", 0) ~= 25 then
-            return label .. " regressed Starting Coins step resolution"
-        end
-        if resolve_owner({}, normal, "cot_cost_amount", 0) ~= 25
-                or resolve_owner({}, normal_dev, "cot_cost_amount", 0) ~= 25 then
-            return label .. " regressed Trial Chest Cost step resolution"
-        end
-        if resolve_owner({ step = 10 }, merged, "base_power_level", 0) ~= 10 then
-            return label .. " regressed explicit widget-step precedence"
-        end
-    end
-end)
-
 -- (#95) Keybind / table read-only values must route through _format_keybind_value
 -- in _mod_tweaker_view.lua, NOT tostring(), or a VMF keybind (a Lua TABLE like
 -- {"left alt"}) renders its raw address ("CYCLE HUD MODE: table: 0x..."). Source
@@ -823,9 +716,13 @@ _rt_register("mod_tweaker_keybind_render", function()
     end
 end)
 
--- (#631) Mouse capture and release-commit are separate focused owners. Inspect
--- the poller and interaction callback independently so the check follows the
--- actual execution boundary rather than relying on a monolithic view source.
+-- (issue 631) Mouse buttons 1-5 must be capturable as keybind primaries. The Mod Tweaker's
+-- keybind capture (_poll_keybind_combo) originally polled only Keyboard, so mouse binds could
+-- never be set even though VMF dispatch already resolves "mouse *" key-ids. Source guard on
+-- _mod_tweaker_view.lua: the VMF-vocabulary mouse map must be present, the poll must read
+-- Mouse.button, and the caller must DEFER the commit (release-committed, so Mouse 1/2 can't
+-- self-trigger the enter/clear hotspots). Split needles avoid self-match; no-op when source
+-- unreadable (retail io sandbox, #511).
 _rt_register("issue631_keybind_mouse_capture", function()
     local ok_view, View = pcall(mod.dofile, mod, "scripts/mods/gui_tweaker/_mod_tweaker_view")
     local ok_capture, Capture = pcall(mod.dofile, mod,
@@ -948,7 +845,12 @@ end)
 -- the brighter drop_down_menu_arrow_clicked glow sprite layering on hover/open. Asserts:
 -- (a) base arrow_down + arrow_up passes both exist and are gated on content.active so one
 -- is ALWAYS drawn; (b) an arrow_glow pass draws drop_down_menu_arrow_clicked; (c) the base
--- arrows are at FULL alpha (never gated to a blank/dimmed open state).
+-- arrows are at FULL alpha (never gated to a blank/dimmed open state); (d) the glow
+-- geometry matches native: 31x28 on the base arrow's x (:2795-2818), and the driver
+-- places it at row centre -1 closed (-14 +13) and -26 open (-14 -12).
+-- The glow sprite is resolved through the pass's own texture_id (content[texture_id], the
+-- key texture_uv draw reads, ui_passes.lua:164-166), so a content-key rename cannot make
+-- the check read a nil key again (0.2.354-dev read content.arrow_glow, which never existed).
 _rt_register("mod_tweaker_dropdown_arrow_glow", function()
     local defs = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_definitions")
     if type(defs.create_dropdown) ~= "function" then return "create_dropdown factory missing" end
@@ -957,12 +859,13 @@ _rt_register("mod_tweaker_dropdown_arrow_glow", function()
         return "create_dropdown did not return a renderable widget"
     end
     -- (a) both base arrows present; one drawn when closed, one when open -> never blank.
-    local has_down, has_up, has_glow = false, false, false
+    local has_down, has_up, glow_pass, driver = false, false, nil, nil
     local down_check, up_check = nil, nil
     for _, p in ipairs(dd.element.passes) do
         if p.style_id == "arrow_down" then has_down = true; down_check = p.content_check_function end
         if p.style_id == "arrow_up"   then has_up   = true; up_check   = p.content_check_function end
-        if p.style_id == "arrow_glow" then has_glow = true end
+        if p.style_id == "arrow_glow" then glow_pass = p end
+        if p.pass_type == "local_offset" and p.offset_function then driver = p.offset_function end
     end
     if not (has_down and has_up) then
         return "#92 regression: dropdown missing a base down/up arrow pass (the arrow must stay visible when open — never gate the only arrow off active)"
@@ -974,14 +877,39 @@ _rt_register("mod_tweaker_dropdown_arrow_glow", function()
         return "#92 regression: dropdown arrow gating wrong (closed must draw the down arrow, open the up arrow — the open state must not be blank)"
     end
     -- (b) the _clicked glow sprite overlay exists (drop_down_menu_arrow_clicked).
-    local glowc = dd.content and dd.content.arrow_glow
-    if not (has_glow and glowc and glowc.texture_id == "drop_down_menu_arrow_clicked") then
-        return "#92 regression: dropdown missing the drop_down_menu_arrow_clicked glow overlay (native hover/open glow sprite)"
+    local glow_tex = glow_pass and dd.content and dd.content[glow_pass.texture_id or "texture_id"]
+    if glow_tex ~= "drop_down_menu_arrow_clicked" then
+        return "#92 regression: dropdown missing the drop_down_menu_arrow_clicked glow overlay (native hover/open glow sprite), got "
+            .. tostring(glow_tex)
     end
     -- (c) base arrows at FULL alpha in both states (native style.arrow color = font_default,255).
     local ad, au = dd.style and dd.style.arrow_down, dd.style and dd.style.arrow_up
     if not (ad and ad.color and ad.color[1] == 255 and au and au.color and au.color[1] == 255) then
         return "#92 regression: dropdown base arrows not at FULL alpha (native arrow is font_default,255 closed AND open; a dim/0 open arrow is the disappearing-arrow defect)"
+    end
+    -- (d) glow geometry. Row centre comes from the row hotspot (full row height).
+    local ag, hs = dd.style.arrow_glow, dd.style.hotspot
+    if not (ag and ag.texture_size and ag.offset and hs and hs.offset and hs.size) then
+        return "#92 regression: dropdown glow or hotspot style missing texture_size/offset"
+    end
+    if ag.texture_size[1] ~= 31 or ag.texture_size[2] ~= 28 then
+        return string.format("#92 regression: dropdown glow is %sx%s, native drop_down_menu_arrow_clicked is 31x28",
+            tostring(ag.texture_size[1]), tostring(ag.texture_size[2]))
+    end
+    if not (ad.offset and ag.offset[1] == ad.offset[1]) then
+        return "#92 regression: dropdown glow x does not sit on the base arrow x (native both at right edge -31)"
+    end
+    if not driver then
+        return "#92 regression: dropdown has no local_offset glow driver (glow cannot reposition on open)"
+    end
+    local cy = hs.offset[2] + hs.size[2] / 2
+    local want = { [false] = cy - 1, [true] = cy - 26 }
+    for _, open in ipairs({ false, true }) do
+        driver(nil, dd.style, { hotspot = { is_hover = true }, active = open })
+        if math.abs(ag.offset[2] - want[open]) > 0.01 then
+            return string.format("#92 regression: dropdown glow y %s when %s, native is row centre %s",
+                tostring(ag.offset[2] - cy), open and "open" or "closed", open and "-26" or "-1")
+        end
     end
 end)
 
@@ -991,10 +919,10 @@ end)
 -- overflow threshold). This guard FAILS if a real setting-READ for that toggle is
 -- reintroduced (gating the feature again). It checks the setting-read shape, not the
 -- bare string, so the explanatory comment naming the removed toggle does not trip it.
--- Anchored on mod.on_setting_changed (a `mod.` field in the MAIN file). Split needle;
--- no-op when source unreadable.
+-- Anchored on the existing opener in the same menu-shell owner as compaction.
+-- Split needle; no-op when source unreadable.
 _rt_register("mod_tweaker_compact_esc_implicit", function()
-    local ok, info = pcall(debug.getinfo, mod.on_setting_changed or function() end, "S")
+    local ok, info = pcall(debug.getinfo, mod.gut_open_mod_tweaker or function() end, "S")
     if not ok or type(info) ~= "table" or not info.source then return end
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
     local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
@@ -1176,11 +1104,47 @@ _rt_register("issue89_cosmetics_only_customize_mount", function()
         if has_cosmetics and mod._gut89_customize_allowed() ~= true then
             return "#89 Cosmetics present but in-mission gear icon remains blocked"
         end
-        local has_cim = get_mod("cim_dev") ~= nil or get_mod("cim") ~= nil
+        local has_cim = get_mod("cim") ~= nil
         if not has_cim and mod._gut89_mount_fix_active() ~= true then
             return "#89 no-CIM mission path did not activate GUT's level-free mount"
         end
     end
+end)
+
+_rt_register("issue717_gear_parent_accent_policy", function()
+    -- (#717) Drive the ONE shared gear-parent accent decision (both twins'
+    -- _append_row consume defs.apply_gear_parent_accent) with synthetic rows:
+    -- an enabled gear parent must take Colors.font_button_normal
+    -- {255,160,146,101} (scripts/utils/colors.lua:1021-1026), a VMF-disabled
+    -- row must keep its existing grey, and an ordinary non-gear child must
+    -- pass through untouched.
+    local defs = mod:dofile("scripts/mods/gui_tweaker/_mod_tweaker_definitions")
+    if type(defs) ~= "table" or type(defs.apply_gear_parent_accent) ~= "function" then
+        return "#717 defs.apply_gear_parent_accent missing"
+    end
+    local apply = defs.apply_gear_parent_accent
+    local function color_is(c, r, g, b, a)
+        return c[1] == r and c[2] == g and c[3] == b and c[4] == a
+    end
+    local parent = { style = { label = { text_color = { 255, 255, 255, 255 } } } }
+    if apply(parent, true) ~= true
+        or not color_is(parent.style.label.text_color, 255, 160, 146, 101)
+        or parent._advanced_parent_accent ~= true then
+        return "#717 enabled gear parent did not take the warm-tan accent"
+    end
+    local disabled = { _disabled_in_vmf = true,
+        style = { label = { text_color = { 255, 128, 128, 128 } } } }
+    if apply(disabled, true) ~= false
+        or not color_is(disabled.style.label.text_color, 255, 128, 128, 128) then
+        return "#717 disabled gear parent lost its grey tint"
+    end
+    local child = { style = { label = { text_color = { 255, 255, 255, 255 } } } }
+    if apply(child, false) ~= false
+        or not color_is(child.style.label.text_color, 255, 255, 255, 255)
+        or child._advanced_parent_accent ~= nil then
+        return "#717 ordinary child row was recolored by the accent policy"
+    end
+    pcall(printf, "[gut:717] accent policy OK parent=tan disabled=grey child=plain")
 end)
 
     return true

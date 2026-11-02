@@ -44,6 +44,10 @@ local _widget_index = {}
 -- ModTweaker public API).
 local _exclusive_groups = {}
 local _exclusive_member_index = {}
+-- Optional presentation metadata stays separate from the member array so the shipped
+-- get_exclusive_members contract remains byte-compatible.  A `control="radio"`
+-- presentation asks the view to synthesize one collapsible radio control when every
+-- member is present under the same parent; otherwise the view fails closed to checkboxes.
 local _exclusive_presentations = {}
 
 -- (#505) Filtered/searchable-dropdown CATEGORY registry. Keyed by _member_key(mod_id,
@@ -240,6 +244,7 @@ function SettingsModule.get_exclusive_members(group_id)
     return _exclusive_groups[group_id]
 end
 
+-- Optional render metadata for a group. Nil preserves the original checkbox bridge.
 function SettingsModule.get_exclusive_presentation(group_id)
     return _exclusive_presentations[group_id]
 end

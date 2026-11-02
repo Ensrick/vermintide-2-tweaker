@@ -1,8 +1,76 @@
--- Engine-free catalog/snapshot classifier for issue #272. The live diagnostics
--- module feeds it vanilla ScoreboardHelper data; offline Lua 5.1 QA exercises
--- malformed and complete shapes without constructing game managers.
+-- _gut_scoreboard_policy.lua - engine-free scoreboard model and retention policy.
+--
+-- Owns detached topic validation, paging, visibility, sorting, fingerprints,
+-- supplemental scalar reads, and bounded statistic path copies for #272/#1414,
+-- plus the optional detached host custom-row overlay for #1570-#1572.
+-- Owned by: gui_tweaker.lua. Consumed via: mod:dofile from scoreboard modules.
 local M = {}
-M.MAX_NATIVE_TOPICS = 11
+M.ROWS_PER_PAGE = 11
+M.MAX_PAGES = 4
+M.MAX_TOPICS = M.ROWS_PER_PAGE * M.MAX_PAGES
+
+-- These two native scalar leaves are already hot-join synchronized, but are
+-- deliberately absent from ScoreboardHelper's fixed eleven-row wire. Callers
+-- build detached rows from StatisticsDatabase instead of extending that wire.
+M.SUPPLEMENTAL_TOPICS = {
+    {
+        name = "aidings",
+        display_text = "gut_scoreboard_topic_aidings",
+        stat_type = "aidings",
+        supplemental = true,
+        mod_localized = true,
+    },
+    {
+        name = "times_revived",
+        display_text = "gut_scoreboard_topic_times_revived",
+        stat_type = "times_revived",
+        supplemental = true,
+        mod_localized = true,
+    },
+}
+
+local function _copy_path(path)
+    local copy = {}
+    for i = 1, #path do copy[i] = path[i] end
+    return copy
+end
+
+local function _copy_topic(topic)
+    if type(topic) ~= "table" then return topic end
+    local copy = {
+        name = topic.name,
+        display_text = topic.display_text,
+        stat_type = topic.stat_type,
+        supplemental = topic.supplemental == true,
+        custom = topic.custom == true,
+        mod_localized = topic.mod_localized == true,
+    }
+    if type(topic.stat_types) == "table" then
+        copy.stat_types = {}
+        for i, path in ipairs(topic.stat_types) do
+            copy.stat_types[i] = type(path) == "table" and _copy_path(path) or path
+        end
+    end
+    return copy
+end
+
+-- Construct a private catalog. ScoreboardHelper remains byte-for-byte vanilla:
+-- no topic is appended to its catalog and num_stats_per_player stays eleven.
+-- Optional extra topics (#1570-#1572 host custom rows) follow the supplemental
+-- rows only when the caller passes them; the default registry is unchanged.
+function M.build_topic_registry(native_topics, extra_topics)
+    local registry = {}
+    for _, topic in ipairs(type(native_topics) == "table" and native_topics or {}) do
+        registry[#registry + 1] = _copy_topic(topic)
+    end
+    for _, topic in ipairs(M.SUPPLEMENTAL_TOPICS) do
+        registry[#registry + 1] = _copy_topic(topic)
+    end
+    for _, topic in ipairs(type(extra_topics) == "table" and extra_topics or {}) do
+        registry[#registry + 1] = _copy_topic(topic)
+    end
+    return registry
+end
 
 function M.inspect_catalog(topics, groups)
     local result = {
@@ -196,7 +264,18 @@ function M.restore_stat_values(records, write_value, limit)
     return restored
 end
 
-local function _score_map(player)
+local function _detached_row(rows, stats_id)
+    return type(rows) == "table"
+        and (rawget(rows, tostring(stats_id)) or rawget(rows, stats_id)) or nil
+end
+
+local function _nonnegative(value)
+    return type(value) == "number" and value == value
+        and value < math.huge and value >= 0
+end
+
+local function _score_map(player, supplemental_scores, boss_scores, stats_id,
+        boss_score_mode, custom_scores, custom_names)
     local scores = {}
     for _, group in pairs(type(player) == "table" and player.group_scores or {}) do
         for _, entry in ipairs(type(group) == "table" and group or {}) do
@@ -206,42 +285,209 @@ local function _score_map(player)
             end
         end
     end
+    local supplement = _detached_row(supplemental_scores, stats_id)
+    if type(supplement) == "table" then
+        for _, topic in ipairs(M.SUPPLEMENTAL_TOPICS) do
+            local value = rawget(supplement, topic.name)
+            if type(value) == "number" then scores[topic.name] = value end
+        end
+    end
+    -- #1448 overlays only the detached presentation cell. The native grouped
+    -- row remains the fallback, and StatisticsDatabase / vanilla score payloads
+    -- are never rewritten. The transport validator already owns stricter caps;
+    -- this final model seam independently requires a finite non-negative value.
+    local boss = _detached_row(boss_scores, stats_id)
+    if type(boss) == "number" and boss == boss
+            and boss < math.huge and boss > -math.huge and boss >= 0 then
+        local native = scores.damage_dealt_bosses
+        if boss_score_mode == "max" and type(native) == "number"
+                and native == native and native < math.huge
+                and native > -math.huge and native >= 0 then
+            scores.damage_dealt_bosses = math.max(native, boss)
+        else
+            scores.damage_dealt_bosses = boss
+        end
+    end
+    -- #1570-#1572 host custom rows have no native value. Only a detached,
+    -- finite, non-negative value for a registered custom topic may fill the
+    -- cell; a missing row stays missing so the presenter shows it unavailable.
+    local custom = _detached_row(custom_scores, stats_id)
+    if type(custom) == "table" and type(custom_names) == "table" then
+        for name in pairs(custom_names) do
+            local value = rawget(custom, name)
+            if scores[name] == nil and _nonnegative(value) then
+                scores[name] = value
+            end
+        end
+    end
     return scores
 end
 
--- Build the bounded, renderer-neutral model shared by the live Tab page and a
--- future end-screen page. No StatisticsDatabase or engine object crosses this
--- boundary, so presentation ordering cannot mutate the native snapshot.
-function M.build_native_page(players, topics, sort_topic, limit)
-    local page = { topics = {}, players = {} }
-    limit = math.min(math.max(tonumber(limit) or 4, 1), 4)
+-- Read the two detached scalar leaves for only the already-selected renderer
+-- rows. The reader is dependency-injected so missing/throwing databases are
+-- contained and the engine-free tests execute the production boundary.
+function M.read_supplemental_scores(player_rows, read_value, limit)
+    local result = {}
+    limit = math.min(math.max(tonumber(limit) or 4, 0), 4)
+    if type(player_rows) ~= "table" or type(read_value) ~= "function" then
+        return result
+    end
+    local visited = 0
+    for _, player in ipairs(player_rows) do
+        if visited >= limit then break end
+        local stats_id = type(player) == "table" and player.stats_id or nil
+        if stats_id ~= nil then
+            visited = visited + 1
+            local values = {}
+            for _, topic in ipairs(M.SUPPLEMENTAL_TOPICS) do
+                local ok, value = pcall(read_value, stats_id, topic.stat_type)
+                if ok and type(value) == "number" then
+                    values[topic.name] = value
+                end
+            end
+            result[tostring(stats_id)] = values
+        end
+    end
+    return result
+end
+
+function M.clamp_page(value, page_count)
+    page_count = math.floor(tonumber(page_count) or 0)
+    if page_count < 1 then return 0 end
+    local page = math.floor(tonumber(value) or 1)
+    if page < 1 then return 1 end
+    if page > page_count then return page_count end
+    return page
+end
+
+function M.next_page(value, page_count)
+    page_count = math.floor(tonumber(page_count) or 0)
+    if page_count < 1 then return 1 end
+    local page = M.clamp_page(value, page_count)
+    return (page % page_count) + 1
+end
+
+local function _append_fingerprint(parts, value)
+    local text = tostring(value)
+    parts[#parts + 1] = tostring(#text) .. ":" .. text
+end
+
+local function _model_fingerprint(model)
+    local parts = {}
+    _append_fingerprint(parts, "gut-scoreboard-model-v1")
+    _append_fingerprint(parts, model.selected_page)
+    _append_fingerprint(parts, model.page_count)
+    _append_fingerprint(parts, model.preferred_sort)
+    _append_fingerprint(parts, model.effective_sort)
+    _append_fingerprint(parts, model.overflow_count)
+    _append_fingerprint(parts, model.duplicate_count)
+    _append_fingerprint(parts, model.malformed_count)
+    for _, topic in ipairs(model.topics) do
+        _append_fingerprint(parts, topic.name)
+        _append_fingerprint(parts, topic.display_text)
+        _append_fingerprint(parts, topic.visible and 1 or 0)
+        _append_fingerprint(parts, topic.mod_localized and 1 or 0)
+    end
+    for _, name in ipairs(model.overflow_topics) do
+        _append_fingerprint(parts, name)
+    end
+    for _, player in ipairs(model.players) do
+        _append_fingerprint(parts, player.stats_key)
+        _append_fingerprint(parts, player.name)
+        for _, topic in ipairs(model.topics) do
+            local value = player.scores[topic.name]
+            _append_fingerprint(parts, type(value) == "number" and value or "missing")
+        end
+    end
+
+    local hash = 5381
+    local bytes = table.concat(parts, "|")
+    for i = 1, #bytes do
+        hash = (hash * 33 + string.byte(bytes, i)) % 4294967296
+    end
+    return string.format("%08x", hash)
+end
+
+-- Build the bounded renderer-neutral model shared by Tab and the end screen.
+-- Every source table is copied; no StatisticsDatabase or native snapshot
+-- object crosses the boundary. The first 44 unique valid topics are rendered
+-- across four pages and later valid topics are reported as explicit overflow.
+function M.build_native_model(players, topics, options)
+    options = type(options) == "table" and options or {}
+    local model = {
+        topics = {},
+        visible_topics = {},
+        overflow_topics = {},
+        pages = {},
+        players = {},
+        overflow_count = 0,
+        duplicate_count = 0,
+        malformed_count = 0,
+        preferred_sort = type(options.sort_topic) == "string"
+            and options.sort_topic or "player_name",
+    }
+    local player_limit = math.min(math.max(tonumber(options.player_limit) or 4, 1), 4)
+    local visibility = type(options.visibility) == "table" and options.visibility or {}
 
     local seen_topics = {}
     for _, topic in ipairs(type(topics) == "table" and topics or {}) do
-        if type(topic) == "table" and type(topic.name) == "string"
-                and type(topic.display_text) == "string"
-                and not seen_topics[topic.name]
-                and #page.topics < M.MAX_NATIVE_TOPICS then
+        if type(topic) ~= "table" or type(topic.name) ~= "string"
+                or topic.name == "" or type(topic.display_text) ~= "string"
+                or topic.display_text == "" then
+            model.malformed_count = model.malformed_count + 1
+        elseif seen_topics[topic.name] then
+            model.duplicate_count = model.duplicate_count + 1
+        else
             seen_topics[topic.name] = true
-            page.topics[#page.topics + 1] = {
-                name = topic.name,
-                display_text = topic.display_text,
-            }
+            if #model.topics < M.MAX_TOPICS then
+                local copy = {
+                    name = topic.name,
+                    display_text = topic.display_text,
+                    visible = rawget(visibility, topic.name) ~= false,
+                    mod_localized = topic.mod_localized == true,
+                    custom = topic.custom == true,
+                }
+                model.topics[#model.topics + 1] = copy
+                if copy.visible then
+                    model.visible_topics[#model.visible_topics + 1] = copy
+                end
+            else
+                model.overflow_count = model.overflow_count + 1
+                model.overflow_topics[#model.overflow_topics + 1] = topic.name
+            end
+        end
+    end
+
+    local visible_names = { player_name = true }
+    for _, topic in ipairs(model.visible_topics) do visible_names[topic.name] = true end
+    model.effective_sort = visible_names[model.preferred_sort]
+        and model.preferred_sort or "player_name"
+
+    local custom_names
+    for _, topic in ipairs(model.topics) do
+        if topic.custom then
+            custom_names = custom_names or {}
+            custom_names[topic.name] = true
         end
     end
 
     for stats_id, player in pairs(type(players) == "table" and players or {}) do
         if type(player) == "table" and type(player.name) == "string" then
-            page.players[#page.players + 1] = {
-                stats_id = tostring(stats_id),
+            local source_id = player.stats_id ~= nil and player.stats_id or stats_id
+            model.players[#model.players + 1] = {
+                stats_id = source_id,
+                stats_key = tostring(source_id),
                 name = player.name,
-                scores = _score_map(player),
+                scores = _score_map(player, options.supplemental_scores,
+                    options.boss_scores, source_id, options.boss_score_mode,
+                    options.custom_scores, custom_names),
             }
         end
     end
 
-    table.sort(page.players, function(a, b)
-        if sort_topic and sort_topic ~= "player_name" then
+    table.sort(model.players, function(a, b)
+        local sort_topic = model.effective_sort
+        if sort_topic ~= "player_name" then
             local av, bv = a.scores[sort_topic], b.scores[sort_topic]
             local a_has, b_has = type(av) == "number", type(bv) == "number"
             -- Missing rows are incomplete snapshots, never a winning zero (or
@@ -257,11 +503,27 @@ function M.build_native_page(players, topics, sort_topic, limit)
         end
         local an, bn = string.lower(a.name), string.lower(b.name)
         if an ~= bn then return an < bn end
-        return a.stats_id < b.stats_id
+        return a.stats_key < b.stats_key
     end)
 
-    while #page.players > limit do table.remove(page.players) end
-    return page
+    while #model.players > player_limit do table.remove(model.players) end
+
+    for i = 1, #model.visible_topics, M.ROWS_PER_PAGE do
+        local page = {
+            number = #model.pages + 1,
+            topics = {},
+            players = model.players,
+        }
+        local last = math.min(i + M.ROWS_PER_PAGE - 1, #model.visible_topics)
+        for j = i, last do page.topics[#page.topics + 1] = model.visible_topics[j] end
+        model.pages[#model.pages + 1] = page
+    end
+    model.page_count = #model.pages
+    model.selected_page = M.clamp_page(options.selected_page, model.page_count)
+    model.selected = model.pages[model.selected_page]
+    model.all_hidden = #model.visible_topics == 0
+    model.fingerprint = _model_fingerprint(model)
+    return model
 end
 
 return M

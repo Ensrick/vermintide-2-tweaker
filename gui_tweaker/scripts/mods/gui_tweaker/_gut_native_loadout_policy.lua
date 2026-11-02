@@ -11,6 +11,8 @@ local COSMETIC_SLOTS = {
 }
 
 local WEAPON_SLOTS = { slot_melee = true, slot_ranged = true }
+local MAX_SNAPSHOT_DEPTH = 12
+local MAX_SNAPSHOT_NODES = 256
 
 function P.is_cwv_backend_id(backend_id)
     return type(backend_id) == "string"
@@ -50,12 +52,242 @@ function P.readonly_action(slot_name, backend_id)
     return "block"
 end
 
-local function copy_value(value)
+-- Issue #273 (capture side). The outer BackendUtils.set_loadout_item hook feeds the
+-- DURABLE Adventure store, but vanilla routes Deus weapon chest/shrine swaps through the
+-- same 3-arg seam with a RUN-LOCAL backend id (deus_chest_extension.lua:597). Gear slots
+-- are therefore capture-eligible only while the durable items interface owns the slot
+-- RIGHT NOW -- `owned_by_items` is the caller-resolved true-table-identity ownership
+-- verdict (_gut_exit_snapshot_core.lua slot_owned_by_items semantics) and anything but
+-- `true` fails closed. Cosmetic slots stay unconditionally eligible: the Deus override
+-- maps skin/hat/frame/pose to "items" (backend_interface_deus_base.lua:7-14), so
+-- cosmetics legitimately persist through a CW run.
+function P.capture_slot_durable(slot_name, owned_by_items)
+    if COSMETIC_SLOTS[slot_name] then return true end
+    return owned_by_items == true
+end
+
+-- Issue #1637: a stored weapon id can be visible while the item interface is
+-- refreshing, then disappear before SimpleInventoryExtension consumes it.
+-- The mirror-read guard cannot close that time-of-check/time-of-use gap.  Plan
+-- the emergency candidate list from vanilla-owned data only: the official
+-- selected row first, then the career's first default row.  Never mutate the
+-- GUT store -- a late-registering modded instance must remain able to heal on a
+-- later read.
+function P.official_weapon_candidates(mirror, career_name, slot_name, get_defaults)
+    if type(mirror) ~= "table" or type(career_name) ~= "string"
+        or not WEAPON_SLOTS[slot_name] then
+        return {}
+    end
+    local ids, labels, seen = {}, {}, {}
+    local function add(id, label)
+        if id ~= nil and not seen[id] then
+            seen[id] = true
+            ids[#ids + 1] = id
+            labels[#labels + 1] = label
+        end
+    end
+
+    local career_data = rawget(mirror, "_career_data")
+    local selected_by_career = rawget(mirror, "_career_loadouts")
+    local selected = type(selected_by_career) == "table"
+        and selected_by_career[career_name] or nil
+    local selected_row = selected ~= nil and type(career_data) == "table"
+        and type(career_data[career_name]) == "table"
+        and career_data[career_name][selected] or nil
+    add(type(selected_row) == "table" and selected_row[slot_name] or nil, "official-selected")
+
+    local ok, defaults = pcall(get_defaults, mirror, career_name)
+    local default_row = ok and type(defaults) == "table" and defaults[1] or nil
+    add(type(default_row) == "table" and default_row[slot_name] or nil, "career-default")
+    -- Second return: the source label of each id, in the same order (#1637 diagnostics).
+    return ids, labels
+end
+
+-- Exact consumer-boundary recovery. `native_item` is the result already
+-- returned by vanilla BackendUtils.get_loadout_item. A valid native result is
+-- never inspected or replaced. Recovery is restricted to STORE-mode weapon
+-- slots and accepts a fallback only when the live item interface resolves it
+-- now; uncertainty returns nil and preserves vanilla behavior.
+function P.recover_missing_weapon(opts)
+    if type(opts) ~= "table" then return nil, "invalid-options" end
+    if opts.native_item ~= nil then return opts.native_item, "native" end
+    if opts.mode ~= opts.mode_store then return nil, "inert-mode" end
+    if not WEAPON_SLOTS[opts.slot_name] then return nil, "inert-slot" end
+    if type(opts.resolve) ~= "function" or type(opts.get_defaults) ~= "function" then
+        return nil, "unavailable"
+    end
+
+    local candidates, labels = P.official_weapon_candidates(opts.mirror, opts.career_name,
+        opts.slot_name, opts.get_defaults)
+    for i = 1, #candidates do
+        local id = candidates[i]
+        local ok, item = pcall(opts.resolve, id)
+        if ok and item ~= nil then
+            return item, labels[i], id
+        end
+    end
+    return nil, "unresolved"
+end
+
+-- Issue #375 audit fix (2026-08-15): vanilla marks exactly slot_necklace / slot_ring /
+-- slot_trinket_1 `unequippable = true` (inventory_settings.lua:43/52/61), so an EMPTY
+-- accessory slot in an otherwise-complete row is a legitimate player choice that is
+-- indistinguishable from data loss. The integrity/repair passes therefore NEVER refill
+-- these slots in place: deliberate unequips survive every seed/repair pass, and
+-- accessory values enter the store only when a FULL row is copied fresh from official
+-- (missing-row add, fresh seed, or the #1033 DEFAULT reseed).
+P.UNEQUIPPABLE_SLOTS = {
+    slot_necklace = true, slot_ring = true, slot_trinket_1 = true,
+}
+
+function P.is_unequippable_slot(slot_name)
+    return P.UNEQUIPPABLE_SLOTS[slot_name] == true
+end
+
+-- A store row is corrupt-partial when a slot vanilla can NEVER leave empty is missing:
+-- weapons fatal at spawn wield, and skin/hat/frame/pose always resolve to some item.
+-- A row missing only unequippable accessories is HEALTHY (deliberate unequip).
+function P.row_is_corrupt_partial(row, slot_names)
+    if type(row) ~= "table" or type(slot_names) ~= "table" then return true end
+    for i = 1, #slot_names do
+        local slot = slot_names[i]
+        if not P.UNEQUIPPABLE_SLOTS[slot] and row[slot] == nil then return true end
+    end
+    return false
+end
+
+-- One-time slot migration (#402): add the official value for any canonical slot an
+-- existing row never carried -- EXCEPT unequippable accessories (deliberate-empty).
+function P.repair_missing_loadout_slots(entry, official_rows, slot_names)
+    if type(entry) ~= "table" or type(entry.loadouts) ~= "table"
+        or type(official_rows) ~= "table" or type(slot_names) ~= "table" then
+        return 0
+    end
+    local repaired = 0
+    for i = 1, #official_rows do
+        local off_row = official_rows[i]
+        local st_row = entry.loadouts[i]
+        if type(off_row) == "table" and type(st_row) == "table" then
+            for s = 1, #slot_names do
+                local slot = slot_names[s]
+                if not P.UNEQUIPPABLE_SLOTS[slot]
+                    and st_row[slot] == nil and off_row[slot] ~= nil then
+                    st_row[slot] = off_row[slot]
+                    repaired = repaired + 1
+                end
+            end
+        end
+    end
+    return repaired
+end
+
+-- Corrupt-row refill (#375): copy every missing official key (slots, talents) into a
+-- row that carries the corruption signature -- EXCEPT unequippable accessory slots,
+-- which stay exactly as the player left them.
+function P.repair_corrupt_row(st_row, off_row)
+    if type(st_row) ~= "table" or type(off_row) ~= "table" then return 0 end
+    local filled = 0
+    for k, v in pairs(off_row) do
+        if st_row[k] == nil and not P.UNEQUIPPABLE_SLOTS[k] then
+            st_row[k] = v
+            filled = filled + 1
+        end
+    end
+    return filled
+end
+
+-- Issue #1033 x #954 reset boundary. A confirmed Equipment DEFAULT must wipe MODDED
+-- LOADOUT DATA: the saved loadout rows, the loadout selection, the seed/integrity
+-- markers (forcing a fresh official reseed), and the cosmetic overlay. The user's BOT
+-- DESIGNATION is NOT modded loadout data: `bot_index`, the detached `bot_loadout`
+-- snapshot, and the one-time native-import marker `_bot_designation_snapshot_v2`
+-- record an explicit user choice, and dropping the marker would let the next bot read
+-- re-import the native PlayerData index -- silently replacing the designated bot
+-- equipment the #954 marker exists to make durable. Preserve exactly that designation
+-- set across the clear; a career without any designation field is removed outright.
+local DESIGNATION_FIELDS = {
+    "bot_index", "bot_loadout", "_bot_designation_snapshot_v2",
+}
+
+-- Returns nil (drop the row) or a bare re-seedable shell carrying only the preserved
+-- designation fields. The shell uses the standard fallback-entry shape
+-- (selected_index = 1, empty loadouts) so the reseed/repair path can fill it.
+local function preserve_designation(row)
+    if type(row) ~= "table" then return nil end
+    local kept = nil
+    for i = 1, #DESIGNATION_FIELDS do
+        local field = DESIGNATION_FIELDS[i]
+        if row[field] ~= nil then
+            kept = kept or { selected_index = 1, loadouts = {} }
+            kept[field] = row[field]
+        end
+    end
+    return kept
+end
+
+-- Issue #1033: clear only mod-owned snapshots. Both tables retain identity so
+-- the hot mirror hooks keep observing the same working copies. Returns the
+-- number of distinct careers cleared plus whether an explicit career existed.
+function P.clear_modded_loadouts(store, overlay, career_name)
+    if type(store) ~= "table" or type(overlay) ~= "table" then return 0, false end
+    if type(career_name) == "string" and career_name ~= "" then
+        local existed = store[career_name] ~= nil or overlay[career_name] ~= nil
+        store[career_name] = preserve_designation(store[career_name])
+        overlay[career_name] = nil
+        return existed and 1 or 0, existed
+    end
+    local seen = {}
+    for name in pairs(store) do seen[name] = true end
+    for name in pairs(overlay) do seen[name] = true end
+    local count = 0
+    for name in pairs(seen) do
+        store[name] = preserve_designation(store[name])
+        overlay[name] = nil
+        count = count + 1
+    end
+    return count, true
+end
+
+-- Deterministic list of official Adventure careers eligible for immediate
+-- re-seeding. Reading this shape cannot invoke a backend/interface method.
+function P.official_seed_careers(mirror, career_name)
+    local rows = type(mirror) == "table" and mirror._career_data or nil
+    if type(rows) ~= "table" then return {} end
+    if type(career_name) == "string" and career_name ~= "" then
+        return type(rows[career_name]) == "table" and { career_name } or {}
+    end
+    local names = {}
+    for name, career_rows in pairs(rows) do
+        if type(name) == "string" and type(career_rows) == "table" then
+            names[#names + 1] = name
+        end
+    end
+    table.sort(names)
+    return names
+end
+
+local function copy_value(value, state, depth)
     if type(value) ~= "table" then return value end
+    if depth >= MAX_SNAPSHOT_DEPTH then return nil, "depth-bound" end
+    if state.seen[value] then return nil, "cycle" end
+    state.nodes = state.nodes + 1
+    if state.nodes > MAX_SNAPSHOT_NODES then return nil, "node-bound" end
+    state.seen[value] = true
     local copy = {}
     for key, child in pairs(value) do
-        copy[key] = copy_value(child)
+        state.nodes = state.nodes + 1
+        if state.nodes > MAX_SNAPSHOT_NODES then
+            state.seen[value] = nil
+            return nil, "node-bound"
+        end
+        local child_copy, detail = copy_value(child, state, depth + 1)
+        if detail then
+            state.seen[value] = nil
+            return nil, detail
+        end
+        copy[key] = child_copy
     end
+    state.seen[value] = nil
     return copy
 end
 
@@ -65,10 +297,13 @@ end
 -- bot cache.
 function P.snapshot_bot_loadout(row, slot_names)
     if type(row) ~= "table" or type(slot_names) ~= "table" then return nil end
+    local state = { nodes = 0, seen = {} }
     local snapshot = {}
     for i = 1, #slot_names do
         local slot_name = slot_names[i]
-        snapshot[slot_name] = copy_value(row[slot_name])
+        local value, detail = copy_value(row[slot_name], state, 0)
+        if detail then return nil, detail end
+        snapshot[slot_name] = value
     end
     return snapshot
 end

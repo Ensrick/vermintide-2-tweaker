@@ -241,7 +241,7 @@ return function(H, repo_root)
 
     H.test("Stable Mod Tweaker #1002 views retain incomplete owner state", function()
         local paths = {
-            "/gui_tweaker/scripts/mods/gui_tweaker/_mod_tweaker_view.lua",
+            "/gui_tweaker/scripts/mods/gui_tweaker/_mod_tweaker_view_pending.lua",
             "/gui_tweaker/scripts/mods/gui_tweaker/_mod_tweaker_state.lua",
         }
         for i = 1, #paths do
@@ -262,20 +262,25 @@ return function(H, repo_root)
             H.truthy(source:find(
                 "if complete then self:_profile_capture(category) end",
                 1, true), paths[i] .. " cannot capture a failed single-owner profile")
-            H.truthy(source:find(
-                "self:apply_pending(category)\n        if self:_active_category_dirty() then",
-                1, true), paths[i] .. " defers a profile switch after an incomplete commit")
-            H.truthy(source:find("[gut:1002]", 1, true),
-                paths[i] .. " emits the bounded incomplete-transaction receipt")
+            H.truthy(source:find("profile_runtime.switch_profile(self, slot", 1, true),
+                paths[i] .. " delegates profile switching to the pre-write replay owner")
         end
 
         local view_file = assert(io.open(repo_root
-            .. "/gui_tweaker/scripts/mods/gui_tweaker/_mod_tweaker_view.lua", "rb"))
+            .. "/gui_tweaker/scripts/mods/gui_tweaker/_mod_tweaker_view_pending.lua", "rb"))
         local view_source = view_file:read("*a")
         view_file:close()
         H.truthy(view_source:find(
             "if complete then\n        for _, row in ipairs(self._rows or {}) do",
             1, true), "stable keybind registration must wait for transaction completion")
+        local runtime_file = assert(io.open(repo_root
+            .. "/gui_tweaker/scripts/mods/gui_tweaker/_mod_tweaker_profile_runtime.lua", "rb"))
+        local runtime_source = runtime_file:read("*a"); runtime_file:close()
+        H.truthy(runtime_source:find(
+            'return false, "pending transaction incomplete"',
+            1, true), "shared replay owner must refuse an incomplete current profile")
+        H.truthy(runtime_source:find("[gut:1002] profile switch deferred", 1, true),
+            "shared replay owner retains the bounded incomplete-transaction receipt")
     end)
 
     H.test("Equipment owner commits stay bounded by owner count", function()

@@ -1,5 +1,39 @@
 # Tweaker: GUI — Changelog
 
+## 0.2.290 (2026-11-02) -- Free-camera correction and official verification-queue rollup
+
+- Correct third-person/free-camera snapshot ownership (#1796): repeated,
+  nested or idle exits restore the prior camera state once; unavailable native
+  free-flight input refuses entry before creating viewport state. Preserve
+  the input-unblock, local-player freeze and live-world cleanup invariants.
+- Promote loadout isolation, exact bot snapshots, equipment/cosmetic persistence,
+  lifecycle saves and thirty-slot paging (#402, #375, #353, #354, #287, #273,
+  #954, #231). Include the native realm boot guard (#1688) and the previously
+  closed no-weapon spawn recovery (#1637), without changing official loadouts.
+- Promote bounded DEFAULT presentation refresh and owner-aware profile replay
+  (#1033, #1575), plus the UI presentation invalidation publisher (#925).
+- Promote Hold-Tab property/illusion/talent refresh (#245, #246, #250), bot
+  victory poses (#232), respawn timer alignment (#285), full-range damage
+  numbers (#938), mission-vote presentation (#700), and intro-only cutscene
+  policy (#274).
+- Promote optional native scoreboard paging/visibility, boss-damage sync and
+  custom host statistics (#1414, #1448, #1570, #1571, #1572, #1573), including
+  native Utf8 compatibility (#1695). Mixed or unsupported peers remain gated.
+- Promote Dialogue controls (#605, #998), native graphics profiles (#292),
+  source-confirmed Witch Hunter Captain passive text (#153), and the implemented
+  Simple UI bounds/dropdown slices (#314). Character Dialogue still owns
+  dialogue catalogue/audio, including #881; this GUI release does not claim
+  to repair that mod's package acquisition.
+- Promote menu accent, arrow-hover and slider-release fixes (#717, #92, #167)
+  and optional in-mission inventory/customization gates (#80, #87, #172).
+  Preserve already-public HUD drag geometry, inventory lighting, Penlight-free
+  operation, Compendium labels and exact slider steps (#547, #522, #281,
+  #224, #389), including stable-only owners and standalone command routing.
+- This is the user-approved in-game-untested public rollup. Automated checks
+  and publication proof remain required; publication does not close these
+  issues or establish gameplay acceptance. Unrelated dev investigations and
+  experiments are not promoted.
+
 ## 0.2.289 (2026-09-03) — owner-aware Mod Tweaker slider steps (#389)
 
 ### Why

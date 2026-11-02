@@ -2,10 +2,10 @@ local mod = get_mod("gut")
 
 -- _mod_tweaker_view_interaction.lua - standalone Mod Tweaker input and draw surface.
 --
--- Owns numeric/search editing, dropdown interaction, pointer dispatch, hover/tooltips,
--- and the renderer pass for ModTweakerView. The parent view installs this surface
--- once through the explicit dependency table below; no hooks or lifecycle callbacks
--- are registered here.
+-- Owns numeric/search editing, dialogue-row transport, dropdown interaction,
+-- pointer dispatch, hover/tooltips, and the renderer pass for ModTweakerView.
+-- The parent view installs this surface once through the explicit dependency
+-- table below; no hooks or lifecycle callbacks are registered here.
 --
 -- Owned by: _mod_tweaker_view.lua. Consumed via: mod:dofile + install.
 
@@ -13,6 +13,7 @@ local M = {}
 
 function M.install(ModTweakerView, deps)
     local defs = assert(deps.defs, "Mod Tweaker interaction requires defs")
+    local DialogueUI = assert(deps.DialogueUI, "Mod Tweaker interaction requires DialogueUI")
     local UIRenderer = assert(deps.UIRenderer, "Mod Tweaker interaction requires UIRenderer")
     local UISceneGraph = assert(deps.UISceneGraph, "Mod Tweaker interaction requires UISceneGraph")
     local UIInverseScaleVectorToResolution = assert(deps.UIInverseScaleVectorToResolution,
@@ -28,6 +29,8 @@ function M.install(ModTweakerView, deps)
     local _play_click = assert(deps.play_click, "Mod Tweaker interaction requires click sound")
     local _play_hover = assert(deps.play_hover, "Mod Tweaker interaction requires hover sound")
     local _printf = assert(deps.printf, "Mod Tweaker interaction requires printf")
+    local SliderDragEdge = assert(deps.slider_drag_edge,
+        "Mod Tweaker interaction requires slider drag edge")
 
 local _EDIT_MAX_LEN = 16
 -- (#497) Max search query length (free text; the numeric editor's cap is _EDIT_MAX_LEN).
@@ -633,6 +636,8 @@ function ModTweakerView:_handle_input(input_service)
             self._sb_dragging = false
         end
     end
+    -- Recycle the bounded dialogue row pool when scrolling crosses a row.
+    if DialogueUI.refresh_window(self) then return end
 
     -- Exit (X) button.
     if self._exit and self._exit.content.button_hotspot and self._exit.content.button_hotspot.on_release then
@@ -660,7 +665,7 @@ function ModTweakerView:_handle_input(input_service)
     -- polled in update() via _check_reset_popup.
     do
         local rh = self._reset and self._reset.content.button_hotspot
-        if rh and (rh.on_release or rh.on_left_release) then
+        if not self._dialogue_category and rh and (rh.on_release or rh.on_left_release) then
             local search_cleared = self:_search_finish()
             if search_cleared then
                 self._scroll_y = 0
@@ -676,7 +681,7 @@ function ModTweakerView:_handle_input(input_service)
     -- restore the selected slot as one bounded per-owner transaction.
     for i = 1, #(self._profile_buttons or {}) do
         local ph = self._profile_buttons[i].content.hotspot
-        if ph and (ph.on_release or ph.on_left_release) then
+        if not self._dialogue_category and ph and (ph.on_release or ph.on_left_release) then
             self:_search_finish()
             self:_switch_profile(i)
             return
@@ -693,6 +698,7 @@ function ModTweakerView:_handle_input(input_service)
             _play_click()
             mod:debug("[mt:dump] input: tab[%d] clicked (was %d, drill=%s)", i, self._selected or -1, tostring(self._drill ~= nil))
             if self._more_tab_index and i == self._more_tab_index then
+                if DialogueUI.is_category(self._categories[self._selected]) then DialogueUI.stop() end
                 self:_search_finish()
                 self._drill = nil
                 self._search_str = ""; self._search_focused = false   -- (#497) fresh tab, fresh search
@@ -702,6 +708,7 @@ function ModTweakerView:_handle_input(input_service)
                 self:_rebuild()
                 return
             elseif (i ~= self._selected or self._drill) and self._categories[i] then
+                if DialogueUI.is_category(self._categories[self._selected]) then DialogueUI.stop() end
                 self:_search_finish()
                 self._drill = nil
                 self._search_str = ""; self._search_focused = false   -- (#497) fresh tab, fresh search
@@ -711,6 +718,13 @@ function ModTweakerView:_handle_input(input_service)
                 return
             end
         end
+    end
+
+    -- #605 deterministic controller focus: vertical navigation selects one
+    -- logical virtual row; horizontal navigation selects State/Play/Pause.
+    if DialogueUI.handle_controller(self, input_service) then
+        _play_click()
+        return
     end
 
     -- Diagnostic for "can't change any option": are row hotspots receiving cursor
@@ -744,20 +758,33 @@ function ModTweakerView:_handle_input(input_service)
         -- is_held = mid-drag. r._dragging stays true THROUGH the release frame (the slider branch
         -- below clears it), so the modal also covers the RELEASE frame — that release was landing
         -- on a checkbox behind the cursor and toggling it.
-        if (cc and cc.track_hs and cc.track_hs.is_held) or r._dragging then self._slider_dragging = r; break end
+        if SliderDragEdge.is_modal(r._dragging,
+                cc and cc.track_hs and cc.track_hs.is_held) then
+            self._slider_dragging = r
+            break
+        end
     end
 
     -- Rows. Persist on change via _cat_set (routes to the real VMF mod object, or
     -- the gut controller for the dogfood category).
     for i = 1, #self._rows do
         local row = self._rows[i]
+        local runtime_mt = _mt()
+        if runtime_mt and runtime_mt.apply_runtime_gate and row._setting_id then
+            runtime_mt:apply_runtime_gate(row, row._mod_id, row._setting_id)
+        end
         -- Skip rows culled this frame (outside the list_mask) so a click on a scrolled-away row
         -- can't register. While a slider is dragging, ALSO skip every OTHER row (modal drag) so
         -- the cursor can't toggle/click anything else mid-drag.
         if not row._readonly and row._middle_visible ~= false
            and not (self._slider_dragging and row ~= self._slider_dragging) then
             local c = row.content
-            if row._is_gear then
+            if row._is_dialogue_group or row._is_dialogue_line then
+                if DialogueUI.handle_row(self, row) then
+                    _play_click()
+                    return
+                end
+            elseif row._is_gear then
                 -- GEAR click: drill INTO this setting's advanced sub-options. Captures
                 -- the parent setting_id + label, resets scroll, and rebuilds the list as
                 -- Back + parent + children (see _build_rows' _drill branch).
@@ -1007,10 +1034,13 @@ function ModTweakerView:_handle_input(input_service)
                 -- ~18KB config to clients — so firing it every drag frame floods the
                 -- network and crashes. One commit on release matches VMF's behaviour.
                 local ths = c.track_hs
-                if ths and ths.is_held and c.track_w then
+                local held = not not (ths and ths.is_held and c.track_w)
+                local cursor = held and input_service and input_service:get("cursor")
+                local next_dragging, follow_cursor, drag_released =
+                    SliderDragEdge.step(row._dragging, held, cursor ~= nil)
+                row._dragging = next_dragging
+                if follow_cursor then
                     -- DRAG: follow the cursor ONLY while the LMB is HELD (visual; commit on release).
-                    local cursor = input_service and input_service:get("cursor")
-                    if cursor then
                         local anchor = UISceneGraph.get_world_position(self.ui_scenegraph, defs.list_sg)
                         local cx = UIInverseScaleVectorToResolution(cursor)[1]
                         local frac = math.clamp((cx - (anchor[1] + (c.track_x or 0))) / math.max(1, c.track_w), 0, 1)
@@ -1020,9 +1050,7 @@ function ModTweakerView:_handle_input(input_service)
                         -- entry paths use, so drag/arrow/type all land on identical grid points.
                         cur = _snap_and_clamp(c, cur)
                         moved = true
-                        row._dragging = true
-                    end
-                elseif row._dragging then
+                elseif drag_released then
                     -- (#167) DRAG ENDED (is_held dropped): commit + play the sound EXACTLY ONCE,
                     -- edge-latched. The old code keyed off on_left_release, which stays LATCHED on
                     -- the shared node for several frames -> it re-ran the cursor math (slider kept
@@ -1032,7 +1060,6 @@ function ModTweakerView:_handle_input(input_service)
                     -- release's still-LATCHED on_release on a checkbox behind the cursor can't toggle
                     -- it once the drag-modal disengages next frame (same latch class as dropdown #158).
                     self._dd_block_until_press = true
-                    row._dragging = false
                     commit = true; play_sound = true
                 end
                 -- (#152) Arrow step = ONE natural increment per click (1 for ints, 10^-dec),
@@ -1181,7 +1208,7 @@ function ModTweakerView:_update_tooltip(dt, hover_row, hover_world_y, renderer)
     if not (row and (self._tt_alpha or 0) > 0 and self._tooltip) then return end
     local ok = pcall(defs.layout_tooltip, self._tooltip, renderer,
         row._tip_title or (row.content and row.content.label) or "", row._tip_desc or "",
-        row._list_y or 0, hover_world_y or 0, self._tt_alpha)
+        row._list_y or 0, hover_world_y or 0, self._tt_alpha, row._tip_prefer_below)
     if ok then UIRenderer.draw_widget(renderer, self._tooltip) end
 end
 
@@ -1348,10 +1375,10 @@ function ModTweakerView:_draw(dt, input_service)
     -- so it's never culled by the list_mask (it lives outside the scrolling list).
     if self._apply then UIRenderer.draw_widget(renderer, self._apply) end
     -- (v0.2.148-dev) RESTORE DEFAULTS button (to the LEFT of Apply). Same render path.
-    if self._reset then UIRenderer.draw_widget(renderer, self._reset) end
-    if self._profiles_label then UIRenderer.draw_widget(renderer, self._profiles_label) end
+    if self._reset and not self._dialogue_category then UIRenderer.draw_widget(renderer, self._reset) end
+    if self._profiles_label and not self._dialogue_category then UIRenderer.draw_widget(renderer, self._profiles_label) end
     for i = 1, #(self._profile_buttons or {}) do
-        UIRenderer.draw_widget(renderer, self._profile_buttons[i])
+        if not self._dialogue_category then UIRenderer.draw_widget(renderer, self._profile_buttons[i]) end
     end
 
     -- (#497) SEARCH box: update its text (query + blink caret, or the placeholder) + focus
@@ -1404,6 +1431,7 @@ function ModTweakerView:_draw(dt, input_service)
         local middle = math.point_is_inside_2d_box({ px, py + 23 }, mask_pos, mask_size)  -- ROW_H/2
         row._middle_visible = middle
         if middle then
+            DialogueUI.refresh_row(row, self)
             self:_apply_row_hover(row)
             -- (#207) Capture the hovered tooltip'd row (+ its bottom-edge world Y for the
             -- on-screen flip test). Either the full-row hover hotspot (row_hs, added by
@@ -1426,6 +1454,8 @@ function ModTweakerView:_draw(dt, input_service)
                 if c.hotspot then c.hotspot.on_release = nil; c.hotspot.on_left_release = nil end
                 if c.dec then c.dec.on_release = nil; c.dec.on_left_release = nil end
                 if c.inc then c.inc.on_release = nil; c.inc.on_left_release = nil end
+                if c.state_hotspot then c.state_hotspot.on_release = nil; c.state_hotspot.on_left_release = nil end
+                if c.media_hotspot then c.media_hotspot.on_release = nil; c.media_hotspot.on_left_release = nil end
             end
         end
     end

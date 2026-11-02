@@ -1,11 +1,21 @@
 return function(H, repo_root)
+    for _, selected in ipairs({
+        { dir = "gui_tweaker_dev", id = "gut_dev" },
+        { dir = "gui_tweaker", id = "gut" },
+    }) do
+    local stream = selected
+    local base_harness = H
+    local H = setmetatable({
+        test = function(name, body) base_harness.test(stream.id .. ": " .. name, body) end,
+    }, { __index = base_harness })
+    local function qualify(path) return path:gsub("gui_tweaker_dev", stream.dir) end
     -- #1573: the #1570-#1572 host ledger rows reach non-host peers through one
     -- separate exact channel that binds #1448's wire policy unchanged. Pure
     -- projection/validation policy, the real client and host adapters driven
     -- through the same minimal VMF/engine seam as test_gut_boss_damage_sync,
     -- the ledger owner's non-host routing, and source invariants.
-    local mod_root = repo_root .. "/gui_tweaker_dev/"
-    local scripts = mod_root .. "scripts/mods/gui_tweaker_dev/"
+    local mod_root = repo_root .. "/" .. stream.dir .. "/"
+    local scripts = mod_root .. "scripts/mods/" .. stream.dir .. "/"
     local wire_path = scripts .. "_gut_boss_damage_sync_policy.lua"
     local policy_path = scripts .. "_gut_custom_stat_sync_policy.lua"
     local runtime_path = scripts .. "_gut_custom_stat_sync.lua"
@@ -18,7 +28,7 @@ return function(H, repo_root)
         CustomPolicy.RANGED, CustomPolicy.PERMANENT_HEALTH
 
     local function read(path)
-        local file = assert(io.open(path, "rb"))
+        local file = assert(io.open(qualify(path), "rb"))
         local source = file:read("*a")
         file:close()
         return source
@@ -459,7 +469,7 @@ return function(H, repo_root)
         end
         with_globals({
             get_mod = function(name)
-                if name == "gut_dev" then return fake_mod end
+                if name == stream.id then return fake_mod end
                 if name == "VMF" then
                     return { ping_vmf_users = function() state.pings = state.pings + 1 end }
                 end
@@ -713,7 +723,7 @@ return function(H, repo_root)
             return encode(value)
         end
         with_globals({
-            get_mod = function(name) return name == "gut_dev" and fake_mod or nil end,
+            get_mod = function(name) return name == stream.id and fake_mod or nil end,
             Managers = {
                 mechanism = {
                     current_mechanism_name = function() return state.mechanism end,
@@ -867,7 +877,7 @@ return function(H, repo_root)
         }
         with_globals({
             get_mod = function(name)
-                if name == "gut_dev" then return fake_mod end
+                if name == stream.id then return fake_mod end
                 if name == "VMF" then return { ping_vmf_users = function() end } end
             end,
             Managers = {
@@ -936,7 +946,7 @@ return function(H, repo_root)
         local policy = read(policy_path)
         local owner = read(owner_path)
         local live = read(scripts .. "_gut_scoreboard_live.lua")
-        local entry = read(scripts .. "gui_tweaker_dev.lua")
+        local entry = read(scripts .. stream.dir .. ".lua")
         local stable_entry = read(repo_root .. "/gui_tweaker/scripts/mods/gui_tweaker/gui_tweaker.lua")
         local stable_live = read(repo_root .. "/gui_tweaker/scripts/mods/gui_tweaker/_gut_scoreboard_live.lua")
 
@@ -944,16 +954,16 @@ return function(H, repo_root)
         H.equal(count_plain(runtime, "mod:hook("), 0)
         H.equal(count_plain(runtime, "mod:hook_safe("), 0)
         H.truthy(policy:find('M.CHANNEL = "gut_custom_stat_snapshot_v1"', 1, true) ~= nil)
-        H.truthy(runtime:find('"scripts/mods/gui_tweaker_dev/_gut_boss_damage_sync_policy"', 1, true) ~= nil,
+        H.truthy(runtime:find(qualify('"scripts/mods/gui_tweaker_dev/_gut_boss_damage_sync_policy"'), 1, true) ~= nil,
             "the transport binds the #1448 wire policy module")
         H.truthy(runtime:find("Contract.CHANNEL == Wire.CHANNEL", 1, true) ~= nil,
             "load-time parity refuses a shared channel")
-        H.truthy(owner:find('"scripts/mods/gui_tweaker_dev/_gut_custom_stat_sync"', 1, true) ~= nil,
+        H.truthy(owner:find(qualify('"scripts/mods/gui_tweaker_dev/_gut_custom_stat_sync"'), 1, true) ~= nil,
             "the ledger owner loads the transport child")
         H.truthy(owner:find('rawget(mod, "_gut_custom_stat_sync")', 1, true) ~= nil,
             "non-host reads route through the child")
         H.truthy(entry:find("local GUT_RPC_SCHEMA = 1", 1, true) ~= nil)
-        H.truthy(entry:find('"scripts/mods/gui_tweaker_dev/_gut_custom_stats"', 1, true) ~= nil)
+        H.truthy(entry:find(qualify('"scripts/mods/gui_tweaker_dev/_gut_custom_stats"'), 1, true) ~= nil)
         H.equal(entry:find("_gut_custom_stat_sync", 1, true), nil,
             "the entry point stays within its size ceiling; the owner loads the child")
         H.truthy(live:find("options.custom_scores", 1, true) ~= nil)
@@ -967,7 +977,8 @@ return function(H, repo_root)
             H.equal(executable:find("rpc_players_session_score", 1, true), nil)
             H.equal(executable:find("rpc_sync_statistics", 1, true), nil)
         end
-        H.equal(stable_entry:find("_gut_custom_stat", 1, true), nil)
-        H.equal(stable_live:find("custom_scores", 1, true), nil)
+        H.truthy(stable_entry:find("_gut_custom_stat", 1, true), "approved public custom ledger is not wired")
+        H.truthy(stable_live:find("custom_scores", 1, true), "public presenter lost custom scores")
     end)
+    end
 end

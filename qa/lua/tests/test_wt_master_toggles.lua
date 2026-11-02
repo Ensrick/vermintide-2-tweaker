@@ -230,9 +230,9 @@ return function(H, repo_root)
     end)
 
     H.test("WT #611 advanced gear parents receive GUI Tweaker accent in both streams", function()
-        -- Stable retains its historical inline/shared shape. Dev's explicit
-        -- installed row owner must call the SAME shared accent policy; its
-        -- marker and warm-tan literal remain in that stream's definitions.
+        -- Both stream frontends install an explicit row owner. It must call
+        -- the SAME shared accent policy whose marker and native color remain
+        -- in that stream's definitions, never a detached duplicate.
         local streams = {
             "/gui_tweaker/scripts/mods/gui_tweaker/",
             "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/",
@@ -247,8 +247,9 @@ return function(H, repo_root)
             local view = stream .. "_mod_tweaker_view.lua"
             local source = read(view)
             local policy = source
-            if stream == "/gui_tweaker_dev/scripts/mods/gui_tweaker_dev/" then
-                H.truthy(source:find('local ViewRows = mod:dofile("scripts/mods/gui_tweaker_dev/_mod_tweaker_view_rows")', 1, true),
+            if source:find("ViewRows.install(ModTweakerView, {", 1, true) then
+                local module_path = stream:gsub("^/([^/]+)/", "")
+                H.truthy(source:find('local ViewRows = mod:dofile("' .. module_path .. '_mod_tweaker_view_rows")', 1, true),
                     view .. " must load its explicit row owner")
                 H.truthy(source:find("ViewRows.install(ModTweakerView, {", 1, true),
                     view .. " must install its row owner")
@@ -256,7 +257,7 @@ return function(H, repo_root)
                     view .. " must pass its shared definitions to the row owner")
                 source = read(stream .. "_mod_tweaker_view_rows.lua")
                 H.truthy(source:find("defs.apply_gear_parent_accent(row, has_gear)", 1, true),
-                    "installed Dev row owner must invoke the exact shared accent policy")
+                    "installed row owner must invoke the exact shared accent policy")
                 policy = read(stream .. "_mod_tweaker_definitions.lua")
             elseif source:find("defs.apply_gear_parent_accent(row, has_gear)", 1, true) then
                 policy = read(stream .. "_mod_tweaker_definitions.lua")
