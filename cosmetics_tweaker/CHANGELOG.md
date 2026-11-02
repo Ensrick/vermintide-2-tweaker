@@ -1,5 +1,16 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.230-dev (2026-11-02) -- Accept public CIM as the Athanor preview provider
+
+- The Loremaster Athanor preview adapter (issue 481) accepted a preview context
+  only from CIM Dev. The next public CIM release publishes the same context
+  under its own id, so the adapter would have treated every public preview as
+  not scoped to CIM. It now reads CIM Dev first, then public CIM. Public CIM
+  0.8.92 has no such context and behaves as before. Not confirmed in game.
+- A public CIM newer than 0.8.92 must now prove illusion ownership through its
+  provider, as CIM Dev already does. If its forge install fails, Cosmetics keeps
+  Apply instead of leaving it unowned. Public 0.8.92 keeps its existing yield.
+
 ## 0.9.229-dev (2026-10-29) -- Isolate persistence regression ownership (#2)
 
 - Extract the three existing offhand, cosmetic and cold-load persistence checks

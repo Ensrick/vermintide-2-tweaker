@@ -1108,7 +1108,7 @@ _rt_register("issue1155_old_musket_descriptor_reconciler", function()
 	end
 	local valid_context = {
 		contract = "cim_preview_context_v1", surface = "cim_preview",
-		provider = "cim_dev", constructor = "weapons", generation = 1155,
+		provider = _om._cwv_cim_preview_provider_id and _om._cwv_cim_preview_provider_id(), constructor = "weapons", generation = 1155,
 		backend_id = "cwv-1155-runtime-preview", exact_backend_identity = true,
 	}
 	local valid_previewer = { _cim_preview_context = valid_context,
@@ -1126,7 +1126,7 @@ _rt_register("issue1155_old_musket_descriptor_reconciler", function()
 		and _om._cwv_cim_preview_context(valid_previewer)
 	if type(accepted_context) ~= "table"
 			or accepted_context.backend_id ~= valid_context.backend_id then
-		return "CIM exact-context consumer rejected a matching provider/item identity"
+		return valid_context.provider and "CIM exact-context consumer rejected a matching provider/item identity" or "skip: no installed CIM build publishes the Athanor preview context"
 	end
 	if not (pilot.implemented_cells.cim_preview
 			and pilot.implemented_cells.cim_preview.instance_load == true

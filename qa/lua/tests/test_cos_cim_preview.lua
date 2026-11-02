@@ -89,7 +89,7 @@ return function(H, repo_root)
         end
         local api = Module.new({
             get_mod = function(id)
-                if id == "cim_dev" then return cim_mod end
+                if id == (options.provider_id or "cim_dev") then return cim_mod end
             end,
             get_application = function() return application end,
             get_package_manager = function() return packages end,
@@ -185,6 +185,25 @@ return function(H, repo_root)
             ITEM, "bid-481", ITEM.item_type, ITEM.skin)
         H.equal(context, nil)
         H.equal(reason, "backendless")
+        H.equal(scoped, true)
+    end)
+
+    H.test("Cosmetics CIM preview accepts public CIM as the provider", function()
+        local api, current = fixture({ provider_id = "cim" })
+        current.value = make_context(1)
+        current.value.provider = "cim"
+        local context, reason, scoped = api.resolve_scoped_identity(
+            ITEM, "bid-481", ITEM.item_type, ITEM.skin)
+        H.equal(context, current.value)
+        H.equal(reason, "exact")
+        H.equal(scoped, true)
+
+        current.value = make_context(2)
+        current.value.provider = "foreign"
+        context, reason, scoped = api.resolve_scoped_identity(
+            ITEM, "bid-481", ITEM.item_type, ITEM.skin)
+        H.equal(context, nil)
+        H.equal(reason, "invalid-contract")
         H.equal(scoped, true)
     end)
 

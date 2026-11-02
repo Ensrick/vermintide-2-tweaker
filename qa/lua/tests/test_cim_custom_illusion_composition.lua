@@ -48,6 +48,8 @@ return function(H, repo_root)
                     settings[name] = value
                 end,
             }
+            -- Public CIM 0.8.92 has no realm authority; Cosmetics tells it apart by this.
+            if public_cim then cim._cim_is_modded_realm = nil end
             local cim_dir = public_cim and "crafting_in_modded"
                 or "crafting_in_modded_dev"
             function cim:dofile(path)

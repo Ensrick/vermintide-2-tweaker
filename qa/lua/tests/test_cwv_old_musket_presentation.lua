@@ -385,8 +385,7 @@ return function(H, repo_root)
 		H.equal(installed, true)
 		local om = install_menu_owner({
 			get_mod = function(id)
-				H.equal(id, "cim_dev")
-				return cim_mod
+				if id == "cim_dev" then return cim_mod end
 			end,
 		})
 
@@ -462,6 +461,50 @@ return function(H, repo_root)
 		H.equal(reason, "identity_mismatch")
 	end)
 
+	H.test("Old Musket Loot preview accepts public CIM as the context provider", function()
+		local marker = {
+			contract = "cim_preview_context_v1", surface = "cim_preview",
+			provider = "cim", constructor = "weapons", generation = 1,
+			backend_id = "public-musket", exact_backend_identity = true,
+		}
+		local public_cim = {
+			_cim_preview_context_for = function(previewer)
+				return previewer._cim_preview_context
+			end,
+		}
+		local om = install_menu_owner({
+			get_mod = function(id)
+				if id == "cim" then return public_cim end
+			end,
+		})
+		H.equal(om._cwv_cim_preview_provider_id(), "cim")
+		local previewer = { _cim_preview_context = marker,
+			_item = { backend_id = "public-musket" } }
+		local context, reason = om._cwv_cim_preview_context(previewer)
+		H.equal(context, marker)
+		H.equal(reason, "ready")
+
+		-- A marker must come from the provider it names.
+		local forged = {}
+		for key, value in pairs(marker) do forged[key] = value end
+		forged.provider = "cim_dev"
+		local rejected, rejected_reason = om._cwv_cim_preview_context({
+			_cim_preview_context = forged,
+			_item = { backend_id = "public-musket" },
+		})
+		H.equal(rejected, nil)
+		H.equal(rejected_reason, "context_invalid")
+
+		-- Public CIM 0.8.92 publishes no accessor at all.
+		local legacy = install_menu_owner({
+			get_mod = function(id)
+				if id == "cim" then return {} end
+			end,
+		})
+		H.equal(legacy._cwv_cim_preview_provider_id(), nil)
+		H.equal(legacy._cwv_loot_preview_surface({}), "illusion_browser")
+	end)
+
 	H.test("Old Musket Loot preview retries only on the visible stable edge", function()
 		local cim_runtime = dofile(repo_root
 			.. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_forge_preview.lua")
@@ -488,8 +531,7 @@ return function(H, repo_root)
 		local calls = {}
 		local om, hooks = install_menu_owner({
 			get_mod = function(id)
-				H.equal(id, "cim_dev")
-				return cim_mod
+				if id == "cim_dev" then return cim_mod end
 			end,
 			preview_descriptor = function(received)
 				H.equal(received, item)
@@ -667,7 +709,7 @@ return function(H, repo_root)
 		-- CIM's exact-instance public context across all three constructors and
 		-- owns one construction edge plus one source-backed stable edge.
 		H.truthy(source:find('local function _cwv_loot_preview_surface(previewer)', 1, true))
-		H.truthy(source:find('_get_mod, "cim_dev"', 1, true))
+		H.truthy(source:find('_CIM_PREVIEW_PROVIDERS = { "cim_dev", "cim" }', 1, true))
 		H.truthy(source:find('provider._cim_preview_context_for', 1, true))
 		H.truthy(source:find('context.contract ~= "cim_preview_context_v1"', 1, true))
 		H.truthy(source:find('_reconcile_old_musket_loot(self, units, spawn_data, "instance_load")', 1, true))

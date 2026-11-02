@@ -1067,7 +1067,8 @@ return function(H, repo_root)
             "entry installs the menu preview owner exactly once")
 		H.equal(count_plain(entry, "get_mod = get_mod,"), 1,
 			"entry injects the exact CIM provider resolver once")
-		H.truthy(menu_preview:find('pcall(_get_mod, "cim_dev")', 1, true))
+		H.truthy(menu_preview:find('_CIM_PREVIEW_PROVIDERS = { "cim_dev", "cim" }', 1, true))
+		H.truthy(menu_preview:find('pcall(_get_mod, mod_id)', 1, true))
 		H.truthy(menu_preview:find("provider._cim_preview_context_for", 1, true))
 		H.truthy(menu_preview:find('context.contract ~= "cim_preview_context_v1"', 1, true))
 		H.equal(count_plain(menu_preview,
