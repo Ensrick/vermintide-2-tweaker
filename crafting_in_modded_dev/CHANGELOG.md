@@ -1,5 +1,16 @@
 # Crafting in Modded Changelog
 
+## 0.8.146-dev (2026-11-02) -- Prepare the public rollup (#1654)
+
+- Saved crafts that fail to restore now also write the reason with engine
+  `printf`, so public logs capture it with mod logging off. `mod:warning` still
+  tells the player once per craft and reason, and the record is still kept.
+- `/inv_dump` reports `modded_realm=` instead of the old `eac=` label; the value
+  was already correct. Stale `eac-untrusted` wording removed from the illusion
+  module header, including a friends-only note that would be wrong once public.
+- `standard_forge.lua` header condensed so the file fits the public ratchet.
+  No behaviour change.
+
 ## 0.8.145-dev (2026-10-27) -- Private Forge completion (#1465, #1530) [not-started]
 
 - Finish the standard Forge and illusion installers before publishing their

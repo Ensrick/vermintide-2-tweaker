@@ -455,6 +455,21 @@ return function(H, repo_root)
         H.equal(owner.owns_illusion_swap(), true)
     end)
 
+    H.test("Cosmetics #1465 newer public CIM must prove ownership", function()
+        local _, owner, _, installed_mods = fixture()
+        local realm = function() return true end
+        installed_mods.cim = { _cim_is_modded_realm = realm }
+        H.equal(owner.owns_illusion_swap(), false,
+            "a newer public CIM without a provider failed its forge install")
+        installed_mods.cim._cim_illusion_swap_provider = {
+            schema = 1,
+            owns_illusion_swap = function() return true end,
+        }
+        H.equal(owner.owns_illusion_swap(), true)
+        installed_mods.cim._cim_illusion_swap_provider.schema = 2
+        H.equal(owner.owns_illusion_swap(), false)
+    end)
+
     H.test("Cosmetics #702 Apply completion commits the exact pending offhand", function()
         local mod, _, hooks, _, commits = fixture()
         mod._pending_la_emit_on_exit = {

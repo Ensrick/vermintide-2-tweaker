@@ -1,5 +1,19 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.568-dev (2026-11-02) -- Accept public CIM as the Athanor preview provider
+
+- The Old Musket Athanor preview trusted a preview context only from CIM Dev.
+  The next public CIM release publishes the same context under its own id, so
+  it would have been rejected as `[cwv:1155] CIM preview rejected`. A context
+  now counts only when it comes from the installed provider it names, checking
+  CIM Dev first and then public CIM. Public CIM 0.8.92 has no such context and
+  behaves as before.
+- `issue1155_old_musket_descriptor_reconciler` tests the installed provider and
+  skips when no installed CIM build publishes the context.
+- First Workshop publication of the finite Crowbill observation work from
+  0.1.567-dev, which merged without an upload. Its stale claim's number stays
+  burned. Not confirmed in game.
+
 ## 0.1.567-dev (2026-10-30) -- Finite Crowbill observations (#719)
 
 - Bound the existing Crowbill check to 32 keyed roster observations plus one

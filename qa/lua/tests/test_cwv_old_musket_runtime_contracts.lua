@@ -767,6 +767,7 @@ return function(H, repo_root)
 				return previewer and previewer._cim_preview_context
 					and "cim_preview" or "illusion_browser"
 			end,
+			_cwv_cim_preview_provider_id = function() return "cim_dev" end,
 			_cwv_cim_preview_context = function(previewer)
 				local context = previewer and previewer._cim_preview_context
 				local item = previewer and previewer._item

@@ -1,24 +1,14 @@
 --[[
-standard_forge — Hooks the Keep's standard crafting menus to work in modded realm
-without consuming crafting materials.
-
-In modded realm the player has zero crafting_material items in their PlayFab
-inventory, so every CraftPage's `setup_recipe_requirements` reports
-`_has_all_requirements = false` and disables the craft button. PlayFab also rejects
-any actual `craft()` request because the server-side ingredient check fails.
+standard_forge: the Keep's standard crafting menus in modded realm, without materials.
+The player has no crafting_material items there, so `setup_recipe_requirements` disables
+the craft button, and PlayFab rejects `craft()` on its server-side ingredient check.
 
 Strategy (same pattern as the Athanor):
-  1. UI layer — post-hook `setup_recipe_requirements` on each material-gated CraftPage
-     to force `_has_all_requirements = true` and re-enable the button.
-  2. Backend layer — when `HeroWindowCrafting` is open, set `_standard_forge_active`
-     and **block all PlayFab commits**. Without that, mutating an existing inventory
-     item triggers a "Backend rejected the challenge response -1" anti-tamper kick
-     (this is what crashed v0.2.0). Hook `BackendInterfaceCraftingPlayfab._get_valid_recipe`
-     to bypass material validation, and `craft()` to short-circuit the PlayFab queue
-     and synthesize results locally via per-recipe `synth.<recipe_name>` functions.
-
-Mutations are session-only. On game restart PlayFab reloads the canonical inventory
-and reverts everything. This matches how the Athanor handles property/trait edits.
+  1. UI: post-hook `setup_recipe_requirements` on each material-gated CraftPage to force
+     `_has_all_requirements = true` and re-enable the button.
+  2. Backend: while `HeroWindowCrafting` is open, set `_standard_forge_active` and block
+     all PlayFab commits (mutating an item otherwise causes an anti-tamper kick). Bypass
+     `_get_valid_recipe` validation and synthesize results locally via `synth.<recipe_name>`.
 ]]
 
 -- Owned by: Dev entry. Consumed via: its original protected Forge boundary.

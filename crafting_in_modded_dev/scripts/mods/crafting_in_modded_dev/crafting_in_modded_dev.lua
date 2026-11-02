@@ -36,7 +36,7 @@ mod._cim959_accessory_property_policy = mod:dofile(
 local _BULK_ACCESSORY_CRAFT = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_bulk_accessory_craft")
 _MEM_PROBE_T0_CIMD = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.8.145-dev"
+local MOD_VERSION = "0.8.146-dev"
 local _bootstrap = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_bootstrap_runtime")({
         mod = mod,
@@ -1061,9 +1061,7 @@ end)
 local _pending_inject = {}
 
 -- #1654: a saved craft whose restore fails for any reason other than a missing
--- ItemMasterList row used to be logged at INFO and retried silently forever,
--- so it vanished from the inventory with no visible trace. Warn once per
--- (bid, reason) with the exact reason and keep the record: it is never deleted
+-- ItemMasterList row warns once per (bid, reason), and the record is never deleted
 -- here. `mod._cim_restore_failures` feeds issue1654_saved_crafts_restored.
 mod._cim_restore_failures = mod._cim_restore_failures or {}
 local _restore_warned = {}
@@ -1076,6 +1074,8 @@ local function _note_restore_result(bid, w, ok, err)
     if _restore_warned[token] then return end
     _restore_warned[token] = true
     mod:warning("[cim:1654] saved craft %s (%s) could not be restored: %s -- the saved record is kept; please attach this log",
+        tostring(w and w.item_key), tostring(bid), reason)
+    printf("[cim:1654] saved craft %s (%s) could not be restored: %s",
         tostring(w and w.item_key), tostring(bid), reason)
 end
 

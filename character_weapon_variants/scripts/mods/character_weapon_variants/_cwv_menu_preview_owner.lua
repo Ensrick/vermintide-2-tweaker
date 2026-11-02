@@ -115,21 +115,43 @@ local function _preview_backend_id(item)
 	return type(bid) == "string" and bid ~= "" and #bid <= 128 and bid or nil
 end
 
+-- Each CIM build stamps its own mod id into the context it publishes, so a marker
+-- only counts when it came from the provider named on it.
+local _CIM_PREVIEW_PROVIDERS = { "cim_dev", "cim" }
+
+local function _cwv_cim_preview_provider(previewer)
+	local installed_id = nil
+	for i = 1, #_CIM_PREVIEW_PROVIDERS do
+		local mod_id = _CIM_PREVIEW_PROVIDERS[i]
+		local ok_mod, provider = pcall(_get_mod, mod_id)
+		local accessor = ok_mod and provider and provider._cim_preview_context_for
+		if type(accessor) == "function" then
+			installed_id = installed_id or mod_id
+			local ok_context, context = pcall(accessor, previewer)
+			if ok_context and type(context) == "table" and context.provider == mod_id then
+				return installed_id, context
+			end
+		end
+	end
+	return installed_id, nil
+end
+_om._cwv_cim_preview_provider_id = function()
+	if type(_get_mod) ~= "function" then return nil end
+	return (_cwv_cim_preview_provider(nil))
+end
+
 local function _cwv_cim_preview_context(previewer)
 	if type(previewer) ~= "table" or type(_get_mod) ~= "function" then
 		return nil, "absent"
 	end
 	local has_marker = rawget(previewer, "_cim_preview_context") ~= nil
-	local ok_mod, provider = pcall(_get_mod, "cim_dev")
-	local accessor = ok_mod and provider and provider._cim_preview_context_for
-	if type(accessor) ~= "function" then
+	local installed_id, context = _cwv_cim_preview_provider(previewer)
+	if not installed_id then
 		return nil, has_marker and "provider_unavailable" or "absent"
 	end
-	local ok_context, context = pcall(accessor, previewer)
-	if not ok_context or type(context) ~= "table"
+	if type(context) ~= "table"
 			or context.contract ~= "cim_preview_context_v1"
 			or context.surface ~= "cim_preview"
-			or context.provider ~= "cim_dev"
 			or type(context.generation) ~= "number" or context.generation <= 0
 			or context.generation ~= context.generation
 			or context.generation == math.huge

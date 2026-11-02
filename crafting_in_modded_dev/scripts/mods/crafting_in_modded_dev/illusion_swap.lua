@@ -2,9 +2,8 @@
 illusion_swap.lua — modded-realm weapon illusion swap.
 
 Migrated from cosmetics_tweaker v0.8.49 so cim ships its own copy of the
-"change cosmetics in modded realm" UI. cosmetics_tweaker preserves its legacy
-yield when public `cim` is present and recognizes this friends-only stream by
-the explicit `_cim_illusion_swap_provider` below. Persistence still observes
+"change cosmetics in modded realm" UI. cosmetics_tweaker recognizes this build
+by the explicit `_cim_illusion_swap_provider` below. Persistence still observes
 vanilla's shared Apply Skin completion seam instead of assuming which mod
 owned the craft.
 
@@ -22,16 +21,15 @@ What it does (6 hooks + helpers, mirroring the original plus persistence):
   1. `BackendInterfaceItemPlayfab.get_weapon_skin_from_skin_key` —
      return a synthetic backend id for any skin the player doesn't
      "own", so the illusion grid can reference it.
-  2. `HeroWindowItemCustomization._enable_craft_button` — temporarily
-     clear `eac-untrusted` so the Apply button is usable for skin
-     swaps. Force-clears hotspot held flags on disable to prevent the
-     fast-completion sound loop.
+  2. `HeroWindowItemCustomization._enable_craft_button` — the shared
+     local Apply owner re-asserts the button after the game's read-only
+     gate writes it. Force-clears hotspot held flags on disable to prevent
+     the fast-completion sound loop.
   3. `HeroWindowItemCustomization._on_illusion_index_pressed` — clear
      `content.locked = false` on the clicked widget so the Apply button
      enables for skins the player hasn't earned.
   4. `HeroWindowItemCustomization._update_state_craft_button` —
-     temporarily clear `eac-untrusted` so the state check doesn't bake
-     in the modded gate.
+     keep the state check from baking in the modded gate.
   5. `BackendInterfaceCraftingPlayfab.craft` — when in modded realm
      applying a weapon skin, write `item.skin` directly on the local
      backend mirror instead of sending to PlayFab. Persist via cim's
@@ -310,7 +308,7 @@ local _apply_owner = _APPLY_PRESENTATION.new({
 })
 
 -- NOTE: `_update_state_craft_button` is hooked in `standard_forge.lua`
--- (loaded before this file). The eac-clearing wrap for the
+-- (loaded before this file). The realm wrap for the
 -- `apply_weapon_skin` recipe lives in that consolidated hook — VMF
 -- rejects a second `mod:hook*` on the same class+method with
 -- "Attempting to rehook active hook" and silently drops the body.
@@ -471,14 +469,14 @@ mod:command("inv_dump", "Dump modded item visibility state to log + console", fu
         return
     end
 
-    local eac = _is_modded_realm() and "true" or "false"
+    local modded_realm = _is_modded_realm() and "true" or "false"
     local sf_active = mod._cim_standard_forge_active and "true" or "false"
     local show_only = mod:get("show_only_modded_weapons") and "true" or "false"
     local mech = Managers.mechanism and Managers.mechanism:current_mechanism_name() or "?"
-    mod:echo(string.format("[inv_dump] eac=%s sf_active=%s show_only=%s mech=%s",
-        eac, sf_active, show_only, mech))
-    mod:info(string.format("[inv_dump] eac=%s sf_active=%s show_only=%s mech=%s",
-        eac, sf_active, show_only, mech))
+    mod:echo(string.format("[inv_dump] modded_realm=%s sf_active=%s show_only=%s mech=%s",
+        modded_realm, sf_active, show_only, mech))
+    mod:info(string.format("[inv_dump] modded_realm=%s sf_active=%s show_only=%s mech=%s",
+        modded_realm, sf_active, show_only, mech))
 
     local player = Managers.player and Managers.player:local_player()
     local profile_index = player and player:profile_index()

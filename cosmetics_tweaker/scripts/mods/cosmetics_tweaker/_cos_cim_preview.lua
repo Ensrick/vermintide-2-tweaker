@@ -37,7 +37,7 @@ local function valid_context(context)
     return type(context) == "table"
         and context.contract == M.CONTRACT
         and context.surface == "cim_preview"
-        and context.provider == "cim_dev"
+        and (context.provider == "cim_dev" or context.provider == "cim")
         and type(context.generation) == "number"
         and context.generation > 0
         and (context.constructor == "overview"
@@ -100,14 +100,15 @@ function M.new(deps)
     end
 
     local function current_context()
-        -- CIM Dev is the sole producer of this exact contract. Stable CIM can
-        -- adopt a distinct provider/version later without being guessed here.
-        local ok_mod, provider = pcall(get_mod, "cim_dev")
-        local accessor = ok_mod and provider
-            and provider._cim_preview_context_current or nil
-        if type(accessor) == "function" then
-            local ok_context, context = pcall(accessor)
-            if ok_context and context ~= nil then return context, true end
+        -- CIM Dev and public CIM each publish this contract under their own id.
+        for _, mod_id in ipairs({ "cim_dev", "cim" }) do
+            local ok_mod, provider = pcall(get_mod, mod_id)
+            local accessor = ok_mod and provider
+                and provider._cim_preview_context_current or nil
+            if type(accessor) == "function" then
+                local ok_context, context = pcall(accessor)
+                if ok_context and context ~= nil then return context, true end
+            end
         end
         return nil, false
     end

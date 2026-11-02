@@ -71,15 +71,18 @@ function M.install(mod, deps)
     end
 
     local function _legacy_public_cim_present()
-        -- Public CIM 0.8.92 predates the capability provider. Preserve its
-        -- established presence-based yield for backward compatibility; Dev
-        -- must opt in through the explicit provider.
+        -- Public CIM 0.8.92 predates the realm authority and the capability
+        -- provider, so it keeps its presence-based yield. Newer builds must
+        -- prove ownership: one whose forge install failed publishes no
+        -- provider, and Cosmetics then keeps Apply instead of leaving it unowned.
         local got_mod, candidate = pcall(get_mod, "cim")
-        return got_mod and candidate ~= nil
+        return got_mod and type(candidate) == "table"
+            and rawget(candidate, "_cim_is_modded_realm") == nil
     end
 
     local function _cim_owns_illusion_swap()
-        return _legacy_public_cim_present() or _provider_owns("cim_dev")
+        return _legacy_public_cim_present() or _provider_owns("cim")
+            or _provider_owns("cim_dev")
     end
 
     local Presentation = deps.presentation or mod:dofile(
