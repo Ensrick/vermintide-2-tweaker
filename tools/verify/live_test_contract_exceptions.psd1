@@ -374,7 +374,7 @@
             Bound='Core.finalize returns no classification after the mission-generation finalized latch is set'
             EmitterAnchors=@(@{Tokens=@('_safe_printf','(','String:[ct:349] chest_count_audit level=%s mission_of_mercy=%s actual=%d cap=%s pickup_census=%s class=%s is_server=%s')})
             GuardAnchors=@(
-                @{Tokens=@('local','classification',',','actual','=','Core','.','finalize','(','_tracker',',','level_id',',','cap',',','census',')')}
+                'local classification, actual = Core.finalize(_tracker, level_id, cap, census)'
                 @{Tokens=@('if','not','classification','then','return','nil','end')}
             )
         }
@@ -398,7 +398,7 @@
             Bound='one over-cap reconciliation receipt from the mission-generation one-shot finalize path'
             EmitterAnchors=@(@{Tokens=@('_safe_printf','(','String:[ct:132] reconcile level=%s alive=%d cap=%d over=%d pruned=%d unprunable=%d (issue 132 / issue 60 cross-path cap)')})
             GuardAnchors=@(
-                @{Tokens=@('local','classification',',','actual','=','Core','.','finalize','(','_tracker',',','level_id',',','cap',',','census',')')}
+                'local classification, actual = Core.finalize(_tracker, level_id, cap, census)'
                 @{Tokens=@('if','not','classification','then','return','nil','end')}
                 @{Tokens=@('if','plan','.','over_n','<=','0','then','return','end')}
             )
@@ -453,7 +453,7 @@
         }
         @{
             Marker='[gut:630]'; ModId='gut_dev'
-            ModTrees=@{gut_dev=@('38c3d7f770665f5578c36ff9eda5cdbbfa51fadf')}
+            ModTrees=@{gut_dev=@('d41e79c0ce648f6a43c201cd115f124e799a936b')}
             SourcesByMod=@{gut_dev='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_dx12_fence630.lua'}
             Signature='[gut:630] frame_evidence draw=%d visible_rows=%s resource_candidates=%s'
             Bound='focus/tab/Weapons-expansion edge evidence under a 48-row per-session probe budget reset only by Mod Tweaker enter'
@@ -627,7 +627,7 @@ end'
             GuardAnchors=@(@{Tokens=@('if','drained','>','0','then')})
         }
         @{
-            Marker='[gut:938]';ModId='gut_dev';ModTrees=@{gut_dev=@('38c3d7f770665f5578c36ff9eda5cdbbfa51fadf')}
+            Marker='[gut:938]';ModId='gut_dev';ModTrees=@{gut_dev=@('d41e79c0ce648f6a43c201cd115f124e799a936b')}
             SourcesByMod=@{gut_dev='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_damage_numbers.lua'}
             Signature='[gut:938] rt skip: NetworkConstants.damage.max unavailable; policy checked against fallback %.2f'
             Bound='at most one fallback notice per explicit issue938 regression-check invocation'
@@ -795,7 +795,7 @@ end'
             )
         }
         @{
-            Marker='[gut:250]';ModId='gut_dev';ModTrees=@{gut_dev=@('38c3d7f770665f5578c36ff9eda5cdbbfa51fadf')}
+            Marker='[gut:250]';ModId='gut_dev';ModTrees=@{gut_dev=@('d41e79c0ce648f6a43c201cd115f124e799a936b')}
             SourcesByMod=@{gut_dev='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_tab_talent_refresh.lua'}
             Signature='[gut:250] career=%s active=%s tiers=%s duplicates=%d unmapped=%d repair=%d/%d';Bound='signature-deduplicated talent repairs under the policy absolute log cap'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[gut:250] career=%s active=%s tiers=%s duplicates=%d unmapped=%d repair=%d/%d')})
@@ -815,7 +815,7 @@ end'
             )
         }
         @{
-            Marker='[gut:257]';ModId='gut_dev';ModTrees=@{gut_dev=@('38c3d7f770665f5578c36ff9eda5cdbbfa51fadf')}
+            Marker='[gut:257]';ModId='gut_dev';ModTrees=@{gut_dev=@('d41e79c0ce648f6a43c201cd115f124e799a936b')}
             SourcesByMod=@{gut_dev='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_cutscenes.lua'}
             Signature='[gut:257] seq=%s phase=%s level=%s disposition=%s skip_next=%s guard=%s active_camera=%s on_activate=%s on_skip=%s hud=%s letterbox=%s fade_in=%s hold=%s fade_out=%s auto=%s capped=%s';Bound='absolute 32-event cap plus one terminal cap row per cutscene-system generation'
             EmitterAnchors=@(@{Tokens=@('_printf','(','String:[gut:257] seq=%s phase=%s level=%s disposition=%s skip_next=%s guard=%s active_camera=%s on_activate=%s on_skip=%s hud=%s letterbox=%s fade_in=%s hold=%s fade_out=%s auto=%s capped=%s')})
@@ -825,7 +825,7 @@ end'
             )
         }
         @{
-            Marker='[gut:245]';ModId='gut_dev';ModTrees=@{gut_dev=@('38c3d7f770665f5578c36ff9eda5cdbbfa51fadf')}
+            Marker='[gut:245]';ModId='gut_dev';ModTrees=@{gut_dev=@('d41e79c0ce648f6a43c201cd115f124e799a936b')}
             SourcesByMod=@{gut_dev='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_tab_property_refresh.lua'}
             Signature='[gut:245] slot=%s backend_id=%s properties=%s refresh=%d/%d';Bound='shared absolute live-loadout refresh log cap'
             EmitterAnchors=@(@{Tokens=@('_printf','(','String:[gut:245] slot=%s backend_id=%s properties=%s refresh=%d/%d')})
@@ -925,6 +925,49 @@ end'
     # exact token anchors. These authorize only Signature, never Marker-wide
     # siblings.
     ReceiptRouteOverrides = @(
+        # Public GUI290: only this registered check's one-shot verdict, never
+        # its [gut:1414] siblings. The latch is consumed before printf can fail.
+        @{
+            ModId='gut'; ModTree='26b87c2e652904e19d9fbd19a6a8419eb701ff76'
+            Source='gui_tweaker/scripts/mods/gui_tweaker/_gut_scoreboard_live.lua'
+            Marker='[gut:1414]'
+            Signature='[gut:1414] runtime verdict=PASS page=%d/%d topics=%d fp=%s'
+            Bound='at most one print attempt per loaded scoreboard-module generation; runtime_model_reported is latched before pcall and is never reset by regression invocations or world transitions'
+            ActionCommands=@('/gut_regression_test')
+            EmitterAnchors=@('pcall(printf, "[gut:1414] runtime verdict=PASS page=%d/%d topics=%d fp=%s",')
+            GuardAnchors=@(
+                'local runtime_model_reported = false'
+@'
+if not runtime_model_reported then
+    runtime_model_reported = true
+    pcall(printf, "[gut:1414] runtime verdict=PASS page=%d/%d topics=%d fp=%s",
+        first.selected_page, first.page_count,
+        #first.visible_topics, first.fingerprint)
+end
+'@
+                'name = "issue272_native_live_scoreboard_page", fn = function()'
+                @{
+                    Source='gui_tweaker/scripts/mods/gui_tweaker/gui_tweaker.lua'
+                    Tokens=@(
+                        'local','ok',',','live_page','=','pcall','(','mod','.','dofile',',','mod',',',
+                        'String:scripts/mods/gui_tweaker/_gut_scoreboard_live',')',
+                        'if','ok','and','type','(','live_page',')','==','String:table','then',
+                        'for','_',',','check','in','ipairs','(','live_page','.','rt_checks','or','{','}',')','do',
+                        '_rt_register','(','check','.','name',',','check','.','fn',')','end'
+                    )
+                }
+                @{
+                    Source='gui_tweaker/scripts/mods/gui_tweaker/gui_tweaker.lua'
+                    Tokens=@(
+                        'mod',':','command','(','String:gut_regression_test',',','String:GUI tweaker self-check',',','function','(',')',
+                        'local','pass',',','fail',',','skip','=','0',',','0',',','0',
+                        'mod',':','echo','(','String:=== gut_regression_test (v%s) ===',',','MOD_VERSION',')',
+                        'for','_',',','c','in','ipairs','(','_RT_CHECKS',')','do',
+                        'local','ok',',','err','=','pcall','(','c','.','fn',')'
+                    )
+                }
+            )
+        }
         # Public WT341: three exact existing routes, not marker-wide permission.
         # Explicit verdicts own /verify_wt_loadout_cache; automatic trace shares
         # one 64-attempt budget per installed backend closure, including resets.
@@ -1035,7 +1078,7 @@ end
             )
         }
         @{
-            ModId='gut_dev'; ModTrees=@('38c3d7f770665f5578c36ff9eda5cdbbfa51fadf')
+            ModId='gut_dev'; ModTrees=@('d41e79c0ce648f6a43c201cd115f124e799a936b')
             Source='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_camera.lua'
             Marker='[gut:209]'
             Signature='[gut:209] %s | effect=%s id=%s tp=%s callsite=%s%s'
@@ -1066,7 +1109,7 @@ end
             )
         }
         @{
-            ModId='gut_dev'; ModTrees=@('38c3d7f770665f5578c36ff9eda5cdbbfa51fadf')
+            ModId='gut_dev'; ModTrees=@('d41e79c0ce648f6a43c201cd115f124e799a936b')
             Source='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_ba_compendium_tabs.lua'
             Marker='[gut:217]'
             Signature='[gut:217] compendium tabs injected into HeroWindowPanelConsole definitions (Armory, Bestiary)'
@@ -1077,20 +1120,6 @@ end
             GuardAnchors=@(
                 @{Tokens=@('if','_injected','then','return')}
                 @{Tokens=@('_injected','=','true')}
-            )
-        }
-        @{
-            ModId='gut_dev'; ModTrees=@('38c3d7f770665f5578c36ff9eda5cdbbfa51fadf')
-            Source='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_native_loadouts.lua'
-            Marker='[gut_dev:NATIVE_LOADOUTS]'
-            Signature='[gut_dev:NATIVE_LOADOUTS] #375 selected-read career=%s caller=%s requested=%s resolved=%s selected=%s row=[melee=%s ranged=%s] canonical=[melee=%s ranged=%s] served=[slot=%s value=%s source=%s]'
-            Bound='SelectedLoadoutTraceCore deduplicates and caps this exact selected-read route at 128 records'
-            EmitterAnchors=@(
-                @{Tokens=@('printf','(','String:[gut_dev:NATIVE_LOADOUTS] #375 selected-read career=%s caller=%s requested=%s resolved=%s selected=%s row=[melee=%s ranged=%s] canonical=[melee=%s ranged=%s] served=[slot=%s value=%s source=%s]')}
-            )
-            GuardAnchors=@(
-                @{Tokens=@('SelectedLoadoutTraceCore','.','new','(','128',')')}
-                @{Tokens=@('if','_selected_loadout_trace',':','record','(','snapshot',')','then')}
             )
         }
         @{
@@ -1443,7 +1472,7 @@ end
                 'mod._cos518_emit("wield", tostring(item_key) .. "|" .. tostring(skin), "OWNER-WIELD slot=%s item=%s skin=%s deus_yield=%s"'
             )
             GuardAnchors=@(
-                @{Tokens=@('if','ch','.','seen','[','dedupe_key',']','or','ch','.','count','>=','16','then','return','false','end')}
+                'if ch.seen[dedupe_key] or ch.count >= 16 then return false end'
                 @{Tokens=@('ch','.','seen','[','dedupe_key',']','=','true')}
                 @{Tokens=@('ch','.','count','=','ch','.','count','+','1')}
             )
@@ -1460,7 +1489,7 @@ end
                 @{Tokens=@('mod','.','_cos518_emit','(','String:paint-skip',',','tostring','(','bid',')',',','String:PAINT-SKIP ctx=ingame bid=%s (deus run: CW upgrade cosmetics win)')}
             )
             GuardAnchors=@(
-                @{Tokens=@('if','ch','.','seen','[','dedupe_key',']','or','ch','.','count','>=','16','then','return','false','end')}
+                'if ch.seen[dedupe_key] or ch.count >= 16 then return false end'
                 @{Tokens=@('ch','.','seen','[','dedupe_key',']','=','true')}
                 @{Tokens=@('ch','.','count','=','ch','.','count','+','1')}
             )
@@ -1477,7 +1506,7 @@ end
                 @{Tokens=@('mod','.','_cos518_emit','(','String:husk-miss',',','tostring','(','armoury_key',')',',','String:HUSK-MISS authored variant %s unavailable (wearer=%s template=%s)')}
             )
             GuardAnchors=@(
-                @{Tokens=@('if','ch','.','seen','[','dedupe_key',']','or','ch','.','count','>=','16','then','return','false','end')}
+                'if ch.seen[dedupe_key] or ch.count >= 16 then return false end'
                 @{Tokens=@('ch','.','seen','[','dedupe_key',']','=','true')}
                 @{Tokens=@('ch','.','count','=','ch','.','count','+','1')}
             )
