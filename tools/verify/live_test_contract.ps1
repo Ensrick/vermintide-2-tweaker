@@ -1337,10 +1337,9 @@ return M
             Assert-VtContractFixture (($verdict -is [string]) -and $verdict -match [regex]::Escape([string]$case.Pattern)) "#577 mp pin case '$($case.Name)' was not rejected as expected: $verdict"
         }
         $requiredRoutes = @(
-            # Seven exact routes the superseding audit proved were legitimate
+            # Six exact routes the superseding audit proved were legitimate
             # false rejects in the merged marker-wide scanner.
             @{ Marker='[gut:217]'; Signature='[gut:217] compendium tabs injected into HeroWindowPanelConsole definitions (Armory, Bestiary)' },
-            @{ Marker='[gut_dev:NATIVE_LOADOUTS]'; Signature='[gut_dev:NATIVE_LOADOUTS] #375 selected-read career=%s caller=%s requested=%s resolved=%s selected=%s row=[melee=%s ranged=%s] canonical=[melee=%s ranged=%s] served=[slot=%s value=%s source=%s]' },
             @{ Marker='[wt:661]'; Signature='[wt:661] wield-boundary item=%s career=%s template=%s result=%s trace=%d/%d' },
             @{ Marker='[cos:373]'; Signature='[cos:373] receiver coverage OK: no magic/runed shield family gaps' },
             @{ Marker='[cos:704]'; Signature='[cos:704] summary inspected=%d suspects=%d emitted=%d truncated=%s signature_truncated=%s signature_bytes=%d' },
@@ -1362,6 +1361,55 @@ return M
             })
             Assert-VtContractFixture ($matches.Count -eq 1) "Exact prior false-reject route is not anchored: $($required.Marker)"
         }
+        # #375's trace core caps retained keys, not emissions: changing a cached
+        # signature or cycling evicted keys re-emits indefinitely. Retire only
+        # this exact false finite-output grant on the two audited uncapped trees.
+        # A future source tree may add a real output cap and undergo normal review.
+        $uncappedSelectedReadTrees=@(
+            '38c3d7f770665f5578c36ff9eda5cdbbfa51fadf'
+            'd41e79c0ce648f6a43c201cd115f124e799a936b'
+        )
+        $selectedReadIdentity=@{
+            ModId='gut_dev'
+            Source='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_native_loadouts.lua'
+            Marker='[gut_dev:NATIVE_LOADOUTS]'
+            Signature='[gut_dev:NATIVE_LOADOUTS] #375 selected-read career=%s caller=%s requested=%s resolved=%s selected=%s row=[melee=%s ranged=%s] canonical=[melee=%s ranged=%s] served=[slot=%s value=%s source=%s]'
+        }
+        $assertNoUncappedSelectedReadGrant={
+            param($Overrides)
+            foreach($route in @($Overrides)){
+                if(-not $route -or [string]$route.ModId -cne $selectedReadIdentity.ModId -or
+                    [string]$route.Source -cne $selectedReadIdentity.Source -or
+                    [string]$route.Marker -cne $selectedReadIdentity.Marker -or
+                    [string]$route.Signature -cne $selectedReadIdentity.Signature){continue}
+                $pins=if($route.ContainsKey('ModTrees')){@($route.ModTrees)}else{@($route.ModTree)}
+                $known=@($pins | Where-Object {$uncappedSelectedReadTrees -ccontains [string]$_})
+                Assert-VtContractFixture ($known.Count -eq 0) 'Known-uncapped exact gut_dev selected-read route received a finite-output grant.'
+            }
+        }
+        $selectedReadRejections=0
+        foreach($tree in $uncappedSelectedReadTrees){
+            foreach($pinField in @('ModTree','ModTrees')){
+                $planted=$selectedReadIdentity.Clone()
+                if($pinField -ceq 'ModTrees'){$planted[$pinField]=@($tree)}else{$planted[$pinField]=$tree}
+                $rejected=$false
+                try{& $assertNoUncappedSelectedReadGrant -Overrides @($planted)}
+                catch{$rejected=[string]$_.Exception.Message -match '^Known-uncapped exact gut_dev selected-read route'}
+                Assert-VtContractFixture $rejected "Planted uncapped selected-read grant was accepted: $tree ($pinField)."
+                $selectedReadRejections++
+            }
+        }
+        $futureSelectedRead=$selectedReadIdentity.Clone()
+        $futureSelectedRead.ModTree=('f'*40)
+        $siblingSelectedRead=$selectedReadIdentity.Clone()
+        $siblingSelectedRead.ModTree=$uncappedSelectedReadTrees[1]
+        $siblingSelectedRead.Signature='[gut_dev:NATIVE_LOADOUTS] unrelated bounded sibling'
+        # These pass this history-specific guard only; they do not bypass the
+        # ordinary immutable-source/emitter/cap review and anchor requirements.
+        & $assertNoUncappedSelectedReadGrant -Overrides @($futureSelectedRead,$siblingSelectedRead)
+        & $assertNoUncappedSelectedReadGrant -Overrides @($exceptions.ReceiptRouteOverrides)
+        Assert-VtContractFixture ($selectedReadRejections -eq 4) 'Selected-read old/new pin rejection census drift.'
+        Write-Host '[live-test-contract] selected-read uncapped-tree regression passed: 4 planted grants rejected; future trees and sibling signatures remain eligible.'
         $unsafe491 = @(
             @($exceptions.ReceiptRouteOverrides) +
             @($exceptions.ReceiptFamilyOverrides) +
