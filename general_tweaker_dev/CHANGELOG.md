@@ -1,5 +1,25 @@
 # General Tweaker Changelog
 
+## 0.2.278-dev (2026-11-02) -- World freeze and readable time controls (#1801, #1802)
+
+- Replaces the opaque time-index slider with native multiplier presets, preserving
+  saved indices and the normal 1x default. All time changes require the modded
+  host; very slow speeds require a global recovery binding.
+- Adds a transient solo World Freeze control. It holds the level world's scene,
+  physics and entity phases while driving only the local keyboard/mouse walking,
+  look and camera paths. Player pose, actions, jumping and co-op freeze are not
+  advanced by this inspection driver; native paused-scene collision remains a
+  live verification requirement, not something unit tests establish.
+- Restores only exact owned world/timer/native speed state on release, disable
+  or transition, and releases the solo freeze before admitting another player.
+  Preserves the separate dev-only Freeze AI feature (#303).
+- Retries a failed exit cleanup once at the next state entry, retiring only a
+  positively replaced native manager before applying the next mission's speed.
+  Clears cached mission capability references on disable and state boundaries;
+  foreign same-manager time state is never overwritten.
+- Uses the separately approved durable version reservations; .277-dev is burned.
+  Automated checks are not in-game acceptance.
+
 ## 0.2.276-dev (2026-10-24) -- Shared native realm authority (#1693)
 
 - Updates the existing sibling realm adapter to the canonical V2 contract:

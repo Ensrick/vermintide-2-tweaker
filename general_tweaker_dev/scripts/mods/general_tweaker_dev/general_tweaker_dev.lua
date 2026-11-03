@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.276-dev"
+local MOD_VERSION = "0.2.278-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -489,6 +489,7 @@ end)
 -- (Keep Menus / in-mission inventory MIGRATED to gut 2026-06-24 — the
 -- mod._gt_apply_keep_menus re-apply that used to live here is gone.)
 mod.on_game_state_changed = function(status, state_name)
+    if mod._gt_time_on_state then mod._gt_time_on_state(status, state_name) end
     -- (3rd-Person Camera tp-reset MIGRATED to gui_tweaker / gut 2026-06-29, #191 —
     -- gut's _gut_camera.lua now clears tp on its own on_game_state_changed.)
     -- Locomotion extensions are torn down across level transitions; the
@@ -526,20 +527,7 @@ mod.on_game_state_changed = function(status, state_name)
     -- mod._bik_reset_bookkeeping is a table field — resolved at call time,
     -- safe to reference even though it's assigned further down.
     if mod._bik_reset_bookkeeping then mod._bik_reset_bookkeeping() end
-    -- Vanilla wipes the engine time scale on level transition. Re-apply the
-    -- user's slider value if it differs from normal (13 = 1.0x). Also clear
-    -- the pause flag so the toggle remembers we're now unpaused. The pause flag
-    -- moved to _gt_hacks.lua and is shared as mod._gt_pause_active (so this
-    -- dispatcher write and the toggle's read path see the same value).
-    mod._gt_pause_active = false
     if status == "enter" and state_name == "StateIngame" then
-        local v = mod:get("time_scale_value")
-        if v and v ~= 13 then
-            local debug_mgr = Managers.state and Managers.state.debug
-            if debug_mgr and debug_mgr.set_time_scale then
-                debug_mgr:set_time_scale(v)
-            end
-        end
         -- Re-apply the Disable Bots (Solo) flag on every mission start so the
         -- party is bot-free from the very first server tick. script_data is a
         -- persistent global, but the game's own reset paths (debug_manager,
@@ -631,8 +619,9 @@ mod.on_setting_changed = function(setting_id)
         if mod._gt_host_lag_comp_setting_changed then
             mod._gt_host_lag_comp_setting_changed()
         end
-    elseif setting_id == "time_scale_value" then
-        mod.gt_time_apply()
+    elseif setting_id == "time_scale_value" or setting_id == "gt_world_freeze_enabled"
+            or setting_id == "pause_hotkey" or setting_id == "gt_time_normal_hotkey" then
+        if mod._gt_time_on_setting then mod._gt_time_on_setting(setting_id) end
     elseif setting_id == "base_crit_chance" then
         mod.gt_apply_crit_chance()
     elseif setting_id == "movement_speed" then
@@ -694,6 +683,7 @@ mod.on_setting_changed = function(setting_id)
 end
 
 mod.on_disabled = function(initial_call)
+    if mod._gt_time_disable then mod._gt_time_disable("mod_disabled") end
     -- (3rd-Person Camera offset restore MIGRATED to gui_tweaker / gut 2026-06-29,
     -- #191 — gut's _gut_camera.lua restores its own camera offset on_disabled.)
     -- (Main Menu & Startup on-disable restore MIGRATED to gui_tweaker / gut
@@ -1461,7 +1451,8 @@ end)
 -- elsewhere, so the OR is a no-op in stable). See the design block above for
 -- why the refusal lives here and not in spawn_queued_unit.
 mod:hook("ConflictDirector", "update_spawn_queue", function(func, self, ...)
-    if mod:get("disable_enemy_spawns") or mod._gt_freeze_ai_active then
+    if mod:get("disable_enemy_spawns") or mod._gt_freeze_ai_active
+            or (mod._gt_time_world_frozen and mod._gt_time_world_frozen()) then
         return
     end
     return func(self, ...)
@@ -1881,6 +1872,14 @@ mod:dofile("scripts/mods/general_tweaker_dev/_gt_level_control")
 -- chance / gt_apply_move_speed / gt_apply_fall_damage as `mod.` fields for the
 -- on_setting_changed branches + regression test. Registers its own `infinite_ammo`
 -- update consumer (the AI half stays in main's `ai_pending` consumer).
+mod._gt_time_modules = {
+    Owner = mod:dofile("scripts/mods/general_tweaker_dev/_gt_time_owner"),
+    Freeze = mod:dofile("scripts/mods/general_tweaker_dev/_gt_selective_freeze"),
+    Driver = mod:dofile("scripts/mods/general_tweaker_dev/_gt_freeze_movement"),
+    Context = mod:dofile("scripts/mods/general_tweaker_dev/_gt_time_context"),
+}
+mod:dofile("scripts/mods/general_tweaker_dev/_gt_time_control")
+mod:dofile("scripts/mods/general_tweaker_dev/_gt_time_hooks")
 mod:dofile("scripts/mods/general_tweaker_dev/_gt_hacks")
 -- Issue #1143: /heal uses vanilla DamageUtils.debug_heal for host/client
 -- routing, then verifies health and wound state through the update registry.

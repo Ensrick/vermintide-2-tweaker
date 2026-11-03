@@ -66,7 +66,10 @@ Sources: both streams' `_wt_diagnostics.lua`, `_wt_anim_remap.lua`,
 god, no_enemies, clear_enemies, freezeai, unstuck, cloak, unkillable, inndmg, noclip, ai,
 --   (freezeai = dev-only, host-only: halt all enemy AI in place + pause new spawns, #303;
 --    also bound in the Dev Tools group keybind)
-heal, infinite_ammo, stamina, gigapower, ultreset, pause, time_faster, time_slower,
+heal, infinite_ammo, stamina, gigapower, ultreset, pause, freeze, time_faster, time_slower, time_normal,
+--   (pause/freeze = solo world-freeze inspection, with local keyboard/mouse
+--    walking/look; assign Freeze world toggle first. time_normal releases it
+--    and selects 1x. Time writes require the modded host, #1801/#1802.)
 --   (heal = native host/client debug-heal route for the living local hero; fills
 --    permanent health and clears the wounded state, #1143)
 -- Level control / match flow:

@@ -7,6 +7,22 @@ Walk every entry below before any release that touches the relevant subsystem. P
 Last updated: 2026-05-22.
 
 ---
+## World freeze and time controls (#1801/#1802)
+
+- QA owners: `test_gt_time_owner`, `test_gt_selective_freeze`,
+  `test_gt_time_context`, `test_gt_time_widgets` and `test_gt_time_hooks`.
+- Solo host: bind Freeze world toggle and Normal speed. Verify walk/look and
+  collision on level ground while enemies, a projectile and rigidbodies stop;
+  resume twice, then verify normal player movement and gameplay. Player pose,
+  actions and jumping remain paused by the inspection-only driver.
+- Verify exact restoration on disable, level exit, peer admission, failed native
+  writes and manager replacement; never reset another owner's changed state.
+- Verify readable native multipliers and 1x reset. Check client refusal solo
+  first; only after solo acceptance test host speed with an unmodded client and
+  a late joiner. Selective World Freeze must release before co-op admission.
+- Unit tests establish dispatch, ownership and rollback, not native C++ paused
+  collision, visual behavior or in-game acceptance.
+
 ## Multiplayer / Network Sync
 
 ### vmf-network-send-recipients — `"server"` recipient is silently dropped

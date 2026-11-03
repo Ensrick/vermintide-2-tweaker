@@ -1,6 +1,6 @@
 local mod = get_mod("gt")
 
-local MOD_VERSION = "0.2.177"
+local MOD_VERSION = "0.2.179"
 _MEM_PROBE_T0_GT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Public field so cross-mod code (e.g. bt's /bug_report walker, the
 -- gt_lobby_* manifest broadcaster below) can read the version without
@@ -280,12 +280,8 @@ local _apply_script_data_no_enemies
 -- (no forward-decl needed — the dispatchers only fire at runtime, long after
 -- the module has dofiled).
 
--- Time & Pause is extracted to _gt_hacks.lua. Its pause flag is shared with the
--- on_game_state_changed dispatcher (which clears it on every state transition,
--- Issue #13) via the mod._gt_pause_active table field — resolved at call time,
--- so no forward-declared file-local is needed (the former `local _pause_active`
--- was retired). The toggle's read path and this dispatcher write now see the
--- same field.
+-- Time controls own exact native snapshots and selective-freeze leases in the
+-- _gt_time_* modules. Lifecycle dispatch resolves their mod fields at call time.
 
 -- Post-spawn re-apply timer. Set by the PlayerUnitFirstPerson.extensions_ready
 -- hook just below and consumed in mod.update (further down).
@@ -356,6 +352,7 @@ local _RT_CHECKS = {}
 local function _rt_register(name, fn)
     _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
 end
+mod._gt_rt_register = _rt_register
 mod:command("gt_regression_test", "Run regression smoke checks for past bugs", function()
     local pass, fail = 0, 0
     mod:echo("=== gt regression_test (v%s) ===", MOD_VERSION)
@@ -448,6 +445,7 @@ end)
 -- (Keep Menus / in-mission inventory MIGRATED to gut 2026-06-24 — the
 -- mod._gt_apply_keep_menus re-apply that used to live here is gone.)
 mod.on_game_state_changed = function(status, state_name)
+    if mod._gt_time_on_state then mod._gt_time_on_state(status, state_name) end
     -- (3rd-Person Camera tp-reset MIGRATED to gui_tweaker / gut 2026-06-29, #191 —
     -- gut's _gut_camera.lua now clears tp on its own on_game_state_changed.)
     -- Locomotion extensions are torn down across level transitions; the
@@ -482,20 +480,7 @@ mod.on_game_state_changed = function(status, state_name)
     -- mod._bik_reset_bookkeeping is a table field — resolved at call time,
     -- safe to reference even though it's assigned further down.
     if mod._bik_reset_bookkeeping then mod._bik_reset_bookkeeping() end
-    -- Vanilla wipes the engine time scale on level transition. Re-apply the
-    -- user's slider value if it differs from normal (13 = 1.0x). Also clear
-    -- the pause flag so the toggle remembers we're now unpaused. The pause flag
-    -- moved to _gt_hacks.lua and is shared as mod._gt_pause_active (so this
-    -- dispatcher write and the toggle's read path see the same value).
-    mod._gt_pause_active = false
     if status == "enter" and state_name == "StateIngame" then
-        local v = mod:get("time_scale_value")
-        if v and v ~= 13 then
-            local debug_mgr = Managers.state and Managers.state.debug
-            if debug_mgr and debug_mgr.set_time_scale then
-                debug_mgr:set_time_scale(v)
-            end
-        end
         -- Re-apply the Disable Bots (Solo) flag on every mission start so the
         -- party is bot-free from the very first server tick. script_data is a
         -- persistent global, but the game's own reset paths (debug_manager,
@@ -558,8 +543,9 @@ mod.on_setting_changed = function(setting_id)
         -- table-field ref resolves at call time, so it's fine that the body is
         -- assigned further down the file.
         if mod._gt_apply_adv_save_traits then mod._gt_apply_adv_save_traits() end
-    elseif setting_id == "time_scale_value" then
-        mod.gt_time_apply()
+    elseif setting_id == "time_scale_value" or setting_id == "gt_world_freeze_enabled"
+            or setting_id == "pause_hotkey" or setting_id == "gt_time_normal_hotkey" then
+        if mod._gt_time_on_setting then mod._gt_time_on_setting(setting_id) end
     elseif setting_id == "base_crit_chance" then
         mod.gt_apply_crit_chance()
     elseif setting_id == "movement_speed" then
@@ -617,7 +603,8 @@ mod.on_setting_changed = function(setting_id)
     end
 end
 
-mod.on_disabled = function()
+mod.on_disabled = function(initial_call)
+    if mod._gt_time_disable then mod._gt_time_disable("mod_disabled") end
     -- (3rd-Person Camera offset restore MIGRATED to gui_tweaker / gut 2026-06-29,
     -- #191 — gut's _gut_camera.lua restores its own camera offset on_disabled.)
     -- (Main Menu & Startup on-disable restore MIGRATED to gui_tweaker / gut
@@ -634,9 +621,9 @@ mod.on_disabled = function()
     -- PlayerUnitMovementSettings.move_speed (plus the closed-upvalue per-unit
     -- copy), InventorySettings, DamageUtils.is_in_inn, ESC-menu inventory entry.
     -- A full snapshot-on-enable + restore-on-disable refactor is significant
-    -- effort; for now we honestly warn the user. This warning fires regardless
+    -- effort; warn only after a user-toggled disable, not VMF boot restoration.
     -- This warning is user-facing operational guidance, not debug spam.
-    mod:echo("[gt] Disable does not fully unwind active mutations. Restart the game for a clean vanilla state.")
+    if not initial_call then mod:echo("[gt] Disable does not fully unwind active mutations. Restart the game for a clean vanilla state.") end -- allow-echo: user-toggled disable, Issue #15 limitation
 end
 
 -- ============================================================
@@ -995,11 +982,10 @@ end)
 -- of the mod._gt_apply_no_bots field. The bots_in_keep _bik_* regression tests
 -- read mod._bik_* fields, so they stay resolvable.
 
--- Time & Pause (Group B) + Ult Controls (Group C) + Buffs & Stat Tweaks
--- (Group D) + Engine error nil-guards (Group F) are extracted to _gt_hacks.lua
--- (dofile'd after the main chunk). Every Hacks hook is a singleton. The pause
--- flag is shared with the on_game_state_changed dispatcher via mod._gt_pause_active;
--- mod.gt_time_apply / gt_apply_crit_chance / gt_apply_move_speed /
+-- Ult Controls (Group C) + Buffs & Stat Tweaks (Group D) + Engine error nil-guards
+-- (Group F) are extracted to _gt_hacks.lua. Native time/freeze lifecycle is owned
+-- separately by _gt_time_*; all class hooks remain singletons.
+-- mod.gt_apply_crit_chance / gt_apply_move_speed /
 -- gt_apply_fall_damage stay `mod.` fields so the on_setting_changed branches +
 -- the fall-damage regression test resolve them at call time. The original merged
 -- infinite-ammo+ai-pending update consumer was split: the infinite-ammo half is
@@ -2042,12 +2028,17 @@ mod:dofile("scripts/mods/general_tweaker/_gt_bots_keep")
 mod:dofile("scripts/mods/general_tweaker/_gt_level_control")
 -- (Keep Menus in Missions / _gt_keep_menus.lua MIGRATED to gut 2026-06-24 — see
 -- the _gt_mission_ui migration note above. Both files deleted.)
--- Hacks port (Groups B/C/D/F): Time & Pause + Ult Controls + Buffs & Stat
--- Tweaks + Engine error nil-guards. All hooks are singletons. Shares the pause
--- flag with main via mod._gt_pause_active; keeps gt_time_apply / gt_apply_crit_
--- chance / gt_apply_move_speed / gt_apply_fall_damage as `mod.` fields for the
--- on_setting_changed branches + regression test. Registers its own `infinite_ammo`
--- update consumer (the AI half stays in main's `ai_pending` consumer).
+-- Dedicated native time owner, selective-freeze factories, composition and hooks
+-- load before the remaining Hacks C/D/F features and the spawner's shared tick.
+mod._gt_modded_realm_authority = mod:dofile("scripts/mods/general_tweaker/_lib_modded_realm_authority")
+mod._gt_time_modules = {
+    Owner = mod:dofile("scripts/mods/general_tweaker/_gt_time_owner"),
+    Freeze = mod:dofile("scripts/mods/general_tweaker/_gt_selective_freeze"),
+    Driver = mod:dofile("scripts/mods/general_tweaker/_gt_freeze_movement"),
+    Context = mod:dofile("scripts/mods/general_tweaker/_gt_time_context"),
+}
+mod:dofile("scripts/mods/general_tweaker/_gt_time_control")
+mod:dofile("scripts/mods/general_tweaker/_gt_time_hooks")
 mod:dofile("scripts/mods/general_tweaker/_gt_hacks")
 -- Creature Spawner (Aussiemon CreatureSpawner port). ~28 singleton hooks (keep-
 -- spawn ConflictDirector.update + a large AI/BT/nav crash-guard suite + breed

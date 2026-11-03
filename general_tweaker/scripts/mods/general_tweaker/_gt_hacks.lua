@@ -1,6 +1,6 @@
 local mod = get_mod("gt")
 
--- _gt_hacks.lua — the Janoti "Hacks" port groups B/C/D/F (medium cheat/QoL
+-- _gt_hacks.lua — the Janoti "Hacks" port groups C/D/F (medium cheat/QoL
 -- features). Co-located so the singleton audit is local. Every hook below is a
 -- singleton (whole-mod grep before extraction confirmed no collision with each
 -- other or with the main chunk):
@@ -15,9 +15,7 @@ local mod = get_mod("gt")
 --   * RoundStartedSystem._players_left_start_area (nil-guard, AI-takeover race)
 --
 -- Features bundled:
---   (B) Time & Pause — host time-scale + pause. Exposes mod.gt_pause_toggle /
---       gt_time_apply / gt_time_faster / gt_time_slower. Shares the pause flag
---       with the main on_game_state_changed dispatcher via mod._gt_pause_active.
+--   Time controls are owned by the dedicated _gt_time_* modules (#1801/#1802).
 --   (C) Ult Controls — gt_ult_reset + player/bot cooldown caps (CareerExtension
 --       .update hook + mod._gt_clamp_cooldowns helper).
 --   (D) Buffs & Stat Tweaks — infinite ammo/stamina, giga power, base crit
@@ -26,14 +24,12 @@ local mod = get_mod("gt")
 --   (F) Engine error nil-guards — four always-on defensive hooks.
 --
 -- DISPATCH WIRING (no behavior change after extraction):
---   * mod.gt_time_apply / gt_apply_crit_chance / gt_apply_move_speed /
+--   * mod.gt_apply_crit_chance / gt_apply_move_speed /
 --     gt_apply_fall_damage stay PUBLIC `mod.` fields — the main on_setting_changed
---     branches (time_scale_value / base_crit_chance / movement_speed /
+--     branches (base_crit_chance / movement_speed /
 --     gt_fall_damage_*) resolve them at call time, and the fall-damage
 --     regression test in main reads mod.gt_apply_fall_damage.
---   * mod._gt_pause_active is the shared pause flag (was a forward-declared
---     file-local _pause_active); on_game_state_changed clears it on every state
---     transition, this module's toggle reads/writes it.
+--   * Native time/freeze lifecycle is isolated from these remaining features.
 --   * The original merged "infinite_ammo_and_ai_pending" update consumer was
 --     SPLIT: the infinite-ammo refresher half moved here (registered as
 --     `infinite_ammo` via mod._gt_register_update), the AI-takeover deferred-
@@ -49,88 +45,7 @@ local mod = get_mod("gt")
 --
 -- Extracted from general_tweaker.lua (Phase 3 refactor, no behavior change).
 
--- ============================================================
--- Time & Pause (Group B — Janoti "Hacks" port)
--- ============================================================
--- Two related features sharing the same engine primitive:
--- `Managers.state.debug:set_time_scale(index)`. The index is into
--- `time_scale_list` in debug_manager.lua:18 — a 24-entry table of
--- multipliers. Index 13 = 1.0x (normal). Lower = slower, higher = faster.
--- Settings persist for the session; vanilla wipes them on level transition,
--- so on_game_state_changed re-applies the slider value on each StateIngame
--- entry.
---
--- Pause: host-only. Toggles between the configured "pause speed" index
--- (default 1 = slowest possible) and normal (13). VT2 has no true pause
--- primitive — set_time_scale(1) is the closest thing and still lets the UI
--- update. Don't confuse with the time slider: the two write to the same
--- engine setter, so if both are used simultaneously the last write wins.
--- We keep them as separate features matching Hacks's UX.
-
--- The pause flag is shared with the main on_game_state_changed dispatcher
--- (Issue #13: it clears the flag on every state transition). It lives on `mod`
--- (mod._gt_pause_active) so both the dispatcher write and the toggle read see
--- the same value. Initialize to false here at module load.
-mod._gt_pause_active = false
-
-mod.gt_pause_toggle = function()
-    if not (Managers.player and Managers.player.is_server) then
-        mod:echo("Only the host can pause the game.")
-        return
-    end
-    local debug_mgr = Managers.state and Managers.state.debug
-    if not (debug_mgr and debug_mgr.set_time_scale) then
-        mod:echo("Time scale manager not available yet.")
-        return
-    end
-    if mod._gt_pause_active then
-        debug_mgr:set_time_scale(mod:get("time_scale_value") or 13)
-        mod._gt_pause_active = false
-        mod:echo("Game unpaused.")
-    else
-        debug_mgr:set_time_scale(mod:get("pause_value") or 1)
-        mod._gt_pause_active = true
-        mod:echo("Game paused.")
-    end
-end
-
-mod.gt_time_apply = function()
-    if mod._gt_pause_active then
-        -- While paused, slider edits update the post-unpause target but don't
-        -- override the active pause speed. Matches Hacks's behaviour.
-        return
-    end
-    local debug_mgr = Managers.state and Managers.state.debug
-    if debug_mgr and debug_mgr.set_time_scale then
-        debug_mgr:set_time_scale(mod:get("time_scale_value") or 13)
-    end
-end
-
-mod.gt_time_faster = function()
-    local cur = mod:get("time_scale_value") or 13
-    if cur >= 24 then
-        mod:echo("Already at maximum time speed.")
-        return
-    end
-    mod:set("time_scale_value", cur + 1)
-    mod.gt_time_apply()
-    mod:echo(string.format("Time scale: %d", cur + 1))
-end
-
-mod.gt_time_slower = function()
-    local cur = mod:get("time_scale_value") or 13
-    if cur <= 1 then
-        mod:echo("Already at minimum time speed.")
-        return
-    end
-    mod:set("time_scale_value", cur - 1)
-    mod.gt_time_apply()
-    mod:echo(string.format("Time scale: %d", cur - 1))
-end
-
-mod:command("pause",    "Toggle game pause (host-only time slowdown to the configured pause speed)", function() mod.gt_pause_toggle() end)
-mod:command("time_faster", "Increase game time scale by one step", function() mod.gt_time_faster() end)
-mod:command("time_slower", "Decrease game time scale by one step", function() mod.gt_time_slower() end)
+-- Time controls now live in the exact native owner and selective-freeze modules.
 
 -- ============================================================
 -- Ult Controls (Group C — Janoti "Hacks" port)

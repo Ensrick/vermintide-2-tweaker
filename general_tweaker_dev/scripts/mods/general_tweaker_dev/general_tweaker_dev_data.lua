@@ -1,4 +1,6 @@
 local mod = get_mod("gt_dev")
+local TIME_WIDGETS = require("scripts/mods/general_tweaker_dev/_gt_time_widgets")
+local TIME_OWNER = require("scripts/mods/general_tweaker_dev/_gt_time_owner")
 
 -- Grail Knight quest dropdown options. Values mirror the
 -- `markus_questing_knight_passive_*` reward strings that
@@ -851,55 +853,11 @@ local _data = {
                             },
                         },
                     },
-                    -- Time & Pause keeps a deliberate FUNCTIONAL order (the time
-                    -- controls -- scale, then faster/slower that adjust it --
-                    -- then the pause controls), NOT A->Z.
+                    -- Native speed presets, then recovery/freeze controls.
                     {
                         setting_id  = "time_group",
                         type        = "group",
-                        sub_widgets = {
-                            {
-                                setting_id    = "time_scale_value",
-                                type          = "numeric",
-                                default_value = 13,
-                                range         = { 1, 24 },
-                                tooltip       = "time_scale_value_tooltip",
-                            },
-                            {
-                                setting_id      = "time_faster_hotkey",
-                                type            = "keybind",
-                                keybind_trigger = "pressed",
-                                keybind_type    = "function_call",
-                                function_name   = "gt_time_faster",
-                                default_value   = {},
-                                tooltip         = "time_faster_hotkey_tooltip",
-                            },
-                            {
-                                setting_id      = "time_slower_hotkey",
-                                type            = "keybind",
-                                keybind_trigger = "pressed",
-                                keybind_type    = "function_call",
-                                function_name   = "gt_time_slower",
-                                default_value   = {},
-                                tooltip         = "time_slower_hotkey_tooltip",
-                            },
-                            {
-                                setting_id    = "pause_value",
-                                type          = "numeric",
-                                default_value = 1,
-                                range         = { 1, 24 },
-                                tooltip       = "pause_value_tooltip",
-                            },
-                            {
-                                setting_id      = "pause_hotkey",
-                                type            = "keybind",
-                                keybind_trigger = "pressed",
-                                keybind_type    = "function_call",
-                                function_name   = "gt_pause_toggle",
-                                default_value   = {},
-                                tooltip         = "pause_hotkey_tooltip",
-                            },
-                        },
+                        sub_widgets = TIME_WIDGETS.build(TIME_OWNER.presets()),
                     },
                     {
                         setting_id  = "ult_group",

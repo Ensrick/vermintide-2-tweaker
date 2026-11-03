@@ -605,6 +605,7 @@ end
 -- AI tracking / specials pacing.
 if ConflictDirector then
     mod:hook(ConflictDirector, "update", function(func, self, dt, t, ...)
+        if mod._gt_time_world_frozen and mod._gt_time_world_frozen() then return end
         if not _gt_cs_is_in_keep() then return func(self, dt, t, ...) end
         if not self.horde_spawner and HordeSpawner then
             self.horde_spawner = HordeSpawner:new(self._world, {})
@@ -622,9 +623,12 @@ end
 -- prop_joe's fix for keep-spawn breed freeze optimisation. Without flipping
 -- this flag in the keep, the engine treats spawned units as if they aren't
 -- in the active level and silently drops them from update.
+local function _gt_cs_after_state_update()
+    script_data.disable_breed_freeze_opt = _gt_cs_is_in_keep()
+end
 if StateIngame then
-    mod:hook_safe(StateIngame, "update", function(...)
-        script_data.disable_breed_freeze_opt = _gt_cs_is_in_keep()
+    mod:hook(StateIngame, "update", function(func, self, dt, ...)
+        return mod._gt_time_state_update(func, self, dt, _gt_cs_after_state_update, ...)
     end)
 end
 
