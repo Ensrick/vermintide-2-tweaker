@@ -304,6 +304,93 @@ try {
     $output=& $privateCli @cliArgs *>&1
     Assert ($LASTEXITCODE -eq 0 -and (Read-ClaimFile $claimPath).Version -ceq '0.1.539-dev') 'CWV release/reclaim cannot recycle the unshipped fresh version'
     Assert ([IO.File]::ReadAllText($foreignPath) -ceq 'foreign fixture record; not a migration target') 'CWV migration and allocation never touch foreign project records'
+
+    # General-only adoption approval: #724 comment 6592186585. Exercise the
+    # actual source-owned policy with private synthetic data, never live state.
+    $committedPolicy=Join-Path $repo 'tools\ship\claim-allocation-policy.psd1'
+    $expectedEnabled=@('character_weapon_variants','general_tweaker','general_tweaker_dev')
+    foreach ($enabledMod in $expectedEnabled) {
+        Assert (Get-AllocationPolicy $committedPolicy $enabledMod) "committed policy activates exact approved identity $enabledMod"
+    }
+    $policyTokens=$null; $policyErrors=$null
+    $policyAst=[Management.Automation.Language.Parser]::ParseFile($committedPolicy,[ref]$policyTokens,[ref]$policyErrors)
+    $policyData=$policyAst.EndBlock.Statements[0].PipelineElements[0].Expression.SafeGetValue()
+    Assert (@($policyData.EnabledMods).Count -eq $expectedEnabled.Count) 'committed policy enables only CWV and the two approved General streams'
+    foreach ($case in @(
+        @{Mod='general_tweaker';Source='0.2.177';Floor='0.2.178';Retained='0.2.178';Fresh='0.2.179';Next='0.2.180'},
+        @{Mod='general_tweaker_dev';Source='0.2.276-dev';Floor='0.2.277';Retained='';Fresh='0.2.278-dev';Next='0.2.279-dev'}
+    )) {
+        $target=[string]$case.Mod
+        $dir=New-Case $target $case.Source $target
+        $toolDir=Join-Path $dir 'tools\ship'; [IO.Directory]::CreateDirectory($toolDir) | Out-Null
+        foreach ($name in @('claim.ps1','claim-allocation.ps1','claim-allocation-policy.psd1','build-output-normalization.ps1','bundle-authority.ps1')) {
+            [IO.File]::Copy((Join-Path $repo ('tools\ship\'+$name)),(Join-Path $toolDir $name))
+        }
+        $privateCli=Join-Path $toolDir 'claim.ps1'; $claims=Join-Path $dir 'claims'
+        $policyPath=Join-Path $toolDir 'claim-allocation-policy.psd1'
+        $policyBytes=[IO.File]::ReadAllBytes($policyPath)
+        $claimPath=Join-Path $claims "$target.claim"; $statePath=Join-Path $claims "$target.allocation"
+        $oldRaw=''; $oldHash='absent'; $oldCreated=$null
+        if ($case.Retained) {
+            $oldRaw=Format-ClaimContent $target $case.Retained 'fixture-general-retained' ([datetime]::UtcNow.AddHours(-25))
+            [IO.File]::WriteAllText($claimPath,$oldRaw,$utf8)
+            $oldHash=Get-AllocationHash ([IO.File]::ReadAllBytes($claimPath))
+            $oldCreated=(Read-ClaimFile $claimPath).CreatedUtc
+        }
+        $foreignClaim=Join-Path $claims 'character_weapon_variants.claim'
+        $foreignState=Join-Path $claims 'character_weapon_variants.allocation'
+        [IO.File]::WriteAllText($foreignClaim,'foreign CWV synthetic claim; preserve',$utf8)
+        [IO.File]::WriteAllText($foreignState,'foreign CWV synthetic ledger; preserve',$utf8)
+        $cliArgs=@{Mod=$target;RepoRoot=$dir;ClaimsDir=$claims;Session='fixture-general-retained';Quiet=$true}
+        foreach ($operation in @('Acquire','Verify','Release')) {
+            $operationArgs=@{}
+            if ($operation -ceq 'Verify') { $operationArgs=@{Verify=$true;ExpectedVersion=$case.Fresh} }
+            if ($operation -ceq 'Release') { $operationArgs=@{Release=$true} }
+            $output=& $privateCli @cliArgs @operationArgs *>&1
+            Assert ($LASTEXITCODE -eq 2) "$target $operation refuses missing active history without legacy fallback"
+            $claimPreserved=if ($case.Retained) { [IO.File]::ReadAllText($claimPath) -ceq $oldRaw } else { -not [IO.File]::Exists($claimPath) }
+            Assert ($claimPreserved -and -not [IO.File]::Exists($statePath)) "$target missing history preserves exact claim or reviewed absence"
+        }
+        $output=& $privateCli @cliArgs -InitializeAllocation -ReviewedFloor $case.Floor -ExpectedClaimSha256 $oldHash -ReviewReference $review *>&1
+        Assert ($LASTEXITCODE -eq 0) "$target initializer accepts exact reviewed floor and claim state"
+        $adopted=Read-AllocationState $statePath $target
+        $expectedStatus=if ($case.Retained) { 'active' } else { 'empty' }
+        $expectedHash=if ($case.Retained) { $oldHash } else { '-' }
+        Assert ($adopted.Floor -ceq $case.Floor -and $adopted.Status -ceq $expectedStatus -and $adopted.ClaimHash -ceq $expectedHash) "$target adoption binds exact floor and reservation state"
+        if ($case.Retained) {
+            Assert ([IO.File]::ReadAllText($claimPath) -ceq $oldRaw -and (Read-ClaimFile $claimPath).CreatedUtc -eq $oldCreated) 'official General adoption preserves retained bytes and original stale timestamp'
+        } else {
+            Assert (-not [IO.File]::Exists($claimPath)) 'General Dev absent-state initialization allocates no claim'
+        }
+        [IO.File]::WriteAllText($policyPath,"@{Schema=1;EnabledMods=@('character_weapon_variants')}",$utf8)
+        $output=& $privateCli @cliArgs -Verify -ExpectedVersion $case.Fresh *>&1
+        Assert ($LASTEXITCODE -eq 2) "$target initialized history refuses an unactivated checkout"
+        [IO.File]::WriteAllBytes($policyPath,$policyBytes)
+        $expectedVerify=if ($case.Retained) { 5 } else { 3 }
+        $verifyVersion=if ($case.Retained) { $case.Retained } else { $case.Fresh }
+        $output=& $privateCli @cliArgs -Verify -ExpectedVersion $verifyVersion *>&1
+        Assert ($LASTEXITCODE -eq $expectedVerify) "$target activated Verify retains stale-or-absent state before fresh acquisition"
+        Assert ([IO.File]::ReadAllText($statePath) -ceq $adopted.Raw) "$target read-only Verify does not renew or change adopted ledger"
+        $cliArgs.Session='fixture-general-fresh'
+        $output=& $privateCli @cliArgs *>&1
+        Assert ($LASTEXITCODE -eq 0 -and (Read-ClaimFile $claimPath).Version -ceq $case.Fresh) "$target allocates exact fresh version above reviewed permanent floor"
+        $freshRaw=[IO.File]::ReadAllText($claimPath); $fresh=Read-AllocationState $statePath $target
+        Assert ($fresh.Floor -ceq ($case.Fresh -replace '-dev$','') -and $fresh.ClaimRaw -ceq $freshRaw -and (Read-ClaimFile $claimPath).Session -ceq 'fixture-general-fresh') "$target fresh allocation has exact permanent owner and version binding"
+        $output=& $privateCli @cliArgs -Verify -ExpectedVersion $case.Fresh *>&1
+        Assert ($LASTEXITCODE -eq 0) "$target fresh exact owner and version verify"
+        $foreignArgs=@{} + $cliArgs; $foreignArgs.Session='fixture-general-foreign'
+        $output=& $privateCli @foreignArgs -Verify -ExpectedVersion $case.Fresh *>&1
+        Assert ($LASTEXITCODE -eq 6) "$target foreign owner cannot verify fresh reservation"
+        $output=& $privateCli @cliArgs -Verify -ExpectedVersion $case.Next *>&1
+        Assert ($LASTEXITCODE -eq 4) "$target different version cannot verify fresh reservation"
+        $output=& $privateCli @cliArgs *>&1
+        Assert ($LASTEXITCODE -eq 0 -and [IO.File]::ReadAllText($claimPath) -ceq $freshRaw -and [IO.File]::ReadAllText($statePath) -ceq $fresh.Raw) "$target same-owner reclaim preserves exact live reservation"
+        $output=& $privateCli @cliArgs -Release *>&1
+        Assert ($LASTEXITCODE -eq 0 -and -not [IO.File]::Exists($claimPath) -and (Read-AllocationState $statePath $target).Floor -ceq $fresh.Floor) "$target release retains permanent floor"
+        $output=& $privateCli @cliArgs *>&1
+        Assert ($LASTEXITCODE -eq 0 -and (Read-ClaimFile $claimPath).Version -ceq $case.Next) "$target release and reacquire never recycle fresh allocation"
+        Assert ([IO.File]::ReadAllText($foreignClaim) -ceq 'foreign CWV synthetic claim; preserve' -and [IO.File]::ReadAllText($foreignState) -ceq 'foreign CWV synthetic ledger; preserve') "$target operations preserve unrelated CWV claim and ledger bytes"
+    }
     Write-Host "[permanent-claims] PASS $script:passed assertions; $($PSVersionTable.PSVersion)."
 }
 finally {
