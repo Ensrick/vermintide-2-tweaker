@@ -1,5 +1,40 @@
 # general_tweaker_dev - engine contact surface
 
+## Time-control module contracts (#1801/#1802, 0.2.278-dev)
+
+The main manifest loads the realm authority and pure Owner/Freeze/Driver/Context
+factories before `_gt_time_control`, `_gt_time_hooks`, then the independent hacks
+and spawner modules. Stable 0.2.179 receives only this selected feature boundary,
+not the unrelated Dev backlog. Data requires the pure owner/widgets because VMF
+evaluates it before the runtime manifest.
+
+- `_gt_time_owner`: native preset policy, synchronized ownership, rollback,
+  guarded cleanup and one bounded post-join resync. Native source is
+  `scripts/managers/debug/debug_manager.lua:20-45,711-751`.
+- `_gt_selective_freeze`: exact current-world/game-timer lease and confirmed,
+  retryable restoration. `EntitySystem.system_update:494-509` returns before all
+  phases while World `paused` is true; `foundation/scripts/util/script_world.lua`
+  pauses animation/scene dt at 316-340. This includes player entity phases, so
+  native pause alone cannot fulfill player-exempt movement.
+- `_gt_freeze_movement`: local keyboard/mouse walking/look/camera only, in the
+  ordinary entity phase after native pre-update position-lookup refresh. Uses
+  positive wall-clock dt with native collision-preserving mover code, never
+  noclip, a full character-state tick or a synthetic game clock. Sources:
+  `scripts/game_state/state_ingame.lua:804-832`,
+  `scripts/entity_system/systems/locomotion/locomotion_templates_player.lua:119-187`,
+  `scripts/unit_extensions/default_player_unit/player_unit_locomotion_extension.lua:371-568`.
+- `_gt_time_context`: source-qualified live identity and solo admission reads;
+  keeps cleanup identities readable when player/authority disappears.
+- `_gt_time_control`: composition, recovery bindings, transient UI and commands;
+  `_gt_time_hooks`: pre/post/entity/hot-join dispatch. Existing spawner owns the
+  sole StateIngame.update and ConflictDirector.update; Dev's existing queue owner
+  additionally parks dequeue. No duplicate hooks, new RPC or actor snapshots.
+- `_gt_time_widgets`: fresh VMF dropdown/options tables, native saved index13=1x.
+
+The game timer still clamps tiny positive dt. Native paused-scene collision,
+frozen projectiles/rigidbodies and visuals remain live-test requirements; these
+source-derived contracts and unit tests do not prove those C++ behaviors.
+
 ## Native realm precedence (#1693, 0.2.276-dev)
 
 Game 6.12+ publishes MODDED_REALM before backend initialization
