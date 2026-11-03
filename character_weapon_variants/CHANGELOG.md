@@ -1,5 +1,12 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.569-dev (2026-11-03) -- Reissue of unpublished 0.1.568-dev
+
+- Same code as 0.1.568-dev, which merged but never reached the Workshop: its
+  version claim expired while the publish chain was stopped. That number stays
+  burned. Carries the public CIM preview provider work and the finite Crowbill
+  observations from 0.1.567-dev. Not confirmed in game.
+
 ## 0.1.568-dev (2026-11-02) -- Accept public CIM as the Athanor preview provider
 
 - The Old Musket Athanor preview trusted a preview context only from CIM Dev.

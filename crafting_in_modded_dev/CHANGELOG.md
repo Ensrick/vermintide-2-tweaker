@@ -1,5 +1,12 @@
 # Crafting in Modded Changelog
 
+## 0.8.147-dev (2026-11-03) -- Reissue of unpublished 0.8.146-dev
+
+- Same code as 0.8.146-dev, which merged but never reached the Workshop: its
+  version claim expired while the publish chain was stopped. That number stays
+  burned. Carries the restore-failure `printf` (#1654), the `/inv_dump` label
+  rename and the header cleanup. Not confirmed in game.
+
 ## 0.8.146-dev (2026-11-02) -- Prepare the public rollup (#1654)
 
 - Saved crafts that fail to restore now also write the reason with engine
