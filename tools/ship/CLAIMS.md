@@ -4,8 +4,9 @@
 
 The permanent-burn requirement is implemented in `claim-allocation.ps1`.
 The source-owned `claim-allocation-policy.psd1` activates only
-`character_weapon_variants`; every other mod still requires its own reviewed
-initialization and activation. The legacy behavior below remains for an
+`character_weapon_variants`, `general_tweaker`, and `general_tweaker_dev`;
+every other mod still requires its own reviewed initialization and activation.
+The legacy behavior below remains for an
 unactivated mod with no allocation state. It does NOT preserve abandoned numbers. Do not allocate
 protected queued versions through that legacy lane while migration is pending.
 The September 6 private reproduction established reuse after ordinary release
@@ -23,6 +24,29 @@ These are migration-event evidence, not permanent current-state pins: future
 authorized allocations change the ledger. They do not authorize copying these
 files, bypassing age checks, or reusing the stale `.537` artifacts. Activation
 of this one mod does not complete #724's remaining scoped migrations.
+
+General's two scoped adoptions were initialized from
+`b562bb72e9924141bf791883f7018a20325b09ca`, under the user's separate
+[General-only approval](https://github.com/Ensrick/vermintide-2-tweaker/issues/724#issuecomment-6592186585)
+of [the exact review plan](https://github.com/Ensrick/vermintide-2-tweaker/issues/724#issuecomment-6592044139).
+The official floor is `0.2.178`. The initializer preserved its stale claim's
+exact SHA-256 `64cc6617b24c2804cc724341b819ea64a6470737a2352cfcf415d85141d3d8a0`,
+owner `explicit:issue1509-stable-promotion`, and original September 1, 2026
+`20:34:06Z` timestamp. It did not authorize or renew that abandoned candidate.
+The initial official ledger SHA-256 is
+`823b7e249620106ff3f50846ee3485d398df22b3c843a06357173da7eb759cbc`.
+
+General Dev had no claim. Its separately reviewed conservative numeric floor is
+`0.2.277`, above the current `0.2.276-dev` source and an uncertain historical
+`.277` mention; initialization created an empty ledger, not a fabricated claim.
+Its initial ledger SHA-256 is
+`07845071e3b17df71095bffe9852f56eade91f1701defdce0b5f4d27bbe8d235`.
+These two hashes are adoption-event evidence, not permanent current-state pins.
+CWV and all other mods' claims/ledgers remain outside this adoption's scope.
+Activation is a separate protected source review; only after it lands may normal
+Acquire allocate the fresh approved official `0.2.179` and Dev `0.2.278-dev`
+candidates. Those version approvals are not build, Workshop-transfer, or gameplay
+acceptance evidence. No uploader implementation or claim wire format changes.
 
 An activated mod has one `<mod>.allocation` file beside its unchanged four-field
 `<mod>.claim`. Its numeric floor survives release, stale takeover and failure;
