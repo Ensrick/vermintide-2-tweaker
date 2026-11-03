@@ -199,14 +199,24 @@ mod._gt_time_disable = function(reason)
     local ok, why = owner:release(reason or "disabled")
     if not ok then report("cleanup_pending", why) end
     pending_apply = false
+    state_object = nil
+    -- Only cached capability references are cleared; pending owner/core leases
+    -- keep their own exact restoration evidence until success or retirement.
+    context.clear()
     return ok, why
 end
 mod._gt_time_on_state = function(status, name)
     if status == "exit" then
         mod._gt_time_disable("state_exit")
-        state_object = nil
     elseif status == "enter" then
         state_object = nil
+        -- Normal exit is notified before native teardown. If that earlier
+        -- cleanup failed, a positively replaced manager may now retire the old
+        -- lease without restoring anything into the new manager. Same-manager
+        -- foreign state still fails closed. Retry once per state entry only.
+        local released, why = owner:release("state_enter")
+        if not released then report("cleanup_pending", why) end
+        context.clear()
         pending_apply = name == "StateIngame"
         set_freeze_ui()
     end

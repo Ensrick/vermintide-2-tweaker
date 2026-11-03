@@ -6,6 +6,9 @@
   dependency, without copying the unrelated Dev feature backlog.
 - Adds readable native speed presets, host/modded-only writes, recovery keys,
   exact owned-state restoration and post-join speed synchronization.
+- Retries failed exit cleanup once on the next state entry, retiring only a
+  positively replaced manager. Clears cached mission references on disable and
+  state boundaries while preserving foreign time state and pending owned leases.
 - Carries the #727 boot-disable guard so restoring a saved disabled state does
   not print the user-toggled-disable warning.
 - Adds transient solo World Freeze with keyboard/mouse walking and look while

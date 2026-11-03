@@ -17,6 +17,11 @@ function M.new(mod, realm, current_state, environment)
     -- a frame and repeated phase validation makes no new Lua context tables.
     local ctx, driver_context, native_state, empty = {}, {}, {}, {}
     local function managers() return env.Managers or empty end
+    local function clear()
+        for key in pairs(ctx) do ctx[key] = nil end
+        for key in pairs(driver_context) do driver_context[key] = nil end
+        for key in pairs(native_state) do native_state[key] = nil end
+    end
     local function enabled()
         return method(mod, "is_enabled") and mod:is_enabled() == true
     end
@@ -87,8 +92,7 @@ function M.new(mod, realm, current_state, environment)
     local function resolve()
         local all = managers()
         local state, tm = current_state(), all.time
-        for key in pairs(ctx) do ctx[key] = nil end
-        for key in pairs(driver_context) do driver_context[key] = nil end
+        clear()
         -- Keep teardown identities available even with no player/realm/authority.
         ctx.time_manager, ctx.game_timer = tm, game_identity(tm)
         if all.world and method(all.world, "has_world")
@@ -153,7 +157,7 @@ function M.new(mod, realm, current_state, environment)
     end
     return { authorize = authorize, authorize_cleanup = authorize_cleanup,
         read_native = read_native, resolve_context = resolve,
-        world_live = world_live, game_identity = game_identity }
+        world_live = world_live, game_identity = game_identity, clear = clear }
 end
 
 return M

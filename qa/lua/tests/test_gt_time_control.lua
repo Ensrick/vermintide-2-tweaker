@@ -81,6 +81,7 @@ return function(H, repo_root)
         function freeze:outer_dt(_, _, dt) return self.active and 1e-06 or dt end
         function freeze:on_entity_phase(_, phase) calls.phase = phase; return self.active end
         local context = {
+            clear = function() calls.context_clear = (calls.context_clear or 0) + 1 end,
             authorize = function() return allowed end,
             authorize_cleanup = function() return allowed and "synchronized" or "local_only" end,
             read_native = function() return manager, effective end,
@@ -91,7 +92,10 @@ return function(H, repo_root)
         }
         mod._gt_time_modules = {
             Owner = { NORMAL_INDEX = Owner.NORMAL_INDEX, multiplier = Owner.multiplier,
-                presets = Owner.presets, new = function(_, api) owner_api = api; return owner end },
+                presets = Owner.presets, new = function(actual_mod, api)
+                    owner_api = api
+                    return options.actual_owner and Owner.new(actual_mod, api) or owner
+                end },
             Freeze = { new = function(_, api) freeze_api = api; return freeze end },
             Driver = { new = function() error("no engine movement in composition tests") end },
             Context = { new = function(_, _, get_state) state_reader = get_state; return context end },
@@ -239,7 +243,84 @@ return function(H, repo_root)
         H.equal(f.calls.cleanup_reason, "recovery_key_removed")
         f.mod._gt_time_on_state("exit", "StateIngame")
         H.equal(f.calls.release_reason, "state_exit")
+        H.equal(f.calls.context_clear, 1)
         H.equal(f.current_state(), nil)
         H.equal(f.mod._gt_time_on_setting("unrelated_setting"), false)
+    end)
+    H.test("GT disable releases captured state after cleanup and fresh phase recaptures it", function()
+        local f = fixture()
+        local retired_state, fresh_state = {}, {}
+        f.mod._gt_time_outer_dt(retired_state, "pre_update", 0.02)
+        H.equal(f.current_state(), retired_state)
+        H.equal(f.mod._gt_time_disable("mod_disabled"), true)
+        H.equal(f.calls.release_reason, "mod_disabled")
+        H.equal(f.current_state(), nil)
+        H.equal(f.calls.context_clear, 1)
+        f.mod._gt_time_outer_dt(fresh_state, "pre_update", 0.02)
+        H.equal(f.current_state(), fresh_state)
+        H.equal(f.calls.native, 0)
+    end)
+    local function actual_owner_fixture()
+        local f = fixture({ actual_owner = true })
+        local manager, state, read_failed = f.manager, f.effective, false
+        f.calls.writer_managers = {}
+        -- Exact scalar/reference ports for the real Owner; not native physics.
+        f.owner_api.read_native = function()
+            if read_failed then error("injected native read unavailable") end
+            return manager, state
+        end
+        f.owner_api.write_native = function(target, index)
+            H.equal(target, manager, "must never write a retired manager")
+            f.calls.native = f.calls.native + 1
+            f.calls.writer_managers[#f.calls.writer_managers + 1] = target
+            state.index, state.paused, state.multiplier = index, false, Owner.multiplier(index)
+        end
+        f.read_failure = function(value) read_failed = value end
+        f.replace_native = function(next_manager, next_state) manager, state = next_manager, next_state end
+        return f
+    end
+    H.test("GT real Owner retires failed exit cleanup before next-state saved speed reapply", function()
+        local f = actual_owner_fixture()
+        f.settings.time_scale_value = 15
+        H.equal(f.mod.gt_time_apply(), true)
+        H.equal(f.calls.native, 1)
+        H.equal(f.calls.writer_managers[1], f.manager)
+        f.read_failure(true)
+        f.mod._gt_time_on_state("exit", "StateIngame")
+        H.equal(f.calls.native, 1)
+        local replacement, next_state = {}, { index = 13, paused = false, multiplier = 1 }
+        f.read_failure(false)
+        f.replace_native(replacement, next_state)
+        f.mod._gt_time_on_state("enter", "StateIngame")
+        -- Entry retires old ownership only; it does not restore the old baseline
+        -- or apply settings before the actual next StateIngame phase arrives.
+        H.equal(f.calls.native, 1)
+        H.equal(f.calls.context_clear, 2)
+        H.equal(next_state.index, 13)
+        H.equal(f.mod._gt_time_outer_dt({}, "pre_update", 0.02), 0.02)
+        H.equal(f.calls.native, 2)
+        H.equal(f.calls.writer_managers[2], replacement)
+        H.equal(next_state.index, 15)
+        H.equal(next_state.multiplier, 1.5)
+        H.equal(f.settings.time_scale_value, 15)
+        H.equal(f.mod.gt_time_apply(), true)
+        H.equal(f.calls.native, 2, "ordinary identical apply must stay deduplicated")
+    end)
+    H.test("GT real Owner preserves same-manager foreign state after failed exit cleanup", function()
+        local f = actual_owner_fixture()
+        f.settings.time_scale_value = 15
+        H.equal(f.mod.gt_time_apply(), true)
+        H.equal(f.calls.native, 1)
+        f.effective.index, f.effective.multiplier = 16, Owner.multiplier(16)
+        f.mod._gt_time_on_state("exit", "StateIngame")
+        f.mod._gt_time_on_state("enter", "StateIngame")
+        f.mod._gt_time_outer_dt({}, "pre_update", 0.02)
+        H.equal(f.calls.native, 1)
+        H.equal(f.effective.index, 16)
+        H.equal(f.effective.multiplier, 1.75)
+        local ok, why = f.mod.gt_time_apply()
+        H.equal(ok, false)
+        H.equal(why, "foreign_state")
+        H.equal(f.calls.native, 1)
     end)
 end

@@ -13,6 +13,10 @@
 - Restores only exact owned world/timer/native speed state on release, disable
   or transition, and releases the solo freeze before admitting another player.
   Preserves the separate dev-only Freeze AI feature (#303).
+- Retries a failed exit cleanup once at the next state entry, retiring only a
+  positively replaced native manager before applying the next mission's speed.
+  Clears cached mission capability references on disable and state boundaries;
+  foreign same-manager time state is never overwritten.
 - Uses the separately approved durable version reservations; .277-dev is burned.
   Automated checks are not in-game acceptance.
 
