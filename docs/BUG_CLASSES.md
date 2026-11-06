@@ -3483,7 +3483,7 @@ cosmetics `_mh_package_lifecycle.lua`).
 **Lives in:** any `_rt_register` check, `/verify_<feature>` command, or offline
 QA gate whose verdict is used to decide whether a fix landed.
 
-The bug is in the INSTRUMENT, not the code it measures. Nine sub-patterns have
+The bug is in the INSTRUMENT, not the code it measures. Ten sub-patterns have
 bitten this repo:
 
 **(a) Setter-success or self-derived expectation.** The check asserts that a
@@ -3583,6 +3583,27 @@ assignment. Refuse unsupported control flow/provenance rather than trusting a
 literal marker. Preserve failed witnesses and successful publication receipts;
 repair cards separately without replaying a completed Workshop upload. Source
 route qualification is not proof that the game launched or the feature passed.
+
+**(j) Composed receipts and constant-prefix helper loads.** Official Chaos
+Wastes `0.7.354-beta` published successfully, but its card preparation rejected
+real bounded receipts assembled by `render(feature, result)` and missed the
+real starting-shrine command behind `mod:dofile(prefix .. literal)` (#1815).
+A literal marker search alone neither proves absence nor supplies authority.
+Qualify each actual source/tree/signature and its complete emitter, caller,
+scope and cap; keep automatic records distinct from command-owned output and
+exclude unbounded sibling signatures. Follow a local path prefix only when its
+canonical same-mod receiver, immutable binding, exact suffix and closed bootstrap
+prelude are proven. Admit only complete direct loader statements after the
+receiver/prefix declarations and prior qualified loads; arbitrary intervening
+code, receiver calls or reacquisition can replace the loader. Refuse shadowing,
+mutation, escape, short-circuited expressions and outer argument contexts.
+Compare actual emitted strings and loader behavior with independent controls.
+The same audit found a genuinely nonexistent backfill log expectation: correct
+that card without inventing an emitter or dropping the real encounter test.
+Keep source/lifecycle grammar intact, preserve failed evidence, and never
+replay a successful Workshop upload to repair a card. If metadata needs
+representation-only compaction, prove exact lexer-token/source equivalence;
+do not relax safe-import limits or weaken provenance to fit more rows.
 
 ### Symptoms
 - An offline suite is green (or a `/verify_*` prints PASS) while the user

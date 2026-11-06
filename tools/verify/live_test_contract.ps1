@@ -334,6 +334,224 @@ end
     Write-Host "[live-test-contract] factory LOAD matrix passed: $($cases.Count) cases, 2 loop-order/2 document-order controls, 3 direct-route controls."
 }
 
+function Invoke-VtConstantPrefixLoadAuthoritySelfTest {
+    # #1815: a real command document behind an immutable local prefix load,
+    # never an invented alias/discovery override. Literal-only legacy scanning
+    # cannot reach either leaf in this exact shop composition.
+    $main='local mod=get_mod("fixture"); mod:dofile("scripts/mods/fixture_mod/_shop")'
+    $shop=@'
+local mod = get_mod("fixture")
+local root = "scripts/mods/fixture_mod/"
+mod.policy = mod:dofile(root .. "_policy")
+mod.runtime = mod:dofile(root .. "_runtime")
+'@
+    $makeDocuments={param([string]$Main,[string]$Shop)
+        @(
+            [pscustomobject]@{RelativePath='fixture_mod/scripts/mods/fixture_mod/fixture_mod.lua';Content=$Main;Tokens=@(Get-VtLuaTokens $Main)},
+            [pscustomobject]@{RelativePath='fixture_mod/scripts/mods/fixture_mod/_shop.lua';Content=$Shop;Tokens=@(Get-VtLuaTokens $Shop)},
+            [pscustomobject]@{RelativePath='fixture_mod/scripts/mods/fixture_mod/_policy.lua';Content='return {}';Tokens=@(Get-VtLuaTokens 'return {}')},
+            [pscustomobject]@{RelativePath='fixture_mod/scripts/mods/fixture_mod/_runtime.lua';Content='local mod=get_mod("fixture"); mod:command("fx_prefix_leaf","fixture",function() end)';Tokens=@(Get-VtLuaTokens 'local mod=get_mod("fixture"); mod:command("fx_prefix_leaf","fixture",function() end)')},
+            [pscustomobject]@{RelativePath='fixture_mod/scripts/mods/foreign/_runtime.lua';Content='return {}';Tokens=@(Get-VtLuaTokens 'return {}')}
+        )
+    }
+    $documents=@(& $makeDocuments $main $shop)
+    $paths=Get-VtLoadTimeReachableLuaPaths -ModDir fixture_mod -Documents $documents -ExpectedModId fixture
+    Assert-VtContractFixture ($paths.Contains('fixture_mod/scripts/mods/fixture_mod/_policy.lua') -and
+        $paths.Contains('fixture_mod/scripts/mods/fixture_mod/_runtime.lua')) 'Constant-prefix fixture leaves are not reachable through the actual shop.'
+    $commands=@($documents|Where-Object {$paths.Contains([string]$_.RelativePath)}|ForEach-Object{(Get-VtDirectLuaCallRoutes $_).CommandRoutes})
+    Assert-VtContractFixture (@($commands|Where-Object Command -ceq '/fx_prefix_leaf').Count -eq 1) 'Constant-prefix discovery did not expose the actual leaf command exactly once.'
+    $literalSibling=$shop.Replace('mod.policy','mod.extra=mod:dofile("scripts/mods/fixture_mod/_policy"); mod.policy')
+    $afterReacquire=$shop+"`nlocal target=get_mod("+'"fixture"); target.dofile=function() return {} end'
+    foreach($positive in @($shop.Replace('root','pathPrefix'),$literalSibling,$afterReacquire)){
+        $docs=@(& $makeDocuments $main $positive)
+        $reached=Get-VtLoadTimeReachableLuaPaths -ModDir fixture_mod -Documents $docs -ExpectedModId fixture
+        Assert-VtContractFixture ($reached.Contains('fixture_mod/scripts/mods/fixture_mod/_runtime.lua')) 'Closed renamed-prefix/literal-sibling/post-target-reacquisition control was rejected.'
+    }
+    $cases=@(
+        @{Name='prefix-reassignment';Shop=$shop.Replace('mod.policy','root="scripts/mods/other/"; mod.policy')},
+        @{Name='prefix-tuple-write';Shop=$shop.Replace('mod.policy','root,unused="scripts/mods/other/",nil; mod.policy')},
+        @{Name='prefix-second-local';Shop=$shop.Replace('mod.policy','local root="scripts/mods/other/"; mod.policy')},
+        @{Name='prefix-multi-local-shadow';Shop=$shop.Replace('mod.policy','local unused,root; mod.policy')},
+        @{Name='prefix-parameter-shadow';Shop=$shop.Replace('mod.policy','local function dormant(root) end; mod.policy')},
+        @{Name='prefix-for-shadow';Shop=$shop.Replace('mod.policy','for root in pairs({}) do end; mod.policy')},
+        @{Name='prefix-alias-escape';Shop=$shop.Replace('mod.policy','local escaped=root; mod.policy')},
+        @{Name='prefix-forwarding';Shop=$shop.Replace('mod.policy','sink(root); mod.policy')},
+        @{Name='prefix-dynamic-expression';Shop=$shop.Replace('"scripts/mods/fixture_mod/"','"scripts/mods/fixture_mod/" .. dynamic')},
+        @{Name='foreign-prefix';Shop=$shop.Replace('scripts/mods/fixture_mod/','scripts/mods/foreign/')},
+        @{Name='case-sensitive-prefix';Shop=$shop.Replace('scripts/mods/fixture_mod/','scripts/mods/Fixture_Mod/')},
+        @{Name='path-traversal';Shop=$shop.Replace('root .. "','root .. "../')},
+        @{Name='dynamic-suffix';Shop=$shop.Replace('root .. "_runtime"','root .. dynamic')},
+        @{Name='extra-concat';Shop=$shop.Replace('root .. "_runtime"','root .. "_runtime" .. dynamic')},
+        @{Name='extra-argument';Shop=$shop.Replace('root .. "_runtime"','root .. "_runtime", other')},
+        @{Name='use-before-prefix-declaration';Shop=$shop.Replace('local root = "scripts/mods/fixture_mod/"','')+"`nlocal root="+'"scripts/mods/fixture_mod/"'},
+        @{Name='dead-call';Shop="if false then`n"+$shop+"`nend"},
+        @{Name='dormant-call';Shop="local function dormant()`n"+$shop+"`nend"},
+        @{Name='prior-return';Shop="do return end;`n"+$shop},
+        @{Name='prior-conditional-return';Shop="if unknown then return end;`n"+$shop},
+        @{Name='prior-loop';Shop="while true do end;`n"+$shop},
+        @{Name='prior-goto';Shop="if true then goto skip end;`n"+$shop+"`n::skip::"},
+        @{Name='loader-tuple-write';Shop=$shop.Replace('mod.policy','mod.dofile,unused=function() end,nil; mod.policy')},
+        @{Name='loader-member-escape';Shop=$shop.Replace('mod.policy','local loader=mod.dofile; mod.policy')},
+        @{Name='receiver-escape';Shop=$shop.Replace('mod.policy','local receiver=mod; mod.policy')},
+        @{Name='loader-call-result-store';Shop=$shop.Replace('mod.policy','mod.dofile')},
+        @{Name='prefix-field-call-result-store';Shop=$shop.Replace('mod.policy','mod.root')},
+        @{Name='receiver-call-result-store';Shop=$shop.Replace('mod.policy','mod')},
+        @{Name='spoofed-receiver';Shop=$shop.Replace('get_mod("fixture")','{dofile=function() end}')},
+        @{Name='foreign-receiver';Shop=$shop.Replace('get_mod("fixture")','get_mod("other")')},
+        @{Name='record-id-not-inferred-from-folder';ExpectedModId='fixture_mod'},
+        @{Name='unreachable-shop';Main='local mod=get_mod("fixture")'},
+        @{Name='fake-string-load';Shop=$shop.Replace('mod.runtime = mod:dofile(root .. "_runtime")','local bait=[=[mod:dofile(root .. "_runtime")]=]')},
+        @{Name='fake-comment-load';Shop=$shop.Replace('mod.runtime = mod:dofile(root .. "_runtime")','-- mod:dofile(root .. "_runtime")')}
+    )
+    # A closed lexical bootstrap deliberately refuses arbitrary preludes, not
+    # an ever-growing mutation denylist. Keep the actual loader0 witnesses and
+    # the executing but unsupported loader1 controls as separate honest oracles.
+    $preludes=@(
+        @{Name='implicit-self-loader-replacement';Code='function mod:replace() self.dofile=function() return {} end end; mod:replace()';NativeExpected=0},
+        @{Name='dot-method-same-record-reacquisition';Code='function mod.replace() local target=get_mod("fixture"); target.dofile=function() return {} end end; mod.replace()';NativeExpected=0},
+        @{Name='same-record-alias-loader-write';Code='local target=get_mod("fixture"); target.dofile=function() return {} end';NativeExpected=0},
+        @{Name='immediate-same-record-loader-write';Code='get_mod("fixture").dofile=function() return {} end';NativeExpected=0},
+        @{Name='forwarded-same-record-reacquisition';Code='local function replace(target) target.dofile=function() return {} end end; replace(get_mod("fixture"))';NativeExpected=0},
+        @{Name='explicit-receiver-method-forwarding';Code='function mod.replace(self) self.dofile=function() return {} end end; mod.replace(mod)';NativeExpected=0},
+        @{Name='unsupported-dormant-nested-helper';Code='local function nested() while true do end return end';NativeExpected=1},
+        @{Name='unsupported-unrelated-member-write';Code='mod.root="unrelated member"';NativeExpected=1},
+        @{Name='unsupported-foreign-record-reacquisition';Code='local target=get_mod("other"); target.dofile=function() return {} end';NativeExpected=1},
+        @{Name='unsupported-call-prelude';Code='sink()';NativeExpected=1},
+        @{Name='unsupported-indexed-receiver-method';Code='mod["replace"]=function() mod.dofile=function() return {} end end; mod["replace"]()';NativeExpected=0},
+        @{Name='unsupported-callable-receiver';Code='setmetatable(mod,{__call=function(self) self.dofile=function() return {} end end}); mod()';NativeExpected=0}
+    )
+    foreach($prelude in $preludes){$cases+=@{Name=$prelude.Name;Shop=$shop.Replace('mod.policy',([string]$prelude.Code+'; mod.policy'))}}
+    $beforeCanonical='local target=get_mod("fixture"); target.dofile=function() return {} end; '+$shop
+    $beforePrefix=$shop.Replace('local root =','local target=get_mod("fixture"); target.dofile=function() return {} end; local root =')
+    $cases+=@{Name='reacquisition-before-canonical-declaration';Shop=$beforeCanonical}
+    $cases+=@{Name='reacquisition-before-prefix-declaration';Shop=$beforePrefix}
+    $cases+=@{Name='unsupported-prefix-before-canonical-declaration';Shop=$shop.Replace('local mod = get_mod("fixture")', '').Replace('local root = "scripts/mods/fixture_mod/"','local root = "scripts/mods/fixture_mod/"; local mod=get_mod("fixture")')}
+    $load='mod:dofile(root .. "_runtime")'
+    $assignment='mod.runtime = '+$load
+    $expressions=@(
+        @{Name='false-and-rhs';Code='mod.runtime = false and '+$load;NativeExpected=0},
+        @{Name='true-or-rhs';Code='mod.runtime = true or '+$load;NativeExpected=0},
+        @{Name='nil-and-rhs';Code='mod.runtime = nil and '+$load;NativeExpected=0},
+        @{Name='not-true-and-rhs';Code='mod.runtime = (not true) and '+$load;NativeExpected=0},
+        @{Name='outer-sink-false-and';Code='sink(false and '+$load+')';NativeExpected=0},
+        @{Name='true-or-outer-sink';Code='mod.runtime = true or sink('+$load+')';NativeExpected=0},
+        @{Name='false-and-outer-sink';Code='mod.runtime = false and sink('+$load+')';NativeExpected=0},
+        @{Name='newline-is-not-false-and-boundary';Code="mod.runtime = false`nand`n"+$load;NativeExpected=0},
+        @{Name='newline-is-not-true-or-boundary';Code="mod.runtime = true`nor`n"+$load;NativeExpected=0},
+        @{Name='second-rhs-short-circuit';Code='mod.runtime, unused = nil, false and '+$load;NativeExpected=0},
+        @{Name='third-rhs-short-circuit';Code='mod.runtime, unused, last = nil, true or '+$load+', nil';NativeExpected=0},
+        @{Name='parenthesized-short-circuit';Code='mod.runtime = (false and '+$load+')';NativeExpected=0},
+        @{Name='table-slot-short-circuit';Code='local values = {false and '+$load+'}';NativeExpected=0},
+        @{Name='argument-two-short-circuit';Code='sink("kept", false and '+$load+')';NativeExpected=0},
+        @{Name='complex-executing-argument-denied';Code='sink('+$load+')';NativeExpected=1},
+        @{Name='complex-executing-trailing-and-denied';Code='mod.runtime = '+$load+' and true';NativeExpected=1},
+        @{Name='complex-executing-trailing-or-denied';Code='mod.runtime = '+$load+' or false';NativeExpected=1},
+        @{Name='complex-executing-argument-two-denied';Code='sink(false and false, '+$load+')';NativeExpected=1},
+        @{Name='dormant-argument-function';Code='sink(function() return '+$load+' end)';NativeExpected=0},
+        @{Name='complex-executing-second-rhs-denied';Code='mod.runtime, unused = nil, '+$load;NativeExpected=1},
+        @{Name='complex-executing-parenthesized-denied';Code='mod.runtime = ('+$load+')';NativeExpected=1}
+    )
+    foreach($expression in $expressions){$cases+=@{Name=$expression.Name;Shop=$shop.Replace($assignment,[string]$expression.Code)}}
+    foreach($case in $cases){
+        $m=if($case.ContainsKey('Main')){[string]$case.Main}else{$main}
+        $s=if($case.ContainsKey('Shop')){[string]$case.Shop}else{$shop}
+        $docs=@(& $makeDocuments $m $s)
+        $expectedId=if($case.ContainsKey('ExpectedModId')){[string]$case.ExpectedModId}else{'fixture'}
+        $reachable=Get-VtLoadTimeReachableLuaPaths -ModDir fixture_mod -Documents $docs -ExpectedModId $expectedId
+        Assert-VtContractFixture (-not$reachable.Contains('fixture_mod/scripts/mods/fixture_mod/_runtime.lua') -and
+            -not$reachable.Contains('fixture_mod/scripts/mods/foreign/_runtime.lua')) "Unsafe constant-prefix load was admitted: $($case.Name)."
+        if($case.Name -cne 'unreachable-shop'){
+            $shopDoc=@($docs|Where-Object RelativePath -ceq 'fixture_mod/scripts/mods/fixture_mod/_shop.lua')[0]
+            $edges=@(Get-VtConstantPrefixDocumentLoads -ModDir fixture_mod -Document $shopDoc -ExpectedModId $expectedId)
+            Assert-VtContractFixture (@($edges|Where-Object {$_.Signature -match '_runtime$'}).Count -eq 0) "Unsafe prefix edge was merely hidden by a missing target: $($case.Name)."
+        }
+    }
+    $legacy=Get-VtLoadTimeReachableLuaPaths -ModDir fixture_mod -Documents $documents
+    Assert-VtContractFixture ($legacy.Contains('fixture_mod/scripts/mods/fixture_mod/_shop.lua') -and
+        -not$legacy.Contains('fixture_mod/scripts/mods/fixture_mod/_runtime.lua')) 'ExpectedModId-less legacy literal discovery behavior changed.'
+    $bare=$shop.Replace('mod.policy = ','').Replace('mod.runtime = ','')
+    $separated=$shop.Replace("`n",";`n")
+    foreach($positive in @($bare,$separated)){
+        $docs=@(& $makeDocuments $main $positive)
+        $reached=Get-VtLoadTimeReachableLuaPaths -ModDir fixture_mod -Documents $docs -ExpectedModId fixture
+        Assert-VtContractFixture ($reached.Contains('fixture_mod/scripts/mods/fixture_mod/_policy.lua') -and
+            $reached.Contains('fixture_mod/scripts/mods/fixture_mod/_runtime.lua')) 'Standalone/semicolon statement-boundary positive rejected.'
+    }
+    foreach($reverse in @($false,$true)){
+        $ordered=@($documents);if($reverse){[array]::Reverse($ordered)}
+        $reached=Get-VtLoadTimeReachableLuaPaths -ModDir fixture_mod -Documents $ordered -ExpectedModId fixture
+        Assert-VtContractFixture ($reached.Contains('fixture_mod/scripts/mods/fixture_mod/_policy.lua') -and
+            $reached.Contains('fixture_mod/scripts/mods/fixture_mod/_runtime.lua')) 'Constant-prefix proof depends on document traversal order.'
+    }
+    $repoRoot=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+    $root='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/'
+    $actualPaths=@($root+'chaos_wastes_tweaker.lua';$root+'_ct_official_shop.lua';$root+'_ct_start_shrine_policy.lua';
+        $root+'_ct_boon_pricing_policy.lua';$root+'_ct_start_shrine_runtime.lua';$root+'_ct_boon_pricing_runtime.lua')
+    $checkActual={param($Docs,[string]$Label)
+        $reachable=Get-VtLoadTimeReachableLuaPaths -ModDir chaos_wastes_tweaker -Documents $Docs -ExpectedModId ct
+        foreach($path in $actualPaths){Assert-VtContractFixture ($reachable.Contains($path)) "Actual CT prefix-load closure missing $path ($Label)."}
+        $leaf=@($Docs|Where-Object RelativePath -ceq ($root+'_ct_start_shrine_runtime.lua'))
+        $commands=@((Get-VtDirectLuaCallRoutes $leaf[0]).CommandRoutes|Where-Object Command -ceq '/ct_verify_start_shrine')
+        Assert-VtContractFixture ($commands.Count -eq 1 -and [string]$commands[0].Source -ceq ($root+'_ct_start_shrine_runtime.lua')) "Actual CT runtime command provenance missing ($Label)."
+        Write-Host "[live-test-contract] actual CT constant-prefix shop/runtime source passed: $Label (not publication authority)."
+    }
+    $current=@(foreach($path in $actualPaths){
+        $text=[IO.File]::ReadAllText((Join-Path $repoRoot $path))
+        [pscustomobject]@{RelativePath=$path;Content=$text;Tokens=@(Get-VtLuaTokens $text)}
+    })
+    & $checkActual -Docs $current -Label 'current candidate source'
+    $frozen='1f98f3cad2ba852ae8d7622ce5820ab98be5c684'
+    if((Get-VtGitObjectTypeOrNull -RepoRoot $repoRoot -ObjectId $frozen) -ceq 'commit'){
+        $old=@(Get-VtDeployedLuaDocuments -RepoRoot $repoRoot -Treeish $frozen -RelativeRoot 'chaos_wastes_tweaker/scripts/mods' -RequiredRelativePaths $actualPaths|Where-Object {$actualPaths -ccontains [string]$_.RelativePath})
+        & $checkActual -Docs $old -Label ('immutable '+$frozen)
+    }else{Write-Host '[live-test-contract] immutable1f CT prefix check skipped: commit absent offline; current candidate check remains mandatory.'}
+    # Independently execute the expression and receiver-provenance witnesses,
+    # not a model of Lua truthiness or table mutation. Complex executing forms
+    # are unsupported by this lane; their true1 outcomes prevent false oracles.
+    $native=@(@{Name='direct-assignment-positive';Source=$shop;Expected=1},
+        @{Name='standalone-positive';Source=$bare;Expected=1},@{Name='semicolon-positive';Source=$separated;Expected=1},
+        @{Name='literal-sibling-positive';Source=$literalSibling;Expected=1},@{Name='post-target-reacquisition-positive';Source=$afterReacquire;Expected=1},
+        @{Name='reacquisition-before-canonical-declaration';Source=$beforeCanonical;Expected=0},
+        @{Name='reacquisition-before-prefix-declaration';Source=$beforePrefix;Expected=0})
+    foreach($prelude in $preludes){$native+=@{Name=$prelude.Name;Source=$shop.Replace('mod.policy',([string]$prelude.Code+'; mod.policy'));Expected=[int]$prelude.NativeExpected}}
+    foreach($expression in $expressions){$native+=@{Name=$expression.Name;Source=$shop.Replace($assignment,[string]$expression.Code);Expected=[int]$expression.NativeExpected}}
+    $luaRows=@(foreach($case in $native){
+        Assert-VtContractFixture (-not([string]$case.Source).Contains(']==]')) 'Unsafe native fixture delimiter.'
+        '{name=[==['+$case.Name+']==],source=[==['+$case.Source+']==],expected='+$case.Expected+'}'
+    })
+    $program='local cases={'+($luaRows -join ",`n")+"}`n"+@'
+for _,case in ipairs(cases) do
+ local calls=0
+ local mod={}
+ function mod:dofile(path)
+  if path=="scripts/mods/fixture_mod/_runtime" then calls=calls+1 end
+  return {}
+ end
+ local foreign={}
+ local env=setmetatable({get_mod=function(id) if id=="fixture" then return mod end assert(id=="other");return foreign end,sink=function(...)return ... end},{__index=_G})
+ env._G=env
+ local chunk=assert(loadstring(case.source,"prefix-expression:"..case.name));setfenv(chunk,env)
+ local ok,err=pcall(chunk);assert(ok,case.name..": "..tostring(err))
+ assert(calls==case.expected,case.name.." expected="..case.expected.." actual="..calls)
+end
+print("PREFIX_EXPRESSION_LUA_PASS "..#cases)
+'@
+    $lua=Join-Path $repoRoot 'qa/lua/vendor/lua-5.1.5-win64/lua5.1.exe'
+    Assert-VtContractFixture ((Get-FileHash $lua -Algorithm SHA256).Hash -ceq 'C9BF063327F6A719AA2D2C25A13A6FB006EBA3F23B53BCD6A629DC04507C18B6') 'Vendored Lua expression oracle changed.'
+    $start=New-Object Diagnostics.ProcessStartInfo
+    $start.FileName=$lua;$start.Arguments='-';$start.UseShellExecute=$false;$start.CreateNoWindow=$true
+    $start.RedirectStandardInput=$true;$start.RedirectStandardOutput=$true;$start.RedirectStandardError=$true
+    $process=New-Object Diagnostics.Process;$process.StartInfo=$start
+    try{
+        Assert-VtContractFixture ($process.Start()) 'Could not start owned Lua expression oracle.'
+        $stdout=$process.StandardOutput.ReadToEndAsync();$stderr=$process.StandardError.ReadToEndAsync()
+        $process.StandardInput.Write($program);$process.StandardInput.Close()
+        if(-not$process.WaitForExit(30000)){$process.Kill();throw 'Lua prefix-expression oracle timed out.'}
+        Assert-VtContractFixture ($process.ExitCode -eq 0 -and $stdout.Result.Trim() -ceq ('PREFIX_EXPRESSION_LUA_PASS '+$native.Count)) ('Lua prefix oracle failed: '+$stderr.Result+' '+$stdout.Result)
+    }finally{$process.Dispose()}
+    Write-Host "[live-test-contract] constant-prefix load matrix passed: 1 two-leaf +5 closed-bootstrap positives, $($cases.Count) negatives, 2 order controls, legacy literal-only control; $($native.Count) actual Lua expression/provenance witnesses."
+}
+
 function Invoke-VtDeployedSourceContractSelfTest {
     param([switch]$StructuralBoundsOnly)
     # #1120: all source below is lexer input, never executed as Lua. The
@@ -671,6 +889,15 @@ end)
     Write-Host '[live-test-contract] structural bounds matrix passed: 192 matrix classifications, 500 route checks, 2 exact-override routes.'
     if($StructuralBoundsOnly){return}
     Invoke-VtFactoryLoadAuthoritySelfTest
+    Invoke-VtConstantPrefixLoadAuthoritySelfTest
+    # The standalone QA entry loads this contract directly; the lifecycle
+    # caller already has these predicates. Loading definitions here does not
+    # invoke another selftest or change the production lifecycle policy.
+    if(-not(Get-Command Get-VtCardEvidenceErrors -ErrorAction SilentlyContinue)){
+        . (Join-Path $PSScriptRoot 'lifecycle_method_policy.ps1')
+    }
+    . (Join-Path $PSScriptRoot 'ct_official_receipt_routes_contract.ps1')
+    Test-VtCtOfficialReceiptRoutesContract -Root (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) | Out-Null
 
     $tempBase = [IO.Path]::GetTempPath()
     $tmp = Join-Path $tempBase ('vt2-live-card-contract-' + [guid]::NewGuid().ToString('N'))
@@ -774,6 +1001,7 @@ function mod.update()
 end
 mod:dofile("scripts/mods/fixture_mod/_helper").install(mod, { log = printf })
 mod:dofile("scripts/mods/fixture_mod/_early").install(mod, { log = printf })
+mod:dofile("scripts/mods/fixture_mod/_prefix_shop")
 pcall(mod.dofile, mod, "scripts/mods/fixture_mod/_pcall_helper")
 pcall(mod.dofile, mod, "scripts/mods/fixture_mod/_pcall_command_only")
 '@, $utf8)
@@ -795,6 +1023,15 @@ return function(context)
     local print_line = context.print_line or printf
     print_line("[fx:LOAD] v%s enabled fp=test OK", MOD_VERSION)
 end
+'@, $utf8)
+        [IO.File]::WriteAllText((Join-Path $luaRoot '_prefix_shop.lua'), @'
+local mod = get_mod("fixture")
+local root = "scripts/mods/fixture_mod/"
+mod:dofile(root .. "_prefix_leaf")
+'@, $utf8)
+        [IO.File]::WriteAllText((Join-Path $luaRoot '_prefix_leaf.lua'), @'
+local mod = get_mod("fixture")
+mod:command("fx_prefix_leaf", "Immutable prefix fixture", function() end)
 '@, $utf8)
         [IO.File]::WriteAllText((Join-Path $luaRoot '_early.lua'), @'
 local M = {}
@@ -912,6 +1149,9 @@ end)
         Assert-VtContractFixture (@($record.CommandRoutes.Command) -contains '/fx_probe') 'Exact command registration was not recovered.'
         Assert-VtContractFixture (@($record.CommandRoutes.Command) -contains '/fx_pcall_probe') 'Literal pcall(mod.command, mod, ...) registration was not recovered.'
         Assert-VtContractFixture (@($record.CommandRoutes.Command) -contains '/fx_pcall_only') 'Protected command registration in a printf-free reachable document was not recovered.'
+        Assert-VtContractFixture (@($record.CommandRoutes|Where-Object {
+            $_.Command -ceq '/fx_prefix_leaf' -and $_.Source -ceq 'fixture_mod/scripts/mods/fixture_mod/_prefix_leaf.lua'
+        }).Count -eq 1) 'Immutable deployed constant-prefix command source was not recovered exactly once.'
         Assert-VtContractFixture (@($record.CommandRoutes.Command) -contains '/fx_long_probe') 'Long-bracket command argument was not recovered.'
         Assert-VtContractFixture (@($record.CommandRoutes.Command) -notcontains '/phantom') 'String-only phantom command was accepted.'
         Assert-VtContractFixture (@($record.CommandRoutes.Command) -notcontains '/dead_probe') 'Literal-false command registration was accepted.'
@@ -1671,6 +1911,7 @@ return M
         Assert-VtContractFixture ($partialRecords.Count -eq 1) 'Partial-clone authority did not resolve exactly one record.'
         Assert-VtContractFixture (@($partialRecords[0].LoadRoutes.Marker) -contains '[fx:LOAD]') 'Partial-clone authority lost the deployed LOAD route through the batched prefetch.'
         Assert-VtContractFixture (@($partialRecords[0].CommandRoutes.Command) -contains '/fx_probe') 'Partial-clone authority lost the deployed command route through the batched prefetch.'
+        Assert-VtContractFixture (@($partialRecords[0].CommandRoutes.Command) -contains '/fx_prefix_leaf') 'Partial-clone authority lost the constant-prefix leaf command.'
         Assert-VtContractFixture (@($partialRecords[0].ReceiptRoutes.Signature) -contains '[fx:probe] status=OK') 'Partial-clone authority lost the deployed receipt route through the batched prefetch.'
         $missingAfter = @(& git -C $partial rev-list --objects --missing=print $deployedTree 2>&1 |
             Where-Object { [string]$_ -match '^\?[0-9a-f]{40,64}$' })

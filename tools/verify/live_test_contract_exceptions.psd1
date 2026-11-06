@@ -262,7 +262,7 @@
             Signature='[crt:728] installed setting=%s scope=local_level_gate occupancy=vanilla'
             Bound='one terminal install receipt per module evaluation'
             EmitterAnchors=@(@{Tokens=@('safe_printf','(','String:[crt:728] installed setting=%s scope=local_level_gate occupancy=vanilla')})
-            GuardAnchors=@(@{Tokens=@('function','M','.','install','(','mod',')')})
+            GuardAnchors=@('function M . install ( mod )')
         }
         @{
             Marker='[crt:728]'; ModId='crt'
@@ -272,8 +272,8 @@
             Bound='unlock decisions are signature-deduplicated for the finite unlock catalogue'
             EmitterAnchors=@(@{Tokens=@('safe_printf','(','String:[crt:728] level_gate setting=%s unlock=%s profile=%s level=%s result=%s reason=%s')})
             GuardAnchors=@(
-                @{Tokens=@('if','unlock_decisions','[','key',']','then','return','end')}
-                @{Tokens=@('unlock_decisions','[','key',']','=','true')}
+                'if unlock_decisions [ key ] then return end'
+                'unlock_decisions [ key ] = true'
             )
         }
         @{
@@ -284,8 +284,8 @@
             Bound='character-selection summaries are digest-deduplicated over a finite widget catalogue'
             EmitterAnchors=@(@{Tokens=@('safe_printf','(','String:[crt:728] character_select setting=%s kruber_profile=%s party=%s available=%s reserved_by=%s careers=[%s]')})
             GuardAnchors=@(
-                @{Tokens=@('if','selection_summaries','[','digest',']','then','return','end')}
-                @{Tokens=@('selection_summaries','[','digest',']','=','true')}
+                'if selection_summaries [ digest ] then return end'
+                'selection_summaries [ digest ] = true'
             )
         }
         @{
@@ -322,7 +322,7 @@
             Signature='[cwv:423] exact damage catalog=%s rows=%d beacon=cwv_damage_profiles_exact_v1'
             Bound='one mutually exclusive catalog/parity result during exact-wire install'
             EmitterAnchors=@(@{Tokens=@('_printf','(','String:[cwv:423] exact damage catalog=%s rows=%d beacon=cwv_damage_profiles_exact_v1')})
-            GuardAnchors=@(@{Tokens=@('function','mod','.','_cwv_damage_wire_safe','(',')')})
+            GuardAnchors=@('function mod . _cwv_damage_wire_safe ( )')
         }
         @{
             Marker='[cwv:423]'; ModId='character_weapon_variants'
@@ -350,7 +350,7 @@
             Bound='at most one blocked-hit receipt per finite NetworkLookup damage-profile id'
             EmitterAnchors=@(@{Tokens=@('_printf','(','String:[cwv:423] blocked unsafe hit: profile=%s(%s) exact catalog unconfirmed and no vanilla fallback resolved')})
             GuardAnchors=@(
-                @{Tokens=@('if','not','logged','[','damage_profile_id',']','then')}
+                'if not logged [ damage_profile_id ] then'
                 @{Tokens=@('logged','[','damage_profile_id',']','=','true')}
             )
         }
@@ -362,8 +362,8 @@
             Bound='at most one substitution receipt per finite NetworkLookup damage-profile id'
             EmitterAnchors=@(@{Tokens=@('_printf','(','String:[cwv:423] wire dmg-profile sub: %s(%s) -> %s (exact catalog unconfirmed; base-weapon damage this hit)')})
             GuardAnchors=@(
-                @{Tokens=@('if','not','logged','[','damage_profile_id',']','then')}
-                @{Tokens=@('logged','[','damage_profile_id',']','=','true')}
+                'if not logged [ damage_profile_id ] then'
+                'logged [ damage_profile_id ] = true'
             )
         }
         @{
@@ -375,7 +375,7 @@
             EmitterAnchors=@(@{Tokens=@('_safe_printf','(','String:[ct:349] chest_count_audit level=%s mission_of_mercy=%s actual=%d cap=%s pickup_census=%s class=%s is_server=%s')})
             GuardAnchors=@(
                 'local classification, actual = Core.finalize(_tracker, level_id, cap, census)'
-                @{Tokens=@('if','not','classification','then','return','nil','end')}
+                'if not classification then return nil end'
             )
         }
         @{
@@ -386,8 +386,8 @@
             Bound='one receipt per actually constructed chest in the finite mission population'
             EmitterAnchors=@(@{Tokens=@('_safe_printf','(','String:[ct:132] chest_of_trials #%d level=%s cap=%s census=%s is_server=%s%s')})
             GuardAnchors=@(
-                @{Tokens=@('local','actual','=','Core','.','appeared','(','_tracker',',','level_id',')')}
-                @{Tokens=@('if','unit','~=','nil','then','_units','[','#','_units','+','1',']','=','unit','end')}
+                'local actual = Core . appeared ( _tracker , level_id )'
+                'if unit ~= nil then _units [ # _units + 1 ] = unit end'
             )
         }
         @{
@@ -399,8 +399,8 @@
             EmitterAnchors=@(@{Tokens=@('_safe_printf','(','String:[ct:132] reconcile level=%s alive=%d cap=%d over=%d pruned=%d unprunable=%d (issue 132 / issue 60 cross-path cap)')})
             GuardAnchors=@(
                 'local classification, actual = Core.finalize(_tracker, level_id, cap, census)'
-                @{Tokens=@('if','not','classification','then','return','nil','end')}
-                @{Tokens=@('if','plan','.','over_n','<=','0','then','return','end')}
+                'if not classification then return nil end'
+                'if plan . over_n <= 0 then return end'
             )
         }
         @{
@@ -411,9 +411,9 @@
             Bound='one receipt per observed Steam connection-state edge; unchanged title-network checks are silent'
             EmitterAnchors=@(
                 @{Tokens=@('_emit','(','String:edge=steam_check steam_connected=%s backend_disconnected=%s observed=%s')}
-                @{Tokens=@('pcall','(','engine_printf',',','String:[gt:753] ','..','fmt',',','...',')')}
+                'pcall ( engine_printf , "[gt:753] " .. fmt , ... )'
             )
-            GuardAnchors=@(@{Tokens=@('if','Policy','.','steam_transition','(','previous',',','connected',')','then')})
+            GuardAnchors=@('if Policy . steam_transition ( previous , connected ) then')
         }
         @{
             Marker='[gt:753]'; ModId='gt_dev'
@@ -423,9 +423,9 @@
             Bound='one receipt per observed backend false-to-true disconnected edge'
             EmitterAnchors=@(
                 @{Tokens=@('_emit','(','String:edge=playfab_disconnect steam_connected=%s backend_disconnected=%s last_reason=%s observed=%s')}
-                @{Tokens=@('pcall','(','engine_printf',',','String:[gt:753] ','..','fmt',',','...',')')}
+                'pcall ( engine_printf , "[gt:753] " .. fmt , ... )'
             )
-            GuardAnchors=@(@{Tokens=@('if','Policy','.','backend_disconnected_transition','(','previous',',','current',')','then')})
+            GuardAnchors=@('if Policy . backend_disconnected_transition ( previous , current ) then')
         }
         @{
             Marker='[gt:753]'; ModId='gt_dev'
@@ -435,9 +435,9 @@
             Bound='one receipt per observed network-client failure edge; unchanged update frames are silent'
             EmitterAnchors=@(
                 @{Tokens=@('_emit','(','String:edge=network_client reason=%s channel_before=%s channel_after=%s steam_connected=%s backend_disconnected=%s observed=%s')}
-                @{Tokens=@('pcall','(','engine_printf',',','String:[gt:753] ','..','fmt',',','...',')')}
+                'pcall ( engine_printf , "[gt:753] " .. fmt , ... )'
             )
-            GuardAnchors=@(@{Tokens=@('if','Policy','.','network_failure_transition','(','before_reason',',','after_reason',',','before_channel',',','after_channel',')','then')})
+            GuardAnchors=@('if Policy . network_failure_transition ( before_reason , after_reason , before_channel , after_channel ) then')
         }
         @{
             Marker='[gt:753]'; ModId='gt_dev'
@@ -447,7 +447,7 @@
             Bound='one terminal armed receipt during module evaluation'
             EmitterAnchors=@(
                 @{Tokens=@('_emit','(','String:armed: steam_check=1 playfab_disconnect=1 network_client=1 transition_only=yes',')')}
-                @{Tokens=@('pcall','(','engine_printf',',','String:[gt:753] ','..','fmt',',','...',')')}
+                'pcall ( engine_printf , "[gt:753] " .. fmt , ... )'
             )
             GuardAnchors=@(@{Tokens=@('mod','.','_gt753_disconnect_diagnostics','=','{')})
         }
@@ -458,13 +458,13 @@
             Signature='[gut:630] frame_evidence draw=%d visible_rows=%s resource_candidates=%s'
             Bound='focus/tab/Weapons-expansion edge evidence under a 48-row per-session probe budget reset only by Mod Tweaker enter'
             EmitterAnchors=@(
-                @{Tokens=@('log','(','string','.','format','(','String:frame_evidence draw=%d visible_rows=%s resource_candidates=%s')}
+                'log ( string . format ( "frame_evidence draw=%d visible_rows=%s resource_candidates=%s"'
                 @{Tokens=@('emit','(','String:[gut:630] ','..','message',')')}
                 @{Source='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/gui_tweaker_dev.lua';Tokens=@('emit','=','function','(','line',')','printf','(','String:%s',',','line',')','end')}
             )
             GuardAnchors=@(
                 @{Tokens=@('local','DEFAULT_LINE_CAP','=','48')}
-                @{Tokens=@('if','state','.','lines','>=','state','.','line_cap','then')}
+                'if state . lines >= state . line_cap then'
                 @{Tokens=@('if','state','.','pending_frame_evidence','then')}
                 @{Tokens=@('state','.','pending_frame_evidence','=','false')}
             )
@@ -475,7 +475,7 @@
             SourcesByMod=@{gt_dev='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_pickups.lua'}
             Signature='[gt:347] phase=%s '
             Bound='one signature-deduplicated phase row under the explicit probe 16-record cap'
-            EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[gt:347] phase=%s ','..','fmt')})
+            EmitterAnchors=@('pcall ( printf , "[gt:347] phase=%s " .. fmt')
             GuardAnchors=@(
                 @{Source='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_diag_chest_pickup_state.lua';Tokens=@('M','.','MAX_RECORDS','=','16')}
                 @{Source='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_diag_chest_pickup_state.lua';Tokens=@('if','not','state','.','armed','or','state','.','count','>=','M','.','MAX_RECORDS','then')}
@@ -502,7 +502,7 @@
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[gt:347] ARMED max_records=%d max_classifications=%d instant_pickup=%s greedy_pickup=%s')})
             GuardAnchors=@(
                 @{Tokens=@('mod',':','command','(','String:gt_chest_pickup_probe')}
-                @{Tokens=@('_gt347_core','.','arm','(','_gt347_state',')')}
+                '_gt347_core . arm ( _gt347_state )'
             )
         }
         @{
@@ -513,10 +513,10 @@
             Bound='one terminal success, rejection, timeout, or lifecycle-cancel receipt per explicit /heal request transaction'
             EmitterAnchors=@(@{Tokens=@('printf','(','String:[gt:1143] heal result=%s route=%s before=%s after=%s max=%s ','..','String:wounded_before=%s wounded_after=%s elapsed=%.3f reason=%s record=%d')})
             GuardAnchors=@(
-                @{Tokens=@('mod',':','command','(','String:heal',',','String:Restore your living hero to full permanent health and clear wounds',',','_request',')')}
-                @{Tokens=@('if','pending','then','_reject','(','String:request_already_pending',')','return','end')}
-                @{Tokens=@('pending','=','nil','_emit','(','String:ok')}
-                @{Tokens=@('pending','=','nil','_emit','(','String:timeout')}
+                'mod : command ( "heal" , "Restore your living hero to full permanent health and clear wounds" , _request )'
+                'if pending then _reject ( "request_already_pending" ) return end'
+                'pending = nil _emit ( "ok"'
+                'pending = nil _emit ( "timeout"'
             )
         }
         @{
@@ -582,7 +582,7 @@ end'
             Signature='[mp:607] event=instrument_error stage=%s reason=observer_failed backend=none'
             Bound='at most twelve automatic print attempts shared with normal receipts per Runtime.install or existing explicit diagnostic-reset window; the same helper consumes attempts before this protected error logger, including logger faults'
             EmitterAnchors=@(
-                @{Tokens=@('print_log','(','String:[mp:607] event=instrument_error stage=%s ','..','String:reason=observer_failed backend=none',',','stage',')')}
+                'print_log ( "[mp:607] event=instrument_error stage=%s " .. "reason=observer_failed backend=none" , stage )'
                 # Bind printf to THIS actual installer, not another generic print_log=printf.
                 @{Source='modded_progression/scripts/mods/modded_progression/modded_progression.lua';Tokens=@(
                     'mod',':','dofile','(','String:scripts/mods/modded_progression/_mp_loot_diag_runtime',')','.',
@@ -632,7 +632,7 @@ end'
             Signature='[gut:938] rt skip: NetworkConstants.damage.max unavailable; policy checked against fallback %.2f'
             Bound='at most one fallback notice per explicit issue938 regression-check invocation'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[gut:938] rt skip: NetworkConstants.damage.max unavailable; policy checked against fallback %.2f')})
-            GuardAnchors=@(@{Tokens=@('if','type','(','max_damage',')','~=','String:number','or','max_damage','<=','0','then')})
+            GuardAnchors=@('if type ( max_damage ) ~= "number" or max_damage <= 0 then')
         }
         @{
             Marker='[ct:919]';ModId='ct_dev';ModTrees=@{ct_dev='3964fcf7a225721a425d40d809e1910d1dd379e4'}
@@ -641,9 +641,9 @@ end'
             Bound='one terminal formatted snapshot or snapshot_error per explicit profile-snapshot transaction'
             EmitterAnchors=@(
                 @{Tokens=@('String:[ct:919] seq=%d phase=%s role=%s profile=%d effective_source=%s coins_local=%s coins_effective=%s miasma_disabled_local=%s miasma_disabled_effective=%s selected_curse="%s" selected_conflict=%s boon_local_count=%d boon_local=%s boon_effective_count=%d boon_effective=%s local_truncated=%d effective_truncated=%d')}
-                @{Tokens=@('pcall','(','printf',',','String:%s',',','Snapshot','.','format','(','result',',','sequence',')',')')}
+                'pcall ( printf , "%s" , Snapshot . format ( result , sequence ) )'
             )
-            GuardAnchors=@(@{Tokens=@('function','mod','.','_ct919_log_profile_snapshot','(','phase',',','profile_override',')')})
+            GuardAnchors=@('function mod . _ct919_log_profile_snapshot ( phase , profile_override )')
         }
         @{
             Marker='[ct:919]';ModId='ct_dev';ModTrees=@{ct_dev='3964fcf7a225721a425d40d809e1910d1dd379e4'}
@@ -684,7 +684,7 @@ end'
             EmitterAnchors=@(@{Tokens=@('emit','(','deps',',','String:[cwv:786] style residency family=%s style=%s resource=%s resident=%s')})
             GuardAnchors=@(
                 @{Tokens=@('M','.','RESIDENCY_PROBE_CAP','=','32')}
-                @{Tokens=@('if','state','.','seen','[','key',']','or','state','.','count','>=','M','.','RESIDENCY_PROBE_CAP','then')}
+                'if state . seen [ key ] or state . count >= M . RESIDENCY_PROBE_CAP then'
             )
         }
         @{
@@ -694,7 +694,7 @@ end'
             Bound='signature-deduplicated candidate evidence under a 32-row per-candidate cap'
             EmitterAnchors=@(@{Tokens=@('String:[cwv:645] candidate=%s item=%s career=%s owner_event=%s sample=%d/%d reason=%s')})
             GuardAnchors=@(
-                @{Tokens=@('count','>=','M','.','DIAGNOSTIC_EVENT_CAP','or','self','.','diagnostic_seen','[','key',']')}
+                'count >= M . DIAGNOSTIC_EVENT_CAP or self . diagnostic_seen [ key ]'
                 @{Tokens=@('M','.','DIAGNOSTIC_EVENT_CAP','=','32')}
             )
         }
@@ -702,10 +702,10 @@ end'
             Marker='[ct:571-native]';ModId='ct_dev';ModTrees=@{ct_dev='3964fcf7a225721a425d40d809e1910d1dd379e4'}
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_tab_native533.lua'}
             Signature='[ct:571-native] %s';Bound='signature-deduplicated native layout census under an absolute 64-row cap'
-            EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[ct:571-native] %s',',','line',')')})
+            EmitterAnchors=@('pcall ( printf , "[ct:571-native] %s" , line )')
             GuardAnchors=@(
                 @{Tokens=@('local','RECORD_CAP','=','64')}
-                @{Tokens=@('if','records','>=','RECORD_CAP','or','seen','[','key',']','then','return','false','end')}
+                'if records >= RECORD_CAP or seen [ key ] then return false end'
             )
         }
         @{
@@ -715,7 +715,7 @@ end'
             Bound='one settled receipt per weak-key Pacing instance'
             EmitterAnchors=@(@{Tokens=@('printf','(','String:[event-inject:393] settled verdict=%s evidence=%s | injected=[%s] max_intensity=%s decay_per_second=%s decay_delay=%s add_per_pct_dmg=%s delay_horde=%s delay_specials=%s delay_mini_patrol=%s cached_horde=%s cached_specials=%s cached_mini_patrol=%s')})
             GuardAnchors=@(
-                @{Tokens=@('if','_issue393_seen','[','self',']','then','return','end')}
+                'if _issue393_seen [ self ] then return end'
                 @{Tokens=@('_issue393_seen','[','self',']','=','true')}
             )
         }
@@ -735,8 +735,8 @@ end'
             Signature='[wt:388] Deepwood overcharge profile applied career=%s transport=owner-authoritative';Bound='one apply receipt per inactive-to-active extension transition'
             EmitterAnchors=@(@{Tokens=@('printf','(','String:[wt:388] Deepwood overcharge profile applied career=%s transport=owner-authoritative')})
             GuardAnchors=@(
-                @{Tokens=@('if','_active_ext','==','ext','then','return','end')}
-                @{Tokens=@('_active_unit',',','_active_ext',',','_baseline','=','player_unit',',','ext',',','_capture','(','ext',')')}
+                'if _active_ext == ext then return end'
+                '_active_unit , _active_ext , _baseline = player_unit , ext , _capture ( ext )'
             )
         }
         @{
@@ -745,7 +745,7 @@ end'
             Signature='[wt:388] Deepwood overcharge profile restored';Bound='one restore receipt per active-to-inactive extension transition'
             EmitterAnchors=@(@{Tokens=@('printf','(','String:[wt:388] Deepwood overcharge profile restored',')')})
             GuardAnchors=@(
-                @{Tokens=@('if','not','ext','or','not','baseline','then','return','end')}
+                'if not ext or not baseline then return end'
                 @{Tokens=@('_abandon','(',')')}
             )
         }
@@ -754,21 +754,21 @@ end'
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/cwv_dev_anim_picker.lua'}
             Signature='[cwv:317] ==== CWV 3P animation picker ====';Bound='one header per explicit finite dump command invocation'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[cwv:317] ==== CWV 3P animation picker ====')})
-            GuardAnchors=@(@{Tokens=@('mod',':','command','(','String:cwv_dump_anim_picks',',','String:Dump saved CWV third-person animation picks',',','M','.','dump',')')})
+            GuardAnchors=@('mod : command ( "cwv_dump_anim_picks" , "Dump saved CWV third-person animation picks" , M . dump )')
         }
         @{
             Marker='[cwv:317]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='4ca1193f2f7c9ff85013c0657b44b8b9c2911ca6'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/cwv_dev_anim_picker.lua'}
             Signature='[cwv:317] %s';Bound='one label per finite authored animation-picker entry per explicit dump invocation'
-            EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[cwv:317] %s',',','entry','.','label',')')})
-            GuardAnchors=@(@{Tokens=@('for','_',',','entry','in','ipairs','(','_ENTRIES',')','do')})
+            EmitterAnchors=@('pcall ( printf , "[cwv:317] %s" , entry . label )')
+            GuardAnchors=@('for _ , entry in ipairs ( _ENTRIES ) do')
         }
         @{
             Marker='[cwv:317]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='4ca1193f2f7c9ff85013c0657b44b8b9c2911ca6'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/cwv_dev_anim_picker.lua'}
             Signature='[cwv:317]   %s = %q,';Bound='one row per finite authored source event with a changed value per explicit dump invocation'
-            EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[cwv:317]   %s = %q,',',','source_event',',','value',')')})
-            GuardAnchors=@(@{Tokens=@('for','_',',','source_event','in','ipairs','(','_SOURCE_EVENTS',')','do')})
+            EmitterAnchors=@('pcall ( printf , "[cwv:317]   %s = %q," , source_event , value )')
+            GuardAnchors=@('for _ , source_event in ipairs ( _SOURCE_EVENTS ) do')
         }
         @{
             Marker='[cwv:317]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='4ca1193f2f7c9ff85013c0657b44b8b9c2911ca6'}
@@ -790,7 +790,7 @@ end'
             Signature='[ct:288] add parent=%s child=%s stat=%s mult=%s event=%s n=%d';Bound='absolute eight-row add-boundary diagnostic cap'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[ct:288] add parent=%s child=%s stat=%s mult=%s event=%s n=%d')})
             GuardAnchors=@(
-                @{Tokens=@('CT_ANATH_RAEMA_ADD_DIAG_COUNT','=','(','CT_ANATH_RAEMA_ADD_DIAG_COUNT','or','0',')','+','1')}
+                'CT_ANATH_RAEMA_ADD_DIAG_COUNT = ( CT_ANATH_RAEMA_ADD_DIAG_COUNT or 0 ) + 1'
                 @{Tokens=@('if','CT_ANATH_RAEMA_ADD_DIAG_COUNT','<=','8','then')}
             )
         }
@@ -800,7 +800,7 @@ end'
             Signature='[gut:250] career=%s active=%s tiers=%s duplicates=%d unmapped=%d repair=%d/%d';Bound='signature-deduplicated talent repairs under the policy absolute log cap'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[gut:250] career=%s active=%s tiers=%s duplicates=%d unmapped=%d repair=%d/%d')})
             GuardAnchors=@(
-                @{Tokens=@('if','not','logged','[','signature',']','and','log_count','<','Policy','.','MAX_LOGS','then')}
+                'if not logged [ signature ] and log_count < Policy . MAX_LOGS then'
                 @{Tokens=@('logged','[','signature',']','=','true')}
             )
         }
@@ -810,8 +810,8 @@ end'
             Signature='[ct:141] audit=%d/%d reason=%s controller=%s run_state=%s server=%s config=%d/%d values=%d progress=%d/%d values=%d shared=%s full_sync=%s player_read=%s/%s/%s player_write=%s/%s/%s config_missing=%s progress_missing=%s mutation=false';Bound='absolute six-row session budget with two manual slots reserved'
             EmitterAnchors=@(@{Tokens=@('printf','(','String:[ct:141] audit=%d/%d reason=%s controller=%s run_state=%s server=%s config=%d/%d values=%d progress=%d/%d values=%d shared=%s full_sync=%s player_read=%s/%s/%s player_write=%s/%s/%s config_missing=%s progress_missing=%s mutation=false')})
             GuardAnchors=@(
-                @{Tokens=@('local','CAP',',','MANUAL_RESERVE',',','captures','=','6',',','2',',','0')}
-                @{Tokens=@('if','captures','>=','budget','then','return','end')}
+                'local CAP , MANUAL_RESERVE , captures = 6 , 2 , 0'
+                'if captures >= budget then return end'
             )
         }
         @{
@@ -830,7 +830,7 @@ end'
             Signature='[gut:245] slot=%s backend_id=%s properties=%s refresh=%d/%d';Bound='shared absolute live-loadout refresh log cap'
             EmitterAnchors=@(@{Tokens=@('_printf','(','String:[gut:245] slot=%s backend_id=%s properties=%s refresh=%d/%d')})
             GuardAnchors=@(
-                @{Tokens=@('if','log_count','<','Policy','.','MAX_LOGS','then')}
+                'if log_count < Policy . MAX_LOGS then'
                 @{Tokens=@('log_count','=','log_count','+','1')}
             )
         }
@@ -839,7 +839,7 @@ end'
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_dev_mission.lua'}
             Signature='[ct:919] registered profile diagnostic with Mod Tweaker';Bound='one registration receipt from the once-per-load on_all_mods_loaded callback'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[ct:919] registered profile diagnostic with Mod Tweaker',')')})
-            GuardAnchors=@(@{Tokens=@('mod','.','on_all_mods_loaded','=','function','(',')')})
+            GuardAnchors=@('mod . on_all_mods_loaded = function ( )')
         }
         @{
             Marker='[ct:288]';ModId='ct_dev';ModTrees=@{ct_dev='3964fcf7a225721a425d40d809e1910d1dd379e4'}
@@ -847,7 +847,7 @@ end'
             Signature='[ct:288] setting=%s template_child=%s stat=%s multiplier=%s event=%s';Bound='one template-setting census row per explicit verify command invocation'
             EmitterAnchors=@(
                 @{Tokens=@('string','.','format','(','String:setting=%s template_child=%s stat=%s multiplier=%s event=%s')}
-                @{Tokens=@('pcall','(','printf',',','String:[ct:288] %s',',','setting_line',')')}
+                'pcall ( printf , "[ct:288] %s" , setting_line )'
             )
             GuardAnchors=@(@{Tokens=@('mod',':','command','(','String:ct_verify_anath_raema')})
         }
@@ -857,9 +857,9 @@ end'
             Signature='[ct:288] active[%d] child=%s stat=%s multiplier=%s event=%s';Bound='one row per finite active matching buff in an explicit verify command census'
             EmitterAnchors=@(
                 @{Tokens=@('string','.','format','(','String:active[%d] child=%s stat=%s multiplier=%s event=%s')}
-                @{Tokens=@('pcall','(','printf',',','String:[ct:288] %s',',','active_line',')')}
+                'pcall ( printf , "[ct:288] %s" , active_line )'
             )
-            GuardAnchors=@(@{Tokens=@('for','_',',','buff','in','pairs','(','be','.','_buffs','or','{','}',')','do')})
+            GuardAnchors=@('for _ , buff in pairs ( be . _buffs or { } ) do')
         }
         @{
             Marker='[ct:288]';ModId='ct_dev';ModTrees=@{ct_dev='3964fcf7a225721a425d40d809e1910d1dd379e4'}
@@ -867,7 +867,7 @@ end'
             Signature='[ct:288] active_count=%d total_reload_time_scale=%s expected_trait_scale=0.5';Bound='one terminal active-count row per explicit verify command invocation'
             EmitterAnchors=@(
                 @{Tokens=@('string','.','format','(','String:active_count=%d total_reload_time_scale=%s expected_trait_scale=0.5')}
-                @{Tokens=@('pcall','(','printf',',','String:[ct:288] %s',',','total_line',')')}
+                'pcall ( printf , "[ct:288] %s" , total_line )'
             )
             GuardAnchors=@(@{Tokens=@('mod',':','command','(','String:ct_verify_anath_raema')})
         }
@@ -875,7 +875,7 @@ end'
             Marker='[ct:288]';ModId='ct_dev';ModTrees=@{ct_dev='3964fcf7a225721a425d40d809e1910d1dd379e4'}
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_balance.lua'}
             Signature='[ct:288] active=unavailable (enter the keep/mission and wield the trait weapon)';Bound='one mutually exclusive early terminal row per explicit verify command invocation'
-            EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[ct:288] active=unavailable (enter the keep/mission and wield the trait weapon)',')')})
+            EmitterAnchors=@('pcall ( printf , "[ct:288] active=unavailable (enter the keep/mission and wield the trait weapon)" )')
             GuardAnchors=@(@{Tokens=@('if','not','be','then')})
         }
     )
@@ -890,7 +890,7 @@ end'
             Signature='[WOC:633] audio contract inspect_event=%s inspect_bank=%s inspect_package=%s ambient_event=%s ambient_bank=%s ambient_status=diagnostic force_load=false network=false probe_runs=%d/%d chat=false'
             EmitterAnchors=@(
                 @{Tokens=@('log','(','String:[WOC:633] audio contract inspect_event=%s inspect_bank=%s inspect_package=%s ambient_event=%s ambient_bank=%s ambient_status=diagnostic force_load=false network=false probe_runs=%d/%d chat=false')}
-                @{Tokens=@('pcall','(','printf_fn',',','format',',','...',')')}
+                'pcall ( printf_fn , format , ... )'
             )
         }
         @{
@@ -925,6 +925,625 @@ end'
     # exact token anchors. These authorize only Signature, never Marker-wide
     # siblings.
     ReceiptRouteOverrides = @(
+        #1815 publicCT354: exact actual automatic routes only. Dynamic composition
+        # is pinned to callers/render/caps; manual verifier summaries are distinct.
+        @{
+            ModId='ct'; ModTree='12bac017f755226f0035ea8e61cad208a3a21ac1'
+            Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence.lua'
+            Marker='[ct:60]'; Signature='[ct:60] APPLY_OBSERVED settled census; queued/marked != removed | %s'; AddRoute=$true
+            Bound='at most24 automatic attempts for literal feature60 per current controller/run/generation/level context; scalar payload and identical-signature deduplication; not a manual-verifier verdict'
+            EmitterAnchors=@(
+                'return "[ct:" .. feature .. "] " .. r.status .. " " .. scalar(r.reason) .. " | " .. table.concat(fields, " ")'
+                'pcall(printf, "%s", render(feature, result("APPLY_OBSERVED", label, copied)))'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_chest_cap.lua';Tokens=@('mod','.','_ct_apply_evidence','.','call','(','String:record',',','String:60',',','String:settled census; queued/marked != removed',',','row',')')}
+            )
+            GuardAnchors=@(
+                'function E.record(feature, label, fields)
+        local _, level, key = context()
+        local copied = { level = level, role = Managers and Managers.player and Managers.player.is_server == true and "host" or "client" }
+        local rc = controller()
+        copied.run_id = run_id(rc)
+        for name, value in pairs(fields or {}) do
+            local kind = type(value)
+            if kind == "string" or kind == "number" or kind == "boolean" then copied[name] = value end
+        end
+        local signature = render(feature, result("APPLY_OBSERVED", label, copied))
+        if last[feature] and last[feature].signature == signature then return end
+        last[feature] = { scope = key, fields = copied, label = label, signature = signature }
+        local used = budgets[feature] or 0
+        if used >= 24 then return end
+        budgets[feature] = used + 1
+        if rawget(_G, "printf") then pcall(printf, "%s", render(feature, result("APPLY_OBSERVED", label, copied))) end
+    end'
+                'return tostring(v):gsub("[%c|]", " "):sub(1, 180)'
+                'if key ~= scope then scope, last, budgets = key, {}, {} end'
+                'local key = tostring(rc) .. ":" .. tostring(run_id(rc)) .. ":" .. tostring(rc and rc._ct_evidence_generation) .. ":" .. tostring(level)'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua';Tokens=@('String:scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence',')','(','mod',',','{')}
+            )
+        }
+        @{
+            ModId='ct'; ModTree='12bac017f755226f0035ea8e61cad208a3a21ac1'
+            Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence.lua'
+            Marker='[ct:107]'; Signature='[ct:107] APPLY_OBSERVED filtered application request (not native retained-state proof) | %s'; AddRoute=$true
+            Bound='at most24 automatic attempts for literal feature107 per current controller/run/generation/level context; scalar payload and identical-signature deduplication; not a manual-verifier verdict'
+            EmitterAnchors=@(
+                'return "[ct:" .. feature .. "] " .. r.status .. " " .. scalar(r.reason) .. " | " .. table.concat(fields, " ")'
+                'pcall(printf, "%s", render(feature, result("APPLY_OBSERVED", label, copied)))'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_verify_runtime.lua';Tokens=@('evidence','(','String:record',',','String:107',',','String:filtered application request (not native retained-state proof)',',','{')}
+            )
+            GuardAnchors=@(
+                'function E.record(feature, label, fields)
+        local _, level, key = context()
+        local copied = { level = level, role = Managers and Managers.player and Managers.player.is_server == true and "host" or "client" }
+        local rc = controller()
+        copied.run_id = run_id(rc)
+        for name, value in pairs(fields or {}) do
+            local kind = type(value)
+            if kind == "string" or kind == "number" or kind == "boolean" then copied[name] = value end
+        end
+        local signature = render(feature, result("APPLY_OBSERVED", label, copied))
+        if last[feature] and last[feature].signature == signature then return end
+        last[feature] = { scope = key, fields = copied, label = label, signature = signature }
+        local used = budgets[feature] or 0
+        if used >= 24 then return end
+        budgets[feature] = used + 1
+        if rawget(_G, "printf") then pcall(printf, "%s", render(feature, result("APPLY_OBSERVED", label, copied))) end
+    end'
+                'return tostring(v):gsub("[%c|]", " "):sub(1, 180)'
+                'if key ~= scope then scope, last, budgets = key, {}, {} end'
+                'local key = tostring(rc) .. ":" .. tostring(run_id(rc)) .. ":" .. tostring(rc and rc._ct_evidence_generation) .. ":" .. tostring(level)'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua';Tokens=@('String:scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence',')','(','mod',',','{')}
+            )
+        }
+        @{
+            ModId='ct'; ModTree='12bac017f755226f0035ea8e61cad208a3a21ac1'
+            Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence.lua'
+            Marker='[ct:146]'; Signature='[ct:146] APPLY_OBSERVED Citadel node applied/read back | %s'; AddRoute=$true
+            Bound='at most24 automatic attempts for literal feature146 per current controller/run/generation/level context; scalar payload and identical-signature deduplication; not a manual-verifier verdict'
+            EmitterAnchors=@(
+                'return "[ct:" .. feature .. "] " .. r.status .. " " .. scalar(r.reason) .. " | " .. table.concat(fields, " ")'
+                'pcall(printf, "%s", render(feature, result("APPLY_OBSERVED", label, copied)))'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_verify_runtime.lua';Tokens=@('evidence','(','String:record',',','String:146',',','String:Citadel node applied/read back',',','{')}
+            )
+            GuardAnchors=@(
+                'function E.record(feature, label, fields)
+        local _, level, key = context()
+        local copied = { level = level, role = Managers and Managers.player and Managers.player.is_server == true and "host" or "client" }
+        local rc = controller()
+        copied.run_id = run_id(rc)
+        for name, value in pairs(fields or {}) do
+            local kind = type(value)
+            if kind == "string" or kind == "number" or kind == "boolean" then copied[name] = value end
+        end
+        local signature = render(feature, result("APPLY_OBSERVED", label, copied))
+        if last[feature] and last[feature].signature == signature then return end
+        last[feature] = { scope = key, fields = copied, label = label, signature = signature }
+        local used = budgets[feature] or 0
+        if used >= 24 then return end
+        budgets[feature] = used + 1
+        if rawget(_G, "printf") then pcall(printf, "%s", render(feature, result("APPLY_OBSERVED", label, copied))) end
+    end'
+                'return tostring(v):gsub("[%c|]", " "):sub(1, 180)'
+                'if key ~= scope then scope, last, budgets = key, {}, {} end'
+                'local key = tostring(rc) .. ":" .. tostring(run_id(rc)) .. ":" .. tostring(rc and rc._ct_evidence_generation) .. ":" .. tostring(level)'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua';Tokens=@('String:scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence',')','(','mod',',','{')}
+            )
+        }
+        @{
+            ModId='ct'; ModTree='12bac017f755226f0035ea8e61cad208a3a21ac1'
+            Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence.lua'
+            Marker='[ct:252]'; Signature='[ct:252] APPLY_OBSERVED same-tier prompt applied/read back (not purchase proof) | %s'; AddRoute=$true
+            Bound='at most24 automatic attempts for literal feature252 per current controller/run/generation/level context; scalar payload and identical-signature deduplication; not a manual-verifier verdict'
+            EmitterAnchors=@(
+                'return "[ct:" .. feature .. "] " .. r.status .. " " .. scalar(r.reason) .. " | " .. table.concat(fields, " ")'
+                'pcall(printf, "%s", render(feature, result("APPLY_OBSERVED", label, copied)))'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_verify_runtime.lua';Tokens=@('evidence','(','String:record',',','String:252',',','String:same-tier prompt applied/read back (not purchase proof)',',','{')}
+            )
+            GuardAnchors=@(
+                'function E.record(feature, label, fields)
+        local _, level, key = context()
+        local copied = { level = level, role = Managers and Managers.player and Managers.player.is_server == true and "host" or "client" }
+        local rc = controller()
+        copied.run_id = run_id(rc)
+        for name, value in pairs(fields or {}) do
+            local kind = type(value)
+            if kind == "string" or kind == "number" or kind == "boolean" then copied[name] = value end
+        end
+        local signature = render(feature, result("APPLY_OBSERVED", label, copied))
+        if last[feature] and last[feature].signature == signature then return end
+        last[feature] = { scope = key, fields = copied, label = label, signature = signature }
+        local used = budgets[feature] or 0
+        if used >= 24 then return end
+        budgets[feature] = used + 1
+        if rawget(_G, "printf") then pcall(printf, "%s", render(feature, result("APPLY_OBSERVED", label, copied))) end
+    end'
+                'return tostring(v):gsub("[%c|]", " "):sub(1, 180)'
+                'if key ~= scope then scope, last, budgets = key, {}, {} end'
+                'local key = tostring(rc) .. ":" .. tostring(run_id(rc)) .. ":" .. tostring(rc and rc._ct_evidence_generation) .. ":" .. tostring(level)'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua';Tokens=@('String:scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence',')','(','mod',',','{')}
+            )
+        }
+        @{
+            ModId='ct'; ModTree='12bac017f755226f0035ea8e61cad208a3a21ac1'
+            Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence.lua'
+            Marker='[ct:256]'; Signature='[ct:256] APPLY_OBSERVED refresh clamp applied/read back | %s'; AddRoute=$true
+            Bound='at most24 automatic attempts for literal feature256 per current controller/run/generation/level context; scalar payload and identical-signature deduplication; not a manual-verifier verdict'
+            EmitterAnchors=@(
+                'return "[ct:" .. feature .. "] " .. r.status .. " " .. scalar(r.reason) .. " | " .. table.concat(fields, " ")'
+                'pcall(printf, "%s", render(feature, result("APPLY_OBSERVED", label, copied)))'
+                'E.record("256", "refresh clamp applied/read back", fields)'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_verify_runtime.lua';Tokens=@('evidence','(','String:ammo_applied',',','ext',',','before_current',',','before_reserve',')')}
+            )
+            GuardAnchors=@(
+                'function E.record(feature, label, fields)
+        local _, level, key = context()
+        local copied = { level = level, role = Managers and Managers.player and Managers.player.is_server == true and "host" or "client" }
+        local rc = controller()
+        copied.run_id = run_id(rc)
+        for name, value in pairs(fields or {}) do
+            local kind = type(value)
+            if kind == "string" or kind == "number" or kind == "boolean" then copied[name] = value end
+        end
+        local signature = render(feature, result("APPLY_OBSERVED", label, copied))
+        if last[feature] and last[feature].signature == signature then return end
+        last[feature] = { scope = key, fields = copied, label = label, signature = signature }
+        local used = budgets[feature] or 0
+        if used >= 24 then return end
+        budgets[feature] = used + 1
+        if rawget(_G, "printf") then pcall(printf, "%s", render(feature, result("APPLY_OBSERVED", label, copied))) end
+    end'
+                'return tostring(v):gsub("[%c|]", " "):sub(1, 180)'
+                'if key ~= scope then scope, last, budgets = key, {}, {} end'
+                'local key = tostring(rc) .. ":" .. tostring(run_id(rc)) .. ":" .. tostring(rc and rc._ct_evidence_generation) .. ":" .. tostring(level)'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua';Tokens=@('String:scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence',')','(','mod',',','{')}
+            )
+        }
+        @{
+            ModId='ct'; ModTree='12bac017f755226f0035ea8e61cad208a3a21ac1'
+            Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence.lua'
+            Marker='[ct:288]'; Signature='[ct:288] APPLY_OBSERVED registry applied/read back | %s'; AddRoute=$true
+            Bound='at most24 automatic attempts for literal feature288 per current controller/run/generation/level context; scalar payload and identical-signature deduplication; not a manual-verifier verdict'
+            EmitterAnchors=@(
+                'return "[ct:" .. feature .. "] " .. r.status .. " " .. scalar(r.reason) .. " | " .. table.concat(fields, " ")'
+                'pcall(printf, "%s", render(feature, result("APPLY_OBSERVED", label, copied)))'
+                'E.record("288", label, {'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_boon_repairs.lua';Tokens=@('mod','.','_ct_apply_evidence','.','call','(','String:anath_registry',',','String:registry applied/read back',')')}
+            )
+            GuardAnchors=@(
+                'function E.record(feature, label, fields)
+        local _, level, key = context()
+        local copied = { level = level, role = Managers and Managers.player and Managers.player.is_server == true and "host" or "client" }
+        local rc = controller()
+        copied.run_id = run_id(rc)
+        for name, value in pairs(fields or {}) do
+            local kind = type(value)
+            if kind == "string" or kind == "number" or kind == "boolean" then copied[name] = value end
+        end
+        local signature = render(feature, result("APPLY_OBSERVED", label, copied))
+        if last[feature] and last[feature].signature == signature then return end
+        last[feature] = { scope = key, fields = copied, label = label, signature = signature }
+        local used = budgets[feature] or 0
+        if used >= 24 then return end
+        budgets[feature] = used + 1
+        if rawget(_G, "printf") then pcall(printf, "%s", render(feature, result("APPLY_OBSERVED", label, copied))) end
+    end'
+                'return tostring(v):gsub("[%c|]", " "):sub(1, 180)'
+                'if key ~= scope then scope, last, budgets = key, {}, {} end'
+                'local key = tostring(rc) .. ":" .. tostring(run_id(rc)) .. ":" .. tostring(rc and rc._ct_evidence_generation) .. ":" .. tostring(level)'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua';Tokens=@('String:scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence',')','(','mod',',','{')}
+            )
+        }
+        @{
+            ModId='ct'; ModTree='12bac017f755226f0035ea8e61cad208a3a21ac1'
+            Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence.lua'
+            Marker='[ct:288]'; Signature='[ct:288] APPLY_OBSERVED registry restored/read back | %s'; AddRoute=$true
+            Bound='at most24 automatic attempts for literal feature288 per current controller/run/generation/level context; scalar payload and identical-signature deduplication; not a manual-verifier verdict'
+            EmitterAnchors=@(
+                'return "[ct:" .. feature .. "] " .. r.status .. " " .. scalar(r.reason) .. " | " .. table.concat(fields, " ")'
+                'pcall(printf, "%s", render(feature, result("APPLY_OBSERVED", label, copied)))'
+                'E.record("288", label, {'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_boon_repairs.lua';Tokens=@('mod','.','_ct_apply_evidence','.','call','(','String:anath_registry',',','String:registry restored/read back',')')}
+            )
+            GuardAnchors=@(
+                'function E.record(feature, label, fields)
+        local _, level, key = context()
+        local copied = { level = level, role = Managers and Managers.player and Managers.player.is_server == true and "host" or "client" }
+        local rc = controller()
+        copied.run_id = run_id(rc)
+        for name, value in pairs(fields or {}) do
+            local kind = type(value)
+            if kind == "string" or kind == "number" or kind == "boolean" then copied[name] = value end
+        end
+        local signature = render(feature, result("APPLY_OBSERVED", label, copied))
+        if last[feature] and last[feature].signature == signature then return end
+        last[feature] = { scope = key, fields = copied, label = label, signature = signature }
+        local used = budgets[feature] or 0
+        if used >= 24 then return end
+        budgets[feature] = used + 1
+        if rawget(_G, "printf") then pcall(printf, "%s", render(feature, result("APPLY_OBSERVED", label, copied))) end
+    end'
+                'return tostring(v):gsub("[%c|]", " "):sub(1, 180)'
+                'if key ~= scope then scope, last, budgets = key, {}, {} end'
+                'local key = tostring(rc) .. ":" .. tostring(run_id(rc)) .. ":" .. tostring(rc and rc._ct_evidence_generation) .. ":" .. tostring(level)'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua';Tokens=@('String:scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence',')','(','mod',',','{')}
+            )
+        }
+        @{
+            ModId='ct'; ModTree='12bac017f755226f0035ea8e61cad208a3a21ac1'
+            Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence.lua'
+            Marker='[ct:288]'; Signature='[ct:288] APPLY_OBSERVED post-native add active readback: %s | %s'; AddRoute=$true
+            Bound='at most24 automatic attempts for literal feature288 per current controller/run/generation/level context; scalar payload and identical-signature deduplication; not a manual-verifier verdict'
+            EmitterAnchors=@(
+                'return "[ct:" .. feature .. "] " .. r.status .. " " .. scalar(r.reason) .. " | " .. table.concat(fields, " ")'
+                'pcall(printf, "%s", render(feature, result("APPLY_OBSERVED", label, copied)))'
+                'E.record("288", "post-native add active readback: " .. r.reason, r.fields)'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_verify_runtime.lua';Tokens=@('local','result','=','pack','(','func','(','self',',','template_name',',','params',')',')','evidence','(','String:anath_after',',','self',')','return','unpack','(','result',',','1',',','result','.','n',')')}
+            )
+            GuardAnchors=@(
+                'function E.record(feature, label, fields)
+        local _, level, key = context()
+        local copied = { level = level, role = Managers and Managers.player and Managers.player.is_server == true and "host" or "client" }
+        local rc = controller()
+        copied.run_id = run_id(rc)
+        for name, value in pairs(fields or {}) do
+            local kind = type(value)
+            if kind == "string" or kind == "number" or kind == "boolean" then copied[name] = value end
+        end
+        local signature = render(feature, result("APPLY_OBSERVED", label, copied))
+        if last[feature] and last[feature].signature == signature then return end
+        last[feature] = { scope = key, fields = copied, label = label, signature = signature }
+        local used = budgets[feature] or 0
+        if used >= 24 then return end
+        budgets[feature] = used + 1
+        if rawget(_G, "printf") then pcall(printf, "%s", render(feature, result("APPLY_OBSERVED", label, copied))) end
+    end'
+                'return tostring(v):gsub("[%c|]", " "):sub(1, 180)'
+                'if key ~= scope then scope, last, budgets = key, {}, {} end'
+                'local key = tostring(rc) .. ":" .. tostring(run_id(rc)) .. ":" .. tostring(rc and rc._ct_evidence_generation) .. ":" .. tostring(level)'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua';Tokens=@('String:scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence',')','(','mod',',','{')}
+            )
+        }
+        @{
+            ModId='ct'; ModTree='12bac017f755226f0035ea8e61cad208a3a21ac1'
+            Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence.lua'
+            Marker='[ct:460]'; Signature='[ct:460] APPLY_OBSERVED difficulty getter return | %s'; AddRoute=$true
+            Bound='at most24 automatic attempts for literal feature460 per current controller/run/generation/level context; scalar payload and identical-signature deduplication; not a manual-verifier verdict'
+            EmitterAnchors=@(
+                'return "[ct:" .. feature .. "] " .. r.status .. " " .. scalar(r.reason) .. " | " .. table.concat(fields, " ")'
+                'pcall(printf, "%s", render(feature, result("APPLY_OBSERVED", label, copied)))'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_verify_runtime.lua';Tokens=@('evidence','(','String:record',',','String:460',',','String:difficulty getter return',',','{')}
+            )
+            GuardAnchors=@(
+                'function E.record(feature, label, fields)
+        local _, level, key = context()
+        local copied = { level = level, role = Managers and Managers.player and Managers.player.is_server == true and "host" or "client" }
+        local rc = controller()
+        copied.run_id = run_id(rc)
+        for name, value in pairs(fields or {}) do
+            local kind = type(value)
+            if kind == "string" or kind == "number" or kind == "boolean" then copied[name] = value end
+        end
+        local signature = render(feature, result("APPLY_OBSERVED", label, copied))
+        if last[feature] and last[feature].signature == signature then return end
+        last[feature] = { scope = key, fields = copied, label = label, signature = signature }
+        local used = budgets[feature] or 0
+        if used >= 24 then return end
+        budgets[feature] = used + 1
+        if rawget(_G, "printf") then pcall(printf, "%s", render(feature, result("APPLY_OBSERVED", label, copied))) end
+    end'
+                'return tostring(v):gsub("[%c|]", " "):sub(1, 180)'
+                'if key ~= scope then scope, last, budgets = key, {}, {} end'
+                'local key = tostring(rc) .. ":" .. tostring(run_id(rc)) .. ":" .. tostring(rc and rc._ct_evidence_generation) .. ":" .. tostring(level)'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua';Tokens=@('String:scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence',')','(','mod',',','{')}
+            )
+        }
+        @{
+            ModId='ct'; ModTree='12bac017f755226f0035ea8e61cad208a3a21ac1'
+            Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence.lua'
+            Marker='[ct:460coin]'; Signature='[ct:460coin] APPLY_OBSERVED coin multiplier return | %s'; AddRoute=$true
+            Bound='at most24 automatic attempts for literal feature460coin per current controller/run/generation/level context; scalar payload and identical-signature deduplication; not a manual-verifier verdict'
+            EmitterAnchors=@(
+                'return "[ct:" .. feature .. "] " .. r.status .. " " .. scalar(r.reason) .. " | " .. table.concat(fields, " ")'
+                'pcall(printf, "%s", render(feature, result("APPLY_OBSERVED", label, copied)))'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_verify_runtime.lua';Tokens=@('evidence','(','String:record',',','String:460coin',',','String:coin multiplier return',',','{')}
+            )
+            GuardAnchors=@(
+                'function E.record(feature, label, fields)
+        local _, level, key = context()
+        local copied = { level = level, role = Managers and Managers.player and Managers.player.is_server == true and "host" or "client" }
+        local rc = controller()
+        copied.run_id = run_id(rc)
+        for name, value in pairs(fields or {}) do
+            local kind = type(value)
+            if kind == "string" or kind == "number" or kind == "boolean" then copied[name] = value end
+        end
+        local signature = render(feature, result("APPLY_OBSERVED", label, copied))
+        if last[feature] and last[feature].signature == signature then return end
+        last[feature] = { scope = key, fields = copied, label = label, signature = signature }
+        local used = budgets[feature] or 0
+        if used >= 24 then return end
+        budgets[feature] = used + 1
+        if rawget(_G, "printf") then pcall(printf, "%s", render(feature, result("APPLY_OBSERVED", label, copied))) end
+    end'
+                'return tostring(v):gsub("[%c|]", " "):sub(1, 180)'
+                'if key ~= scope then scope, last, budgets = key, {}, {} end'
+                'local key = tostring(rc) .. ":" .. tostring(run_id(rc)) .. ":" .. tostring(rc and rc._ct_evidence_generation) .. ":" .. tostring(level)'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua';Tokens=@('String:scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence',')','(','mod',',','{')}
+            )
+        }
+        @{
+            ModId='ct'; ModTree='12bac017f755226f0035ea8e61cad208a3a21ac1'
+            Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence.lua'
+            Marker='[ct:460credit]'; Signature='[ct:460credit] APPLY_OBSERVED native coin credit readback | %s'; AddRoute=$true
+            Bound='at most24 automatic attempts for literal feature460credit per current controller/run/generation/level context; scalar payload and identical-signature deduplication; not a manual-verifier verdict'
+            EmitterAnchors=@(
+                'return "[ct:" .. feature .. "] " .. r.status .. " " .. scalar(r.reason) .. " | " .. table.concat(fields, " ")'
+                'pcall(printf, "%s", render(feature, result("APPLY_OBSERVED", label, copied)))'
+                'E.record("460credit", "native coin credit readback", {'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_verify_runtime.lua';Tokens=@('local','result','=','pack','(','func','(','self',',','unpack','(','args',',','1',',','n',')',')',')','evidence','(','String:coin_applied',',','self',',','raw_amount',',','args','[','1',']',',','before',')','return','unpack','(','result',',','1',',','result','.','n',')')}
+            )
+            GuardAnchors=@(
+                'function E.record(feature, label, fields)
+        local _, level, key = context()
+        local copied = { level = level, role = Managers and Managers.player and Managers.player.is_server == true and "host" or "client" }
+        local rc = controller()
+        copied.run_id = run_id(rc)
+        for name, value in pairs(fields or {}) do
+            local kind = type(value)
+            if kind == "string" or kind == "number" or kind == "boolean" then copied[name] = value end
+        end
+        local signature = render(feature, result("APPLY_OBSERVED", label, copied))
+        if last[feature] and last[feature].signature == signature then return end
+        last[feature] = { scope = key, fields = copied, label = label, signature = signature }
+        local used = budgets[feature] or 0
+        if used >= 24 then return end
+        budgets[feature] = used + 1
+        if rawget(_G, "printf") then pcall(printf, "%s", render(feature, result("APPLY_OBSERVED", label, copied))) end
+    end'
+                'return tostring(v):gsub("[%c|]", " "):sub(1, 180)'
+                'if key ~= scope then scope, last, budgets = key, {}, {} end'
+                'local key = tostring(rc) .. ":" .. tostring(run_id(rc)) .. ":" .. tostring(rc and rc._ct_evidence_generation) .. ":" .. tostring(level)'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua';Tokens=@('String:scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence',')','(','mod',',','{')}
+            )
+        }
+        @{
+            ModId='ct'; ModTree='12bac017f755226f0035ea8e61cad208a3a21ac1'
+            Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence.lua'
+            Marker='[ct:471]'; Signature='[ct:471] APPLY_OBSERVED placement return (not enemy-spawn/completion proof) | %s'; AddRoute=$true
+            Bound='at most24 automatic attempts for literal feature471 per current controller/run/generation/level context; scalar payload and identical-signature deduplication; not a manual-verifier verdict'
+            EmitterAnchors=@(
+                'return "[ct:" .. feature .. "] " .. r.status .. " " .. scalar(r.reason) .. " | " .. table.concat(fields, " ")'
+                'pcall(printf, "%s", render(feature, result("APPLY_OBSERVED", label, copied)))'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_verify_runtime.lua';Tokens=@('evidence','(','String:record',',','String:471',',','String:placement return (not enemy-spawn/completion proof)',',','{')}
+            )
+            GuardAnchors=@(
+                'function E.record(feature, label, fields)
+        local _, level, key = context()
+        local copied = { level = level, role = Managers and Managers.player and Managers.player.is_server == true and "host" or "client" }
+        local rc = controller()
+        copied.run_id = run_id(rc)
+        for name, value in pairs(fields or {}) do
+            local kind = type(value)
+            if kind == "string" or kind == "number" or kind == "boolean" then copied[name] = value end
+        end
+        local signature = render(feature, result("APPLY_OBSERVED", label, copied))
+        if last[feature] and last[feature].signature == signature then return end
+        last[feature] = { scope = key, fields = copied, label = label, signature = signature }
+        local used = budgets[feature] or 0
+        if used >= 24 then return end
+        budgets[feature] = used + 1
+        if rawget(_G, "printf") then pcall(printf, "%s", render(feature, result("APPLY_OBSERVED", label, copied))) end
+    end'
+                'return tostring(v):gsub("[%c|]", " "):sub(1, 180)'
+                'if key ~= scope then scope, last, budgets = key, {}, {} end'
+                'local key = tostring(rc) .. ":" .. tostring(run_id(rc)) .. ":" .. tostring(rc and rc._ct_evidence_generation) .. ":" .. tostring(level)'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua';Tokens=@('String:scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence',')','(','mod',',','{')}
+            )
+        }
+        @{
+            ModId='ct'; ModTree='12bac017f755226f0035ea8e61cad208a3a21ac1'
+            Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence.lua'
+            Marker='[ct:471]'; Signature='[ct:471] APPLY_OBSERVED native placement threw (no completion claim) | %s'; AddRoute=$true
+            Bound='at most24 automatic attempts for literal feature471 per current controller/run/generation/level context; scalar payload and identical-signature deduplication; not a manual-verifier verdict'
+            EmitterAnchors=@(
+                'return "[ct:" .. feature .. "] " .. r.status .. " " .. scalar(r.reason) .. " | " .. table.concat(fields, " ")'
+                'pcall(printf, "%s", render(feature, result("APPLY_OBSERVED", label, copied)))'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_verify_runtime.lua';Tokens=@('evidence','(','String:record',',','String:471',',','String:native placement threw (no completion claim)',',','{')}
+            )
+            GuardAnchors=@(
+                'function E.record(feature, label, fields)
+        local _, level, key = context()
+        local copied = { level = level, role = Managers and Managers.player and Managers.player.is_server == true and "host" or "client" }
+        local rc = controller()
+        copied.run_id = run_id(rc)
+        for name, value in pairs(fields or {}) do
+            local kind = type(value)
+            if kind == "string" or kind == "number" or kind == "boolean" then copied[name] = value end
+        end
+        local signature = render(feature, result("APPLY_OBSERVED", label, copied))
+        if last[feature] and last[feature].signature == signature then return end
+        last[feature] = { scope = key, fields = copied, label = label, signature = signature }
+        local used = budgets[feature] or 0
+        if used >= 24 then return end
+        budgets[feature] = used + 1
+        if rawget(_G, "printf") then pcall(printf, "%s", render(feature, result("APPLY_OBSERVED", label, copied))) end
+    end'
+                'return tostring(v):gsub("[%c|]", " "):sub(1, 180)'
+                'if key ~= scope then scope, last, budgets = key, {}, {} end'
+                'local key = tostring(rc) .. ":" .. tostring(run_id(rc)) .. ":" .. tostring(rc and rc._ct_evidence_generation) .. ":" .. tostring(level)'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua';Tokens=@('String:scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence',')','(','mod',',','{')}
+            )
+        }
+        @{
+            ModId='ct'; ModTree='12bac017f755226f0035ea8e61cad208a3a21ac1'
+            Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_boon_repairs.lua'
+            Marker='[ct:288]'; Signature='[ct:288] add parent=%s child=%s stat=%s mult=%s event=%s n=%d'
+            Bound='at most8 add receipts per installed boon-repair factory'
+            EmitterAnchors=@(
+                'pcall(printf, "[ct:288] add parent=%s child=%s stat=%s mult=%s event=%s n=%d",'
+            )
+            GuardAnchors=@(
+                'local add_receipts = 0'
+                'if add_receipts < 8 then add_receipts = add_receipts + 1'
+            )
+        }
+        @{
+            ModId='ct'; ModTree='12bac017f755226f0035ea8e61cad208a3a21ac1'
+            Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_progressive_modifier_runtime.lua'
+            Marker='[ct:289]'; Signature='[ct:289] stack %d/%d node=%s curse=%s extra=%s completed=%s ladder=%s extras=%s list=%d'; AddRoute=$true
+            Bound='at most12 successful apply rows per idempotent installed runtime; error and installation rows are not granted'
+            EmitterAnchors=@(
+                'local log = ctx.log or function(fmt, ...) pcall(printf, fmt, ...) end'
+                'log("[ct:289] stack %d/%d node=%s curse=%s extra=%s completed=%s ladder=%s extras=%s list=%d",'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_feature_leaf.lua';Tokens=@('state','.','modifiers','=','mod',':','dofile','(','String:scripts/mods/chaos_wastes_tweaker/_ct_progressive_modifier_runtime',')','(','{','mod','=','mod',',','effective_setting','=','ctx','.','effective_setting',',','is_curse_disabled','=','ctx','.','is_curse_disabled',',','}',')')}
+            )
+            GuardAnchors=@(
+                'LOG_CAP = 12'
+                'if state.log_rows < state.LOG_CAP then state.log_rows = state.log_rows + 1'
+                'if mod._ct_progressive_modifier_runtime_state then return mod._ct_progressive_modifier_runtime_state end'
+            )
+        }
+        @{
+            ModId='ct'; ModTree='12bac017f755226f0035ea8e61cad208a3a21ac1'
+            Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_progressive_elite_runtime.lua'
+            Marker='[ct:323]'; Signature='[ct:323] apply %d/%d breed=%s recipe=%s spawn=%s completed=%d rate=%d'; AddRoute=$true
+            Bound='at most12 successful apply rows per idempotent installed runtime; error and installation rows are not granted'
+            EmitterAnchors=@(
+                'local log = ctx.log or function(fmt, ...) pcall(printf, fmt, ...) end'
+                'log("[ct:323] apply %d/%d breed=%s recipe=%s spawn=%s completed=%d rate=%d",'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_feature_leaf.lua';Tokens=@('state','.','elites','=','mod',':','dofile','(','String:scripts/mods/chaos_wastes_tweaker/_ct_progressive_elite_runtime',')','(','{','mod','=','mod',',','effective_setting','=','ctx','.','effective_setting',',','}',')')}
+            )
+            GuardAnchors=@(
+                'LOG_CAP = 12'
+                'if state.log_rows < state.LOG_CAP then state.log_rows = state.log_rows + 1'
+                'if mod._ct_progressive_elite_runtime_state then return mod._ct_progressive_elite_runtime_state end'
+            )
+        }
+        @{
+            ModId='ct'; ModTree='12bac017f755226f0035ea8e61cad208a3a21ac1'
+            Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_miasma.lua'
+            Marker='[ct:361]'; Signature='[ct:361] '
+            Bound='at most32 attempts across this one physical concatenation emitter per loaded module; no other361 emitter is granted'
+            EmitterAnchors=@(
+                'pcall(printf, "[ct:361] " .. fmt, ...)'
+            )
+            GuardAnchors=@(
+                'local log_count = 0'
+                'if log_count >= 32 then return end log_count = log_count + 1'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_feature_leaf.lua';Tokens=@('mod',':','dofile','(','String:scripts/mods/chaos_wastes_tweaker/_ct_miasma',')')}
+            )
+        }
+        @{
+            ModId='ct'; ModTree='12bac017f755226f0035ea8e61cad208a3a21ac1'
+            Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_boon_pricing_runtime.lua'
+            Marker='[ct:467]'; Signature='[ct:467] purchase accepted boon=%s price=%d tier=%s'; AddRoute=$true
+            Bound='at most24 total attempts across this installed pricing report closure; only the exact accepted-purchase route is granted'
+            EmitterAnchors=@(
+                'pcall(printf, "[ct:467] " .. fmt, ...)'
+                'report("purchase accepted boon=%s price=%d tier=%s", power_up.name, price,'
+            )
+            GuardAnchors=@(
+                'local report_count = 0'
+                'if report_count >= 24 then return end report_count = report_count + 1'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_shop.lua';Tokens=@('mod','.','_ct_boon_pricing_runtime','=','mod',':','dofile','(','root','..','String:_ct_boon_pricing_runtime',')')}
+            )
+        }
+        @{
+            ModId='ct'; ModTree='12bac017f755226f0035ea8e61cad208a3a21ac1'
+            Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_chest_rescue.lua'
+            Marker='[ct:299]'; Signature='[ct:299] key=%s %s move-before-free retained=%s corrections=%d'
+            Bound='one terminal receipt per completed pending rescue entry; entry removed immediately by both processing owners;30-second transaction/four errors/one correction are not global state-row caps'
+            EmitterAnchors=@(
+                'pcall(printf, "[ct:299] key=%s %s move-before-free retained=%s corrections=%d", tostring(key), result, tostring(retained), entry.corrections or 0) return true'
+            )
+            GuardAnchors=@(
+                'if process_now and mod._ct299_process(entry.key, entry, 0) then mod._ct_pending_team_teleport[entry.key] = nil end'
+                'if mod._ct299_process(key, entry, dt) then pending[key] = nil end'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_chest_revive_policy.lua';Tokens=@('M','.','TIMEOUT_SECONDS','=','30','M','.','MAX_ERRORS','=','4','M','.','MAX_CORRECTIONS','=','1','M','.','RETAIN_DISTANCE_SQ','=','9')}
+                'elseif action == "complete" then local result = retained == false and "DEGRADED" or "PASS"'
+            )
+        }
+        @{
+            ModId='ct'; ModTree='12bac017f755226f0035ea8e61cad208a3a21ac1'
+            Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_dev_mission.lua'
+            Marker='[ct:505]'; Signature='[ct:505] single_mission_load level=%s diff=%s progress=%s curse=%s mod1=%s mod2=%s starting_boons=%d belakor=%s'
+            Bound='one attempt plus at most one failure receipt per explicit single-mission load invocation from registered command or menu hotkey; no unrelated505 route is granted'
+            EmitterAnchors=@(
+                'pcall(printf, "[ct:505] single_mission_load level=%s diff=%s progress=%s curse=%s mod1=%s mod2=%s starting_boons=%d belakor=%s",'
+            )
+            GuardAnchors=@(
+                'local function do_load(opts)'
+                'local progress = Cat.sanitize_progress(opts.progress)'
+                'local ok, err = pcall(function() mech:debug_load_deus_level(level_key, difficulty, progress, level_seed, with_belakor) end)'
+                'if not ok then'
+                'mod.ct_dev_load_selected_mission = function()'
+                'mod:command("ct_load_mission",'
+                'mod._ct_dev_mission_do_load = do_load'
+            )
+        }
+        @{
+            ModId='ct'; ModTree='12bac017f755226f0035ea8e61cad208a3a21ac1'
+            Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_dev_mission.lua'
+            Marker='[ct:505]'; Signature='[ct:505] single_mission_load FAILED level=%s err=%s'
+            Bound='one attempt plus at most one failure receipt per explicit single-mission load invocation from registered command or menu hotkey; no unrelated505 route is granted'
+            EmitterAnchors=@(
+                'pcall(printf, "[ct:505] single_mission_load FAILED level=%s err=%s",'
+            )
+            GuardAnchors=@(
+                'local function do_load(opts)'
+                'local progress = Cat.sanitize_progress(opts.progress)'
+                'local ok, err = pcall(function() mech:debug_load_deus_level(level_key, difficulty, progress, level_seed, with_belakor) end)'
+                'if not ok then'
+                'mod.ct_dev_load_selected_mission = function()'
+                'mod:command("ct_load_mission",'
+                'mod._ct_dev_mission_do_load = do_load'
+            )
+        }
+        @{
+            ModId='ct'; ModTree='12bac017f755226f0035ea8e61cad208a3a21ac1'
+            Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_tab_collectibles_layout.lua'
+            Marker='[ct:533]'; Signature='[ct:533] deus collectibles build failed source=%s (pane remains vanilla): %s'
+            Bound='at most one failure per player-list setup generation; failure latch is set before printf and blocks draw retries'
+            EmitterAnchors=@(
+                'pcall(printf, "[ct:533] deus collectibles build failed source=%s (pane remains vanilla): %s",'
+            )
+            GuardAnchors=@(
+                'if self._ct_deus_collectibles then return true end if self._ct_deus_collectibles_build_failed then return false end'
+                'self._ct_deus_collectibles_build_failed = true'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_collectibles.lua';Tokens=@('mod',':','hook','(','String:IngamePlayerListUI',',','String:_setup_mission_data',',','function','(','func',',','self',',','level_settings',')','self','.','_ct_deus_collectibles','=','nil','self','.','_ct_deus_collectibles_build_failed','=','nil')}
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_collectibles.lua';Tokens=@('local','layout','=','mod',':','dofile','(','String:scripts/mods/chaos_wastes_tweaker/_ct_tab_collectibles_layout',')')}
+            )
+        }
+        @{
+            ModId='ct'; ModTree='12bac017f755226f0035ea8e61cad208a3a21ac1'
+            Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_tab_collectibles_layout.lua'
+            Marker='[ct:533]'; Signature='[ct:533] Tab-hold collectibles -> deus counters source=%s (Chests of Trials + Pilgrim''s Coins); adventure tome/grim/dice counters suppressed'
+            Bound='at most one successful construction per player-list setup generation; retained widget set before printf blocks draw retries'
+            EmitterAnchors=@(
+                'pcall(printf, "[ct:533] Tab-hold collectibles -> deus counters source=%s (Chests of Trials + Pilgrim''s Coins); adventure tome/grim/dice counters suppressed",'
+            )
+            GuardAnchors=@(
+                'if self._ct_deus_collectibles then return true end if self._ct_deus_collectibles_build_failed then return false end'
+                'self._ct_deus_collectibles = built'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_collectibles.lua';Tokens=@('mod',':','hook','(','String:IngamePlayerListUI',',','String:_setup_mission_data',',','function','(','func',',','self',',','level_settings',')','self','.','_ct_deus_collectibles','=','nil','self','.','_ct_deus_collectibles_build_failed','=','nil')}
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_collectibles.lua';Tokens=@('local','layout','=','mod',':','dofile','(','String:scripts/mods/chaos_wastes_tweaker/_ct_tab_collectibles_layout',')')}
+            )
+        }
+        @{
+            ModId='ct'; ModTree='12bac017f755226f0035ea8e61cad208a3a21ac1'
+            Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_tab_collectibles_layout.lua'
+            Marker='[ct:571]'; Signature='[ct:571] native collectible offsets count=%d rows=%d offsets=[%s] right=%.1f available=%.1f fit=%s source=IngamePlayerListUI._setup_mission_data'
+            Bound='at most one offsets receipt per retained widget-layout generation; layout signature latched before printf, native setup owns reset'
+            EmitterAnchors=@(
+                'pcall(printf, "[ct:571] native collectible offsets count=%d rows=%d offsets=[%s] right=%.1f available=%.1f fit=%s source=IngamePlayerListUI._setup_mission_data",'
+            )
+            GuardAnchors=@(
+                'if cw.layout_signature == LAYOUT_MARKER then return end'
+                'cw.layout_signature = LAYOUT_MARKER cw.layout = layout'
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_collectibles.lua';Tokens=@('mod',':','hook','(','String:IngamePlayerListUI',',','String:_setup_mission_data',',','function','(','func',',','self',',','level_settings',')','self','.','_ct_deus_collectibles','=','nil','self','.','_ct_deus_collectibles_build_failed','=','nil')}
+                @{Source='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_collectibles.lua';Tokens=@('local','layout','=','mod',':','dofile','(','String:scripts/mods/chaos_wastes_tweaker/_ct_tab_collectibles_layout',')')}
+            )
+        }
         # Public GUI290: only this registered check's one-shot verdict, never
         # its [gut:1414] siblings. The latch is consumed before printf can fail.
         @{
@@ -1133,7 +1752,7 @@ end
             )
             GuardAnchors=@(
                 @{Tokens=@('emitted','>=','MAX_DIAGNOSTICS')}
-                @{Tokens=@('seen','[','signature',']','=','true')}
+                'seen [ signature ] = true'
                 @{Tokens=@('emitted','=','emitted','+','1')}
             )
         }
@@ -1147,8 +1766,8 @@ end
                 @{Tokens=@('pcall','(','printf',',','String:[cwv:567] cache_invalidated=%s rebuild=%s skin=%s association=%s owner=%s combination=%s rarity=%s cache_item=%s')}
             )
             GuardAnchors=@(
-                @{Tokens=@('mod','.', '_cwv567_skin_keys','=','{','String:cwv_es_sword_and_mace_wpn_emp_sword_02_t1_wpn_emp_mace_03_t1',',','String:cwv_es_dual_maces_es_1h_mace_skin_02_runed_01',',','String:cwv_es_axe_shield_wpn_emp_shield_03__axe_02_t2',',','}')}
-                @{Tokens=@('for','_',',','skin_key','in','ipairs','(','mod','.', '_cwv567_skin_keys',')','do')}
+                'mod . _cwv567_skin_keys = { "cwv_es_sword_and_mace_wpn_emp_sword_02_t1_wpn_emp_mace_03_t1" , "cwv_es_dual_maces_es_1h_mace_skin_02_runed_01" , "cwv_es_axe_shield_wpn_emp_shield_03__axe_02_t2" , }'
+                'for _ , skin_key in ipairs ( mod . _cwv567_skin_keys ) do'
             )
         }
         @{
@@ -1158,7 +1777,7 @@ end
             Signature='[cos:373] receiver coverage OK: no magic/runed shield family gaps'
             Bound='one latched boot validation pass; zero-gap terminal row occurs once'
             EmitterAnchors=@(
-                @{Tokens=@('local','pf','=','rawget','(','_G',',','String:printf',')')}
+                'local pf = rawget ( _G , "printf" )'
                 @{Tokens=@('pf','(','String:[cos:373] receiver coverage OK: no magic/runed shield family gaps',')')}
             )
             GuardAnchors=@(
@@ -1201,13 +1820,13 @@ end
             Signature='[cos:704] summary inspected=%d suspects=%d emitted=%d truncated=%s signature_truncated=%s signature_bytes=%d'
             Bound='four signature-deduplicated captures, each capped at 56 emitted rows'
             EmitterAnchors=@(
-                @{Tokens=@('local','emitter','=','rawget','(','_G',',','String:printf',')')}
-                @{Tokens=@('pcall','(','emitter',',','format',',','...')}
+                'local emitter = rawget ( _G , "printf" )'
+                'pcall ( emitter , format , ...'
                 @{Tokens=@('emit','(','String:[cos:704] summary inspected=%d suspects=%d emitted=%d truncated=%s signature_truncated=%s signature_bytes=%d')}
             )
             GuardAnchors=@(
                 @{Tokens=@('_issue704_capture_count','>=','_ISSUE704_CAPTURE_CAP')}
-                @{Tokens=@('if','emitted','>=','_ISSUE704_ENTRY_CAP','then','return','false','end')}
+                'if emitted >= _ISSUE704_ENTRY_CAP then return false end'
             )
         }
         @{
@@ -1218,11 +1837,11 @@ end
             Bound='absolute three-run probe cap'
             EmitterAnchors=@(
                 @{Tokens=@('String:[cwv:343] status=%s base=%s area=%s pool=%d/%.6f healthy=%s exact_z_scale=%s registration_quarantined=%s')}
-                @{Tokens=@('pcall','(','printf',',','String:%s',',','line',')')}
+                'pcall ( printf , "%s" , line )'
             )
             GuardAnchors=@(
-                @{Tokens=@('M','.','_runs','>=','M','.','MAX_RUNS')}
-                @{Tokens=@('M','.','_runs','=','M','.','_runs','+','1')}
+                'M . _runs >= M . MAX_RUNS'
+                'M . _runs = M . _runs + 1'
             )
         }
         @{
@@ -1232,13 +1851,13 @@ end
             Signature='[crt:699] icon active=true subject=%s buff=%s role=%s template=%s expected=%s icon=%s atlas=%s atlas_id=%s widget=%s widget_icon=%s semantic_match=%s numb_collision=%s hud_widgets=%d hud_capacity=%d hidebuffs=%s hidden=%s priority=%s'
             Bound='state-signature deduplication under an absolute 64-row helper cap'
             EmitterAnchors=@(
-                @{Tokens=@('pcall','(','printf',',','format',',','...')}
+                'pcall ( printf , format , ...'
                 @{Tokens=@('_crt_fk_icon_log','(','String:[crt:699] icon active=true subject=%s buff=%s role=%s template=%s expected=%s icon=%s atlas=%s atlas_id=%s widget=%s widget_icon=%s semantic_match=%s numb_collision=%s hud_widgets=%d hud_capacity=%d hidebuffs=%s hidden=%s priority=%s')}
             )
             GuardAnchors=@(
                 @{Tokens=@('_crt_fk_icon_log_count','>=','_CRT_FK_ICON_LOG_CAP')}
                 @{Tokens=@('_crt_fk_icon_log_count','=','_crt_fk_icon_log_count','+','1')}
-                @{Tokens=@('if','_crt_fk_icon_last','[','state_key',']','~=','signature','then')}
+                'if _crt_fk_icon_last [ state_key ] ~= signature then'
             )
         }
         @{
@@ -1293,8 +1912,8 @@ end
             Signature='[ct:skull52] %s'
             Bound='absolute 320 census plus 256 lifecycle rows, with lower per-session caps and signature deduplication'
             EmitterAnchors=@(
-                @{Tokens=@('local','engine_printf','=','rawget','(','_G',',','String:printf',')')}
-                @{Tokens=@('pcall','(','engine_printf',',','String:[ct:skull52] %s',',','line',')')}
+                'local engine_printf = rawget ( _G , "printf" )'
+                'pcall ( engine_printf , "[ct:skull52] %s" , line )'
             )
             GuardAnchors=@(
                 @{Tokens=@('records','>=','CENSUS_RECORD_CAP_TOTAL')}
@@ -1310,12 +1929,12 @@ end
             Signature='[gt:488] bot-hazard type=%s milestone=%s active_before=%d active_after=%d damage_in=%.3f damage_out=%.3f record=%d/%d'
             Bound='signature-deduplicated hazard milestones under an absolute sixteen-row cap'
             EmitterAnchors=@(
-                @{Tokens=@('local','_printf','=','rawget','(','_G',',','String:printf',')')}
+                'local _printf = rawget ( _G , "printf" )'
                 @{Tokens=@('pcall','(','_printf',',','String:[gt:488] bot-hazard type=%s milestone=%s active_before=%d active_after=%d damage_in=%.3f damage_out=%.3f record=%d/%d')}
             )
             GuardAnchors=@(
                 @{Tokens=@('log_records','<','MAX_LOG_RECORDS')}
-                @{Tokens=@('ledger','.','_logged','[','log_key',']','=','true')}
+                'ledger . _logged [ log_key ] = true'
                 @{Tokens=@('log_records','=','log_records','+','1')}
             )
         }
@@ -1326,12 +1945,12 @@ end
             Signature='[gt:488] ratling-shield state=%d/%d wielded=%s wielded_template=%s wielded_shield=%s melee_template=%s melee_shield=%s blocking=%s projectile_hit=%s victim_self=%s taking_cover=%s input=%s mutation=0'
             Bound='signature-deduplicated Ratling/shield states under an absolute twelve-row cap'
             EmitterAnchors=@(
-                @{Tokens=@('local','_printf','=','rawget','(','_G',',','String:printf',')')}
+                'local _printf = rawget ( _G , "printf" )'
                 @{Tokens=@('pcall','(','_printf',',','String:[gt:488] ratling-shield state=%d/%d wielded=%s wielded_template=%s wielded_shield=%s melee_template=%s melee_shield=%s blocking=%s projectile_hit=%s victim_self=%s taking_cover=%s input=%s mutation=0')}
             )
             GuardAnchors=@(
                 @{Tokens=@('_shield_probe_count','>=','SHIELD_PROBE_CAP')}
-                @{Tokens=@('_shield_probe_seen','[','signature',']','=','true')}
+                '_shield_probe_seen [ signature ] = true'
                 @{Tokens=@('_shield_probe_count','=','_shield_probe_count','+','1')}
             )
         }
@@ -1346,8 +1965,8 @@ end
                 @{Source='weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua';Tokens=@('mod',':','command','(','String:woc_boss_catalog')}
             )
             GuardAnchors=@(
-                @{Tokens=@('local','results','=','M','.','runtime_authored_snapshot','(',')')}
-                @{Tokens=@('for','i','=','1',',','#','results','do')}
+                'local results = M . runtime_authored_snapshot ( )'
+                'for i = 1 , # results do'
             )
         }
         @{
@@ -1357,11 +1976,11 @@ end
             Signature='[cos:656] registered skin=%s donor=%s vanilla_geometry=true enabled=%s'
             Bound='one successful registration receipt under the module-lifetime registered latch'
             EmitterAnchors=@(
-                @{Tokens=@('local','engine_printf','=','rawget','(','_G',',','String:printf',')')}
+                'local engine_printf = rawget ( _G , "printf" )'
                 @{Tokens=@('pcall','(','engine_printf',',','String:[cos:656] registered skin=%s donor=%s vanilla_geometry=true enabled=%s')}
             )
             GuardAnchors=@(
-                @{Tokens=@('if','M','.','registered','then','M','.','sync_toggle','(',')',';','return','true','end')}
+                'if M . registered then M . sync_toggle ( ) ; return true end'
                 @{Tokens=@('M','.','registered','=','true')}
             )
         }
@@ -1378,7 +1997,7 @@ end
                 @{Source='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_husk_path.lua';Tokens=@('_om','.','outrider_animation','.','emit_evidence','(','printf')}
             )
             GuardAnchors=@(
-                @{Tokens=@('evidence_seen','[','key',']','or','evidence_count','>=','M','.','EVIDENCE_LIMIT')}
+                'evidence_seen [ key ] or evidence_count >= M . EVIDENCE_LIMIT'
                 @{Tokens=@('evidence_seen','[','key',']','=','true')}
                 @{Tokens=@('evidence_count','=','evidence_count','+','1')}
             )
@@ -1393,9 +2012,9 @@ end
                 @{Tokens=@('pcall','(','printf',',','String:[ct:xchar105] upgrade-altar slot=%s career=%s rarity=%s pre_key=%s post_key=%s %s')}
             )
             GuardAnchors=@(
-                @{Tokens=@('mod',':','hook','(','String:DeusChestExtension',',','String:_generate_upgraded_weapon',',','function')}
+                'mod : hook ( "DeusChestExtension" , "_generate_upgraded_weapon" , function'
                 'local a, b = func(self, weapon, slot_name, rarity, eff_go_id, profile_index, career_index)'
-                @{Tokens=@('return','a',',','b','end',')')}
+                'return a , b end )'
             )
         }
         @{
@@ -1405,12 +2024,12 @@ end
             Signature='[et:453] modifier-audit reason=%s modifiers=%d template_missing=%d wire_missing=%d enhancement_missing=%d child_missing=%d child_wire_missing=%d function_missing=%d special=%d boss=%d elite=%d lord=%d behavior_changes=0'
             Bound='one summary per explicit /et_modifier_audit invocation'
             EmitterAnchors=@(
-                @{Tokens=@('local','_printf','=','rawget','(','_G',',','String:printf',')','or','function','(',')','end')}
+                'local _printf = rawget ( _G , "printf" ) or function ( ) end'
                 @{Tokens=@('pcall','(','_printf',',','String:[et:453] modifier-audit reason=%s modifiers=%d template_missing=%d wire_missing=%d enhancement_missing=%d child_missing=%d child_wire_missing=%d function_missing=%d special=%d boss=%d elite=%d lord=%d behavior_changes=0')}
             )
             GuardAnchors=@(
                 @{Tokens=@('mod',':','command','(','String:et_modifier_audit')}
-                @{Tokens=@('local','summary','=','print_details','(','String:command',')')}
+                'local summary = print_details ( "command" )'
             )
         }
         @{
@@ -1420,13 +2039,13 @@ end
             Signature='[et:453] %s family=%s enhancement=%s buff=%s template=%s wire=%s enhancement_contains=%s chain_templates=%d chain_functions=%d chain_gaps=%d capped=%s'
             Bound='one finite fifteen-row catalogue per explicit /et_modifier_audit invocation'
             EmitterAnchors=@(
-                @{Tokens=@('local','_printf','=','rawget','(','_G',',','String:printf',')','or','function','(',')','end')}
+                'local _printf = rawget ( _G , "printf" ) or function ( ) end'
                 @{Tokens=@('pcall','(','_printf',',','String:[et:453] %s family=%s enhancement=%s buff=%s template=%s wire=%s enhancement_contains=%s chain_templates=%d chain_functions=%d chain_gaps=%d capped=%s')}
             )
             GuardAnchors=@(
-                @{Tokens=@('for','i','=','1',',','#','rows','do')}
+                'for i = 1 , # rows do'
                 @{Tokens=@('mod',':','command','(','String:et_modifier_audit')}
-                @{Tokens=@('local','summary','=','print_details','(','String:command',')')}
+                'local summary = print_details ( "command" )'
             )
         }
         @{
@@ -1436,13 +2055,13 @@ end
             Signature='[et:453] live category=%s breed=%s sample=%d/%d eligible=%d eligible_sample=%s rejected_banned=%d rejected_buff=%d rejected_prereq=%d buff=%s health=%s blackboard=%s nav=%s position=%s side=%s race=%s go_id=%s existing_enhancements=%d mutation=0'
             Bound='at most two distinct-breed receipts in each of the four finite enemy categories per module lifetime'
             EmitterAnchors=@(
-                @{Tokens=@('local','_printf','=','rawget','(','_G',',','String:printf',')','or','function','(',')','end')}
+                'local _printf = rawget ( _G , "printf" ) or function ( ) end'
                 @{Tokens=@('pcall','(','_printf',',','String:[et:453] live category=%s breed=%s sample=%d/%d eligible=%d eligible_sample=%s rejected_banned=%d rejected_buff=%d rejected_prereq=%d buff=%s health=%s blackboard=%s nav=%s position=%s side=%s race=%s go_id=%s existing_enhancements=%d mutation=0')}
             )
             GuardAnchors=@(
-                @{Tokens=@('_observed_categories','[','category',']','>=','OBSERVE_PER_CATEGORY')}
-                @{Tokens=@('_observed_breeds','[','name',']','=','true')}
-                @{Tokens=@('_observed_categories','[','category',']','=','_observed_categories','[','category',']','+','1')}
+                '_observed_categories [ category ] >= OBSERVE_PER_CATEGORY'
+                '_observed_breeds [ name ] = true'
+                '_observed_categories [ category ] = _observed_categories [ category ] + 1'
             )
         }
         @{
@@ -1452,12 +2071,12 @@ end
             Signature='[et:453] modifier-audit ready modifiers=%d gaps=%d command=/et_modifier_audit behavior_changes=0'
             Bound='one module-load readiness receipt'
             EmitterAnchors=@(
-                @{Tokens=@('local','_printf','=','rawget','(','_G',',','String:printf',')','or','function','(',')','end')}
+                'local _printf = rawget ( _G , "printf" ) or function ( ) end'
                 @{Tokens=@('pcall','(','_printf',',','String:[et:453] modifier-audit ready modifiers=%d gaps=%d command=/et_modifier_audit behavior_changes=0')}
             )
             GuardAnchors=@(
-                @{Tokens=@('local','_',',','initial_summary','=','audit','(',')')}
-                @{Tokens=@('initial_summary','.','modifiers',',','initial_summary','.','template_missing')}
+                'local _ , initial_summary = audit ( )'
+                'initial_summary . modifiers , initial_summary . template_missing'
             )
         }
         @{
@@ -1467,14 +2086,14 @@ end
             Signature='[cos:518] OWNER-WIELD slot=%s item=%s skin=%s deus_yield=%s'
             Bound='signature-deduplicated owner-wield evidence under a per-channel sixteen-row cap'
             EmitterAnchors=@(
-                @{Tokens=@('local','pf','=','rawget','(','_G',',','String:printf',')')}
-                @{Tokens=@('pf','(','String:[cos:518] ','..','fmt',',','...',')')}
+                'local pf = rawget ( _G , "printf" )'
+                'pf ( "[cos:518] " .. fmt , ... )'
                 'mod._cos518_emit("wield", tostring(item_key) .. "|" .. tostring(skin), "OWNER-WIELD slot=%s item=%s skin=%s deus_yield=%s"'
             )
             GuardAnchors=@(
                 'if ch.seen[dedupe_key] or ch.count >= 16 then return false end'
-                @{Tokens=@('ch','.','seen','[','dedupe_key',']','=','true')}
-                @{Tokens=@('ch','.','count','=','ch','.','count','+','1')}
+                'ch . seen [ dedupe_key ] = true'
+                'ch . count = ch . count + 1'
             )
         }
         @{
@@ -1484,14 +2103,14 @@ end
             Signature='[cos:518] PAINT-SKIP ctx=ingame bid=%s (deus run: CW upgrade cosmetics win)'
             Bound='signature-deduplicated paint-skip evidence under a per-channel sixteen-row cap'
             EmitterAnchors=@(
-                @{Tokens=@('local','pf','=','rawget','(','_G',',','String:printf',')')}
-                @{Tokens=@('pf','(','String:[cos:518] ','..','fmt',',','...',')')}
-                @{Tokens=@('mod','.','_cos518_emit','(','String:paint-skip',',','tostring','(','bid',')',',','String:PAINT-SKIP ctx=ingame bid=%s (deus run: CW upgrade cosmetics win)')}
+                'local pf = rawget ( _G , "printf" )'
+                'pf ( "[cos:518] " .. fmt , ... )'
+                'mod . _cos518_emit ( "paint-skip" , tostring ( bid ) , "PAINT-SKIP ctx=ingame bid=%s (deus run: CW upgrade cosmetics win)"'
             )
             GuardAnchors=@(
                 'if ch.seen[dedupe_key] or ch.count >= 16 then return false end'
-                @{Tokens=@('ch','.','seen','[','dedupe_key',']','=','true')}
-                @{Tokens=@('ch','.','count','=','ch','.','count','+','1')}
+                'ch . seen [ dedupe_key ] = true'
+                'ch . count = ch . count + 1'
             )
         }
         @{
@@ -1501,14 +2120,14 @@ end
             Signature='[cos:518] HUSK-MISS authored variant %s unavailable (wearer=%s template=%s)'
             Bound='signature-deduplicated authored-variant miss evidence under a per-channel sixteen-row cap'
             EmitterAnchors=@(
-                @{Tokens=@('local','pf','=','rawget','(','_G',',','String:printf',')')}
-                @{Tokens=@('pf','(','String:[cos:518] ','..','fmt',',','...',')')}
-                @{Tokens=@('mod','.','_cos518_emit','(','String:husk-miss',',','tostring','(','armoury_key',')',',','String:HUSK-MISS authored variant %s unavailable (wearer=%s template=%s)')}
+                'local pf = rawget ( _G , "printf" )'
+                'pf ( "[cos:518] " .. fmt , ... )'
+                'mod . _cos518_emit ( "husk-miss" , tostring ( armoury_key ) , "HUSK-MISS authored variant %s unavailable (wearer=%s template=%s)"'
             )
             GuardAnchors=@(
                 'if ch.seen[dedupe_key] or ch.count >= 16 then return false end'
-                @{Tokens=@('ch','.','seen','[','dedupe_key',']','=','true')}
-                @{Tokens=@('ch','.','count','=','ch','.','count','+','1')}
+                'ch . seen [ dedupe_key ] = true'
+                'ch . count = ch . count + 1'
             )
         }
         @{
@@ -1521,7 +2140,7 @@ end
                 @{Tokens=@('pcall','(','printf',',','String:[WOC:712] transform proof kind=%s surface=%s perspective=%s before=%s after=%s target=%s write={%s} durable=true node=%s node_name=%s')}
             )
             GuardAnchors=@(
-                @{Tokens=@('if','_transform_diag_budget','<=','0','then','return','end')}
+                'if _transform_diag_budget <= 0 then return end'
                 @{Tokens=@('_transform_diag_budget','=','_transform_diag_budget','-','1')}
             )
         }
@@ -1535,8 +2154,8 @@ end
                 @{Tokens=@('pcall','(','printf',',','String:[WOC:712] tuner set offset={%f,%f,%f} rotation={%f,%f,%f} scale_3p=%f scale_1p=%f retargeted=%d live=%d')}
             )
             GuardAnchors=@(
-                @{Tokens=@('mod',':','command','(','String:woc_pose',',')}
-                @{Tokens=@('mod',':','command','(','String:woc_pose_reset',',')}
+                'mod : command ( "woc_pose" ,'
+                'mod : command ( "woc_pose_reset" ,'
                 'local function _pose_set(x, y, z, rx, ry, rz, scale, scale_1p)'
             )
         }
@@ -1551,7 +2170,7 @@ end
             )
             GuardAnchors=@(
                 @{Tokens=@('mod',':','command','(','String:woc_pose_audit')}
-                @{Tokens=@('local','report','=','_transform_owner',':','audit','(','8',')')}
+                'local report = _transform_owner : audit ( 8 )'
             )
         }
         @{
@@ -1565,8 +2184,8 @@ end
             )
             GuardAnchors=@(
                 @{Tokens=@('mod',':','command','(','String:woc_pose_audit')}
-                @{Tokens=@('local','report','=','_transform_owner',':','audit','(','8',')')}
-                @{Tokens=@('for','i',',','row','in','ipairs','(','report','.','rows',')','do')}
+                'local report = _transform_owner : audit ( 8 )'
+                'for i , row in ipairs ( report . rows ) do'
             )
         }
         @{
@@ -1577,12 +2196,12 @@ end
             Bound='one receipt per finite surface/perspective key, with an additional thirty-two-row appearance budget'
             EmitterAnchors=@(
                 @{Tokens=@('_appearance_diag','(','String:[WOC:712] unit census surface=%s perspective=%s %s')}
-                @{Tokens=@('pcall','(','printf',',','format',',','...',')')}
+                'pcall ( printf , format , ... )'
             )
             GuardAnchors=@(
-                @{Tokens=@('if','_unit_shape_seen','[','key',']','then','return','end')}
-                @{Tokens=@('_unit_shape_seen','[','key',']','=','true')}
-                @{Tokens=@('if','_appearance_diag_budget','<=','0','then','return','end')}
+                'if _unit_shape_seen [ key ] then return end'
+                '_unit_shape_seen [ key ] = true'
+                'if _appearance_diag_budget <= 0 then return end'
             )
         }
         @{
@@ -1592,14 +2211,14 @@ end
             Signature='[WOC:712] transform SKIP reason=%s node_name=%s chat=false'
             Bound='one receipt per finite transform-node failure reason under the module-lifetime diagnostic key latch'
             EmitterAnchors=@(
-                @{Tokens=@('local','print_fn','=','api','.','printf')}
-                @{Tokens=@('if','type','(','print_fn',')','==','String:function','then','pcall','(','print_fn',',','format',',','...',')','end')}
-                @{Tokens=@('diagnostic_once','(','String:transform-node:','..','tostring','(','transform_reason',')',',','String:[WOC:712] transform SKIP reason=%s node_name=%s chat=false')}
+                'local print_fn = api . printf'
+                'if type ( print_fn ) == "function" then pcall ( print_fn , format , ... ) end'
+                'diagnostic_once ( "transform-node:" .. tostring ( transform_reason ) , "[WOC:712] transform SKIP reason=%s node_name=%s chat=false"'
                 @{Source='weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua';Tokens=@('local','_wa','=','_pulse_lib','.','new','(','_appearance',',','_transform_owner',',','nil',',','mod','.','_woc_resource_residency',')')}
             )
             GuardAnchors=@(
-                @{Tokens=@('if','diagnostics','[','key',']','then','return','end')}
-                @{Tokens=@('diagnostics','[','key',']','=','true')}
+                'if diagnostics [ key ] then return end'
+                'diagnostics [ key ] = true'
             )
         }
         @{
@@ -1609,10 +2228,10 @@ end
             Signature='[et:324] spawn#%d t=+%ss %s'
             Bound='at most four Warlords times three fixed snapshots, one cap row, and one fallback per attempted row'
             EmitterAnchors=@(
-                @{Tokens=@('pcall','(','printf',',','String:[et:324] ','..','fmt',',','...',')')}
+                'pcall ( printf , "[et:324] " .. fmt , ... )'
             )
             GuardAnchors=@(
-                @{Tokens=@('local','DIAG_OFFSETS','=','{','5',',','15','}','local','DIAG_MAX_UNITS','=','4')}
+                'local DIAG_OFFSETS = { 5 , 15 } local DIAG_MAX_UNITS = 4'
                 'entry.next = entry.next + 1 if not ok or keep == false or entry.next > #DIAG_OFFSETS then table.remove(_tracked, i)'
             )
         }
@@ -1628,8 +2247,8 @@ end
             )
             GuardAnchors=@(
                 @{Tokens=@('M','.','RECEIPT_CAP','=','10')}
-                @{Tokens=@('if','state','.','seed_reported','then','return','nil','end','state','.','seed_reported','=','true')}
-                @{Tokens=@('if','state','.','summary_emitted','then','return','nil','end','state','.','summary_emitted','=','true')}
+                'if state . seed_reported then return nil end state . seed_reported = true'
+                'if state . summary_emitted then return nil end state . summary_emitted = true'
             )
         }
     )
