@@ -140,6 +140,200 @@ function Get-VtReceiptFamilyPinnedTree {
     return [pscustomobject]@{ Tree=$expected; Routes=$routes.Count; Resolved=($objectType -ceq 'tree') }
 }
 
+function Invoke-VtFactoryLoadAuthoritySelfTest {
+    # #1812: executable-source admission, not literal tag discovery. The
+    # factory-only subject has no direct LOAD route to mask a failed binding.
+    $main=@'
+local mod = get_mod("fixture")
+local MOD_VERSION = "1.2.3-dev"
+mod:dofile("scripts/mods/fixture_mod/_factory")({
+    mod = mod, version = MOD_VERSION,
+    print_line = function(fmt, ...) printf(fmt, ...) end,
+})
+'@
+    $helper=@'
+return function(context)
+    assert(type(context) == "table")
+    local MOD_VERSION = assert(context.version)
+    local print_line = context.print_line or printf
+    print_line("[fx:LOAD] v%s enabled fp=test OK", MOD_VERSION)
+end
+'@
+    $emit='print_line("[fx:LOAD] v%s enabled fp=test OK", MOD_VERSION)'
+    $declaration='local print_line = context.print_line or printf'
+    $wrapper='function(fmt, ...) printf(fmt, ...) end'
+    $cases=@(
+        @{Name='exact-production-shape-and-alias-field-name-trap';Expected=1},
+        @{Name='nested-helper-return-does-not-abort-factory';Helper=$helper.Replace($declaration,'local function helper() if true then return end end '+$declaration);Expected=1},
+        @{Name='nested-helper-return-does-not-abort-main';Main=$main.Replace('local MOD_VERSION','local function helper() do return end end local MOD_VERSION');Expected=1},
+        @{Name='outer-return-after-load-remains-valid';Helper=$helper.Replace($emit,$emit+' return {}');Expected=1},
+        @{Name='nested-helper-loop-does-not-block-factory';Helper=$helper.Replace($declaration,'local function helper() while true do end end '+$declaration);Expected=1},
+        @{Name='nested-helper-loop-does-not-block-main';Main=$main.Replace('local MOD_VERSION','local function helper() for n=1,2 do end end local MOD_VERSION');Expected=1},
+        @{Name='direct-same-namespace-preload';Main=$main.Replace('local MOD_VERSION','mod:dofile("scripts/mods/fixture_mod/_factory") local MOD_VERSION');Expected=1},
+        @{Name='loader-member-reference-after-constructor';Main=$main+' local native = mod.dofile';Expected=1},
+        @{Name='bare-trusted-printf';Main=$main.Replace($wrapper,'printf');Expected=1},
+        @{Name='different-local-alias';Helper=$helper.Replace('local print_line =','local emit =').Replace($emit,$emit.Replace('print_line(','emit('));Expected=1},
+        @{Name='missing-field-even-with-raw-fallback';Main=$main.Replace('print_line =','unbound =')},
+        @{Name='case-sensitive-field-binding';Main=$main.Replace('print_line =','Print_Line =')},
+        @{Name='untrusted-field';Main=$main.Replace($wrapper,'mod.info')},
+        @{Name='duplicate-field';Main=$main.Replace('mod = mod,','mod = mod, print_line = printf,')},
+        @{Name='duplicate-factory-call';Main=$main+"`n"+$main},
+        @{Name='wrong-module';Main=$main.Replace('/_factory','/_other')},
+        @{Name='member-mod-lookalike';Main=$main.Replace('mod:dofile','helper.mod:dofile')},
+        @{Name='loaded-but-not-invoked';Main='mod:dofile("scripts/mods/fixture_mod/_factory")'},
+        @{Name='unreachable-module';Main='local MOD_VERSION = "1.2.3-dev"'},
+        @{Name='dead-factory-call';Main="if false then`n"+$main+"`nend"},
+        @{Name='dormant-factory-call';Main="local function dormant()`n"+$main+"`nend"},
+        @{Name='loop-factory-call';Main="for n=1,2 do`n"+$main+"`nend"},
+        @{Name='main-do-pre-return-peer-control';Main="do return end`n"+$main},
+        @{Name='main-empty-infinite-loop-peer-control';Main=$main.Replace('local MOD_VERSION','while true do end; local MOD_VERSION')},
+        @{Name='factory-empty-infinite-loop-peer-control';Helper=$helper.Replace($emit,'while true do end; '+$emit)},
+        @{Name='main-conditional-prior-loop';Main=$main.Replace('local MOD_VERSION','if unknown then for n=1,2 do end end local MOD_VERSION')},
+        @{Name='factory-finite-prior-loop-conservatively-denied';Helper=$helper.Replace($emit,'for n=1,2 do end '+$emit)},
+        @{Name='factory-conditional-pre-return-peer-control';Helper=$helper.Replace($emit,'if true then return end '+$emit)},
+        @{Name='factory-do-pre-return';Helper=$helper.Replace($emit,'do return {} end '+$emit)},
+        @{Name='factory-nested-pre-goto';Helper=$helper.Replace($emit,'if true then goto skipped end '+$emit+' ::skipped::')},
+        @{Name='main-nested-pre-goto';Main='if true then goto skipped end '+$main+' ::skipped::'},
+        @{Name='spoofed-loader-peer-control';Main=$main.Replace('get_mod("fixture")','{dofile=function() return function(_) end end}')},
+        @{Name='foreign-record-loader';Main=$main.Replace('get_mod("fixture")','get_mod("other")')},
+        @{Name='expected-record-not-derived-from-marker-or-folder';ExpectedModId='other'},
+        @{Name='loader-binding-missing';Main=$main.Replace('local mod = get_mod("fixture")','')},
+        @{Name='loader-reassignment';Main=$main.Replace('local MOD_VERSION','mod = {dofile=function() return function(_) end end} local MOD_VERSION')},
+        @{Name='loader-dofile-member-overwrite';Main=$main.Replace('local MOD_VERSION','mod.dofile = function() return function(_) end end local MOD_VERSION')},
+        @{Name='loader-tuple-member-write-peer-control';Main=$main.Replace('local MOD_VERSION','mod.dofile, unused = function() return function(_) end end, nil; local MOD_VERSION')},
+        @{Name='loader-tuple-bracket-write';Main=$main.Replace('local MOD_VERSION','mod["dofile"], unused = function() return function(_) end end, nil; local MOD_VERSION')},
+        @{Name='loader-member-alias-before-constructor';Main=$main.Replace('local MOD_VERSION','local native = mod.dofile local MOD_VERSION')},
+        @{Name='loader-member-forwarded-before-constructor';Main=$main.Replace('local MOD_VERSION','pcall(mod.dofile, mod, "scripts/mods/fixture_mod/_factory") local MOD_VERSION')},
+        @{Name='loader-dynamic-path-before-constructor';Main=$main.Replace('local MOD_VERSION','mod:dofile(module_path) local MOD_VERSION')},
+        @{Name='loader-foreign-prefix-before-constructor';Main=$main.Replace('local MOD_VERSION','mod:dofile("scripts/mods/other_mod/_factory") local MOD_VERSION')},
+        @{Name='loader-dofile-method-overwrite';Main=$main.Replace('local MOD_VERSION','function mod:dofile() return function(_) end end local MOD_VERSION')},
+        @{Name='loader-dofile-bracket-overwrite';Main=$main.Replace('local MOD_VERSION','mod["dofile"] = function() return function(_) end end local MOD_VERSION')},
+        @{Name='loader-rawset-escape';Main=$main.Replace('local MOD_VERSION','rawset(mod, "dofile", function() return function(_) end end) local MOD_VERSION')},
+        @{Name='loader-alias-escape';Main=$main.Replace('local MOD_VERSION','local other = mod other.dofile = function() return function(_) end end local MOD_VERSION')},
+        @{Name='loader-local-shadow';Main=$main.Replace('local MOD_VERSION','local function dormant(mod) end local MOD_VERSION')},
+        @{Name='loader-multi-local-without-initializer';Main=$main.Replace('local MOD_VERSION','local other, mod local MOD_VERSION')},
+        @{Name='get-mod-local-shadow';Main='local get_mod = function() return {} end '+$main},
+        @{Name='get-mod-global-write';Main='_G.get_mod = function() return {} end '+$main},
+        @{Name='get-mod-rawset-write';Main='rawset(_G, "get_mod", function() return {} end) '+$main},
+        @{Name='raw-printf-shadow';Main="local printf = mod.info`n"+$main},
+        @{Name='wrapper-parameter-shadow';Main=$main.Replace($wrapper,'function(printf, ...) printf(printf, ...) end')},
+        @{Name='member-printf-lookalike';Main=$main.Replace($wrapper,'function(fmt, ...) mod.printf(fmt, ...) end')},
+        @{Name='transformed-wrapper-argument';Main=$main.Replace($wrapper,'function(fmt, ...) printf("changed", ...) end')},
+        @{Name='extra-wrapper-operation';Main=$main.Replace($wrapper,'function(fmt, ...) printf(fmt, ...) other() end')},
+        @{Name='alias-reassignment';Helper=$helper.Replace($declaration,$declaration+"`n print_line = mod.info")},
+        @{Name='alias-local-shadow';Helper=$helper.Replace($emit,'local function dormant(print_line) end '+$emit)},
+        @{Name='alias-named-function-shadow';Helper=$helper.Replace($emit,'function print_line() end '+$emit)},
+        @{Name='alias-forwarding';Helper=$helper.Replace($emit,'sink(print_line) '+$emit)},
+        @{Name='alias-before-declaration';Helper=$helper.Replace($declaration,$emit+"`n"+$declaration)},
+        @{Name='context-replacement';Helper=$helper.Replace($declaration,'context = {} '+$declaration)},
+        @{Name='context-field-overwrite';Helper=$helper.Replace($declaration,'context.print_line = mod.info '+$declaration)},
+        @{Name='context-forwarding';Helper=$helper.Replace($declaration,'mutate(context) '+$declaration)},
+        @{Name='chained-alias-expression';Helper=$helper.Replace($declaration,$declaration+' or mod.info')},
+        @{Name='nested-dormant-emitter';Helper=$helper.Replace($emit,'local function dormant() '+$emit+' end')},
+        @{Name='dead-emitter';Helper=$helper.Replace($emit,'if false then '+$emit+' end')},
+        @{Name='fake-string-marker';Helper=$helper.Replace($emit,'local bait = [=[print_line("[fx:LOAD] v%s enabled fp=test OK", MOD_VERSION)]=]')},
+        @{Name='fake-comment-marker';Helper=$helper.Replace($emit,'-- '+$emit)},
+        @{Name='dynamic-first-argument';Helper=$helper.Replace($emit,'local marker = "[fx:LOAD] v%s enabled fp=test OK" print_line(marker, MOD_VERSION)')},
+        @{Name='literal-and-dynamic-first-argument-concatenation';Helper=$helper.Replace($emit,
+            'print_line("[fx:LOAD]" .. " literal", MOD_VERSION) print_line("[fx:LOAD]" .. dynamic_marker, MOD_VERSION)')},
+        @{Name='malformed-marker';Helper=$helper.Replace('[fx:LOAD]','[fx LOAD]')},
+        @{Name='nonload-receipt-not-promoted';Helper=$helper.Replace('[fx:LOAD]','[fx:proof]')},
+        @{Name='two-parameter-factory';Helper=$helper.Replace('function(context)','function(context, other)')},
+        @{Name='not-returned-factory';Helper=$helper.Replace('return function(context)','local function factory(context)')},
+        @{Name='outer-factory-goto';Helper=$helper.Replace($emit,'goto skip '+$emit+' ::skip::')}
+    )
+    foreach($case in $cases){
+        $mainSource=if($case.ContainsKey('Main')){[string]$case.Main}else{$main}
+        $helperSource=if($case.ContainsKey('Helper')){[string]$case.Helper}else{$helper}
+        $documents=@(
+            [pscustomobject]@{RelativePath='fixture_mod/scripts/mods/fixture_mod/fixture_mod.lua';Content=$mainSource;Tokens=@(Get-VtLuaTokens -Content $mainSource)},
+            [pscustomobject]@{RelativePath='fixture_mod/scripts/mods/fixture_mod/_factory.lua';Content=$helperSource;Tokens=@(Get-VtLuaTokens -Content $helperSource)}
+        )
+        $reachable=Get-VtLoadTimeReachableLuaPaths -ModDir 'fixture_mod' -Documents $documents
+        $expectedId=if($case.ContainsKey('ExpectedModId')){[string]$case.ExpectedModId}else{'fixture'}
+        $routes=@(Get-VtFactoryInjectedLoadRoutes -ModDir 'fixture_mod' -Documents @($documents | Where-Object {$reachable.Contains([string]$_.RelativePath)}) -ExpectedModId $expectedId)
+        $expected=if($case.ContainsKey('Expected')){[int]$case.Expected}else{0}
+        Assert-VtContractFixture ($routes.Count -eq $expected) "Factory LOAD case '$($case.Name)': expected $expected route(s), got $($routes.Count)."
+        if($expected){
+            Assert-VtContractFixture ([string]$routes[0].Source -ceq 'fixture_mod/scripts/mods/fixture_mod/_factory.lua' -and
+                [string]$routes[0].Signature -ceq '[fx:LOAD] v%s enabled fp=test OK' -and
+                [string]$routes[0].Callable -ceq 'factory-injected:print_line') "Factory LOAD provenance drift: $($case.Name)."
+            foreach($document in $documents){
+                Assert-VtContractFixture (@((Get-VtDirectLuaCallRoutes -Document $document).LoadRoutes).Count -eq 0) "Factory subject acquired a direct LOAD mask: $($case.Name)."
+            }
+        }
+    }
+    # File-local, position-local loop qualification: an earlier emitter stays
+    # admitted, a later emitter does not. Swap names without changing positions
+    # to rule out marker-wide/traversal-order proof leakage.
+    foreach($firstMarker in @('first','second')){
+        $laterMarker=if($firstMarker -ceq 'first'){'second'}else{'first'}
+        $ordered=$helper.Replace($emit,
+            'print_line("['+$firstMarker+':LOAD] v%s loaded", MOD_VERSION) while true do end '+
+            'print_line("['+$laterMarker+':LOAD] v%s loaded", MOD_VERSION)')
+        $documents=@(
+            [pscustomobject]@{RelativePath='fixture_mod/scripts/mods/fixture_mod/fixture_mod.lua';Content=$main;Tokens=@(Get-VtLuaTokens $main)},
+            [pscustomobject]@{RelativePath='fixture_mod/scripts/mods/fixture_mod/_factory.lua';Content=$ordered;Tokens=@(Get-VtLuaTokens $ordered)}
+        )
+        $orderedRoutes=@(Get-VtFactoryInjectedLoadRoutes -ModDir 'fixture_mod' -Documents $documents -ExpectedModId fixture)
+        Assert-VtContractFixture ($orderedRoutes.Count -eq 1 -and [string]$orderedRoutes[0].Marker -ceq ('['+$firstMarker+':LOAD]')) 'Prior-loop qualification leaked across emitter positions/marker order.'
+    }
+    $pairMain=$main.Replace('mod = mod, ','')+"`n"+$main.Replace('mod = mod, ','').Replace('/_factory','/_good')
+    # Keep one canonical receiver binding while calling the two distinct
+    # factories. Neither context hands the receiver to the earlier factory.
+    $pairMain=$pairMain.Replace("})`nlocal mod = get_mod("+'"fixture"'+')',"})`n")
+    $bad=$helper.Replace($emit,'while true do end '+$emit)
+    $good=$helper.Replace($declaration,'local function nested() for n=1,2 do end return end '+$declaration).Replace('[fx:LOAD]','[good:LOAD]')
+    $pair=@(
+        [pscustomobject]@{RelativePath='fixture_mod/scripts/mods/fixture_mod/fixture_mod.lua';Content=$pairMain;Tokens=@(Get-VtLuaTokens $pairMain)},
+        [pscustomobject]@{RelativePath='fixture_mod/scripts/mods/fixture_mod/_factory.lua';Content=$bad;Tokens=@(Get-VtLuaTokens $bad)},
+        [pscustomobject]@{RelativePath='fixture_mod/scripts/mods/fixture_mod/_good.lua';Content=$good;Tokens=@(Get-VtLuaTokens $good)}
+    )
+    foreach($reverse in @($false,$true)){
+        $items=@($pair);if($reverse){[array]::Reverse($items)}
+        $pairRoutes=@(Get-VtFactoryInjectedLoadRoutes -ModDir fixture_mod -Documents $items -ExpectedModId fixture)
+        Assert-VtContractFixture ($pairRoutes.Count -eq 1 -and [string]$pairRoutes[0].Marker -ceq '[good:LOAD]' -and
+            [string]$pairRoutes[0].Source -ceq 'fixture_mod/scripts/mods/fixture_mod/_good.lua') 'Loop scope proof leaked across documents or input order.'
+    }
+    # Direct routes retain their established classification, independently of
+    # the factory-only deployed fixture below.
+    $directSource='printf("[direct:LOAD] v%s loaded", "1.2.3-dev") pcall(printf,"[protected:LOAD] v%s loaded","1.2.3-dev") mod:info("[logged:LOAD] v%s loaded","1.2.3-dev")'
+    $direct=Get-VtDirectLuaCallRoutes -Document ([pscustomobject]@{RelativePath='direct.lua';Content=$directSource;Tokens=@(Get-VtLuaTokens $directSource)})
+    Assert-VtContractFixture (@($direct.LoadRoutes).Count -eq 3) 'Factory adapter changed direct LOAD classification.'
+
+    $repoRoot=Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
+    $mainPath='crafting_in_modded/scripts/mods/crafting_in_modded/crafting_in_modded.lua'
+    $helperPath='crafting_in_modded/scripts/mods/crafting_in_modded/_cim_bootstrap_runtime.lua'
+    $checkProduction={
+        param($Documents,[string]$Label)
+        $paths=Get-VtLoadTimeReachableLuaPaths -ModDir 'crafting_in_modded' -Documents $Documents
+        $production=@($Documents | Where-Object {$paths.Contains([string]$_.RelativePath)})
+        $loads=@(Get-VtFactoryInjectedLoadRoutes -ModDir 'crafting_in_modded' -Documents $production -ExpectedModId 'cim')
+        Assert-VtContractFixture ($loads.Count -eq 1 -and [string]$loads[0].Marker -ceq '[cim:LOAD]' -and
+            [string]$loads[0].Signature -ceq '[cim:LOAD] v%s enabled fp=%s OK' -and
+            [string]$loads[0].Source -ceq $helperPath -and [string]$loads[0].Callable -ceq 'factory-injected:print_line') "Actual CIM factory LOAD source check failed: $Label."
+        foreach($document in $production){
+            Assert-VtContractFixture (@((Get-VtDirectLuaCallRoutes -Document $document).LoadRoutes).Count -eq 0) "Actual CIM factory source check has a direct LOAD mask: $Label."
+        }
+        Write-Host "[live-test-contract] actual CIM factory source check passed: $Label (not publication authority)."
+    }
+    $candidate=@()
+    foreach($path in @($mainPath,$helperPath)){
+        $full=Join-Path $repoRoot $path
+        Assert-VtContractFixture (Test-Path -LiteralPath $full -PathType Leaf) "Candidate CIM source required for pre-publication authority check: $path."
+        $content=[IO.File]::ReadAllText($full)
+        $candidate+= [pscustomobject]@{RelativePath=$path;Content=$content;Tokens=@(Get-VtLuaTokens -Content $content)}
+    }
+    & $checkProduction -Documents $candidate -Label 'current candidate working-tree source'
+    $frozenCommit='251fbdf7f1febb4ea09070a63d82452ae510214e'
+    if((Get-VtGitObjectTypeOrNull -RepoRoot $repoRoot -ObjectId $frozenCommit) -ceq 'commit'){
+        $frozen=@(Get-VtDeployedLuaDocuments -RepoRoot $repoRoot -Treeish $frozenCommit -RelativeRoot 'crafting_in_modded/scripts/mods' |
+            Where-Object {[string]$_.RelativePath -in @($mainPath,$helperPath)})
+        & $checkProduction -Documents $frozen -Label ('immutable '+$frozenCommit)
+    }else{Write-Host '[live-test-contract] immutable251 factory source check skipped: object absent offline; current candidate check remains mandatory.'}
+    Write-Host "[live-test-contract] factory LOAD matrix passed: $($cases.Count) cases, 2 loop-order/2 document-order controls, 3 direct-route controls."
+}
+
 function Invoke-VtDeployedSourceContractSelfTest {
     param([switch]$StructuralBoundsOnly)
     # #1120: all source below is lexer input, never executed as Lua. The
@@ -476,6 +670,7 @@ end)
     }
     Write-Host '[live-test-contract] structural bounds matrix passed: 192 matrix classifications, 500 route checks, 2 exact-override routes.'
     if($StructuralBoundsOnly){return}
+    Invoke-VtFactoryLoadAuthoritySelfTest
 
     $tempBase = [IO.Path]::GetTempPath()
     $tmp = Join-Path $tempBase ('vt2-live-card-contract-' + [guid]::NewGuid().ToString('N'))
@@ -498,6 +693,7 @@ end)
 }
 '@, $utf8)
         [IO.File]::WriteAllText((Join-Path $luaRoot 'fixture_mod.lua'), @'
+local mod = get_mod("fixture")
 local MOD_VERSION = "1.2.3-dev"
 local banner_bait = "[bait:LOAD] v%s enabled fp=fake OK"
 local phantom_command = 'mod:command("phantom", "not registered", function() end)'
@@ -507,7 +703,10 @@ local long_data = [=[printf("[fx:long-string]")]=]
 local fakeprintf = function() end
 fakeprintf("[fx:fake]")
 mod.printf("[fx:member-call]")
-pcall(printf, "[fx:LOAD] v%s enabled fp=test OK", MOD_VERSION)
+mod:dofile("scripts/mods/fixture_mod/_factory")({
+    mod = mod, version = MOD_VERSION,
+    print_line = function(fmt, ...) printf(fmt, ...) end,
+})
 mod:command("fx_probe", "Fixture probe", function()
     pcall(printf, "[fx:probe] status=OK")
 end)
@@ -586,6 +785,16 @@ function M.install()
     emit("[fx:alias-ok] status=%s", "OK")
 end
 return M
+'@, $utf8)
+        # No direct LOAD exists in this deployed fixture: authority must prove
+        # the returned factory and exact raw-printer dependency, as production
+        # CIM does, rather than finding a nearby marker or direct-call fallback.
+        [IO.File]::WriteAllText((Join-Path $luaRoot '_factory.lua'), @'
+return function(context)
+    local MOD_VERSION = assert(context.version)
+    local print_line = context.print_line or printf
+    print_line("[fx:LOAD] v%s enabled fp=test OK", MOD_VERSION)
+end
 '@, $utf8)
         [IO.File]::WriteAllText((Join-Path $luaRoot '_early.lua'), @'
 local M = {}
@@ -692,6 +901,9 @@ end)
         Assert-VtContractFixture ([string]$record.AssetFilename -ceq 'fixture_mod.zip') 'ZIP filename was not projected into card authority.'
         Assert-VtContractFixture ([string]$record.AssetSha256 -ceq ('e' * 64)) 'ZIP digest was not projected into card authority.'
         Assert-VtContractFixture (@($record.LoadRoutes.Marker) -contains '[fx:LOAD]') 'Literal LOAD route was not recovered.'
+        Assert-VtContractFixture (@($record.LoadRoutes).Count -eq 1 -and
+            [string]$record.LoadRoutes[0].Source -ceq 'fixture_mod/scripts/mods/fixture_mod/_factory.lua' -and
+            [string]$record.LoadRoutes[0].Callable -ceq 'factory-injected:print_line') 'Factory-only LOAD lost its exact source/callable provenance.'
         Assert-VtContractFixture (@($record.LoadRoutes.Marker) -notcontains '[bait:LOAD]') 'String-only LOAD bait was accepted.'
         Assert-VtContractFixture (@($record.LoadRoutes.Marker) -notcontains '[dead:LOAD]') 'Literal-false LOAD route was accepted.'
         Assert-VtContractFixture (@($record.LoadRoutes.Marker) -notcontains '[unreachable:LOAD]') 'Unloaded-document LOAD route was accepted.'
