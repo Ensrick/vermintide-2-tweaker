@@ -100,8 +100,12 @@ copy the one hunk) and never promotes anything else.
    tags are forbidden in both source streams before promotion (#694).
 3. `promotion-status.ps1 -Mod <stable>` -> the issue should now show OK (cited).
 4. A clean stable upload needs a **fresh, per-build ship signal from the user naming the version**
-   (treated like `git push --force`). Then `ship.ps1 -Mod <stable>`, adding
-   `-AllowPublic` iff the stable cfg is public; commit + push.
+   (treated like `git push --force`). Follow the merge-first transaction in
+   [PROJECT_STANDARDS.md section 6.6](../PROJECT_STANDARDS.md#66-ship-doctrine-keyed-off-the-mod_version-suffix-canonical-2026-07-01):
+   land the reviewed source and artifact proof through protected PR QA before
+   publication from the clean exact default-branch HEAD. That section also owns
+   visibility flags and post-publication verification; do not publish first and
+   commit afterward.
 
 Worked example this session: cim v0.8.34 (public) + cim_dev v0.8.54-dev (issue #278).
 
@@ -134,7 +138,8 @@ create for itself (issue #676). A `VT2-Promotion:` commit trailer is only PR
 content and is no longer trusted by CI.
 
 1. Open the same-repository PR with the complete stable promotion and its exact
-   root bundle. Fork PRs cannot promote stable source.
+   authority proof (tracked canonical root bundle or committed schema-3 receipt,
+   as selected by section 6.6). Fork PRs cannot promote stable source.
 2. Copy the exact approval line printed by the failing
    `check_promotion_authorization.ps1` step into a PR comment. It has this form:
 
@@ -143,7 +148,10 @@ content and is no longer trusted by CI.
    ```
 
    Use one line per stable directory when a deliberately coordinated PR changes
-   more than one. The current `MOD_VERSION` and exact PR head SHA are mandatory.
+   more than one, with **all target lines in one immutable comment**. The
+   validator does not combine separate comments. Post that complete comment
+   before the approval-label grant. The current `MOD_VERSION` and exact PR head
+   SHA are mandatory.
 3. The same maintainer applies the `stable-promotion-approved` label, then
    reruns the checks. The base-owned `pull_request_target` authorization
    workflow reads the live PR, comment, label timeline, and collaborator
@@ -211,5 +219,7 @@ rewriting the published version or relying on an older bundle.
   one. Authorization-bound documentation-only maintenance (Markdown other than
   `CHANGELOG.md`) skips these release invariants because no releasable surface
   changed. Self-test: `qa/check_promotion.ps1 -SelfTest` (pwsh 7 + PS 5.1).
-- **Verify the ship**: `workshop_log.txt` must show `Uploaded new content`; `ship.ps1`
-  hash-verifies the deploy. `ugc_tool` prints success even on failure.
+- **Verify the ship**: use section 6.6's bounded same-transaction evidence and
+  authenticated hosted-result reread, including its distinct Uploaded/NoChange
+  contracts and deployment mode. Uploader success strings or page-inspection
+  hints are not publication proof.
