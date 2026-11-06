@@ -70,7 +70,7 @@ local function _pass_flags(widget, pass)
         saturated = style.saturated == true,
         point_sample = style.point_sample == true,
         viewport_mask = style.viewport_mask == true,
-        retained = style.retained_id ~= nil and style.retained_id ~= false,
+        retained = pass.retained_mode ~= nil and pass.retained_mode ~= false,
     }
 end
 

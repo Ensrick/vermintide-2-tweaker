@@ -563,3 +563,15 @@ stand, its line numbers do not. Structural template is
 subsystem notes -> dead ends) stable.
 
 The #1465 private installation boundary retains the existing customization state hook in `_cim_illusion_apply_presentation.lua`, invoked at its original Forge position. It requires one canonical handler handoff and successful completion of the whole Forge installer before final Apply UI/check/provider publication; original entry load/error ordering is retained. This is control-flow completion only: VMF can return nil on successful registration or silent refusal, so no hook-ABI/readiness claim follows.
+
+The #749/#404 retained-route correction adds no hook: both static and late
+scrollbar guards select the exact Gui from the texture pass's `retained_mode`,
+not `style.retained_id`. Native `UIPasses.texture.draw` reads that field at
+`ui_passes.lua:134-138`, then `UIRenderer.draw_texture` selects `gui_retained` at
+`ui_renderer.lua:792-805` (source `93dea911`, game6.13). A missing retained target
+is not permission to use immediate-Gui proof. The eight actual glue/native-route
+cases per stream in `qa/lua/tests/cim_official_resource_glue_cases.lua` execute
+the complete mission owner and real shared helper, including false/nil/fault and
+independent-Gui controls. They establish offline API contracts, not live engine
+handles, rendering, or historical crash causality. Global unknown-resource
+preservation and the original Keep no-op remain unchanged.

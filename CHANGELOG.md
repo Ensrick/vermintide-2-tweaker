@@ -1,5 +1,20 @@
 # Changelog
 
+## 2026-11-06 - Selective official verification-queue promotion
+
+General 0.2.180, Chaos Wastes 0.7.354-beta and CIM 0.8.148 carry the
+maintainer-approved functional verification queue into the existing public
+items. The source selection preserves stream identities and excludes unrelated
+Dev investigations and incomplete features. CWV 0.1.570-dev supplies the exact
+official-CIM preview consumer; CT Dev 0.7.354-dev first corrects the concrete
+rescue, living-owner, effective-false and listed-grudge counterexamples found
+while reviewing the promotion. Exact native rendering qualification also found
+and corrected the retained-Gui selection defect Dev-first in CIM0.8.148-dev,
+before carrying the same correction publicly. Per-mod changelogs retain scope
+and verification limits. Publication and offline gates are not human gameplay
+acceptance.
+
+
 ## 2026-10-24 - One local illusion Apply owner and native realm V2 (#1690, #1693)
 
 Cosmetics and CIM Dev now bundle one canonical Apply presentation class with

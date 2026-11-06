@@ -1,0 +1,462 @@
+-- Exact native CT GUI routing specimen; source-only/offline evidence.
+-- Native commit 93dea911a4cc464a0eb51cfdc3a443297bfc4550, game 6.13.0.
+-- Raw source SHA-256 values include checkout bytes. Executable spans retain CRLF
+-- through escaped strings (Lua long strings would normalize those line endings).
+-- This proves declared native routes, not package contents or live Gui handles.
+return {
+    source_commit = "93dea911a4cc464a0eb51cfdc3a443297bfc4550",
+    source_game_version = "6.13.0",
+    sources = {
+        ["scripts/ui/ui_renderer.lua"] = "3e3d78a1946b341a66fbe3456b961180c124026c58ce6a10d157e14de02d4f5c",
+        ["scripts/ui/views/ingame_ui_settings.lua"] = "f421b7f67e31ad5bbf8d8364b2740f85b16cb5ae956b512051f399496f9bda7c",
+        ["scripts/settings/dlcs/belakor/belakor_ui_settings.lua"] = "7b465e529829a34890b6539377931ae5b9cc9f2ac8b7e8a3fe51e3953a9eefd6",
+        ["scripts/helpers/ui_atlas_helper.lua"] = "a78eca223b28abc0747a4f4fdfe3c14ddb9ba281540ae8e05dbfe89d5d99c724",
+        ["scripts/ui/atlas_settings/gui_icons_atlas.lua"] = "fab8711fc1d5669312d77b07084e82af4a82c838fd6bc2fc04faa31b3f0cb2cb",
+        ["scripts/ui/atlas_settings/gui_belakor_atlas.lua"] = "aefc07485c893f07cd03d23a5843834e1ef5ef86e8fd43a2f78fe92363a159f3",
+        ["scripts/ui/views/ingame_ui.lua"] = "da727f99a8b21b4247c3a23d24b67e7bcb1e259e062032d06a4e7ab7608b673d",
+        ["scripts/ui/views/ingame_hud.lua"] = "3ba96b5dc71ea3549144dfc1ca4bbd899848fe2d48758a206622368b46c4557e",
+        ["scripts/ui/views/ingame_player_list_ui_v2.lua"] = "77f6111e29f5cb8eed539a9e89d4286f56810d0262f78c9af46d1a4cc65899ee",
+        ["scripts/ui/views/ingame_player_list_ui_v2_definitions.lua"] = "f3a4e343912cc0861cf5aa8e510bd249a120aabe6e76a4cccd2dc25547d7cd66",
+        ["scripts/ui/hud_ui/buff_ui.lua"] = "e32257bfe5772e41a91c4324f1415b95c35317f021cd1ef2f63f3395c9e3acf2",
+        ["scripts/ui/hud_ui/buff_ui_definitions.lua"] = "d54bbeb2fa5e2daaed7d6794da261fd1f7134c35b859c450efad1d558ffeedaa",
+        ["scripts/settings/dlcs/belakor/belakor_buff_settings.lua"] = "f86cbfdbd2c522091444e6362d27e80e69f9d63e6ba335cb188246ea1230d065",
+        ["scripts/settings/dlcs/morris/morris_buff_settings.lua"] = "ffdec14e2bc1c77b2225e6f73ef35a7573b39cc57bcab8be9aafc0f1b73be995",
+        ["scripts/boot.lua"] = "4f2d41b0b5d7d3a24bb461587fe2a4fa7602eaa4f07943989a1f1e0357dd0fae",
+        ["scripts/settings/dlc_settings.lua"] = "23c46ed0fb13748501bfec7548a8c14f107657a468ddd7be9ea1bb480f93dfe8",
+    },
+    code = {
+        ["renderer_create"] = "UIRenderer._injected_material_sets = {}\r\n\r\nlocal function inject_materials(i, ...)\r\n\tlocal material = UIRenderer._injected_material_sets[i]\r\n\r\n\tif material then\r\n\t\treturn \"material\", material, inject_materials(i + 1, ...)\r\n\tend\r\n\r\n\treturn ...\r\nend\r\n\r\nUIRenderer.create = function (world, ...)\r\n\tlocal gui = World.create_screen_gui(world, \"immediate\", inject_materials(1, ...))\r\n\tlocal gui_retained = World.create_screen_gui(world, inject_materials(1, ...))\r\n\r\n\treturn UIRenderer.create_ui_renderer(world, gui, gui_retained)\r\nend\r\n\r\n",
+        ["bitmap"] = "UIRenderer.script_draw_bitmap = function (gui, render_settings, material, gui_position, gui_size, color, masked, saturated, retained_id, point_sample, viewport_mask)\r\n\tlocal snap_pixel_positions = render_settings and render_settings.snap_pixel_positions\r\n\r\n\tif snap_pixel_positions == nil then\r\n\t\tsnap_pixel_positions = SNAP_PIXEL_POSITIONS\r\n\tend\r\n\r\n\tif snap_pixel_positions then\r\n\t\tgui_position = snap_to_position(gui_position)\r\n\tend\r\n\r\n\tlocal alpha_multiplier = render_settings and render_settings.alpha_multiplier or 1\r\n\tlocal texture_settings\r\n\r\n\tif UIAtlasHelper.has_atlas_settings_by_texture_name(material) then\r\n\t\ttexture_settings = UIAtlasHelper.get_atlas_settings_by_texture_name(material)\r\n\tend\r\n\r\n\tif not color then\r\n\t\tcolor = Color(255 * alpha_multiplier, 255, 255, 255)\r\n\telse\r\n\t\tcolor = Color(color[1] * alpha_multiplier, color[2], color[3], color[4])\r\n\tend\r\n\r\n\tif texture_settings then\r\n\t\tlocal uv00_table = texture_settings.uv00\r\n\t\tlocal uv11_table = texture_settings.uv11\r\n\t\tlocal uv00 = Vector2(uv00_table[1], uv00_table[2])\r\n\t\tlocal uv11 = Vector2(uv11_table[1], uv11_table[2])\r\n\t\tlocal material_name\r\n\r\n\t\tif not masked then\r\n\t\t\tif saturated then\r\n\t\t\t\tmaterial_name = texture_settings.saturated_material_name\r\n\t\t\telseif point_sample then\r\n\t\t\t\tmaterial_name = texture_settings.point_sample_material_name\r\n\t\t\telseif viewport_mask then\r\n\t\t\t\tmaterial_name = texture_settings.viewport_mask_material_name\r\n\t\t\telse\r\n\t\t\t\tmaterial_name = texture_settings.material_name\r\n\t\t\tend\r\n\t\telseif saturated then\r\n\t\t\tmaterial_name = texture_settings.masked_saturated_material_name\r\n\t\telseif point_sample then\r\n\t\t\tmaterial_name = texture_settings.masked_point_sample_material_name\r\n\t\telse\r\n\t\t\tmaterial_name = texture_settings.masked_material_name\r\n\t\tend\r\n\r\n\t\tif retained_id then\r\n\t\t\tGui_update_bitmap_uv(gui, retained_id, material_name, uv00, uv11, gui_position, gui_size, color)\r\n\t\telse\r\n\t\t\treturn Gui_bitmap_uv(gui, material_name, uv00, uv11, gui_position, gui_size, color)\r\n\t\tend\r\n\telseif retained_id then\r\n\t\tGui_update_bitmap(gui, retained_id, material, gui_position, gui_size, color)\r\n\telse\r\n\t\treturn Gui_bitmap(gui, material, gui_position, gui_size, color)\r\n\tend\r\nend\r\n\r\n",
+        ["draw_texture"] = "UIRenderer.draw_texture = function (self, material, position, size, color, masked, saturated, retained_id, point_sample, viewport_mask)\r\n\tlocal gui = self.gui\r\n\r\n\tif retained_id then\r\n\t\tgui = self.gui_retained\r\n\r\n\t\tif retained_id == true then\r\n\t\t\tretained_id = nil\r\n\t\tend\r\n\tend\r\n\r\n\tlocal scale = RESOLUTION_LOOKUP.scale\r\n\r\n\treturn UIRenderer.script_draw_bitmap(gui, self.render_settings, material, Vector3(position[1] * scale, position[2] * scale, position[3] or 0), Vector3(size[1] * scale, size[2] * scale, size[3] or 0), color, masked, saturated, retained_id, point_sample, viewport_mask)\r\nend\r\n\r\n",
+        ["renderer_factory"] = "function (world, is_tutorial, is_in_inn, mechanism_key)\r\n\t\tlocal materials = {\r\n\t\t\t\"material\",\r\n\t\t\t\"materials/ui/ui_1080p_hud_atlas_textures\",\r\n\t\t\t\"material\",\r\n\t\t\t\"materials/ui/ui_1080p_hud_single_textures\",\r\n\t\t\t\"material\",\r\n\t\t\t\"materials/ui/ui_1080p_menu_atlas_textures\",\r\n\t\t\t\"material\",\r\n\t\t\t\"materials/ui/ui_1080p_menu_single_textures\",\r\n\t\t\t\"material\",\r\n\t\t\t\"materials/ui/ui_1080p_common\",\r\n\t\t\t\"material\",\r\n\t\t\t\"materials/ui/ui_1080p_versus_available_common\",\r\n\t\t\t\"material\",\r\n\t\t\t\"materials/ui/ui_1080p_chat\",\r\n\t\t\t\"material\",\r\n\t\t\t\"materials/fonts/gw_fonts\",\r\n\t\t}\r\n\r\n\t\tif is_in_inn then\r\n\t\t\tmaterials[#materials + 1] = \"material\"\r\n\t\t\tmaterials[#materials + 1] = \"materials/ui/ui_1080p_achievement_atlas_textures\"\r\n\t\t\tmaterials[#materials + 1] = \"material\"\r\n\t\t\tmaterials[#materials + 1] = \"materials/ui/ui_1080p_inn_single_textures\"\r\n\t\t\tmaterials[#materials + 1] = \"material\"\r\n\t\t\tmaterials[#materials + 1] = \"materials/ui/ui_1080p_lock_test\"\r\n\t\t\tmaterials[#materials + 1] = \"material\"\r\n\t\t\tmaterials[#materials + 1] = \"materials/ui/ui_1080p_pose_cosmetics\"\r\n\t\t\tmaterials[#materials + 1] = \"material\"\r\n\t\t\tmaterials[#materials + 1] = \"video/tutorial_videos/tutorial_videos\"\r\n\r\n\t\t\tfor _, settings in pairs(AreaSettings) do\r\n\t\t\t\tlocal video_settings = settings.video_settings\r\n\r\n\t\t\t\tif video_settings then\r\n\t\t\t\t\tmaterials[#materials + 1] = \"material\"\r\n\t\t\t\t\tmaterials[#materials + 1] = video_settings.resource\r\n\t\t\t\tend\r\n\t\t\tend\r\n\r\n\t\t\tfor _, dlc in pairs(DLCSettings) do\r\n\t\t\t\tlocal ui_materials_in_inn = dlc.ui_materials_in_inn\r\n\t\t\t\tlocal ui_materials_in_inn_condition = dlc.ui_materials_in_inn_condition\r\n\r\n\t\t\t\tif ui_materials_in_inn and (not ui_materials_in_inn_condition or ui_materials_in_inn_condition(is_tutorial, is_in_inn, mechanism_key)) then\r\n\t\t\t\t\tfor _, path in ipairs(ui_materials_in_inn) do\r\n\t\t\t\t\t\tmaterials[#materials + 1] = \"material\"\r\n\t\t\t\t\t\tmaterials[#materials + 1] = path\r\n\t\t\t\t\tend\r\n\t\t\t\tend\r\n\t\t\tend\r\n\t\tend\r\n\r\n\t\tfor _, dlc in pairs(DLCSettings) do\r\n\t\t\tlocal ui_materials = dlc.ui_materials\r\n\t\t\tlocal ui_materials_condition = dlc.ui_materials_condition\r\n\r\n\t\t\tif ui_materials and (not ui_materials_condition or ui_materials_condition(is_tutorial, is_in_inn, mechanism_key)) then\r\n\t\t\t\tfor _, path in ipairs(ui_materials) do\r\n\t\t\t\t\tmaterials[#materials + 1] = \"material\"\r\n\t\t\t\t\tmaterials[#materials + 1] = path\r\n\t\t\t\tend\r\n\t\t\tend\r\n\t\tend\r\n\r\n\t\tif is_tutorial then\r\n\t\t\tmaterials[#materials + 1] = \"material\"\r\n\t\t\tmaterials[#materials + 1] = \"materials/ui/ui_1080p_tutorial_textures\"\r\n\t\tend\r\n\r\n\t\tfor _, settings in pairs(CareerSettings) do\r\n\t\t\tlocal video = settings.video\r\n\r\n\t\t\tif video then\r\n\t\t\t\tmaterials[#materials + 1] = \"material\"\r\n\t\t\t\tmaterials[#materials + 1] = video.resource\r\n\t\t\tend\r\n\t\tend\r\n\r\n\t\tif IS_WINDOWS then\r\n\t\t\tmaterials[#materials + 1] = \"material\"\r\n\t\t\tmaterials[#materials + 1] = \"video/ui_option\"\r\n\t\tend\r\n\r\n\t\tif IS_WINDOWS then\r\n\t\t\treturn UIRenderer.create(world, unpack(materials))\r\n\t\telse\r\n\t\t\treturn UIRenderer.create(world, unpack(materials))\r\n\t\tend\r\n\tend",
+        ["belakor_settings"] = "local settings = DLCSettings.belakor\r\n\r\nsettings.ui_materials = {\r\n\t\"materials/ui/ui_1080p_belakor_atlas\",\r\n}\r\nsettings.ui_texture_settings = {\r\n\tfilenames = {\r\n\t\t\"scripts/ui/atlas_settings/gui_belakor_atlas\",\r\n\t},\r\n\tatlas_settings = {\r\n\t\tbelakor_atlas = {\r\n\t\t\tmasked_material_name = \"gui_belakor_atlas_masked\",\r\n\t\t\tmasked_offscreen_material_name = \"gui_belakor_atlas_masked_offscreen\",\r\n\t\t\tmasked_point_sample_material_name = \"gui_belakor_atlas_point_sample_masked\",\r\n\t\t\tmasked_point_sample_offscreen_material_name = \"gui_belakor_atlas_point_sample_masked_offscreen\",\r\n\t\t\tmasked_saturated_material_name = \"gui_belakor_atlas_masked_saturated\",\r\n\t\t\tmaterial_name = \"gui_belakor_atlas\",\r\n\t\t\toffscreen_material_name = \"gui_belakor_atlas_offscreen\",\r\n\t\t\tpoint_sample_material_name = \"gui_belakor_atlas_point_sample\",\r\n\t\t\tpoint_sample_offscreen_material_name = \"gui_belakor_atlas_point_sample_offscreen\",\r\n\t\t\tsaturated_material_name = \"gui_belakor_atlas_saturated\",\r\n\t\t\tsaturated_offscreen_material_name = \"gui_belakor_atlas_saturated\",\r\n\t\t},\r\n\t},\r\n}\r\n",
+    },
+    segments = {
+        {
+            ["file"] = "scripts/ui/ui_renderer.lua",
+            ["first"] = "UIRenderer._injected_material_sets = {}",
+            ["last"] = "local UI_RENDERER_INTERFACE",
+            ["code_key"] = "renderer_create",
+            ["first_line"] = 234,
+            ["last_line"] = 252,
+        },
+        {
+            ["file"] = "scripts/ui/ui_renderer.lua",
+            ["first"] = "UIRenderer.script_draw_bitmap = function",
+            ["last"] = "UIRenderer.script_draw_bitmap_uv = function",
+            ["code_key"] = "bitmap",
+            ["first_line"] = 60,
+            ["last_line"] = 120,
+        },
+        {
+            ["file"] = "scripts/ui/ui_renderer.lua",
+            ["first"] = "UIRenderer.draw_texture = function",
+            ["last"] = "UIRenderer.draw_texture_uv = function",
+            ["code_key"] = "draw_texture",
+            ["first_line"] = 792,
+            ["last_line"] = 807,
+        },
+        {
+            ["file"] = "scripts/ui/views/ingame_ui_settings.lua",
+            ["first"] = "function (world, is_tutorial, is_in_inn, mechanism_key)",
+            ["last"] = ",\r\n\tui_top_renderer_function = function",
+            ["code_key"] = "renderer_factory",
+            ["first_line"] = 562,
+            ["last_line"] = 651,
+        },
+        {
+            ["file"] = "scripts/settings/dlcs/belakor/belakor_ui_settings.lua",
+            ["first"] = "local settings = DLCSettings.belakor",
+            ["last"] = "settings.breed_textures",
+            ["code_key"] = "belakor_settings",
+            ["first_line"] = 3,
+            ["last_line"] = 27,
+        },
+    },
+    atlases = {
+        ["deus_icons_boon"] = {
+		size = {
+			80,
+			80,
+		},
+		uv00 = {
+			0.500488,
+			0.288086,
+		},
+		uv11 = {
+			0.52002,
+			0.327148,
+		},
+	            material_name = "gui_icons_atlas",
+            masked_saturated_material_name = "gui_icons_atlas_masked_saturated",
+        },
+        ["deus_icons_coin"] = {
+		size = {
+			80,
+			80,
+		},
+		uv00 = {
+			0.520996,
+			0.24707,
+		},
+		uv11 = {
+			0.540527,
+			0.286133,
+		},
+	            material_name = "gui_icons_atlas",
+            masked_saturated_material_name = "gui_icons_atlas_masked_saturated",
+        },
+        ["deus_icon_supportbomb_concentration_01"] = {
+		size = {
+			80,
+			80,
+		},
+		uv00 = {
+			0.192871,
+			0.24707,
+		},
+		uv11 = {
+			0.212402,
+			0.286133,
+		},
+	            material_name = "gui_icons_atlas",
+            masked_saturated_material_name = "gui_icons_atlas_masked_saturated",
+        },
+        ["deus_icon_supportbomb_crit_01"] = {
+		size = {
+			80,
+			80,
+		},
+		uv00 = {
+			0.172363,
+			0.411133,
+		},
+		uv11 = {
+			0.191895,
+			0.450195,
+		},
+	            material_name = "gui_icons_atlas",
+            masked_saturated_material_name = "gui_icons_atlas_masked_saturated",
+        },
+        ["deus_icon_supportbomb_healing_01"] = {
+		size = {
+			80,
+			80,
+		},
+		uv00 = {
+			0.151855,
+			0.53418,
+		},
+		uv11 = {
+			0.171387,
+			0.573242,
+		},
+	            material_name = "gui_icons_atlas",
+            masked_saturated_material_name = "gui_icons_atlas_masked_saturated",
+        },
+        ["deus_icon_supportbomb_speed_01"] = {
+		size = {
+			80,
+			80,
+		},
+		uv00 = {
+			0.151855,
+			0.452148,
+		},
+		uv11 = {
+			0.171387,
+			0.491211,
+		},
+	            material_name = "gui_icons_atlas",
+            masked_saturated_material_name = "gui_icons_atlas_masked_saturated",
+        },
+        ["deus_icon_trait_crit_chain_lightning"] = {
+		size = {
+			40,
+			40,
+		},
+		uv00 = {
+			0.322266,
+			0.950195,
+		},
+		uv11 = {
+			0.361328,
+			0.989258,
+		},
+	            material_name = "gui_belakor_atlas",
+            masked_saturated_material_name = "gui_belakor_atlas_masked_saturated",
+        },
+        ["deus_curse_slaanesh_01"] = {
+		size = {
+			80,
+			80,
+		},
+		uv00 = {
+			0.869629,
+			0.083008,
+		},
+		uv11 = {
+			0.88916,
+			0.12207,
+		},
+	            material_name = "gui_icons_atlas",
+            masked_saturated_material_name = "gui_icons_atlas_masked_saturated",
+        },
+        ["deus_icon_invigorating_strike"] = {
+		size = {
+			80,
+			80,
+		},
+		uv00 = {
+			0.910156,
+			0.542969,
+		},
+		uv11 = {
+			0.988281,
+			0.621094,
+		},
+	            material_name = "gui_belakor_atlas",
+            masked_saturated_material_name = "gui_belakor_atlas_masked_saturated",
+        },
+    },
+    atlas_sources = {
+        ["deus_icons_boon"] = {
+            ["file"] = "scripts/ui/atlas_settings/gui_icons_atlas.lua",
+            ["first"] = "\tdeus_icons_boon = {",
+            ["first_line"] = 12128,
+            ["last_line"] = 12141,
+        },
+        ["deus_icons_coin"] = {
+            ["file"] = "scripts/ui/atlas_settings/gui_icons_atlas.lua",
+            ["first"] = "\tdeus_icons_coin = {",
+            ["first_line"] = 11512,
+            ["last_line"] = 11525,
+        },
+        ["deus_icon_supportbomb_concentration_01"] = {
+            ["file"] = "scripts/ui/atlas_settings/gui_icons_atlas.lua",
+            ["first"] = "\tdeus_icon_supportbomb_concentration_01 = {",
+            ["first_line"] = 17518,
+            ["last_line"] = 17531,
+        },
+        ["deus_icon_supportbomb_crit_01"] = {
+            ["file"] = "scripts/ui/atlas_settings/gui_icons_atlas.lua",
+            ["first"] = "\tdeus_icon_supportbomb_crit_01 = {",
+            ["first_line"] = 17798,
+            ["last_line"] = 17811,
+        },
+        ["deus_icon_supportbomb_healing_01"] = {
+            ["file"] = "scripts/ui/atlas_settings/gui_icons_atlas.lua",
+            ["first"] = "\tdeus_icon_supportbomb_healing_01 = {",
+            ["first_line"] = 18092,
+            ["last_line"] = 18105,
+        },
+        ["deus_icon_supportbomb_speed_01"] = {
+            ["file"] = "scripts/ui/atlas_settings/gui_icons_atlas.lua",
+            ["first"] = "\tdeus_icon_supportbomb_speed_01 = {",
+            ["first_line"] = 18120,
+            ["last_line"] = 18133,
+        },
+        ["deus_icon_trait_crit_chain_lightning"] = {
+            ["file"] = "scripts/ui/atlas_settings/gui_belakor_atlas.lua",
+            ["first"] = "\tdeus_icon_trait_crit_chain_lightning = {",
+            ["first_line"] = 172,
+            ["last_line"] = 185,
+        },
+        ["deus_curse_slaanesh_01"] = {
+            ["file"] = "scripts/ui/atlas_settings/gui_icons_atlas.lua",
+            ["first"] = "\tdeus_curse_slaanesh_01 = {",
+            ["first_line"] = 11036,
+            ["last_line"] = 11049,
+        },
+        ["deus_icon_invigorating_strike"] = {
+            ["file"] = "scripts/ui/atlas_settings/gui_belakor_atlas.lua",
+            ["first"] = "\tdeus_icon_invigorating_strike = {",
+            ["first_line"] = 438,
+            ["last_line"] = 451,
+        },
+    },
+    buff_flags = { retained_mode = true, foreground_masked = true },
+    buff_flag_sources = {
+        {
+            ["file"] = "scripts/ui/hud_ui/buff_ui_definitions.lua",
+            ["first_line"] = 4,
+            ["last_line"] = 4,
+            ["field"] = "retained_mode",
+        },
+        {
+            ["file"] = "scripts/ui/hud_ui/buff_ui_definitions.lua",
+            ["first_line"] = 105,
+            ["last_line"] = 114,
+            ["field"] = "retained_mode",
+        },
+        {
+            ["file"] = "scripts/ui/hud_ui/buff_ui_definitions.lua",
+            ["first_line"] = 210,
+            ["last_line"] = 213,
+            ["field"] = "foreground_masked",
+        },
+    },
+    controls = { base = { icon = "deus_curse_slaanesh_01", is_cooldown = true },
+        belakor = { icon = "deus_icon_invigorating_strike", is_cooldown = true } },
+    control_sources = {
+        ["base"] = {
+            ["file"] = "scripts/settings/dlcs/belakor/belakor_buff_settings.lua",
+            ["first_line"] = 631,
+            ["last_line"] = 645,
+        },
+        ["belakor"] = {
+            ["file"] = "scripts/settings/dlcs/morris/morris_buff_settings.lua",
+            ["first_line"] = 6651,
+            ["last_line"] = 6662,
+        },
+    },
+    lifecycle = {
+        {
+            ["name"] = "ingame_renderer_creation",
+            ["file"] = "scripts/ui/views/ingame_ui.lua",
+            ["first_line"] = 76,
+            ["last_line"] = 77,
+            ["text"] = "\tself.ui_renderer = self:create_ui_renderer(world, is_tutorial, is_in_inn, mechanism_key)\r\n\tself.ui_top_renderer = self:create_ui_renderer(top_world, is_tutorial, is_in_inn, mechanism_key)\r",
+        },
+        {
+            ["name"] = "ingame_context_renderer_binding",
+            ["file"] = "scripts/ui/views/ingame_ui.lua",
+            ["first_line"] = 94,
+            ["last_line"] = 103,
+            ["text"] = "\tingame_ui_context.ui_renderer = self.ui_renderer\r\n\tingame_ui_context.ui_top_renderer = self.ui_top_renderer\r\n\tingame_ui_context.ingame_ui = self\r\n\tingame_ui_context.wwise_world = wwise_world\r\n\tself.profile_synchronizer = ingame_ui_context.profile_synchronizer\r\n\tself.peer_id = ingame_ui_context.peer_id\r\n\tself.local_player_id = ingame_ui_context.local_player_id\r\n\tself._player = ingame_ui_context.player\r\n\tself.is_server = ingame_ui_context.is_server\r\n\tself.ingame_hud = IngameHud:new(self, ingame_ui_context)\r",
+        },
+        {
+            ["name"] = "hud_before_renderer_teardown",
+            ["file"] = "scripts/ui/views/ingame_ui.lua",
+            ["first_line"] = 252,
+            ["last_line"] = 253,
+            ["text"] = "\tself.ingame_hud:destroy()\r\n\r",
+        },
+        {
+            ["name"] = "renderer_teardown",
+            ["file"] = "scripts/ui/views/ingame_ui.lua",
+            ["first_line"] = 299,
+            ["last_line"] = 303,
+            ["text"] = "\tUIRenderer.destroy(self.ui_renderer, self.world)\r\n\tUIRenderer.destroy(self.ui_top_renderer, self.top_world)\r\n\r\n\tself.ui_renderer = nil\r\n\tself.ui_top_renderer = nil\r",
+        },
+        {
+            ["name"] = "hud_component_teardown",
+            ["file"] = "scripts/ui/views/ingame_hud.lua",
+            ["first_line"] = 444,
+            ["last_line"] = 455,
+            ["text"] = "IngameHud.destroy = function (self)\r\n\tManagers.state.event:unregister(\"player_party_changed\", self)\r\n\r\n\tlocal components_array = self._components_array\r\n\r\n\tfor _, component in ipairs(components_array) do\r\n\t\tif component.destroy then\r\n\t\t\tcomponent:destroy()\r\n\t\tend\r\n\tend\r\n\r\n\tself._components = nil\r",
+        },
+        {
+            ["name"] = "player_list_renderer_binding",
+            ["file"] = "scripts/ui/views/ingame_player_list_ui_v2.lua",
+            ["first_line"] = 37,
+            ["last_line"] = 42,
+            ["text"] = "IngamePlayerListUI.init = function (self, parent, ingame_ui_context)\r\n\tself._parent = parent\r\n\tself._ui_renderer = ingame_ui_context.ui_renderer\r\n\tself._ui_top_renderer = ingame_ui_context.ui_top_renderer\r\n\tself._ingame_ui = ingame_ui_context.ingame_ui\r\n\tself._wwise_world = ingame_ui_context.dialogue_system.wwise_world\r",
+        },
+        {
+            ["name"] = "player_list_plain_icon_pass",
+            ["file"] = "scripts/ui/views/ingame_player_list_ui_v2_definitions.lua",
+            ["first_line"] = 884,
+            ["last_line"] = 897,
+            ["text"] = "\t\t\t\t{\r\n\t\t\t\t\tpass_type = \"texture\",\r\n\t\t\t\t\tstyle_id = \"icon\",\r\n\t\t\t\t\ttexture_id = \"icon\",\r\n\t\t\t\t\tcontent_check_function = function (content)\r\n\t\t\t\t\t\treturn content.amount > 0\r\n\t\t\t\t\tend,\r\n\t\t\t\t},\r\n\t\t\t\t{\r\n\t\t\t\t\tpass_type = \"texture\",\r\n\t\t\t\t\tstyle_id = \"background_icon\",\r\n\t\t\t\t\ttexture_id = \"icon\",\r\n\t\t\t\t},\r\n\t\t\t\t{\r",
+        },
+        {
+            ["name"] = "buff_renderer_binding",
+            ["file"] = "scripts/ui/hud_ui/buff_ui.lua",
+            ["first_line"] = 32,
+            ["last_line"] = 36,
+            ["text"] = "BuffUI.init = function (self, parent, ingame_ui_context)\r\n\tself._ui_renderer = ingame_ui_context.ui_renderer\r\n\tself._player = ingame_ui_context.player\r\n\tself._is_spectator = false\r\n\tself._spectated_player_unit = nil\r",
+        },
+        {
+            ["name"] = "buff_retained_mode",
+            ["file"] = "scripts/ui/hud_ui/buff_ui_definitions.lua",
+            ["first_line"] = 3,
+            ["last_line"] = 4,
+            ["text"] = "local SIZE_X, SIZE_Y = 1920, 1080\r\nlocal RETAINED_MODE_ENABLED = true\r",
+        },
+        {
+            ["name"] = "buff_retained_icon_passes",
+            ["file"] = "scripts/ui/hud_ui/buff_ui_definitions.lua",
+            ["first_line"] = 105,
+            ["last_line"] = 117,
+            ["text"] = "\t\t\t\tpass_type = \"texture\",\r\n\t\t\t\tstyle_id = \"texture_icon_bg\",\r\n\t\t\t\ttexture_id = \"texture_icon\",\r\n\t\t\t\tretained_mode = RETAINED_MODE_ENABLED,\r\n\t\t\t},\r\n\t\t\t{\r\n\t\t\t\tpass_type = \"texture\",\r\n\t\t\t\tstyle_id = \"texture_icon\",\r\n\t\t\t\ttexture_id = \"texture_icon\",\r\n\t\t\t\tretained_mode = RETAINED_MODE_ENABLED,\r\n\t\t\t\tcontent_check_function = function (content)\r\n\t\t\t\t\treturn content.is_cooldown\r\n\t\t\t\tend,\r",
+        },
+        {
+            ["name"] = "buff_destroy_and_hide_retained_elements",
+            ["file"] = "scripts/ui/hud_ui/buff_ui.lua",
+            ["first_line"] = 285,
+            ["last_line"] = 304,
+            ["text"] = "BuffUI.destroy = function (self)\r\n\tself:set_visible(false)\r\n\tManagers.state.event:unregister(\"on_spectator_target_changed\", self)\r\n\tManagers.state.event:unregister(\"on_game_options_changed\", self)\r\nend\r\n\r\nBuffUI.set_visible = function (self, visible)\r\n\tself._is_visible = visible\r\n\r\n\tlocal ui_renderer = self._ui_renderer\r\n\tlocal active_buff_widgets = self._active_buff_widgets\r\n\r\n\tfor i = 1, #active_buff_widgets do\r\n\t\tlocal widget = active_buff_widgets[i]\r\n\r\n\t\tUIRenderer.set_element_visible(ui_renderer, widget.element, visible)\r\n\tend\r\n\r\n\tself._dirty = true\r\nend\r",
+        },
+        {
+            ["name"] = "buff_foreground_mask",
+            ["file"] = "scripts/ui/hud_ui/buff_ui_definitions.lua",
+            ["first_line"] = 210,
+            ["last_line"] = 213,
+            ["text"] = "\t\ttexture_icon = {\r\n\t\t\tmasked = true,\r\n\t\t\tsaturated = false,\r\n\t\t\tsize = {\r",
+        },
+        {
+            ["name"] = "buff_icon_and_saturation",
+            ["file"] = "scripts/ui/hud_ui/buff_ui.lua",
+            ["first_line"] = 252,
+            ["last_line"] = 268,
+            ["text"] = "\twidget_content.texture_icon = icon\r\n\twidget_content.is_cooldown = is_cooldown\r\n\twidget_content.buff = buff\r\n\twidget_content.name = buff_template.name\r\n\twidget_content.static_start_time = start_time\r\n\twidget_content.stack_count = 1\r\n\twidget_content.progress = is_cooldown and 1 or 0\r\n\r\n\tUIRenderer.set_element_visible(self._ui_renderer, widget.element, true)\r\n\r\n\tlocal widget_style = widget.style\r\n\tlocal duration_color = buff_template.debuff and COLOR_DEBUFF or COLOR_BUFF\r\n\r\n\tColors.copy_to(widget_style.texture_duration.color, duration_color)\r\n\r\n\twidget_style.texture_icon.saturated = is_cooldown\r\n\twidget_style.texture_icon_bg.saturated = is_cooldown and is_infinite\r",
+        },
+        {
+            ["name"] = "native_base_cooldown_control",
+            ["file"] = "scripts/settings/dlcs/belakor/belakor_buff_settings.lua",
+            ["first_line"] = 631,
+            ["last_line"] = 645,
+            ["text"] = "\tbelakor_homing_skull_debuff_delayed_stun = {\r\n\t\tbuffs = {\r\n\t\t\t{\r\n\t\t\t\tbuff_to_add = \"belakor_homing_skull_debuff_delayed_stun_effect\",\r\n\t\t\t\tcontinuous_effect = \"fx/screenspace_darkness_flash\",\r\n\t\t\t\tdebuff = true,\r\n\t\t\t\tduration = 3,\r\n\t\t\t\ticon = \"deus_curse_slaanesh_01\",\r\n\t\t\t\tis_cooldown = true,\r\n\t\t\t\tmax_stacks = 1,\r\n\t\t\t\tname = \"belakor_homing_skull_debuff_delayed_stun\",\r\n\t\t\t\tpriority_buff = true,\r\n\t\t\t\tremove_buff_func = \"add_buff\",\r\n\t\t\t},\r\n\t\t},\r",
+        },
+        {
+            ["name"] = "native_belakor_cooldown_control",
+            ["file"] = "scripts/settings/dlcs/morris/morris_buff_settings.lua",
+            ["first_line"] = 6651,
+            ["last_line"] = 6662,
+            ["text"] = "\tinvigorating_strike_cooldown = {\r\n\t\tbuffs = {\r\n\t\t\t{\r\n\t\t\t\ticon = \"deus_icon_invigorating_strike\",\r\n\t\t\t\tis_cooldown = true,\r\n\t\t\t\tmax_stacks = 1,\r\n\t\t\t\tname = \"invigorating_strike_cooldown\",\r\n\t\t\t\tduration = MorrisBuffTweakData.invigorating_strike_cooldown.duration,\r\n\t\t\t},\r\n\t\t},\r\n\t},\r\n\tstaggering_force_buff = {\r",
+        },
+        {
+            ["name"] = "base_atlas_table",
+            ["file"] = "scripts/helpers/ui_atlas_helper.lua",
+            ["first_line"] = 362,
+            ["last_line"] = 362,
+            ["text"] = "\tgui_icons_atlas = icons_atlas,\r",
+        },
+        {
+            ["name"] = "base_masked_saturated_alias",
+            ["file"] = "scripts/helpers/ui_atlas_helper.lua",
+            ["first_line"] = 413,
+            ["last_line"] = 413,
+            ["text"] = "\tgui_icons_atlas = \"gui_icons_atlas_masked_saturated\",\r",
+        },
+        {
+            ["name"] = "base_atlas_material_assignment",
+            ["file"] = "scripts/helpers/ui_atlas_helper.lua",
+            ["first_line"] = 511,
+            ["last_line"] = 517,
+            ["text"] = "\t\tsettings.texture_name = texture_name\r\n\t\tsettings.material_name = material\r\n\t\tsettings.masked_material_name = masked_materials[material]\r\n\t\tsettings.point_sample_material_name = point_sample_materials[material]\r\n\t\tsettings.masked_point_sample_material_name = masked_point_sample_materials[material]\r\n\t\tsettings.saturated_material_name = saturated_materials[material]\r\n\t\tsettings.masked_saturated_material_name = masked_saturated_materials[material]\r",
+        },
+        {
+            ["name"] = "dlc_package_boot_load",
+            ["file"] = "scripts/boot.lua",
+            ["first_line"] = 358,
+            ["last_line"] = 363,
+            ["text"] = "\t\tfor dlc_name, dlc in pairs(DLCSettings) do\r\n\t\t\tlocal package_name = dlc.package_name\r\n\r\n\t\t\tif package_name then\r\n\t\t\t\tManagers.package:load(package_name, \"boot\", nil, true)\r\n\t\t\tend\r",
+        },
+        {
+            ["name"] = "dlc_packages_ready_before_settings",
+            ["file"] = "scripts/boot.lua",
+            ["first_line"] = 377,
+            ["last_line"] = 389,
+            ["text"] = "\telseif Boot.startup_state == \"loading_dlcs\" then\r\n\t\tfoundation_require(\"util\", \"local_require\")\r\n\r\n\t\tlocal done = Managers.package:update(dt)\r\n\r\n\t\tif done then\r\n\t\t\tBoot.startup_state = \"done_loading_dlcs\"\r\n\t\t\tBoot.disable_loading_bar = true\r\n\t\tend\r\n\telseif Boot.startup_state == \"done_loading_dlcs\" then\r\n\t\tDLCUtils.require_list(\"additional_settings\")\r\n\t\tDLCUtils.merge(\"script_data\", script_data)\r\n\t\tGame:require_game_scripts()\r",
+        },
+        {
+            ["name"] = "belakor_package_identity",
+            ["file"] = "scripts/settings/dlc_settings.lua",
+            ["first_line"] = 259,
+            ["last_line"] = 272,
+            ["text"] = "\tbelakor = {\r\n\t\tlocalization = \"localization/belakor\",\r\n\t\tpackage_name = \"resource_packages/dlcs/belakor\",\r\n\t\tadditional_settings = {\r\n\t\t\tachievements = \"scripts/settings/dlcs/belakor/belakor_achievements_settings\",\r\n\t\t\tai = \"scripts/settings/dlcs/belakor/belakor_ai_settings\",\r\n\t\t\tbuff = \"scripts/settings/dlcs/belakor/belakor_buff_settings\",\r\n\t\t\tchallenges = \"scripts/settings/dlcs/belakor/belakor_ingame_challenge_settings\",\r\n\t\t\tcommon = \"scripts/settings/dlcs/belakor/belakor_common_settings\",\r\n\t\t\tequipment = \"scripts/settings/dlcs/belakor/belakor_equipment_settings\",\r\n\t\t\tpickups = \"scripts/settings/dlcs/belakor/belakor_pickup_settings\",\r\n\t\t\tsound = \"scripts/settings/dlcs/belakor/belakor_sound_settings\",\r\n\t\t\tui = \"scripts/settings/dlcs/belakor/belakor_ui_settings\",\r\n\t\t},\r",
+        },
+    },
+}

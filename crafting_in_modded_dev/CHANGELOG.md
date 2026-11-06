@@ -1,5 +1,25 @@
 # Crafting in Modded Changelog
 
+## 0.8.148-dev (2026-11-06) -- Native retained preview Gui selection
+
+- Follow the actual native texture pass's `retained_mode` when proving the
+  target Gui, not the style's cached retained bitmap ID. Both static and dynamic
+  mission guards must refuse a missing retained Gui instead of proving the
+  immediate Gui and allowing a draw on an unproved target (#749, #404).
+- Exact 6.13 native texture/renderer execution exposed the defect in the
+  unchanged Dev and official candidate. Eight adversarial cases per stream
+  cover independent Gui residency, absent retained handles and failing probes;
+  restored old policy/glue are negative controls. No historical crash cause or
+  native gameplay acceptance is inferred from this offline counterexample.
+- Keep the existing shared helper, global unknown-resource policy, hook count,
+  tuple/error contracts and all unrelated Dev work unchanged. This is the
+  minimal Dev-first prerequisite for the authorized official0.8.148 promotion.
+- Verification: `/cim_regression_test` and the current issue cards in an actual
+  Adventure mission. The existing material-suppression receipts show the live
+  guard path; exact native Gui handles/draw behaviour cannot be established
+  from the keep or by an installation-only regression check.
+
+
 ## 0.8.147-dev (2026-11-03) -- Reissue of unpublished 0.8.146-dev
 
 - Same code as 0.8.146-dev, which merged but never reached the Workshop: its

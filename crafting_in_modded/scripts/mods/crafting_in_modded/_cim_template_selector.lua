@@ -10,8 +10,19 @@ local M = {}
 -- kept as the fallback so this module stays pure and standalone-loadable for the
 -- unit tests.
 local _canonical_key_resolver = nil
+local _craft_picker_role_resolver = nil
 function M.set_canonical_key_resolver(fn)
     _canonical_key_resolver = type(fn) == "function" and fn or nil
+end
+
+function M.set_identity_contract(contract)
+    contract = type(contract) == "table" and contract or nil
+    _canonical_key_resolver = contract
+        and type(contract.canonical_item_key) == "function"
+        and contract.canonical_item_key or nil
+    _craft_picker_role_resolver = contract
+        and type(contract.craft_picker_role) == "function"
+        and contract.craft_picker_role or nil
 end
 
 local function _rarity(item)
@@ -27,9 +38,34 @@ local function _power(item)
     return tonumber(item.power_level or (custom and custom.power_level))
 end
 
-local function _is_weapon_row(item)
+local function _is_craftable_row(item)
     local data = type(item) == "table" and type(item.data) == "table" and item.data or nil
-    return data and (data.slot_type == "melee" or data.slot_type == "ranged") or false
+    local slot_type = data and data.slot_type or (type(item) == "table" and item.slot_type)
+    return slot_type == "melee" or slot_type == "ranged"
+        or slot_type == "ring" or slot_type == "necklace" or slot_type == "trinket"
+end
+
+local function _slot_type(item)
+    local data = type(item) == "table" and type(item.data) == "table" and item.data or nil
+    return data and data.slot_type or (type(item) == "table" and item.slot_type)
+end
+
+local function _allowed_slots(options)
+    if type(options) ~= "table" then return nil end
+    local slots = type(options.allowed_slots) == "table" and options.allowed_slots or nil
+    return slots and next(slots) and slots or nil
+end
+
+local function _slot_allowed(item, allowed)
+    if not allowed then return true end
+    return allowed[_slot_type(item)] == true
+end
+
+local function _craft_picker_role(item)
+    if _craft_picker_role_resolver then return _craft_picker_role_resolver(item) end
+    if not _is_craftable_row(item) then return "other" end
+    local rarity = _rarity(item)
+    return (rarity == nil or rarity == "default") and "selector" or "instance"
 end
 
 function M.canonical_key(item)
@@ -87,16 +123,18 @@ function M.canonical_family(item)
     return key and ("key:" .. key) or nil
 end
 
-function M.inject(items, templates)
+function M.inject(items, templates, options)
     if type(items) ~= "table" or type(templates) ~= "table" then return items end
+    local allowed = _allowed_slots(options)
 
     -- A real default-rarity row wins over CIM's synthetic selector. Modded
     -- crafted instances never count: vanilla can_craft_with excludes them,
     -- and this guard preserves the contract even if an upstream filter leaks.
     local real_families = {}
     for _, item in ipairs(items) do
-        local rarity = _rarity(item)
-        if not item.cim_acquisition_template and (rarity == nil or rarity == "default") then
+        if _slot_allowed(item, allowed)
+                and not item.cim_acquisition_template
+                and _craft_picker_role(item) == "selector" then
             local family = M.canonical_family(item)
             if family then
                 local current = real_families[family]
@@ -116,14 +154,23 @@ function M.inject(items, templates)
     for i = 1, #items do
         local item = items[i]
         local keep = true
-        if item and item.cim_acquisition_template then
+        local role = item and _craft_picker_role(item) or "invalid"
+        if role == "instance" then
+            -- This module is called only for vanilla `can_craft_with`. Crafted
+            -- items belong in inventory/salvage and can never be acquisition
+            -- selectors, even if an upstream backend hook leaked one here.
+            keep = false
+        elseif item and item.cim_acquisition_template then
             local family = M.canonical_family(item)
-            if not family or real_families[family] or synthetic_families[family] then
+            if not _slot_allowed(item, allowed)
+                    or not family
+                    or real_families[family]
+                    or synthetic_families[family] then
                 keep = false
             else
                 synthetic_families[family] = true
             end
-        elseif item and _rarity(item) == "default" and _is_weapon_row(item) then
+        elseif item and role == "selector" and _is_craftable_row(item) then
             local family = M.canonical_family(item)
             -- Collapse repeated real/default weapon selectors too. Older code
             -- only bounded CIM's synthetic rows, allowing persisted/legacy CWV
@@ -143,7 +190,10 @@ function M.inject(items, templates)
     for _, template in pairs(templates) do
         local key = M.canonical_key(template)
         local family = M.canonical_family(template)
-        if key and family and not real_families[family] and not synthetic_families[family] then
+        if key and family
+                and _slot_allowed(template, allowed)
+                and not real_families[family]
+                and not synthetic_families[family] then
             pending[#pending + 1] = { key = key, family = family, template = template }
             synthetic_families[family] = true
         end

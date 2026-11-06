@@ -4,7 +4,29 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-05-22.
+Last updated: 2026-11-06.
+
+## Official selective-promotion contracts
+
+- Run `test_ct_official_verify_rollup`, `test_ct_official_native_gui_contract`
+  and every existing public #426/catalog suite. Selected production subjects
+  are the actual official files; no Dev substitution or optional native-source
+  checkout is needed. The pinned native fixture executes immediate PlayerList
+  and retained BuffUI atlas selection and lifetime contracts unconditionally.
+- Preserve the observed-order 29-row public catalog, pre-mutation parity gate,
+  post-gate purchase dispatch, nil-bearing native returns and host-effective
+  false values. No new NetworkLookup rows belong to the local cooldown display.
+- Rescue requires retained near-team readback before release. Accept native
+  collision shifts through three metres; reject far no-op/missing readback.
+  Preserve the four-error/30-second bound and single post-alive correction.
+- Keep only living Miasma owners while dead-health bodies still have inventory.
+  Ban-all must retain native base/elite/termite and foreign scaffolding. Preserve
+  the selected elite recipe, native placement spacing and immutable start tier.
+- Live-only checks remain mission population/classification, linked-pickup
+  identity on both peers, approach/finale graph effects, reload child instances,
+  actual progression/coin transitions, aura/cooldown rendering, TAB HUD scales,
+  and saved/reopened behavior. Offline callback or policy success is not a pass
+  for these cells. Use the published localized issue cards, solo first.
 
 ---
 ## Multiplayer / Network Sync

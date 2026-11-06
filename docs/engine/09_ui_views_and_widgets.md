@@ -274,7 +274,7 @@ non-negotiable 8). gut documents its whole-mod grep in each hook site
 | # | Trap | Detail / canonical fix |
 |---|---|---|
 | 1 | **`create_screen_gui` C-fatal on non-resident material** (create time) | `World.create_screen_gui` hard-fatals - bypasses pcall AND xpcall (went through VMF's safe_call_nr and still killed the client). Cannot be caught; must be PRE-FILTERED via `Application.can_get("material", path)`. Fix: `_gut_gui_material_guard.lua` drop-filter with fail-open self-test. Memory `reference_vt2_create_screen_gui_missing_material_crash` |
-| 2 | **Font material as create material** | `materials/fonts/arial` is a valid `Gui.text` FONT arg but NOT a create material -> instant fatal. Create with `materials/fonts/gw_fonts`; pass arial only to `Gui.text` (vanilla: `debug.lua:12` + `:81`). Burned gt #293/#295; fixed gt_dev `_gt_bot_teleport_lab.lua:1100`; **still live in gt STABLE `:897`** (see §5) |
+| 2 | **Font material as create material** | `materials/fonts/arial` is a valid `Gui.text` FONT arg but NOT a create material -> instant fatal. Create with `materials/fonts/gw_fonts`; pass arial only to `Gui.text` (vanilla: `debug.lua:12` + `:81`). Historical gt #293/#295; both current streams use `GUI_MTRL` at creation. See §5 for the checked public owner. |
 | 3 | **Keep-only Gui material drawn mid-mission** (draw time) - BUG_CLASSES.md §23 | `Material 'X' not found in Gui` at `ui_passes.lua` texture draw (~`:134-194`) or `UIRenderer.draw_video` -> `Gui.video` (`ui_renderer.lua:1296` decompiled / `:1345` shipped) = hard CTD. Cause: `ingame_ui_settings.lua` appends whole groups only `if is_in_inn` (`:582-614`). Fix = BOTH layers: inject-when-resident (`UIRenderer.create` hook) + skip-the-widget at creation site. Canonical `_gut_gui_material_guard.lua` + `_gut_mission_map.lua` (#155/#80/#336) |
 | 4 | **ShadingEnvironment.blend AV: undefined VARIATION** - BUG_CLASSES.md §22 | Mission-substituted preview world receives a variation request (`weapons_default_01`) its env doesn't define -> native 0xc0000005, uncatchable. Pin via `_update_environment` hook forcing `force_default = true` when the world env lacks the variation (`cosmetics_tweaker.lua:2751`, cim `:2298`); pick substitute env by residency, fallback `environment/blank` |
 | 5 | **Raw options materials on a borrowed renderer** | `checkbox_checked`, `rect_masked`, `highlight_texture` etc. exist ONLY in `options_view_definitions.lua`, in no atlas -> `Material not found in Gui` when reused in a mod view. Build rows from `rect`/`border` passes + atlas-backed textures (`matchmaking_checkbox`, `slider_thumb` in `gui_settings_atlas.lua`); draw on `ingame_ui_context.ui_renderer`, not ui_top_renderer. Memory `reference_vt2_options_widgets_raw_materials`; canonical `_mod_tweaker_definitions.lua` |
@@ -289,22 +289,21 @@ non-negotiable 8). gut documents its whole-mod grep in each hook site
 | 14 | **Repeat-transition guard eats re-opens** | `handle_transition` drops a transition equal to `_previous_transition` (`ingame_ui.lua:934-938`) - a custom "open my view" transition fired twice in a row silently no-ops; route exits through a DIFFERENT transition (gut exits via `"ingame_menu"`/`"hero_view"`/`"exit_menu"`) |
 | 15 | **Decompiled-vs-shipped line drift** | Crash logs cite shipped lines (`ui_renderer.lua:1345`); the decompiled repo differs by up to ~50 lines in big files. Match by function name, not line |
 | 16 | **Global residency is not exact-Gui closure** (#749) | `UIRenderer.create` bakes separate immediate/retained Gui instances (`ui_renderer.lua:247-248`). A passing `Application.can_get("material", path)` cannot prove the material exists in the Gui selected later by `ui_renderer.lua:836` / `ui_passes.lua:636`. Use `_lib_resource_residency.gui_material_resident` against the exact renderer before an optional draw. In a global create hook, missing/throwing probes are unknown: preserve the original vanilla/third-party/Pusfume pair and drop only positively absent resources. |
+| 17 | **Retained selection belongs to the pass, not its cached style ID** (#749/#404) | Native `UIPasses.texture.draw` chooses retained mode from `pass_definition.retained_mode` (`ui_passes.lua:134-138`); `UIRenderer.draw_texture` then selects `self.gui_retained` (`ui_renderer.lua:792-805`, source `93dea911`). Derive proof flags from that same pass field. If the retained Gui is absent, refuse the optional consumer draw; never borrow immediate-Gui proof. Actual CIM mission-glue/native-pass cases in `cim_official_resource_glue_cases.lua` cover both streams and both static/dynamic paths. This does not change the global preserve-unknown rule. |
 
 ---
 
 ## 5. Implications for our mods - concrete improvements
 
-1. **[P1 - promotion-stranded crash fix] gt STABLE still creates its debug GUI
-   with a font material.**
-   `general_tweaker/scripts/mods/general_tweaker/_gt_bot_teleport_lab.lua:897`
-   calls `World.create_screen_gui(world, "material", FONT_MTRL, "immediate")`
-   with `FONT_MTRL = "materials/fonts/arial"` (`:849`) - trap §4.2, a
-   guaranteed C-fatal whenever the bot-lab GUI spins up on stable gt. gt_dev
-   already fixed it (`general_tweaker_dev/.../_gt_bot_teleport_lab.lua:985`
-   comments + `:1100` creates with the gw_fonts material). Stable is read-only
-   (dev-only edit doctrine) - this needs surfacing for promotion, exactly the
-   #278-style stranded-fix failure mode `tools/promote/promotion-status.ps1`
-   exists to catch.
+1. **[Checked 2026-11-06 - historical warning, not a current public defect]
+   General's bot-lab uses separate GUI and font materials.**
+   `general_tweaker/scripts/mods/general_tweaker/_gt_bot_teleport_lab.lua:853`
+   defines `GUI_MTRL = "materials/fonts/gw_fonts"`; creation at `:908` passes
+   that material after its residency check at `:906`. Only `Gui.text` at `:981`
+   receives `FONT_MTRL = "materials/fonts/arial"`. The pre-promotion public
+   source already used this separation; the older claim of a stranded public
+   Arial-create defect was stale. This corrects documentation, not runtime code
+   or a claim that offline checks establish a successful native Gui draw.
 
 2. **[P2 - hook the engine's registration surface instead of racing it] gut's
    view attach leans on a timing-fragile `setup_views` hook.**

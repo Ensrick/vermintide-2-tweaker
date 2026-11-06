@@ -1,6 +1,8 @@
 -- Engine-free resource policy for CIM's LootItemUnitPreviewer/Athanor gate.
 local M = {}
 
+local OVERVIEW_ROLE_MARKER = "_cim882_mirrored_viewport"
+
 local function available(can_get, kind, path)
     if type(can_get) ~= "function" or type(path) ~= "string" or path == "" then
         return false
@@ -27,6 +29,60 @@ function M.authored_mode(descriptor, resource_mode, can_get)
     if not ok then return nil, "resolver_error" end
     if mode == "custom" or mode == "fallback" then return mode, reason end
     return nil, reason or "unavailable"
+end
+
+-- HeroWindowWeaveProperties uses {-0.85, 3, 0} for every item while the
+-- sibling native HeroWindowWeaveForgeWeapons browser centers its preview at
+-- x=0.  Keep the properties layout's authored depth/height, but use the
+-- native centered x position for ranged weapons whose long meshes otherwise
+-- sit at the far-left edge.  Returning nil leaves every other slot on the
+-- untouched vanilla path.
+function M.properties_preview_position(slot_type, native_position)
+    if slot_type ~= "ranged" or type(native_position) ~= "table"
+            or type(native_position[1]) ~= "number"
+            or type(native_position[2]) ~= "number"
+            or type(native_position[3]) ~= "number" then
+        return nil
+    end
+
+    return {
+        0,
+        native_position[2],
+        native_position[3],
+    }
+end
+
+-- The overview normally puts both equipped weapons at x=-0.8 and marks the
+-- third/secondary viewport `invert_rendering`; its keep-only inverted shading
+-- environment mirrors the final image.  The mission-safe environment fallback
+-- cannot preserve that resource, so mirror the viewport which vanilla marked,
+-- regardless of the weapon's slot_type.  Grail Knight, Slayer, Warrior Priest,
+-- and cross-slot loadouts can legitimately put a melee item in slot_ranged.
+function M.overview_preview_x(mirrored_viewport, native_x, in_keep)
+    if in_keep or mirrored_viewport ~= true or type(native_x) ~= "number" then
+        return native_x
+    end
+    return -native_x
+end
+
+-- #882 production handoff.  Keep the native viewport role and its later
+-- previewer consumer in callable, engine-free helpers so the runtime check can
+-- exercise the same producer -> widget content -> consumer path as the hooks.
+-- UIWidget.init preserves definition.content on widget.content; callers which
+-- do not present that exact table shape remain on the native placement path.
+function M.mark_overview_viewport_role(definition, invert_rendering)
+    if type(definition) == "table" and type(definition.content) == "table" then
+        definition.content[OVERVIEW_ROLE_MARKER] = invert_rendering == true
+    end
+    return definition
+end
+
+function M.overview_preview_x_from_widget(viewport_widget, native_x, in_keep)
+    local content = type(viewport_widget) == "table" and viewport_widget.content
+    local mirrored_viewport = type(content) == "table"
+        and content[OVERVIEW_ROLE_MARKER] == true
+    return M.overview_preview_x(mirrored_viewport, native_x, in_keep),
+        mirrored_viewport
 end
 
 return M

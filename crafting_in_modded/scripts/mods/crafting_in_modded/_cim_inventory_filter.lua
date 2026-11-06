@@ -7,8 +7,9 @@
 --     leaked OWNED vs_* twins from the Adventure grid (ALWAYS), drop vanilla
 --     weapons when show_only_modded / the standard forge is active, and inject
 --     blacksmith templates for the can_craft_with recipe.
---   * BackendInterfaceCommon.filter_items -- surface modded crafts in the salvage
---     grid regardless of equip / loadout state.
+--   * BackendInterfaceCommon.filter_items -- restore exact persisted CIM crafts
+--     to the salvage grid only when active-equip, saved-loadout, favorite,
+--     rarity, slot, and immutable-relic guards all pass.
 --   * _cim_is_versus_key / _cim_is_leaked_versus_twin (also published on the flat
 --     mod._cim_* namespace; the get_filtered_items re-hide and the inline
 --     versus_twin_rehidden regression check in the entry both consume them).
@@ -150,50 +151,95 @@ local function _is_salvage_filter(filter_infix)
     return filter_infix:find("can_salvage", 1, true) ~= nil
 end
 
+-- issues 628/682: this adapter routes every re-admitted row through the
+-- contract (`is_salvage_eligible` -> validate_instance), so declare salvage
+-- as a routed provider-gate surface for the unrouted-walk census.
+do
+    local _contract = mod._cim_synthetic_item_contract
+    if _contract and _contract.register_enumerator then
+        _contract.register_enumerator("salvage")
+    end
+end
+
+-- Issue 628 diagnostic: the 2026-07-20 log proved a crafted Dual Maces
+-- instance remained in the mirror, but only exposed aggregate salvage counts.
+-- Trace the exact guard state at this canonical boundary. Fingerprints suppress
+-- identical UI refreshes; the hard cap prevents unbounded output.
+local _cim628_salvage_trace_seen = {}
+local _cim628_salvage_trace_emits = 0
+local _CIM628_SALVAGE_TRACE_CAP = 96
+
+local function _cim628_join(values)
+    if type(values) ~= "table" or #values == 0 then return "none" end
+    local copy = {}
+    for i = 1, math.min(#values, 12) do copy[i] = tostring(values[i]) end
+    table.sort(copy)
+    local suffix = #values > 12 and string.format("+%d", #values - 12) or ""
+    return table.concat(copy, ",") .. suffix
+end
+
+local function _cim628_trace(contract, item, record, state, visible, eligible, reason,
+        careers, loadouts)
+    if _cim628_salvage_trace_emits >= _CIM628_SALVAGE_TRACE_CAP then return end
+    local bid = item and (item.backend_id or item.ItemInstanceId)
+    local fingerprint = contract.salvage_trace_fingerprint
+        and contract.salvage_trace_fingerprint(bid, visible, eligible, reason, state)
+    if not fingerprint or _cim628_salvage_trace_seen[fingerprint] then return end
+    _cim628_salvage_trace_seen[fingerprint] = true
+    _cim628_salvage_trace_emits = _cim628_salvage_trace_emits + 1
+    printf("[cim:628] salvage_state bid=%s key=%s result=%s verdict=%s reason=%s equipped=%s careers=%s saved=%s loadouts=%s favorite=%s backend_dirty=%s trace=%d/%d",
+        tostring(bid), tostring(record and record.item_key), visible and "visible" or "hidden",
+        eligible and "eligible" or "rejected", tostring(reason or "none"),
+        tostring(state.is_equipped), _cim628_join(careers),
+        tostring(state.is_equipped_by_any_loadout), _cim628_join(loadouts),
+        tostring(state.is_favorite), tostring(state.backend_dirty),
+        _cim628_salvage_trace_emits, _CIM628_SALVAGE_TRACE_CAP)
+end
+
+mod._cim628_salvage_trace_wired = true
+
 mod:hook("BackendInterfaceCommon", "filter_items", function(func, self, items, filter_infix, params)
     local result = func(self, items, filter_infix, params)
     if not _is_salvage_filter(filter_infix) then return result end
     if type(result) ~= "table" or type(items) ~= "table" then return result end
 
-    local seen = {}
-    for _, r in ipairs(result) do
-        if r and r.backend_id then seen[r.backend_id] = true end
-    end
-
     local backend_items = Managers.backend and Managers.backend:get_interface("items")
     if not backend_items then return result end
 
     local contract = mod._cim_synthetic_item_contract
-    if type(contract) ~= "table" then return result end
-
-    for _, item in ipairs(items) do
-        local bid = item and item.backend_id
-        local record = bid and mod._cim_get_craft and mod._cim_get_craft(bid)
-        if bid and record and not seen[bid] then
-            local equipped, any_loadout, favorite = true, true, true
-
-            local ok_equipped, careers = pcall(backend_items.equipped_by, backend_items, bid)
-            if ok_equipped and type(careers) == "table" then equipped = #careers > 0 end
-
-            local ok_loadout, loadouts = pcall(
-                backend_items.is_equipped_by_any_loadout, backend_items, bid)
-            if ok_loadout and type(loadouts) == "table" then any_loadout = #loadouts > 0 end
-
-            if ItemHelper and ItemHelper.is_favorite_backend_id then
-                local ok_favorite, value = pcall(ItemHelper.is_favorite_backend_id, bid, item)
-                if ok_favorite then favorite = value and true or false end
-            end
-
-            local eligible = contract.is_salvage_eligible(item, record, {
-                is_equipped = equipped,
-                is_equipped_by_any_loadout = any_loadout,
-                is_favorite = favorite,
-            })
-            if eligible then
-                result[#result + 1] = item
-                seen[bid] = true
-            end
-        end
+    if type(contract) ~= "table"
+            or type(contract.recover_salvage_items) ~= "function" then
+        return result
     end
-    return result
+
+    return contract.recover_salvage_items(items, result, {
+        get_record = function(backend_id)
+            return mod._cim_get_craft and mod._cim_get_craft(backend_id)
+        end,
+        get_equipped_careers = function(backend_id)
+            return backend_items:equipped_by(backend_id)
+        end,
+        get_saved_loadouts = function(backend_id)
+            return backend_items:is_equipped_by_any_loadout(backend_id)
+        end,
+        is_favorite = function(backend_id, item)
+            if not ItemHelper or not ItemHelper.is_favorite_backend_id then
+                return nil
+            end
+            -- #628: the vanilla helper ends `return favorite_item_ids and
+            -- favorite_item_ids[item_id]` (item_helper.lua:453) - NIL for a
+            -- non-favorited item, never false. The contract's fail-closed
+            -- favorite default only yields to a real boolean, so coerce here;
+            -- a raw pass-through rejected every recovered row as "favorite".
+            local favorite = ItemHelper.is_favorite_backend_id(backend_id, item)
+            if type(contract.coerce_favorite_verdict) == "function" then
+                return contract.coerce_favorite_verdict(favorite)
+            end
+            return favorite and true or false
+        end,
+        backend_dirty = backend_items._dirty == true,
+        trace = function(...)
+            return _cim628_trace(contract, ...)
+        end,
+    })
 end)

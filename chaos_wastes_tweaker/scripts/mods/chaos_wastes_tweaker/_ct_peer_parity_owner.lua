@@ -763,6 +763,13 @@ return function(mod, deps)
         function(func, self, buyer, power_up, discount)
             local name = type(power_up) == "table" and power_up.name
             if not policy.power_up_allowed(name, wire_safe()) then return false end
+            -- _ct_consolidated_shop_purchase_dispatch: the existing public
+            -- pre-mutation wire gate remains first; selected shop policy never
+            -- bypasses the exact catalog/parity decision.
+            if type(mod._ct_official_shop_try_buy) == "function" then
+                local handled, bought = mod._ct_official_shop_try_buy(self, buyer, power_up, discount)
+                if handled then return bought end
+            end
             return func(self, buyer, power_up, discount)
         end)
     register_hook("DeusRunController", "rpc_deus_shop_power_up_bought",

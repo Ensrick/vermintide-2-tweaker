@@ -404,6 +404,13 @@ local finale_god_options = {
     { text = "finale_god_slaanesh", value = 4 },
 }
 
+local DevMission = mod:dofile("scripts/mods/chaos_wastes_tweaker/_ct_dev_mission_catalog")
+local start_shrine_cost_options = {}
+for percent = 0, 200, 10 do
+    start_shrine_cost_options[#start_shrine_cost_options + 1] = { text = "ct_start_shrine_cost_" .. percent, value = percent }
+end
+local start_shrine_limit_options = { { text = "ct_start_shrine_limit_unlimited", value = 0 } }
+for count = 1, 8 do start_shrine_limit_options[#start_shrine_limit_options + 1] = { text = tostring(count), value = count } end
 local data = {
     name = mod:localize("mod_name"),
     description = mod:localize("mod_description"),
@@ -415,6 +422,109 @@ local data = {
         -- (mutex clusters, the god-grouped curse banlist, the paired altar-reuse rows)
         -- are flagged inline where they intentionally deviate from A->Z.
         widgets = {
+            DevMission.build_menu_group(),
+            -- ============================================================
+            -- Progressive Difficulty (deliberate top-of-list placement: a
+            -- run-wide difficulty modifier, not one of the A-Z groups below)
+            -- ============================================================
+            {
+                setting_id = "progressive_difficulty",
+                type = "checkbox",
+                default_value = false,
+                tooltip = "progressive_difficulty_tooltip",
+                sub_widgets = {
+                    {
+                        setting_id = "progressive_difficulty_increase",
+                        type = "checkbox",
+                        default_value = true,
+                        tooltip = "progressive_difficulty_increase_tooltip",
+                    },
+                    {
+                        setting_id = "progressive_coin_reduction",
+                        type = "numeric",
+                        default_value = -25,
+                        range = { -100, 0 },
+                        decimals_number = 0,
+                        tooltip = "progressive_coin_reduction_tooltip",
+                    },
+                },
+            },
+            -- ============================================================
+            -- Progressive Elite Enhancements (#323): sibling of Progressive
+            -- Difficulty, same top-of-list placement. Host-authoritative,
+            -- default-off; owner is _ct_progressive_elite_runtime.lua.
+            -- ============================================================
+            {
+                setting_id = "progressive_elite_enhancements",
+                type = "checkbox",
+                default_value = false,
+                tooltip = "progressive_elite_enhancements_tooltip",
+                sub_widgets = {
+                    {
+                        setting_id = "progressive_elite_step_percent",
+                        type = "numeric",
+                        default_value = 5,
+                        range = { 0, 25 },
+                        decimals_number = 0,
+                        tooltip = "progressive_elite_step_percent_tooltip",
+                    },
+                },
+            },
+            -- ============================================================
+            -- Progressive Modifier Stacking (#289): third progressive sibling,
+            -- same top-of-list placement. Host-authoritative, default-off;
+            -- owner is _ct_progressive_modifier_runtime.lua. Deliberately no
+            -- rate knob: the ladder is the documented feasibility gate.
+            -- ============================================================
+            {
+                setting_id = "progressive_modifier_stack",
+                type = "checkbox",
+                default_value = false,
+                tooltip = "progressive_modifier_stack_tooltip",
+            },
+            -- ============================================================
+            -- Buy Starting Boons (#458): top-level like Progressive Difficulty
+            -- (a run-start modifier, not one of the A-Z groups). The advanced
+            -- sub-options tune this shrine independently of normal ones.
+            -- ============================================================
+            {
+                setting_id = "ct_buy_starting_boons",
+                type = "checkbox",
+                default_value = false,
+                tooltip = "ct_buy_starting_boons_tooltip",
+                sub_widgets = {
+                    { setting_id = "ct_start_shrine_boon_count",    type = "numeric", default_value = 4, range = { 0, 8 }, decimals_number = 0, tooltip = "ct_start_shrine_boon_count_tooltip" },
+                    { setting_id = "ct_start_shrine_cost_percent", type = "dropdown", default_value = 100, options = start_shrine_cost_options, tooltip = "ct_start_shrine_cost_percent_tooltip" },
+                    { setting_id = "ct_start_shrine_purchase_limit", type = "dropdown", default_value = 0, options = start_shrine_limit_options, tooltip = "ct_start_shrine_purchase_limit_tooltip" },
+                    { setting_id = "ct_start_shrine_miracle_count", type = "numeric", default_value = 0, range = { 0, 3 }, decimals_number = 0, tooltip = "ct_start_shrine_miracle_count_tooltip" },
+                    {
+                        setting_id = "ct_start_shrine_miracle_pool_group",
+                        type = "group",
+                        sub_widgets = {
+                            { setting_id = "ct_start_shrine_miracle_blessing_of_power",          type = "checkbox", default_value = true, tooltip = "ct_start_shrine_miracle_blessing_of_power_tooltip" },
+                            { setting_id = "ct_start_shrine_miracle_blessing_of_shallya",        type = "checkbox", default_value = true, tooltip = "ct_start_shrine_miracle_blessing_of_shallya_tooltip" },
+                            { setting_id = "ct_start_shrine_miracle_blessing_of_grimnir",        type = "checkbox", default_value = true, tooltip = "ct_start_shrine_miracle_blessing_of_grimnir_tooltip" },
+                            { setting_id = "ct_start_shrine_miracle_blessing_of_isha",           type = "checkbox", default_value = true, tooltip = "ct_start_shrine_miracle_blessing_of_isha_tooltip" },
+                            { setting_id = "ct_start_shrine_miracle_blessing_of_ranald",         type = "checkbox", default_value = true, tooltip = "ct_start_shrine_miracle_blessing_of_ranald_tooltip" },
+                            { setting_id = "ct_start_shrine_miracle_blessing_of_abundance",      type = "checkbox", default_value = true, tooltip = "ct_start_shrine_miracle_blessing_of_abundance_tooltip" },
+                            { setting_id = "ct_start_shrine_miracle_blessing_holy_hand_grenade", type = "checkbox", default_value = true, tooltip = "ct_start_shrine_miracle_blessing_holy_hand_grenade_tooltip" },
+                            { setting_id = "ct_start_shrine_miracle_blessing_rally_flag",        type = "checkbox", default_value = true, tooltip = "ct_start_shrine_miracle_blessing_rally_flag_tooltip" },
+                        },
+                    },
+                },
+            },
+            -- ============================================================
+            -- Preserve Adventure Illusions (#917): top-level loose toggle like
+            -- Progressive Difficulty (a run-start snapshot, not one of the A-Z
+            -- groups). PER-PEER by design - see PER_PEER_SETTING_NAMES in
+            -- _ct_host_state_transport_owner.lua.
+            -- ============================================================
+            {
+                setting_id = "preserve_adventure_illusions",
+                type = "checkbox",
+                default_value = false,
+                tooltip = "preserve_adventure_illusions_tooltip",
+            },
             -- ============================================================
             -- Adventure Maps
             -- ============================================================
@@ -798,6 +908,45 @@ local data = {
     },
 }
 
+-- Selected masters preserve every existing leaf id/default. Their effective
+-- readers compose the master at runtime; no saved leaf is rewritten.
+do
+    local function find(widgets, id)
+        for _, widget in ipairs(widgets or {}) do
+            if widget.setting_id == id then return widget end
+            local nested = find(widget.sub_widgets, id)
+            if nested then return nested end
+        end
+    end
+    local function add(group, widget)
+        local target = assert(find(data.options.widgets, group), "missing CT group " .. group)
+        table.insert(target.sub_widgets, 1, widget)
+    end
+    local function checkbox(id, default)
+        return { setting_id = id, type = "checkbox", default_value = default, tooltip = id .. "_tooltip" }
+    end
+    add("banned_traits_group", checkbox("ban_all_traits", false))
+    add("boss_grudge_marks_group", checkbox("ban_all_grudge_marks", false))
+    add("disabled_curses_group", checkbox("disable_all_listed_curses", false))
+    add("reworks_boons_new_group", checkbox("enable_boon_reworks", true))
+    add("altar_reuse_group", checkbox("enable_altar_reuse", true))
+    add("reworks_boons_existing_group", checkbox("ct_individual_boon_prices", false))
+    add("curses_group", {
+        setting_id = "miasma_group", type = "group", sub_widgets = {
+            checkbox("miasma_permanent_carrier", false),
+            { setting_id = "miasma_safe_radius", type = "numeric", default_value = 8, range = { 2, 30 }, decimals_number = 1, tooltip = "miasma_safe_radius_tooltip" },
+            { setting_id = "miasma_stack_interval", type = "numeric", default_value = 1.3, range = { 0.1, 5 }, decimals_number = 1, tooltip = "miasma_stack_interval_tooltip" },
+        },
+    })
+    add("curses_group", {
+        setting_id = "finale_approach_god", type = "dropdown", default_value = 0,
+        tooltip = "finale_approach_god_tooltip", options = {
+            { text = "finale_approach_same", value = 0 },
+            { text = "finale_god_nurgle", value = 1 }, { text = "finale_god_tzeentch", value = 2 },
+            { text = "finale_god_khorne", value = 3 }, { text = "finale_god_slaanesh", value = 4 },
+        },
+    })
+end
 recursive_sort(data.options.widgets)
 
 return data

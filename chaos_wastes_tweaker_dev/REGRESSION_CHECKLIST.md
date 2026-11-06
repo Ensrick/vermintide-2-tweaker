@@ -4,7 +4,19 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-08-13.
+Last updated: 2026-11-06.
+
+### Selected-fix authority corrections
+
+Run the four registered suites: `test_ct_chest_revive_retained_readback`,
+`test_ct_miasma_living_owner`, `test_ct_dev_shop_false_authority`, and
+`test_ct_dev_grudge_master_boundary`. Preserve their actual installed callback
+subjects, all 28 cases and untouched-donor negative controls. The invariants are
+retained near-team movement before rescue release, native health rather than
+body-object liveness for relic ownership, effective false/nil shop authority,
+and thirteen-listed-mark-only master filtering. Keep three-metre collision
+tolerance, bounded retries and all original singleton hooks/transport. Human
+mission acceptance remains separate from these offline counterexamples.
 
 ### injected Old Haunts gargoyle-objective observation - issue #1124
 

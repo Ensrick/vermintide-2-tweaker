@@ -211,8 +211,7 @@ function mod._cim83_sanitize_dynamic_forge_widgets(window, in_keep)
     local material_seen = {}
     local function has_texture(texture, flags)
         local target = renderer
-        if flags and flags.retained and type(renderer) == "table"
-                and renderer.gui_retained ~= nil then
+        if flags and flags.retained and type(renderer) == "table" then
             target = { gui = renderer.gui_retained }
         end
         return icon_policy.renderer_has_texture(
@@ -750,8 +749,7 @@ function mod._cim_suppress_skilltree_rings_in_mission(window, in_keep)
         local renderer = entry.renderer
         local report = policy.sanitize_widgets(entry.widgets, function(texture, flags)
             local target = renderer
-            if flags and flags.retained and type(renderer) == "table"
-                    and renderer.gui_retained ~= nil then
+            if flags and flags.retained and type(renderer) == "table" then
                 target = { gui = renderer.gui_retained }
             end
             return icon_policy.renderer_has_texture(

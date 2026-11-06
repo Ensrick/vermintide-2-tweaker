@@ -5,6 +5,11 @@ return {
     mod_description = {
         en = "Craft any weapon your career can use, with the properties and traits you choose. Open the Athanor (B key by default) to reach the modded crafting menu.",
     },
+    -- Selected #1141 action labels; no Community Builds strings are promoted.
+    temper_button_apply = { en = "APPLY" },
+    temper_button_craft = { en = "CRAFT" },
+    temper_button_unavailable = { en = "UNAVAILABLE" },
+    temper_button_craft_accessories = { en = "CRAFT MODDED ACCESSORIES" },
     forge_group = {
         en = "Athanor (Mod Weapon Crafting)",
     },

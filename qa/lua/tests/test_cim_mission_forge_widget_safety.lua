@@ -130,4 +130,8 @@ return function(H, repo_root)
         H.truthy(source:find("window._ui_top_renderer", 1, true))
         H.equal(source:find('local _CIM_ATLAS_ATHANOR_PREFIX = "athanor_skilltree_slot"', 1, true), nil)
     end)
+    -- Actual glue/native routing proof; the official rollup mapper adapts only
+    -- this oracle stream identity, so the same cases execute official production.
+    assert(loadfile(repo_root .. "/qa/lua/tests/cim_official_resource_glue_cases.lua"))()(
+        H, repo_root, "crafting_in_modded_dev")
 end

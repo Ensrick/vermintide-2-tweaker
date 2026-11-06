@@ -1302,7 +1302,7 @@ return {
         local runtime_source = read("chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_wire_runtime.lua")
         local package = read("chaos_wastes_tweaker/resource_packages/chaos_wastes_tweaker/chaos_wastes_tweaker.package")
         local manifest = read("tools/shared_lib/manifest.psd1")
-        H.truthy(main:find('local MOD_VERSION = "0.7.132-beta"', 1, true))
+        H.truthy(main:find('local MOD_VERSION = "0.7.354-beta"', 1, true))
         H.truthy(main:find('scripts/mods/chaos_wastes_tweaker/_ct_peer_parity_owner', 1, true))
         H.truthy(main:find("mod._ct_power_up_wire_allowed(name)", 1, true))
         H.truthy(main:find("mod._ct_wire_reservation_ready", 1, true))
@@ -1328,9 +1328,23 @@ return {
             "local function register_meta_boon(spec)", meta_start, true))
         local meta_proc = main:sub(meta_start, meta_finish - 1)
         H.truthy(meta_proc:find('type(mod._ct_wire_safe) ~= "function"', 1, true))
-        H.truthy(meta_proc:find('buff_extension:add_buff(stack_name)', 1, true))
+        local grant_call = 'mod._ct_official_runtime.grant_stack(unit, stack_name, stack_key, stacks_target, buff_extension)'
+        H.truthy(meta_proc:find(grant_call, 1, true))
         H.truthy(meta_proc:find('type(mod._ct_wire_safe) ~= "function"', 1, true)
-            < meta_proc:find('buff_extension:add_buff(stack_name)', 1, true))
+            < meta_proc:find(grant_call, 1, true))
+        H.equal(meta_proc:find('buff_extension:add_buff', 1, true), nil,
+            "public meta producer must not recreate local-only stacks")
+        local selected = read("chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_verify_runtime.lua")
+        local grant_start = assert(selected:find('function M.grant_stack(', 1, true))
+        local grant_end = assert(selected:find('function M.clamp_ammo(', grant_start, true))
+        local grant = selected:sub(grant_start, grant_end - 1)
+        local final_floor = assert(grant:find('type(mod._ct_wire_safe) ~= "function"', 1, true))
+        local network_write = assert(grant:find('system:add_buff(unit, stack_name, unit, true)', 1, true))
+        H.truthy(final_floor < network_write, "delegated producer must recheck parity before mutation")
+        H.truthy(grant:find('Managers.player.is_server == true', 1, true))
+        H.truthy(grant:find('M.ammo.grant_plan(server, true,', 1, true))
+        H.equal(grant:find('ext:add_buff(', 1, true), nil,
+            "denied or unavailable replication must have no local fallback")
         local isha_hook = assert(main:find(
             'mod:hook_safe("DeusSpawning", "_apply_initial_buffs"', 1, true))
         local isha_guard = assert(main:find(

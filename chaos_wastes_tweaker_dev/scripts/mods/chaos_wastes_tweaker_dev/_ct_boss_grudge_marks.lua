@@ -53,6 +53,14 @@ return function(ctx)
     local exports = state.exports
 
     local function mark_is_banned(name)
+        -- #221/#107: this master owns only the 13 listed Boss Grudge Marks.
+        -- Universal enhancement payloads also carry native health/damage
+        -- scaffolds (base/elite_base) and other systems' enhancements.
+        local listed = false
+        for i = 1, #MARK_NAMES do
+            if MARK_NAMES[i] == name then listed = true; break end
+        end
+        if not listed then return false end
         return state.is_banned(
             state.effective_setting("ban_all_grudge_marks"),
             state.effective_setting("ban_grudge_mark_" .. name))

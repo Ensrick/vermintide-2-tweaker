@@ -14,6 +14,7 @@
         # renderer boundary must update this file and its named QA evidence.
         @{ File='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_curse_lighting_owner.lua'; Kind='shading'; Count=2; Policy='owned-world-existing'; Evidence='qa/lua/tests/test_resource_residency_census.lua' }
         @{ File='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua'; Kind='shading'; Count=2; Policy='owned-world-existing'; Evidence='qa/lua/tests/test_resource_residency_census.lua' }
+        @{ File='chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_verify_runtime.lua'; Kind='shading'; Count=2; Policy='owned-world-existing'; Evidence='qa/lua/tests/test_ct_official_verify_rollup.lua' }
         @{ File='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_preview.lua'; Kind='material_bind'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_cwv_texture_residency.lua' }
         @{ File='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_preview.lua'; Kind='residency_proof'; Count=3; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_cwv_texture_residency.lua' }
         @{ File='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_old_musket_appearance.lua'; Kind='texture_descriptor'; Count=2; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_cwv_old_musket_appearance.lua' }
@@ -47,7 +48,8 @@
         # reached behind the live residency proof.
         @{ File='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_customization_view_lifecycle.lua'; Kind='shading'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_resource_residency_census.lua' }
         @{ File='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_customization_view_lifecycle.lua'; Kind='residency_proof'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_resource_residency_census.lua' }
-        @{ File='crafting_in_modded/scripts/mods/crafting_in_modded/_cim_athanor_icon_policy.lua'; Kind='gui_lookup'; Count=1; Policy='exact-gui-existing'; Evidence='qa/lua/tests/test_cim_athanor_icon_policy.lua' }
+        @{ File='crafting_in_modded/scripts/mods/crafting_in_modded/_cim_athanor_icon_policy.lua'; Kind='residency_proof'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_cim_official_verify_rollup.lua' }
+        @{ File='crafting_in_modded/scripts/mods/crafting_in_modded/_cim_mission_forge_safety.lua'; Kind='residency_proof'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_cim_official_verify_rollup.lua' }
         @{ File='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_athanor_icon_policy.lua'; Kind='residency_proof'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_cim_athanor_icon_policy.lua' }
         @{ File='crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_mission_forge_safety.lua'; Kind='residency_proof'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_cim_mission_forge_widget_safety.lua' }
         @{ File='dynamic_cosmetic_portraits/scripts/mods/dynamic_cosmetic_portraits/dynamic_cosmetic_portraits.lua'; Kind='gui_lookup'; Count=2; Policy='exact-gui-existing'; Evidence='qa/lua/tests/test_resource_residency_census.lua' }
