@@ -6,6 +6,38 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-05-22.
 
+## Selective functional promotion (2026-11-05)
+
+- Retain the existing World Freeze/time-control owners; exactly one
+  `ConflictDirector.update_spawn_queue` hook composes enemy-spawn suppression
+  with the frozen-world predicate. Real queued IDs and pickup/dummy passthrough
+  remain native (#242).
+- `/gt_regression_test` includes the promoted #72, #241, #247, #300, #548,
+  #1008, #1009 and dynamic-special enumeration checks, plus self-registering
+  #298, #332, #333, #364/#365, #797, #1034, #1143 and #1150 owners. The old
+  official baseline checks moved unchanged into `_gt_regression_checks.lua`,
+  except obsolete pre-#247 locomotion assertions replaced by its keep-slot check.
+- Verify #548 Bile/fly gates, #1009 storm entry and #1008 armor-zero damage with
+  Godmode-off controls. Noclip boundary suppression must remain local and
+  disappear when disabled. The 9999 damage child uses the accepted #549
+  authority/heartbeat and owned ammo reconciliation dependency.
+- #332 joining-client filtering covers only received mutator bursts: a host
+  can still suppress transmission. Max Ragdolls 0 retains nothing; cap lowering
+  reconciles once per second. #298's attacker-ping control covers elites only.
+- #364 reserves only Survival Ale across native mule cleanup, greedy selection
+  and instant pickup; #365 permits only all-team, three-stack, over-half-duration
+  surplus. Other pickups and disabled controls stay native.
+- #797 exposes only the read-only Player Statistics group, not Dev Tools.
+  Check pages, scale, source labels, UNSUPPORTED rows and teardown. #1143 healing
+  confirms native permanent-health/wound postconditions; #1034 retains its
+  bounded remote-human melee queue and native excluded paths.
+- `test_gt_official_verify_rollup` executes the actual #333 hooks against the
+  native source-qualified ballot/package oracle, including hostile callbacks.
+  See `OFFLINE_TWITCH.md` for the finite selection boundary.
+- No human gameplay acceptance is claimed by this promotion. Retained bug
+  reports and automated checks authorize the candidate, not closure of live
+  verification issues. Developer chest/disconnect/agent probes are excluded.
+
 ---
 ## World freeze and time controls (#1801/#1802)
 

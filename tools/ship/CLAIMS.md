@@ -4,7 +4,8 @@
 
 The permanent-burn requirement is implemented in `claim-allocation.ps1`.
 The source-owned `claim-allocation-policy.psd1` activates only
-`character_weapon_variants`, `general_tweaker`, and `general_tweaker_dev`;
+`character_weapon_variants`, `general_tweaker`, `general_tweaker_dev`,
+`chaos_wastes_tweaker`, and `crafting_in_modded`;
 every other mod still requires its own reviewed initialization and activation.
 The legacy behavior below remains for an
 unactivated mod with no allocation state. It does NOT preserve abandoned numbers. Do not allocate
@@ -47,6 +48,28 @@ Activation is a separate protected source review; only after it lands may normal
 Acquire allocate the fresh approved official `0.2.179` and Dev `0.2.278-dev`
 candidates. Those version approvals are not build, Workshop-transfer, or gameplay
 acceptance evidence. No uploader implementation or claim wire format changes.
+
+Official Chaos Wastes and official CIM were separately initialized from
+`9b78f18c1a1cb5440996f78d763c9f15a7354957` under the maintainer's explicit
+[batch and scoped migration approval](https://github.com/Ensrick/vermintide-2-tweaker/issues/724#issuecomment-6677449320).
+Chaos Wastes had no claim; its conservative reviewed floor is `0.7.353`, above
+known official source history (`0.7.132-beta`) and including the Dev donor's
+numeric version. Deleted historical claims remain unknown; this does not claim
+to reconstruct them. Initialization created an empty ledger, SHA-256
+`7c9c76d1fc6833890c949c71eedefdff9623a47f8beb5d97f7e64e0f65a8db2b`.
+
+CIM's reviewed floor is `0.8.147`. Its abandoned official `0.8.146` claim retained
+the exact SHA-256
+`00af0ffdb773f8fe2a35441adf57c98348f0133e93ab6bcd6f5077e06bdcdbcb`,
+owner `explicit:claude-cim-rollup-20261102`, and original November 2, 2026
+`19:27:59Z` timestamp. The initial CIM ledger SHA-256 is
+`e51165477c698d971ed55c15a0fed323a3ac04dbc4b1b68c5bf72cfe7112e732`.
+These are adoption-event evidence, not permanent current-state pins. The
+out-of-scope CIM Dev `0.8.147-dev` claim remains byte-identical and unactivated;
+existing prepared source and artifacts remain protected. This source activation
+must land through protected review and exact-master QA before normal Acquire
+allocates the approved fresh official CT `0.7.354-beta` and CIM `0.8.148`.
+No old timestamp was renewed and no old artifact gained publication authority.
 
 An activated mod has one `<mod>.allocation` file beside its unchanged four-field
 `<mod>.claim`. Its numeric floor survives release, stale takeover and failure;

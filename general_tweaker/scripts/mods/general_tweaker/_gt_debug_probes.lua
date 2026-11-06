@@ -911,8 +911,8 @@ do
     -- enter — Managers.player and Managers.mechanism are guaranteed
     -- ready by then.
     local prev_update = mod.update
-    mod.update = function(self, dt)
-        if prev_update then prev_update(self, dt) end
+    mod.update = function(dt)
+        if prev_update then prev_update(dt) end
         if _pending_after_ingame then
             _pending_after_ingame = false
             _gt_dump_ai_now("state_ingame_enter")

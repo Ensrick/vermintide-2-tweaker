@@ -1,7 +1,7 @@
 local mod = get_mod("gt")
 
 -- ============================================================================
--- Improved Bot Combat  (single toggle: gt_improved_bot_combat)
+-- Improved Bot Combat  (master toggle + issue #298 advanced controls)
 -- ============================================================================
 -- A from-scratch reimplementation of the non-conflicting combat improvements
 -- from the "Bot Improvements - Combat Returns" Workshop mod (3560390486), folded
@@ -40,9 +40,20 @@ local Unit = Unit
 local Vector3 = Vector3
 local ScriptUnit = ScriptUnit
 local Managers = Managers
+local _printf = rawget(_G, "printf") or function() end
+local policy = mod:dofile("scripts/mods/general_tweaker/_gt_improved_bot_combat_policy")
+mod._gt_ibc_policy = policy
 
 local function _on()
     return mod:get("gt_improved_bot_combat")
+end
+
+local function _feature_on(setting_id)
+    return policy.feature_enabled(_on(), mod:get(setting_id))
+end
+
+local function _distance_sq(setting_id, fallback)
+    return policy.distance_sq(mod:get(setting_id), fallback)
 end
 
 -- Sum the threat value of alive enemies within `max_dist_sq` of `self_pos`,
@@ -85,7 +96,7 @@ end
 -- when the wielded slot had no data (mid weapon-swap, utility slot, freshly
 -- swapped AI-Takeover bot) -- we nil-guard and fall back to vanilla there.
 mod:hook("BTBotMeleeAction", "_choose_attack", function(func, self, blackboard, target_unit)
-    if not _on() then return func(self, blackboard, target_unit) end
+    if not _feature_on("gt_ibc_smarter_attacks") then return func(self, blackboard, target_unit) end
 
     local item_template = blackboard.wielded_item_template
     local meta = item_template and item_template.attack_meta_data
@@ -195,7 +206,7 @@ local function _try_ping_elite(blackboard)
     end
 end
 
--- CONSOLIDATED hook on (BTBotMeleeAction, "run"). This is the ONLY gt hook
+-- CONSOLIDATED hook on (BTBotMeleeAction, "run"). This is the ONLY gt_dev hook
 -- on this pair (VMF drops a 2nd) -- it carries BOTH:
 --   (a) the UNGATED nil-weapon crash guard (see _gt_bot_fixes.lua's BTBotMeleeAction.enter
 --       hook): if the melee node entered a frame where the bot's wielded slot was
@@ -215,12 +226,12 @@ mod:hook("BTBotMeleeAction", "run", function(func, self, unit, blackboard, t, dt
     local result, evaluate = func(self, unit, blackboard, t, dt)
 
     -- (b) Gated feature.
-    if _on() then mod:pcall(function() _try_ping_elite(blackboard) end) end
+    if _feature_on("gt_ibc_ping_attackers") then mod:pcall(function() _try_ping_elite(blackboard) end) end
 
     return result, evaluate
 end)
 mod:hook_safe("BTBotShootAction", "run", function(self, unit, blackboard, t, dt)
-    if _on() then mod:pcall(function() _try_ping_elite(blackboard) end) end
+    if _feature_on("gt_ibc_ping_attackers") then mod:pcall(function() _try_ping_elite(blackboard) end) end
 end)
 
 -- ----------------------------------------------------------------------------
@@ -228,12 +239,12 @@ end)
 -- ----------------------------------------------------------------------------
 -- Cap the distance at which a bot will commit to pathing toward an enemy, so it
 -- stops sprinting off after a far gutter runner / leech and abandoning the team.
-local CHASE_MAX_DIST_SQ = 50  -- ~7 m
 mod:hook("PlayerBotBase", "_enemy_path_allowed", function(func, self, enemy_unit)
-    if not _on() then return func(self, enemy_unit) end
+    if not _feature_on("gt_ibc_limit_special_chase") then return func(self, enemy_unit) end
     local ep = POSITION_LOOKUP[enemy_unit]
     local sp = POSITION_LOOKUP[self._unit]
-    if ep and sp and Vector3.distance_squared(ep, sp) > CHASE_MAX_DIST_SQ then
+    if ep and sp and Vector3.distance_squared(ep, sp)
+            > _distance_sq("gt_ibc_special_chase_distance", math.sqrt(50)) then
         return false
     end
     return func(self, enemy_unit)
@@ -249,8 +260,66 @@ end)
 local LOF_WIDTH = 2.5
 local LOF_WIDTH_STICKY = 6.0
 local LOF_LENGTH = 40.0
-local LOF_MAX_PAIR_DIST_SQ = 140
 local _lof_scratch = {}
+
+-- #488 shield-vs-Ratling is not implemented yet: suppressing cover does not
+-- itself make the BT wield melee and hold block. Capture the exact live state
+-- needed to choose the safe authority seam. Twelve distinct state shapes max.
+local _shield_probe_seen = {}
+local _shield_probe_count = 0
+local SHIELD_PROBE_CAP = 12
+mod._GT_488_RATLING_SHIELD_PROBE_CAP = SHIELD_PROBE_CAP
+
+local function _item_template(inventory, slot_name)
+    if not inventory or not slot_name then return nil end
+    local slot = inventory:get_slot_data(slot_name)
+    return slot and inventory:get_item_template(slot) or nil
+end
+
+local function _probe_ratling_shield(self, self_unit, take_cover_targets, taking_cover_from)
+    if _shield_probe_count >= SHIELD_PROBE_CAP then return end
+    local bb = self and self._blackboard
+    local inventory = bb and bb.inventory_extension
+    if not inventory then return end
+    local equipment = inventory:equipment()
+    local wielded_slot = equipment and equipment.wielded_slot
+    local wielded = _item_template(inventory, wielded_slot)
+    local melee = _item_template(inventory, "slot_melee")
+    local status = bb.status_extension
+    local blocking = false
+    if status and type(status.is_blocking) == "function" then
+        local ok, value = pcall(status.is_blocking, status)
+        blocking = ok and value and true or false
+    end
+
+    for attacker, victim in pairs(take_cover_targets or {}) do
+        local attacker_bb = BLACKBOARDS[attacker]
+        local breed = attacker_bb and attacker_bb.breed
+        if breed and breed.name == "skaven_ratling_gunner" then
+            local projectile_hits = bb.hit_by_projectile
+            local hit = type(projectile_hits) == "table"
+                and projectile_hits[attacker] ~= nil or false
+            local signature = table.concat({
+                tostring(wielded_slot), tostring(wielded and wielded.shield_block == true),
+                tostring(melee and melee.shield_block == true), tostring(blocking),
+                tostring(hit), tostring(victim == self_unit),
+            }, "|")
+            if not _shield_probe_seen[signature] then
+                _shield_probe_seen[signature] = true
+                _shield_probe_count = _shield_probe_count + 1
+                pcall(_printf,
+                    "[gt:488] ratling-shield state=%d/%d wielded=%s wielded_template=%s wielded_shield=%s melee_template=%s melee_shield=%s blocking=%s projectile_hit=%s victim_self=%s taking_cover=%s input=%s mutation=0",
+                    _shield_probe_count, SHIELD_PROBE_CAP, tostring(wielded_slot),
+                    tostring(wielded and wielded.name),
+                    tostring(wielded and wielded.shield_block == true),
+                    tostring(melee and melee.name), tostring(melee and melee.shield_block == true),
+                    tostring(blocking), tostring(hit), tostring(victim == self_unit),
+                    tostring(taking_cover_from and taking_cover_from[attacker] ~= nil),
+                    tostring(bb.input_extension ~= nil))
+            end
+        end
+    end
+end
 
 local function _point_in_lane(from, to, p, width, length)
     if not (from and to and p) then return false end
@@ -266,7 +335,12 @@ local function _point_in_lane(from, to, p, width, length)
 end
 
 mod:hook("PlayerBotBase", "_in_line_of_fire", function(func, self, self_unit, self_pos, take_cover_targets, taking_cover_from)
-    if not _on() then return func(self, self_unit, self_pos, take_cover_targets, taking_cover_from) end
+    -- Observation runs before the feature gate so ordinary play can arm #488
+    -- diagnostics without changing the current cover policy.
+    pcall(_probe_ratling_shield, self, self_unit, take_cover_targets, taking_cover_from)
+    if not _feature_on("gt_ibc_ignore_distant_gunners") then
+        return func(self, self_unit, self_pos, take_cover_targets, taking_cover_from)
+    end
 
     local in_lof = false
     local changed = false
@@ -276,7 +350,8 @@ mod:hook("PlayerBotBase", "_in_line_of_fire", function(func, self, self_unit, se
         local ap = POSITION_LOOKUP[attacker]
         local vp = POSITION_LOOKUP[victim]
         if ALIVE[victim] and ap and vp
-           and Vector3.distance_squared(ap, vp) < LOF_MAX_PAIR_DIST_SQ then
+           and Vector3.distance_squared(ap, vp)
+                < _distance_sq("gt_ibc_gunner_cover_distance", math.sqrt(140)) then
             local already = taking_cover_from[attacker]
             local width = already and LOF_WIDTH_STICKY or LOF_WIDTH
             if victim == self_unit or _point_in_lane(ap, vp, self_pos, width, LOF_LENGTH) then
@@ -307,9 +382,8 @@ end)
 -- Bots normally treat monsters as top-priority urgent targets and tunnel them.
 -- Keep urgent targeting as vanilla, but only ADD a boss as an urgent target when
 -- the bot is close to it AND isn't busy with a crowd (or the boss is on the bot).
-local BOSS_ENGAGE_DIST_SQ = 15 * 15
 mod:hook("AIBotGroupSystem", "_update_urgent_targets", function(func, self, dt, t)
-    if not _on() then return func(self, dt, t) end
+    if not _feature_on("gt_ibc_limit_boss_focus") then return func(self, dt, t) end
 
     local conflict = Managers.state.conflict
     local alive_bosses = conflict and conflict:alive_bosses()
@@ -345,7 +419,8 @@ mod:hook("AIBotGroupSystem", "_update_urgent_targets", function(func, self, dt, 
                     local crowd = blackboard.proximite_enemies and #blackboard.proximite_enemies or 0
                     if bp and bbb and HEALTH_ALIVE[boss]
                        and not AiUtils.unit_invincible(boss)
-                       and Vector3.distance_squared(bp, self_pos) < BOSS_ENGAGE_DIST_SQ
+                       and Vector3.distance_squared(bp, self_pos)
+                            < _distance_sq("gt_ibc_boss_engage_distance", 15)
                        and not bbb.defensive_mode_duration
                        and (crowd < 2 or bbb.target_unit == bot_unit) then
                         local u, d = self:_calculate_opportunity_utility(bot_unit, blackboard, self_pos, old_target, boss, t, false, false)
@@ -395,7 +470,7 @@ if BTConditions and BTConditions.can_activate then
     -- down as allies drop, so the morale heal lands when it matters.
     if CA.es_mercenary then
         mod:hook(CA, "es_mercenary", function(func, blackboard)
-            if not _on() then return func(blackboard) end
+            if not _feature_on("gt_ibc_ability_timing") then return func(blackboard) end
             local self_pos = POSITION_LOOKUP[blackboard.unit]
             local side = blackboard.side
             local units = side and side.PLAYER_AND_BOT_UNITS
@@ -416,7 +491,7 @@ if BTConditions and BTConditions.can_activate then
     -- prioritized ally.
     if CA.es_huntsman then
         mod:hook(CA, "es_huntsman", function(func, blackboard)
-            if not _on() then return func(blackboard) end
+            if not _feature_on("gt_ibc_ability_timing") then return func(blackboard) end
             if _prioritized_rescue(blackboard) then return true end
             if _low_stamina(blackboard) then return true end
             local tu = blackboard.target_unit
@@ -430,7 +505,7 @@ if BTConditions and BTConditions.can_activate then
     -- that's within dash range and reachable on the navmesh.
     if CA.we_maidenguard then
         mod:hook(CA, "we_maidenguard", function(func, blackboard)
-            if not _on() then return func(blackboard) end
+            if not _feature_on("gt_ibc_ability_timing") then return func(blackboard) end
             local self_pos = POSITION_LOOKUP[blackboard.unit]
             if not self_pos then return func(blackboard) end
             local dash_target, dist_sq
@@ -465,7 +540,7 @@ if BTConditions and BTConditions.can_activate then
     -- Shade: pop on a prioritized rescue, low stamina, or a heavy single target.
     if CA.we_shade then
         mod:hook(CA, "we_shade", function(func, blackboard)
-            if not _on() then return func(blackboard) end
+            if not _feature_on("gt_ibc_ability_timing") then return func(blackboard) end
             if _prioritized_rescue(blackboard) then return true end
             if _low_stamina(blackboard) then return true end
             local tu = blackboard.target_unit
@@ -478,7 +553,7 @@ if BTConditions and BTConditions.can_activate then
     -- Captain: pop when the close-range weighted threat is high.
     if CA.wh_captain then
         mod:hook(CA, "wh_captain", function(func, blackboard)
-            if not _on() then return func(blackboard) end
+            if not _feature_on("gt_ibc_ability_timing") then return func(blackboard) end
             local self_pos = POSITION_LOOKUP[blackboard.unit]
             if not self_pos then return func(blackboard) end
             return _nearby_threat(blackboard, self_pos, 49, 1.25, _low_stamina(blackboard) and 15 or 0) >= 30
@@ -489,7 +564,7 @@ if BTConditions and BTConditions.can_activate then
     -- are on the bot (lower bar when the bot itself is near death).
     if CA.bw_unchained then
         mod:hook(CA, "bw_unchained", function(func, blackboard)
-            if not _on() then return func(blackboard) end
+            if not _feature_on("gt_ibc_ability_timing") then return func(blackboard) end
             local oc = blackboard.overcharge_extension
             if oc and oc:is_above_critical_limit() then return true end
             local self_pos = POSITION_LOOKUP[blackboard.unit]

@@ -1,5 +1,22 @@
 # General Tweaker Changelog
 
+## 0.2.279-dev (2026-11-05) -- Close Twitch second-choice filter bypass (#333) [verify-fix]
+
+- The native standard-vote selector did not ask the whitelist about candidate B
+  or its package replacement. Compose the same category/whitelist gate at both
+  boundaries while preserving native selection costs, boss matching, conditions,
+  used-vote behavior, package effects, return shape and original errors.
+- Snapshot the finite candidate set, reject by lookup key rather than a mutable
+  template alias, and bound owned attempts/reset. Callback-driven lookup growth
+  and reentrancy do not mutate a global list or replace an instance method.
+  Disabled mode delegates the exact original call.
+- Add a native-source-qualified oracle and actual Dev/official callback tests,
+  including known-bypass reproduction, alias/growth adversarial cases and
+  package lock/error controls. Shared tests also prove unchanged-stat HUD mode
+  and scale invalidation already present in Dev; the official port retains it.
+- No unrelated Dev feature is promoted by this correction. Runtime in-game
+  acceptance remains outstanding.
+
 ## 0.2.278-dev (2026-11-02) -- World freeze and readable time controls (#1801, #1802)
 
 - Replaces the opaque time-index slider with native multiplier presets, preserving

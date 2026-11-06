@@ -305,20 +305,23 @@ try {
     Assert ($LASTEXITCODE -eq 0 -and (Read-ClaimFile $claimPath).Version -ceq '0.1.539-dev') 'CWV release/reclaim cannot recycle the unshipped fresh version'
     Assert ([IO.File]::ReadAllText($foreignPath) -ceq 'foreign fixture record; not a migration target') 'CWV migration and allocation never touch foreign project records'
 
-    # General-only adoption approval: #724 comment 6592186585. Exercise the
-    # actual source-owned policy with private synthetic data, never live state.
+    # General adoption: #724 comment 6592186585. Official CT/CIM adoption:
+    # #724 comment 6677449320. Exercise the actual source-owned policy with
+    # private synthetic data, never live state or unrelated Dev streams.
     $committedPolicy=Join-Path $repo 'tools\ship\claim-allocation-policy.psd1'
-    $expectedEnabled=@('character_weapon_variants','general_tweaker','general_tweaker_dev')
+    $expectedEnabled=@('character_weapon_variants','general_tweaker','general_tweaker_dev','chaos_wastes_tweaker','crafting_in_modded')
     foreach ($enabledMod in $expectedEnabled) {
         Assert (Get-AllocationPolicy $committedPolicy $enabledMod) "committed policy activates exact approved identity $enabledMod"
     }
     $policyTokens=$null; $policyErrors=$null
     $policyAst=[Management.Automation.Language.Parser]::ParseFile($committedPolicy,[ref]$policyTokens,[ref]$policyErrors)
     $policyData=$policyAst.EndBlock.Statements[0].PipelineElements[0].Expression.SafeGetValue()
-    Assert (@($policyData.EnabledMods).Count -eq $expectedEnabled.Count) 'committed policy enables only CWV and the two approved General streams'
+    Assert (@($policyData.EnabledMods).Count -eq $expectedEnabled.Count) 'committed policy enables only the five explicitly adopted streams'
     foreach ($case in @(
         @{Mod='general_tweaker';Source='0.2.177';Floor='0.2.178';Retained='0.2.178';Fresh='0.2.179';Next='0.2.180'},
-        @{Mod='general_tweaker_dev';Source='0.2.276-dev';Floor='0.2.277';Retained='';Fresh='0.2.278-dev';Next='0.2.279-dev'}
+        @{Mod='general_tweaker_dev';Source='0.2.276-dev';Floor='0.2.277';Retained='';Fresh='0.2.278-dev';Next='0.2.279-dev'},
+        @{Mod='chaos_wastes_tweaker';Source='0.7.132-beta';Floor='0.7.353';Retained='';Fresh='0.7.354-beta';Next='0.7.355-beta'},
+        @{Mod='crafting_in_modded';Source='0.8.92';Floor='0.8.147';Retained='0.8.146';Fresh='0.8.148';Next='0.8.149'}
     )) {
         $target=[string]$case.Mod
         $dir=New-Case $target $case.Source $target
@@ -358,9 +361,9 @@ try {
         $expectedHash=if ($case.Retained) { $oldHash } else { '-' }
         Assert ($adopted.Floor -ceq $case.Floor -and $adopted.Status -ceq $expectedStatus -and $adopted.ClaimHash -ceq $expectedHash) "$target adoption binds exact floor and reservation state"
         if ($case.Retained) {
-            Assert ([IO.File]::ReadAllText($claimPath) -ceq $oldRaw -and (Read-ClaimFile $claimPath).CreatedUtc -eq $oldCreated) 'official General adoption preserves retained bytes and original stale timestamp'
+            Assert ([IO.File]::ReadAllText($claimPath) -ceq $oldRaw -and (Read-ClaimFile $claimPath).CreatedUtc -eq $oldCreated) "$target adoption preserves retained bytes and original stale timestamp"
         } else {
-            Assert (-not [IO.File]::Exists($claimPath)) 'General Dev absent-state initialization allocates no claim'
+            Assert (-not [IO.File]::Exists($claimPath)) "$target absent-state initialization allocates no claim"
         }
         [IO.File]::WriteAllText($policyPath,"@{Schema=1;EnabledMods=@('character_weapon_variants')}",$utf8)
         $output=& $privateCli @cliArgs -Verify -ExpectedVersion $case.Fresh *>&1
@@ -375,7 +378,7 @@ try {
         $output=& $privateCli @cliArgs *>&1
         Assert ($LASTEXITCODE -eq 0 -and (Read-ClaimFile $claimPath).Version -ceq $case.Fresh) "$target allocates exact fresh version above reviewed permanent floor"
         $freshRaw=[IO.File]::ReadAllText($claimPath); $fresh=Read-AllocationState $statePath $target
-        Assert ($fresh.Floor -ceq ($case.Fresh -replace '-dev$','') -and $fresh.ClaimRaw -ceq $freshRaw -and (Read-ClaimFile $claimPath).Session -ceq 'fixture-general-fresh') "$target fresh allocation has exact permanent owner and version binding"
+        Assert ($fresh.Floor -ceq ($case.Fresh -replace '-[A-Za-z]+$','') -and $fresh.ClaimRaw -ceq $freshRaw -and (Read-ClaimFile $claimPath).Session -ceq 'fixture-general-fresh') "$target fresh allocation has exact permanent owner and version binding"
         $output=& $privateCli @cliArgs -Verify -ExpectedVersion $case.Fresh *>&1
         Assert ($LASTEXITCODE -eq 0) "$target fresh exact owner and version verify"
         $foreignArgs=@{} + $cliArgs; $foreignArgs.Session='fixture-general-foreign'

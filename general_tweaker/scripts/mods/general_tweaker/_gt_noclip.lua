@@ -1,4 +1,5 @@
 local mod = get_mod("gt")
+local BoundaryPolicy = mod:dofile("scripts/mods/general_tweaker/_gt_noclip_boundary_policy")
 
 -- _gt_noclip.lua — Noclip (player body flies through walls)
 --
@@ -42,6 +43,12 @@ local mod = get_mod("gt")
 -- ============================================================
 
 local _noclip_active = false
+local _boundary_route_logged = {}
+local function _log_boundary_suppression(route, detail)
+    if _boundary_route_logged[route] then return end
+    _boundary_route_logged[route] = true
+    printf("[gt][noclip] suppressed %s for local player (%s)", route, detail)
+end
 
 local function _local_player_unit()
     local pm = Managers.player
@@ -59,6 +66,7 @@ end
 -- and the shared post_spawn_reapply consumer (godmode + noclip) resolve it.
 mod._gt_apply_noclip = function(enabled)
     _noclip_active = enabled and true or false
+    _boundary_route_logged = {}
     local loco, unit = _local_locomotion()
     if not loco then
         mod:info("[noclip] no locomotion extension yet (not in a level?) — flag stored, will re-arm on player spawn via extensions_ready hook")
@@ -141,6 +149,66 @@ function(func, self, unit, dt, t)
     Unit.set_local_position(unit, 0, final_position)
     self.velocity_network:store(velocity)
     self.velocity_current:store(velocity)
+end)
+
+local function _is_local_noclip_unit(unit)
+    return BoundaryPolicy.should_suppress_unit_route(
+        _noclip_active, unit, _local_player_unit())
+end
+
+mod:hook("CharacterStateHelper", "is_ledge_hanging", function(func, world, unit, params)
+    if _is_local_noclip_unit(unit) then return false end
+    return func(world, unit, params)
+end)
+
+mod:hook("CharacterStateHelper", "will_be_ledge_hanging", function(func, world, unit, params)
+    if _is_local_noclip_unit(unit) then
+        return false
+    end
+    return func(world, unit, params)
+end)
+
+mod:hook("HealthSystem", "suicide", function(func, self, unit)
+    if _is_local_noclip_unit(unit) then
+        _log_boundary_suppression("host out-of-bounds suicide", "z<-240 while noclipping")
+        return
+    end
+    return func(self, unit)
+end)
+
+mod:hook("PlayerUnitHealthExtension", "entered_kill_volume", function(func, self, t)
+    if _is_local_noclip_unit(self and self.unit) then
+        _log_boundary_suppression("kill-volume instant death", "rpc_request_insta_kill blocked")
+        return
+    end
+    return func(self, t)
+end)
+
+mod._gt_noclip_server_rpc_guard = function(rpc_name, ...)
+    if rpc_name == "rpc_suicide" and _noclip_active then
+        local go_id = ...
+        local unit = _local_player_unit()
+        local state = Managers.state
+        local storage = state and state.unit_storage
+        local local_go_id = unit and storage and storage:go_id(unit)
+
+        if BoundaryPolicy.should_suppress_rpc(
+                _noclip_active, rpc_name, go_id, local_go_id) then
+            _log_boundary_suppression("client out-of-bounds suicide RPC", "local rpc_suicide blocked")
+            return true
+        end
+    end
+    return false
+end
+
+mod._gt241_boundary_suppression_wired = true
+printf("[gt][noclip] issue #241: boundary-safety suppression armed (ledge-grab + kill-volume + host/client out-of-bounds death)")
+
+
+-- One official owner for client suicide routing; unrelated messages delegate.
+mod:hook("NetworkTransmit", "send_rpc_server", function(func, self, rpc_name, ...)
+    if mod._gt_noclip_server_rpc_guard(rpc_name, ...) then return end
+    return func(self, rpc_name, ...)
 end)
 
 -- Called from the main file's on_game_state_changed: locomotion extensions are

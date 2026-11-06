@@ -43,9 +43,10 @@ mod:hook("GameNetworkManager", "hot_join_sync", function(func, self, ...)
     return after_join_result(func(self, ...))
 end)
 
--- Public owns no older queue filter: freeze only dequeuing, not spawn selection.
+-- Compose spawn suppression with world freeze at the one dequeue boundary.
 mod:hook("ConflictDirector", "update_spawn_queue", function(func, self, ...)
-    if mod._gt_time_world_frozen and mod._gt_time_world_frozen() then return end
+    if mod:get("disable_enemy_spawns")
+            or (mod._gt_time_world_frozen and mod._gt_time_world_frozen()) then return end
     return func(self, ...)
 end)
 

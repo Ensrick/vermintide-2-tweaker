@@ -205,26 +205,54 @@ local _gt_cs_buff_cap_limit_exceeded = false
 -- forward to it on the "destroy" hotkey rather than maintain a private list,
 -- so behaviour matches upstream's `handle_despawn_units` 1:1.
 
+local function _gt_cs_is_spawnable(breed)
+    return type(breed) == "table"
+        and (breed.base_unit or breed.opt_base_unit) ~= nil
+        and breed.unit_template ~= nil
+        and (breed.behavior or breed.horde_behavior) ~= nil
+end
+
+-- Category fallback for breeds NOT in the curated overlay: derive from the
+-- breed's own fields. `boss` / `special` are the vanilla per-breed flags
+-- (e.g. breed_chaos_troll_chief.lua `boss = true`,
+-- breed_chaos_tether_sorcerer.lua `special = true` - both missing from the
+-- old hardcoded map); `race = "dummy"` marks the training dummy
+-- (breed_training_dummy.lua:43). Everything else lists as a regular enemy.
+-- Specials additionally list under Regular, mirroring the curated overlay
+-- (every vanilla special above is { "regular", "special" }); without this,
+-- late-registered mod specials never enter the default Regular lap (#1138).
+local function _gt_cs_dynamic_categories(breed)
+    if breed.boss then return { "boss" } end
+    if breed.special then return { "regular", "special" } end
+    if breed.race == "dummy" then return { "dummy", "misc" } end
+    return { "regular" }
+end
+
 local function _gt_cs_build_unit_lists()
-    -- Populate the per-category arrays. Walk Breeds (the global table loaded
-    -- before any mod runs) and slot each breed into every category it belongs
-    -- to per the upstream `unit_categories` map. Breeds not present in the
-    -- map are NOT added to anything — same behaviour as the upstream
-    -- `[Spawn]: Unrecognized breed name` warning, just silent in our case
-    -- since gt isn't a spawning-focused mod and we'd rather not spam.
+    -- Populate the per-category arrays from the LIVE Breeds table (#454).
+    -- Every spawnable breed is listed: curated breeds keep their upstream
+    -- category memberships, unknown breeds (DLC additions, enemy_tweaker's
+    -- et_* clones, any other mod's Breeds[...] registrations) are slotted by
+    -- _gt_cs_dynamic_categories. Rebuilt lazily at command/menu time, NOT at
+    -- file scope: mods register breeds at their own module load and mod load
+    -- order is user-defined, so a boot-time snapshot goes stale - the same
+    -- class as the ConflictDirector threat_values upvalue documented in
+    -- enemy_tweaker/ENGINE_SURFACE.md "every table that snapshots
+    -- pairs(Breeds) at boot". The walk is ~100 entries at keypress frequency.
     for _, list_name in ipairs(_gt_cs_unit_category_names) do
         _gt_cs_unit_lists[list_name .. "_units"] = {}
     end
-    if not Breeds then return end
-    for breed_name, _ in pairs(Breeds) do
-        local categories = _gt_cs_unit_categories[breed_name]
-        if categories then
+    if not Breeds then return _gt_cs_unit_lists end
+    for breed_name, breed in pairs(Breeds) do
+        if _gt_cs_is_spawnable(breed) then
+            local categories = _gt_cs_unit_categories[breed_name]
+                or _gt_cs_dynamic_categories(breed)
             for _, cat in ipairs(categories) do
                 local list = _gt_cs_unit_lists[cat .. "_units"]
                 if list then list[#list + 1] = breed_name end
             end
             local all = _gt_cs_unit_lists["all_units"]
-            if all then all[#all + 1] = breed_name end
+            all[#all + 1] = breed_name
         end
     end
     for _, list_name in ipairs(_gt_cs_unit_category_names) do
@@ -233,11 +261,36 @@ local function _gt_cs_build_unit_lists()
             table.sort(list, function(a, b) return a < b end)
         end
     end
+    return _gt_cs_unit_lists
 end
+-- Exposed for the gt_cs_breed_list_dynamic regression check in main (which
+-- injects a probe breed into Breeds, rebuilds, and asserts it is listed).
+mod._gt_cs_rebuild_unit_lists = _gt_cs_build_unit_lists
+
+-- Issue #454 regression marker - if a future refactor reverts the live-table
+-- enumeration, the main-file rt check gt_cs_breed_list_dynamic fails.
+GT_CS_DYNAMIC_BREED_LIST_MARKER_v0_2_210 = "gt-cs-dynamic-breed-list-i454"
 
 local function _gt_cs_active_list()
+    -- Lazy rebuild on every access (#454) - callers are all user-driven
+    -- (next/prev cycle, dropdown change, game-state change), never per-frame.
+    _gt_cs_build_unit_lists()
     local key = mod:get("gt_cs_unit_list") or "regular_units"
-    return _gt_cs_unit_lists[key] or _gt_cs_unit_lists.regular_units
+    local list = _gt_cs_unit_lists[key] or _gt_cs_unit_lists.regular_units
+    -- Re-locate the current selection in the fresh list so cycling continues
+    -- from the same breed even when a late-registered breed shifted indices.
+    local selected = mod:get("gt_cs_selected_unit")
+    if selected and selected ~= "" then
+        for i = 1, #list do
+            if list[i] == selected then
+                _gt_cs_breed_name_index = i
+                break
+            end
+        end
+    end
+    if _gt_cs_breed_name_index > #list then _gt_cs_breed_name_index = #list end
+    if _gt_cs_breed_name_index < 1 then _gt_cs_breed_name_index = 1 end
+    return list
 end
 
 local function _gt_cs_is_in_keep()
@@ -1095,4 +1148,4 @@ end
 -- Build lists at mod load. Breeds is populated before mods run, so this is
 -- safe to call here; matches upstream's `mod:build_unit_lists()` placement
 -- at the bottom of CreatureSpawner.lua.
-_gt_cs_build_unit_lists()
+-- Live lists rebuild when a user accesses the spawner, not at mod boot.

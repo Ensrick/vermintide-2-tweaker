@@ -63,6 +63,29 @@ Promotion is **selective by default**. Never blind-copy the whole dev tree to st
 that can dump unverified in-flight work on subscribers (the ~80-cim-subscriber loss,
 May 2026). Pick the mode that fits.
 
+Include newly added source files in the staged whitespace review before the
+first BuildOnly freeze: ordinary `git diff --check` excludes untracked files.
+Stage the complete owned candidate for that check, without hiding dirty sibling
+mods; after generation, restage its final source and artifact proofs together.
+
+### Maintainer-approved verification-queue releases
+
+On 2026-11-05, the maintainer authorized promoting existing `verify-fix`
+candidates to their existing official releases without waiting for volunteer
+in-game testing, using public bug reports for subsequent feedback. For this
+batch, missing human acceptance is not a promotion-admission blocker.
+
+This is a selected-fix rollup, not permission to copy every Dev feature or
+promote `diagnostics-armed` investigations. Include the functional dependency
+closure, preserve official-only fixes and Workshop identities, and check newer
+human comments for a failed or superseded candidate. A single-stream public
+item may already contain the fix despite its version suffix; do not publish it
+again merely to rename the stream. Leave issues open and distinguish release
+delivery from gameplay acceptance. Keep test cards usable on the actual
+official candidate and preserve the normal automated, protected-review,
+version-reservation and section 6.6 publication gates, including exact-version
+authorization for clean stable releases.
+
 ### Mode A - Cherry-pick hotfix (the common case)
 
 A single fix (usually a crash) needs to reach stable without dragging the rest of the

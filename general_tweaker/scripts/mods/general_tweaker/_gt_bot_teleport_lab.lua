@@ -1,4 +1,5 @@
 local mod = get_mod("gt")
+local RESOURCE_RESIDENCY = mod:dofile("scripts/mods/general_tweaker/_lib_resource_residency")
 
 -- ============================================================================
 -- Bot Teleport Lab (Diagnostics)  --  observe/probe the "bots teleport away
@@ -902,7 +903,10 @@ local function _do_draw(want_hud, want_lines)
             mod._gt_btlab_gui_world = world
         end
         if not mod._gt_btlab_gui then
-            mod._gt_btlab_gui = World.create_screen_gui(world, "material", GUI_MTRL, "immediate")
+            if RESOURCE_RESIDENCY.material_resident(GUI_MTRL, rawget(_G, "Application"), nil, "gt_bot_teleport_lab") == true then
+                -- resource-safety: gt_public_btlab_material_residency
+                mod._gt_btlab_gui = World.create_screen_gui(world, "material", GUI_MTRL, "immediate")
+            end
         end
         gui = mod._gt_btlab_gui
     end
