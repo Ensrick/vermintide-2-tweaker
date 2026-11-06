@@ -1093,6 +1093,276 @@ function Get-VtInjectedReceiptRoutes {
     return @($routes.ToArray())
 }
 
+function Get-VtFactoryLuaScopeOwners {
+    param($Tokens)
+    # Deliberately small grammar for immediate factory composition. A scope
+    # owner is the opening keyword's token index; -1 means module top level.
+    # No CFG is inferred: repeat is unsupported, and exits belong to the
+    # nearest function even when nested inside an if/do/loop block.
+    $owners=New-Object 'int[]' @($Tokens).Count
+    $stack=New-Object System.Collections.Generic.List[object]
+    $unsafeOwners=New-Object 'System.Collections.Generic.HashSet[int]'
+    $returns=New-Object System.Collections.Generic.List[object]
+    $loops=New-Object System.Collections.Generic.List[object]
+    for($i=0;$i -lt @($Tokens).Count;$i++){
+        $owners[$i]=if($stack.Count){[int]$stack[$stack.Count-1].Start}else{-1}
+        if([string]$Tokens[$i].Kind -cne 'Identifier'){continue}
+        $text=[string]$Tokens[$i].Text
+        if($text -in @('repeat','until')){return $null}
+        if($text -in @('goto','return','for','while')){
+            $functionOwner=-1
+            for($j=$stack.Count-1;$j -ge 0;$j--){
+                if([string]$Tokens[[int]$stack[$j].Start].Text -ceq 'function'){$functionOwner=[int]$stack[$j].Start;break}
+            }
+            if($text -ceq 'goto'){$null=$unsafeOwners.Add($functionOwner)}
+            elseif($text -ceq 'return'){$returns.Add([pscustomobject]@{Owner=$functionOwner;TokenIndex=$i})}
+            else{$loops.Add([pscustomobject]@{Owner=$functionOwner;TokenIndex=$i})}
+            if($text -in @('goto','return')){continue}
+        }
+        if($text -in @('function','if','for','while','do')){
+            if($text -ceq 'do' -and $stack.Count -and [bool]$stack[$stack.Count-1].AwaitDo){
+                $stack[$stack.Count-1].AwaitDo=$false
+            }else{$stack.Add([pscustomobject]@{Start=$i;AwaitDo=($text -in @('for','while'))})}
+        }elseif($text -ceq 'end'){
+            if(-not$stack.Count){return $null}
+            $stack.RemoveAt($stack.Count-1)
+        }
+    }
+    if($stack.Count){return $null}
+    return [pscustomobject]@{Owners=$owners;UnsafeOwners=$unsafeOwners;Returns=@($returns.ToArray());Loops=@($loops.ToArray())}
+}
+
+function Get-VtFactoryCanonicalModReceiverProof {
+    param($Document,$Scope,[string]$ExpectedModId,[string]$ModulePrefix)
+    $tokens=@($Document.Tokens);$declarations=New-Object System.Collections.Generic.List[int]
+    $escapes=New-Object System.Collections.Generic.List[int]
+    $unsupportedLoaders=New-Object System.Collections.Generic.List[int]
+    $fieldKeys=New-Object 'System.Collections.Generic.HashSet[int]'
+    $tableValues=New-Object 'System.Collections.Generic.HashSet[int]'
+    $punctuation=New-Object System.Collections.Generic.Stack[int]
+    # Distinguish { mod = mod } keys from assignments/shadows. Lua table keys
+    # are not local identifiers; a same-named function parameter still is.
+    for($i=0;$i -lt $tokens.Count;$i++){
+        $text=[string]$tokens[$i].Text
+        if($text -in @('(','{','[')){$punctuation.Push($i);continue}
+        if($text -in @(')','}',']')){if($punctuation.Count){$null=$punctuation.Pop()};continue}
+        if($punctuation.Count -and [string]$tokens[$punctuation.Peek()].Text -ceq '{' -and
+           [int]$Scope.Owners[$i] -eq [int]$Scope.Owners[$punctuation.Peek()]){$null=$tableValues.Add($i)}
+        if($i -gt 0 -and $i+1 -lt $tokens.Count -and $tableValues.Contains($i) -and
+           [string]$tokens[$i-1].Text -in @('{',',') -and (Test-VtLuaToken $tokens[$i+1] '=')){$null=$fieldKeys.Add($i)}
+        if($i+6 -lt $tokens.Count -and [int]$Scope.Owners[$i] -eq -1 -and
+           (Test-VtLuaToken $tokens[$i] 'local' 'Identifier') -and (Test-VtLuaToken $tokens[$i+1] 'mod' 'Identifier') -and
+           (Test-VtLuaToken $tokens[$i+2] '=') -and (Test-VtLuaToken $tokens[$i+3] 'get_mod' 'Identifier') -and
+           (Test-VtLuaToken $tokens[$i+4] '(') -and [string]$tokens[$i+5].Kind -ceq 'String' -and
+           [string]$tokens[$i+5].Value -ceq $ExpectedModId -and (Test-VtLuaToken $tokens[$i+6] ')') -and
+           $i+7 -lt $tokens.Count -and [string]$tokens[$i+7].Text -in @('local','mod','if','function','return',';')){$declarations.Add($i+1)}
+    }
+    if($declarations.Count -ne 1){return $null}
+    for($i=0;$i+1 -lt $tokens.Count;$i++){
+        if([string]$tokens[$i].Text -cnotin @('local','for')){continue}
+        $name=$i+1
+        while($name -lt $tokens.Count -and [string]$tokens[$name].Kind -ceq 'Identifier'){
+            if([string]$tokens[$name].Text -cin @('mod','get_mod') -and $name -ne $declarations[0]){return $null}
+            if($name+2 -ge $tokens.Count -or -not(Test-VtLuaToken $tokens[$name+1] ',')){break}
+            $name+=2
+        }
+    }
+    foreach($span in @([VtLiveCardLuaLexerV2]::ScanFunctionSpans([VtLiveCardLuaTokenV2[]]$tokens))){
+        $open=[int]$span.Start+1
+        while($open -lt [int]$span.End -and [string]$tokens[$open].Text -cne '('){$open++}
+        $close=Get-VtLuaMatchingTokenIndex -Tokens $tokens -OpenIndex $open
+        if($close -lt 0){return $null}
+        for($i=$open+1;$i -lt $close;$i++){if([string]$tokens[$i].Text -cin @('mod','get_mod')){return $null}}
+    }
+    for($i=0;$i -lt $tokens.Count;$i++){
+        if([string]$tokens[$i].Kind -cne 'Identifier' -or [string]$tokens[$i].Text -cnotin @('mod','get_mod') -or
+           $fieldKeys.Contains($i) -or ($i -gt 0 -and [string]$tokens[$i-1].Text -in @('.',':')) -or $i -eq $declarations[0]){continue}
+        if($i -gt 0 -and ((Test-VtLuaToken $tokens[$i-1] 'local' 'Identifier') -or
+           ((Test-VtLuaToken $tokens[$i-1] 'function' 'Identifier') -and
+            -not([string]$tokens[$i].Text -ceq 'mod' -and $i+1 -lt $tokens.Count -and [string]$tokens[$i+1].Text -in @('.',':'))))){return $null}
+        if([string]$tokens[$i].Text -ceq 'mod' -and $i+3 -lt $tokens.Count -and
+           [string]$tokens[$i+1].Text -in @('.',':') -and (Test-VtLuaToken $tokens[$i+2] 'dofile' 'Identifier') -and
+           ((Test-VtLuaToken $tokens[$i+3] '=') -or ($i -gt 0 -and (Test-VtLuaToken $tokens[$i-1] 'function' 'Identifier')))){return $null}
+        if([string]$tokens[$i].Text -ceq 'mod'){
+            if($i+2 -lt $tokens.Count -and [string]$tokens[$i+1].Text -in @('.',':') -and
+               (Test-VtLuaToken $tokens[$i+2] 'dofile' 'Identifier')){
+                # Only a native colon call with one complete same-namespace
+                # literal path is a qualified loader use. Every other member
+                # reference is unsupported, including comma-list writes and
+                # forwarding/aliasing; no assignment-spelling list is inferred.
+                $direct=$ModulePrefix -and $i+5 -lt $tokens.Count -and
+                    (Test-VtLuaToken $tokens[$i+1] ':') -and (Test-VtLuaToken $tokens[$i+3] '(') -and
+                    [string]$tokens[$i+4].Kind -ceq 'String' -and
+                    ([string]$tokens[$i+4].Value).StartsWith($ModulePrefix,[StringComparison]::Ordinal) -and
+                    (Test-VtLuaToken $tokens[$i+5] ')')
+                if(-not$direct){$unsupportedLoaders.Add($i)}
+            }
+            if($i+2 -lt $tokens.Count -and (Test-VtLuaToken $tokens[$i+1] '[') -and
+               ([string]$tokens[$i+2].Kind -cne 'String' -or [string]$tokens[$i+2].Value -ceq 'dofile')){$unsupportedLoaders.Add($i)}
+            if($i+4 -lt $tokens.Count -and (Test-VtLuaToken $tokens[$i+1] '[') -and
+               [string]$tokens[$i+2].Kind -ceq 'String' -and [string]$tokens[$i+2].Value -ceq 'dofile' -and
+               (Test-VtLuaToken $tokens[$i+3] ']') -and (Test-VtLuaToken $tokens[$i+4] '=')){return $null}
+            # A bare receiver handed to an earlier helper/alias could have its
+            # loader replaced. Do not infer what that helper does. Constructor
+            # context values occur after its call token and are unaffected.
+            if($i+1 -ge $tokens.Count -or [string]$tokens[$i+1].Text -notin @('.',':')){$escapes.Add($i)}
+        }
+        $end=$i
+        while(-not$tableValues.Contains($i) -and $end+2 -lt $tokens.Count -and
+              (Test-VtLuaToken $tokens[$end+1] ',') -and [string]$tokens[$end+2].Kind -ceq 'Identifier'){$end+=2}
+        if($end+1 -lt $tokens.Count -and [string]$tokens[$end+1].Text -in @('=','in')){return $null}
+    }
+    # Reuse the established conservative environment-write detector with only
+    # these two protected global names normalized. Never execute get_mod/Lua.
+    $normalized=@(foreach($token in $tokens){
+        $text=[string]$token.Text;$value=[string]$token.Value
+        if([string]$token.Kind -ceq 'Identifier' -and $text -cin @('mod','get_mod')){$text='printf'}
+        if([string]$token.Kind -ceq 'String' -and $value -cin @('mod','get_mod')){$value='printf'}
+        [pscustomobject]@{Kind=[string]$token.Kind;Text=$text;Value=$value}
+    })
+    if(Test-VtLuaMutatesGlobalPrintf -Tokens $normalized){return $null}
+    return [pscustomobject]@{TokenIndex=[int]$declarations[0];ModId=$ExpectedModId
+        Escapes=@($escapes.ToArray());UnsupportedLoaders=@($unsupportedLoaders.ToArray())}
+}
+
+function Get-VtFactoryInjectedLoadRoutes {
+    param([string]$ModDir,$Documents,[Parameter(Mandatory=$true)][string]$ExpectedModId)
+    # #1812: separate from receipt discovery/bounds: a proven immediate factory LOAD
+    # is a build identity, not an explicit-action diagnostic receipt. No module
+    # names, deployed trees, or marker-specific exceptions participate here.
+    $routes=New-Object System.Collections.Generic.List[object]
+    $bindings=New-Object System.Collections.Generic.List[object]
+    foreach($document in @($Documents)){
+        if([string]$document.Content -notmatch '\bmod\s*:\s*dofile\b' -or
+           [string]$document.Content -notmatch '\)\s*\(\s*\{'){continue}
+        $tokens=@($document.Tokens);$scope=Get-VtFactoryLuaScopeOwners -Tokens $tokens
+        if($null -eq $scope){continue}
+        $raw=Test-VtRawPrintfIsUnshadowed -Tokens $tokens
+        # Record-qualified receiver proof is file-local and indexed once,
+        # rather than rescanning the whole entry for every factory call.
+        $callerModule=Get-VtLuaModulePath -ModDir $ModDir -RelativePath ([string]$document.RelativePath)
+        if(-not$callerModule -or $callerModule.LastIndexOf('/') -lt 0){continue}
+        $modulePrefix=$callerModule.Substring(0,$callerModule.LastIndexOf('/')+1)
+        $receiver=Get-VtFactoryCanonicalModReceiverProof -Document $document -Scope $scope -ExpectedModId $ExpectedModId -ModulePrefix $modulePrefix
+        for($i=0;$i+7 -lt $tokens.Count;$i++){
+            if($i -gt 0 -and [string]$tokens[$i-1].Text -in @('.',':')){continue}
+            if(-not((Test-VtLuaToken $tokens[$i] 'mod' 'Identifier') -and
+                (Test-VtLuaToken $tokens[$i+1] ':') -and (Test-VtLuaToken $tokens[$i+2] 'dofile' 'Identifier') -and
+                (Test-VtLuaToken $tokens[$i+3] '(') -and [string]$tokens[$i+4].Kind -ceq 'String' -and
+                (Test-VtLuaToken $tokens[$i+5] ')') -and (Test-VtLuaToken $tokens[$i+6] '(') -and
+                (Test-VtLuaToken $tokens[$i+7] '{'))){continue}
+            $close=Get-VtLuaMatchingTokenIndex -Tokens $tokens -OpenIndex ($i+6)
+            $tableClose=Get-VtLuaMatchingTokenIndex -Tokens $tokens -OpenIndex ($i+7)
+            if($close -lt 0 -or $tableClose -ne $close-1){continue}
+            $fields=New-Object 'System.Collections.Generic.Dictionary[string,bool]' ([StringComparer]::Ordinal)
+            $valid=$true
+            foreach($field in @(Split-VtLuaArguments -Tokens $tokens -OpenIndex ($i+7) -CloseIndex $tableClose)){
+                $start=[int]$field.Start;$end=[int]$field.End
+                if($start+2 -gt $end -or [string]$tokens[$start].Kind -cne 'Identifier' -or
+                   -not(Test-VtLuaToken $tokens[$start+1] '=') -or $fields.ContainsKey([string]$tokens[$start].Text)){$valid=$false;break}
+                $rhs=$start+2;$trusted=$false
+                if($raw -and $rhs -eq $end -and (Test-VtLuaToken $tokens[$rhs] 'printf' 'Identifier')){$trusted=$true}
+                # Exact format/vararg passthrough only; no extra statements,
+                # transformed arguments, member callable, or shadowed printf.
+                if($raw -and $end-$rhs -eq 12){
+                    $shape=@('function','(','$IDENT',',','...',')','printf','(','$IDENT',',','...',')','end')
+                    $trusted=$true
+                    for($j=0;$j -lt $shape.Count;$j++){
+                        if($shape[$j] -ceq '$IDENT'){
+                            if([string]$tokens[$rhs+$j].Kind -cne 'Identifier'){$trusted=$false;break}
+                        }elseif(-not(Test-VtLuaToken $tokens[$rhs+$j] $shape[$j])){$trusted=$false;break}
+                    }
+                    if([string]$tokens[$rhs+2].Text -cne [string]$tokens[$rhs+8].Text -or
+                       [string]$tokens[$rhs+2].Text -ceq 'printf'){$trusted=$false}
+                }
+                $fields[[string]$tokens[$start].Text]=$trusted
+            }
+            $bindings.Add([pscustomobject]@{ModulePath=[string]$tokens[$i+4].Value;Fields=$fields
+                Valid=($valid -and [int]$scope.Owners[$i] -eq -1 -and -not$scope.UnsafeOwners.Contains(-1) -and
+                    @($scope.Returns | Where-Object {$_.Owner -eq -1 -and $_.TokenIndex -lt $i}).Count -eq 0 -and
+                    @($scope.Loops | Where-Object {$_.Owner -eq -1 -and $_.TokenIndex -lt $i}).Count -eq 0 -and
+                    $null -ne $receiver -and [int]$receiver.TokenIndex -lt $i -and
+                    @($receiver.Escapes | Where-Object {$_ -lt $i}).Count -eq 0 -and
+                    @($receiver.UnsupportedLoaders | Where-Object {$_ -lt $i}).Count -eq 0)
+                Source=[string]$document.RelativePath;TokenIndex=$i})
+        }
+    }
+    foreach($document in @($Documents)){
+        if([string]$document.Content -notmatch ':LOAD\]' -or [string]$document.Content -notmatch '^\s*(?:--[^\r\n]*[\r\n]+\s*)*return\s+function\s*\('){continue}
+        $tokens=@($document.Tokens);$scope=Get-VtFactoryLuaScopeOwners -Tokens $tokens
+        if($null -eq $scope -or $tokens.Count -lt 7 -or
+           -not(Test-VtLuaToken $tokens[0] 'return' 'Identifier') -or -not(Test-VtLuaToken $tokens[1] 'function' 'Identifier') -or
+           -not(Test-VtLuaToken $tokens[2] '(') -or [string]$tokens[3].Kind -cne 'Identifier' -or
+           -not(Test-VtLuaToken $tokens[4] ')') -or -not(Test-VtLuaToken $tokens[$tokens.Count-1] 'end' 'Identifier') -or
+           [int]$scope.Owners[$tokens.Count-1] -ne 1 -or $scope.UnsafeOwners.Contains(1)){continue}
+        $modulePath=Get-VtLuaModulePath -ModDir $ModDir -RelativePath ([string]$document.RelativePath)
+        $bound=@($bindings | Where-Object {[string]$_.ModulePath -ceq $modulePath})
+        if(-not$modulePath -or $bound.Count -ne 1 -or -not[bool]$bound[0].Valid){continue}
+        $parameter=[string]$tokens[3].Text;$contextSafe=$true
+        for($i=5;$i -lt $tokens.Count;$i++){
+            if([string]$tokens[$i].Kind -cne 'Identifier' -or [string]$tokens[$i].Text -cne $parameter -or
+               [string]$tokens[$i-1].Text -in @('.',':')){continue}
+            # Only direct field reads or the exact type(context) validation.
+            # Passing the table to an arbitrary helper could mutate its field.
+            $fieldRead=$i+3 -lt $tokens.Count -and (Test-VtLuaToken $tokens[$i+1] '.') -and
+                [string]$tokens[$i+2].Kind -ceq 'Identifier' -and [string]$tokens[$i+3].Text -in @(')',',','or')
+            $typeRead=$i -ge 2 -and (Test-VtLuaToken $tokens[$i-2] 'type' 'Identifier') -and
+                (Test-VtLuaToken $tokens[$i-1] '(') -and (Test-VtLuaToken $tokens[$i+1] ')')
+            if(-not$fieldRead -and -not$typeRead){$contextSafe=$false;break}
+        }
+        if(-not$contextSafe){continue}
+        $declarations=New-Object System.Collections.Generic.List[object]
+        for($i=5;$i+5 -lt $tokens.Count;$i++){
+            if([int]$scope.Owners[$i] -ne 1 -or -not(Test-VtLuaToken $tokens[$i] 'local' 'Identifier') -or
+               [string]$tokens[$i+1].Kind -cne 'Identifier' -or -not(Test-VtLuaToken $tokens[$i+2] '=') -or
+               -not(Test-VtLuaToken $tokens[$i+3] $parameter 'Identifier') -or -not(Test-VtLuaToken $tokens[$i+4] '.') -or
+               [string]$tokens[$i+5].Kind -cne 'Identifier'){continue}
+            $field=[string]$tokens[$i+5].Text;$end=$i+5
+            if($i+7 -lt $tokens.Count -and (Test-VtLuaToken $tokens[$i+6] 'or' 'Identifier') -and
+               (Test-VtLuaToken $tokens[$i+7] 'printf' 'Identifier')){$end=$i+7}
+            $next=$end+1
+            $alias=[string]$tokens[$i+1].Text
+            # A recognized next statement is required; no chained expression
+            # or newline-as-expression-boundary assumption is permitted.
+            if($alias -in @($parameter,'printf') -or -not$bound[0].Fields.ContainsKey($field) -or
+               -not[bool]$bound[0].Fields[$field] -or $next -ge $tokens.Count -or
+               -not([string]$tokens[$next].Text -in @('local','if','for','while','return','end',';') -or
+                    ([string]$tokens[$next].Text -ceq $alias -and (Test-VtLuaToken $tokens[$next+1] '(')))){continue}
+            $declarations.Add([pscustomobject]@{Alias=$alias;TokenIndex=$i+1;Field=$field})
+        }
+        foreach($declaration in @($declarations.ToArray())){
+            $alias=[string]$declaration.Alias;$unambiguous=$true
+            for($i=0;$i -lt $tokens.Count;$i++){
+                if([string]$tokens[$i].Kind -cne 'Identifier' -or [string]$tokens[$i].Text -cne $alias -or
+                   ($i -gt 0 -and [string]$tokens[$i-1].Text -in @('.',':')) -or $i -eq [int]$declaration.TokenIndex){continue}
+                if($i -lt [int]$declaration.TokenIndex -or $i+1 -ge $tokens.Count -or
+                   ($i -gt 0 -and [string]$tokens[$i-1].Text -in @('function','local')) -or
+                   -not(Test-VtLuaToken $tokens[$i+1] '(')){$unambiguous=$false;break}
+            }
+            if(-not$unambiguous){continue}
+            for($i=[int]$declaration.TokenIndex+1;$i+2 -lt $tokens.Count;$i++){
+                if([int]$scope.Owners[$i] -ne 1 -or -not(Test-VtLuaToken $tokens[$i] $alias 'Identifier') -or
+                   [string]$tokens[$i-1].Text -in @('.',':') -or -not(Test-VtLuaToken $tokens[$i+1] '(') -or
+                   [string]$tokens[$i+2].Kind -cne 'String'){continue}
+                # Even an unknown conditional pre-return is conservatively
+                # denied; returns in another/nested helper function are not.
+                if(@($scope.Returns | Where-Object {$_.Owner -eq 1 -and $_.TokenIndex -lt $i}).Count){continue}
+                if(@($scope.Loops | Where-Object {$_.Owner -eq 1 -and $_.TokenIndex -lt $i}).Count){continue}
+                # The literal must be the complete first argument, not merely
+                # a trusted-looking prefix of unsupported concatenation/code.
+                if($i+3 -ge $tokens.Count -or [string]$tokens[$i+3].Text -notin @(',',')') -or
+                   (Get-VtLuaMatchingTokenIndex -Tokens $tokens -OpenIndex ($i+1)) -lt 0){continue}
+                $signature=[string]$tokens[$i+2].Value;$marker=Get-VtMarkerFromSignature $signature
+                if($marker -cmatch ':LOAD\]$'){
+                    $routes.Add([pscustomobject]@{Marker=$marker;Signature=$signature;Source=[string]$document.RelativePath
+                        Line=[int]$tokens[$i].Line;TokenIndex=$i;Callable=('factory-injected:'+[string]$declaration.Field)})
+                }
+            }
+        }
+    }
+    return @($routes.ToArray())
+}
+
 function Get-VtMenuSurfaces {
     param($Documents)
     # Menu discovery is deliberately token-based. Literal values are examined
@@ -1711,6 +1981,7 @@ function Get-VtCardSourceAuthority {
             foreach($x in @($scan.ExactBannerRoutes)){$bannerRoutes.Add($x)}
         }
         foreach($x in @(Get-VtInjectedReceiptRoutes -ModDir ([string]$entry.Dir) -Documents $reachableDocuments)){$receiptRoutes.Add($x)}
+        foreach($x in @(Get-VtFactoryInjectedLoadRoutes -ModDir ([string]$entry.Dir) -Documents $reachableDocuments -ExpectedModId $id)){$loadRoutes.Add($x)}
         # Accept only a route-local structural proof or an immutable-tree,
         # exact-signature/token-anchor exception. Nearby prose and marker-wide
         # sibling emitters never prove this route finite.

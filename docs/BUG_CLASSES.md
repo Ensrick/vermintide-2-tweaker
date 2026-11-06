@@ -3483,7 +3483,7 @@ cosmetics `_mh_package_lifecycle.lua`).
 **Lives in:** any `_rt_register` check, `/verify_<feature>` command, or offline
 QA gate whose verdict is used to decide whether a fix landed.
 
-The bug is in the INSTRUMENT, not the code it measures. Eight sub-patterns have
+The bug is in the INSTRUMENT, not the code it measures. Nine sub-patterns have
 bitten this repo:
 
 **(a) Setter-success or self-derived expectation.** The check asserts that a
@@ -3568,6 +3568,21 @@ Recompute route-dependent proof for every emitter, keep only genuinely
 owner-invariant metadata cached, and require conservative complete block and
 callback boundaries. Compare deployed routes and current ready cards before
 rollout; never compensate with blanket exceptions or automatic label stripping.
+
+**(i) Injected startup printer loses LOAD authority.** Official CIM `0.8.148`
+published successfully, but both card-refresh passes rejected its startup
+receipt because the source checker recognized direct printers and install-style
+receipt aliases, not an immediately invoked returned factory with a context
+printer (#1812). Qualify the literal module, canonical same-mod loader, unique
+context field, exact raw-printer forwarding and reachable outer emitter together;
+do not promote ordinary receipt aliases into LOAD authority. Use a factory-only
+fixture with no direct LOAD fallback, plus the actual candidate bootstrap in
+pre-publication QA. Adversarial Lua controls exposed false admissions from prior
+returns, nonterminating prefixes and loader replacement, including tuple member
+assignment. Refuse unsupported control flow/provenance rather than trusting a
+literal marker. Preserve failed witnesses and successful publication receipts;
+repair cards separately without replaying a completed Workshop upload. Source
+route qualification is not proof that the game launched or the feature passed.
 
 ### Symptoms
 - An offline suite is green (or a `/verify_*` prints PASS) while the user
