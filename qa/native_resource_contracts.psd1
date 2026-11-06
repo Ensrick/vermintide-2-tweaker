@@ -57,7 +57,8 @@
         @{ File='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_debug_highlights.lua'; Kind='gui_create'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_resource_residency_census.lua' }
         @{ File='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_debug_highlights.lua'; Kind='residency_proof'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_resource_residency_census.lua' }
         @{ File='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_solo_qol.lua'; Kind='shading'; Count=2; Policy='owned-world-existing'; Evidence='qa/lua/tests/test_resource_residency_census.lua' }
-        @{ File='general_tweaker/scripts/mods/general_tweaker/_gt_bot_teleport_lab.lua'; Kind='gui_create'; Count=1; Policy='deferred-legacy'; Evidence='issue:#749' }
+        @{ File='general_tweaker/scripts/mods/general_tweaker/_gt_bot_teleport_lab.lua'; Kind='gui_create'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_resource_residency_census.lua' }
+        @{ File='general_tweaker/scripts/mods/general_tweaker/_gt_bot_teleport_lab.lua'; Kind='residency_proof'; Count=1; Policy='shared-v2-strict'; Evidence='qa/lua/tests/test_resource_residency_census.lua' }
         @{ File='general_tweaker/scripts/mods/general_tweaker/_gt_solo_qol.lua'; Kind='shading'; Count=2; Policy='owned-world-existing'; Evidence='qa/lua/tests/test_resource_residency_census.lua' }
         @{ File='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_gui_material_guard.lua'; Kind='renderer_hook'; Count=1; Policy='shared-v2-global-preserve-unknown'; Evidence='qa/lua/tests/test_cos_resource_residency.lua' }
         @{ File='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_gui_material_guard.lua'; Kind='residency_proof'; Count=4; Policy='shared-v2-global-preserve-unknown'; Evidence='qa/lua/tests/test_cos_resource_residency.lua' }

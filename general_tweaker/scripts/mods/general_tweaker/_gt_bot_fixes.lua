@@ -481,7 +481,17 @@ local function _gt_instant_pickup_tick(self, unit, blackboard, t)
     if blackboard.target_ally_need_type then
         return
     end
-    local pickup = blackboard.mule_pickup or blackboard.health_pickup or blackboard.ammo_pickup
+    local mule_pickup = blackboard.mule_pickup
+    if mod._gt_bot_pickup_is_reserved(mule_pickup) then
+        if blackboard.interaction_unit == mule_pickup then
+            blackboard.interaction_unit = nil
+        end
+        if blackboard.forced_pickup_unit == mule_pickup then
+            blackboard.forced_pickup_unit = nil
+        end
+        mule_pickup = nil
+    end
+    local pickup = mule_pickup or blackboard.health_pickup or blackboard.ammo_pickup
     if not (pickup and Unit.alive(pickup)) then
         return
     end
@@ -720,6 +730,22 @@ end)
 --   This wrapper calls the original first, so it composes with other bot mods
 --   that also hook _select_ally_by_utility. It only ADDS a target when vanilla
 --   found nothing more urgent.
+mod._gt_rescue_awaiting_distance_cap = function(ignore_leash, custom_range_enabled, custom_range_m, follow_range_m)
+    if ignore_leash then
+        return nil
+    end
+
+    local custom = custom_range_enabled and true or false
+    local value = tonumber(custom and custom_range_m or follow_range_m) or 40.0
+    local maximum = custom and 100.0 or 40.0
+    return math.max(10.0, math.min(maximum, value))
+end
+
+mod._gt_rescue_awaiting_within_cap = function(distance_m, cap_m)
+    return cap_m == nil or (type(distance_m) == "number" and distance_m <= cap_m)
+end
+mod.GT_BOT300_RESCUE_RANGE_POLICY_MARKER_v0_2_221 = true
+
 mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit, blackboard, breed, t)
     local ally, real_dist, need_type, look_at = func(self, unit, blackboard, breed, t)
 
@@ -758,7 +784,12 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
     local player_and_bot_units = side:player_units()
     local self_pos = POSITION_LOOKUP[unit]
     local best_unit, best_dist
-    local considered, blocked_path, not_alive = 0, 0, 0
+    local considered, blocked_path, blocked_range, not_alive = 0, 0, 0, 0
+    local rescue_distance_cap = mod:get("gt_bot_rescue_awaiting") and mod._gt_rescue_awaiting_distance_cap(
+        mod:get("gt_bot_rescue_awaiting_ignore_leash"),
+        mod:get("gt_bot_rescue_awaiting_custom_range"),
+        mod:get("gt_bot_rescue_awaiting_range_m"),
+        mod:get("gt_bot_follow_distance_m")) or nil
 
     do
         -- Throttled heartbeat: proves the wrapper runs and shows the roster size,
@@ -767,7 +798,7 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
         local next_hb = blackboard._gt_rescue_hb_t or 0
         if t >= next_hb then
             blackboard._gt_rescue_hb_t = t + 3.0
-            mod:debug("[gt:bot-rescue] scan roster=%d prior_need=%s", #player_and_bot_units, tostring(need_type))
+            pcall(printf, "[gt:bot-rescue] scan roster=%d prior_need=%s", #player_and_bot_units, tostring(need_type))
         end
     end
 
@@ -790,7 +821,7 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
                 local _, allowed_aid_path = self:_ally_path_allowed(unit, player_unit, t)
                 local cand_pos = POSITION_LOOKUP[player_unit]
 
-                mod:debug("[gt:bot-rescue] candidate idx=%d ready=true health_alive=%s aid_path=%s has_pos=%s",
+                pcall(printf, "[gt:bot-rescue] candidate idx=%d ready=true health_alive=%s aid_path=%s has_pos=%s",
                     k, tostring(alive), tostring(allowed_aid_path and true or false), tostring(cand_pos ~= nil))
 
                 if not alive then
@@ -801,7 +832,9 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
                     -- nil-guard both positions: a just-spawned remote awaiting unit
                     -- can momentarily lack a POSITION_LOOKUP entry (skip this frame).
                     local d = Vector3.distance(self_pos, cand_pos)
-                    if not best_dist or d < best_dist then
+                    if not mod._gt_rescue_awaiting_within_cap(d, rescue_distance_cap) then
+                        blocked_range = blocked_range + 1
+                    elseif not best_dist or d < best_dist then
                         best_dist = d
                         best_unit = player_unit
                     end
@@ -814,8 +847,9 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
         local next_t = blackboard._gt_rescue_log_t or 0
         if t >= next_t then
             blackboard._gt_rescue_log_t = t + 2.0
-            mod:debug("[gt:bot-rescue] awaiting=%d picked=%s not_health_alive=%d path_blocked=%d prior_need=%s",
-                considered, best_unit and "yes" or "no", not_alive, blocked_path, tostring(need_type))
+            pcall(printf, "[gt:bot-rescue] awaiting=%d picked=%s not_health_alive=%d path_blocked=%d range_blocked=%d cap_m=%s prior_need=%s",
+                considered, best_unit and "yes" or "no", not_alive, blocked_path, blocked_range,
+                rescue_distance_cap and string.format("%.1f", rescue_distance_cap) or "unlimited", tostring(need_type))
         end
     end
 
@@ -825,7 +859,7 @@ mod:hook("PlayerBotBase", "_select_ally_by_utility", function (func, self, unit,
         -- (Gated on gt_bot_rescue_awaiting so the awaiting scan above can run for
         -- the priority toggles without rescuing awaiting allies when its own
         -- toggle is off.)
-        mod:debug("[gt:bot-rescue] RESCUE picked awaiting ally dist=%.1f -> relabel knocked_down", best_dist or -1)
+        pcall(printf, "[gt:bot-rescue] RESCUE picked awaiting ally dist=%.1f -> relabel knocked_down", best_dist or -1)
         return best_unit, best_dist, "knocked_down", false
     end
 

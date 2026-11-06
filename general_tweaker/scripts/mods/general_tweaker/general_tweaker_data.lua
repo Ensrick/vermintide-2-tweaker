@@ -108,6 +108,20 @@ local _data = {
                         type          = "checkbox",
                         default_value = false,
                         tooltip       = "gt_bot_behavior_improvements_tooltip",
+                        sub_widgets   = {
+                            {
+                                setting_id    = "gt_bot_greedy_pickup",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = "gt_bot_greedy_pickup_tooltip",
+                            },
+                            {
+                                setting_id    = "gt_bot_smart_ale",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "gt_bot_smart_ale_tooltip",
+                            },
+                        },
                     },
                     -- Bot follow mode (v0.2.152-dev) -- single dropdown
                     -- consolidating the previous gt_bot_split_among_players +
@@ -147,6 +161,28 @@ local _data = {
                         type          = "checkbox",
                         default_value = false,
                         tooltip       = "gt_bot_rescue_awaiting_tooltip",
+                        sub_widgets   = {
+                            {
+                                setting_id    = "gt_bot_rescue_awaiting_ignore_leash",
+                                type          = "checkbox",
+                                default_value = true,
+                                tooltip       = "gt_bot_rescue_awaiting_ignore_leash_tooltip",
+                            },
+                            {
+                                setting_id    = "gt_bot_rescue_awaiting_custom_range",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "gt_bot_rescue_awaiting_custom_range_tooltip",
+                            },
+                            {
+                                setting_id      = "gt_bot_rescue_awaiting_range_m",
+                                type            = "numeric",
+                                default_value   = 40.0,
+                                range           = { 10.0, 100.0 },
+                                decimals_number = 1,
+                                tooltip         = "gt_bot_rescue_awaiting_range_m_tooltip",
+                            },
+                        },
                     },
                     -- Bot-roster presence (whether bots exist / where). Still
                     -- runtime kill-switched (#65).
@@ -178,6 +214,17 @@ local _data = {
                         type          = "checkbox",
                         default_value = false,
                         tooltip       = "gt_improved_bot_combat_tooltip",
+                        sub_widgets   = {
+                            { setting_id = "gt_ibc_smarter_attacks", type = "checkbox", default_value = true, tooltip = "gt_ibc_smarter_attacks_tooltip" },
+                            { setting_id = "gt_ibc_ping_attackers", type = "checkbox", default_value = true, tooltip = "gt_ibc_ping_attackers_tooltip" },
+                            { setting_id = "gt_ibc_limit_special_chase", type = "checkbox", default_value = true, tooltip = "gt_ibc_limit_special_chase_tooltip" },
+                            { setting_id = "gt_ibc_special_chase_distance", type = "numeric", default_value = 7.1, range = { 3.0, 30.0 }, decimals_number = 1, tooltip = "gt_ibc_special_chase_distance_tooltip" },
+                            { setting_id = "gt_ibc_ignore_distant_gunners", type = "checkbox", default_value = true, tooltip = "gt_ibc_ignore_distant_gunners_tooltip" },
+                            { setting_id = "gt_ibc_gunner_cover_distance", type = "numeric", default_value = 11.8, range = { 3.0, 40.0 }, decimals_number = 1, tooltip = "gt_ibc_gunner_cover_distance_tooltip" },
+                            { setting_id = "gt_ibc_limit_boss_focus", type = "checkbox", default_value = true, tooltip = "gt_ibc_limit_boss_focus_tooltip" },
+                            { setting_id = "gt_ibc_boss_engage_distance", type = "numeric", default_value = 15.0, range = { 5.0, 50.0 }, decimals_number = 1, tooltip = "gt_ibc_boss_engage_distance_tooltip" },
+                            { setting_id = "gt_ibc_ability_timing", type = "checkbox", default_value = true, tooltip = "gt_ibc_ability_timing_tooltip" },
+                        },
                     },
                 },
             },
@@ -218,6 +265,20 @@ local _data = {
                         type          = "checkbox",
                         default_value = false,
                         tooltip       = "godmode_enabled_tooltip",
+                        sub_widgets   = {
+                            {
+                                setting_id    = "gt_godmode_strike_damage",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "gt_godmode_strike_damage_tooltip",
+                            },
+                            {
+                                setting_id    = "gt_godmode_unlimited_ammo",
+                                type          = "checkbox",
+                                default_value = false,
+                                tooltip       = "gt_godmode_unlimited_ammo_tooltip",
+                            },
+                        },
                     },
                     -- Noclip master toggle -- speed + boost fine-tunes nest under
                     -- it (code reads them only inside the active movement hook,
@@ -675,6 +736,34 @@ local _data = {
                             },
                         },
                     },
+                    {
+                        setting_id    = "gt_host_lag_comp",
+                        type          = "checkbox",
+                        default_value = true,
+                        tooltip       = "gt_host_lag_comp_tooltip",
+                        sub_widgets   = {
+                            {
+                                setting_id      = "gt_host_lag_comp_max_ms",
+                                type            = "numeric",
+                                default_value   = 250,
+                                range           = { 0, 350 },
+                                decimals_number = 0,
+                                tooltip         = "gt_host_lag_comp_max_ms_tooltip",
+                            },
+                        },
+                    },
+                    {
+                        setting_id    = "gt_offline_twitch_enabled",
+                        type          = "checkbox",
+                        default_value = false,
+                        tooltip       = "gt_offline_twitch_enabled_tooltip",
+                        sub_widgets   = {
+                            { setting_id = "gt_offline_twitch_allow_buffs", type = "checkbox", default_value = true, tooltip = "gt_offline_twitch_allow_buffs_tooltip" },
+                            { setting_id = "gt_offline_twitch_allow_items", type = "checkbox", default_value = true, tooltip = "gt_offline_twitch_allow_items_tooltip" },
+                            { setting_id = "gt_offline_twitch_allow_mutators", type = "checkbox", default_value = true, tooltip = "gt_offline_twitch_allow_mutators_tooltip" },
+                            { setting_id = "gt_offline_twitch_allow_spawns", type = "checkbox", default_value = true, tooltip = "gt_offline_twitch_allow_spawns_tooltip" },
+                        },
+                    },
                 },
             },
             -- ============================================================
@@ -863,7 +952,7 @@ local _data = {
                         setting_id      = "gt_more_corpses_count",
                         type            = "numeric",
                         default_value   = 24,
-                        range           = { 1, 300 },
+                        range           = { 0, 300 },
                         decimals_number = 0,
                         tooltip         = "gt_more_corpses_count_tooltip",
                     },
@@ -872,6 +961,59 @@ local _data = {
         },
     },
 }
+
+-- #797 promotes only the read-only statistics panel, not the Dev Tools group.
+do
+    local widgets = _data.options.widgets
+    local index = #widgets + 1
+    for i = 1, #widgets do
+        if widgets[i].setting_id == "gt_solo_group" then index = i break end
+    end
+    table.insert(widgets, index, {
+        setting_id = "gt_player_statistics_group", type = "group",
+        sub_widgets = {
+            {
+                setting_id    = "gt_devtools_player_stat_hud",
+                type          = "checkbox",
+                default_value = false,
+                tooltip       = "gt_devtools_player_stat_hud_tooltip",
+                sub_widgets   = {
+                    {
+                        setting_id    = "gt_player_stat_hud_mode",
+                        type          = "dropdown",
+                        default_value = "compact",
+                        tooltip       = "gt_player_stat_hud_mode_tooltip",
+                        options       = {
+                            { text = "gt_player_stat_hud_mode_compact", value = "compact" },
+                            { text = "gt_player_stat_hud_mode_expanded", value = "expanded" },
+                        },
+                    },
+                    {
+                        setting_id    = "gt_player_stat_hud_position",
+                        type          = "dropdown",
+                        default_value = "bottom_left",
+                        tooltip       = "gt_player_stat_hud_position_tooltip",
+                        options       = {
+                            { text = "gt_player_stat_hud_position_left", value = "bottom_left" },
+                            { text = "gt_player_stat_hud_position_right", value = "bottom_right" },
+                        },
+                    },
+                    {
+                        setting_id    = "gt_player_stat_hud_scale",
+                        type          = "dropdown",
+                        default_value = 100,
+                        tooltip       = "gt_player_stat_hud_scale_tooltip",
+                        options       = {
+                            { text = "gt_player_stat_hud_scale_75", value = 75 },
+                            { text = "gt_player_stat_hud_scale_100", value = 100 },
+                            { text = "gt_player_stat_hud_scale_125", value = 125 },
+                        },
+                    },
+                },
+            },
+        },
+    })
+end
 
 -- Dev Tools (dev-stream only). The whole group is appended ONLY in the dev clone.
 -- `"gt" .. "_dev"` has NO contiguous "gt" substring, so it SURVIVES the

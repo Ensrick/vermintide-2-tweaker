@@ -279,14 +279,38 @@ end)
 -- ----------------------------------------------------------------------------
 -- Disable the purple mutator explosion (elite/special death burst)
 -- ----------------------------------------------------------------------------
-mod:hook("AiUtils", "generic_mutator_explosion", function (func, killed_unit, blackboard, explosion_template_name)
-    if mod:get("gt_solo_disable_mutator_explosions")
-       and (explosion_template_name == "generic_mutator_explosion"
-         or explosion_template_name == "generic_mutator_explosion_medium"
-         or explosion_template_name == "generic_mutator_explosion_large") then
+local function _gt_is_mutator_explosion(name)
+    return name == "generic_mutator_explosion"
+        or name == "generic_mutator_explosion_medium"
+        or name == "generic_mutator_explosion_large"
+end
+
+-- Hook #1 -- HOST render path. do_damage (vanilla's 4th arg, ai_utils.lua:575 --
+-- gates whether the blast deals damage) is now captured and forwarded; the prior
+-- 3-arg func() call silently passed do_damage=nil on every non-suppressed call.
+mod:hook("AiUtils", "generic_mutator_explosion", function (func, killed_unit, blackboard, explosion_template_name, do_damage)
+    if mod:get("gt_solo_disable_mutator_explosions") and _gt_is_mutator_explosion(explosion_template_name) then
         return
     end
-    return func(killed_unit, blackboard, explosion_template_name)
+    return func(killed_unit, blackboard, explosion_template_name, do_damage)
+end)
+
+-- Hook #2 -- CLIENT render path (#332). Drop the local render when the RPC
+-- resolves to a mutator template. Gated on `not self.is_server` so the host's
+-- re-broadcast to OTHER clients (the `if self.is_server` block at
+-- area_damage_system.lua:474-478) is never touched -- the fix affects only the
+-- local player's view. Full mod:hook (not hook_safe) so the render can actually
+-- be skipped. Duplicate-hook pre-flight (2026-07-05): no other gt hook targets
+-- AreaDamageSystem.rpc_create_explosion.
+mod:hook("AreaDamageSystem", "rpc_create_explosion", function (func, self, channel_id, attacker_unit_id, attacker_is_level_unit, position, rotation, explosion_template_name_id, scale, damage_source_id, attacker_power_level, is_critical_strike, source_attacker_unit_id)
+    if mod:get("gt_solo_disable_mutator_explosions") and not self.is_server then
+        local lookup = NetworkLookup and NetworkLookup.explosion_templates
+        local name = lookup and lookup[explosion_template_name_id]
+        if _gt_is_mutator_explosion(name) then
+            return
+        end
+    end
+    return func(self, channel_id, attacker_unit_id, attacker_is_level_unit, position, rotation, explosion_template_name_id, scale, damage_source_id, attacker_power_level, is_critical_strike, source_attacker_unit_id)
 end)
 
 -- ----------------------------------------------------------------------------

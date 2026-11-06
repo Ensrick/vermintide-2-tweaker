@@ -423,7 +423,7 @@ return {
     gt_devtools_bot_hud_tooltip = { en = "Draws a column per bot showing its current behavior-tree action, the teammate it follows, distance to that teammate and to you, whether it just teleported, its teleport tally, and the last twenty actions it entered. On-screen, host-only, dev build only." },
 
     gt_devtools_player_stat_hud = { en = "Player stat HUD" },
-    gt_devtools_player_stat_hud_tooltip = { en = "Shows source-backed consumer-effective values where the engine path is deterministic, exact retained factors where downstream context is required, and explicit UNSUPPORTED reasons otherwise. Expanded mode exposes every row and contribution across navigable pages. Read-only, local-only, dev build only." },
+    gt_devtools_player_stat_hud_tooltip = { en = "Shows source-backed consumer-effective values where the engine path is deterministic, exact retained factors where downstream context is required, and explicit UNSUPPORTED reasons otherwise. Expanded mode exposes every row and contribution across navigable pages. Read-only and local-only." },
     gt_player_stat_hud_mode = { en = "Player stat HUD detail" },
     gt_player_stat_hud_mode_tooltip = { en = "Compact shows eight high-value stat families. Expanded exposes all stat families, authoritative consumer names, and contribution stages across navigable pages." },
     gt_player_stat_hud_mode_compact = { en = "Compact" },
@@ -659,7 +659,7 @@ return {
     gt_solo_disable_fog = { en = "Disable fog" },
     gt_solo_disable_fog_tooltip = { en = "The level's fog stops rendering, giving a cleaner line of sight. Purely visual and affects only your own game." },
     gt_solo_disable_mutator_explosions = { en = "Disable mutator death explosions" },
-    gt_solo_disable_mutator_explosions_tooltip = { en = "Removes the purple burst that enemies leave behind when they die under the Explosive mutator or boon. Works whether you host or join, and only changes what you see." },
+    gt_solo_disable_mutator_explosions_tooltip = { en = "Hides the three mutator death-burst effects on this machine. A host also prevents those bursts from reaching clients; a joining player can only hide bursts the host sends. Bomb, artillery and grenadier effects are unchanged." },
     gt_solo_disable_sun_shadows = { en = "Disable sun shadows" },
     gt_solo_disable_sun_shadows_tooltip = { en = "Sun shadows stop rendering, for clearer visibility and a small performance gain. Purely visual and affects only your own game." },
     gt_solo_disable_ult_fx = { en = "Disable ult screen effects" },

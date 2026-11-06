@@ -1,5 +1,18 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.570-dev (2026-11-05) -- Official CIM preview dependency reissue
+
+- Reissue the existing public-CIM preview provider compatibility from
+  0.1.568-dev/0.1.569-dev for the official verification-queue promotion
+  (#882, #404; existing #1155 preview reconciler). No new model, appearance,
+  transport or gameplay behavior is introduced by this reissue.
+- The previous .569 transaction completed build, local deployment and GitHub
+  publication but failed its upload readiness check. It has no authenticated
+  Workshop result, and its expired claim is not renewed or replayed. The
+  normal durable broker allocated this fresh .570 candidate.
+- Preserve the finite Crowbill observations already included in that exact
+  reviewed source. This release does not establish in-game acceptance.
+
 ## 0.1.569-dev (2026-11-03) -- Reissue of unpublished 0.1.568-dev
 
 - Same code as 0.1.568-dev, which merged but never reached the Workshop: its

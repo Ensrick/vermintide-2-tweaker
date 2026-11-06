@@ -1,6 +1,6 @@
 local mod = get_mod("gt")
 
-local MOD_VERSION = "0.2.179"
+local MOD_VERSION = "0.2.180"
 _MEM_PROBE_T0_GT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- Public field so cross-mod code (e.g. bt's /bug_report walker, the
 -- gt_lobby_* manifest broadcaster below) can read the version without
@@ -30,7 +30,7 @@ mod.GT_LOBBY_RPC_SCHEMA = 1
 -- call time and the /gt_regression_test check below can assert it cross-module.
 -- Bump ONLY when the `gt_ai_toggle_request` payload shape changes. Initial
 -- value is 1; never define lower.
-mod.GT_AI_RPC_SCHEMA = 1
+mod.GT_AI_RPC_SCHEMA = 2
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
 -- `_dbg` routes through mod:debug (confirmation / expected behavior).
@@ -187,6 +187,8 @@ local _apply_godmode
 -- local fast path) -- no regression. Schema arg per VMF_RECIPES.md §10.
 mod._gt_godmode_peers = mod._gt_godmode_peers or {}
 local _gt_godmode_peers = mod._gt_godmode_peers
+mod._gt_godmode_damage_peers = mod._gt_godmode_damage_peers or {}
+local _gt_godmode_damage_peers = mod._gt_godmode_damage_peers
 local _GT_GODMODE_RPC = "gt_godmode_state"
 local _GT_GODMODE_RPC_SCHEMA = 1
 local _gt_godmode_resync_t = 0  -- self-heal countdown for the MP godmode rebroadcast (see mod.update)
@@ -204,9 +206,16 @@ local function _gt_godmode_broadcast(on)
     local ok, peer = pcall(function() return Network and Network.peer_id and Network.peer_id() end)
     if not (ok and peer) then return end
     _gt_godmode_peers[peer] = on and _gt_net_clock or nil
+    local strike_damage_on = on and mod:get("gt_godmode_strike_damage") == true
+    _gt_godmode_damage_peers[peer] = strike_damage_on and _gt_net_clock or nil
     local vmf = get_mod("VMF")
     if vmf and vmf.ping_vmf_users then pcall(vmf.ping_vmf_users) end
-    pcall(function() mod:network_send(_GT_GODMODE_RPC, "others", _GT_GODMODE_RPC_SCHEMA, on and true or false) end)
+    -- Optional trailing flag preserves the schema-1 base contract: older peers
+    -- ignore it, while a new host can authoritatively apply #549 for its client.
+    pcall(function()
+        mod:network_send(_GT_GODMODE_RPC, "others", _GT_GODMODE_RPC_SCHEMA,
+            on and true or false, strike_damage_on)
+    end)
 end
 
 -- AI Takeover client-side send queue.
@@ -454,6 +463,9 @@ mod.on_game_state_changed = function(status, state_name)
     -- time) so a stale noclip setting from the previous mission doesn't
     -- re-arm before the player has a body to fly.
     if mod._gt_noclip_reset_active then mod._gt_noclip_reset_active() end
+    if mod._gt_dev_heal_reset then mod._gt_dev_heal_reset("game_state_changed") end
+    if mod._gt_player_stat_hud_reset then mod._gt_player_stat_hud_reset() end
+    if mod._gt_host_lag_comp_reset then mod._gt_host_lag_comp_reset() end
     -- AI takeover is a per-run intent — the saved state on the host doesn't
     -- survive a level/state change cleanly, and persisting the checkbox would
     -- show "on" across runs where no swap actually happened. Suppress the
@@ -528,6 +540,17 @@ mod.on_setting_changed = function(setting_id)
     -- (3rd-Person Camera tp_* branches MIGRATED to gui_tweaker / gut 2026-06-29, #191.)
     if setting_id == "godmode_enabled" then
         _apply_godmode(mod:get("godmode_enabled") or false)
+    elseif setting_id == "gt_godmode_strike_damage" then
+        _gt_godmode_broadcast(_godmode)
+    elseif setting_id == "gt_godmode_unlimited_ammo" then
+        if mod._gt_reconcile_infinite_ammo then mod._gt_reconcile_infinite_ammo() end
+    elseif setting_id == "gt_host_lag_comp" then
+        if mod._gt_host_lag_comp_setting_changed then mod._gt_host_lag_comp_setting_changed() end
+    elseif setting_id == "gt_devtools_player_stat_hud"
+            or setting_id == "gt_player_stat_hud_mode"
+            or setting_id == "gt_player_stat_hud_position"
+            or setting_id == "gt_player_stat_hud_scale" then
+        if mod._gt_player_stat_hud_reset then mod._gt_player_stat_hud_reset() end
     elseif setting_id == "noclip_enabled" then
         -- _gt_apply_noclip is a table field on `mod` (extracted to _gt_noclip.lua),
         -- resolved at call time — safe to reference even though the module
@@ -557,6 +580,7 @@ mod.on_setting_changed = function(setting_id)
         -- resolves at call time — safe to reference even though the function
         -- body is assigned later in the file.
         if mod.gt_apply_corpse_count then mod.gt_apply_corpse_count() end
+        if mod._gt332_reconcile_client_corpses then mod._gt332_reconcile_client_corpses() end
     -- (Disable Loading-Screen Monologues MIGRATED to gui_tweaker / gut 2026-06-29,
     -- #192 — branch removed.)
     elseif setting_id == "ai_takeover_enabled" then
@@ -605,6 +629,9 @@ end
 
 mod.on_disabled = function(initial_call)
     if mod._gt_time_disable then mod._gt_time_disable("mod_disabled") end
+    if mod._gt_dev_heal_reset then mod._gt_dev_heal_reset("mod_disabled") end
+    if mod._gt_player_stat_hud_reset then mod._gt_player_stat_hud_reset() end
+    if mod._gt_host_lag_comp_disable then mod._gt_host_lag_comp_disable() end
     -- (3rd-Person Camera offset restore MIGRATED to gui_tweaker / gut 2026-06-29,
     -- #191 — gut's _gut_camera.lua restores its own camera offset on_disabled.)
     -- (Main Menu & Startup on-disable restore MIGRATED to gui_tweaker / gut
@@ -683,17 +710,20 @@ _apply_godmode = function(on)
     -- lobby still converges, and turning it off expires on the host even if the
     -- "off" send is lost.
     _gt_godmode_broadcast(_godmode)
+    if mod._gt_reconcile_infinite_ammo then mod._gt_reconcile_infinite_ammo() end
 end
 
 -- Receive other peers' godmode state (see _gt_godmode_peers rationale near the
 -- top of the file). Validates the schema arg per VMF_RECIPES.md §10.
-mod:network_register(_GT_GODMODE_RPC, function(sender_peer_id, schema, on)
+mod:network_register(_GT_GODMODE_RPC, function(sender_peer_id, schema, on, strike_damage_on)
     if sender_peer_id == nil or schema ~= _GT_GODMODE_RPC_SCHEMA then
         return
     end
     -- Store the local clock at receipt; _gt_godmode_active expires the entry if
     -- the sender stops heartbeating (clean godmode-off even if its send dropped).
     _gt_godmode_peers[sender_peer_id] = (on == true) and _gt_net_clock or nil
+    _gt_godmode_damage_peers[sender_peer_id] =
+        (on == true and strike_damage_on == true) and _gt_net_clock or nil
 end)
 
 mod:command("god", "Toggle godmode (invincibility + invisibility to enemies)", function()
@@ -755,6 +785,352 @@ local function _gt_godmode_active(unit)
     -- it so a missed "off" (or a disconnect) can't leave them invincible forever.
     return seen ~= nil and (_gt_net_clock - seen) < _GT_GODMODE_TIMEOUT
 end
+
+mod._gt_godmode_active = _gt_godmode_active
+
+-- Issue #1009: Blightstorm capture is server-authored at
+-- StatusUtils.set_in_vortex_network. Vanilla changes the status and broadcasts
+-- it to clients there [src: scripts/helpers/status_utils.lua:278-297], and
+-- VortexExtension adds the player to its captured-player table only when this
+-- function returns true [src:
+-- scripts/unit_extensions/ai_supplementary/vortex_extension.lua:615-631].
+-- Reject only the entering edge for a Godmode human when the source unit
+-- positively owns the enemy VortexExtension through ai_supplementary_system.
+-- Sister of the Thorn's SummonedVortexExtension is registered under
+-- area_damage_system [src:
+-- scripts/settings/dlcs/woods/woods_common_settings.lua:174-184] and remains
+-- vanilla. Exit/cleanup calls and all non-Godmode behavior remain vanilla.
+mod._gt_godmode_vortex_policy = mod:dofile(
+    "scripts/mods/general_tweaker/_gt_godmode_vortex_policy")
+mod._gt1009_should_block_vortex_entry =
+    mod._gt_godmode_vortex_policy.should_block_entry
+mod._GT_1009_GODMODE_VORTEX_MARKER = "gt-1009-godmode-vortex-entry"
+mod._gt1009_logged_units = setmetatable({}, { __mode = "k" })
+
+mod:hook("StatusUtils", "set_in_vortex_network",
+    function(func, affected_unit, in_vortex, vortex_unit)
+        local vortex_extension = in_vortex == true
+            and vortex_unit
+            and ALIVE[vortex_unit]
+            and ScriptUnit.has_extension(
+                vortex_unit, "ai_supplementary_system")
+        local is_blightstorm = vortex_extension
+            and vortex_extension.vortex_template_name ~= nil
+
+        if mod._gt1009_should_block_vortex_entry(
+                _gt_godmode_active(affected_unit),
+                in_vortex,
+                is_blightstorm == true) then
+            if not mod._gt1009_logged_units[affected_unit] then
+                mod._gt1009_logged_units[affected_unit] = true
+                printf(
+                    "[gt:1009] blocked Blightstorm capture template=%s",
+                    tostring(vortex_extension.vortex_template_name))
+            end
+            return false
+        end
+
+        return func(affected_unit, in_vortex, vortex_unit)
+    end)
+
+-- Issue #549: outgoing damage is host-authoritative for a joining client's
+-- weapon hit, so the child toggle rides the existing heartbeat and is resolved
+-- against the attacking HUMAN's peer here. Bots are excluded for the same
+-- host-peer ownership reason as base godmode.
+local function _gt_godmode_strike_damage_active(unit)
+    if not unit then return false end
+    local pm = Managers.player
+    if not pm then return false end
+    if _godmode and mod:get("gt_godmode_strike_damage") == true then
+        local lp = pm:local_player()
+        if lp and lp.player_unit == unit then return true end
+    end
+    if not next(_gt_godmode_damage_peers) then return false end
+    local owner = pm.owner and pm:owner(unit)
+    if not owner or not owner.is_player_controlled or not owner:is_player_controlled() then
+        return false
+    end
+    local seen = _gt_godmode_damage_peers[owner.peer_id]
+    return seen ~= nil and (_gt_net_clock - seen) < _GT_GODMODE_TIMEOUT
+end
+mod._gt_godmode_strike_damage_active = _gt_godmode_strike_damage_active
+
+-- Pure truth tables shared by the live hooks, offline tests, and
+-- /gt_regression_test. The final-damage gate remains positive-only so hard
+-- invulnerability, authored no-damage profiles, friendly fire, and self hits
+-- cannot be promoted to 9999.
+do
+    local policy = mod:dofile(
+        "scripts/mods/general_tweaker/_gt_godmode_outgoing_policy")
+    mod._gt549_should_override_outgoing = policy.should_override_final
+    mod._gt1008_should_override_armor_zero = policy.should_override_armor_zero
+end
+mod._GT_549_GODMODE_POWER_MARKER = "gt-549-godmode-power-and-ammo"
+mod._GT_1008_GODMODE_ARMOR_MARKER = "gt-1008-godmode-armor-boundary"
+mod._GT_1008_GODMODE_ARMOR_LOG_CAP = 8
+mod._gt1008_armor_override_logs = 0
+
+-- Issue #1008: vanilla armor rejection has already reduced the hit to zero by
+-- the time #549's apply_buffs_to_damage hook sees it. calculate_damage is the
+-- narrow earlier seam: it exposes the resolved hit-zone armor categories and
+-- returns a second value only for hard invulnerability
+-- [src: scripts/helpers/damage_utils.lua:449-571]. Lift ONLY a zero against
+-- armor category 2/6 when the authored attack power is positive and its exact
+-- resolved attack-armor modifier is zero. Authored no-damage/zero-power
+-- profiles, invulnerability, allies, self hits, enemy players, unarmored zero
+-- results, cleave exhaustion, and Godmode-off behavior remain vanilla.
+--
+-- Returning the configured 9999 value here also keeps vanilla's predicted
+-- damage and no-crit comparison on the same value as #549's final owner. No
+-- profile or armor table is mutated.
+--
+-- PRE-FLIGHT: this is GT's only DamageUtils.calculate_damage hook.
+do
+    local function classify_armor_zero(damage, is_invincible, target_unit,
+            attacker_unit, hit_zone_name, is_critical_strike, damage_profile,
+            target_index, attacker_active)
+        local breed = AiUtils.unit_breed(target_unit)
+        if not breed or breed.is_hero then
+            return false
+        end
+
+        local is_enemy = DamageUtils.is_enemy(attacker_unit, target_unit)
+        local armor_override = Unit.get_data(target_unit, "armor")
+        local target_armor, _, primary_armor = ActionUtils.get_target_armor(
+            hit_zone_name, breed, armor_override)
+        local target_settings = damage_profile.targets
+            and damage_profile.targets[target_index]
+            or damage_profile.default_target
+        if not target_settings then
+            return false
+        end
+
+        local critical_settings = is_critical_strike
+            and damage_profile.critical_strike or nil
+        local range_scalar = ActionUtils.get_range_scalar_multiplier(
+            damage_profile, target_settings, attacker_unit, target_unit)
+        local attack_armor_modifier = ActionUtils.get_armor_power_modifier(
+            "attack", damage_profile, target_settings, target_armor,
+            primary_armor, critical_settings, range_scalar)
+        local attack_power_multiplier = ActionUtils.get_power_multiplier(
+            "attack", damage_profile, target_settings, range_scalar)
+        local should_override = mod._gt1008_should_override_armor_zero(
+            damage, is_invincible, damage_profile.no_damage, is_enemy,
+            attacker_active, target_armor, primary_armor, attack_armor_modifier,
+            attack_power_multiplier, breed.is_hero)
+
+        return should_override, target_armor, primary_armor,
+            attack_armor_modifier, attack_power_multiplier
+    end
+
+    local function log_armor_boundary(message, ...)
+        local n = mod._gt1008_armor_override_logs or 0
+        if n < mod._GT_1008_GODMODE_ARMOR_LOG_CAP then
+            mod._gt1008_armor_override_logs = n + 1
+            pcall(printf, "[gt:1008] n=%d/%d " .. message,
+                n + 1, mod._GT_1008_GODMODE_ARMOR_LOG_CAP, ...)
+        end
+    end
+
+    mod:hook("DamageUtils", "calculate_damage", function(func, damage_output,
+            target_unit, attacker_unit, hit_zone_name, original_power_level,
+            boost_curve, boost_damage_multiplier, is_critical_strike,
+            damage_profile, target_index, backstab_multiplier, damage_source)
+        local damage, is_invincible = func(damage_output, target_unit,
+            attacker_unit, hit_zone_name, original_power_level, boost_curve,
+            boost_damage_multiplier, is_critical_strike, damage_profile,
+            target_index, backstab_multiplier, damage_source)
+
+        local attacker_active = _gt_godmode_strike_damage_active(attacker_unit)
+        if damage ~= 0 or is_invincible or not attacker_active
+                or not target_unit or not damage_profile
+                or damage_profile.no_damage then
+            return damage, is_invincible
+        end
+
+        local ok, should_override, target_armor, primary_armor,
+            attack_armor_modifier, attack_power_multiplier = pcall(
+                classify_armor_zero, damage, is_invincible, target_unit,
+                attacker_unit, hit_zone_name, is_critical_strike,
+                damage_profile, target_index, attacker_active)
+        if not ok then
+            log_armor_boundary("classification failed error=%s",
+                tostring(should_override))
+            return damage, is_invincible
+        end
+
+        if should_override then
+            log_armor_boundary(
+                "godmode armor zero promoted source=%s armor=%s primary=%s modifier=%s power=%s",
+                tostring(damage_source), tostring(target_armor),
+                tostring(primary_armor), tostring(attack_armor_modifier),
+                tostring(attack_power_multiplier))
+            return 9999, is_invincible
+        end
+
+        return damage, is_invincible
+    end)
+end
+
+-- PRE-FLIGHT: this is gt's only DamageUtils.apply_buffs_to_damage hook. Vanilla
+-- has already populated victim_units and applied target mitigation by the time
+-- func returns [src: scripts/helpers/damage_utils.lua:2134-2450]. Both damage
+-- funnels consume that return before the authoritative health write [src:
+-- damage_utils.lua:1783-1831, 1916-1987], making this the narrow shared seam.
+mod:hook("DamageUtils", "apply_buffs_to_damage", function(func, current_damage,
+        attacked_unit, attacker_unit, damage_source, victim_units, damage_type,
+        buff_attack_type, first_hit, source_attacker_unit)
+    local damage = func(current_damage, attacked_unit, attacker_unit, damage_source,
+        victim_units, damage_type, buff_attack_type, first_hit, source_attacker_unit)
+    local source_active = source_attacker_unit
+        and _gt_godmode_strike_damage_active(source_attacker_unit) or false
+    local attacker_active = _gt_godmode_strike_damage_active(attacker_unit)
+    local actual_attacker = source_active and source_attacker_unit or attacker_unit
+    local is_enemy = actual_attacker and attacked_unit
+        and DamageUtils.is_enemy(actual_attacker, attacked_unit) or false
+    if mod._gt549_should_override_outgoing(damage, is_enemy, attacker_active, source_active) then
+        return 9999
+    end
+    return damage
+end)
+
+-- Issue #548: damage immunity alone does not suppress the separate player
+-- stagger funnel. Boss hits calculate damage and then call stagger_player, so
+-- returning zero from add_damage_network still allowed launches. Drop only the
+-- stagger application for a godmode human; no persistent status flag is
+-- written, so toggling godmode cannot clobber another immunity source.
+mod:hook("DamageUtils", "stagger_player", function(func, unit, ...)
+    if _gt_godmode_active(unit) then
+        return
+    end
+    return func(unit, ...)
+end)
+mod._gt548_stagger_gate_wired = true
+
+-- Issue #548 (debuff immunity): godmode's HP hooks (add_damage_network*) zero
+-- damage, but debuffs ride the SEPARATE buff funnel (BuffExtension:add_buff), so
+-- Troll Bile's slow/DoT, the vomit-in-face blind, and generic slow volumes still
+-- affect a protected human. Suppress a CURATED, cite-verified set of DEBUFFS
+-- while godmode is on. CURATED (never blanket) so godmode can never strip an
+-- unrelated status such as a heal or a friendly buff. Skipping the add is safe:
+-- the later BuffExtension.remove_buff(nil) bookkeeping is a no-op
+-- [src: scripts/entity_system/systems/buff/buff_extension.lua:890-892], and the
+-- generic-slow volume's volume_buffs[unit][name] = nil write reads back cleanly
+-- [src: buff_system.lua add_volume_buff]. Gas/warpfire stay OUT until the probe
+-- above captures their authored template names (observe-then-catalogue).
+mod._gt548_godmode_debuff_denylist = {
+    movement_volume_generic_slowdown = true,  -- generic slow volume [src: buff_templates.lua:5781]
+    troll_bile_ground                = true,  -- Troll Bile pool DoT+slow [src: buff_templates.lua:7490]
+    troll_bile_face                  = true,  -- vomit-in-face blind/slow [src: buff_templates.lua:8472]
+}
+-- Pure truth table shared by the live hook and /gt_regression_test. godmode off
+-- => always false (vanilla), so the cheat toggle fully governs the behaviour.
+mod._gt548_should_deny_buff = function(template_name, godmode_on)
+    return godmode_on == true and mod._gt548_godmode_debuff_denylist[template_name] == true
+end
+
+mod:hook("BuffExtension", "add_buff", function(func, self, template_name, ...)
+    local unit = self and self._unit
+    local godmode_on = (unit and _gt_godmode_active(unit)) or false
+    -- Curated debuff immunity: block the add for a protected human. remove_buff(nil)
+    -- later is a no-op (buff_extension.lua:890), so no bookkeeping faults.
+    if mod._gt548_should_deny_buff(template_name, godmode_on) then
+        pcall(printf, "[gt:548] godmode denied debuff template=%s", tostring(template_name))
+        return
+    end
+    return func(self, template_name, ...)
+end)
+mod._gt548_buff_probe_wired = true
+
+-- Issue #548 (fly-swarm control loss): Halescourge's swarm action and fly
+-- missile, plus Nurgloth's Drachenfels fly missile, bypass both the HP-damage
+-- and BuffExtension funnels. They enter GenericStatusExtension.overpowered at
+-- the server-only StatusUtils.set_overpowered_network seam with the authored
+-- reasons "slow_bomb" or "fly_bomb" [src: bt_swarm_action.lua:71-76;
+-- explosion_templates.lua:1308-1358; status_utils.lua:332-350]. Reject only
+-- those two ENTERING edges for a Godmode human. The exact rejected blob's
+-- unqualified destroy cleanup is consumed below; every unrelated exit, reason,
+-- and Godmode-off call remains vanilla [src:
+-- overpowered_blob_health_extension.lua:24-33].
+mod._gt548_fly_overpowered_policy = mod:dofile(
+    "scripts/mods/general_tweaker/_gt_godmode_fly_policy")
+mod._gt548_should_block_fly_overpowered =
+    mod._gt548_fly_overpowered_policy.should_block_entry
+mod._gt548_seen_fly_overpowered_reasons = {}
+mod._gt548_blocked_fly_blobs = setmetatable({}, { __mode = "k" })
+mod._GT_548_GODMODE_FLY_MARKER = "gt-548-godmode-fly-overpowered-boundary"
+
+-- AiUtils.spawn_overpowering_blob has exactly three decompiled call sites and
+-- all three are the fly paths cited above [src: ai_utils.lua:627-657; repo-wide
+-- call-site census]. Buff-perk overpowered effects can reuse "slow_bomb" but
+-- pass the affected player as attacking_unit instead, so reason-only matching
+-- would overreach. Require positive ownership by the dedicated blob extension.
+local function _gt548_is_authored_fly_blob(attacking_unit, affected_unit)
+    local health_extension = attacking_unit and ALIVE[attacking_unit]
+        and ScriptUnit.has_extension(attacking_unit, "health_system")
+    return health_extension ~= nil
+        and health_extension.target_unit == affected_unit
+        and health_extension.bots_can_do_damage == true
+end
+mod._gt548_is_authored_fly_blob = _gt548_is_authored_fly_blob
+
+-- Singleton pre-flight: no other gt hook owns either pair installed here.
+-- Keep entry at the shared server seam; GenericStatusExtension.set_overpowered
+-- would also catch unrelated local/RPC state. The exact rejected blob observes
+-- no overpowered status and deletes itself. Its destroy method would then issue
+-- an unqualified `false`, so the installer consumes cleanup only for the exact
+-- blocked blob; ordinary blobs and every other destroy call remain vanilla.
+mod._gt548_fly_runtime = mod:dofile(
+    "scripts/mods/general_tweaker/_gt_godmode_fly_runtime")
+local _gt548_fly_installation = mod._gt548_fly_runtime.install(mod, {
+    blocked_blobs = mod._gt548_blocked_fly_blobs,
+    godmode_active = _gt_godmode_active,
+    is_authored_fly_blob = _gt548_is_authored_fly_blob,
+    log = printf,
+    policy = mod._gt548_fly_overpowered_policy,
+    seen_reasons = mod._gt548_seen_fly_overpowered_reasons,
+})
+mod._gt548_status_wrapper = _gt548_fly_installation.status_wrapper
+mod._gt548_destroy_wrapper = _gt548_fly_installation.destroy_wrapper
+mod._gt548_fly_overpowered_hook_wired =
+    type(mod._gt548_status_wrapper) == "function"
+mod._gt548_fly_blob_cleanup_hook_wired =
+    type(mod._gt548_destroy_wrapper) == "function"
+
+-- Keep-safe wiring verifier required by the repository fix doctrine. This
+-- checks the exact closed truth table and hook marker; the mission reproduction
+-- remains the authority for player-visible behavior.
+mod:command("verify_godmode_flies",
+    "Verify the Godmode fly-swarm control-loss gate",
+    function()
+        local policy = mod._gt548_should_block_fly_overpowered
+        local slow = type(policy) == "function"
+            and policy(true, true, "slow_bomb", true) == true
+        local fly = type(policy) == "function"
+            and policy(true, true, "fly_bomb", true) == true
+        local godmode_off = type(policy) == "function"
+            and policy(false, true, "slow_bomb", true) == false
+        local exit_forwarded = type(policy) == "function"
+            and policy(true, false, "fly_bomb", true) == false
+        local unrelated = type(policy) == "function"
+            and policy(true, true, "charged", true) == false
+        local non_blob = type(policy) == "function"
+            and policy(true, true, "slow_bomb", false) == false
+        local ok = slow and fly and godmode_off and exit_forwarded and unrelated
+            and non_blob
+            and mod._gt548_fly_overpowered_hook_wired == true
+            and mod._gt548_fly_blob_cleanup_hook_wired == true
+            and mod._GT_548_GODMODE_FLY_MARKER
+                == "gt-548-godmode-fly-overpowered-boundary"
+        local verdict = ok and "PASS" or "FAIL"
+
+        printf(
+            "[gt:548] verify fly overpowered gate result=%s slow=%s fly=%s godmode_off=%s exit=%s unrelated=%s non_blob=%s",
+            verdict, tostring(slow), tostring(fly), tostring(godmode_off),
+            tostring(exit_forwarded), tostring(unrelated), tostring(non_blob))
+        mod:echo("Godmode fly-swarm gate: " .. verdict
+            .. ". See the console log for the exact boundary checks.")
+    end)
 
 -- Block fall damage at the source on the local player when godmode is on.
 -- The server-side `add_damage_network` hook below covers the host-self case,
@@ -844,7 +1220,6 @@ end)
 -- you while you reach a cleaner area.
 
 mod:hook("ConflictDirector", "spawn_queued_unit", function(func, self, breed, ...)
-    if mod:get("disable_enemy_spawns") then return end
     -- Solo/QoL: assassin/packmaster spawn text warning. Merged here because VMF
     -- drops a 2nd hook on the same Class.method; the detector lives in
     -- _gt_solo_qol.lua and no-ops unless one of its warning toggles is on.
@@ -860,10 +1235,33 @@ mod:hook("ConflictDirector", "spawn_queued_unit", function(func, self, breed, ..
     return func(self, breed, ...)
 end)
 
-mod:hook("ConflictDirector", "spawn_unit_immediate", function(func, self, ...)
-    if mod:get("disable_enemy_spawns") then return nil, nil end
-    return func(self, ...)
+mod:hook("ConflictDirector", "spawn_unit_immediate", function(func, self, breed, spawn_pos, spawn_rot, spawn_category, ...)
+    -- Freeze AI (#303, dev-only) blocks new spawns too, via the same gate as the
+    -- /no_enemies toggle. mod._gt_freeze_ai_active is only ever set on the dev
+    -- stream host (nil elsewhere), so this OR is a no-op in stable.
+    --
+    -- Category discrimination (#242): refuse AI ENEMY spawns only. Vanilla
+    -- routes PICKUPS through this entry point - the training-dummy level
+    -- events spawn Breeds.training_dummy with spawn_category "pickup"
+    -- (pickups.lua:133-150/165-182 -> pickup_system.lua:1271-1283) - and
+    -- those two are the ONLY vanilla spawn_unit_immediate call sites
+    -- (decompile-wide grep, 2026-08-02), so the "pickup" category cleanly
+    -- separates unit-pickup spawns from AI enemy spawns; the dummy breed is
+    -- also passed by race as belt-and-suspenders (`race = "dummy"`,
+    -- breed_training_dummy.lua:43). The nil,nil refusal for everything else
+    -- cannot hit a vanilla nil-sink - no vanilla caller spawns AI enemies
+    -- through this path - and remains only to stop mod-injected immediate
+    -- enemy spawns.
+    if mod:get("disable_enemy_spawns") then
+        local is_pickup_spawn = spawn_category == "pickup"
+            or (type(breed) == "table" and breed.race == "dummy")
+        if not is_pickup_spawn then
+            return nil, nil
+        end
+    end
+    return func(self, breed, spawn_pos, spawn_rot, spawn_category, ...)
 end)
+mod._gt_242_pickup_passthrough_armed = true
 
 -- Belt-and-suspenders: the two ConflictDirector hooks above catch every spawn
 -- *call*, but Janoti's "Hacks" also flips a fuller set of `script_data.ai_*`
@@ -891,7 +1289,46 @@ _apply_script_data_no_enemies = function(enabled)
     end
 end
 
+mod._gt_apply_spawn_block = function()
+    _apply_script_data_no_enemies(mod:get("disable_enemy_spawns"))
+end
 _apply_script_data_no_enemies(mod:get("disable_enemy_spawns"))
+mod._gt_242_dequeue_gate_armed = true
+mod._gt_242_pickup_passthrough_armed = true
+
+_rt_register("issue242_all_spawn_classes_blocked", function()
+    local required = {
+        ai_mini_patrol_disabled = true,
+        ai_boss_spawning_disabled = true,
+        ai_horde_spawning_disabled = true,
+        ai_roaming_spawning_disabled = true,
+        ai_specials_spawning_disabled = true,
+        ai_critter_spawning_disabled = true,
+    }
+    for _, name in ipairs(_AI_SPAWN_FLAGS) do
+        required[name] = nil
+    end
+    for name in pairs(required) do
+        return "missing spawn-block flag: " .. name
+    end
+    if type(mod._gt_apply_spawn_block) ~= "function" then
+        return "spawn-block reapply boundary missing"
+    end
+    -- #242 nil-safety design invariants: the refusal must live at the
+    -- update_spawn_queue drain (a spawn_queued_unit nil return is a nil-keyed
+    -- table write in bt_chaos_sorcerer_summoning_action.lua:406-408), and
+    -- spawn_unit_immediate must pass pickup-category spawns (training
+    -- dummies, pickups.lua:147/179) through. The markers are set immediately
+    -- after each hook registration, so their absence means the hook block
+    -- was removed or reordered.
+    if not mod._gt_242_dequeue_gate_armed then
+        return "update_spawn_queue dequeue gate not armed"
+    end
+    if not mod._gt_242_pickup_passthrough_armed then
+        return "spawn_unit_immediate pickup passthrough not armed"
+    end
+end)
+
 
 mod:command("no_enemies", "Toggle blocking all enemy spawns", function()
     local new_val = not mod:get("disable_enemy_spawns")
@@ -1040,864 +1477,12 @@ end)
 -- (CS only hooks the DISTINCT ConflictDirector.update for keep-spawns).
 
 -- ============================================================
--- /regression_test checks (see scaffold near MOD_VERSION).
--- ============================================================
--- The task spec mentioned a `skip_splash_hook_installed` check + a
--- `collision_disable_one_indexed` check, but the current gt source has no
--- StateSplashScreen hook (skip-splash is delegated to a different mod) and no
--- collision-disable loop (collision filtering is field-based, not loop-based).
--- Both skipped here. (The Skip Cutscenes feature — and its two regression checks
--- cutscene_auto_skip_deferred / cutscene_skip_setting_id_present — MIGRATED to
--- gui_tweaker (gut) 2026-06-25, issue #106. Those checks now live in gut.)
-
-_rt_register("gt_pickup_lookup_uses_rawget", function()
-    -- v0.2.47/.48: `_gt_is_spawn` resolves the chat-supplied pickup name through
-    -- `rawget(NetworkLookup.pickup_names, pickup_name)` (~L3553) so an unknown
-    -- name echoes "Unknown pickup name: ..." instead of raising the strict
-    -- `__index` metatable. The strict-table-lookup lint covers static-pattern
-    -- regressions; this runtime check is the belt-and-suspenders companion
-    -- required by §15 of PROJECT_STANDARDS.md.
-    --
-    -- 1. Source-pattern: the marker constant must be present.
-    if CT_GT_PICKUP_LOOKUP_RAWGET_MARKER_v0_2_48 ~= "gt-pickup-lookup-rawget-hardened" then
-        return "RAWGET marker absent — was the v0.2.47 pickup-lookup hardening reverted?"
-    end
-    -- 2. Runtime-state: probe rawget on a known-bad key — must return nil
-    --    without raising. If pickup_names ever loses its strict metatable,
-    --    this still passes; if it grows one with broken handling, this fails.
-    local NL = rawget(_G, "NetworkLookup")
-    local pn = NL and NL.pickup_names
-    if type(pn) == "table" then
-        local ok, value = pcall(rawget, pn, "__gt_rawget_probe_does_not_exist__")
-        if not ok then
-            return "rawget(NetworkLookup.pickup_names, <bad-key>) RAISED — strict-metatable behavior changed"
-        end
-        if value ~= nil then
-            return "rawget(NetworkLookup.pickup_names, <bad-key>) returned non-nil — unexpected"
-        end
-    end
-end)
-
-_rt_register("ai_takeover_marker_present", function()
-    -- v0.2.52 source-pattern guard. If a future refactor strips the marker
-    -- constant or the v0.2.52 fix gets reverted, this fails. Belt-and-
-    -- suspenders for the runtime queue test below — the queue test would
-    -- still pass even if `mod._gt_ai_handle_toggle_change` deleted the ping call.
-    if CT_GT_AI_CLIENT_SEND_MARKER_v0_2_52 ~= "gt-ai-client-send-vmf-rehandshake" then
-        return "AI client-send marker absent — was the v0.2.52 fix reverted?"
-    end
-end)
-
-_rt_register("ai_takeover_vmf_ping_api_available", function()
-    -- v0.2.52: AI Takeover client send now calls `get_mod("VMF").ping_vmf_users()`
-    -- before each emit to force VMF to re-handshake when `_vmf_users` has gone
-    -- stale (bot-churn at mission load drops the host — see send-queue comment
-    -- in this file). If VMF ever renames or removes this entry point, the
-    -- workaround silently no-ops via the pcall and every client toggle would
-    -- silently drop again. Pin both the mod presence and the function shape.
-    local vmf = get_mod("VMF")
-    if not vmf then
-        return "VMF mod not loaded — `get_mod('VMF')` returned nil"
-    end
-    if type(vmf.ping_vmf_users) ~= "function" then
-        return "vmf.ping_vmf_users is not a function (type=" .. type(vmf.ping_vmf_users) .. ")"
-    end
-end)
-
-_rt_register("ai_takeover_client_send_queue_wired", function()
-    -- v0.2.52: client-side toggle now enqueues into `mod._gt_ai_pending_client_send`
-    -- with retries instead of sending inline. The mod.update consumer must
-    -- be wired into the existing update chain — without it the queue would
-    -- fill and never drain. Verify the consumer function exists in the file's
-    -- closure scope by walking the queue forward via a synthetic enqueue and
-    -- asserting mod.update drains it.
-    --
-    -- We don't actually exercise the network send (no real peer in regression
-    -- harness); we just verify the queue shape + drain behavior using a
-    -- guaranteed-elapsed `next_at`. Restore the prior queue state on exit.
-    local saved = mod._gt_ai_pending_client_send
-    mod._gt_ai_pending_client_send = {
-        host = "__rt_probe_peer__",
-        want_bot = true,
-        retries_left = 1,
-        next_at = os.clock() - 1.0,  -- already-elapsed so the first tick fires
-    }
-    -- Drive one mod.update tick. The consumer should fire (next_at elapsed),
-    -- decrement retries to 0, and clear the queue.
-    if type(mod.update) ~= "function" then
-        mod._gt_ai_pending_client_send = saved
-        return "mod.update is not a function — update chain broken"
-    end
-    local ok, err = pcall(mod.update, 0.016)
-    if not ok then
-        mod._gt_ai_pending_client_send = saved
-        return "mod.update raised during client-send drain probe: " .. tostring(err)
-    end
-    if mod._gt_ai_pending_client_send ~= nil then
-        mod._gt_ai_pending_client_send = saved
-        return "client-send queue did not drain after one tick (consumer not wired into mod.update?)"
-    end
-    mod._gt_ai_pending_client_send = saved
-end)
-
-_rt_register("dbg_helpers_two_channel", function()
-    if type(_dbg) ~= "function" then return "_dbg helper missing" end
-    if type(_dbg_alert) ~= "function" then return "_dbg_alert helper missing" end
-    local ok = pcall(_dbg, "smoke test")
-    if not ok then return "_dbg raised" end
-    ok = pcall(_dbg_alert, "smoke test")
-    if not ok then return "_dbg_alert raised" end
-end)
-
-_rt_register("necro_potion_give_half_targeted_promote", function()
-    -- v0.2.138-dev (FIX 1 give-half completion). The Necromancer-bot potion
-    -- promote must target the REAL potion BY IDENTITY (SwapFromStorageType.Same
-    -- + the potion's item_data), not storage index 1 (SwapFromStorageType.First).
-    -- slot_potion storage can also hold the grimoire (non-giveable) and the
-    -- demoted skull, so a First-swap could promote the wrong occupant -> primary
-    -- stays non-giveable -> the give never resolves -> the bot loops "trying to
-    -- pass but can't". Pin both halves:
-    --   1) the source-pattern marker constant is present, AND
-    --   2) the SwapFromStorageType.Same enum member exists (the swap mode we rely
-    --      on for identity promotion). If vanilla ever drops it, the promote
-    --      would silently no-op the targeted path.
-    if GT_NECRO_POTION_GIVE_HALF_MARKER_v0_2_138 ~= "gt-necro-potion-give-half-targeted-promote" then
-        return "give-half marker absent — was the v0.2.138 targeted-promote reverted to a blind First-swap?"
-    end
-    local sfs = rawget(_G, "SwapFromStorageType")
-    if type(sfs) ~= "table" then
-        return "SwapFromStorageType enum table missing"
-    end
-    if sfs.Same == nil then
-        return "SwapFromStorageType.Same absent — identity promotion can't target the real potion"
-    end
-end)
-
-
-
-_rt_register("localization_format_safe", function()
-    -- Layer 3 (2026-05-25): catch unescaped %-format chars in loc strings at
-    -- runtime. VMF's tooltip render path calls string.format on the loc value;
-    -- literal "%APPDATA%" / "5%" / "%USERNAME%" raises 'invalid option' and
-    -- shows as a red error tooltip in the VMF settings UI. Static check is
-    -- qa/check_localization.ps1 -- this is its runtime twin so the bug can't
-    -- ship even if the static check is skipped. RULE: any literal % in a loc
-    -- string must be doubled to %%.
-    local ok, loc = pcall(mod.dofile, mod, "scripts/mods/general_tweaker/general_tweaker_localization")
-    if not ok or type(loc) ~= "table" then return end  -- can't reach loc; skip
-    for k, v in pairs(loc) do
-        if type(v) == "table" and type(v.en) == "string" then
-            local fmt_ok, fmt_err = pcall(string.format, v.en)
-            if not fmt_ok then
-                return string.format(
-                    "loc key %q has invalid format string (escape literal %% as %%%%): %s",
-                    k, tostring(fmt_err))
-            end
-        end
-    end
-end)
-
--- v0.2.60-dev: VMF_RECIPES § 10 / Issue #43 -- assert the gt_lobby RPC schema
--- constant is in place. Migrated from lt v0.1.7-dev when its `lt_motd_show`
--- RPC was absorbed as `gt_lobby_motd_show`.
-_rt_register("gt_lobby_rpc_schema_present", function()
-    if type(mod.GT_LOBBY_RPC_SCHEMA) ~= "number" then
-        return "mod.GT_LOBBY_RPC_SCHEMA not defined as number"
-    end
-    if mod.GT_LOBBY_RPC_SCHEMA < 1 then
-        return "mod.GT_LOBBY_RPC_SCHEMA < 1"
-    end
-end)
-
--- v0.2.167-dev: VMF_RECIPES § 10 / Issue #44 -- assert the AI-control RPC schema
--- constant is in place (mirrors gt_lobby_rpc_schema_present). The
--- `gt_ai_toggle_request` sender + receiver in _gt_ai_takeover.lua both read
--- mod.GT_AI_RPC_SCHEMA; if it goes missing the receiver gate compares against nil
--- and would accept anything, so guard it here.
-_rt_register("gt_ai_rpc_schema_present", function()
-    if type(mod.GT_AI_RPC_SCHEMA) ~= "number" then
-        return "mod.GT_AI_RPC_SCHEMA not defined as number"
-    end
-    if mod.GT_AI_RPC_SCHEMA < 1 then
-        return "mod.GT_AI_RPC_SCHEMA < 1"
-    end
-end)
-
--- audit 2026-06-07 (F3, v0.2.80-dev): event-registration clobber. The three
--- lobby modules (slot_reservations, session_ignore, motd) used to each register
--- (mod, "on_player_joined_party") -- EventManager keys by (object, event_name)
--- so last-writer-wins meant only ONE fired. They now append to a single shared
--- dispatcher. This test FAILS if a module reverts to self-registration (its
--- handler would be absent from the shared list) or the consolidation is dropped.
-_rt_register("gt_lobby_join_dispatch_consolidated", function()
-    local handlers = mod._gt_lobby_join_handlers
-    if type(handlers) ~= "table" then
-        return "mod._gt_lobby_join_handlers missing (shared dispatcher not installed)"
-    end
-    if type(mod.gt_lobby_on_player_joined_party) ~= "function" then
-        return "mod.gt_lobby_on_player_joined_party (single registered method) missing"
-    end
-    -- All three join-handlers must be reachable from the single dispatch list.
-    local want = { session_ignore = false, slot_reservations = false, motd = false }
-    for i = 1, #handlers do
-        local h = handlers[i]
-        if h and want[h.name] ~= nil then
-            if type(h.fn) ~= "function" then
-                return "join-handler '" .. tostring(h.name) .. "' is not a function"
-            end
-            want[h.name] = true
-        end
-    end
-    for name, present in pairs(want) do
-        if not present then
-            return "join-handler '" .. name .. "' not registered on the shared dispatcher"
-        end
-    end
-end)
-
--- audit 2026-06-07 (F3): the single dispatcher must (a) strip the EventManager
--- object-prepend so handlers get the true peer_id, and (b) invoke EVERY handler
--- even if an earlier one raises (pcall isolation). We swap the live handler list
--- for two synthetic handlers (so the real session_ignore/slot_reservations/motd
--- logic never runs against a fake peer), drive the dispatcher the way
--- EventManager.trigger does (object prepended), then restore the real list.
-_rt_register("gt_lobby_join_dispatch_pcall_isolated", function()
-    local handlers = mod._gt_lobby_join_handlers
-    if type(handlers) ~= "table" or type(mod.gt_lobby_on_player_joined_party) ~= "function" then
-        return "shared dispatcher not installed"
-    end
-    -- Snapshot + clear the live list so we test only our synthetic handlers.
-    local saved = {}
-    for i = 1, #handlers do saved[i] = handlers[i]; handlers[i] = nil end
-    local function restore()
-        for i = #handlers, 1, -1 do handlers[i] = nil end
-        for i = 1, #saved do handlers[i] = saved[i] end
-    end
-    local reached = false
-    local got_peer = nil
-    handlers[1] = { name = "_rt_raiser", fn = function() error("synthetic raise") end }
-    handlers[2] = { name = "_rt_recorder", fn = function(peer_id) reached = true; got_peer = peer_id end }
-    -- EventManager.trigger calls object[name](object, ...); first real arg is mod.
-    local ok = pcall(mod.gt_lobby_on_player_joined_party, mod, "peer123", 1, 0, 1, false)
-    restore()
-    if not ok then
-        return "dispatcher itself raised (handler pcall isolation broken)"
-    end
-    if not reached then
-        return "second handler never ran after first raised (no pcall isolation)"
-    end
-    if got_peer ~= "peer123" then
-        return "handler received wrong peer_id (object-prepend not stripped): got " .. tostring(got_peer)
-    end
-end)
-
--- audit 2026-06-07 (F4, v0.2.80-dev): double consume-once popup race. The
--- enriched failed-join popup is now polled ONLY by the mod (it is no longer
--- assigned to StateLoading._popup_id), so the mod's poller must drive the
--- vanilla restart_as_server teardown itself. This test exercises that driver
--- against a synthetic StateLoading and asserts it sets the exact fields vanilla
--- _handle_popup's restart_as_server branch sets (state_loading.lua:1570-1577).
--- FAILS if the teardown driver is dropped or stops setting either field --
--- which is the exact symptom of the loading-screen hang the race caused.
-_rt_register("gt_lobby_failnotify_teardown_driver", function()
-    local drive = mod._gt_failnotify_drive_teardown
-    if type(drive) ~= "function" then
-        return "mod._gt_failnotify_drive_teardown missing (F4 teardown driver not installed)"
-    end
-    -- Synthetic StateLoading-like object with a force_done()-capable view.
-    local forced = false
-    local fake_sl = {
-        _teardown_network = false,
-        _permission_to_go_to_next_state = false,
-        _first_time_view = { force_done = function() forced = true end },
-    }
-    local ok, err = pcall(drive, fake_sl)
-    if not ok then
-        return "teardown driver raised: " .. tostring(err)
-    end
-    if fake_sl._teardown_network ~= true then
-        return "driver did not set _teardown_network=true (loading screen would hang)"
-    end
-    if fake_sl._permission_to_go_to_next_state ~= true then
-        return "driver did not set _permission_to_go_to_next_state=true"
-    end
-    if forced ~= true then
-        return "driver did not force_done the first_time_view"
-    end
-    -- Must tolerate a nil StateLoading (entry.sl absent) without raising.
-    local ok2, err2 = pcall(drive, nil)
-    if not ok2 then
-        return "teardown driver raised on nil sl: " .. tostring(err2)
-    end
-end)
-
-_rt_register("gt_lobby_failnotify_unknown_result_drives_teardown", function()
-    -- v0.2.81 (Issue #72): an unrecognized popup result must NOT silently drop
-    -- the pending entry — it logs (ungated) and still drives teardown so the
-    -- user is never stranded on the loading screen. Drive the real consumer
-    -- with a stub popup manager and a synthetic pending entry.
-    local consume = mod._gt_failnotify_consume_results
-    local pending = mod._gt_failnotify_pending_popups
-    if type(consume) ~= "function" or type(pending) ~= "table" then
-        return "consume_results/pending_popups test exports missing (Issue #72 regression)"
-    end
-    local fake_sl = { _teardown_network = false, _permission_to_go_to_next_state = false }
-    local popup_id = "gt_rt_unknown_result_probe"  -- string key can't collide with engine numeric ids
-    pending[popup_id] = { diff = nil, sl = fake_sl }
-    local stub_mgr = { query_result = function(_, id)
-        if id == popup_id then return "some_future_unknown_action" end
-    end }
-    local ok, err = pcall(consume, stub_mgr)
-    pending[popup_id] = nil  -- belt-and-suspenders cleanup regardless of outcome
-    if not ok then
-        return "consumer raised on unknown result: " .. tostring(err)
-    end
-    if fake_sl._teardown_network ~= true or fake_sl._permission_to_go_to_next_state ~= true then
-        return "unknown result did not drive teardown (user would be stranded on loading screen)"
-    end
-end)
-
-_rt_register("gt_lobby_failnotify_popup_up_soft_defers", function()
-    -- v0.2.81 (Issue #72, F17): the popup-already-up branch must soft-defer
-    -- (boolean decision), never raise. Pins the truth table.
-    local should_defer = mod._gt_failnotify_should_defer
-    if type(should_defer) ~= "function" then
-        return "should_defer test export missing (F17 soft guard regressed)"
-    end
-    local ok, a, b, c = pcall(function()
-        return should_defer({ _popup_id = 123 }), should_defer({}), should_defer(nil)
-    end)
-    if not ok then
-        return "F17 guard raised instead of soft-deferring: " .. tostring(a)
-    end
-    if a ~= true then return "popup-up state did not defer (would hit vanilla's assert with our enrichment half-applied)" end
-    if b ~= false then return "no-popup state wrongly deferred (enrichment would never fire)" end
-    if c ~= false then return "nil self wrongly deferred" end
-end)
-
-_rt_register("gt_lobby_failnotify_unpack_preserves_leading_nils", function()
-    -- v0.2.81 (Issue #72): replica of the create_popup forward idiom
-    -- (n = 3 + select('#', ...); unpack(args, 1, n)) under its worst case:
-    -- header/action/right_button all nil with trailing format varargs present
-    -- (vanilla call site state_loading.lua:1084 passes 2 trailing args). Bare
-    -- unpack(args) boundary-searches across the leading nils and can drop the
-    -- format args, crashing vanilla's string.format at state_loading.lua:2467.
-    local function _forward(header, action, right_button, ...)
-        local n = 3 + select("#", ...)
-        local args = { header, action, right_button, ... }
-        return select("#", unpack(args, 1, n)), (select(n, unpack(args, 1, n)))
-    end
-    local count, last = _forward(nil, nil, nil, "client_hash", "lobby_hash")
-    if count ~= 5 then
-        return string.format("forward dropped args across leading nil holes: expected 5, got %d", count)
-    end
-    if last ~= "lobby_hash" then
-        return string.format("trailing format arg lost: expected 'lobby_hash', got %s", tostring(last))
-    end
-end)
-
-_rt_register("bots_in_keep_helpers_exposed", function()
-    -- v0.2.71-dev "Allow Bots in Keep": the early on_setting_changed and
-    -- on_game_state_changed closures (declared ~line 830/789) reach into the
-    -- feature via mod._bik_* table fields because the file-locals aren't
-    -- visible at compile time at those positions. If a future refactor stops
-    -- exposing the helpers OR renames them, the on_setting_changed branch
-    -- becomes a silent no-op (toggle would still flip the setting but no
-    -- bots would ever be added/removed in response).
-    for _, name in ipairs({ "_bik_fill", "_bik_clear", "_bik_active", "_bik_reset_bookkeeping" }) do
-        if type(mod[name]) ~= "function" then
-            return "mod." .. name .. " is not a function (type=" .. type(mod[name]) .. ")"
-        end
-    end
-end)
-
-_rt_register("bots_in_keep_active_default_false", function()
-    -- _bik_active() must return false when the gt_bots_in_keep setting is
-    -- off (default state on fresh install). Catches regressions where the
-    -- gate logic gets inverted, the setting_id changes without updating the
-    -- gate read, or _bik_active starts throwing on a missing dependency
-    -- (Managers.player nil at boot, etc.).
-    local saved = mod:get("gt_bots_in_keep")
-    if saved == true then mod:set("gt_bots_in_keep", false) end
-    local ok, result = pcall(mod._bik_active)
-    if saved == true then mod:set("gt_bots_in_keep", true) end
-    if not ok then
-        return "_bik_active raised: " .. tostring(result)
-    end
-    if result ~= false then
-        return "_bik_active returned " .. tostring(result) .. " with toggle off (expected false)"
-    end
-end)
-
-_rt_register("bots_in_keep_reset_bookkeeping_safe", function()
-    -- _bik_reset_bookkeeping is called from on_game_state_changed on EVERY
-    -- state transition (StateSplashScreen, StateTitleScreen, StateLoading,
-    -- StateIngame, etc.). It must be a pure table reset — no engine calls,
-    -- no _remove_bot_instant invocations on Player references that may have
-    -- been torn down by state shutdown. Probe by calling it twice in a row
-    -- and asserting no raise.
-    local ok1, err1 = pcall(mod._bik_reset_bookkeeping)
-    if not ok1 then
-        return "_bik_reset_bookkeeping raised on first call: " .. tostring(err1)
-    end
-    local ok2, err2 = pcall(mod._bik_reset_bookkeeping)
-    if not ok2 then
-        return "_bik_reset_bookkeeping raised on second call (idempotency failure): " .. tostring(err2)
-    end
-end)
-
-_rt_register("bots_in_keep_crashfix_marker_present", function()
-    -- v0.2.146-dev: "Allow Bots in Keep" was un-kill-switched after the two
-    -- v0.2.74-dev crash classes (#65) were fixed structurally (Photo-Mode port):
-    -- teardown via GameModeInn/InnDeus.cleanup_game_mode_units (unregisters bot
-    -- stats before the venture stats manager is destroyed -> Bug 1) and fill
-    -- gated on _bik_host_in_party1() (-> Bug 2 slot-1 race). If this marker
-    -- disappears, the revival was reverted (or the kill-switch came back).
-    if GT_BIK_CRASHFIX_MARKER_v0_2_146 ~= "gt-bik-cleanup-and-host-slot-gate" then
-        return "bots_in_keep crash-fix marker absent — was the v0.2.146-dev revival reverted?"
-    end
-end)
-
-_rt_register("bots_in_keep_necro_pets_marker_present", function()
-    -- v0.2.147-dev: necromancer BOT keep-skeletons sub-feature. With Bots in Keep
-    -- on, a bot necromancer's raise-dead AI loops against the vanilla hub pet ban
-    -- (PassiveAbilityNecromancerCharges._pets_forbidden_in_level). We post-hook
-    -- _on_talents_changed and clear that flag for bot necromancers only. If this
-    -- marker disappears, the sub-feature (or its hook) was removed.
-    if GT_BIK_NECRO_KEEP_PETS_MARKER_v0_2_147 ~= "gt-bik-necro-bot-keep-pets" then
-        return "necromancer keep-pets marker absent — was the v0.2.147-dev sub-feature reverted?"
-    end
-end)
-
-_rt_register("bot_leash_no_snap_to_downed_marker_present", function()
-    -- #139 (v0.2.148-dev): the tighter follow-leash (FIX 7) must NOT snap-teleport
-    -- a bot onto a DOWNED follow target — on the frame a split teammate is newly
-    -- downed the bot would otherwise teleport onto them instead of pathing in to
-    -- revive. The guard sets this marker; if it disappears the guard was removed.
-    if GT_BOT139_LEASH_AID_GUARD_MARKER_v0_2_148 ~= "gt-bot139-no-snap-to-downed-follow" then
-        return "bot #139 leash-aid guard marker absent — was the v0.2.148-dev fix reverted?"
-    end
-end)
-
-_rt_register("bot_leash_no_teleport_away_from_side_aid_marker_present", function()
-    -- v0.2.152-dev (#139 sibling): the tighter follow-leash must also bail when
-    -- ANY teammate on the side needs aid (not just when follow_unit itself is
-    -- downed). Catches the case the user reported: bot leashed to a LIVING far
-    -- player, separate teammate goes down nearby, leash fires and teleports
-    -- the bot AWAY from where help is needed.
-    if GT_BOT139_LEASH_AID_SIDEAID_MARKER_v0_2_152 ~= "gt-bot139-no-leash-away-from-side-aid" then
-        return "bot #139 sibling-case (leash-away-from-downed) guard absent — was the v0.2.152-dev extension reverted?"
-    end
-end)
-
-_rt_register("bot_follow_mode_dropdown_consolidated", function()
-    -- v0.2.152-dev: gt_bot_split_among_players + gt_bot_follow_host checkboxes
-    -- replaced by a single gt_bot_follow_mode dropdown (default/follow_host/split).
-    -- The hook reads mod._gt_resolve_follow_mode() (legacy-fallback aware).
-    if GT_BOT_FOLLOW_MODE_DROPDOWN_MARKER_v0_2_152 ~= "gt-bot-follow-mode-dropdown-consolidation" then
-        return "gt_bot_follow_mode dropdown consolidation marker absent — was the v0.2.152-dev change reverted?"
-    end
-    if type(mod._gt_resolve_follow_mode) ~= "function" then
-        return "mod._gt_resolve_follow_mode helper missing — dropdown migration may be broken"
-    end
-end)
-
-_rt_register("btlab_settings_removed", function()
-    -- v0.2.175-dev: the Bot Teleport Lab settings section (master + 10 D-toggles +
-    -- 10 F-toggles + 4 numeric params) was removed. Diagnostics are now implicit /
-    -- always-on in the dev build; the two visual tools moved to "Dev Tools". No
-    -- gt_btlab_ widget may remain in the data tree, else a friend's saved F-toggle
-    -- could resurface behind a ghost UI. Walk the tree and fail on any survivor.
-    local ok, data = pcall(require, "scripts/mods/general_tweaker/general_tweaker_data")
-    if not ok or type(data) ~= "table" then return "could not require data file" end
-    local offending
-    local function walk(node)
-        if offending or type(node) ~= "table" then return end
-        local sid = node.setting_id
-        if type(sid) == "string" and sid:find("^gt_btlab_") then offending = sid return end
-        for _, child in pairs(node) do if type(child) == "table" then walk(child) end end
-    end
-    walk(data)
-    if offending then
-        return "a gt_btlab_ widget still exists in the data tree: " .. tostring(offending)
-    end
-end)
-
-_rt_register("btlab_fixes_dormant", function()
-    -- v0.2.175-dev: the retired F1..F10 bisection candidates must be DORMANT --
-    -- their three dispatch fns early-return on the module flag _BTLAB_FIXES_ARMED
-    -- (false) regardless of any (removed) setting, so a stale saved F-toggle can't
-    -- resurrect a behavior change. Behavioral proof: call each with nil args and
-    -- assert the dormant return. The proven #139 fixes in _gt_bot_fixes.lua are a
-    -- SEPARATE path and are unaffected.
-    if type(mod._gt_btlab_veto_teleport) ~= "function"
-        or type(mod._gt_btlab_override_follow_unit) ~= "function"
-        or type(mod._gt_btlab_redirect_teleport) ~= "function" then
-        return "a gt_btlab fix dispatch fn is missing (expected all three present but dormant)"
-    end
-    local veto = mod._gt_btlab_veto_teleport(nil, nil, nil, nil)
-    if veto ~= false then return "veto_teleport not dormant (returned " .. tostring(veto) .. ", want false)" end
-    local ovr = mod._gt_btlab_override_follow_unit(nil, nil)
-    if ovr ~= nil then return "override_follow_unit not dormant (returned " .. tostring(ovr) .. ", want nil)" end
-    local redir = mod._gt_btlab_redirect_teleport(nil, nil)
-    if redir ~= false then return "redirect_teleport not dormant (returned " .. tostring(redir) .. ", want false)" end
-end)
-
-_rt_register("devtools_group_dev_gated", function()
-    -- v0.2.175-dev: the "Dev Tools" group (gttools_bot_hud + gttools_leash_lines)
-    -- exists ONLY in the dev clone and is appended after "Cheats and Debug". This
-    -- test runs inside the dev mod, so require() returns the tree WITH Dev Tools.
-    -- (1) behavioral: the group + both children are present and ordered after
-    -- cheats_debug_group. (2) source-pattern: the data file gates the append on the
-    -- sed-safe get_mod("gt" .. "_dev") needle (survives the dev->stable gt->gt
-    -- sed, so the group never builds in the promoted stable clone).
-    local ok, data = pcall(require, "scripts/mods/general_tweaker/general_tweaker_data")
-    if not ok or type(data) ~= "table" then return "could not require data file" end
-    local widgets = data.options and data.options.widgets
-    if type(widgets) ~= "table" then return "data.options.widgets missing" end
-    local cheats_i, devtools_i
-    for i = 1, #widgets do
-        local sid = widgets[i].setting_id
-        if sid == "cheats_debug_group" then cheats_i = i end
-        if sid == "gttools_group" then devtools_i = i end
-    end
-    if not devtools_i then return "gttools_group not present in the dev data tree (append broken?)" end
-    if cheats_i and devtools_i < cheats_i then
-        return "gttools_group must sort AFTER cheats_debug_group (A->Z)"
-    end
-    local want = { gttools_bot_hud = false, gttools_leash_lines = false }
-    local function walk(node)
-        if type(node) ~= "table" then return end
-        if node.setting_id and want[node.setting_id] ~= nil then want[node.setting_id] = true end
-        for _, child in pairs(node) do if type(child) == "table" then walk(child) end end
-    end
-    walk(widgets[devtools_i])
-    for id, found in pairs(want) do
-        if not found then return id .. " missing from the Dev Tools group" end
-    end
-    -- Source-pattern needle (best-effort; degrades if the deploy hides source).
-    local iok, info = pcall(debug.getinfo, mod._gt_btlab_veto_teleport or function() end, "S")
-    if iok and type(info) == "table" and info.source then
-        local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-        local data_path = src:gsub("_gt_bot_teleport_lab%.lua$", "general_tweaker_data.lua")
-        local f = io.open(data_path, "r")
-        if f then
-            local txt = f:read("*a")
-            f:close()
-            if txt and not txt:find('get_mod("gt" .. "_dev")', 1, true) then
-                return "data file Dev Tools append missing the sed-safe get_mod(\"gt\" .. \"_dev\") gate"
-            end
-        end
-    end
-end)
-
-_rt_register("devtools_bot_hud_wired", function()
-    -- v0.2.175-dev: the bot behavior HUD must be wired -- the per-frame ring-buffer
-    -- poll dispatch fn present (driven from _gt_bot_fixes.lua's PlayerBotBase.update
-    -- merge-dispatch), and the lab source must read the current BT leaf action from
-    -- the blackboard (running_nodes) and gate the HUD on its toggle. Source read is
-    -- best-effort and degrades if the deploy doesn't expose source.
-    if type(mod._gt_btlab_observe_update) ~= "function" then
-        return "mod._gt_btlab_observe_update missing -- HUD ring-buffer poll chokepoint gone"
-    end
-    local ok, info = pcall(debug.getinfo, mod._gt_btlab_veto_teleport or function() end, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local src = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
-    if not txt then return end
-    if not txt:find("running_nodes", 1, true) then
-        return "lab source missing running_nodes read -- current BT action poll gone"
-    end
-    if not txt:find("gttools_bot_hud", 1, true) then
-        return "lab source missing gttools_bot_hud gate -- HUD not wired to its toggle"
-    end
-end)
-
-_rt_register("bt_health_conditions_nilguarded_marker_present", function()
-    -- #59 secondary fix (v0.2.149-dev): nil-guard the BTConditions.at_*_health
-    -- + can_transition_*_health + less_than_one_health condition family so a
-    -- first-tick read of an uninitialized blackboard.current_health[_percent]
-    -- biases to false instead of crashing on `nil <= number`. Primary fix
-    -- (level-family prefix match) is regression-tested by
-    -- gt_cs_is_in_level_prefix_match below. If this marker disappears the
-    -- belt-and-suspenders guard was removed.
-    if GT_BT_HEALTH_NILGUARD_MARKER_v0_2_149 ~= "gt-bt-health-conditions-nilguarded-i59" then
-        return "BT health-condition nil-guard marker absent — was the v0.2.149-dev fix reverted?"
-    end
-end)
-
-_rt_register("ai_locomotion_override_marker_present", function()
-    -- Issue #60 (2026-05-27): host self-toggle AI Takeover crashed in
-    -- LocomotionSystem.update_animation_lods one frame after pm:remove_player
-    -- destroyed the host's local Player. Vanilla reads
-    -- `self._override_player or Managers.player:local_player()` for the
-    -- viewport name — both are nil after the swap. Fix mirrors
-    -- benchmark_handler.lua:423: set_override_player(bot_player) on swap,
-    -- clear it on swap-back. If the marker disappears or a refactor drops
-    -- the calls, host AI Takeover will crash the next frame again.
-    if CT_GT_AI_LOCOMOTION_OVERRIDE_MARKER_v0_2_73 ~= "gt-ai-locomotion-override-on-host-swap" then
-        return "AI locomotion override marker absent — was the v0.2.73-dev fix reverted?"
-    end
-end)
-
-_rt_register("ai_locomotion_override_set_and_cleared", function()
-    -- Source-pattern guard for both halves of the v0.2.73-dev fix. Reads the
-    -- on-disk file and asserts the host swap path calls
-    -- `locomotion_system:set_override_player(bot_player)` AND the swap-back
-    -- path calls `locomotion_system:set_override_player(nil)`. Catches a
-    -- partial revert that keeps the marker but drops one of the two calls.
-    local path = "scripts/mods/general_tweaker/general_tweaker.lua"
-    -- VMF mods load from the bundle, so the on-disk source path varies by
-    -- install location. Use Mods.mod_directory_path if available, else fall
-    -- back to a project-relative read attempt (regression test then no-ops
-    -- gracefully under deploy paths that don't expose the source).
-    local Mods = rawget(_G, "Mods")
-    local dir = Mods and Mods.original and Mods.original.gt
-    -- The simplest portable check: pcall debug.getinfo on the wrapped function
-    -- to extract its source listing. If unavailable, we degrade to MARKER-only.
-    -- _ai_swap_human_to_bot moved to _gt_ai_takeover.lua (Phase 4); it's exposed
-    -- as mod._gt_ai_swap_human_to_bot. debug.getinfo now reports THAT file as the
-    -- source, and the set_override_player call-pair the grep below looks for moved
-    -- there too, so the check reads the right file.
-    local ok, info = pcall(debug.getinfo, mod._gt_ai_swap_human_to_bot or function() end, "S")
-    if not ok or type(info) ~= "table" or not info.source then
-        return  -- environment doesn't support source introspection — accept the marker-only check
-    end
-    -- info.source is "@<path>" for files. Skip the leading @ and try to read.
-    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src_path, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
-    if not txt then return end
-    if not txt:find("locomotion_system:set_override_player(bot_player)", 1, true) then
-        return "swap-to-bot path missing set_override_player(bot_player) call"
-    end
-    if not txt:find("locomotion_system:set_override_player(nil)", 1, true) then
-        return "swap-back path missing set_override_player(nil) call"
-    end
-end)
-
-_rt_register("gt_no_mission_hotkey_flip", function()
-    -- Issue #62 (2026-05-28): a legacy hook force-set the hotkeys-enabled arg of
-    -- IngameUI.handle_menu_hotkeys to true mid-mission, enabling crash-prone keep
-    -- view hotkeys (Hero Select / Map / etc. spawn unloaded ui_* preview worlds).
-    -- Removed in v0.2.82-dev. This source-pattern guard fails if that hook is
-    -- reintroduced. The needle is assembled from two literals so this test's own
-    -- source does not self-match. Degrades to a no-op when source introspection
-    -- is unavailable (deploy/bundle paths).
-    -- Anchored on mod.on_setting_changed (a `mod.` field defined in the MAIN
-    -- file) so this guard always reads general_tweaker.lua — where the
-    -- removed IngameUI hook lived. (Phase 3: gt_open_mission_inventory moved to
-    -- _gt_mission_ui.lua, so it can no longer be used as the main-file anchor.)
-    local ok, info = pcall(debug.getinfo, mod.on_setting_changed or function() end, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
-    local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
-    local f = io.open(src_path, "r")
-    if not f then return end
-    local txt = f:read("*a")
-    f:close()
-    if not txt then return end
-    local needle = 'mod:hook("' .. 'IngameUI", "handle_menu_hotkeys"'
-    if txt:find(needle, 1, true) then
-        return "Issue #62 regression: the IngameUI handle_menu_hotkeys hook was reintroduced (crash-prone mid-mission hotkey flip)"
-    end
-end)
-
-_rt_register("gt_cs_is_in_level_prefix_match", function()
-    -- Issue #59 (2026-05-26): _gt_cs_is_in_level("dlc_castle") used to be
-    -- `level_key == level_name` (exact-match). In CW variants of the same
-    -- physical arena (dlc_castle_slaanesh_path1 / dlc_castle_chaos_path2 /
-    -- etc.) that returned false, causing the transitioned_one_third_health
-    -- hook to bias TRUE and skip vanilla phase-init, which left
-    -- blackboard.current_health_percent nil and crashed bt_conditions.lua:309
-    -- (at_one_fifth_health) when the BT entered the final offense phase.
-    --
-    -- Probe by stubbing Managers.state.game_mode:level_key() and verifying
-    -- both exact and `<name>_<suffix>` levels match, while non-prefix
-    -- levels (dlc_morningstar, dlc_castled_unrelated) do not.
-    local saved_state = Managers.state
-    local saved_game_mode = saved_state and saved_state.game_mode
-    Managers.state = Managers.state or {}
-    local probe_level
-    Managers.state.game_mode = {
-        level_key = function() return probe_level end,
-    }
-    local cases = {
-        { level = "dlc_castle",                       name = "dlc_castle", want = true,  why = "exact match" },
-        { level = "dlc_castle_path1",                 name = "dlc_castle", want = true,  why = "vanilla path variant" },
-        { level = "dlc_castle_slaanesh_path1",        name = "dlc_castle", want = true,  why = "CW theme variant (Issue #59 case)" },
-        { level = "dlc_castle_chaos_boss_path1",      name = "dlc_castle", want = true,  why = "CW boss variant" },
-        { level = "dlc_morningstar",                  name = "dlc_castle", want = false, why = "unrelated level" },
-        { level = "dlc_castled_unrelated",            name = "dlc_castle", want = false, why = "shared prefix without underscore boundary" },
-        { level = "inn_level",                        name = "dlc_castle", want = false, why = "keep level" },
-    }
-    local fail = nil
-    for _, c in ipairs(cases) do
-        probe_level = c.level
-        local got = mod._gt_cs_is_in_level(c.name)
-        if got ~= c.want then
-            fail = string.format("level=%q name=%q want=%s got=%s (%s)",
-                c.level, c.name, tostring(c.want), tostring(got), c.why)
-            break
-        end
-    end
-    Managers.state.game_mode = saved_game_mode
-    if fail then return fail end
-end)
-
-_rt_register("bots_in_keep_setting_registered", function()
-    -- The gt_bots_in_keep checkbox must exist in general_tweaker_data.lua's
-    -- widget tree. If a future refactor drops it from gameplay_group without
-    -- updating the feature module, mod:get("gt_bots_in_keep") returns nil and
-    -- the toggle silently no-ops. Verify by walking the data table.
-    local ok, data = pcall(require, "scripts/mods/general_tweaker/general_tweaker_data")
-    if not ok or type(data) ~= "table" then return "could not require data file" end
-    local found = false
-    local function walk(node)
-        if found or type(node) ~= "table" then return end
-        if node.setting_id == "gt_bots_in_keep" then found = true; return end
-        for _, child in pairs(node) do
-            if type(child) == "table" then walk(child) end
-        end
-    end
-    walk(data)
-    if not found then
-        return "gt_bots_in_keep widget not found in data file widget tree"
-    end
-end)
-
-_rt_register("no_bots_setting_registered", function()
-    -- The gt_no_bots checkbox must exist in the widget tree, else
-    -- mod:get("gt_no_bots") returns nil and the toggle silently no-ops.
-    local ok, data = pcall(require, "scripts/mods/general_tweaker/general_tweaker_data")
-    if not ok or type(data) ~= "table" then return "could not require data file" end
-    local found = false
-    local function walk(node)
-        if found or type(node) ~= "table" then return end
-        if node.setting_id == "gt_no_bots" then found = true; return end
-        for _, child in pairs(node) do
-            if type(child) == "table" then walk(child) end
-        end
-    end
-    walk(data)
-    if not found then
-        return "gt_no_bots widget not found in data file widget tree"
-    end
-end)
-
-_rt_register("no_bots_apply_sets_ai_bots_disabled", function()
-    -- mod._gt_apply_no_bots must drive script_data.ai_bots_disabled — that's the
-    -- ONLY engine flag _handle_bots re-reads per server tick to both despawn
-    -- existing bots and block new ones. The old /bottoggle path
-    -- (level_settings.no_bots_allowed) does NOT despawn mid-mission, which was
-    -- the reported bug. This test pins the correct flag. (Phase 3: the apply fn
-    -- moved to _gt_bots_keep.lua and is exposed as mod._gt_apply_no_bots.)
-    local apply = mod._gt_apply_no_bots
-    if type(apply) ~= "function" then
-        return "mod._gt_apply_no_bots is not a function (type=" .. type(apply) .. ")"
-    end
-    script_data = script_data or {}
-    local saved = script_data.ai_bots_disabled
-    apply(true)
-    local on = script_data.ai_bots_disabled
-    apply(false)
-    local off = script_data.ai_bots_disabled
-    script_data.ai_bots_disabled = saved
-    if on ~= true then
-        return "ai_bots_disabled not true after mod._gt_apply_no_bots(true) (got " .. tostring(on) .. ")"
-    end
-    if off ~= nil then
-        return "ai_bots_disabled not cleared after mod._gt_apply_no_bots(false) (got " .. tostring(off) .. ")"
-    end
-end)
-
-_rt_register("gk_quest_dropdowns_dont_share_options", function()
-    -- Choose Grail Knight Quests has THREE dropdowns (gt_gk_quest1/2/3). VMF's
-    -- localize_dropdown_data mutates option.text in place, so if the dropdowns
-    -- share one options table the 2nd/3rd re-localize already-localized strings
-    -- and render the `<<...>>` / `<<<...>>>` bracket cascade users reported.
-    -- Each dropdown MUST hold its own table (built by _gt_gk_quest_options()).
-    -- This walks the data tree and fails if any two of the three share a table
-    -- identity. See REGRESSION_CHECKLIST "vmf-dropdown-options-mutated".
-    local ok, data = pcall(require, "scripts/mods/general_tweaker/general_tweaker_data")
-    if not ok or type(data) ~= "table" then return "could not require data file" end
-    local opts_by_id = {}
-    local function walk(node)
-        if type(node) ~= "table" then return end
-        local sid = node.setting_id
-        if (sid == "gt_gk_quest1" or sid == "gt_gk_quest2" or sid == "gt_gk_quest3") and node.options then
-            opts_by_id[sid] = node.options
-        end
-        for _, child in pairs(node) do
-            if type(child) == "table" then walk(child) end
-        end
-    end
-    walk(data)
-    local q1, q2, q3 = opts_by_id.gt_gk_quest1, opts_by_id.gt_gk_quest2, opts_by_id.gt_gk_quest3
-    if not (q1 and q2 and q3) then
-        return "one or more gt_gk_quest dropdowns missing an options table"
-    end
-    if q1 == q2 or q1 == q3 or q2 == q3 then
-        return "gt_gk_quest dropdowns share an options table — bracket cascade will occur"
-    end
-    -- Option text must be loc KEYS (no spaces / punctuation), else VMF's
-    -- missing-key fallback wraps the raw display string in angle brackets.
-    for _, opt in ipairs(q1) do
-        if type(opt.text) ~= "string" or opt.text:find("[%s%.]") then
-            return "gt_gk_quest option text is not a bare loc key: " .. tostring(opt.text)
-        end
-    end
-end)
-
--- (menu_qol_settings_registered + menu_qol_return_quits_roundtrips regression
--- tests MIGRATED out with the Main Menu & Startup feature to gui_tweaker / gut
--- 2026-06-29, #190.)
-
-_rt_register("fall_damage_widgets_and_scaling", function()
-    -- Both fall-damage widgets must exist, the apply fn must be callable, and a
-    -- direct scaling probe must hold: scaling fall.heights by m must produce
-    -- m*vanilla for the three damage fields (m=0 -> 0). Pins the host-side fall
-    -- damage multiplier (health_system.lua rpc_take_falling_damage reads these).
-    local ok, data = pcall(require, "scripts/mods/general_tweaker/general_tweaker_data")
-    if not ok or type(data) ~= "table" then return "could not require data file" end
-    local want = { gt_fall_damage_enabled = false, gt_fall_damage_mult = false }
-    local function walk(node)
-        if type(node) ~= "table" then return end
-        if node.setting_id and want[node.setting_id] ~= nil then want[node.setting_id] = true end
-        for _, child in pairs(node) do if type(child) == "table" then walk(child) end end
-    end
-    walk(data)
-    for id, found in pairs(want) do
-        if not found then return id .. " widget not found in data file widget tree" end
-    end
-    if type(mod.gt_apply_fall_damage) ~= "function" then
-        return "mod.gt_apply_fall_damage is not a function"
-    end
-    if not (PlayerUnitMovementSettings and PlayerUnitMovementSettings.fall and PlayerUnitMovementSettings.fall.heights) then
-        return nil -- settings not loaded in this context; skip (not a failure)
-    end
-    -- Pure-math probe on a standalone table (no live mutation): clamp(d*FDM*m,
-    -- max*0*m, max*1*m) must equal m * clamp(d*FDM, 0, max).
-    local FDM, d, max = 14, 3, 150
-    local function fall_dmg(mult)
-        return math.clamp(d * FDM * mult, max * 0 * mult, max * 1 * mult)
-    end
-    if fall_dmg(0) ~= 0 then return "m=0 should yield 0 fall damage" end
-    if math.abs(fall_dmg(2) - 2 * fall_dmg(1)) > 0.001 then return "fall damage not linear in multiplier" end
-    -- Re-applying the live setting must leave a positive, numeric multiplier.
-    mod.gt_apply_fall_damage()
-    local live = PlayerUnitMovementSettings.fall.heights.FALL_DAMAGE_MULTIPLIER
-    if type(live) ~= "number" or live < 0 then
-        return "FALL_DAMAGE_MULTIPLIER not a non-negative number after apply (got " .. tostring(live) .. ")"
-    end
-end)
-
--- (tp_camera_yields_to_cutscene regression test MIGRATED out with the Third-Person
--- Camera feature to gui_tweaker / gut 2026-06-29, #191.)
+-- Regression registrations keep their existing private marker bindings.
+mod:dofile("scripts/mods/general_tweaker/_gt_regression_checks").install(mod, _rt_register, {
+    CT_GT_PICKUP_LOOKUP_RAWGET_MARKER_v0_2_48 = CT_GT_PICKUP_LOOKUP_RAWGET_MARKER_v0_2_48,
+    CT_GT_AI_CLIENT_SEND_MARKER_v0_2_52 = CT_GT_AI_CLIENT_SEND_MARKER_v0_2_52,
+    dbg = _dbg, dbg_alert = _dbg_alert,
+})
 
 -- ============================================================
 -- Shared `on_player_joined_party` dispatcher (audit 2026-06-07, F3, v0.2.80-dev)
@@ -2092,6 +1677,7 @@ mod:dofile("scripts/mods/general_tweaker/_gt_lobby_failed_join_reveal")
 
 -- Bot Options: Necromancer potion handoff, Ironbreaker revive-during-ult,
 -- rescue allies awaiting respawn. Host-side bot AI fixes; no network registration.
+mod:dofile("scripts/mods/general_tweaker/_gt_bot_pickups")
 mod:dofile("scripts/mods/general_tweaker/_gt_bot_fixes")
 mod:dofile("scripts/mods/general_tweaker/_gt_prioritize_specials")
 mod:dofile("scripts/mods/general_tweaker/_gt_weave_unlock")
@@ -2132,5 +1718,19 @@ mod:dofile("scripts/mods/general_tweaker/_gt_solo_qol")
 -- [198:dummy] line with a hit count. Default-on, printf, no gameplay change, no
 -- new hook collision (nothing else hooks TrainingDummyHealthExtension).
 mod:dofile("scripts/mods/general_tweaker/_gt_probe_dummy_hits")
+
+-- Selective functional verify-fix promotion; no developer probe rollup.
+mod:dofile("scripts/mods/general_tweaker/_gt_client_ragdolls")
+mod:dofile("scripts/mods/general_tweaker/_gt_dev_heal")
+mod:dofile("scripts/mods/general_tweaker/_gt_duplicate_careers_parity")
+mod:dofile("scripts/mods/general_tweaker/_gt_offline_twitch")
+mod:dofile("scripts/mods/general_tweaker/_gt_host_lag_comp")
+mod:dofile("scripts/mods/general_tweaker/_gt_diag_player_stats")
+
+-- #797 shares the established HUD-composite seam, without importing other tools.
+mod:hook_safe("IngameHud", "update", function(self, dt, _t)
+    local draw = mod._gt_player_stat_hud_draw
+    if draw then draw(self, dt) end
+end)
 
 mod:info("[mem-probe] gt boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - _MEM_PROBE_T0_GT) / 1024)

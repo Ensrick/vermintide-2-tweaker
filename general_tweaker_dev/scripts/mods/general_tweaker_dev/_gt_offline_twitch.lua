@@ -77,9 +77,30 @@ mod:hook("TwitchGameMode", "_in_whitelist", function(func, self, template_name, 
     return policy.is_allowed(template_name, template, _allowed_categories())
 end)
 
+-- Pre-flight: GT owns no other _next_standard_vote hook. The native method
+-- reads the global lookup at call time, but temporarily replacing it would
+-- leak into condition callbacks/reentrant votes. Use the source-qualified
+-- selection policy instead; disabled mode delegates the exact call unchanged.
+mod:hook("TwitchGameMode", "_next_standard_vote", function(func, self, template_a, ...)
+    if not _enabled() then return func(self, template_a, ...) end
+    return policy.next_standard_vote(self, template_a, {
+        templates = TwitchVoteTemplates,
+        standard = TwitchStandardVoteTemplatesLookup,
+        maximum_diff = TwitchSettings.max_a_b_vote_cost_diff,
+        clone = table.clone,
+        shuffle = table.shuffle,
+    })
+end)
+
+mod._gt333_standard_candidate_gate_armed = true
+
 mod._gt_rt_register("issue333_offline_twitch_policy", function()
     if mod._GT333_OFFLINE_TWITCH_MARKER ~= "gt-333-native-offline-votes-single-whitelist-gate" then
         return "issue 333 provenance marker missing"
+    end
+    if mod._gt333_standard_candidate_gate_armed ~= true
+            or type(policy.next_standard_vote) ~= "function" then
+        return "issue 333 standard candidate/replacement gate missing"
     end
     if policy.category("twitch_give_potion", {}) ~= "items"
             or policy.category("twitch_spawn_rat_ogre", { boss = true }) ~= "spawns"

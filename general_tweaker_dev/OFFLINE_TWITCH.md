@@ -7,7 +7,24 @@ vote game objects, UI, effects, and RPCs. No Twitch account or IRC connection is
 required. The option takes effect when the next supported mission activates its
 Twitch manager.
 
-Event controls use the existing `TwitchGameMode._in_whitelist` candidate gate.
+Event controls compose the existing `TwitchGameMode._in_whitelist` candidate
+gate with the native standard-ballot selector. Native candidate B does not
+consult that gate, so the enabled feature uses the same source-qualified
+condition, cost, used-vote and boss-match rules while applying the composed
+gate to B and both breed-package replacements. Disabled mode calls the native
+method unchanged, including for a live Twitch connection. No shared lookup or
+instance method is temporarily replaced: condition callbacks and reentrant
+selection cannot observe a temporary global filter.
+
+The candidate lookup is snapshotted once per call. Rejected replacements are
+tracked by lookup key, not a possibly aliased template name. The owned selector
+has a finite initial-candidate budget and clears native used votes at most
+once before deferring an impossible ballot. Native package loading still owns
+its original locks, errors and internal retries; this does not claim to bound
+that separate engine loader. Behavioral tests run the actual Dev and official
+hooks against the retained native selection/package-loader oracle in
+`qa/lua/tests/fixtures/gt_native_standard_vote.lua`.
+
 Item templates begin with `twitch_give_`; spawn templates begin with
 `twitch_spawn_` or declare a breed/boss/special; mutators use vanilla mutator
 localization prefixes; remaining and future templates are grouped as buffs and

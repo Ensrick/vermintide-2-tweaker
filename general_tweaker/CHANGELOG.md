@@ -1,5 +1,41 @@
 # General Tweaker Changelog
 
+## 0.2.180 (2026-11-05) -- Selected official verification-queue promotion
+
+- Promote the current functional Godmode candidates: exact fly/Bile protection
+  and rejected-blob cleanup (#548), enemy Blightstorm entry protection (#1009),
+  and the optional host-authoritative final strike override (#1008, accepted
+  #549 dependency). Preserve optional heartbeat compatibility with older peers.
+- Promote native bot-driven AI Control (#247), local Noclip boundary guards
+  (#241), spawn suppression without invalid queue IDs (#242), dynamic special
+  enumeration (#1138), duplicate-career parity (#1150), and enriched failed-join
+  ownership (#72). Preserve official world-freeze controls and its one shared
+  spawn-queue owner.
+- Promote bot aid ranges (#300), Survival Ale reservation and smart allocation
+  (#364, #365), and the six independent combat/ping controls (#298). The ping
+  candidate targets attacking elites; broader specials/monsters are not implied.
+- Promote the existing client burst filter and bounded corpse reconciliation
+  (#332). Host suppression still affects forwarded bursts; this is not a claim
+  that every peer can independently display a host-suppressed explosion.
+- Promote offline Twitch voting (#333), including the Dev-first correction of
+  the native second-choice/package-replacement category-filter bypass. Preserve
+  native costs, boss matching, used votes, conditions and package ownership;
+  bound owned retries without replacing global lookups or instance methods.
+- Promote host-side ordinary-melee latency compensation (#1034), native `/heal`
+  completion (#1143), and the bounded read-only Player Statistics HUD (#797).
+  Only its dedicated statistics controls are exposed, not the Dev Tools group.
+  Mode/position/scale changes invalidate cached HUD presentation.
+- Promote the strict material-residency guard for the existing Bot Teleport
+  Lab renderer (#749) without enabling its Dev-only investigation controls.
+- Keep unrelated hazard, chest, disconnect, agent and AI-freeze investigations
+  out. Extract unchanged official regression registrations to retain file-size
+  ceilings rather than increasing baselines. Add actual callback/native-oracle,
+  consumer, UI, dependency-graph and cache-transition coverage.
+- The maintainer explicitly approved admitting verify-fix candidates without
+  human testing for this promotion batch. Automated gates and authenticated
+  publication remain required; this entry is not gameplay acceptance or issue
+  closure, and clean-version publication still needs exact-version approval.
+
 ## 0.2.179 (2026-11-02) -- World freeze and readable time controls (#1801, #1802)
 
 - Selectively promotes General's new time-control owners and their native realm

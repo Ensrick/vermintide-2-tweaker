@@ -6,6 +6,18 @@ Walk every entry below before any release that touches the relevant subsystem. P
 
 Last updated: 2026-10-24.
 
+## Offline Twitch standard candidate B (#333)
+
+- `test_gt_official_verify_rollup` must reproduce native option-B leakage with
+  the feature off, then execute both installed hooks and reject that category
+  when enabled. Cover native whitelist, condition, cost, boss, used-vote reset,
+  package replacement, lock/error, nil-return and disabled/live-connected paths.
+- Alias keys and a condition that grows the shared lookup must not enlarge the
+  initial finite selection budget. Nested selection and throwing callbacks
+  leave no temporary global or instance-method state to restore.
+- In-game acceptance remains pending: no-account votes, each category disabled,
+  Keep cleanup, then a separate vanilla-client synchronization pass.
+
 ## Native realm precedence (#1693)
 
 - Offline shared tests must prove modern native true works without the old EAC
