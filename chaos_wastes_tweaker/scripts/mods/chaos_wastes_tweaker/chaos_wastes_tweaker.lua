@@ -41,7 +41,7 @@ local mod = get_mod("ct")
 -- Captured in log diff host vs client 2026-05-22 session.
 local REAL_PLAYER_LOCAL_ID = 1
 
-local MOD_VERSION = "0.7.132-beta"
+local MOD_VERSION = "0.7.354-beta"
 _MEM_PROBE_T0_CT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 -- v0.7.104-dev: ct_meta_ammo redesign — hyperbolic cost-floor with direct hooks on
 -- use_ammo / drain / add_charge. Replaces v0.7.102's linear-additive stat_buff
@@ -74,7 +74,8 @@ pcall(printf, "Chaos Wastes Tweaker v%s loaded", MOD_VERSION)
 --     replaced anyway. Acceptable; the schema gate IS the migration cliff.
 --
 -- VMF_RECIPES.md § 10 documents the full design + when to bump.
-local CT_RPC_SCHEMA = 1
+-- #358 cooldown generations require schema 2; mixed peers fail closed.
+local CT_RPC_SCHEMA = 2
 pcall(printf, "[ct:rpc] schema_version=%d", CT_RPC_SCHEMA)
 
 -- Two-helper debug-logging policy (PROJECT_STANDARDS.md § 3.6).
@@ -318,26 +319,30 @@ pcall(printf, "[ct] dormant/skulls boons purged (v%s, sentinel=%s); %d dormants 
 
 -- /regression_test scaffold. See the corresponding _rt_register calls at end
 -- of file. Each registered check is a function returning nil for PASS or a
--- string for FAIL.
+-- string for FAIL, or {status="SKIP",reason=...} for unavailable live context.
 local _RT_CHECKS = {}
 local function _rt_register(name, fn)
     _RT_CHECKS[#_RT_CHECKS + 1] = { name = name, fn = fn }
 end
+mod._ct_rt_register = _rt_register
 mod:command("ct_regression_test", "Run regression smoke checks for past bugs", function()
-    local pass, fail = 0, 0
+    local pass, fail, skip = 0, 0, 0
     mod:echo("=== ct regression_test (v%s) ===", MOD_VERSION)
     for _, c in ipairs(_RT_CHECKS) do
         local ok, err = pcall(c.fn)
         if ok and err == nil then
             mod:echo("  PASS: %s", c.name); pass = pass + 1
             _dbg("[regression] PASS %s", c.name)
+        elseif ok and type(err) == "table" and err.status == "SKIP" then
+            mod:echo("  SKIP: %s -- %s", c.name, tostring(err.reason)); skip = skip + 1
+            _dbg("[regression] SKIP %s: %s", c.name, tostring(err.reason))
         else
             local msg = (not ok and tostring(err)) or tostring(err)
             mod:echo("  FAIL: %s -- %s", c.name, msg); fail = fail + 1
             mod:warning("[regression] FAIL %s: %s", c.name, msg)
         end
     end
-    mod:echo("=== %d passed, %d failed ===", pass, fail)
+    mod:echo("=== %d passed, %d failed, %d skipped ===", pass, fail, skip)
 end)
 pcall(printf, "[regression-test-command] registered as /ct_regression_test")
 
@@ -528,7 +533,6 @@ local _career_exclusive_logged_this_run = {}
 -- run_id we applied to so any re-entry (host-migration replay, debug re-runs
 -- of setup_run) doesn't re-apply on top of vanilla's set value.
 -- See feedback_redundant_safeguards_ok.md.
-local _starting_coins_applied_for_run = nil
 -- Marker constant — embedded in the compiled bundle so the
 -- /ct_regression_test source-pattern check can verify the setter-override
 -- mode (not adder mode) shipped to the bundle.
@@ -663,10 +667,12 @@ mod:hook("DeusRunController", "on_soft_currency_picked_up", function(func, self,
         -- v0.7.55: route through effective_setting so a client picking up coins applies
         -- the host's coin_multiplier (matches what the host's own pickups grant).
         local multiplier = effective_setting("coin_multiplier") or 1
+        if mod._ct_official_runtime then multiplier = mod._ct_official_runtime.coin_multiplier(multiplier) end
         args[1] = math.max(1, math.floor(raw_amount * multiplier))
     end
 
-    return func(self, unpack(args, 1, n))
+    local before_ok, before = pcall(function() return self:get_player_soft_currency(self:get_own_peer_id()) end)
+    return mod._ct_official_runtime.credit_native(func, self, args, n, raw_amount, before_ok and before or nil)
 end)
 
 -- ============================================================
@@ -1246,6 +1252,7 @@ local PER_PEER_SETTING_NAMES = {
     -- Curse/mission visual desync from this is tracked as a separate follow-up — likely
     -- needs a host→client graph snapshot RPC instead of toggle sync.
     inject_adventure_maps   = true,
+    preserve_adventure_illusions = true,
 }
 
 local function _collect_setting_ids()
@@ -1392,6 +1399,8 @@ end
 -- send can't abort the rest of the drain or stall the queue. Cheap no-op when
 -- the queue is empty (the common case), so it's safe to run unconditionally.
 mod.update = function(dt)
+    if mod._ct_official_cooldowns then mod._ct_official_cooldowns.update(dt) end
+    if mod._ct_chest_teleport_tick then mod._ct_chest_teleport_tick(dt) end
     -- #58/#156: drive the deferred spawn-census emit (armed in populate_pickups,
     -- fires ~8s later once the guaranteed-spawn pass is done). Cheap no-op when
     -- disarmed. Resolved via mod._ since the census `do` block is defined LATER in
@@ -2162,6 +2171,48 @@ end
 -- main-chunk local (keeps us under the Lua 5.1 200-locals-per-function cap).
 mod._ct_effective_setting = effective_setting
 
+-- Selective functional owners, with no replacement of the public wire catalog.
+mod._ct_raw_effective_setting = effective_setting
+mod._ct_official_runtime = mod:dofile("scripts/mods/chaos_wastes_tweaker/_ct_official_verify_runtime")(mod, {
+    effective_setting = function(name) return effective_setting(name) end,
+    rt_register = _rt_register,
+    rpc_schema = CT_RPC_SCHEMA,
+    altar_uses = function(go_id) return _altar_uses_by_go_id[go_id] or 0 end,
+})
+effective_setting = function(name)
+    return mod._ct_official_runtime.setting(name, mod._ct_raw_effective_setting(name), mod._ct_raw_effective_setting)
+end
+mod._ct_effective_setting = effective_setting
+mod._ct_official_boon_repairs = mod:dofile("scripts/mods/chaos_wastes_tweaker/_ct_official_boon_repairs")(mod, {
+    effective_setting = function(name) return effective_setting(name) end,
+    rt_register = _rt_register,
+    parry_policy = mod:dofile("scripts/mods/chaos_wastes_tweaker/_ct_parry_cooldown_policy"),
+})
+mod._ct_apply_evidence = mod:dofile("scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence")(mod, {
+    effective_setting = function(name) return effective_setting(name) end,
+    runtime = mod._ct_official_runtime,
+    rt_register = _rt_register,
+})
+mod._ct_official_cooldowns = mod:dofile("scripts/mods/chaos_wastes_tweaker/_ct_official_cooldowns")(mod, {
+    effective_setting = function(name) return effective_setting(name) end,
+    rt_register = _rt_register, rpc_schema = CT_RPC_SCHEMA,
+})
+mod:dofile("scripts/mods/chaos_wastes_tweaker/_ct_official_shop")
+mod._ct_official_chest_cap = mod:dofile("scripts/mods/chaos_wastes_tweaker/_ct_official_chest_cap")(mod, {
+    effective_setting = function(name) return effective_setting(name) end,
+    rt_register = _rt_register,
+})
+do
+    local checks = mod:dofile("scripts/mods/chaos_wastes_tweaker/_ct_official_collectibles").rt_checks
+    for _, check in ipairs(checks or {}) do _rt_register(check[1], check[2]) end
+end
+mod:hook_safe("DeusCursedChestExtension", "extensions_ready", function(self, world, unit)
+    pcall(function()
+        local current = LevelHelper and LevelHelper:current_level_settings()
+        mod._ct_official_chest_cap.appeared(current and current.level_id or "?", unit)
+    end)
+end)
+
 -- ============================================================
 -- UNCONDITIONAL settings dump (Issue: host-config visibility for triage).
 -- ============================================================
@@ -2240,6 +2291,11 @@ is_curse_disabled = function(curse_name)
     local key = "disable_curse_" .. curse_name:gsub("^curse_", "")
     return effective_setting(key) == true
 end
+mod:dofile("scripts/mods/chaos_wastes_tweaker/_ct_official_feature_leaf")({
+    mod = mod,
+    effective_setting = function(name) return effective_setting(name) end,
+    is_curse_disabled = function(name) return is_curse_disabled(name) end,
+})
 
 -- v0.7.95: starting_coins is now a SETTER, not an adder.
 -- ============================================================
@@ -2293,27 +2349,9 @@ mod:hook("DeusRunController", "setup_run", function(func, self, ...)
     -- so initial_own_soft_currency is args[5].
     -- effective_setting reads host's broadcast value on clients and own value on host,
     -- so both peers compute the same target. The host-side RPC handler still re-clamps.
-    local raw_setting = effective_setting("starting_coins")
-    local setting = (type(raw_setting) == "number") and math.floor(raw_setting / 25 + 0.5) * 25 or 0
-
-    local run_state = self and self._run_state
-    local run_id = run_state and run_state.get_run_id and run_state:get_run_id() or "unknown"
-
-    local vanilla_initial = args[5]
-    local final = vanilla_initial
-
-    if setting and setting > 0 and _starting_coins_applied_for_run ~= run_id then
-        args[5] = setting
-        final = setting
-        _starting_coins_applied_for_run = run_id
-        _dbg("[ct/coins] starting_coins setter applied: vanilla_initial=%s, setting=%d, final=%d (run_id=%s)",
-            tostring(vanilla_initial), setting, final, tostring(run_id))
-    elseif setting and setting > 0 then
-        _dbg("[ct/coins] starting_coins setter skipped (already applied for run_id=%s): vanilla_initial=%s, setting=%d",
-            tostring(run_id), tostring(vanilla_initial), setting)
-    end
-
-    local ret_a, ret_b = func(self, unpack(args, 1, n))
+    mod._ct_official_runtime.setup(self, args)
+    local ret_n, ret_values = _capture_returns(func(self, unpack(args, 1, n)))
+    mod._ct_official_runtime.capture_coins(self)
 
     -- v0.7.121-dev Issue #53 diagnostic — dump post-populate graph state on
     -- BOTH peers (gated on VMF debug logging via _dbg). Proves whether the
@@ -2376,7 +2414,7 @@ mod:hook("DeusRunController", "setup_run", function(func, self, ...)
         _log_peer_manifest("self (host)", host_manifest, "HOST")
     end
 
-    return ret_a, ret_b
+    return unpack(ret_values, 1, ret_n)
 end)
 
 -- v0.7.95 (host-side): when a client joins and sends its initial_own_soft_currency
@@ -2386,11 +2424,8 @@ end)
 -- multipliers / boon roll), override the incoming value with the host's setting
 -- BEFORE vanilla computes `new_coins`. Skip if setting == 0 (vanilla behavior).
 mod:hook("DeusRunController", "rpc_deus_set_initial_soft_currency", function(func, self, sender_channel_id, initial_own_soft_currency)
-    local host_setting = mod:get("starting_coins")
-    if type(host_setting) == "number" then
-        host_setting = math.floor(host_setting / 25 + 0.5) * 25
-    end
-    if host_setting and host_setting > 0 then
+    local host_setting, configured = mod._ct_official_runtime.coins.resolve(mod:get("starting_coins"), initial_own_soft_currency)
+    if configured then
         _dbg("[ct/coins] host RPC override for joining peer: client_sent=%s, host_setting=%d (overriding)",
             tostring(initial_own_soft_currency), host_setting)
         initial_own_soft_currency = host_setting
@@ -2636,7 +2671,7 @@ mod:hook("DeusPowerUpUtils", "generate_random_power_ups", function(func, ...)
     -- and BEFORE any altar interaction (rolls happen at chest spawn, before player
     -- opens it). The strip body is idempotent — once `cooldown_buff` is nil, the
     -- next call's `for` loop is a no-op. Safe to call from every roll.
-    pcall(_ct128_strip_parry_cooldowns)
+    pcall(mod._ct128_strip_parry_cooldowns)
 
     return new_seed, new_power_ups
 end)
@@ -2667,6 +2702,7 @@ end
 
 mod:hook_safe("DeusShopView", "_create_ui_elements", function(self, shop_settings, power_ups, blessings)
     fix_arc_nan(self._shop_item_widgets)
+    if mod._ct_official_shop_refresh then mod._ct_official_shop_refresh(self) end
     -- v0.7.67 diagnostic: log the blessings the shop is offering this visit. The
     -- 2026-05-20 session had blessing_of_power available at shop_strife but the
     -- user reported it "wasn't purchaseable" with zero buy attempts in logs. This
@@ -3815,7 +3851,14 @@ local function _filtered_weapon_gen(label, func, gen_rarity, n, args)
         end
         error(result, 2)  -- re-raise; baked_trait_combinations is now restored
     end
-    return override_traits_in_result(result, gen_rarity)
+    result = override_traits_in_result(result, gen_rarity)
+    if type(result) == "table" then
+        result.traits = mod._ct_official_runtime.umbrella.filter_traits(
+            effective_setting("ban_all_traits"), result.traits,
+            function(trait) return effective_setting("ban_trait_" .. tostring(trait)) == true end)
+        mod._ct_official_runtime.illusions.apply_to_result(label, result, label == "upgrade_item" and args[1] or nil)
+    end
+    return result
 end
 
 mod:hook("DeusWeaponGeneration", "generate_weapon", function(func, difficulty, run_progress, rarity, ...)
@@ -3893,7 +3936,9 @@ end)
 -- rpc_deus_setup_run handler). This is the canonical entry point for "the run
 -- starts" — capture run_seed + journey + dominant_god + with_belakor + mutators
 -- to confirm both peers run with identical args.
-mod:hook_safe("DeusMechanism", "_setup_run", function(self, run_id, run_seed, is_initial_setup, server_peer_id, difficulty, journey_name, dominant_god, with_belakor, mutators, boons)
+mod:hook("DeusMechanism", "_setup_run", function(func, self, run_id, run_seed, is_initial_setup, server_peer_id, difficulty, journey_name, dominant_god, with_belakor, mutators, boons)
+    mod._ct_official_runtime.illusions.snapshot_now()
+    local result_n, result = _capture_returns(func(self, run_id, run_seed, is_initial_setup, server_peer_id, difficulty, journey_name, dominant_god, with_belakor, mutators, boons))
     local is_server = Managers and Managers.player and Managers.player.is_server
     local m_count = (type(mutators) == "table") and #mutators or "?"
     local b_count = (type(boons) == "table") and #boons or "?"
@@ -3902,6 +3947,7 @@ mod:hook_safe("DeusMechanism", "_setup_run", function(self, run_id, run_seed, is
         tostring(journey_name), tostring(dominant_god), tostring(with_belakor),
         tostring(m_count), tostring(b_count),
         tostring(is_initial_setup), tostring(server_peer_id))
+    return unpack(result, 1, result_n)
 end)
 
 -- (2) [intentionally no separate setup_run hook] — the diagnostic graph-dump
@@ -4099,6 +4145,7 @@ do
     local _EMIT_DELAY = 8.0  -- seconds; guaranteed-spawn pass completes well within this window
 
     mod._ct_tally_reset = function(level_key, injected, adv_base, difficulty)
+        mod._ct_official_chest_cap.begin(level_key)
         table.clear(_counts)
         _total = 0
         _level, _injected, _adv_base, _difficulty = level_key, injected, adv_base, difficulty
@@ -4115,6 +4162,8 @@ do
 
     local function _emit()
         local ok = pcall(function()
+            mod._ct_official_chest_cap.finalize(_level, effective_setting("cursed_chest_count"),
+                Managers and Managers.player and Managers.player.is_server == true)
             local cursed  = _counts.deus_cursed_chest or 0
             local weapon  = _counts.deus_weapon_chest or 0
             local altar   = _counts.deus_02 or 0
@@ -5422,6 +5471,8 @@ mod:hook_safe("CameraManager", "shading_callback", function(self, world, shading
             ShadingEnvironment.set_scalar(shading_env, "exposure", cur * exp)
         end
     end
+    local current = LevelHelper and LevelHelper:current_level_settings()
+    mod._ct_official_runtime.light(current and adventure_base_from_level_key(current.level_id), theme, shading_env)
 end)
 
 -- ============================================================
@@ -5694,6 +5745,7 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
 
     if not effective_setting("replace_shrines_with_missions") then
         local result = { func(base_graph, seed, config, dominant_god, with_belakor) }
+        mod._ct_official_runtime.force_finale(result[1], config)
         local cursed, total = count_cursed(result[1])
         _dbg("[deus_populate_graph] post-run cursed=%d / total_curseable=%d", cursed, total)
         dump_graph(result[1], "post-run")
@@ -5734,6 +5786,7 @@ mod:hook(_G, "deus_populate_graph", function(func, base_graph, seed, config, dom
     end
 
     local result = { func(mutated, seed, config, dominant_god, with_belakor) }
+    mod._ct_official_runtime.force_finale(result[1], config)
     local cursed, total = count_cursed(result[1])
     _dbg("[deus_populate_graph] post-run (shop-converted) cursed=%d / total_curseable=%d", cursed, total)
     dump_graph(result[1], "post-run-shop-converted")
@@ -5901,9 +5954,8 @@ mod:hook("PickupSystem", "_spawn_pickup", function(func, self, settings, pickup_
     -- conversion) once vanilla confirms it actually spawned. _spawn_pickup is the
     -- single chokepoint for both the spread pass and the guaranteed chest/altar pass,
     -- so this tallies EVERYTHING. Returns a single unit (or nil) in vanilla.
-    local spawned = func(self, settings, pickup_name, position, rotation, flag, spawn_type, ...)
-    if mod._ct_tally_count then mod._ct_tally_count(pickup_name, spawned) end
-    return spawned
+    return mod._ct_official_runtime.finish_pickup(func, self, settings, pickup_name,
+        position, rotation, flag, spawn_type, ...)
 end)
 -- Note: previous versions attempted to make altars/chests walk-through by mutating
 -- their actor collision filter / scene_query / collision_enabled flags. This
@@ -6412,7 +6464,6 @@ end)
 -- CLARIFY: STATES.OPEN = 3 in deus_cursed_chest_extension.lua. State transitions to OPEN at line
 -- 174 of that file ONLY on the server, and ONLY when the curse encounter's terror event has ended
 -- successfully. Hot-join clients enter HOTJOIN_OPEN (= 4) instead, so they do not trigger here.
-local CURSED_CHEST_STATE_OPEN = 3
 -- CLARIFY: DifficultyMapping["normal"] = "recruit" (difficulty_settings.lua:424). The string the
 -- engine uses internally is "normal"; "recruit" is only the display name.
 local DIFFICULTY_RECRUIT = "normal"
@@ -6422,89 +6473,14 @@ local DIFFICULTY_RECRUIT = "normal"
 -- in the same run can re-mark the same peer.
 local pending_chest_respawn = {}
 
+mod._ct_official_chest_rescue = mod:dofile("scripts/mods/chaos_wastes_tweaker/_ct_official_chest_rescue")(mod, {
+    effective_setting = function(name) return effective_setting(name) end,
+    mark_dead_respawn = function(peer) pending_chest_respawn[peer] = true end,
+    rt_register = _rt_register,
+})
 mod:hook_safe("DeusCursedChestExtension", "_set_state", function(self, state)
-    if state ~= CURSED_CHEST_STATE_OPEN then
-        return
-    end
-    -- raw printf so it lands on a mod-logging-OFF host (the user's setup)
-    pcall(printf, "[ct-chest-revive] chest OPEN: setting=%s is_server=%s",
-        tostring(effective_setting("respawn_on_chest_complete")),
-        tostring(Managers and Managers.player and Managers.player.is_server))
-
-    if not effective_setting("respawn_on_chest_complete") then
-        return
-    end
-    if not Managers.player or not Managers.player.is_server then
-        return
-    end
-
-    local game_mode = Managers.state and Managers.state.game_mode
-    if not game_mode then
-        return
-    end
-
-    local side = Managers.state.side and Managers.state.side:get_side_from_name("heroes")
-    local party = side and side.party
-    local occupied_slots = party and party.occupied_slots
-
-    -- #116 (v0.7.177-dev): the prior body relied solely on
-    -- `game_mode:force_respawn_dead_players()` (which only zeroes respawn timers) and
-    -- never handled AWAITING-RESCUE players (hanging at a beacon, ready for assisted
-    -- respawn) — so a downed teammate just stayed down and the feature looked dead.
-    -- Now we port general_tweaker's proven per-player respawn primitive
-    -- (_gt_level_control.lua `_gt_host_respawn`) and apply it to every party slot,
-    -- covering all three downed states:
-    --   * awaiting-rescue (hanging)  -> StatusUtils.set_respawned_network (free w/ party)
-    --   * knocked-down (bleeding out) -> StatusUtils.set_revived_network (revive in place)
-    --   * dead / queued for respawn   -> zero respawn_timer so RespawnHandler.server_update
-    --                                    spawns them at the active beacon shortly
-    -- Host-authoritative (already gated on is_server above).
-    if occupied_slots then
-        for i = 1, #occupied_slots do
-            local status = occupied_slots[i]
-            local data = status.game_mode_data
-            local peer_id = status.peer_id
-            local local_player_id = status.local_player_id
-
-            if peer_id and local_player_id then
-                local player = Managers.player:player(peer_id, local_player_id)
-                local unit = player and player.player_unit
-                local health_state = data and data.health_state or "?"
-
-                local status_ext = unit and Unit.alive(unit) and ScriptUnit.has_extension(unit, "status_system") or nil
-                local is_knocked = status_ext and status_ext.is_knocked_down and status_ext:is_knocked_down() or false
-                local is_disabled_pact = status_ext and status_ext.is_disabled_by_pact_sworn and status_ext:is_disabled_by_pact_sworn() or false
-                local is_awaiting = status_ext and status_ext.is_ready_for_assisted_respawn and status_ext:is_ready_for_assisted_respawn() or false
-                local action = "none"
-
-                if is_awaiting and rawget(_G, "StatusUtils") and StatusUtils.set_respawned_network then
-                    -- hanging at a respawn beacon -> free directly (helper = self).
-                    StatusUtils.set_respawned_network(unit, true, unit)
-                    action = "freed-awaiting-rescue"
-                elseif is_knocked and not is_disabled_pact and StatusUtils and StatusUtils.set_revived_network then
-                    -- bleeding out -> revive in place (skip disabler-held players).
-                    StatusUtils.set_revived_network(unit, true, nil)
-                    action = "revived-knocked"
-                elseif data and (health_state == "dead" or data.respawn_timer ~= nil) then
-                    -- fully dead / in the respawn queue -> spawn at the active beacon.
-                    data.respawn_timer = 0
-                    pending_chest_respawn[peer_id] = true   -- arm THP/wounded post-respawn overrides
-                    action = "respawn-timer-cleared"
-                end
-
-                pcall(printf, "[ct-chest-revive] slot=%d peer=%s health=%s knocked=%s awaiting=%s disabled=%s -> %s",
-                    i, tostring(peer_id), tostring(health_state), tostring(is_knocked),
-                    tostring(is_awaiting), tostring(is_disabled_pact), action)
-            end
-        end
-    end
-
-    -- Belt-and-suspenders: also fire the engine's team-wide dead-respawn so any dead
-    -- player our per-slot health_state check didn't classify still respawns (idempotent
-    -- — it only zeroes respawn timers). Per feedback_redundant_safeguards_ok.md.
-    if game_mode.force_respawn_dead_players then
-        game_mode:force_respawn_dead_players()
-    end
+    -- _ct_consolidated_chest_rescue_dispatch
+    return mod._ct_official_chest_rescue.on_state(self, state)
 end)
 
 -- CLARIFY: THP override on the dead-respawn path. sync_health_state reads
@@ -6573,12 +6549,9 @@ end)
 -- fires per player-add at run start + on late joiner / bot add), NOT a user-typed operational
 -- toggle. Per PROJECT_STANDARDS § 3.6 "Chat-echo policy" that means log-only, never chat.
 -- Demoted from `mod:echo` to `mod:info("[ct:starting_boons] ...")` below.
-mod:hook_safe("DeusRunController", "_add_initial_power_ups", function(self, peer_id, local_player_id, profile_index, career_index)
-    local run_state = self._run_state
-    if not run_state or not run_state:is_server() then return end  -- host-only
-    if not DeusPowerUpsArray or not DeusPowerUpUtils then return end
-
+mod._ct_collect_start_boons = function()
     local extra = {}
+    if not DeusPowerUpsArray or not DeusPowerUpUtils then return extra end
     for _, entry in ipairs(DeusPowerUpsArray) do
         local name = entry.name
         if name and mod:get("start_boon_" .. name)
@@ -6587,6 +6560,12 @@ mod:hook_safe("DeusRunController", "_add_initial_power_ups", function(self, peer
             extra[#extra + 1] = DeusPowerUpUtils.generate_specific_power_up(name, entry.rarity)
         end
     end
+    return extra
+end
+mod:hook_safe("DeusRunController", "_add_initial_power_ups", function(self, peer_id, local_player_id, profile_index, career_index)
+    local run_state = self._run_state
+    if not run_state or not run_state:is_server() then return end
+    local extra = mod._ct_collect_start_boons()
 
     if #extra == 0 then return end
 
@@ -7587,6 +7566,7 @@ mod:hook_safe("DeusChestExtension", "open_chest", function(self)
         tostring(chest_type), tostring(target_rarity), tostring(target_slot), #bots)
 
     _ct_bot_weapon_mirror_active = true
+    mod._ct_official_runtime.illusions.suppress(true)
     local ok, err = pcall(function()
         local go_id = self._go_id or (Managers.state.unit_storage and Managers.state.unit_storage:go_id(self.unit))
         for bi, bot in ipairs(bots) do
@@ -7632,6 +7612,7 @@ mod:hook_safe("DeusChestExtension", "open_chest", function(self)
         end
     end)
     _ct_bot_weapon_mirror_active = false
+    mod._ct_official_runtime.illusions.suppress(false)
 
     if not ok then
         pcall(printf, "[bot-weap] error mirroring weapon chest to bots: %s", tostring(err))
@@ -7752,49 +7733,7 @@ sync_grudge_marks()
 -- pool (which bypasses _G.BossGrudgeMarks, the gap the nil-out fix above can't
 -- close), the random boss roll, and grudge_mark_commander alike. Single mod:hook
 -- (no VMF dup-hook — VMF_RECIPES.md § 1).
-if rawget(_G, "TerrorEventUtils") then
-    mod:hook(_G.TerrorEventUtils, "apply_breed_enhancements", function(func, unit, breed, optional_data)
-        local enh = optional_data and optional_data.enhancements
-        local is_server = Managers and Managers.player and Managers.player.is_server
-        if type(enh) == "table" and #enh > 0 then
-            -- #107: strip BANNED grudge marks before vanilla applies. Each entry's
-            -- `.name` is its BreedEnhancements key (grudge_mark_settings.lua:122-124),
-            -- which equals the `ban_grudge_mark_<name>` setting suffix — direct map.
-            -- BreedEnhancements.base (name="base") has no ban setting so it is kept.
-            -- HOST-ONLY strip: assignment is server-authoritative (host rolls/applies/
-            -- broadcasts; clients apply what they receive), so filtering only on the
-            -- host keeps host/client consistent.
-            local applied, removed = {}, {}
-            if is_server then
-                local kept = {}
-                for i = 1, #enh do
-                    local e = enh[i]
-                    local nm = (type(e) == "table" and e.name) or (type(e) == "string" and e) or nil
-                    if type(nm) == "string" and effective_setting("ban_grudge_mark_" .. nm) == true then
-                        removed[#removed + 1] = nm
-                    else
-                        kept[#kept + 1] = e
-                        applied[#applied + 1] = nm or "?"
-                    end
-                end
-                if #removed > 0 then
-                    optional_data.enhancements = kept
-                end
-            else
-                for i = 1, #enh do
-                    local e = enh[i]
-                    applied[#applied + 1] = (type(e) == "table" and e.name) or tostring(e)
-                end
-            end
-            -- printf (raw engine print), NOT mod:info: survives a VMF-mod-logging-OFF
-            -- host so the spawn record is actually captured in the user's console log.
-            pcall(printf, "[grudge-spawn] breed=%s is_server=%s applied=[%s] banned_stripped=[%s]",
-                tostring(breed and breed.name), tostring(is_server),
-                table.concat(applied, ", "), table.concat(removed, ", "))
-        end
-        return func(unit, breed, optional_data)
-    end)
-end
+-- #107/#221 singleton application hook is installed by _ct_official_verify_runtime.
 
 -- Dump command — safe to run from the keep (reads _G.BossGrudgeMarks +
 -- BreedEnhancements; doesn't need a live boss spawn). Use this to verify the
@@ -7980,28 +7919,8 @@ end)
 -- v0.7.95: starting_coins verification (setter vs adder regression).
 -- Prints current coin balance, the active setting, and whether the override
 -- hook is registered. Use during a CW run to confirm the value applied.
-mod:command("verify_coins", "Verify starting_coins: live coin balance vs setting, and override-hook registration", function()
-    local mechanism = Managers and Managers.mechanism and Managers.mechanism:game_mechanism()
-    local rc = mechanism and mechanism.get_deus_run_controller and mechanism:get_deus_run_controller()
-    local setting = mod:get("starting_coins")
-    local snapped = (type(setting) == "number") and math.floor(setting / 25 + 0.5) * 25 or 0
-    local marker_present = (type(STARTING_COINS_MODE_MARKER) == "string"
-        and STARTING_COINS_MODE_MARKER == "starting_coins:setter-override-via-setup_run-arg")
-    local hook_registered_str = marker_present and "yes (setter-override mode marker present)" or "NO (marker missing)"
-    if not rc then
-        mod:echo(string.format("/verify_coins: setting=%s (snapped=%d), override-hook=%s, live balance=N/A (no active CW run — use during run)",
-            tostring(setting), snapped, hook_registered_str))
-        pcall(printf, "[verify_coins] no active DeusRunController; setting=%s snapped=%d marker=%s",
-            tostring(setting), snapped, tostring(marker_present))
-        return
-    end
-    local own_peer_id = rc.get_own_peer_id and rc:get_own_peer_id()
-    local balance = rc.get_player_soft_currency and own_peer_id and rc:get_player_soft_currency(own_peer_id)
-    local is_server = rc.is_server and rc:is_server()
-    pcall(printf, "[verify_coins] is_server=%s own_peer_id=%s setting=%s snapped=%d live_balance=%s marker=%s",
-        tostring(is_server), tostring(own_peer_id), tostring(setting), snapped, tostring(balance), tostring(marker_present))
-    mod:echo(string.format("/verify_coins: setting=%d, live=%s, override-hook=%s, host=%s. NOTE: match expected only at run-start; mid-run balance reflects pickups/spends.",
-        snapped, tostring(balance), hook_registered_str, tostring(is_server)))
+mod:command("verify_coins", "Verify exact initial readback separately from current spendable coins", function()
+    return mod._ct_apply_evidence.command("coins")
 end)
 
 -- v0.7.97: career-exclusive pickup blocklist verifier.
@@ -8789,67 +8708,12 @@ sync_shard_strike()
 -- Mutates BOTH `WeaponTraits.buff_templates.deus_ammo_pickup_reload_speed` (the trait
 -- registry the trait system reads at apply time) AND `BuffTemplates.deus_ammo_pickup_reload_speed`
 -- (the global runtime buff lookup). Save-and-restore so the toggle is reversible.
-local anath_raema_originals = nil
-
-local function _anath_raema_buff_entries()
-    local out = {}
-    local wt = rawget(_G, "WeaponTraits")
-    if wt and wt.buff_templates and wt.buff_templates.deus_ammo_pickup_reload_speed then
-        out[#out + 1] = { tbl = wt.buff_templates, key = "deus_ammo_pickup_reload_speed" }
-    end
-    local bt = rawget(_G, "BuffTemplates")
-    if bt and bt.deus_ammo_pickup_reload_speed then
-        out[#out + 1] = { tbl = bt, key = "deus_ammo_pickup_reload_speed" }
-    end
-    return out
-end
-
 local function revert_anath_raema_permanent_tweak()
-    if not anath_raema_originals then return end
-    for _, e in ipairs(_anath_raema_buff_entries()) do
-        e.tbl[e.key] = anath_raema_originals.templates[e.key] or e.tbl[e.key]
-    end
-    anath_raema_originals = nil
+    return mod._ct_official_boon_repairs.revert_anath()
 end
-
-local function apply_anath_raema_permanent_tweak()
-    local entries = _anath_raema_buff_entries()
-    if #entries == 0 then
-        _dbg("[anath-raema] templates not loaded yet; will retry on settings sync")
-        return
-    end
-    if anath_raema_originals then return end
-    local saved = {}
-    for _, e in ipairs(entries) do
-        saved[e.key] = e.tbl[e.key]
-    end
-    anath_raema_originals = { templates = saved }
-
-    -- Replacement template: single permanent stat_buff. multiplier = 0.5 matches the
-    -- vanilla on-pickup multiplier from MorrisBuffTweakData.deus_ammo_pickup_reload_speed_buff.
-    local replacement = {
-        buffs = {
-            {
-                name        = "deus_ammo_pickup_reload_speed_permanent",
-                stat_buff   = "reload_speed",
-                multiplier  = 0.5,
-                max_stacks  = 1,
-            },
-        },
-    }
-    for _, e in ipairs(entries) do
-        e.tbl[e.key] = replacement
-    end
-end
-
 local function sync_anath_raema_permanent()
-    if effective_setting("tweak_anath_raema_permanent") then
-        apply_anath_raema_permanent_tweak()
-    else
-        revert_anath_raema_permanent_tweak()
-    end
+    return mod._ct_official_boon_repairs.sync_anath()
 end
-
 sync_anath_raema_permanent()
 
 -- ============================================================
@@ -9830,10 +9694,9 @@ local CT_META_BOONS = {
 local function _make_meta_proc(stack_name)
     local stack_key = stack_name .. "_1"
     return function(unit, buff, params)
-        -- This path writes straight to BuffExtension (it does not pass through
-        -- the BuffSystem producer hooks owned by #426).  Close it at the final
-        -- pre-mutation boundary so a parity-loss race cannot recreate a custom
-        -- stack between host strip attempts.
+        -- The selected replicated owner now writes through BuffSystem. Keep
+        -- this producer floor as well as its final owner-side parity check:
+        -- parity loss must not recreate custom stacks between strip attempts.
         if type(mod._ct_wire_safe) ~= "function" or not mod._ct_wire_safe() then
             return
         end
@@ -9852,10 +9715,7 @@ local function _make_meta_proc(stack_name)
         -- factory are mirrored on purpose — either one alone is sufficient,
         -- both together close the door. See doc-block near MOD_VERSION.
         local stacks_target = math.min(num_boons, CT_META_AMMO_MAX_STACKS)
-        local num_existing = buff_extension:num_buff_stacks(stack_key)
-        for _ = num_existing + 1, stacks_target do
-            buff_extension:add_buff(stack_name)
-        end
+        mod._ct_official_runtime.grant_stack(unit, stack_name, stack_key, stacks_target, buff_extension)
     end
 end
 
@@ -9976,8 +9836,8 @@ do
                     local right_hand_unit = ranged_slot_data.right_unit_1p
                     local left_ammo  = left_hand_unit  and ScriptUnit.has_extension(left_hand_unit,  "ammo_system")
                     local right_ammo = right_hand_unit and ScriptUnit.has_extension(right_hand_unit, "ammo_system")
-                    if left_ammo  then left_ammo:refresh_buffs()  end
-                    if right_ammo then right_ammo:refresh_buffs() end
+                    if left_ammo then left_ammo:refresh_buffs(); mod._ct_official_runtime.clamp_ammo(left_ammo) end
+                    if right_ammo then right_ammo:refresh_buffs(); mod._ct_official_runtime.clamp_ammo(right_ammo) end
                 end
             end
 
@@ -10513,7 +10373,10 @@ local function register_trait_boon(spec)
     -- now happens unconditionally in pre_register_trait_boon_lookups. This
     -- function is only responsible for the toggle-gated pool insert, which
     -- determines whether the user actually rolls the boon.
-    if not effective_setting(spec.toggle) then return end
+    if not effective_setting(spec.toggle) then
+        _remove_dormant_from_pool(spec.name, spec.rarity)
+        return
+    end
     _add_dormant_to_pool(spec.name, spec.rarity)
     _dbg("[trait-boon] enabled " .. spec.name .. " at rarity " .. spec.rarity)
 end
@@ -10605,6 +10468,9 @@ local function pre_register_trait_boon_lookups()
             }
         end
         local buff_name = "power_up_" .. spec.name .. "_" .. spec.rarity
+        if spec.name == "ct_boon_vauls_anvil" then
+            mod._ct_official_boon_repairs.wire_vaul_clone(templates[spec.name].buff_template.buffs)
+        end
         local buff_template = table.clone(templates[spec.name].buff_template)
         buff_template.buffs[1].name = buff_name
         dpubt[buff_name] = buff_template
@@ -10663,12 +10529,15 @@ end
     end
 end)()
 
+mod:dofile("scripts/mods/chaos_wastes_tweaker/_ct_stack_rebroadcast_owner")(mod, { rt_register = _rt_register })
+
 -- Assignment to the forward-declared `sync_host_dependent_state` (see top of file).
 -- Called by the ct_sync_host_settings RPC handler immediately after a client
 -- receives the host's settings payload, so any template/pool mutations gated on
 -- a synced setting are reapplied with the host's values. Apply order mirrors the
 -- one-shot calls each sync_* function does at module load.
 sync_host_dependent_state = function()
+    if mod._ct_official_feature_leaf then mod._ct_official_feature_leaf.reapply_miasma() end
     sync_reckless_swings()
     sync_bomb_cooldown()
     sync_boon_movespeed()
@@ -10796,6 +10665,10 @@ local HOME_BREWER_BREWED_TEMPLATES = {
 CT_HOME_BREWER_MULTIRETURN_MARKER = "home_brewer_add_buff:capture_returns_unpack_v0.7.203"
 
 mod:hook("BuffExtension", "add_buff", function(func, self, template_name, params)
+    mod._ct_official_boon_repairs.before_add_buff(template_name)
+    if template_name == "deus_ammo_pickup_reload_speed" then
+        return mod._ct_official_runtime.add_anath(func, self, template_name, params)
+    end
     if not effective_setting("tweak_home_brewer_potency") then
         return func(self, template_name, params)
     end
@@ -10939,42 +10812,14 @@ end
 -- in `buff_function_templates` (the apply-callback category) which is why THAT hook
 -- worked at the same call site.
 if ProcFunctions and ProcFunctions.chain_lightning then
-    local MANANN_TEMPEST_COOLDOWN_S = 8.0
-    local _manann_tempest_t = setmetatable({}, { __mode = "k" })
-
     mod:hook(ProcFunctions, "chain_lightning", function(func, owner_unit, buff, params, world, param_order)
-        local template = buff and buff.template
-        local template_name = template and template.name
-        local is_boon  = type(template_name) == "string"
-            and string.find(template_name, "^power_up_ct_boon_manann_tempest_") ~= nil
-        local is_trait = template_name == "deus_crit_chain_lightning"
-
-        if not (is_boon or is_trait) then
-            return func(owner_unit, buff, params, world, param_order)
-        end
-        if not effective_setting("tweak_manann_tempest_cooldown") then
-            return func(owner_unit, buff, params, world, param_order)
-        end
-
-        local hit_unit = params[param_order.attacked_unit]
-        local first_hit = params[param_order.first_hit]
-        local is_critical_strike = params[param_order.is_critical_strike]
-        if not (ALIVE[owner_unit] and ALIVE[hit_unit] and first_hit and is_critical_strike) then
-            return func(owner_unit, buff, params, world, param_order)
-        end
-
-        local t = (Managers and Managers.time and Managers.time:time("game")) or 0
-        local bucket = _manann_tempest_t[owner_unit]
-        if not bucket then
-            bucket = { boon_next_t = 0, trait_next_t = 0 }
-            _manann_tempest_t[owner_unit] = bucket
-        end
-        local key = is_boon and "boon_next_t" or "trait_next_t"
-        if t < bucket[key] then
-            return
-        end
-        bucket[key] = t + MANANN_TEMPEST_COOLDOWN_S
-        return func(owner_unit, buff, params, world, param_order)
+        -- _ct_consolidated_chain_lightning_cooldown_dispatch
+        return mod._ct_official_cooldowns.chain_lightning(func, owner_unit, buff, params, world, param_order)
+    end)
+end
+if ProcFunctions and ProcFunctions.grenade_explode_buff_area then
+    mod:hook(ProcFunctions, "grenade_explode_buff_area", function(func, ...)
+        return mod._ct_official_cooldowns.grenade_explode_buff_area(func, ...)
     end)
 end
 
@@ -11149,39 +10994,10 @@ end
 --   5. Restore originals so we don't mutate the shared template.
 if rawget(_G, "TerrorEventMixer") and TerrorEventMixer.init_functions
         and TerrorEventMixer.init_functions.spawn_around_origin_unit then
-    mod:hook(TerrorEventMixer.init_functions, "spawn_around_origin_unit",
-        function(func, event, element, t)
-            if not (element and element.spawn_counter_category == "cursed_chest_enemies") then
-                return func(event, element, t)
-            end
-            local mult = effective_setting("cot_enemy_multiplier")
-            if type(mult) ~= "number" or mult <= 1 then
-                return func(event, element, t)
-            end
-            -- Save + scale. element is the SHARED template; we MUST restore before
-            -- returning so subsequent events see vanilla values.
-            local saved_amount = element.amount
-            if type(saved_amount) == "number" then
-                element.amount = math.max(1, math.floor(saved_amount * mult))
-            end
-            local saved_difficulty_amount = element.difficulty_amount
-            if type(saved_difficulty_amount) == "table" then
-                local scaled = {}
-                for k, v in pairs(saved_difficulty_amount) do
-                    scaled[k] = (type(v) == "number") and math.max(1, math.floor(v * mult)) or v
-                end
-                element.difficulty_amount = scaled
-            end
-
-            local ok, err = pcall(func, event, element, t)
-
-            element.amount = saved_amount
-            element.difficulty_amount = saved_difficulty_amount
-            if not ok then error(err) end
-            _dbg("[cot_enemy_mult] event=%s breed=%s scaled by %.1f (saved orig)",
-                tostring(event and event.event_name or "?"),
-                tostring(element.breed_name), mult)
-        end)
+    mod:hook(TerrorEventMixer.init_functions, "spawn_around_origin_unit", function(func, event, element, t)
+        -- _ct_consolidated_cot_placement_dispatch
+        return mod._ct_official_runtime.spawn_around(func, event, element, t)
+    end)
 end
 
 -- ============================================================
@@ -11384,34 +11200,6 @@ end
 -- proc to once per cooldown duration via vanilla buff_extension cooldown
 -- check (buff_extension.lua:1378-1390). Nuking that field at mod boot makes
 -- every successful timed block fire the proc — no cooldown.
-local function _ct128_strip_parry_cooldowns()
-    local templates = rawget(_G, "DeusPowerUpTemplates")
-    if not (templates and templates.power_ups) then
-        _dbg("[ct128] DeusPowerUpTemplates not ready; parry-cooldown strip skipped")
-        return false
-    end
-    local function strip(name)
-        local pu = templates.power_ups[name]
-        if not (pu and pu.buff_template and pu.buff_template.buffs) then
-            _dbg("[ct128] %s missing or unexpected shape; cooldown strip skipped", name)
-            return
-        end
-        local n_stripped = 0
-        for _, b in ipairs(pu.buff_template.buffs) do
-            if b.cooldown_buff then
-                _dbg("[ct128] %s: stripped cooldown_buff=%s", name, tostring(b.cooldown_buff))
-                b.cooldown_buff = nil
-                n_stripped = n_stripped + 1
-            end
-        end
-        if n_stripped == 0 then
-            _dbg("[ct128] %s: already cooldown-free (no cooldown_buff field)", name)
-        end
-    end
-    strip("static_blade")
-    strip("boon_skulls_03")
-    return true
-end
 -- v0.7.130-dev: the boot-time `pcall(_ct128_strip_parry_cooldowns)` was
 -- removed here. DeusPowerUpTemplates is reliably absent at mod-load time in
 -- VT2 (verified by log line 1308 of console-2026-05-29-02.03.57: "[ct128]
@@ -11731,43 +11519,7 @@ end)
 -- of the call so the proc returns false specifically when the grenade is a Morgrim's Bomb. Other
 -- grenades (frag, fire, conflagration) continue to roll normally.
 mod:hook("ActionChargedProjectileUtility", "fire_charged_projectile", function(func, projectile_context, ...)
-    if not effective_setting("rv_no_save_morgrim")
-        or not projectile_context
-        or projectile_context.item_name ~= "holy_hand_grenade"
-        or not projectile_context.is_grenade
-        or projectile_context.grenade_thrown
-    then
-        return func(projectile_context, ...)
-    end
-
-    local buff_ext = projectile_context.buff_extension
-    if not buff_ext then
-        return func(projectile_context, ...)
-    end
-
-    -- rawget so we know whether the instance had a pre-existing override (vs. inheriting via
-    -- __index from the class). On restore we either reinstate the override or clear our shim.
-    local had_instance_override = rawget(buff_ext, "apply_buffs_to_value") ~= nil
-    local original = buff_ext.apply_buffs_to_value
-    buff_ext.apply_buffs_to_value = function(self, value, stat_buff_name, ...)
-        if stat_buff_name == "not_consume_grenade" then
-            return value, false
-        end
-        return original(self, value, stat_buff_name, ...)
-    end
-
-    local ok, a, b = pcall(func, projectile_context, ...)
-
-    if had_instance_override then
-        buff_ext.apply_buffs_to_value = original
-    else
-        buff_ext.apply_buffs_to_value = nil
-    end
-
-    if not ok then
-        error(a, 0)
-    end
-    return a, b
+    return mod._ct_official_boon_repairs.fire_charged_projectile(func, projectile_context, ...)
 end)
 
 -- Pool-affecting settings: master toggle, per-CW-scenario toggles, and per-adventure
@@ -11782,6 +11534,7 @@ local function is_pool_setting(setting_id)
 end
 
 mod.on_setting_changed = function(setting_id)
+    if mod._ct_official_feature_leaf then mod._ct_official_feature_leaf.reapply_miasma() end
     -- Mutex cluster enforcement (v0.7.81 — see LOCALIZATION_STANDARD.md § 10).
     -- Runs BEFORE everything else so a cluster toggle-on programmatically
     -- unchecks its siblings before downstream apply logic dispatches on the
@@ -11856,7 +11609,7 @@ mod.on_setting_changed = function(setting_id)
     -- comment them out to make the disable explicit (re-enable alongside data.lua + loc).
     -- elseif type(setting_id) == "string" and setting_id:find("^activate_dormant_") == 1 then
     --     sync_dormant_boons()
-    elseif type(setting_id) == "string" and setting_id:find("^ban_grudge_mark_") == 1 then
+    elseif setting_id == "ban_all_grudge_marks" or (type(setting_id) == "string" and setting_id:find("^ban_grudge_mark_") == 1) then
         sync_grudge_marks()
     -- elseif setting_id == "enable_skulls_event_boons" then
     --     sync_skulls_event_boons()
@@ -11915,6 +11668,7 @@ end)
 -- cooldowns) so toggling the mod off via VMF doesn't leave them in a tweaked state until restart.
 -- All other mutations in this mod are scoped (save-and-restore inside hooks).
 mod.on_disabled = function()
+    if mod._ct_official_cooldowns then mod._ct_official_cooldowns.on_disabled() end
     if type(mod._ct_force_wire_inert) == "function" then
         pcall(mod._ct_force_wire_inert, "mod-disabled")
     end
@@ -12698,32 +12452,11 @@ _rt_register("starting_coins_setter_not_adder", function()
 end)
 
 _rt_register("starting_coins_value_matches_setting", function()
-    -- v0.7.95: runtime check — when a CW run is active and our setter
-    -- override applied for this run, verify `get_player_soft_currency(own_peer_id)
-    -- == mod:get("starting_coins")` at run start. Mid-run the balance diverges
-    -- from setting (pickups/spends), so this is a best-effort check gated on
-    -- `_starting_coins_applied_for_run == current_run_id`. If no CW run is
-    -- active, this is a no-op PASS (run from keep gives PASS, run during a
-    -- fresh CW expedition gives a real verify).
+    -- Compare the one post-setup receipt, not the current spendable balance.
+    -- Pickups/purchases after setup must never manufacture a regression.
     local mechanism = Managers and Managers.mechanism and Managers.mechanism:game_mechanism()
-    local rc = mechanism and mechanism.get_deus_run_controller and mechanism:get_deus_run_controller()
-    if not rc then return nil end
-    local run_state = rc._run_state
-    local run_id = run_state and run_state.get_run_id and run_state:get_run_id()
-    if _starting_coins_applied_for_run ~= run_id then
-        return nil
-    end
-    local setting = mod:get("starting_coins")
-    if type(setting) ~= "number" then return nil end
-    local snapped = math.floor(setting / 25 + 0.5) * 25
-    if snapped <= 0 then return nil end
-    local own_peer_id = rc.get_own_peer_id and rc:get_own_peer_id()
-    if not own_peer_id then return "could not resolve own_peer_id" end
-    local balance = rc.get_player_soft_currency and rc:get_player_soft_currency(own_peer_id)
-    if type(balance) ~= "number" then return "could not read balance" end
-    if balance ~= snapped then
-        return string.format("balance=%d != setting=%d (additive-bug regression?)", balance, snapped)
-    end
+    local controller = mechanism and mechanism.get_deus_run_controller and mechanism:get_deus_run_controller()
+    return mod._ct_official_runtime.coins_regression(controller)
 end)
 
 -- v0.7.129-dev altar-reuse fix: regression check that the re-arm hook is on
@@ -12776,24 +12509,7 @@ end)
 -- non-failing "pre-roll, will retry post-roll" status by returning nil only
 -- when both are nil (after the first roll fires `_ct128_strip_parry_cooldowns`).
 _rt_register("parry_cooldowns_stripped_post_load", function()
-    local templates = rawget(_G, "DeusPowerUpTemplates")
-    if not (templates and templates.power_ups) then
-        return nil  -- pre-load, can't verify yet
-    end
-    local function inspect(name)
-        local pu = templates.power_ups[name]
-        if not (pu and pu.buff_template and pu.buff_template.buffs) then return nil end
-        for _, b in ipairs(pu.buff_template.buffs) do
-            if b.cooldown_buff then return b.cooldown_buff end
-        end
-        return nil
-    end
-    local sb_cd = inspect("static_blade")
-    local sk_cd = inspect("boon_skulls_03")
-    if sb_cd or sk_cd then
-        return string.format("cooldown_buff still present (run /ct_regression_test after first boon roll fires deferred init): static_blade=%s boon_skulls_03=%s",
-            tostring(sb_cd), tostring(sk_cd))
-    end
+    return mod._ct342_parry_cooldown_policy.residual_report(rawget(_G, "BuffTemplates"), rawget(_G, "DeusPowerUps"))
 end)
 
 -- v0.7.130-dev CoT enemy multiplier: source-pattern check that the hook

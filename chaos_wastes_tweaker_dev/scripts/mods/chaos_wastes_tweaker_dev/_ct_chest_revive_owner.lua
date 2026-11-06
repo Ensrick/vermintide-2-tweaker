@@ -398,7 +398,8 @@ do
         local ux, uy, uz = _world_xyz(unit)
         local retained = ux and ((ux - x) * (ux - x) + (uy - y) * (uy - y)
             + (uz - z) * (uz - z) <= policy.RETAIN_DISTANCE_SQ)
-        return true, retained and "retained" or "readback-drift"
+        if not retained then return false, "readback-drift" end
+        return true, "retained"
     end
 
     local function _health_alive(entry)

@@ -9,7 +9,8 @@ local report_count = 0
 
 local function enabled()
     local reader = mod._ct_effective_setting
-    return (reader and reader("ct_individual_boon_prices") or mod:get("ct_individual_boon_prices")) == true
+    if type(reader) == "function" then return reader("ct_individual_boon_prices") == true end
+    return mod:get("ct_individual_boon_prices") == true
 end
 
 local function report(fmt, ...)

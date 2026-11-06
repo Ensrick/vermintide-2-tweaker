@@ -1,5 +1,58 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.354-beta (2026-11-06) -- Selective official functional promotion
+
+- Maintainer-authorized promotion of the functional verification queue, not a
+  wholesale Dev clone. Preserves the official observed-order 29-row
+  `ct-public-wire-v1` catalog and every fail-closed public parity boundary.
+- Carry meta-boon stack synchronization and current-ammo bounds (#249, #256),
+  owner-local bomb and Manann cooldown displays (#357, #358), and native TAB
+  collectible counters (#571; counter-only #533 dependency).
+- Carry default-off modifier/elite progression, difficulty progression and
+  independent coin reduction (#289, #323, #460); exact zero-inclusive starting
+  coins (#912); starting shrine purchases and consistent individual boon
+  prices (#1146, #458, #467). Effective host false never falls back to saved true.
+- Carry the chamber-only Single Mission Loader (#505), separate Citadel
+  approach/finale god selection (#146), scoped interior curse lighting
+  (#271, #258), compatible Adventure illusions (#917), missing-only rank-eight
+  curse damage (#470), and non-destructive master controls (#221, #107).
+- Carry native-spaced Chest of Trials placement, eligible-pickup caps and
+  retained-position rescue (#471, #60, #299); transparent linked pickup returns
+  (#322), reused same-tier Reliquary prompt (#252), registered parry cooldowns
+  (#342), and Anath Raema, Vaul and Morgrim repairs (#288, #144, #259).
+- New donor counterexamples are corrected Dev-first in 0.7.354-dev: rescue
+  readback must confirm a near-team landing before release; dead-health relic
+  carriers cannot steal the living Miasma owner (#361); shop readers preserve
+  effective false; ban-all removes only the thirteen authored Grudge Marks,
+  retaining native base/elite/foreign scaffolding.
+- Offline contracts execute actual selected modules and callbacks, plus pinned
+  native immediate/retained Gui routes. These are not gameplay, visual or co-op
+  acceptance. No unrelated previews, new boon catalog, bot-grant replacement,
+  full progression-owner replacement, or feasibility probes are promoted.
+- Verification: `/ct_regression_test`, `/verify_ct_chest_cap`,
+  `/verify_ct_citadel`, `/verify_ct_anath_raema` (alias `/ct_verify_anath_raema`),
+  `/verify_ct_linked_pickups`, `/verify_ct_ammo_bounds`,
+  `/verify_ct_progression`, `/verify_coins`, `/verify_ct_altar_reroll`, and
+  `/verify_ct_trial_placement`. Fresh native readbacks are distinguished from
+  captured scalar receipts; unavailable live contexts report SKIP, not PASS.
+- Explicit section5.1a keep exceptions: a targeted reused-altar UI (#252) and
+  active trial geometry (#471) are not observable from the keep. Their commands
+  show only bounded historical apply receipts and always SKIP live proof. No
+  widget/event/vector handle is retained. Actual prompt/cost/use/reward and
+  placement/telegraph/completion behavior still require the mission cards.
+- Linked axes are checked on each authorized peer while still attached, never
+  inferred from server-only spawn returns. Queued chest deletion is not drained
+  removal; starting-coin initial readback is not the later spendable balance.
+  Active Anath verification checks resolved multiplier/duration/bonus, not just
+  its registry/template. No generic smoke pass substitutes for gameplay cells.
+- Grudge filtering records bounded incoming/kept/removed application-request
+  counts at its existing callback (#107). `/verify_grudge_marks` verifies only
+  the live random-roll pool. The Shadow Lieutenant's hardcoded application is
+  not observable from the keep: its displayed marks and preserved champion
+  behavior require the mission card. A request receipt is not retained-state
+  or gameplay proof; this is the explicit section5.1a keep exception.
+
+
 ## 0.7.132-beta (2026-09-03) — exact public boon/miracle wire parity (#426) [untested] [crash] [0-critical]
 
 - Freezes the existing public catalog at exactly 29 bidirectional

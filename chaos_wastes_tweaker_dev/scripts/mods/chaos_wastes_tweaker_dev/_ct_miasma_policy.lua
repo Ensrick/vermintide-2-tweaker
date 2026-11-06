@@ -28,8 +28,13 @@ function M.interval(value)
 end
 
 function M.select_owner(current_owner, carriers, is_alive)
-    if type(carriers) == "table" and carriers[1] ~= nil then
-        return carriers[1], carriers[1] ~= current_owner
+    if type(carriers) == "table" then
+        for i = 1, #carriers do
+            local carrier = carriers[i]
+            if is_alive(carrier) then
+                return carrier, carrier ~= current_owner
+            end
+        end
     end
     if current_owner ~= nil and is_alive(current_owner) then
         return current_owner, false

@@ -58,6 +58,7 @@
             Source = "_lib_modded_realm_authority.lua"
             Consumers = @(
                 "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_lib_modded_realm_authority.lua"
+                "crafting_in_modded/scripts/mods/crafting_in_modded/_lib_modded_realm_authority.lua"
                 "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_lib_modded_realm_authority.lua"
                 "general_tweaker_dev/scripts/mods/general_tweaker_dev/_lib_modded_realm_authority.lua"
                 "general_tweaker/scripts/mods/general_tweaker/_lib_modded_realm_authority.lua"
@@ -68,6 +69,7 @@
             Source = "_lib_local_illusion_apply.lua"
             Consumers = @(
                 "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_lib_local_illusion_apply.lua"
+                "crafting_in_modded/scripts/mods/crafting_in_modded/_lib_local_illusion_apply.lua"
                 "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_lib_local_illusion_apply.lua"
             )
         }
@@ -86,6 +88,7 @@
             Consumers = @(
                 "character_weapon_variants/scripts/mods/character_weapon_variants/_lib_resource_residency.lua"
                 "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_lib_resource_residency.lua"
+                "crafting_in_modded/scripts/mods/crafting_in_modded/_lib_resource_residency.lua"
                 "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_lib_resource_residency.lua"
                 "general_tweaker/scripts/mods/general_tweaker/_lib_resource_residency.lua"
                 "general_tweaker_dev/scripts/mods/general_tweaker_dev/_lib_resource_residency.lua"

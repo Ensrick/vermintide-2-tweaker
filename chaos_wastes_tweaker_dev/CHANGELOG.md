@@ -1,5 +1,28 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.354-dev (2026-11-06) -- Correct selected fix authority boundaries
+
+- Tighten the existing rescue success boolean: missing, throwing or far-away
+  retained position cannot free the player. Native collision-adjusted landings
+  within the existing three-metre tolerance still succeed; four-error/30-second
+  bounds and the one post-alive correction remain (#299).
+- Filter relic carriers through the existing native health predicate before
+  selecting the Miasma aura owner; a still-existing dead body cannot replace
+  the remembered living owner before native item drop (#361).
+- Preserve a present effective shop reader's false/nil instead of replacing it
+  with saved true. Keep saved fallback only when no reader exists (#458, #467).
+- Ban-all is scoped to the authored thirteen Boss Grudge Marks, retaining
+  native base/elite/termite and foreign enhancements and the selected elite
+  recipe (#107, #221, #323).
+- Four actual-callback suites cover 28 cases. The unchanged donor fails twelve
+  adversarial assertions across the same cases; no historical live cause or
+  gameplay acceptance is inferred. No new hook, RPC or network lookup is added.
+- Verification: `/verify_grudge_marks`, `/ct_boon_price_status`, and
+  `/ct_regression_test`. Rescue retained-position and health/item-drop ordering
+  are mission-only postconditions, not something a keep-only command can prove;
+  their live application receipts and solo-first cards remain required.
+
+
 ## 0.7.353-dev (2026-10-25) -- Implicit replacement progression preservation (#465) [not-started]
 
 - Replacement progression preservation is intrinsic host behavior, as requested.

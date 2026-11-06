@@ -4,7 +4,29 @@ Subset of the monorepo [REGRESSION_CHECKLIST.md](../REGRESSION_CHECKLIST.md) —
 
 Walk every entry below before any release that touches the relevant subsystem. Pair with the repo-root `tools/lint/regression-lint.ps1` (STATIC items at build time) and the `/regression_test` chat command (UNIT/INTEGRATION items at runtime).
 
-Last updated: 2026-05-22.
+Last updated: 2026-11-06.
+
+## Official selective-promotion contracts
+
+- Run `test_cim_official_verify_rollup` alongside all existing CIM, shared Apply
+  and realm suites. Execute the actual official private Forge/Apply installer,
+  ownership/token attacks, rollback, deletion compensation, preview nesting,
+  explicit-false wire clearing and owner-only widget cleanup. Do not substitute
+  Dev production or drop existing acquisition/composition cases.
+- Complete private Standard Forge and illusion installation before publishing
+  providers. Keep live accessors, exact completion acknowledgements and raw
+  once-per-load version telemetry when VMF info logging is disabled.
+- Preserve the three byte-exact canonical shared-library copies and exact
+  native-resource proofs. The closed #524 temporary probe stays retired;
+  Blacksmith/selector acquisition and deduplication remain covered.
+- After authenticated CWV/CIM publication, test Keep and Adventure Athanor;
+  distinct Primary/Secondary previews with dual-melee and melee/ranged controls;
+  rotate/zoom/reopen and unavailable resources; slot-family choices at both
+  craft surfaces; exact owned Apply, immutable seeds/relics and bubble refusal;
+  mixed weapon/accessory cleanup, equipped/favorite/saved exclusions, stale
+  confirmation and restart persistence. Solo cells precede already-owed co-op
+  and hot-join cells. Offline source/callback proof is not native rendering or
+  gameplay acceptance.
 
 ---
 ## Multiplayer / Network Sync

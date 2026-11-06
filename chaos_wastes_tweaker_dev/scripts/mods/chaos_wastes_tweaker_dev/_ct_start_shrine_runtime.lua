@@ -33,7 +33,8 @@ end
 
 local function effective(setting_id)
     local reader = mod._ct_effective_setting
-    return reader and reader(setting_id) or mod:get(setting_id)
+    if type(reader) == "function" then return reader(setting_id) end
+    return mod:get(setting_id)
 end
 
 local function server_flag(drc)
@@ -153,9 +154,7 @@ function M.price(rarity, discount, name)
     local cfg = config()
     if not M.config_valid(cfg) then return nil end
     local exact = mod._ct_boon_pricing_policy
-    local reader = mod._ct_effective_setting
-    local exact_enabled = (reader and reader("ct_individual_boon_prices")
-        or mod:get("ct_individual_boon_prices")) == true
+    local exact_enabled = effective("ct_individual_boon_prices") == true
     if exact_enabled and exact and type(exact.price) == "function" then
         return exact.price(name, rarity, discount, cfg.ct_cost_percent)
     end

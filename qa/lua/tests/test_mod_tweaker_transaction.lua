@@ -313,9 +313,10 @@ return function(H, repo_root)
             "callback/application work must be bounded by Equipment owner count")
     end)
 
-    H.test("Every in-flight Equipment owner opts into the bounded transaction", function()
+    H.test("Every coalescing Equipment owner opts into the bounded transaction", function()
         local paths = {
             "/cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_settings_runtime.lua",
+            "/crafting_in_modded/scripts/mods/crafting_in_modded/_cim_settings_runtime.lua",
             "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_settings_runtime.lua",
             "/weapon_tweaker/scripts/mods/weapon_tweaker/_wt_settings_runtime.lua",
             "/weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_settings_runtime.lua",
@@ -330,7 +331,7 @@ return function(H, repo_root)
         end
     end)
 
-    H.test("CIM dev coalesces settings while stable fallback remains bounded", function()
+    H.test("Both CIM streams coalesce settings through their actual owners", function()
         local dev_path =
             "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_settings_runtime.lua"
         local Runtime = assert(loadfile(repo_root .. dev_path))()
@@ -345,17 +346,29 @@ return function(H, repo_root)
         H.equal(applies, 2, "CIM dev applies once per completion path")
         H.equal(records, 1, "CIM dev records one batch completion")
 
-        -- Stable split streams do not receive in-flight fixes. Its legacy
-        -- callback is nevertheless bounded: only one exact setting can invoke
-        -- the sole heavyweight re-apply during a per-setting fallback reset.
-        local stable_path =
-            "/crafting_in_modded/scripts/mods/crafting_in_modded/crafting_in_modded.lua"
-        local file = assert(io.open(repo_root .. stable_path, "rb"))
-        local stable = file:read("*a")
-        file:close()
-        H.truthy(stable:find(
-            'mod%.on_setting_changed = function%(setting_id%)%s+if setting_id == "movespeed_2pct_mode" then%s+_patch_movespeed_buff%(%)%s+end%s+end'
-        ), "stable CIM fallback must keep heavyweight work behind one exact setting")
+        -- The authorized official promotion now has the same bounded owner,
+        -- without the excluded Dev diagnostic completion emitter.
+        local public_root = repo_root
+            .. "/crafting_in_modded/scripts/mods/crafting_in_modded/"
+        local PublicRuntime = assert(loadfile(public_root .. "_cim_settings_runtime.lua"))()
+        local public_mod, public_applies, public_records = {}, 0, 0
+        PublicRuntime.install(public_mod,
+            function() public_applies = public_applies + 1 end,
+            function() public_records = public_records + 1 end)
+        public_mod.on_setting_changed("unrelated")
+        public_mod.on_settings_batch_changed({ "unrelated", "unrelated" })
+        H.equal(public_applies, 0, "unrelated public settings must never reapply")
+        public_mod.on_setting_changed("movespeed_2pct_mode")
+        public_mod.on_settings_batch_changed({
+            "unrelated", "movespeed_2pct_mode", "movespeed_2pct_mode",
+        })
+        H.equal(public_applies, 2, "official CIM applies once per completion path")
+        H.equal(public_records, 0, "official promotion excludes the Dev batch probe")
+        local file = assert(io.open(public_root .. "_cim_weave_loadout_owner.lua", "rb"))
+        local owner = file:read("*a"); file:close()
+        H.truthy(owner:find(
+            'mod:dofile("scripts/mods/crafting_in_modded/_cim_settings_runtime")', 1, true))
+        H.truthy(owner:find('_settings_runtime.install(mod, _patch_movespeed_buff, printf)', 1, true))
     end)
 
     H.test("Both Mod Tweaker views retain failed owner buffers", function()

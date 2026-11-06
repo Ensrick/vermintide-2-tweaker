@@ -243,6 +243,9 @@ return function(H, repo_root)
             if path == "scripts/mods/crafting_in_modded_dev/standard_forge" then
                 return assert(loadfile(root .. "standard_forge.lua"))()
             end
+            if path:find("_cim_standard_forge_presentation", 1, true) then
+                return assert(loadfile(root .. "_cim_standard_forge_presentation.lua"))()
+            end
             if path:find("_cim_direct_craft_owner", 1, true) then
                 return install_direct_owner
             end

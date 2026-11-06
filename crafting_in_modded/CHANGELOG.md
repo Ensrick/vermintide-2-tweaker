@@ -1,5 +1,42 @@
 # Crafting in Modded Changelog
 
+## 0.8.148 (2026-11-06) -- Selective official functional promotion
+
+- Promote the eleven functional verification islands and the required
+  current-game Apply prerequisite, not the whole Dev stream. Keep native-first
+  realm V2, one private Apply class, full Standard Forge completion and ordered
+  illusion installation before provider publication (#1465).
+- Retain the Morris particle package for crafted Chaos Wastes traits (#947),
+  exact borrowed-renderer resource proofs (#749), safe in-mission Athanor
+  picker/materials and distinct Primary/Secondary previews (#404, #882).
+- Carry the Dev-first native retained-Gui correction from0.8.148-dev: target
+  selection follows the pass's retained mode, and missing retained handles do
+  not fall back to an unrelated immediate proof. Native-source counterexamples
+  and real guard glue tests qualify the same narrow correction in both streams.
+- Reject missing/accessory slot families for Chaos Wastes weapon traits;
+  retain the independent family oracle (#414, with #1122 supporting coverage).
+- Keep Hold-Tab rarity metadata sender-primed and tri-state, reject unknown
+  identities before decode, and restore only the proven local owner's Cursed
+  widget writes (#921, #598).
+- Unify exact-provider salvage, single deletion and accessory-aware bulk
+  cleanup behind compensated local transactions. Preserve equipped, saved and
+  favorite protections and stale-confirmation refusal (#277, #628, #822).
+- Stage Temper Item edits behind Apply; authenticate Blacksmith/owned-instance
+  identity, mirror tokens and representable property values before commit,
+  retaining readback, compensation and refresh containment (#1141).
+- Use the already-injected raw engine printer for the permanent version/load
+  banner, so disabled VMF info logging cannot hide the build identity. Retire
+  the closed temporary #524 probe while retaining selector coverage.
+- Requires the authenticated CWV 0.1.570-dev preview-context consumer where CWV
+  is installed. No Community Builds browser/fetch/import API, restoration probe
+  (#1654), or new debug emitter (#1694) is promoted.
+- Verification: `/cim_regression_test` plus the published issue-specific cards.
+  The 150 selected offline cases cover installed callbacks, identity attacks,
+  rollback and native-source fixtures, not actual renderer/gameplay acceptance.
+  Mission previews, native package handles and host/client presentation need
+  their named live contexts and cannot be established from the keep alone.
+
+
 ## 0.8.92 (2026-08-01) - #48 custom-glow fallback notice [verify-fix]
 
 - When saved CIM weapons contain opaque custom-glow data but Tweaker:

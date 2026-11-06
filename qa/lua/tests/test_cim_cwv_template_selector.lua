@@ -249,9 +249,52 @@ return function(H, repo_root)
 		local stable_file = assert(io.open(stable_path, "rb"))
 		local stable_source = stable_file:read("*a")
 		stable_file:close()
-		-- Stable remains promotion-only; this dev contract moves with the next
-		-- explicitly authorized CIM promotion rather than leaking into stable.
-		H.truthy(stable_source:find("mod._cim592_cwv_registration_only = true", 1, true))
-		H.equal(stable_source:find("mod._cim592_cwv_bounded_seed", 1, true), nil)
+        -- Authorized official promotion carries the same bounded acquisition
+        -- contract while retiring closed-524 observation-only instrumentation.
+        H.truthy(stable_source:find("mod._cim592_cwv_bounded_seed = true", 1, true))
+        H.equal(stable_source:find("mod._cim592_cwv_registration_only", 1, true), nil)
+        H.equal(stable_source:find("_cim_diag_524", 1, true), nil)
+        H.equal(stable_source:find("[cim:524]", 1, true), nil)
+        local public_root = repo_root .. "/crafting_in_modded/scripts/mods/crafting_in_modded/"
+        local function public_read(name)
+            local file = assert(io.open(public_root .. name, "rb"))
+            local text = file:read("*a"); file:close()
+            return text
+        end
+        H.equal(public_read("crafting_in_modded.lua"):find("_cim_diag_524", 1, true), nil)
+        local checks = public_read("_cim_regression_checks.lua")
+        H.equal(checks:find("issue524_render_diagnostics_armed", 1, true), nil)
+        for _, check in ipairs({
+            "issue524_cwv_selector_bounded",
+            "issue524_all_cwv_blacksmith_selectors",
+            "issue524_native_craft_families_deduplicated",
+        }) do
+            H.truthy(checks:find(check, 1, true), "functional acquisition regression retired: " .. check)
+        end
+        local diagnostic = io.open(public_root .. "_cim_diag_524.lua", "rb")
+        if diagnostic then diagnostic:close() end
+        H.equal(diagnostic, nil, "closed diagnostic must be removed from compiler input")
+        local ownership_file = assert(io.open(repo_root .. "/qa/diagnostic_ownership.psd1", "rb"))
+        local ownership = ownership_file:read("*a"); ownership_file:close()
+        H.equal(ownership:find(
+            "crafting_in_modded/scripts/mods/crafting_in_modded/_cim_diag_524.lua", 1, true), nil)
+
     end)
+
+    H.test("official acquisition selectors preserve real seed and distinct variant identity", function()
+        local Public = assert(loadfile(repo_root
+            .. "/crafting_in_modded/scripts/mods/crafting_in_modded/_cim_template_selector.lua"))()
+        local seed = { backend_id = "cwv_es_longsword_001", key = "es_bastard_sword",
+            rarity = "default", power_level = 5,
+            data = { slot_type = "melee", item_type = "es_bastard_sword" } }
+        local crafted = { backend_id = "cwv_es_longsword_100", rarity = "modded",
+            data = { slot_type = "melee", cwv_key = "cwv_es_longsword" } }
+        local twin, other = selector("cwv_es_longsword"), selector("cwv_es_longsword_variant")
+        local rows = { crafted, twin, seed, twin }
+        Public.inject(rows, { twin, other })
+        H.equal(#rows, 2); H.equal(rows[1], seed); H.equal(rows[2], other)
+        Public.inject(rows, { twin, other })
+        H.equal(#rows, 2); H.equal(rows[1], seed); H.equal(rows[2], other)
+    end)
+
 end
