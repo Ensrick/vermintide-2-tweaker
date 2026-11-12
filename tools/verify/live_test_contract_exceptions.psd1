@@ -303,7 +303,7 @@
         }
         @{
             Marker='[wt:282]'; ModIds=@('wt','wt_dev')
-            ModTrees=@{wt='ba2cdbc1f5dfc20b34c635ae6247508dd4c615c7';wt_dev='ee55f05dd1df5016c7b2129164e27425b67ee614'}
+            ModTrees=@{wt='089f9d0e0a62c8836d8eefb8085eb7a0982e499e';wt_dev='ee55f05dd1df5016c7b2129164e27425b67ee614'}
             SourcesByMod=@{
                 wt='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_deepwood_runtime.lua'
                 wt_dev='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_deepwood_runtime.lua'
@@ -717,7 +717,7 @@ end'
             )
         }
         @{
-            Marker='[wt:388]';ModIds=@('wt','wt_dev');ModTrees=@{wt='ba2cdbc1f5dfc20b34c635ae6247508dd4c615c7';wt_dev='ee55f05dd1df5016c7b2129164e27425b67ee614'}
+            Marker='[wt:388]';ModIds=@('wt','wt_dev');ModTrees=@{wt='089f9d0e0a62c8836d8eefb8085eb7a0982e499e';wt_dev='ee55f05dd1df5016c7b2129164e27425b67ee614'}
             SourcesByMod=@{wt='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_overcharge_presentation.lua';wt_dev='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_overcharge_presentation.lua'}
             Signature='[wt:388] Deepwood overcharge HUD hook installed';Bound='one HUD-hook installation receipt per module lifetime'
             EmitterAnchors=@('printf ( "[wt:388] Deepwood overcharge HUD hook installed" )')
@@ -727,7 +727,7 @@ end'
             )
         }
         @{
-            Marker='[wt:388]';ModIds=@('wt','wt_dev');ModTrees=@{wt='ba2cdbc1f5dfc20b34c635ae6247508dd4c615c7';wt_dev='ee55f05dd1df5016c7b2129164e27425b67ee614'}
+            Marker='[wt:388]';ModIds=@('wt','wt_dev');ModTrees=@{wt='089f9d0e0a62c8836d8eefb8085eb7a0982e499e';wt_dev='ee55f05dd1df5016c7b2129164e27425b67ee614'}
             SourcesByMod=@{wt='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_overcharge_presentation.lua';wt_dev='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_overcharge_presentation.lua'}
             Signature='[wt:388] Deepwood overcharge profile applied career=%s transport=owner-authoritative';Bound='one apply receipt per inactive-to-active extension transition'
             EmitterAnchors=@('printf ( "[wt:388] Deepwood overcharge profile applied career=%s transport=owner-authoritative"')
@@ -737,7 +737,7 @@ end'
             )
         }
         @{
-            Marker='[wt:388]';ModIds=@('wt','wt_dev');ModTrees=@{wt='ba2cdbc1f5dfc20b34c635ae6247508dd4c615c7';wt_dev='ee55f05dd1df5016c7b2129164e27425b67ee614'}
+            Marker='[wt:388]';ModIds=@('wt','wt_dev');ModTrees=@{wt='089f9d0e0a62c8836d8eefb8085eb7a0982e499e';wt_dev='ee55f05dd1df5016c7b2129164e27425b67ee614'}
             SourcesByMod=@{wt='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_overcharge_presentation.lua';wt_dev='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_overcharge_presentation.lua'}
             Signature='[wt:388] Deepwood overcharge profile restored';Bound='one restore receipt per active-to-inactive extension transition'
             EmitterAnchors=@('printf ( "[wt:388] Deepwood overcharge profile restored" )')
@@ -1584,7 +1584,7 @@ end
         # Explicit verdicts own /verify_wt_loadout_cache; automatic trace shares
         # one 64-attempt budget per installed backend closure, including resets.
         @{
-            ModId='wt'; ModTree='ba2cdbc1f5dfc20b34c635ae6247508dd4c615c7'
+            ModId='wt'; ModTree='089f9d0e0a62c8836d8eefb8085eb7a0982e499e'
             Source='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_diagnostics.lua'
             Marker='[wt:1190]'; Signature='[wt:1190] verify result=not-ready'
             Bound='at most one verdict per explicit /verify_wt_loadout_cache invocation; unavailable-backend branch returns before the normal verdict'
@@ -1615,7 +1615,7 @@ mod:command("verify_wt_loadout_cache",
             )
         }
         @{
-            ModId='wt'; ModTree='ba2cdbc1f5dfc20b34c635ae6247508dd4c615c7'
+            ModId='wt'; ModTree='089f9d0e0a62c8836d8eefb8085eb7a0982e499e'
             Source='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_diagnostics.lua'
             Marker='[wt:1190]'; Signature='[wt:1190] verify result=%s %s'
             Bound='at most one verdict per explicit /verify_wt_loadout_cache invocation; one verifier call and one normal printf after the unavailable-backend branch returns'
@@ -1646,7 +1646,7 @@ mod:command("verify_wt_loadout_cache",
             )
         }
         @{
-            ModId='wt'; ModTree='ba2cdbc1f5dfc20b34c635ae6247508dd4c615c7'
+            ModId='wt'; ModTree='089f9d0e0a62c8836d8eefb8085eb7a0982e499e'
             Source='weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_backend.lua'
             Marker='[wt:1190]'; Signature='[wt:1190] action=%s career=%s row=%s slot=%s weapon=%s result=%s'
             Bound='at most 64 automatic trace attempts per installed backend closure; deduplication and budget consumption precede printf, and verifier reset does not replenish the trace budget'
