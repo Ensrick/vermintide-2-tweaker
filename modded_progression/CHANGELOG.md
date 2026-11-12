@@ -1,5 +1,20 @@
 # Modded Progression — Changelog
 
+## 0.2.52-dev (2026-11-12) -- Reissue bounded Progression observations (#1684, #1692) [not-started]
+
+- Reissue the prepared cached-login and native-ending diagnostics under a fresh
+  permanent reservation after the separately approved #724 migration. Preserve
+  the stale 0.2.51-dev claim, partial GitHub publication and original failures as
+  historical evidence; they do not authorize this candidate's publication.
+- Runtime behavior is unchanged apart from the version banner. Login inspection
+  remains cached-only and bounded to eleven rows; the native-ending collector
+  retains its shared twelve-attempt budget. No backend fetch, reward claim,
+  local login schedule, chest grant or account-protection change is introduced.
+- Keep the private Workshop identity, configuration and existing diagnostics.
+  Fresh canonical build, protected review, publication authentication and exact
+  finite-source/card qualification are required before a live-test invitation.
+  No game, reward, persistence or account-safety acceptance is claimed.
+
 ## 0.2.51-dev (2026-10-30) -- Inspect cached login rewards without requests (#1684)
 
 - Add `/mp_login_diag <day/index>` to the existing read-only census owner.
