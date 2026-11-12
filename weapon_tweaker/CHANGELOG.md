@@ -1,5 +1,20 @@
 # Weapon Tweaker Changelog
 
+## 0.12.343-beta (2026-11-12) -- Reissue finite Flame Sword capture (#942) [not-started]
+
+- Reissue the prepared finite calculation capture under a fresh permanent
+  reservation after the separately approved #724 migration. Preserve the stale
+  0.12.342-beta reservation and its source/artifact evidence; do not renew it or
+  borrow the previous public release's Workshop proof.
+- Keep gameplay, settings, defaults, existing protocol and all eight-observation
+  capture boundaries unchanged. The explicit one-shot dump remains bounded to
+  ten ASCII log rows; calculated damage is not enemy health loss or a vanilla
+  counterfactual. Burning damage, nova area, heat decay and #943 remain separate.
+- Mirror this runtime in Dev 0.12.344-dev while preserving both Workshop items,
+  namespaces, visibility and previews. Canonical build/review/publication and
+  exact post-ship receipt admission precede any new live diagnostic card.
+  No game, transition, combat or multiplayer acceptance is claimed.
+
 ## 0.12.342-beta (2026-10-30) -- Finite Flame Sword observations (#942)
 
 - Add explicit `/wt_heat_capture arm`, `dump` and `clear` operations through

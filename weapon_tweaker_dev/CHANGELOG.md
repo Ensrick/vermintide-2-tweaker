@@ -1,5 +1,19 @@
 # Weapon Tweaker Changelog
 
+## 0.12.344-dev (2026-11-12) -- Mirror reissued Flame Sword capture (#942) [not-started]
+
+- Mirror public 0.12.343-beta's version-only reissue under the fresh permanent
+  reservation from the separately approved #724 migration. Retain the stale
+  0.12.343-dev candidate and its original reservation as historical evidence,
+  not current publication authority.
+- Preserve normalized runtime parity, Dev namespace, friends-only Workshop
+  identity, preview and diagnostic overlay. No gameplay/default, hook, RPC,
+  balance arithmetic, capture budget or one-shot output behavior is changed.
+- Complete the normal canonical source/artifact/protected QA/publication path
+  and exact post-ship source qualification before a new live-test invitation.
+  Existing source tests do not establish installed playback, combat, transition,
+  remote presentation or multiplayer acceptance.
+
 ## 0.12.343-dev (2026-10-30) -- Mirror finite Flame Sword observations (#942)
 
 - Mirror public 0.12.342-beta's explicit eight-observation Flame Sword capture
