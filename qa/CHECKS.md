@@ -144,6 +144,7 @@ The following checks are pinned in `run_all.ps1` to a non-default policy via the
 
 | Check | Policy | Reason |
 |---|---|---|
+| `check_mp_login_source_contract` | `Blocking` | #1684: exact three synthetic login routes require the audited complete MP51 entry/owner token contract, allowing only the single version literal matched to each actual view's cfg or selected deployment. Before the Quick exit, normal QA checks real index plus working source; `-Staged` checks only stage-zero index, and hosted QA also checks committed HEAD. The shared assertion runs on actual immutable selected deployed documents before route overrides. Absent rows are inert; partial/widened presence, source/owner/logger drift and stale oracle substitution fail closed. The existing live-source self-test owns 19 focused real-Git view/selected-source cases; no publication or gameplay acceptance is inferred. |
 | `check_published_ids` | `Blocking` | Signals a real published_id collision (Workshop-item hijack) via **exit 1**. Any non-zero from it is a hard error, so it must fail the gate despite using exit 1. |
 | `check_in_progress` | `Advisory` | Multi-agent coordination surface only ("Never blocks - just surfaces awareness", per CLAUDE.md). No exit code it returns (including exit 2 on a malformed sentinel) ever fails the gate; a non-zero is reported as an advisory notice. |
 | `check_worktree_budget` | `Standard` | Blocking local-capacity guard added after the 2026-07-30 cleanup found 707 registered worktrees and reclaimed at least 323.81 GiB. It excludes the primary checkout, permits at most 8 secondary worktrees using at most 12 GiB combined, warns above 2 GiB per tree, and never deletes. CI normally has zero secondary worktrees. Its offline `-SelfTest` covers count, disk, primary exclusion, large-tree warnings, and stale registrations; `run_selftests.ps1` also exercises the lifecycle wrapper's Windows self-close boundary. |
@@ -908,6 +909,18 @@ fresh invocation budget, lossy/incomplete SKIP behavior and installed delegation
 The four SKIP signatures and a forged automatic same-marker sibling receive no
 permission. This is finite diagnostic-source qualification, not live rendering,
 remote-peer acceptance or a new Workshop publication.
+
+The MP login raw-source contract is shared between deployed classification and
+actual candidate QA. The original full documents remain unchanged; only a
+comparison digest treats the unique MOD_VERSION string as a version field,
+and its real value must match the independent view cfg/selected deployment.
+It does not relax the generic raw-printf scanner, pin finalization, safe-data
+limits, family/discovery rules or uploader. The tiny disposable-Git integration
+fixture checks bad index with clean working source, the reverse, bad committed
+HEAD with repaired candidate views, independently differing 51/52 versions,
+stale caller Tokens over changed Content, and source/metadata refusal paths.
+Both PS7 and PS5.1 are supported; the original immutable oracle is MP51 tree
+`6325090f4667757eb97e7b4011a5406aa375acc9`, not a substitute for the actual subject.
 
 ## How to add a check
 

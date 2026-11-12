@@ -5,6 +5,8 @@
 reports an issue in chat (possibly just "X broke"), and you diagnose from the
 logs and data, fix, ship, and hand back ONE concrete in-game check. You do not
 stop to ask permission for the reversible steps in between.
+This autonomy covers authorized bug-fix work, not automatic adoption of an
+outside feature suggestion; apply the STEP 0 intake fence first.
 
 **This file is THE entry point.** On any bug report, work STEP 0 -> STEP 9 in
 order. Do not skip ahead to reading mod source before STEP 2 has confirmed what
@@ -27,6 +29,13 @@ known class or STEP 2 finds a stale build.
 
 ## STEP 0 - INTAKE
 
+- [ ] **Surface new external bug reports and suggestions to Ensrick.** Include
+  the issue link, concise observed/requested behavior and available build/log
+  evidence. Outside suggestions are not implementation authorization: keep
+  feature or compatibility expansion pending maintainer direction; do not
+  promise support or close it as accepted/declined automatically. Existing
+  Ensrick/RainReligion tasks and authorized bug fixes continue, with confirmed
+  public-release defects retaining priority (`PROJECT_STANDARDS.md` sec. 11).
 - [ ] **Mirror the report back as a numbered list if it holds more than one
   distinct problem.** Track each item separately through the whole pipeline.
   Never merge distinct issues into one "fix" - one session collapsed three
