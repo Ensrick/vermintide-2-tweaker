@@ -922,6 +922,17 @@ stale caller Tokens over changed Content, and source/metadata refusal paths.
 Both PS7 and PS5.1 are supported; the original immutable oracle is MP51 tree
 `6325090f4667757eb97e7b4011a5406aa375acc9`, not a substitute for the actual subject.
 
+The same `check_live_test_contract.ps1 -SelfTest` also runs
+`Test-VtWt942ReceiptRouteContract` after actual WT route metadata adoption.
+It reads three unchanged Lua witnesses from each consumed public/Dev immutable
+scripts tree without implicit network hydration. Three exact begin/row/end
+capture routes per stream belong only to `/wt_heat_capture`; this grants no
+synthetic AddRoute, family/discovery permission or unrelated inert receipt.
+Controls cover the eight-observation bound, validated finite ASCII rows,
+consumed dump, command delegation, missing/foreign witnesses, raw/global
+printf shadowing, and ambiguous or commandless card selectors. This is
+diagnostic-source qualification, not gameplay/peer acceptance or a publication.
+
 ## How to add a check
 
 When a new bug class is discovered:
