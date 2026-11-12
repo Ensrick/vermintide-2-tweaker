@@ -902,6 +902,8 @@ end)
     Test-VtCwv719ReceiptRouteContract -Root (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) | Out-Null
     . (Join-Path $PSScriptRoot 'mp_login_source_contract_test.ps1')
     Test-VtMpLoginSourceContract -Root (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) | Out-Null
+    . (Join-Path $PSScriptRoot 'wt942_receipt_route_contract.ps1')
+    Test-VtWt942ReceiptRouteContract -Root (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) | Out-Null
 
     $tempBase = [IO.Path]::GetTempPath()
     $tmp = Join-Path $tempBase ('vt2-live-card-contract-' + [guid]::NewGuid().ToString('N'))

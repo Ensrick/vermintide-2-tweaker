@@ -1,4 +1,3 @@
-# GENERATED DIAGNOSTIC MP-FIRST PREVIEW ONLY - NONAUTHORITY; CANDIDATE TREE IS NOT A DEPLOYED PIN.
 # Audited exceptions for the CURRENT LIVE TEST authority scanner.
 #
 # Keep this file narrow and immutable-source-addressed. An exception is never
@@ -303,7 +302,7 @@
         }
         @{
             Marker='[wt:282]'; ModIds=@('wt','wt_dev')
-            ModTrees=@{wt='089f9d0e0a62c8836d8eefb8085eb7a0982e499e';wt_dev='ee55f05dd1df5016c7b2129164e27425b67ee614'}
+            ModTrees=@{wt='089f9d0e0a62c8836d8eefb8085eb7a0982e499e';wt_dev='22d3dc8f8e61d8bf363f587a90755ff5848505bc'}
             SourcesByMod=@{
                 wt='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_deepwood_runtime.lua'
                 wt_dev='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_deepwood_runtime.lua'
@@ -717,7 +716,7 @@ end'
             )
         }
         @{
-            Marker='[wt:388]';ModIds=@('wt','wt_dev');ModTrees=@{wt='089f9d0e0a62c8836d8eefb8085eb7a0982e499e';wt_dev='ee55f05dd1df5016c7b2129164e27425b67ee614'}
+            Marker='[wt:388]';ModIds=@('wt','wt_dev');ModTrees=@{wt='089f9d0e0a62c8836d8eefb8085eb7a0982e499e';wt_dev='22d3dc8f8e61d8bf363f587a90755ff5848505bc'}
             SourcesByMod=@{wt='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_overcharge_presentation.lua';wt_dev='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_overcharge_presentation.lua'}
             Signature='[wt:388] Deepwood overcharge HUD hook installed';Bound='one HUD-hook installation receipt per module lifetime'
             EmitterAnchors=@('printf ( "[wt:388] Deepwood overcharge HUD hook installed" )')
@@ -727,7 +726,7 @@ end'
             )
         }
         @{
-            Marker='[wt:388]';ModIds=@('wt','wt_dev');ModTrees=@{wt='089f9d0e0a62c8836d8eefb8085eb7a0982e499e';wt_dev='ee55f05dd1df5016c7b2129164e27425b67ee614'}
+            Marker='[wt:388]';ModIds=@('wt','wt_dev');ModTrees=@{wt='089f9d0e0a62c8836d8eefb8085eb7a0982e499e';wt_dev='22d3dc8f8e61d8bf363f587a90755ff5848505bc'}
             SourcesByMod=@{wt='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_overcharge_presentation.lua';wt_dev='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_overcharge_presentation.lua'}
             Signature='[wt:388] Deepwood overcharge profile applied career=%s transport=owner-authoritative';Bound='one apply receipt per inactive-to-active extension transition'
             EmitterAnchors=@('printf ( "[wt:388] Deepwood overcharge profile applied career=%s transport=owner-authoritative"')
@@ -737,7 +736,7 @@ end'
             )
         }
         @{
-            Marker='[wt:388]';ModIds=@('wt','wt_dev');ModTrees=@{wt='089f9d0e0a62c8836d8eefb8085eb7a0982e499e';wt_dev='ee55f05dd1df5016c7b2129164e27425b67ee614'}
+            Marker='[wt:388]';ModIds=@('wt','wt_dev');ModTrees=@{wt='089f9d0e0a62c8836d8eefb8085eb7a0982e499e';wt_dev='22d3dc8f8e61d8bf363f587a90755ff5848505bc'}
             SourcesByMod=@{wt='weapon_tweaker/scripts/mods/weapon_tweaker/_wt_overcharge_presentation.lua';wt_dev='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_overcharge_presentation.lua'}
             Signature='[wt:388] Deepwood overcharge profile restored';Bound='one restore receipt per active-to-inactive extension transition'
             EmitterAnchors=@('printf ( "[wt:388] Deepwood overcharge profile restored" )')
@@ -1735,7 +1734,7 @@ end
             )
         }
         @{
-            ModId='wt_dev'; ModTree='ee55f05dd1df5016c7b2129164e27425b67ee614'
+            ModId='wt_dev'; ModTree='22d3dc8f8e61d8bf363f587a90755ff5848505bc'
             Source='weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_weapon_action_lifecycle.lua'
             Marker='[wt:661]'
             Signature='[wt:661] wield-boundary item=%s career=%s template=%s result=%s trace=%d/%d'
@@ -2488,6 +2487,672 @@ end)',
 'ModTree' = '364e82717f903705f36a5414afcc1d0318c50b43';
 'Signature' = '[mp:1684] %s';
 'Source' = 'modded_progression/scripts/mods/modded_progression/modded_progression.lua'
+}
+@{
+'ActionCommands' = @(
+'/wt_heat_capture'
+);
+'Bound' = 'one begin per explicit /wt_heat_capture dump; entire buffer validated before emission, at most eight data rows plus begin/end, at most 960 printable ASCII bytes per payload; pending buffer consumed before command output';
+'EmitterAnchors' = @(
+'printf("[wt:942:capture] begin %s", data.header)'
+);
+'GuardAnchors' = @(
+'mod:command("wt_heat_capture", "Finite Flame Sword calculation capture: arm, dump or clear",
+    function(action, ...)
+        if select("#", ...) ~= 0 or (action ~= "arm" and action ~= "dump" and action ~= "clear") then
+            mod:echo("[wt_heat_capture] usage: arm, dump or clear")
+            return
+        end
+        local owner = rawget(mod, "_wt942_owner")
+        local capture = type(owner) == "table" and rawget(owner, "capture")
+        if type(capture) ~= "function" then
+            mod:echo("[wt_heat_capture] owner not ready")
+            return
+        end
+        local ok, data, status = pcall(capture, owner, action)
+        if not ok then mod:echo("[wt_heat_capture] capture unavailable"); return end
+        if action ~= "dump" or type(data) ~= "table" then
+            mod:echo("[wt_heat_capture] %s", data == true and status or "not ready/no pending capture")
+            return
+        end
+        local function bounded(value)
+            return type(value) == "string" and #value <= 960
+                and not value:find("[^ -~]")
+        end
+        if type(data.count) ~= "number" or data.count < 0 or data.count > 8
+                or data.count % 1 ~= 0 or type(data.rows) ~= "table" or not bounded(data.header) then
+            mod:echo("[wt_heat_capture] malformed capture refused")
+            return
+        end
+        for index = 1, 8 do
+            if index <= data.count and not bounded(rawget(data.rows, index)) then
+                mod:echo("[wt_heat_capture] malformed row refused")
+                return
+            end
+        end
+        printf("[wt:942:capture] begin %s", data.header)
+        for index = 1, 8 do
+            if index > data.count then break end
+            printf("[wt:942:capture] row=%s", rawget(data.rows, index))
+        end
+        printf("[wt:942:capture] end count=%d", data.count)
+    end)',
+@{
+'Source' = 'weapon_tweaker/scripts/mods/weapon_tweaker/_wt_fire_sword_heat_runtime.lua';
+'Tokens' = 'function',
+'runtime',
+':',
+'capture_dump',
+'(',
+')',
+'if',
+'not',
+'capture',
+'or',
+'not',
+'capture',
+'.',
+'pending',
+'then',
+'return',
+'nil',
+',',
+'String:no-pending-capture',
+'end',
+'live_capture',
+'(',
+')',
+'stop',
+'(',
+'String:dumped',
+')',
+'capture',
+'.',
+'pending',
+'=',
+'false',
+'local',
+'rows',
+'=',
+'{',
+'}'
+},
+@{
+'Source' = 'weapon_tweaker/scripts/mods/weapon_tweaker/_wt_fire_sword_owner.lua';
+'Tokens' = 'if',
+'action',
+'==',
+'String:dump',
+'then',
+'return',
+'runtime',
+':',
+'capture_dump',
+'(',
+')',
+'end'
+}
+);
+'Marker' = '[wt:942:capture]';
+'ModId' = 'wt';
+'ModTree' = '089f9d0e0a62c8836d8eefb8085eb7a0982e499e';
+'Signature' = '[wt:942:capture] begin %s';
+'Source' = 'weapon_tweaker/scripts/mods/weapon_tweaker/_wt_diagnostics.lua'
+}
+@{
+'ActionCommands' = @(
+'/wt_heat_capture'
+);
+'Bound' = 'at most eight row emissions per explicit /wt_heat_capture dump; integer count in 0..8, entire payload set validated as strings of at most 960 printable ASCII bytes before any output; loop is fixed at eight and breaks after count; pending buffer consumed before command output';
+'EmitterAnchors' = @(
+'printf("[wt:942:capture] row=%s", rawget(data.rows, index))'
+);
+'GuardAnchors' = @(
+'mod:command("wt_heat_capture", "Finite Flame Sword calculation capture: arm, dump or clear",
+    function(action, ...)
+        if select("#", ...) ~= 0 or (action ~= "arm" and action ~= "dump" and action ~= "clear") then
+            mod:echo("[wt_heat_capture] usage: arm, dump or clear")
+            return
+        end
+        local owner = rawget(mod, "_wt942_owner")
+        local capture = type(owner) == "table" and rawget(owner, "capture")
+        if type(capture) ~= "function" then
+            mod:echo("[wt_heat_capture] owner not ready")
+            return
+        end
+        local ok, data, status = pcall(capture, owner, action)
+        if not ok then mod:echo("[wt_heat_capture] capture unavailable"); return end
+        if action ~= "dump" or type(data) ~= "table" then
+            mod:echo("[wt_heat_capture] %s", data == true and status or "not ready/no pending capture")
+            return
+        end
+        local function bounded(value)
+            return type(value) == "string" and #value <= 960
+                and not value:find("[^ -~]")
+        end
+        if type(data.count) ~= "number" or data.count < 0 or data.count > 8
+                or data.count % 1 ~= 0 or type(data.rows) ~= "table" or not bounded(data.header) then
+            mod:echo("[wt_heat_capture] malformed capture refused")
+            return
+        end
+        for index = 1, 8 do
+            if index <= data.count and not bounded(rawget(data.rows, index)) then
+                mod:echo("[wt_heat_capture] malformed row refused")
+                return
+            end
+        end
+        printf("[wt:942:capture] begin %s", data.header)
+        for index = 1, 8 do
+            if index > data.count then break end
+            printf("[wt:942:capture] row=%s", rawget(data.rows, index))
+        end
+        printf("[wt:942:capture] end count=%d", data.count)
+    end)',
+@{
+'Source' = 'weapon_tweaker/scripts/mods/weapon_tweaker/_wt_fire_sword_heat_runtime.lua';
+'Tokens' = 'function',
+'runtime',
+':',
+'capture_dump',
+'(',
+')',
+'if',
+'not',
+'capture',
+'or',
+'not',
+'capture',
+'.',
+'pending',
+'then',
+'return',
+'nil',
+',',
+'String:no-pending-capture',
+'end',
+'live_capture',
+'(',
+')',
+'stop',
+'(',
+'String:dumped',
+')',
+'capture',
+'.',
+'pending',
+'=',
+'false',
+'local',
+'rows',
+'=',
+'{',
+'}'
+},
+@{
+'Source' = 'weapon_tweaker/scripts/mods/weapon_tweaker/_wt_fire_sword_owner.lua';
+'Tokens' = 'if',
+'action',
+'==',
+'String:dump',
+'then',
+'return',
+'runtime',
+':',
+'capture_dump',
+'(',
+')',
+'end'
+}
+);
+'Marker' = '[wt:942:capture]';
+'ModId' = 'wt';
+'ModTree' = '089f9d0e0a62c8836d8eefb8085eb7a0982e499e';
+'Signature' = '[wt:942:capture] row=%s';
+'Source' = 'weapon_tweaker/scripts/mods/weapon_tweaker/_wt_diagnostics.lua'
+}
+@{
+'ActionCommands' = @(
+'/wt_heat_capture'
+);
+'Bound' = 'one end per explicit /wt_heat_capture dump; exact integer count in 0..8 and all payloads validated before emission; at most eight data rows plus begin/end; pending buffer consumed before command output';
+'EmitterAnchors' = @(
+'printf("[wt:942:capture] end count=%d", data.count)'
+);
+'GuardAnchors' = @(
+'mod:command("wt_heat_capture", "Finite Flame Sword calculation capture: arm, dump or clear",
+    function(action, ...)
+        if select("#", ...) ~= 0 or (action ~= "arm" and action ~= "dump" and action ~= "clear") then
+            mod:echo("[wt_heat_capture] usage: arm, dump or clear")
+            return
+        end
+        local owner = rawget(mod, "_wt942_owner")
+        local capture = type(owner) == "table" and rawget(owner, "capture")
+        if type(capture) ~= "function" then
+            mod:echo("[wt_heat_capture] owner not ready")
+            return
+        end
+        local ok, data, status = pcall(capture, owner, action)
+        if not ok then mod:echo("[wt_heat_capture] capture unavailable"); return end
+        if action ~= "dump" or type(data) ~= "table" then
+            mod:echo("[wt_heat_capture] %s", data == true and status or "not ready/no pending capture")
+            return
+        end
+        local function bounded(value)
+            return type(value) == "string" and #value <= 960
+                and not value:find("[^ -~]")
+        end
+        if type(data.count) ~= "number" or data.count < 0 or data.count > 8
+                or data.count % 1 ~= 0 or type(data.rows) ~= "table" or not bounded(data.header) then
+            mod:echo("[wt_heat_capture] malformed capture refused")
+            return
+        end
+        for index = 1, 8 do
+            if index <= data.count and not bounded(rawget(data.rows, index)) then
+                mod:echo("[wt_heat_capture] malformed row refused")
+                return
+            end
+        end
+        printf("[wt:942:capture] begin %s", data.header)
+        for index = 1, 8 do
+            if index > data.count then break end
+            printf("[wt:942:capture] row=%s", rawget(data.rows, index))
+        end
+        printf("[wt:942:capture] end count=%d", data.count)
+    end)',
+@{
+'Source' = 'weapon_tweaker/scripts/mods/weapon_tweaker/_wt_fire_sword_heat_runtime.lua';
+'Tokens' = 'function',
+'runtime',
+':',
+'capture_dump',
+'(',
+')',
+'if',
+'not',
+'capture',
+'or',
+'not',
+'capture',
+'.',
+'pending',
+'then',
+'return',
+'nil',
+',',
+'String:no-pending-capture',
+'end',
+'live_capture',
+'(',
+')',
+'stop',
+'(',
+'String:dumped',
+')',
+'capture',
+'.',
+'pending',
+'=',
+'false',
+'local',
+'rows',
+'=',
+'{',
+'}'
+},
+@{
+'Source' = 'weapon_tweaker/scripts/mods/weapon_tweaker/_wt_fire_sword_owner.lua';
+'Tokens' = 'if',
+'action',
+'==',
+'String:dump',
+'then',
+'return',
+'runtime',
+':',
+'capture_dump',
+'(',
+')',
+'end'
+}
+);
+'Marker' = '[wt:942:capture]';
+'ModId' = 'wt';
+'ModTree' = '089f9d0e0a62c8836d8eefb8085eb7a0982e499e';
+'Signature' = '[wt:942:capture] end count=%d';
+'Source' = 'weapon_tweaker/scripts/mods/weapon_tweaker/_wt_diagnostics.lua'
+}
+@{
+'ActionCommands' = @(
+'/wt_heat_capture'
+);
+'Bound' = 'one begin per explicit /wt_heat_capture dump; entire buffer validated before emission, at most eight data rows plus begin/end, at most 960 printable ASCII bytes per payload; pending buffer consumed before command output';
+'EmitterAnchors' = @(
+'printf("[wt:942:capture] begin %s", data.header)'
+);
+'GuardAnchors' = @(
+'mod:command("wt_heat_capture", "Finite Flame Sword calculation capture: arm, dump or clear",
+    function(action, ...)
+        if select("#", ...) ~= 0 or (action ~= "arm" and action ~= "dump" and action ~= "clear") then
+            mod:echo("[wt_heat_capture] usage: arm, dump or clear")
+            return
+        end
+        local owner = rawget(mod, "_wt942_owner")
+        local capture = type(owner) == "table" and rawget(owner, "capture")
+        if type(capture) ~= "function" then
+            mod:echo("[wt_heat_capture] owner not ready")
+            return
+        end
+        local ok, data, status = pcall(capture, owner, action)
+        if not ok then mod:echo("[wt_heat_capture] capture unavailable"); return end
+        if action ~= "dump" or type(data) ~= "table" then
+            mod:echo("[wt_heat_capture] %s", data == true and status or "not ready/no pending capture")
+            return
+        end
+        local function bounded(value)
+            return type(value) == "string" and #value <= 960
+                and not value:find("[^ -~]")
+        end
+        if type(data.count) ~= "number" or data.count < 0 or data.count > 8
+                or data.count % 1 ~= 0 or type(data.rows) ~= "table" or not bounded(data.header) then
+            mod:echo("[wt_heat_capture] malformed capture refused")
+            return
+        end
+        for index = 1, 8 do
+            if index <= data.count and not bounded(rawget(data.rows, index)) then
+                mod:echo("[wt_heat_capture] malformed row refused")
+                return
+            end
+        end
+        printf("[wt:942:capture] begin %s", data.header)
+        for index = 1, 8 do
+            if index > data.count then break end
+            printf("[wt:942:capture] row=%s", rawget(data.rows, index))
+        end
+        printf("[wt:942:capture] end count=%d", data.count)
+    end)',
+@{
+'Source' = 'weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_fire_sword_heat_runtime.lua';
+'Tokens' = 'function',
+'runtime',
+':',
+'capture_dump',
+'(',
+')',
+'if',
+'not',
+'capture',
+'or',
+'not',
+'capture',
+'.',
+'pending',
+'then',
+'return',
+'nil',
+',',
+'String:no-pending-capture',
+'end',
+'live_capture',
+'(',
+')',
+'stop',
+'(',
+'String:dumped',
+')',
+'capture',
+'.',
+'pending',
+'=',
+'false',
+'local',
+'rows',
+'=',
+'{',
+'}'
+},
+@{
+'Source' = 'weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_fire_sword_owner.lua';
+'Tokens' = 'if',
+'action',
+'==',
+'String:dump',
+'then',
+'return',
+'runtime',
+':',
+'capture_dump',
+'(',
+')',
+'end'
+}
+);
+'Marker' = '[wt:942:capture]';
+'ModId' = 'wt_dev';
+'ModTree' = '22d3dc8f8e61d8bf363f587a90755ff5848505bc';
+'Signature' = '[wt:942:capture] begin %s';
+'Source' = 'weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_diagnostics.lua'
+}
+@{
+'ActionCommands' = @(
+'/wt_heat_capture'
+);
+'Bound' = 'at most eight row emissions per explicit /wt_heat_capture dump; integer count in 0..8, entire payload set validated as strings of at most 960 printable ASCII bytes before any output; loop is fixed at eight and breaks after count; pending buffer consumed before command output';
+'EmitterAnchors' = @(
+'printf("[wt:942:capture] row=%s", rawget(data.rows, index))'
+);
+'GuardAnchors' = @(
+'mod:command("wt_heat_capture", "Finite Flame Sword calculation capture: arm, dump or clear",
+    function(action, ...)
+        if select("#", ...) ~= 0 or (action ~= "arm" and action ~= "dump" and action ~= "clear") then
+            mod:echo("[wt_heat_capture] usage: arm, dump or clear")
+            return
+        end
+        local owner = rawget(mod, "_wt942_owner")
+        local capture = type(owner) == "table" and rawget(owner, "capture")
+        if type(capture) ~= "function" then
+            mod:echo("[wt_heat_capture] owner not ready")
+            return
+        end
+        local ok, data, status = pcall(capture, owner, action)
+        if not ok then mod:echo("[wt_heat_capture] capture unavailable"); return end
+        if action ~= "dump" or type(data) ~= "table" then
+            mod:echo("[wt_heat_capture] %s", data == true and status or "not ready/no pending capture")
+            return
+        end
+        local function bounded(value)
+            return type(value) == "string" and #value <= 960
+                and not value:find("[^ -~]")
+        end
+        if type(data.count) ~= "number" or data.count < 0 or data.count > 8
+                or data.count % 1 ~= 0 or type(data.rows) ~= "table" or not bounded(data.header) then
+            mod:echo("[wt_heat_capture] malformed capture refused")
+            return
+        end
+        for index = 1, 8 do
+            if index <= data.count and not bounded(rawget(data.rows, index)) then
+                mod:echo("[wt_heat_capture] malformed row refused")
+                return
+            end
+        end
+        printf("[wt:942:capture] begin %s", data.header)
+        for index = 1, 8 do
+            if index > data.count then break end
+            printf("[wt:942:capture] row=%s", rawget(data.rows, index))
+        end
+        printf("[wt:942:capture] end count=%d", data.count)
+    end)',
+@{
+'Source' = 'weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_fire_sword_heat_runtime.lua';
+'Tokens' = 'function',
+'runtime',
+':',
+'capture_dump',
+'(',
+')',
+'if',
+'not',
+'capture',
+'or',
+'not',
+'capture',
+'.',
+'pending',
+'then',
+'return',
+'nil',
+',',
+'String:no-pending-capture',
+'end',
+'live_capture',
+'(',
+')',
+'stop',
+'(',
+'String:dumped',
+')',
+'capture',
+'.',
+'pending',
+'=',
+'false',
+'local',
+'rows',
+'=',
+'{',
+'}'
+},
+@{
+'Source' = 'weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_fire_sword_owner.lua';
+'Tokens' = 'if',
+'action',
+'==',
+'String:dump',
+'then',
+'return',
+'runtime',
+':',
+'capture_dump',
+'(',
+')',
+'end'
+}
+);
+'Marker' = '[wt:942:capture]';
+'ModId' = 'wt_dev';
+'ModTree' = '22d3dc8f8e61d8bf363f587a90755ff5848505bc';
+'Signature' = '[wt:942:capture] row=%s';
+'Source' = 'weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_diagnostics.lua'
+}
+@{
+'ActionCommands' = @(
+'/wt_heat_capture'
+);
+'Bound' = 'one end per explicit /wt_heat_capture dump; exact integer count in 0..8 and all payloads validated before emission; at most eight data rows plus begin/end; pending buffer consumed before command output';
+'EmitterAnchors' = @(
+'printf("[wt:942:capture] end count=%d", data.count)'
+);
+'GuardAnchors' = @(
+'mod:command("wt_heat_capture", "Finite Flame Sword calculation capture: arm, dump or clear",
+    function(action, ...)
+        if select("#", ...) ~= 0 or (action ~= "arm" and action ~= "dump" and action ~= "clear") then
+            mod:echo("[wt_heat_capture] usage: arm, dump or clear")
+            return
+        end
+        local owner = rawget(mod, "_wt942_owner")
+        local capture = type(owner) == "table" and rawget(owner, "capture")
+        if type(capture) ~= "function" then
+            mod:echo("[wt_heat_capture] owner not ready")
+            return
+        end
+        local ok, data, status = pcall(capture, owner, action)
+        if not ok then mod:echo("[wt_heat_capture] capture unavailable"); return end
+        if action ~= "dump" or type(data) ~= "table" then
+            mod:echo("[wt_heat_capture] %s", data == true and status or "not ready/no pending capture")
+            return
+        end
+        local function bounded(value)
+            return type(value) == "string" and #value <= 960
+                and not value:find("[^ -~]")
+        end
+        if type(data.count) ~= "number" or data.count < 0 or data.count > 8
+                or data.count % 1 ~= 0 or type(data.rows) ~= "table" or not bounded(data.header) then
+            mod:echo("[wt_heat_capture] malformed capture refused")
+            return
+        end
+        for index = 1, 8 do
+            if index <= data.count and not bounded(rawget(data.rows, index)) then
+                mod:echo("[wt_heat_capture] malformed row refused")
+                return
+            end
+        end
+        printf("[wt:942:capture] begin %s", data.header)
+        for index = 1, 8 do
+            if index > data.count then break end
+            printf("[wt:942:capture] row=%s", rawget(data.rows, index))
+        end
+        printf("[wt:942:capture] end count=%d", data.count)
+    end)',
+@{
+'Source' = 'weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_fire_sword_heat_runtime.lua';
+'Tokens' = 'function',
+'runtime',
+':',
+'capture_dump',
+'(',
+')',
+'if',
+'not',
+'capture',
+'or',
+'not',
+'capture',
+'.',
+'pending',
+'then',
+'return',
+'nil',
+',',
+'String:no-pending-capture',
+'end',
+'live_capture',
+'(',
+')',
+'stop',
+'(',
+'String:dumped',
+')',
+'capture',
+'.',
+'pending',
+'=',
+'false',
+'local',
+'rows',
+'=',
+'{',
+'}'
+},
+@{
+'Source' = 'weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_fire_sword_owner.lua';
+'Tokens' = 'if',
+'action',
+'==',
+'String:dump',
+'then',
+'return',
+'runtime',
+':',
+'capture_dump',
+'(',
+')',
+'end'
+}
+);
+'Marker' = '[wt:942:capture]';
+'ModId' = 'wt_dev';
+'ModTree' = '22d3dc8f8e61d8bf363f587a90755ff5848505bc';
+'Signature' = '[wt:942:capture] end count=%d';
+'Source' = 'weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_diagnostics.lua'
 }
 )
 }
