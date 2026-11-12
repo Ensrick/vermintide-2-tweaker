@@ -2000,6 +2000,7 @@ function Get-VtCardDeploymentManifest {
 }
 
 . (Join-Path $PSScriptRoot 'deployed_source_proof.ps1')
+. (Join-Path $PSScriptRoot 'mp_login_source_contract.ps1')
 
 # Bounded incident exceptions (#1643). One entry suspends exactly one named
 # fail-closed detector for one exact ModId, one exact deployed
@@ -2146,6 +2147,10 @@ function Get-VtCardSourceAuthority {
         # exact-signature/token-anchor exception. Nearby prose and marker-wide
         # sibling emitters never prove this route finite.
         Set-VtStructuralReceiptBounds -Documents $documents -Routes $receiptRoutes
+        if($id -ceq 'mp'){
+            Assert-VtMpLoginRawSourceContract -Documents $documents -Exceptions $exceptions `
+                -Version ([string]$row.version).TrimStart('v') -View 'Selected deployed' -ModTree $modTree | Out-Null
+        }
         Set-VtReceiptOverrideBounds -ModId $id -ModTree $modTree -Documents $documents -Routes $receiptRoutes -CommandRoutes $commandRoutes -Exceptions $exceptions
         if($loadRoutes.Count -eq 0){throw "Deployed mod '$id' exposes no literal runtime [*:LOAD] route."}
         $rootBundle=[string]$row.root_bundle

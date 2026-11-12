@@ -2212,6 +2212,21 @@ gh issue list --repo Ensrick/vermintide-2-tweaker            # open
 gh issue list --repo Ensrick/vermintide-2-tweaker --state all # incl. closed
 ```
 
+### External intake and authorization (binding, 2026-11-12)
+
+Surface new third-party bug reports and suggestions to Ensrick with the issue
+link, concise observed/requested behavior, and available build/log evidence.
+Read-only intake is allowed; notification does not pause authorized bug fixes.
+
+Outside feature suggestions are NOT automatic implementation authorization.
+A filed issue, broad backlog-work goal, or absent reply does not authorize
+implementing or publishing a suggestion. Keep it pending maintainer direction;
+do not promise expanded support or close it as accepted/declined automatically.
+
+Existing Ensrick/RainReligion requests and approved tasks remain in scope.
+Confirmed public-release bugs retain the existing evidence-based fix priority;
+all existing release, verification and closure requirements still apply.
+
 ### Process
 1. When you find a pending item (audit, code review, deferred work),
    `gh issue create` it with appropriate labels.
