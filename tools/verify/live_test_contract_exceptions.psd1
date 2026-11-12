@@ -311,7 +311,7 @@
             Bound='one receipt per last_reason state transition; unchanged ensure/update calls are silent'
             EmitterAnchors=@(@{Tokens=@('_printf','(','String:[wt:282] Deepwood package lease state=%s ready=%s loading=%s references=%s attempts=%s')})
             GuardAnchors=@(
-                @{Tokens=@('if','reason','~=','last_reason','then')}
+                'if reason ~= last_reason then'
                 @{Tokens=@('last_reason','=','reason')}
             )
         }
@@ -351,7 +351,7 @@
             EmitterAnchors=@(@{Tokens=@('_printf','(','String:[cwv:423] blocked unsafe hit: profile=%s(%s) exact catalog unconfirmed and no vanilla fallback resolved')})
             GuardAnchors=@(
                 'if not logged [ damage_profile_id ] then'
-                @{Tokens=@('logged','[','damage_profile_id',']','=','true')}
+                'logged [ damage_profile_id ] = true'
             )
         }
         @{
@@ -449,7 +449,7 @@
                 @{Tokens=@('_emit','(','String:armed: steam_check=1 playfab_disconnect=1 network_client=1 transition_only=yes',')')}
                 'pcall ( engine_printf , "[gt:753] " .. fmt , ... )'
             )
-            GuardAnchors=@(@{Tokens=@('mod','.','_gt753_disconnect_diagnostics','=','{')})
+            GuardAnchors=@('mod . _gt753_disconnect_diagnostics = {')
         }
         @{
             Marker='[gut:630]'; ModId='gut_dev'
@@ -459,14 +459,14 @@
             Bound='focus/tab/Weapons-expansion edge evidence under a 48-row per-session probe budget reset only by Mod Tweaker enter'
             EmitterAnchors=@(
                 'log ( string . format ( "frame_evidence draw=%d visible_rows=%s resource_candidates=%s"'
-                @{Tokens=@('emit','(','String:[gut:630] ','..','message',')')}
+                'emit ( "[gut:630] " .. message )'
                 @{Source='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/gui_tweaker_dev.lua';Tokens=@('emit','=','function','(','line',')','printf','(','String:%s',',','line',')','end')}
             )
             GuardAnchors=@(
                 @{Tokens=@('local','DEFAULT_LINE_CAP','=','48')}
                 'if state . lines >= state . line_cap then'
-                @{Tokens=@('if','state','.','pending_frame_evidence','then')}
-                @{Tokens=@('state','.','pending_frame_evidence','=','false')}
+                'if state . pending_frame_evidence then'
+                'state . pending_frame_evidence = false'
             )
         }
         @{
@@ -487,7 +487,7 @@
             SourcesByMod=@{gt_dev='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_pickups.lua'}
             Signature='[gt:347] trace complete records=%d classifications=%d'
             Bound='one terminal cap row when the explicit probe reaches its 16-record budget'
-            EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[gt:347] trace complete records=%d classifications=%d')})
+            EmitterAnchors=@('pcall ( printf , "[gt:347] trace complete records=%d classifications=%d"')
             GuardAnchors=@(
                 @{Source='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_diag_chest_pickup_state.lua';Tokens=@('if','capped','then','state','.','armed','=','false','end')}
                 @{Tokens=@('if','capped','then')}
@@ -499,9 +499,9 @@
             SourcesByMod=@{gt_dev='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_pickups.lua'}
             Signature='[gt:347] ARMED max_records=%d max_classifications=%d instant_pickup=%s greedy_pickup=%s'
             Bound='one armed receipt per explicit /gt_chest_pickup_probe invocation'
-            EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[gt:347] ARMED max_records=%d max_classifications=%d instant_pickup=%s greedy_pickup=%s')})
+            EmitterAnchors=@('pcall ( printf , "[gt:347] ARMED max_records=%d max_classifications=%d instant_pickup=%s greedy_pickup=%s"')
             GuardAnchors=@(
-                @{Tokens=@('mod',':','command','(','String:gt_chest_pickup_probe')}
+                'mod : command ( "gt_chest_pickup_probe"'
                 '_gt347_core . arm ( _gt347_state )'
             )
         }
@@ -511,7 +511,7 @@
             SourcesByMod=@{gt_dev='general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_dev_heal.lua'}
             Signature='[gt:1143] heal result=%s route=%s before=%s after=%s max=%s wounded_before=%s wounded_after=%s elapsed=%.3f reason=%s record=%d'
             Bound='one terminal success, rejection, timeout, or lifecycle-cancel receipt per explicit /heal request transaction'
-            EmitterAnchors=@(@{Tokens=@('printf','(','String:[gt:1143] heal result=%s route=%s before=%s after=%s max=%s ','..','String:wounded_before=%s wounded_after=%s elapsed=%.3f reason=%s record=%d')})
+            EmitterAnchors=@('printf ( "[gt:1143] heal result=%s route=%s before=%s after=%s max=%s " .. "wounded_before=%s wounded_after=%s elapsed=%.3f reason=%s record=%d"')
             GuardAnchors=@(
                 'mod : command ( "heal" , "Restore your living hero to full permanent health and clear wounds" , _request )'
                 'if pending then _reject ( "request_already_pending" ) return end'
@@ -623,15 +623,15 @@ end'
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_musket_ammo_pool.lua'}
             Signature='[cwv:1107] melee-slot musket reload drained %d round(s): reserve %d -> %d'
             Bound='at most one drain receipt per completed melee-slot reload transaction'
-            EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[cwv:1107] melee-slot musket reload drained %d round(s): reserve %d -> %d')})
-            GuardAnchors=@(@{Tokens=@('if','drained','>','0','then')})
+            EmitterAnchors=@('pcall ( printf , "[cwv:1107] melee-slot musket reload drained %d round(s): reserve %d -> %d"')
+            GuardAnchors=@('if drained > 0 then')
         }
         @{
             Marker='[gut:938]';ModId='gut_dev';ModTrees=@{gut_dev=@('d41e79c0ce648f6a43c201cd115f124e799a936b')}
             SourcesByMod=@{gut_dev='gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_damage_numbers.lua'}
             Signature='[gut:938] rt skip: NetworkConstants.damage.max unavailable; policy checked against fallback %.2f'
             Bound='at most one fallback notice per explicit issue938 regression-check invocation'
-            EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[gut:938] rt skip: NetworkConstants.damage.max unavailable; policy checked against fallback %.2f')})
+            EmitterAnchors=@('pcall ( printf , "[gut:938] rt skip: NetworkConstants.damage.max unavailable; policy checked against fallback %.2f"')
             GuardAnchors=@('if type ( max_damage ) ~= "number" or max_damage <= 0 then')
         }
         @{
@@ -649,7 +649,7 @@ end'
             Marker='[ct:919]';ModId='ct_dev';ModTrees=@{ct_dev='3964fcf7a225721a425d40d809e1910d1dd379e4'}
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_profile_snapshot.lua'}
             Signature='[ct:919] seq=%d snapshot_error=%s';Bound='one mutually exclusive error receipt per profile-snapshot transaction'
-            EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[ct:919] seq=%d snapshot_error=%s')})
+            EmitterAnchors=@('pcall ( printf , "[ct:919] seq=%d snapshot_error=%s"')
             GuardAnchors=@(@{Tokens=@('if','not','ok','then')})
         }
         @{
@@ -658,7 +658,7 @@ end'
             Signature='[cwv:786] verdict %s peer=%s slot=%s family=%s style=%s edge=%s attempt=%d/%d terminal=%s detail=%s'
             Bound='one verdict per retry transition under the eight-attempt per-style-edge ledger'
             EmitterAnchors=@(@{Tokens=@('String:[cwv:786] verdict %s peer=%s slot=%s family=%s style=%s edge=%s attempt=%d/%d terminal=%s detail=%s')})
-            GuardAnchors=@(@{Tokens=@('M','.','MAX_REMOTE_REFRESH_ATTEMPTS','=','8')})
+            GuardAnchors=@('M . MAX_REMOTE_REFRESH_ATTEMPTS = 8')
         }
         @{
             Marker='[cwv:786]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='4ca1193f2f7c9ff85013c0657b44b8b9c2911ca6'}
@@ -666,14 +666,14 @@ end'
             Signature='[cwv:786] rebuild queued peer=%s slot=%s family=%s style=%s edge=%s attempt=%d/%d'
             Bound='one queue receipt per retry transition under the eight-attempt per-style-edge ledger'
             EmitterAnchors=@(@{Tokens=@('String:[cwv:786] rebuild queued peer=%s slot=%s family=%s style=%s edge=%s attempt=%d/%d')})
-            GuardAnchors=@(@{Tokens=@('M','.','MAX_REMOTE_REFRESH_ATTEMPTS','=','8')})
+            GuardAnchors=@('M . MAX_REMOTE_REFRESH_ATTEMPTS = 8')
         }
         @{
             Marker='[cwv:786]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='4ca1193f2f7c9ff85013c0657b44b8b9c2911ca6'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_combat_styles.lua'}
             Signature='[cwv:786] style rx peer=%s slot=%s family=%s style=%s source=%s changed=%s'
             Bound='one receive receipt per explicit synchronized style edge'
-            EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[cwv:786] style rx peer=%s slot=%s family=%s style=%s source=%s changed=%s')})
+            EmitterAnchors=@('pcall ( printf , "[cwv:786] style rx peer=%s slot=%s family=%s style=%s source=%s changed=%s"')
             GuardAnchors=@('function runtime:accept_style_edge(peer_id, slot_name, family_id, style_id, source, descriptor)')
         }
         @{
@@ -681,9 +681,9 @@ end'
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_style_rewield.lua'}
             Signature='[cwv:786] style residency family=%s style=%s resource=%s resident=%s'
             Bound='signature-deduplicated residency evidence under an absolute 32-row cap'
-            EmitterAnchors=@(@{Tokens=@('emit','(','deps',',','String:[cwv:786] style residency family=%s style=%s resource=%s resident=%s')})
+            EmitterAnchors=@('emit ( deps , "[cwv:786] style residency family=%s style=%s resource=%s resident=%s"')
             GuardAnchors=@(
-                @{Tokens=@('M','.','RESIDENCY_PROBE_CAP','=','32')}
+                'M . RESIDENCY_PROBE_CAP = 32'
                 'if state . seen [ key ] or state . count >= M . RESIDENCY_PROBE_CAP then'
             )
         }
@@ -716,7 +716,7 @@ end'
             EmitterAnchors=@(@{Tokens=@('printf','(','String:[event-inject:393] settled verdict=%s evidence=%s | injected=[%s] max_intensity=%s decay_per_second=%s decay_delay=%s add_per_pct_dmg=%s delay_horde=%s delay_specials=%s delay_mini_patrol=%s cached_horde=%s cached_specials=%s cached_mini_patrol=%s')})
             GuardAnchors=@(
                 'if _issue393_seen [ self ] then return end'
-                @{Tokens=@('_issue393_seen','[','self',']','=','true')}
+                '_issue393_seen [ self ] = true'
             )
         }
         @{
@@ -774,8 +774,8 @@ end'
             Marker='[cwv:317]';ModId='character_weapon_variants';ModTrees=@{character_weapon_variants='4ca1193f2f7c9ff85013c0657b44b8b9c2911ca6'}
             SourcesByMod=@{character_weapon_variants='character_weapon_variants/scripts/mods/character_weapon_variants/cwv_dev_anim_picker.lua'}
             Signature='[cwv:317] ==== end ====';Bound='one terminal row per explicit finite dump command invocation'
-            EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[cwv:317] ==== end ====',')')})
-            GuardAnchors=@(@{Tokens=@('function','M','.','dump','(',')')})
+            EmitterAnchors=@('pcall ( printf , "[cwv:317] ==== end ====" )')
+            GuardAnchors=@('function M . dump ( )')
         }
         @{
             Marker='[ct:288]';ModId='ct_dev';ModTrees=@{ct_dev='3964fcf7a225721a425d40d809e1910d1dd379e4'}
@@ -801,7 +801,7 @@ end'
             EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[gut:250] career=%s active=%s tiers=%s duplicates=%d unmapped=%d repair=%d/%d')})
             GuardAnchors=@(
                 'if not logged [ signature ] and log_count < Policy . MAX_LOGS then'
-                @{Tokens=@('logged','[','signature',']','=','true')}
+                'logged [ signature ] = true'
             )
         }
         @{
@@ -838,7 +838,7 @@ end'
             Marker='[ct:919]';ModId='ct_dev';ModTrees=@{ct_dev='3964fcf7a225721a425d40d809e1910d1dd379e4'}
             SourcesByMod=@{ct_dev='chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_dev_mission.lua'}
             Signature='[ct:919] registered profile diagnostic with Mod Tweaker';Bound='one registration receipt from the once-per-load on_all_mods_loaded callback'
-            EmitterAnchors=@(@{Tokens=@('pcall','(','printf',',','String:[ct:919] registered profile diagnostic with Mod Tweaker',')')})
+            EmitterAnchors=@('pcall ( printf , "[ct:919] registered profile diagnostic with Mod Tweaker" )')
             GuardAnchors=@('mod . on_all_mods_loaded = function ( )')
         }
         @{
@@ -1770,6 +1770,79 @@ end
                 'for _ , skin_key in ipairs ( mod . _cwv567_skin_keys ) do'
             )
         }
+        # #719: only this holder signature is admitted, not the four SKIP
+        # signatures or an arbitrary sibling with the same marker. The actual
+        # installed factory supplies no ctx.env; the sink is engine printf.
+        @{
+            ModId='character_weapon_variants'; ModTree='4ca1193f2f7c9ff85013c0657b44b8b9c2911ca6'
+            Source='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_issue719_transaction_check.lua'
+            Marker='[cwv:719]'; AddRoute=$true
+            Signature='[cwv:719] peer observation role=%s peer=%s verdict=%s %s'
+            ActionCommands=@('/cwv_regression_test')
+            Bound='At most 32 holder observations per explicit regression invocation; shared 33-attempt sink cap, 768-byte printable lines, fresh invocation budget; incomplete or lossy observation cannot PASS.'
+            EmitterAnchors=@(
+                'emit("[cwv:719] peer observation role=%s peer=%s verdict=%s %s", budget, role, peer, err and "FAIL" or (ok_leg and "ok" or "unproven"), err or detail)'
+                'local function global(name) local env = ctx.env if type(env) == "table" and env[name] ~= nil then return env[name] end return rawget(_G, name) end'
+                'local sink = global("printf")'
+                'local ok = pcall(sink, fmt, ...)'
+                @{
+                    Source='character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua'
+                    Tokens=@('String:scripts/mods/character_weapon_variants/_cwv_issue719_transaction_check',')','(','mod',',','{','om','=','_om',',','}',')')
+                }
+                @{
+                    Source='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_identity.lua'
+                    Tokens=@('local','transaction_error','=','_issue719_transaction_check','(')
+                }
+            )
+            GuardAnchors=@(
+                'local MAX_ROSTER_ENTRIES, MAX_ATOM_BYTES = 32, 160'
+                'local MAX_DETAIL_BYTES, MAX_LINE_BYTES, MAX_RESULT_BYTES = 512, 768, 2048'
+                'local MAX_SAMPLE_BYTES, MAX_EMISSIONS = 1536, 33'
+                'if budget.emitted >= MAX_EMISSIONS then budget.lossy = true; return end'
+                'budget.emitted = budget.emitted + 1'
+                'if #line > MAX_LINE_BYTES or line:find("[^ -~]") then budget.lossy = true return end'
+                'if type(sink) ~= "function" then budget.lossy = true; return end'
+                'if not ok then budget.lossy = true end'
+                'for scan_index = 1, 32 do'
+                'if not complete then complete = next(players, cursor) == nil end'
+                'if not complete then emit("[cwv:719] peer observation SKIP reason=diagnostic_budget", budget) return "skip: legs 1-2 passed; peer observation incomplete"'
+                'if budget.lossy then emit("[cwv:719] peer observation SKIP reason=diagnostic_text_budget", budget) return "skip: legs 1-2 passed; diagnostic evidence was not fully representable"'
+                'return function(descriptor, family, model, career, template_name) local budget = { lossy = false, emitted = 0 }'
+                'err = peer_observation(family, budget)'
+                @{
+                    Source='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_identity.lua'
+                    Tokens=@('_rt_register','(','String:issue719_imperial_crowbill_remote_identity',',','function')
+                }
+                @{
+                    Source='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_identity.lua'
+                    Tokens=@('isolated_register','(','ctx','.','rt_register',',','_om',')')
+                }
+                @{
+                    Source='character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_identity.lua'
+                    Tokens=@('_issue719_transaction_check','=','ctx','.','issue719_transaction_check')
+                }
+                @{
+                    Source='character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua'
+                    Tokens=@('issue719_transaction_check','=','_issue719_transaction_check',',','}')
+                }
+                @{
+                    Source='character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua'
+                    Tokens=@('String:scripts/mods/character_weapon_variants/_cwv_regression_identity',')','(','mod',',','_cwv_regression_context',')')
+                }
+                @{
+                    Source='character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua'
+                    Tokens=@('rt_register','=','_rt_register',',','variant_definitions')
+                }
+                @{
+                    Source='character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua'
+                    Tokens=@('_RT_CHECKS','[','#','_RT_CHECKS','+','1',']')
+                }
+                @{
+                    Source='character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua'
+                    Tokens=@('pcall','(','c','.','fn',')')
+                }
+            )
+        }
         @{
             ModId='cosmetics_tweaker'; ModTrees=@('30aedf012bdff49a0d4fb9bb90c1600cd1cc4a63')
             Source='cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_la_bridge.lua'
@@ -1917,9 +1990,9 @@ end
             )
             GuardAnchors=@(
                 @{Tokens=@('records','>=','CENSUS_RECORD_CAP_TOTAL')}
-                @{Tokens=@('seen','[','key',']','=','true')}
+                'seen [ key ] = true'
                 @{Tokens=@('lifecycle_records','>=','LIFECYCLE_RECORD_CAP_TOTAL')}
-                @{Tokens=@('lifecycle_seen','[','key',']','=','true')}
+                'lifecycle_seen [ key ] = true'
             )
         }
         @{
@@ -1998,7 +2071,7 @@ end
             )
             GuardAnchors=@(
                 'evidence_seen [ key ] or evidence_count >= M . EVIDENCE_LIMIT'
-                @{Tokens=@('evidence_seen','[','key',']','=','true')}
+                'evidence_seen [ key ] = true'
                 @{Tokens=@('evidence_count','=','evidence_count','+','1')}
             )
         }

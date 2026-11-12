@@ -897,6 +897,18 @@ existing full source-authority selftest retains receipt-policy and partial-clone
 hydration coverage. Both new checks are automatically discovered in full QA.
 These checks establish GitHub source provenance only, not Workshop delivery.
 
+The same `check_live_test_contract.ps1 -SelfTest` also runs
+`Test-VtCwv719ReceiptRouteContract`: three actual Lua witnesses are read from
+the consumed immutable CWV scripts tree, without implicit network hydration.
+One exact Crowbill holder receipt is admitted through the existing route
+override grammar and belongs only to `/cwv_regression_test`. Cross-file factory,
+registration, isolated callback and runner anchors bind the indirect engine
+printf sink. Actual-source mutations exercise the roster/text/emission limits,
+fresh invocation budget, lossy/incomplete SKIP behavior and installed delegation.
+The four SKIP signatures and a forged automatic same-marker sibling receive no
+permission. This is finite diagnostic-source qualification, not live rendering,
+remote-peer acceptance or a new Workshop publication.
+
 ## How to add a check
 
 When a new bug class is discovered:
