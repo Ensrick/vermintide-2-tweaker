@@ -1,23 +1,25 @@
-# Focused MP1684 integration fixtures. No live release or primary Git writes.
-function Test-VtMpLoginSourceContract {
+# The fixture may seed from available current HEAD, never missing historical
+# blobs. The immutable production hashes remain the independent oracle.
+function Get-VtMpLoginFixtureSeed {
     [CmdletBinding()]
-    param([Parameter(Mandatory=$true)][string]$Root,[string]$TestParent)
-    $ErrorActionPreference='Stop'
-    if(-not$TestParent){$TestParent=[IO.Path]::GetTempPath()}
-    $parent=[IO.Path]::GetFullPath($TestParent)
-    $fixture=Join-Path $parent ('vt2-mp-login-integration-'+[guid]::NewGuid().ToString('N'))
-    $assert={param([bool]$Ok,[string]$Why) if(-not$Ok){throw ('MP1684 integration: '+$Why)}}
-    $source='35edbfcd7b10a6b760e025f89dea8668fc7f5a68'
+    param([Parameter(Mandatory=$true)][string]$Root)
+    $assert={param([bool]$Ok,[string]$Why) if(-not$Ok){throw ('MP1684 fixture seed: '+$Why)}}
+    $source=Get-VtGitScalar -RepoRoot $Root -Arguments @('rev-parse','--verify','HEAD^{commit}') -Description 'Resolve actual fixture seed HEAD'
+    & $assert ($source -cmatch '^[0-9a-f]{40}$') 'actual HEAD identity'
     $paths=@('modded_progression/scripts/mods/modded_progression/modded_progression.lua',
         'modded_progression/scripts/mods/modded_progression/_mp_diag_fresh_profile.lua')
-    $oracle=@{}
-    foreach($path in $paths){$oracle[$path]=Read-VtMpLoginGitText -RepoRoot $Root -Spec ($source+':'+$path)}
-    # Independent fixture metadata, generated from the audited old callback,
-    # never from current subject content or an already-approved live row.
-    $start=$oracle[$paths[0]].IndexOf('mod:command("mp_login_diag",',[StringComparison]::Ordinal)
-    $end=$oracle[$paths[0]].IndexOf(([string][char]10)+'local _mp840_census_backend',$start,[StringComparison]::Ordinal)
+    $actual=@{}
+    foreach($path in $paths){$actual[$path]=Read-VtMpLoginGitText -RepoRoot $Root -Spec ($source+':'+$path)}
+    $cfg=Read-VtMpLoginGitText -RepoRoot $Root -Spec ($source+':modded_progression/itemV2.cfg')
+    $version=[regex]::Matches($cfg,'(?m)^\s*title\s*=\s*"Modded Progression v([^"]+)"\s*;\s*$')
+    & $assert ($version.Count -eq 1) 'unique independent HEAD cfg version'
+    $actualVersion=$version[0].Groups[1].Value
+    # Independent fixture metadata, generated from the current callback, independently hash-checked below,
+    # not treated as an oracle merely because it came from the current source.
+    $start=$actual[$paths[0]].IndexOf('mod:command("mp_login_diag",',[StringComparison]::Ordinal)
+    $end=$actual[$paths[0]].IndexOf(([string][char]10)+'local _mp840_census_backend',$start,[StringComparison]::Ordinal)
     & $assert ($start -ge 0 -and $end -gt $start) 'immutable fixture callback boundaries'
-    $callback=$oracle[$paths[0]].Substring($start,$end-$start).Trim()
+    $callback=$actual[$paths[0]].Substring($start,$end-$start).Trim()
     $quote={param([string]$Value) "'"+$Value.Replace("'","''")+"'"}
     $sigs=@('[mp:1684] status=projection_unavailable request=none eligibility=unproven grant=none',
         '[mp:1684] status=projection_unavailable reason=invalid_rows request=none grant=none','[mp:1684] %s')
@@ -34,6 +36,39 @@ function Test-VtMpLoginSourceContract {
     $exceptions=Import-VtMpLoginViewPolicy -Text $rowText
     $state=Get-VtMpLoginOverrideState -Exceptions $exceptions
     & $assert $state.Active 'fixture requires exact three active synthetic routes'
+    $documents=@(foreach($path in $paths){[pscustomobject]@{RelativePath=$path;Content=$actual[$path]}})
+    $proof=Assert-VtMpLoginRawSourceContract -Documents $documents -Exceptions $exceptions -Version $actualVersion -View 'Actual committed fixture seed'
+    & $assert ([bool]$proof.Active) 'full immutable entry/owner/callback proof must be active before normalization'
+    $tokens=@(Get-VtLuaTokens -Content $actual[$paths[0]])
+    $versions=@(for($i=3;$i -lt $tokens.Count;$i++){
+        if($tokens[$i].Kind -ceq 'String' -and $tokens[$i-1].Text -ceq '=' -and $tokens[$i-2].Text -ceq 'MOD_VERSION' -and $tokens[$i-3].Text -ceq 'local'){$tokens[$i]}
+    })
+    & $assert ($versions.Count -eq 1 -and $versions[0].Value -ceq $actualVersion) 'actual version token/cfg identity'
+    # Fixture-only normalization AFTER the actual subject passed all production
+    # hashes. Never alter the documents given to deployed/candidate assertions.
+    $v=$versions[0]
+    $normalized=$actual.Clone()
+    $text=$actual[$paths[0]]
+    $normalized[$paths[0]]=$text.Substring(0,$v.Start)+'"0.2.51-dev"'+$text.Substring($v.Start+$v.Length)
+    $fixtureDocuments=@(foreach($path in $paths){[pscustomobject]@{RelativePath=$path;Content=$normalized[$path]}})
+    $normalizedProof=Assert-VtMpLoginRawSourceContract -Documents $fixtureDocuments -Exceptions $exceptions -Version '0.2.51-dev' -View 'Normalized fixture only'
+    & $assert ([bool]$normalizedProof.Active) 'normalized fixture must retain every independent immutable hash'
+    return [pscustomobject]@{SourceCommit=$source;ActualVersion=$actualVersion;Paths=$paths;Actual=$actual;Normalized=$normalized;Exceptions=$exceptions;RowText=$rowText}
+}
+
+# Focused MP1684 integration fixtures. No live release or primary Git writes.
+function Test-VtMpLoginSourceContract {
+    [CmdletBinding()]
+    param([Parameter(Mandatory=$true)][string]$Root,[string]$TestParent)
+    $ErrorActionPreference='Stop'
+    if(-not$TestParent){$TestParent=[IO.Path]::GetTempPath()}
+    $parent=[IO.Path]::GetFullPath($TestParent)
+    $fixture=Join-Path $parent ('vt2-mp-login-integration-'+[guid]::NewGuid().ToString('N'))
+    $assert={param([bool]$Ok,[string]$Why) if(-not$Ok){throw ('MP1684 integration: '+$Why)}}
+    $seed=Get-VtMpLoginFixtureSeed -Root $Root
+    $paths=@($seed.Paths);$oracle=$seed.Normalized
+    $exceptions=$seed.Exceptions;$state=Get-VtMpLoginOverrideState -Exceptions $exceptions
+    $rowText=$seed.RowText
     $utf8=New-Object Text.UTF8Encoding($false,$true)
     $write={param([string]$Path,[string]$Text)
         $full=Join-Path $fixture $Path
@@ -78,12 +113,26 @@ function Test-VtMpLoginSourceContract {
         $null=[IO.Directory]::CreateDirectory((Join-Path $fixture 'empty-hooks'))
         $null=[IO.Directory]::CreateDirectory((Join-Path $fixture 'empty-template'))
         & $write 'empty-config' ''
-        foreach($path in $paths){& $write $path $oracle[$path]}
-        & $write 'modded_progression/itemV2.cfg' 'title = "Modded Progression v0.2.51-dev";'
+        # Real no-history portability case: only current source blobs/cfg enter
+        # this tiny repo. Historical35ed commit/input is not imported or fetched.
+        foreach($path in $paths){& $write $path $seed.Actual[$path]}
+        & $write 'modded_progression/itemV2.cfg' ('title = "Modded Progression v'+$seed.ActualVersion+'";')
         & $write 'tools/verify/live_test_contract_exceptions.psd1' $rowText
         & $git @('init','-q')
         & $git (@('add','--')+$paths+@('modded_progression/itemV2.cfg','tools/verify/live_test_contract_exceptions.psd1'))
-        & $git @('commit','-q','-m','MP fixture baseline')
+        & $git @('commit','-q','-m','Current source only, no historical oracle objects')
+        $portable=Get-VtMpLoginFixtureSeed -Root $fixture
+        & $assert ($portable.ActualVersion -ceq $seed.ActualVersion -and $portable.SourceCommit -cne $seed.SourceCommit) 'current-only repo must validate its own actual HEAD and cfg'
+        & $assert ($portable.Normalized[$paths[0]] -ceq $oracle[$paths[0]]) 'current-only fixture normalized witness differs'
+        $oldUnavailable=$false
+        try{Read-VtMpLoginGitText -RepoRoot $fixture -Spec ('35edbfcd7b10a6b760e025f89dea8668fc7f5a68:'+$paths[0])|Out-Null}catch{$oldUnavailable=$_.Exception.Message -match 'cannot read'}
+        & $assert $oldUnavailable 'current-only fixture unexpectedly contains historical input'
+        $portabilityChecks=3
+        # Preserve the independently distinct existing51/52 view matrix.
+        foreach($path in $paths){& $write $path $oracle[$path]}
+        & $write 'modded_progression/itemV2.cfg' 'title = "Modded Progression v0.2.51-dev";'
+        & $git (@('add','--')+$paths+@('modded_progression/itemV2.cfg'))
+        & $git @('commit','-q','--allow-empty','-m','Validated fixture-only version51 baseline')
         $clean=@(Invoke-VtMpLoginCandidateContract -RepoRoot $fixture -Committed)
         & $assert ($clean.Count -eq 3 -and @($clean|Where-Object{$_.Active}).Count -eq 3) 'real index/working/HEAD baseline'
         $script:mpIntegrationChecks++
@@ -141,7 +190,7 @@ function Test-VtMpLoginSourceContract {
         & $reject {Assert-VtMpLoginRawSourceContract -Documents $global -Exceptions $exceptions -Version '0.2.51-dev' -View 'Selected deployed'} 'mutates global/environment' 'canonical mutation guard retained'
         $ownerBad=@($docs[0],[pscustomobject]@{RelativePath=$paths[1];Content=($oracle[$paths[1]]+[char]10+'return {}')})
         & $reject {Assert-VtMpLoginRawSourceContract -Documents $ownerBad -Exceptions $exceptions -Version '0.2.51-dev' -View 'Selected deployed'} 'projection-owner' 'actual owner drift'
-        return [pscustomobject]@{Checks=$script:mpIntegrationChecks;Views='real Index/Working/Committed + actual selected documents';PrimaryWrites=$false}
+        return [pscustomobject]@{Checks=$script:mpIntegrationChecks;PortabilityChecks=$portabilityChecks;ActualSeedVersion=$seed.ActualVersion;ActualSeedCommit=$seed.SourceCommit;FixtureVersion='0.2.51-dev';Views='real Index/Working/Committed + actual selected documents';PrimaryWrites=$false}
     }finally{
         Remove-VtSourceProofTemporaryDirectory -Path $fixture -ExpectedParent $parent -NamePrefix 'vt2-mp-login-integration-'
     }
