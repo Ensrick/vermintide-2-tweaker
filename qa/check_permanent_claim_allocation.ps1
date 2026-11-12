@@ -306,22 +306,26 @@ try {
     Assert ([IO.File]::ReadAllText($foreignPath) -ceq 'foreign fixture record; not a migration target') 'CWV migration and allocation never touch foreign project records'
 
     # General adoption: #724 comment 6592186585. Official CT/CIM adoption:
-    # #724 comment 6677449320. Exercise the actual source-owned policy with
+    # #724 comment 6677449320. MP/WT adoption: #724 comment 6814671590.
+    # Exercise the actual source-owned policy and main dispatcher with
     # private synthetic data, never live state or unrelated Dev streams.
     $committedPolicy=Join-Path $repo 'tools\ship\claim-allocation-policy.psd1'
-    $expectedEnabled=@('character_weapon_variants','general_tweaker','general_tweaker_dev','chaos_wastes_tweaker','crafting_in_modded')
+    $expectedEnabled=@('character_weapon_variants','general_tweaker','general_tweaker_dev','chaos_wastes_tweaker','crafting_in_modded','modded_progression','weapon_tweaker','weapon_tweaker_dev')
     foreach ($enabledMod in $expectedEnabled) {
         Assert (Get-AllocationPolicy $committedPolicy $enabledMod) "committed policy activates exact approved identity $enabledMod"
     }
     $policyTokens=$null; $policyErrors=$null
     $policyAst=[Management.Automation.Language.Parser]::ParseFile($committedPolicy,[ref]$policyTokens,[ref]$policyErrors)
     $policyData=$policyAst.EndBlock.Statements[0].PipelineElements[0].Expression.SafeGetValue()
-    Assert (@($policyData.EnabledMods).Count -eq $expectedEnabled.Count) 'committed policy enables only the five explicitly adopted streams'
+    Assert (@($policyData.EnabledMods).Count -eq $expectedEnabled.Count) 'committed policy enables only the eight explicitly adopted streams'
     foreach ($case in @(
         @{Mod='general_tweaker';Source='0.2.177';Floor='0.2.178';Retained='0.2.178';Fresh='0.2.179';Next='0.2.180'},
         @{Mod='general_tweaker_dev';Source='0.2.276-dev';Floor='0.2.277';Retained='';Fresh='0.2.278-dev';Next='0.2.279-dev'},
         @{Mod='chaos_wastes_tweaker';Source='0.7.132-beta';Floor='0.7.353';Retained='';Fresh='0.7.354-beta';Next='0.7.355-beta'},
-        @{Mod='crafting_in_modded';Source='0.8.92';Floor='0.8.147';Retained='0.8.146';Fresh='0.8.148';Next='0.8.149'}
+        @{Mod='crafting_in_modded';Source='0.8.92';Floor='0.8.147';Retained='0.8.146';Fresh='0.8.148';Next='0.8.149'},
+        @{Mod='modded_progression';Source='0.2.51-dev';Floor='0.2.51';Retained='0.2.51-dev';Fresh='0.2.52-dev';Next='0.2.53-dev'},
+        @{Mod='weapon_tweaker';Source='0.12.342-beta';Floor='0.12.342';Retained='0.12.342-beta';Fresh='0.12.343-beta';Next='0.12.344-beta'},
+        @{Mod='weapon_tweaker_dev';Source='0.12.343-dev';Floor='0.12.343';Retained='0.12.343-dev';Fresh='0.12.344-dev';Next='0.12.345-dev'}
     )) {
         $target=[string]$case.Mod
         $dir=New-Case $target $case.Source $target

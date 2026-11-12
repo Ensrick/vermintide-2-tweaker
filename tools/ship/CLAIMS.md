@@ -5,7 +5,8 @@
 The permanent-burn requirement is implemented in `claim-allocation.ps1`.
 The source-owned `claim-allocation-policy.psd1` activates only
 `character_weapon_variants`, `general_tweaker`, `general_tweaker_dev`,
-`chaos_wastes_tweaker`, and `crafting_in_modded`;
+`chaos_wastes_tweaker`, `crafting_in_modded`, `modded_progression`,
+`weapon_tweaker`, and `weapon_tweaker_dev`;
 every other mod still requires its own reviewed initialization and activation.
 The legacy behavior below remains for an
 unactivated mod with no allocation state. It does NOT preserve abandoned numbers. Do not allocate
@@ -70,6 +71,51 @@ existing prepared source and artifacts remain protected. This source activation
 must land through protected review and exact-master QA before normal Acquire
 allocates the approved fresh official CT `0.7.354-beta` and CIM `0.8.148`.
 No old timestamp was renewed and no old artifact gained publication authority.
+
+Modded Progression and the Weapon Tweaker public-beta/Dev pair were initialized
+at `2026-11-12T04:57:47.9747440Z` from reviewed merged source
+`883c6025ae8f32ee708b6668813e9bc0dac1eb4c`, under the maintainer's explicit
+[three-stream approval and floor review](https://github.com/Ensrick/vermintide-2-tweaker/issues/724#issuecomment-6814671590).
+Only their three allocation ledgers were created; all original claims and
+other shared records remained byte-identical. Initialization performed no
+Acquire, timestamp renewal, activation, build or publication.
+
+Modded Progression's reviewed numeric floor is `0.2.51`. Its retained
+`0.2.51-dev` claim has SHA-256
+`874cb7d7536e5d9ee41572209337f3633bf2d71fc29a6eddca125c0531471274`,
+owner `explicit:codex-mp1684-login-cache-20261030`, and original timestamp
+`2026-10-30T19:31:53Z`. Its initial ledger SHA-256 is
+`c062b48d176a0683895f9787c509ccc6a80fa733060f6a2879273aedb53f746c`.
+The old version has a GitHub publication receipt, not an authenticated Workshop
+transfer; the retained incomplete transaction is not authority to reuse it.
+
+Weapon Tweaker's reviewed public-beta floor is `0.12.342`. Its retained
+`0.12.342-beta` claim has SHA-256
+`05747d37ae8926e3e70df65157dfaca3a4db41e6da9b0fbd4e690095cc2bb106`,
+owner `explicit:codex-wt942-finite-capture-20261030`, and original timestamp
+`2026-10-30T23:20:20Z`. Its initial ledger SHA-256 is
+`c6937fe86ece6fc8ed7e037cd2f9fd2eadf4eb2c488aab57cfeb46fb3935d09a`.
+
+Weapon Tweaker Dev's separately reviewed floor is `0.12.343`. Its retained
+`0.12.343-dev` claim has SHA-256
+`5e27376ee66e1e09f2ae9fff15e4ce3f8743d57aab7d02acf62ef728856f77c0`
+with the same WT owner and original timestamp. Its initial ledger SHA-256 is
+`6d5157ed645aacb750243acef08d0062c9995eccc599673743a633b2aeab78cf`.
+Those WT candidates were prepared but unpublished; their previous successful
+`0.12.341-beta` / `0.12.342-dev` publication proofs are not substitutes.
+
+The review covered all 112 retained release manifests, 58 relevant publication
+receipts, all 38 current remote branch tips, retained exact-file histories and
+both registered detached worktree HEADs. Deleted claims and overwritten/deleted
+history remain unknown: these are conservative known-allocation floors, not
+retroactive reconstruction. These claim and ledger hashes describe only this
+initialization event; later authorized reservations change the ledgers.
+Protected activation review and exact-master QA must complete before normal
+Acquire returns fresh higher versions (expected `0.2.52-dev`, `0.12.343-beta`
+and `0.12.344-dev`). The broker's returned version remains authoritative, not
+those expectations. Old stale timestamps and prepared artifacts gain no new
+publication authority. Every other unactivated stream remains outside scope;
+this does not complete the broader #724 migration.
 
 An activated mod has one `<mod>.allocation` file beside its unchanged four-field
 `<mod>.claim`. Its numeric floor survives release, stale takeover and failure;
