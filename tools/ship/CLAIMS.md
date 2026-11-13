@@ -7,10 +7,15 @@ The source-owned `claim-allocation-policy.psd1` activates only
 `character_weapon_variants`, `general_tweaker`, `general_tweaker_dev`,
 `chaos_wastes_tweaker`, `crafting_in_modded`, `modded_progression`,
 `weapon_tweaker`, and `weapon_tweaker_dev`;
-every other mod still requires its own reviewed initialization and activation.
+every other mod still requires its own reviewed initialization and activation
+before it can use the permanent-burn guarantee.
 The legacy behavior below remains for an
 unactivated mod with no allocation state. It does NOT preserve abandoned numbers. Do not allocate
 protected queued versions through that legacy lane while migration is pending.
+Absence of allocation state alone is not a blocker for an ordinary fresh legacy
+Acquire that does not reclaim a protected queued number. Review the known
+reservations and let the broker allocate; do not invent a migration requirement
+for that supported operation or initialize a ledger without separate approval.
 The September 6 private reproduction established reuse after ordinary release
 and stale takeover; older claims already deleted cannot be reconstructed from
 the current directory. Source-plus-one is not historical reconciliation.

@@ -3472,8 +3472,23 @@ cosmetics `_mh_package_lifecycle.lua`).
 ### Related issues / fixes
 - #282 owns the cross-mod package-lifetime class. Weapon Tweaker's Deepwood
   retry regression was repaired by retaining the request latch whenever
-  `is_loading(package, "wt_deepwood_runtime")` is true and exposing the exact
+  `is_loading(package, "wt_deepwood_runtime")` is truthy and exposing the exact
   reference count through its runtime regression suite.
+
+### Reference-qualified readiness is not a Boolean (#881)
+
+At native source `93dea911`, PackageManager.is_loading with a reference name
+returns the final reference-count operand (`package_manager.lua:282-283`);
+load increments that count (`:20-27`). In contrast, has_loaded explicitly tests
+reference presence and returns a Boolean (`:286-293`). Normalize the loading
+value at that API boundary, not by globally relaxing unrelated Boolean guards.
+
+Character Dialogue's literal-true comparison cancelled a valid async preview
+and retried acquisition on the next click. Boolean-only package doubles hid
+the defect. Its real-entry tests must include a positive native loading count,
+pending-to-ready transition, repeated clicks with one acquisition, latest-event
+playback once and symmetric release. Cleanup observers must not throw across
+ownership finishing or prevent retries after their evidence budget is exhausted.
 
 ## 85. Lying instrument (harness misreport)
 
