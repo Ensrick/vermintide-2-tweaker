@@ -222,15 +222,17 @@ return function(Harness, repo_root)
         end
     end)
 
-    Harness.test("issue 1530 CIM Dev copy attributes the 25-point grid to Mod Tweaker", function()
-        local root = "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/"
+    for _, directory in ipairs({ "crafting_in_modded", "crafting_in_modded_dev" }) do
+        local namespace = directory
+        local root = namespace .. "/scripts/mods/" .. namespace .. "/"
+    Harness.test("issue 1530 " .. namespace .. " copy attributes the 25-point grid to Mod Tweaker", function()
         local localization = assert(loadfile(repo_root .. "/" .. root
-            .. "crafting_in_modded_dev_localization.lua"))()
+            .. namespace .. "_localization.lua"))()
         local description = localization.base_power_level_description.en
         Harness.truthy(description:find("steps of 25 in Mod Tweaker", 1, true))
         Harness.equal(description:find("steps of 50", 1, true), nil)
         Harness.equal(string.format(description), description)
-        local data = read(root .. "crafting_in_modded_dev_data.lua")
+        local data = read(root .. namespace .. "_data.lua")
         local forge = read(root .. "standard_forge.lua")
         Harness.equal(data:find("in steps of 50", 1, true), nil)
         Harness.equal(forge:find("0-950 step 50", 1, true), nil)
@@ -238,8 +240,8 @@ return function(Harness, repo_root)
         Harness.truthy(forge:find("Mod Tweaker steps by 25", 1, true))
     end)
 
-    Harness.test("issue 1530 CIM base-power reader clamps without GUI quantization", function()
-        local source = read("crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/standard_forge.lua")
+    Harness.test("issue 1530 " .. namespace .. " base-power reader clamps without GUI quantization", function()
+        local source = read(root .. "standard_forge.lua")
             :gsub("\r\n", "\n")
         -- Compile the exact published production function in its complete,
         -- two-name environment; no engine hooks or copied clamp implementation.
@@ -265,4 +267,5 @@ return function(Harness, repo_root)
         value = nil
         Harness.equal(read_power(), 300)
     end)
+    end
 end

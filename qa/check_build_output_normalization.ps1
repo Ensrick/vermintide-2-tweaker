@@ -33,6 +33,7 @@ $script:SdkSidecarPolicyDirs = @(
     'enemy_tweaker',
     'character_weapon_variants',
     'character_dialogue',
+    'crafting_in_modded',
     'crafting_in_modded_dev',
     'event_tweaker',
     'modded_progression',
@@ -41,7 +42,6 @@ $script:SdkSidecarPolicyDirs = @(
 )
 $script:SdkSidecarDeferredDirs = @(
     'general_tweaker',
-    'crafting_in_modded',
     'verminious_dreams_lighting'
 )
 
@@ -381,7 +381,7 @@ function Invoke-NormalizationSelfTest {
 
         $completeInventory = @(New-SdkSidecarCompletenessFixture)
         Assert (@(Get-SdkSidecarInventoryCompletenessErrors -ModEntries $completeInventory).Count -eq 0) `
-            'live inventory completeness accepts the exact 18-policy transfer'
+            'live inventory completeness accepts the exact 19-policy transfer'
 
         $omittedInventory = @($completeInventory | Where-Object { $_.Dir -cne 'general_tweaker_dev' })
         Assert ((@(Get-SdkSidecarInventoryCompletenessErrors -ModEntries $omittedInventory) -match

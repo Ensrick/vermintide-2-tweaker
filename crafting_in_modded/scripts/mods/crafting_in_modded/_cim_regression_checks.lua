@@ -1264,6 +1264,39 @@ _rt_register("action_rejection_uses_warning_channel", function()
     if not ok then return string.format("mod:warning raised: %s", tostring(err)) end
 end)
 
+-- Appended after the historical registrations; their order stays unchanged.
+-- #1530: use the runner's actual registrar and current localized module.
+-- Missing dependencies must fail, not become a nil-returning false PASS.
+-- Reads only: Mod Tweaker owns the 25-point grid; CIM's reader just clamps.
+_rt_register("issue1530_base_power_step_wording", function()
+    if type(mod.dofile) ~= "function" then return "Base Power localization loader missing" end
+    local ok, loc = pcall(mod.dofile, mod,
+        "scripts/mods/crafting_in_modded/crafting_in_modded_localization")
+    if not ok or type(loc) ~= "table" then return "Base Power localization failed to load" end
+    local entry = loc.base_power_level_description
+    local text = type(entry) == "table" and entry.en or nil
+    if type(text) ~= "string" then return "base_power_level_description is missing" end
+    if not text:find("steps of 25 in Mod Tweaker", 1, true) then
+        return "Base Power tooltip no longer attributes 25-point steps to Mod Tweaker"
+    end
+    if text:find("steps of 50", 1, true) then return "Base Power tooltip still claims 50-point steps" end
+    if type(mod.get) ~= "function" then return "Base Power setting reader missing" end
+    if type(mod._cim_base_power) ~= "function" then return "_cim_base_power reader missing" end
+    local read_setting, setting = pcall(mod.get, mod, "base_power_level")
+    if not read_setting then return "Base Power setting read failed" end
+    local read_power, power = pcall(mod._cim_base_power)
+    if not read_power then return "Base Power craft reader failed" end
+    if type(power) ~= "number" or power ~= power or power < 0 or power > 950 then
+        return "base power reader returned " .. tostring(power) .. " outside 0..950"
+    end
+    local expected = type(setting) == "number" and setting or 300
+    if expected < 0 then expected = 0 elseif expected > 950 then expected = 950 end
+    if power ~= expected then
+        return string.format("reader changed clamped setting %s to %s",
+            tostring(expected), tostring(power))
+    end
+end)
+
 return {
     with_loadout_sandbox = _rt_with_loadout_sandbox,
 }
