@@ -1,5 +1,35 @@
 # Character Dialogue Changelog
 
+## 0.1.15-dev (2026-11-13) -- Native async readiness and safe cleanup (#881)
+
+### Why
+
+VT2's reference-qualified PackageManager.is_loading returns a reference count,
+not literal true. The preview adapter rejected that valid pending state, aborting
+the first async preview and attempting another acquisition on repeated clicks.
+Cleanup logging could also raise after unload and interrupt ownership finishing.
+
+### Changed
+
+- Normalize only the loading result using native Lua truthiness; retain the
+  has_loaded Boolean contract. Native source: package_manager.lua:20-27,282-303.
+- Preserve the latest pending click and exactly one private package reference
+  while async loading completes. No new package or dialogue family is inferred.
+- Bound cleanup observations to 32 per entry lifetime, at most 64 logging calls.
+  Truncate error text to 160 bytes before sanitizing controls, with protected
+  formatting and sinks. Unload attempts/retries remain outside the log budget.
+- Execute the real entry in 15 new cleanup/native-count cases. The 64-case
+  candidate passes; the old entry fails eight new cases, and the cleanup-only
+  intermediate fails precisely the two native-count cases.
+
+### Notes
+
+- Verify audible first/repeat Morris playback, pending-row replacement and
+  private-reference cleanup through the later exact published-build solo card.
+  Missing/capped evidence is inconclusive; tests are not Wwise/game acceptance.
+- Ordinary fresh legacy reservation remains supported here; permanent-floor
+  adoption is a separate operation, not a prerequisite inferred from absence.
+
 ## 0.1.14-dev (2026-09-25) - staged audio-isolation owner (#998)
 
 - Reissued as 0.1.14-dev: the 0.1.12-dev entry (2026-09-06) merged to master

@@ -18,6 +18,18 @@ reference, keeps only the latest pending click, and releases the package when
 preview ownership ends. Unmapped dialogue continues through vanilla Wwise
 playback without speculative package loading.
 
+The reference-qualified native `PackageManager.is_loading` result is a reference
+count while pending, not a Boolean. The adapter normalizes its Lua truthiness;
+`has_loaded` retains its separate Boolean contract. See native
+`foundation/scripts/managers/package/package_manager.lua:20-27,282-303` at
+`93dea911`. Tests must model the native positive count, not only a Boolean stub.
+
+Cleanup observations are limited to 32 attempts per loaded entry (at most 64
+logging calls), and error text is truncated to 160 bytes before control-character
+sanitization. This budget never limits unloading or retries. Logging/formatting
+errors cannot prevent the actual unload result from finishing ownership cleanup.
+Missing or exhausted observations are not proof of successful cleanup.
+
 Each generated catalogue tuple also carries Fatshark's authored clip duration.
 The Dialogue tab combines that duration with `WwiseWorld.get_playing_elapsed`
 for its active-row progress bar; Wwise playback state remains the completion

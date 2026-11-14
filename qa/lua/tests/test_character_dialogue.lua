@@ -947,4 +947,301 @@ return function(Harness, repo_root)
             end
         end)
     end)
+
+    -- #881 Execute the installed CD entry. Stub only the external package,
+    -- Wwise and printf boundaries; cleanup/retry state stays production-owned.
+    local live_dialogue_fixture = assert(loadfile(repo_root ..
+        "/qa/lua/tests/fixtures/dialogue_transaction_fixture.lua"))()
+    local morris_source = "hero_conversations_dlc_morris_ingame"
+    local function release_fixture(options)
+        options = options or {}
+        local f = live_dialogue_fixture(repo_root)
+        local p = { owned = false, loaded = false, loading = false,
+            loads = 0, unloads = 0, failures = options.failures or 0, references = {},
+            receipts = {}, print_attempts = 0, triggers = 0 }
+        local manager = {}
+        local function reference(package_name, name)
+            Harness.equal(package_name, residency.MORRIS_PACKAGE)
+            Harness.equal(name, residency.REFERENCE)
+            p.references[#p.references + 1] = { package_name, name }
+        end
+        function manager:has_loaded(package_name, name)
+            reference(package_name, name)
+            return p.owned and p.loaded
+        end
+        function manager:is_loading(package_name, name)
+            reference(package_name, name)
+            if options.native_loading_count then
+                return p.owned and p.loading and 1 or false
+            end
+            return p.owned and p.loading
+        end
+        function manager:load(package_name, name)
+            reference(package_name, name)
+            p.loads = p.loads + 1
+            Harness.equal(p.owned, false, "must not acquire a second private reference")
+            p.owned = true
+            p.loaded, p.loading = not options.async, options.async == true
+        end
+        function manager:unload(package_name, name)
+            reference(package_name, name)
+            p.unloads = p.unloads + 1
+            Harness.equal(p.owned, true, "must not unload an unowned private reference")
+            if p.failures > 0 then
+                p.failures = p.failures - 1
+                error(p.error_object or "planted unload failure", 0)
+            end
+            p.owned, p.loaded, p.loading = false, false, false
+        end
+        f:load_live_cd({
+            catalogue = {
+                { "pes_fixture_01", "", "", "empire_soldier", 2 },
+                { "pes_morris_bardin_song_kruber_13", "", "", morris_source, 2 },
+                { "pes_morris_bardin_song_kruber_14", "", "", morris_source, 2 },
+            },
+            package_manager = manager,
+            trigger_event = function(_, event)
+                p.triggers = p.triggers + 1
+                p.last_triggered_event = event
+                if options.trigger_zero then return 0 end
+                f.playing = true
+                return 7
+            end,
+        })
+        f.env.printf = function(format, ...)
+            if not format:find("[cd:881] package_release", 1, true) then return end
+            p.print_attempts = p.print_attempts + 1
+            if p.throw_logger then error("planted cleanup logger failure", 0) end
+            p.receipts[#p.receipts + 1] = string.format(format, ...)
+        end
+        f.package, f.package_manager = p, manager
+        function f:play_morris(second)
+            return self.api.play(second and "pes_morris_bardin_song_kruber_14"
+                or "pes_morris_bardin_song_kruber_13")
+        end
+        return f
+    end
+    Harness.test("cd issue 881 installed native loading count stays pending until ready then plays once", function()
+        local f = release_fixture({ async = true, native_loading_count = true })
+        Harness.truthy(f:play_morris())
+        for _ = 1, 3 do f.cd.update(0.1) end
+        Harness.equal(f.package.loads, 1)
+        Harness.equal(f.package.unloads, 0, "native reference count one is loading, not stopped")
+        Harness.equal(f.package.owned, true)
+        Harness.equal(f.package.triggers, 0)
+        f.package.loaded, f.package.loading = true, false
+        f.cd.update(0.1)
+        Harness.equal(f.package.triggers, 1)
+        Harness.equal(f.package.last_triggered_event, "pes_morris_bardin_song_kruber_13")
+        f.cd.update(0.1)
+        Harness.equal(f.package.triggers, 1, "one pending click triggers once")
+        f.api.stop()
+        Harness.equal(f.package.unloads, 1)
+        Harness.equal(f.package.owned, false)
+    end)
+    Harness.test("cd issue 881 installed native loading count replaces latest pending without duplicate acquire", function()
+        local f = release_fixture({ async = true, native_loading_count = true })
+        Harness.truthy(f:play_morris())
+        Harness.truthy(f:play_morris(true))
+        Harness.equal(f.package.loads, 1, "pending native reference must not be acquired twice")
+        f.cd.update(0.1)
+        Harness.equal(f.package.unloads, 0)
+        Harness.equal(f.package.owned, true)
+        Harness.equal(f.package.triggers, 0)
+        f.package.loaded, f.package.loading = true, false
+        f.cd.update(0.1)
+        Harness.equal(f.package.triggers, 1)
+        Harness.equal(f.package.last_triggered_event, "pes_morris_bardin_song_kruber_14")
+        f.cd.update(0.1)
+        Harness.equal(f.package.triggers, 1)
+        f.api.stop()
+        Harness.equal(f.package.unloads, 1)
+        Harness.equal(f.package.owned, false)
+    end)
+    Harness.test("cd issue 881 installed successful cleanup is symmetric and idempotent", function()
+        local f = release_fixture()
+        Harness.truthy(f:play_morris())
+        Harness.equal(f.package.loads, 1)
+        f.api.stop()
+        Harness.equal(f.package.unloads, 1)
+        Harness.equal(f.package.owned, false)
+        Harness.equal(#f.package.receipts, 1)
+        Harness.truthy(f.package.receipts[1]:find("ok=true", 1, true))
+        f.api.stop()
+        f.cd.on_disabled()
+        f.cd.on_unload()
+        Harness.equal(f.package.unloads, 1)
+        Harness.equal(#f.package.receipts, 1)
+    end)
+    Harness.test("cd issue 881 installed failed unload retries the exact retained reference", function()
+        local f = release_fixture({ failures = 1 })
+        Harness.truthy(f:play_morris())
+        f.api.stop()
+        Harness.equal(f.package.owned, true)
+        Harness.equal(f.package.unloads, 1)
+        Harness.equal(#f.package.receipts, 2)
+        Harness.truthy(f.package.receipts[1]:find("ok=false", 1, true))
+        Harness.truthy(f.package.receipts[2]:find("package_release_retry", 1, true))
+        f.api.stop()
+        Harness.equal(f.package.owned, false)
+        Harness.equal(f.package.unloads, 2)
+        Harness.equal(f.package.loads, 1)
+        Harness.truthy(f.package.receipts[3]:find("ok=true", 1, true))
+        f.api.stop()
+        Harness.equal(f.package.unloads, 2)
+    end)
+    Harness.test("cd issue 881 installed lifetime evidence cap never caps lifecycle unload retries", function()
+        local f = release_fixture({ failures = 100 })
+        Harness.truthy(f:play_morris())
+        local boundaries = { f.api.stop, f.cd.on_disabled, f.cd.on_unload,
+            function() f.cd.on_game_state_changed("exit") end }
+        for i = 1, 40 do boundaries[(i - 1) % #boundaries + 1]() end
+        Harness.equal(f.package.unloads, 40)
+        Harness.equal(f.package.owned, true)
+        Harness.equal(#f.package.receipts, 64, "32 observations may emit at most two rows each")
+        f.package.failures = 0
+        f.api.stop()
+        Harness.equal(f.package.unloads, 41)
+        Harness.equal(f.package.owned, false)
+        Harness.equal(#f.package.receipts, 64, "no uncapped final/suppression row")
+        f.api.stop()
+        Harness.equal(f.package.unloads, 41)
+    end)
+    Harness.test("cd issue 881 installed evidence cap survives successful preview reacquisition", function()
+        local f = release_fixture()
+        for _ = 1, 40 do
+            Harness.truthy(f:play_morris())
+            f.api.stop()
+        end
+        Harness.equal(f.package.loads, 40)
+        Harness.equal(f.package.unloads, 40)
+        Harness.equal(f.package.owned, false)
+        Harness.equal(#f.package.receipts, 32, "successful stops never reset the entry-lifetime budget")
+    end)
+    Harness.test("cd issue 881 installed throwing cleanup logger cannot strand ownership or refill cap", function()
+        local f = release_fixture({ failures = 100 })
+        f.package.throw_logger = true
+        Harness.truthy(f:play_morris())
+        for _ = 1, 40 do f.api.stop() end
+        Harness.equal(f.package.unloads, 40)
+        Harness.equal(f.package.owned, true)
+        Harness.equal(f.package.print_attempts, 64, "reserve budget before the throwing sink")
+        f.package.failures = 0
+        f.api.stop()
+        Harness.equal(f.package.owned, false)
+        Harness.equal(f.package.unloads, 41)
+        Harness.equal(f.package.print_attempts, 64)
+        f.api.stop()
+        Harness.equal(f.package.unloads, 41)
+    end)
+    Harness.test("cd issue 881 installed hostile error formatting cannot suppress later release", function()
+        local f = release_fixture({ failures = 100 })
+        f.package.error_object = setmetatable({}, {
+            __tostring = function() error("planted error formatting failure", 0) end,
+        })
+        Harness.truthy(f:play_morris())
+        for _ = 1, 40 do f.api.stop() end
+        Harness.equal(f.package.unloads, 40)
+        Harness.equal(f.package.owned, true)
+        Harness.equal(f.package.print_attempts, 32, "only retry rows survive hostile error formatting")
+        f.package.failures = 0
+        f.api.stop()
+        Harness.equal(f.package.owned, false)
+        Harness.equal(f.package.unloads, 41)
+        f.api.stop()
+        Harness.equal(f.package.unloads, 41)
+    end)
+    Harness.test("cd issue 881 installed huge multiline error evidence stays bounded while retries continue", function()
+        local f = release_fixture({ failures = 2 })
+        f.package.error_object = ("native\r\n\t" .. string.char(127) .. "error"):rep(32768)
+        Harness.truthy(f:play_morris())
+        local maximum = #string.format("[cd:881] package_release package=%s ok=%s error=%s",
+            residency.MORRIS_PACKAGE, "false", "") + 160
+        for attempt = 1, 2 do
+            f.api.stop()
+            Harness.equal(f.package.unloads, attempt)
+            Harness.equal(f.package.owned, true)
+            Harness.equal(#f.package.receipts, attempt * 2)
+            local receipt = f.package.receipts[attempt * 2 - 1]
+            local error_text = assert(receipt:match(" error=(.*)$"))
+            Harness.equal(#error_text, 160, "truncate bytes before sanitizing controls")
+            Harness.equal(error_text:find("%c"), nil, "one physical error-text line")
+            Harness.equal(#receipt, maximum, "literal prefix plus at most 160 error bytes")
+        end
+        f.api.stop()
+        Harness.equal(f.package.unloads, 3)
+        Harness.equal(f.package.owned, false)
+        Harness.equal(#f.package.receipts, 5)
+        Harness.truthy(f.package.receipts[5]:find("ok=true", 1, true))
+        f.api.stop()
+        Harness.equal(f.package.unloads, 3)
+    end)
+    Harness.test("cd issue 881 installed same package replacement holds exactly one reference", function()
+        local f = release_fixture()
+        Harness.truthy(f:play_morris())
+        Harness.truthy(f:play_morris(true))
+        Harness.equal(f.package.loads, 1)
+        Harness.equal(f.package.unloads, 0)
+        Harness.equal(#f.package.receipts, 0)
+        Harness.equal(f.package.triggers, 2)
+        f.api.stop()
+        Harness.equal(f.package.unloads, 1)
+    end)
+    Harness.test("cd issue 881 installed cancelled pending click never resumes after failed unload", function()
+        local f = release_fixture({ async = true, failures = 1 })
+        Harness.truthy(f:play_morris())
+        Harness.truthy(f:play_morris(true))
+        Harness.equal(f.package.loads, 1)
+        Harness.equal(f.package.triggers, 0)
+        f.api.stop()
+        Harness.equal(f.package.owned, true)
+        f.package.loaded, f.package.loading = true, false
+        f.cd.update(0.1)
+        Harness.equal(f.package.triggers, 0, "failed unload preserves ownership, never a stale pending click")
+        f.api.stop()
+        Harness.equal(f.package.owned, false)
+        Harness.equal(f.package.unloads, 2)
+    end)
+    Harness.test("cd issue 881 installed timeout releases even when cleanup evidence throws", function()
+        local f = release_fixture({ async = true })
+        f.package.throw_logger = true
+        Harness.truthy(f:play_morris())
+        f.cd.update(residency.TIMEOUT_SECONDS)
+        Harness.equal(f.package.unloads, 1)
+        Harness.equal(f.package.owned, false)
+        Harness.equal(f.package.triggers, 0)
+        f.api.stop()
+        Harness.equal(f.package.unloads, 1)
+    end)
+    Harness.test("cd issue 881 installed trigger failure releases its resident private reference", function()
+        local f = release_fixture({ trigger_zero = true })
+        Harness.equal(f:play_morris(), false)
+        Harness.equal(f.package.triggers, 1)
+        Harness.equal(f.package.unloads, 1)
+        Harness.equal(f.package.owned, false)
+        f.api.stop()
+        Harness.equal(f.package.unloads, 1)
+    end)
+    Harness.test("cd issue 881 installed missing package manager retains retry ownership", function()
+        local f = release_fixture()
+        Harness.truthy(f:play_morris())
+        f.env.Managers.package = nil
+        f.api.stop()
+        Harness.equal(f.package.owned, true)
+        Harness.equal(f.package.unloads, 0)
+        Harness.equal(#f.package.receipts, 0)
+        f.env.Managers.package = f.package_manager
+        f.cd.on_disabled()
+        Harness.equal(f.package.owned, false)
+        Harness.equal(f.package.unloads, 1)
+    end)
+    Harness.test("cd issue 881 installed unmapped family remains on native playback without package work", function()
+        local f = release_fixture()
+        Harness.truthy(f.api.play("pes_fixture_01"))
+        Harness.equal(f.package.triggers, 1)
+        f.api.stop()
+        Harness.equal(f.package.loads, 0)
+        Harness.equal(f.package.unloads, 0)
+        Harness.equal(#f.package.receipts, 0)
+    end)
 end

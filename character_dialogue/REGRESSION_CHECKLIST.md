@@ -1,5 +1,14 @@
 # Character Dialogue Regression Checklist
 
+- #881 host coverage executes the actual entry with native-style positive
+  loading counts: first async play stays pending, repeated clicks retain one
+  reference, only the latest line plays after readiness, and Stop releases once.
+  Preserve Boolean has_loaded, false/nil loading and timeout behavior.
+- Keep cleanup work outside the 32-observation budget; at most 64 logging calls,
+  160 sanitized error bytes. Cover exhausted budgets, throwing formatters/sinks,
+  huge multiline errors, replacement, world change, disable and unload. Missing
+  evidence is inconclusive, never a pass; live Wwise audibility is still owed.
+
 - #998: Click Isolate Audio During Playback: Apply enables but no setting/audio
   changes until Apply. Close without Apply, reopen, and confirm the old value.
 - Apply ON and OFF while a preview plays; restart and confirm persistence.

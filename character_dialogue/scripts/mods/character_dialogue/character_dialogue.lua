@@ -1,5 +1,5 @@
 local mod = get_mod("character_dialogue")
-local MOD_VERSION = "0.1.14-dev"
+local MOD_VERSION = "0.1.15-dev"
 -- Fatshark keeps DialogueQueries local to dialogue_system.lua; it is not a
 -- global like TagQueryDatabase.  Resolve the canonical module before asking
 -- VMF to install the hook, otherwise VMF receives nil and emits a startup
@@ -45,6 +45,11 @@ local function auto_isolation_enabled()
     return mod:get(AUTO_ISOLATION_SETTING) == true
 end
 local preview_residency = PreviewResidency.new_state()
+-- #881 Bound only cleanup evidence, never the unload attempts themselves.
+-- One attempt emits at most two rows; this entry-lifetime budget is never
+-- reset by preview, world, disable, or unload lifecycle transitions.
+local PREVIEW_RELEASE_LOG_ATTEMPTS = 32
+local preview_release_log_attempts = 0
 local catalogue_cache
 local catalogue_index_cache
 local catalogue_index
@@ -90,10 +95,22 @@ local function release_preview_package(keep_package)
     if not ((ok_loaded and loaded) or (ok_loading and loading)) then return true end
     local ok, err = pcall(package_manager.unload, package_manager,
         package_name, PreviewResidency.REFERENCE)
-    printf("[cd:881] package_release package=%s ok=%s error=%s",
-        package_name, tostring(ok), tostring(err))
-    if not ok then
-        printf("[cd:881] package_release_retry package=%s reason=unload_failed", package_name)
+    if preview_release_log_attempts < PREVIEW_RELEASE_LOG_ATTEMPTS then
+        preview_release_log_attempts = preview_release_log_attempts + 1
+        -- Formatting and the sink are both observational. Neither may throw
+        -- past the actual result and prevent exact-reference retry/cleanup.
+        pcall(function()
+            -- Bound before sanitizing, so arbitrary native error text cannot
+            -- expand a receipt into a large allocation or extra physical rows.
+            local error_text = tostring(err):sub(1, 160):gsub("%c", " ")
+            printf("[cd:881] package_release package=%s ok=%s error=%s",
+                package_name, tostring(ok), error_text)
+        end)
+        if not ok then
+            pcall(function()
+                printf("[cd:881] package_release_retry package=%s reason=unload_failed", package_name)
+            end)
+        end
     end
     return ok
 end
@@ -156,7 +173,9 @@ local function package_status(package_name)
         package_name, PreviewResidency.REFERENCE)
     local ok_loading, loading = pcall(package_manager.is_loading, package_manager,
         package_name, PreviewResidency.REFERENCE)
-    return package_manager, ok_loaded and loaded == true, ok_loading and loading == true
+    -- Native is_loading(package, reference) returns the reference count, not
+    -- literal true: package_manager.lua:282-283, source 93dea911 (6.13).
+    return package_manager, ok_loaded and loaded == true, not not (ok_loading and loading)
 end
 
 local function trigger_owned_preview(event)

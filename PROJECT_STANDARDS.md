@@ -1072,6 +1072,8 @@ the prospective durable-floor implementation remains dormant until each exact
 mod's reviewed initialization/adoption and source-policy activation. The legacy
 unactivated broker does not retain released/stale allocations; do not use that
 lane to reclaim protected queued versions. Follow `tools/ship/CLAIMS.md` for
+the supported ordinary fresh legacy lane when allocation state is absent; that
+absence alone does not require a migration. Follow the same document for
 explicit floor review, exact-claim adoption, old-broker exclusion and fresh
 higher versions for stale work. Missing history is not reconstructed from
 source-plus-one. Always renumber `MOD_VERSION`, the
