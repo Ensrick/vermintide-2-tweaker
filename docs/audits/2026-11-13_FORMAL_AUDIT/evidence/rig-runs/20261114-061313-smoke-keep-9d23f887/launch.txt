@@ -1,0 +1,1 @@
+pid 49620 desktop 'Vt2Rig-c966f6bd9e884399ab0c4ebee2c624d7' args: -eac-untrusted --bundle-dir ../bundle --ini settings --silent-mode -skip-splash -vt2-test-run 9d23f887

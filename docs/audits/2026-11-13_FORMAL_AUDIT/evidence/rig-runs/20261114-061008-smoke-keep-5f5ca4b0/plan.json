@@ -1,0 +1,8 @@
+{
+  "name": "smoke-keep",
+  "mods": ["1369573612"],
+  "timeout": 300,
+  "cases": [
+    { "id": "smoke-keep", "arena": "keep", "file": "../cases/smoke_keep.lua" }
+  ]
+}

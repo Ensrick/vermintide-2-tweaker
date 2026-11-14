@@ -281,7 +281,7 @@ The owner's two stated concerns were: a fully autonomous process, and a way to k
 - Retail has no LAN or offline mode and peer identity is the Steam account, so real co-op needs two accounts on two machines.
 - File writes (`io`) are removed from the retail Lua environment. Evidence leaves the game through the console log and the user-settings file.
 
-### 8.2 What was proven on 2026-11-13
+### 8.2 What was proven on 2026-11-13 and 2026-11-14
 
 | # | Question | Result |
 |---|---|---|
@@ -292,9 +292,9 @@ The owner's two stated concerns were: a fully autonomous process, and a way to k
 | 5 | Can the rig load its own code without a Workshop upload per change? | **Yes, with one correction to earlier project belief.** The game ignores a Workshop folder that Steam does not list as subscribed, so "synthetic" local folders do not work. The rig therefore uses one tiny private Workshop item (a constant bootstrap file, published once) and sends the driver and every test script as text in the run plan. |
 | 6 | Can Workshop items be created and subscribed with no GUI? | **Yes.** The SDK tool creates the item; the game's own Steam library subscribes and installs it (`steam-ugc.ps1`). No browser cookies, no Steam restart. |
 | 7 | Is the console log usable as a live signal? | **No.** It is buffered and a killed process loses its tail. The driver therefore writes progress checkpoints through the settings file, and verdicts are trusted only after a clean exit. |
-| 8 | Does the driver reach the keep, run a case and quit by itself? | **Pending at the time of writing.** The driver and the bootstrap item are in place and the run is queued; it starts when the author machine is free (the rig refuses to start while another game is running or free memory is under 6 GiB, and it did refuse). The result is recorded in `evidence/rig-runs/` and in `docs/program/wp/H.md` when it lands. |
+| 8 | Does the driver reach the keep, run a case and quit by itself? | **Yes.** Three runs on 2026-11-14 (`smoke-keep-4b32903a`, `-5f5ca4b0`, `-9d23f887`), private desktop, VMF and the driver only: the game reached the keep 54 to 62 seconds after process start, the case passed 5 of 5 assertions, the driver printed `RUN END`, and the game closed by itself within 4 seconds more; the isolation check was OK each time. The runs also settled three things. A clean modded-realm exit reports code `0xFA730001`, not 0. The game sends one routine save about 5 seconds after the keep loads, in the owner's own sessions too; it carries only the keep-painting layout, unchanged. The first run installed the write shield after that save, so the driver now installs it at the title screen and answers that save as well: the third run sent no save at all. |
 
-Prototype and run records: `rig/` and `evidence/rig-runs/` in this audit folder. The harness track of the plan (`docs/program/wp/H.md`) turns the prototype into a tested tool and lists what is still unproven: mission and Chaos Wastes arenas, stills from a private desktop, and two-machine co-op.
+Prototype and run records: `rig/` and `evidence/rig-runs/` in this audit folder. The harness track of the plan (`docs/program/wp/H.md`) turns the prototype into a tested tool and lists what is still unproven: mission and Chaos Wastes arenas, stills from a private desktop, and two-machine co-op. Every rig run signs in to the owner's real game account, exactly as a normal start does; what the rig holds back there, and what is proven about it, is in `WP-H-14`.
 
 ### 8.3 What this buys
 

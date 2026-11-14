@@ -12,7 +12,7 @@
 
 local plan, nonce = ...
 
-local DRIVER_VERSION = "0.4.0"
+local DRIVER_VERSION = "0.4.2"
 local driver = {}
 
 local function find_mod(name)
@@ -520,6 +520,73 @@ end
 -- _commit_user_data). A test must never change the real account. So the driver replaces, on the live mirror
 -- INSTANCE only, the two functions that decide whether there is something to send: both now answer "nothing",
 -- and print what they held back. The commit itself still runs and completes, so no caller waits for ever.
+--
+-- 0.4.1: the shield goes up on the first tick on which the backend mirror exists, not at KEEP READY. Run
+-- smoke-keep-4b32903a showed why: the game sends its routine start-up save (_commit_internal "1", request
+-- updateHeroAttributes) about 4 s BEFORE the keep is ready. The shield also watches the mirror's request queue
+-- and prints the top-level key NAMES of every updateHeroAttributes request (never values), so a run's
+-- evidence shows what the game still sent.
+--
+-- 0.4.2: run smoke-keep-5f5ca4b0 showed that the start-up save carries one key, keep_decorations: the
+-- account's painting layout decoded and encoded again (backend_interface_keep_decorations_playfab.lua:7-22,
+-- 62-64; compared as a string at playfab_mirror_base.lua:2879-2883). The shield now answers that comparison
+-- with the acknowledged string, so a rig run sends no hero-attribute save at all, and prints how many
+-- painting slots it held back when a case changed the layout.
+local function shield_keep_decorations(mirror)
+	local ok, interface = pcall(function ()
+		local interfaces = rawget(Managers.backend, "_interfaces")
+
+		return type(interfaces) == "table" and interfaces.keep_decorations
+	end)
+
+	if not ok or type(interface) ~= "table" or rawget(interface, "_vt2_rig_shield") then
+		return
+	end
+
+	local encode = interface.get_keep_decorations_json
+
+	if type(encode) ~= "function" then
+		return
+	end
+
+	rawset(interface, "_vt2_rig_shield", true)
+	rawset(interface, "get_keep_decorations_json", function (self)
+		local acked = rawget(mirror, "_read_only_data_mirror")
+
+		acked = type(acked) == "table" and acked.keep_decorations
+
+		if type(acked) ~= "string" then
+			return encode(self)
+		end
+
+		pcall(function ()
+			local before, now, changed = cjson.decode(acked), self._keep_decorations, 0
+
+			for slot, painting in pairs(now) do
+				if before[slot] ~= painting then
+					changed = changed + 1
+				end
+			end
+
+			for slot in pairs(before) do
+				if now[slot] == nil then
+					changed = changed + 1
+				end
+			end
+
+			if changed > 0 and changed ~= S.shield_keep_changed then
+				S.shield_keep_changed = changed
+
+				out("SHIELD blocked=keep_decorations changed_slots=%d case=%s", changed, S.current and S.current.id or "-")
+			end
+		end)
+
+		return acked
+	end)
+
+	out("SHIELD keep_decorations installed t=%.1f state=%s", S.t, tostring(S.game_state))
+end
+
 local function install_shield()
 	if plan.backend_shield == false then
 		return
@@ -529,11 +596,45 @@ local function install_shield()
 		return Managers.backend:get_backend_mirror()
 	end)
 
-	if not ok or type(mirror) ~= "table" or rawget(mirror, "_vt2_rig_shield") then
+	if not ok or type(mirror) ~= "table" then
+		return
+	end
+
+	shield_keep_decorations(mirror)
+
+	if rawget(mirror, "_vt2_rig_shield") then
 		return
 	end
 
 	rawset(mirror, "_vt2_rig_shield", true)
+
+	local queue = rawget(mirror, "_request_queue")
+
+	if type(queue) == "table" and not rawget(queue, "_vt2_rig_watch") and type(queue.enqueue) == "function" then
+		local enqueue = queue.enqueue
+
+		rawset(queue, "_vt2_rig_watch", true)
+		rawset(queue, "enqueue", function (self, request, ...)
+			pcall(function ()
+				if type(request) == "table" and request.FunctionName == "updateHeroAttributes" then
+					local keys = {}
+					local attributes = type(request.FunctionParameter) == "table" and request.FunctionParameter.hero_attributes
+
+					if type(attributes) == "table" then
+						for key in pairs(attributes) do
+							keys[#keys + 1] = tostring(key)
+						end
+
+						table.sort(keys)
+					end
+
+					out("SHIELD saw request=updateHeroAttributes keys=%s characters_key=%s", q(table.concat(keys, ",")), q(rawget(mirror, "_characters_data_key")))
+				end
+			end)
+
+			return enqueue(self, request, ...)
+		end)
+	end
 
 	rawset(mirror, "_check_career_data", function (_, careers_data, career_data_mirror)
 		local changed = 0
@@ -579,7 +680,7 @@ local function install_shield()
 		end
 	end)
 
-	out("SHIELD installed")
+	out("SHIELD installed t=%.1f state=%s", S.t, tostring(S.game_state))
 end
 
 -- ---------------------------------------------------------------------------
@@ -633,6 +734,8 @@ driver.update = function (_, dt)
 	if S.phase == "QUIT" then
 		return
 	end
+
+	install_shield()
 
 	if S.t - S.hb_at >= 5 then
 		S.hb_at = S.t
