@@ -1,0 +1,4 @@
+character_weapon_variants	_cwv_core_templates.lua	274	wield_anim_3p	to_polearm	vanilla_uses_2
+character_weapon_variants	_cwv_core_templates.lua	459	wield_anim_3p	to_1h_spear_shield	vanilla_uses_1
+character_weapon_variants	_cwv_core_templates.lua	600	wield_anim_3p	to_dual_hammer_sword_es	vanilla_uses_1
+character_weapon_variants	_cwv_javelin_runtime_owner.lua	1031	wield_anim_3p	to_es_deus_01	vanilla_uses_1

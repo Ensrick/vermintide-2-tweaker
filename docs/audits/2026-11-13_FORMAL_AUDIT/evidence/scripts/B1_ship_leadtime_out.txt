@@ -1,0 +1,6 @@
+verified ships analysed: 81
+source-commit(master HEAD) -> verified Workshop upload result, minutes: p50=29 p75=35 p90=48 min=19 max=574
+last mod-source change on master -> verified upload, hours: p50=1.8 p75=2.7 p90=6.1 max=20.3
+ships whose source commit (master HEAD at ship) itself changed the shipped mod: 50/81
+ships per day: max=11 median=3 days=17
+ship days: 09-20x1, 09-21x3, 09-23x2, 09-26x5, 10-17x2, 10-24x10, 10-25x11, 10-26x7, 10-27x11, 10-28x2, 10-29x7, 10-30x4, 11-02x3, 11-03x2, 11-06x7, 11-12x3, 11-14x1

@@ -1,0 +1,316 @@
+== workflow runs: 300  window 2026-11-06T16:03:01Z .. 2026-11-14T01:27:32Z
+workflow                                 event                     n   ok fail canc skip other  fail%  p50min  p90min
+Issue lifecycle guard                    issue_comment           167    4   19  143    1     0   82.6     0.5     1.9
+Issue lifecycle guard                    issues                   68    1   11   56    0     0   91.7     0.5     0.9
+PR auto-close authorization              pull_request_target      14   13    0    1    0     0    0.0     0.3     0.4
+Stable Promotion Authorization           pull_request_target      13   11    2    0    0     0   15.4     0.5     0.8
+QA                                       pull_request             12   10    2    0    0     0   16.7    25.7    28.4
+PR auto-close audit                      pull_request_target       9    9    0    0    0     0    0.0     0.4     0.6
+QA                                       push                      9    8    0    1    0     0    0.0    26.9    27.7
+Issue lifecycle guard                    schedule                  8    1    7    0    0     0   87.5     0.5     1.4
+
+== merged PRs fetched: 300  merged window 2026-08-29T11:21:30Z .. 2026-11-14T00:22:55Z
+merged in last 90 days (since 2026-08-16): 300
+PR lead time hours (created->merged): p50=0.39 p75=0.81 p90=1.75 max=163.9 mean=4.30
+merged per month: {'2026-08': 44, '2026-09': 141, '2026-10': 92, '2026-11': 23}
+title-heuristic classification (last 90d): {'product': 26, 'process': 118, 'unclassified': 103, 'mixed': 53}
+  # 1460 2026-08-29 process      release/issue1448-0343                 chore(verify): repoint GUI Dev live-test pins
+  # 1461 2026-08-29 unclassified agent/issue-428-wt-moonfire            refactor(wt): share Moonfire lookup registration
+  # 1462 2026-08-29 product      agent/issue1436-composer               WT: add source-exact Patch 6.0 history
+  # 1463 2026-08-29 unclassified agent/issue2-cwv-regression-runtime    Split CWV regression identity owner
+  # 1464 2026-08-29 process      agent/issue2-cwv-master-qa             Repoint deployed CWV live-test pins
+  # 1467 2026-08-29 product      agent/issue1436-patch411               feat(wt): add source-exact Patch 4.1.1 history
+  # 1468 2026-08-29 process      agent/issue1436-release                chore(verify): repoint deployed WT live-test pins
+  # 1469 2026-08-29 process      agent/issue1465-realm-gate             Restore modded-realm illusion authority
+  # 1470 2026-08-29 process      agent/issue1465-realm-gate             chore(release): reconcile #1465 live-test authority
+  # 1471 2026-08-30 unclassified agent/issue1436-p46-hagbane            Add source-exact Patch 4.6 Hagbane history
+  # 1472 2026-08-30 process      agent/issue1436-release-pins           chore(release): update Weapons live-test pins
+  # 1474 2026-08-30 process      agent/branch-census-refresh-20260829   chore(qa): refresh branch reconciliation census
+  # 1475 2026-08-30 unclassified agent/issue1436-p32-axe                feat(weapons): add source-exact Patch 3.2 axe history
+  # 1473 2026-08-30 process      agent/gut-promotion-636-694            fix(gui): promote verified #636 and #694 fixes
+  # 1477 2026-08-30 process      fix/gui-stable-build-receipt-20260829  fix: normalize GUI stable build outputs
+  # 1476 2026-08-30 process      chore/repoint-wt-release-pins-20260829 chore: repoint deployed Weapons authority pins
+  # 1478 2026-08-30 unclassified agent/issue2-cim-regression-split      refactor(cim): split forge regression checks
+  # 1479 2026-08-30 process      fix/refresh-cards-foreign-pid-270      Fail closed on shared-tag card conflicts
+  # 1480 2026-08-30 process      agent/issue1203-raw                    [tooling] Normalize remaining optional SDK sidecar streams
+  # 1481 2026-08-30 unclassified agent/issue1436-patch31                feat(weapons): add source-exact Patch 3.1 Blunderbuss history
+  # 1482 2026-08-30 process      chore/repoint-wt-patch31-release-pins  chore: repoint Weapons live-test source pins
+  # 1483 2026-08-30 product      agent/issue428-cwv-lookup              CWV: route deferred item registration through shared NetworkLookup
+  # 1484 2026-08-30 process      agent/issue1102-card-normalization     Tooling: reconcile lifecycle cards atomically
+  # 1485 2026-08-30 process      chore/reconcile-cwv-0536-claim         chore(cwv): reconcile registrar release claim
+  # 1486 2026-08-30 unclassified agent/issue1436-tuskgor31-rebase       feat(wt): add source-exact Patch 3.1 Tuskgor history
+  # 1487 2026-08-30 process      agent/issue1436-release-reconcile      chore(wt): reconcile Patch 3.1 publication claims
+  # 1488 2026-08-30 process      agent/issue1436-deployed-pin-reconcile chore(release): reconcile WT deployed-source pins
+  # 1490 2026-08-30 process      agent/issue1151-gui-public             fix(gui): promote verified Damage Taken award repair (#1151)
+  # 1489 2026-08-30 unclassified agent/issue540-deadline                fix(qa): make WT deadline fixtures deterministic
+  # 1491 2026-08-30 process      agent/issue1102-current-artifact-autho fix: bind current live cards to release artifacts
+  # 1493 2026-08-31 product      agent/issue1436-patch206-handguns      feat(wt): add Patch 2.0.6 Handgun history
+  # 1494 2026-08-31 process      agent/issue1436-postship-pins          Reconcile WT post-ship source pins
+  # 1492 2026-08-31 unclassified agent/issue2-ct-regression-resource-sa refactor(ct): split resource-safety regression checks
+  # 1495 2026-08-31 unclassified agent/issue2-cos-glow-layout           refactor(cos): centralize glow panel layout (#2)
+  # 1498 2026-08-31 unclassified agent/issue1124-direct-evidence        fix(ct): make gargoyle evidence source-provable (#1124)
+  # 1499 2026-08-31 unclassified agent/issue595-regression              Fix WOC packaged helper regression
+  # 1500 2026-08-31 mixed        agent/woc-0159-pin-repoint             Repoint WOC v0.1.59 deployed-source pins
+  # 1501 2026-08-31 product      agent/issue1436-next-boundary2         Add Patch 2.0.10 Sword and Dagger history
+  # 1502 2026-08-31 process      agent/issue1436-public-pin             Reconcile Tweaker Weapons public deployment pins (#1436)
+  # 1503 2026-08-31 unclassified agent/issue-209-authority              Make issue 209 diagnostics source-authoritative
+  # 1504 2026-08-31 unclassified agent/issue-209-pin-authority          verify: bind issue 209 diagnostic route
+  # 1505 2026-08-31 process      agent/issue1436-sd-dev-ship            chore: carry WT Dev deployment pins
+  # 1506 2026-08-31 product      agent/issue1436-halberd2091            WT: add source-exact Halberd 2.0.9 history
+  # 1507 2026-08-31 process      agent/issue1436-halberd-postship-pins  Reconcile Tweaker: Weapons Halberd deployment pins
+  # 1508 2026-09-01 unclassified agent/issue1497-et-local-fence         Fix local-host custom-breed sync fence (#1497)
+  # 1510 2026-09-01 mixed        agent/issue1497-postship-pins          Pin Enemy Tweaker live-test contracts after 0.7.61
+  # 1511 2026-09-01 unclassified agent/issue1509-level-control          Fix modded level-control backend rejection
+  # 1512 2026-09-01 process      agent/issue1509-postship-pins          Pin General Dev live-test authority after #1509
+  # 1513 2026-09-01 product      agent/issue1436-dagger-6112            Add source-exact Sienna Dagger Hotfix 6.11.2 history
+  # 1514 2026-09-01 process      chore/issue1436-public-postship-pins   chore(ship): pin Tweaker Weapons release receipts
+  # 1515 2026-09-01 unclassified agent/issue358-cooldown-deadline       fix(ct): preserve Manann cooldown deadlines
+  # 1516 2026-09-01 process      chore/issue358-postship-pins           Refresh CT live authority after #358 ship
+  # 1517 2026-09-01 unclassified agent/issue428-la-transaction          refactor(cosmetics): transact Loremaster registration
+  # 1518 2026-09-01 process      chore/issue428-postship-pins           chore(test): refresh Cosmetics live authority after #428 ship
+  # 1519 2026-09-01 unclassified agent/issue1436-longbow-6110           feat(wt): add source-exact 6.10 Longbow history
+  # 1520 2026-09-01 process      agent/wt-pin-reconciliation            Reconcile shipped WT live-test pins
+  # 1522 2026-09-01 unclassified agent/issue1497-runtime-check          Fix Enemy local-host parity evidence (#1497)
+  # 1523 2026-09-01 process      ship/et-0762                           Reconcile Enemy live-test authority
+  # 1524 2026-09-01 product      agent/issue1436-af-6112                feat(wt): add source-exact 6.11.1 Axe and Falchion history
+  # 1525 2026-09-01 process      agent/issue1436-live-pin-repoint       chore(verify): repoint live WT release pins
+  # 1528 2026-09-01 process      agent/public-release-triage-contract   chore(lifecycle): enforce public release routing
+  # 1531 2026-09-04 mixed        agent/issue1436-hammer-mace-6110-sourc feat(wt): add Hammer/Mace 6.10.0 history and refresh 6.12.1 provenance
+  # 1532 2026-09-04 process      agent/issue651-download-timeout        fix(release): scale carried asset download timeout
+  # 1533 2026-09-04 process      agent/ship-pin-reconcile               chore(qa): repoint WT live-test source pins
+  # 1534 2026-09-04 process      agent/pin-wt-dev-331                   chore(qa): repoint WT Dev live-test source pins
+  # 1535 2026-09-04 unclassified agent/issue389-gui-stable              fix(gui): preserve owner-aware slider steps
+  # 1536 2026-09-04 unclassified agent/issue1180-fixture-race-pr        Stabilize owner-death mutex fixture
+  # 1538 2026-09-04 process      agent/issue1537-suffix-ci              fix(ci): bind authorized stable suffix per exact version
+  # 1539 2026-09-04 unclassified agent/wt-history-fixture-hardening     test(qa): make remaining WT deadline fixtures deterministic
+  # 1537 2026-09-04 unclassified agent/issue426-stable-release          fix(ct): contain public custom boon wire state
+  # 1540 2026-09-04 process      agent/issue1203-ct-stable              fix(tooling): normalize public CT SDK sidecar
+  # 1541 2026-09-04 unclassified agent/issue540-real-process-fixture    test(qa): accept contained taskkill deadlines
+  # 1542 2026-09-05 process      agent/issue426-pcall-command-authority Recognize protected live-test commands (#426)
+  # 1544 2026-09-06 process      agent/issue540-finite-helper-output    Harden QA fixtures and launcher guidance
+  # 1545 2026-09-06 unclassified agent/issue540-recovery-fixture-order  test(tooling): isolate transaction owner death from crash reporting
+  # 1546 2026-09-06 unclassified agent/issue-592-stable-owner           Preserve public CIM inventory ownership
+  # 1543 2026-09-06 unclassified agent/issue1465-source-replacement     Restore CIM illusion Apply ownership
+  # 1547 2026-09-06 process      agent/issue1527-closure-attestation    Add offline public-release closure attestation foundation
+  # 1549 2026-09-06 process      agent/issue1328-publication-finalizati Reconcile source pins after upload failures
+  # 1550 2026-09-06 process      agent/issue1328-publisher-handoff      Preserve publication proof through handoff failures
+  # 1551 2026-09-06 process      agent/issue1328-current-pin-recovery   Recover source pins after hard process death
+  # 1552 2026-09-06 process      agent/issue1527-authority-shape        Fix canonical closure authority shapes
+  # 1554 2026-09-06 unclassified agent/issue1436-next-slice             Add qualified Swiftbow ammunition history
+  # 1553 2026-09-06 unclassified agent/issue998-staged-isolation        Fix Dialogue isolation Apply transaction
+  # 1555 2026-09-06 process      agent/issue1307-upload-evidence        fix(ship): bind upload success to one bounded terminal transaction (#1307)
+  # 1556 2026-09-06 process      agent/issue1527-readonly-collector     Collect bounded public-release closure evidence (#1527)
+  # 1557 2026-09-08 process      agent/issue1429-receipt-local-ship     Add receipt-bound local deployment to canonical ship (#1429)
+  # 1558 2026-09-08 process      agent/issue724-permanent-reservations  Retain burned claim versions prospectively
+  # 1560 2026-09-08 unclassified agent/issue724-cwv-activation          Activate permanent CWV reservations
+  # 1559 2026-09-09 process      agent/issue1527-bounded-transport      feat(verify): add bounded read-only closure transport
+  # 1561 2026-09-09 mixed        agent/issue1548-cwv-retry              build(cwv): reissue reviewed seed ownership release as 0.1.538-dev
+  # 1563 2026-09-09 unclassified agent/issue1562-checker-reporting      Report custom-unit validation outcomes honestly
+  # 1564 2026-09-12 mixed        agent/issue1548-cwv-recovery-20260912  build(cwv): resume seed ownership release as 0.1.539-dev
+  # 1565 2026-09-12 process      agent/issue1548-cwv0539-pins-20260912  Reconcile CWV .539 publication source pins
+  # 1566 2026-09-12 unclassified agent/issue913-custom-descriptions     fix(cosmetics): bridge registered illusion descriptions (#913)
+  # 1569 2026-09-12 unclassified agent/issue221-armor-master            feat(crt,gut_dev): armor cluster master with profile ownership (#221)
+  # 1574 2026-09-12 unclassified agent/issue323-progressive-elites      feat(ct): progressive elite enhancements (#323)
+  # 1579 2026-09-12 mixed        agent/issue323-ct-pins-0.7.350         chore(verify): repoint ct_dev pins to 0.7.350-dev tree
+  # 1578 2026-09-12 unclassified agent/issue485-pose-evidence-cap       fix(cosmetics): cap heroic pose gap evidence (#485)
+  # 1576 2026-09-12 unclassified agent/issue272-gut                     feat(gut_dev): host custom scoreboard rows (#1570, #1571, #1572)
+  # 1580 2026-09-13 process      agent/issue727-logging-slice1          chore(logging): boot lifecycle notices and manifest loader
+  # 1585 2026-09-13 mixed        ship/gut-dev-0.2.347                   chore(verify): repoint gut_dev pins to 0.2.347-dev tree
+  # 1587 2026-09-13 process      integration/20260912-landing           chore: land five reviewed PRs plus enemy pin repoint (integration)
+  # 1586 2026-09-13 unclassified agent/issue840-fresh-profile           feat(mp): isolated Fresh profile items/loadouts slice (#840)
+  # 1583 2026-09-13 product      agent/issue598-owner-frame-20260912    fix(cim_dev): paint owner Cursed frame in Hold-Tab, reissue 0.8.132 (#598)
+  # 1582 2026-09-13 unclassified agent/issue1575-profile-indicators     fix(crt): keep rework selections through profile switches (#1575)
+  # 1581 2026-09-13 process      agent/issue1000-weave-frame-census     feat(cosmetics): Weave Season 5-10 frame provider and census (#1000)
+  # 1568 2026-09-13 process      agent/issue169-retired-key-gate        chore(qa): hard retired-debug-key gate with pinned GT stable debt
+  # 1584 2026-09-13 product      agent/issue1436-grudge-raker-source-20 feat(wt): Grudge-Raker 6.10.0 ammunition history, reissue Swiftbow pair (#1436)
+  # 1588 2026-09-13 mixed        pins/career_tweaker-0.4.31-beta        chore(verify): repoint career_tweaker pins to 0.4.31-beta tree
+  # 1590 2026-09-13 mixed        pins/cosmetics_tweaker-0.9.223-dev     chore(verify): repoint cosmetics_tweaker pins to 0.9.223-dev tree
+  # 1591 2026-09-13 mixed        pins/crafting_in_modded_dev-0.8.133-de chore(verify): repoint crafting_in_modded_dev pins to 0.8.133-dev tree
+  # 1592 2026-09-14 mixed        pins/weapon_tweaker-0.12.332-beta      chore(verify): repoint weapon_tweaker pins to 0.12.332-beta tree
+  # 1596 2026-09-14 unclassified integration/20260913-landing           chore: land four reviewed PRs (registrar, stat sync, et/gt_dev and wt reissues)
+  # 1595 2026-09-14 product      agent/issue727-reissue-et-gt           build(et,gt_dev): reissue unpublished 0.4.52/0.2.274 as fresh versions (#727)
+  # 1594 2026-09-14 mixed        agent/issue1436-reissue-wt-pair        build(wt): reissue pair as 0.12.333-beta / 0.12.334-dev after stale dev claim (#1436)
+  # 1593 2026-09-14 unclassified agent/issue1573-custom-stat-sync       feat(gut_dev): synchronize host custom statistics to clients (#1573)
+  # 1589 2026-09-14 process      agent/issue451-chosen-registrar        feat(et): declarative custom-breed registrar and Chosen contract (#451)
+  # 1597 2026-09-14 mixed        pins/enemy_tweaker-0.7.64-dev          chore(verify): repoint enemy_tweaker pins to 0.7.64-dev tree
+  # 1599 2026-09-14 mixed        pins/gui_tweaker_dev-0.2.348-dev       chore(verify): repoint gui_tweaker_dev pins to 0.2.348-dev tree
+  # 1600 2026-09-14 mixed        pins/event_tweaker-0.4.53-dev          chore(verify): repoint event_tweaker pins to 0.4.53-dev tree
+  # 1601 2026-09-14 mixed        pins/general_tweaker_dev-0.2.275-dev   chore(verify): repoint general_tweaker_dev pins to 0.2.275-dev tree
+  # 1602 2026-09-14 mixed        pins/weapon_tweaker-0.12.333-beta      chore(verify): repoint weapon_tweaker pins to 0.12.333-beta tree
+  # 1603 2026-09-14 mixed        pins/weapon_tweaker_dev-0.12.334-dev   chore(verify): repoint weapon_tweaker_dev pins to 0.12.334-dev tree
+  # 1598 2026-09-14 product      agent/issue840-reissue-mp              build(mp): reissue unpublished 0.2.38-dev as fresh version (#840)
+  # 1606 2026-09-14 mixed        pins/modded_progression-0.2.39-dev     chore(verify): repoint modded_progression pins to 0.2.39-dev tree
+  # 1610 2026-09-14 unclassified integration/20260914-landing           chore: land four reviewed PRs (cim wording, Simple UI, modifier stack, description parity)
+  # 1608 2026-09-14 process      agent/issue1567-description-parity     fix(cosmetics): item description parity census and vanilla typo bridge (#1567)
+  # 1607 2026-09-14 unclassified agent/issue289-modifier-stack          feat(ct): progressive modifier stacking (#289)
+  # 1605 2026-09-14 unclassified agent/issue314-simple-ui               feat(gut_dev): Simple UI compatibility phase 2 (#314)
+  # 1604 2026-09-14 unclassified agent/issue1530-base-power-wording     fix(cim_dev): Base Power description says 25-point Mod Tweaker steps (#1530)
+  # 1611 2026-09-15 mixed        pins/cosmetics_tweaker-0.9.224-dev     chore(verify): repoint cosmetics_tweaker pins to 0.9.224-dev tree
+  # 1612 2026-09-15 mixed        pins/crafting_in_modded_dev-0.8.134-de chore(verify): repoint crafting_in_modded_dev pins to 0.8.134-dev tree
+  # 1613 2026-09-15 mixed        pins/chaos_wastes_tweaker_dev-0.7.351- chore(verify): repoint chaos_wastes_tweaker_dev pins to 0.7.351-dev tree
+  # 1614 2026-09-15 mixed        pins/gui_tweaker_dev-0.2.349-dev       chore(verify): repoint gui_tweaker_dev pins to 0.2.349-dev tree
+  # 1615 2026-09-15 process      agent/issue1609-mp-fixture             fix(verify): derive mp #577 fixture tree from pins, not a literal (#1609)
+  # 1616 2026-09-15 process      agent/issue253-metal-wind              feat(ct): Metal wind per-level curse adapter, command-gated (#253)
+  # 1618 2026-09-15 mixed        pins/chaos_wastes_tweaker_dev-0.7.352- chore(verify): repoint chaos_wastes_tweaker_dev pins to 0.7.352-dev tree
+  # 1617 2026-09-15 unclassified agent/issue231-loadout-paging          feat(gut): thirty modded loadouts via paged selector (#231)
+  # 1619 2026-09-15 mixed        pins/gui_tweaker_dev-0.2.350-dev       chore(verify): repoint gui_tweaker_dev pins to 0.2.350-dev tree
+  # 1620 2026-09-18 mixed        agent/issue1548-launcher-063           fix(ship): require VMB Launcher 0.6.3 Steamworks readiness guard (#1548)
+  # 1621 2026-09-18 unclassified agent/issue1141-temper-craft           fix(cim,cwv): stage Temper changes behind Apply; Craft from Blacksmith copies (#1141)
+  # 1622 2026-09-18 mixed        pins/crafting_in_modded_dev-0.8.135-de chore(verify): repoint crafting_in_modded_dev pins to 0.8.135-dev tree
+  # 1623 2026-09-18 mixed        pins/character_weapon_variants-0.1.540 chore(verify): repoint character_weapon_variants pins to 0.1.540-dev tree
+  # 1624 2026-09-20 process      codex/issue1527-retained-evidence      Add closure evidence action planner (#1527)
+  # 1625 2026-09-20 process      codex/issue1307-upload-receipt         qa: bind Workshop result candidates to receipts (#1307)
+  # 1626 2026-09-20 unclassified codex/issue727-logging-audit           qa: classify reviewed logging intent (#727)
+  # 1627 2026-09-20 unclassified codex/issue1307-release-proof          tooling: authenticate append-only Workshop result assets
+  # 1628 2026-09-20 unclassified codex/issue2-size-ratchet              qa: ratchet reduced oversized Lua ceilings
+  # 1629 2026-09-20 process      codex/issue1307-ship-integration       ship: require authenticated upload-result authority
+  # 1630 2026-09-20 process      codex/issue1527-grace-policy           qa: model public closure attestation grace (#1527)
+  # 1631 2026-09-20 process      codex/issue1307-nochange-snapshot      ship: authenticate no-change manifest snapshots (#1307)
+  # 1632 2026-09-20 process      codex/issue1025-root-doctrine          qa: ratchet launcher path doctrine (#1025)
+  # 1633 2026-09-20 process      codex/issue1307-doctrine-final         docs: finalize Workshop result authority (#1307)
+  # 1634 2026-09-20 unclassified codex/issue2-ct-hard-ratchet           qa: ratchet stable CT size ceiling (#2)
+  # 1635 2026-09-20 process      codex/lifecycle-unready-pin-guard      qa: reject stale pinned cards on unready issues (#546)
+  # 1636 2026-09-20 unclassified codex/issue428-lookup-ratchet          QA: ratchet manual NetworkLookup append owners (#428)
+  # 1638 2026-09-20 unclassified codex/issue1637-keep-spawn             fix(gut): prevent missing-weapon Keep spawn crash (#1637)
+  # 1639 2026-09-20 process      agent/issue1307-receipt-nesting        fix(ship): count receipt keys at the top level only; repoint gut_dev pins (#1307, #1637)
+  # 1640 2026-09-20 process      agent/issue1307-bundle-inventory       fix(ship): validate the real receipt bundle inventory; bind the release zip digest to the hosted manifest (#13
+  # 1641 2026-09-21 unclassified agent/issue1637-default-fallback       fix(gut): log every spawn-weapon miss and fall back to the career default (#1637)
+  # 1645 2026-09-21 unclassified agent/issue1643-incident-exception     fix(verify): bounded incident exception for the deployed gut_dev printf swap (#1643)
+  # 1644 2026-09-21 unclassified agent/mp-fresh-lookup                  fix(mp): resolve fresh-profile ids through every derived reader; default to the official inventory (#840, #163
+  # 1647 2026-09-21 mixed        pins/modded_progression-0.2.40-dev     chore(verify): repoint modded_progression pins to 0.2.40-dev tree
+  # 1646 2026-09-21 unclassified agent/issue1637-printf-route           fix(gut): prove the spawn-weapon printf route without swapping the global (#1637)
+  # 1649 2026-09-21 mixed        pins/gui_tweaker_dev-0.2.354-dev       chore(verify): repoint gui_tweaker_dev pins to 0.2.354-dev tree
+  # 1650 2026-09-21 unclassified agent/issue1643-exception-removal      Remove the #1643 gut_dev incident exception
+  # 1653 2026-09-23 unclassified agent/issue1648-drain-fixture          qa: widen root-exit output-drain fixture window (#1648)
+  # 1657 2026-09-23 product      agent/issue954-modded-career-import    gut_dev 0.2.355-dev: import modded-career bot designations (#954)
+  # 1659 2026-09-23 mixed        pins/gui_tweaker_dev-0.2.355-dev       chore(verify): repoint gui_tweaker_dev pins to 0.2.355-dev tree
+  # 1658 2026-09-23 product      agent/issue1141-apply-dedupe           cim_dev 0.8.136-dev: Temper Apply/Craft refuse unstorable bubble counts (#1141)
+  # 1661 2026-09-23 mixed        pins/crafting_in_modded_dev-0.8.136-de chore(verify): repoint crafting_in_modded_dev pins to 0.8.136-dev tree
+  # 1662 2026-09-23 mixed        agent/issue1651-1652-gut-checks        gut_dev: pure loc scan and policy-scoped keep check (#1651, #1652)
+  # 1663 2026-09-23 mixed        pins/gui_tweaker_dev-0.2.357-dev       Pins: gui_tweaker_dev 0.2.357-dev source tree
+  # 1665 2026-09-23 process      agent/release-assets-by-id             publish-release: refresh release asset inventory by release id
+  # 1664 2026-09-23 product      agent/issue579-cwv-batch               cwv 0.1.541-543-dev: #579 husk hands, #1320 grenade, #1660 careers
+  # 1669 2026-09-26 product      agent/cwv-0.1.544-reissue              cwv 0.1.544-dev: reissue unpublished 0.1.543-dev
+  # 1672 2026-09-26 mixed        pins/character_weapon_variants-0.1.544 chore(verify): repoint character_weapon_variants pins to 0.1.544-dev tree
+  # 1668 2026-09-26 mixed        agent/issue998-cd-buildonly            cd 0.1.14-dev: reissue unpublished #998 build under a fresh claim
+  # 1673 2026-09-26 product      agent/issue414-1654-cim                cim_dev 0.8.137/0.8.138: #414 CW trait slots, #1654 restore diagnostics
+  # 1674 2026-09-26 mixed        pins/crafting_in_modded_dev-0.8.138-de chore(verify): repoint crafting_in_modded_dev pins to 0.8.138-dev tree
+  # 1675 2026-09-26 product      agent/issue916-maul-burn-scrub         cwv 0.1.545-dev: Maul burn scrub keys on burn property
+  # 1678 2026-09-26 mixed        pins/character_weapon_variants-0.1.545 chore(verify): repoint character_weapon_variants pins to 0.1.545-dev tree
+  # 1677 2026-09-26 unclassified agent/issue92-arrow-glow-check         fix(gut_dev): dropdown arrow glow check reads real sprite key (#92)
+  # 1679 2026-09-26 mixed        pins/gui_tweaker_dev-0.2.358-dev       chore(verify): repoint gui_tweaker_dev pins to 0.2.358-dev tree
+  # 1681 2026-10-13 process      chore/refresh-census-20261013          chore(qa): refresh branch reconciliation census
+  # 1680 2026-10-13 process      docs/lift-delete-ban                   docs: lift the recursive-delete ban (user, 2026-10-13)
+  # 1685 2026-10-17 mixed        agent/issue1682-reanchor-6130          Re-anchor weapon-history provenance to game 6.13.0
+  # 1697 2026-10-17 process      agent/batch-tooling-1017               Tooling: release-id asset refresh, friends-only NOCHANGE proof
+  # 1699 2026-10-17 mixed        agent/batch-et-1017                    et 0.7.65-dev: #324 capacity-authority probe for the Warlord refusal
+  # 1702 2026-10-17 mixed        pins/enemy_tweaker-0.7.65-dev          chore(verify): repoint enemy_tweaker pins to 0.7.65-dev tree
+  # 1701 2026-10-17 mixed        agent/batch-mp-1017                    mp 0.2.41-dev: remove dead IngameUI.not_in_modded hook (#1671)
+  # 1706 2026-10-17 mixed        pins/modded_progression-0.2.41-dev     chore(verify): repoint modded_progression pins to 0.2.41-dev tree
+  # 1705 2026-10-17 product      agent/batch-gut-1017                   gut_dev 0.2.362-dev: menu sounds, check verdicts, #630 budget
+  # 1704 2026-10-24 product      agent/batch-hotfix613-1017             Game 6.13.0 icon crash hotfix: WOC Poisoned Edge, crt buff icons
+  # 1710 2026-10-24 unclassified agent/batch-tooling2-1017              Scope upstream freshness checks to affected changes
+  # 1712 2026-10-24 process      agent/overnight-crt-publication-pins-1 Pin CRT diagnostics to the current GitHub release source
+  # 1714 2026-10-24 mixed        agent/issue1691-modern-realm-1024      Restore current-engine Cosmetics realm gates (0.9.225-dev)
+  # 1713 2026-10-24 unclassified agent/overnight-ready-batch-1024       Integrate GUI, CIM, DCP, MP and CWV fixes with complete Lua discovery
+  # 1715 2026-10-24 mixed        agent/batch-mp2-1017                   Restore the MP loot diagnostic native realm gate (0.2.43-dev)
+  # 1711 2026-10-24 unclassified agent/issue1700-suite-manifest-1024    Enforce complete Lua suite registration
+  # 1709 2026-10-24 product      agent/batch-cwv-1017                   CWV 0.1.549-dev: recovery, Crowbill identity, harness and resolved profile fixes
+  # 1708 2026-10-24 product      agent/batch-dcp2-1017                  dcp 0.1.31-dev: observable portrait transactions and honest live verdicts
+  # 1707 2026-10-24 product      agent/batch-cim2-1017                  cim 0.8.141-dev: safe regression verdicts and native Necromancer keys
+  # 1716 2026-10-24 unclassified agent/issue1690-shared-apply-1024      Fix shared native realm and complete local illusion Apply
+  # 1703 2026-10-24 unclassified agent/batch-wt-1017                    Revalidate WT Hold-Pose owner split with fresh mirror builds
+  # 1717 2026-10-24 unclassified agent/issue317-runtime-1024            Exercise CWV picker readiness through the production owner
+  # 1718 2026-10-24 process      agent/issue1025-recovery-1024          Keep partial-upload recovery inside canonical ship
+  # 1719 2026-10-24 process      agent/gut363-recovered-pins-1024       Retain canonically recovered GUI publication pins
+  # 1720 2026-10-24 process      agent/mp44-publication-pins-1024       Retain verified progression publication records
+  # 1722 2026-10-24 unclassified agent/issue1025-root-recovery-1024     Guard root-guide partial-upload recovery advice
+  # 1723 2026-10-25 unclassified agent/issue1721-ps51-default-root-1024 Fix PowerShell 5.1 standalone sentinel root
+  # 1724 2026-10-25 process      fix/1328-completion-report-and-drain-e fix(ship): defer completion until cleanup and capture bounded drain evidence
+  # 1725 2026-10-25 mixed        retain/general276-verified-publication chore: retain verified General Dev 0.2.276 publication pins
+  # 1726 2026-10-25 mixed        retain/wt337-verified-publication-pins chore: retain verified Weapons Dev 0.12.337 publication pins
+  # 1727 2026-10-25 mixed        retain/cwv550-verified-publication-pin chore: retain verified CWV 0.1.550 publication pins
+  # 1728 2026-10-25 unclassified codex/issue1694-forge-realm-diagnostic Fix CIM realm evidence and strengthen transform checks
+  # 1729 2026-10-25 process      codex/issue444-localization-census     Scope translation census to active mod owners
+  # 1730 2026-10-25 unclassified codex/issue1684-daily-reroll-boundary  fix(mp): deny unsupported daily quest rerolls
+  # 1731 2026-10-25 unclassified codex/issue465-implicit-replacement    Make replacement progression preservation implicit
+  # 1732 2026-10-25 process      codex/issue1025-prerelease-doctrine    Retire prerelease publication doctrine drift
+  # 1733 2026-10-25 unclassified codex/issue1684-emporium-action        fix(mp): own local Emporium purchase actions
+  # 1734 2026-10-25 process      codex/issue1689-forge-proof-20261025   fix(cim-dev): exercise installed Keep forge check and align MP46 receipt proof
+  # 1735 2026-10-26 unclassified codex/issue657-645-692-native-shield   fix(appearance): validate shields and exercise diagnostic owners
+  # 1736 2026-10-26 unclassified codex/issue579-installed-chain-2026102 test: prove installed dual axes appearance chain
+  # 1738 2026-10-26 unclassified codex/issue1684-daily-ui-20261026      Own local daily UI and calendar safety
+  # 1740 2026-10-26 unclassified codex/issue1739-name-cli-20261026      Fix PowerShell 5.1 name-checker defaults
+  # 1741 2026-10-26 unclassified codex/issue942-thermal-owners-20261026 Fix Fire Sword heat and rework ownership
+  # 1742 2026-10-26 unclassified codex/issue2-gui-owner-split-20261026  Refactor GUI row and map-check ownership
+  # 1743 2026-10-26 process      codex/issue660-greatsword-retained-202 Reconcile retained Greatsword husk poses
+  # 1744 2026-10-26 process      codex/gui364-published-pins-20261026   Refresh deployed GUI source pins
+  # 1745 2026-10-26 unclassified codex/issue2-gui-category-owner-202610 Extract GUI category ownership
+  # 1747 2026-10-27 unclassified codex/issue428-old-musket-transaction- Make Old Musket construction atomic; preserve test readiness
+  # 1748 2026-10-27 process      codex/issue1746-sibling-card-authority fix(tooling): preserve sibling card publication authority
+  # 1749 2026-10-27 process      codex/issue428-musket-retained-sweep-2 fix(cwv): retain Old Musket Sweep authority (#428)
+  # 1750 2026-10-27 unclassified codex/issue2-gui-entry-owners-20261027 refactor(gui): retain loadout and menu owners
+  # 1752 2026-10-27 unclassified codex/issue428-javelin-construction-20 fix(cwv): atomic Tuskgor Javelin construction and admission
+  # 1753 2026-10-27 process      codex/issue428-history1751-20261027    Make historical weapon profile publication atomic
+  # 1754 2026-10-27 unclassified codex/issue428-shortsword-r3-20261027  Harden CWV Shortsword construction and career compatibility
+  # 1755 2026-10-27 unclassified codex/issue2-gui-pending-20261027      Retain standalone GUI pending view ownership
+  # 1756 2026-10-27 process      codex/issue428-history1102-20261027    Preserve CWV construction across native history and harden card receipts
+  # 1757 2026-10-27 unclassified codex/issue1465-private-forge-20261027 Complete Dev CIM private Forge initialization
+  # 1760 2026-10-27 process      codex/issue428-elven-greataxe-20261027 Preserve Elven and Greataxe construction authority
+  # 1761 2026-10-27 process      codex/issue1758-1759-qa-20261027       Correct QA reporting and carry Weapons publication pins
+  # 1762 2026-10-27 process      codex/wt341-publication-pins-20261027  chore: record published WT Dev341 source pins
+  # 1763 2026-10-28 process      codex/cwv559-publication-pins-20261028 Record CWV559 canonical publication pins
+  # 1764 2026-10-28 process      codex/login-authority-and-ship-docs-20 Guard progression requests and canonical publication guidance
+  # 1765 2026-10-28 process      codex/cwv560-publication-pins-20261028 Share GUI category ownership and reconcile provenance
+  # 1766 2026-10-29 process      codex/upload-docs-mp49-pins-20261029   Unify upload docs and retain MP49 provenance
+  # 1767 2026-10-29 process      codex/gui368-aftercare-progression-202 Clarify publication evidence and retain GUI368 pins
+  # 1768 2026-10-29 unclassified codex/mp-loot-entry-diagnostics-202610 Observe native loot entry with bounded diagnostics
+  # 1769 2026-10-29 process      codex/mp50-receipt-aftercare-20261029  Bind MP50 diagnostic authority to real emitters
+  # 1770 2026-10-29 unclassified codex/reciprocal-sword-style-20261029  Retain Sword styles and refresh engine references
+  # 1771 2026-10-29 process      codex/wt341-partial-pins-20261029      Reconcile Weapons source pins after partial publication
+  # 1772 2026-10-29 process      codex/hub-publication-doctrine-2026102 Guard upload guidance and refresh Weapons provenance
+  # 1774 2026-10-29 process      codex/codex-entrypoint-cwv561-provenan Guard Codex release guidance and refresh provenance
+  # 1775 2026-10-29 unclassified codex/issue1328-retained-process-handl Retain authenticated process handles during cleanup
+  # 1773 2026-10-29 unclassified codex/cos-persistence-check-owner-2026 Split Cosmetics persistence regression ownership
+  # 1776 2026-10-30 process      codex/cos229-deployed-provenance-20261 Reconcile Cosmetics 229 deployed provenance
+  # 1778 2026-10-30 unclassified codex/issue645-mace-integration-202610 Add Mace Style To Kruber's Sword
+  # 1779 2026-10-30 process      codex/cwv563-published-pins-20261030   Align Published CWV Source Pins
+  # 1780 2026-10-30 process      codex/issue1777-reviewed-route-retenti Retain Reviewed Route Pins During Publication
+  # 1781 2026-10-30 process      codex/issue1328-normal-release-evidenc Retain Bounded Lease Fixture Failure Evidence
+  # 1782 2026-10-30 unclassified codex/issue635-wt-command-inventory-20 Distinguish Public and Dev Weapon Commands
+  # 1783 2026-10-30 product      codex/issue645-tuskgor-retained-202610 CWV: retain Tuskgor source and career ownership
+  # 1784 2026-10-30 mixed        codex/issue645-style-catalog-qa-202610 CWV: reconcile 564 pins and guard style membership
+  # 1785 2026-10-30 process      codex/issue1025-vt2-test-boundary-2026 Docs: clarify VT2 volunteer testing readiness
+  # 1786 2026-10-30 unclassified codex/issue1190-bounded-receipts-20261 Certify finite WT loadout diagnostic routes
+  # 1787 2026-10-30 unclassified codex/issue2-husk-residency-owner-2026 refactor(cwv): defer husk residency ownership
+  # 1788 2026-10-30 process      codex/cwv565-source-pin-aftercare-2026 Align CWV565 deployed-source pins
+  # 1789 2026-10-30 unclassified codex/cwv-regression-isolation-1656-20 fix(cwv): isolate semantic-identity regression state
+  # 1790 2026-10-30 mixed        codex/cwv566-source-pin-aftercare-2026 Reconcile CWV 0.1.566 publication source pins
+  # 1791 2026-10-30 unclassified codex/mp1684-cached-login-census-20261 Add cached-only login reward diagnostics
+  # 1792 2026-10-30 process      codex/mp51-partial-publication-pins-20 Reconcile MP51 partial-publication source pins
+  # 1793 2026-10-30 unclassified codex/cwv719-finite-observation-202610 Bound Crowbill diagnostic observations
+  # 1794 2026-10-31 unclassified codex/wt942-finite-capture-20261030    Add finite Flame Sword calculation capture
+  # 1795 2026-10-31 process      codex/tooling1120-route-bounds-2026103 Fix context-dependent live receipt bounds
+  # 1797 2026-11-02 unclassified agent/cim-provider-consumers           Accept public CIM as preview provider before the rollup
+  # 1798 2026-11-02 mixed        pins/cosmetics_tweaker-0.9.230-dev     chore(verify): repoint cosmetics_tweaker-0.9.230-dev pins
+  # 1799 2026-11-02 process      codex/gui1796-public-rollup-20261102   Promote GUI fixes and preserve third-person camera
+  # 1800 2026-11-03 process      chore/gui290-publication-aftercare     Reconcile GUI publication source proofs
+  # 1803 2026-11-03 unclassified chore/general-allocation-adoption-2026 Activate approved General version reservations
+  # 1804 2026-11-03 product      feat/general-time-controls-1801-1802   General: selective freeze and readable time controls
+  # 1805 2026-11-03 process      chore/general-dev-278-publication-pins chore: bind General Dev publication pins
+  # 1806 2026-11-03 process      agent/cim-consumers-reissue            Reissue CWV and CIM Dev under fresh claims
+  # 1807 2026-11-03 mixed        pins/character_weapon_variants-0.1.569 chore(verify): repoint character_weapon_variants-0.1.569-dev pins
+  # 1808 2026-11-06 process      release/official-verify-fix-20261105   Promote General fixes and official reservation gates
+  # 1809 2026-11-06 process      release/general279-publication-pins-20 Record General Dev279 publication source pins
+  # 1810 2026-11-06 process      release/official-ct-cim-rollup-2026110 Promote selected Chaos Wastes and CIM fixes
+  # 1811 2026-11-06 process      release/cimdev148-provenance-20261106  Retain CIM148 release pins and clarify promotion
+  # 1813 2026-11-06 process      fix/1812-factory-load-authority-202611 Qualify factory-injected startup LOAD authority
+  # 1814 2026-11-06 process      release/ctdev354-pins-20261106         Reconcile published CTDev354 source pins
+  # 1816 2026-11-06 unclassified fix/1815-ct-evidence-authority-2026110 Qualify constructed Chaos Wastes diagnostics (#1815)
+  # 1818 2026-11-12 unclassified codex/issue719-route-20261111          Qualify bounded Crowbill diagnostic evidence
+  # 1819 2026-11-12 unclassified codex/mp-wt-reservation-activation-202 Activate approved Progression and Weapons reservations
+  # 1820 2026-11-12 unclassified codex/mp-wt-diagnostic-reissue-2026111 Reissue Progression and Weapons diagnostics
+  # 1821 2026-11-12 process      codex/mp52-aftercare-20261112          Qualify Progression diagnostic testing after publication
+  # 1822 2026-11-12 process      codex/wt343-pins-20261112              tooling: retain published WT343 source pins
+  # 1823 2026-11-12 process      codex/wt942-admission-20261112         tooling: qualify published Flame Sword capture
+  # 1825 2026-11-14 product      fix/character-dialogue-881-20261113    Character Dialogue 0.1.15-dev: native async readiness and safe cleanup

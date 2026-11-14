@@ -1,0 +1,4 @@
+character_weapon_variants	_cwv_exact_appearance.lua	62	units/weapons/player/	NOT_VANILLA_NOT_OWN
+character_weapon_variants	_cwv_exact_appearance.lua	63	units/cwv_	NOT_VANILLA_NOT_OWN
+weapons_of_chaos	_woc_boss_weapon_catalog.lua	55	units/woc_skarrik_dual_swords/skarrik_swords	NOT_VANILLA_NOT_OWN
+weapons_of_chaos	_woc_boss_weapon_catalog.lua	106	units/weapons/enemy/wpn_skaven_set/wpn_skaven_set	NOT_VANILLA_NOT_OWN

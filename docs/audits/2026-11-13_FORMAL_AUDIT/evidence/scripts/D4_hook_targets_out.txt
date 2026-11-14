@@ -1,0 +1,8 @@
+== modded_progression: 52 literal hook sites, 52 distinct targets, 0 unresolved, 0 allow-listed, 23 non-literal sites not checked
+== career_tweaker: 24 literal hook sites, 24 distinct targets, 0 unresolved, 0 allow-listed, 7 non-literal sites not checked
+== crafting_in_modded: 109 literal hook sites, 109 distinct targets, 0 unresolved, 1 allow-listed, 16 non-literal sites not checked
+   allow-listed HeroWindowCraftingInventory._update_crafting_material_panel  (crafting_in_modded/scripts/mods/crafting_in_modded/_cim_standard_forge_presentation.lua:261)  [class not found in source]
+== crafting_in_modded_dev: 109 literal hook sites, 109 distinct targets, 0 unresolved, 1 allow-listed, 16 non-literal sites not checked
+   allow-listed HeroWindowCraftingInventory._update_crafting_material_panel  (crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/standard_forge.lua:417)  [class not found in source]
+== gui_tweaker: 83 literal hook sites, 83 distinct targets, 0 unresolved, 0 allow-listed, 57 non-literal sites not checked
+== gui_tweaker_dev: 85 literal hook sites, 85 distinct targets, 0 unresolved, 0 allow-listed, 57 non-literal sites not checked

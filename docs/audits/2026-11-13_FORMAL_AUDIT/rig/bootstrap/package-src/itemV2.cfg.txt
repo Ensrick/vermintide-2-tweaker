@@ -1,0 +1,8 @@
+title = "VT2 Rig Driver";
+description = "Test rig driver. Never published. Does nothing unless the game is started by the test rig.";
+preview = "item_preview.png";
+content = "bundleV2";
+language = "english";
+visibility = "private";
+apply_for_sanctioned_status = false;
+tags = [ ];

@@ -1,0 +1,161 @@
+#60	ct_chest_count_live_60	chaos_wastes_tweaker_dev/scripts	0	-
+#60	ct_chest_count_live_60	chaos_wastes_tweaker/scripts	1	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence.lua:303:        ctx.rt_register("ct_chest_count_live_60", runtime_check("ct_chest_
+#60	ct_chest_count_live_60	qa/lua/tests	0	-
+#60	verify_ct_chest_cap	chaos_wastes_tweaker_dev/scripts	0	-
+#60	verify_ct_chest_cap	chaos_wastes_tweaker/scripts	1	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence.lua:313:    mod:command("verify_ct_chest_cap", "Read current settled chest census;
+#60	cursed_chest_reconcile_132	chaos_wastes_tweaker_dev/scripts	1	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_regression_resource_safety.lua:281:_rt_register("cursed_chest_reconcile_132", function()
+#60	cursed_chest_reconcile_132	chaos_wastes_tweaker/scripts	1	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_chest_cap.lua:166:        ctx.rt_register("cursed_chest_reconcile_132", function()
+#60	cursed_chest_reconcile_132	qa/lua/tests	1	qa/lua/tests/test_ct_regression_resource_safety.lua:19:        "cursed_chest_reconcile_132",
+#102	_ct_altar_next_rarity_above|next_rarity_above	chaos_wastes_tweaker_dev/scripts	1	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_altar_reuse_owner.lua:245:mod._ct_altar_next_rarity_above = function(weapon_rarity_name)
+#102	_ct_altar_next_rarity_above|next_rarity_above	chaos_wastes_tweaker/scripts	1	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua:793:mod._ct_altar_next_rarity_above = function(weapon_rarity_name)
+#102	issue102|altar_rarity_102|ct:102	chaos_wastes_tweaker_dev/scripts	0	-
+#102	issue102|altar_rarity_102|ct:102	chaos_wastes_tweaker/scripts	0	-
+#102	issue102|altar_rarity_102|ct:102	qa/lua/tests	3	qa/lua/tests/test_wt_hold_pose.lua:313:        H.truthy(checks.issue1023_live_hold_pose_hud,
+#107	issue107_	chaos_wastes_tweaker_dev/scripts	0	-
+#107	issue107_	chaos_wastes_tweaker/scripts	1	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_verify_runtime.lua:361:    register("issue107_grudge_application_master", function()
+#107	issue107_	qa/lua/tests	0	-
+#144	vauls_anvil_reconciler_installed	chaos_wastes_tweaker_dev/scripts	1	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_runtime_owner.lua:358:_rt_register("vauls_anvil_reconciler_installed", function()
+#144	vauls_anvil_reconciler_installed	chaos_wastes_tweaker/scripts	0	-
+#144	vauls_anvil_reconciler_installed	qa/lua/tests	0	-
+#146	citadel145_force_finale_god_fix|ct_citadel_graph_readback_146	chaos_wastes_tweaker_dev/scripts	1	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_regression.lua:824:_rt_register("citadel145_force_finale_god_fix", function()
+#146	citadel145_force_finale_god_fix|ct_citadel_graph_readback_146	chaos_wastes_tweaker/scripts	1	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence.lua:298:        ctx.rt_register("ct_citadel_graph_readback_146", runtime_check("ct
+#146	citadel145_force_finale_god_fix|ct_citadel_graph_readback_146	qa/lua/tests	0	-
+#146	finale_approach_god	chaos_wastes_tweaker_dev/scripts	6	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev_data.lua:740:                    { setting_id = "finale_approach_god", type = "dro
+#146	finale_approach_god	chaos_wastes_tweaker/scripts	7	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker_data.lua:942:        setting_id = "finale_approach_god", type = "dropdown", default_value = 0,
+#243	_CURSE_MAP_BRIGHTNESS|curse_lighting_brightness	chaos_wastes_tweaker_dev/scripts	5	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev_data.lua:743:                    { setting_id = "curse_lighting_brightness", type
+#243	_CURSE_MAP_BRIGHTNESS|curse_lighting_brightness	chaos_wastes_tweaker/scripts	4	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua:5444:    local b = tonumber(mod:get("curse_lighting_brightness")) or 1.0
+#243	_CURSE_MAP_BRIGHTNESS|curse_lighting_brightness	qa/lua/tests	1	qa/lua/tests/test_ct_curse_lighting_owner.lua:100:                H.equal(setting_id, "curse_lighting_brightness")
+#252	Reroll this weapon\?	chaos_wastes_tweaker_dev/scripts	2	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_altar_reuse_owner.lua:687:CT_RELIQUARY_REROLL_PROMPT = "Reroll this weapon?"
+#252	Reroll this weapon\?	chaos_wastes_tweaker/scripts	1	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_verify_runtime.lua:340:            info.content.reward_info_text = "Reroll this weapon?"
+#252	Reroll this weapon\?	qa/lua/tests	4	qa/lua/tests/test_ct_altar_reuse_owner.lua:260:            'CT_RELIQUARY_REROLL_PROMPT = "Reroll this weapon?"'), 1)
+#252	reliquary_reroll_message_hook|ct_altar_prompt_readback_252	chaos_wastes_tweaker_dev/scripts	1	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_regression.lua:572:_rt_register("reliquary_reroll_message_hook", function()
+#252	reliquary_reroll_message_hook|ct_altar_prompt_readback_252	chaos_wastes_tweaker/scripts	1	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence.lua:304:        ctx.rt_register("ct_altar_prompt_readback_252", runtime_check("ct_
+#252	reliquary_reroll_message_hook|ct_altar_prompt_readback_252	qa/lua/tests	0	-
+#256	ct_meta_ammo_current_floor_256	chaos_wastes_tweaker_dev/scripts	2	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_meta_boon_owner.lua:321:        -- regression `ct_meta_ammo_current_floor_256`; helper exposed as
+#256	ct_meta_ammo_current_floor_256	chaos_wastes_tweaker/scripts	1	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence.lua:300:        ctx.rt_register("ct_meta_ammo_current_floor_256", runtime_check("c
+#256	ct_meta_ammo_current_floor_256	qa/lua/tests	1	qa/lua/tests/test_ct_official_evidence_integration.lua:103:        assert(f.checks.ct_meta_ammo_current_floor_256().status=="SKIP")
+#259	issue259|morgrim.*free_grenade|free_grenade	chaos_wastes_tweaker_dev/scripts	4	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_combat_hooks.lua:1506:    -- #259: also shim has_buff_perk so the RV-ability `free_grenade` PERK can't
+#259	issue259|morgrim.*free_grenade|free_grenade	chaos_wastes_tweaker/scripts	4	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_boon_repairs.lua:164:            if perk_name == "free_grenade"
+#259	issue259|morgrim.*free_grenade|free_grenade	qa/lua/tests	3	qa/lua/tests/ct_official_boon_repair_cases.lua:152:                        if name == "free_grenade" then return true end
+#288	anath_raema_registry_retry_288|ct_anath_raema_active_288	chaos_wastes_tweaker_dev/scripts	1	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_meta_trait_boons.lua:560:_rt_register("anath_raema_registry_retry_288", function()
+#288	anath_raema_registry_retry_288|ct_anath_raema_active_288	chaos_wastes_tweaker/scripts	2	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence.lua:299:        ctx.rt_register("ct_anath_raema_active_288", runtime_check("ct_ana
+#288	anath_raema_registry_retry_288|ct_anath_raema_active_288	qa/lua/tests	0	-
+#289	issue289_progressive_modifier_stack	chaos_wastes_tweaker_dev/scripts	3	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_progressive_modifier_runtime.lua:37:-- /ct_regression_test check `issue289_progressive_modifier_stack`.
+#289	issue289_progressive_modifier_stack	chaos_wastes_tweaker/scripts	3	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_progressive_modifier_runtime.lua:37:-- /ct_regression_test check `issue289_progressive_modifier_stack`.
+#289	issue289_progressive_modifier_stack	qa/lua/tests	13	qa/lua/tests/ct_official_feature_cases.lua:361:        assert(f.checks.issue289_progressive_modifier_stack and f.checks.issue323_progressive_elite_runtime)
+#299	ct299:move_before_free_v1|issue299_chest_revive_move_before_free	chaos_wastes_tweaker_dev/scripts	2	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_runtime_owner.lua:335:    if type(policy) ~= "table" or policy.MARKER ~= "ct299:move_before_free_v
+#299	ct299:move_before_free_v1|issue299_chest_revive_move_before_free	chaos_wastes_tweaker/scripts	2	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_chest_revive_policy.lua:13:M.MARKER = "ct299:move_before_free_v1"
+#299	ct299:move_before_free_v1|issue299_chest_revive_move_before_free	qa/lua/tests	4	qa/lua/tests/test_ct_chest_revive_owner.lua:211:        H.equal(mod._ct_chest_revive_policy.MARKER, "ct299:move_before_free_v1")
+#322	spawn_pickup_returns_both_values|ct_linked_pickup_identity_322	chaos_wastes_tweaker_dev/scripts	1	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_runtime_owner.lua:320:_rt_register("spawn_pickup_returns_both_values", function()
+#322	spawn_pickup_returns_both_values|ct_linked_pickup_identity_322	chaos_wastes_tweaker/scripts	1	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence.lua:301:        ctx.rt_register("ct_linked_pickup_identity_322", runtime_check("ct
+#322	spawn_pickup_returns_both_values|ct_linked_pickup_identity_322	qa/lua/tests	0	-
+#323	issue323|ct:323	chaos_wastes_tweaker_dev/scripts	8	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_progressive_elite_audit.lua:59:    printf("[ct:323] audit=%d/%d reason=%s completed=%d rate=%d rates=%s
+#323	issue323|ct:323	chaos_wastes_tweaker/scripts	6	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_progressive_elite_runtime.lua:34:-- /ct_regression_test check `issue323_progressive_elite_runtime`.
+#323	issue323|ct:323	qa/lua/tests	22	qa/lua/tests/ct_official_feature_cases.lua:361:        assert(f.checks.issue289_progressive_modifier_stack and f.checks.issue323_progressive_elite_runtime)
+#342	boon_skulls_03_cooldown	chaos_wastes_tweaker_dev/scripts	3	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_combat_hooks.lua:1132:-- "boon_skulls_03_cooldown", morris_buff_settings.lua:4632/:4655). The
+#342	boon_skulls_03_cooldown	chaos_wastes_tweaker/scripts	2	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_parry_cooldown_policy.lua:21:--     hard-codes "boon_skulls_03_cooldown" for both the gate and the re-arm
+#342	boon_skulls_03_cooldown	qa/lua/tests	5	qa/lua/tests/ct_official_boon_repair_cases.lua:129:                boon_skulls_03_cooldown = { buffs = { skulls_cd } },
+#342	parry_cooldown	chaos_wastes_tweaker_dev/scripts	12	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_combat_hooks.lua:1133:-- working mechanism now lives in _ct_parry_cooldown_policy.lua: zero the
+#342	parry_cooldown	chaos_wastes_tweaker/scripts	13	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua:2189:    parry_policy = mod:dofile("scripts/mods/chaos_wastes_tweaker/_ct_parry_cooldown_p
+#342	parry_cooldown	qa/lua/tests	21	qa/lua/tests/ct_official_boon_repair_cases.lua:13:        local policy, policy_actual = load_production(prefix .. "_ct_parry_cooldown_policy.lua", env)
+#357	issue357_	chaos_wastes_tweaker_dev/scripts	1	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_regression.lua:1461:_rt_register("issue357_bomb_bubble_cooldown_display", function()
+#357	issue357_	chaos_wastes_tweaker/scripts	1	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_cooldowns.lua:118:        ctx.rt_register("issue357_owner_cooldown_display", function()
+#357	issue357_	qa/lua/tests	2	qa/lua/tests/ct_official_cooldown_cases.lua:209:        assert(w.checks.issue357_owner_cooldown_display() == nil)
+#358	issue358_	chaos_wastes_tweaker_dev/scripts	7	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_bomb_cooldown_display.lua:505:    if fingerprint == M._issue358_last_error then return end
+#358	issue358_	chaos_wastes_tweaker/scripts	7	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_bomb_cooldown_display.lua:507:    if fingerprint == M._issue358_last_error then return end
+#358	issue358_	qa/lua/tests	3	qa/lua/tests/ct_official_cooldown_cases.lua:210:        assert(w.checks.issue358_manann_tempest_cooldown_display() == nil)
+#361	issue361_miasma_customization_installed	chaos_wastes_tweaker_dev/scripts	1	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_runtime_owner.lua:252:_rt_register("issue361_miasma_customization_installed", function()
+#361	issue361_miasma_customization_installed	chaos_wastes_tweaker/scripts	1	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_feature_leaf.lua:34:        mod._ct_rt_register("issue361_miasma_customization_installed", function()
+#361	issue361_miasma_customization_installed	qa/lua/tests	1	qa/lua/tests/ct_official_feature_cases.lua:362:        assert(f.checks.issue361_miasma_customization_installed() == nil)
+#369	issue369_	enemy_tweaker/scripts	2	enemy_tweaker/scripts/mods/enemy_tweaker/_et_health_multiplier.lua:87:ET.rt_register("issue369_health_multiplier_wired", function()
+#369	issue369_	qa/lua/tests	0	-
+#413	issue413|wpn_shadow_gargoyle_head	event_tweaker/scripts	7	event_tweaker/scripts/mods/event_tweaker/_evt_guard413_weave.lua:10:-- regression check issue413_weave_only_mutators_gated; checklist slug
+#413	issue413|wpn_shadow_gargoyle_head	qa/lua/tests	0	-
+#1123	\-0\.9|\-0\.8	event_tweaker/scripts/mods/event_tweaker/_evt_shadow_adventure.lua	3	45:-- vanilla Ulgu value (WindSettings.shadow.damage_taken = -0.8 at every
+#1123	\-0\.9|\-0\.8	event_tweaker/scripts/mods/event_tweaker/event_tweaker_shadow_policy.lua	2	8:-- Vanilla Ulgu wind value: WindSettings.shadow.damage_taken is -0.8 at every
+#1123	issue1123	event_tweaker/scripts	0	-
+#1123	issue1123	qa/lua/tests	0	-
+#426	ct_426_diag|issue426	chaos_wastes_tweaker_dev/scripts	4	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_peer_parity_owner.lua:770:        mod:command("ct_426_diag", "Audit modded boon and miracle peer wire s
+#426	ct_426_diag|issue426	chaos_wastes_tweaker/scripts	2	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_peer_parity_owner.lua:1211:        "ct_426_diag", "Write the public boon wire-safety audit to the log",
+#426	ct_426_diag|issue426	qa/lua/tests	8	qa/lua/tests/test_ct_boon_split.lua:31:        "issue426_runtime_gate_presentation",
+#430	issue430_	event_tweaker/scripts	4	event_tweaker/scripts/mods/event_tweaker/_evt_guard430_curse_parity.lua:335:rt_register("issue430_peer_parity_beacon_installed", function()
+#430	issue430_	qa/lua/tests	0	-
+#450	issue450|verify_boss_balance	enemy_tweaker/scripts	3	enemy_tweaker/scripts/mods/enemy_tweaker/_et_boss_balance.lua:192:-- Live readback for /verify_boss_balance. This reports the values the engine
+#450	issue450|verify_boss_balance	qa/lua/tests	1	qa/lua/tests/test_et_boss_behavior.lua:113:        H.truthy(commands:find('mod:command("verify_boss_balance"', 1, true))
+#451	issue451_	enemy_tweaker/scripts	4	enemy_tweaker/scripts/mods/enemy_tweaker/_et_boss_ideas.lua:96:ET.rt_register("issue451_boss_ideas_safely_decomposed", function()
+#451	issue451_	qa/lua/tests	5	qa/lua/tests/test_et_custom_breed_parity.lua:44:            "issue451_no_replay_probe", resolver, function(first)
+#458	ct_verify_start_shrine|issue458	chaos_wastes_tweaker_dev/scripts	2	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_runtime_owner.lua:206:_rt_register("issue458_start_shrine_config", mod._ct_start_shrine_runtime.re
+#458	ct_verify_start_shrine|issue458	chaos_wastes_tweaker/scripts	2	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_shop.lua:56:    mod._ct_rt_register("issue458_start_shrine_config", start.regression)
+#458	ct_verify_start_shrine|issue458	qa/lua/tests	3	qa/lua/tests/ct_official_shop_cases.lua:99:        H.equal(f.checks.issue458_start_shrine_config(), nil)
+#460	verify_ct_progression|issue460	chaos_wastes_tweaker_dev/scripts	0	-
+#460	verify_ct_progression|issue460	chaos_wastes_tweaker/scripts	1	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence.lua:312:    mod:command("verify_ct_progression", "Read current progression; unavai
+#460	verify_ct_progression|issue460	qa/lua/tests	2	qa/lua/tests/test_ct_official_evidence_integration.lua:101:            "verify_ct_ammo_bounds","verify_ct_linked_pickups","verify_ct_progression","verify_ct_altar_reroll"
+#467	issue467|ct:467	chaos_wastes_tweaker_dev/scripts	9	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua:872:    pcall(printf, "[ct:467] summary total=%d cap=%d stock_prices{event=%s
+#467	issue467|ct:467	chaos_wastes_tweaker/scripts	2	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_boon_pricing_runtime.lua:20:    pcall(printf, "[ct:467] " .. fmt, ...)
+#467	issue467|ct:467	qa/lua/tests	2	qa/lua/tests/ct_official_shop_cases.lua:100:        H.equal(f.checks.issue467_individual_boon_prices(), nil)
+#470	issue470_sparse_rank8_backfill	chaos_wastes_tweaker_dev/scripts	0	-
+#470	issue470_sparse_rank8_backfill	chaos_wastes_tweaker/scripts	1	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_verify_runtime.lua:356:    register("issue470_sparse_rank8_backfill", function()
+#470	issue470_sparse_rank8_backfill	qa/lua/tests	0	-
+#471	ct_trial_placement_readback_471|verify_ct_trial_placement	chaos_wastes_tweaker_dev/scripts	0	-
+#471	ct_trial_placement_readback_471|verify_ct_trial_placement	chaos_wastes_tweaker/scripts	2	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence.lua:305:        ctx.rt_register("ct_trial_placement_readback_471", runtime_check("
+#471	ct_trial_placement_readback_471|verify_ct_trial_placement	qa/lua/tests	1	qa/lua/tests/test_ct_official_evidence_integration.lua:101:            "verify_ct_ammo_bounds","verify_ct_linked_pickups","verify_ct_progression","verify_ct_altar_reroll"
+#505	single_mission_loader_redesign_505|0\.999	chaos_wastes_tweaker_dev/scripts	5	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua:464:_rt_register("single_mission_loader_redesign_505", function()
+#505	single_mission_loader_redesign_505|0\.999	chaos_wastes_tweaker/scripts	6	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua:9950:        if factor >= 0.9999 then return end  -- no scaling happened
+#505	single_mission_loader_redesign_505|0\.999	qa/lua/tests	9	qa/lua/tests/ct_official_feature_cases.lua:313:        assert(args.n == 5 and args[1] == "pat_forest_nurgle_path3" and args[3] == 0.999 and args[5] == true)
+#571	issue571_cw_tab_collectibles_safe_reflow	chaos_wastes_tweaker_dev/scripts	1	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_tab_panel_owner.lua:661:_rt_register("issue571_cw_tab_collectibles_safe_reflow", _ct_tab_layout_571.reg
+#571	issue571_cw_tab_collectibles_safe_reflow	chaos_wastes_tweaker/scripts	1	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_collectibles.lua:219:    { "issue571_cw_tab_collectibles_safe_reflow", layout.regression },
+#571	issue571_cw_tab_collectibles_safe_reflow	qa/lua/tests	1	qa/lua/tests/test_ct_tab_panel_owner.lua:148:            '_rt_register("issue571_cw_tab_collectibles_safe_reflow"',
+#802	issue802_event_mission_area_scope	event_tweaker/scripts	1	event_tweaker/scripts/mods/event_tweaker/_evt_missions.lua:446:ET.rt_register("issue802_event_mission_area_scope", function()
+#802	issue802_event_mission_area_scope	qa/lua/tests	0	-
+#912	ct_initial_coins_readback_912|verify_coins	chaos_wastes_tweaker_dev/scripts	5	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_boon_runtime_owner.lua:623:mod:command("verify_coins", "Verify starting_coins: live coin balance vs loc
+#912	ct_initial_coins_readback_912|verify_coins	chaos_wastes_tweaker/scripts	2	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua:7922:mod:command("verify_coins", "Verify exact initial readback separately from current sp
+#912	ct_initial_coins_readback_912|verify_coins	qa/lua/tests	4	qa/lua/tests/test_ct_starting_coins.lua:60:    -- #912 audit repair (2026-08-03): /verify_coins previously read only the
+#917	issue917|adventure_illusion|preserve_adventure_illusions	chaos_wastes_tweaker_dev/scripts	23	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev_data.lua:566:                setting_id = "preserve_adventure_illusions",
+#917	issue917|adventure_illusion|preserve_adventure_illusions	chaos_wastes_tweaker/scripts	17	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua:1255:    preserve_adventure_illusions = true,
+#917	issue917|adventure_illusion|preserve_adventure_illusions	qa/lua/tests	12	qa/lua/tests/test_ct_adventure_illusions.lua:8:    local module_path = base .. "_ct_adventure_illusions.lua"
+#941	issue941_prologue_solo_only_projection	event_tweaker/scripts	1	event_tweaker/scripts/mods/event_tweaker/_evt_missions.lua:378:ET.rt_register("issue941_prologue_solo_only_projection", function()
+#941	issue941_prologue_solo_only_projection	qa/lua/tests	0	-
+#1146	issue1146|ct:1146	chaos_wastes_tweaker_dev/scripts	0	-
+#1146	issue1146|ct:1146	chaos_wastes_tweaker/scripts	1	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_official_shop.lua:58:    mod._ct_rt_register("issue1146_false_discount", function()
+#1146	issue1146|ct:1146	qa/lua/tests	1	qa/lua/tests/ct_official_shop_cases.lua:101:        H.equal(f.checks.issue1146_false_discount(), nil)
+#1149	issue1149_modifier_loc_icon_coverage	event_tweaker/scripts	1	event_tweaker/scripts/mods/event_tweaker/_evt_preview.lua:285:rt_register("issue1149_modifier_loc_icon_coverage", function()
+#1149	issue1149_modifier_loc_icon_coverage	qa/lua/tests	0	-
+#1497	issue1497_local_host_hot_join_bypass	enemy_tweaker/scripts	1	enemy_tweaker/scripts/mods/enemy_tweaker/_et_custom_breed_parity.lua:613:ET.rt_register("issue1497_local_host_hot_join_bypass", function()
+#1497	issue1497_local_host_hot_join_bypass	qa/lua/tests	5	qa/lua/tests/test_et_issue1497_local_host_fence.lua:88:            local check_name = "issue1497_local_host_hot_join_bypass"
+#61	issue61|et:61	enemy_tweaker/scripts	5	enemy_tweaker/scripts/mods/enemy_tweaker/_et_personal_handicap.lua:57:        mod:info("[et:61] local preset=%s host=%s", preset, tostring(host))
+#61	issue61|et:61	qa/lua/tests	11	qa/lua/tests/test_cim_regression_module.lua:35:        "issue617_athanor_icon_resource_closure",
+#249	issue249_|verify_boon_ammo_hud	chaos_wastes_tweaker_dev/scripts	1	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_stack_rebroadcast_owner.lua:185:    _rt_register("issue249_stack_rebroadcast_on_restore", function()
+#249	issue249_|verify_boon_ammo_hud	chaos_wastes_tweaker/scripts	1	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_stack_rebroadcast_owner.lua:185:    _rt_register("issue249_stack_rebroadcast_on_restore", function()
+#249	issue249_|verify_boon_ammo_hud	gui_tweaker_dev/scripts	2	gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_numericui_cooldown_realtime.lua:213:mod:command("verify_boon_ammo_hud",
+#249	issue249_|verify_boon_ammo_hud	qa/lua/tests	3	qa/lua/tests/test_ct_ammo_guard_policy.lua:80:        local check = checks["issue249_stack_rebroadcast_on_restore"]
+#52	ct:skull52	chaos_wastes_tweaker_dev/scripts	3	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_skull52.lua:43:        pcall(engine_printf, "[ct:skull52] %s", line)
+#52	ct:skull52	chaos_wastes_tweaker/scripts	0	-
+#141	ct_resume_audit	chaos_wastes_tweaker_dev/scripts	3	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua:1591:mod:dofile("scripts/mods/chaos_wastes_tweaker_dev/_ct_resume_audit")
+#141	ct_resume_audit	chaos_wastes_tweaker/scripts	0	-
+#251	ct:251|_ct_book_spawner_census|book_spawner_census	chaos_wastes_tweaker_dev/scripts	13	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_level_load_owner.lua:28:    `_dump_pickup_spawners_verbose` and `_ct_book_spawner_census` are the censu
+#251	ct:251|_ct_book_spawner_census|book_spawner_census	chaos_wastes_tweaker/scripts	0	-
+#253	ct_weave_metal	chaos_wastes_tweaker_dev/scripts	17	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua:1576:-- host-owned, default-off Metal wind adapter (command-gated via /ct_weav
+#253	ct_weave_metal	chaos_wastes_tweaker/scripts	0	-
+#253	ct_weave_metal	qa/lua/tests	26	qa/lua/tests/test_ct_weave_metal_policy.lua:3:        .. "/chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_weave_metal_policy.lua"))()
+#324	issue324_	enemy_tweaker/scripts	2	enemy_tweaker/scripts/mods/enemy_tweaker/_et_diag_capacity_authority.lua:36:M.CHECK_NAME = "issue324_capacity_authority_probe"
+#324	issue324_	qa/lua/tests	3	qa/lua/tests/test_et_custom_breed_registrar.lua:610:        H.truthy(type(capture.runtime_checks.issue324_warlord_diag_armed)
+#349	ct:349	chaos_wastes_tweaker_dev/scripts	4	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_cursed_chest132.lua:30:    census after eight seconds. Its one [ct:349] line compares settled coun
+#349	ct:349	chaos_wastes_tweaker/scripts	0	-
+#393	event-inject:393	event_tweaker/scripts	1	event_tweaker/scripts/mods/event_tweaker/_evt_diagnostics.lua:176:        printf("[event-inject:393] settled verdict=%s evidence=%s | injected=[%s] max_intensity=%s decay
+#453	et_modifier_audit|et:453	enemy_tweaker/scripts	7	enemy_tweaker/scripts/mods/enemy_tweaker/_et_enemy_modifiers.lua:35:        "[et:453] modifier-audit reason=%s modifiers=%d template_missing=%d wire_missing=%d enhancemen
+#456	ct:456|issue456	chaos_wastes_tweaker_dev/scripts	12	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_adventure_runtime_owner.lua:388:-- dumps, the [ct:456] book-spawner census and the [ct:136] per-peer mi
+#456	ct:456|issue456	chaos_wastes_tweaker/scripts	0	-
+#919	ct_profile_audit|ct:919	chaos_wastes_tweaker_dev/scripts	5	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_dev_mission.lua:295:        pcall(printf, "[ct:919] registered profile diagnostic with Mod Tweaker")
+#919	ct_profile_audit|ct:919	chaos_wastes_tweaker/scripts	0	-
+#919	ct_profile_audit|ct:919	gui_tweaker_dev/scripts	0	-
+#1124	ct:1124	chaos_wastes_tweaker_dev/scripts	2	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_diag_gargoyle1124.lua:20:-- isolated. Output is bounded engine `printf` with the exact `[ct:1124]` pref
+#1124	ct:1124	chaos_wastes_tweaker/scripts	0	-
+#1191	wire_identity	chaos_wastes_tweaker_dev/scripts	9	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_peer_parity_owner.lua:225:        local wire_identity, wire_error, wire_integrity
+#1191	wire_identity	chaos_wastes_tweaker/scripts	4	chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_peer_parity_owner.lua:205:                wire_identity = identity,
+#1309	issue1309_|et:1149t	event_tweaker/scripts	11	event_tweaker/scripts/mods/event_tweaker/_evt_cursed_adventure.lua:127:    if ET.issue1309_on_mutator_activated then
+#1309	issue1309_|et:1149t	qa/lua/tests	7	qa/lua/tests/test_event_tzeentch_diagnostic.lua:4:    local old_path = mod_root .. "/_evt_issue1309_probe.lua"
+#465	ct:465|policy=implicit	chaos_wastes_tweaker_dev/scripts	3	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/_ct_replacement_runtime.lua:43:    pcall(printf, "[ct:465] " .. fmt, ...)
+#465	ct:465|policy=implicit	chaos_wastes_tweaker/scripts	0	-
+#465	ct:465|policy=implicit	qa/lua/tests	2	qa/lua/tests/test_ct_replacement_compensation.lua:380:        H.truthy(table.concat(f.logs, "\n"):find("policy=implicit", 1, true))
+#466	ct:466	chaos_wastes_tweaker_dev/scripts	1	chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua:933:    pcall(printf, "[ct:466] " .. fmt, ...)
+#466	ct:466	chaos_wastes_tweaker/scripts	0	-

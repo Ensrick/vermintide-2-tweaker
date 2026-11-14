@@ -1,0 +1,144 @@
+#3 [comp] MANUAL 2026-06-13 | other runtime unlabelled  | life= | ev=D | reop=0 | Ensrick | BR_STUBS source-file recovery from Core's Big Rebalance (Workshop 2705276978)
+   close[06-13 a]: Closing. The deleted Core's Big Rebalance source is already on disk at `_big_rebalance_extract/source/` (dated 2026-05-21), so the recovery blocker is resolved. More importantly, the entire BR-stubs effort is superseded by the 202
+   openrefs=1 sig: #2:regression_test
+#7 [comp] MANUAL 2026-05-24 | wt? runtime unlabelled  | life= | ev=D | reop=0 | Ensrick | wt: remove temporary polearm preview diagnostic helper
+   close[05-24 a]: Resolved in v0.12.70-dev (2026-05-23) — `_wt_polearm_preview_diag` function, `_POLEARM_DIAG_KEYS` whitelist, and the call site in the consolidated `MenuWorldPreviewer.equip_item` hook were all removed. Verified clean on grep of `_
+#11 [comp] MANUAL 2026-05-23 | other runtime bug  | life= | ev=C | reop=0 | Ensrick | Cross-mod chat-command name collision: 7 mods all registered 'regression_test'
+   close[05-23 a]: Resolved 2026-05-23 — all 7 mods renamed with mod-prefix namespacing (cim_, ct_, wt_, cos_, gt_, et_, crt_). Permanent regression prevention via qa/check_command_collisions.ps1, wired into qa/run_all.ps1 and the GHA workflow. PC-A
+#12 [comp] MANUAL 2026-06-04 | cim? runtime bug  | life= | ev=D | reop=0 | Ensrick | cim: Athanor 'CRAFT' button auto-equips new item, leaving slot icon out of sync with actua
+   close[06-04 a]: Resolved in cim v0.7.x dev branch, shipped in v0.8.0 (2026-05-30). The three auto-equip `backend_items.set_loadout_item` call sites identified in this issue (HeroWindowWeaveForgeWeapons._equip_item, _cim_amulet_craft_one_slot, Her
+#14 [comp] MANUAL 2026-05-25 | cosmetics? runtime bug  | life= | ev=D | reop=0 | Ensrick | cosmetics_tweaker: LA hat equipped on GK leaks to Warrior Priest body at mission start (ho
+   close[05-25 a]: Fixed in v0.9.11-dev (guard rewrite); v0.9.13-dev adds the behavioral regression suite (5 new `la_chars_compatible_*` tests via `/cos_regression_test`) plus a passive runtime monitor that fires on every player spawn and warns on c
+#20 [comp] MANUAL 2026-05-24 | cwv? runtime crash  | life= | ev=D | reop=0 | Ensrick | cwv: 27 ItemMasterList crashify exceptions per keep load (missing rawget on _auto_register
+   close[05-24 a]: Resolved in v0.1.333-dev (commit pending). One-word change at line 8167: `if not ItemMasterList[key]` → `if not rawget(ItemMasterList, key)`. Build green (4 bundles, 2.09s). Verification: keep-load grep for `ItemMaster List has no
+#21 [comp] MANUAL 2026-05-24 | cwv? runtime bug  | life= | ev=D | reop=0 | Ensrick | cwv: cwv_es_musket_old appears twice in pending_defs (duplicate rarity-set log entry)
+   close[05-24 a]: Closing as not-a-bug — intentional design.  `cwv_es_musket_old` has `def.instances = 2` (line 493) which is the registration plumbing for the cross-slot dual-carry feature: two independently-equippable backend instances (`cwv_es_m
+#24 [comp] MANUAL 2026-06-04 | other runtime crash  | life= | ev=D | reop=0 | Ensrick | crafting_in_modded VMB build crashes Stingray (blocks publish-release.ps1)
+   close[06-04 a]: Resolved — cim builds cleanly in current publish-release.ps1 runs. Recent v0.7.x → v0.8.0 ship cycles all included successful `VMBLauncher.exe build crafting_in_modded` (4 bundles) followed by zip-stage. The Stingray error code 42
+#26 [comp] MANUAL 2026-05-25 | other runtime unlabelled  | life= | ev=C | reop=0 | Ensrick | Senior-eng hardening: pcall-isolated mod:safe_hook wrapper to prevent silent chain drops
+   close[05-25 a]: Resolved in weapon_tweaker v0.12.77-dev — _safe_hook.lua helper added; 5 hook sites converted (SimpleInventoryExtension.wield, SimpleHuskInventoryExtension.wield, GearUtils.create_equipment, GearUtils.spawn_inventory_unit, LevelEn
+#27 [comp] MANUAL 2026-05-25 | other runtime unlabelled  | life= | ev=C | reop=0 | Ensrick | Senior-eng hardening: explicit RPC schema_version + drop-on-mismatch
+   close[05-25 a]: Pilot landed in ct v0.7.114-dev — CT_RPC_SCHEMA=1 prepended to all 3 ct RPC senders (ct_sync_host_settings_chunk, ct_graph_snapshot_chunk, ct_peer_manifest_chunk), all 3 receivers reject mismatch with _dbg_alert + early return. VM
+#28 [comp] MANUAL 2026-05-25 | mp? runtime enhancement  | life= | ev=D | reop=0 | Ensrick | Senior-eng hardening: network-replay ring buffer for MP desync triage
+   close[05-25 a]: Resolved in buff_tweaker v0.1.2-alpha + chaos_wastes_tweaker v0.7.106-dev — _net_replay.lua ring buffer (CAPACITY=200) + /bt_net_replay [mod_id] chat command added; ct host-settings RPC (ct_sync_host_settings_chunk) instrumented o
+#35 [comp] MANUAL 2026-05-25 | cosmetics? runtime bug  | life= | ev=D | reop=0 | Ensrick | cosmetics_tweaker: hook_safe(SimpleHuskInventoryExtension, "extensions_ready") — function
+   close[05-25 a]: Fixed in cosmetics_tweaker v0.9.16-dev. `SimpleHuskInventoryExtension` has no `extensions_ready` method — it's a separate root class from `SimpleInventoryExtension` (CLAUDE.md "Self-owned vs husk extension classes") and its lifecy
+#38 [comp] MANUAL 2026-06-04 | cim? runtime bug  | life= | ev=D | reop=0 | Ensrick | cim: 'JEWELRY' label on main crafting page still shows despite Localize override
+   close[06-04 a]: Resolved in cim v0.8.0 (2026-05-30). CHANGELOG entry: 'JEWELLERY → ACCESSORIES on the forge surfaces.' The v0.7.48-alpha runtime probe (`cim_debug.lua` widget walker) located the exact widget(s) carrying the literal text; the v0.8
+#41 [comp] MANUAL 2026-05-25 | other runtime bug  | life= | ev=D | reop=0 | Ensrick | gui_tweaker: hook_safe target 'NewsHeadUI' does not exist — silent dead hook (2 registrati
+   close[05-25 a]: Fixed in gut v0.2.2-dev. Vanilla class is `NewsFeedUI` (file: `scripts/ui/hud_ui/news_feed_ui.lua`), not `NewsHeadUI` — renamed `class_name` in `_hud_customizer.lua` REGISTRY line 23. The two ERROR lines per session came from `ins
+#42 [comp] MANUAL 2026-07-07 | enemies runtime enhancement  | life=verify-fix | ev=C | reop=0 | Ensrick | Propagate RPC schema_version pattern to enemy_tweaker (et_br_fingerprint)
+   close[07-07 a]: Verified in code: `ET_RPC_SCHEMA = 1` (enemy_tweaker.lua:11), prepended as first positional in the `et_br_fingerprint` sender (:316), receiver drops on `schema_version ~= ET_RPC_SCHEMA` before touching state (:326-342), plus `et_r
+#43 [comp] MANUAL 2026-05-25 | other runtime enhancement  | life= | ev=C | reop=0 | Ensrick | Propagate RPC schema_version pattern to lobby_tweaker (lt_motd_show)
+   close[05-25 a]: Resolved by merge into general_tweaker -- `lt_motd_show` migrated as `gt_lobby_motd_show` with `mod.GT_LOBBY_RPC_SCHEMA = 1` schema versioning. Sender prepends the constant; receiver gates on it and drops with `_dbg_alert` on mism
+#45 [comp] MANUAL 2026-07-07 | cosmetics runtime enhancement  | life=verify-fix | ev=C | reop=0 | Ensrick | Propagate RPC schema_version pattern to cosmetics_tweaker (4 RPCs)
+   close[07-07 a]: Verified in code: `COS_RPC_SCHEMA = 1` (cosmetics_tweaker.lua:67); all 4 RPCs (`cos_la_apply`/`cos_la_apply_req`/`cos_glow_apply`/`cos_glow_apply_req`) send-with-schema and drop cross-version payloads on mismatch (with printf mirr
+#46 [comp] MANUAL 2026-06-13 | other runtime enhancement  | life= | ev=C | reop=0 | Ensrick | Propagate RPC schema_version pattern to crafting_in_modded (cim_modded_slot)
+   close[06-13 a]: Verified implemented in cim_dev: `CIM_RPC_SCHEMA = 1`, sender prepends it on the `cim_modded_slot` channel, receiver drops on schema mismatch before any state mutation, regression test `rpc_schema_gate_drops_on_mismatch`. That is
+#47 [comp] MANUAL 2026-06-04 | cim? runtime crash  | life= | ev=D | reop=0 | Ensrick | cim: B-menu property bubbles no longer apply to equipment (CRITICAL: core feature regressi
+   close[06-04 a]: Resolved across v0.7.44-alpha and v0.8.0 (2026-05-30). v0.7.44 fix: roughly a dozen action-rejection `mod:echo` calls converted to `mod:warning` so cap-enforced clicks now surface visible feedback (the v0.7.38 blanket chat suppres
+#49 [comp] MANUAL 2026-06-04 | cim? runtime bug  | life= | ev=D | reop=0 | Ensrick | cim: stamina/movespeed bubbles block other properties despite their low cap (slot accounti
+   close[06-04 a]: Resolved in cim v0.7.44-alpha (cap removal), confirmed in v0.8.0 (2026-05-30) CHANGELOG: 'Stamina/property slot accounting fixed — 2-stamina no longer over-consumes slots; the per-property bubble caps (stamina 2 / movespeed 1) are
+#50 [comp] MANUAL 2026-06-04 | cim? runtime crash  | life= | ev=D | reop=0 | Ensrick | cim: CRASH in HeroWindowItemCustomization mid-mission gear-icon click (object_set_names on
+   close[06-04 a]: Resolved in cim v0.7.45-alpha (2026-05-25), shipped in v0.8.0 (2026-05-30). Fix: `HeroWindowItemCustomization._create_item_preview_widget_definition` hook now skips the vanilla call entirely when not in keep, constructing the widg
+#53 [comp] MANUAL 2026-05-26 | cw? runtime bug  | life= | ev=B | reop=0 | Ensrick | ct: Belakor's Temple not visible on Holseher's map for CLIENT when host has 'always belako
+   close[05-26 a]: Verified fixed in v0.7.123-dev via the apply_graph_snapshot `arena_belakor_node` skip.  **Confirmation from 2026-05-26 multiplayer session logs (client + host, run `journey_citadel` w/ force_belakor=true):**  - Host generated 2 Be
+#54 [comp] MANUAL 2026-06-13 | cw? runtime bug  | life= | ev=D | reop=0 | Ensrick | ct: Miracle of Isha tweak text shows 'unlimited wounds' when host selected Aegis (25% dmg
+   close[06-13 a]: Verified fixed. The `blessing_of_isha_desc` Localize branch now reads the v0.7.81 mutex keys via host-authoritative `effective_setting` first (`tweak_miracle_of_isha_aegis` -> desc_aegis, `_wounds` -> desc_wounds), then falls back
+#55 [comp] MANUAL 2026-05-28 | enemies? runtime enhancement  | life= | ev=D | reop=0 | Ensrick | enemy_tweaker: add horde frequency multiplier slider (companion to v0.6.0-dev spawn-size s
+   close[05-28 a]: Resolved in enemy_tweaker v0.7.0-dev (shipped 2026-05-28). Added `horde_frequency_min` and `horde_frequency_max` sliders (range 5-200s, defaults 50/100) in the new Spawn Pacing group. Hooks: `ConflictDirector.update_horde_pacing`
+   openrefs=1 sig:
+#62 [comp] MANUAL 2026-07-04 | gut runtime crash  | life= | ev=A? | reop=1 | Level12L | Keep Menus in Mission hotkeys causes crash
+   v 06-20 P Level1: Tweaker: General v0.2.71-alpha (2026-06-17) Tested menus in mission with recent update  ESC-menu > Inventory   /gt_inv   Inve
+   v 06-25 P Level1: Tweaker: General 0.2.72-alpha  **_Applies only to people that have used an older version of the mod and not completed any of
+   v 06-25 M Ensric: Thanks, I'll bring this back in Tweaker: GUI when I get it working on the dev version
+   close[06-25 H]: Thanks, I'll bring this back in Tweaker: GUI when I get it working on the dev version
+#64 [comp] MANUAL 2026-06-13 | cw? runtime enhancement  | life= | ev=C | reop=0 | Ensrick | ct: optional setting to increase enemy spawns from Chests of Trials
+   close[06-13 a]: Verified implemented in ct_dev v0.7.130-dev. `cot_enemy_multiplier` (numeric 0.5-5.0, default 1.0) scales cursed-chest wave `element.amount`/`element.difficulty_amount` via the `TerrorEventMixer.spawn_around_origin_unit` hook (fil
+   openrefs=1 sig: #471:incomplete/regression
+#65 [comp] MANUAL 2026-07-05 | gt runtime crash  | life=verify-fix | ev=D | reop=0 | Ensrick | gt: bots_in_keep — two crash classes, feature disabled in v0.2.74-dev pending fix
+#67 [comp] MANUAL 2026-06-04 | enemies? runtime crash  | life= | ev=D | reop=0 | Ensrick | enemy_tweaker: silent pcall in SpawnZoneBaker.inject_special_packs hook + 10x rat scaling
+   close[06-04 a]: Closed — immediate crash resolved by enemy_tweaker v0.7.1-dev (shipped 2026-05-28).  **Fix as shipped:** belt-suspenders `_hook_wrap("SpawnZoneBaker", "inject_special_packs", ...)` that pcalls vanilla and bails to `_chat_alert` on
+#71 [comp] MANUAL 2026-06-17 | other runtime crash  | life= | ev=C | reop=0 | carlothe | Pressing amulet crashes game
+   close[06-17 a]: Both problems in this report are fixed in **Crafting in Modded v0.8.4** (public Workshop — also on the GitHub release that the vt2-mod-updater app reads).  **1) Amulet crash.** Root cause: vanilla `get_talent_required_forge_level`
+#78 [comp] MANUAL 2026-07-05 | gut runtime enhancement  | life= | ev=D | reop=0 | Ensrick | gut Mod Tweaker: native settings-menu layout fidelity (title/tab overlap, dividers, justif
+#79 [comp] MANUAL 2026-06-24 | gut? runtime enhancement  | life= | ev=C | reop=0 | Ensrick | gut Mod Tweaker: implement gear "Advanced Settings" drill-down + fix MOD TWEAKER title z-o
+   close[06-24 a]: Both parts done in the Mod Tweaker rework (now gut v0.2.82-dev):  **1. Gear "Advanced Settings" drill-down** — implemented in **v0.2.59-dev**: `create_gear_button` factory (atlas-safe, explicit style_id) + `plan_drill_children` +
+#82 [comp] MANUAL 2026-06-24 | cwv? runtime enhancement  | life= | ev=D | reop=0 | Ensrick | cwv: embed MoreItemsLibrary so variants register standalone (currently no-op without cosme
+   close[06-24 a]: Closing per maintainer.
+#93 [comp] MANUAL 2026-07-05 | gut runtime enhancement  | life=verify-fix | ev=D | reop=0 | Ensrick | gut: compact ESC menu should be implicit (always-on), not a toggle
+#159 [comp] MANUAL 2026-08-28 | wt runtime bug 3 | life= | ev=C | reop=0 | Ensrick | Localize Weapon Names in Developer UI
+   close[08-28 a]: ## Resolution evidence — 2026-08-28  The developer-key localization/source-documentation contract is complete and released.  - PR #1440 merged the stable/dev documented-key registries, symbolic consumers, fail-closed shared unlock
+   openrefs=1 sig:
+#160 [comp] MANUAL 2026-07-03 | wt runtime enhancement  | life=verify-fix | ev=C | reop=0 | Ensrick | wt: add Kruber Executioner Sword to Saltzpyre dev anim picker
+   close[07-01 a]: Fixed in wt **v0.12.194-dev**.  Added Kruber's Executioner Sword (`es_2h_sword_executioner`) to the **Saltzpyre** side of the dev 3P Anim Picker as a new SET G ("2H Sword").  - It already renders as Saltzpyre's 2H Sword via the ex
+#162 [comp] MANUAL 2026-06-28 | wt? runtime bug  | life= | ev=C | reop=0 | Ensrick | wt: Saltzpyre dual axes rendered as WP Dual Hammers + dagger as Rapier (wield patch not up
+   close[06-28 a]: Fixed in v0.12.168-dev (wield-patch change) + regression tests saltzpyre_dual_axes_wield_axe_falchion / saltzpyre_dagger_wield_falchion. Needs in-game confirm of the rendered anims.
+#186 [comp] MANUAL 2026-07-03 | cosmetics runtime enhancement  | life=verify-fix | ev=D | reop=0 | Ensrick | cosmetics_tweaker: disable Loremaster's Armoury Okri's Challenges entirely (toggle) — stop
+   close[06-29 a]: **Implemented in cosmetics_tweaker v0.9.49-dev** (uploaded to Workshop 3715714222, byte-verified; GitHub release `mods-2026-06-29` refreshed). Leaving open until in-game confirmation.  New toggle **LA: Disable Okri's Challenges**
+#188 [comp] MANUAL 2026-06-29 | gut runtime unlabelled  | life= | ev=D | reop=0 | Ensrick | gut Mod Tweaker: slider numeric-input caret sits one space too far left + doesn't move wit
+   close[06-29 a]: Caret position when typing into a slider box confirmed fixed in-game by user (2026-06-29). (Arrow-key cursor movement within the field is a separate, lower-priority enhancement — not tracked here.)
+#190 [comp] MANUAL 2026-07-02 | gut runtime unlabelled  | life= | ev=D | reop=0 | Ensrick | Migrate Main Menu + Startup options from GT (general_tweaker) to GUT (gui_tweaker)
+#191 [comp] MANUAL 2026-07-02 | gut runtime unlabelled  | life= | ev=D | reop=0 | Ensrick | Migrate 3rd-person camera options from GT (general_tweaker) to GUT (gui_tweaker)
+   openrefs=1 sig:
+#192 [comp] MANUAL 2026-07-03 | gut runtime unlabelled  | life= | ev=D | reop=0 | Ensrick | Migrate Cutscenes + Monologues options from GT (general_tweaker) to GUT (gui_tweaker)
+#218 [comp] MANUAL 2026-08-13 | cim runtime enhancement 3 | life=Fixed | ev=A3 | reop=0 | Ensrick | Remove obsolete CIM widget stripping
+   close[08-13 a]: Autonomous completion evidence: PR #1279 merged as `5519deb378cab74fef2fbe820f24a0632e547831` and exact-master hosted QA passed at https://github.com/Ensrick/vermintide-2-tweaker/actions/runs/31683809100. This issue is a repositor
+#220 [comp] MANUAL 2026-07-02 | cw? runtime unlabelled  | life= | ev=D | reop=0 | Ensrick | ct_dev: physically reorder chaos_wastes_tweaker_dev_localization.lua to mirror the widget
+   close[07-02 a]: Done in ct_dev v0.7.205-dev (commit 19002f3). The localization file is physically reordered into menu-mirroring `-- ===` sections. Guarded reorder proved content-preserving: 1045 entry-units + the 1062-key value map are byte-ident
+#225 [comp] MANUAL 2026-07-05 | wt runtime crash  | life= | ev=D | reop=0 | Ensrick | wt: add Deepwood Staff (we_life_staff) as a cross-character toggle for Kruber + Saltzpyre
+   openrefs=1 sig:
+#238 [comp] MANUAL 2026-07-03 | cim runtime enhancement  | life=verify-fix | ev=C | reop=0 | Ensrick | cim: Chaos Wastes / injected traits show no description in the Athanor picker (v0.8.44-dev
+   close[07-02 a]: Fixed in cim_dev **v0.8.45-dev** (commit f6dcdca), awaiting in-game verify.  `_cim_ensure_trait_twin` now copies `advanced_description` + `description_values` **together** from the adventure `WeaponTraits.traits[bare]` entry into
+#311 [comp] MANUAL 2026-07-18 | gut runtime feature 1 | life=verify-fix | ev=D | reop=0 | Ensrick | Crosshair Kill Confirmation
+   close[07-18 a]: Duplicate of closed #313 (CKC folded into gut's Mod Tweaker as a collapsible group); open regression #528 proves that integration shipped and is the live tracker for its cleanup. (2026-07-17 xref sweep)
+#405 [comp] MANUAL 2026-07-13 | career runtime crash 0 | life=Fixed | ev=A3 | reop=0 | Ensrick | crt: client CTD on Fires from Ash THP heal
+   close[07-13 a]: Post-fix pass complete as of crt 0.3.60-dev (upload confirmed): hardening = the is_server gate on the Fires-from-Ash proc heal, class-swept across crt's server-authoritative call sites; docs = BUG_CLASSES class 29; regression = th
+   openrefs=1 sig:
+#411 [comp] MANUAL 2026-08-02 | wt runtime bug 3 | life=not-started | ev=C | reop=0 | Ensrick | wt: dead Anim Picker entry swap_charge_stance (bastard sword)
+   close[08-02 a]: Closed autonomously (tooling/tests class): the dead picker entry itself was removed by the #519 bake (wt v0.12.213/.219-dev; the baked Saltzpyre mapping survives in _wt_anim_remap_data.lua:850/:880). Recurrence is now CI-gated by
+   openrefs=1 sig:
+#496 [comp] MANUAL 2026-07-13 | gut runtime bug 2 | life=not-started | ev=D | reop=0 | Ensrick | gut monologue script_data shadow may no-op
+   close[07-13 a]: Closing as disproved (code-audit issue, Claude-verifiable per the 2026-07-12 doctrine; no code changed, no build shipped). The shadow cannot occur in retail: boot_init creates _G.script_data at boot.lua:4/boot_init.lua:79 long bef
+#497 [comp] MANUAL 2026-07-13 | gut runtime feature 1 | life=Fixed | ev=A3 | reop=0 | Ensrick | Mod Tweaker menu search feature
+   close[07-13 a]: Confirmed complete by the project owner on 2026-07-13. Closing as Fixed.
+#512 [comp] MANUAL 2026-08-16 | enemies runtime bug 3 | life= | ev=C | reop=0 | Ensrick | Fix Keep Mini-Patrol Regression Check
+   close[08-16 a]: Closing autonomously per CLAUDE.md rule 13: this is regression-harness instrumentation with a green offline deterministic check, no gameplay surface.  **Verified:** qa/lua/tests/test_rt_harness_context_absent.lua loads the shipped
+   openrefs=1 sig: #509:regression_test
+#534 [comp] MANUAL 2026-07-13 | gt runtime enhancement 2 | life= | ev=N! | reop=0 | Ensrick | gt debug lines invisible to other players
+   v 07-13 N Ensric: removing verify fix, no change
+   close[07-13 H]: removing verify fix, no change
+   openrefs=1 sig:
+#566 [comp] MANUAL 2026-07-19 | cosmetics runtime bug 3 | life=Fixed | ev=A3 | reop=0 | Ensrick | Fix White-Glow Regression Test
+   close[07-19 a]: Verified from the attached session log and closing as fixed.  Empirical evidence from `console-2026-07-18-22.49.20-f2222cd1-4b48-4181-b368-8865889c2408.log`:  - Tweaker: Cosmetics loaded as `v0.9.151-dev` at line 1619. - `/cos_reg
+   post(1)[2026-07-19]: Fix shipped in cosmetics_tweaker 0.9.155-dev (upload 03:03): the glow check's boot-population dependence is now a declared precondition (SKIP when cat
+#581 [comp] MANUAL 2026-07-14 | mp runtime crash 0 | life=Fixed | ev=A3 | reop=0 | Ensrick | mp: synthetic daily statistic crashes startup
+   close[07-14 a]: Verified from the user's latest host log and post-fix coverage.  `console-2026-07-14-00.16.57-1b7e5c2d-a05a-4242-af33-33801883bc40.log` loaded `[mp:LOAD] v0.2.20-dev`, completed startup, entered the keep, and continued through UI
+#627 [comp] MANUAL 2026-07-18 | cwv runtime enhancement 1 | life= | ev=D | reop=0 | Ensrick | Add custom Outrider launcher model
+   close[07-18 a]: Shipped in cwv 0.1.446-dev (PR 726): custom launcher_01 mesh + textures + policy module + NetworkLookup donor alias. Test: equip the Outrider grenade launcher CWV variant solo, confirm the custom model in 1P and 3P (was missing),
+   openrefs=1 sig:
+#634 [comp] MANUAL 2026-07-19 | wt runtime enhancement 2 | life=Fixed | ev=C | reop=0 | Ensrick | WT: refresh dev stream after beta
+   close[07-19 a]: Closing because this issue already carried the terminal Fixed lifecycle label in the open-issue audit. Reopen if a fresh in-game regression appears.
+   openrefs=1 sig:
+#944 [comp] MANUAL 2026-08-03 | cwv runtime enhancement 2 | life= | ev=A? | reop=0 | RainReli | Make Weapon Attacks Interruptible Through Weapon Style Switching
+   v 08-03 M RainRe: Tested with Bretonnian Longsword, Greatsword, and Tuskgor Spear. Seems to work flawlessly.  Ran CWV regression. Attaching log
+   close[08-03 a]: Verified by @RainReligion with **Bretonnian Longsword**, **Greatsword**, and **Tuskgor Spear**: attack interruption/style switching worked correctly and `/cwv_regression_test` completed. The confirming console log is attached in t
+   openrefs=1 sig: #774:regression
+#1087 [comp] MANUAL 2026-08-03 | wt runtime enhancement 3 | life=not-started | ev=C | reop=0 | Ensrick | Backfill 119 orphan port decision rows
+   close[08-03 a]: Closed by merged PR #1115 and verified again from exact `master` commit `2d5dc8e17b777da4e5c9e8318883e4130a5ef9e0`.  `qa/check_decisions_wired.ps1` now reports:  - 197 decisions parsed; - 172 wired; - 2 explicitly pending (`dr_2h_
+#1088 [comp] MANUAL 2026-08-16 | cosmetics runtime enhancement 3 | life=not-started | ev=C | reop=0 | Ensrick | Refresh stale LA sync core audit
+   close[08-16 a]: Closing autonomously per CLAUDE.md rule 13: docs-only recensus with its deterministic gates green.  **Merged:** PR #1324 (0fe8b647). `docs/LA_SYNC_CORE_AUDIT.md` rebuilt from the current cosmetics owner modules (`_cos_la_replay_po
+#1121 [comp] MANUAL 2026-08-13 | cosmetics runtime bug 3 | life=Fixed | ev=A3 | reop=0 | Ensrick | Cosmetics _la_okri direct warnings escape chat-debt census
+   close[08-13 a]: Autonomously verified and closing. Commit `80d73acd` rerouted both `_la_okri.lua` diagnostic failure paths from chat-backed `mod:warning` to bounded pcall-guarded `printf`, and added the missing scope-independent `[<mod>:dbg]` sca
+#1148 [comp] MANUAL 2026-08-16 | cwv runtime bug 1 | life= | ev=C | reop=0 | Ensrick | CWV regression marker checks broken by decomposition
+   close[08-16 a]: Closing autonomously per CLAUDE.md rule 13: harness instrumentation fix with a green offline deterministic check, no gameplay surface.  **Verified:** qa/lua/tests/test_cwv_marker_check_contract.lua compiles and executes the real c
+   openrefs=1 sig:
+#1153 [comp] MANUAL 2026-08-16 | gt runtime bug 2 | life= | ev=C | reop=0 | Ensrick | gt regression runner misreads true-returning checks
+   close[08-16 a]: Closing autonomously per CLAUDE.md rule 13: harness instrumentation fix with green offline deterministic checks, no gameplay surface.  **Verified:** qa/lua/tests/test_gt_diagnostic_check_contract.lua loads the production gt module
+   openrefs=1 sig:
+#1227 [comp] MANUAL 2026-08-16 | cim runtime bug 2 | life= | ev=C | reop=0 | Ensrick | Three cim_dev regression checks anchor wrong file
+   close[08-16 a]: Closing autonomously per CLAUDE.md rule 13: regression-check re-anchoring is harness instrumentation with a green offline deterministic check.  **Verified:** qa/lua/tests/test_cim_regression_module.lua 'CIM extracted source checks
+#1241 [comp] MANUAL 2026-08-13 | cosmetics runtime bug 3 | life=Fixed | ev=A3 | reop=0 | Ensrick | Remove dead _try_apply_by_peer in cosmetics
+   close[08-13 a]: Autonomous completion evidence: PR #1279 merged as `5519deb378cab74fef2fbe820f24a0632e547831` and exact-master hosted QA passed at https://github.com/Ensrick/vermintide-2-tweaker/actions/runs/31683809100. This is repository-only d
+#1271 [comp] MANUAL 2026-08-12 | cw runtime crash 0 | life=Fixed | ev=A3 | reop=0 | Ensrick | Lobby browser crashes on injected missions
+   close[08-12 a]: Verified in `console-2026-08-12-22.42.49-d1eaa659-0dcc-4c1d-bebd-1789887d36d9.log`: Tweaker: Chaos Wastes Dev v0.7.339-dev loaded, the issue #1271 lookup-parity regression check passed twice, no `mission_ids`/`forest_ambush_khorne

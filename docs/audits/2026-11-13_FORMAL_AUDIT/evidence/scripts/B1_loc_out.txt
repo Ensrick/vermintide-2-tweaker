@@ -1,0 +1,259 @@
+bucket                                        files     lines       KiB
+docs                                             53    409721     17875
+mod-dir:other(.bones)                             1         0         0
+mod-dir:other(.cfg)                              21       168        58
+mod-dir:other(.config)                            1         0         0
+mod-dir:other(.fbx)                              33         0      9322
+mod-dir:other(.ini)                               3        23         0
+mod-dir:other(.jpg)                              21         0      1408
+mod-dir:other(.json)                             23      8860       686
+mod-dir:other(.material)                         76         0       347
+mod-dir:other(.md)                              231    107689      9986
+mod-dir:other(.mod)                              43       596        23
+mod-dir:other(.mod_bundle)                       67         0    163237
+mod-dir:other(.package)                          23         0        16
+mod-dir:other(.png)                             179         0    257744
+mod-dir:other(.ps1)                              17      1597        75
+mod-dir:other(.py)                               15      2437        93
+mod-dir:other(.texture)                         161         0        68
+mod-dir:other(.txt)                              17     10695       638
+mod-dir:other(.unit)                             33         0        10
+mod-dir:other(noext)                              1         0         0
+pipeline:.github                                 11       785        30
+pipeline:qa-release-gates                        81     28316      1560
+pipeline:tools/github                             7      3281       192
+pipeline:tools/hooks                              2       383        18
+pipeline:tools/promote                            2       395        20
+pipeline:tools/publish-release                    6      3044       152
+pipeline:tools/review                             3       869        35
+pipeline:tools/ship                              25     15454       831
+pipeline:tools/verify                            16     11647       712
+pipeline:tools/weapon-history                    93     18485       738
+pipeline:tools/worktrees                          2       266        12
+product:mod-lua                                1307    522219     29558
+product:other-lua                                 3       203        16
+qa:fixtures-baselines                            45      2212      1298
+qa:lua-tests                                    691    198525     10528
+qa:other-gates                                   66     17930      1240
+root-files                                       34      9398       568
+tools:other                                      41     11852      1332
+TOTAL                                          3454   1387050    510426
+
+pipeline lines total: 82925
+product mod-lua lines: 522219
+
+== pipeline:.github
+      141  .github/workflows/qa.yml
+      129  .github/ISSUE_TEMPLATE/bug_report.yml
+      112  .github/ISSUE_TEMPLATE/maintenance.yml
+      109  .github/ISSUE_TEMPLATE/feature_request.yml
+       60  .github/workflows/issue-lifecycle.yml
+       53  .github/pull_request_template.md
+       47  .github/workflows/pr-autoclose-audit.yml
+       45  .github/workflows/stable-promotion-authorization.yml
+       43  .github/CURRENT_LIVE_TEST_TEMPLATE.md
+       41  .github/workflows/pr-autoclose-authorization.yml
+        5  .github/ISSUE_TEMPLATE/config.yml
+
+== pipeline:qa-release-gates
+     2542  qa/check_wt_history_source_freshness.ps1
+     1239  qa/check_ci_hardening.ps1
+     1219  qa/check_build_receipts.ps1
+     1208  qa/check_promotion_authorization.ps1
+     1135  qa/check_machine_transaction_lease.ps1
+      996  qa/check_release_recovery_record.ps1
+      895  qa/check_publication_doctrine.ps1
+      810  qa/check_publication_snapshot.ps1
+      763  qa/check_bundle_authority.ps1
+      705  qa/check_content_manifest.ps1
+      666  qa/check_release_bundle_atomicity.ps1
+      601  qa/check_bundle_output_set.ps1
+      571  qa/check_current_source_pin_recovery.ps1
+      568  qa/check_vmb_launcher_path.ps1
+      468  qa/check_build_output_normalization.ps1
+      428  qa/check_github_release_fallback.ps1
+      419  qa/check_permanent_claim_allocation.ps1
+      404  qa/check_public_release_closure_policy.ps1
+      401  qa/check_pipeline_state.ps1
+      398  qa/check_ps51_compatibility.ps1
+      374  qa/check_promotion.ps1
+      360  qa/check_workshop_upload_evidence.ps1
+      357  qa/check_issue_status_labels.ps1
+      357  qa/check_workshop_upload_result_release.ps1
+      345  qa/check_wt_history_patch_6_11_2_reproducibility.ps1
+      329  qa/check_release_manifest.ps1
+      321  qa/check_wt_history_patch_6_11_0_reproducibility.ps1
+      316  qa/check_wt_history_patch_4_6_reproducibility.ps1
+      315  qa/check_unpack_safety.ps1
+      298  qa/check_branch_reconciliation_census.ps1
+      295  qa/check_deployed_source_proof.ps1
+      281  qa/check_wt_stream_parity.ps1
+      280  qa/check_wt_history_patch_3_1_reproducibility.ps1
+      278  qa/check_wt_history_reproducibility.ps1
+      277  qa/check_source_provenance.ps1
+      270  qa/check_public_release_closure_collector.ps1
+      269  qa/check_versions.ps1
+      262  qa/check_live_card_receipts.ps1
+      262  qa/check_release_reproducibility.ps1
+      254  qa/check_publication_receipt.ps1
+      244  qa/check_pr_autoclose.ps1
+      239  qa/check_stale_docs.ps1
+      237  qa/check_wt_history_patch_6_6_reproducibility.ps1
+      234  qa/check_diff_whitespace.ps1
+      234  qa/check_wt_history_patch_2_0_6_reproducibility.ps1
+      234  qa/check_wt_history_patch_4_1_1_reproducibility.ps1
+      231  qa/check_wt_history_patch_3_2_reproducibility.ps1
+      231  qa/check_wt_history_patch_6_8_reproducibility.ps1
+      229  qa/check_public_release_closure_transport.ps1
+      226  qa/check_wt_history_patch_2_0_9_1_reproducibility.ps1
+      209  qa/check_wt_history_patch_2_0_10_reproducibility.ps1
+      197  qa/check_workshop_nochange_result.ps1
+      197  qa/check_worktree_budget.ps1
+      195  qa/check_in_progress.ps1
+      184  qa/check_dev_only_edits.ps1
+      180  qa/check_mod_inventory.ps1
+      179  qa/check_wt_history_source_checkout.ps1
+      168  qa/check_workshop_published_file_snapshot.ps1
+      167  qa/check_local_deployment_receipt.ps1
+      140  qa/check_mod_descriptor_line_endings.ps1
+
+== pipeline:tools/github
+     1075  tools/github/audit-open-issues.ps1
+      793  tools/github/check-lifecycle-cardinality.ps1
+      593  tools/github/branch-reconciliation-census.ps1
+      353  tools/github/ClosureAuditTransport.cs
+      246  tools/github/public-release-closure-collector.ps1
+      131  tools/github/protect-master.ps1
+       90  tools/github/public-release-closure-transport.psm1
+
+== pipeline:tools/hooks
+      281  tools/hooks/pre-commit.ps1
+      102  tools/install-hooks.ps1
+
+== pipeline:tools/promote
+      231  tools/promote/promotion-status.ps1
+      164  tools/promote/promote.ps1
+
+== pipeline:tools/publish-release
+      895  tools/publish-release/publish-release.ps1
+      583  tools/publish-release/github-release-api.ps1
+      552  tools/publish-release/recovery-record.ps1
+      542  tools/publish-release/release-manifest.ps1
+      456  tools/publish-release/README.md
+       16  tools/publish-release/release-mutation-lock.ps1
+
+== pipeline:tools/review
+      653  tools/review/content-manifest.psm1
+      136  tools/review/content-manifest.ps1
+       80  tools/review/README.md
+
+== pipeline:tools/ship
+     3131  tools/ship/ship.ps1
+     2692  tools/ship/refresh-cards.ps1
+     1445  tools/ship/build-receipt.ps1
+     1091  tools/ship/bundle-output-set.ps1
+      815  tools/ship/transaction-lease.ps1
+      812  tools/ship/claim.ps1
+      699  tools/ship/publication-receipt.ps1
+      591  tools/ship/build-output-normalization.ps1
+      536  tools/ship/exception-pin-finalization.ps1
+      418  tools/ship/workshop-nochange-log-proof.ps1
+      375  tools/ship/CLAIMS.md
+      369  tools/ship/workshop-upload-result-release.ps1
+      340  tools/ship/bundle-authority.ps1
+      332  tools/ship/publication-snapshot.ps1
+      304  tools/ship/claim-allocation.ps1
+      219  tools/ship/workshop-published-file-snapshot.ps1
+      219  tools/ship/workshop-upload-evidence.ps1
+      204  tools/ship/publication-authorization.ps1
+      196  tools/ship/workshop-nochange-result.ps1
+      173  tools/ship/workshop-upload-result.ps1
+      157  tools/ship/current-source-pin-recovery.ps1
+      143  tools/ship/local-deployment-receipt.ps1
+      105  tools/ship/load-tag-resolution.ps1
+       74  tools/ship/release-identity.ps1
+       14  tools/ship/claim-allocation-policy.psd1
+
+== pipeline:tools/verify
+     3158  tools/verify/live_test_contract_exceptions.psd1
+     2197  tools/verify/live_test_source_authority.ps1
+     1932  tools/verify/live_test_contract.ps1
+     1489  tools/verify/lifecycle_method_policy.ps1
+      647  tools/verify/generate_playtest.ps1
+      343  tools/verify/PUBLIC_RELEASE_CLOSURE.md
+      302  tools/verify/public_release_closure_policy.ps1
+      247  tools/verify/ct_official_receipt_routes_contract.ps1
+      243  tools/verify/deployed_source_proof.ps1
+      217  tools/verify/public_release_closure_evidence.ps1
+      204  tools/verify/mp_login_source_contract.ps1
+      197  tools/verify/mp_login_source_contract_test.ps1
+      182  tools/verify/wt942_receipt_route_contract.ps1
+      150  tools/verify/cwv719_receipt_route_contract.ps1
+      109  tools/verify/README.md
+       30  tools/verify/deployed_source_incident_exceptions.psd1
+
+== pipeline:tools/weapon-history
+     1484  tools/weapon-history/evidence/patch_5_2/_wt_history_snapshot_5_1_1_part_2_generated.lua
+     1134  tools/weapon-history/evidence/patch_5_2/_wt_history_snapshot_5_1_1_part_1_generated.lua
+     1093  tools/weapon-history/evidence/patch_5_2/_wt_history_snapshot_5_2_0_part_1_generated.lua
+      952  tools/weapon-history/source_oracle/extract_weapon_history_oracle.lua
+      785  tools/weapon-history/extract_weapon_history.lua
+      625  tools/weapon-history/generate_patch_6_11_0_history.lua
+      589  tools/weapon-history/generate_patch_5_2_history.lua
+      519  tools/weapon-history/evidence/patch_5_2/_wt_history_5_2_source_catalog.lua
+      517  tools/weapon-history/evidence/patch_5_2/_wt_history_snapshot_5_2_0_part_2_generated.lua
+      499  tools/weapon-history/README.md
+      431  tools/weapon-history/evidence/patch_5_2/_wt_history_profiles_5_1_1_dlc_generated.lua
+      407  tools/weapon-history/generate_patch_6_0_history.lua
+      373  tools/weapon-history/generate_patch_2_0_10_history.lua
+      371  tools/weapon-history/generate_patch_2_0_9_1_history.lua
+      366  tools/weapon-history/source-anchor.ps1
+      350  tools/weapon-history/generate_patch_4_6_history.lua
+      341  tools/weapon-history/source_oracle/patch_5_2_routes_oracle.lua
+      336  tools/weapon-history/generate_patch_2_0_6_history.lua
+      331  tools/weapon-history/generate_patch_3_1_history.lua
+      324  tools/weapon-history/generate_patch_6_6_history.lua
+      317  tools/weapon-history/evidence/patch_5_2/_wt_history_profiles_5_1_1_generated.lua
+      297  tools/weapon-history/evidence/patch_2_0_9_1/_wt_history_snapshot_2_0_9_rehydrated_generated.lua
+      294  tools/weapon-history/generate_patch_6_11_2_history.lua
+      290  tools/weapon-history/evidence/patch_5_2/_wt_history_snapshot_5_2_3_generated.lua
+      259  tools/weapon-history/generate_patch_4_1_1_history.lua
+      258  tools/weapon-history/generate_patch_3_2_history.lua
+      258  tools/weapon-history/generate_patch_6_8_history.lua
+      242  tools/weapon-history/evidence/patch_2_0_9_1/_wt_history_snapshot_2_0_9_to_2_0_9_1_generated.lua
+      218  tools/weapon-history/source_oracle/patch_5_2_source_spec.lua
+      179  tools/weapon-history/evidence/patch_5_2/_wt_history_profiles_5_2_0_generated.lua
+      177  tools/weapon-history/evidence/patch_4_6/_wt_history_profiles_current_6_13_0_generated.lua
+      175  tools/weapon-history/evidence/patch_4_6/_wt_history_profiles_post_4_6_generated.lua
+      173  tools/weapon-history/evidence/patch_4_6/_wt_history_profiles_4_5_1_rehydrated_generated.lua
+      173  tools/weapon-history/evidence/patch_4_6/_wt_history_profiles_4_5_1_to_4_6_generated.lua
+      171  tools/weapon-history/evidence/patch_2_0_10/_wt_history_profiles_current_6_13_0_generated.lua
+      169  tools/weapon-history/evidence/patch_2_0_10/_wt_history_profiles_2_0_9_1_to_2_0_10_generated.lua
+      169  tools/weapon-history/evidence/patch_2_0_10/_wt_history_profiles_post_2_0_10_generated.lua
+      163  tools/weapon-history/evidence/patch_6_11_0/_wt_history_6_11_0_source_catalog.lua
+      120  tools/weapon-history/evidence/patch_6_0/_wt_history_6_0_source_catalog.lua
+      103  tools/weapon-history/evidence/patch_6_11_2/_wt_history_6_11_2_source_catalog.lua
+      100  tools/weapon-history/evidence/patch_4_6/_wt_history_4_6_source_catalog.lua
+       95  tools/weapon-history/source_oracle/README.md
+       92  tools/weapon-history/evidence/patch_5_2/_wt_history_profiles_5_2_0_dlc_generated.lua
+       88  tools/weapon-history/evidence/patch_2_0_10/_wt_history_2_0_10_source_catalog.lua
+       84  tools/weapon-history/evidence/patch_6_0/_wt_history_snapshot_5_6_1_breton_rehydrated_generated.lua
+       75  tools/weapon-history/evidence/patch_3_1/_wt_history_3_1_source_catalog.lua
+       73  tools/weapon-history/evidence/patch_6_0/_wt_history_snapshot_5_6_1_sword_shield_rehydrated_generated.lua
+       72  tools/weapon-history/evidence/patch_6_0/_wt_history_profiles_5_6_1_rehydrated_generated.lua
+       72  tools/weapon-history/evidence/patch_6_0/_wt_history_profiles_5_6_1_to_6_0_generated.lua
+       72  tools/weapon-history/evidence/patch_6_0/_wt_history_profiles_current_6_13_0_generated.lua
+       72  tools/weapon-history/evidence/patch_6_0/_wt_history_snapshot_5_6_1_breton_to_6_0_generated.lua
+       64  tools/weapon-history/evidence/patch_2_0_10/_wt_history_2_0_10_routes_oracle.lua
+       63  tools/weapon-history/evidence/patch_2_0_6/_wt_history_2_0_6_source_catalog.lua
+       63  tools/weapon-history/evidence/patch_6_0/_wt_history_snapshot_5_6_1_sword_shield_to_6_0_generated.lua
+       61  tools/weapon-history/evidence/patch_6_6/_wt_history_snapshot_6_5_4_rehydrated_generated.lua
+       57  tools/weapon-history/evidence/patch_6_11_0/_wt_history_snapshot_6_10_0_hammers_rehydrated_generated.lua
+       57  tools/weapon-history/evidence/patch_6_6/_wt_history_6_6_source_catalog.lua
+       55  tools/weapon-history/evidence/patch_6_6/_wt_history_snapshot_6_5_4_to_6_6_0_generated.lua
+       49  tools/weapon-history/evidence/patch_6_11_0/_wt_history_snapshot_6_10_0_hammers_to_6_11_0_generated.lua
+       47  tools/weapon-history/evidence/patch_2_0_6/_wt_history_snapshot_2_0_5_rehydrated_generated.lua
+
+== pipeline:tools/worktrees
+      222  tools/worktrees/worktree.ps1
+       44  tools/worktrees/README.md

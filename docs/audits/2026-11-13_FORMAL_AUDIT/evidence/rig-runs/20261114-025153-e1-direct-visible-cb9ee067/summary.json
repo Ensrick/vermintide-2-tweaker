@@ -1,0 +1,24 @@
+{
+  "run": "20261114-025153-e1-direct-visible-cb9ee067",
+  "name": "e1-direct-visible",
+  "nonce": "cb9ee067",
+  "verdict": "HOST-TIMEOUT-KILLED",
+  "exit": 0,
+  "isolation": "OK",
+  "private_desktop": false,
+  "renderer": "dx12",
+  "arguments": "-eac-untrusted --bundle-dir ../bundle --ini settings --silent-mode -skip-splash -vt2-test-run cb9ee067",
+  "run_end_seen": false,
+  "marks_seconds": {
+    "log_created": 1.1,
+    "realm": 37.4,
+    "splash": 37.4,
+    "title": 37.4,
+    "ended": 130.8
+  },
+  "cases": [],
+  "script_errors": [],
+  "evidence_lines": 0,
+  "log": "%USERPROFILE%\\.claude\\vt2-harness\\runs\\20261114-025153-e1-direct-visible-cb9ee067\\console.log",
+  "notes": []
+}
