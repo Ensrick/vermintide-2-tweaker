@@ -1,5 +1,38 @@
 # Crafting in Modded Changelog
 
+## 0.8.149 (2026-11-13) -- Official wording and realm-diagnostic promotion
+
+### Why
+
+The selective 0.8.148 promotion omitted two already-implemented Dev corrections:
+Base Power still claimed 50-point steps, and Forge diagnostics read the retired
+EAC flag on current game versions (#1530, #1694).
+
+### Changed
+
+- Promote the Dev tooltip/data wording for 25-point steps in Mod Tweaker.
+  Preserve CIM's clamp-only power reader; no crafting or slider math changes.
+- Promote the native-first realm diagnostic through the existing Forge-open
+  callback. Its engine receipt remains visible with VMF info logging disabled;
+  no realm, backend or settings state is changed.
+- Extend actual official-source wording, callback and named-check regression
+  coverage rather than substituting the Dev donor in official tests.
+- Retire the previously tracked SDK tool-only sidecar below. Two consecutive
+  canonical clean builds emitted different sets solely because this exact
+  known sidecar appeared intermittently. Adopt the existing name-and-SHA
+  exclusion used by CIM Dev; retain the active root and common bundles.
+  The VMB launcher, uploader and normalization implementation are unchanged.
+
+VT2-Bundle-Retirement: e7852992f40eb619.mod_bundle
+
+### Notes
+
+- After publication, hover Base Power in Mod Tweaker and open the physical
+  Keep Forge with official CIM alone. Run `/cim_regression_test`; require
+  `issue1530_base_power_step_wording` to pass and the Forge receipt to report
+  the Modded Realm correctly. Automated checks are not gameplay acceptance.
+- Official publication requires the user's fresh v0.8.149 approval.
+
 ## 0.8.148 (2026-11-06) -- Selective official functional promotion
 
 - Promote the eleven functional verification islands and the required
