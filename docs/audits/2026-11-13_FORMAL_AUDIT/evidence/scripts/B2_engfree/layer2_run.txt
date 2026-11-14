@@ -19,7 +19,7 @@ LOADED  scripts/unit_extensions/default_player_unit/buffs/buff_templates  (+24 f
 LOADED  scripts/settings/breeds  (+0 files, 0.00s)
 LOADED  scripts/settings/profiles/career_settings  (+0 files, 0.00s)
 LOADED  scripts/settings/equipment/weapon_skins  (+23 files, 0.02s)
-LOADED  @docs/audits/2026-11-13_FORMAL_AUDIT/evidence/scripts/B2_engfree/check_mod_layer.lua  (+0 files, 0.00s)
+LOADED  @docs/audits/2026-11-13_FORMAL_AUDIT/evidence/scripts/B2_engfree/check_mod_layer.lua.txt  (+0 files, 0.00s)
 vanilla files executed: 743
 explicit engine stubs touched: 15 distinct paths, top-level stub roots: Achievement,Actor,Application,BackendUtils,Benchmark,Camera,Clipboard,Crashify,EngineOptimized,EngineOptimizedExtensions,Friends,GameSession,Gui,GwNavQueries,GwNavWorld,Keyboard,LanClient,Level,Light,LineObject,Localizer,Managers,Material,Math,Matrix4x4,Mesh,Mouse,Mover,Network,NetworkConstants,Pad1,PhysicsWorld,Presence,Profiler,Rectangle2D,Renderer,ResourcePackage,Script,ShadingEnvironment,Stats,Steam,SteamHelper,Unit,Vector3Aux,Viewport,Window,World,Wwise,WwiseWorld
 globals read while nil: 166

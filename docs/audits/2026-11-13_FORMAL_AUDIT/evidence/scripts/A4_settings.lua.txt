@@ -1,5 +1,5 @@
 -- A4 helper: load a VMF *_data.lua offline with stubs and print every widget setting_id + type.
--- Usage: lua5.1 A4_settings.lua <repo_root> <mod_dir> <mod_id> <data_file_rel>
+-- Usage: lua5.1 A4_settings.lua.txt <repo_root> <mod_dir> <mod_id> <data_file_rel>
 local root, mod_dir, mod_id, data_rel = arg[1], arg[2], arg[3], arg[4]
 local base = root .. "/" .. mod_dir .. "/"
 local function load_rel(path)

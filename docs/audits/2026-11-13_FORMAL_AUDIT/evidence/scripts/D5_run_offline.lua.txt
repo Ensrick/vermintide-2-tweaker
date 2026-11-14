@@ -1,5 +1,5 @@
 -- D5 offline evidence runner (audit workspace only; reads the repo, writes nothing).
--- Usage: lua5.1.exe D5_run_offline.lua <repo_root>
+-- Usage: lua5.1.exe D5_run_offline.lua.txt <repo_root>
 -- Part 1: run selected repo unit-test files through the repo's own harness.
 -- Part 2: load production General Tweaker modules with a stub VMF mod object and
 --         execute selected registered runtime checks (the pure-Lua ones) offline.
