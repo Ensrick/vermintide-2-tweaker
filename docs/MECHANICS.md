@@ -53,6 +53,10 @@ The substrate is APPEND-mostly. Entries get PROMOTED up the tiers
 
 ## Domain: Lua / Stingray engine quirks
 
+- Reference-qualified `PackageManager.is_loading` preserves its final reference
+  count operand, so use Lua truthiness at that boundary rather than literal
+  `true`; `has_loaded` instead returns a Boolean presence test. See bug class84
+  and Character Dialogue #881. [src: foundation/scripts/managers/package/package_manager.lua:282-303]
 - `class(child, super)` COPIES every non-special key from `super` into `child` at
   class-definition time; there is no `__index` chain, so later replacing a method
   on the parent table does NOT affect a child defined earlier. [src: foundation/scripts/util/class.lua:51-57]

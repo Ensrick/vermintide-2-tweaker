@@ -90,7 +90,8 @@ return function(root, persisted)
         control.content.hotspot.on_release = true
         return self.UI.handle_row(self.view, control)
     end
-    function f:load_live_cd()
+    function f:load_live_cd(options)
+        options = options or {}
         -- Execute the real entry's setter, VMF lifecycle and Wwise-owner code.
         -- Only external audio/package/registration boundaries are supplied.
         cd.info, cd.echo, cd.debug, cd.warning = function() end, function() end, function() end, function() end
@@ -99,7 +100,7 @@ return function(root, persisted)
         cd.command = function() end
         function cd:dofile(path)
             if path:match("character_dialogue_catalogue$") then
-                return { { "pes_fixture_01", "", "", "empire_soldier", 2 } }
+                return options.catalogue or { { "pes_fixture_01", "", "", "empire_soldier", 2 } }
             end
             return load("character_dialogue/" .. path)
         end
@@ -111,10 +112,11 @@ return function(root, persisted)
         env.Application = { user_setting = function(name)
             return ({ music_bus_volume = 0.37, sfx_bus_volume = 0.81 })[name]
         end }
-        env.Managers = { world = { world = function() return {} end,
-            wwise_world = function() return {} end } }
+        env.Managers = { package = options.package_manager,
+            world = { world = function() return {} end,
+                wwise_world = function() return {} end } }
         env.WwiseWorld = {
-            trigger_event = function() f.playing = true; return 7 end,
+            trigger_event = options.trigger_event or function() f.playing = true; return 7 end,
             stop_event = function() f.playing = false end,
             pause_event = function() end, resume_event = function() end,
             is_playing = function() return f.playing end,
