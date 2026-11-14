@@ -1,0 +1,13 @@
+docs/audits/2026-11-13_FORMAL_AUDIT/evidence/scripts/B1_branches.py:13: DeprecationWarning: 'maxsplit' is passed as positional argument
+  pref = collections.Counter(re.split(r"[/-]", r[0].replace("origin/", ""), 1)[0] for r in rows)
+docs/audits/2026-11-13_FORMAL_AUDIT/evidence/scripts/B1_branches.py:24: DeprecationWarning: 'maxsplit' is passed as positional argument
+  tp = collections.Counter(re.split(r"[-_/v0-9]", t, 1)[0] or t[:6] for t in tags)
+local: 1152 branches; fully merged into master: 766; NOT merged: 386; not merged and >30d old: 341
+   age buckets: {'>90d': 832, '31-90d': 189, '8-30d': 116, '<=7d': 15}
+   top prefixes: [('agent', 502), ('codex', 247), ('fix', 211), ('worktree', 34), ('release', 19), ('audit', 18), ('issue', 18), ('chore', 14), ('preserve', 14), ('refactor', 10), ('integrate', 8), ('deploy', 7)]
+remote: 98 branches; fully merged into master: 54; NOT merged: 44; not merged and >30d old: 21
+   age buckets: {'<=7d': 17, '>90d': 15, '8-30d': 52, '31-90d': 14}
+   top prefixes: [('codex', 43), ('agent', 31), ('fix', 8), ('release', 6), ('chore', 3), ('feat', 2), ('pins', 2), ('origin', 1), ('feature', 1), ('master', 1)]
+ref namespaces: {'refs/heads': 1152, 'refs/worktree-archives': 173, 'refs/tags': 113, 'refs/remotes': 100, 'refs/preserve': 53, 'refs/original': 1, 'refs/stash': 1}
+stash entries: 54
+tags: 113 [('mods', 112), ('chaos', 1)]

@@ -1,0 +1,35 @@
+open issues: 329  closed issues: 613  comments total: 6768
+comment authors (all issues): [('Ensrick', 6655), ('RainReligion', 109), ('Level12Lobster', 3), ('carlotheemo', 1)]
+comment bytes total: 6936632 (~1734158 tokens)
+comments on OPEN issues: 4127 bytes 4657213
+  by author: [('Ensrick', 4095), ('RainReligion', 32)]
+
+lifecycle label sets on open issues: {'not-started': 47, 'verify-fix': 228, 'diagnostics-armed': 54}
+label cardinality violations on open issues: {}
+
+CURRENT LIVE TEST cards on OPEN issues: total 858 over 329 issues; issues with >=1 card: 298
+  cards per open issue: mean 2.61 median 3 p90 5 max 9
+  distribution: [(0, 31), (1, 54), (2, 77), (3, 73), (4, 59), (5, 24), (6, 6), (7, 2), (8, 2), (9, 1)]
+  ready (verify-fix/diag-armed) issues: 282; cards per ready issue mean 2.91 median 3.0 max 9; ready with zero cards: 0
+  card size bytes: mean 1477 median 1239 max 32718 ; total card bytes 1267995 (~316998 tokens)
+  newest-card age on ready issues (days): median 60.0 p90 102 max 114
+  ready issues where ANY non-owner commented after the newest card: 0
+  card outcome: {'card with no non-owner comment before next card/now': 846, 'card followed by a non-owner comment': 12}
+cards on CLOSED issues: total 53 over 613 closed issues (36 with >=1)
+cards overall: 911
+
+title words (after prefix) on open issues: median 6; >8 words: 16 of 329
+body words on open issues: median 145 p90 281 max 3192; >200 words: 56; >400: 17
+open issues with a 'Fallback 1' comment (three-fallback rule): 24 of 329
+comments per open issue: mean 12.5 median 11 p90 21 max 134
+
+non-owner comments total: 113 [('RainReligion', 109), ('Level12Lobster', 3), ('carlotheemo', 1)]
+RainReligion comments: 109 first 2026-07-05 last 2026-09-23
+  per month: [('2026-07', 69), ('2026-08', 18), ('2026-09', 22)]
+owner-account comments per month: [('2026-05', 42), ('2026-06', 128), ('2026-07', 4247), ('2026-08', 1463), ('2026-09', 367), ('2026-10', 239), ('2026-11', 169)]
+cards posted per month: [('2026-07', 232), ('2026-08', 501), ('2026-09', 55), ('2026-10', 12), ('2026-11', 111)]
+
+comment kinds on open issues: {'other': 1637, 'short lifecycle/label note': 457, 'ship/deploy note': 1150, 'three-fallback comment': 25, 'CURRENT LIVE TEST card': 858}
+top open issues by card count: [(9, 474, 'CWV: Old Musket pose calibration and peer parity'), (8, 954, 'Changes Made to Equipment Simultaneously Apply to Other/Bot '), (8, 402, 'Modded loadouts leak into official realm'), (7, 822, '[WOC] Blightreaper missing and exposed in Athanor'), (7, 278, 'Crafted CWV loadout sync crashes clients'), (6, 719, 'Client sees Sienna crowbill for Kruber variant'), (6, 592, 'CWV must provide exactly one 5-power Blacksmith seed per wea'), (6, 426, 'ct: modded boons/miracles CTD non-ct peers'), (6, 321, 'Resolve Inert Big Rebalance Toggles'), (6, 292, 'Save and swap native graphics profiles'), (6, 246, 'Fix Hold-Tab Weapon Illusion Icons'), (5, 1141, 'Clicking the "craft" button under on "Temper Item"')]
+open issue age days: median 123 p90 134
+open issue authors: [('Ensrick', 305), ('RainReligion', 19), ('maximusrime-bit', 2), ('Wingflierx', 1), ('arnaud612', 1), ('thetaequalspi', 1)]

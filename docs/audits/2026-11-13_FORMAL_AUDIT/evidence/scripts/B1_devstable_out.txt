@@ -1,0 +1,8 @@
+pair                         stable ver      dev ver         st files dev files st lines dev lines only-st only-dev identical* differ chg lines    st last   dev last
+chaos_wastes_tweaker         0.7.354-beta    0.7.354-dev           49        94    27586     37664      12       57         16     21     20271 2026-11-06 2026-11-06
+crafting_in_modded           0.8.148         0.8.148-dev           67        70    23528     25336       1        4         43     23       744 2026-11-06 2026-11-06
+general_tweaker              0.2.180         0.2.279-dev           59        93    21763     31689       1       35         21     37      7431 2026-11-06 2026-11-06
+gui_tweaker                  0.2.290         0.2.369-dev          134       134    41709     43176       9        9         53     72      2167 2026-11-02 2026-11-02
+verminious_dreams_lighting   1.0.7           1.0.20-dev             3         4      843      1334       0        1          0      3       498 2026-07-01 2026-10-25
+weapon_tweaker               0.12.343-beta   0.12.344-dev          88        93    36860     42123       0        5         65     23       727 2026-11-12 2026-11-12
+TOTAL stable-side lines 152289, dev-side lines 181322  (* identical after replacing '<mod>_dev' with '<mod>' in content)

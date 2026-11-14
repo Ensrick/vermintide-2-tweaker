@@ -1,0 +1,100 @@
+mod	files	loc	code	comment	hook	hook_safe	hook_origin	pcall	rawset_G	G_write	command	rpc_reg	net_send	rt_reg	printf	NetworkLookup	ItemMasterList	mod_get	mod_set	TODO	issue_ref	over1500	over2500
+weapon_tweaker	88	36948	31023	4408	31	11	0	275	0	0	12	3	4	80	15	80	91	44	10	0	385	4	1
+weapon_tweaker_dev	93	42216	34923	5499	31	14	0	312	0	0	23	3	4	93	27	80	94	102	47	0	508	5	1
+character_weapon_variants	130	47410	35183	9745	81	22	0	644	0	0	35	6	5	106	36	300	240	11	1	14	1245	4	0
+weapons_of_chaos	30	10149	8318	1113	43	4	0	191	0	0	9	3	0	21	21	31	21	16	0	0	38	0	0
+cosmetics_tweaker	111	48479	37821	8151	58	37	1	413	0	4	38	7	24	68	75	59	164	42	4	1	593	5	1
+dynamic_cosmetic_portraits	7	2198	1666	380	2	5	0	49	0	0	4	0	0	13	1	0	0	1	0	0	22	0	0
+character_dialogue	9	35652	35351	197	2	0	0	18	0	0	6	0	0	0	17	0	0	3	2	0	21	1	1
+chaos_wastes_tweaker	49	27635	18722	7192	84	27	0	393	0	2	42	7	9	76	26	93	8	51	5	5	303	1	1
+chaos_wastes_tweaker_dev	94	37758	25364	9888	114	33	0	551	2	4	46	7	9	115	37	111	8	75	7	5	889	3	0
+event_tweaker	28	6457	4132	1799	18	9	0	125	0	0	7	1	2	21	5	20	0	15	1	0	30	0	0
+enemy_tweaker	45	12817	9238	2652	12	5	0	161	0	0	16	2	3	56	5	35	1	53	1	1	142	0	0
+crafting_in_modded	67	23595	16784	5071	90	36	0	325	0	0	34	1	0	90	36	11	88	56	28	1	416	1	0
+crafting_in_modded_dev	70	25406	18397	5167	91	35	0	379	0	0	34	1	0	93	39	11	102	57	28	1	436	1	0
+modded_progression	18	5819	4642	706	75	0	0	65	0	0	6	0	0	32	8	0	7	9	12	7	98	0	0
+career_tweaker	38	15412	11378	3165	16	17	0	172	0	0	5	2	2	45	2	46	2	120	4	0	124	0	0
+general_tweaker	59	21822	14968	5185	139	29	0	234	1	0	79	6	7	47	20	17	13	188	38	0	199	1	0
+general_tweaker_dev	93	31782	21136	8147	155	40	0	318	1	0	92	9	10	90	56	40	13	274	39	0	615	6	0
+gui_tweaker	134	41843	29294	9706	101	41	0	622	0	0	33	2	0	82	133	10	26	141	31	3	993	4	0
+gui_tweaker_dev	134	43310	30349	10024	101	43	0	654	0	0	38	2	0	86	154	10	26	141	31	3	1051	4	0
+verminious_dreams_lighting	3	846	665	109	0	2	0	9	0	0	22	0	0	3	0	0	0	3	1	0	0	0	0
+verminious_dreams_lighting_dev	4	1338	951	286	0	2	0	11	0	0	27	0	0	6	0	0	0	5	2	0	0	0	0
+tweaker	5	4812	4070	447	34	7	0	30	0	0	25	0	0	0	0	0	60	42	0	3	0	1	0
+TOTAL	1309	523704	394375	99037	1278	419	1	5951	4	10	633	62	79	1223	713	954	964	1449	292	44	8108	41	5
+
+== get_mod dependency edges (mod dir -> referenced mod id: count)
+  weapon_tweaker -> {'wt': 21, 'character_weapon_variants': 8}
+  weapon_tweaker_dev -> {'wt_dev': 25, 'character_weapon_variants': 8}
+  character_weapon_variants -> {'character_weapon_variants': 5, 'cosmetics_tweaker': 2, 'wt': 2, 'MoreItemsLibrary': 1, 'cim_dev': 1, 'cim': 1, 'wt_dev': 1}
+  weapons_of_chaos -> {'cim_dev': 4, 'cim': 4, 'WOC': 3, 'MoreItemsLibrary': 1}
+  cosmetics_tweaker -> {'cosmetics_tweaker': 27, 'character_weapon_variants': 7, 'MoreItemsLibrary': 5, 'cim_dev': 2, 'cim': 2, 'material_hijack_patched': 2, 'wt': 1, 'la_prefix_patch': 1}
+  dynamic_cosmetic_portraits -> {'dynamic_cosmetic_portraits': 2}
+  character_dialogue -> {'character_dialogue': 2, 'gut_dev': 1}
+  chaos_wastes_tweaker -> {'ct': 17, 'bt': 2, 'gut': 1}
+  chaos_wastes_tweaker_dev -> {'ct_dev': 31, 'gut_dev': 2, 'gut': 2, 'bt': 2, 'enemy_tweaker': 1}
+  event_tweaker -> {'event_tweaker': 17}
+  enemy_tweaker -> {'enemy_tweaker': 30, 'VMF': 2}
+  crafting_in_modded -> {'cim': 14, 'character_weapon_variants': 1, 'WOC': 1, 'cosmetics_tweaker': 1}
+  crafting_in_modded_dev -> {'cim_dev': 15, 'character_weapon_variants': 1, 'WOC': 1, 'cosmetics_tweaker': 1}
+  modded_progression -> {'mp': 5}
+  career_tweaker -> {'crt': 14, 'HideBuffs': 1, 'gut_dev': 1, 'gut': 1}
+  general_tweaker -> {'gt': 46, 'VMF': 9, 'cim': 1, 'StreamingInfo': 1}
+  general_tweaker_dev -> {'gt_dev': 53, 'gt': 12, 'VMF': 11, 'cim': 1, 'StreamingInfo': 1}
+  gui_tweaker -> {'gut': 80, 'HideBuffs': 14, 'VMF': 12, 'character_dialogue': 6, 'cim': 6, 'cosmetics_tweaker': 3, 'SimpleUI': 2, 'NumericUI': 2, 'armory': 1, 'bestiary': 1, 'cosmetics': 1, 'wt_dev': 1, 'wt': 1}
+  gui_tweaker_dev -> {'gut_dev': 81, 'HideBuffs': 14, 'VMF': 12, 'cim': 7, 'character_dialogue': 5, 'cim_dev': 5, 'cosmetics_tweaker': 3, 'NumericUI': 3, 'SimpleUI': 2, 'armory': 1, 'bestiary': 1, 'cosmetics': 1, 'wt_dev': 1, 'wt': 1}
+  verminious_dreams_lighting -> {'verminious_dreams_lighting': 2}
+  verminious_dreams_lighting_dev -> {'verminious_dreams_lighting_dev': 2}
+  tweaker -> {'t': 2}
+
+== largest Lua files
+  34333 character_dialogue/scripts/mods/character_dialogue/character_dialogue_catalogue.lua
+  13295 chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua
+  11931 cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cosmetic_unlocks.lua
+  7238 weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_history_5_2_catalog.lua
+  7238 weapon_tweaker/scripts/mods/weapon_tweaker/_wt_history_5_2_catalog.lua
+  2344 general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_regression_checks.lua
+  2335 gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_mod_tweaker_definitions.lua
+  2307 character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_render.lua
+  2287 weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_runtime_checks.lua
+  2270 tweaker/scripts/mods/tweaker/tweaker.lua
+  2158 weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/wt_dev_anim_picker.lua
+  2131 gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_native_loadouts.lua
+  2115 weapon_tweaker/scripts/mods/weapon_tweaker/_wt_runtime_checks.lua
+  2074 character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_combat_styles.lua
+  2044 cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_runtime_checks.lua
+  2039 general_tweaker_dev/scripts/mods/general_tweaker_dev/general_tweaker_dev.lua
+  1978 weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_anim_remap_data.lua
+  1978 weapon_tweaker/scripts/mods/weapon_tweaker/_wt_anim_remap_data.lua
+  1959 gui_tweaker/scripts/mods/gui_tweaker/_mod_tweaker_definitions.lua
+  1827 crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/standard_forge.lua
+  1778 weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/weapon_tweaker_dev_data.lua
+  1737 general_tweaker/scripts/mods/general_tweaker/general_tweaker.lua
+  1725 weapon_tweaker/scripts/mods/weapon_tweaker/weapon_tweaker_data.lua
+  1654 general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_creature_spawner.lua
+  1599 general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_fixes.lua
+  1598 chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua
+  1595 general_tweaker_dev/scripts/mods/general_tweaker_dev/_gt_bot_teleport_lab.lua
+  1586 cosmetics_tweaker/scripts/mods/cosmetics_tweaker/cosmetics_tweaker.lua
+  1583 crafting_in_modded/scripts/mods/crafting_in_modded/standard_forge.lua
+  1583 cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_glow_picker.lua
+
+== byte-identical Lua files shared across different top-level dirs
+  53 ('weapon_tweaker', 'weapon_tweaker_dev')
+  43 ('gui_tweaker', 'gui_tweaker_dev')
+  24 ('crafting_in_modded', 'crafting_in_modded_dev')
+  15 ('general_tweaker', 'general_tweaker_dev')
+  11 ('chaos_wastes_tweaker', 'chaos_wastes_tweaker_dev')
+  1 ('career_tweaker', 'chaos_wastes_tweaker', 'character_weapon_variants', 'cosmetics_tweaker', 'enemy_tweaker', 'weapon_tweaker', 'weapon_tweaker_dev', 'weapons_of_chaos')
+  1 ('career_tweaker', 'chaos_wastes_tweaker', 'chaos_wastes_tweaker_dev', 'character_weapon_variants', 'enemy_tweaker', 'event_tweaker', 'weapon_tweaker', 'weapon_tweaker_dev')
+  1 ('career_tweaker', 'chaos_wastes_tweaker', 'chaos_wastes_tweaker_dev', 'character_weapon_variants', 'event_tweaker')
+  1 ('character_weapon_variants', 'cosmetics_tweaker', 'weapons_of_chaos')
+  1 ('character_weapon_variants', 'weapon_tweaker', 'weapon_tweaker_dev', 'weapons_of_chaos')
+  1 ('character_weapon_variants', 'weapon_tweaker', 'weapon_tweaker_dev')
+  1 ('character_weapon_variants', 'cosmetics_tweaker', 'crafting_in_modded', 'crafting_in_modded_dev', 'general_tweaker', 'general_tweaker_dev', 'gui_tweaker', 'gui_tweaker_dev', 'weapons_of_chaos')
+  1 ('character_weapon_variants', 'cosmetics_tweaker', 'weapon_tweaker', 'weapon_tweaker_dev', 'weapons_of_chaos')
+  1 ('cosmetics_tweaker', 'crafting_in_modded', 'crafting_in_modded_dev')
+  1 ('cosmetics_tweaker', 'crafting_in_modded', 'crafting_in_modded_dev', 'general_tweaker', 'general_tweaker_dev', 'modded_progression')
+  1 ('cosmetics_tweaker', 'dynamic_cosmetic_portraits', 'gui_tweaker', 'gui_tweaker_dev')
+  1 ('crafting_in_modded', 'crafting_in_modded_dev', 'general_tweaker_dev', 'verminious_dreams_lighting_dev')
+identical groups 158 files involved 354

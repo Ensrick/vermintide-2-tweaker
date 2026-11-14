@@ -1,0 +1,12 @@
+bucket                                                             files    lines code lines*
+A release pipeline: ship/publish/promote/worktrees/hooks              38    20135       16511
+B tracker/card authority: tools/verify, tools/github, tools/review    26    15797       14012
+C .github workflows/templates                                         11      785         571
+D release-paperwork QA gates (qa/check_*, run_*)                      54    21340       19011
+O other tools (lint, weapon-history, diagnostics...)                 124    27929       24426
+P product mod Lua                                                   1307   522219      394083
+Q other QA gates (code/content checks, wt-history repro)             101    25066       20722
+T qa/lua unit tests                                                  661   196802      178895
+
+PIPELINE (A+B+C+D): 58057 lines, 50105 code lines*   | product mod Lua: 522219 lines, 394083 code lines* in 1307 files
+* non-blank lines not starting with a comment marker

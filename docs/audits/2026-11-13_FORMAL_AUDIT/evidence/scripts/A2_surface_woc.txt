@@ -1,0 +1,68 @@
+== totals
+   190  pcall(
+   136  rawget(
+    47  printf(
+    43  mod:hook(
+    25  mod:dofile
+    21  _rt_register/rt_register(
+    20  rawset(
+    16  mod:get(
+    12  get_mod(
+     9  mod:command
+     4  mod:hook_safe(
+     3  mod:network_register
+== hooks per file
+  16  _woc_mod_unit_preview.lua
+  13  _woc_relic_registration_owner.lua
+  12  weapons_of_chaos.lua
+   4  _woc_shared_relic_runtime.lua
+   1  _woc_spirit_runtime_owner.lua
+== hook targets (kind class.method file:line)
+hook        ActionInspect.client_owner_start_action  weapons_of_chaos.lua:949
+hook        ActionInspect.finish  weapons_of_chaos.lua:955
+hook        ActionMeleeStart.client_owner_start_action  weapons_of_chaos.lua:963
+hook        ActionSweep.client_owner_start_action  weapons_of_chaos.lua:971
+hook        BackendInterfaceDeusBase.grant_deus_weapon  _woc_relic_registration_owner.lua:576
+hook        BackendInterfaceItemPlayfab.get_item_from_id  _woc_relic_registration_owner.lua:522
+hook        BackendUtils.get_item_units  weapons_of_chaos.lua:750
+hook        BackendUtils.set_loadout_item  _woc_shared_relic_runtime.lua:875
+hook_safe   BuffSystem.rpc_add_buff_synced_params  _woc_spirit_runtime_owner.lua:141
+hook        DeusChestExtension.can_be_unlocked  _woc_relic_registration_owner.lua:581
+hook        DeusMechanism._setup_run  _woc_relic_registration_owner.lua:531
+hook        DeusRunController.get_weapon_pool  _woc_relic_registration_owner.lua:590
+hook        DeusWeaponGeneration.deserialize_weapon  _woc_relic_registration_owner.lua:562
+hook        DeusWeaponGeneration.generate_item_from_item_key  _woc_relic_registration_owner.lua:543
+hook        DeusWeaponGeneration.serialize_weapon  _woc_relic_registration_owner.lua:556
+hook        DeusWeaponGeneration.upgrade_item  _woc_relic_registration_owner.lua:568
+hook        GearUtils.destroy_equipment  weapons_of_chaos.lua:994
+hook        GearUtils.spawn_inventory_unit  weapons_of_chaos.lua:848
+hook        HeroPreviewer._load_packages  _woc_mod_unit_preview.lua:310
+hook        HeroPreviewer._spawn_item  _woc_mod_unit_preview.lua:384
+hook        HeroPreviewer.equip_item  _woc_mod_unit_preview.lua:368
+hook        HeroViewStateOverview._set_loadout_item  _woc_shared_relic_runtime.lua:749
+hook_safe   HeroWindowLoadoutConsole._equip_item_presentation  weapons_of_chaos.lua:214
+hook        HeroWindowWeaveProperties._create_item_previewer  _woc_mod_unit_preview.lua:447
+hook        KeepDecorationTrophyExtension._load_trophy  _woc_shared_relic_runtime.lua:856
+hook        LoadoutUtils. .. '  weapons_of_chaos.lua:1240
+hook        LoadoutUtils.sync_loadout_slot  weapons_of_chaos.lua:1075
+hook        LootItemUnitPreviewer._destroy_units  _woc_mod_unit_preview.lua:522
+hook        LootItemUnitPreviewer._unload_packages  _woc_mod_unit_preview.lua:527
+hook        LootItemUnitPreviewer.load_package  _woc_mod_unit_preview.lua:456
+hook        LootItemUnitPreviewer.spawn_units  _woc_mod_unit_preview.lua:509
+hook        MenuWorldPreviewer._load_packages  _woc_mod_unit_preview.lua:311
+hook        MenuWorldPreviewer._spawn_item  _woc_mod_unit_preview.lua:385
+hook        SimpleHuskInventoryExtension._reapply_fade  weapons_of_chaos.lua:917
+hook        SimpleInventoryExtension._wield_slot  weapons_of_chaos.lua:933
+hook        SimpleInventoryExtension.create_equipment_in_slot  _woc_shared_relic_runtime.lua:773
+hook_safe   StateInGameRunning.on_enter  _woc_relic_registration_owner.lua:607
+hook_safe   StateInGameRunning.on_exit  _woc_relic_registration_owner.lua:622
+hook        TeamPreviewer._spawn_hero  _woc_mod_unit_preview.lua:320
+hook        WeaponUnitExtension._play_3p_anim  _woc_relic_registration_owner.lua:631
+hook        WeaponUtils.get_weapon_packages  _woc_mod_unit_preview.lua:287
+hook        _G.Localize  _woc_relic_registration_owner.lua:62
+hook        class_name._destroy_item_units_by_slot  _woc_mod_unit_preview.lua:407
+hook        class_name.clear_units  _woc_mod_unit_preview.lua:427
+hook        class_name.on_exit  _woc_mod_unit_preview.lua:434
+hook        class_name.post_update  _woc_mod_unit_preview.lua:401
+== duplicate (class,method) targets
+total literal hooks: 46 unique targets: 46

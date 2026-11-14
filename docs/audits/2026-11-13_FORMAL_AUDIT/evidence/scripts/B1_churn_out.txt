@@ -1,0 +1,14 @@
+since 2026-08-15: 409 first-parent commits
+class                                    added   deleted  share of added
+mod-lua:feature code                    141470     30420           34.0%
+qa lua unit tests                       130851      6552           31.4%
+generated docs                           35776     15276            8.6%
+wt-history tooling                       27743      2491            6.7%
+qa gates (ps1)                           21993      1163            5.3%
+release/tracker tooling                  20878      2051            5.0%
+docs/changelogs                          15871      2989            3.8%
+mod-lua:regression/diag modules          11804      5162            2.8%
+pins psd1                                 5416      2258            1.3%
+other tools                               2245       100            0.5%
+other                                     2170       444            0.5%
+artifact/receipt                           287       278            0.1%

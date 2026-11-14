@@ -1,0 +1,138 @@
+-- D5 offline evidence runner (audit workspace only; reads the repo, writes nothing).
+-- Usage: lua5.1.exe D5_run_offline.lua <repo_root>
+-- Part 1: run selected repo unit-test files through the repo's own harness.
+-- Part 2: load production General Tweaker modules with a stub VMF mod object and
+--         execute selected registered runtime checks (the pure-Lua ones) offline.
+local repo = (arg[1] or "."):gsub("\\", "/")
+package.path = repo .. "/qa/lua/?.lua;" .. repo .. "/qa/lua/tests/?.lua;" .. package.path
+
+local H = require("harness")
+
+local function run_suite(name)
+    local chunk, err = loadfile(repo .. "/qa/lua/tests/" .. name .. ".lua")
+    if not chunk then io.write("[D5] LOAD-ERROR " .. name .. ": " .. tostring(err) .. "\n"); return end
+    local ok, register = pcall(chunk)
+    if not ok or type(register) ~= "function" then
+        io.write("[D5] REGISTER-ERROR " .. name .. ": " .. tostring(register) .. "\n"); return
+    end
+    local ok2, err2 = pcall(register, H, repo)
+    if not ok2 then io.write("[D5] REGISTER-RAISED " .. name .. ": " .. tostring(err2) .. "\n"); return end
+    local passed, total, failed = H.run({ quiet = true })
+    io.write(string.format("[D5] SUITE %s passed=%s total=%s failed=%s\n", name, tostring(passed), tostring(total), tostring(failed)))
+end
+
+for _, name in ipairs({
+    "test_gt_lobby_failnotify_hardening",   -- #72
+    "test_gt_disconnect_failure_diag",      -- #753
+    "test_crt_retired_big_rebalance",       -- #321
+    "test_gt_official_verify_rollup",       -- #364 / #333 / #797 official stream
+    "test_gt_ai_takeover",                  -- #247 (dev tree only)
+    "test_gt_vmf_debug_gate",               -- #169
+    "test_gt_stable_world_liveness",        -- #490
+}) do
+    run_suite(name)
+end
+
+-- Part 2 ---------------------------------------------------------------
+local function make_mod(id)
+    local store = {}
+    local mod = { _id = id }
+    local noop = function() end
+    setmetatable(mod, { __index = function(_, k)
+        -- any VMF method that the module calls at load time becomes a no-op
+        if type(k) == "string" and k:sub(1, 1) ~= "_" then return noop end
+        return nil
+    end })
+    rawset(mod, "get", function(_, key) return store[key] end)
+    rawset(mod, "set", function(_, key, v) store[key] = v end)
+    rawset(mod, "pcall", function(_, f, ...) return pcall(f, ...) end)
+    rawset(mod, "dofile", function(_, path)
+        local file = path:match("([^/]+)$")
+        local stream = (id == "gt") and "general_tweaker" or "general_tweaker_dev"
+        return dofile(repo .. "/" .. stream .. "/scripts/mods/" .. stream .. "/" .. file .. ".lua")
+    end)
+    return mod
+end
+
+local function run_checks(stream, id, modules, wanted, prepare)
+    local mod = make_mod(id)
+    local checks = {}
+    local function register(name, fn) checks[name] = fn end
+    rawset(mod, "_gt_rt_register", register)
+    rawset(mod, "_gt_register_update", function() end)
+    _G.get_mod = function() return mod end
+    _G.printf = _G.printf or function() end
+    local root = repo .. "/" .. stream .. "/scripts/mods/" .. stream .. "/"
+    if prepare then prepare(mod) end
+    for _, file in ipairs(modules) do
+        local ok, err = pcall(dofile, root .. file .. ".lua")
+        io.write(string.format("[D5] LOAD %s/%s -> %s\n", stream, file, ok and "ok" or ("ERROR " .. tostring(err))))
+    end
+    local ok, M = pcall(dofile, root .. "_gt_regression_checks.lua")
+    if ok and type(M) == "table" then
+        local ok2, err2 = pcall(M.install, mod, register, {
+            CT_GT_PICKUP_LOOKUP_RAWGET_MARKER_v0_2_48 = "gt-pickup-lookup-rawget-hardened",
+            CT_GT_AI_CLIENT_SEND_MARKER_v0_2_52 = "gt-ai-client-send-vmf-rehandshake",
+            dbg = function() end, dbg_alert = function() end,
+        })
+        if not ok2 then io.write("[D5] INSTALL-ERROR " .. tostring(err2) .. "\n") end
+    else
+        io.write("[D5] CHECKS-LOAD-ERROR " .. tostring(M) .. "\n")
+    end
+    for _, name in ipairs(wanted) do
+        local fn = checks[name]
+        if not fn then
+            io.write(string.format("[D5] RT %s %s -> NOT-REGISTERED\n", stream, name))
+        else
+            local okc, res = pcall(fn)
+            local verdict = (okc and res == nil) and "PASS" or ("FAIL: " .. tostring(res))
+            io.write(string.format("[D5] RT %s %s -> %s\n", stream, name, verdict))
+        end
+    end
+end
+
+local lobby72 = {
+    "issue72_lobby_failnotify_never_hands_popup_to_vanilla",
+    "gt_lobby_failnotify_popup_up_soft_defers",
+    "gt_lobby_failnotify_teardown_driver",
+    "gt_lobby_failnotify_unknown_result_drives_teardown",
+    "gt_lobby_failnotify_unpack_preserves_leading_nils",
+}
+
+-- official stream: #72 (five checks), #247 gate as shipped, #1138
+run_checks("general_tweaker", "gt",
+    { "_gt_lobby_failed_join_reveal", "_gt_creature_spawner" },
+    { lobby72[1], lobby72[2], lobby72[3], lobby72[4], lobby72[5],
+      "gt_cs_breed_list_dynamic", "issue247_keep_slot_takeover_wired", "issue298_improved_bot_combat_controls" },
+    function(mod)
+        -- exactly what the official entry file sets before its modules load (general_tweaker.lua:260)
+        rawset(mod, "_gt_ai_takeover_disabled", true)
+        rawset(mod, "_GT_247_KEEP_SLOT_MARKER", "gt-247-keep-slot-v1")      -- _gt_ai_takeover.lua:60
+        rawset(mod, "_gt_ai_swap_human_to_bot", function() end)              -- _gt_ai_takeover.lua:353
+    end)
+
+-- dev stream: #378 watchdog reroute, #1138, #72
+run_checks("general_tweaker_dev", "gt_dev",
+    { "_gt_lobby_failed_join_reveal", "_gt_creature_spawner" },
+    { "gt_lobby378_watchdog_abort_reroutes_to_menu", "gt_cs_breed_list_dynamic",
+      lobby72[1], lobby72[2], lobby72[3], lobby72[4], lobby72[5] },
+    nil)
+
+-- Part 3: #1138 with a Breeds stub so the probe half of gt_cs_breed_list_dynamic really runs.
+_G.Breeds = {
+    skaven_clan_rat = { base_unit = "u", unit_template = "t", behavior = "b" },
+    skaven_gutter_runner = { base_unit = "u", unit_template = "t", behavior = "b", special = true },
+}
+run_checks("general_tweaker", "gt", { "_gt_creature_spawner" }, { "gt_cs_breed_list_dynamic" }, nil)
+run_checks("general_tweaker_dev", "gt_dev", { "_gt_creature_spawner" }, { "gt_cs_breed_list_dynamic" }, nil)
+_G.Breeds = nil
+
+-- Part 4: try to load the real official and dev entry files with the stub and read the takeover gate.
+for _, pair in ipairs({ { "general_tweaker", "gt", "general_tweaker" }, { "general_tweaker_dev", "gt_dev", "general_tweaker_dev" } }) do
+    local mod = make_mod(pair[2])
+    rawset(mod, "_gt_rt_register", function() end)
+    _G.get_mod = function() return mod end
+    local ok, err = pcall(dofile, repo .. "/" .. pair[1] .. "/scripts/mods/" .. pair[1] .. "/" .. pair[3] .. ".lua")
+    io.write(string.format("[D5] ENTRY %s load=%s gate(_gt_ai_takeover_disabled)=%s%s\n", pair[1], tostring(ok),
+        tostring(rawget(mod, "_gt_ai_takeover_disabled")), ok and "" or (" err=" .. tostring(err):sub(1, 160))))
+end
