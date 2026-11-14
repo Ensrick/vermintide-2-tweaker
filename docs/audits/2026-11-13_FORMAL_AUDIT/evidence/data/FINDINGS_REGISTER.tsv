@@ -1,0 +1,206 @@
+report	id	severity	category	title
+A1	A1-F01	S1	state-lifecycle	"Disable" does not return the game to vanilla: natives are stripped, then everything is re-applied with all hooks off
+A1	A1-F02	S1	architecture	Thirteen mechanisms rewrite 3P animation events; two parallel encodings disagree; no resolver seam; zero behavioural tests
+A1	A1-F03	S2	correctness	Brace of Pistols `anim_event_3p` is written on the shared template, so native Saltzpyre is changed too (the #210 bug class, fixed only for the longbows)
+A1	A1-F04	S1	state-lifecycle	Eleven owners mutate the same vanilla tables; apply order is hand-written at five call sites; `on_disabled` restores only some of them
+A1	A1-F05	S2	correctness	The "3P-only" not-loaded / no-ammo career override also drives the 1P wield animation and the reload RPC
+A1	A1-F06	S2	dead-code	The keep-preview attachment-node pre-validation never runs (table shape mismatch)
+A1	A1-F07	S2	crash-safety	Blanket `pcall` on vanilla paths converts diagnosable errors into silent state corruption
+A1	A1-F08	S2	crash-safety	`mod:safe_hook` runs the original a second time when the handler fails after already calling it
+A1	A1-F09	S2	network-coop	Moonfire AoE revert is effectively a host-side rule that also applies to players without the mod; client-only installs show effects with no damage
+A1	A1-F10	S3	dead-code	`LevelEndView._verify_weapon_data` hook fixes a vanilla bug that the current game no longer has
+A1	A1-F11	S1	testability	The verification layer cannot be driven or read by a script, and mostly asserts the mod's own tables
+A1	A1-F12	S2	maintainability	Weapon history: about 42k lines and 14 blocking QA gates for one unverified feature, with gates that depend on an external checkout
+A1	A1-F13	S2	maintainability	Reference docs and in-code comments describe a file layout that no longer exists
+A1	A1-F14	S3	dead-code	Retired features still shipped and still called
+A1	A1-F15	S2	performance	The animation funnel does per-event work for every unit in the game
+A1	A1-F16	S2	network-coop	The parity gate is sound but fails silent, and the sender floor can drop every client hit
+A1	A1-F17	S2	coupling	Cross-mod contracts are implicit and duplicated
+A1	A1-F18	S2	correctness	A cross-career weapon is never persisted: the loadout reverts on restart
+A1	A1-F19	S3	maintainability	The size ratchet produced mechanical splits and compressed code
+A2	A2-F01	S0	network-coop	The Outrider Grenade Launcher puts a cwv-only lookup index on a replicated vanilla game object, with no peer gate
+A2	A2-F02	S1	state-lifecycle	Both mods are user-togglable, but disabling removes the safety hooks and leaves the items
+A2	A2-F03	S1	testability	The Definition of Done is a human checklist with no machine enforcement, and the live-test cards drift from the code
+A2	A2-F04	S1	coupling	Whether a variant exists depends on byte-exact pins of another mod's private state and of the decompiled-source revision
+A2	A2-F05	S1	duplication	35 hand-rolled `NetworkLookup` appends in 7 files; the canonical helper is used twice and its result is ignored at the main site
+A2	A2-F06	S1	architecture	One shared mutable table (`_om`, 286 fields, 29 files) is the module interface; load order is the contract
+A2	A2-F07	S1	performance	Global hooks on engine C functions and per-frame paths, installed for single weapons, never measured
+A2	A2-F08	S1	testability	The in-game regression suite mixes real checks with checks that cannot fail, has no automatic runner, and already fails on tester builds for harness reasons
+A2	A2-F09	S2	testability	Offline tests are numerous but about 37% of their assertions pin source text, and 27 files execute code sliced out of source files
+A2	A2-F10	S2	duplication	Variants are data-driven only for the trivial case; each interesting variant is bespoke code, and one variant must be registered in 6-9 places
+A2	A2-F11	S2	state-lifecycle	cwv edits vanilla items and career tables for every player with the mod, never restores them, and overlaps weapon_tweaker's job
+A2	A2-F12	S2	maintainability	Comments are an incident log, documents describe a file that no longer exists, and the vocabulary is private
+A2	A2-F13	S2	crash-safety	Package force-loads are wrapped in `pcall` that cannot catch the failure they guard against; leases are never released
+A2	A2-F14	S2	correctness	The Old Musket shot report is sent on two channels and played by both receivers
+A2	A2-F15	S2	correctness	Preview hooks on a class and its parent run twice for the inventory previewer (cwv and WOC)
+A2	A2-F16	S2	coupling	Both mods reach into Crafting in Modded's private functions and saved data
+A2	A2-F17	S2	architecture	WOC carries a host-authoritative "one holder per lobby" lease protocol for a single item
+A2	A2-F18	S2	crash-safety	WOC's package lists Lua files one by one; a missing entry has already crashed startup twice
+A2	A2-F19	S2	network-coop	Chaos Wastes identity is gated by presence-only parity, and nobody has enumerated what the cwv keys ride on there
+A2	A2-F20	S2	architecture	Hard dependencies are not declared or checked by cwv
+A2	A2-F21	S3	dead-code	Stubs, retired rows and test data ship in the bundle
+A2	A2-F22	S3	maintainability	Defensive style hides intent
+A2	A2-F23	S3	duplication	Identical helpers copied between the two mods outside the shared-lib system
+A2	A2-F24	S2	security	cwv removes the DLC requirement from clones of paid-DLC weapons, with an unverified note in the code
+A3	A3-F01	S1	correctness	Dialogue line overrides always select line 1 on a fresh dialogue group
+A3	A3-F02	S1	architecture	Weapon and cosmetic appearance has no single source of truth: 10+ decision points, 15+ retained stores, context inferred from ambient flags
+A3	A3-F03	S1	coupling	A cosmetics mod patches the mod framework and the global `get_mod`, and is the hidden provider of MoreItemsLibrary for CWV and WOC
+A3	A3-F04	S1	security	Peer-supplied `hand_field` and `offhand_unit` are relayed and applied without validation
+A3	A3-F05	S1	maintainability	The least verifiable mod ships every change straight to a public Workshop item
+A3	A3-F06	S2	network-coop	Cosmetic sync needs the host to run the mod, and the host must itself have LA for LA keys
+A3	A3-F07	S2	crash-safety	The husk wield hook swallows every error from vanilla and from all other mods' hooks below it
+A3	A3-F08	S2	state-lifecycle	The embedded MoreItemsLibrary lifecycle wrapper is overwritten at load
+A3	A3-F09	S2	dead-code	Global glow override is inert but its hooks, transport fields and 14 setting readers remain; one TPE setting has no reader
+A3	A3-F10	S2	performance	Hooks on engine hot paths and unthrottled per-frame work
+A3	A3-F11	S2	maintainability	DCP: literal 24 / 12 gates, four hand-synced portrait lists, one career
+A3	A3-F12	S2	testability	In-game checks can report PASS without running, never read rendered engine state, and the host tests pin source text
+A3	A3-F13	S2	architecture	The decomposition kept the coupling: flat `mod` namespace and wide dependency bags
+A3	A3-F14	S2	state-lifecycle	Nothing is restored when the mod is disabled
+A3	A3-F15	S2	coupling	LA bridge depends on six LA internals and ten SKIN_LIST fields with no contract check, against a local fork
+A3	A3-F16	S2	network-coop	Convergence depends on wall-clock windows and bounded retries
+A3	A3-F17	S2	correctness	`can_wield` for 479 cosmetics is rewritten from a generated snapshot on every game-state change
+A3	A3-F18	S2	coupling	character_dialogue's UI exists only with the friends-only `gut_dev`, and its overrides act only on the host
+A3	A3-F19	S3	maintainability	Documentation lags the decomposition
+A3	A3-F20	S3	duplication	Repeated boilerplate and unreferenced assets
+A3	A3-F21	S3	crash-safety	Ambient flags and temporary global swaps are not exception-safe
+A4	A4-F01	S0	network-coop	The lobby hash shim lets peers with different `NetworkLookup.level_keys` into the same session, and nothing gates the level / graph axis
+A4	A4-F02	S0	network-coop, correctness	The custom-boon parity gate and the `enable_boon_*` toggles edit a table the roller never reads; the shrine purchase path has no parity check
+A4	A4-F03	S0	network-coop, correctness	event_tweaker's hot-join lock hooks `GameModeBase.is_joinable`, which subclass instances never call
+A4	A4-F04	S1	network-coop, state-lifecycle	ct_dev's hot-join fence deletes every player's custom boons whenever the joiner is not already acknowledged, and acknowledgements expire after 15 s off-roster
+A4	A4-F05	S1	architecture	Dev and public Chaos Wastes are two diverged implementations; the public one holds the stronger wire fence
+A4	A4-F06	S1	network-coop	"Host-authoritative" settings silently become client-authoritative when the host does not run the mod
+A4	A4-F07	S1	crash-safety	enemy_tweaker's `_hook_wrap` re-runs vanilla after a failure and then swallows the second failure; 21 hooks use it, including `ConflictDirector.init`
+A4	A4-F08	S1	network-coop	enemy_tweaker's custom-breed fence can hold and kick joiners in a mod labelled host-only; its fail-closed census treats "cannot tell" as "live"
+A4	A4-F09	S1	testability	A third of ct_dev's in-game regression checks cannot fail on behaviour, and live verification cards depend on them
+A4	A4-F10	S2	maintainability, state-lifecycle	ct_dev writes 44 implicit globals, including live transport state shared by name with the public mod; nothing prevents both mods loading together
+A4	A4-F11	S2	architecture, coupling	The ct_dev decomposition moved code but kept the coupling
+A4	A4-F12	S2	crash-safety	Vanilla tables are mutated around a call without a protected restore
+A4	A4-F13	S2	performance, correctness	enemy_tweaker hooks global `table.clone` for a benefit the engine source does not support
+A4	A4-F14	S2	testability	The NetworkLookup append ratchet does not see any appender in these three mods
+A4	A4-F15	S2	state-lifecycle	Changing two event_tweaker settings restarts the current level immediately
+A4	A4-F16	S2	network-coop	Host-settings and manifest receivers accept payloads from any peer
+A4	A4-F17	S2	performance, maintainability	Per-issue diagnostics are permanently installed on production paths
+A4	A4-F18	S3	security	The peer manifest sends each player's full enabled-mod list to other ct peers
+A4	A4-F19	S3	maintainability	The shared beacon library swallows errors from the host mod's previous `mod.update`
+A4	A4-F20	S3	correctness	Boon-count override finds its argument by value range
+A4	A4-F21	S3	maintainability	Documentation drift
+A4	A4-F22	S1	crash-safety (drift)	The public Chaos Wastes mod ships the difficulty ramp without the journey-stat crash guard
+A5	A5-F01	S0	correctness, state-lifecycle	CIM writes crafted backend ids into career loadouts and owns no isolation of that write
+A5	A5-F02	S0	crash-safety	`/cim_craft_standard` and the standard-crafting keybind transition to a HeroView screen that does not exist
+A5	A5-F03	S0	state-lifecycle, crash-safety	The commit-suppression hook drops completion callbacks, including the one that shows the end-of-mission screen
+A5	A5-F04	S1	correctness, architecture	Restore-time "exact postcondition" removes a saved craft from the inventory whenever its stored form differs from what the engine parses
+A5	A5-F05	S1	performance, state-lifecycle	Every boot re-adds every saved craft with full side effects: game-save autosave per item, "new" marker per item, full inventory refresh per item
+A5	A5-F06	S1	architecture, state-lifecycle	A player's whole crafted collection lives in one VMF setting, with the failure modes that implies
+A5	A5-F07	S1	testability	The in-game regression runner cannot serve an automated pipeline as built
+A5	A5-F08	S1	correctness, dead-code	mp's un-gate brackets are inert on the current game, and the mod's description promises what they no longer deliver
+A5	A5-F09	S2	dead-code, coupling	mp's economy API and seeding path are scaffolding with no callers
+A5	A5-F10	S2	correctness	career_tweaker's level override and career unlock let a modded session write talent and career choices the real account has not earned
+A5	A5-F11	S2	performance, maintainability	cim's "debug-gated" autodumps are permanently on
+A5	A5-F12	S2	dead-code	About 700 lines of loadout persistence are force-disabled but still installed
+A5	A5-F13	S2	dead-code, maintainability	career_tweaker carries its retired and disabled features as bulk
+A5	A5-F14	S2	state-lifecycle	Global `ItemMasterList` mutation with no restore, patched by a display filter
+A5	A5-F15	S2	correctness	Property "trim" walks the entire live inventory and drops properties in arbitrary order
+A5	A5-F16	S2	crash-safety	Scoped inventory-access flip swallows a failed `HeroView.on_enter`
+A5	A5-F17	S2	security, coupling	The dev mod queries a third party's database with an embedded API key
+A5	A5-F18	S2	state-lifecycle	`/mp_reset` wipes all local progression with one unconfirmed command
+A5	A5-F19	S2	performance	mp evaluates its routing predicate inside 22 hot item-interface hooks and allocates every frame
+A5	A5-F20	S3	performance	career_tweaker pattern-matches every read-only data key
+A5	A5-F21	S3	maintainability	Stray globals
+A5	A5-F22	S3	maintainability	Documentation contradicts code in ways that mislead an executing agent
+A5	A5-F23	S3	dead-code	Smaller dead paths
+A5	A5-F24	S3	maintainability	Command names
+A6	A6-F01	S1	network-coop, security	The host performs privileged actions for any gt peer, with no host opt-in (public stable included)
+A6	A6-F02	S1	network-coop, process	An unverified, default-ON host-side combat change is in the public build
+A6	A6-F03	S1	crash-safety, coupling	Always-on global engine guards change engine behaviour for every mod and hide other mods' faults
+A6	A6-F04	S1	architecture	No module contract: five lifecycle mechanisms, a hand-wired dispatcher, and a disable path that does not unwind
+A6	A6-F05	S1	testability	The in-game regression suite asserts that code is loaded, not that features work
+A6	A6-F06	S1	testability	The live agent bridge has no inbound path and has never produced a result
+A6	A6-F07	S1	process	Public stable gt is a hand-assembled hybrid that matches no dev build
+A6	A6-F08	S2	crash-safety	The dead-world and POSITION_LOOKUP guards are scattered copies, not a structure
+A6	A6-F09	S2	correctness	Host AI takeover reads the local player's POSITION_LOOKUP in the `mod.update` phase and has no rollback at that point
+A6	A6-F10	S2	state-lifecycle	`/inndmg` flips the global that nine call sites use to ask "am I in the keep"; six different keep predicates exist
+A6	A6-F11	S2	performance	Hot-path hooks are always installed and gate with `mod:get` per call
+A6	A6-F12	S2	correctness	Two features still draw with LineObject, which the repo itself concluded does not render in retail
+A6	A6-F13	S2	correctness	`/dump_ai` and `/dump_menu` set a retired key and print through `mod:debug`, so they are silent by default
+A6	A6-F14	S2	correctness	The `(condition and func(...)) or default` wrapper idiom truncates return values in nine always-on hooks
+A6	A6-F15	S2	correctness, performance	vdl's per-frame shading hook has no world gate and allocates every frame, contrary to its own doc
+A6	A6-F16	S2	coupling	Four mods hook `CameraManager.shading_callback`; vdl and ct both layer Chaos Wastes curse lighting on the same levels without knowing about each other
+A6	A6-F17	S2	maintainability	Issue archaeology and retired experiments live inside production hooks
+A6	A6-F18	S2	testability	A third of the host unit tests pin source text
+A6	A6-F19	S3	maintainability	Docs disagree with code
+A6	A6-F20	S3	dead-code	`tweaker/` sits in the active tree and costs 13 QA exclusions
+A6	A6-F21	S3	dead-code	A default-on diagnostic probe ships only in the public build
+A6	A6-F22	S3	testability	vdl has no host unit tests and its disable path leaves lights tinted
+A6	A6-F23	S3	state-lifecycle	Timers in `mod.update` consumers run on scaled time
+A7	A7-F01	S1	state-lifecycle	The exit-time snapshot can permanently replace a stored modded item id with the official fallback id
+A7	A7-F02	S1	architecture	The loadout mirror has one persistence call but no state owner; the load-bearing module cannot be executed offline
+A7	A7-F03	S1	correctness	`/mod_tweaker` is registered twice; the later registration opens a different, policy-disabled presenter
+A7	A7-F04	S1	crash-safety	Lifecycle callbacks are capture-prev chains with no per-handler isolation; one throw disables every later-loaded handler for that event, including safety cleanup
+A7	A7-F05	S1	dead-code	The HideBuffs fork is half-wired: its lifecycle module is never loaded and twelve menu toggles have no implementation
+A7	A7-F06	S2	maintainability (licence)	The HideBuffs fork ships without the upstream MIT notice
+A7	A7-F07	S2	state-lifecycle	Vanilla `refresh_bot_loadouts` still runs against the store and can erase the realm-shared bot designation
+A7	A7-F08	S2	correctness	The #954 fix freezes the bot's equipment at designation time; later edits to the designated row never reach the bot and no bot-edit path exists
+A7	A7-F09	S2	crash-safety	Module load failures are swallowed: 22 bare `pcall(mod.dofile, ...)` calls, and the failure branches cannot print the error
+A7	A7-F10	S2	correctness	HUD editor: the resolution bucket is fixed at load, baselines are hardcoded, and the design duplicates a wider vanilla facility
+A7	A7-F11	S2	performance	Always-on diagnostics sit on the backend hot path
+A7	A7-F12	S2	testability	The in-game regression command overstates coverage
+A7	A7-F13	S2	duplication	Two presenters for one menu and two transports for one sync pattern
+A7	A7-F14	S2	architecture	The official-loadout boot guard re-implements vanilla sign-in continuations with no drift detector
+A7	A7-F15	S2	state-lifecycle	Durable loadout state and the spawned character have no common commit path
+A7	A7-F16	S2	maintainability	Dev and stable are structurally forked in both directions (details in section 5)
+A7	A7-F17	S3	correctness	The settings fingerprint in the dev load banner cannot work
+A7	A7-F18	S3	maintainability	Defensive `pcall` density hides root causes
+A7	A7-F19	S3	maintainability	ENGINE_SURFACE.md is stale in the places that matter (list in 2.7)
+A7	A7-F20	S3	state-lifecycle	Small leaks of vanilla state and a cached UI context
+A7	A7-F21	S3	maintainability	The public surface carries research and one-off diagnostics
+B1	B1-F01	S0	process	The pipeline's size and ceremony are out of proportion to the risk, and bookkeeping has displaced product work
+B1	B1-F02	S0	release	Every ship leaves master needing a second pull request, and one metadata file is touched by 59% of all commits
+B1	B1-F03	S1	ci	The tracker lifecycle guard has failed on every run since 2026-11-06
+B1	B1-F04	S1	source-control	Compiled bundles are tracked in git: 98.7% of history, a 15 GiB public repository
+B1	B1-F05	S1	source-control	Dev and stable streams are duplicated directories: 152,289 duplicate lines, large drift, and a family of gates to police the copies
+B1	B1-F06	S1	release	There is no rollback path; the only way back is a new version through the whole pipeline
+B1	B1-F07	S1	release	Shipping is bound to "exact live master HEAD with green CI", which serializes the whole repository
+B1	B1-F08	S1	release	Publication order allows half-published states
+B1	B1-F09	S1	process	The real shipping procedure lives outside the repository, and `ship.ps1` is neither one command nor measurable
+B1	B1-F10	S2	release	A build receipt binds every file in the mod directory, including 208 Markdown files
+B1	B1-F11	S2	ci	`qa-gate` runs 21.9 minutes at the median against a 30 minute timeout and is not scoped to the change
+B1	B1-F12	S2	testability	Pipeline self-tests assert the script's own source text
+B1	B1-F13	S2	release	Safeguards are unused in one place and missing in another
+B1	B1-F14	S2	release	Shipping works on exactly one machine in exactly one state
+B1	B1-F15	S2	source-control	Branch, stash and ref debt
+B1	B1-F16	S2	process	Gates that fail because time passed or something outside the repo changed
+B1	B1-F17	S2	supply-chain	Asset provenance is recorded for one mod only, and the licence text may not match the content
+B1	B1-F18	S3	hygiene	Root-level clutter
+B1	B1-F19	S3	security	Personal identifiers in a public repository
+B1	B1-F20	S3	supply-chain	`tools/luacheck/luacheck.exe` is committed without a recorded hash or licence note
+B1	B1-F21	S3	hygiene	Local checkout state
+D1	D1-F1	S0		The bucket has had no human in-game evidence since 2026-09-23, while 28 further CWV changelog entries (0.1.541 to 0.1.570) landed after the last build a person ran.
+D1	D1-F2	S0		The one recorded live run of the in-mod regression suites failed 22 checks and exposed 4 real regressions in issues labelled `verify-fix`, while the offline suite was green.
+D1	D1-F3	S1		The pinned co-op card for the external crash #1211 cannot be satisfied as written: it requires a check named `issue1211_registered_wwise_world_guard` that exists nowhere in master.
+D1	D1-F4	S1		Pinned cards are version-bumped in place without re-validation.
+D1	D1-F5	S1		#922 is labelled `verify-fix` but static evidence suggests one reported surface is still unfixed.
+D1	D1-F6	S1		#661's regression check is a spot check, not the invariant.
+D1	D1-F7	S2		7 issues can be closed today on static or offline evidence; 30 more need only a solo headless harness.
+D1	D1-F8	S2		Lifecycle and priority labels are unreliable in this bucket.
+D2	D2-F1	S0		The bucket holds 210 pinned "CURRENT LIVE TEST" cards across 63 issues and 750 comments, and has received 3 human test results in total (Rain: #1033 on 08-03, #913 and #998 on 08-16). No non-owner comment exists after 2026-08-16. 56 of 63 issues are "fix shipp
+D2	D2-F2	S1		Static evidence suggests the named in-game regression check for #730 fails on every run since 2026-07-19: `cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_runtime_checks.lua:290` requires `cache_identity == "mesh_unit"`, while `_cos_grail_knight_set.lua:
+D2	D2-F3	S1		Lifecycle labels are not trustworthy in this bucket. 7 `verify-fix` issues carry a body that says the issue is NOT ready because its named in-mod check does not exercise the fix, and the gap is still present on master (#373, #388, #629, #641, #650, #658, #796)
+D2	D2-F4	S1		The in-mod "named regression checks" that gate `verify-fix` are mostly wiring/constant assertions (`type(x) == "function"`, literal contract flags, pure predicates). They cannot observe the reported symptom. Examples: #730 (`_cos_runtime_checks.lua:282-295`),
+D2	D2-F5	S2		42 of 63 issues (67%) are class R, plus 8 U/S: 50 of 63 (79%) can be closed or failed without human eyes if a scripted in-game harness exists. 8 are closable today from static evidence alone. Only 7 need visual judgement and 5 need two real clients.
+D2	D2-F6	S2		#1190 (the only external report) is a real bug with a shipped but unverified fix, mislabelled `diagnostics-armed`; the reporter's log is never quoted and the reporter was never asked to retest.
+D2	D2-F7	S2		Static evidence of a dead branch in the cluster's shared code: `_cos_customization_view_lifecycle.lua:394` reads `inv.wielded_slot` on the local inventory extension, a field only the husk class defines (`Vermintide-2-Source-Code/scripts/unit_extensions/default
+D6	D6-F01	S0		A 0-critical co-op crash issue (#406) was auto-closed by a PR merge 34 minutes after the owner reported the fix did not work, and was never retested.
+D6	D6-F02	S1		27 keyword auto-closes (20 commit, 7 PR) in 2026-07-02 to 07-19; 9 runtime issues among them have no verification (#157, #216, #362, #372, #379, #387, #409, #406, #731), 5 crash-class. Guard in place since 2026-07-22; none since.
+D6	D6-F03	S1		66 closed-completed runtime issues have no runtime evidence (31 static only, 35 none); 18 crash-class. Only 4 have a number-named runtime check.
+D6	D6-F04	S1		Closed Chaos Wastes and General Tweaker fixes are mostly dev-only: 15 of 24 and 14 of 20 checkable issues have their fix identifiers absent from the stable tree, including crash guards (#731, #157, #294, #291). "Closed" does not mean "fixed in the public build
+D6	D6-F05	S1		25 closed-completed runtime issues have an open issue describing the same or regressed symptom (14 flagged by the 2026-07-18 corpus sweep as "Regression of closed work"); three 0-critical (#620, #267, #390).
+D6	D6-F06	S1		102 of 296 in-game confirmations exist only as an agent's statement, with no human-typed text and no owner label. In #143 the last human comment before the "user-confirmed" close is negative.
+D6	D6-F07	S2		The fix verified for #568 (0-critical) is no longer on master; the area was rewritten under open #1684/#573.
+D6	D6-F08	S2		Umbrella absorption hides live 0-critical bugs: #154, #401, #697 into blocked #660 (silent duplicate closes); #182, #196 and four leaves into #748 minutes after fresh failure reports.
+D6	D6-F09	S2		83 runtime issues were closed with a waiting lifecycle label still attached; 72 completed issues still carry one. About half are stale labels, about 27 are truly unverified. Any query on `verify-fix` over closed issues is unreliable.
+D6	D6-F10	S2		35 silent closes (24 runtime), concentrated on 2026-07-03 and 07-05, including #56 (1-major, probe only) and #65 (two crash classes).
+D6	D6-F11	S2		Label-keyed bulk sweeps (179 closes in bursts) closed partial verdicts as complete: #441 (9 failing regression checks not tracked), #392, #98.
+D6	D6-F12	S2		26 runtime closes from May-June predate the confirmation rule ("Resolved in vX" by an agent); no later verification.
+D6	D6-F13	S3		`state_reason` misuse: 11 "completed" closes are not fixes; 37 consolidations are `not_planned` rather than `duplicate`.
+D6	D6-F14	S3		Tooling issues are repeatedly closed and reopened (#540 x5, #1102 x4, #750 x3, #1203 x3).
+D6	D6-F15	S3		The pre-scored `has_confirmation_text` heuristic under-counts confirmations (misses "fixed", "Working!", the `Fixed` label).

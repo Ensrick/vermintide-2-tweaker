@@ -1,0 +1,67 @@
+Development.init_application_parameters
+-----------------------------------------------------------------
+--                   Application parameters                    --
+-----------------------------------------------------------------
+[ConflictSettings] Contained breeds generated in:	0.006
+TIME: 0.062
+==== B2 engine-free load probe ====
+LOADED  scripts/utils/colors  (+0 files, 0.00s)
+LOADED  scripts/utils/global_utils  (+1 files, 0.00s)
+LOADED  scripts/utils/loaded_dice  (+1 files, 0.00s)
+LOADED  scripts/unit_extensions/human/ai_player_unit/ai_utils  (+7 files, 0.01s)
+LOADED  scripts/unit_extensions/default_player_unit/inventory/gear_utils  (+1 files, 0.00s)
+LOADED  scripts/network/shared_state  (+1 files, 0.00s)
+LOADED  scripts/settings/terror_events/terror_event_utils  (+2 files, 0.00s)
+LOADED  scripts/settings/dlcs/morris/deus_shop_settings  (+1 files, 0.00s)
+LOADED  scripts/settings/dlcs/morris/deus_blessing_settings  (+1 files, 0.00s)
+LOADED  scripts/settings/paintings_01  (+1 files, 0.00s)
+LOADED  scripts/settings/terror_events/terror_events_generic  (+4 files, 0.01s)
+LOADED  scripts/settings/inventory_settings  (+2 files, 0.00s)
+LOADED  scripts/managers/game_mode/mutator_templates  (+104 files, 0.02s)
+LOADED  scripts/settings/breeds  (+135 files, 0.12s)
+LOADED  scripts/settings/breeds/breed_players  (+7 files, 0.01s)
+FAILED  scripts/settings/conflict_settings  (+11 files, 0.05s)
+    scripts/settings/conflict_settings.lua:5554: bad argument #1 to 'pairs' (table expected, got nil)
+
+    stack traceback:
+	[C]: in function 'error'
+	...aude\vt2-audit-20261113\scripts\B2_engfree\probe.lua.txt:43: in function <...aude\vt2-audit-20261113\scripts\B2_engfree\probe.lua.txt:26>
+	(tail call): ?
+	[C]: in function 'xpcall'
+	...aude\vt2-audit-20261113\scripts\B2_engfree\probe.lua.txt:117: in main chunk
+	[C]: ?
+LOADED  scripts/settings/unlock_settings  (+1 files, 0.00s)
+LOADED  scripts/settings/difficulty_settings  (+0 files, 0.00s)
+LOADED  scripts/settings/equipment/item_master_list  (+51 files, 0.04s)
+LOADED  scripts/settings/equipment/weapons  (+215 files, 0.14s)
+LOADED  scripts/unit_extensions/default_player_unit/buffs/buff_templates  (+24 files, 0.03s)
+LOADED  scripts/settings/game_mode_settings  (+0 files, 0.00s)
+LOADED  scripts/settings/objective_templates_vs  (+4 files, 0.00s)
+FAILED  scripts/network_lookup/network_lookup  (+584 files, 0.56s)
+    scripts/network_lookup/network_lookup.lua:961: bad argument #1 to 'pairs' (table expected, got nil)
+
+    stack traceback:
+	[C]: in function 'error'
+	...aude\vt2-audit-20261113\scripts\B2_engfree\probe.lua.txt:43: in function <...aude\vt2-audit-20261113\scripts\B2_engfree\probe.lua.txt:26>
+	(tail call): ?
+	[C]: in function 'xpcall'
+	...aude\vt2-audit-20261113\scripts\B2_engfree\probe.lua.txt:117: in main chunk
+	[C]: ?
+vanilla files executed: 1437
+explicit engine stubs touched: 18 distinct paths, top-level stub roots: Achievement,Actor,Application,BackendUtils,Benchmark,Camera,Clipboard,Crashify,EngineOptimized,EngineOptimizedExtensions,Friends,GameSession,Gui,GwNavQueries,GwNavWorld,Keyboard,LanClient,Level,Light,LineObject,Localizer,Managers,Material,Math,Matrix4x4,Mesh,Mouse,Mover,Network,NetworkConstants,Pad1,PhysicsWorld,Presence,Profiler,Rectangle2D,Renderer,ResourcePackage,Script,ShadingEnvironment,Stats,Steam,SteamHelper,Unit,Vector3Aux,Viewport,Window,World,Wwise,WwiseWorld
+globals read while nil: 214
+  AchievementTemplateHelper ActSettings ActionTemplates AiBreedSnippets AiUtils AreaSettings BLACKBOARDS BREED_DIE_LOOKUP BTHesitationVariations BadgeDefinitions BalefireBurnDotLookup BalefireDots BenchmarkHandler BoonReactivationRules BotActions BotConstants BotNavTransitionManager BreedActions BreedEnhancements BreedHitZonesLookup Breeds BuffAreaHelper BuffUtils CONST CanWieldAllItemTemplates CareerAbilityBWAdept CareerAbilityBWNecromancerCommand CareerAbilityBWUnchained CareerAbilityChaosTrollVomit CareerAbilityCorruptorGrab CareerAbilityCorruptorTeleport CareerAbilityDRIronbreaker CareerAbilityDRSlayer CareerAbilityDarkPactBase CareerAbilityDarkPactHorde CareerAbilityESHuntsman CareerAbilityESKnight CareerAbilityESMercenary CareerAbilityGutterRunnerFoff CareerAbilityGutterRunnerPounce CareerAbilityPackmasterEquip CareerAbilityPackmasterGrab CareerAbilityPackmasterHoist CareerAbilityPoisonWindGlobadierThrow CareerAbilityRatOgreJump CareerAbilityRatlingGunnerFire CareerAbilityRatlingGunnerReload CareerAbilitySorcererTeleport CareerAbilityVortexSorcerer CareerAbilityWEMaidenGuard CareerAbilityWEShade CareerAbilityWEShadeDash CareerAbilityWHCaptain CareerAbilityWHZealot CareerAbilityWarpfireThrower CircularQueue Colors Currencies CurrentBossSettings CurrentConflictSettings CurrentHordeSettings CurrentIntensitySettings CurrentPacing CurrentPackSpawningSettings CurrentRoamingSettings CurrentSpecialsSettings DEUS_CHEST_TYPES DEUS_GOD_INDEX DEUS_GOD_TYPES DEUS_LEVEL_PICKUP_SETTINGS DEUS_LEVEL_SETTINGS DEUS_SHRINE_LEVEL_SETTINGS DEUS_THEME_INDEX DEUS_THEME_TYPES DEUS_WEAPON_CHEST_DISTRIBUTION DLCSettings DLCUtils DebugGlobadier DebugGutterRunner DeusBlessingSettings DeusCostSettings DeusJourneyCycleGods DeusJourneySettings DeusPowerUpAvailabilityTypes DeusPowerUpExclusionList DeusPowerUpRarities DeusPowerUpRarityPool DeusPowerUpSettings DeusPowerUpTemplates DeusPowerUps DeusPowerUpsArray DeusShopSettings DeusTerrorEventTags DeusThemeSettings DialogueLookup DifficultySettings DifficultyTweak DotTypeLookup DroneTemplates ExperienceSettings ExplosionUtils FOUNDATION_patches_applied FROZEN GameModeSettings GenericVolumeTemplates Geometry GrowQueue HEALTH_ALIVE HashUtils IDENTITY InfiniteBurnDotLookup InteractionCustomChecks InteractionDefinitions InterestPointPickList InterestPointPickListIndexLookup InterestPointUnitsLookup Intersect ItemMasterList ItemMasterListMeta JourneyDifficultyDBNames JourneyDominantGodDifficultyDBNames LevelSettings MaterialEffectMappings MaterialEffectMappingsHotReloadVersion MechanismOverrides MeleeBuffTypes MockClass MorrisBuffTweakData MutatorTemplates MutatorUtils NAV_TAG_VOLUME_LAYER_COST_AI NAV_TAG_VOLUME_LAYER_COST_BOTS NONE NOP NearPickupSpawnChance OverchargeData PATCHED_USER_SETTINGS POSITION_LOOKUP PaintingOrder PaintingPackageNames Paintings PassiveAbilityEngineer PassiveAbilityNecromancerCharges PassiveAbilityQuestingKnight PassiveAbilityRatOgre PassiveAbilityThornsister PassiveAbilityWarriorPriest PatrolFormationSett
+engine stub paths touched (top 45): Unit.material_id() x28; Unit.alive x1; Unit.node x1; Unit.world_position x1; Unit.get_data x1; GameSession.set_game_object_field x1; Unit.set_flow_variable x1; Managers.localizer x1; GwNavQueries.triangle_from_position x1; Unit.animation_set_variable x1; GameSession.game_object_field x1; EngineOptimized.closest_point_on_line x1; Unit.flow_event x1; GwNavQueries.inside_position_from_outside_position x1; Unit.animation_event x1; Unit.local_rotation x1; BackendUtils.get_total_power_level x1; Unit.material_id x1
+first failure: scripts/settings/conflict_settings: scripts/settings/conflict_settings.lua:5554: bad argument #1 to 'pairs' (table expected, got nil)
+first trace: scripts/settings/conflict_settings.lua:5554: bad argument #1 to 'pairs' (table expected, got nil)
+stack traceback:
+	[C]: in function 'pairs'
+	scripts/settings/conflict_settings.lua:5554: in main chunk
+	[C]: in function 'xpcall'
+	...aude\vt2-audit-20261113\scripts\B2_engfree\probe.lua.txt:38: in function <...aude\vt2-audit-20261113\scripts\B2_engfree\probe.lua.txt:26>
+	(tail call): ?
+	[C]: in function 'xpcall'
+	...aude\vt2-audit-20261113\scripts\B2_engfree\probe.lua.txt:117: in main chunk
+	[C]: ?
+explicit stubs declared: 86
+  PLATFORM BUILD IS_WINDOWS IS_CONSOLE IS_LINUX IS_XB1 IS_PS4 IS_NOT_CONSOLE IS_NOT_WINDOWS IS_NOT_LINUX IS_NOT_XB1 IS_NOT_PS4 HAS_STEAM DEDICATED_SERVER LEVEL_EDITOR_TEST LAUNCH_MODE script_data GLOBAL_MUSIC_WORLD Application Managers Math Wwise WwiseWorld Unit World Level Actor Mover Camera Network GameSession LanClient Steam SteamHelper Script Gui Material Mesh Window Keyboard Mouse Pad1 PhysicsWorld GwNavQueries GwNavWorld EngineOptimized EngineOptimizedExtensions Profiler Renderer ShadingEnvironment LineObject Light Localizer NetworkConstants Crashify Development ResourcePackage Viewport Clipboard Stats Achievement Friends BackendUtils Presence Benchmark Vector3Aux Matrix4x4 Rectangle2D bit Vector3 Quaternion Vector3Box QuaternionBox Vector2 Vector4 Matrix4x4Box GameModeInnVs GameModeVersus Color Localize printf print_warning print_error cprint cprintf visual_assert

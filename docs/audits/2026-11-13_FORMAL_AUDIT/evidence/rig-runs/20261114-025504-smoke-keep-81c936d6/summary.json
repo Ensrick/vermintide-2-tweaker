@@ -1,0 +1,26 @@
+{
+  "run": "20261114-025504-smoke-keep-81c936d6",
+  "name": "smoke-keep",
+  "nonce": "81c936d6",
+  "verdict": "HOST-TIMEOUT-KILLED",
+  "exit": 2,
+  "isolation": "OK",
+  "private_desktop": true,
+  "renderer": "dx12",
+  "arguments": "-eac-untrusted --bundle-dir ../bundle --ini settings --silent-mode -skip-splash -vt2-test-run 81c936d6",
+  "run_end_seen": false,
+  "marks_seconds": {
+    "log_created": 0.5,
+    "realm": 27.1,
+    "splash": 27.1,
+    "title": 27.1,
+    "ended": 540.6
+  },
+  "cases": [],
+  "script_errors": [],
+  "evidence_lines": 0,
+  "log": "%USERPROFILE%\\.claude\\vt2-harness\\runs\\20261114-025504-smoke-keep-81c936d6\\console.log",
+  "notes": [
+    "private desktop windows at end: "
+  ]
+}

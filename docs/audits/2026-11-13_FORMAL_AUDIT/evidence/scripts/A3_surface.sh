@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# A3 helper: engine contact surface counts for a mod dir (read-only greps)
+REPO=<repos>/vermintide-2-tweaker
+d="$1"
+cd "$REPO/$d" || exit 1
+cnt() { grep -rhoE --include='*.lua' "$1" . | wc -l; }
+echo "== $d"
+echo "mod:hook(           $(cnt '\bmod:hook\(')"
+echo "mod:hook_safe(      $(cnt '\bmod:hook_safe\(')"
+echo "mod:hook_origin(    $(cnt '\bmod:hook_origin\(')"
+echo "any :hook*( (non-mod receiver incl) $(cnt ':hook(_safe|_origin)?\(')"
+echo "mod:hook_enable/disable $(cnt ':hook_(enable|disable)\(')"
+echo "network_register    $(cnt ':network_register\(')"
+echo "network_send        $(cnt ':network_send\(')"
+echo "mod:command(        $(cnt ':command\(')"
+echo "mod:set(            $(cnt '\bmod:set\(')"
+echo "mod:get(            $(cnt '\bmod:get\(')"
+echo "_G. writes approx   $(cnt '_G\.[A-Za-z_0-9]+ *=[^=]')"
+echo "rawset(             $(cnt '\brawset\(')"
+echo "rawget(_G           $(cnt 'rawget\(_G')"
+echo "pcall(              $(cnt '\bpcall\(')"
+echo "xpcall(             $(cnt '\bxpcall\(')"
+echo "get_mod(            $(cnt '\bget_mod\(')"
+echo "ItemMasterList[..]= $(cnt 'ItemMasterList\[[^]]+\] *=[^=]')"
+echo "NetworkLookup refs  $(cnt 'NetworkLookup')"
+echo "WeaponSkins refs    $(cnt 'WeaponSkins')"
+echo "Unit.set_material   $(cnt 'Unit\.set_material')"
+echo "Material.set_       $(cnt 'Material\.set_[a-z_0-9]+')"
+echo "Application.set_resource... $(cnt 'Application\.[a-z_]+')"
+echo "Managers.package    $(cnt 'Managers\.package')"
+echo "_rt_register(       $(cnt '_rt_register\(')"

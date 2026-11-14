@@ -1,0 +1,61 @@
+static-literal hook targets: 878  total hook call sites: 1064  non-literal (dynamic/loop-registered) sites: 38
+targets hooked by >=2 active mods: 88   by >=3: 28
+  8  _G.Localize  <- career:hook, chaos_wastes:hook, character_weapon_variants:hook, cosmetics:hook, crafting_in_modded:hook, enemy:hook, general:hook, weapons_of_chaos:hook
+  8  PlayerManager.add_remote_player  <- career:hook_safe, chaos_wastes:hook_safe, character_weapon_variants:hook_safe, cosmetics:hook_safe, enemy:hook_safe, event:hook_safe, general:hook_safe, weapon:hook_safe
+  6  GameNetworkManager.remove_peer  <- career:hook_safe, chaos_wastes:hook, character_weapon_variants:hook_safe, enemy:hook_safe, event:hook_safe, weapon:hook_safe
+  4  MenuWorldPreviewer._spawn_item  <- character_weapon_variants:hook, cosmetics:hook, weapon:hook, weapons_of_chaos:hook
+  4  LootItemUnitPreviewer.spawn_units  <- character_weapon_variants:hook, cosmetics:hook, crafting_in_modded:hook, weapons_of_chaos:hook
+  4  GearUtils.spawn_inventory_unit  <- character_weapon_variants:hook, cosmetics:hook, weapon:hook, weapons_of_chaos:hook
+  4  SimpleInventoryExtension._wield_slot  <- character_weapon_variants:hook, cosmetics:hook_safe, weapon:hook, weapons_of_chaos:hook
+  4  BackendUtils.get_item_units  <- character_weapon_variants:hook, cosmetics:hook, crafting_in_modded:hook, weapons_of_chaos:hook
+  3  DamageUtils.apply_buffs_to_damage  <- career:hook, enemy:hook, general:hook
+  3  CameraManager.shading_callback  <- chaos_wastes:hook_safe, event:hook_safe, verminious_dreams_lighting:hook_safe
+  3  GameNetworkManager.hot_join_sync  <- chaos_wastes:hook, general:hook, weapon:hook
+  3  DeusMechanism._setup_run  <- chaos_wastes:hook, character_weapon_variants:hook, weapons_of_chaos:hook
+  3  IngamePlayerListUI._draw  <- chaos_wastes:hook_safe, event:hook_safe, gui:hook_safe
+  3  GearUtils.create_equipment  <- chaos_wastes:hook, character_weapon_variants:hook, cosmetics:hook
+  3  SimpleHuskInventoryExtension._reapply_fade  <- character_weapon_variants:hook, cosmetics:hook, weapons_of_chaos:hook
+  3  SimpleHuskInventoryExtension._wield_slot  <- character_weapon_variants:hook, cosmetics:hook, weapon:hook_safe
+  3  LoadoutUtils.sync_loadout_slot  <- character_weapon_variants:hook, cosmetics:hook, weapons_of_chaos:hook
+  3  StateInGameRunning.on_enter  <- character_weapon_variants:hook_safe, gui:hook_safe, weapons_of_chaos:hook_safe
+  3  TeamPreviewer._spawn_hero  <- character_weapon_variants:hook, cosmetics:hook, weapons_of_chaos:hook
+  3  HeroPreviewer._spawn_item  <- character_weapon_variants:hook, cosmetics:hook, weapons_of_chaos:hook
+  3  LootItemUnitPreviewer.load_package  <- character_weapon_variants:hook, cosmetics:hook, weapons_of_chaos:hook
+  3  BackendInterfaceCraftingPlayfab.get_unlocked_weapon_skins  <- character_weapon_variants:hook_safe, cosmetics:hook_safe, crafting_in_modded:hook_safe
+  3  MenuWorldPreviewer.equip_item  <- character_weapon_variants:hook_safe, cosmetics:hook, weapon:hook_safe
+  3  HeroWindowItemCustomization._enable_craft_button  <- cosmetics:hook, crafting_in_modded:hook, modded_progression:hook
+  3  HeroWindowItemCustomization._update_state_craft_button  <- cosmetics:hook, crafting_in_modded:hook, modded_progression:hook
+  3  HeroPreviewer.equip_item  <- cosmetics:hook, weapon:hook, weapons_of_chaos:hook
+  3  HeroView.on_enter  <- crafting_in_modded:hook, general:hook, gui:hook_safe
+  3  ActionSweep.client_owner_start_action  <- gui:hook_safe, weapon:hook, weapons_of_chaos:hook
+  2  PlayerUnitHealthExtension.add_heal  <- career:hook, gui:hook
+  2  CareerExtension.current_ability_cooldown  <- career:hook, gui:hook
+  2  DeusChestExtension.can_be_unlocked  <- chaos_wastes:hook, weapons_of_chaos:hook
+  2  PlayerBotBase.update  <- chaos_wastes:hook_safe, general:hook_safe
+  2  GameModeDeus.evaluate_end_conditions  <- chaos_wastes:hook, general:hook
+  2  BuffExtension.add_buff  <- chaos_wastes:hook, general:hook
+  2  MutatorHandler._activate_mutator  <- chaos_wastes:hook, event:hook
+  2  ConflictDirector._post_spawn_unit  <- chaos_wastes:hook, enemy:hook_safe
+  2  VMFOptionsView.callback_setting_changed  <- chaos_wastes:hook, weapon:hook
+  2  IngamePlayerListUI._setup_deed_reward_data  <- chaos_wastes:hook_safe, event:hook_safe
+  2  DeusWeaponGeneration.generate_item_from_item_key  <- chaos_wastes:hook, weapons_of_chaos:hook
+  2  DeusWeaponGeneration.upgrade_item  <- chaos_wastes:hook, weapons_of_chaos:hook
+  2  MutatorHandler.init  <- chaos_wastes:hook, event:hook_safe
+  2  SimpleInventoryExtension.wield  <- character_weapon_variants:hook_safe, cosmetics:hook_safe
+  2  WeaponUnitExtension._play_3p_anim  <- character_weapon_variants:hook, weapons_of_chaos:hook
+  2  PackageManager.unload  <- character_weapon_variants:hook, gui:hook_safe
+  2  GearUtils.link_units  <- character_weapon_variants:hook, weapon:hook
+
+same mod hooking the same literal (Class, method) more than once (VMF drops/rehooks): 10
+   4 chaos_wastes_tweaker_dev DeusChestExtension.open_chest ['hook', 'hook', 'hook', 'hook']
+   3 character_weapon_variants SimpleInventoryExtension.wield ['hook_safe', 'hook_safe', 'hook_safe']
+   3 crafting_in_modded_dev klass.on_enter ['hook_safe', 'hook_safe', 'hook']
+   2 enemy_tweaker _G.Localize ['hook', 'hook']
+   2 chaos_wastes_tweaker_dev DeusRunController.setup_run ['hook', 'hook_safe']
+   2 cosmetics_tweaker GearUtils.create_equipment ['hook', 'hook']
+   2 weapon_tweaker MenuWorldPreviewer.equip_item ['hook_safe', 'hook_safe']
+   2 general_tweaker_dev AISystem.update_brains ['hook', 'hook']
+   2 gui_tweaker_dev HeroWindowLoadoutConsole._customize_item ['hook', 'hook']
+   2 gui_tweaker_dev HeroWindowPanelConsole.on_enter ['hook_safe', 'hook_safe']
+
+most-hooked classes: [('HeroWindowItemCustomization', 30), ('BackendInterfaceWeavesPlayFab', 30), ('Runtime.CLASS', 22), ('SimpleInventoryExtension', 18), ('DeusRunController', 17), ('LootItemUnitPreviewer', 17), ('PlayFabMirrorAdventure', 15), ('HeroWindowWeaveProperties', 15), ('DeusChestExtension', 14), ('BTConditions', 14), ('PlayerManager', 13), ('DamageUtils', 13), ('GearUtils', 13), ('MenuWorldPreviewer', 13), ('BackendInterfaceItemPlayfab', 13), ('SimpleHuskInventoryExtension', 12), ('HeroPreviewer', 12), ('WINDOW', 12), ('GameNetworkManager', 11), ('GenericAmmoUserExtension', 11), ('HeroWindowWeaveForgeWeapons', 11), ('BackendInterfaceQuestsPlayfab', 11), ('_G', 10), ('MutatorHandler', 10), ('Unit', 10)]

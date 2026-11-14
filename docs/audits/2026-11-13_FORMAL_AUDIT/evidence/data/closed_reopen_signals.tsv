@@ -1,0 +1,614 @@
+score	number	author	closed	reason	open_issue_refs	has_confirmation_text	nonowner_comments	labels	title
+15	731	Ensrick	2026-07-18	completed	3	0	0	bug,crash,Tweaker: General,verify-fix,0-critical,vanilla-bug,coop-required	Client CTD on disconnect: VOIP channel nil
+15	495	Ensrick	2026-07-14	completed	12	0	0	bug,crash,CWV,cross-mod,verify-fix,0-critical,coop-required	cwv skins leak on resync and equipment RPCs
+15	409	Ensrick	2026-07-07	completed	5	0	0	bug,CWV,verify-fix,2-moderate	cwv: Old Musket mis-posed on inventory preview only
+15	387	Ensrick	2026-07-07	completed	3	0	0	bug,Tweaker: GUI,verify-fix,diagnostics-armed,2-moderate	gut: switching loadouts does not change weapons
+15	261	Ensrick	2026-07-06	completed	3	0	0	bug,Tweaker: General,diagnostics-armed	gt_dev: split follow mode - bots pursue objectives outside the follow radius, then get leash-yanked; radius should constrain ALL bot behavior
+15	157	Ensrick	2026-07-04	completed	3	0	0	bug,Tweaker: Chaos Wastes,verify-fix	wt + ct: cross-character ranged weapon (fireball staff) on Kruber CTDs CW loadout inventory — BackendInterfaceDeusBase item doesn't exist
+14	174	Ensrick	2026-07-03	completed	3	0	0	cim,Tweaker: Cosmetics,Progression,cross-mod,diagnostics-armed	Bot loadout replaced on startup by base blacksmith (5-power) items in modded realm — something persists/restores loadouts on exit
+13	1651	Ensrick	2026-09-26	completed	3	1	1	bug,Tweaker: GUI,verify-fix,2-moderate	gut loc format check throws in hook_chain
+13	609	Ensrick	2026-07-15	completed	3	1	0	bug,Tweaker: Cosmetics,cross-mod,verify-fix,2-moderate	Mods query players after network teardown
+13	536	Ensrick	2026-07-13	completed	3	1	0	bug,crash,Tweaker: Weapons,verify-fix,2-moderate,coop-required	wt: wh careers missing empty-wield network patch
+13	506	Ensrick	2026-07-14	completed	3	1	0	bug,cross-mod,verify-fix,2-moderate,coop-required	Shared parity lib: callbacks read stale applied_state
+13	406	Ensrick	2026-07-19	completed	3	1	0	bug,crash,Tweaker: Chaos Wastes,verify-fix,0-critical,coop-required	ct: client CTD on kill with kill-heal boon
+13	386	Ensrick	2026-07-06	completed	3	1	1	bug,verify-fix,0-critical,Tweaker: Events	event_tweaker: high_intensity injection kills ConflictDirector.init - no AI, no boss
+13	275	Ensrick	2026-07-06	completed	5	1	1	bug,Tweaker: GUI,Tweaker: General,verify-fix,0-critical	gut: The Enchanter's Lair (Drachenfels 3) - Skip Cutscenes auto-skips Nurgloth's phase cutscene, boss jumps to final phase and softlocks (health stuck at phase-1 amount)
+13	199	Ensrick	2026-07-02	completed	3	1	0	crash,verify-fix	cosmetics_tweaker: crash equipping CWV musket — missing fallback texture T_Texture_NR in embedded Material-Hijack
+13	156	Ensrick	2026-07-05	completed	5	1	0	bug,Tweaker: Chaos Wastes,verify-fix,diagnostics-armed	ct_dev: Horn of Magnus (magnus_belakor_path1) sometimes spawns NO pickups (health/ammo/tomes/grimoires) when injected into CW
+13	103	Ensrick	2026-07-03	completed	3	1	0	bug,Tweaker: Chaos Wastes,verify-fix	ct_dev: multi-use temper (upgrade) altar still flips to the 'used-up'/looted model on each use (re-arm lua_update re-fire doesn't revert the collected mesh)
+12	737	Ensrick	2026-07-19	completed	9	0	0	bug,crash,Tweaker: Cosmetics,CWV,cross-mod,0-critical,Fixed	Score sync CTD: modded skin index on wire
+12	539	Ensrick	2026-07-14	completed	4	0	0	bug,crash,Tweaker: GUI,cross-mod,0-critical,Fixed	Mid-mission Customize crashes: gsub on nil ItemId
+12	438	RainReligion	2026-07-16	completed	3	0	1	bug,Tweaker: GUI,3-low,vanilla-bug,Fixed	"On Yer Feet, Mates!" Talent Not Giving Credit to the Kruber Player for Revives on the Scoreboard
+12	425	Ensrick	2026-07-13	completed	8	0	0	bug,crash,Tweaker: Career,cross-mod,0-critical,Fixed	crt: rework talent buffs CTD non-crt peers
+12	379	Ensrick	2026-07-06	completed	2	0	0	bug,Tweaker: GUI,verify-fix,2-moderate	gut: hovered loadout preview stale after in-view equip
+12	337	Ensrick	2026-07-14	completed	3	0	1	bug,Tweaker: General,2-moderate,Fixed	gt_dev: /recall_position_N teleports but reports 'teleport failed' - POSITION_LOOKUP dead temporary in chat-command phase
+12	276	shorkington-1	2026-07-06	completed	4	0	0	duplicate,crash,0-critical	game log.
+12	268	Ensrick	2026-07-06	completed	4	0	0	bug,Tweaker: Cosmetics,2-moderate,Fixed	cosmetics/LA: recv/retry re-apply pulses one peer's shield onto MULTIPLE units - including other characters' (bot Saltzpyre shield mesh-swapped to a Kruber empire shield)
+12	267	Ensrick	2026-07-06	completed	5	0	0	bug,Tweaker: Cosmetics,2-moderate,Fixed	cosmetics/LA: hot-join gets NO existing state - and the join-time rebroadcast loses the same pre-ingame race as #233 (17ms)
+12	264	Ensrick	2026-07-06	completed	4	0	0	bug,Tweaker: Cosmetics,2-moderate,Fixed	cosmetics/LA: switching weapons mid-mission then back to an LA-cosmetic'd weapon does not restore the cosmetic on other peers' screens
+12	155	Ensrick	2026-07-19	completed	7	0	0	bug,crash,Tweaker: GUI,0-critical,Fixed	Prevent In-Mission Cosmetics Atlas Crash
+12	66	Ensrick	2026-05-29	completed	3	0	0	bug	ct: curse-tint doesn't apply on native CW path missions (Devious Delvings dlc_termite_2_khorne_path1 has no khorne lighting)
+11	655	Ensrick	2026-07-19	completed	3	0	0	cim,cross-mod,feature,2-moderate,Fixed,WOC	Add Blightreaper poison and health-curse traits
+11	477	Ensrick	2026-07-12	completed	2	0	0	verify-fix,0-critical	Logs related to a lot of CWV testing and other tests for issues recently published.
+11	475	Ensrick	2026-07-13	completed	5	0	0	regression,Tweaker: Cosmetics,Tweaker: Weapons,CWV,cross-mod,0-critical	Wielding the Bretonian Longsword and Shield on Kruber uses the wrong weapon
+11	89	Ensrick	2026-07-14	completed	4	0	0	enhancement,Tweaker: Cosmetics,not-started	cosmetics_tweaker: port cim's in-mission preview-level mount-fix to enable cosmetics-only customize in-mission
+11	84	Ensrick	2026-07-02	completed	2	0	0	enhancement,Tweaker: GUI,cim,cross-mod,verify-fix	gut/cim: defer in-mission weapon-cosmetic change via the equipment gear/cog icon
+11	44	Ensrick	2026-07-03	completed	2	0	0	enhancement,Tweaker: General,verify-fix	Propagate RPC schema_version pattern to general_tweaker (AI-control RPC)
+10	1652	Ensrick	2026-09-26	completed	2	1	1	bug,Tweaker: GUI,verify-fix,2-moderate	gut keep branch skips transition_with_fade
+10	1637	RainReligion	2026-09-21	completed	3	1	8	bug,crash,regression,Tweaker: GUI,0-critical,Fixed,architecture	Sudden crash - tried to wield default slot "slot_melee" for bw_unchained that contained no weapon
+10	883	Ensrick	2026-07-21	completed	3	1	0	bug,Tweaker: Cosmetics,2-moderate,Fixed	Per-instance LA cosmetic inventory icons missing
+10	835	Ensrick	2026-07-21	completed	6	1	0	bug,cross-mod,1-major,Fixed,architecture	Shared appearance lib rejects callable-table Vector3 constructor
+10	828	Ensrick	2026-07-21	completed	3	1	0	bug,regression,Tweaker: Chaos Wastes,2-moderate,Fixed	[CT] Starting shop defaults on
+10	776	RainReligion	2026-07-21	completed	3	1	5	bug,crash,Tweaker: Career,0-critical,Fixed	[Career] Buff catalog mismatch crashes peers
+10	742	Ensrick	2026-07-19	completed	7	1	0	bug,crash,CWV,0-critical,Fixed	Old Musket texture apply lacks residency gate
+10	735	Ensrick	2026-07-21	completed	4	1	0	bug,Tweaker: Weapons,1-major,Fixed	Shield-only rotation also applied to sword
+10	711	Ensrick	2026-07-18	completed	4	1	0	bug,cim,Tweaker: Cosmetics,cross-mod,1-major,Fixed	Athanor preview bleeds LA and Bretonnian shields
+10	698	Ensrick	2026-07-19	completed	7	1	0	bug,Tweaker: Cosmetics,cross-mod,0-critical,Fixed	Husk repaints GK armor on Foot Knight
+10	690	Ensrick	2026-07-18	completed	6	1	0	bug,regression,0-critical,Fixed,WOC	Blightreaper missing
+10	654	Ensrick	2026-07-17	completed	7	1	0	bug,crash,0-critical,Fixed,WOC	WOC: Blightreaper loadout sync crashes on woc_power_vs_order property
+10	644	Ensrick	2026-07-17	completed	3	1	0	bug,CWV,2-moderate	Align Combat Style Cycle Controls
+10	617	RainReligion	2026-07-16	completed	4	1	1	bug,crash,cim,CWV,cross-mod,0-critical,Fixed	Custom preview/icon resources crash CIM Athanor item selector
+10	589	Ensrick	2026-07-14	completed	3	1	0	bug,crash,Progression,0-critical	mp: Login reward claim forces exit
+10	574	Ensrick	2026-07-14	completed	5	1	0	bug,Tweaker: Cosmetics,2-moderate	cosmetics: RGB glow edits never expose Apply or persist per variant
+10	569	Ensrick	2026-07-13	completed	3	1	0	bug,Tweaker: Weapons,2-moderate	wt: Saltzpyre weapons using Warrior Priest greathammer anims face backwards in 3P
+10	563	Ensrick	2026-07-13	completed	4	1	0	bug,cim,Tweaker: Cosmetics,cross-mod,2-moderate	Primary weapon illusion changes do not persist
+10	530	Ensrick	2026-07-13	completed	4	1	0	crash,Tweaker: GUI,Tweaker: Chaos Wastes,0-critical,Fixed	In the chaos wastes the crafting tab shouldn't be available on the pause menu. It is on holseher's map.
+10	524	Ensrick	2026-07-21	completed	4	1	0	bug,cim,CWV,0-critical,Fixed	Crafted CWV items are creating more base-item instances.
+10	520	Ensrick	2026-07-14	completed	4	1	0	bug,Tweaker: GUI,Tweaker: Cosmetics,1-major,Fixed	Loremaster Outfits/Hats last equipped are not saved
+10	514	Ensrick	2026-07-14	completed	6	1	0	bug,Tweaker: Cosmetics,CWV,1-major,Fixed	Using Sword and Mace with LA cosmetics on shield.
+10	513	Ensrick	2026-07-14	completed	6	1	0	bug,Tweaker: Cosmetics,2-moderate,Fixed	Model/Husk score screen doesn't have the loremaster override skin on.
+10	487	Ensrick	2026-07-19	completed	4	1	0	bug,Tweaker: Chaos Wastes,0-critical,Fixed,architecture	Chaos Wastes game Freeze
+10	484	Ensrick	2026-07-18	completed	7	1	0	bug,CWV,0-critical	Yet more CWV Musket issues
+10	483	Ensrick	2026-07-18	completed	4	1	0	bug,Tweaker: Cosmetics,CWV,2-moderate,Fixed	Replicate and customize dual-weapon cosmetics
+10	478	Ensrick	2026-07-19	completed	5	1	0	bug,Tweaker: Cosmetics,Tweaker: Weapons,CWV,cross-mod,1-major,Fixed	dr_deus_01 husk spawn fails, weapon invisible
+10	455	RainReligion	2026-07-13	completed	3	1	0	crash,0-critical,Tweaker: Events,Fixed	"Multiple Bosses" Mutator Causes Crash on Adventure Mode
+10	435	Ensrick	2026-07-19	completed	3	1	0	bug,2-moderate,Fixed	Scope Dynamic Portraits Per Player
+10	431	Ensrick	2026-07-19	completed	7	1	0	bug,crash,Tweaker: Weapons,cross-mod,1-major,Fixed	Prevent damage-profile crashes in mixed lobbies
+10	422	Ensrick	2026-07-13	completed	7	1	0	bug,crash,0-critical,Fixed,WOC	WOC: Blightreaper CTDs non-WOC peers on equip
+10	403	Ensrick	2026-07-13	completed	4	1	0	bug,crash,CWV,0-critical,Fixed	CWV v0.1.367 boot fatal: residency loads mod-local mesh
+10	397	Ensrick	2026-07-13	completed	5	1	0	bug,CWV,1-major	CWV transforms (offset/scale/rotation) not applied on husks
+10	396	Ensrick	2026-07-18	completed	6	1	0	bug,wontfix,CWV,2-moderate	CWV Imperial Longsword invisible on client husk view
+10	392	Ensrick	2026-07-14	completed	11	1	0	bug,CWV,1-major,Fixed	CWV blacksmith/template items resolve to base weapon
+10	390	Ensrick	2026-07-13	completed	7	1	0	bug,cim,CWV,1-major,Fixed	CIM crafts CWV weapons as base vanilla item
+10	372	Ensrick	2026-07-06	completed	2	1	0	bug,crash,Tweaker: GUI,verify-fix,0-critical	CRASH (gut loadout manager): hovering a saved loadout in the keep fatals in vanilla get_ui_information_from_item (nil equipment item; gut should own modded loadouts)
+10	368	Ensrick	2026-07-21	completed	3	1	0	bug,Tweaker: Weapons,CWV,2-moderate,Fixed	Make WT Control CWV Availability
+10	363	Ensrick	2026-07-06	completed	5	1	0	bug,crash,Tweaker: GUI,cim	[crash] gut/cim: in-mission Crafting Salvage page crashes - gui_store_menu_atlas not in ingame Gui (draw fatal)
+10	294	Ensrick	2026-07-06	completed	6	1	0	bug,crash,Tweaker: Chaos Wastes,cross-mod,0-critical	[crash] ct: CTD spawning skulls_2023 'pup_skull_of_fury' pickup via _spawn_pickup hook — entity_manager2.lua:114 table index is nil
+10	280	Ensrick	2026-07-13	completed	5	1	0	bug,crash,0-critical,Fixed	CWV: client CTD equipping Kruber Axe & Shield variant (cwv_es_axe_shield_001) — husk cross-char weapon unit non-resident, equipment.wielded_slot nil in start_weapon_fx
+10	234	Ensrick	2026-07-07	completed	4	1	0	bug,Tweaker: Cosmetics,Fixed	cosmetics/LA: mid-mission LA skin-to-skin swap fails when the shield MODEL changes - mesh swap only happens at unit spawn
+10	197	Ensrick	2026-07-07	completed	2	1	0	bug,regression,Tweaker: Weapons,verify-fix	wt: 27x '(localize): localization file was not loaded' flood — picker resolves names via mod:localize before loc is registered
+10	150	Ensrick	2026-07-19	completed	3	1	0	bug,crash,cim,0-critical,Fixed	Guard Cosmetic Customization Preview State
+10	106	Ensrick	2026-07-02	completed	2	1	0	bug,Tweaker: GUI,verify-fix,diagnostics-armed	gut (cutscene skip): "Blood in the Darkness" (Drachenfels, dlc_castle) cutscene stuck in Chaos Wastes — black bars + forced camera + loading icon, skip broken
+10	104	Ensrick	2026-07-06	completed	4	1	0	bug,Tweaker: Chaos Wastes	ct_dev: consistent HOST-side FPS drops on injected adventure maps (repro: 'Blood in the Darkness' / dlc_bastion) — suspect per-frame curse-lighting shading_callback
+10	100	Ensrick	2026-07-04	completed	4	1	0	bug,regression,Tweaker: Chaos Wastes,Fixed	ct_dev: bot weapon-upgrade mirror gives bots one rarity tier ABOVE host (reads post-re-arm-bump self._rarity)
+10	86	Ensrick	2026-07-05	completed	2	1	0	bug,cim,verify-fix	cim: Athanor 'add stamina' property consumes more than 2 inventory slots (should use exactly 2 empty slots)
+10	83	Quesant	2026-07-19	completed	6	1	1	bug,crash,regression,cim,0-critical,Fixed	Crafting in Modded v0.8.7 - Crash in map when opening the UI
+10	59	Ensrick	2026-07-04	completed	2	1	0	bug,Tweaker: General,verify-fix	gt: Drachenfels boss BT crash on CW dlc_castle_*_path missions — bt_conditions.lua:309 attempt to compare nil with number
+9	1360	Ensrick	2026-09-23	completed	3	1	2	cim,feature,2-moderate,Fixed	cim: browse and import ranalds.gift builds in-game
+9	1155	Ensrick	2026-08-21	completed	6	1	4	enhancement,refactor,Tweaker: Cosmetics,CWV,cross-mod,1-major,architecture	Appearance decision layer: pilot family behind descriptor
+9	648	Ensrick	2026-07-17	completed	4	1	0	CWV,feature,2-moderate,Fixed	Tune Bretonnian Longsword Greatsword Combat Styles
+9	637	Ensrick	2026-07-19	completed	4	1	0	cim,cross-mod,feature,1-major,Fixed,WOC	Make WOC items unique inventory relics
+9	626	Ensrick	2026-07-21	completed	3	1	0	enhancement,1-major,Tweaker: Events,Fixed	ET: Dissect Feast mission activation
+9	620	Ensrick	2026-07-16	completed	7	1	1	CWV,cross-mod,feature,Fixed	Add per-item combat style switching
+9	616	Ensrick	2026-07-15	completed	2	1	0	enhancement,Tweaker: Weapons,verify-fix,3-low	Add scaling controls to dev Weapon Hold-Pose tuner
+9	611	RainReligion	2026-07-19	completed	3	1	3	Tweaker: Weapons,feature,1-major,Fixed	Add weapon-availability master toggles
+9	606	Ensrick	2026-07-15	completed	2	0	1	bug,Tweaker: Weapons,2-moderate,Fixed	Bardin Crowbill inventory preview loses idle
+9	587	Ensrick	2026-07-13	completed	2	0	0	bug,Tweaker: Weapons,2-moderate	WT: sync tuned weapon transforms
+9	583	Ensrick	2026-07-19	completed	3	1	0	enhancement,Tweaker: Cosmetics,CWV,2-moderate,Fixed	Cosmetics: customize dual-weapon offhands
+9	578	Ensrick	2026-07-19	completed	3	1	0	enhancement,Progression,2-moderate,Fixed	Label and Refresh Local Silver Shillings
+9	568	Ensrick	2026-07-13	completed	2	0	0	bug,crash,Progression,0-critical,Fixed	Modded Progression: simulated daily claim calls PlayFab and forces game exit
+9	437	RainReligion	2026-07-19	completed	6	1	0	enhancement,Tweaker: GUI,3-low,Fixed	Preserve Adventure Scoreboards Across Rejoins
+9	366	Ensrick	2026-07-16	completed	3	1	1	enhancement,Tweaker: Career,3-low,Fixed	[crt] Bardin ale buff should decay one stack at a time instead of dropping all 3 at once
+9	320	Ensrick	2026-07-07	completed	2	1	0	enhancement,Tweaker: General,verify-fix,1-major,2-moderate	Bots using potions
+9	319	Ensrick	2026-07-06	completed	3	1	0	Tweaker: Weapons,0-critical	Axe+Falchion on Kruber; Larger Issue FAILING TO GET ANIMATIONS PROPERLY FROM CONFIG
+9	297	Ensrick	2026-07-06	completed	7	1	1	enhancement,Tweaker: General,feature,1-major	Bot Behaivor Improvement Options
+9	286	Ensrick	2026-07-14	completed	2	0	0	bug,Tweaker: Weapons,2-moderate,Fixed	wt: Greataxe on Saltzpyre uses Greatsword 3P anims — should use Warrior Priest greathammer (to_2h_hammer_priest)
+9	265	Ensrick	2026-07-06	completed	1	0	0	bug,Tweaker: Cosmetics,verify-fix,2-moderate	cosmetics/LA: reverting from an LA cosmetic back to a vanilla shield never propagates - other peers keep rendering the stale LA cosmetic
+9	216	Ensrick	2026-07-02	completed	1	0	0	bug,crash,Tweaker: GUI,verify-fix	gut 3P camera: create_screen_particles nil-return crashes overcharge screen effect + unguarded vortex-exit stop calls (set_particles_material_scalar / stop_spawning_particles nil id)
+9	198	mattyjacks	2026-07-05	completed	2	0	0	bug	Training Dummy Gets Hit Many Times by Same Attack
+9	175	Ensrick	2026-07-02	completed	5	1	0	Tweaker: GUI	gut: save/load loadouts in MODDED realm via the game's native loadout system, modded-scoped (no effect on non-modded)
+9	164	Ensrick	2026-07-03	completed	3	1	0	Tweaker: GUI	gut Mod Tweaker: sliders must respect a setting's custom increment/step (e.g. CW starting pilgrim's coin +25)
+9	96	Ensrick	2026-07-16	completed	4	1	1	enhancement,cim,Fixed	cim: gate the in-mission 'Allow standard crafting bench in mission' option on GUI Tweaker (gut) presence
+9	68	Ensrick	2026-07-05	completed	1	0	0	bug,Tweaker: Chaos Wastes,diagnostics-armed	ct: native CW Belakor path variants of Fatshark DLCs render as altar/shrine models on Holseher's map (no mission icon, no curse halo)
+9	34	Ensrick	2026-05-25	completed	2	0	0	bug	ct: ct_meta_ammo Quiver Cascade boon — max_stacks = math.huge can overflow _max_ammo to ∞
+8	599	Ensrick	2026-07-19	completed	2	0	0	enhancement,CWV,2-moderate,Fixed	Distinguish one-handed maces and hammers
+8	303	Ensrick	2026-07-19	completed	2	0	0	Tweaker: General,feature,1-major,Fixed	Freeze AI
+7	1509	Level12Lobster	2026-09-04	completed	2	1	2	bug,Tweaker: General,2-moderate,Fixed,public-release	Level control triggers backend challenge rejection
+7	1151	RainReligion	2026-08-30	completed	2	1	1	bug,Tweaker: GUI,3-low,vanilla-bug,Fixed	Scoreboard "Damage Taken" only provides green circle credit to players that took no damage
+7	825	Ensrick	2026-07-21	completed	2	1	0	bug,regression,Tweaker: Chaos Wastes,2-moderate,Fixed	[CT] Make trial activation cost absolute
+7	701	Ensrick	2026-07-19	completed	2	1	0	bug,Tweaker: Weapons,2-moderate,Fixed	Apply recorded Kruber crossbow left-hand offsets
+7	640	Ensrick	2026-07-19	completed	2	1	0	bug,crash,0-critical,Tweaker: Enemies,Fixed	enemy: Deleted poison source crashes damage hook
+7	618	Ensrick	2026-07-15	completed	1	1	0	bug,cim,verify-fix	CIM add modded salvage autofill
+7	597	Ensrick	2026-07-15	completed	2	1	0	bug,enhancement,crash,Tweaker: Weapons,CWV,0-critical,Fixed	CWV: replace Poleaxe with Kruber Greataxe models
+7	593	Ensrick	2026-07-15	completed	2	1	0	bug,regression,Tweaker: Weapons,CWV,2-moderate,Fixed	WT conditionally yields native Axe+Shield
+7	588	Ensrick	2026-07-17	completed	2	1	0	bug,CWV,0-critical,Fixed	CWV: Dual Maces crash clients on wield
+7	586	Ensrick	2026-07-17	completed	2	1	0	bug,regression,CWV,0-critical,Fixed	CWV: Dual Axes state-machine crash
+7	576	Ensrick	2026-07-17	completed	2	1	0	bug,Tweaker: Weapons,2-moderate	wt: audit missing Saltzpyre animation-tuner ports; crowbill falsely confirmed
+7	556	Ensrick	2026-07-17	completed	2	1	2	bug,Tweaker: Chaos Wastes,2-moderate,Fixed	Granting talents as starting boons
+7	528	Ensrick	2026-07-19	completed	2	1	0	bug,regression,Tweaker: GUI,0-critical,Fixed	Crosshair Kill Confirmation Options.
+7	511	Ensrick	2026-07-19	completed	2	1	0	bug,cross-mod,1-major,Fixed	Remove io.open from runtime checks
+7	508	Ensrick	2026-07-12	completed	2	1	0	bug,Tweaker: General,1-major,Fixed	gt_dev: debug_highlights error spam before backend ready
+7	461	Ensrick	2026-07-26	completed	2	1	1	bug,regression,Tweaker: Chaos Wastes,1-major,Fixed	Preview Starting Boons
+7	383	Ensrick	2026-07-07	completed	1	1	0	bug,Tweaker: General,verify-fix,1-major	Split mode: movement and leash anchors disagree
+7	339	Ensrick	2026-07-06	completed	2	1	0	bug,Tweaker: GUI,cross-mod,0-critical	CRITICAL: integrated mods wrongly rendered as top-level Mod Tweaker tabs; must live inside category collapsibles
+7	336	Ensrick	2026-07-06	completed	2	1	1	bug,crash,Tweaker: GUI,0-critical	gut_dev: in-mission mission map CTD - background window mounts levels/ui_keep_menu/world (Level not loaded)
+7	295	Ensrick	2026-07-07	completed	1	1	0	bug,crash,Tweaker: General,verify-fix,0-critical	[crash] gt: game crashes shortly after enabling the bot testing tools (bot-teleport-lab) — no Lua crash block captured
+7	293	Ensrick	2026-07-13	completed	2	1	0	bug,crash,Tweaker: General,0-critical,Fixed	[crash] gt: create_screen_gui 'Gui material not found' fatal in bot-teleport-lab debug GUI (_gt_bot_teleport_lab.lua:1028)
+7	291	Ensrick	2026-07-06	completed	2	1	0	bug,crash,Tweaker: Chaos Wastes,cross-mod,0-critical	[crash] CW journey-complete CTD on Cataclysm 3 — vanilla statistics_util.lua:997 'compare number with nil' (difficulty_index nil), won Slaanesh Citadel
+7	240	Ensrick	2026-07-03	completed	2	1	0	bug	enemy_tweaker: _dbg_alert/_spawn_dbg_alert route through mod:warning, which posts to CHAT under VMF defaults - routine roaming-plateau warning spams chat every mission load
+7	236	Ensrick	2026-07-03	completed	1	1	0	bug,Tweaker: Weapons,verify-fix	wt: Deepwood Staff (we_life_staff) not available on Kruber - cannot test
+7	228	Ensrick	2026-07-19	completed	2	1	0	bug,crash,Tweaker: Cosmetics,0-critical,Fixed	Diagnose customization preview renderer crash
+7	227	Ensrick	2026-07-21	completed	2	1	0	bug,CWV,2-moderate,Fixed	Fix Old Musket illusion binding
+7	205	Ensrick	2026-07-21	completed	2	1	0	bug,crash,Tweaker: Chaos Wastes,0-critical,Fixed	Prevent settings-sync queue overflow
+7	194	Ensrick	2026-07-03	completed	1	1	0	bug,Tweaker: General,verify-fix	gt_dev: 'Disable Bots (Solo)' (gt_no_bots) does not work — bots not despawned/blocked
+7	193	Ensrick	2026-07-07	completed	2	1	0	bug,crash,Tweaker: GUI,Fixed	CRASH: in-mission loadout-management window (HeroView) fatals in UIRenderer_draw_texture (Adventure)
+7	179	Ensrick	2026-07-02	completed	2	1	0	bug,Tweaker: Weapons,Fixed	wt: Weapon Availability — group rows by source char in fixed order (Kruber, Bardin, Saltzpyre, Kerillian, Sienna)
+7	145	Ensrick	2026-07-05	completed	1	1	0	bug,Tweaker: Chaos Wastes,verify-fix	ct_dev: Citadel of Eternity — dominant god differs between mission (Tzeentch) and finale (Nurgle); dominant-god-disable may conflict with the override
+7	143	Ensrick	2026-07-06	completed	2	1	0	bug,Tweaker: Chaos Wastes	ct_dev: Morgrim's Bomb appears too often
+7	140	Ensrick	2026-07-05	completed	2	1	0	bug,Tweaker: GUI	gut: 'A Parting of the Waves' (dlc_dwarf_whaling, NOT dlc_portals) — fade-to-black plays despite auto-skip; standalone Skip Cutscenes mod co-running contaminates every repro
+7	139	Ensrick	2026-08-04	completed	2	1	0	bug,Tweaker: General,0-critical,not-started	Bots abandon split team after player down
+7	131	Ensrick	2026-07-05	completed	1	1	0	bug,Tweaker: Chaos Wastes,Tweaker: Weapons,cross-mod,diagnostics-armed	ct_dev/wt: Moonfire bow can fire more shots than normal in Chaos Wastes
+7	121	Ensrick	2026-07-06	completed	2	1	0	bug,Tweaker: Chaos Wastes	ct_dev: Shared Reliquaries / Blessed Bots — bots get double-upgraded or an extra tier; audit bot upgrade + bot boon settings for conflicts
+7	120	Ensrick	2026-07-05	completed	1	1	0	bug,Tweaker: Chaos Wastes,verify-fix	ct_dev: 'Bomb Boon Cooldown' does not work (should rate-limit bomb-bubble boon procs to once per interval)
+7	116	Ensrick	2026-07-03	completed	1	1	0	bug,Tweaker: Chaos Wastes,verify-fix	ct_dev: 'Revive Team on Chest Completion' does not work (must respawn dead + rescue awaiting-rescue, like gt respawn)
+7	81	Ensrick	2026-06-28	completed	2	1	0	crash,regression	cim: in-mission forge (B-hotkey + allow_in_mission) crashes on LA armoury_atlas in HDR world create
+7	76	Ensrick	2026-07-05	completed	1	1	0	bug,crash,Tweaker: GUI,verify-fix	gut: Mod Tweaker renderer recreation — LA armoury_atlas crash on repeated open + deprecated IngameView look on exit (proper fix: HeroView sub-state)
+7	58	Ensrick	2026-06-24	completed	2	1	0	bug	ct: Horn of Magnus CW path (magnus_belakor_path1) has no pickup_settings for harder — chests/altars/ammo don't spawn
+6	1548	Ensrick	2026-09-18	completed	16	1	0	bug,crash,tooling,0-critical,not-started	SDK uploader crashes during Steam initialization
+6	1180	Ensrick	2026-09-04	completed	5	1	0	bug,regression,tooling,0-critical,not-started,architecture	Tooling: machine-serialize every VMB/Stingray build, deploy, upload, and parity transaction
+6	1159	Ensrick	2026-08-12	completed	2	1	0	enhancement,refactor,Tweaker: Chaos Wastes,cim,Tweaker: Cosmetics,Tweaker: Weapons,CWV,2-moderate,not-started,architecture	Decompose remaining god files; unify copied libraries
+6	1158	Ensrick	2026-08-09	completed	2	1	0	enhancement,Tweaker: Chaos Wastes,Tweaker: Weapons,Tweaker: Career,CWV,cross-mod,1-major,Tweaker: Events,WOC,architecture	Peer-parity gates for vanilla-RPC gameplay axes
+6	1156	Ensrick	2026-08-22	completed	3	1	0	bug,regression,CWV,cross-mod,tooling,2-moderate,architecture	Repair verification instruments: postcondition-first standard
+6	750	Ensrick	2026-10-27	completed	15	1	0	bug,regression,tooling,1-major,not-started	Tracker integrity: lifecycle labels silently stripped
+6	639	Ensrick	2026-07-17	completed	2	1	0	Tweaker: Cosmetics,feature,3-low,Fixed	Finalize names and flavor text for the Purpure and Azure Grail Knight cosmetic set
+6	638	Ensrick	2026-07-19	completed	2	1	0	Tweaker: Cosmetics,feature,3-low,Fixed	Add Purpure and Azure Set Icons
+6	608	Ensrick	2026-07-18	completed	2	1	0	Tweaker: General,cross-mod,feature,1-major,not-started	Research Steam-loss LAN recovery for modded play
+6	603	Ensrick	2026-07-15	completed	1	0	0	bug,Tweaker: Weapons,2-moderate,Fixed	Ranger Veteran inventory preview uses Dual Hammers idle with Dual Axes
+6	561	Ensrick	2026-07-13	completed	2	1	0	enhancement,Tweaker: GUI,cross-mod,feature,1-major,Fixed	Per-tab settings profiles
+6	557	Ensrick	2026-07-19	completed	1	0	0	bug,0-critical,Fixed	[mod] Tweaker: GUI layout wrong for mod settings
+6	549	Ensrick	2026-07-17	completed	2	1	0	enhancement,Tweaker: General,2-moderate,Fixed	Give more damage in godmode
+6	540	Ensrick	2026-09-06	completed	7	1	0	bug,audit,regression,tooling,0-critical,not-started	Harden CI and protect master
+6	538	Ensrick	2026-07-14	completed	1	0	0	bug,CWV,3-low	cwv_give registers skin_only illusion keys as items
+6	535	Ensrick	2026-07-13	completed	1	0	0	bug,crash,Tweaker: Weapons,2-moderate,Fixed	wt: moonfire AoE template missing NetworkLookup registration
+6	523	Ensrick	2026-07-14	completed	2	1	0	Tweaker: General,feature,2-moderate	gt: bots actively heal hurt allies with kits
+6	515	Ensrick	2026-07-12	completed	2	1	0	enhancement,Tweaker: General,1-major,Fixed	gt bots: allow teleport past no-return thresholds
+6	454	Ensrick	2026-08-03	completed	2	1	0	enhancement,Tweaker: General,2-moderate,Fixed	Creature Spawner should not be a hardcoded list
+6	446	Ensrick	2026-07-21	completed	2	1	0	Tweaker: GUI,Tweaker: Career,cross-mod,feature,1-major,Fixed	Add mutually exclusive option controls
+6	410	Ensrick	2026-07-13	completed	1	0	0	bug,3-low,not-started	Unknown resource type 3fcdd69156a46417 flood at mod-mount
+6	395	Ensrick	2026-07-19	completed	1	0	0	bug,CWV,2-moderate,Fixed	CWV rapier not unequipped on client after swap
+6	362	Ensrick	2026-07-06	completed	0	0	0	bug,crash,Tweaker: Weapons,verify-fix	[crash] wt: create_equipment hook returns nil on inner failure -> add_equipment fatal (non-resident level-event unit, e.g. off-level whale_oil_barrel)
+6	335	Ensrick	2026-07-18	completed	0	0	0	bug,diagnostics-armed,1-major	Re-derive localization status tags from evidence
+6	312	Ensrick	2026-07-19	completed	2	1	0	Tweaker: GUI,cross-mod,feature,1-major,Fixed	UI Tweaks integration
+6	217	Ensrick	2026-07-02	completed	1	1	0	enhancement,Tweaker: GUI,verify-fix	gut: Armory + Bestiary tabs in the hero-menu top tab row (Compendium Phase 1)
+6	212	Ensrick	2026-07-02	completed	0	0	0	bug,Tweaker: GUI,verify-fix	gut_dev: /armory and /bestiary chat commands collide with the Armory / Bestiary mods (registration silently lost)
+6	207	Ensrick	2026-07-01	completed	2	1	0	enhancement,Tweaker: GUI	gut Mod Tweaker: add native-style hover info popup (title + description, fade-in, instant-out) for each setting
+6	195	Ensrick	2026-07-03	completed	0	0	0	crash,Tweaker: Weapons,verify-fix	wt: Necromancy Staff soul_rip crash on cross-char wielder (FX force-load timing)
+6	185	Ensrick	2026-07-03	completed	2	1	0	bug,audit,Tweaker: Chaos Wastes,verify-fix	ct_dev deploy gap: GitHub release published but Workshop upload skipped → host loaded stale pre-fix bundle
+6	148	Ensrick	2026-07-19	completed	1	0	0	bug,crash,Tweaker: Cosmetics,0-critical,Fixed	[crash] cosmetics_tweaker: loot_item_unit_previewer.lua:142 index _unit_start_position_boxed (nil) — Loremaster preview
+6	135	Ensrick	2026-07-18	completed	0	0	0	bug,Tweaker: Chaos Wastes,diagnostics-armed,2-moderate	Correct Weekly God Override Mapping
+6	122	Ensrick	2026-07-04	completed	0	0	0	bug,Tweaker: Chaos Wastes,verify-fix	ct_dev: 'Show Both Chips for Duplicate Careers' — duplicate chip floats / lands on the wrong mission node
+6	98	Ensrick	2026-07-05	completed	0	0	0	bug,Tweaker: Chaos Wastes,verify-fix	ct_dev: duplicate-career map-vote chip lands on wrong CW node (current_node_key fallback)
+6	77	Ensrick	2026-07-01	completed	2	1	0	enhancement,Tweaker: GUI	gut Mod Tweaker: port native settings-menu control fidelity (ON/OFF stepper switch, moving slider thumb, texture arrows, hover highlight, Wwise sounds)
+6	56	Ensrick	2026-07-05	completed	0	0	0	bug,Tweaker: Chaos Wastes,diagnostics-armed,1-major	ct: Citadel of Eternity mission curse doesn't match host's on client
+6	39	Ensrick	2026-06-13	completed	1	0	0	bug,deferred	ct: starting_coins VMF slider steps by 1, not 25
+6	37	Ensrick	2026-06-13	completed	1	0	0	bug	cosmetics_tweaker: LA shield picker auto-applies the first option (yellow dragon Reiland) on browse
+6	33	Ensrick	2026-05-25	completed	1	0	0	bug	cwv: duplicate mod:hook_safe("SimpleInventoryExtension", "wield", ...) — one handler silently dead
+5	694	Ensrick	2026-07-18	completed	3	1	0	enhancement,tooling,2-moderate,Fixed	Remove lifecycle tags from player UI
+5	504	Ensrick	2026-08-13	completed	5	1	0	enhancement,audit,refactor,cross-mod,1-major,not-started,architecture	OOP decomposition umbrella: remaining phases
+5	494	Ensrick	2026-07-13	completed	4	1	0	documentation,audit	Handoff: Fable agent campaign state 2026-07-11
+5	433	Ensrick	2026-07-14	completed	1	0	0	refactor,2-moderate,not-started	Dead Big Rebalance code in three mods
+5	429	Ensrick	2026-07-08	completed	3	1	0	tooling,1-major	tooling: CI bypasses the QA gate engine
+5	348	RainReligion	2026-07-19	completed	1	0	0	Tweaker: Weapons,feature,1-major,Fixed	Revert Patch 6.11.0 Change to 1-handed Kruber/Sienna Sword
+5	334	Ensrick	2026-07-14	completed	1	0	1	enhancement,Tweaker: Career,2-moderate,Fixed	crt: Ironbreaker Gromril Armour, Necromancer Cursed Armor, and Unchained's Blood Magic shouldn't be triggered by Unquenchable Thirst
+5	311	Ensrick	2026-07-18	completed	0	0	0	Tweaker: GUI,verify-fix,feature,1-major	Crosshair Kill Confirmation
+5	308	Ensrick	2026-07-14	completed	1	0	0	Tweaker: General,feature,1-major,Fixed	Melee Latency Smoothing (Client-Side Prediction Layer)
+5	238	Ensrick	2026-07-03	completed	0	0	0	enhancement,cim,verify-fix	cim: Chaos Wastes / injected traits show no description in the Athanor picker (v0.8.44-dev)
+5	225	Ensrick	2026-07-05	completed	1	0	0	enhancement,blocked,Tweaker: Weapons	wt: add Deepwood Staff (we_life_staff) as a cross-character toggle for Kruber + Saltzpyre (blocked on #201 finger-node crash)
+5	191	Ensrick	2026-07-02	completed	1	0	0	Tweaker: GUI,Tweaker: General,cross-mod	Migrate 3rd-person camera options from GT (general_tweaker) to GUT (gui_tweaker)
+5	127	Ensrick	2026-07-05	completed	1	0	0	enhancement,refactor,Tweaker: GUI,Tweaker: General,cross-mod	general_tweaker (stable): remove cutscene skip — it belongs in gut now (gt_dev already removed it v0.2.140-dev)
+5	93	Ensrick	2026-07-05	completed	0	0	0	enhancement,Tweaker: GUI,verify-fix	gut: compact ESC menu should be implicit (always-on), not a toggle
+5	64	Ensrick	2026-06-13	completed	1	0	0	enhancement	ct: optional setting to increase enemy spawns from Chests of Trials
+5	55	Ensrick	2026-05-28	completed	1	0	0	enhancement,deferred	enemy_tweaker: add horde frequency multiplier slider (companion to v0.6.0-dev spawn-size sliders)
+5	13	Ensrick	2026-05-25	completed	2	0	0	bug,audit	gt: latent _pause_active forward-reference bug binds to global
+4	1426	Ensrick	2026-08-26	completed	2	0	0	enhancement,audit,tooling,2-moderate,not-started	Publish receipt-authority bundles safely
+4	1422	Ensrick	2026-08-26	completed	2	0	0	enhancement,audit,tooling,2-moderate	Add immutable publication byte snapshots
+4	1153	Ensrick	2026-08-16	completed	1	1	0	bug,Tweaker: General,2-moderate	gt regression runner misreads true-returning checks
+4	1148	Ensrick	2026-08-16	completed	1	1	0	bug,CWV,1-major	CWV regression marker checks broken by decomposition
+4	1117	Ensrick	2026-09-23	completed	1	1	1	bug,cim,3-low,Fixed	Separate Athanor bulk-accessory label from arrow icon
+4	1002	RainReligion	2026-07-28	completed	1	1	1	bug,crash,Tweaker: GUI,0-critical,Fixed	Choosing to Reset to Default Settings on Equipment Tab of GUI Tweaker Causes Out of Memory Crash
+4	959	RainReligion	2026-08-10	completed	1	1	4	bug,cim,1-major,Fixed	Properties are Erroneously Synced Between Accessories in CIM Menu
+4	950	Ensrick	2026-07-21	completed	0	1	0	bug,Tweaker: Cosmetics,verify-fix	[cosmetics] Preserve partial attachment links
+4	795	Ensrick	2026-07-21	completed	1	1	0	bug,regression,Tweaker: Cosmetics,2-moderate,Fixed	[Cosmetics] Applied glow missing from selection screen
+4	794	Ensrick	2026-07-21	completed	1	1	0	bug,Tweaker: Cosmetics,2-moderate,Fixed	[Cosmetics] Glow slider hitbox is offset
+4	787	Ensrick	2026-07-21	completed	1	1	0	bug,cross-mod,3-low,Fixed	[cross-mod] CIM Dual Axes uses fallback icon
+4	732	Ensrick	2026-07-19	completed	1	1	0	bug,crash,Tweaker: Chaos Wastes,Tweaker: Weapons,cross-mod,0-critical,Fixed	Deus spear on Saltzpyre CTDs on attack
+4	713	Ensrick	2026-07-19	completed	1	1	0	bug,Tweaker: Cosmetics,2-moderate,Fixed	Cosmetics unlock injection re-fires every second
+4	703	Ensrick	2026-07-19	completed	1	1	0	bug,cim,CWV,2-moderate,Fixed	CIM picker shows CWV weapons as locked
+4	695	Ensrick	2026-07-19	completed	1	1	0	bug,cross-mod,2-moderate,Fixed	Boot flood: thousands of unknown-interface warnings
+4	693	RainReligion	2026-07-19	completed	1	1	0	bug,Tweaker: General,2-moderate,Fixed	Client Unable to use Creature Spawner
+4	663	Ensrick	2026-07-19	completed	1	1	0	bug,Tweaker: Career,1-major,Fixed	crt: Foot Knight aura buffs flicker
+4	653	Ensrick	2026-07-19	completed	1	1	0	bug,crash,Tweaker: General,0-critical,Fixed	Bot follow crashes on missing ally distance
+4	649	RainReligion	2026-07-17	completed	1	1	1	bug,crash,Tweaker: GUI,0-critical,Fixed	Major Crash when Selecting Helmgart Campaign in Mission Select
+4	612	Ensrick	2026-07-15	completed	1	1	0	bug,regression,Tweaker: Cosmetics,0-critical,Fixed	Add Encarmine Helmet cosmetic
+4	610	RainReligion	2026-07-19	completed	1	1	0	bug,regression,Tweaker: Cosmetics,1-major,Fixed	Restore native weapon glow defaults
+4	600	RainReligion	2026-07-16	completed	1	1	2	bug,Tweaker: General,2-moderate,Fixed	Fix Bot "Wait!" Command in Command Wheel Not Stopping Bot Where the Player is Looking
+4	590	Ensrick	2026-07-19	completed	1	1	0	bug,crash,Tweaker: Chaos Wastes,0-critical,Fixed	ct: Pool aliases exceed level capacity
+4	584	Ensrick	2026-07-14	completed	1	1	0	bug,Tweaker: Weapons,2-moderate	WT: Moonfire stops recharging while stowed
+4	580	Ensrick	2026-07-13	completed	1	1	0	bug,Tweaker: Weapons,2-moderate	wt: substitute Saltzpyre Moonfire presentation
+4	575	Ensrick	2026-07-14	completed	1	1	0	bug,Tweaker: GUI,3-low	gut: slider numeric editor caret is offset left
+4	570	Ensrick	2026-07-14	completed	1	1	0	bug,Tweaker: GUI,Tweaker: Chaos Wastes,Tweaker: Cosmetics,CWV,cross-mod,3-low	Startup chat contains automatic CWV and CT state notices
+4	564	Ensrick	2026-07-19	completed	1	1	0	bug,Tweaker: Chaos Wastes,2-moderate,Fixed	Fix mission-depth localization exceptions
+4	545	Ensrick	2026-07-13	completed	2	0	0	enhancement,audit,tooling,2-moderate,not-started	Add source-to-bundle release provenance
+4	529	Ensrick	2026-07-14	completed	1	1	0	bug,Tweaker: General,2-moderate,Fixed	Stamina in godmode
+4	517	Ensrick	2026-07-13	completed	1	1	0	bug,Tweaker: GUI,2-moderate,Fixed	gut: TOML config-read never worked in retail
+4	512	Ensrick	2026-08-16	completed	1	1	0	bug,3-low,Tweaker: Enemies	Fix Keep Mini-Patrol Regression Check
+4	501	Ensrick	2026-07-12	completed	2	0	0	refactor,tooling,2-moderate	Standardize test tiers and placement repo-wide
+4	500	Ensrick	2026-07-13	completed	1	1	0	bug,refactor,cross-mod,1-major,Fixed	Stale probes for closed issues still running
+4	492	Ensrick	2026-07-12	completed	1	1	0	bug,Tweaker: General,1-major,Fixed	gt bots lock in aid branch, strand behind
+4	479	Ensrick	2026-07-19	completed	1	1	0	bug,1-major,Tweaker: Enemies,Fixed	enemy_tweaker hook fallback re-runs failed CD tick
+4	468	Ensrick	2026-07-13	completed	1	1	0	bug,Tweaker: General,1-major,Fixed	Bots are wasting healing, this is supposed to be fixed already
+4	464	Ensrick	2026-07-19	completed	1	1	0	bug,Tweaker: Chaos Wastes,1-major,Fixed	Anath Raema's Swiftness causes slower reload
+4	459	Ensrick	2026-07-13	completed	1	1	0	crash,0-critical,Fixed	Access violation
+4	441	Ensrick	2026-07-19	completed	1	1	0	bug,Tweaker: Weapons,1-major,Fixed	Fix Volley Crossbow preview animation
+4	418	Ensrick	2026-07-13	completed	1	1	0	bug,CWV,2-moderate,Fixed	CWV: residency ref string duplicated, base-mesh risk
+4	412	Ensrick	2026-07-19	completed	1	1	0	bug,CWV,2-moderate,Fixed	Let Musket Style Swap Interrupt Actions
+4	411	Ensrick	2026-08-02	completed	1	1	0	bug,Tweaker: Weapons,3-low,not-started	wt: dead Anim Picker entry swap_charge_stance (bastard sword)
+4	405	Ensrick	2026-07-13	completed	1	1	0	bug,crash,Tweaker: Career,0-critical,Fixed	crt: client CTD on Fires from Ash THP heal
+4	374	Ensrick	2026-07-21	completed	1	1	0	bug,CWV,2-moderate,Fixed	Restore Moonfire Recharge Across Careers
+4	360	RainReligion	2026-07-16	completed	1	1	1	bug,Tweaker: GUI,2-moderate	Options Menu - Kill Confirm Crosshair -> Advanced Options Gear Icon Misaligned
+4	318	Ensrick	2026-07-21	completed	1	1	0	bug,Tweaker: GUI,CWV,2-moderate,Fixed	Dim Disabled CWV Menu Entry
+4	262	Ensrick	2026-07-06	completed	1	1	0	bug,crash,Tweaker: Chaos Wastes,0-critical	[crash] ct_dev: host NetworkedFlowStateManager 'Too many object states(512)' overflow during Chest of Trials + raised enemy caps
+4	260	Ensrick	2026-07-06	completed	1	1	0	bug,Tweaker: Chaos Wastes,1-major	ct: melee-only traits appear on ranged weapons in Chaos Wastes — should keep the melee/ranged split
+4	248	Ensrick	2026-07-06	completed	1	1	1	bug,Tweaker: Weapons,1-major	wt: Executioner Sword (es_2h_sword_executioner) dev anims don't play on Saltzpyre - picker offers SOURCE event names, not Saltzpyre 2H-sword 3P vocab (#196 class)
+4	235	Ensrick	2026-07-07	completed	0	1	0	bug,Tweaker: Cosmetics,verify-fix	cosmetics: in-mission cosmetic menu 3D weapon preview is blank - #228 guard neuters the preview world; needs a mission-safe render path
+4	230	Ensrick	2026-07-07	completed	0	1	0	bug,Tweaker: Cosmetics,verify-fix	cosmetics: vanilla-unobtainable skins/hats never equippable — toggles edit can_wield but never grant ownership (fixed 0.9.63-dev, verify in-game)
+4	223	Ensrick	2026-07-16	completed	1	1	1	bug,crash,Tweaker: GUI,Fixed	gut_dev compendium (#217): clicking Armory/Bestiary tab inside HeroView re-transitions hero_view -> C-fatal 'World hero_view_hdr already exists'
+4	202	Ensrick	2026-07-01	completed	1	1	0	bug,Tweaker: GUI	gut: 'Disable Aim Zoom-In' (3P camera) doesn't work — only patches offset_position, not vertical_fov
+4	187	Ensrick	2026-07-02	completed	0	1	0	bug,Tweaker: Weapons,verify-fix	wt: remove redundant Bardin 1H Axe + 1H Hammer from Saltzpyre (identical to wh_1h_axe / wh_1h_hammer)
+4	159	Ensrick	2026-08-28	completed	1	1	0	bug,Tweaker: Weapons,3-low	Localize Weapon Names in Developer UI
+4	152	Ensrick	2026-07-06	completed	1	1	0	bug,Tweaker: GUI	gut Mod Tweaker: slider arrow increments too fast (single click over-adjusts; hold has no gradual speed-up + auto-moves) — need vanilla-slider diagnostic
+4	133	Ensrick	2026-07-06	completed	1	1	0	bug,Tweaker: Chaos Wastes	ct_dev: Manann's Tempest description doesn't reflect the 8s-cooldown tweak
+4	129	Ensrick	2026-07-04	completed	1	1	0	crash,Tweaker: Chaos Wastes	ct_dev: Mathlann's Storm-Strike (boon_careerskill_01) uncapped AoE lightning floods reliable send queue → HOST CRASH with large hordes
+4	128	Ensrick	2026-06-28	completed	1	1	0	bug,crash	wt: cross-character fire weapons crash host — AOE explosion particle not loaded (create_particles C-fatal)
+4	118	Ensrick	2026-07-02	completed	0	1	0	bug,Tweaker: Chaos Wastes,verify-fix	ct_dev: 'Any Trait on Any Weapon' grants traits to common/starting weapons that shouldn't have them
+4	115	Ensrick	2026-07-06	completed	1	1	0	bug,Tweaker: Chaos Wastes	ct_dev: Shrine boon GUI can't fit >4 boon options without overflow
+4	114	Ensrick	2026-07-06	completed	1	1	0	bug,Tweaker: Chaos Wastes	ct_dev: Chest of Trials boon GUI can't fit >3 boons without overflow
+4	101	Ensrick	2026-06-28	completed	1	1	0	bug	ct_dev: 'Endless Bombs consumes Morgrim's' tweak not working — Morgrim's Bomb survives Pockets-Full-of-Bombs potion
+4	65	Ensrick	2026-07-05	completed	0	1	0	bug,crash,Tweaker: General,verify-fix	gt: bots_in_keep — two crash classes, feature disabled in v0.2.74-dev pending fix
+4	22	Ensrick	2026-06-04	completed	1	1	0	bug	cim: equipped loadout (modded weapons + LA cosmetics) not fully restored across sessions
+3	1271	Ensrick	2026-08-12	completed	0	0	0	bug,crash,Tweaker: Chaos Wastes,0-critical,Fixed	Lobby browser crashes on injected missions
+3	1241	Ensrick	2026-08-13	completed	0	0	0	bug,Tweaker: Cosmetics,3-low,Fixed	Remove dead _try_apply_by_peer in cosmetics
+3	1121	Ensrick	2026-08-13	completed	0	0	0	bug,Tweaker: Cosmetics,3-low,Fixed	Cosmetics _la_okri direct warnings escape chat-debt census
+3	1001	RainReligion	2026-09-23	completed	1	1	1	enhancement,cim,CWV,cross-mod,3-low,Fixed	[CIM] Crafted Weapons Don't Persist Being Marked as Favorite After Game Restart
+3	944	RainReligion	2026-08-03	completed	1	1	1	enhancement,CWV,2-moderate	Make Weapon Attacks Interruptible Through Weapon Style Switching
+3	880	Ensrick	2026-07-21	completed	1	1	0	Tweaker: GUI,cross-mod,feature,2-moderate,Fixed,Character Dialogue	Dialogue browser: mouseover transcript preview popups
+3	762	Ensrick	2026-07-21	completed	1	1	0	enhancement,regression,CWV,1-major,Fixed	[CWV] Restore Outrider blunderbuss model
+3	662	Ensrick	2026-07-19	completed	0	0	0	bug,regression,Tweaker: General,1-major,Fixed	Guard infinite-ammo reconciliation before network readiness
+3	634	Ensrick	2026-07-19	completed	1	1	0	enhancement,Tweaker: Weapons,2-moderate,Fixed	WT: refresh dev stream after beta
+3	627	Ensrick	2026-07-18	completed	1	1	0	enhancement,wontfix,CWV,1-major	Add custom Outrider launcher model
+3	623	Ensrick	2026-07-15	completed	0	1	0	enhancement,Tweaker: Weapons,verify-fix,3-low	WT add Mace and Sword speed nerf
+3	622	Ensrick	2026-07-15	completed	0	1	0	enhancement,Tweaker: Weapons,verify-fix,3-low	WT add Cog Hammer heavy speed nerf
+3	621	Ensrick	2026-07-15	completed	0	1	0	enhancement,Tweaker: Weapons,verify-fix,3-low	WT add 1H Axe cleave nerf
+3	619	Ensrick	2026-07-19	completed	1	1	0	Tweaker: Career,feature,2-moderate,Fixed	Add Foot Knight career feature toggles
+3	562	Ensrick	2026-07-14	completed	1	1	0	enhancement,cim,feature,3-low	CIM auto-equips newly crafted weapons
+3	537	Ensrick	2026-07-14	completed	0	0	0	bug,Tweaker: GUI,2-moderate,Fixed	gut: on_setting_changed re-latches skippable_cutscenes global
+3	534	Ensrick	2026-07-13	completed	1	1	0	enhancement,Tweaker: General,2-moderate	gt debug lines invisible to other players
+3	532	Ensrick	2026-07-14	completed	1	1	0	feature,2-moderate,Tweaker: Events,Fixed	event_tweaker: preview active mutators on Tab
+3	463	Ensrick	2026-07-19	completed	0	0	0	bug,regression,Tweaker: Chaos Wastes,1-major,Fixed	Chest of Trials repeat trial
+3	457	Ensrick	2026-07-19	completed	1	1	0	enhancement,Tweaker: Chaos Wastes,1-major,Fixed	Revamp Mission Availability
+3	305	Ensrick	2026-07-13	completed	1	1	0	Tweaker: GUI,feature,2-moderate,Fixed	Mission Selection during Mission
+3	304	Ensrick	2026-07-16	completed	1	1	1	Tweaker: General,feature,3-low,Fixed	Keep dummy collision
+3	210	Ensrick	2026-07-01	completed	1	1	0	regression,Tweaker: Weapons	wt: Kruber native Empire longbow charge/draw anim broken — longbow_empire_template globally remapped to crossbow (to_zoom) for Saltzpyre
+3	186	Ensrick	2026-07-03	completed	0	1	0	enhancement,Tweaker: Cosmetics,verify-fix	cosmetics_tweaker: disable Loremaster's Armoury Okri's Challenges entirely (toggle) — stop them registering/tracking, not just hide
+3	173	Ensrick	2026-07-02	completed	1	1	0	Tweaker: GUI	gut: 'Hero Select' opens the TALENT menu instead of the hero/character selection (change character/career)
+3	160	Ensrick	2026-07-03	completed	0	1	0	enhancement,Tweaker: Weapons,verify-fix	wt: add Kruber Executioner Sword to Saltzpyre dev anim picker
+3	137	Ensrick	2026-06-27	completed	0	0	0	bug	cosmetics_tweaker: disable LA (Loremaster's Armoury) kill-quest tracking when active (toggle) — neutralizes LA register_kill host crash
+3	94	Ensrick	2026-07-01	completed	1	1	0	enhancement,Tweaker: GUI	gut: remove 'UI Tweaks Absorbed' from the public alpha
+3	54	Ensrick	2026-06-13	completed	0	0	0	bug	ct: Miracle of Isha tweak text shows 'unlimited wounds' when host selected Aegis (25% dmg reduction)
+3	53	Ensrick	2026-05-26	completed	0	0	0	bug	ct: Belakor's Temple not visible on Holseher's map for CLIENT when host has 'always belakor' enabled
+3	50	Ensrick	2026-06-04	completed	0	0	0	bug,crash	cim: CRASH in HeroWindowItemCustomization mid-mission gear-icon click (object_set_names on un-loaded ui_store_preview level)
+3	49	Ensrick	2026-06-04	completed	0	0	0	bug	cim: stamina/movespeed bubbles block other properties despite their low cap (slot accounting)
+3	45	Ensrick	2026-07-07	completed	0	1	0	enhancement,Tweaker: Cosmetics,verify-fix	Propagate RPC schema_version pattern to cosmetics_tweaker (4 RPCs)
+3	42	Ensrick	2026-07-07	completed	0	1	0	enhancement,verify-fix,Tweaker: Enemies	Propagate RPC schema_version pattern to enemy_tweaker (et_br_fingerprint)
+3	41	Ensrick	2026-05-25	completed	0	0	0	bug	gui_tweaker: hook_safe target 'NewsHeadUI' does not exist — silent dead hook (2 registrations)
+3	38	Ensrick	2026-06-04	completed	0	0	0	bug	cim: 'JEWELRY' label on main crafting page still shows despite Localize override
+3	35	Ensrick	2026-05-25	completed	0	0	0	bug	cosmetics_tweaker: hook_safe(SimpleHuskInventoryExtension, "extensions_ready") — function does not exist; silent dead hook
+3	24	Ensrick	2026-06-04	completed	0	0	0	crash,blocked	crafting_in_modded VMB build crashes Stingray (blocks publish-release.ps1)
+3	14	Ensrick	2026-05-25	completed	0	0	0	bug	cosmetics_tweaker: LA hat equipped on GK leaks to Warrior Priest body at mission start (host-side)
+3	12	Ensrick	2026-06-04	completed	0	0	0	bug	cim: Athanor 'CRAFT' button auto-equips new item, leaving slot icon out of sync with actual equipped weapon
+3	11	Ensrick	2026-05-23	completed	0	0	0	bug,regression	Cross-mod chat-command name collision: 7 mods all registered 'regression_test'
+2	1758	Ensrick	2026-10-27	completed	1	0	0	bug,tooling,3-low	Returned installers trigger false forward-reference warnings
+2	1529	Ensrick	2026-09-04	completed	2	1	0	enhancement,audit,tooling,1-major,not-started	[tooling] Refresh 6.12.1 source provenance
+2	1430	Ensrick	2026-08-29	completed	2	1	0	enhancement,audit,cross-mod,tooling,2-moderate,not-started	[tooling] Add source-exact recovery
+2	1429	Ensrick	2026-09-08	completed	2	1	0	enhancement,audit,cross-mod,tooling,2-moderate,not-started	[tooling] Add receipt-bound local deployment
+2	1413	Ensrick	2026-08-25	completed	2	1	0	enhancement,audit,refactor,2-moderate,Tweaker: Enemies,architecture	#451A: Transactional custom-breed registrar
+2	1412	Ensrick	2026-08-25	completed	2	1	0	enhancement,audit,tooling,2-moderate,not-started,architecture	#558B: Add fail-closed bundle authority control plane
+2	1400	Ensrick	2026-08-25	completed	2	1	0	enhancement,audit,tooling,2-moderate,architecture	#558A: Shadow complete-output BuildReceipt authority
+2	1307	Ensrick	2026-09-20	completed	2	1	0	enhancement,tooling,3-low,not-started	Bind card manifest IDs to upload receipts
+2	1203	Ensrick	2026-09-04	completed	1	0	0	bug,regression,Tweaker: GUI,Tweaker: Chaos Wastes,CWV,cross-mod,tooling,1-major,Character Dialogue,architecture	[tooling] Normalize optional SDK sidecar
+2	1088	Ensrick	2026-08-16	completed	0	0	0	enhancement,Tweaker: Cosmetics,cross-mod,3-low,not-started	Refresh stale LA sync core audit
+2	1087	Ensrick	2026-08-03	completed	0	0	0	enhancement,Tweaker: Weapons,3-low,not-started	Backfill 119 orphan port decision rows
+2	1032	RainReligion	2026-08-03	completed	0	0	2	enhancement,cim,2-moderate,Fixed	[CIM] "Craft Modded Accessories" Button - Remove Restriction on "No Accessory Edits to Craft"
+2	1031	RainReligion	2026-08-03	completed	0	0	1	enhancement,cim,3-low	[CIM] "Craft Modded Jewellery" - Change Button Text to "Craft Modded Accessories"
+2	1004	Ensrick	2026-07-27	completed	0	0	1	enhancement,Tweaker: Chaos Wastes,feature,3-low,Fixed	Starting Boons preview: show localized description on hover
+2	939	Ensrick	2026-07-26	completed	0	0	1	Tweaker: General,1-major,Fixed	Falling off ledge in godmode
+2	829	Ensrick	2026-07-19	completed	1	0	0	bug,tooling,2-moderate,Fixed	Headless ship opens visible VMB console windows in desktop agents
+2	601	Ensrick	2026-07-19	completed	0	0	1	enhancement,Tweaker: Weapons,1-major,Fixed	Add Greataxe and Dual Axes toggles
+2	510	Ensrick	2026-07-14	completed	0	0	0	refactor,cross-mod,3-low,Fixed	dcp/vdl mem-probe baseline leaks bare global
+2	497	Ensrick	2026-07-13	completed	0	0	0	Tweaker: GUI,feature,1-major,Fixed	Mod Tweaker menu search feature
+2	443	Ensrick	2026-07-13	completed	2	1	0	documentation,Tweaker: Career,2-moderate	Improper Claude AI localization descriptions for talent reworks.
+2	381	Ensrick	2026-07-16	completed	0	0	1	enhancement,Tweaker: General,3-low,Fixed	Godmode on-screen indicator (dev)
+2	355	RainReligion	2026-07-19	completed	0	0	0	Tweaker: General,feature,1-major,Fixed	Add down and suicide commands
+2	313	Ensrick	2026-07-17	completed	0	0	1	Tweaker: GUI,feature,1-major,not-started	Integrate Crosshair Kill Confirmation mod options into GUT and the normal Options menu.
+2	208	Ensrick	2026-07-01	completed	0	0	0	enhancement,Tweaker: GUI,cross-mod	gut Mod Tweaker: merge the 4 inventory mods into a unified 'Equipment' tab (Cosmetics / Crafting / Weapons + nested CWV)
+2	192	Ensrick	2026-07-03	completed	0	0	0	Tweaker: GUI,Tweaker: General,cross-mod	Migrate Cutscenes + Monologues options from GT (general_tweaker) to GUT (gui_tweaker)
+2	190	Ensrick	2026-07-02	completed	0	0	0	Tweaker: GUI,Tweaker: General,cross-mod	Migrate Main Menu + Startup options from GT (general_tweaker) to GUT (gui_tweaker)
+2	82	Ensrick	2026-06-24	completed	0	0	0	enhancement	cwv: embed MoreItemsLibrary so variants register standalone (currently no-op without cosmetics_tweaker/MIL)
+2	79	Ensrick	2026-06-24	completed	0	0	0	enhancement	gut Mod Tweaker: implement gear "Advanced Settings" drill-down + fix MOD TWEAKER title z-order behind tabs
+2	71	carlotheemo	2026-06-17	completed	0	0	1		Pressing amulet crashes game
+2	46	Ensrick	2026-06-13	completed	0	0	0	enhancement	Propagate RPC schema_version pattern to crafting_in_modded (cim_modded_slot)
+2	43	Ensrick	2026-05-25	completed	0	0	0	enhancement	Propagate RPC schema_version pattern to lobby_tweaker (lt_motd_show)
+2	29	Ensrick	2026-05-25	completed	0	0	0	enhancement	Senior-eng hardening: pre-commit hook running qa/run_all -Quick + lint-mod locally
+2	28	Ensrick	2026-05-25	completed	0	0	0	enhancement	Senior-eng hardening: network-replay ring buffer for MP desync triage
+2	27	Ensrick	2026-05-25	completed	0	0	0	refactor	Senior-eng hardening: explicit RPC schema_version + drop-on-mismatch
+2	26	Ensrick	2026-05-25	completed	0	0	0	refactor	Senior-eng hardening: pcall-isolated mod:safe_hook wrapper to prevent silent chain drops
+2	10	Ensrick	2026-05-23	completed	0	0	0	enhancement	vmblauncher: auto-rewrite cfg title with MOD_VERSION suffix on upload
+2	7	Ensrick	2026-05-24	completed	0	0	0	refactor,deferred	wt: remove temporary polearm preview diagnostic helper
+2	3	Ensrick	2026-06-13	completed	0	0	0	blocked	BR_STUBS source-file recovery from Core's Big Rebalance (Workshop 2705276978)
+1	1648	Ensrick	2026-09-23	completed	1	0	0	tooling,3-low,Fixed	Flaky PS 5.1 wt-history output-drain fixture
+1	1227	Ensrick	2026-08-16	completed	0	1	0	bug,cim,2-moderate	Three cim_dev regression checks anchor wrong file
+1	1157	Ensrick	2026-08-04	completed	1	0	0	enhancement,cross-mod,tooling,2-moderate,not-started,architecture	Re-key appearance census to surface-x-edge cells
+1	1154	Ensrick	2026-08-23	completed	1	0	0	enhancement,refactor,cross-mod,tooling,0-critical,architecture	Master: Top-Down Professionalization Program
+1	1100	Ensrick	2026-08-02	completed	1	0	0	enhancement,tooling,2-moderate	Guard tracked bundle deletions in merge resolutions
+1	935	Ensrick	2026-07-28	completed	0	1	2	bug,Tweaker: Career,1-major,Fixed	Foot Knight Allow Melee in Secondary
+1	929	Ensrick	2026-07-21	completed	0	1	0	bug,Tweaker: Weapons,0-critical,Fixed	Moonfire bow unlimited use
+1	824	Ensrick	2026-07-21	completed	0	1	0	bug,Tweaker: GUI,1-major,Fixed	gut_dev bundle missing localization file resource
+1	823	Ensrick	2026-07-21	completed	0	1	0	bug,cim,1-major,Fixed	cim_dev live duplicate hooks dropped silently
+1	687	Ensrick	2026-07-19	completed	0	1	0	bug,0-critical,Fixed	crt Foot Knight talent tooltip CTD
+1	636	RainReligion	2026-07-17	completed	0	1	1	bug,Tweaker: GUI,Tweaker: Weapons,cross-mod,1-major,Fixed	WT v0.12.139-dev Missing Weapons Tab on GUI Tweaker
+1	594	Ensrick	2026-07-14	completed	0	1	0	bug,Tweaker: Weapons,3-low	WT exposes Bardin Hammer+Shield to Saltzpyre
+1	591	Ensrick	2026-07-14	completed	1	0	0	enhancement,audit,tooling,1-major	Gate every ship with headless QA
+1	585	Ensrick	2026-07-14	completed	0	1	0	bug,Tweaker: Weapons,2-moderate	WT: Moonfire bar survives loadout change
+1	582	Ensrick	2026-07-14	completed	0	1	0	bug,regression,Tweaker: Weapons,CWV,2-moderate	WT: hide native Bardin Dual Axes
+1	581	Ensrick	2026-07-14	completed	0	1	0	bug,crash,Progression,0-critical,Fixed	mp: synthetic daily statistic crashes startup
+1	566	Ensrick	2026-07-19	completed	0	1	0	bug,Tweaker: Cosmetics,3-low,Fixed	Fix White-Glow Regression Test
+1	565	Ensrick	2026-07-19	completed	0	1	0	bug,Tweaker: Cosmetics,2-moderate,Fixed	Load offhand packages asynchronously at startup
+1	560	Ensrick	2026-07-13	completed	0	1	0	bug,crash,Tweaker: GUI,0-critical,Tweaker: Enemies,Fixed	Defaults reset exhausts Lua heap
+1	559	Ensrick	2026-07-13	completed	0	1	0	bug,Tweaker: GUI,1-major,Fixed	Search leaks expansion into collapsible state
+1	542	Ensrick	2026-07-13	completed	1	0	0	documentation,enhancement,audit,tooling,2-moderate,not-started	Standardize portable repository configuration
+1	541	Ensrick	2026-07-13	completed	1	0	0	documentation,enhancement,audit,2-moderate,not-started	Build canonical human contributor documentation
+1	521	Ensrick	2026-07-15	completed	0	1	0	bug,cim,2-moderate,Fixed	Two popups on Athanor crafting menu.
+1	496	Ensrick	2026-07-13	completed	0	1	0	bug,Tweaker: GUI,2-moderate,not-started	gut monologue script_data shadow may no-op
+1	449	Ensrick	2026-07-12	completed	0	1	0	bug,0-critical,vanilla-bug	Enemies attacking during cutscene on The Enchanter's Lair
+1	448	Ensrick	2026-07-13	completed	0	1	0	bug,Tweaker: General,0-critical,Fixed	Morr's protection on bots bug
+1	436	Ensrick	2026-07-13	completed	1	0	0	tooling,2-moderate,not-started	ship.ps1 release step mislabels mid-edit sibling mods
+1	434	Ensrick	2026-07-13	completed	0	1	0	bug,Progression,1-major,Fixed	mp: _with_eac_off restore not pcall-protected
+1	407	Ensrick	2026-07-13	completed	0	1	0	bug,cim,1-major,Fixed	cim: gamepad craft-item drops every craft (nil recipe)
+1	400	Ensrick	2026-07-19	completed	0	1	0	bug,Tweaker: Weapons,2-moderate,Fixed	Align Cross-Career Flamestorm Effects
+1	356	Ensrick	2026-07-19	completed	0	1	0	bug,crash,Tweaker: Chaos Wastes,0-critical,Fixed	Prevent no-roamers mission-load crash
+1	351	RainReligion	2026-07-21	completed	0	1	0	bug,Tweaker: Chaos Wastes,2-moderate,Fixed	Convert Adventure Pickups to Pilgrim's Coins
+1	338	Ensrick	2026-07-06	completed	0	1	1	bug,Tweaker: General,1-major	gt: /respawn from awaiting-rescue fails ('not dead or awaiting rescue') when host has bots
+1	327	Ensrick	2026-07-13	completed	1	0	0	enhancement,tooling,1-major,not-started	Blocking dev-to-stable promotion gate (strip tags, strip suffix, version monotonic)
+1	283	Ensrick	2026-07-21	completed	0	1	0	bug,Tweaker: Career,2-moderate,Fixed	Preserve Job Well Done Stacks
+1	255	Ensrick	2026-07-06	completed	0	1	0	bug,Tweaker: General,0-critical	gt: 'disable ult effects' option doesn't work (Neuter Ult Effects mod does)
+1	213	Ensrick	2026-07-06	completed	0	1	0	bug,Tweaker: Enemies	et: 'Tried to freeze unit twice in the same frame' engine ERROR under enemy_recycler.deactivate_area with raised grunt caps
+1	211	Ensrick	2026-07-06	completed	0	1	0	bug,Tweaker: Chaos Wastes	ct_dev: disabled boons still granted - host-side grant path bypasses the generate_random_power_ups strip (boon-trace caught 4 named boons)
+1	206	Ensrick	2026-07-01	completed	0	1	0	bug,Tweaker: GUI	gut Mod Tweaker: nested-row indent inconsistent across widget types (toggles/dropdowns sit 12px right of sliders/titles) — unify label base-x
+1	162	Ensrick	2026-06-28	completed	0	1	0	bug	wt: Saltzpyre dual axes rendered as WP Dual Hammers + dagger as Rapier (wield patch not updated, only picker SET)
+1	142	Ensrick	2026-08-03	completed	0	1	0	bug,Tweaker: General,2-moderate,Fixed	Let Bots Retraverse Drop-Down Ledges
+1	136	Ensrick	2026-07-21	completed	0	1	0	bug,Tweaker: Chaos Wastes,0-critical,Fixed	Synchronize Chaos Wastes Mission Selection
+1	126	Ensrick	2026-07-16	completed	0	1	1	bug,Tweaker: GUI,Tweaker: General,cross-mod,Fixed	gut: confirm cutscene skip + auto-skip are fully migrated & FUNCTIONAL in-game (code present since v0.2.93-dev)
+1	124	Ensrick	2026-07-01	completed	0	1	0	bug,Tweaker: GUI	gut Mod Tweaker: exit returns to the equipment/HeroView screen — should exit straight to the game (no menu)
+1	123	Ensrick	2026-07-01	completed	0	1	0	bug,Tweaker: GUI	gut Mod Tweaker: keybind widgets are read-only (can't set/rebind) + render like title text — implement settable keybinds
+1	119	Ensrick	2026-07-06	completed	0	1	0	bug,Tweaker: Chaos Wastes	ct_dev: 'Trait Tier by Rarity' still restricts allowed traits by weapon type (should allow all specified per category except ranged/melee split)
+1	117	Ensrick	2026-06-28	completed	0	1	0	bug	ct_dev: 'Chest of Trials unique trial each time' repeats the same trial; make it implicit (always-on, no toggle) + fix
+1	99	Ensrick	2026-06-28	completed	0	1	0	bug	gut Mod Tweaker: dropdown arrow visual broken (down→up flip + hover glow never properly implemented)
+1	97	Ensrick	2026-07-06	completed	0	1	0	bug,crash,Tweaker: Chaos Wastes,0-critical	ct_dev: chunked sync floods reliable send queue → HOST CRASH on hot-join (large CW graph)
+1	95	Ensrick	2026-07-01	completed	0	1	0	bug,Tweaker: GUI	gut Mod Tweaker: keybind/non-scalar settings render raw Lua table ('TABLE: 0x...') instead of the value
+1	91	Ensrick	2026-06-24	completed	0	1	0	bug	gut Mod Tweaker: scrollbar can't be dragged — clicking it jumps to top
+1	88	Ensrick	2026-07-14	completed	0	1	1	bug,cim	cim: backing out of the in-game (ESC) menu during a mission pulls up the inventory — should be keep-only
+1	67	Ensrick	2026-06-04	completed	0	1	0	bug	enemy_tweaker: silent pcall in SpawnZoneBaker.inject_special_packs hook + 10x rat scaling causes vanilla spawn_zone_baker.lua:563 nil-zone crash
+1	62	Level12Lobster	2026-07-04	completed	0	1	2	bug,crash,Tweaker: GUI	Keep Menus in Mission hotkeys causes crash
+1	47	Ensrick	2026-06-04	completed	0	1	0	bug,crash	cim: B-menu property bubbles no longer apply to equipment (CRITICAL: core feature regression)
+1	23	Ensrick	2026-05-24	completed	0	1	0	bug	vmblauncher: scp remote-deploy fails with OpenSSH 9.x "unexpected filename" (need -O flag)
+1	21	Ensrick	2026-05-24	completed	0	1	0	bug	cwv: cwv_es_musket_old appears twice in pending_defs (duplicate rarity-set log entry)
+1	20	Ensrick	2026-05-24	completed	0	1	0	bug	cwv: 27 ItemMasterList crashify exceptions per keep load (missing rawget on _auto_register_all membership check)
+1	16	Ensrick	2026-05-25	completed	1	0	0	audit,refactor	gt: 5 layered mod.update rewraps have no registry — silent-drop risk
+0	1689	Ensrick	2026-11-13	duplicate	2	0	0	bug,duplicate,cim,2-moderate,public-release	cim Keep forge blocked again since 6.12.0
+0	1562	Ensrick	2026-09-09	completed	1	1	0	bug,tooling,2-moderate,not-started	Report skipped custom-unit validation accurately
+0	1343	Ensrick	2026-08-20	completed	1	1	0	bug,tooling,1-major,not-started	Card refresher strands older cross-mod cards
+0	1287	Ensrick	2026-08-13	completed	1	1	0	bug,audit,tooling,1-major,Fixed	VDL Dev v1.0.18 release points to dirty v1.0.17 source
+0	1278	Ensrick	2026-08-13	completed	1	1	0	bug,tooling,1-major,Fixed	Bind BuildOnly bundles to the exact dirty source snapshot committed
+0	1176	Ensrick	2026-08-06	completed	1	1	0	bug,tooling,0-critical,Fixed,not-started	QA: command collision scan descends into nested worktrees
+0	1144	Ensrick	2026-08-13	not_planned	1	0	0	bug,cross-mod,0-critical,not-started	Client appears to have been kicked from lobby after mission despite having the same mods.
+0	1142	Ensrick	2026-09-01	completed	0	1	1	enhancement,Tweaker: General,2-moderate,Fixed	Disable Bots Command.
+0	1120	Ensrick	2026-10-31	completed	1	1	0	bug,audit,regression,tooling,0-critical,not-started,architecture	Receipt bounds leak between sibling emitters
+0	1049	Ensrick	2026-08-01	completed	1	1	0	bug,regression,tooling,0-critical,Fixed	WOC uppercase receipt asset fails canonical Workshop publication gate
+0	1036	Ensrick	2026-07-28	completed	1	1	0	bug,tooling,1-major,Fixed	Filtered release cannot carry pre-authorization sibling manifests
+0	1029	Ensrick	2026-07-27	not_planned	0	0	0	duplicate,enhancement,CWV,2-moderate,not-started	Add Tuskgor spear style to Kerillian spear
+0	1028	Ensrick	2026-07-27	not_planned	0	0	0	duplicate,enhancement,CWV,2-moderate,not-started	Add Kruber sword style to Kerillian sword
+0	1027	Ensrick	2026-07-27	not_planned	0	0	0	duplicate,enhancement,CWV,2-moderate,not-started	Add Kruber mace style to Kruber sword
+0	1026	Ensrick	2026-08-02	not_planned	2	0	0	enhancement,CWV,2-moderate,not-started	Add four cross-character weapon style swaps
+0	958	Ensrick	2026-07-21	not_planned	1	0	0	duplicate,regression,0-critical,WOC	Blightreaper Regression
+0	945	Ensrick	2026-07-21	not_planned	3	0	0	0-critical	Logs
+0	940	Ensrick	2026-07-21	not_planned	14	0	0	0-critical	test log
+0	937	Ensrick	2026-07-21	not_planned	6	0	0	Tweaker: Career,0-critical	Log Career Tweaker Testing
+0	933	Ensrick	2026-07-21	not_planned	3	0	0	0-critical	Log for more testing.
+0	930	Ensrick	2026-07-21	not_planned	6	1	0	0-critical,not-started	Log CWV tests
+0	928	Ensrick	2026-07-21	not_planned	1	1	0	CWV,0-critical,not-started	Blacksmith Quality CWV item instances missing
+0	927	Ensrick	2026-07-21	not_planned	6	1	0	0-critical,not-started	Log for Issues
+0	926	Ensrick	2026-07-21	not_planned	1	1	0	enhancement,Tweaker: Cosmetics,0-critical,not-started	Glow Menu Changes
+0	924	Ensrick	2026-07-21	not_planned	1	1	0	bug,Tweaker: Cosmetics,0-critical,not-started,architecture	Blood-Bloomed Bouclier Custom Cosmetic description
+0	920	Ensrick	2026-07-21	not_planned	3	1	0	bug,Tweaker: Chaos Wastes,0-critical,not-started	Single-Mission-Loader - No Curse?
+0	826	Ensrick	2026-07-20	duplicate	0	1	0	bug,regression,Tweaker: Chaos Wastes,2-moderate,Fixed	[CT] Snap trial cost to 25 coins
+0	820	Ensrick	2026-07-19	not_planned	0	0	0	bug,duplicate,regression,Tweaker: Chaos Wastes,2-moderate,not-started	[CT] Starting boons missing from pre-run Tab
+0	803	Ensrick	2026-07-19	not_planned	2	0	0	duplicate,enhancement,1-major,Tweaker: Events	[Events] Make Shadow mutator work in Adventure
+0	793	Ensrick	2026-07-19	not_planned	1	0	0	bug,duplicate,regression,cim,cross-mod,2-moderate,WOC,not-started	[cross-mod] Exclude Blightreaper from Athanor menu
+0	792	Ensrick	2026-07-22	not_planned	2	1	0	bug,regression,CWV,2-moderate,not-started	[CWV] Old Musket preview loses idle
+0	789	Ensrick	2026-07-19	not_planned	2	1	0	bug,regression,CWV,2-moderate	[CWV] Kruber Rapier shows offhand pistol
+0	741	Ensrick	2026-07-22	not_planned	6	1	0	bug,crash,CWV,cross-mod,1-major,not-started	Retire cwv skin parity gate: null unconditionally
+0	734	Ensrick	2026-07-19	not_planned	3	1	0	bug,crash,Tweaker: Cosmetics,cross-mod,0-critical	Session-score skin index crashes client
+0	710	Ensrick	2026-07-17	not_planned	0	1	0	bug,crash,cim,0-critical,not-started	Athanor weapon list crashes on arch material
+0	697	Ensrick	2026-08-03	duplicate	1	1	0	bug,Tweaker: Cosmetics,0-critical,architecture	Husk hat LA paint step fails nil
+0	686	Ensrick	2026-07-17	not_planned	0	0	0	0-critical	ct_dev talent tooltip CTD: foot_knight_policy nil
+0	664	Ensrick	2026-07-26	completed	0	1	1	Tweaker: Weapons,feature,1-major,Fixed	Add Executioner headshot-damage toggle
+0	647	Ensrick	2026-07-17	completed	1	1	0	bug,regression,tooling,1-major	Bind Ships to Their Source Worktree
+0	643	Ensrick	2026-07-17	not_planned	1	0	0	duplicate,feature,1-major,WOC	WOC: add native Shyish death spirits to Blightreaper kills
+0	631	RainReligion	2026-07-17	completed	0	1	1	enhancement,Tweaker: GUI,3-low,Fixed	Allow GUI Tweaker Hot Keys to Track Mouse Key Binds
+0	596	Ensrick	2026-07-15	completed	0	1	0	enhancement,Tweaker: Weapons,CWV,2-moderate,Fixed	CWV: add Kruber Infantry Spear
+0	572	Ensrick	2026-07-15	completed	0	1	0	enhancement,Tweaker: GUI,3-low,Fixed	gut: reuse vanilla inventory magnifier in Mod Tweaker search bar
+0	543	Ensrick	2026-10-29	completed	1	1	0	bug,documentation,audit,tooling,2-moderate,not-started	Pin decompiled source provenance automatically
+0	533	Ensrick	2026-07-22	not_planned	3	1	0	bug,duplicate,Tweaker: Chaos Wastes,2-moderate	The Collectibles for Chaos Wastes Mission on tab
+0	531	Ensrick	2026-07-19	not_planned	2	1	0	enhancement,2-moderate,Tweaker: Enemies	Hook remaining behavioral boss controls
+0	527	Ensrick	2026-07-14	completed	0	1	0	Tweaker: GUI,1-major,Fixed	UI Tweaks and Crosshair Kill Confirmation in Tweaker GUI position in the middle and bottom of options
+0	525	Ensrick	2026-07-15	completed	0	1	0	enhancement,Tweaker: GUI,Progression,3-low,Fixed	Rename Modded Progression Tab
+0	519	RainReligion	2026-07-14	completed	0	1	0	Tweaker: Weapons,3-low,Fixed	Set of Saltz Body Anims Done - Needs Implementation
+0	507	Ensrick	2026-07-13	completed	0	1	0	refactor,Tweaker: Career,3-low,Fixed	crt hygiene: dead restore save, latent hook skip
+0	486	Ensrick	2026-07-12	not_planned	0	0	0	CWV,0-critical,not-started	CWV test logs
+0	469	Ensrick	2026-07-19	completed	0	1	0	enhancement,Tweaker: General,1-major,Fixed	Protect bots from hazardous area effects
+0	462	RainReligion	2026-07-09	duplicate	0	0	0		Event Tweaker to Display all Event Mutators AND Starting Boons in Tab List
+0	439	RainReligion	2026-07-08	duplicate	0	0	0		Warrior Priest Career Skill / Bubble Often Prioritizes Bardin Over Other Characters
+0	415	Ensrick	2026-07-07	not_planned	0	1	0	bug,CWV,2-moderate	cwv: Imperial Longsword shield offhand absent for host
+0	401	Ensrick	2026-08-04	duplicate	5	1	0	bug,regression,CWV,0-critical,architecture	Imperial Axe+Shield reverts to dwarf base model
+0	394	Ensrick	2026-08-03	not_planned	3	1	0	bug,CWV,2-moderate,not-started	Apply CWV Grip Transforms to Husks
+0	391	Ensrick	2026-07-19	not_planned	1	1	0	Tweaker: Weapons,CWV,feature,2-moderate	Control CWV Availability Per Career
+0	384	Ensrick	2026-07-19	not_planned	1	0	0	bug,Tweaker: General,1-major	Aid-errand teleport gap when need_type flickers
+0	382	Ensrick	2026-07-14	not_planned	1	0	0	enhancement,Tweaker: General,3-low,not-started	Dev cheat: massive fixed damage per hit
+0	376	Ensrick	2026-08-03	not_planned	2	1	0	bug,regression,Tweaker: Cosmetics,2-moderate,not-started	LA illusions do not persist across restart
+0	359	RainReligion	2026-07-16	completed	0	1	1	Tweaker: GUI,Tweaker: General,feature,3-low,Fixed	Add Command Wheel From Versus as a Means to Assign (Temporary) Bot Behavior During a Mission
+0	352	RainReligion	2026-07-16	completed	0	1	1	Tweaker: GUI,feature,3-low,Fixed	Implement Original Temporary Health Talent Names
+0	350	RainReligion	2026-07-19	completed	0	1	0	Tweaker: Chaos Wastes,feature,3-low,Fixed	Open Trial Rewards During Combat
+0	346	Ensrick	2026-07-13	completed	1	1	0	bug,tooling,2-moderate,not-started	qa: check_localization.ps1 misses unescaped % in loc strings - blocks vmb-launcher publish.ps1 test gate
+0	344	Ensrick	2026-07-12	completed	0	1	0	bug,tooling,verify-fix,1-major	tooling: gui_tweaker_dev itemV2.cfg transiently carried ct_dev's published_id during a ship - Workshop item hijack (recovered)
+0	341	Ensrick	2026-07-16	completed	0	1	1	Tweaker: Weapons,feature,2-moderate,Fixed	Add a Weapon Tweak toggle for bolt staff
+0	331	RainReligion	2026-07-21	completed	0	1	0	Tweaker: Chaos Wastes,feature,2-moderate,Fixed	[Chaos Wastes Tweaker] Create Bots Category
+0	239	Ensrick	2026-07-05	completed	0	1	0	enhancement,cim	cim: hide the per-option 'Cost' (0) readout in the modded Athanor -- meaningless there
+0	229	Ensrick	2026-07-02	not_planned	1	0	0	bug,duplicate,Tweaker: Cosmetics	cosmetics: unlock toggles for unobtainable skins/hats were no-ops - mod never granted OWNERSHIP (136 items) [fixed 0.9.63-dev, awaiting in-game verify]
+0	220	Ensrick	2026-07-02	completed	0	1	0	refactor	ct_dev: physically reorder chaos_wastes_tweaker_dev_localization.lua to mirror the widget tree
+0	218	Ensrick	2026-08-13	completed	0	1	0	enhancement,refactor,cim,3-low,Fixed	Remove obsolete CIM widget stripping
+0	196	Ensrick	2026-07-21	not_planned	1	1	0	bug,audit,Tweaker: Weapons,0-critical,not-started,architecture	Fix Billhook charge animation vocabulary
+0	189	Ensrick	2026-06-29	completed	0	1	0	Tweaker: GUI	gut: in-mission loadout gear/cog icon could be ~40% bigger
+0	188	Ensrick	2026-06-29	completed	0	1	0	Tweaker: GUI	gut Mod Tweaker: slider numeric-input caret sits one space too far left + doesn't move with arrow keys
+0	184	Ensrick	2026-07-21	not_planned	1	1	0	enhancement,Tweaker: Weapons,2-moderate,not-started	Add Kruber ranged animation tuning
+0	182	Ensrick	2026-07-21	not_planned	1	1	0	bug,Tweaker: Weapons,0-critical,not-started,architecture	Retune Kruber Cog Hammer animations
+0	180	Ensrick	2026-07-21	not_planned	1	1	0	bug,Tweaker: Weapons,2-moderate,not-started	Retune Kruber Greathammer animations
+0	178	Ensrick	2026-07-21	not_planned	1	1	0	bug,Tweaker: Weapons,2-moderate,not-started	Fix Kruber Rapier animations
+0	171	Ensrick	2026-06-29	completed	0	1	0	Tweaker: GUI	gut: 'Hide UI' set to OFF does not restore the HUD (have to use UI Tweaks to bring it back)
+0	170	Ensrick	2026-06-29	completed	0	1	0	Tweaker: GUI	gut: cycling Hide Viewmodel off->on blends BOTH primary + secondary weapon units over each other (swapping weapons clears it)
+0	166	Ensrick	2026-06-29	completed	0	1	0	Tweaker: GUI	gut Mod Tweaker: scrollbar corners are square; should be slightly rounded to match the vanilla options menu
+0	165	Ensrick	2026-06-30	completed	0	1	0	Tweaker: GUI	gut Mod Tweaker: collapsible groups should show a right/down arrow indicator (right=collapsed, down=expanded) with hover highlight
+0	163	Ensrick	2026-06-29	completed	0	1	0	Tweaker: GUI	gut Mod Tweaker: auto-collapse sibling collapsibles when opening another (toggle, default ON, level-aware)
+0	161	Ensrick	2026-07-21	not_planned	1	1	0	bug,Tweaker: Weapons,2-moderate,not-started	Restore Saltzpyre Polearm Animations
+0	158	Ensrick	2026-06-29	completed	0	1	0	Tweaker: GUI	gut Mod Tweaker: open dropdown popup bleeds hover through to the menu rows behind it
+0	154	Ensrick	2026-08-04	duplicate	8	1	0	bug,Tweaker: Cosmetics,0-critical,architecture	Synchronize Cross-Character Weapon Cosmetics
+0	151	Ensrick	2026-06-28	completed	0	1	0		gut Mod Tweaker: tabs stop working inside the advanced/gear submenu (nested menu under a toggleable option)
+0	147	Ensrick	2026-06-29	completed	0	1	0	Tweaker: General	gt_dev: 3rd-person camera minimum distance too large — allow closer than 1.0
+0	134	Ensrick	2026-07-14	not_planned	0	0	0	bug,Tweaker: Chaos Wastes,diagnostics-armed	ct_dev: Ravaged Art + loot dice issue in Chaos Wastes (details TBD)
+0	132	Ensrick	2026-07-19	not_planned	2	1	0	bug,Tweaker: Chaos Wastes,2-moderate	Enforce Khazukan Trial Chest Cap
+0	125	Ensrick	2026-06-28	completed	0	1	0	enhancement	gut: add a hotkey (+ chat command) to open the Mod Tweaker menu
+0	113	Ensrick	2026-07-22	not_planned	2	1	0	duplicate,enhancement,audit,Tweaker: Weapons,3-low	Audit Warrior Priest Cross-Character Coverage
+0	111	Ensrick	2026-07-22	not_planned	2	0	0	duplicate,enhancement,audit,Tweaker: Weapons,2-moderate	Audit Kerillian Cross-Character Weapon Coverage
+0	110	Ensrick	2026-07-22	not_planned	2	1	0	duplicate,enhancement,audit,Tweaker: Weapons,3-low	Audit Bardin Cross-Character Weapon Coverage
+0	109	Ensrick	2026-07-22	not_planned	2	0	0	duplicate,enhancement,audit,Tweaker: Weapons,2-moderate	Audit Kruber Cross-Character Weapon Coverage
+0	78	Ensrick	2026-07-05	completed	0	1	0	enhancement,Tweaker: GUI	gut Mod Tweaker: native settings-menu layout fidelity (title/tab overlap, dividers, justification, tab casing)
+0	75	Ensrick	2026-06-20	not_planned	0	0	0		Comprehensive per-mod feature list (players can't see implicit/bundled features)
+0	63	Ensrick	2026-07-21	completed	0	1	0	enhancement,Tweaker: Chaos Wastes,3-low,Fixed	Add Optional Trial Chest Costs
+0	40	Ensrick	2026-07-03	not_planned	0	1	0	bug,wontfix,regression,Tweaker: Chaos Wastes,verify-fix	ct: Miracle of Isha mutex checkboxes don't visually deselect siblings
+0	36	Ensrick	2026-05-25	completed	0	1	0	enhancement	QA: static check for unpack(t, i) without explicit j (nil-hole non-determinism)
+0	31	Ensrick	2026-07-05	not_planned	0	0	0	enhancement,deferred,tooling,1-major	Senior-eng hardening: per-mod feature flag for local-only testing
+0	4	Ensrick	2026-07-14	not_planned	0	0	0	enhancement,audit,blocked,Tweaker: Career,3-low,not-started	career_tweaker: fill 27 remaining BR_TOGGLES stubs
+-1	1815	Ensrick	2026-11-06	completed	0	0	0	bug,Tweaker: Chaos Wastes,tooling,1-major,not-started,architecture,public-release	Qualify constructed Chaos Wastes receipts
+-1	1812	Ensrick	2026-11-06	completed	0	0	0	bug,tooling,0-critical,not-started,architecture,public-release	Recognize Factory LOAD Authority
+-1	1777	Ensrick	2026-10-30	completed	1	1	0	enhancement,tooling,2-moderate,not-started	Preserve Card Authority Across Healthy Publication
+-1	1759	Ensrick	2026-10-27	completed	0	0	0	bug,tooling,3-low	QA reports Lua success after failures
+-1	1751	Ensrick	2026-10-27	completed	0	0	0	bug,tooling,2-moderate,not-started	Validate staged file-size baseline changes
+-1	1682	Ensrick	2026-10-24	completed	1	1	0	Tweaker: Weapons,tooling,1-major,not-started	Re-anchor weapon-history source to Version 6.13.0
+-1	1643	Ensrick	2026-09-21	completed	0	0	0	bug,tooling,0-critical,Fixed	Deployed printf swap deadlocks lifecycle guard and ships
+-1	1428	Ensrick	2026-08-26	completed	1	1	0	enhancement,audit,tooling,2-moderate,not-started,Character Dialogue	[tooling] Backfill Character Dialogue receipt
+-1	1416	Ensrick	2026-08-25	completed	1	1	0	audit,refactor,Tweaker: Chaos Wastes,2-moderate,architecture	#2: Extract Chaos Wastes peer-parity owner
+-1	1376	Ensrick	2026-08-23	completed	0	0	0	bug,tooling,1-major	Ship fails when author is unsubscribed
+-1	1257	Ensrick	2026-08-11	completed	0	0	0	bug,tooling,2-moderate,not-started	Worktree cleanup rejects proven merged branch
+-1	1125	Ensrick	2026-08-13	completed	1	1	0	audit,tooling,2-moderate,Fixed	Census gaps: particle kind, reachability, damage_sources
+-1	1111	Ensrick	2026-08-02	completed	0	0	0	bug,tooling,2-moderate	check_versions crashes on vanished agent worktrees
+-1	1109	Ensrick	2026-08-02	completed	0	0	0	bug,tooling,0-critical	Publication authorization misses qa-gate after check-run pagination
+-1	684	Ensrick	2026-07-18	completed	0	0	0	bug,tooling,2-moderate	promote.ps1 id normalizer and verify defects
+-1	676	Ensrick	2026-07-19	completed	1	1	0	enhancement,audit,tooling,1-major	Add Trusted CI Authorization for Stable Promotion PRs
+-1	625	Ensrick	2026-07-17	completed	1	1	0	enhancement,tooling,1-major,not-started	Reconcile unmerged agent branches
+-1	544	Ensrick	2026-07-13	completed	1	1	0	audit,tooling,feature,2-moderate,not-started	Add pure Lua unit test layer
+-1	498	Ensrick	2026-07-17	completed	1	1	0	enhancement,tooling,2-moderate,Fixed	Enforce lifecycle labels, roll out not-started
+-1	432	Ensrick	2026-07-12	completed	1	1	0	documentation,2-moderate	docs: contradictions, stale claims, overlap consolidation
+-1	370	Ensrick	2026-07-13	completed	0	0	0	bug,tooling,2-moderate,not-started	tooling: ship.ps1 aborts (exit 1) after a successful upload on the first ship past midnight — 'gh release view' not-found stderr terminates outside try/catch
+-1	345	Ensrick	2026-07-18	completed	0	1	0	enhancement,audit,Tweaker: GUI,Tweaker: General,Tweaker: Chaos Wastes,cross-mod,verify-fix,2-moderate	Synchronize Localization Tags with Issues
+-1	307	Ensrick	2026-07-06	completed	1	1	0	Tweaker: GUI,tooling,feature,0-critical	Free Camera
+-1	301	Ensrick	2026-07-05	completed	1	1	0	documentation,audit,cross-mod,1-major	New Doctrine on Issues/Localization!
+-1	90	Ensrick	2026-07-05	completed	0	1	0	enhancement,audit,Tweaker: GUI,verify-fix	🧪 In-game verification checklist — 2026-06-24 session builds (keep open until user-verified)
+-1	30	Ensrick	2026-08-25	completed	1	1	0	enhancement,regression,tooling,2-moderate,not-started	Senior-eng hardening: bundle SHA256 in manifest.json + vt2-mod-updater verification
+-1	18	Ensrick	2026-05-24	completed	0	0	0	bug,audit	et: mid-session settings-edit doesn't re-trigger threat-value reseed (only on_enabled does)
+-1	17	Ensrick	2026-05-25	completed	0	0	0	bug,audit	et: BR damage hooks have no host/client gating — divergence risk if settings differ
+-1	15	Ensrick	2026-05-25	completed	0	0	0	bug,audit	gt: on_disabled leaves global mutations behind (only restores camera)
+-1	6	Ensrick	2026-05-25	completed	0	0	0	bug,audit	ct: altar distribution seed determinism untested under live multiplayer
+-1	1	Ensrick	2026-07-04	completed	0	1	0	enhancement,audit,refactor,CWV,verify-fix	CWV: refactor 22 bare-global declarations to local forward-decl pattern
+-2	1683	Ensrick	2026-10-24	completed	0	0	0	tooling,1-major,not-started	Upstream source tip freezes every commit
+-2	1466	Ensrick	2026-08-29	completed	0	0	0	enhancement,audit,cross-mod,tooling,2-moderate,not-started	[tooling] Compose Disabled Source-Exact Recovery Coordinator
+-2	1435	Ensrick	2026-08-27	completed	0	0	0	enhancement,audit,cross-mod,tooling,2-moderate,Fixed	[tooling] Canonicalize immutable-review content manifests
+-2	1308	Ensrick	2026-08-16	completed	0	0	0	enhancement,refactor,tooling,2-moderate,not-started	Strip brittle non-behavioral filler from offline suite
+-2	1223	Ensrick	2026-08-13	completed	0	0	0	enhancement,tooling,2-moderate,Fixed	Add Lua parse gate for mod sources
+-2	1198	Ensrick	2026-08-13	completed	0	0	0	enhancement,cim,cross-mod,tooling,2-moderate,Fixed,architecture	Census lacks vanilla crafting-bench preview surface
+-2	1197	Ensrick	2026-08-13	completed	0	0	0	enhancement,cross-mod,tooling,2-moderate,Fixed,architecture	Expand appearance contracts to all 16 surfaces
+-2	1187	Ensrick	2026-08-07	completed	0	0	0	documentation,CWV,3-low,not-started	DoD miscites Outrider as G-THROWN canon
+-2	1160	Ensrick	2026-08-06	completed	0	0	0	enhancement,cross-mod,tooling,2-moderate	Retire process residue: promotion lag, frozen debt
+-2	751	Ensrick	2026-07-19	completed	0	0	0	enhancement,audit,tooling,2-moderate,not-started	Triage 16 unmerged branches for stranded fixes
+-2	503	Ensrick	2026-07-12	completed	0	0	0	documentation,audit,2-moderate,not-started	ENGINE_SURFACE docs for remaining active mods
+-2	489	Ensrick	2026-07-13	completed	0	0	0	tooling,2-moderate,not-started	ship.ps1 gh release view dies under redirection
+-2	330	Ensrick	2026-07-05	completed	0	0	0	tooling,3-low	Decision: retire or git-native-ize the MOD_OWNERSHIP + .in_progress sentinel ceremony
+-2	329	Ensrick	2026-07-05	completed	0	0	0	tooling,3-low	Decision: enforce or retire the priority-label rule (82 percent of open issues unlabeled)
+-2	328	Ensrick	2026-07-05	completed	0	0	0	tooling,2-moderate	Ship doctrine tie-breaker: public visibility + pre-release suffix must NOT auto-upload
+-2	215	Ensrick	2026-07-02	completed	0	0	0	tooling	qa/check_in_progress.ps1: non-mod sentinel names (e.g. .in_progress/qa-tooling.md) trip 'malformed sentinel' exit 2 and hard-block the pre-commit hook
+-2	73	Ensrick	2026-06-11	completed	0	0	0	audit,deferred	cim: HeroView HDR fix follow-ups — error-path world leak (deferred fassert) + inn-material residency watch
+-2	70	Ensrick	2026-07-14	completed	0	0	0	enhancement,audit,Tweaker: General,not-started	QA hygiene backlog (2026-05-29 review): gt nil-guards, cwv companion-detection doc gap, mp sibling-API doc-vs-reality, POSTMORTEMS adoption
+-2	69	Ensrick	2026-06-13	completed	0	0	0	audit	bt: no runtime peer-handshake — cross-peer BR registration-index divergence is undefended
+-2	32	Ensrick	2026-08-25	completed	0	0	0	enhancement,regression,tooling,2-moderate,not-started	Add 'Verify installed bundles' button to vt2-mod-updater
+-2	19	Ensrick	2026-05-24	completed	0	0	0	audit,refactor	et: BR._set_template_body overwrites buff_template entries unconditionally (silent stomp risk)
+-2	9	Ensrick	2026-05-23	completed	0	0	0	audit	et: difficulty-mimic threat-value seeding gap on mid-session re-enable
+-2	5	Ensrick	2026-05-23	completed	0	0	0	audit,refactor	ct: Reckless Swings tweak uses hard-coded array indices
+-3	1739	Ensrick	2026-10-26	completed	0	1	0	bug,tooling,3-low,not-started	Name checker fails standalone in PowerShell 5.1
+-3	1721	Ensrick	2026-10-25	completed	0	1	0	bug,tooling,3-low,not-started	Sentinel script fails standalone in PowerShell 5.1
+-3	1609	Ensrick	2026-09-15	completed	0	1	0	bug,tooling,3-low,not-started	Live-test fixture hard-codes mp deployed tree
+-3	1577	Ensrick	2026-09-13	completed	0	1	0	bug,tooling,2-moderate,not-started	Textual invariant manifest rejects any new entry
+-3	1298	Ensrick	2026-08-13	completed	0	1	0	bug,tooling,1-major,Fixed	Ship card refresh misses helper-owned LOAD tags
+-3	1174	Ensrick	2026-08-06	completed	0	1	0	bug,tooling,2-moderate,Fixed	QA: reject staged and committed base-to-head whitespace defects
+-3	1129	Ensrick	2026-08-03	completed	0	1	0	bug,tooling,1-major,not-started	Publication gate misses qa-gate past 30 check runs
+-3	1102	Ensrick	2026-10-27	completed	0	1	0	bug,regression,tooling,2-moderate,not-started,architecture	Auto-refresh pinned card versions on ship
+-3	1101	Ensrick	2026-08-02	completed	0	1	0	bug,tooling,2-moderate	Native-resource check false-fails inside linked worktrees
+-3	832	Ensrick	2026-07-19	completed	0	1	0	bug,tooling,0-critical,Fixed	Canonical headless ship path deadlocks before release-bundle generation
+-3	827	Ensrick	2026-07-21	completed	0	1	0	bug,audit,Tweaker: Chaos Wastes,2-moderate,Fixed	[CT] Audit trial cost localization
+-3	689	Ensrick	2026-07-17	completed	0	1	0	bug,tooling,1-major,not-started	CI dev-only-edits gate blocks legitimate promotions
+-3	683	Ensrick	2026-07-17	completed	0	1	0	bug,audit,tooling,1-major	Ship/release launcher path diverges in clean worktrees
+-3	651	Ensrick	2026-09-04	completed	0	1	0	bug,regression,tooling,1-major,not-started	Release tooling: fall back when GitHub release-by-tag endpoint returns 503
+-3	646	Ensrick	2026-07-17	completed	0	1	0	bug,tooling,2-moderate	Normalize Descriptor Hashes Across Steam Line Endings
+-3	284	Ensrick	2026-07-06	completed	0	1	0	bug,CWV,tooling,0-critical	cwv: compile FAILS - 'main function has more than 200 local variables' (character_weapon_variants.lua:10203) - blocks every dev ship's GitHub-release stage
+-3	214	Ensrick	2026-07-02	completed	0	1	0	bug,tooling	tools/mod-lint/lint-mod.ps1: second positional arg is $JsonPath — passing a 2nd file path OVERWRITES that source file with the JSON report
+-3	85	Ensrick	2026-07-22	completed	0	1	0	bug,regression,tooling,1-major,not-started	Keep PowerShell 5.1 QA scripts ASCII-safe
+-3	74	Ensrick	2026-07-14	completed	0	1	0	bug,audit,deferred,Tweaker: Weapons,not-started	wt: BR true-flight reimpl divergences vs vanilla + regression-harness 'skip:' handling + stale cfg description version
+-3	51	Ensrick	2026-07-05	completed	0	1	0	bug,tooling,0-critical	qa/check_unpack_safety: 5 sites need pragma/fix + improve comment-block detection (2 false positives)
+-4	1746	Ensrick	2026-10-27	completed	0	1	0	enhancement,tooling,3-low,not-started	Support sibling receipts in single-stream card refresh
+-4	1700	Ensrick	2026-10-24	completed	0	1	0	enhancement,tooling,2-moderate,not-started	Lua suite manifest skips seven test files
+-4	1666	Ensrick	2026-10-17	completed	0	1	0	tooling,3-low,not-started	Card authority trusts embedded release assets array
+-4	1321	Ensrick	2026-08-28	completed	0	1	0	enhancement,tooling,3-low,not-started	CI-hardening spoof allowlist fails on Linux runner
+-4	1090	Ensrick	2026-08-02	completed	0	1	0	enhancement,tooling,2-moderate,not-started	Backfill unresolvable BUG_CLASSES source citations
+-4	1089	Ensrick	2026-08-03	completed	0	1	0	enhancement,audit,tooling,1-major,not-started	Triage 23 unreviewed no-PR agent branches
+-4	1085	Ensrick	2026-08-02	completed	0	1	0	enhancement,tooling,2-moderate,not-started	LF-normalize remaining .mod sources and bundles
+-4	746	Ensrick	2026-07-19	completed	0	1	0	enhancement,tooling,2-moderate,not-started	Coop verify queue for volunteer testers
+-4	516	Ensrick	2026-07-12	completed	0	1	0	tooling,2-moderate	qa: tier-a gate for textual rt invariants
+-4	502	Ensrick	2026-07-12	completed	0	1	0	documentation,2-moderate	Archive superseded and point-in-time docs
+-4	493	Ensrick	2026-07-13	completed	0	1	0	tooling,2-moderate,not-started	publish-release rebuilds all mods, no per-mod filter
+-4	480	Ensrick	2026-07-13	completed	0	1	0	Tweaker: GUI,tooling,2-moderate,Fixed	gut_dev gear-read diagnostic floods logs unthrottled
+-4	326	Ensrick	2026-07-13	completed	0	1	0	enhancement,tooling,1-major	Mechanize ship-time status labeling + loc-tag/label sync check
+-4	325	Ensrick	2026-07-05	completed	0	1	0	tooling,2-moderate	Label taxonomy: 'et' label description says event_tweaker but its issues are enemy_tweaker; event_tweaker has no label
+-4	315	Ensrick	2026-07-04	completed	0	1	0	documentation,cross-mod,1-major	Extract Source Code from the Following Mods:
+-4	306	Ensrick	2026-07-06	completed	0	1	0	Tweaker: General,tooling,1-major	Save coordinates / teleport
+-4	219	Ensrick	2026-08-03	completed	0	1	0	enhancement,audit,cross-mod,3-low	Remove confirmed orphan localization keys
+-4	177	Ensrick	2026-06-28	completed	0	1	0	audit	wt: tag Crowbill (bw_1h_crowbill) on Kruber as confirmed working
+-4	176	Ensrick	2026-06-28	completed	0	1	0	audit	wt: tag Falchion (wh_1h_falchion) on Kruber as confirmed working
+-4	57	Ensrick	2026-06-13	completed	0	1	0	audit	Launcher: UploadStager ignored cfg's preview field
+-4	8	Ensrick	2026-05-24	completed	0	1	0	audit,refactor	wt: defensive rawget on user-input ItemMasterList lookups

@@ -1,0 +1,79 @@
+
+== weapon_tweaker (v0.12.343-beta, last src commit 2026-11-12)  vs  weapon_tweaker_dev (v0.12.344-dev, last 2026-11-12)
+   common files: 88  identical-after-namespace-normalization: 79  differing: 9 (+707/-6 lines dev vs stable)
+   only in dev: 5 files, 4565 lines   only in stable: 0 files, 0 lines
+     diff 244 scripts/mods/weapon_tweaker/_wt_anim_remap.lua
+     diff 172 scripts/mods/weapon_tweaker/_wt_runtime_checks.lua
+     diff 118 scripts/mods/weapon_tweaker/weapon_tweaker.lua
+     diff 80 scripts/mods/weapon_tweaker/_wt_diagnostics.lua
+     diff 53 scripts/mods/weapon_tweaker/weapon_tweaker_data.lua
+     diff 26 scripts/mods/weapon_tweaker/weapon_tweaker_localization.lua
+     dev-only sample: _wt_runtime_checks_hold_pose.lua, wt_dev_anim_picker.lua, wt_dev_hold_pose.lua, wt_port_status.lua, wt_universal_availability.lua
+
+== chaos_wastes_tweaker (v0.7.354-beta, last src commit 2026-11-06)  vs  chaos_wastes_tweaker_dev (v0.7.354-dev, last 2026-11-06)
+   common files: 37  identical-after-namespace-normalization: 21  differing: 16 (+3108/-11797 lines dev vs stable)
+   only in dev: 57 files, 24541 lines   only in stable: 12 files, 2928 lines
+     diff 10619 scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua
+     diff 2454 scripts/mods/chaos_wastes_tweaker/_ct_peer_parity_owner.lua
+     diff 706 scripts/mods/chaos_wastes_tweaker/_ct_wire_policy.lua
+     diff 459 scripts/mods/chaos_wastes_tweaker/_adventure_pool.lua
+     diff 292 scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker_localization.lua
+     diff 189 scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker_data.lua
+     dev-only sample: _ct_adventure_runtime_owner.lua, _ct_altar_reuse_owner.lua, _ct_boon_balance.lua, _ct_boon_grant_owner.lua, _ct_boon_offer_view_owner.lua, _ct_boon_preview_helpers.lua, _ct_boon_preview_runtime.lua, _ct_boon_preview_tooltip.lua, _ct_boon_pricing_audit.lua, _ct_boon_registry.lua, _ct_boon_runtime_owner.lua, _ct_boss_grudge_marks.lua
+     stable-only: _ct_diag_official_apply_evidence.lua, _ct_official_boon_repairs.lua, _ct_official_chest_cap.lua, _ct_official_chest_rescue.lua, _ct_official_collectibles.lua, _ct_official_cooldowns.lua, _ct_official_feature_leaf.lua, _ct_official_shop.lua, _ct_official_verify_runtime.lua, _ct_wire_bootstrap.lua, _ct_wire_runtime.lua, _lib_network_lookup.lua
+
+== crafting_in_modded (v0.8.148, last src commit 2026-11-06)  vs  crafting_in_modded_dev (v0.8.148-dev, last 2026-11-06)
+   common files: 66  identical-after-namespace-normalization: 53  differing: 13 (+724/-28 lines dev vs stable)
+   only in dev: 4 files, 1389 lines   only in stable: 1 files, 265 lines
+     diff 270 scripts/mods/crafting_in_modded/standard_forge.lua
+     diff 135 scripts/mods/crafting_in_modded/crafting_in_modded.lua
+     diff 100 scripts/mods/crafting_in_modded/_cim_modded_loadout_owner.lua
+     diff 53 scripts/mods/crafting_in_modded/cim_debug.lua
+     diff 52 scripts/mods/crafting_in_modded/_cim_forge_state_owner.lua
+     diff 41 scripts/mods/crafting_in_modded/_cim_forge_ui_owner.lua
+     dev-only sample: _cim_ranalds_browser.lua, _cim_ranalds_catalog.lua, _cim_ranalds_firestore.lua, _cim_ranalds_import.lua
+     stable-only: _cim_standard_forge_presentation.lua
+
+== general_tweaker (v..., last src commit 2026-11-06)  vs  general_tweaker_dev (v..., last 2026-11-06)
+   common files: 58  identical-after-namespace-normalization: 38  differing: 20 (+6087/-1525 lines dev vs stable)
+   only in dev: 35 files, 5828 lines   only in stable: 1 files, 120 lines
+     diff 1747 scripts/mods/general_tweaker/_gt_regression_checks.lua
+     diff 1696 scripts/mods/general_tweaker/_gt_bot_fixes.lua
+     diff 710 scripts/mods/general_tweaker/_gt_creature_spawner.lua
+     diff 655 scripts/mods/general_tweaker/general_tweaker_data.lua
+     diff 636 scripts/mods/general_tweaker/_gt_bot_teleport_lab.lua
+     diff 606 scripts/mods/general_tweaker/general_tweaker_localization.lua
+     dev-only sample: _gt_agent_bridge.lua, _gt_bot_aid_owner.lua, _gt_bot_command_policy.lua, _gt_bot_command_wheel.lua, _gt_bot_consumables.lua, _gt_bot_hazard_resistance.lua, _gt_bot_hazard_resistance_policy.lua, _gt_bot_heal_policy.lua, _gt_bot_update_fixes.lua, _gt_bot_utility_policy.lua, _gt_debug_highlights.lua, _gt_diag_chest_pickup_state.lua
+     stable-only: _gt_probe_dummy_hits.lua
+
+== gui_tweaker (v0.2.290, last src commit 2026-11-02)  vs  gui_tweaker_dev (v0.2.369-dev, last 2026-11-02)
+   common files: 125  identical-after-namespace-normalization: 103  differing: 22 (+1891/-272 lines dev vs stable)
+   only in dev: 9 files, 1604 lines   only in stable: 9 files, 1738 lines
+     diff 725 scripts/mods/gui_tweaker/_gut_native_loadouts.lua
+     diff 440 scripts/mods/gui_tweaker/_mod_tweaker_definitions.lua
+     diff 163 scripts/mods/gui_tweaker/_numericui_cooldown_realtime.lua
+     diff 158 scripts/mods/gui_tweaker/_gut_camera.lua
+     diff 135 scripts/mods/gui_tweaker/gui_tweaker.lua
+     diff 95 scripts/mods/gui_tweaker/_gut_mod_tweaker_contracts.lua
+     dev-only sample: _gut_all_languages.lua, _gut_career_hud_holder_policy.lua, _gut_career_swap.lua, _gut_diag_cutscene257.lua, _gut_diag_optionsview.lua, _gut_diagnostics.lua, _gut_dx12_fence630.lua, _gut_screen_particle_ledger.lua, _numericui_ammo_core.lua
+     stable-only: _gut_issue389_verifier.lua, _gut_mission_selection_manifest.lua, _gut_native_loadout_checks.lua, _gut_native_loadout_commands.lua, _gut_uitweaks_live_group.lua, _mod_tweaker_boolean_rows.lua, _mod_tweaker_dialogue_rows.lua, _mod_tweaker_keybind_capture.lua, _mod_tweaker_tooltip.lua
+
+== verminious_dreams_lighting (v1.0.7, last src commit 2026-07-01)  vs  verminious_dreams_lighting_dev (v1.0.20-dev, last 2026-10-25)
+   common files: 3  identical-after-namespace-normalization: 0  differing: 3 (+492/-28 lines dev vs stable)
+   only in dev: 1 files, 31 lines   only in stable: 0 files, 0 lines
+     diff 499 scripts/mods/verminious_dreams_lighting/verminious_dreams_lighting.lua
+     diff 11 scripts/mods/verminious_dreams_lighting/verminious_dreams_lighting_localization.lua
+     diff 10 scripts/mods/verminious_dreams_lighting/verminious_dreams_lighting_data.lua
+     dev-only sample: _lib_debug.lua
+
+== versions of single-stream mods
+   character_weapon_variants 0.1.570-dev 2026-11-06
+   weapons_of_chaos 0.1.62-dev 2026-10-24
+   cosmetics_tweaker 0.9.230-dev 2026-11-02
+   dynamic_cosmetic_portraits 0.1.32-dev 2026-10-25
+   character_dialogue 0.1.15-dev 2026-11-13
+   event_tweaker 0.4.54-dev 2026-10-25
+   enemy_tweaker 0.7.65-dev 2026-10-17
+   modded_progression 0.2.52-dev 2026-11-12
+   career_tweaker 0.4.34-beta 2026-10-24
+   tweaker ? 2026-04-24

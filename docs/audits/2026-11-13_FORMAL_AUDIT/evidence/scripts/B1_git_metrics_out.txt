@@ -1,0 +1,21 @@
+first-parent commits on master since 2026-04-01: 1656
+month     total                docs-only           lua-tests-only                other-mix                pins-only product(mod-lua touched)   release-paperwork-only   tooling/qa(no mod-lua)
+2026-04       7                        0                        0                        0                        0                        7                        0                        0
+2026-05      44                        5                        0                        1                        0                       38                        0                        0
+2026-06       3                        1                        0                        0                        0                        2                        0                        0
+2026-07    1002                       69                        7                        2                        0                      769                       59                       96
+2026-08     365                        5                        4                        0                       43                      239                       15                       59
+2026-09     125                        2                        0                        0                       38                       42                        0                       43
+2026-10      87                        4                        0                        2                       18                       44                        0                       19
+2026-11      23                        1                        0                        0                        6                        8                        0                        8
+ALL        1656                       87                       11                        5                      105                     1149                       74                      225
+share: docs-only=5.3%, lua-tests-only=0.7%, other-mix=0.3%, pins-only=6.3%, product(mod-lua touched)=69.4%, release-paperwork-only=4.5%, tooling/qa(no mod-lua)=13.6%
+file-touch counts by class: {'modsrc': 5867, 'docs': 2843, 'luatests': 2420, 'artifact': 1861, 'changelog': 1588, 'modmeta': 1557, 'other': 1170, 'qa': 1147, 'tooling': 775, 'pins': 191}
+authors: {'Ensrick': 1655, 'Rain': 1}
+
+last 90 days (since 2026-08-15): 409 commits
+  product(mod-lua touched)         192  46.9%
+  pins-only                        105  25.7%
+  tooling/qa(no mod-lua)           100  24.4%
+  docs-only                         10   2.4%
+  other-mix                          2   0.5%

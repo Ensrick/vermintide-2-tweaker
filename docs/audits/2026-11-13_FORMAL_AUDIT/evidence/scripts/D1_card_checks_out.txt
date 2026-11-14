@@ -1,0 +1,269 @@
+MOD_VERSION on master: _archive=0.3.6-dev, career_tweaker=0.4.34-beta, chaos_wastes_tweaker=0.7.354-beta, chaos_wastes_tweaker_dev=0.7.354-dev, character_dialogue=0.1.15-dev, character_weapon_variants=0.1.570-dev, cosmetics_tweaker=0.9.230-dev, crafting_in_modded=0.8.148, crafting_in_modded_dev=0.8.148-dev, dynamic_cosmetic_portraits=0.1.32-dev, enemy_tweaker=0.7.65-dev, event_tweaker=0.4.54-dev, general_tweaker=0.2.180, general_tweaker_dev=0.2.279-dev, gui_tweaker=0.2.290, gui_tweaker_dev=0.2.369-dev, modded_progression=0.2.52-dev, verminious_dreams_lighting=1.0.7, verminious_dreams_lighting_dev=1.0.20-dev, weapon_tweaker=0.12.343-beta, weapon_tweaker_dev=0.12.344-dev, weapons_of_chaos=0.1.62-dev
+
+#226 card=2026-08-20 (4 cards) last_comment=2026-08-20 versions=['0.1.570-dev', '0.8.148-dev']
+   labels: bug, cim, CWV, verify-fix, 1-major
+   cmd /cim_regression_test: crafting_in_modded/scripts/mods/crafting_in_modded/_cim_bootstrap_runtime.lua
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#237 card=2026-09-20 (4 cards) last_comment=2026-09-20 versions=['0.1.570-dev']
+   labels: bug, CWV, verify-fix, 2-moderate
+   check issue660_preview_descriptor_adapter_parity: character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_render.lua
+   check preview_meshswap_guards: character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_render.lua
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#273 card=2026-11-02 (3 cards) last_comment=2026-11-02 versions=['0.12.343-beta', '0.2.290']
+   labels: bug, Tweaker: GUI, Tweaker: Chaos Wastes, CWV, cross-mod, verify-fix, 1-major
+#278 card=2026-08-20 (7 cards) last_comment=2026-08-20 versions=['0.1.570-dev', '0.8.148-dev']
+   labels: bug, question, crash, cim, CWV, cross-mod, verify-fix, 0-critical, coop-required
+#279 card=2026-08-03 (3 cards) last_comment=2026-08-03 versions=['0.1.570-dev']
+   labels: bug, cim, CWV, cross-mod, verify-fix, 0-critical
+#296 card=2026-10-30 (4 cards) last_comment=2026-10-30 versions=['0.1.570-dev']
+   labels: bug, CWV, verify-fix, 2-moderate
+   check cwv_wire_safe_thrown_variant_installed: character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_render.lua
+   check issue296_tuskgor_javelin_recovery_transaction: character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_husk_ammo.lua
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#317 card=2026-10-30 (3 cards) last_comment=2026-10-30 versions=['0.1.570-dev', '0.2.369-dev']
+   labels: CWV, verify-fix, feature, 2-moderate
+   check issue317_career_scoped_animation_picker: character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_identity.lua
+   cmd /cwv_dump_anim_picks: character_weapon_variants/scripts/mods/character_weapon_variants/cwv_dev_anim_picker.lua
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+   cmd /tp: gui_tweaker/scripts/mods/gui_tweaker/_gut_camera.lua
+#343 card=2026-08-03 (1 cards) last_comment=2026-08-03 versions=['0.1.536-dev']
+   labels: blocked, CWV, feature, 3-low, not-started, human-input-needed
+   check issue343_smoke_bomb_diagnostics: character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_render.lua
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+   cmd /cwv_smoke_bomb_probe: character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_diag_smoke_bomb.lua
+#371 card=2026-08-13 (4 cards) last_comment=2026-08-13 versions=['0.1.570-dev', '0.12.344-dev', '0.2.369-dev', '0.4.34-beta', '0.4.54-dev', '0.7.354-dev']
+   labels: Tweaker: GUI, Tweaker: General, cim, CWV, cross-mod, diagnostics-armed, feature, 0-critical, architecture
+   check issue371_runtime_gate_api: gui_tweaker/scripts/mods/gui_tweaker/_gut_mod_tweaker_contracts.lua +1
+   cmd /crt_regression_test: career_tweaker/scripts/mods/career_tweaker/_crt_regression.lua
+   cmd /ct_regression_test: chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+   cmd /event_tweaker_regression_test: event_tweaker/scripts/mods/event_tweaker/_evt_regression.lua
+   cmd /gut_regression_test: gui_tweaker/scripts/mods/gui_tweaker/gui_tweaker.lua
+   cmd /wt_regression_test: weapon_tweaker/scripts/mods/weapon_tweaker/_wt_regression.lua
+#398 card=2026-08-20 (3 cards) last_comment=2026-08-20 versions=['0.1.570-dev']
+   labels: bug, CWV, verify-fix, 0-critical, coop-required, architecture
+   check issue398_cross_access_audio_uses_networked_receiver_event: character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_runtime_identity.lua
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#399 card=2026-08-07 (3 cards) last_comment=2026-08-07 versions=['0.1.570-dev']
+   labels: bug, CWV, verify-fix, 0-critical, coop-required, architecture
+#417 card=None (0 cards) last_comment=2026-08-03 versions=[]
+   labels: bug, blocked, CWV, 2-moderate, not-started, architecture
+#419 card=2026-09-20 (4 cards) last_comment=2026-09-20 versions=['0.1.570-dev', '0.8.148-dev']
+   labels: bug, CWV, verify-fix, 2-moderate
+   cmd /cim_regression_test: crafting_in_modded/scripts/mods/crafting_in_modded/_cim_bootstrap_runtime.lua
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#420 card=2026-08-13 (2 cards) last_comment=2026-08-13 versions=['0.9.230-dev']
+   labels: enhancement, Tweaker: Cosmetics, Tweaker: Weapons, CWV, cross-mod, verify-fix, 2-moderate
+#423 card=2026-08-09 (4 cards) last_comment=2026-08-09 versions=['0.1.570-dev']
+   labels: bug, crash, CWV, verify-fix, 0-critical
+   check cwv_wire_safe_damage_profile_gate: character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_render.lua
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#424 card=2026-08-20 (5 cards) last_comment=2026-08-20 versions=['0.1.570-dev']
+   labels: bug, crash, CWV, verify-fix, 0-critical
+   check cwv_wire_safe_thrown_variant_installed: character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_render.lua
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#474 card=2026-08-21 (9 cards) last_comment=2026-10-26 versions=['0.1.570-dev', '0.12.344-dev']
+   labels: bug, regression, Tweaker: Cosmetics, Tweaker: Weapons, CWV, cross-mod, diagnostics-armed, 0-critical, architecture
+   cmd /wt_dev_hp_reset: weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/wt_dev_hold_pose.lua
+#476 card=2026-08-20 (4 cards) last_comment=2026-10-26 versions=['0.1.570-dev', '0.9.230-dev']
+   labels: bug, crash, Tweaker: Cosmetics, CWV, verify-fix, 0-critical, coop-required, architecture
+#482 card=2026-08-20 (3 cards) last_comment=2026-08-20 versions=['0.1.570-dev', '0.8.148-dev']
+   labels: bug, regression, CWV, verify-fix, 2-moderate
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#491 card=2026-08-20 (4 cards) last_comment=2026-08-20 versions=['0.1.570-dev']
+   labels: bug, crash, CWV, cross-mod, verify-fix, 0-critical
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#518 card=2026-08-20 (3 cards) last_comment=2026-08-20 versions=['0.1.570-dev', '0.7.354-dev', '0.9.230-dev']
+   labels: bug, regression, Tweaker: Chaos Wastes, Tweaker: Cosmetics, CWV, diagnostics-armed, 0-critical, architecture
+   check cos_la_deus_yield_active_mission_only: cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_runtime_checks.lua
+   cmd /cos_persist_dump: cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_command_owner.lua
+   cmd /cos_regression_test: cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_command_owner.lua
+   cmd /la_loadout: cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_commands.lua
+#567 card=2026-09-20 (4 cards) last_comment=2026-09-20 versions=['0.1.570-dev']
+   labels: bug, CWV, diagnostics-armed, 2-moderate
+   check issue567_exact_pair_transition_live: character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_render.lua
+   check issue567_skin_reverse_index_valid: character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_render.lua
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#579 card=2026-09-26 (5 cards) last_comment=2026-10-26 versions=['0.1.570-dev', '0.9.230-dev']
+   labels: bug, Tweaker: Cosmetics, CWV, verify-fix, 0-critical, coop-required, architecture
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#592 card=2026-11-06 (6 cards) last_comment=2026-11-06 versions=['0.1.570-dev', '0.8.148']
+   labels: bug, cim, CWV, verify-fix, 0-critical, architecture, public-release
+   check issue592_bounded_blacksmith_acquisition: character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_render.lua
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#602 card=None (0 cards) last_comment=2026-08-03 versions=[]
+   labels: enhancement, blocked, Tweaker: Cosmetics, Tweaker: Weapons, CWV, cross-mod, 2-moderate, not-started, human-input-needed
+#604 card=2026-08-23 (4 cards) last_comment=2026-08-23 versions=['0.1.570-dev']
+   labels: Tweaker: Weapons, CWV, verify-fix, feature, 0-critical
+   check issue604_crowbill_template_ownership: character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_combat_style.lua
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#613 card=2026-08-26 (1 cards) last_comment=2026-10-17 versions=['0.1.62-dev', '0.8.148-dev']
+   labels: bug, diagnostics-armed, 1-major, WOC
+   cmd /woc_pose_audit: weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua
+   cmd /woc_pose_reset: weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua
+   cmd /woc_regression_test: weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua
+#614 card=2026-08-03 (3 cards) last_comment=2026-08-03 versions=['0.1.62-dev']
+   labels: diagnostics-armed, feature, 1-major, WOC
+   cmd /woc_boss_catalog: weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua
+#615 card=2026-08-03 (3 cards) last_comment=2026-08-03 versions=['0.1.62-dev']
+   labels: diagnostics-armed, feature, 1-major, WOC
+   cmd /woc_boss_catalog: weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua
+#628 card=2026-11-06 (3 cards) last_comment=2026-11-06 versions=['0.1.570-dev', '0.1.62-dev', '0.8.148']
+   labels: bug, cim, CWV, cross-mod, verify-fix, 1-major, architecture
+   cmd /cim_dump_settings: crafting_in_modded/scripts/mods/crafting_in_modded/_cim_bootstrap_runtime.lua
+   cmd /cim_regression_test: crafting_in_modded/scripts/mods/crafting_in_modded/_cim_bootstrap_runtime.lua
+#632 card=2026-08-02 (1 cards) last_comment=2026-08-13 versions=['0.1.50-dev']
+   labels: blocked, feature, 1-major, WOC, not-started
+   cmd /woc_regression_test: weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua
+#633 card=2026-08-20 (4 cards) last_comment=2026-08-20 versions=['0.1.62-dev']
+   labels: diagnostics-armed, feature, 2-moderate, WOC
+   cmd /woc_audio_contract: weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua
+   cmd /woc_audio_probe: weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua
+#642 card=2026-08-03 (3 cards) last_comment=2026-08-03 versions=['0.1.62-dev']
+   labels: diagnostics-armed, feature, 1-major, WOC
+   cmd /woc_boss_catalog: weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua
+#645 card=2026-11-12 (3 cards) last_comment=2026-11-12 versions=['0.1.570-dev']
+   labels: CWV, diagnostics-armed, feature, 2-moderate
+#657 card=2026-11-12 (3 cards) last_comment=2026-11-12 versions=['0.1.570-dev', '0.9.230-dev']
+   labels: CWV, verify-fix, feature, 2-moderate
+   check issue657_native_shield_style_identity: character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_combat_style.lua
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#660 card=2026-08-23 (1 cards) last_comment=2026-10-26 versions=['0.1.536-dev']
+   labels: bug, audit, crash, refactor, blocked, Tweaker: GUI, cim, Tweaker: Cosmetics, Tweaker: Weapons, CWV, cross-mod, 0-critical, WOC, not-started, architecture
+   check issue660_greatsword_style_appearance_transaction: character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_combat_style.lua
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#661 card=2026-08-20 (4 cards) last_comment=2026-08-20 versions=['0.1.570-dev', '0.1.62-dev', '0.12.344-dev']
+   labels: bug, regression, Tweaker: Weapons, CWV, cross-mod, verify-fix, 0-critical, WOC, architecture
+   check issue661_effective_wield_action_contract: weapon_tweaker/scripts/mods/weapon_tweaker/_wt_runtime_checks.lua +1
+   cmd /wt_regression_test: weapon_tweaker/scripts/mods/weapon_tweaker/_wt_regression.lua
+#692 card=2026-11-12 (1 cards) last_comment=2026-11-12 versions=['0.1.570-dev']
+   labels: bug, regression, CWV, verify-fix, 2-moderate
+   check issue692_inverse_transform_application: character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_issue692_transform_check.lua
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#702 card=2026-08-24 (1 cards) last_comment=2026-08-24 versions=['0.9.230-dev']
+   labels: bug, audit, cim, Tweaker: Cosmetics, CWV, cross-mod, verify-fix, 1-major
+#704 card=2026-09-20 (5 cards) last_comment=2026-09-20 versions=['0.1.570-dev', '0.9.230-dev']
+   labels: bug, cim, CWV, verify-fix, 2-moderate
+   check issue483_cwv_sword_mace_individualized_cosmetics: cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_runtime_checks.lua
+   check issue704_canonical_skin_owner_and_sword_mace_sources: character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_render.lua
+   check issue704_sword_mace_picker_family_diagnostics: cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_runtime_checks.lua
+   cmd /cos_regression_test: cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_command_owner.lua
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#712 card=2026-08-03 (5 cards) last_comment=2026-08-03 versions=['0.1.62-dev', '0.12.344-dev']
+   labels: bug, regression, diagnostics-armed, 0-critical, WOC
+   cmd /woc_pose_audit: weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua
+   cmd /woc_pose_reset: weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua
+   cmd /woc_regression_test: weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua
+   cmd /wt_dev_hp_reset: weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/wt_dev_hold_pose.lua
+#719 card=2026-11-12 (6 cards) last_comment=2026-11-12 versions=['0.1.570-dev', '0.8.148']
+   labels: bug, regression, cim, CWV, cross-mod, diagnostics-armed, 2-moderate
+   check issue719_imperial_crowbill_remote_identity: character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_identity.lua
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#747 card=2026-08-03 (5 cards) last_comment=2026-08-20 versions=['0.1.468-dev', '0.1.512-dev', '0.1.54-dev', '0.12.291-dev']
+   labels: bug, blocked, CWV, cross-mod, 1-major, WOC, not-started, architecture
+#760 card=2026-09-20 (5 cards) last_comment=2026-09-20 versions=['0.1.570-dev', '0.12.344-dev']
+   labels: bug, CWV, diagnostics-armed, 3-low
+   check cwv_issue760_outrider_saltzpyre_repeater_stance: character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_render.lua
+   check network_event_unavailable: character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_outrider_animation.lua
+   check unit_not_alive: character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_outrider_animation.lua
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#782 card=2026-08-03 (2 cards) last_comment=2026-08-03 versions=['0.1.62-dev']
+   labels: bug, verify-fix, 1-major, WOC
+#786 card=2026-08-07 (4 cards) last_comment=2026-10-26 versions=['0.1.570-dev']
+   labels: bug, regression, CWV, verify-fix, 0-critical, coop-required, architecture
+#798 card=2026-07-27 (1 cards) last_comment=2026-07-27 versions=['0.1.570-dev']
+   labels: enhancement, Tweaker: Weapons, CWV, verify-fix, 1-major
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#807 card=2026-08-03 (5 cards) last_comment=2026-08-03 versions=['0.1.570-dev']
+   labels: bug, crash, regression, CWV, verify-fix, 0-critical
+#822 card=2026-11-06 (7 cards) last_comment=2026-11-06 versions=['0.1.62-dev', '0.8.148']
+   labels: bug, regression, cim, cross-mod, verify-fix, 0-critical, WOC
+   cmd /cim_dump_settings: crafting_in_modded/scripts/mods/crafting_in_modded/_cim_bootstrap_runtime.lua
+   cmd /cim_regression_test: crafting_in_modded/scripts/mods/crafting_in_modded/_cim_bootstrap_runtime.lua
+   cmd /woc_regression_test: weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua
+#914 card=2026-08-20 (5 cards) last_comment=2026-10-26 versions=['0.1.570-dev']
+   labels: bug, CWV, verify-fix, 0-critical, coop-required, architecture
+   check issue914_peer_ready_identity_lifecycle: character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_identity.lua
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#915 card=2026-09-20 (4 cards) last_comment=2026-09-20 versions=['0.1.570-dev']
+   labels: bug, regression, CWV, verify-fix, 2-moderate
+   check issue915_maul_illusion_vanilla_provenance: character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_render.lua
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#916 card=2026-10-17 (3 cards) last_comment=2026-10-17 versions=['0.1.570-dev']
+   labels: enhancement, CWV, verify-fix, 3-low
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#918 card=2026-08-20 (3 cards) last_comment=2026-08-20 versions=['0.1.570-dev', '0.9.230-dev']
+   labels: bug, regression, Tweaker: Cosmetics, CWV, verify-fix, 0-critical, architecture
+   check issue918_custom_illusion_semantic_sync: cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_runtime_checks.lua
+   check wire_skin_null_all_senders: cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_runtime_checks.lua
+   check wire_skin_null_ungated: cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_runtime_checks.lua
+   cmd /cos_regression_test: cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_command_owner.lua
+#922 card=2026-08-03 (2 cards) last_comment=2026-08-03 versions=['0.1.570-dev', '0.1.62-dev', '0.9.230-dev']
+   labels: bug, Tweaker: Cosmetics, CWV, verify-fix, 0-critical, architecture
+#932 card=2026-08-03 (2 cards) last_comment=2026-08-03 versions=['0.1.570-dev']
+   labels: CWV, verify-fix, feature, 1-major
+   check issue932_primary_slot_musket_ammo_pool_contract: character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_identity.lua
+   cmd /cwv_musket_ammo_diag: character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_commands_lifecycle.lua
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#934 card=2026-11-06 (3 cards) last_comment=2026-11-06 versions=['0.1.62-dev']
+   labels: verify-fix, feature, 1-major, WOC
+   check issue934_shared_relic_lease_contract: weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_shared_relic_runtime.lua
+   cmd /woc_regression_test: weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua
+   cmd /woc_relic_lease_audit: weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_shared_relic_runtime.lua
+#948 card=2026-08-20 (3 cards) last_comment=2026-08-20 versions=['0.1.570-dev', '0.12.344-dev']
+   labels: enhancement, Tweaker: Weapons, CWV, cross-mod, diagnostics-armed, 0-critical, architecture
+   check issue948_universal_base_availability: weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_runtime_checks.lua
+   cmd /wt_audit_universal_compatibility: weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_diagnostics.lua
+   cmd /wt_regression_test: weapon_tweaker/scripts/mods/weapon_tweaker/_wt_regression.lua
+#1107 card=2026-08-03 (1 cards) last_comment=2026-08-03 versions=['0.1.570-dev']
+   labels: bug, CWV, verify-fix, 1-major
+   check issue1107_melee_slot_reload_drains_reserve: character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_identity.lua
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#1108 card=2026-08-20 (2 cards) last_comment=2026-08-20 versions=['0.1.570-dev']
+   labels: bug, CWV, verify-fix, 2-moderate
+   check issue1108_primary_slot_musket_ammo_hud_contract: character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_identity.lua
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#1141 card=2026-11-06 (5 cards) last_comment=2026-11-06 versions=['0.8.148']
+   labels: bug, cim, CWV, cross-mod, verify-fix, 0-critical
+   cmd /cim_dump_settings: crafting_in_modded/scripts/mods/crafting_in_modded/_cim_bootstrap_runtime.lua
+   cmd /cim_regression_test: crafting_in_modded/scripts/mods/crafting_in_modded/_cim_bootstrap_runtime.lua
+#1145 card=2026-08-20 (2 cards) last_comment=2026-08-20 versions=['0.1.570-dev', '0.9.230-dev']
+   labels: bug, crash, Tweaker: Cosmetics, CWV, cross-mod, verify-fix, 0-critical, coop-required, architecture
+   cmd /cos_regression_test: cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_command_owner.lua
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#1186 card=2026-08-20 (2 cards) last_comment=2026-08-20 versions=['0.1.570-dev']
+   labels: bug, CWV, verify-fix, 2-moderate
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#1188 card=2026-08-20 (2 cards) last_comment=2026-08-20 versions=['0.1.570-dev', '0.12.344-dev']
+   labels: bug, Tweaker: Weapons, CWV, cross-mod, verify-fix, 2-moderate, coop-required
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+   cmd /wt_regression_test: weapon_tweaker/scripts/mods/weapon_tweaker/_wt_regression.lua
+#1204 card=2026-09-20 (3 cards) last_comment=2026-09-20 versions=['0.1.570-dev']
+   labels: bug, CWV, cross-mod, verify-fix, 2-moderate, coop-required
+   check issue1204_deus_identity_uses_committed_parity: character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_runtime_identity.lua
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#1211 card=2026-08-20 (2 cards) last_comment=2026-08-20 versions=['0.1.570-dev']
+   labels: bug, crash, regression, CWV, verify-fix, 0-critical, coop-required
+   check issue1211_registered_wwise_world_guard: MISSING
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#1273 card=2026-08-12 (1 cards) last_comment=2026-08-12 versions=['0.1.570-dev']
+   labels: bug, crash, regression, CWV, verify-fix, 0-critical
+   cmd /cwv: character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_commands_lifecycle.lua
+#1320 card=2026-09-26 (2 cards) last_comment=2026-09-26 versions=['0.1.570-dev']
+   labels: bug, CWV, cross-mod, verify-fix, 2-moderate
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#1656 card=None (0 cards) last_comment=2026-11-12 versions=[]
+   labels: bug, cim, CWV, tooling, 2-moderate, not-started
+#1660 card=2026-09-26 (1 cards) last_comment=2026-09-26 versions=['0.1.570-dev']
+   labels: bug, CWV, verify-fix, 2-moderate
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#1676 card=2026-10-30 (1 cards) last_comment=2026-10-30 versions=['0.1.570-dev']
+   labels: bug, CWV, verify-fix, 2-moderate
+   check issue1676_resolved_profile_multipliers: character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_husk_ammo.lua
+   cmd /cwv_regression_test: character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua
+#1687 card=2026-10-30 (1 cards) last_comment=2026-10-30 versions=['0.1.62-dev']
+   labels: bug, verify-fix, 0-critical, WOC
+   check issue613_blightreaper_inventory_icon_contract: weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_relic_registration_owner.lua
+   check issue655_blightreaper_trait_contract: weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua
+   check issue690_blightreaper_registration_gate_contract: weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua
+   cmd /woc_regression_test: weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua

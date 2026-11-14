@@ -1,0 +1,12 @@
+(CLAUDE
+<note-name>
+<note>
+feedback_vt2_max_resource_consumption_side
+reference_cim_equip_capture_la_dispatch
+reference_cim_weapon_crafting_flow
+reference_vmf_checkbox_cached_display_state
+reference_vmf_numeric_widget_no_step
+reference_vmf_persistence_namespace
+reference_vt2_menu_button_overlay_pattern
+reference_vt2_versus_items_hidden_in_adventure
+reference_vt2_widget_timing_pattern

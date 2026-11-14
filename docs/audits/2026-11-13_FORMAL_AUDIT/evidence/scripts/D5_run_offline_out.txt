@@ -1,0 +1,32 @@
+[D5] SUITE test_gt_lobby_failnotify_hardening passed=true total=3 failed=0
+[D5] SUITE test_gt_disconnect_failure_diag passed=true total=3 failed=0
+[D5] SUITE test_crt_retired_big_rebalance passed=true total=4 failed=0
+[D5] SUITE test_gt_official_verify_rollup passed=true total=26 failed=0
+[D5] SUITE test_gt_ai_takeover passed=true total=5 failed=0
+[D5] SUITE test_gt_vmf_debug_gate passed=true total=16 failed=0
+[D5] SUITE test_gt_stable_world_liveness passed=true total=2 failed=0
+[D5] LOAD general_tweaker/_gt_lobby_failed_join_reveal -> ok
+[D5] LOAD general_tweaker/_gt_creature_spawner -> ok
+[D5] RT general_tweaker issue72_lobby_failnotify_never_hands_popup_to_vanilla -> PASS
+[D5] RT general_tweaker gt_lobby_failnotify_popup_up_soft_defers -> PASS
+[D5] RT general_tweaker gt_lobby_failnotify_teardown_driver -> PASS
+[D5] RT general_tweaker gt_lobby_failnotify_unknown_result_drives_teardown -> PASS
+[D5] RT general_tweaker gt_lobby_failnotify_unpack_preserves_leading_nils -> PASS
+[D5] RT general_tweaker gt_cs_breed_list_dynamic -> PASS
+[D5] RT general_tweaker issue247_keep_slot_takeover_wired -> FAIL: #247 emergency gate is still disabling takeover
+[D5] RT general_tweaker issue298_improved_bot_combat_controls -> NOT-REGISTERED
+[D5] LOAD general_tweaker_dev/_gt_lobby_failed_join_reveal -> ok
+[D5] LOAD general_tweaker_dev/_gt_creature_spawner -> ok
+[D5] RT general_tweaker_dev gt_lobby378_watchdog_abort_reroutes_to_menu -> PASS
+[D5] RT general_tweaker_dev gt_cs_breed_list_dynamic -> PASS
+[D5] RT general_tweaker_dev issue72_lobby_failnotify_never_hands_popup_to_vanilla -> PASS
+[D5] RT general_tweaker_dev gt_lobby_failnotify_popup_up_soft_defers -> PASS
+[D5] RT general_tweaker_dev gt_lobby_failnotify_teardown_driver -> PASS
+[D5] RT general_tweaker_dev gt_lobby_failnotify_unknown_result_drives_teardown -> PASS
+[D5] RT general_tweaker_dev gt_lobby_failnotify_unpack_preserves_leading_nils -> PASS
+[D5] LOAD general_tweaker/_gt_creature_spawner -> ok
+[D5] RT general_tweaker gt_cs_breed_list_dynamic -> PASS
+[D5] LOAD general_tweaker_dev/_gt_creature_spawner -> ok
+[D5] RT general_tweaker_dev gt_cs_breed_list_dynamic -> PASS
+[D5] ENTRY general_tweaker load=false gate(_gt_ai_takeover_disabled)=true err=...ker/scripts/mods/general_tweaker/general_tweaker.lua:1532: attempt to index global 'Managers' (a nil value)
+[D5] ENTRY general_tweaker_dev load=false gate(_gt_ai_takeover_disabled)=false err=...pts/mods/general_tweaker_dev/general_tweaker_dev.lua:1767: attempt to index global 'Managers' (a nil value)

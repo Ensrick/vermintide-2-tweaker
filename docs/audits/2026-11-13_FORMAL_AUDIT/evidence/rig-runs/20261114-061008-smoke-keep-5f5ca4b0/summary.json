@@ -1,0 +1,40 @@
+{
+  "run": "20261114-061008-smoke-keep-5f5ca4b0",
+  "name": "smoke-keep",
+  "nonce": "5f5ca4b0",
+  "verdict": "EXITED code=4201840641",
+  "exit": 0,
+  "isolation": "OK",
+  "private_desktop": true,
+  "renderer": "dx12",
+  "arguments": "-eac-untrusted --bundle-dir ../bundle --ini settings --silent-mode -skip-splash -vt2-test-run 5f5ca4b0",
+  "run_end_seen": true,
+  "marks_seconds": {
+    "log_created": 0.5,
+    "realm": 27.3,
+    "splash": 27.3,
+    "title": 27.3,
+    "run_begin": 27.3,
+    "loading": 42.3,
+    "ingame": 42.3,
+    "keep_ready": 54.1,
+    "run_end": 54.1,
+    "ended": 57.4
+  },
+  "cases": [
+    {
+      "id": "smoke-keep",
+      "verdict": "PASS",
+      "asserts": 5,
+      "failed": 0,
+      "seconds": 0.0,
+      "detail": null
+    }
+  ],
+  "script_errors": [],
+  "evidence_lines": 33,
+  "log": "%USERPROFILE%\\.claude\\vt2-harness\\runs\\20261114-061008-smoke-keep-5f5ca4b0\\console.log",
+  "notes": [
+    "private desktop windows at end: "
+  ]
+}

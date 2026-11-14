@@ -1,0 +1,242 @@
+== chaos_wastes_tweaker_dev hook sites: 137
+  kinds: {'hook': 109, 'hook_safe': 28}
+   10 _ct_combat_hooks.lua
+    8 _ct_altar_reuse_owner.lua
+    8 _ct_node_entry_owner.lua
+    8 _ct_run_runtime_owner.lua
+    6 _ct_adventure_runtime_owner.lua
+    6 _ct_diag_gargoyle1124.lua
+    6 _ct_replacement_runtime.lua
+    5 _ct_cot_early_reward.lua
+    4 chaos_wastes_tweaker_dev.lua
+    4 _ct_boon_grant_owner.lua
+    4 _ct_boon_offer_view_owner.lua
+    4 _ct_pickup_spawn_owner.lua
+    4 _ct_run_creation_owner.lua
+    4 _ct_start_shrine_runtime.lua
+    4 _ct_weapon_trait_generation.lua
+    3 _ct_boon_balance.lua
+    3 _ct_boon_registry.lua
+    3 _ct_boon_runtime_owner.lua
+    3 _ct_bot_weapon_chest_owner.lua
+    3 _ct_chest_revive_owner.lua
+    3 _ct_diag_skull52.lua
+    3 _ct_level_load_owner.lua
+    3 _ct_meta_boon_owner.lua
+    3 _ct_meta_trait_boons.lua
+    3 _ct_tab_panel_owner.lua
+    3 _ct_weave_metal_runtime.lua
+    2 _ct_dup_vote_chips.lua
+    2 _ct_peer_parity_owner.lua
+    2 _ct_pickup_population_owner.lua
+    1 _ct_blessed_bots.lua
+    1 _ct_boss_grudge_marks.lua
+    1 _ct_campaign_graph_owner.lua
+    1 _ct_cot_cost.lua
+    1 _ct_curse_lighting_owner.lua
+    1 _ct_diag_tab_native533.lua
+    1 _ct_journey_difficulty_guard.lua
+    1 _ct_miasma.lua
+    1 _ct_progressive_difficulty.lua
+    1 _ct_progressive_elite_runtime.lua
+    1 _ct_progressive_modifier_runtime.lua
+    1 _ct_settings_lifecycle_owner.lua
+    1 _ct_spawn_eligibility_owner.lua
+    chaos_wastes_tweaker_dev.lua:618 mod:hook(_LobbyAux, create_network_hash)
+    chaos_wastes_tweaker_dev.lua:1005 mod:hook("DeusRunController", on_soft_currency_picked_up)
+    chaos_wastes_tweaker_dev.lua:1317 mod:hook("GearUtils", create_equipment)
+    chaos_wastes_tweaker_dev.lua:1388 mod:hook("DeusRunController", can_spawn_belakor_locus)
+    _ct_adventure_runtime_owner.lua:19 mod:hook("LobbyBrowserConsoleUI", _remove_invalid_lobbies)
+    _ct_adventure_runtime_owner.lua:174 mod:hook(_gmh, get_object_sets)
+    _ct_adventure_runtime_owner.lua:312 mod:hook(_G, Localize)
+    _ct_adventure_runtime_owner.lua:441 mod:hook("NetworkedFlowStateManager", clear_object_state)
+    _ct_adventure_runtime_owner.lua:487 mod:hook("NetworkedFlowStateManager", flow_cb_create_state)
+    _ct_adventure_runtime_owner.lua:571 mod:hook("DeusMapScene", on_enter)
+    _ct_altar_reuse_owner.lua:409 mod:hook("DeusChestExtension", update)
+    _ct_altar_reuse_owner.lua:493 mod:hook("DeusChestExtension", get_purchase_cost)
+    _ct_altar_reuse_owner.lua:517 mod:hook("DeusChestExtension", _generate_stored_power_up)
+    _ct_altar_reuse_owner.lua:529 mod:hook("DeusChestExtension", _generate_stored_weapon)
+    _ct_altar_reuse_owner.lua:552 mod:hook("DeusChestExtension", _generate_upgraded_weapon)
+    _ct_altar_reuse_owner.lua:606 mod:hook("DeusChestExtension", update_upgrade_chest_color)
+    _ct_altar_reuse_owner.lua:637 mod:hook("DeusChestExtension", can_be_unlocked)
+    _ct_altar_reuse_owner.lua:688 mod:hook_safe("DeusUpgradeWeaponInteractionUI", _populate_widget)
+    _ct_blessed_bots.lua:166 mod:hook_safe("PlayerBotBase", update)
+    _ct_boon_balance.lua:313 mod:hook(ProcFunctions, drop_item_on_ability_use)
+    _ct_boon_balance.lua:353 mod:hook(ProcFunctions, grenade_explode_buff_area)
+    _ct_boon_balance.lua:1031 mod:hook("GameModeDeus", evaluate_end_conditions)
+    _ct_boon_grant_owner.lua:216 mod:hook("DeusRunController", add_power_ups)
+    _ct_boon_grant_owner.lua:460 mod:hook("DeusRunController", _try_buy_power_up)
+    _ct_boon_grant_owner.lua:546 mod:hook("DeusShopView", _init_power_up_widget)
+    _ct_boon_grant_owner.lua:556 mod:hook("DeusShopView", _on_power_up_bought)
+    _ct_boon_offer_view_owner.lua:149 mod:hook_safe("DeusShopView", _create_ui_elements)
+    _ct_boon_offer_view_owner.lua:195 mod:hook_safe("DeusCursedChestView", create_ui_elements)
+    _ct_boon_offer_view_owner.lua:497 mod:hook("DeusShopView", update)
+    _ct_boon_offer_view_owner.lua:508 mod:hook("DeusCursedChestView", update)
+    _ct_boon_registry.lua:703 mod:hook("DeusRunController", _try_buy_blessing)
+    _ct_boon_registry.lua:841 mod:hook_safe("DeusSpawning", _apply_initial_buffs)
+    _ct_boon_registry.lua:927 mod:hook(server_tbl, start_function)
+    _ct_boon_runtime_owner.lua:48 mod:hook_safe("DeusRunController", _add_initial_power_ups)
+    _ct_boon_runtime_owner.lua:400 mod:hook("DeusRunController", _check_set_completed)
+    _ct_boon_runtime_owner.lua:411 mod:hook("DeusCursedChestView", _on_button_pressed)
+    _ct_boss_grudge_marks.lua:123 mod:hook(terror_event_utils, apply_breed_enhancements)
+    _ct_bot_weapon_chest_owner.lua:285 mod:hook_safe("DeusChestExtension", extensions_ready)
+    _ct_bot_weapon_chest_owner.lua:319 mod:hook("DeusChestExtension", purchase)
+    _ct_bot_weapon_chest_owner.lua:363 mod:hook("DeusChestExtension", open_chest)
+    _ct_campaign_graph_owner.lua:284 mod:hook(_G, deus_populate_graph)
+    _ct_chest_revive_owner.lua:164 mod:hook_safe("DeusCursedChestExtension", _set_state)
+    _ct_chest_revive_owner.lua:535 mod:hook("PlayerUnitHealthExtension", sync_health_state)
+    _ct_chest_revive_owner.lua:555 mod:hook_safe("RespawnHandler", _respawn_player)
+    _ct_combat_hooks.lua:92 mod:hook(ProcFunctions, chain_lightning)
+    _ct_combat_hooks.lua:198 mod:hook(ProcFunctions, lightning_adjecent_enemies)
+    _ct_combat_hooks.lua:264 mod:hook(ProcFunctions, mark_of_nurgle_explosion)
+    _ct_combat_hooks.lua:392 mod:hook(TerrorEventMixer.init_functions, spawn_around_origin_unit)
+    _ct_combat_hooks.lua:574 mod:hook("ConflictDirector", start_terror_event)
+    _ct_combat_hooks.lua:703 mod:hook("TerrorEventMixer", start_event)
+    _ct_combat_hooks.lua:1231 mod:hook(ProcFunctions, career_ability_apply_dot_to_adjecent_enemies)
+    _ct_combat_hooks.lua:1347 mod:hook(ProcFunctions, boon_dot_burning_01_spread)
+    _ct_combat_hooks.lua:1441 mod:hook_safe("GenericAmmoUserExtension", _apply_buffs)
+    _ct_combat_hooks.lua:1480 mod:hook("ActionChargedProjectileUtility", fire_charged_projectile)
+    _ct_cot_cost.lua:71 mod:hook("DeusCursedChestExtension", on_server_interact)
+    _ct_cot_early_reward.lua:25 mod:hook_safe("DeusCursedChestExtension", update)
+    _ct_cot_early_reward.lua:46 mod:hook("DeusCursedChestExtension", can_interact)
+    _ct_cot_early_reward.lua:52 mod:hook("DeusCursedChestExtension", get_interaction_length)
+    _ct_cot_early_reward.lua:57 mod:hook("DeusCursedChestExtension", get_interaction_action)
+    _ct_cot_early_reward.lua:67 mod:hook("DeusCursedChestExtension", on_client_interact)
+    _ct_curse_lighting_owner.lua:246 mod:hook_safe("CameraManager", shading_callback)
+    _ct_diag_gargoyle1124.lua:392 mod:hook("LimitedItemTrackSystem", on_add_extension)
+    _ct_diag_gargoyle1124.lua:407 mod:hook("LimitedItemTrackSystem", register_group)
+    _ct_diag_gargoyle1124.lua:414 mod:hook("LimitedItemTrackSystem", activate_group)
+    _ct_diag_gargoyle1124.lua:421 mod:hook("LimitedItemTrackSpawner", spawn_item)
+    _ct_diag_gargoyle1124.lua:440 mod:hook("LimitedItemTrackSpawner", socket_item)
+    _ct_diag_gargoyle1124.lua:464 mod:hook("MissionSystem", flow_callback_update_mission)
+    _ct_diag_skull52.lua:448 mod:hook_safe("StateIngame", _create_level)
+    _ct_diag_skull52.lua:451 mod:hook("StateIngame", _teardown_level)
+    _ct_diag_skull52.lua:462 mod:hook_safe("GameModeManager", _set_flow_object_set_enabled)
+    _ct_diag_tab_native533.lua:235 mod:hook_safe("IngamePlayerListUI", _set_active)
+    _ct_dup_vote_chips.lua:255 mod:hook_safe("DeusMapDecisionView", _update_player_state)
+    _ct_dup_vote_chips.lua:421 mod:hook_safe("DeusMapScene", _clear)
+    _ct_journey_difficulty_guard.lua:37 mod:hook("StatisticsUtil", _register_completed_journey_difficulty)
+    _ct_level_load_owner.lua:205 mod:hook("EnemyPackageLoader", setup_startup_enemies)
+    _ct_level_load_owner.lua:257 mod:hook("MutatorHandler", tweak_pack_spawning_settings)
+    _ct_level_load_owner.lua:674 mod:hook_safe("GameModeDeus", local_player_game_starts)
+    _ct_meta_boon_owner.lua:505 mod:hook("GenericAmmoUserExtension", use_ammo)
+    _ct_meta_boon_owner.lua:526 mod:hook("PlayerUnitEnergyExtension", drain)
+    _ct_meta_boon_owner.lua:564 mod:hook("PlayerUnitOverchargeExtension", add_charge)
+    _ct_meta_trait_boons.lua:655 mod:hook("BuffExtension", add_buff)
+    _ct_meta_trait_boons.lua:732 mod:hook(BuffFunctionTemplates.functions, apply_pockets_full_of_bombs_buff)
+    _ct_meta_trait_boons.lua:749 mod:hook(BuffFunctionTemplates.functions, remove_deus_potion_buff)
+    _ct_miasma.lua:86 mod:hook(server, update)
+    _ct_node_entry_owner.lua:141 mod:hook("MutatorHandler", _activate_mutator)
+    _ct_node_entry_owner.lua:185 mod:hook_safe("MutatorHandler", initialize_mutators)
+    _ct_node_entry_owner.lua:217 mod:hook("DeusMechanism", get_current_node_curse)
+    _ct_node_entry_owner.lua:231 mod:hook("DeusMechanism", _transition_next_node)
+    _ct_node_entry_owner.lua:270 mod:hook("DeusMechanism", start_next_round)
+    _ct_node_entry_owner.lua:322 mod:hook("DeusMapDecisionView", _enable_hover)
+    _ct_node_entry_owner.lua:354 mod:hook("DeusRunController", get_own_weapon_pool_excludes)
+    _ct_node_entry_owner.lua:569 mod:hook("DeusRunController", get_deus_weapon_chest_type)
+    _ct_peer_parity_owner.lua:790 mod:hook("GameNetworkManager", hot_join_sync)
+    _ct_peer_parity_owner.lua:827 mod:hook("GameNetworkManager", remove_peer)
+    _ct_pickup_population_owner.lua:305 mod:hook_safe("DeusCursedChestExtension", extensions_ready)
+    _ct_pickup_population_owner.lua:345 mod:hook("PickupSystem", populate_pickups)
+    _ct_pickup_spawn_owner.lua:256 mod:hook("PickupSystem", _spawn_pickup)
+    _ct_pickup_spawn_owner.lua:345 mod:hook("UnitSpawner", spawn_network_unit)
+    _ct_pickup_spawn_owner.lua:372 mod:hook("PickupSystem", _spawn_guaranteed_pickup)
+    _ct_pickup_spawn_owner.lua:594 mod:hook("GameModeDeus", _get_coins_amount_and_type)
+    _ct_progressive_difficulty.lua:76 mod:hook("DeusMechanism", sync_mechanism_data)
+    _ct_progressive_elite_runtime.lua:167 mod:hook("ConflictDirector", _post_spawn_unit)
+    _ct_progressive_modifier_runtime.lua:164 mod:hook("GameModeDeus", mutators)
+    _ct_replacement_runtime.lua:237 mod:hook("GameModeDeus", player_left_game_session)
+    _ct_replacement_runtime.lua:270 mod:hook("GameModeManager", player_left_game_session)
+    _ct_replacement_runtime.lua:275 mod:hook_safe("GameModeDeus", _add_bot)
+    _ct_replacement_runtime.lua:361 mod:hook("GameModeDeus", remove_bot)
+    _ct_replacement_runtime.lua:429 mod:hook("GameModeManager", remove_bot)
+    _ct_replacement_runtime.lua:438 mod:hook("DeusRunController", rpc_deus_set_initial_setup)
+    _ct_run_creation_owner.lua:237 mod:hook("DeusRunController", get_run_difficulty)
+    _ct_run_creation_owner.lua:264 mod:hook("DeusRunController", setup_run)
+    _ct_run_creation_owner.lua:405 mod:hook("DeusRunController", rpc_deus_set_initial_soft_currency)
+    _ct_run_creation_owner.lua:451 mod:hook("DeusPowerUpUtils", generate_random_power_ups)
+    _ct_run_runtime_owner.lua:245 mod:hook("BackendInterfaceDeusPlayFab", deus_journey_with_belakor)
+    _ct_run_runtime_owner.lua:267 mod:hook("BackendInterfaceDeusPlayFab", set_loadout_item)
+    _ct_run_runtime_owner.lua:281 mod:hook("BackendInterfaceDeusPlayFab", get_total_power_level)
+    _ct_run_runtime_owner.lua:308 mod:hook_safe("BulldozerPlayer", spawn)
+    _ct_run_runtime_owner.lua:357 mod:hook("DeusMechanism", _setup_run)
+    _ct_run_runtime_owner.lua:385 mod:hook_safe("DeusRunController", unlock_arena_belakor)
+    _ct_run_runtime_owner.lua:396 mod:hook_safe("DeusMapDecisionView", _start)
+    _ct_run_runtime_owner.lua:477 mod:hook("DeusMechanism", game_round_ended)
+    _ct_settings_lifecycle_owner.lua:202 mod:hook("VMFOptionsView", callback_setting_changed)
+    _ct_spawn_eligibility_owner.lua:193 mod:hook("PickupSystem", _can_spawn)
+    _ct_start_shrine_runtime.lua:298 mod:hook("DeusShopView", _get_power_up_costs)
+    _ct_start_shrine_runtime.lua:309 mod:hook_safe("DeusShopView", _update_shop_widgets)
+    _ct_start_shrine_runtime.lua:315 mod:hook("DeusShopView", start)
+    _ct_start_shrine_runtime.lua:342 mod:hook("GameModeMapDeus", local_player_game_starts)
+    _ct_tab_panel_owner.lua:154 mod:hook_safe("IngamePlayerListUI", _setup_deed_reward_data)
+    _ct_tab_panel_owner.lua:206 mod:hook_safe("IngamePlayerListUI", _draw)
+    _ct_tab_panel_owner.lua:620 mod:hook("IngamePlayerListUI", _setup_mission_data)
+    _ct_weapon_trait_generation.lua:391 mod:hook("DeusWeaponGeneration", generate_weapon)
+    _ct_weapon_trait_generation.lua:396 mod:hook("DeusWeaponGeneration", generate_weapon_for_slot)
+    _ct_weapon_trait_generation.lua:401 mod:hook("DeusWeaponGeneration", generate_item_from_item_key)
+    _ct_weapon_trait_generation.lua:406 mod:hook("DeusWeaponGeneration", upgrade_item)
+    _ct_weave_metal_runtime.lua:161 mod:hook(metal_server, start_function)
+    _ct_weave_metal_runtime.lua:214 mod:hook("MutatorHandler", init)
+    _ct_weave_metal_runtime.lua:229 mod:hook_safe("MutatorHandler", destroy)
+== event_tweaker hook sites: 26
+  kinds: {'hook': 18, 'hook_safe': 8}
+   10 _evt_missions.lua
+    5 _evt_cursed_adventure.lua
+    3 _evt_backend_hooks.lua
+    3 _evt_diagnostics.lua
+    2 _evt_guard430_curse_parity.lua
+    2 _evt_preview.lua
+    1 _evt_guard386_pacing.lua
+    _evt_backend_hooks.lua:32 mod:hook("BackendInterfaceLiveEventsPlayfab", get_special_events)
+    _evt_backend_hooks.lua:85 mod:hook("BackendInterfaceLiveEventsPlayfab", get_active_events)
+    _evt_backend_hooks.lua:114 mod:hook("BackendManagerPlayFab", get_level_variation_data)
+    _evt_cursed_adventure.lua:109 mod:hook("MutatorHandler", _activate_mutator)
+    _evt_cursed_adventure.lua:137 mod:hook("MutatorHandler", _deactivate_mutator)
+    _evt_cursed_adventure.lua:155 mod:hook_safe("MutatorHandler", init)
+    _evt_cursed_adventure.lua:180 mod:hook_safe("StateIngame", on_exit)
+    _evt_cursed_adventure.lua:236 mod:hook_safe("CameraManager", shading_callback)
+    _evt_diagnostics.lua:154 mod:hook_safe("Pacing", update)
+    _evt_diagnostics.lua:333 mod:hook("MutatorHandler", ai_killed)
+    _evt_diagnostics.lua:388 mod:hook("UnitSpawner", spawn_unit_from_game_object)
+    _evt_guard386_pacing.lua:119 mod:hook_safe("MutatorHandler", conflict_director_updated_settings)
+    _evt_guard430_curse_parity.lua:132 mod:hook("GameModeBase", is_joinable)
+    _evt_guard430_curse_parity.lua:250 mod:hook_safe("GameNetworkManager", remove_peer)
+    _evt_missions.lua:177 mod:hook("StartGameWindowAreaSelection", _setup_area_widgets)
+    _evt_missions.lua:181 mod:hook("StartGameWindowAreaSelectionConsoleV2", _setup_area_widgets)
+    _evt_missions.lua:189 mod:hook("StartGameWindowAreaSelection", _set_area_presentation_info)
+    _evt_missions.lua:193 mod:hook("StartGameWindowAreaSelectionConsoleV2", _set_area_presentation_info)
+    _evt_missions.lua:197 mod:hook("StartGameWindowMissionSelection", _setup_level_acts)
+    _evt_missions.lua:201 mod:hook("StartGameWindowMissionSelectionConsole", _setup_level_acts)
+    _evt_missions.lua:261 mod:hook("StartGameWindowMissionSelection", _set_presentation_info)
+    _evt_missions.lua:265 mod:hook("StartGameWindowMissionSelectionConsole", _set_presentation_info)
+    _evt_missions.lua:291 mod:hook("StartGameStateSettingsOverview", play)
+    _evt_missions.lua:317 mod:hook("MatchmakingManager", find_game)
+    _evt_preview.lua:192 mod:hook_safe("IngamePlayerListUI", _setup_deed_reward_data)
+    _evt_preview.lua:220 mod:hook_safe("IngamePlayerListUI", _draw)
+== enemy_tweaker hook sites: 15
+  kinds: {'hook': 11, 'hook_safe': 4}
+    4 _et_protect.lua
+    3 _et_custom_breed_parity.lua
+    2 _et_pacing.lua
+    1 _et_boss_behavior.lua
+    1 _et_boss_grudge.lua
+    1 _et_health_multiplier.lua
+    1 _et_personal_handicap.lua
+    1 _et_roaming.lua
+    1 _et_skaven_warlord_breed.lua
+    _et_boss_behavior.lua:42 mod:hook("BTStormfiendShootAction", _fire_from_position_direction)
+    _et_boss_grudge.lua:161 mod:hook_safe("ConflictDirector", _post_spawn_unit)
+    _et_custom_breed_parity.lua:386 mod:hook("GameNetworkManager", set_peer_synchronizing)
+    _et_custom_breed_parity.lua:433 mod:hook("NetworkServer", is_network_state_fully_synced_for_peer)
+    _et_custom_breed_parity.lua:449 mod:hook_safe("GameNetworkManager", remove_peer)
+    _et_health_multiplier.lua:30 mod:hook("GenericHealthExtension", init)
+    _et_pacing.lua:219 mod:hook_safe(ConflictDirector, calculate_threat_value)
+    _et_pacing.lua:304 mod:hook_safe(Pacing, update)
+    _et_personal_handicap.lua:131 mod:hook(DamageUtils, apply_buffs_to_damage)
+    _et_protect.lua:66 mod:hook(class, method)
+    _et_protect.lua:94 mod:hook(class, method)
+    _et_protect.lua:117 mod:hook(class_table, method)
+    _et_protect.lua:197 mod:hook(class, method)
+    _et_roaming.lua:272 mod:hook(table, clone)
+    _et_skaven_warlord_breed.lua:163 mod:hook(_G, Localize)

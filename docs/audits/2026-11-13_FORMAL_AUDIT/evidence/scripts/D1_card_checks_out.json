@@ -1,0 +1,1527 @@
+{
+ "versions": {
+  "career_tweaker": "0.4.34-beta",
+  "chaos_wastes_tweaker": "0.7.354-beta",
+  "chaos_wastes_tweaker_dev": "0.7.354-dev",
+  "character_dialogue": "0.1.15-dev",
+  "character_weapon_variants": "0.1.570-dev",
+  "cosmetics_tweaker": "0.9.230-dev",
+  "crafting_in_modded": "0.8.148",
+  "crafting_in_modded_dev": "0.8.148-dev",
+  "dynamic_cosmetic_portraits": "0.1.32-dev",
+  "enemy_tweaker": "0.7.65-dev",
+  "event_tweaker": "0.4.54-dev",
+  "general_tweaker": "0.2.180",
+  "general_tweaker_dev": "0.2.279-dev",
+  "gui_tweaker": "0.2.290",
+  "gui_tweaker_dev": "0.2.369-dev",
+  "modded_progression": "0.2.52-dev",
+  "verminious_dreams_lighting": "1.0.7",
+  "verminious_dreams_lighting_dev": "1.0.20-dev",
+  "weapons_of_chaos": "0.1.62-dev",
+  "weapon_tweaker": "0.12.343-beta",
+  "weapon_tweaker_dev": "0.12.344-dev",
+  "_archive": "0.3.6-dev"
+ },
+ "rows": [
+  {
+   "n": 226,
+   "labels": "bug, cim, CWV, verify-fix, 1-major",
+   "ncards": 4,
+   "card_date": "2026-08-20",
+   "checks": {},
+   "cmds": {
+    "cim_regression_test": [
+     "crafting_in_modded/scripts/mods/crafting_in_modded/_cim_bootstrap_runtime.lua",
+     "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_bootstrap_runtime.lua"
+    ],
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev",
+    "0.8.148-dev"
+   ],
+   "last_comment": "2026-08-20",
+   "ncomments": 17,
+   "card_is_last_real": true
+  },
+  {
+   "n": 237,
+   "labels": "bug, CWV, verify-fix, 2-moderate",
+   "ncards": 4,
+   "card_date": "2026-09-20",
+   "checks": {
+    "issue660_preview_descriptor_adapter_parity": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_render.lua"
+    ],
+    "preview_meshswap_guards": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_render.lua"
+    ]
+   },
+   "cmds": {
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev"
+   ],
+   "last_comment": "2026-09-20",
+   "ncomments": 11,
+   "card_is_last_real": true
+  },
+  {
+   "n": 273,
+   "labels": "bug, Tweaker: GUI, Tweaker: Chaos Wastes, CWV, cross-mod, verify-fix, 1-major",
+   "ncards": 3,
+   "card_date": "2026-11-02",
+   "checks": {},
+   "cmds": {},
+   "versions": [
+    "0.12.343-beta",
+    "0.2.290"
+   ],
+   "last_comment": "2026-11-02",
+   "ncomments": 15,
+   "card_is_last_real": true
+  },
+  {
+   "n": 278,
+   "labels": "bug, question, crash, cim, CWV, cross-mod, verify-fix, 0-critical, coop-required",
+   "ncards": 7,
+   "card_date": "2026-08-20",
+   "checks": {},
+   "cmds": {},
+   "versions": [
+    "0.1.570-dev",
+    "0.8.148-dev"
+   ],
+   "last_comment": "2026-08-20",
+   "ncomments": 17,
+   "card_is_last_real": true
+  },
+  {
+   "n": 279,
+   "labels": "bug, cim, CWV, cross-mod, verify-fix, 0-critical",
+   "ncards": 3,
+   "card_date": "2026-08-03",
+   "checks": {},
+   "cmds": {},
+   "versions": [
+    "0.1.570-dev"
+   ],
+   "last_comment": "2026-08-03",
+   "ncomments": 17,
+   "card_is_last_real": true
+  },
+  {
+   "n": 296,
+   "labels": "bug, CWV, verify-fix, 2-moderate",
+   "ncards": 4,
+   "card_date": "2026-10-30",
+   "checks": {
+    "cwv_wire_safe_thrown_variant_installed": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_render.lua"
+    ],
+    "issue296_tuskgor_javelin_recovery_transaction": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_husk_ammo.lua"
+    ]
+   },
+   "cmds": {
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev"
+   ],
+   "last_comment": "2026-10-30",
+   "ncomments": 18,
+   "card_is_last_real": true
+  },
+  {
+   "n": 317,
+   "labels": "CWV, verify-fix, feature, 2-moderate",
+   "ncards": 3,
+   "card_date": "2026-10-30",
+   "checks": {
+    "issue317_career_scoped_animation_picker": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_identity.lua"
+    ]
+   },
+   "cmds": {
+    "cwv_dump_anim_picks": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/cwv_dev_anim_picker.lua"
+    ],
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ],
+    "tp": [
+     "gui_tweaker/scripts/mods/gui_tweaker/_gut_camera.lua",
+     "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_camera.lua",
+     "tweaker/scripts/mods/tweaker/tweaker.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev",
+    "0.2.369-dev"
+   ],
+   "last_comment": "2026-10-30",
+   "ncomments": 15,
+   "card_is_last_real": true
+  },
+  {
+   "n": 343,
+   "labels": "blocked, CWV, feature, 3-low, not-started, human-input-needed",
+   "ncards": 1,
+   "card_date": "2026-08-03",
+   "checks": {
+    "issue343_smoke_bomb_diagnostics": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_render.lua"
+    ]
+   },
+   "cmds": {
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ],
+    "cwv_smoke_bomb_probe": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_diag_smoke_bomb.lua"
+    ]
+   },
+   "versions": [
+    "0.1.536-dev"
+   ],
+   "last_comment": "2026-08-03",
+   "ncomments": 5,
+   "card_is_last_real": true
+  },
+  {
+   "n": 371,
+   "labels": "Tweaker: GUI, Tweaker: General, cim, CWV, cross-mod, diagnostics-armed, feature, 0-critical, architecture",
+   "ncards": 4,
+   "card_date": "2026-08-13",
+   "checks": {
+    "issue371_runtime_gate_api": [
+     "gui_tweaker/scripts/mods/gui_tweaker/_gut_mod_tweaker_contracts.lua",
+     "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/_gut_mod_tweaker_contracts.lua"
+    ]
+   },
+   "cmds": {
+    "crt_regression_test": [
+     "career_tweaker/scripts/mods/career_tweaker/_crt_regression.lua"
+    ],
+    "ct_regression_test": [
+     "chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/chaos_wastes_tweaker.lua",
+     "chaos_wastes_tweaker_dev/scripts/mods/chaos_wastes_tweaker_dev/chaos_wastes_tweaker_dev.lua"
+    ],
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ],
+    "event_tweaker_regression_test": [
+     "event_tweaker/scripts/mods/event_tweaker/_evt_regression.lua"
+    ],
+    "gut_regression_test": [
+     "gui_tweaker/scripts/mods/gui_tweaker/gui_tweaker.lua",
+     "gui_tweaker_dev/scripts/mods/gui_tweaker_dev/gui_tweaker_dev.lua"
+    ],
+    "wt_regression_test": [
+     "weapon_tweaker/scripts/mods/weapon_tweaker/_wt_regression.lua",
+     "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_regression.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev",
+    "0.12.344-dev",
+    "0.2.369-dev",
+    "0.4.34-beta",
+    "0.4.54-dev",
+    "0.7.354-dev"
+   ],
+   "last_comment": "2026-08-13",
+   "ncomments": 32,
+   "card_is_last_real": true
+  },
+  {
+   "n": 398,
+   "labels": "bug, CWV, verify-fix, 0-critical, coop-required, architecture",
+   "ncards": 3,
+   "card_date": "2026-08-20",
+   "checks": {
+    "issue398_cross_access_audio_uses_networked_receiver_event": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_runtime_identity.lua"
+    ]
+   },
+   "cmds": {
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev"
+   ],
+   "last_comment": "2026-08-20",
+   "ncomments": 19,
+   "card_is_last_real": true
+  },
+  {
+   "n": 399,
+   "labels": "bug, CWV, verify-fix, 0-critical, coop-required, architecture",
+   "ncards": 3,
+   "card_date": "2026-08-07",
+   "checks": {},
+   "cmds": {},
+   "versions": [
+    "0.1.570-dev"
+   ],
+   "last_comment": "2026-08-07",
+   "ncomments": 15,
+   "card_is_last_real": true
+  },
+  {
+   "n": 417,
+   "labels": "bug, blocked, CWV, 2-moderate, not-started, architecture",
+   "ncards": 0,
+   "card_date": null,
+   "checks": {},
+   "cmds": {},
+   "versions": [],
+   "last_comment": "2026-08-03",
+   "ncomments": 9
+  },
+  {
+   "n": 419,
+   "labels": "bug, CWV, verify-fix, 2-moderate",
+   "ncards": 4,
+   "card_date": "2026-09-20",
+   "checks": {},
+   "cmds": {
+    "cim_regression_test": [
+     "crafting_in_modded/scripts/mods/crafting_in_modded/_cim_bootstrap_runtime.lua",
+     "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_bootstrap_runtime.lua"
+    ],
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev",
+    "0.8.148-dev"
+   ],
+   "last_comment": "2026-09-20",
+   "ncomments": 10,
+   "card_is_last_real": true
+  },
+  {
+   "n": 420,
+   "labels": "enhancement, Tweaker: Cosmetics, Tweaker: Weapons, CWV, cross-mod, verify-fix, 2-moderate",
+   "ncards": 2,
+   "card_date": "2026-08-13",
+   "checks": {},
+   "cmds": {},
+   "versions": [
+    "0.9.230-dev"
+   ],
+   "last_comment": "2026-08-13",
+   "ncomments": 12,
+   "card_is_last_real": true
+  },
+  {
+   "n": 423,
+   "labels": "bug, crash, CWV, verify-fix, 0-critical",
+   "ncards": 4,
+   "card_date": "2026-08-09",
+   "checks": {
+    "cwv_wire_safe_damage_profile_gate": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_render.lua"
+    ]
+   },
+   "cmds": {
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev"
+   ],
+   "last_comment": "2026-08-09",
+   "ncomments": 24,
+   "card_is_last_real": true
+  },
+  {
+   "n": 424,
+   "labels": "bug, crash, CWV, verify-fix, 0-critical",
+   "ncards": 5,
+   "card_date": "2026-08-20",
+   "checks": {
+    "cwv_wire_safe_thrown_variant_installed": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_render.lua"
+    ]
+   },
+   "cmds": {
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev"
+   ],
+   "last_comment": "2026-08-20",
+   "ncomments": 22,
+   "card_is_last_real": true
+  },
+  {
+   "n": 474,
+   "labels": "bug, regression, Tweaker: Cosmetics, Tweaker: Weapons, CWV, cross-mod, diagnostics-armed, 0-critical, architecture",
+   "ncards": 9,
+   "card_date": "2026-08-21",
+   "checks": {},
+   "cmds": {
+    "wt_dev_hp_reset": [
+     "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/wt_dev_hold_pose.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev",
+    "0.12.344-dev"
+   ],
+   "last_comment": "2026-10-26",
+   "ncomments": 58,
+   "card_is_last_real": true
+  },
+  {
+   "n": 476,
+   "labels": "bug, crash, Tweaker: Cosmetics, CWV, verify-fix, 0-critical, coop-required, architecture",
+   "ncards": 4,
+   "card_date": "2026-08-20",
+   "checks": {},
+   "cmds": {},
+   "versions": [
+    "0.1.570-dev",
+    "0.9.230-dev"
+   ],
+   "last_comment": "2026-10-26",
+   "ncomments": 20,
+   "card_is_last_real": true
+  },
+  {
+   "n": 482,
+   "labels": "bug, regression, CWV, verify-fix, 2-moderate",
+   "ncards": 3,
+   "card_date": "2026-08-20",
+   "checks": {},
+   "cmds": {
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev",
+    "0.8.148-dev"
+   ],
+   "last_comment": "2026-08-20",
+   "ncomments": 18,
+   "card_is_last_real": true
+  },
+  {
+   "n": 491,
+   "labels": "bug, crash, CWV, cross-mod, verify-fix, 0-critical",
+   "ncards": 4,
+   "card_date": "2026-08-20",
+   "checks": {},
+   "cmds": {
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev"
+   ],
+   "last_comment": "2026-08-20",
+   "ncomments": 20,
+   "card_is_last_real": true
+  },
+  {
+   "n": 518,
+   "labels": "bug, regression, Tweaker: Chaos Wastes, Tweaker: Cosmetics, CWV, diagnostics-armed, 0-critical, architecture",
+   "ncards": 3,
+   "card_date": "2026-08-20",
+   "checks": {
+    "cos_la_deus_yield_active_mission_only": [
+     "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_runtime_checks.lua"
+    ]
+   },
+   "cmds": {
+    "cos_persist_dump": [
+     "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_command_owner.lua"
+    ],
+    "cos_regression_test": [
+     "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_command_owner.lua"
+    ],
+    "la_loadout": [
+     "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_la_commands.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev",
+    "0.7.354-dev",
+    "0.9.230-dev"
+   ],
+   "last_comment": "2026-08-20",
+   "ncomments": 19,
+   "card_is_last_real": true
+  },
+  {
+   "n": 567,
+   "labels": "bug, CWV, diagnostics-armed, 2-moderate",
+   "ncards": 4,
+   "card_date": "2026-09-20",
+   "checks": {
+    "issue567_exact_pair_transition_live": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_render.lua"
+    ],
+    "issue567_skin_reverse_index_valid": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_render.lua"
+    ]
+   },
+   "cmds": {
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev"
+   ],
+   "last_comment": "2026-09-20",
+   "ncomments": 21,
+   "card_is_last_real": true
+  },
+  {
+   "n": 579,
+   "labels": "bug, Tweaker: Cosmetics, CWV, verify-fix, 0-critical, coop-required, architecture",
+   "ncards": 5,
+   "card_date": "2026-09-26",
+   "checks": {},
+   "cmds": {
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev",
+    "0.9.230-dev"
+   ],
+   "last_comment": "2026-10-26",
+   "ncomments": 26,
+   "card_is_last_real": true
+  },
+  {
+   "n": 592,
+   "labels": "bug, cim, CWV, verify-fix, 0-critical, architecture, public-release",
+   "ncards": 6,
+   "card_date": "2026-11-06",
+   "checks": {
+    "issue592_bounded_blacksmith_acquisition": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_render.lua"
+    ]
+   },
+   "cmds": {
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev",
+    "0.8.148"
+   ],
+   "last_comment": "2026-11-06",
+   "ncomments": 22,
+   "card_is_last_real": true
+  },
+  {
+   "n": 602,
+   "labels": "enhancement, blocked, Tweaker: Cosmetics, Tweaker: Weapons, CWV, cross-mod, 2-moderate, not-started, human-input-needed",
+   "ncards": 0,
+   "card_date": null,
+   "checks": {},
+   "cmds": {},
+   "versions": [],
+   "last_comment": "2026-08-03",
+   "ncomments": 13
+  },
+  {
+   "n": 604,
+   "labels": "Tweaker: Weapons, CWV, verify-fix, feature, 0-critical",
+   "ncards": 4,
+   "card_date": "2026-08-23",
+   "checks": {
+    "issue604_crowbill_template_ownership": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_combat_style.lua"
+    ]
+   },
+   "cmds": {
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev"
+   ],
+   "last_comment": "2026-08-23",
+   "ncomments": 38,
+   "card_is_last_real": true
+  },
+  {
+   "n": 613,
+   "labels": "bug, diagnostics-armed, 1-major, WOC",
+   "ncards": 1,
+   "card_date": "2026-08-26",
+   "checks": {},
+   "cmds": {
+    "woc_pose_audit": [
+     "weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua"
+    ],
+    "woc_pose_reset": [
+     "weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua"
+    ],
+    "woc_regression_test": [
+     "weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua"
+    ]
+   },
+   "versions": [
+    "0.1.62-dev",
+    "0.8.148-dev"
+   ],
+   "last_comment": "2026-10-17",
+   "ncomments": 30,
+   "card_is_last_real": true
+  },
+  {
+   "n": 614,
+   "labels": "diagnostics-armed, feature, 1-major, WOC",
+   "ncards": 3,
+   "card_date": "2026-08-03",
+   "checks": {},
+   "cmds": {
+    "woc_boss_catalog": [
+     "weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua"
+    ]
+   },
+   "versions": [
+    "0.1.62-dev"
+   ],
+   "last_comment": "2026-08-03",
+   "ncomments": 7,
+   "card_is_last_real": true
+  },
+  {
+   "n": 615,
+   "labels": "diagnostics-armed, feature, 1-major, WOC",
+   "ncards": 3,
+   "card_date": "2026-08-03",
+   "checks": {},
+   "cmds": {
+    "woc_boss_catalog": [
+     "weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua"
+    ]
+   },
+   "versions": [
+    "0.1.62-dev"
+   ],
+   "last_comment": "2026-08-03",
+   "ncomments": 7,
+   "card_is_last_real": true
+  },
+  {
+   "n": 628,
+   "labels": "bug, cim, CWV, cross-mod, verify-fix, 1-major, architecture",
+   "ncards": 3,
+   "card_date": "2026-11-06",
+   "checks": {},
+   "cmds": {
+    "cim_dump_settings": [
+     "crafting_in_modded/scripts/mods/crafting_in_modded/_cim_bootstrap_runtime.lua",
+     "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_bootstrap_runtime.lua"
+    ],
+    "cim_regression_test": [
+     "crafting_in_modded/scripts/mods/crafting_in_modded/_cim_bootstrap_runtime.lua",
+     "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_bootstrap_runtime.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev",
+    "0.1.62-dev",
+    "0.8.148"
+   ],
+   "last_comment": "2026-11-06",
+   "ncomments": 20,
+   "card_is_last_real": true
+  },
+  {
+   "n": 632,
+   "labels": "blocked, feature, 1-major, WOC, not-started",
+   "ncards": 1,
+   "card_date": "2026-08-02",
+   "checks": {},
+   "cmds": {
+    "woc_regression_test": [
+     "weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua"
+    ]
+   },
+   "versions": [
+    "0.1.50-dev"
+   ],
+   "last_comment": "2026-08-13",
+   "ncomments": 18,
+   "card_is_last_real": true
+  },
+  {
+   "n": 633,
+   "labels": "diagnostics-armed, feature, 2-moderate, WOC",
+   "ncards": 4,
+   "card_date": "2026-08-20",
+   "checks": {},
+   "cmds": {
+    "woc_audio_contract": [
+     "weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua"
+    ],
+    "woc_audio_probe": [
+     "weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua"
+    ]
+   },
+   "versions": [
+    "0.1.62-dev"
+   ],
+   "last_comment": "2026-08-20",
+   "ncomments": 9,
+   "card_is_last_real": true
+  },
+  {
+   "n": 642,
+   "labels": "diagnostics-armed, feature, 1-major, WOC",
+   "ncards": 3,
+   "card_date": "2026-08-03",
+   "checks": {},
+   "cmds": {
+    "woc_boss_catalog": [
+     "weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua"
+    ]
+   },
+   "versions": [
+    "0.1.62-dev"
+   ],
+   "last_comment": "2026-08-03",
+   "ncomments": 8,
+   "card_is_last_real": true
+  },
+  {
+   "n": 645,
+   "labels": "CWV, diagnostics-armed, feature, 2-moderate",
+   "ncards": 3,
+   "card_date": "2026-11-12",
+   "checks": {},
+   "cmds": {},
+   "versions": [
+    "0.1.570-dev"
+   ],
+   "last_comment": "2026-11-12",
+   "ncomments": 35,
+   "card_is_last_real": true
+  },
+  {
+   "n": 657,
+   "labels": "CWV, verify-fix, feature, 2-moderate",
+   "ncards": 3,
+   "card_date": "2026-11-12",
+   "checks": {
+    "issue657_native_shield_style_identity": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_combat_style.lua"
+    ]
+   },
+   "cmds": {
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev",
+    "0.9.230-dev"
+   ],
+   "last_comment": "2026-11-12",
+   "ncomments": 27,
+   "card_is_last_real": true
+  },
+  {
+   "n": 660,
+   "labels": "bug, audit, crash, refactor, blocked, Tweaker: GUI, cim, Tweaker: Cosmetics, Tweaker: Weapons, CWV, cross-mod, 0-critical, WOC, not-started, architecture",
+   "ncards": 1,
+   "card_date": "2026-08-23",
+   "checks": {
+    "issue660_greatsword_style_appearance_transaction": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_combat_style.lua"
+    ]
+   },
+   "cmds": {
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.536-dev"
+   ],
+   "last_comment": "2026-10-26",
+   "ncomments": 55,
+   "card_is_last_real": true
+  },
+  {
+   "n": 661,
+   "labels": "bug, regression, Tweaker: Weapons, CWV, cross-mod, verify-fix, 0-critical, WOC, architecture",
+   "ncards": 4,
+   "card_date": "2026-08-20",
+   "checks": {
+    "issue661_effective_wield_action_contract": [
+     "weapon_tweaker/scripts/mods/weapon_tweaker/_wt_runtime_checks.lua",
+     "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_runtime_checks.lua"
+    ]
+   },
+   "cmds": {
+    "wt_regression_test": [
+     "weapon_tweaker/scripts/mods/weapon_tweaker/_wt_regression.lua",
+     "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_regression.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev",
+    "0.1.62-dev",
+    "0.12.344-dev"
+   ],
+   "last_comment": "2026-08-20",
+   "ncomments": 30,
+   "card_is_last_real": true
+  },
+  {
+   "n": 692,
+   "labels": "bug, regression, CWV, verify-fix, 2-moderate",
+   "ncards": 1,
+   "card_date": "2026-11-12",
+   "checks": {
+    "issue692_inverse_transform_application": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_issue692_transform_check.lua"
+    ]
+   },
+   "cmds": {
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev"
+   ],
+   "last_comment": "2026-11-12",
+   "ncomments": 15,
+   "card_is_last_real": true
+  },
+  {
+   "n": 702,
+   "labels": "bug, audit, cim, Tweaker: Cosmetics, CWV, cross-mod, verify-fix, 1-major",
+   "ncards": 1,
+   "card_date": "2026-08-24",
+   "checks": {},
+   "cmds": {},
+   "versions": [
+    "0.9.230-dev"
+   ],
+   "last_comment": "2026-08-24",
+   "ncomments": 20,
+   "card_is_last_real": true
+  },
+  {
+   "n": 704,
+   "labels": "bug, cim, CWV, verify-fix, 2-moderate",
+   "ncards": 5,
+   "card_date": "2026-09-20",
+   "checks": {
+    "issue483_cwv_sword_mace_individualized_cosmetics": [
+     "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_runtime_checks.lua"
+    ],
+    "issue704_canonical_skin_owner_and_sword_mace_sources": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_render.lua"
+    ],
+    "issue704_sword_mace_picker_family_diagnostics": [
+     "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_runtime_checks.lua"
+    ]
+   },
+   "cmds": {
+    "cos_regression_test": [
+     "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_command_owner.lua"
+    ],
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev",
+    "0.9.230-dev"
+   ],
+   "last_comment": "2026-09-20",
+   "ncomments": 17,
+   "card_is_last_real": true
+  },
+  {
+   "n": 712,
+   "labels": "bug, regression, diagnostics-armed, 0-critical, WOC",
+   "ncards": 5,
+   "card_date": "2026-08-03",
+   "checks": {},
+   "cmds": {
+    "woc_pose_audit": [
+     "weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua"
+    ],
+    "woc_pose_reset": [
+     "weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua"
+    ],
+    "woc_regression_test": [
+     "weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua"
+    ],
+    "wt_dev_hp_reset": [
+     "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/wt_dev_hold_pose.lua"
+    ]
+   },
+   "versions": [
+    "0.1.62-dev",
+    "0.12.344-dev"
+   ],
+   "last_comment": "2026-08-03",
+   "ncomments": 34,
+   "card_is_last_real": true
+  },
+  {
+   "n": 719,
+   "labels": "bug, regression, cim, CWV, cross-mod, diagnostics-armed, 2-moderate",
+   "ncards": 6,
+   "card_date": "2026-11-12",
+   "checks": {
+    "issue719_imperial_crowbill_remote_identity": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_identity.lua"
+    ]
+   },
+   "cmds": {
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev",
+    "0.8.148"
+   ],
+   "last_comment": "2026-11-12",
+   "ncomments": 29,
+   "card_is_last_real": true
+  },
+  {
+   "n": 747,
+   "labels": "bug, blocked, CWV, cross-mod, 1-major, WOC, not-started, architecture",
+   "ncards": 5,
+   "card_date": "2026-08-03",
+   "checks": {},
+   "cmds": {},
+   "versions": [
+    "0.1.468-dev",
+    "0.1.512-dev",
+    "0.1.54-dev",
+    "0.12.291-dev"
+   ],
+   "last_comment": "2026-08-20",
+   "ncomments": 14,
+   "card_is_last_real": true
+  },
+  {
+   "n": 760,
+   "labels": "bug, CWV, diagnostics-armed, 3-low",
+   "ncards": 5,
+   "card_date": "2026-09-20",
+   "checks": {
+    "cwv_issue760_outrider_saltzpyre_repeater_stance": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_render.lua"
+    ],
+    "network_event_unavailable": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_outrider_animation.lua"
+    ],
+    "unit_not_alive": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_outrider_animation.lua"
+    ]
+   },
+   "cmds": {
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev",
+    "0.12.344-dev"
+   ],
+   "last_comment": "2026-09-20",
+   "ncomments": 13,
+   "card_is_last_real": true
+  },
+  {
+   "n": 782,
+   "labels": "bug, verify-fix, 1-major, WOC",
+   "ncards": 2,
+   "card_date": "2026-08-03",
+   "checks": {},
+   "cmds": {},
+   "versions": [
+    "0.1.62-dev"
+   ],
+   "last_comment": "2026-08-03",
+   "ncomments": 10,
+   "card_is_last_real": true
+  },
+  {
+   "n": 786,
+   "labels": "bug, regression, CWV, verify-fix, 0-critical, coop-required, architecture",
+   "ncards": 4,
+   "card_date": "2026-08-07",
+   "checks": {},
+   "cmds": {},
+   "versions": [
+    "0.1.570-dev"
+   ],
+   "last_comment": "2026-10-26",
+   "ncomments": 19,
+   "card_is_last_real": true
+  },
+  {
+   "n": 798,
+   "labels": "enhancement, Tweaker: Weapons, CWV, verify-fix, 1-major",
+   "ncards": 1,
+   "card_date": "2026-07-27",
+   "checks": {},
+   "cmds": {
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev"
+   ],
+   "last_comment": "2026-07-27",
+   "ncomments": 10,
+   "card_is_last_real": true
+  },
+  {
+   "n": 807,
+   "labels": "bug, crash, regression, CWV, verify-fix, 0-critical",
+   "ncards": 5,
+   "card_date": "2026-08-03",
+   "checks": {},
+   "cmds": {},
+   "versions": [
+    "0.1.570-dev"
+   ],
+   "last_comment": "2026-08-03",
+   "ncomments": 17,
+   "card_is_last_real": true
+  },
+  {
+   "n": 822,
+   "labels": "bug, regression, cim, cross-mod, verify-fix, 0-critical, WOC",
+   "ncards": 7,
+   "card_date": "2026-11-06",
+   "checks": {},
+   "cmds": {
+    "cim_dump_settings": [
+     "crafting_in_modded/scripts/mods/crafting_in_modded/_cim_bootstrap_runtime.lua",
+     "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_bootstrap_runtime.lua"
+    ],
+    "cim_regression_test": [
+     "crafting_in_modded/scripts/mods/crafting_in_modded/_cim_bootstrap_runtime.lua",
+     "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_bootstrap_runtime.lua"
+    ],
+    "woc_regression_test": [
+     "weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua"
+    ]
+   },
+   "versions": [
+    "0.1.62-dev",
+    "0.8.148"
+   ],
+   "last_comment": "2026-11-06",
+   "ncomments": 17,
+   "card_is_last_real": true
+  },
+  {
+   "n": 914,
+   "labels": "bug, CWV, verify-fix, 0-critical, coop-required, architecture",
+   "ncards": 5,
+   "card_date": "2026-08-20",
+   "checks": {
+    "issue914_peer_ready_identity_lifecycle": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_identity.lua"
+    ]
+   },
+   "cmds": {
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev"
+   ],
+   "last_comment": "2026-10-26",
+   "ncomments": 20,
+   "card_is_last_real": true
+  },
+  {
+   "n": 915,
+   "labels": "bug, regression, CWV, verify-fix, 2-moderate",
+   "ncards": 4,
+   "card_date": "2026-09-20",
+   "checks": {
+    "issue915_maul_illusion_vanilla_provenance": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_render.lua"
+    ]
+   },
+   "cmds": {
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev"
+   ],
+   "last_comment": "2026-09-20",
+   "ncomments": 10,
+   "card_is_last_real": true
+  },
+  {
+   "n": 916,
+   "labels": "enhancement, CWV, verify-fix, 3-low",
+   "ncards": 3,
+   "card_date": "2026-10-17",
+   "checks": {},
+   "cmds": {
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev"
+   ],
+   "last_comment": "2026-10-17",
+   "ncomments": 8,
+   "card_is_last_real": true
+  },
+  {
+   "n": 918,
+   "labels": "bug, regression, Tweaker: Cosmetics, CWV, verify-fix, 0-critical, architecture",
+   "ncards": 3,
+   "card_date": "2026-08-20",
+   "checks": {
+    "issue918_custom_illusion_semantic_sync": [
+     "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_runtime_checks.lua"
+    ],
+    "wire_skin_null_all_senders": [
+     "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_runtime_checks.lua"
+    ],
+    "wire_skin_null_ungated": [
+     "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_runtime_checks.lua"
+    ]
+   },
+   "cmds": {
+    "cos_regression_test": [
+     "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_command_owner.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev",
+    "0.9.230-dev"
+   ],
+   "last_comment": "2026-08-20",
+   "ncomments": 10,
+   "card_is_last_real": true
+  },
+  {
+   "n": 922,
+   "labels": "bug, Tweaker: Cosmetics, CWV, verify-fix, 0-critical, architecture",
+   "ncards": 2,
+   "card_date": "2026-08-03",
+   "checks": {},
+   "cmds": {},
+   "versions": [
+    "0.1.570-dev",
+    "0.1.62-dev",
+    "0.9.230-dev"
+   ],
+   "last_comment": "2026-08-03",
+   "ncomments": 10,
+   "card_is_last_real": true
+  },
+  {
+   "n": 932,
+   "labels": "CWV, verify-fix, feature, 1-major",
+   "ncards": 2,
+   "card_date": "2026-08-03",
+   "checks": {
+    "issue932_primary_slot_musket_ammo_pool_contract": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_identity.lua"
+    ]
+   },
+   "cmds": {
+    "cwv_musket_ammo_diag": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_commands_lifecycle.lua"
+    ],
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev"
+   ],
+   "last_comment": "2026-08-03",
+   "ncomments": 5,
+   "card_is_last_real": true
+  },
+  {
+   "n": 934,
+   "labels": "verify-fix, feature, 1-major, WOC",
+   "ncards": 3,
+   "card_date": "2026-11-06",
+   "checks": {
+    "issue934_shared_relic_lease_contract": [
+     "weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_shared_relic_runtime.lua"
+    ]
+   },
+   "cmds": {
+    "woc_regression_test": [
+     "weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua"
+    ],
+    "woc_relic_lease_audit": [
+     "weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_shared_relic_runtime.lua"
+    ]
+   },
+   "versions": [
+    "0.1.62-dev"
+   ],
+   "last_comment": "2026-11-06",
+   "ncomments": 8,
+   "card_is_last_real": true
+  },
+  {
+   "n": 948,
+   "labels": "enhancement, Tweaker: Weapons, CWV, cross-mod, diagnostics-armed, 0-critical, architecture",
+   "ncards": 3,
+   "card_date": "2026-08-20",
+   "checks": {
+    "issue948_universal_base_availability": [
+     "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_runtime_checks.lua"
+    ]
+   },
+   "cmds": {
+    "wt_audit_universal_compatibility": [
+     "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_diagnostics.lua"
+    ],
+    "wt_regression_test": [
+     "weapon_tweaker/scripts/mods/weapon_tweaker/_wt_regression.lua",
+     "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_regression.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev",
+    "0.12.344-dev"
+   ],
+   "last_comment": "2026-08-20",
+   "ncomments": 13,
+   "card_is_last_real": true
+  },
+  {
+   "n": 1107,
+   "labels": "bug, CWV, verify-fix, 1-major",
+   "ncards": 1,
+   "card_date": "2026-08-03",
+   "checks": {
+    "issue1107_melee_slot_reload_drains_reserve": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_identity.lua"
+    ]
+   },
+   "cmds": {
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev"
+   ],
+   "last_comment": "2026-08-03",
+   "ncomments": 1,
+   "card_is_last_real": true
+  },
+  {
+   "n": 1108,
+   "labels": "bug, CWV, verify-fix, 2-moderate",
+   "ncards": 2,
+   "card_date": "2026-08-20",
+   "checks": {
+    "issue1108_primary_slot_musket_ammo_hud_contract": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_identity.lua"
+    ]
+   },
+   "cmds": {
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev"
+   ],
+   "last_comment": "2026-08-20",
+   "ncomments": 7,
+   "card_is_last_real": true
+  },
+  {
+   "n": 1141,
+   "labels": "bug, cim, CWV, cross-mod, verify-fix, 0-critical",
+   "ncards": 5,
+   "card_date": "2026-11-06",
+   "checks": {},
+   "cmds": {
+    "cim_dump_settings": [
+     "crafting_in_modded/scripts/mods/crafting_in_modded/_cim_bootstrap_runtime.lua",
+     "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_bootstrap_runtime.lua"
+    ],
+    "cim_regression_test": [
+     "crafting_in_modded/scripts/mods/crafting_in_modded/_cim_bootstrap_runtime.lua",
+     "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_cim_bootstrap_runtime.lua"
+    ]
+   },
+   "versions": [
+    "0.8.148"
+   ],
+   "last_comment": "2026-11-06",
+   "ncomments": 19,
+   "card_is_last_real": true
+  },
+  {
+   "n": 1145,
+   "labels": "bug, crash, Tweaker: Cosmetics, CWV, cross-mod, verify-fix, 0-critical, coop-required, architecture",
+   "ncards": 2,
+   "card_date": "2026-08-20",
+   "checks": {},
+   "cmds": {
+    "cos_regression_test": [
+     "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_cos_command_owner.lua"
+    ],
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev",
+    "0.9.230-dev"
+   ],
+   "last_comment": "2026-08-20",
+   "ncomments": 3,
+   "card_is_last_real": true
+  },
+  {
+   "n": 1186,
+   "labels": "bug, CWV, verify-fix, 2-moderate",
+   "ncards": 2,
+   "card_date": "2026-08-20",
+   "checks": {},
+   "cmds": {
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev"
+   ],
+   "last_comment": "2026-08-20",
+   "ncomments": 3,
+   "card_is_last_real": true
+  },
+  {
+   "n": 1188,
+   "labels": "bug, Tweaker: Weapons, CWV, cross-mod, verify-fix, 2-moderate, coop-required",
+   "ncards": 2,
+   "card_date": "2026-08-20",
+   "checks": {},
+   "cmds": {
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ],
+    "wt_regression_test": [
+     "weapon_tweaker/scripts/mods/weapon_tweaker/_wt_regression.lua",
+     "weapon_tweaker_dev/scripts/mods/weapon_tweaker_dev/_wt_regression.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev",
+    "0.12.344-dev"
+   ],
+   "last_comment": "2026-08-20",
+   "ncomments": 3,
+   "card_is_last_real": true
+  },
+  {
+   "n": 1204,
+   "labels": "bug, CWV, cross-mod, verify-fix, 2-moderate, coop-required",
+   "ncards": 3,
+   "card_date": "2026-09-20",
+   "checks": {
+    "issue1204_deus_identity_uses_committed_parity": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_runtime_identity.lua"
+    ]
+   },
+   "cmds": {
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev"
+   ],
+   "last_comment": "2026-09-20",
+   "ncomments": 5,
+   "card_is_last_real": true
+  },
+  {
+   "n": 1211,
+   "labels": "bug, crash, regression, CWV, verify-fix, 0-critical, coop-required",
+   "ncards": 2,
+   "card_date": "2026-08-20",
+   "checks": {
+    "issue1211_registered_wwise_world_guard": []
+   },
+   "cmds": {
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev"
+   ],
+   "last_comment": "2026-08-20",
+   "ncomments": 4,
+   "card_is_last_real": true
+  },
+  {
+   "n": 1273,
+   "labels": "bug, crash, regression, CWV, verify-fix, 0-critical",
+   "ncards": 1,
+   "card_date": "2026-08-12",
+   "checks": {},
+   "cmds": {
+    "cwv": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_commands_lifecycle.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev"
+   ],
+   "last_comment": "2026-08-12",
+   "ncomments": 1,
+   "card_is_last_real": true
+  },
+  {
+   "n": 1320,
+   "labels": "bug, CWV, cross-mod, verify-fix, 2-moderate",
+   "ncards": 2,
+   "card_date": "2026-09-26",
+   "checks": {},
+   "cmds": {
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev"
+   ],
+   "last_comment": "2026-09-26",
+   "ncomments": 4,
+   "card_is_last_real": true
+  },
+  {
+   "n": 1656,
+   "labels": "bug, cim, CWV, tooling, 2-moderate, not-started",
+   "ncards": 0,
+   "card_date": null,
+   "checks": {},
+   "cmds": {},
+   "versions": [],
+   "last_comment": "2026-11-12",
+   "ncomments": 9
+  },
+  {
+   "n": 1660,
+   "labels": "bug, CWV, verify-fix, 2-moderate",
+   "ncards": 1,
+   "card_date": "2026-09-26",
+   "checks": {},
+   "cmds": {
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev"
+   ],
+   "last_comment": "2026-09-26",
+   "ncomments": 2,
+   "card_is_last_real": true
+  },
+  {
+   "n": 1676,
+   "labels": "bug, CWV, verify-fix, 2-moderate",
+   "ncards": 1,
+   "card_date": "2026-10-30",
+   "checks": {
+    "issue1676_resolved_profile_multipliers": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/_cwv_regression_husk_ammo.lua"
+    ]
+   },
+   "cmds": {
+    "cwv_regression_test": [
+     "character_weapon_variants/scripts/mods/character_weapon_variants/character_weapon_variants.lua"
+    ]
+   },
+   "versions": [
+    "0.1.570-dev"
+   ],
+   "last_comment": "2026-10-30",
+   "ncomments": 3,
+   "card_is_last_real": true
+  },
+  {
+   "n": 1687,
+   "labels": "bug, verify-fix, 0-critical, WOC",
+   "ncards": 1,
+   "card_date": "2026-10-30",
+   "checks": {
+    "issue613_blightreaper_inventory_icon_contract": [
+     "weapons_of_chaos/scripts/mods/weapons_of_chaos/_woc_relic_registration_owner.lua"
+    ],
+    "issue655_blightreaper_trait_contract": [
+     "weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua"
+    ],
+    "issue690_blightreaper_registration_gate_contract": [
+     "weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua"
+    ]
+   },
+   "cmds": {
+    "woc_regression_test": [
+     "weapons_of_chaos/scripts/mods/weapons_of_chaos/weapons_of_chaos.lua"
+    ]
+   },
+   "versions": [
+    "0.1.62-dev"
+   ],
+   "last_comment": "2026-10-30",
+   "ncomments": 5,
+   "card_is_last_real": true
+  }
+ ]
+}
