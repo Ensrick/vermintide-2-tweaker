@@ -24,13 +24,20 @@ Assert-True ($LASTEXITCODE -eq 0) "committed plans equal a fresh generation (exi
 
 foreach ($case in @(
         @{ File = 'smoke-public.json'; Rows = @($inv.Mods | Where-Object { $_.Public -eq $true }) },
-        @{ File = 'smoke-dev.json'; Rows = @($inv.Mods | Where-Object { $_.Stream -in 'dev', 'single' }) })) {
+        @{ File = 'smoke-dev.json'; Rows = @($inv.Mods | Where-Object { $_.Stream -in 'dev', 'single' }) },
+        @{ File = 'sweep-public.json'; Rows = @($inv.Mods | Where-Object { $_.Public -eq $true }); Sweep = $true },
+        @{ File = 'sweep-dev.json'; Rows = @($inv.Mods | Where-Object { $_.Stream -in 'dev', 'single' }); Sweep = $true })) {
     $plan = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath (Join-Path $plansDir $case.File)).Path) | ConvertFrom-Json
     $ids = @($case.Rows | Where-Object { $_.WorkshopId } | ForEach-Object { [string]$_.WorkshopId })
     Assert-True ($plan.mods[0] -eq '1369573612' -and $plan.expect_mods[0] -eq 'VMF') "$($case.File): VMF first"
     Assert-True ((@($plan.mods | Select-Object -Skip 1) -join ',') -eq ($ids -join ',')) "$($case.File): every row's Workshop id in inventory order ($($ids.Count))"
     Assert-True ($plan.expect_mods.Count -eq $plan.mods.Count) "$($case.File): one expect_mods id per enabled mod"
-    Assert-True ($plan.cases.Count -eq 1 -and $plan.cases[0].file -eq '../_rig/smoke_keep.lua') "$($case.File): runs the smoke case"
+    Assert-True ($plan.cases[0].file -eq '../_rig/smoke_keep.lua') "$($case.File): runs the smoke case first"
+    if ($case.Sweep) {
+        Assert-True ($plan.cases.Count -eq 2 -and $plan.cases[1].file -eq '../_rig/sweep_regression.lua' -and $plan.sweep -eq $true) "$($case.File): then the regression sweep, sweep true"
+    } else {
+        Assert-True ($plan.cases.Count -eq 1 -and -not $plan.PSObject.Properties['sweep']) "$($case.File): smoke case only"
+    }
 }
 
 $tmp = Join-Path ([System.IO.Path]::GetTempPath()) ('vt2-smokeplan-tests-' + [guid]::NewGuid().ToString('N'))

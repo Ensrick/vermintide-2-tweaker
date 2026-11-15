@@ -19,7 +19,8 @@
     }
   Case files are Lua source that returns a table { issue = <n>, timeout = <s>, run = function(T) ... end }.
   Case file paths are relative to the plan file. Every qa/runtime/_shared/*.lua travels with the plan
-  (T.shared(<name>) in a case). See tools/harness/README.md.
+  (T.shared(<name>) in a case), and so does every driver helper group in tools/harness/driver/lib/*.lua
+  (tools/harness/API.md). See tools/harness/README.md.
 
   Optional plan fields (WP-H-02): "expect_mods" (VMF mod ids the smoke case asserts are loaded),
   "host_expect_log" / "host_forbid_log" (regex lists checked on the final log) and "host_allow_log"
@@ -55,6 +56,7 @@ param(
     [string] $DriverFile = (Join-Path $PSScriptRoot 'driver/vt2_rig_driver.lua'),
     [string] $DriverId = '3839345856',      # private Workshop item: the rig bootstrap
     [string] $SharedDir = (Join-Path $PSScriptRoot '..\..\qa\runtime\_shared'),
+    [string] $LibDir = (Join-Path $PSScriptRoot 'driver\lib'),        # WP-H-06 driver helper groups (T.set, T.shot, ...)
     [string] $SlotsFile = (Join-Path $PSScriptRoot 'slots.psd1'),     # WP-H-07 rig slots for plan local_builds
     [string] $RigRoot = (Join-Path $env:LOCALAPPDATA 'vt2-harness'),
     [string] $SteamApps = '',               # default: resolved from HKCU:\Software\Valve\Steam SteamPath
@@ -134,7 +136,7 @@ if ($planObj) {
 
 # ---------- profile ----------
 $profileArgs = @{ RealProfile = $realProfile; ProfileRoot = (Join-Path $RigRoot 'profile'); DriverId = $DriverId; KeepOwnerMods = $KeepOwnerMods }
-if ($planObj) { $profileArgs.PlanPath = $planPath; $profileArgs.Nonce = $nonce; $profileArgs.DriverFile = $DriverFile; $profileArgs.SharedDir = $SharedDir }
+if ($planObj) { $profileArgs.PlanPath = $planPath; $profileArgs.Nonce = $nonce; $profileArgs.DriverFile = $DriverFile; $profileArgs.SharedDir = $SharedDir; $profileArgs.LibDir = $LibDir }
 if ($localBuilds.Count) {
     $swaps = @{}; $versions = @{}
     foreach ($lb in $localBuilds) { $swaps[$lb.real_id] = $lb.slot_id; if ($lb.version) { $versions[$lb.mod_id] = $lb.version } }
@@ -283,13 +285,21 @@ elseif ($planObj -and $runEnd -and $cases.Count -gt 0) {
 }
 elseif (-not $planObj) { $exit = 0 }
 if (($forbidHits.Count -or $expectMisses.Count) -and $exit -ne 3) { $exit = 1 }
+# WP-H-03: a plan with "sweep": true turns the regression suites' output into sweep.json / sweep.md; a FAIL row
+# fails the run (exit 1).
+$sweep = $null
+if ($planObj -and $planObj.PSObject.Properties['sweep'] -and $planObj.sweep -eq $true) {
+    $sweepResult = & (Join-Path $here 'Parse-Sweep.ps1') -EvidenceFile (Join-Path $run 'evidence.txt') -LogFile ([string]$logPath) -OutDir $run -Quiet
+    $sweep = $sweepResult.Counts
+    if ($sweep.fail -gt 0 -and $exit -ne 3) { $exit = 1 }
+}
 $summary = [ordered]@{
     run = "$stamp-$Name-$nonce"; name = $Name; nonce = $nonce; verdict = $verdict; exit = $exit; isolation = $isolation
     private_desktop = (-not $Visible); renderer = $Renderer; arguments = $arguments; run_end_seen = $runEnd
     keep_ready_seconds = $hostLog.KeepReadySeconds; keep_ready_driver_t = $hostLog.KeepReadyDriverT
     backend_shield = [bool]$shieldOn; shield_installed_before_first_commit = $shieldFirst
     host_forbid_hits = $forbidHits; host_expect_misses = $expectMisses; host_allowed = @($hostLog.Allowed)
-    loaded_versions = $hostLog.LoadedVersions; local_builds = @($localBuilds); level_loads = @($hostLog.LevelLoads)
+    loaded_versions = $hostLog.LoadedVersions; local_builds = @($localBuilds); level_loads = @($hostLog.LevelLoads); sweep = $sweep
     marks_seconds = $marks; cases = $cases; script_errors = $scriptErrors; evidence_lines = $lines.Count
     log = $evidenceLog; log_source = $logSource; notes = $notes
 }
@@ -304,6 +314,7 @@ foreach ($p in $expectMisses) { $md += "Expected log line missing: ``$p``" }
 foreach ($a in @($hostLog.Allowed)) { $md += "Allowed log line ($($a.rule)): ``$($a.line)`` -- $($a.reason)" }
 foreach ($lb in $localBuilds) { $md += "Local build: $($lb.mod) $($lb.version) at $($lb.commit)$(if ($lb.dirty) { ' (dirty)' }) in slot $($lb.slot) ($($lb.slot_id)) | real folder unchanged: $($lb.real_folder_unchanged)" }
 foreach ($ll in @($hostLog.LevelLoads)) { $md += "Level load: $($ll.level) $(if ($ll.failed) { $ll.failed } else { "$($ll.seconds) s" })" }
+if ($sweep) { $md += "Regression sweep: rows $($sweep.rows), PASS $($sweep.pass), FAIL $($sweep.fail), SKIP $($sweep.skip), inconclusive suites $($sweep.inconclusive_suites) (sweep.md)" }
 if (@($hostLog.LoadedVersions.Keys).Count) { $md += "Load banners: $((@($hostLog.LoadedVersions.Keys) | ForEach-Object { "$_ $($hostLog.LoadedVersions[$_])" }) -join ', ')" }
 $md | Set-Content -LiteralPath (Join-Path $run 'summary.md') -Encoding utf8
 $summary | ConvertTo-Json -Depth 6
