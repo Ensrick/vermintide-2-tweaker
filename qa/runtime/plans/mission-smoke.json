@@ -1,0 +1,12 @@
+{
+  "name": "mission-smoke",
+  "purpose": "WP-H-04 acceptance: keep, then Righteous Stand (military) as host with bots, then back to the keep, then quit. Run it three times; every run must exit 0. summary.json level_loads records each load.",
+  "mods": ["1369573612"],
+  "expect_mods": ["VMF"],
+  "arenas": ["keep", "mission:military", "keep"],
+  "timeout": 900,
+  "cases": [
+    { "id": "smoke-keep", "arena": "keep", "file": "../_rig/smoke_keep.lua" },
+    { "id": "mission-military", "arena": "mission:military", "file": "../_rig/mission_military.lua" }
+  ]
+}
