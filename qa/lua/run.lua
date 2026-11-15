@@ -371,6 +371,7 @@ local suites = {
 	"test_woc_durable_transform",
 	"test_woc_mod_unit_preview",
 	"test_woc_data_widgets",
+	"test_cwv_woc_not_togglable",
 	"test_woc_blightreaper_audio",
 	"test_woc_attack_order",
 	"test_woc_phase5_runtime_owners",
