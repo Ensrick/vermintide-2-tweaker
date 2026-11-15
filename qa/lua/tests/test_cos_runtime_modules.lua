@@ -149,7 +149,8 @@ return function(H, repo_root)
             checks[#checks + 1] = { name = name, fn = fn }
         end, deps)
         -- 62 -> 64: #696 prespawn-lease + #1147 surface-glow checks (2026-08-16).
-        H.equal(#checks, 64)
+        -- 64 -> 65: WP-COS-01 issue416_payload_policy (2026-11-14).
+        H.equal(#checks, 65)
         H.equal(checks[1].name, "cos_la_reconcile_and_pull_wired")
         H.equal(checks[2].name, "cos_replay_reconciler_wired")
         -- #25: the cold-load contract must stay registered directly after the
@@ -255,7 +256,7 @@ return function(H, repo_root)
             end
         end, deps)
         H.equal(calls, 1)
-        H.equal(#names, 64)
+        H.equal(#names, 65)  -- WP-COS-01 issue416_payload_policy
         local window = { "cos_la_revert_recv_deletes_entry", "cos_la_offhand_persistence_roundtrip",
             "cos_la_cosmetic_persistence_roundtrip", "cos_la_cold_load_contract_25",
             "cos_la_loadout_equip_capture_wired" }
