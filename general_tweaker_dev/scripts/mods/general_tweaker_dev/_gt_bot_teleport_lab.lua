@@ -1076,9 +1076,7 @@ local function _clear_and_null()
     local lo = mod._gt_btlab_line_object
     local w  = mod._gt_btlab_line_world
     if lo and w then
-        local wm   = Managers.world
-        local live = wm and wm:has_world("level_world") and wm:world("level_world")
-        if live == w then
+        if mod._gt_world.is_live(w) then
             pcall(function()
                 LineObject.reset(lo)
                 LineObject.dispatch(w, lo)
@@ -1192,8 +1190,7 @@ local function _do_draw(want_hud, want_lines)
     -- WorldManager.world() FASSERTS on a missing world (world_manager.lua:111-115);
     -- probe has_world first (#459) -- this runs from mods_update, which keeps
     -- ticking between game states where level_world does not exist.
-    local wm    = Managers.world
-    local world = wm and wm:has_world("level_world") and wm:world("level_world")
+    local world = mod._gt_world.live()
     if not world then
         _clear_and_null()
         return
@@ -1448,9 +1445,7 @@ local function _shared_clear_and_null()
     local lo = mod._gt_shared_line_object
     local w  = mod._gt_shared_line_world
     if lo and w then
-        local wm   = Managers.world
-        local live = wm and wm:has_world("level_world") and wm:world("level_world")
-        if live == w then
+        if mod._gt_world.is_live(w) then
             pcall(function()
                 LineObject.reset(lo)
                 LineObject.dispatch(w, lo)
@@ -1479,8 +1474,7 @@ local function _shared_draw(dt) -- luacheck: ignore dt
         return
     end
     pcall(function()
-        local wm    = Managers.world
-        local world = wm and wm:has_world("level_world") and wm:world("level_world")
+        local world = mod._gt_world.live()
         if not world then _shared_clear_and_null(); return end
         if mod._gt_shared_line_world ~= world then
             mod._gt_shared_line_object = nil

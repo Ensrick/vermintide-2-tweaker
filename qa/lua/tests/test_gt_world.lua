@@ -82,4 +82,16 @@ return function(H, repo_root)
     H.test("GT A6-F08 the creature spawner never calls Managers.world:world( unguarded", function()
         H.equal(read("_gt_creature_spawner.lua"):find("Managers.world:world(", 1, true), nil)
     end)
+
+    H.test("GT A6-F08 the former guard copies route through mod._gt_world", function()
+        for _, name in ipairs({ "_gt_debug_highlights.lua", "_gt_bot_teleport_lab.lua",
+                "_gt_solo_qol.lua", "_gt_melee_warning.lua" }) do
+            local text = read(name)
+            H.equal(text:find('has_world("level_world")', 1, true), nil, name .. " still probes the world itself")
+            H.truthy(text:find("mod._gt_world.", 1, true), name .. " does not use the helper")
+        end
+        -- The in-game check reads these markers; they must survive the refactor.
+        H.truthy(read("_gt_debug_highlights.lua"):find("mod._gt459_liveness_gated_dh = true", 1, true))
+        H.truthy(read("_gt_bot_teleport_lab.lua"):find("mod._gt459_liveness_gated_lab = true", 1, true))
+    end)
 end

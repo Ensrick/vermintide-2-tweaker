@@ -208,14 +208,11 @@ end
 -- Fire a short 2D UI cue via the level world's Wwise handle. pcall-guarded:
 -- WwiseWorld.trigger_event C-faults on a non-resident event.
 local function _play_warn_sound()
-    local wm = Managers.world
-    if not wm then return end
-    -- WorldManager.world() FASSERTS on a missing world (world_manager.lua:111-115),
-    -- so the old `if not world` check below it could never fire; probe has_world
-    -- first (#459 sweep).
-    if not wm:has_world("level_world") then return end
-    local world = wm:world("level_world")
-    local ww = wm:wwise_world(world)
+    -- WorldManager.world() FASSERTS on a missing world (world_manager.lua:111-115);
+    -- the shared helper probes has_world first (#459 sweep, WP-GT-03).
+    local world = mod._gt_world.live()
+    if not world then return end
+    local ww = Managers.world:wwise_world(world)
     if not ww then return end
     pcall(WwiseWorld.trigger_event, ww, _WARN_SOUND)
 end

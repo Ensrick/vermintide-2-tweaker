@@ -8,8 +8,10 @@
   position safely (audit finding A6-F08, advances #490).
 - The creature spawner's crosshair raycast no longer calls
   `Managers.world:world("level_world")` unguarded; with no level loaded the
-  spawn commands say "No level is loaded." instead of faulting. Not confirmed
-  in game.
+  spawn commands say "No level is loaded." instead of faulting.
+- The five copies of the world guard (debug highlights, the bot teleport lab
+  twice, solo QoL, the melee warning) now use the helper. Behaviour and the
+  `[gt:459]` log lines are unchanged. Not confirmed in game.
 
 ## 0.2.281-dev (2026-11-15) -- Host melee latency compensation off by default (WP-GT-02)
 
