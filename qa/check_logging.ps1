@@ -101,6 +101,7 @@ if (-not $RepoRoot) { $RepoRoot = Join-Path $PSScriptRoot ".." }
 # on-disk casing) so enumerated file paths share the root prefix that the floor
 # tables and relative-path reports strip. Prefix tests below are case-insensitive.
 $repoRoot = (Get-Item -LiteralPath (Resolve-Path $RepoRoot).Path).FullName
+. (Join-Path $PSScriptRoot 'worktree_state.ps1')  # Get-QATrackedFiles: tracked + not-ignored files only (WP-T-06)
 
 # Issue #427 migration floor. These are the three public stable-stream helpers
 # whose dev twins are already console-only; they may disappear through an
@@ -280,7 +281,7 @@ $rxTokEnd      = [regex]'\bend\b'
 # ---- file collection (mirrors check_unpack_safety.ps1) ----
 function Get-ScanFiles {
     param([string]$Root)
-    Get-ChildItem -Path $Root -Filter "*.lua" -Recurse -File -ErrorAction SilentlyContinue `
+    Get-QATrackedFiles -RepoRoot $Root -Filter "*.lua" -AsFileInfo `
         | Where-Object {
             $p = $_.FullName
             $isActive = $p -match "\\scripts\\"

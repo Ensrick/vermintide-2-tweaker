@@ -4,6 +4,7 @@ param(
     [switch]$Quiet,
     [switch]$SelfTest
 )
+. (Join-Path $PSScriptRoot 'worktree_state.ps1')  # Get-QATrackedFiles: tracked + not-ignored files only (WP-T-06)
 
 $requiredDocs = @{
     'PROJECT_STANDARDS.md' = @(
@@ -83,7 +84,7 @@ foreach ($path in $requiredDocs.Keys) {
 }
 
 $sources = @()
-Get-ChildItem -LiteralPath $repoRoot -Recurse -Filter '*.lua' -File | ForEach-Object {
+Get-QATrackedFiles -RepoRoot $repoRoot -Filter '*.lua' -AsFileInfo | ForEach-Object {
     $relative = $_.FullName.Substring($repoRoot.Length + 1)
     if ($relative -match '^(?:_archive|bundleV2|\.temp|tools|qa|\.claude)[\\/]') { return }
     if ($relative -match '[\\/]bundleV2[\\/]') { return }

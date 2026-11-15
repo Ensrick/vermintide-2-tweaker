@@ -17,13 +17,14 @@ param([switch]$Quiet)
 
 $here = $PSScriptRoot
 $repoRoot = Split-Path $here -Parent
+. (Join-Path $PSScriptRoot 'worktree_state.ps1')  # Get-QATrackedFiles: tracked + not-ignored files only (WP-T-06)
 $skip = @('_archive', 'bundleV2', '.temp', '.git', 'test_fixtures', 'node_modules', 'tools\luacheck')
 
 $derefPattern = 'get_mod\(\s*["'']([A-Za-z0-9_\-]+)["'']\s*\)\s*[\.:]\w'
 $ownPattern   = 'get_mod\(\s*["'']([A-Za-z0-9_\-]+)["'']\s*\)'
 
 $violations = @()
-Get-ChildItem -Path $repoRoot -Recurse -Filter *.lua -File | ForEach-Object {
+Get-QATrackedFiles -RepoRoot $repoRoot -Filter '*.lua' -AsFileInfo | ForEach-Object {
     $f = $_
     $rel = $f.FullName.Substring($repoRoot.Length + 1)
     foreach ($s in $skip) { if ($rel -like "*$s*") { return } }

@@ -14,6 +14,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path $RepoRoot).Path
+. (Join-Path $PSScriptRoot 'worktree_state.ps1')  # Get-QATrackedFiles: tracked + not-ignored files only (WP-T-06)
 $errors = @()
 $warnings = @()
 
@@ -34,8 +35,7 @@ $bmcSvg = "buy-me-coffee-icon.svg"
 $bugReportMarker = "github.com/Ensrick/vermintide-2-tweaker/issues"
 
 function Get-CfgFiles {
-    Get-ChildItem -Path $repoRoot -Filter "itemV2.cfg" -Recurse -File `
-        -ErrorAction SilentlyContinue `
+    Get-QATrackedFiles -RepoRoot $repoRoot -Filter "itemV2.cfg" -AsFileInfo `
         | Where-Object { $_.FullName -notlike "*\_archive\*" `
                     -and $_.FullName -notlike "*\bundleV2\*" `
                     -and $_.FullName -notlike "*\.build\*" `

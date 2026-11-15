@@ -577,6 +577,9 @@ Run-Check "check_appearance_contracts"          { & (Join-Path $here "check_appe
 # without a regenerate leaves a committed report that lies about the gap count.
 Run-Check "check_appearance_census_gaps"        { & (Join-Path $here "check_appearance_census_gaps.ps1")        -Quiet:$Quiet }
 Run-Check "check_native_resource_contracts"     { & (Join-Path $here "check_native_resource_contracts.ps1")     -Quiet:$Quiet }
+# WP-T-06: a qa/check_*.ps1 root walk must read tracked files (Get-QATrackedFiles)
+# or say why not, so git-ignored scratch copies of mod trees never fail a gate.
+Run-Check "check_gate_enumeration"              { & (Join-Path $here "check_gate_enumeration.ps1")              -Quiet:$Quiet }
 Run-Check "check_decomposition_contracts"       { & (Join-Path $here "check_decomposition_contracts.ps1")       -Quiet:$Quiet }
 Run-Check "check_level_lookup_budget"          { & (Join-Path $here "check_level_lookup_budget.ps1")          -Quiet:$Quiet }
 Run-Check "check_retired_big_rebalance"        { & (Join-Path $here "check_retired_big_rebalance.ps1")        -Quiet:$Quiet }

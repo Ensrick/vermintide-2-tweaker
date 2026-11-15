@@ -15,6 +15,7 @@ param(
 $ErrorActionPreference = "Stop"
 if (-not $RepoRoot) { $RepoRoot = Join-Path $PSScriptRoot ".." }
 $repoRoot = (Resolve-Path $RepoRoot).Path
+. (Join-Path $PSScriptRoot 'worktree_state.ps1')  # Get-QATrackedFiles: tracked + not-ignored files only (WP-T-06)
 $errors = @()
 $warnings = @()
 
@@ -23,7 +24,7 @@ function Read-FileUtf8([string]$path) {
 }
 
 function Find-LocFiles {
-    Get-ChildItem -Path $repoRoot -Filter "*_localization.lua" -Recurse -File -ErrorAction SilentlyContinue `
+    Get-QATrackedFiles -RepoRoot $repoRoot -Filter "*_localization.lua" -AsFileInfo `
         | Where-Object {
             $p = $_.FullName
             $p -notlike "*\_archive\*" -and $p -notlike "*\bundleV2\*" -and $p -notlike "*\.build\*" `
@@ -33,7 +34,7 @@ function Find-LocFiles {
 }
 
 function Find-DataFiles {
-    Get-ChildItem -Path $repoRoot -Filter "*_data.lua" -Recurse -File -ErrorAction SilentlyContinue `
+    Get-QATrackedFiles -RepoRoot $repoRoot -Filter "*_data.lua" -AsFileInfo `
         | Where-Object {
             $p = $_.FullName
             $p -notlike "*\_archive\*" -and $p -notlike "*\bundleV2\*" -and $p -notlike "*\.build\*" `

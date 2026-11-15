@@ -49,6 +49,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot 'worktree_state.ps1')  # Get-QATrackedFiles: tracked + not-ignored files only (WP-T-06)
 
 # #1739: PS5 standalone -File does not bind PSScriptRoot during defaults.
 # Derive omitted paths here; explicitly supplied values retain their semantics.
@@ -261,7 +262,7 @@ function Invoke-IntegrityChecks {
     $errors = @(); $warnings = @()
     if (-not $oracle) { $oracle = @{ exact = @{}; keys = @() } }
 
-    $locFiles = Get-ChildItem -Path $repoRoot -Filter '*_localization.lua' -Recurse -File -ErrorAction SilentlyContinue |
+    $locFiles = Get-QATrackedFiles -RepoRoot $repoRoot -Filter '*_localization.lua' -AsFileInfo |
         Where-Object {
             $p = $_.FullName
             $p -notlike '*\_archive\*' -and $p -notlike '*\bundleV2\*' -and $p -notlike '*\.build\*' `

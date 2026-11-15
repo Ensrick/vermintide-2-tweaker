@@ -12,6 +12,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+. (Join-Path $PSScriptRoot 'worktree_state.ps1')  # Get-QATrackedFiles: tracked + not-ignored files only (WP-T-06)
 
 # Windows PowerShell 5.1's -File path initializes PSScriptRoot after parameter
 # defaults. Resolve the optional root in the body, never from the caller's CWD.
@@ -291,7 +292,7 @@ function Get-ActiveDocuments {
 
     $rootPath = [IO.Path]::GetFullPath($Root).TrimEnd("\", "/")
     $documents = @()
-    foreach ($file in Get-ChildItem -LiteralPath $rootPath -Recurse -Filter "*.md" -File) {
+    foreach ($file in (Get-QATrackedFiles -RepoRoot $rootPath -Filter "*.md" -AsFileInfo)) {
         $relative = $file.FullName.Substring($rootPath.Length + 1).Replace("\", "/")
         if (Test-IsHistoricalDocument $relative) { continue }
         $documents += [pscustomobject]@{

@@ -64,6 +64,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path $RepoRoot).Path
+. (Join-Path $PSScriptRoot 'worktree_state.ps1')  # Get-QATrackedFiles: tracked + not-ignored files only (WP-T-06)
 
 function Read-FileUtf8([string]$path) {
     return [System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8)
@@ -98,7 +99,7 @@ function Get-ScanFiles {
     # Active mods follow `<mod>/scripts/...` layout. We scope to that
     # subtree to skip both top-level scaffolding lua and unrelated repos
     # (Vermintide-2-Source-Code, Darktide-Source-Code, extracted-mod dumps).
-    Get-ChildItem -Path $Root -Filter "*.lua" -Recurse -File -ErrorAction SilentlyContinue `
+    Get-QATrackedFiles -RepoRoot $Root -Filter "*.lua" -AsFileInfo `
         | Where-Object {
             $p = $_.FullName
             $isActive = $p -match "\\scripts\\"
