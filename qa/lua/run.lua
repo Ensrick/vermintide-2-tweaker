@@ -127,6 +127,7 @@ local suites = {
     "test_rig_api_inventory",
     "test_rig_api_ui",
     "test_rig_api_actor",
+    "test_rig_api_wire",
     "test_event_high_intensity_diagnostic",
     "test_event_mission_allowlist",
     "test_event_curse_join_policy",

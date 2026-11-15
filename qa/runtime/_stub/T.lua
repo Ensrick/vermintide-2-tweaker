@@ -15,7 +15,7 @@ local NAMES = {
     "main", "spawn", "kill", "teleport", "invincible", "end_level", "return_to_keep", "expect_rt",
     -- helper groups in tools/harness/driver/lib/ (WP-H-06)
     "set", "shot", "career", "equip", "loadout", "backend_items", "open_view", "close_view", "widget", "press",
-    "first_bot_unit", "as_bot", "pickup",
+    "first_bot_unit", "as_bot", "pickup", "transmit_spy",
     -- planned helpers (tools/harness/API.md, status planned) are not listed: a case must not call them
 }
 local FIELDS = { "case_id", "nonce" }

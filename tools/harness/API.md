@@ -82,6 +82,12 @@ Every change goes through the game's own setters (the ones the hero view and the
 | `T.loadout(career)` | lib/inventory.lua | read-only: the backend id in every loadout slot (`stored_in_backend`) of a career (nil: the career played) | `BackendUtils.get_loadout_item_id` (`backend_utils.lua:14`); slots `scripts/settings/inventory_settings.lua:15-100` | none | api-selftest |
 | `T.backend_items(filter)` | lib/inventory.lua | read-only: the owned backend items for which `filter(item)` is true, as a list (items carry `backend_id`, `key`, `data`) | `get_all_backend_items` (`scripts/managers/backend_playfab/backend_interface_item_playfab.lua:431`; fields `playfab_mirror_base.lua:1784-1786`) | none | api-selftest |
 
+## Wire
+
+| Helper | Status | What it does | Wraps | Packs | Rig |
+|---|---|---|---|---|---|
+| `T.transmit_spy(rpc_names)` | lib/wire.lua | records every call of the network transmit's senders whose RPC is `rpc_names` (a name, a list, or nil for all) and passes each call through; returns `spy` with `calls` (`{ rpc, via, n, args }`, args after `rpc_name`, engine values as text), `count(name)` and `stop()` (also at cleanup; a wrapper installed on top after the start is left in place). A solo host still calls the senders, so the ids recorded are the ones a client would receive (D1 primitive P7; D1 calls it `T.spy`) (`SPY START`, `SPY STOP` lines) | `NetworkTransmit.send_rpc*` (`scripts/network/network_transmit.lua:169-533`) on `Managers.state.network.network_transmit` (`scripts/managers/network/game_network_manager.lua:109`) | D1 | api-selftest |
+
 ## Backend, shared helpers and evidence
 
 | Helper | Status | What it does | Wraps | Packs | Rig |
@@ -90,14 +96,15 @@ Every change goes through the game's own setters (the ones the hero view and the
 | `T.shared(name)` | driver | a shared helper table from `qa/runtime/_shared/<name>.lua`, or INCONCLUSIVE | none | none | shield-equip, api-selftest |
 | `T.shot(label)` | lib/shot.lua | records that the case asked for a still (`SHOT ... captured=false`) and returns false; the capture is WP-H-10 | none yet | CONV, all packs | api-selftest |
 
-## Planned groups (WP-H-06 step 2, one pull request each)
+## Planned
+
+Not built yet. `T.previewer` and `T.score_previewers` need the field path from an open view to its previewers resolved once in the game (D2 marks it `[unverified]`); `T.hero_input` needs a way to feed the local hero's input extension without OS input, not chosen yet. Until then a case that needs one starts with `T.require`.
 
 | Helper | Status | What it does | Wraps | Packs | Rig |
 |---|---|---|---|---|---|
 | `T.previewer()` | planned: UI | the live `MenuWorldPreviewer` of the open view (field path `[unverified]`, D2) | not chosen yet | D2 | none |
 | `T.score_previewers()` | planned: UI | the `TeamPreviewer.hero_previewers` list (field path `[unverified]`, D2) | not chosen yet | D2 | none |
 | `T.hero_input(action)` | planned: actor input | feeds the local hero's input extension (cases start with `T.require`) | not chosen yet | D2 | none |
-| `T.transmit_spy(rpc_name)` | planned: wire | records the arguments passed to `network_transmit` for one RPC during a step (D1 calls it `T.spy`) | `NetworkTransmit.send_rpc*` (`scripts/network/network_transmit.lua:169-371`) | D1 | none |
 
 ## Adding a helper
 
