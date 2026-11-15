@@ -808,4 +808,63 @@ end }
         H.truthy(first(lines, tag .. "CASE END id=main%-err verdict=ERROR .*planted main error"), "an error in main is the case's ERROR")
         H.truthy(first(lines, tag .. "CASE END id=main%-require verdict=INCONCLUSIVE .*precondition inside main"), "a failed T.require in main stays INCONCLUSIVE")
     end)
+
+    -- -----------------------------------------------------------------------------------------------------
+    -- WP-H-03: T.cmd runs a regression suite in the main update; the rows it echoes feed T.expect_rt.
+    -- The stub suite echoes rows the way every runner does ("  <VERDICT>: <check>[ -- <detail>]").
+    -- -----------------------------------------------------------------------------------------------------
+    local function boot_with_suite()
+        local calls = {}
+        local plan = make_plan({
+            { id = "rt-asserts", src = [[
+return { run = function(T)
+    local lines = T.cmd("gt_regression_test")
+    T.note("lines", #lines)
+    T.expect_rt("gt_dev", "gt_a")
+    T.expect_rt("gt_dev", "gt_b")
+    T.expect_rt("gt_dev", "gt_x")
+end }
+]] },
+            { id = "rt-skip", src = "return { run = function(T) T.expect_rt('gt_dev', 'gt_s') end }" },
+            { id = "rt-missing-suite", src = "return { run = function(T) T.expect_rt('ct_dev', 'ct_a') end }" },
+            { id = "rt-missing-check", src = "return { run = function(T) T.expect_rt('gt_dev', 'nope') end }" },
+        })
+        local object, env, lines = boot(plan)
+        local VMFMod = {}
+        for _, method in ipairs({ "echo", "info", "warning", "error", "debug" }) do
+            VMFMod[method] = function() end
+        end
+        env.VMFMod = VMFMod
+        local gt = setmetatable({ get_name = function() return "gt_dev" end }, { __index = VMFMod })
+        local vmf = {
+            run_command = function(name)
+                calls[#calls + 1] = { name = name, in_coroutine = coroutine.running() ~= nil }
+                gt:echo("=== gt regression_test (v%s) ===", "0.2.300-dev")
+                gt:echo("  PASS: %s", "gt_a")
+                gt:info("[regression] PASS %s", "gt_a")
+                gt:echo("  FAIL: %s -- %s", "gt_b", "expected 1, got 2")
+                gt:echo("  XPASS: %s -- %s", "gt_x", "open issue 9 no longer reproduces")
+                gt:echo("  SKIP: %s -- %s", "gt_s", "no mission")
+                gt:echo("=== %d passed, %d failed, %d skipped ===", 1, 2, 1)
+            end,
+            get_commands_list = function() return { { name = "gt_regression_test" } } end,
+        }
+        env.get_mod = function(name) return name == "VMF" and vmf or nil end
+        return object, env, lines, calls
+    end
+
+    H.test("rig T.cmd / T.expect_rt: the suite runs in the main update and its rows decide the asserts", function()
+        local object, env, lines, calls = boot_with_suite()
+        H.truthy(run_to_end(object, env), "run completed")
+        H.equal(#calls, 1, "the suite ran once")
+        H.equal(calls[1].in_coroutine, false, "VMF.run_command ran in the main update, not in the case coroutine")
+        H.truthy(first(lines, tag .. "OUT mod=gt_dev via=echo text=\"  FAIL: gt_b %-%- expected 1, got 2\""), "rows are printed as OUT lines for Parse-Sweep")
+        H.truthy(first(lines, tag .. "ASSERT id=rt%-asserts n=%d+ PASS label=\"rt gt_dev gt_a\" got=\"PASS\""), "PASS row passes")
+        H.truthy(first(lines, tag .. "ASSERT id=rt%-asserts n=%d+ FAIL label=\"rt gt_dev gt_b\" got=\"FAIL\" detail=\"expected 1, got 2\""), "FAIL row fails with its detail")
+        H.truthy(first(lines, tag .. "ASSERT id=rt%-asserts n=%d+ PASS label=\"rt gt_dev gt_x\" got=\"XPASS\""), "XPASS counts as passed")
+        H.truthy(first(lines, tag .. "CASE END id=rt%-asserts verdict=FAIL asserts=3 failed=1"), "the case FAILs on the FAIL row")
+        H.truthy(first(lines, tag .. "CASE END id=rt%-skip verdict=INCONCLUSIVE .*not skipped %(no mission%)"), "a SKIP row is INCONCLUSIVE")
+        H.truthy(first(lines, tag .. "CASE END id=rt%-missing%-suite verdict=INCONCLUSIVE .*regression suite of ct_dev ran earlier in this boot"), "a suite not run in this boot is INCONCLUSIVE")
+        H.truthy(first(lines, tag .. "CASE END id=rt%-missing%-check verdict=INCONCLUSIVE .*check nope reported by gt_dev"), "an unknown check is INCONCLUSIVE")
+    end)
 end
