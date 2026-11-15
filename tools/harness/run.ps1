@@ -73,6 +73,9 @@ $planObj = $null
 if ($Plan) {
     $planPath = (Resolve-Path -LiteralPath $Plan).Path
     $planObj = Get-Content -LiteralPath $planPath -Raw | ConvertFrom-Json
+    # WP-H-08: "modset" fills mods and expect_mods (New-RigProfile.ps1 resolves the plan the same way)
+    try { $planObj = & (Join-Path $PSScriptRoot 'Resolve-RigPlan.ps1') -Plan $planObj }
+    catch { Write-Host "RIG REFUSED: plan: $($_.Exception.Message)"; exit 3 }
     if (-not $Name) { $Name = $planObj.name }
 }
 if (-not $Name) { throw 'Give -Plan or -Name.' }
