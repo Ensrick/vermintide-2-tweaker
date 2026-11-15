@@ -703,7 +703,7 @@ return {
 
     -- Host-authoritative melee latency compensation (#1034).
     gt_host_lag_comp = { en = "Host-side Melee Latency Compensation" },
-    gt_host_lag_comp_tooltip = { en = "When you host, ordinary blockable enemy melee hits against remote human players wait for a short grace window based on the host-measured connection delay. A block, dodge, or attack-interrupting stagger that reaches the host during that window prevents the hit. Bots, the host, grabs, projectiles, hazards, and unblockable attacks are unchanged. On by default." },
+    gt_host_lag_comp_tooltip = { en = "When you host, ordinary blockable enemy melee hits against remote human players wait for a short grace window based on the host-measured connection delay. A block, dodge, or attack-interrupting stagger that reaches the host during that window prevents the hit. Bots, the host, grabs, projectiles, hazards, and unblockable attacks are unchanged. Off by default." },
     gt_host_lag_comp_max_ms = { en = "Maximum Compensation Window" },
     gt_host_lag_comp_max_ms_tooltip = { en = "Caps the host-measured grace window from 0 to 350 milliseconds. The actual window follows a smoothed connection delay for each remote player and never exceeds this value." },
 
