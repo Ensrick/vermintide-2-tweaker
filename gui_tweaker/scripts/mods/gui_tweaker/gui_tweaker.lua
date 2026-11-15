@@ -35,7 +35,7 @@ mod._gut925_publish_if_unobserved = function(before_generation, career_name,
         item_key = item and (item.key or (item_data and item_data.name)),
     })
 end
-local MOD_VERSION = "0.2.290"
+local MOD_VERSION = "0.2.291"
 local GUT_RPC_SCHEMA = 1 -- Bump only when a GUT positional wire shape changes.
 mod._GUT_RPC_SCHEMA = GUT_RPC_SCHEMA
 
