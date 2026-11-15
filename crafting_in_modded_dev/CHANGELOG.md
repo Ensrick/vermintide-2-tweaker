@@ -1,5 +1,18 @@
 # Crafting in Modded Changelog
 
+## 0.8.155-dev (2026-11-15) -- Import crafted items from the other Crafting in Modded stream (#1654, #277)
+
+- Crafting in Modded (dev) and Crafting in Modded (public) keep separate
+  crafted collections. New command `/cim_import_other_stream`: without an
+  argument it reports how many of the public stream's crafted items are not
+  here; `/cim_import_other_stream CONFIRM` copies exactly those in one
+  validated write and restores them to the inventory. Nothing is removed or
+  overwritten, and nothing is imported automatically (WP-CIM-06c).
+- When both streams are enabled at once, one line says so:
+  `[cim:store] both Crafting in Modded streams are enabled; each keeps its
+  own crafted items`.
+- Not confirmed in game.
+
 ## 0.8.154-dev (2026-11-15) -- Session-start backup of crafted items and /cim_restore_backup (#1654, #277)
 
 - The first load in each game session copies the crafted collection to the

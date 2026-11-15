@@ -19,6 +19,23 @@ return function(context)
         or function() return nil end
     local get_restore_modded_loadout = context.get_restore_modded_loadout
         or function() return nil end
+    local get_user_setting = context.get_user_setting
+        or function(key) return Application.user_setting(key) end
+
+    -- WP-CIM-06 step 7: VMF namespaces settings by mod id, so cim_dev and cim
+    -- each keep their own forged_weapons and neither reads the other's
+    -- (Vermintide-Mod-Framework/vmf/scripts/mods/vmf/modules/core/settings.lua:46-55).
+    -- Read-only view of the other stream's store; nil when any level is missing.
+    local OTHER_STREAM_ID = "cim"
+    mod._cim_other_stream_store = function()
+        local ok, all = pcall(get_user_setting, "mods_settings")
+        if not ok or type(all) ~= "table" then return nil end
+        local other = all[OTHER_STREAM_ID]
+        if type(other) ~= "table" then return nil end
+        local store = other.forged_weapons
+        if type(store) ~= "table" then return nil end
+        return store
+    end
 
     local more_items_lib
     local forged_weapons = {}
@@ -150,6 +167,22 @@ return function(context)
             mod._cim_store_backup_done = true
             if type(save_data) == "table" and next(save_data) ~= nil then
                 mod:set("forged_weapons_backup", save_data, false)
+            end
+        end
+        -- WP-CIM-06 step 9: say once when both streams run side by side.
+        if not mod._cim_both_streams_noted then
+            local ok_dev, dev = pcall(resolve_mod, "cim_dev")
+            local ok_stable, stable = pcall(resolve_mod, "cim")
+            local function enabled(m)
+                if type(m) ~= "table" or type(m.is_enabled) ~= "function" then return false end
+                local ok, on = pcall(m.is_enabled, m)
+                return ok and on == true
+            end
+            if ok_dev and ok_stable and enabled(dev) and enabled(stable) then
+                mod._cim_both_streams_noted = true
+                local notice = "[cim:store] both Crafting in Modded streams are enabled; each keeps its own crafted items"
+                pcall(print_line, notice)
+                pcall(mod.echo, mod, notice)
             end
         end
         if not save_data or type(save_data) ~= "table" then return end
