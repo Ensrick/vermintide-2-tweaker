@@ -2,9 +2,10 @@
 -- keep session (RainReligion, cim 0.8.135-dev) for harness reasons, not product
 -- defects. Every case runs the SHIPPED check through the shipped installers,
 -- wired to the real production owner the check depends on:
---   modded_loadout_round_trip_save_then_clear: vanilla set_loadout_item
---     (transcribed below from backend_interface_item_playfab.lua:635-670)
---     raised on the all-no-op stub before the hook_safe capture could run;
+--   modded_loadout_round_trip_save_then_clear and its gate-off twin: vanilla
+--     set_loadout_item raised on the all-no-op stub before the hook_safe
+--     capture could run (both checks were removed with the dormant
+--     loadout-persistence path in WP-CIM-11; the stub characterization stays);
 --   inventory_property_count_within_cap: pinned the pre-#86 2-property ceiling;
 --   localization_format_safe: probed placeholder strings with no arguments;
 --   default_property_cap_is_five_bubbles: asserted pre-#244 linear storage;
@@ -96,31 +97,8 @@ return function(H, repo_root)
         mod._cim_is_modded_backend_id = function(bid)
             return type(bid) == "string" and forged[bid] ~= nil
         end
-        mod._cim_persist_loadouts_enabled = function()
-            if options.gate_leaks then return false end
-            return mod:get("persist_modded_loadouts") == true
-        end
-
-        -- Real persisted-loadout owner: its hook_safe is the capture under test.
-        local loadout_install = assert(loadfile(root .. "_cim_modded_loadout_owner.lua"))()
-        local loadout = loadout_install({
-            mod = mod,
-            persist_loadouts_enabled = function()
-                if options.gate_leaks then return true end
-                return mod:get("persist_modded_loadouts") == true
-            end,
-            get_forged_weapons = function() return forged end,
-        })
-        local capture = assert(mod.safe_hooks["BackendInterfaceItemPlayfab.set_loadout_item"])
-        -- VMF hook_safe semantics: the safe hook runs after the hooked chain
-        -- returns and its own errors are contained; a raise in the chain skips it.
-        local cls = {
-            set_loadout_item = function(self, ...)
-                local results = { vanilla_set_loadout_item(self, ...) }
-                pcall(capture, self, ...)
-                return unpack(results)
-            end,
-        }
+        -- WP-CIM-11: no cim capture hook remains on set_loadout_item.
+        local cls = { set_loadout_item = vanilla_set_loadout_item }
 
         -- Real weave-loadout owner under the vanilla property tables.
         local function adventure(range)
@@ -195,9 +173,6 @@ return function(H, repo_root)
             get_custom_forge_active = function() return false end,
             get_forged_weapons = function() return forged end,
             set_forged_weapons = function(store) forged = store end,
-            get_modded_loadout = loadout.get_modded_loadout,
-            set_modded_loadout = loadout.set_modded_loadout,
-            modded_loadout_load = loadout.modded_loadout_load,
             rpc_schema = 1,
         }
         local globals = { BackendInterfaceItemPlayfab = cls }
@@ -209,7 +184,7 @@ return function(H, repo_root)
         surfaces_install(context)
         return {
             checks = checks, mod = mod, settings = settings, forged = function() return forged end,
-            loadout = loadout, weave = weave_owner, core_env = core_env,
+            weave = weave_owner, core_env = core_env,
         }
     end
 
@@ -251,50 +226,6 @@ return function(H, repo_root)
         H.equal(stub._dirty, true)
         H.equal(rawget(stub, "get_all_backend_items") ~= nil, true,
             "rows must be an instance field so class hooks on get_all_backend_items are bypassed")
-    end)
-
-    H.test("CIM #1656 modded_loadout_round_trip_save_then_clear passes on the real capture", function()
-        local suite = build_suite()
-        local result = run(suite, "modded_loadout_round_trip_save_then_clear")
-        H.equal(result, nil, tostring(result))
-        -- The sandbox restored the player's store and toggle.
-        H.equal(suite.settings.persist_modded_loadouts, nil)
-        H.equal(next(suite.loadout.get_modded_loadout()), nil)
-    end)
-
-    H.test("CIM #1656 the round trip still fails when the capture stops clearing", function()
-        local suite = build_suite()
-        -- A capture that only saves (the 2026-05-23 bug) must be caught.
-        local real = suite.mod._cim_is_modded_backend_id
-        suite.mod._cim_is_modded_backend_id = function() return true end
-        local result = run(suite, "modded_loadout_round_trip_save_then_clear")
-        suite.mod._cim_is_modded_backend_id = real
-        H.truthy(type(result) == "string" and result:find("STALE modded entry not cleared", 1, true),
-            tostring(result))
-    end)
-
-    H.test("CIM #1656 persist_loadouts_gate_off_is_passthrough is no longer vacuous", function()
-        H.equal(run(build_suite(), "persist_loadouts_gate_off_is_passthrough"), nil)
-        local leaking = run(build_suite({ gate_leaks = true }), "persist_loadouts_gate_off_is_passthrough")
-        H.truthy(type(leaking) == "string" and leaking:find("OFF gate leaked a capture", 1, true),
-            "a leaking gate must FAIL now that vanilla accepts the stub: " .. tostring(leaking))
-    end)
-
-    H.test("CIM #1656 the gate-off twin fails on a rejected fixture registration", function()
-        -- A rejected registration leaves the bid unmodded, so even a leaking
-        -- gate captures nothing; the check must not read that as a pass.
-        local suite = build_suite({ gate_leaks = true })
-        suite.mod._cim_register_craft = function() return false, "gate_record_refused" end
-        H.equal(run(suite, "persist_loadouts_gate_off_is_passthrough"),
-            "fixture craft registration rejected: gate_record_refused")
-    end)
-
-    H.test("CIM #1656 the gate-off twin skips when vanilla never writes the mirror", function()
-        -- A chain that returns before vanilla never reaches the capture either.
-        local short_circuit = { set_loadout_item = function() return false end }
-        local suite = build_suite({ gate_leaks = true, globals = { BackendInterfaceItemPlayfab = short_circuit } })
-        H.equal(run(suite, "persist_loadouts_gate_off_is_passthrough"),
-            "skip: set_loadout_item chain never reached vanilla's mirror write (0 writes), gate not exercised")
     end)
 
     -- 2. inventory_property_count_within_cap --------------------------------

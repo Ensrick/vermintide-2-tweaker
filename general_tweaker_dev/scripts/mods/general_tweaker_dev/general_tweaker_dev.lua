@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.281-dev"
+local MOD_VERSION = "0.2.282-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -68,6 +68,7 @@ mod.GT_CS_RPC_SCHEMA = 1
 -- per-frame observation hooks block further down, which shadows this top-of-
 -- file definition for everything below that point.
 local _dbg, _dbg_alert = mod:dofile("scripts/mods/general_tweaker_dev/_lib_debug")(mod, "[gt:dbg]")
+mod._gt_world = mod:dofile("scripts/mods/general_tweaker_dev/_gt_world").new({ managers = function() return Managers end, Unit = Unit })
 
 -- Exposed for sibling `_gt_lobby_*` modules (and any future external file
 -- that needs gt's debug-helpers). _dbg is VMF mod:debug; _dbg_alert is
@@ -1604,8 +1605,7 @@ end)
 -- gear-icon cim gate + Show menu tabs in-mission + the InventorySettings/ESC-menu
 -- patch) MIGRATED to gui_tweaker (gut) 2026-06-24. gut now owns this feature;
 -- _gt_mission_ui.lua + _gt_keep_menus.lua were deleted and their dispatcher
--- branches removed from main. The gt_no_mission_hotkey_flip regression test
--- (Issue #62) stays — it guards the removed IngameUI.handle_menu_hotkeys flip.
+-- branches removed from main; gt_no_mission_hotkey_flip (#62) guards the removed flip.
 
 -- Friendly Fire Toggle (DamageUtils.allow_friendly_fire_ranged/melee hooks) is
 -- extracted to _gt_godmode_qol.lua (dofile'd after the main chunk). These are

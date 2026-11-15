@@ -36,7 +36,7 @@ mod._cim959_accessory_property_policy = mod:dofile(
 local _BULK_ACCESSORY_CRAFT = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_bulk_accessory_craft")
 _MEM_PROBE_T0_CIMD = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.8.156-dev"
+local MOD_VERSION = "0.8.157-dev"
 local _bootstrap = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_bootstrap_runtime")({
         mod = mod,
@@ -284,7 +284,6 @@ mod._cim_store_policy = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_sto
 -- ============================================================
 -- These callbacks are bound later in the entry; the owner resolves them when BackendManagerPlayFab rebuilds interfaces.
 local _athanor_inject_all
-local _restore_modded_loadout
 local _bubble_cap
 local _cim_restore_forge_freedom
 
@@ -294,7 +293,6 @@ local _forge_state = mod:dofile(
         rt_register = _rt_register,
         print_line = function(fmt, ...) printf(fmt, ...) end,
         get_athanor_inject_all = function() return _athanor_inject_all end,
-        get_restore_modded_loadout = function() return _restore_modded_loadout end,
     })
 local _forge_create_item = _forge_state.create_item
 local _forge_detect_mil = _forge_state.detect_mil
@@ -304,40 +302,21 @@ mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_career_commit_guard")({ mod
 -- ============================================================
 -- Vanilla-safe loadout wire owner
 -- ============================================================
-local _loadout_wire = mod:dofile(
+mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_loadout_wire_owner")({
         mod = mod,
         rpc_schema = CIM_RPC_SCHEMA,
         dbg_alert = _dbg_alert,
         print_line = function(fmt, ...) printf(fmt, ...) end,
     })
-local _persist_loadouts_enabled = _loadout_wire.persist_loadouts_enabled
 -- ============================================================
--- Modded inventory filter + loadout restore
+-- Craft auto-equip + exact-loadout owner
 -- ============================================================
--- The mod-realm view: hide vanilla weapons from the inventory grid (toggleable),
--- and remember the last modded item the player equipped on each (career, slot)
--- so that switching to vanilla and back doesn't wipe their modded loadout.
---
--- The persisted store, its flat -> indexed migration, the stale purge, both
--- set_loadout_item capture hooks (#22), the restore/re-equip pass, the #562
--- auto-equip helpers, and the three loadout commands all live in one owner
--- installed HERE, at the exact point that block used to execute. The forge
--- store is injected as an accessor because _forge_load rebinds it on every
--- backend _create_interfaces pass.
-local _install_modded_loadout_owner = mod:dofile(
-    "scripts/mods/crafting_in_modded_dev/_cim_modded_loadout_owner")
-local _LOADOUT_OWNER = _install_modded_loadout_owner({
-    mod = mod,
-    persist_loadouts_enabled = _persist_loadouts_enabled,
-    get_forged_weapons = _forge_state.get_forged_weapons,
-})
--- Bind the forward-declared local the _create_interfaces hook already closes over.
-_restore_modded_loadout = _LOADOUT_OWNER.restore_modded_loadout
--- Consumed by mod.update (deferred post-LA install) and the late owner installers.
-local _install_backendutils_capture = _LOADOUT_OWNER.install_backendutils_capture
-local _modded_loadout_save = _LOADOUT_OWNER.modded_loadout_save
-local _modded_loadout_load = _LOADOUT_OWNER.modded_loadout_load
+-- #562 auto-equip, the #1360 exact five-slot loadout primitives, the
+-- restore-callback registry cosmetics_tweaker calls, and /cim_craft_standard.
+-- WP-CIM-11 removed the dormant persisted modded-loadout path from it; Tweaker:
+-- GUI owns modded loadout persistence.
+mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_modded_loadout_owner")({ mod = mod })
 
 
 -- ============================================================
@@ -1140,14 +1119,6 @@ local function _athanor_retry_pending()
     end
 end
 
--- Timer for the deferred "let the mirror settle" loadout restore. Set by
--- on_game_state_changed; consumed in mod.update (chain added at file bottom).
--- Counts down in real time; once it hits 0 we retry _restore_modded_loadout.
--- This catches the case where PlayFab's _set_inital_career_data /
--- _fix_career_data path wipes the user's saved modded loadout AFTER our
--- _create_interfaces hook already ran the first restore pass.
-local _cim_loadout_restore_timer = nil
-
 mod.on_game_state_changed = function()
     _custom_forge_active = false
     mod._cim_standard_forge_active = false
@@ -1156,11 +1127,6 @@ mod.on_game_state_changed = function()
     if mod._cim563_reset_vanilla_skin_rehydrate then
         mod._cim563_reset_vanilla_skin_rehydrate()
     end
-    -- Schedule a deferred loadout restore. 1.0s is empirically enough for
-    -- PlayFab's signin → request_characters → _set_inital_career_data →
-    -- _fix_career_data round-trip to complete and the mirror to settle.
-    -- A second pass at 3.0s catches slow modded-realm signin cases.
-    _cim_loadout_restore_timer = 1.0
 end
 
 mod.update = function(dt)
@@ -1170,10 +1136,6 @@ mod.update = function(dt)
     if mod._cim_install_keep_forge_interaction then
         mod._cim_install_keep_forge_interaction()
     end
-    -- Install the BackendUtils.set_loadout_item capture once the backend (and LA
-    -- bridge) are up. Cheap once-guarded no-op after install. Issue #22 root fix.
-    _install_backendutils_capture()
-
     -- #563: server inventory refreshes restore CustomData.skin into the live
     -- mirror. Reapply exact-instance local overrides only on a confirmed
     -- PlayFab mirror-ready edge; the helper is a cheap no-op otherwise.
@@ -1181,18 +1143,6 @@ mod.update = function(dt)
         mod._cim563_update_vanilla_skin_overrides()
     end
 
-    if _cim_loadout_restore_timer then
-        _cim_loadout_restore_timer = _cim_loadout_restore_timer - (dt or 0)
-        if _cim_loadout_restore_timer <= 0 then
-            _cim_loadout_restore_timer = nil
-            if _restore_modded_loadout then
-                -- Idempotent: set_loadout_item just rewrites the mirror entry
-                -- if it already matches. Safer than gating on "did PlayFab
-                -- wipe us?" detection.
-                _restore_modded_loadout()
-            end
-        end
-    end
     -- v0.7.52-dev: drain pending post-craft visibility checks (gated on
     -- enable_debug_logging — zero cost when off). Each scheduled check counts
     -- down `frames_until_check`; when zero, asserts the crafted BID is
@@ -1417,13 +1367,11 @@ _install_command_owner({
     mod = mod,
     is_custom_forge_active = function() return _custom_forge_active end,
     get_forged_weapons = _forge_state.get_forged_weapons,
-    get_modded_loadout = _LOADOUT_OWNER.get_modded_loadout,
     get_more_items_lib = _forge_state.get_more_items_lib,
     commit_craft = _DIRECT_CRAFT_OWNER.commit,
     forge_create_item = _forge_create_item,
     forge_detect_mil = _forge_detect_mil,
     forge_save = _forge_save,
-    modded_loadout_save = _modded_loadout_save,
 })
 
 -- Regression registrations load together after every production helper/hook.
@@ -1454,9 +1402,6 @@ local _regression_context = {
     get_custom_forge_active = function() return _custom_forge_active end,
     get_forged_weapons = _forge_state.get_forged_weapons,
     set_forged_weapons = _forge_state.set_forged_weapons,
-    get_modded_loadout = _LOADOUT_OWNER.get_modded_loadout,
-    set_modded_loadout = _LOADOUT_OWNER.set_modded_loadout,
-    modded_loadout_load = _modded_loadout_load,
     rpc_schema = CIM_RPC_SCHEMA,
 }
 _install_cleanup_regression_checks(_regression_context)

@@ -7,11 +7,11 @@
 # Pure data file: no executable statements.
 @{
     Slots = @(
-        @{ Slot = 1; Id = ''; Title = 'VT2 Rig Slot 1' }
-        @{ Slot = 2; Id = ''; Title = 'VT2 Rig Slot 2' }
-        @{ Slot = 3; Id = ''; Title = 'VT2 Rig Slot 3' }
-        @{ Slot = 4; Id = ''; Title = 'VT2 Rig Slot 4' }
-        @{ Slot = 5; Id = ''; Title = 'VT2 Rig Slot 5' }
-        @{ Slot = 6; Id = ''; Title = 'VT2 Rig Slot 6' }
+        @{ Slot = 1; Id = '3840301411'; Title = 'VT2 Rig Slot 1' }
+        @{ Slot = 2; Id = '3840301616'; Title = 'VT2 Rig Slot 2' }
+        @{ Slot = 3; Id = '3840301649'; Title = 'VT2 Rig Slot 3' }
+        @{ Slot = 4; Id = '3840301687'; Title = 'VT2 Rig Slot 4' }
+        @{ Slot = 5; Id = '3840301709'; Title = 'VT2 Rig Slot 5' }
+        @{ Slot = 6; Id = '3840301739'; Title = 'VT2 Rig Slot 6' }
     )
 }

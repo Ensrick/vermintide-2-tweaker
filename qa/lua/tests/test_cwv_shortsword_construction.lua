@@ -281,7 +281,7 @@ return function(H, root)
         local a=assert(source:find("local function _athanor_inject_item(weapon_data, backend_id, options)",1,true))
         local b=assert(source:find("\nlocal _DIRECT_CRAFT_OWNER =",a,true));local inject=source:sub(a,b-1)
         a=assert(source:find("local _pending_inject = {}",b,true))
-        b=assert(source:find("\n-- v0.7.28",a,true)or source:find("\nlocal _cim_loadout_restore_timer",a,true))
+        b=assert(source:find("\n-- v0.7.28",a,true)or source:find("\nmod.on_game_state_changed = function()",a,true))
         local factory=c.T.run("return function(mod,_forge_state)\nlocal _athanor_inject_all\n"..inject.."\n"..source:sub(a,b-1)
             .."\nreturn _athanor_inject_all,_athanor_retry_pending,function()return _pending_inject end end",c.env,"actual-CIM-Shortsword-pending-restore")
         local adds=0;c.env.Managers={backend={get_backend_mirror=function()return{_inventory_items={},add_item=function()adds=adds+1 end}end}}
