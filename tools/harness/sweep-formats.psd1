@@ -29,4 +29,7 @@
         Row  = '\[(?<prefix>[A-Za-z_]+):rt\] (?<check>\S+) (?<verdict>PASS|FAIL|SKIP|XFAIL|XPASS|BADSHAPE)(?: (?<detail>[^\r\n]*))?'
         Done = '\[(?<prefix>[A-Za-z_]+):rt\] done pass=(?<pass>\d+) fail=(?<fail>\d+) skip=(?<skip>\d+) xfail=(?<xfail>\d+) total=(?<total>\d+)'
     }
+    # VMF mod ids of a plan's expect_mods that have no regression suite by design; every other loaded mod must show
+    # up in some suite, or Parse-Sweep.ps1 reports it as "(missing) <id>".
+    NoSuite = @('VMF')
 }

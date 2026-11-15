@@ -22,11 +22,19 @@ $pwsh = (Get-Process -Id $PID).Path
 $null = & $pwsh -NoProfile -File $generator -Check -Quiet 2>&1
 Assert-True ($LASTEXITCODE -eq 0) "committed plans equal a fresh generation (exit $LASTEXITCODE)"
 
+$devRows = @($inv.Mods | Where-Object { $_.Stream -in 'dev', 'single' })
+# the sweeps load weapon_tweaker or weapon_tweaker_dev, never both (qa/runtime/reports/sweep-2026-11-15.md, cause A)
+$single = @($devRows | Where-Object { $_.Dir -eq 'weapon_tweaker' })[0]
+$twin = @($devRows | Where-Object { $_.Dir -eq 'weapon_tweaker_dev' })[0]
+Assert-True ($single.Stream -eq 'single' -and $twin.Stream -eq 'dev') 'inventory: weapon_tweaker is single and weapon_tweaker_dev its dev twin'
+$sweepDevRows = @($devRows | Where-Object { $_.Dir -ne 'weapon_tweaker_dev' })
+$sweepWtDevRows = @($sweepDevRows | ForEach-Object { if ($_.Dir -eq 'weapon_tweaker') { $twin } else { $_ } })
 foreach ($case in @(
         @{ File = 'smoke-public.json'; Rows = @($inv.Mods | Where-Object { $_.Public -eq $true }) },
-        @{ File = 'smoke-dev.json'; Rows = @($inv.Mods | Where-Object { $_.Stream -in 'dev', 'single' }) },
+        @{ File = 'smoke-dev.json'; Rows = $devRows },
         @{ File = 'sweep-public.json'; Rows = @($inv.Mods | Where-Object { $_.Public -eq $true }); Sweep = $true },
-        @{ File = 'sweep-dev.json'; Rows = @($inv.Mods | Where-Object { $_.Stream -in 'dev', 'single' }); Sweep = $true })) {
+        @{ File = 'sweep-dev.json'; Rows = $sweepDevRows; Sweep = $true },
+        @{ File = 'sweep-wtdev.json'; Rows = $sweepWtDevRows; Sweep = $true })) {
     $plan = [System.IO.File]::ReadAllText((Resolve-Path -LiteralPath (Join-Path $plansDir $case.File)).Path) | ConvertFrom-Json
     $ids = @($case.Rows | Where-Object { $_.WorkshopId } | ForEach-Object { [string]$_.WorkshopId })
     Assert-True ($plan.mods[0] -eq '1369573612' -and $plan.expect_mods[0] -eq 'VMF') "$($case.File): VMF first"
@@ -35,6 +43,7 @@ foreach ($case in @(
     Assert-True ($plan.cases[0].file -eq '../_rig/smoke_keep.lua') "$($case.File): runs the smoke case first"
     if ($case.Sweep) {
         Assert-True ($plan.cases.Count -eq 2 -and $plan.cases[1].file -eq '../_rig/sweep_regression.lua' -and $plan.sweep -eq $true) "$($case.File): then the regression sweep, sweep true"
+        Assert-True (-not ($plan.expect_mods -contains 'wt' -and $plan.expect_mods -contains 'wt_dev')) "$($case.File): not both Weapon Tweaker streams"
     } else {
         Assert-True ($plan.cases.Count -eq 1 -and -not $plan.PSObject.Properties['sweep']) "$($case.File): smoke case only"
     }
