@@ -1,0 +1,44 @@
+{
+  "name": "sweep-public",
+  "generated_by": "tools/harness/New-SmokePlan.ps1 from tools/mod-inventory.psd1 (rows with Public = $true); do not edit by hand",
+  "mods": [
+    "1369573612",
+    "3712896117",
+    "3712929235",
+    "3713619122",
+    "3732144878",
+    "3715714222",
+    "3716286199",
+    "3716869446",
+    "3721038774",
+    "3721290755",
+    "3727221800"
+  ],
+  "expect_mods": [
+    "VMF",
+    "wt",
+    "ct",
+    "gt",
+    "gut",
+    "cosmetics_tweaker",
+    "crt",
+    "character_weapon_variants",
+    "cim",
+    "event_tweaker",
+    "verminious_dreams_lighting"
+  ],
+  "timeout": 900,
+  "cases": [
+    {
+      "id": "smoke-keep",
+      "arena": "keep",
+      "file": "../_rig/smoke_keep.lua"
+    },
+    {
+      "id": "sweep-regression",
+      "arena": "keep",
+      "file": "../_rig/sweep_regression.lua"
+    }
+  ],
+  "sweep": true
+}

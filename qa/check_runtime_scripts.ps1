@@ -7,6 +7,8 @@
 # qa/runtime/_stub/check_script.lua, run by the vendored Lua 5.1.
 # Plans: every qa/runtime/plans/*.json must parse, and a plan that sets backend_shield to false needs a
 # non-empty backend_shield_reason (only plans that test commit behaviour itself may switch the shield off).
+# API (WP-H-06): every T.<name> used in qa/runtime/**/*.lua and every stub name is a row of tools/harness/API.md,
+# and each row's status agrees with the driver and its helper groups (tools/harness/driver/lib/); see Test-ApiDoc.
 #
 # Shape only: a script that passes here can still FAIL in the game. The stub never proves a behaviour.
 # -SelfTest first proves that the fixtures under qa/_test_fixtures/runtime_scripts/ pass or fail with the
@@ -26,6 +28,9 @@ $luaExe = Join-Path $PSScriptRoot 'lua\vendor\lua-5.1.5-win64\lua5.1.exe'
 $stub = Join-Path $repoRoot 'qa\runtime\_stub\T.lua'
 $checker = Join-Path $repoRoot 'qa\runtime\_stub\check_script.lua'
 $fixtureRoot = Join-Path $PSScriptRoot '_test_fixtures\runtime_scripts'
+$realApiDoc = Join-Path $repoRoot 'tools\harness\API.md'
+$driverFile = Join-Path $repoRoot 'tools\harness\driver\vt2_rig_driver.lua'
+$driverLibDir = Join-Path $repoRoot 'tools\harness\driver\lib'
 
 function Get-RelativePath([string]$Path) {
     if ($Path.StartsWith($repoRoot + '\', [System.StringComparison]::OrdinalIgnoreCase)) {
@@ -124,7 +129,59 @@ function Invoke-RuntimeScriptCheck([string]$ScanRoot) {
             }
         }
     }
+    $apiDoc = Join-Path $ScanRoot 'API.md'
+    if (-not (Test-Path -LiteralPath $apiDoc -PathType Leaf)) { $apiDoc = $realApiDoc }
+    foreach ($e in (Test-ApiDoc -ScanRoot $ScanRoot -ApiDoc $apiDoc -CheckStub ($apiDoc -eq $realApiDoc))) { $errors.Add($e) }
     return [pscustomobject]@{ Errors = $errors; Scripts = $entries.Count; Plans = $plans }
+}
+
+# WP-H-06: tools/harness/API.md lists every helper. Every T.<name> that a Lua file under the scan root uses outside a
+# comment, and every helper name of the stub, must be a row of its table. A row whose status does not start with
+# "planned" must be defined by the driver or a helper group (function T.<name>, or T.<name> = ...); a planned row must
+# not be, so the document cannot fall behind the code in either direction.
+function Test-ApiDoc([string]$ScanRoot, [string]$ApiDoc, [bool]$CheckStub) {
+    $errors = New-Object System.Collections.Generic.List[string]
+    $docRel = Get-RelativePath $ApiDoc
+    if (-not (Test-Path -LiteralPath $ApiDoc -PathType Leaf)) { $errors.Add("${docRel}: not found"); return $errors }
+    $rows = [ordered]@{}
+    $rowRx = '(?m)^\|\s*`T\.([A-Za-z_][A-Za-z0-9_]*)[^`]*`\s*\|\s*([^|]*?)\s*\|'
+    foreach ($m in [regex]::Matches([System.IO.File]::ReadAllText($ApiDoc), $rowRx)) { $rows[$m.Groups[1].Value] = $m.Groups[2].Value }
+    if ($rows.Count -eq 0) { $errors.Add("${docRel}: no helper rows (| ``T.<name>`` | <status> | ...)"); return $errors }
+
+    $defined = @{}
+    $sources = @($driverFile) + @(Get-ChildItem -LiteralPath $driverLibDir -File -Filter '*.lua' -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
+    foreach ($f in $sources) {
+        if (-not (Test-Path -LiteralPath $f -PathType Leaf)) { continue }
+        foreach ($m in [regex]::Matches([System.IO.File]::ReadAllText($f), '(?m)\bfunction\s+T\.([A-Za-z_][A-Za-z0-9_]*)\b|^\s*T\.([A-Za-z_][A-Za-z0-9_]*)\s*=(?!=)')) {
+            $defined[$m.Groups[1].Value + $m.Groups[2].Value] = $true
+        }
+    }
+
+    $used = [ordered]@{}
+    foreach ($file in @(Get-ChildItem -LiteralPath $ScanRoot -Recurse -File -Filter '*.lua' | Where-Object { $_.FullName -notmatch '[\\/]_stub[\\/]' })) {
+        $code = [regex]::Replace([System.IO.File]::ReadAllText($file.FullName), '--\[(=*)\[.*?\]\1\]', '', 'Singleline')
+        $code = [regex]::Replace($code, '--[^\r\n]*', '')
+        foreach ($m in [regex]::Matches($code, '(?<![A-Za-z0-9_.])T\.([A-Za-z_][A-Za-z0-9_]*)')) {
+            if (-not $used.Contains($m.Groups[1].Value)) { $used[$m.Groups[1].Value] = Get-RelativePath $file.FullName }
+        }
+    }
+    foreach ($n in $used.Keys) {
+        if (-not $rows.Contains($n)) { $errors.Add("$($used[$n]): T.$n is not listed in $docRel") }
+    }
+    if ($CheckStub) {
+        $stubText = [System.IO.File]::ReadAllText($stub)
+        foreach ($block in [regex]::Matches($stubText, '(?ms)^local (?:NAMES|FIELDS) = \{(.*?)^?\}')) {
+            foreach ($m in [regex]::Matches($block.Groups[1].Value, '"([A-Za-z_][A-Za-z0-9_]*)"')) {
+                if (-not $rows.Contains($m.Groups[1].Value)) { $errors.Add("qa/runtime/_stub/T.lua: T.$($m.Groups[1].Value) is not listed in $docRel") }
+            }
+        }
+    }
+    foreach ($n in $rows.Keys) {
+        $planned = $rows[$n] -match '^planned'
+        if ($planned -and $defined[$n]) { $errors.Add("${docRel}: T.$n is marked '$($rows[$n])' but the driver or a helper group defines it") }
+        if (-not $planned -and -not $defined[$n]) { $errors.Add("${docRel}: T.$n is marked '$($rows[$n])' but neither the driver nor a helper group defines it") }
+    }
+    return $errors
 }
 
 foreach ($required in @($luaExe, $stub, $checker)) {
@@ -140,7 +197,9 @@ if ($SelfTest) {
         @{ Name = 'misspelled_helper'; Needle = 'unknown helper T.exepct' },
         @{ Name = 'issue_mismatch'; Needle = 'file name says issue 8 but the issue field is 9' },
         @{ Name = 'plan_without_reason'; Needle = 'backend_shield is false without a backend_shield_reason' },
-        @{ Name = 'top_level_engine'; Needle = "top level reads global 'Managers'" }
+        @{ Name = 'top_level_engine'; Needle = "top level reads global 'Managers'" },
+        @{ Name = 'undocumented_helper'; Needle = 'T.note is not listed in qa/_test_fixtures/runtime_scripts/undocumented_helper/API.md' },
+        @{ Name = 'api_status_wrong'; Needle = "T.step is marked 'planned: fixture' but the driver or a helper group defines it" }
     )
     $selfFailures = 0
     foreach ($e in $expectations) {
