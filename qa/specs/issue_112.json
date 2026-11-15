@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 112,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "weapon_tweaker",
+      "min_version": "0.12.344-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable only Tweaker: Weapons (Dev), select Mercenary, and equip the Bill Hook.",
+        "2. Switch to another hero, return to Mercenary, then wield the Bill Hook and use its light attacks, heavy attacks, block, push, and weapon swap.",
+        "3. Repeat the hero switch and action sequence with the Cog Hammer.",
+        "4. Run `/wt_regression_test`, exit the game normally, and attach the newest console log."
+      ],
+      "assertions": [
+        "Both weapons retain Mercenary's correct owner third-person animation set after every hero switch. The regression check named `issue112_remap_identity_includes_receiver_career` passes. If an action still fails, report the player-facing weapon and action name with the log.",
+        "Mercenary+billhook, switch hero and back: assert unit remap identity contains career and remap table non-nil; Unit.has_animation_event true for each remapped 3P event. Swing look V."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5160181514,
+    "card_date": "2026-08-02T20:24:04Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

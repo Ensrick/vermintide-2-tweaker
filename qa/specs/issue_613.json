@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "issue": 613,
+  "class": "V",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "weapons_of_chaos",
+      "min_version": "0.1.62-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh **Weapons of Chaos** and **Crafting in Modded Dev**, launch, and confirm both exact build banners in the newest log.",
+        "2. Play Kruber in the Keep, enable **Blightreaper**, equip one **Blightreaper**, and run `/woc_pose_reset`. Do not use either weapon pose tuner afterward.",
+        "3. Inspect the equipped Blightreaper in first person and local third person. Swap to the other weapon and back once, then inspect both views again.",
+        "4. Open the inventory-screen character and the ordinary illusion/item preview. Confirm the authored model, animated rune glow, orientation, scale, and `-0.3` vertical offset remain present. Close and reopen each preview once.",
+        "5. In **Crafting in Modded's Athanor**, select **Blightreaper** without crafting or modifying it. Close and reopen the preview once.",
+        "6. Enter an Adventure mission, swap away and back once, and repeat the first-person and local-third-person checks.",
+        "7. With Blightreaper wielded, run `/woc_pose_audit` and `/woc_regression_test`, exit normally, and attach the newest console log. Note the exact surface and transition for any visual mismatch."
+      ],
+      "assertions": [
+        "Every tested surface retains the authored Blightreaper rather than an Empire Sword, invisible unit, missing texture, or overlapping second model. The rune glow and canonical transform remain after swaps, preview reopen, and the Keep-to-mission transition. `/woc_pose_reset` emits one bounded `[WOC:712] tuner set offset=` receipt. `/woc_pose_audit` emits one bounded `[WOC:712] pose audit canonical offset=` summary and at most eight `[WOC:712] pose audit row=` receipts; the canonical summary should report offset `{0.000,0.000,-0.300}`, rotation `{-180.0,-90.0,-90.0}`, third-person scale `{0.900,0.900,0.900}`, and first-person scale `{0.800,0.800,0.800}`. Live rows should report `retained=true` and include `current=`/`target=` snapshots: target `p` is baseline-plus-offset, target `s` is baseline multiplied by the canonical scale, and `q` is quaternion rotation rather than Euler degrees. Preview/application paths emit no rejection or fallback warning.",
+        "Automatable part: woc_pose_audit rows report retained canonical offset, rotation and scale on each surface after swap and transition; capture preview unit path equals Blightreaper mesh."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "Every tested surface retains the authored Blightreaper rather than an Empire Sword, invisible unit, missing texture, or overlapping second model. The rune glow and canonical transform remain after swaps, preview reopen, and the Keep-to-mission transition. `/woc_pose_reset` emits one bounded `[WOC:712] tuner set offset=` receipt. `/woc_pose_audit` emits one bounded `[WOC:712] pose audit canonical offset=` summary and at most eight `[WOC:712] pose audit row=` receipts; the canonical summary should report offset `{0.000,0.000,-0.300}`, rotation `{-180.0,-90.0,-90.0}`, third-person scale `{0.900,0.900,0.900}`, and first-person scale `{0.800,0.800,0.800}`. Live rows should report `retained=true` and include `current=`/`target=` snapshots: target `p` is baseline-plus-offset, target `s` is baseline multiplied by the canonical scale, and `q` is quaternion rotation rather than Euler degrees. Preview/application paths emit no rejection or fallback warning."
+  ],
+  "source": {
+    "card_comment_id": 5420985211,
+    "card_date": "2026-08-26T05:23:50Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

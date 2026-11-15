@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "issue": 916,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh **Character Weapon Variants** from Steam Workshop (Workshop item `3716869446`, manifest `6878734095577181464`), launch the Modded Realm, and confirm the build banner above in the newest console log.",
+        "2. In the keep, on Mercenary or Foot Knight, equip **Kruber's Greatsword** with a distinctive unlocked illusion, then use the Equipment-screen Combat Style control until **Half-Swording Combat Style** is selected.",
+        "3. Run `/cwv_regression_test` and keep the complete output.",
+        "4. With Half-Swording selected, test every light attack, every charged heavy attack, push attack, held block, dodge, weapon swap, and Kruber's career skill.",
+        "5. Enter an Adventure mission, swap away and back, and confirm the Greatsword keeps its exact illusion and the Half-Swording selection.",
+        "6. Strike several enemies with light and heavy attacks: no burning damage over time and no burning visual effect appears on them.",
+        "7. Equip the Character Weapon Variants **Maul** on Kruber and repeat step 6.",
+        "8. Exit the game normally and attach the newest console log."
+      ],
+      "assertions": [
+        "The `/cwv_regression_test` output shows `PASS: issue916_half_swording_combat_style_contract` and reports zero failures. No hit from Half-Swording or the Maul applies burning. The selected Greatsword stays visible with its exact illusion, and the full Half-Swording action set and career skill work through the solo mission.",
+        "For Half-Swording and Maul effective templates assert no action profile carries a dot template; hit a dummy and assert no burning buff; all events pass has_animation_event."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6233729140,
+    "card_date": "2026-10-17T12:11:14Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

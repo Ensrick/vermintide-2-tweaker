@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "issue": 797,
+  "class": "V",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "general_tweaker_dev",
+      "min_version": "0.2.180",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In Mod Tweaker > General > **Player Statistics**, enable **Player stat HUD** and press **Apply**, then enter a mission. The panel title is `PLAYER STATS - READ ONLY`.",
+        "2. Swap melee/ranged weapons, attack, block, take damage and use the career ability; confirm supported values update after each state change.",
+        "3. Set **Player stat HUD detail** to **Expanded**, press Apply, and page with `/gt_stat_hud_page`, first using its `next` argument and then its `prev` argument. Also switch Compact/Expanded while otherwise idle, without changing a stat.",
+        "4. Change **Player stat HUD position** between **Bottom left** and **Bottom right**, and **Player stat HUD scale** between 75%, 100% and 125%, pressing Apply. Include an idle scale change.",
+        "5. Run `/gt_stat_hud_metrics`, then `/gt_regression_test`. Turn the HUD off, exit normally, and attach the newest log."
+      ],
+      "assertions": [
+        "The panel stays on-screen and readable, supported values update, and unavailable final values are labelled UNSUPPORTED instead of invented. Idle detail/scale changes take effect without a weapon/stat change, paging remains usable, and HUD-off clears the panel. Gameplay stays unchanged; the HUD and diagnostics regression checks pass. This exposes only Player Statistics, not the Dev Tools group.",
+        "Automatable: HUD on, change weapon and buffs, compare HUD model rows with BuffExtension values, /gt_stat_hud_metrics bounded, HUD off clears widgets. Legibility and layout need eyes."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "The panel stays on-screen and readable, supported values update, and unavailable final values are labelled UNSUPPORTED instead of invented. Idle detail/scale changes take effect without a weapon/stat change, paging remains usable, and HUD-off clears the panel. Gameplay stays unchanged; the HUD and diagnostics regression checks pass. This exposes only Player Statistics, not the Dev Tools group."
+  ],
+  "source": {
+    "card_comment_id": 6681748904,
+    "card_date": "2026-11-06T09:33:17Z",
+    "ledger": "D5_ledger.tsv"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 269,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "weapon_tweaker",
+      "min_version": "0.12.344-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. On a Kruber career, equip **Kerillian: Deepwood Staff** and inspect the inventory preview plus wielded first and third person.",
+        "2. Holster it, swap away and back, enter and leave a mission, and repeat the whole sequence after a respawn.",
+        "3. Repeat steps 1 and 2 with **Sienna: Beam Staff**, **Sienna: Fireball Staff**, **Sienna: Flamestorm Staff**, **Sienna: Conflagration Staff**, **Sienna: Bolt Staff** and **Sienna: Soulstealer Staff**.",
+        "4. Equip one of Kruber's own ranged weapons as a control and repeat the holster and swap sequence.",
+        "5. Run `/wt_regression_test` and keep the newest log."
+      ],
+      "assertions": [
+        "every staff stays visible and attached to Kruber's body while wielded and while holstered, across swap, mission entry, mission exit and respawn, with no crash and no missing-node failure, and none of them sinks into or clips through the hips while stowed; the control weapon is unchanged; `/wt_regression_test` reports no new failures. A staff that vanishes while holstered, or a crash on the attachment path, is the failure this card is looking for.",
+        "Kruber with each of 7 staves: holster, assert staff 3P unit alive and linked to j_hips with zero dropped links; native control zero-copy. Clipping V."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5165070523,
+    "card_date": "2026-08-03T10:14:49Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

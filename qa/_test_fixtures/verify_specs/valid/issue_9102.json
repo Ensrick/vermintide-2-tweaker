@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "issue": 9102,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    { "dir": "chaos_wastes_tweaker_dev", "min_version": null, "settings": null }
+  ],
+  "cases": [
+    { "script": "", "steps": [], "assertions": [], "pass_closes": false }
+  ],
+  "offline": [
+    { "class": "U", "command": "", "expect": "" }
+  ],
+  "left_for_humans": ["Fixture: the client view needs a second machine."],
+  "source": { "card_comment_id": 123456789, "card_date": "2026-11-13", "ledger": "fixture" }
+}

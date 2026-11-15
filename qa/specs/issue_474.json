@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "issue": 474,
+  "class": "V",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "weapon_tweaker",
+      "min_version": "0.12.344-dev",
+      "settings": null
+    },
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Equip one **Old Musket** in the ranged slot. Open **Dev: Weapon Hold Pose Tuner** and enable **Enable Hold-Pose Tuner**, **Enable first-person tuner**, and **Enable third-person tuner**. Set **Target slot** to **Ranged** and use the right-hand controls.",
+        "2. Run `/wt_dev_hp_reset`, then close and reopen Mod Options so the reset values are visible. In rifle mode, adjust only one first-person **Offset X/Y/Z** axis at a time in `0.005 m` steps, refining a useful axis to `0.001 m`. Check normal first person and aiming down the sights after each change. Adjust only third-person **Offset X/Y/Z** the same way until neither hand floats nor clips. Copy the six visible offset values into your issue comment under **Rifle** and take front/side screenshots.",
+        "3. Turn **Enable Hold-Pose Tuner** off, run `/wt_dev_hp_reset`, close and reopen Mod Options, then use **Weapon Special** to enter melee/bayonet mode and re-enable the tuner. Adjust only the first- and third-person **Offset X/Y/Z** values until the weapon follows the Tuskgor Spear hand grip. Copy those six visible values into your comment under **Bayonet** and take front/side screenshots.",
+        "4. Run `/wt_dev_hp_reset`, disable **Enable Hold-Pose Tuner**, and confirm the `.526` baseline returns. Attach the four screenshots. Note separately whether the inventory character or ordinary 1920x1080 illusion browser still needs a preview-specific correction; the live tuner does not directly establish the browser framing value."
+      ],
+      "assertions": [
+        "Report four bounded position deltas relative to `.526`: first-person rifle, third-person rifle, first-person bayonet, and third-person bayonet. All rotation sliders remain `0`, all scale sliders remain `1`, and all left-hand controls remain unchanged; the baked `.526` bayonet orientation stays intact beneath the zero rotation delta. Rifle sights and grip align; bayonet mode follows the Tuskgor Spear grip; reset restores the canonical baseline; no value leaks between rifle and bayonet measurements. The issue remains diagnostic until the values are baked and a new solo verification build ships.",
+        "Automatable part: assert each of four attachment profiles retains its baked local pose after N frames on every surface. Fit quality needs screenshots judged by a human."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "Report four bounded position deltas relative to `.526`: first-person rifle, third-person rifle, first-person bayonet, and third-person bayonet. All rotation sliders remain `0`, all scale sliders remain `1`, and all left-hand controls remain unchanged; the baked `.526` bayonet orientation stays intact beneath the zero rotation delta. Rifle sights and grip align; bayonet mode follows the Tuskgor Spear grip; reset restores the canonical baseline; no value leaks between rifle and bayonet measurements. The issue remains diagnostic until the values are baked and a new solo verification build ships."
+  ],
+  "source": {
+    "card_comment_id": 5375727773,
+    "card_date": "2026-08-21T21:44:09Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

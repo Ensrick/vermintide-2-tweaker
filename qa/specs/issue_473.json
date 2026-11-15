@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 473,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "career_tweaker",
+      "min_version": "0.4.34-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. As Handmaiden, enable **Dance of Blades hit-stack rework** and select **Dance of Blades**.",
+        "2. Repeatedly hit the same surviving armoured enemy or monster. Confirm every landed hit adds the paired effect through hit fifteen, and hit sixteen adds no further stack.",
+        "3. Stop attacking and confirm the earlier stacks expire before the later stacks instead of all refreshing together.",
+        "4. Block and dodge once, then disable the rework and confirm the ordinary Dance of Blades behaviour returns.",
+        "5. Run `/crt_regression_test` and keep the newest log."
+      ],
+      "assertions": [
+        "Each hostile hit grants one paired two-second stack, capped at fifteen: +30% damage dealt and +30% damage taken at the cap. The paired stacks expire independently, the blocking-dodge benefit remains available, disabling the rework restores vanilla behaviour, and the command reports `PASS: issue473_dance_of_blades_contract` with no suite failure.",
+        "Hit a dummy 16 times: both stack counts equal 15 (not 8/7), stacks expire independently; disable restores vanilla; issue473 PASS; C residual: client-owned Handmaiden."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5377404258,
+    "card_date": "2026-08-22T02:36:17Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

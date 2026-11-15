@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 1143,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "general_tweaker_dev",
+      "min_version": "0.2.180",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Host a private Adventure game with both peers running this exact official General build.",
+        "2. Under ordinary healing conditions, damage the host and wound them by downing and reviving them. Once living and controllable, the host runs `/heal`.",
+        "3. Confirm full permanent health and cleared wounded state; retain the host log.",
+        "4. Damage and wound the client in the same way. Once living and controllable, the client runs `/heal`.",
+        "5. Confirm full permanent health and cleared wounded state; retain the client log.",
+        "6. Both run `/gt_regression_test`, exit normally, and attach both newest logs."
+      ],
+      "assertions": [
+        "Both heroes reach their current full permanent health and clear wounds through native healing. Host/client result rows identify their respective routes and report wounded_after=false only after that postcondition is observed. The developer-heal regression passes, with no custom network event or direct health-state error. Native healing modifiers that prevent the result should produce an honest timeout, not a false success.",
+        "Host route: damage and wound the local hero, run the command function, assert health equals max and wounded false. Client route needs a joined peer (C)."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6681755820,
+    "card_date": "2026-11-06T09:33:42Z",
+    "ledger": "D5_ledger.tsv"
+  }
+}

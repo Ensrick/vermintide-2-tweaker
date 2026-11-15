@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 998,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "character_dialogue",
+      "min_version": "0.1.15-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh **Character Dialogue** and **Tweaker: GUI Dev** from Steam Workshop, launch the Modded Realm, and confirm both build banners above. Character Dialogue Workshop item `3765055148`, manifest `7650312824747378336`; GUI Dev Workshop item `3751024698`, manifest `248173669569923353`.",
+        "2. In the keep, open Mod Tweaker, go to the **Dialogue** tab, set **Isolate Audio During Playback** to **Yes**, and press Apply. Reopen the tab: the setting still reads Yes.",
+        "3. Play any dialogue preview from that tab. While it plays, music and ambient effects fall silent and the voice stays audible; when the preview ends or you stop it, music and effects return at their previous volume.",
+        "4. Set it to **No**, Apply, and play a preview again: music and effects keep playing underneath.",
+        "5. Set it back to **Yes** and Apply, quit the game completely, relaunch, and confirm the tab still reads Yes and a preview still isolates.",
+        "6. Run `/gut_regression_test`, then `/cd_regression_test`, exit normally, and attach the newest console log."
+      ],
+      "assertions": [
+        "The Yes/No setting survives Apply, reopen and restart, and preview playback isolates the voice only while it plays. The GUI Dev run reports `PASS: issue998_dialogue_staged_isolation` and the Character Dialogue run reports no FAIL. No Character Dialogue or Tweaker: GUI script error occurs while the Dialogue tab is open or during previews.",
+        "Set option Yes, Apply, assert persisted after restart; during preview assert music and sfx bus values zero and restored on stop, natural end, replace; issue998 check passes."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5842954605,
+    "card_date": "2026-09-26T03:56:16Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

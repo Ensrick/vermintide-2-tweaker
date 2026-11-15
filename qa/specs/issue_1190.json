@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 1190,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "weapon_tweaker",
+      "min_version": "0.12.343-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Before restarting the game, set VMF logging to **Custom**: **Info** and **Debug** output to **Log**, and **Echo** to **Log & Chat**. Fully restart and confirm the three exact loaded versions above. A chat confirmation alone does not prove the detailed wield information was logged.",
+        "2. In Tweaker: GUI, leave **Use non-modded loadouts** off. As Slayer in Equipment, run `/gut_loadout_status`. It must show the modded-realm STORE mode described in Expected. If not, stop and attach the log; do not continue the weapon cycle or attribute that mode mismatch to Weapons.",
+        "3. Enable **Kruber: Sword** under **Melee: Slayer** and confirm rows I, II and III exist. Run `/verify_wt_loadout_cache` with the argument `reset` in the same chat message, and wait for **ARMED** before the following weapon changes.",
+        "4. In the same melee slot, explicitly re-equip row I with native **Great Axe**, row II with native **Great Hammer**, and row III with **Kruber's Sword**. Do not reset the verifier again.",
+        "5. After the final row III change, close and reopen the loadout selector so every row's preview is read. Starting on III, switch **III -> I -> II -> III**. Close and reopen Equipment, repeat that cycle, then leave the menu. Check the selected, previewed and actually wielded weapon for each row.",
+        "6. Run `/verify_wt_loadout_cache` and `/wt_regression_test`, then attach the newest full console log including the `[wt:1190]` receipts. If a weapon is wrong, note the row and run `/gut_loadout_status` and `/wt_dump_wielded` before re-equipping or resetting. Include those details in the same log."
+      ],
+      "assertions": [
+        "The topology result includes `realm_modded=true mode=store`. Great Axe stays on I, Great Hammer on II and Kruber's Sword on III, including after reopening Equipment. The live verifier reports **CORE PASS** and the issue1190 row-scoped regression check reports **PASS**; the ordinary regression PASS alone is not CORE PASS. **NOT RUN**, **FAIL**, missing loaded banners, a non-STORE result, or missing wield-debug details after a mismatch needs the log, not repeated resets to force a pass. GUI status is a topology check; the required saved-log artifact is the `[wt:1190]` receipt; a normal verdict includes `verify result=` plus its status and details. This does not verify restart persistence, bot loadouts or co-op.",
+        "Slayer rows I, II, III with axe, hammer, Kruber sword: cycle rows twice and reopen; assert stored and wielded item per row; loadout-cache verifier reports CORE PASS."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6524371787,
+    "card_date": "2026-10-30T13:47:56Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

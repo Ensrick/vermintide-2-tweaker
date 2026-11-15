@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "issue": 702,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "crafting_in_modded_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Equip one **Dual Axes** item.",
+        "2. Open **Tweaker: Cosmetics** and give its primary axe and offhand axe two visibly different illusions.",
+        "3. Press **Apply**.",
+        "4. Exit Vermintide 2 completely.",
+        "5. Restart the game and inspect that same Dual Axes item before reopening the illusion picker.",
+        "6. Check the inventory character preview, first person, and your local third-person model.",
+        "7. Optional stronger check: repeat with a second Dual Axes item using the opposite pairing."
+      ],
+      "assertions": [
+        "Both distinct axe illusions survive the full game restart on the exact item; a second Dual Axes item retains its own independent pairing; neither axe collapses to the primary illusion or the default model.",
+        "Apply distinct illusions to Dual Axes; assert the per-backend-id offhand row is persisted; reload the persistence module and assert both hand unit paths restore."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5400142276,
+    "card_date": "2026-08-24T19:19:25Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

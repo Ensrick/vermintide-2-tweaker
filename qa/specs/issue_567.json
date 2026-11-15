@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "issue": 567,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh **Character Weapon Variants**, start a new game session, and confirm the newest log contains `[cwv:LOAD] v0.1.570-dev`.",
+        "2. On Kruber, equip **Sword and Mace** and select the Empire sword-and-mace illusion that visibly places the sword in the right hand and the mace in the left.",
+        "3. Confirm that hand order in the inventory character preview and local third person in the Keep.",
+        "4. With that exact Sword and Mace still equipped, run `/cwv_regression_test` once.",
+        "5. Exit normally and attach the newest complete console log."
+      ],
+      "assertions": [
+        "`issue567_skin_reverse_index_valid` passes. `issue567_exact_pair_transition_live` reports XFAIL only because a solo run cannot produce peer transmit/receive/hot-join/clear evidence; it must not report BAD-SHAPE or an ordinary unannotated failure. Exactly three bounded `[cwv:567] cache_invalidated=` rows report `association=valid`, no `Incorrectly configured weapon skins` warning appears, and the selected Sword and Mace remains sword-right/mace-left locally. A solo pass advances this issue to the two-player role-reversal transition test; it does not itself prove the remote-husk result.",
+        "Solo: three pinned skin keys exist and reverse index valid on the live build. Co-op: after transition and hot join observer husk unit paths equal the exact pair."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "`issue567_skin_reverse_index_valid` passes. `issue567_exact_pair_transition_live` reports XFAIL only because a solo run cannot produce peer transmit/receive/hot-join/clear evidence; it must not report BAD-SHAPE or an ordinary unannotated failure. Exactly three bounded `[cwv:567] cache_invalidated=` rows report `association=valid`, no `Incorrectly configured weapon skins` warning appears, and the selected Sword and Mace remains sword-right/mace-left locally. A solo pass advances this issue to the two-player role-reversal transition test; it does not itself prove the remote-husk result.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 5749475105,
+    "card_date": "2026-09-20T11:20:59Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

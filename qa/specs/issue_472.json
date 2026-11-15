@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "issue": 472,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "career_tweaker",
+      "min_version": "0.4.34-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. As Handmaiden, turn off **Focused Spirit stacking rework** and **Focused Spirit ignores chip damage**, select **Focused Spirit**, and confirm its normal description appears.",
+        "2. Turn on only **Focused Spirit ignores chip damage**, reopen the talent screen, and confirm the description now explains the chip-damage exemption.",
+        "3. Turn on **Focused Spirit stacking rework** too, reopen the talent screen, and confirm the description explains an empty start, one 5% power stack every ten seconds, a five-stack 25% cap, and one stack lost per ordinary hit.",
+        "4. Avoid damage for about 50 seconds and confirm the effect grows from zero to exactly five stacks.",
+        "5. Take one ordinary enemy melee hit. Confirm exactly one stack is removed and one ten-second growth timer restarts.",
+        "6. Build at least two stacks again, then take one available chip or damage-over-time source such as poison gas, Warpfire Thrower fire, or Ratling Gunner fire. Confirm the stacks and timer are preserved.",
+        "7. Run `/crt_verify_focused_spirit`, then run `/crt_regression_test`, leave the session normally, and keep the newest complete log."
+      ],
+      "assertions": [
+        "All four setting combinations show the matching Focused Spirit description. Stacking grows once per ten seconds to five, an ordinary hit removes exactly one stack and restarts growth once, exempt chip or damage-over-time removes no stack and does not restart growth, and both verification commands pass without duplicate lifecycle work or a new error.",
+        "Solo: stack count 0 to 5 at 10 s steps, hit removes one and restarts timer, chip/DoT preserve; U: transition_role table; C residual: remote human gains one stack per interval."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5385477124,
+    "card_date": "2026-08-23T10:15:30Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

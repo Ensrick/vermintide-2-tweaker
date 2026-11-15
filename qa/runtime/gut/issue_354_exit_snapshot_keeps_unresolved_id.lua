@@ -14,7 +14,9 @@
 --   Managers.backend:dirtify_interfaces  scripts/managers/backend_playfab/backend_manager_playfab.lua:211-219
 return {
 	issue = 354,
+	class = "R",
 	arena = "keep",
+	class = "R",
 	timeout = 60,
 	run = function(T)
 		local PROBE = "gut_rig_unresolvable_necklace"

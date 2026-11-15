@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "issue": 273,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Equip an identifiable native weapon pair before entering the Pilgrimage Chamber. Record both durable pre-run identities, complete a solo expedition, and inspect both slots on return to the chamber and then the Keep before equipping anything else.",
+        "2. Repeat with a supported public Weapon Tweaker cross-character weapon. Record the exact ported identity, not just its weapon type, and inspect both return boundaries.",
+        "3. During native and WT runs, obtain an available Chaos Wastes upgrade/replacement and record its temporary identity separately from the pre-run durable item. Confirm returning home restores the exact durable identities rather than persisting a temporary upgrade or falling back to an older/base weapon.",
+        "4. Exercise both weapon slots across the runs. Report any upgrade or slot cell you could not exercise; it is not a pass."
+      ],
+      "assertions": [
+        "Native and public-WT durable weapon identities survive the full expedition and both return boundaries. Temporary Chaos Wastes upgrades do not overwrite the durable items, and neither slot falls back to a base/older identity or emits a resolution error.",
+        "Under mechanism deus call BackendUtils.set_loadout_item with a run-local backend id; assert the GUT durable row is unchanged and post-run loadout ids equal the pre-run snapshot."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6591469412,
+    "card_date": "2026-11-02T23:49:39Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

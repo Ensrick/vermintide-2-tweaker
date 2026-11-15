@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 25,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "0.9.230-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Run `/cos_regression_test` and require the full report to pass.",
+        "2. Apply a non-default Loremaster's Armoury hat, one primary-weapon illusion, and one offhand illusion. Keep a second unmodified weapon of the same type as a control.",
+        "3. Fully exit the game and relaunch; confirm all three choices restore on the same career and exact weapon instance while the control remains unchanged.",
+        "4. Run `/cos_persist_dump` and confirm no synthetic regression entries remain.",
+        "5. Run `/cos_persist_clear`, fully restart once more, and confirm the cleared choices do not return.",
+        "6. Attach both newest console logs."
+      ],
+      "assertions": [
+        "The hat, primary illusion, and offhand illusion survive a cold restart only on their saved career and exact weapon instance; the control stays untouched; the regression report passes; clearing persistence prevents every cleared choice from resurrecting. No cosmetic bleeds to another loadout or item.",
+        "Two-launch harness: seed hat+primary+offhand, quit, relaunch, assert la_persisted_equips rows and spawned unit names per backend id; control unchanged; clear, relaunch, assert empty."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5357036408,
+    "card_date": "2026-08-20T14:09:13Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

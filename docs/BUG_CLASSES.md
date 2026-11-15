@@ -1645,7 +1645,7 @@ boot-time containment completed in v0.2.333-dev)
 - Gate every ordinary persist/set-through in the modded realm; capture it in the modded store and never mutate official `_career_data` / `characters_data`.
 - Install the boot owner at the beginning of mod evaluation. Import the official snapshot with an empty verification set, suppress Adventure `fixCareerData` and `verifyCareerLoadouts` requests/responses when a snapshot already exists, and permit exactly one vanilla verification bootstrap only when no official snapshot exists. Keep Versus and official sessions on vanilla behavior.
 - Ship an OFFICIAL-realm repair command (report-only default; apply replaces only already-broken slots with an owned resolvable id; refuses in the modded realm) covering weapons AND frame/cosmetic slots.
-- Regression: assert all five ordinary write seams plus all five boot request/writer seams stay hooked (`native_loadouts_official_write_chokepoint`) so a dropped boundary fails the gate.
+- Regression: probe the two Adventure loadout writers through the real hook dispatch on a throwaway table (loadout isolation contract 1, `docs/CROSS_MOD_ARCHITECTURE.md`; in-game checks `native_loadouts_official_write_chokepoint` and `issue402_isolation_contract`, WP-GUT-04) so a hook that is listed but not live fails the gate.
 - Consumers that cache the realm must reconcile from immutable launch-parameter
   presence before an official-only backend call. Restoring the cache and taking
   vanilla's own modded branch is preferable to swallowing the later backend

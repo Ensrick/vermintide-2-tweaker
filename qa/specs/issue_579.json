@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "issue": 579,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Both players refresh **Character Weapon Variants** and **Tweaker: Cosmetics** from Steam Workshop and confirm both banners above in their newest logs. Character Weapon Variants Workshop item `3716869446`, manifest `6878734095577181464`.",
+        "2. The owner equips Character Weapon Variants **Dual Axes** on Kruber and uses Tweaker: Cosmetics to apply one visibly different illusion to the right axe and another to the left axe. Confirm the inventory preview shows a different axe in each hand.",
+        "3. The second player checks that right/left pair on the owner's Kruber in the Keep. The owner swaps away and back; the second player checks again.",
+        "4. Enter a mission and check both hands again during the first fight.",
+        "5. Reverse host and client roles and repeat steps 2 to 4.",
+        "6. Both players run `/cwv_regression_test`, exit normally, and attach both newest logs."
+      ],
+      "assertions": [
+        "The observer always sees the same independently selected right and left axe illusions as the owner, with no hand swap and no single mesh copied onto both hands. `PASS: issue579_dual_axes_preview_and_husk_skin_continuity` on both peers, and no Character Weapon Variants script error on either machine.",
+        "Observer client reads husk right and left unit paths; assert two distinct per-hand selections equal the owner's; solo: issue579 check passes on the live build."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "The observer always sees the same independently selected right and left axe illusions as the owner, with no hand swap and no single mesh copied onto both hands. `PASS: issue579_dual_axes_preview_and_husk_skin_continuity` on both peers, and no Character Weapon Variants script error on either machine.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 5842502172,
+    "card_date": "2026-09-26T02:46:45Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

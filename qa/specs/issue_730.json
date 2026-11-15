@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "issue": 730,
+  "class": "V",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "0.9.230-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Equip **Midnight Purpure and Azure** on Grail Knight.",
+        "2. Complete or end a mission and inspect your Grail Knight in the end-of-mission lineup.",
+        "3. Hide and show the lineup once if that control is available.",
+        "4. Return to the Keep, complete one more Keep-to-mission transition, and inspect the lineup again.",
+        "5. Exit normally and attach the newest console log."
+      ],
+      "assertions": [
+        "Your Grail Knight wears Midnight Purpure and Azure every time the lineup model becomes visible. It never falls back to a vanilla donor outfit, overlaps another outfit, or retains another score row's armor. This card covers the local score-screen cell; remote outfit replay remains under #629/#660 after solo passes.",
+        "Automatable: on score lineup spawn assert authored variant recorded for the local row and painter invoked after visibility on that mesh. Rendered outfit needs eyes; remote leg two clients."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "Your Grail Knight wears Midnight Purpure and Azure every time the lineup model becomes visible. It never falls back to a vanilla donor outfit, overlaps another outfit, or retains another score row's armor. This card covers the local score-screen cell; remote outfit replay remains under #629/#660 after solo passes."
+  ],
+  "source": {
+    "card_comment_id": 5356756531,
+    "card_date": "2026-08-20T13:46:11Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

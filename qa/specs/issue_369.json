@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 369,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "enemy_tweaker",
+      "min_version": "0.7.65-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh **Tweaker: Enemies** from the Workshop, launch, and confirm `[et:LOAD] v0.7.65-dev` in a fresh log.",
+        "2. Open Mod Options, **Tweaker: Enemies**. Confirm a top-level **Enemy Stats** category sits between **Enemy Spawns** and **Faction Substitution**, containing a **Health Multipliers** group with seven sliders labeled Recruit, Veteran, Champion, Legend, Cataclysm 1, Cataclysm 2, Cataclysm 3 (range 0.1 to 5.0, default 1.0).",
+        "3. Open **Enemy Spawns** > **Special Spawns** and expand one difficulty block: confirm no health multiplier slider remains there.",
+        "4. If you had a non-default multiplier saved before this build, confirm the same value now shows on that difficulty's slider under Enemy Stats.",
+        "5. Set one slider to 2.0, start a map on that difficulty, and confirm enemies take doubled damage-to-kill as before the move.",
+        "6. Run `/et_regression_test`."
+      ],
+      "assertions": [
+        "Multipliers live only under Enemy Stats > Health Multipliers, saved values carry over with no reset, scaling behavior is unchanged, and the regression suite passes including `issue369_enemy_stats_category`.",
+        "Set active-tier multiplier 2.0; spawn a clanrat; assert max health equals 2x base; damage 50 percent, change slider, percent preserved; inactive tier no change."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5306205477,
+    "card_date": "2026-08-16T06:54:00Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

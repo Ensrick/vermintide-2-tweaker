@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "issue": 1694,
+  "class": "S",
+  "status": "draft",
+  "vp": null,
+  "arena": "none",
+  "mods": [
+    {
+      "dir": "crafting_in_modded_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "crafting_in_modded",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [],
+      "assertions": [
+        "grep official cim_debug.lua for script_data['eac-untrusted']: zero hits; the PR's ten-case callback oracle."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "offline": [
+    {
+      "class": "S",
+      "command": "",
+      "expect": "grep official cim_debug.lua for script_data['eac-untrusted']: zero hits; the PR's ten-case callback oracle."
+    }
+  ],
+  "source": {
+    "card_comment_id": null,
+    "card_date": null,
+    "ledger": "D4_ledger.tsv"
+  }
+}

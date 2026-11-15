@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 375,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "0.2.290",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Before that career's first PUBLIC GUI modded-store use, record all occupied weapon, accessory and cosmetic slots in each Official row I-VI. Enter Modded with **Use non-modded loadouts** off and inspect each imported row before changing it; compare every recorded slot, not weapons alone.",
+        "2. Choose two distinct modded rows with identifiable gear. Select the first, change a weapon and an accessory/cosmetic, switch to the second and back, then repeat an edit on the second. Each edit must remain only on the row selected when it was made; record the Roman numerals.",
+        "3. On one test row, deliberately unequip its necklace. Close/reopen inventory and switch away/back; the intended row must retain the deliberate empty slot while the other row stays unchanged. Run `/gut_loadout_status` and retain the row report.",
+        "4. Return normally to the title screen and re-enter Modded. Repeat the row comparison and `/gut_loadout_status`, then exit/relaunch normally. Recheck imported occupied slots, both edited rows and the deliberate empty slot. Return to Official for a read-only comparison with its original rows.",
+        "5. Run `/gut_regression_test` and retain its complete report. Any missing check, failure or skipped acceptance cell must be reported, not counted as a pass."
+      ],
+      "assertions": [
+        "Initial import preserves every resolvable occupied slot in each Official row, not only gear equipped later in Modded. Edits persist on the selected modded row without bleeding to another row. The deliberate empty accessory slot remains empty through recreation and restart, and Official rows remain unchanged. The status reports agree with the visible selected rows and empty necklace.",
+        "Fresh store: every slot of seeded rows equals official mirror rows; equip on row A, switch B and back: only A changed; deliberate empty necklace survives relaunch; issue375_* PASS."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6591543514,
+    "card_date": "2026-11-02T23:54:20Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

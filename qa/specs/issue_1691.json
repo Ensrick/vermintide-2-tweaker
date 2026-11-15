@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 1691,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "0.9.230-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh the public Cosmetics item normally. In Cosmetics settings, note your starting values, then enable **Unlock All Portrait Frames**, **Unlock All Weapon Illusions**, and **Unlock Heroic Weapon Poses**. Under **Cosmetic Availability > Kruber > Huntsman > Skins**, keep **Huntsman: Ostermark Bowman** and **Huntsman: Nuln Bordermarcher** enabled. Route VMF Info and Echo output to the log, then exit the game completely and restart; frame/fake-inventory setup needs this fresh login. Confirm the exact banner above.",
+        "2. In the Keep, run `/cos_regression_test`, `/frames_status` and `/cosmetics_status`. The native/shared-realm and authored-pose checks named below must be PASS, not missing, FAIL or SKIP. Frame status must report the toggle on, Modded Realm true and an injection hook that actually fired. If the mirror cannot be found, the hook never fired, or the realm disagrees, stop and attach the full output. Do not reset or force the backend to make counts pass.",
+        "3. In normal Hero cosmetic customization as Huntsman, confirm **Ostermark Bowman** and **Nuln Bordermarcher** are listed as available, and preview one. Inspect the portrait-frame list too; preview an eligible frame and record its displayed name. Frames requiring DLC you do not own must not become equippable. Take screenshots. Record pre-existing ownership if known; zero newly added frames is not by itself failure when they were already present, but it is not proof of a new grant either.",
+        "4. Select your owned ordinary Sword in the normal illusion browser and inspect its eligible native illusion list/preview with **Unlock All Weapon Illusions** on. Record a displayed illusion name and any missing/locked entry you expected to be eligible. Do not craft, reroll, purchase or press Apply for this check. Apply/controller presentation belongs to #1690; if the browser itself is inaccessible, report this stage as unexercised rather than claiming an unlock pass or clearing protected flags.",
+        "5. Wield the same ordinary Sword and open its weapon-pose page on the normal social wheel. With **Unlock Heroic Weapon Poses** on, all six authored Sword pose choices should have usable icons; select one and observe it play. Turn that option off, close/reopen the wheel to record the ordinary account-owned result, then turn it on and reopen once to confirm the six exact Sword choices return. An already-owned identical off/on list does not prove a new ownership grant. A blank icon, wrong weapon pose or missing pose-package warning is not a pass; do not borrow another weapon's pose or force-load a package.",
+        "6. Run the three commands again and attach the newest full console log plus screenshots/observations for the four surfaces: frames, the two Huntsman outfits, native Sword illusion list, and Sword pose icons/playback. Keep all unrelated FAIL/SKIP output and any crash information. Do not keep toggling/resetting until an error disappears."
+      ],
+      "assertions": [
+        "`issue1691_native_realm_authority`, `issue1693_shared_native_realm_authority` and `issue485_authored_weapon_poses_local_only` report PASS, and the actual eligible UI entries/previews and exact-parent pose playback work as described. Check PASS alone is not rendered acceptance. Existing ownership, absent entitlement, an inaccessible browser or an unexercised surface must be reported honestly, not counted as a new unlock.",
+        "Fresh login with unlock options on: assert unlocked frame, skin and illusion mirror counts grew, DLC-gated rows excluded, issue1691 and issue1693 checks PASS not SKIP."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6524133684,
+    "card_date": "2026-10-30T13:36:07Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

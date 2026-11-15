@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "issue": 426,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "chaos_wastes_tweaker",
+      "min_version": "0.7.354-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable public **Tweaker: Chaos Wastes**. Disable **Tweaker: Chaos Wastes Dev** so only one Chaos Wastes stream is active. Enter the Keep and confirm the banner above in the newest console log.",
+        "2. Open **Mod Tweaker > Tweaker: Chaos Wastes** and confirm the boon rework rows such as **Rework: Vaul's Anvil as Boon (Unique)** and the miracle rows are enabled and not greyed out.",
+        "3. Start a Chaos Wastes expedition alone. Obtain at least one mod-added boon during the run, for example **Reactive Bulwark**, **Crit Cascade**, or **Vaul's Anvil**, and confirm it applies normally.",
+        "4. With that boon active, run `/ct_426_diag` in chat and confirm the chat reply says the public wire audit was written to the console log.",
+        "5. Run `/ct_regression_test` in chat, finish or leave the expedition normally, and attach the newest console log."
+      ],
+      "assertions": [
+        "The mod-added boon rolls, is granted, and works in solo play with no block, refusal, script error, or crash. `/ct_regression_test` reports zero failures, including the `ct_426_public_exact_catalog` and `ct_426_public_receiver_floors` checks. This completes the official solo floor; if it passes, the next card routes the mixed lobby leg with a peer that does not have Tweaker: Chaos Wastes installed.",
+        "Solo covers /ct_426_diag exact catalog and both public checks; unit simulates an un-acked peer refusing every writer. A non-CT joiner needs two clients."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "The mod-added boon rolls, is granted, and works in solo play with no block, refusal, script error, or crash. `/ct_regression_test` reports zero failures, including the `ct_426_public_exact_catalog` and `ct_426_public_receiver_floors` checks. This completes the official solo floor; if it passes, the next card routes the mixed lobby leg with a peer that does not have Tweaker: Chaos Wastes installed.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 5552889475,
+    "card_date": "2026-09-05T15:39:08Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

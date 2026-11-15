@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "issue": 224,
+  "class": "U",
+  "status": "draft",
+  "vp": null,
+  "arena": "none",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "0.2.368-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Restart the game, enter the Keep, and open Hero View.",
+        "2. Read the two injected Compendium tabs. They must say **Armory** and **Bestiary**.",
+        "3. Switch into each one, return to a vanilla tab, then close and reopen Hero View and read the two tabs again.",
+        "4. Confirm the tab strip still contains exactly one Armory tab and one Bestiary tab after the reopen.",
+        "5. Attach the newest log; it must contain the line `[gut:217] compendium tabs injected into HeroWindowPanelConsole definitions (Armory, Bestiary)` exactly once."
+      ],
+      "assertions": [
+        "Both tabs read **Armory** and **Bestiary** on first open and after reopening. They never show an internal key, an angle-bracket marker, blank text, uppercase-mangled text, or a duplicated tab, and the `[gut:217]` injection line appears exactly once in the log.",
+        "Export _resolve_label; unit-test valid string, bare key, empty, <key> sentinel all yield the literal fallback; assert injected widgets carry literal text."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "offline": [
+    {
+      "class": "U",
+      "command": "",
+      "expect": "Export _resolve_label; unit-test valid string, bare key, empty, <key> sentinel all yield the literal fallback; assert injected widgets carry literal text."
+    }
+  ],
+  "source": {
+    "card_comment_id": 5165064358,
+    "card_date": "2026-08-03T10:14:13Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

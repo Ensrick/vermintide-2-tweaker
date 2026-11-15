@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 912,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "0.7.354-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Finish or leave a session where rollover currency is available. Open **Tweaker: Chaos Wastes > Pilgrim's Coin** and set **Starting Coins** to `0`.",
+        "2. Start a fresh expedition. Before collecting or spending any coins, confirm the balance is exactly `0`, then run `/verify_coins`.",
+        "3. Leave the run and set **Starting Coins** to exactly `324`, using the fine-grained mod-options numeric control rather than a coarse step that changes the value.",
+        "4. Start another fresh expedition. Before collecting or spending anything, confirm the balance is exactly `324`, then run `/verify_coins` and `/ct_regression_test`.",
+        "5. Exit normally and attach the newest complete log. Record each selected value and the immediate starting balance."
+      ],
+      "assertions": [
+        "Zero replaces rollover rather than preserving it; `324` stays exact rather than rounding to a multiple of 25. The verifier's original incoming baseline, raw local setting, host-effective value, rewritten request and captured initial host readback agree with the selected zero or324. The host result reports APPLIED/PASS and `ct_initial_coins_readback_912` passes. Missing initial readback reports SKIP; an asynchronous client is PENDING/SKIP and is not part of this solo stage. Replayed setup does not add the baseline twice. Mid-run readings after pickups or spending are not evidence for this baseline test.",
+        "Set starting coins 0 then 324; start a fresh run each time; read own soft currency right after setup_run equals the setting; /verify_coins PASS."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6693608176,
+    "card_date": "2026-11-06T19:32:30Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

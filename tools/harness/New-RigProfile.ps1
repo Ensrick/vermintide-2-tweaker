@@ -73,13 +73,20 @@ $cfg = [regex]::Replace($cfg, '(?ms)^vt2_rig_progress = \{.*?^\}\n', '', 1)
 if ($planObj -or -not $KeepOwnerMods) {
     $wanted = @(); if ($planObj -and $planObj.mods) { $wanted = @($planObj.mods | ForEach-Object { [string]$_ }) }
     if ($planObj) { $wanted += $DriverId }
-    # the driver needs an entry in the mods array; add one when missing
-    if ($planObj -and $cfg -notmatch ('(?m)^\t\tid = "' + $DriverId + '"')) {
-        $entry = "`t{`n`t`tauthor = `"rig`"`n`t`tauthor_id = 0`n`t`tbanned = false`n`t`tdependency_error = `"`"`n`t`tdescription = `"`"`n`t`tdownload_pending = false`n`t`tdownloading = false`n`t`tenabled = true`n`t`tid = `"$DriverId`"`n`t`tinstalled = true`n`t`tlast_updated = `"1/1/2026 12:00:00 AM`"`n`t`tname = `"VT2 Rig Driver`"`n`t`tnum_children = 0`n`t`tout_of_date = false`n`t`tsanctioned = false`n`t`tsubscribed = true`n`t}`n"
-        $m = [regex]::Match($cfg, '(?ms)^mods = \[\n.*?^\]')
-        if (-not $m.Success) { throw 'mods array not found in user_settings.config' }
-        $insertAt = $m.Index + $m.Length - 1
-        $cfg = $cfg.Substring(0, $insertAt) + $entry + $cfg.Substring($insertAt)
+    # Every plan mod and the driver need an entry in the mods array; add one at the end when missing (plan mods
+    # first, the driver last). The game reports an entry whose folder Steam does not list as "was not found in
+    # the workshop folder" (mod_manager.lua:297), which Read-HostLog.ps1 forbids by default (WP-H-02).
+    if ($planObj) {
+        foreach ($id in $wanted) {
+            if ($id -notmatch '^\d+$') { throw "mod id must be a Workshop folder number: $id" }
+            if ($cfg -match ('(?m)^\t\tid = "' + $id + '"$')) { continue }
+            $label = if ($id -eq $DriverId) { 'VT2 Rig Driver' } else { "Rig plan mod $id" }
+            $entry = "`t{`n`t`tauthor = `"rig`"`n`t`tauthor_id = 0`n`t`tbanned = false`n`t`tdependency_error = `"`"`n`t`tdescription = `"`"`n`t`tdownload_pending = false`n`t`tdownloading = false`n`t`tenabled = true`n`t`tid = `"$id`"`n`t`tinstalled = true`n`t`tlast_updated = `"1/1/2026 12:00:00 AM`"`n`t`tname = `"$label`"`n`t`tnum_children = 0`n`t`tout_of_date = false`n`t`tsanctioned = false`n`t`tsubscribed = true`n`t}`n"
+            $m = [regex]::Match($cfg, '(?ms)^mods = \[\n.*?^\]')
+            if (-not $m.Success) { throw 'mods array not found in user_settings.config' }
+            $insertAt = $m.Index + $m.Length - 1
+            $cfg = $cfg.Substring(0, $insertAt) + $entry + $cfg.Substring($insertAt)
+        }
     }
     $cfg = [regex]::Replace($cfg, '(?m)^(\t\t)enabled = (true|false)(\n\t\tid = "(\d+)")', {
             param($m)
@@ -99,6 +106,8 @@ if ($planObj) {
     [void]$sb.Append("`ttimeout = $([int]($planObj.timeout ?? 600))`n`tsettle = $([int]($planObj.settle ?? 4))`n`tquit = true`n")
     if ($planObj.PSObject.Properties['backend_shield'] -and $planObj.backend_shield -eq $false) { [void]$sb.Append("`tbackend_shield = false`n") }
     if ($planObj.arenas) { [void]$sb.Append("`tarenas = [`n"); foreach ($a in $planObj.arenas) { [void]$sb.Append("`t`t$(ConvertTo-SjsonString $a)`n") }; [void]$sb.Append("`t]`n") }
+    # WP-H-02: the smoke case asserts every one of these VMF mod ids is loaded
+    if ($planObj.PSObject.Properties['expect_mods'] -and $planObj.expect_mods) { [void]$sb.Append("`texpect_mods = [`n"); foreach ($e in $planObj.expect_mods) { [void]$sb.Append("`t`t$(ConvertTo-SjsonString ([string]$e))`n") }; [void]$sb.Append("`t]`n") }
     [void]$sb.Append("`tdriver_hex = `"$(ConvertTo-Hex $driverSource)`"`n")
     [void]$sb.Append("`tcases = [`n")
     foreach ($c in $planObj.cases) {

@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "issue": 233,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "0.9.230-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Player A equips **Sword and Shield**, selects **Reikland Captain's Shield** in the shield picker, applies it, then closes the game so the selection is persisted.",
+        "2. Player A relaunches without reopening the customization screen. Player B joins Player A's Keep and checks Player A's shield immediately.",
+        "3. Enter a mission. Player A swaps to the other weapon and back once; Player B checks the shield again.",
+        "4. Have Player A die and respawn, then check once more. Return to the Keep and check again.",
+        "5. Reverse host/client roles and repeat steps 1╬ô├ç├┤4. If any check fails, attach both newly generated logs and state which step first showed the vanilla shield."
+      ],
+      "assertions": [
+        "At every check, the observer sees **Reikland Captain's Shield** without the wearer reopening customization or pressing Apply. The wearer remains correct too. No stage shows the vanilla shield, a shield belonging to the wrong weapon, repeated wield flicker, crash, or disconnect.",
+        "Two clients, roles reversed: persisted shield, cold join, mission, swap, respawn; observer asserts wearer husk offhand unit name at every edge; logs correlated."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "At every check, the observer sees **Reikland Captain's Shield** without the wearer reopening customization or pressing Apply. The wearer remains correct too. No stage shows the vanilla shield, a shield belonging to the wrong weapon, repeated wield flicker, crash, or disconnect.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 5160466053,
+    "card_date": "2026-08-02T21:40:10Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

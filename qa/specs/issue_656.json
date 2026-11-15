@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "issue": 656,
+  "class": "V",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "0.9.230-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable **Foot Knight: Reikland Griffin Cape** and equip **Knights Encarmine - Reikland Griffin**.",
+        "2. Inspect the cape in the inventory character preview and owner third person while standing, moving, and backing the camera into the cape.",
+        "3. Switch **Midnight Purpure and Azure** to **Reikland Griffin** and back to **Midnight Purpure and Azure** on the same preview mesh, then repeat Reikland once.",
+        "4. Change to another Kruber career and back, enter and finish one mission, and inspect the local score lineup with an unrelated bot present.",
+        "5. Run `/cos_regression_test`; retain the result log and any bounded issue-specific or residency row."
+      ],
+      "assertions": [
+        "The griffin is upright, centered, and confined to the cape with no mirror, seam, stretching, bleed, stale texture, career/bot bleed, broken cloth shading/physics, or camera-fade regression. All other outfit pixels remain vanilla, current textures are resident, and `issue656_reikland_griffin_contract` passes. The retained bounded source receipt begins `[cos:656]`. This is the owner/UV gate only; remote replay is not proved Solo.",
+        "Automatable: issue656 contract (resources resident, donor fallback, slots); texture equals donor outside the cape UV mask. Orientation, seam and cloth shading need eyes or screenshot."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "The griffin is upright, centered, and confined to the cape with no mirror, seam, stretching, bleed, stale texture, career/bot bleed, broken cloth shading/physics, or camera-fade regression. All other outfit pixels remain vanilla, current textures are resident, and `issue656_reikland_griffin_contract` passes. The retained bounded source receipt begins `[cos:656]`. This is the owner/UV gate only; remote replay is not proved Solo."
+  ],
+  "source": {
+    "card_comment_id": 5656581855,
+    "card_date": "2026-09-13T22:25:04Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

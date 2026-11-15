@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 144,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "0.7.354-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Before a new expedition, open **Tweaker: Chaos Wastes > Reworks > Reworks: Boons > Reworks: New Boons (Added)**. Turn on **Enable new boon reworks** and **Rework: Vaul's Anvil as Boon (Unique)**.",
+        "2. Acquire **Vaul's Anvil** in that new run. With a melee weapon wielded, take an incoming hit while attacking rather than manually blocking and confirm automatic blocking works.",
+        "3. Swap to ranged and back, then pick up and put away each available healing item, potion, bomb, and book. Recheck automatic blocking after each return to melee.",
+        "4. Break block to start the ten-second lockout. Confirm automatic blocking stays off during the lockout and returns afterward without needing another weapon swap.",
+        "5. Transition to another map and repeat one swap and one pickup. Run `/ct_regression_test`, exit normally, and attach the newest complete log."
+      ],
+      "assertions": [
+        "The boon stays owned and listed. Automatic blocking is active only while melee is wielded and the lockout is inactive, recovers after inventory/wield changes, survives transition, and does not duplicate. A weapon's native always-blocking trait remains unchanged. The regression report passes.",
+        "Grant Vaul's Anvil; script wield ranged/melee and pickup cycles; assert always-blocking buff present and override_blocking true on melee, false during lockout."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6693541732,
+    "card_date": "2026-11-06T19:28:58Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

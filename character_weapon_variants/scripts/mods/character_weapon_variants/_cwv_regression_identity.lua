@@ -1388,6 +1388,7 @@ _rt_register("issue474_old_musket_hot_join_identity_and_remote_fire", function()
             return slot_name .. " failed to reconstruct Old Musket semantic identity"
         end
     end
+    _om._appearance_lifecycle:clear_peer("rt474-peer")  -- WP-CWV-06: leave no fake peer behind
 
     local template = Weapons and Weapons.old_musket_template
     local action_one = template and template.actions and template.actions.action_one
@@ -1417,9 +1418,8 @@ _rt_register("issue474_old_musket_hot_join_identity_and_remote_fire", function()
 			or type(_om._old_musket_modes_by_backend) ~= "table" then
 		return "Old Musket explicit presentation-state contract is incomplete"
 	end
-	-- #474 (2026-07-18): stance + shot report additionally ride the delivering
-	-- cwv_item_identity channel; the dedicated mode channel never delivered in
-	-- the paired live logs. These are the identity-channel consumers.
+	-- #474 (2026-07-18): stance + shot report ride the delivering cwv_item_identity
+	-- channel (the mode channel never delivered live); these are its consumers.
 	if type(_om._old_musket_accept_mode) ~= "function"
 			or type(_om._old_musket_play_remote_fire) ~= "function"
 			or type(_om._old_musket_mode_for_local_slot) ~= "function" then
