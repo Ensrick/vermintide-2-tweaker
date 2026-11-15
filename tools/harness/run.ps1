@@ -155,7 +155,7 @@ if ($planObj) {
 }
 
 # ---------- profile ----------
-$profileArgs = @{ RealProfile = $realProfile; ProfileRoot = (Join-Path $RigRoot 'profile'); DriverId = $DriverId; KeepOwnerMods = $KeepOwnerMods; KeepProfile = $KeepProfile }
+$profileArgs = @{ RealProfile = $realProfile; ProfileRoot = (Join-Path $RigRoot 'profile'); DriverId = $DriverId; KeepOwnerMods = $KeepOwnerMods }
 if ($planObj) { $profileArgs.PlanPath = $planPath; $profileArgs.Nonce = $nonce; $profileArgs.DriverFile = $DriverFile; $profileArgs.SharedDir = $SharedDir }
 if ($localBuilds.Count) {
     $swaps = @{}; $versions = @{}
@@ -168,6 +168,8 @@ function Get-FolderHashes([string] $dir) {
     ($h.GetEnumerator() | ForEach-Object { "$($_.Key)=$($_.Value)" }) -join ';'
 }
 $realFoldersBefore = @{}; foreach ($lb in $localBuilds) { $realFoldersBefore[$lb.real_id] = Get-FolderHashes $lb.real_dir }
+# WP-H-08: a later boot of a plan with boots keeps the profile the boot before it left
+if ($KeepProfile) { $profileArgs.KeepProfile = $true }
 try { $rigProfile = & (Join-Path $here 'New-RigProfile.ps1') @profileArgs }
 catch { Write-Host "RIG REFUSED: profile: $($_.Exception.Message)"; $mutex.ReleaseMutex(); exit 3 }
 $profileRoot = $rigProfile.ProfileRoot
