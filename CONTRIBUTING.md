@@ -58,13 +58,9 @@ Every open issue has exactly one tracker lifecycle label:
 - `diagnostics-armed` when an in-game diagnostic is deployed and runnable now.
 - `verify-fix` when a complete candidate fix is deployed and runnable now.
 
-The two ready states require the newest exact `## CURRENT LIVE TEST` comment
-with a semantic version plus `[mod:LOAD]` or a clearly labeled exact versioned
-runtime banner, topology, numbered player-facing steps, and expected result.
-Test solo first. Add `coop-required` only after the card records solo as
-passed/exhausted and the remaining topology is co-op. Blocked and tooling issues
-stay `not-started`. `Fixed` and `verify-fix-coop` are invalid while open. After
-verification, complete hardening/documentation/regression work and close.
+Manual `## CURRENT LIVE TEST` cards are stopped. Do not change lifecycle labels
+by hand. Issues of evidence class U, S or R close on machine evidence; class V
+and C go to the human list.
 
 The complete taxonomy and prerequisites live in
 [PROJECT_STANDARDS section 11](./PROJECT_STANDARDS.md#11-pending-work-tracking).
@@ -123,7 +119,8 @@ belong in a focused `printf` probe, not an assumption.
 - Keep entry points small and place coherent features in documented modules.
 - Update the affected mod's version, `CHANGELOG.md`, and owning reference docs
   when producing a build. Documentation-only changes do not bump mod versions.
-- Never claim a game fix is complete before in-game confirmation.
+- Never claim a game fix is complete from a build or review alone; see
+  `docs/adr/0001-rig-launch-machine-evidence-no-cards.md`.
 
 Testing has three distinct tiers:
 
@@ -165,6 +162,8 @@ If a maintainer asks you to produce a build, follow the current ship doctrine in
 [PROJECT_STANDARDS section 6.6](./PROJECT_STANDARDS.md#66-ship-doctrine-keyed-off-the-mod_version-suffix-canonical-2026-07-01)
 and the VMBLauncher documentation. Never launch Vermintide 2 or another
 interactive application on someone else's machine without explicit permission.
+The project's unattended rig (`tools/harness/run.ps1`) is the one exception on
+the maintainer's machines.
 
 ## Documentation changes
 

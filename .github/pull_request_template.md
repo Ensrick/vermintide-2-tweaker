@@ -32,7 +32,7 @@ Use `N/A` with a reason for documentation or repository-only work.
 - [ ] MOD_VERSION, per-mod CHANGELOG, and owning docs were updated for a built mod change.
 - [ ] No mod version was bumped for documentation-only work.
 - [ ] No duplicate `(Class, method)` hook registration was introduced.
-- [ ] No game, deployment, Workshop upload, or public release was performed without authorization.
+- [ ] The game was launched only through `tools/harness/run.ps1`, if at all; nothing was uploaded outside `tools/ship/ship.ps1`.
 
 ### In-game or autonomous test
 
@@ -41,10 +41,9 @@ Use `N/A` with a reason for documentation or repository-only work.
 ## Issue lifecycle
 
 Every open issue has exactly one lifecycle label: `not-started`,
-`diagnostics-armed`, or `verify-fix`. A ready issue requires a strict
-`## CURRENT LIVE TEST` comment; the newest exact card must be the only pinned
-exact card. Complete useful solo testing before adding `coop-required` for a
-remaining co-op test. Blocked, partial, documentation, and tooling work stays
+`diagnostics-armed`, or `verify-fix`. Manual live-test cards are stopped; do
+not change lifecycle labels by hand. Class U, S, R issues close on machine
+evidence. Blocked, partial, documentation, and tooling work stays
 `not-started`. `Fixed` and `verify-fix-coop` are invalid while open. After
 verification, complete hardening/documentation/regression coverage and close.
 

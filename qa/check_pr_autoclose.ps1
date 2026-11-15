@@ -60,8 +60,15 @@ function Test-TrustedClosureReceipt {
         $trustedAssociation = $association -in @('OWNER', 'MEMBER', 'COLLABORATOR')
         $hasHeading = $commentBody -match '(?im)^## CLOSURE AUTHORIZATION\s*$'
         $hasVerification = $commentBody -match '(?im)^Verification:\s*user-confirmed\s*$'
+        # Owner decision 2026-11-13 (docs/adr/0001-rig-launch-machine-evidence-no-cards.md):
+        # a class U, S or R machine PASS with its spec and run also authorizes closure.
+        $hasMachine = $commentBody -match '(?im)^Verification:\s*machine-evidence\s*$' -and
+            $commentBody -match '(?im)^Evidence class:\s*[USR]\s*$' -and
+            $commentBody -match '(?im)^Result:\s*PASS\s*$' -and
+            $commentBody -match '(?im)^Spec:\s*qa/specs/issue_\d+\.json\s*$' -and
+            $commentBody -match '(?im)^Run:\s*\S.*$'
         $boundToPr = $PrNumber -gt 0 -and $commentBody -match "(?im)^Authorized PR:\s*#$PrNumber\s*$"
-        if ($trustedLogin -and $trustedAssociation -and $hasHeading -and $hasVerification -and $boundToPr) { return $true }
+        if ($trustedLogin -and $trustedAssociation -and $hasHeading -and $boundToPr -and ($hasVerification -or $hasMachine)) { return $true }
     }
     return $false
 }
@@ -130,6 +137,17 @@ function Invoke-SelfTest {
     $comments[0].body = "## CLOSURE AUTHORIZATION`nVerification: user-confirmed`nAuthorized PR: #123"
     $comments[0].user.login = 'untrusted'
     if (Test-TrustedClosureReceipt $comments @('Ensrick') 123) { throw 'untrusted author was accepted' }
+    $comments[0].user.login = 'Ensrick'
+    # Machine-evidence receipts (owner decision 2026-11-13).
+    $machine = "## CLOSURE AUTHORIZATION`nVerification: machine-evidence`nEvidence class: R`nResult: PASS`nSpec: qa/specs/issue_42.json`nRun: rig-20261115-0001`nAuthorized PR: #123"
+    $comments[0].body = $machine
+    if (-not (Test-TrustedClosureReceipt $comments @('Ensrick') 123)) { throw 'complete class R machine receipt was rejected' }
+    $comments[0].body = $machine.Replace('Evidence class: R', 'Evidence class: V')
+    if (Test-TrustedClosureReceipt $comments @('Ensrick') 123) { throw 'class V machine receipt was accepted' }
+    $comments[0].body = $machine.Replace("`nRun: rig-20261115-0001", '')
+    if (Test-TrustedClosureReceipt $comments @('Ensrick') 123) { throw 'machine receipt without Run was accepted' }
+    $comments[0].body = $machine.Replace('Result: PASS', 'Result: FAIL')
+    if (Test-TrustedClosureReceipt $comments @('Ensrick') 123) { throw 'failed machine receipt was accepted' }
     $tempBody = Join-Path ([System.IO.Path]::GetTempPath()) ("vt2-pr-body-" + [guid]::NewGuid().ToString('N') + '.md')
     try {
         [System.IO.File]::WriteAllText($tempBody, 'Refs #12', (New-Object System.Text.UTF8Encoding($false)))
