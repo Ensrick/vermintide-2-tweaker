@@ -1,5 +1,17 @@
 # Career Tweaker Changelog
 
+## 0.4.35-beta (2026-11-15) - Regression suite results on the engine log (WP-CIM-05)
+
+- `/crt_regression_test` runs through the shared runner `_lib_rt_runner.lua`:
+  PASS, FAIL or SKIP per check (a check returning `skip: ...` was counted as
+  FAIL before), `[crt:RT] ...` lines and a `[crt:RT] SUMMARY` line on the
+  engine log, last results in `mod._crt_rt_last`.
+- Two checks that could not evaluate now report SKIP instead of PASS: the
+  localization-format check when the file cannot be read, and the
+  apply-state order probe when `on_enable` did not fire.
+- `[crt:LOAD]` is also printed to the engine log.
+- Not confirmed in game.
+
 ## 0.4.34-beta (2026-10-24) - buff icons survive the 6.13.0 atlas (#1686) [verify-fix]
 
 - Reissued the unpublished 0.4.32-beta candidate under a fresh broker claim;

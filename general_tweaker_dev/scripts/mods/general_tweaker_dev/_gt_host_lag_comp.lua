@@ -1,5 +1,13 @@
 local mod = get_mod("gt_dev")
 local Policy = mod:dofile("scripts/mods/general_tweaker_dev/_gt_host_lag_comp_policy")
+do
+    local flag = "gt_host_lag_comp_default_off_v1"
+    local value, done = Policy.migrate_default_off(mod:get("gt_host_lag_comp"), mod:get(flag))
+    if mod:get(flag) ~= true then
+        mod:set("gt_host_lag_comp", value)
+        mod:set(flag, done)
+    end
+end
 
 -- Issue #1034: host-authoritative melee latency compensation.
 --
@@ -123,7 +131,7 @@ local function _eligible(
     local blocked_damage = action and action.blocked_damage
 
     local context = {
-        enabled = mod:get("gt_host_lag_comp") ~= false,
+        enabled = mod:get("gt_host_lag_comp") == true,
         is_server = _server_network() ~= nil,
         target_is_remote_human = owner ~= nil,
         attacker_is_ai = attacker_blackboard ~= nil
@@ -321,7 +329,7 @@ mod._gt_host_lag_comp_disable = function()
     _flush(true)
 end
 mod._gt_host_lag_comp_setting_changed = function()
-    if mod:get("gt_host_lag_comp") == false then
+    if mod:get("gt_host_lag_comp") ~= true then
         _flush(true)
     end
 end
@@ -482,7 +490,7 @@ end)
 mod._gt_register_update("host_lag_comp", function(dt)
     if #_pending == 0 then return end
 
-    if mod:get("gt_host_lag_comp") == false or not _server_network() then
+    if mod:get("gt_host_lag_comp") ~= true or not _server_network() then
         _flush(true)
         return
     end

@@ -3,7 +3,7 @@ local mod = get_mod("crt")
 -- concern module and this entry's lifecycle callbacks read/write it.
 mod._crt = mod._crt or {}
 
-local MOD_VERSION = "0.4.34-beta"
+local MOD_VERSION = "0.4.35-beta"
 mod._crt.MOD_VERSION = MOD_VERSION
 
 -- VMF mod-to-mod RPC schema (VMF_RECIPES section 10). Issue #776 appends the
@@ -81,6 +81,7 @@ local function _settings_fingerprint()
 end
 
 mod:info("[crt:LOAD] v%s enabled fp=%s OK", MOD_VERSION, _settings_fingerprint())
+pcall(printf, "[crt:LOAD] v%s enabled fp=%s OK", MOD_VERSION, _settings_fingerprint())
 
 -- Per PROJECT_STANDARDS § 3.6 + § 14a: dev/alpha/beta/0.x versions print
 -- version to chat on load so the user can see what's active. Stable

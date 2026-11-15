@@ -1,5 +1,61 @@
 # Crafting in Modded Changelog
 
+## 0.8.156-dev (2026-11-15) -- Regression suite results on the engine log (WP-CIM-05)
+
+- `/cim_regression_test` runs through the new shared runner
+  `_lib_rt_runner.lua`: PASS, FAIL or SKIP per check on chat and as
+  `[cim:RT] <verdict> <check> <detail>` on the engine log, then
+  `[cim:RT] SUMMARY pass=N fail=N skip=N version=...`. The last results are
+  kept in `mod._cim_rt_last` for the unattended test rig.
+- The localization-format check now reports SKIP instead of PASS when the
+  localization file cannot be read.
+- The load marker `[cim:LOAD]` is also printed to the engine log, so it shows
+  even with mod logging off.
+- Not confirmed in game.
+
+## 0.8.155-dev (2026-11-15) -- Import crafted items from the other Crafting in Modded stream (#1654, #277)
+
+- Crafting in Modded (dev) and Crafting in Modded (public) keep separate
+  crafted collections. New command `/cim_import_other_stream`: without an
+  argument it reports how many of the public stream's crafted items are not
+  here; `/cim_import_other_stream CONFIRM` copies exactly those in one
+  validated write and restores them to the inventory. Nothing is removed or
+  overwritten, and nothing is imported automatically (WP-CIM-06c).
+- When both streams are enabled at once, one line says so:
+  `[cim:store] both Crafting in Modded streams are enabled; each keeps its
+  own crafted items`.
+- Not confirmed in game.
+
+## 0.8.154-dev (2026-11-15) -- Session-start backup of crafted items and /cim_restore_backup (#1654, #277)
+
+- The first load in each game session copies the crafted collection to the
+  new setting `forged_weapons_backup` (never an empty copy), so a bad write
+  or a lost record later in the session can be undone (WP-CIM-06b).
+- New command `/cim_restore_backup`: without an argument it reports how many
+  backed-up items are missing from the collection; `/cim_restore_backup
+  CONFIRM` adds exactly those back in one validated write and restores them
+  to the inventory. It never removes or overwrites an item.
+- Regression check `issue_cim_store_backup_present`.
+- Not confirmed in game. The rig case is
+  `qa/runtime/cim/issue_1654_store_backup.lua`.
+
+## 0.8.153-dev (2026-11-15) -- Never write a crafted store that breaks the settings save (#1654, #277)
+
+- Every write of the crafted collection (`forged_weapons`) is validated
+  first. A record holding a table with mixed array and map keys would make
+  VMF's settings save fail for every mod; such a write is now refused with
+  `[cim:store] REFUSED write: record <id> field <path> is not serializable;
+  previous save kept`, and a craft that would cause it fails with
+  `save:store_not_serializable` instead of being published (WP-CIM-06a).
+- A saved record that load rejects (for example a `woc_*` relic) is copied
+  into the new setting `forged_weapons_rejected` under its id (at most 200)
+  instead of being dropped for good.
+- Load writes the store back only when a record was rejected or migrated
+  (promo rarity, missing `via_mirror`); a clean store is left untouched.
+- New pure module `_cim_store_policy.lua`; regression check
+  `issue_cim_store_serializable`.
+- Not confirmed in game.
+
 ## 0.8.152-dev (2026-11-15) -- Restore saved crafts without deleting them or re-saving (#1654)
 
 - The boot restore of saved crafts (`_athanor_inject_all`,

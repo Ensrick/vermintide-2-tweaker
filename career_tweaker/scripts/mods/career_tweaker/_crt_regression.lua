@@ -41,20 +41,17 @@ end
 mod._crt.rt_register = _rt_register
 
 mod:command("crt_regression_test", "Run regression smoke checks for past bugs", function()
-    local pass, fail = 0, 0
     mod:echo("=== crt regression_test (v%s) ===", MOD_VERSION)
-    for _, c in ipairs(_RT_CHECKS) do
-        local ok, err = pcall(c.fn)
-        if ok and err == nil then
-            mod:echo("  PASS: %s", c.name); pass = pass + 1
-            mod:info("[regression] PASS %s", c.name)
-        else
-            local msg = (not ok and tostring(err)) or tostring(err)
-            mod:echo("  FAIL: %s -- %s", c.name, msg); fail = fail + 1
-            mod:warning("[regression] FAIL %s: %s", c.name, msg)
-        end
-    end
-    mod:echo("=== %d passed, %d failed ===", pass, fail)
+    -- WP-CIM-05: shared runner; every verdict also reaches the engine log,
+    -- which mod logging settings cannot hide.
+    local summary = mod:dofile("scripts/mods/career_tweaker/_lib_rt_runner").run(_RT_CHECKS, function(verdict, name, detail)
+        mod:echo("  %s: %s%s", verdict, name, detail and (" -- " .. detail) or "")
+        pcall(printf, "[crt:RT] %s %s %s", verdict, name, tostring(detail or ""))
+    end)
+    mod._crt_rt_last = summary
+    mod:echo("=== %d passed, %d failed, %d skipped ===", summary.pass, summary.fail, summary.skip)
+    pcall(printf, "[crt:RT] SUMMARY pass=%d fail=%d skip=%d version=%s",
+        summary.pass, summary.fail, summary.skip, MOD_VERSION)
 end)
 mod:info("[regression-test-command] registered as /crt_regression_test")
 
@@ -206,7 +203,7 @@ _rt_register("localization_format_safe", function()
     -- ship even if the static check is skipped. RULE: any literal % in a loc
     -- string must be doubled to %%.
     local ok, loc = pcall(mod.dofile, mod, "scripts/mods/career_tweaker/career_tweaker_localization")
-    if not ok or type(loc) ~= "table" then return end  -- can't reach loc; skip
+    if not ok or type(loc) ~= "table" then return "skip: localization file unreachable" end
     for k, v in pairs(loc) do
         if type(v) == "table" and type(v.en) == "string" then
             local fmt_ok, fmt_err = pcall(string.format, v.en)
@@ -629,7 +626,7 @@ _rt_register("crt_parity_applied_state_committed_before_callbacks", function()
         on_enable = function() seen_state = inst:applied_state() end,
     })
     pcall(function() inst:tick(10) end)   -- solo enables on the first tick (settle 0)
-    if seen_state == nil then return end  -- enable did not fire in this env; skip
+    if seen_state == nil then return "skip: on_enable did not fire in this environment" end
     if seen_state ~= "enabled" then
         return string.format(
             "applied_state() inside on_enable was %q, expected \"enabled\" -- shared lib fired callbacks before committing _applied (issue 506 regression)",
