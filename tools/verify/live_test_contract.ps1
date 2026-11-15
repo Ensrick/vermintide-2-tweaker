@@ -536,19 +536,25 @@ for _,case in ipairs(cases) do
 end
 print("PREFIX_EXPRESSION_LUA_PASS "..#cases)
 '@
-    $lua=Join-Path $repoRoot 'qa/lua/vendor/lua-5.1.5-win64/lua5.1.exe'
-    Assert-VtContractFixture ((Get-FileHash $lua -Algorithm SHA256).Hash -ceq 'C9BF063327F6A719AA2D2C25A13A6FB006EBA3F23B53BCD6A629DC04507C18B6') 'Vendored Lua expression oracle changed.'
-    $start=New-Object Diagnostics.ProcessStartInfo
-    $start.FileName=$lua;$start.Arguments='-';$start.UseShellExecute=$false;$start.CreateNoWindow=$true
-    $start.RedirectStandardInput=$true;$start.RedirectStandardOutput=$true;$start.RedirectStandardError=$true
-    $process=New-Object Diagnostics.Process;$process.StartInfo=$start
-    try{
-        Assert-VtContractFixture ($process.Start()) 'Could not start owned Lua expression oracle.'
-        $stdout=$process.StandardOutput.ReadToEndAsync();$stderr=$process.StandardError.ReadToEndAsync()
-        $process.StandardInput.Write($program);$process.StandardInput.Close()
-        if(-not$process.WaitForExit(30000)){$process.Kill();throw 'Lua prefix-expression oracle timed out.'}
-        Assert-VtContractFixture ($process.ExitCode -eq 0 -and $stdout.Result.Trim() -ceq ('PREFIX_EXPRESSION_LUA_PASS '+$native.Count)) ('Lua prefix oracle failed: '+$stderr.Result+' '+$stdout.Result)
-    }finally{$process.Dispose()}
+    # WP-P-01: the vendored oracle is a Windows binary. The Linux issue-lifecycle
+    # job skips only this process; the Windows qa-gate still runs it.
+    if([string][System.Environment]::OSVersion.Platform -ceq 'Win32NT'){
+        $lua=Join-Path $repoRoot 'qa/lua/vendor/lua-5.1.5-win64/lua5.1.exe'
+        Assert-VtContractFixture ((Get-FileHash $lua -Algorithm SHA256).Hash -ceq 'C9BF063327F6A719AA2D2C25A13A6FB006EBA3F23B53BCD6A629DC04507C18B6') 'Vendored Lua expression oracle changed.'
+        $start=New-Object Diagnostics.ProcessStartInfo
+        $start.FileName=$lua;$start.Arguments='-';$start.UseShellExecute=$false;$start.CreateNoWindow=$true
+        $start.RedirectStandardInput=$true;$start.RedirectStandardOutput=$true;$start.RedirectStandardError=$true
+        $process=New-Object Diagnostics.Process;$process.StartInfo=$start
+        try{
+            Assert-VtContractFixture ($process.Start()) 'Could not start owned Lua expression oracle.'
+            $stdout=$process.StandardOutput.ReadToEndAsync();$stderr=$process.StandardError.ReadToEndAsync()
+            $process.StandardInput.Write($program);$process.StandardInput.Close()
+            if(-not$process.WaitForExit(30000)){$process.Kill();throw 'Lua prefix-expression oracle timed out.'}
+            Assert-VtContractFixture ($process.ExitCode -eq 0 -and $stdout.Result.Trim() -ceq ('PREFIX_EXPRESSION_LUA_PASS '+$native.Count)) ('Lua prefix oracle failed: '+$stderr.Result+' '+$stdout.Result)
+        }finally{$process.Dispose()}
+    }else{
+        Write-Host '[live-test-contract] SKIP Lua expression oracle: needs the vendored Windows runtime; the Windows qa-gate runs it.'
+    }
     Write-Host "[live-test-contract] constant-prefix load matrix passed: 1 two-leaf +5 closed-bootstrap positives, $($cases.Count) negatives, 2 order controls, legacy literal-only control; $($native.Count) actual Lua expression/provenance witnesses."
 }
 
