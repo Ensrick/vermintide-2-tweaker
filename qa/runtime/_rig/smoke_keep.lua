@@ -32,6 +32,19 @@ return {
 			end
 		end
 
+		-- WP-H-07: a local build staged in a rig slot must be the one that runs
+		local staged = type(plan) == "table" and plan.nonce == T.nonce and type(plan.expect_versions) == "table" and plan.expect_versions or {}
+		for id, version in pairs(staged) do
+			local mod = T.find_mod(id)
+			T.expect(mod ~= nil, "staged mod " .. tostring(id) .. " is loaded")
+			local loaded = mod and rawget(mod, "MOD_VERSION")
+			if loaded ~= nil then
+				T.expect_eq(loaded, version, "mod " .. tostring(id) .. " runs the staged version")
+			else
+				T.note("staged:" .. tostring(id), tostring(version) .. " (checked against the load banner by run.ps1)")
+			end
+		end
+
 		T.step("player state readable")
 		local player = T.local_player()
 		T.expect(player ~= nil, "local player exists")
