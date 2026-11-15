@@ -642,5 +642,8 @@ mod:command("cwv_give", "Give a variant weapon: cwv_give <item_key>", function(i
 	_give_variant(item_key)
 end)
 
+-- WP-CWV-02: the mod is non-togglable, so VMF never fires on_enabled at
+-- start-up (vmf_mod_manager.lua:127-129); run the start-up body once here.
+mod.on_enabled()
 
 end

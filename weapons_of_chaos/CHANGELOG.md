@@ -1,5 +1,13 @@
 # Weapons of Chaos — Changelog
 
+## v0.1.63-dev (2026-11-15) - Weapons of Chaos can no longer be switched off (WP-CWV-02)
+
+- The mod is no longer togglable from the VMF options menu (audit finding
+  A2-F02). Switching it off turned every network-safety hook off while its
+  relic, lookup rows and table edits stayed in the game. The start-up work
+  VMF used to run on enable now runs once at load. To stop using the mod,
+  unsubscribe or disable it in the launcher. Not confirmed in game.
+
 ## v0.1.62-dev (2026-10-24) - Poisoned Edge icon survives the 6.13.0 atlas (#1687) [verify-fix]
 
 - Reissued the unpublished 0.1.60-dev candidate under a fresh broker claim;

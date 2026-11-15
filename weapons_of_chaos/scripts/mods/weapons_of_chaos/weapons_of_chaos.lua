@@ -1,6 +1,6 @@
 local mod = get_mod("WOC")
 
-local MOD_VERSION = "0.1.62-dev"
+local MOD_VERSION = "0.1.63-dev"
 
 mod:info("Weapons of Chaos v%s loading", MOD_VERSION)
 
@@ -1452,3 +1452,4 @@ mod:info("[WOC] enabled v%s settings_fp=%s (Blightreaper)", MOD_VERSION, _settin
 if MOD_VERSION:find("-dev$") or MOD_VERSION:find("-alpha$") or MOD_VERSION:find("-beta$") or MOD_VERSION:find("-rc%d*$") or MOD_VERSION:find("^0%.") then
 	mod:echo(string.format("[WOC] v%s loaded", MOD_VERSION))
 end
+mod.on_enabled() -- WP-CWV-02: non-togglable, VMF never fires on_enabled at start-up
