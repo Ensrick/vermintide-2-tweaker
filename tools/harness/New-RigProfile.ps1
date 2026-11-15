@@ -41,11 +41,41 @@ function Set-TopLevel([string] $text, [string] $key, [string] $value) {
     if ($rx.IsMatch($text)) { return $rx.Replace($text, "$key = $value", 1) }
     return "$key = $value`n" + $text
 }
+# A JSON scalar as SJSON text: true/false, a number in invariant form, a quoted string (-RawString: the string as it is).
+function ConvertTo-SjsonScalar($value, [switch] $RawString) {
+    if ($value -is [bool]) { return $(if ($value) { 'true' } else { 'false' }) }
+    if ($value -is [int] -or $value -is [long] -or $value -is [double] -or $value -is [decimal]) { return [System.Convert]::ToString($value, [System.Globalization.CultureInfo]::InvariantCulture) }
+    if ($value -is [string]) { return $(if ($RawString) { $value } else { ConvertTo-SjsonString $value }) }
+    throw "plan value must be true, false, a number or a string (got $($value.GetType().Name)): $value"
+}
+function ConvertTo-SjsonKey([string] $name) { if ($name -match '^[A-Za-z_][A-Za-z0-9_]*$') { $name } else { ConvertTo-SjsonString $name } }
+# Sets mods_settings.<mod>.<setting> = <value> in the user settings text. The table, the mod's block and the setting are
+# matched by indentation (one tab per level, as the game writes the file); an existing value, one line or a multi-line
+# table or array, is replaced.
+function Set-ModOption([string] $text, [string] $mod, [string] $setting, [string] $value) {
+    $tableRx = [regex]'(?ms)^mods_settings = \{\n(.*?)^\}\n'
+    if (-not $tableRx.IsMatch($text)) { $text = "mods_settings = {`n}`n" + $text }
+    $table = $tableRx.Match($text)
+    $body = $table.Groups[1].Value
+    $modKey = ConvertTo-SjsonKey $mod
+    $modRx = [regex]('(?ms)^\t' + [regex]::Escape($modKey) + ' = \{\n(.*?)^\t\}\n')
+    if (-not $modRx.IsMatch($body)) { $body += "`t$modKey = {`n`t}`n" }
+    $modBlock = $modRx.Match($body)
+    $inner = $modBlock.Groups[1].Value
+    $setKey = [regex]::Escape((ConvertTo-SjsonKey $setting))
+    $inner = [regex]::Replace($inner, '(?ms)^\t\t' + $setKey + ' = [\[\{]\n.*?^\t\t[\]\}]\n', '')
+    $inner = [regex]::Replace($inner, '(?m)^\t\t' + $setKey + ' = .*\n', '')
+    $inner += "`t`t$(ConvertTo-SjsonKey $setting) = $value`n"
+    $body = $body.Substring(0, $modBlock.Groups[1].Index) + $inner + $body.Substring($modBlock.Groups[1].Index + $modBlock.Groups[1].Length)
+    return $text.Substring(0, $table.Groups[1].Index) + $body + $text.Substring($table.Groups[1].Index + $table.Groups[1].Length)
+}
 
 $planObj = $null
 if ($PlanPath) {
     $PlanPath = (Resolve-Path -LiteralPath $PlanPath).Path
     $planObj = [System.IO.File]::ReadAllText($PlanPath) | ConvertFrom-Json
+    # WP-H-08: "modset" fills mods and expect_mods from tools/harness/modsets.psd1 (run.ps1 resolves it the same way)
+    $planObj = & (Join-Path $PSScriptRoot 'Resolve-RigPlan.ps1') -Plan $planObj
     if (-not $Nonce) { throw 'A plan needs -Nonce.' }
     if (-not $DriverFile -or -not (Test-Path -LiteralPath $DriverFile -PathType Leaf)) { throw "Driver file not found: $DriverFile" }
 }
@@ -65,12 +95,21 @@ if (-not (Test-Path -LiteralPath $shader) -and (Test-Path -LiteralPath (Join-Pat
 
 $cfg = [System.IO.File]::ReadAllText((Join-Path $RealProfile 'user_settings.config')) -replace "`r`n", "`n"
 $forced = [ordered]@{ borderless_fullscreen = 'false'; fullscreen = 'false'; max_fps = '30'; master_bus_volume = '0' }
-if ($planObj -and $planObj.settings) { foreach ($p in $planObj.settings.PSObject.Properties) { $forced[$p.Name] = [string]$p.Value } }
+# plan "settings": top-level user settings; a JSON boolean or number is written as SJSON (true, 30), a string as it
+# is (raw SJSON text, e.g. "30")
+if ($planObj -and $planObj.settings) { foreach ($p in $planObj.settings.PSObject.Properties) { $forced[$p.Name] = ConvertTo-SjsonScalar $p.Value -RawString } }
 foreach ($k in $forced.Keys) { $cfg = Set-TopLevel $cfg $k $forced[$k] }
 $cfg = [regex]::Replace($cfg, '(?ms)^screen_resolution = \[.*?^\]', "screen_resolution = [`n`t1280`n`t720`n]", 1)
 $cfg = [regex]::Replace($cfg, '(?ms)^vt2_rig_plan = \{.*?^\}\n', '', 1)
 $cfg = [regex]::Replace($cfg, '(?ms)^vt2_rig_results = \{.*?^\}\n', '', 1)
 $cfg = [regex]::Replace($cfg, '(?ms)^vt2_rig_progress = \{.*?^\}\n', '', 1)
+# WP-H-08 plan "options": { "<VMF mod id>": { "<setting>": <value> } } goes into the top-level mods_settings table,
+# which VMF reads once when it loads (Vermintide-Mod-Framework/vmf/scripts/mods/vmf/modules/core/settings.lua:10).
+if ($planObj -and $planObj.PSObject.Properties['options'] -and $planObj.options) {
+    foreach ($modProp in $planObj.options.PSObject.Properties) {
+        foreach ($setProp in $modProp.Value.PSObject.Properties) { $cfg = Set-ModOption $cfg $modProp.Name $setProp.Name (ConvertTo-SjsonScalar $setProp.Value) }
+    }
+}
 
 if ($planObj -or -not $KeepOwnerMods) {
     $wanted = @(); if ($planObj -and $planObj.mods) { $wanted = @($planObj.mods | ForEach-Object { [string]$_ }) }
