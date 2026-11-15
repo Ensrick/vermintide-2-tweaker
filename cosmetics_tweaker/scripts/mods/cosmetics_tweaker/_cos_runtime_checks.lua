@@ -1171,18 +1171,10 @@ end, {
 })
 
 _rt_register("filter_illusion_widgets_hides_named_mat", function()
-    -- v0.9.29-dev (issue #48): the `_filter_illusion_widgets` helper must
-    -- drop widgets whose skin maps to a filtered mat family (weaves /
-    -- shyish), preserve everything else, AND always keep the currently-
-    -- equipped skin even if its family is filtered (otherwise vanilla's
-    -- selection state dangles).
-    --
-    -- Drive the helper with a synthetic widget array + setting overrides
-    -- so we don't depend on live WeaponSkins state. We stub
-    -- WeaponSkins.skins via a local override of _skin_mat_family — but
-    -- _skin_mat_family is file-local; instead we pre-populate
-    -- WeaponSkins.skins with synthetic entries scoped to test-only skin
-    -- keys so we don't trip real entries.
+    -- v0.9.29-dev (issue #48): `_filter_illusion_widgets` must drop widgets whose
+    -- skin maps to a filtered mat family (weaves / shyish), keep everything else,
+    -- and always keep the equipped skin (else vanilla's selection dangles). Driven
+    -- with synthetic widgets and test-only WeaponSkins.skins keys, no real entry.
     if type(mod._filter_illusion_widgets) ~= "function" then
         return "mod._filter_illusion_widgets helper missing"
     end
@@ -1990,6 +1982,22 @@ _rt_register("issue420_shared_weapon_appearance_owner", function()
     end
 end)
 
+-- WP-COS-01 (A3-F04, #416): five malformed peer payloads are refused, a valid one passes.
+_rt_register("issue416_payload_policy", function()
+    local policy = mod._cos_la_payload_policy
+    if type(policy) ~= "table" or type(policy.clean) ~= "function" then return "payload policy missing" end
+    local function p(k, v)
+        local t = { slot = "tpl", kind = "offhand", offhand_unit = "units/x", hand_field = "left_hand_unit" }
+        if k then t[k] = v end
+        return t
+    end
+    for i, bad in ipairs({ p("hand_field", "material_settings_name"), p("hand_field", 42), p("offhand_unit", {}),
+            p("slot", 7), { slot = "tpl", kind = "bogus", armoury_key = "KruberPure" } }) do
+        if policy.clean(bad, false) ~= nil then return "malformed payload " .. i .. " accepted" end
+    end
+    if policy.clean(p(), false) == nil then return "valid offhand payload rejected" end
+end)
+
 _rt_register("mh_package_single_reference", function()
     -- issue 282: the MH embed's package loads must be exactly-once per path under
     -- the mod-owned reference name "cosmetics_tweaker_mh" (PackageManager.load
@@ -2027,15 +2035,8 @@ _rt_register("mh_package_single_reference", function()
     end
 end)
 
--- [mem-probe] cos boot Lua-footprint readout. MUST live at module top-level (runs
--- once when this file finishes loading), NOT inside the _rt_register closure above
--- — until v0.9.35-dev it was stranded as the last statement of that regression-test
--- closure (after two early returns), so it NEVER executed and "cos boot_lua" appeared
--- in zero console logs, leaving cosmetics' Lua footprint invisible next to
--- weapon_tweaker's measured +12.8 MB. Mirrors weapon_tweaker.lua's boot readout.
--- Measures the static table footprint (e.g. the ~11.9k-line _cosmetic_unlocks table)
--- at load time — the 74 offhand unit packages are queued later (lazily, in
--- mod.update) and Lua bookkeeping is snapshotted after that queueing pass.
+-- [mem-probe] cos boot Lua-footprint readout. MUST stay at module top level (runs once
+-- at load): inside a check closure it never ran (until v0.9.35-dev). Static tables only.
 mod:info("[mem-probe] cos boot_lua=+%.1f MB (of ~1024 MB lua_heap cap)", (collectgarbage("count") - mod._cos_mem_t0) / 1024)
 
 end

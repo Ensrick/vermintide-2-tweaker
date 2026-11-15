@@ -1,6 +1,6 @@
 local mod = get_mod("gt_dev")
 
-local MOD_VERSION = "0.2.279-dev"
+local MOD_VERSION = "0.2.280-dev"
 -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic).
 -- On the mod table, not a bare _G global (issue 510 class) and not a new
 -- top-level local (this chunk lives near the 200-local ceiling).
@@ -780,6 +780,7 @@ mod:network_register(_GT_GODMODE_RPC, function(sender_peer_id, schema, on, strik
     if sender_peer_id == nil or schema ~= _GT_GODMODE_RPC_SCHEMA then
         return
     end
+    if mod._gt_host_request_policy and mod._gt_host_request_policy.ignore_remote_godmode(Managers.player and Managers.player.is_server, mod:get("gt_host_allow_client_requests")) then return end  -- WP-GT-01
     -- Store the local clock at receipt; _gt_godmode_active expires the entry if
     -- the sender stops heartbeating (clean godmode-off even if its send dropped).
     _gt_godmode_peers[sender_peer_id] = (on == true) and _gt_net_clock or nil
@@ -1609,8 +1610,7 @@ end)
 -- Friendly Fire Toggle (DamageUtils.allow_friendly_fire_ranged/melee hooks) is
 -- extracted to _gt_godmode_qol.lua (dofile'd after the main chunk). These are
 -- DISTINCT methods from the godmode add_damage_network* hooks that stay here, so
--- there is no duplicate-hook collision. disable_friendly_fire is read directly
--- inside the hooks (no apply-fn / dispatch).
+-- there is no duplicate-hook collision; disable_friendly_fire is read in the hooks.
 
 -- Level Control (win / fail / restart) + End-of-level profile fallback /
 -- score-screen fix + gt_kill_bots / gt_die + /respawn + gt_fix_sound +
