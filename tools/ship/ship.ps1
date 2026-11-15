@@ -297,6 +297,14 @@ function Get-ShipDeploymentPolicy {
     }
 }
 
+# WP-P-07: the launcher doctor prints one line per check as [ ok ], [warn] or
+# [ERR ] followed by "Title: detail". An error, or any Steam warning, means the
+# release station is not ready to publish.
+function Get-ShipDoctorProblems {
+    param([string[]]$Lines)
+    return @(@($Lines) | Where-Object { [string]$_ -match '^\[ERR \]' -or [string]$_ -match '^\[warn\] Steam:' })
+}
+
 function Test-ShipUploadEvidencePolicy {
     param(
         [Parameter(Mandatory = $true)][string]$UploadStatus,
@@ -991,6 +999,11 @@ function Invoke-ShipSelfTest {
     Assert $receiptRemoteRejected "receipt local deployment never silently substitutes for remote deployment"
     $receiptBuildOnlyPolicy = Get-ShipDeploymentPolicy -PublishedId '3733366851' -DeployDirectoryExists $true -BundleAuthority receipt -BuildOnly
     Assert (-not $receiptBuildOnlyPolicy.ShouldDeploy) "receipt artifact-only build does not acquire deployment authority"
+    # WP-P-07: doctor ERR lines and Steam warnings stop a ship; other warnings do not.
+    $doctorFixture = @(Get-ShipDoctorProblems -Lines @('[ERR ] Steam: not running', '[warn] Steam: not logged in', '[ ok ] Steam: running', '[warn] Workshop content folder: not found', '[ ok ] VMB: found'))
+    Assert ($doctorFixture.Count -eq 2 -and $doctorFixture[0] -ceq '[ERR ] Steam: not running' -and $doctorFixture[1] -ceq '[warn] Steam: not logged in') "launcher doctor ERR lines and Steam warnings stop a ship"
+    Assert (@(Get-ShipDoctorProblems -Lines @('[ERR ] Project folder: missing')).Count -eq 1) "any launcher doctor ERR line stops a ship"
+    Assert (@(Get-ShipDoctorProblems -Lines @('[ ok ] Steam: running', '[warn] Workshop content folder: not found')).Count -eq 0) "healthy doctor output and non-Steam warnings pass"
     $bootstrapPolicy = Get-ShipDeploymentPolicy -PublishedId '0' -DeployDirectoryExists $false
     Assert ($bootstrapPolicy.Mode -eq 'bootstrap' -and -not $bootstrapPolicy.ShouldDeploy -and -not $bootstrapPolicy.RemoteDeploy) "first upload remains a separate no-deploy bootstrap"
     $invalidPublishedIdRejected = $false
@@ -2038,6 +2051,19 @@ catch {
     Fail $_.Exception.Message
 }
 Write-Host ("VMBLauncher publication capability: PASS (v{0}, receipt schema 3, authority {1}, locked snapshot)" -f $launcherCapability.Version, $bundleAuthorityPolicy.Authority) -ForegroundColor DarkGray
+
+# WP-P-07 (#1328): a release station whose Steam or SDK is not ready must stop
+# here, before the build, the GitHub release and the upload. doctor is read-only;
+# nothing restarts Steam or changes machine state when it fails (D-P-09).
+if (-not $BuildOnly) {
+    $doctorRun = Invoke-ShipLauncherNoWindow -LauncherExecutableLease $launcherExecutableLease -ArgumentList @('doctor', '--no-banner', '--config', $launcherSettings)
+    $doctorProblems = @(Get-ShipDoctorProblems -Lines @($doctorRun.Lines))
+    if ($doctorRun.ExitCode -ne 0 -or $doctorProblems.Count -gt 0) {
+        $doctorDetail = if ($doctorProblems.Count -gt 0) { $doctorProblems -join '; ' } else { "doctor exited $($doctorRun.ExitCode)" }
+        Fail "VMBLauncher doctor reports the release station is not ready; nothing was built, published or uploaded: $doctorDetail"
+    }
+    Write-Host "VMBLauncher doctor: PASS (release station ready)" -ForegroundColor DarkGray
+}
 
 # ---------------------------------------------------------------------------
 # Headless red gate (issues #590/#591): exercise the same fast, host-runnable
