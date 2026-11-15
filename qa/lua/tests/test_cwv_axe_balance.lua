@@ -407,6 +407,13 @@ return function(H, repo_root)
 		H.truthy(source:find("scale_executioner_headshot_damage", 1, true))
 		local parity = read(repo_root
 			.. "/weapon_tweaker/scripts/mods/weapon_tweaker/_wt431_damage_profile_parity.lua")
-		H.truthy(parity:find("mod._wt_apply_axe_balance", 1, true))
+		-- WP-WT-07: the parity flip reaches the balance lifecycle through the
+		-- ordered registry's history_and_axe owner (history sandwich, else axe).
+		H.truthy(parity:find('mod._wt.registry.reconcile("peer_parity")', 1, true))
+		local owners = read(repo_root
+			.. "/weapon_tweaker/scripts/mods/weapon_tweaker/_wt_mutation_owners.lua")
+		H.truthy(owners:find('{ id = "history_and_axe", order = 40,', 1, true))
+		H.truthy(owners:find("mod._wt_reconcile_history_owner_stack(reason)", 1, true))
+		H.truthy(owners:find("mod._wt_apply_axe_balance(nil, false)", 1, true))
 	end)
 end
