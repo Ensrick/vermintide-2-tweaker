@@ -1256,6 +1256,7 @@ end
 mod._gut_reset_modded_loadouts = function(source)
     return M.reset_modded_loadouts(nil, source or "api", false)
 end
+mod._gut_exit_snapshot = function(edge_name) return M.exit_snapshot(edge_name) end -- rig seam (WP-GUT-01); M.exit_snapshot is defined below
 
 mod:command("reset_modded_loadouts", "Reset modded loadouts to re-seed from official (optional: career name)", function(career_arg)
     M.reset_modded_loadouts(career_arg, "command", true)
@@ -1506,13 +1507,11 @@ end)
 -- maps those slots to `items`. Eligible reads then go through BackendUtils.get_loadout_item_id /
 -- get_loadout_item -- the exact readers the hero view uses. These are NOT mirror-read hooks, so
 -- calling get_item_from_id underneath here does NOT recurse (the v0.2.173 1 GiB burn was
--- get_item_from_id called from INSIDE the
--- get_character_data hook; an exit edge is not a mirror read -- same safety /gut_loadout_status
--- relies on). Gear reconciles only a value that resolves to a registered item RIGHT NOW
--- (RESOLVE_YES); an unresolved live read is a SKIP, never a clear, so a late-registering
--- synthetic id can never blank a stored id (#375/#387 non-destructive doctrine). Official realm
--- / Versus / non-adventure backend => fully inert. Official cloud data is never written (the
--- store/overlay are modded-only; #175 isolation guarantee is untouched).
+-- get_item_from_id called from INSIDE the get_character_data hook; an exit edge is not a mirror
+-- read -- same safety /gut_loadout_status relies on). Gear: a live value must resolve now
+-- (RESOLVE_YES), and a stored id that does not resolve now is kept, never replaced (WP-GUT-01).
+-- Official realm / Versus / non-adventure backend => fully inert; official cloud data is never
+-- written (the store/overlay are modded-only; #175 isolation guarantee is untouched).
 -- ==================================================================
 
 -- The per-slot owner gate `_slot_owned_by_items` is defined above the BackendUtils equip
@@ -1582,7 +1581,7 @@ function M.exit_snapshot(edge_name)
         return 0, false
     end
 
-    local total, wrote, foreign_slot_reads = 0, false, 0
+    local total, wrote, foreign_slot_reads, skipped_unresolved = 0, false, 0, 0
     if mode == MODE_STORE then
         local store = _store()
         local live_by_career = {}
@@ -1591,8 +1590,9 @@ function M.exit_snapshot(edge_name)
             live_by_career[career_name] = live
             foreign_slot_reads = foreign_slot_reads + foreign
         end
-        local diverged, merged_rows, per_career =
-            ExitSnapshotCore.reconcile_selected(live_by_career, store, LOADOUT_SLOT_NAMES)
+        local diverged, merged_rows, per_career, skipped =
+            ExitSnapshotCore.reconcile_selected(live_by_career, store, LOADOUT_SLOT_NAMES,
+                function(_, slot, value) return GEAR_SLOT_SET[slot] and _resolve_item_raw(value) ~= RESOLVE_YES end)
         if diverged > 0 then
             for career_name, merged in pairs(merged_rows) do
                 local entry = store[career_name]
@@ -1605,7 +1605,7 @@ function M.exit_snapshot(edge_name)
             _dirtify()
             wrote = true
         end
-        total = diverged
+        total, skipped_unresolved = diverged, skipped
     elseif mode == MODE_READONLY then
         -- #287: gameplay gear is official-read-only; only mod-owned cosmetics + exact CWV
         -- instances live modded-side, in the overlay keyed by the official selected index. Back
@@ -1637,8 +1637,8 @@ function M.exit_snapshot(edge_name)
         end
     end
 
-    printf("[gut:persist] edge=%s diverged=%d written=%s foreign_slot_reads=%d",
-        tostring(edge_name), total, tostring(wrote), foreign_slot_reads)
+    printf("[gut:persist] edge=%s diverged=%d written=%s foreign_slot_reads=%d skipped_unresolved=%d",
+        tostring(edge_name), total, tostring(wrote), foreign_slot_reads, skipped_unresolved)
     return total, wrote
 end
 
