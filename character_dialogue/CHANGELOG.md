@@ -1,5 +1,16 @@
 # Character Dialogue Changelog
 
+## 0.1.17-dev (2026-11-15) -- Line overrides no longer always pick line 1 (WP-COS-03)
+
+- With any line override on a dialogue group, the game always played line 1
+  of that group, even when line 1 was the line you disabled (audit finding
+  A3-F01, #605). The selection now draws through the game's own shuffle, so a
+  disabled line is never chosen, every other eligible line can be, and an
+  explicitly enabled line still bypasses the game's line filter. Groups
+  without overrides use the vanilla path unchanged.
+- New `/cd_regression_test` check `override_selection_fresh_group`. Not
+  confirmed in game.
+
 ## 0.1.16-dev (2026-11-15) -- Named regression checks (WP-COS-02)
 
 - `/cd_regression_test` now prints one `PASS:` / `FAIL:` line per named check
