@@ -23,10 +23,13 @@
 -- tools/harness/API.md lists every helper.
 --
 -- 0.4.7 (WP-H-06 actor group): T.teleport takes { x, y, z } or a Vector3Box and builds the Vector3 in the main update.
+--
+-- 0.4.8 (WP-H-05): arenas "deus" (the Chaos Wastes hub) and "deus:<level_key>" (a run level, loaded from the hub);
+-- the backend write shield drops the run start's deusRunStarted request (SHIELD_DROP_REQUESTS).
 
 local plan, nonce = ...
 
-local DRIVER_VERSION = "0.4.7"
+local DRIVER_VERSION = "0.4.8"
 local driver = {}
 
 local function find_mod(name)
@@ -107,8 +110,17 @@ local S = {
 		blocked_keep_decorations = 0,
 		saw_update_hero_attributes = 0,
 		saw_requests = 0,
+		blocked_requests = 0,
+		blocked_by_name = {},
 	},
 }
+
+-- WP-H-05: cloud scripts the shield never sends. deusRunStarted is enqueued by every Chaos Wastes run start
+-- (DeusMechanism._setup_run, Vermintide-2-Source-Code/scripts/managers/game_mode/mechanisms/deus_mechanism.lua:1213;
+-- BackendInterfaceDeusPlayFab.deus_run_started, scripts/managers/backend_playfab/backend_interface_deus_playfab.lua:
+-- 100-116) and resets the account's rolled-over run coins (the client predicts it: playfab_mirror_base.lua:2693-2695).
+-- A dropped request gets a negative id and no callback; its only caller ignores both.
+local SHIELD_DROP_REQUESTS = { deusRunStarted = true }
 
 -- The console log is written through a buffer, so the orchestrator cannot rely on it for liveness.
 -- A settings save is a real file write: it is the live progress channel.
@@ -289,14 +301,37 @@ end
 -- Vermintide-2-Source-Code/scripts/settings/level_settings.lua:50-57), so debug_load_level can return to it.
 local KEEP_LEVEL = "inn_level"
 
+-- WP-H-05 Chaos Wastes. The hub is morris_hub, whose LevelSettings.mechanism is "deus"
+-- (Vermintide-2-Source-Code/levels/honduras_dlcs/morris/level_settings_morris.lua:15-29), so loading it from the keep
+-- switches the mechanism (scripts/game_state/components/level_transition_handler.lua apply_defaults_to_level_data;
+-- scripts/managers/game_mode/game_mechanism_manager.lua:480-531). A run level ("deus:<level_key>", a key such as
+-- pat_mountain_wastes_path1, level_settings_morris.lua:93-142) is started from the hub: in the deus mechanism
+-- debug_load_level sets up a run on a debug seed for that level (mechanisms/deus_mechanism.lua:1002-1015, 1023-1052).
+local DEUS_HUB = "morris_hub"
+
 local function arena_level(arena)
 	if arena == "keep" then
 		return KEEP_LEVEL
+	elseif arena == "deus" then
+		return DEUS_HUB
 	end
 
-	local key = arena:match("^mission:(.+)$") or arena:match("^level:(.+)$")
+	local key = arena:match("^mission:(.+)$") or arena:match("^level:(.+)$") or arena:match("^deus:(.+)$")
 
 	return key
+end
+
+local function current_mechanism()
+	local mechanism = Managers.mechanism
+
+	return mechanism and mechanism.current_mechanism_name and mechanism:current_mechanism_name()
+end
+
+-- The level an arena must pass through first: a run level needs the deus mechanism, which only the hub switches to.
+local function arena_via(arena)
+	if arena:match("^deus:.+$") and current_mechanism() ~= "deus" then
+		return DEUS_HUB
+	end
 end
 
 -- Host-side level change (Vermintide-2-Source-Code/scripts/managers/game_mode/game_mechanism_manager.lua:880-892;
@@ -1148,6 +1183,17 @@ local function install_shield()
 		-- function name of every other cloud-script request the game builds
 		-- (the game itself logs "Enqueuing ExecuteCloudScript request" at playfab_request_queue.lua:49).
 		rawset(queue, "enqueue", function (self, request, ...)
+			local drop = type(request) == "table" and SHIELD_DROP_REQUESTS[request.FunctionName]
+
+			if drop then
+				S.shield.blocked_requests = S.shield.blocked_requests + 1
+				S.shield.blocked_by_name[request.FunctionName] = (S.shield.blocked_by_name[request.FunctionName] or 0) + 1
+
+				out("SHIELD blocked=%s case=%s", tostring(request.FunctionName), S.current and S.current.id or "-")
+
+				return -S.shield.blocked_requests
+			end
+
 			pcall(function ()
 				local name = type(request) == "table" and request.FunctionName
 
@@ -1265,10 +1311,19 @@ local function begin_arena(index)
 		return
 	end
 
+	local via = arena_via(arena)
+
+	S.then_level = nil
+
+	if via and via ~= level_key() then
+		S.then_level = wanted_level
+		wanted_level = via
+	end
+
 	if wanted_level == level_key() then
 		set_phase("SETTLE")
 	else
-		out("LOAD arena=%s level=%s from=%s", arena, tostring(wanted_level), tostring(level_key()))
+		out("LOAD arena=%s level=%s from=%s%s", arena, tostring(wanted_level), tostring(level_key()), S.then_level and (" then=" .. S.then_level) or "")
 
 		local ok, err = pcall(load_level, wanted_level)
 
@@ -1343,7 +1398,35 @@ driver.update = function (_, dt)
 		elseif world_ready() and level_key() == S.wanted_level and S.t - S.phase_at > 3 then
 			install_shield()
 			out("LEVEL READY level=%s t=%.1f load_seconds=%.1f", tostring(level_key()), S.t, S.t - S.phase_at)
-			set_phase("SETTLE")
+
+			-- WP-H-05: the hub was only the way in; now load the run level from it
+			local next_level = S.then_level
+
+			if next_level then
+				S.then_level = nil
+				S.wanted_level = next_level
+				out("LOAD arena=%s level=%s from=%s mechanism=%s", tostring(S.arenas[S.arena_index]), next_level, tostring(level_key()), tostring(current_mechanism()))
+
+				local ok, err = pcall(load_level, next_level)
+
+				if ok then
+					set_phase("LOADING")
+				else
+					out("LOAD FAILED arena=%s err=%s", tostring(S.arenas[S.arena_index]), q(err))
+
+					local arena = S.arenas[S.arena_index]
+
+					for i = 1, #S.cases do
+						if S.cases[i].status == "PENDING" and S.cases[i].arena == arena then
+							finish_case(S.cases[i], "INCONCLUSIVE", "level load raised: " .. tostring(err))
+						end
+					end
+
+					begin_arena(S.arena_index + 1)
+				end
+			else
+				set_phase("SETTLE")
+			end
 		end
 	elseif S.phase == "SETTLE" then
 		if not world_ready() then

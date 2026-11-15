@@ -16,6 +16,7 @@ local NAMES = {
     -- helper groups in tools/harness/driver/lib/ (WP-H-06)
     "set", "shot", "career", "equip", "loadout", "backend_items", "open_view", "close_view", "widget", "press",
     "first_bot_unit", "as_bot", "pickup", "transmit_spy",
+    "deus_run_controller", "grant_boon", "has_boon", "deus_coins", "set_deus_coins",
     -- planned helpers (tools/harness/API.md, status planned) are not listed: a case must not call them
 }
 local FIELDS = { "case_id", "nonce" }

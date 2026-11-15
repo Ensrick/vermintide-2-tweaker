@@ -621,9 +621,9 @@ end }
     end)
 
     H.test("rig arenas: an arena the driver cannot load ends its cases as INCONCLUSIVE", function()
-        local plan = make_plan({ { id = "deus-case", arena = "deus", src = "return { run = function(T) T.expect(true, 'x') end }" } })
+        local plan = make_plan({ { id = "coop-case", arena = "coop", src = "return { run = function(T) T.expect(true, 'x') end }" } })
         local lines = run_mission(plan)
-        H.truthy(first(lines, tag .. "CASE END id=deus%-case verdict=INCONCLUSIVE .*arena not supported by this driver: deus"), "INCONCLUSIVE names the arena")
+        H.truthy(first(lines, tag .. "CASE END id=coop%-case verdict=INCONCLUSIVE .*arena not supported by this driver: coop"), "INCONCLUSIVE names the arena")
         H.truthy(first(lines, tag .. "RUN END"), "run still ends")
     end)
 

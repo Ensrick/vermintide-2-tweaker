@@ -38,8 +38,13 @@ Assert-True ($leak.ShieldInstalledBeforeFirstCommit -eq $false) 'leak: commit be
 $caseFold = & $reader -Text "[PlayFabRequestQueue] Enqueuing ExecuteCloudScript request${tab}updateheroattributes${tab}1" -Nonce $nonce -ShieldOn
 Assert-True (@($caseFold.ForbidHits).Count -eq 0) 'matching is case-sensitive'
 
-$off = & $reader -Text (@($heroRequest, $userData) -join "`n") -Nonce $nonce
-Assert-True (@($off.ForbidHits).Count -eq 0) 'backend_shield false: the two defaults are dropped'
+# WP-H-05: the driver drops deusRunStarted; the game's own enqueue line for it is forbidden, the driver's SHIELD line is not
+$deusRequest = "00:01:03.000 [Lua] [PlayFabRequestQueue] Enqueuing ExecuteCloudScript request${tab}deusRunStarted${tab}9"
+$deusDropped = "00:01:03.000 [Lua] [vt2t:$nonce] SHIELD blocked=deusRunStarted case=-"
+$deus = & $reader -Text (@($shield, $deusDropped, $deusRequest) -join "`n") -Nonce $nonce -ShieldOn
+Assert-True (@($deus.ForbidHits | Where-Object { $_.rule -eq 'shield: deusRunStarted request' }).Count -eq 1 -and @($deus.ForbidHits).Count -eq 1) 'a sent deusRunStarted request is forbidden; the driver''s SHIELD blocked line is not'
+$off = & $reader -Text (@($heroRequest, $userData, $deusRequest) -join "`n") -Nonce $nonce
+Assert-True (@($off.ForbidHits).Count -eq 0) 'backend_shield false: the shield defaults are dropped'
 Assert-True ($null -eq $off.ShieldInstalledBeforeFirstCommit) 'no shield line: order unknown'
 
 $noCommit = & $reader -Text $shield -Nonce $nonce -ShieldOn

@@ -88,6 +88,18 @@ Every change goes through the game's own setters (the ones the hero view and the
 |---|---|---|---|---|---|
 | `T.transmit_spy(rpc_names)` | lib/wire.lua | records every call of the network transmit's senders whose RPC is `rpc_names` (a name, a list, or nil for all) and passes each call through; returns `spy` with `calls` (`{ rpc, via, n, args }`, args after `rpc_name`, engine values as text), `count(name)` and `stop()` (also at cleanup; a wrapper installed on top after the start is left in place). A solo host still calls the senders, so the ids recorded are the ones a client would receive (D1 primitive P7; D1 calls it `T.spy`) (`SPY START`, `SPY STOP` lines) | `NetworkTransmit.send_rpc*` (`scripts/network/network_transmit.lua:169-533`) on `Managers.state.network.network_transmit` (`scripts/managers/network/game_network_manager.lua:109`) | D1 | api-selftest |
 
+## Chaos Wastes
+
+For cases in a `"deus:<level_key>"` arena (a run level, e.g. `pat_mountain_wastes_path1`); the `"deus"` arena is the hub, where no run exists. Paths under `scripts/managers/game_mode/mechanisms/` unless given.
+
+| Helper | Status | What it does | Wraps | Packs | Rig |
+|---|---|---|---|---|---|
+| `T.deus_run_controller()` | lib/deus.lua | the current run's DeusRunController, or INCONCLUSIVE outside a run | `DeusMechanism.get_deus_run_controller` (`deus_mechanism.lua:523-525`) | WP-H-05 card | deus-smoke |
+| `T.grant_boon(name, rarity)` | lib/deus.lua | grants one boon (a `DeusPowerUpTemplates` key; rarity default `"rare"`) to the local player; it stays for the run (`BOON GRANT` line) | `DeusPowerUpUtils.generate_specific_power_up` + `DeusRunController.add_power_ups`, as `scripts/game_state/state_ingame_testify.lua:185-197` (`deus_run_controller.lua:1126`) | WP-H-05 card | deus-smoke |
+| `T.has_boon(name, rarity)` | lib/deus.lua | whether the local player holds that boon in this run | `DeusRunController.has_power_up_by_name` (`deus_run_controller.lua:1523-1535`) | WP-H-05 card | deus-smoke |
+| `T.deus_coins()` | lib/deus.lua | the local player's coins in this run | `DeusRunController.get_player_soft_currency` (`deus_run_controller.lua:925-927`) | WP-H-05 card | deus-smoke |
+| `T.set_deus_coins(n)` | lib/deus.lua | sets them; the value before the case's first change is put back at cleanup (`DEUS COINS` lines) | `DeusRunState.set_player_soft_currency` (`deus_run_state.lua:575-579`) | WP-H-05 card | deus-smoke |
+
 ## Backend, shared helpers and evidence
 
 | Helper | Status | What it does | Wraps | Packs | Rig |
