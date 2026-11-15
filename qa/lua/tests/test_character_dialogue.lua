@@ -54,6 +54,97 @@ return function(Harness, repo_root)
         Harness.equal(false, policy.all_disabled(dialogue, { a = false, c = false }))
     end)
 
+    -- WP-COS-03 (audit finding A3-F01, #605): a stand-in with the control flow of
+    -- vanilla's index source (Vermintide-2-Source-Code/scripts/entity_system/
+    -- systems/dialogues/dialogue_queries.lua:20-107, unweighted branch). Every
+    -- generated group starts with randomize_indexes_n = 0 and an empty shuffle
+    -- table, so wrap_around = true alone never builds the shuffle and every
+    -- drawn index is nil: the old hook then returned 1, even when line 1 was the
+    -- disabled line.
+    local NativeShaped = {}
+    function NativeShaped.build_randomized_indexes(d)
+        local temp = {}
+        for i = 1, d.sound_events_n do temp[i] = i end
+        d.randomize_indexes = {}
+        for i = 1, d.sound_events_n do
+            d.randomize_indexes[i] = table.remove(temp, math.random(1, d.sound_events_n + 1 - i))
+        end
+        d.randomize_indexes_n = d.sound_events_n
+    end
+    function NativeShaped.get_dialogue_event_index(d, wrap_around)
+        local n = d.sound_events_n
+        if n == 1 then return 1 end
+        local wrapped = false
+        if d.randomize_indexes_n == 0 then
+            if wrap_around then
+                wrapped = true
+                d.randomize_indexes_n = n
+            else
+                NativeShaped.build_randomized_indexes(d)
+            end
+        end
+        local current = d.randomize_indexes_n
+        d.randomize_indexes_n = d.randomize_indexes_n - 1
+        return d.randomize_indexes[current], wrapped
+    end
+    function NativeShaped.filter_sound_event() return true end
+
+    local function fresh()
+        return { sound_events_n = 3, sound_events = { "a", "b", "c" },
+            randomize_indexes_n = 0, randomize_indexes = {} }
+    end
+    local function rejecting(queries)
+        return setmetatable({ filter_sound_event = function() return false end }, { __index = queries })
+    end
+    local function disabled_first_never_selected(queries, runs)
+        local seen = {}
+        for _ = 1, runs do
+            local index = policy.select_index(fresh(), { a = false }, queries, {}, {})
+            Harness.truthy(index ~= 1, "the disabled line 1 was selected")
+            seen[index or "nil"] = true
+        end
+        Harness.truthy(seen[2] and seen[3], "both eligible lines must be selectable")
+    end
+
+    Harness.test("cd 605 fresh group never selects the disabled line and reaches every eligible one", function()
+        disabled_first_never_selected(NativeShaped, 200)
+    end)
+
+    Harness.test("cd 605 explicit enable wins over a rejecting vanilla filter on a fresh group", function()
+        for _ = 1, 200 do
+            Harness.equal(policy.select_index(fresh(), { c = true }, rejecting(NativeShaped), {}, {}), 3)
+        end
+    end)
+
+    Harness.test("cd 605 two disabled lines leave only the third on a fresh group", function()
+        for _ = 1, 200 do
+            Harness.equal(policy.select_index(fresh(), { a = false, b = false }, NativeShaped, {}, {}), 3)
+        end
+    end)
+
+    Harness.test("cd 605 a group with every line disabled selects nothing", function()
+        for _ = 1, 200 do
+            Harness.equal(policy.select_index(fresh(), { a = false, b = false, c = false }, NativeShaped, {}, {}), nil)
+        end
+    end)
+
+    local decompile_root = os.getenv("VT2_DECOMPILE_ROOT") or (repo_root .. "/../Vermintide-2-Source-Code")
+    local vanilla_file = io.open(decompile_root .. "/scripts/entity_system/systems/dialogues/dialogue_queries.lua", "rb")
+    local vanilla_source = vanilla_file and vanilla_file:read("*a")
+    if vanilla_file then vanilla_file:close() end
+    Harness.test_if(vanilla_source ~= nil, "cd 605 real vanilla dialogue queries agree with the stand-in", function()
+        local saved_settings, saved_tag_query = rawget(_G, "DialogueSettings"), rawget(_G, "TagQuery")
+        _G.DialogueSettings = { sound_event_default_length = 4.5 }
+        _G.TagQuery = { FilterOP = {} }
+        local ok, err = pcall(function()
+            local source = vanilla_source:gsub("^\239\187\191", "")
+            local Vanilla = assert(loadstring(source, "@dialogue_queries.lua"))()
+            disabled_first_never_selected(Vanilla, 200)
+        end)
+        _G.DialogueSettings, _G.TagQuery = saved_settings, saved_tag_query
+        if not ok then error(err, 0) end
+    end, "decompiled dialogue_queries.lua not found (set VT2_DECOMPILE_ROOT)")
+
     Harness.test("cd catalogue contains unique stable events", function()
         local path = repo_root .. "/character_dialogue/scripts/mods/character_dialogue/character_dialogue_catalogue.lua"
         local f = assert(io.open(path, "rb"))
@@ -1251,6 +1342,20 @@ return function(Harness, repo_root)
     Harness.test("cd regression command echoes one named PASS line per check", function()
         local f = live_dialogue_fixture(repo_root)
         local commands, echoes = {}, {}
+        -- WP-COS-03: the named check override_selection_fresh_group drives the
+        -- entry's DialogueQueries; the fixture's require returns an empty table, so
+        -- hand the entry the native-shaped stand-in defined above instead.
+        local env_meta = getmetatable(f.env)
+        env_meta.__newindex = function(t, key, value)
+            if key == "require" then
+                local inner = value
+                value = function(name)
+                    inner(name)
+                    return NativeShaped
+                end
+            end
+            rawset(t, key, value)
+        end
         setmetatable(f.cd, { __newindex = function(t, key, value)
             if key == "command" then
                 value = function(_, name, _, fn) commands[name] = fn end
