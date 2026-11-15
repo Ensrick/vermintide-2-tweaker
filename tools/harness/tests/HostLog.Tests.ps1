@@ -107,6 +107,19 @@ try {
 }
 finally { Remove-Item -LiteralPath $tmp -Recurse -Force }
 
+# ---- WP-H-04: level loads ----
+$loadText = @(
+    "01:00:00.000 [Lua] [vt2t:$nonce] LOAD arena=mission:military level=military from=inn_level",
+    "01:01:10.000 [Lua] [vt2t:$nonce] LEVEL READY level=military t=120.4 load_seconds=62.5",
+    "01:02:00.000 [Lua] [vt2t:$nonce] LOAD FAILED arena=mission:nowhere err=`"x`"",
+    "01:03:00.000 [Lua] [vt2t:$nonce] LEVEL READY level=inn_level t=230.0 load_seconds=48.1"
+) -join "`n"
+$loads = @((& $reader -Text $loadText -Nonce $nonce).LevelLoads)
+Assert-True ($loads.Count -eq 3) "three level loads recorded (got $($loads.Count))"
+Assert-True ($loads[0].level -eq 'military' -and $loads[0].seconds -eq 62.5) 'mission load seconds'
+Assert-True ($loads[1].level -eq 'mission:nowhere' -and $loads[1].failed -eq 'FAILED') 'failed load recorded with its arena'
+Assert-True ($loads[2].level -eq 'inn_level' -and $loads[2].seconds -eq 48.1) 'return-to-keep load seconds'
+
 if ($failures.Count) { Write-Host "[HostLog.Tests] FAILED -- $($failures.Count) assertion(s)." -ForegroundColor Red; exit 2 }
 Write-Host '[HostLog.Tests] OK -- forbidden and expected lines, allow entries, shield order, KEEP READY seconds and banners checked.'
 exit 0

@@ -9,10 +9,14 @@
 -- results table into the run profile's user settings, and quits.
 --
 -- Evidence line format (all lines):  [vt2t:<nonce>] <KIND> key=value ...
+--
+-- 0.4.4 (WP-H-04): plan arenas run in order and may repeat (the keep is inn_level, reloaded when needed); T.spawn,
+-- T.kill, T.teleport, T.invincible, T.end_level and T.return_to_keep; each case's helper changes are undone
+-- when it ends (run_cleanups).
 
 local plan, nonce = ...
 
-local DRIVER_VERSION = "0.4.3"
+local DRIVER_VERSION = "0.4.4"
 local driver = {}
 
 local function find_mod(name)
@@ -154,18 +158,21 @@ local function load_cases()
 		S.cases[#S.cases + 1] = case
 	end
 
-	-- arenas in first-seen order, keep first
+	-- WP-H-04: the plan's arenas in their own order, repeats allowed (keep, mission:military, keep returns to the
+	-- keep before quitting); the run always starts in the keep; arenas of cases the plan does not list follow.
 	local seen = { keep = true }
+	local wanted = plan.arenas or {}
 
 	S.arenas = { "keep" }
 
-	local wanted = plan.arenas or {}
-
 	for i = 1, #wanted do
-		if not seen[wanted[i]] then
-			seen[wanted[i]] = true
-			S.arenas[#S.arenas + 1] = wanted[i]
+		local arena = tostring(wanted[i])
+
+		if i > 1 or arena ~= "keep" then
+			S.arenas[#S.arenas + 1] = arena
 		end
+
+		seen[arena] = true
 	end
 
 	for i = 1, #S.cases do
@@ -238,14 +245,24 @@ local function world_ready()
 	return ok and ready
 end
 
+-- The keep is the hub level inn_level (LevelSettings.inn_level.hub_level = true,
+-- Vermintide-2-Source-Code/scripts/settings/level_settings.lua:50-57), so debug_load_level can return to it.
+local KEEP_LEVEL = "inn_level"
+
 local function arena_level(arena)
 	if arena == "keep" then
-		return nil
+		return KEEP_LEVEL
 	end
 
 	local key = arena:match("^mission:(.+)$") or arena:match("^level:(.+)$")
 
 	return key
+end
+
+-- Host-side level change (Vermintide-2-Source-Code/scripts/managers/game_mode/game_mechanism_manager.lua:880-892;
+-- Adventure: mechanisms/adventure_mechanism.lua:580-594 picks the hub state for a hub level).
+local function load_level(level)
+	Managers.mechanism:debug_load_level(level, 0)
 end
 
 -- ---------------------------------------------------------------------------
@@ -375,6 +392,131 @@ local function new_T(case)
 		return ext
 	end
 
+	-- WP-H-04 actor helpers (host side, no OS input). Whatever a helper changes is undone when the case ends:
+	-- case.cleanups runs newest first in finish_case.
+	case.cleanups = case.cleanups or {}
+
+	local function hero_position()
+		local hero = local_hero()
+
+		T.require(hero ~= nil, "local hero alive")
+
+		return Unit.local_position(hero, 0)
+	end
+
+	-- Queues one enemy next to the hero the way the game's own test hook does
+	-- (Vermintide-2-Source-Code/scripts/managers/conflict_director/conflict_director_testify.lua:18-22;
+	-- ConflictDirector.spawn_queued_unit, conflict_director.lua:1732) and returns the unit once it is alive
+	-- (spawned_units_by_breed, conflict_director.lua:2144). The unit is killed at cleanup if still alive.
+	-- offset: a Vector3 or { x, y, z } relative to the hero.
+	function T.spawn(breed_name, offset, timeout)
+		local conflict = Managers.state.conflict
+
+		T.require(conflict ~= nil, "conflict director exists")
+
+		local breed = Breeds[breed_name]
+
+		T.require(breed ~= nil, "breed " .. tostring(breed_name) .. " exists")
+
+		local before = {}
+
+		for _, unit in pairs(conflict:spawned_units_by_breed(breed_name) or {}) do
+			before[unit] = true
+		end
+
+		local position = hero_position()
+
+		if type(offset) == "table" then
+			position = position + Vector3(offset[1] or offset.x or 0, offset[2] or offset.y or 0, offset[3] or offset.z or 0)
+		elseif offset ~= nil then
+			position = position + offset
+		end
+
+		conflict:spawn_queued_unit(breed, Vector3Box(position), QuaternionBox(Quaternion.identity()))
+
+		local unit = T.wait_until(function ()
+			for _, candidate in pairs(conflict:spawned_units_by_breed(breed_name) or {}) do
+				if not before[candidate] and Unit.alive(candidate) then
+					return candidate
+				end
+			end
+		end, timeout or 15, "spawned " .. tostring(breed_name))
+
+		if unit then
+			case.cleanups[#case.cleanups + 1] = function ()
+				if HEALTH_ALIVE[unit] then
+					AiUtils.kill_unit(unit)
+				end
+			end
+		end
+
+		return unit
+	end
+
+	-- Kills a unit with the game's own helper (AiUtils.kill_unit, ai_player_unit/ai_utils.lua:1326).
+	function T.kill(unit)
+		if unit and HEALTH_ALIVE[unit] then
+			AiUtils.kill_unit(unit)
+
+			return true
+		end
+
+		return false
+	end
+
+	-- Moves a unit that has a teleport_to locomotion (PlayerUnitLocomotionExtension.teleport_to,
+	-- default_player_unit/player_unit_locomotion_extension.lua:1005).
+	function T.teleport(unit, position)
+		local locomotion = unit and ScriptUnit.has_extension(unit, "locomotion_system")
+
+		T.require(locomotion and locomotion.teleport_to, "unit can be teleported")
+		locomotion:teleport_to(position)
+	end
+
+	-- The hero's health extension flag read by get_is_invincible (generic/generic_health_extension.lua:496-512;
+	-- the player damage gate at default_player_unit/player_unit_health_extension.lua:780). Restored at cleanup.
+	function T.invincible(on)
+		local hero = local_hero()
+		local health = hero and ScriptUnit.has_extension(hero, "health_system")
+
+		T.require(health ~= nil, "hero health extension")
+
+		if not case.invincible_saved then
+			local previous = health.is_invincible
+
+			case.invincible_saved = true
+			case.cleanups[#case.cleanups + 1] = function ()
+				health.is_invincible = previous
+			end
+		end
+
+		health.is_invincible = on and true or false
+	end
+
+	-- Ends the level as host: GameModeManager.complete_level / fail_level (game_mode/game_mode_manager.lua:636, 645).
+	function T.end_level(result)
+		local game_mode = Managers.state.game_mode
+
+		T.require(game_mode ~= nil, "game mode manager")
+
+		if result == "fail" then
+			game_mode:fail_level()
+		else
+			game_mode:complete_level()
+		end
+	end
+
+	-- Loads the keep and waits until it is ready (the hero alive in StateIngame on inn_level).
+	function T.return_to_keep(timeout)
+		if level_key() ~= KEEP_LEVEL then
+			load_level(KEEP_LEVEL)
+		end
+
+		return T.wait_until(function ()
+			return world_ready() and level_key() == KEEP_LEVEL
+		end, timeout or 240, "back in the keep")
+	end
+
 	-- Runs a mod chat command. Returns the lines the command printed through VMF echo/info/warning/error.
 	function T.cmd(name, ...)
 		local vmf = find_mod("VMF")
@@ -468,7 +610,33 @@ end
 -- ---------------------------------------------------------------------------
 -- Case runner
 -- ---------------------------------------------------------------------------
+local function run_cleanups(case)
+	local list = case.cleanups
+
+	if type(list) ~= "table" or #list == 0 then
+		return
+	end
+
+	local errors = 0
+
+	for i = #list, 1, -1 do
+		local ok, err = pcall(list[i])
+
+		if not ok then
+			errors = errors + 1
+
+			out("CLEANUP ERROR id=%s err=%s", case.id, q(err))
+		end
+	end
+
+	out("CLEANUP id=%s actions=%d errors=%d", case.id, #list, errors)
+
+	case.cleanups = {}
+end
+
 local function finish_case(case, verdict, detail)
+	run_cleanups(case)
+
 	case.status = verdict
 	case.detail = detail
 	case.seconds = S.t - (case.began or S.t)
@@ -867,14 +1035,26 @@ local function begin_arena(index)
 
 	local wanted_level = arena_level(arena)
 
-	if arena == "keep" or wanted_level == level_key() then
+	if wanted_level == nil then
+		out("LOAD FAILED arena=%s err=%s", arena, q("arena not supported by this driver"))
+
+		for i = 1, #S.cases do
+			if S.cases[i].status == "PENDING" and S.cases[i].arena == arena then
+				finish_case(S.cases[i], "INCONCLUSIVE", "arena not supported by this driver: " .. tostring(arena))
+			end
+		end
+
+		begin_arena(index + 1)
+
+		return
+	end
+
+	if wanted_level == level_key() then
 		set_phase("SETTLE")
 	else
 		out("LOAD arena=%s level=%s from=%s", arena, tostring(wanted_level), tostring(level_key()))
 
-		local ok, err = pcall(function ()
-			Managers.mechanism:debug_load_level(wanted_level, 0)
-		end)
+		local ok, err = pcall(load_level, wanted_level)
 
 		if not ok then
 			out("LOAD FAILED arena=%s err=%s", arena, q(err))
