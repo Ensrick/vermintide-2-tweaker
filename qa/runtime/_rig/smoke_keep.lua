@@ -1,6 +1,8 @@
 -- Boot-to-keep smoke: the game reached the keep with no input and the expected mods are loaded.
 return {
 	issue = 0,
+	arena = "keep",
+	class = "R",
 	timeout = 60,
 	run = function(T)
 		T.step("reach the keep")
