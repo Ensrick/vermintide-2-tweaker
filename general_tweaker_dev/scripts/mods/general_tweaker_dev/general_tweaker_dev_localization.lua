@@ -608,6 +608,8 @@ return {
     gt_lobby_join_watchdog_timeout_seconds_tooltip = { en = "How long a join may sit before game start before it counts as stalled, from 20 to 180 seconds. Level loading happens after this window, so a slow disk will not trip it. Default 60." },
 
     -- Loose lobby options (A->Z by display label).
+    gt_host_allow_client_requests = { en = "Allow Client Requests" },
+    gt_host_allow_client_requests_tooltip = { en = "When you host, other players running this mod may ask your game to win, fail or restart the level, respawn them, honour their godmode, and spawn or clear enemies. Off by default." },
     allow_duplicate_careers = { en = "Allow Duplicate Careers" },
     allow_duplicate_careers_tooltip = { en = "More than one player can pick the same hero and career in the same lobby." },
 

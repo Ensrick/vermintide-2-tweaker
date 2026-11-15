@@ -36,7 +36,7 @@ mod._cim959_accessory_property_policy = mod:dofile(
 local _BULK_ACCESSORY_CRAFT = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_bulk_accessory_craft")
 _MEM_PROBE_T0_CIMD = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.8.150-dev"
+local MOD_VERSION = "0.8.151-dev"
 local _bootstrap = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_bootstrap_runtime")({
         mod = mod,
@@ -110,6 +110,11 @@ end
 mod._cim244_property_value_policy = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_property_value_policy")
 mod.CIM244_PROPERTY_VALUE_POLICY_MARKER_v0_8_74 = true
+mod._cim_bench_route =mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_bench_route")
+_rt_register("issue_cim_bench_route_is_real_screen", function()
+    if rawget(_G, "HeroView") == nil then return "skip: HeroView not loaded" end
+    if mod._cim_bench_route.transition_params().menu_state_name ~= "overview" then return "standard bench route is not the overview screen" end
+end)
 
 -- Standard Keep crafting — same Athanor pattern: mutations are session-only because
 -- we block PlayFab commits while the forge is open. v0.2.0 crashed because we left
@@ -460,8 +465,8 @@ end
 -- ONE trap avoided: do NOT route the in-mission flow onto the gear-icon
 -- Customization view (`HeroWindowItemCustomization`), which pulls
 -- `levels/ui_store_preview/world` (the preview-world crash class cim already
--- patched at v0.7.45 / gt #50). A direct transition to `menu_state_name="forge"`
--- lands on the crafting/inventory/options windows, none of which route there.
+-- patched at v0.7.45 / gt #50). #80: the route is the overview screen with the `forge` window
+-- layout as its sub-state (_cim_bench_route.lua); `forge` is not a HeroView screen.
 mod.open_standard_crafting = function()
     if not Managers.ui then
         mod:echo("Standard crafting: UI not available")
@@ -513,9 +518,7 @@ mod.open_standard_crafting = function()
     -- HeroView reads the untouched vanilla values and bails as normal.
     _cim_open_standard_inv_pending = true
 
-    ingame_ui:transition_with_fade("hero_view_force", {
-        menu_state_name = "forge",   -- hosts HeroWindowCrafting; NOT "weave_forge"
-    })
+    ingame_ui:transition_with_fade("hero_view_force", mod._cim_bench_route.transition_params())
 end
 
 
@@ -535,7 +538,7 @@ end
 -- Fix: apply the flip ONLY around cim's own HeroView open, gated on the
 -- one-shot `_cim_open_standard_inv_pending` flag set right before cim's
 -- transition. Save the original values, let vanilla on_enter read the flipped
--- ones, then restore — even if vanilla raises (pcall) — and clear the flag.
+-- ones, then restore — even if vanilla raises (pcall, then re-raised: #80) — and clear the flag.
 -- Any OTHER HeroView open (ESC backout, hero select, etc.) sees the untouched
 -- vanilla table and bails as normal. Keep / CW-hub opens are unaffected (the
 -- mode is already supported there, and the flag is only set by cim's
@@ -572,9 +575,7 @@ mod:hook("HeroView", "on_enter", function(func, self, params)
     modes.survival  = saved_survival
     modes.deus      = saved_deus
 
-    if not ok then
-        mod:warning("[cim] HeroView.on_enter raised under scoped inventory-access flip: %s", tostring(err))
-    end
+    if not ok then error(err, 0) end
 end)
 
 

@@ -1,5 +1,18 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.231-dev (2026-11-14) -- Validate peer cosmetic payloads before storing (WP-COS-01)
+
+- A lobby peer could send a `cos_la_apply_req` / `cos_la_apply` payload with a
+  wrong field type or an unknown hand, and the receiver stored and rebroadcast
+  it, then wrote it into the husk's item unit table on the next spawn (audit
+  finding A3-F04, #416). Both receivers now check every field right after the
+  schema check (new pure `_cos_la_payload_policy.lua`) and drop a bad payload
+  with one `[cos:416] payload rejected` log line (16 per session at most).
+- The husk spawn writes only `left_hand_unit` / `right_hand_unit`, and for an
+  ordinary (non-dual) weapon only a unit from this machine's own pool for that
+  hand. In-game check `issue416_payload_policy`. The wire schema and what a
+  correct sender sends are unchanged. Not confirmed in game.
+
 ## 0.9.230-dev (2026-11-02) -- Accept public CIM as the Athanor preview provider
 
 - The Loremaster Athanor preview adapter (issue 481) accepted a preview context
