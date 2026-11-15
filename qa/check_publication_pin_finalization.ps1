@@ -122,7 +122,7 @@ try {
     # Remove only disposable paths below this verified unique fixture root.
     # No recursive delete; repository/output/Steam paths are never targets.
     $resolved = [IO.Path]::GetFullPath($root).TrimEnd('\') + '\'
-    $children = @(Get-ChildItem -LiteralPath $root -Recurse -Force)
+    $children = @(Get-ChildItem -LiteralPath $root -Recurse -Force)  # enumeration-ok: disposable fixture root cleanup, not the repository
     foreach ($entry in $children) {
         if (-not $entry.FullName.StartsWith($resolved, [StringComparison]::OrdinalIgnoreCase) -or
             ($entry.Attributes -band [IO.FileAttributes]::ReparsePoint)) { throw 'Fixture cleanup path is unsafe.' }

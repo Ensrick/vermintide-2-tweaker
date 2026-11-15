@@ -32,6 +32,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path $RepoRoot).Path
+. (Join-Path $PSScriptRoot 'worktree_state.ps1')  # Get-QATrackedFiles: tracked + not-ignored files only (WP-T-06)
 $stale = @()
 $today = Get-Date
 
@@ -73,7 +74,7 @@ function Find-AuditDocs {
     # (PROJECT_STANDARDS section 7.4).
     $patterns = @("*AUDIT*.md", "*REVIEW*.md", "*audit*.md")
     foreach ($pat in $patterns) {
-        Get-ChildItem -Path $repoRoot -Filter $pat -Recurse -File -ErrorAction SilentlyContinue `
+        Get-QATrackedFiles -RepoRoot $repoRoot -Filter $pat -AsFileInfo `
             | Where-Object {
                 $p = $_.FullName
                 $p -notlike "*\_archive\*" -and $p -notlike "*\bundleV2\*" -and $p -notlike "*\.build\*" `
@@ -155,7 +156,7 @@ if ($stale.Count -eq 0) {
 # exempt: PROJECT_STANDARDS section 7.1 makes it a mandatory per-mod canonical
 # doc, so a staleness banner there means "refresh due", not "archive me".
 $misplaced = @()
-Get-ChildItem -Path $repoRoot -Filter "*.md" -Recurse -File -ErrorAction SilentlyContinue `
+Get-QATrackedFiles -RepoRoot $repoRoot -Filter "*.md" -AsFileInfo `
     | Where-Object {
         $p = $_.FullName
         $p -notlike "*\_archive\*" -and $p -notlike "*\bundleV2\*" -and $p -notlike "*\.build\*" `
@@ -203,7 +204,7 @@ if ($misplaced.Count -gt 0) {
 # own directory and the repo root. Zero calendar dependence, so no staleness
 # noise; ADVISORY only (PROJECT_STANDARDS section 7.11).
 $dangling = @()
-Get-ChildItem -Path $repoRoot -Filter "*.md" -Recurse -File -ErrorAction SilentlyContinue `
+Get-QATrackedFiles -RepoRoot $repoRoot -Filter "*.md" -AsFileInfo `
     | Where-Object {
         $p = $_.FullName
         $p -notlike "*\_archive\*" -and $p -notlike "*\bundleV2\*" -and $p -notlike "*\.build\*" `

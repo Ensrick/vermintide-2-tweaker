@@ -44,6 +44,7 @@ if ($BaselineOnly -or $Staged) {
     catch { Write-Host "[check_file_sizes] ERROR -- $($_.Exception.Message)" -ForegroundColor Red; exit 2 }
 }
 else { $repoRoot = (Resolve-Path $RepoRoot).Path }
+. (Join-Path $PSScriptRoot 'worktree_state.ps1')  # Get-QATrackedFiles: tracked + not-ignored files only (WP-T-06)
 $baselinePath = Join-Path $scriptRoot "baselines\file_sizes.json"
 $targetBaselinePath = Join-Path $scriptRoot "baselines\file_sizes_target.json"
 $overTarget = @()
@@ -104,7 +105,7 @@ function Test-ModLuaCandidate([System.IO.FileInfo]$file) {
 }
 
 function Find-ModLuas {
-    Get-ChildItem -Path $repoRoot -Filter "*.lua" -Recurse -File -ErrorAction SilentlyContinue `
+    Get-QATrackedFiles -RepoRoot $repoRoot -Filter "*.lua" -AsFileInfo `
         | Where-Object { Test-ModLuaCandidate $_ }
 }
 

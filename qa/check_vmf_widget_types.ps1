@@ -66,6 +66,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path $RepoRoot).Path
+. (Join-Path $PSScriptRoot 'worktree_state.ps1')  # Get-QATrackedFiles: tracked + not-ignored files only (WP-T-06)
 
 # ---- canonical VMF widget type whitelist ----
 # Verified against VMF source patterns + every active mod's `*_data.lua` in
@@ -117,7 +118,7 @@ function Get-ScanFiles {
     # `*\Vermintide-2-*` glob (case-insensitive) to skip the upstream source
     # clone because that would also match every file under the active repo.
     # Use the specific upstream folder names instead.
-    Get-ChildItem -Path $Root -Filter "*_data.lua" -Recurse -File -ErrorAction SilentlyContinue `
+    Get-QATrackedFiles -RepoRoot $Root -Filter "*_data.lua" -AsFileInfo `
         | Where-Object {
             $p = $_.FullName
             $isUnderMod = $p -match "\\scripts\\mods\\"

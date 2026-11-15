@@ -70,6 +70,7 @@ param(
 
 $ErrorActionPreference = "Stop"
 $repoRoot = (Resolve-Path $RepoRoot).Path
+. (Join-Path $PSScriptRoot 'worktree_state.ps1')  # Get-QATrackedFiles: tracked + not-ignored files only (WP-T-06)
 
 function Read-FileUtf8([string]$path) {
     return [System.IO.File]::ReadAllText($path, [System.Text.Encoding]::UTF8)
@@ -105,7 +106,7 @@ function Get-ScanFiles {
     # Active mods follow `<mod>/scripts/mods/<mod>/...`. Scope to that
     # subtree to skip vanilla source dumps, the legacy `tweaker/` SDK mod,
     # archived snapshots, the bundleV2 build output, etc.
-    Get-ChildItem -Path $Root -Filter "*.lua" -Recurse -File -ErrorAction SilentlyContinue `
+    Get-QATrackedFiles -RepoRoot $Root -Filter "*.lua" -AsFileInfo `
         | Where-Object {
             $p = $_.FullName
             $isUnderMod = $p -match "\\scripts\\mods\\"

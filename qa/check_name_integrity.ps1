@@ -261,7 +261,7 @@ function Invoke-IntegrityChecks {
     $errors = @(); $warnings = @()
     if (-not $oracle) { $oracle = @{ exact = @{}; keys = @() } }
 
-    $locFiles = Get-ChildItem -Path $repoRoot -Filter '*_localization.lua' -Recurse -File -ErrorAction SilentlyContinue |
+    $locFiles = Get-QATrackedFiles -RepoRoot $repoRoot -Filter '*_localization.lua' -AsFileInfo |
         Where-Object {
             $p = $_.FullName
             $p -notlike '*\_archive\*' -and $p -notlike '*\bundleV2\*' -and $p -notlike '*\.build\*' `
@@ -536,6 +536,7 @@ entry.description = "planted_annotated_fixture_key" -- name-integrity: non-rende
 if ($SelfTest) { exit (Invoke-SelfTest) }
 
 $repoRoot = (Resolve-Path $RepoRoot).Path
+. (Join-Path $PSScriptRoot 'worktree_state.ps1')  # Get-QATrackedFiles: tracked + not-ignored files only (WP-T-06)
 
 # The oracle (docs/generated/NAME_MAP.generated.json) is committed, so it loads
 # identically in CI and locally — always use it.

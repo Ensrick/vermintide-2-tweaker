@@ -5,6 +5,9 @@ $ErrorActionPreference = 'Stop'
 $here = $PSScriptRoot
 $root = Split-Path $here -Parent
 $manifestPath = Join-Path $here 'native_resource_contracts.psd1'
+# Get-QATrackedFiles: tracked plus untracked-but-not-ignored files only, so a
+# git-ignored scratch copy of a mod tree is never censused (WP-T-06).
+. (Join-Path $here 'worktree_state.ps1')
 
 $patterns = [ordered]@{
     particle = [regex]'\b(?:World|ScriptWorld|[A-Za-z_][A-Za-z0-9_]*_api)\.(?:create_particles|create_particles_linked)\s*(?:,|\()'
@@ -82,7 +85,7 @@ function Get-WeaponAppearanceDescriptorRows {
         foreach ($consumerRoot in $roots) {
             $fullRoot = Join-Path $root $consumerRoot
             if (-not (Test-Path -LiteralPath $fullRoot -PathType Container)) { continue }
-            Get-ChildItem -LiteralPath $fullRoot -Recurse -File -Filter '*.lua' |
+            Get-QATrackedFiles -RepoRoot $root -Filter '*.lua' -Path @($consumerRoot) -AsFileInfo |
                 ForEach-Object {
                     $relative = Convert-ToRepoRelativePath $_.FullName
                     if ($relative -notmatch '(^|/)(?:_archive|bundleV2|_test_fixtures|\.claude)(/|$)') {
@@ -123,7 +126,7 @@ function Get-WeaponAppearanceDescriptorRows {
 }
 
 function Get-DetectedRows {
-    param($Manifest)
+    param($Manifest, [switch]$NoRipgrep)
     $detected = @{}
     $needles = @(
         'World.create_particles', 'ScriptWorld.create_particles',
@@ -141,7 +144,9 @@ function Get-DetectedRows {
     )
 
     $files = @()
-    $rg = Get-Command rg -ErrorAction SilentlyContinue
+    $tracked = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+    foreach ($path in (Get-QATrackedFiles -RepoRoot $root -Filter '*.lua')) { [void]$tracked.Add($path) }
+    $rg = if ($NoRipgrep) { $null } else { Get-Command rg -ErrorAction SilentlyContinue }
     if ($rg) {
         $rgArgs = @('--files-with-matches', '--fixed-strings',
             '--glob', '*/scripts/mods/**/*.lua',
@@ -153,15 +158,17 @@ function Get-DetectedRows {
         $rgArgs += '.'
         Push-Location $root
         try {
+            # An rg --glob include overrides .gitignore, so rg's matches are
+            # kept only when Git lists the file (tracked or not ignored).
             $files = @(& $rg.Source @rgArgs | ForEach-Object {
-                Get-Item -LiteralPath (Join-Path $root $_)
-            })
+                [IO.Path]::GetFullPath((Join-Path $root $_))
+            } | Where-Object { $tracked.Contains($_) } | ForEach-Object { [IO.FileInfo]::new($_) })
         } finally {
             Pop-Location
         }
     } else {
-        $files = @(Get-ChildItem -LiteralPath $root -Recurse -File -Filter '*.lua' |
-            Where-Object { $_.FullName -match '[\\/]scripts[\\/]mods[\\/]' })
+        $files = @($tracked | Where-Object { $_ -match '[\\/]scripts[\\/]mods[\\/]' } |
+            ForEach-Object { [IO.FileInfo]::new($_) })
     }
 
     $files | Where-Object {
@@ -303,7 +310,39 @@ channels.textures = true
     $fakeRoot = Join-Path ([IO.Path]::GetTempPath()) '.claude\worktrees\agent'
     $insideRelative = Convert-ToRepoRelativePath (Join-Path $fakeRoot 'mod\scripts\mods\mod\a.lua') $fakeRoot
     $nestedRelative = Convert-ToRepoRelativePath (Join-Path $fakeRoot '.claude\worktrees\nested\mod\a.lua') $fakeRoot
+    # A git-ignored scratch copy of a mod tree (.temp/x/...) is never censused,
+    # with or without ripgrep (WP-T-06).
+    $scanned = @{}
+    $fixture = Join-Path ([IO.Path]::GetTempPath()) ('vt2-native-census-' + [Guid]::NewGuid().ToString('N'))
+    $savedRoot = $script:root
+    try {
+        [void][IO.Directory]::CreateDirectory((Join-Path $fixture 'mod\scripts\mods\mod'))
+        [void][IO.Directory]::CreateDirectory((Join-Path $fixture '.temp\x\mod\scripts\mods\mod'))
+        $particle = "World.create_particles(world, effect, position)`n"
+        [IO.File]::WriteAllText((Join-Path $fixture '.gitignore'), ".temp/`n")
+        [IO.File]::WriteAllText((Join-Path $fixture 'mod\scripts\mods\mod\a.lua'), $particle)
+        [IO.File]::WriteAllText((Join-Path $fixture '.temp\x\mod\scripts\mods\mod\a.lua'), $particle)
+        Invoke-QAStateGit -RepoRoot $fixture -Arguments @('init', '-q') | Out-Null
+        $script:root = $fixture
+        $scanned.rg = Get-DetectedRows @{ Rows = @() }
+        $scanned.walk = Get-DetectedRows @{ Rows = @() } -NoRipgrep
+    } finally {
+        $script:root = $savedRoot
+        if ([IO.Directory]::Exists($fixture)) {
+            foreach ($path in [IO.Directory]::EnumerateFiles($fixture, '*', [IO.SearchOption]::AllDirectories)) {
+                [IO.File]::SetAttributes($path, [IO.FileAttributes]::Normal)
+            }
+            [IO.Directory]::Delete($fixture, $true)
+        }
+    }
+    $ignoredCopySkipped = {
+        param($rows)
+        $null -ne $rows -and $rows.ContainsKey('mod/scripts/mods/mod/a.lua|particle') -and
+            -not $rows.ContainsKey('.temp/x/mod/scripts/mods/mod/a.lua|particle')
+    }
     $checks = @(
+        @{ Name='a git-ignored .temp copy of a mod tree is not scanned (ripgrep when installed)'; Pass=(& $ignoredCopySkipped $scanned.rg) }
+        @{ Name='a git-ignored .temp copy of a mod tree is not scanned (no ripgrep)'; Pass=(& $ignoredCopySkipped $scanned.walk) }
         @{ Name='exact census passes'; Pass=(Get-CensusFindings $good $base).Count -eq 0 }
         @{ Name='count drift fails'; Pass=(Get-CensusFindings $drift $base).Count -gt 0 }
         @{ Name='new boundary fails'; Pass=(Get-CensusFindings $new $base).Count -gt 0 }
