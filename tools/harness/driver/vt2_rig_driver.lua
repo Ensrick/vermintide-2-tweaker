@@ -17,10 +17,14 @@
 --
 -- 0.4.5 (WP-H-03): T.cmd runs the command in the main update; every "  <VERDICT>: <check>" row a regression
 -- suite echoes is kept per mod for T.expect_rt; tools/harness/Parse-Sweep.ps1 turns the OUT lines into sweep.json.
+--
+-- 0.4.6 (WP-H-06): helper groups under tools/harness/driver/lib/ travel in the plan (plan.libs) and add their
+-- helpers to every case's T (load_libs, install_libs); the first groups are T.set and the T.shot stub.
+-- tools/harness/API.md lists every helper.
 
 local plan, nonce = ...
 
-local DRIVER_VERSION = "0.4.5"
+local DRIVER_VERSION = "0.4.6"
 local driver = {}
 
 local function find_mod(name)
@@ -87,6 +91,7 @@ local S = {
 	rt_results = {},
 	keep_ready = false,
 	shared = {},
+	libs = {},
 	om_snapshot = nil,
 	-- what the backend write shield did; T.shield() hands cases a copy
 	shield = {
@@ -212,6 +217,33 @@ local function load_shared()
 			out("SHARED id=%s ok=true", id)
 		else
 			out("SHARED id=%s ok=false err=%s", id, q(lib))
+		end
+	end
+end
+
+-- WP-H-06: helper groups (tools/harness/driver/lib/*.lua, sent by New-RigProfile.ps1 -LibDir in file-name order)
+-- travel in the plan as hex text. Each chunk returns install(T, ctx); install_libs calls every one for each case
+-- after the driver's own helpers. A group that does not load is named in a LIB line and its helpers stay nil, so a
+-- case that calls one ends as ERROR.
+local function load_libs()
+	local list = plan.libs or {}
+
+	for i = 1, #list do
+		local entry = list[i]
+		local id = tostring(entry.id or ("lib" .. i))
+		local chunk, err = loadstring(entry.hex and unhex(entry.hex) or "", "=lib:" .. id)
+		local ok, install = false, err
+
+		if chunk then
+			ok, install = pcall(chunk)
+		end
+
+		if ok and type(install) == "function" then
+			S.libs[#S.libs + 1] = { id = id, install = install }
+
+			out("LIB id=%s ok=true", id)
+		else
+			out("LIB id=%s ok=false err=%s", id, q(ok and ("returned " .. type(install) .. ", not an install function") or install))
 		end
 	end
 end
@@ -660,6 +692,31 @@ local function new_T(case)
 		end
 
 		return names
+	end
+
+	-- WP-H-06 helper groups. ctx is all a group gets from the driver: the case (its id and cleanups list), the
+	-- evidence printers and the engine readers above. A group that raises while installing is named and skipped.
+	local ctx = {
+		case = case,
+		record = record,
+		out = out,
+		q = q,
+		now = function ()
+			return S.t
+		end,
+		find_mod = find_mod,
+		local_player = local_player,
+		local_hero = local_hero,
+		level_key = level_key,
+	}
+
+	for i = 1, #S.libs do
+		local lib = S.libs[i]
+		local ok, err = pcall(lib.install, T, ctx)
+
+		if not ok then
+			out("LIB ERROR id=%s case=%s err=%s", lib.id, case.id, q(err))
+		end
 	end
 
 	return T
@@ -1309,6 +1366,7 @@ load_cases()
 
 out("RUN BEGIN driver=%s plan=%s cases=%d arenas=%s realm=modded", DRIVER_VERSION, q(plan.name or "?"), #S.cases, q(table.concat(S.arenas, ",")))
 load_shared()
+load_libs()
 
 local ok_pid, pid = pcall(function ()
 	return Application.process_id and Application.process_id()

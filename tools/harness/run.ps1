@@ -19,7 +19,8 @@
     }
   Case files are Lua source that returns a table { issue = <n>, timeout = <s>, run = function(T) ... end }.
   Case file paths are relative to the plan file. Every qa/runtime/_shared/*.lua travels with the plan
-  (T.shared(<name>) in a case). See tools/harness/README.md.
+  (T.shared(<name>) in a case), and so does every driver helper group in tools/harness/driver/lib/*.lua
+  (tools/harness/API.md). See tools/harness/README.md.
 
   Optional plan fields (WP-H-02): "expect_mods" (VMF mod ids the smoke case asserts are loaded),
   "host_expect_log" / "host_forbid_log" (regex lists checked on the final log) and "host_allow_log"
@@ -55,6 +56,7 @@ param(
     [string] $DriverFile = (Join-Path $PSScriptRoot 'driver/vt2_rig_driver.lua'),
     [string] $DriverId = '3839345856',      # private Workshop item: the rig bootstrap
     [string] $SharedDir = (Join-Path $PSScriptRoot '..\..\qa\runtime\_shared'),
+    [string] $LibDir = (Join-Path $PSScriptRoot 'driver\lib'),        # WP-H-06 driver helper groups (T.set, T.shot, ...)
     [string] $SlotsFile = (Join-Path $PSScriptRoot 'slots.psd1'),     # WP-H-07 rig slots for plan local_builds
     [string] $RigRoot = (Join-Path $env:LOCALAPPDATA 'vt2-harness'),
     [string] $SteamApps = '',               # default: resolved from HKCU:\Software\Valve\Steam SteamPath
@@ -134,7 +136,7 @@ if ($planObj) {
 
 # ---------- profile ----------
 $profileArgs = @{ RealProfile = $realProfile; ProfileRoot = (Join-Path $RigRoot 'profile'); DriverId = $DriverId; KeepOwnerMods = $KeepOwnerMods }
-if ($planObj) { $profileArgs.PlanPath = $planPath; $profileArgs.Nonce = $nonce; $profileArgs.DriverFile = $DriverFile; $profileArgs.SharedDir = $SharedDir }
+if ($planObj) { $profileArgs.PlanPath = $planPath; $profileArgs.Nonce = $nonce; $profileArgs.DriverFile = $DriverFile; $profileArgs.SharedDir = $SharedDir; $profileArgs.LibDir = $LibDir }
 if ($localBuilds.Count) {
     $swaps = @{}; $versions = @{}
     foreach ($lb in $localBuilds) { $swaps[$lb.real_id] = $lb.slot_id; if ($lb.version) { $versions[$lb.mod_id] = $lb.version } }
