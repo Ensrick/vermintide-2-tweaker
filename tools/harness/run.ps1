@@ -289,7 +289,7 @@ $summary = [ordered]@{
     keep_ready_seconds = $hostLog.KeepReadySeconds; keep_ready_driver_t = $hostLog.KeepReadyDriverT
     backend_shield = [bool]$shieldOn; shield_installed_before_first_commit = $shieldFirst
     host_forbid_hits = $forbidHits; host_expect_misses = $expectMisses; host_allowed = @($hostLog.Allowed)
-    loaded_versions = $hostLog.LoadedVersions; local_builds = @($localBuilds)
+    loaded_versions = $hostLog.LoadedVersions; local_builds = @($localBuilds); level_loads = @($hostLog.LevelLoads)
     marks_seconds = $marks; cases = $cases; script_errors = $scriptErrors; evidence_lines = $lines.Count
     log = $evidenceLog; log_source = $logSource; notes = $notes
 }
@@ -303,6 +303,7 @@ foreach ($h in $forbidHits) { $md += "Forbidden log line ($($h.rule)): ``$($h.li
 foreach ($p in $expectMisses) { $md += "Expected log line missing: ``$p``" }
 foreach ($a in @($hostLog.Allowed)) { $md += "Allowed log line ($($a.rule)): ``$($a.line)`` -- $($a.reason)" }
 foreach ($lb in $localBuilds) { $md += "Local build: $($lb.mod) $($lb.version) at $($lb.commit)$(if ($lb.dirty) { ' (dirty)' }) in slot $($lb.slot) ($($lb.slot_id)) | real folder unchanged: $($lb.real_folder_unchanged)" }
+foreach ($ll in @($hostLog.LevelLoads)) { $md += "Level load: $($ll.level) $(if ($ll.failed) { $ll.failed } else { "$($ll.seconds) s" })" }
 if (@($hostLog.LoadedVersions.Keys).Count) { $md += "Load banners: $((@($hostLog.LoadedVersions.Keys) | ForEach-Object { "$_ $($hostLog.LoadedVersions[$_])" }) -join ', ')" }
 $md | Set-Content -LiteralPath (Join-Path $run 'summary.md') -Encoding utf8
 $summary | ConvertTo-Json -Depth 6
