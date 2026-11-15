@@ -40,11 +40,7 @@ function M.install(mod, _rt_register, deps, balance_registration_verify)
         local cls = rawget(_G, "SimpleHuskInventoryExtension")
         if not cls then return "SimpleHuskInventoryExtension not loaded (run in-keep)" end
         if type(cls.wield) ~= "function" then return "SimpleHuskInventoryExtension.wield missing" end
-        -- VMF replaces the class method with its hook wrapper. We can't easily
-        -- introspect VMF's hook table portably, so leave this as a presence-of-
-        -- class check + an embedded comment marker proving wt hooks it.
-        local _MARKER = "SimpleHuskInventoryExtension"
-        if #_MARKER == 0 then return "marker missing" end
+        return "skip: hook presence is not readable from Lua; husk remap needs two clients"
     end)
 
     _rt_register("issue201_deepwood_runtime_package_resident", function()
