@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "issue": 1573,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "0.2.290",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Disable standalone **Tab Scoreboard**. Enable **Expanded Scoreboard (Live + End Screen)** and **Host Statistics**, then select **Page 2**.",
+        "2. Start Adventure SOLO with melee and ranged weapons. Before fighting, **Friendly Fire Damage**, **Melee Damage**, **Ranged Damage** and **Permanent Health Restored** after **Times Revived** must all show 0, not dashes, for you and every bot.",
+        "3. Deal melee and ranged damage; confirm the corresponding values rise and every custom row remains numeric. Other rows, sorting and page must not change.",
+        "4. Finish and confirm all four end-screen values are not lower than the last held-Tab values.",
+        "5. Start another mission and confirm all four rows reset to 0 for everyone."
+      ],
+      "assertions": [
+        "As solo host, all four rows remain numeric and correctly retained/reset on live and end screens, without corrupting other scoreboard state.",
+        "U: sync policy tests; solo R: four rows numeric zero (not dash), retained and reset; C: client rows show host values, mixed lobby shows dash."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "As solo host, all four rows remain numeric and correctly retained/reset on live and end screens, without corrupting other scoreboard state.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 6591503032,
+    "card_date": "2026-11-02T23:51:46Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

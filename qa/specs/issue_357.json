@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 357,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "0.7.354-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Open **Tweaker: Chaos Wastes > Reworks > Reworks: Boons > Reworks: Existing Boons** and set **Bomb Boon Cooldown (s)** to 10.",
+        "2. In a Chaos Wastes mission, obtain one supported boon and bombs: **Bomb of Alchemical Concentration**, **Bomb of Alchemical Lethality**, **Bomb of Alchemical Rejuvenation**, or **Bomb of Alchemical Alacrity**. Report which one you used.",
+        "3. Throw a bomb that creates that boon's ground effect. Confirm its native boon icon appears on your buff bar and counts down for the configured 10 seconds.",
+        "4. Throw another bomb during that interval. It must not create a second supported boon ground effect or restart the countdown. After expiry, a new eligible bomb must create the effect and a fresh countdown.",
+        "5. Set **Bomb Boon Cooldown (s)** to 0. Confirm eligible bombs create their normal boon effects with no CT cooldown timer or added CT cooldown gate.",
+        "6. Run `/ct_regression_test`, exit normally, and attach the newest complete log. Note any wrong icon, missing timer, restart, or mismatch between the effect and its countdown."
+      ],
+      "assertions": [
+        "The solo owner sees the matching native icon after an accepted proc; gated throws do not restart it; expiry allows a new proc; zero restores normal behavior without a CT timer. `issue357_owner_cooldown_display` and the full regression report pass.",
+        "Grant a bomb boon with cooldown 10; trigger a proc; assert display buff with duration 10 and expected icon id; gated throw does not restart; 0 shows none."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6693571469,
+    "card_date": "2026-11-06T19:30:34Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "issue": 1448,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "0.2.290",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Disable standalone **Tab Scoreboard**, enable **Expanded Scoreboard (Live + End Screen)** and keep **Boss Damage** visible.",
+        "2. Start Adventure SOLO. Before a boss, inspect held Tab for usable, correctly aligned rows.",
+        "3. Damage a boss and check Boss Damage is credited correctly, non-negative and does not alter other rows, sorting, visibility or page.",
+        "4. Finish and compare its end-screen total with the last held-Tab value; it must not decrease.",
+        "5. Start another Adventure mission and confirm the previous mission's Boss Damage is not carried forward."
+      ],
+      "assertions": [
+        "The solo host's held-Tab and end-screen Boss Damage remain usable, correctly attributed and mission-local, without corrupting native rows.",
+        "U: wire validator tests (forged sender, stale generation, bounds); solo R: host extraction and per-mission reset; C: late-join client shows the host subtotal."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "The solo host's held-Tab and end-screen Boss Damage remain usable, correctly attributed and mission-local, without corrupting native rows.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 6591496728,
+    "card_date": "2026-11-02T23:51:23Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

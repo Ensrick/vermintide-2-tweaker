@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 470,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "0.7.354-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Keep **Disable all listed curses** and **Disable: Nurgle: Skulking Sorcerer** off. Stand in the **Pilgrimage Chamber** and open **Single Mission Loader** in Tweaker: Chaos Wastes.",
+        "2. Select **The Forbidden Trail**, set **Run Progress** to **Deepest (99.9%)**, **Base Difficulty** to **Cataclysm 3**, and **Curses** to **Skulking Sorcerer (Nurgle)**.",
+        "3. Launch with **Load Selected Mission Now (hotkey)**. Fight until at least one Skulking Sorcerer actually spawns and confirm the mission continues normally while fighting it.",
+        "4. Run `/ct_regression_test`, retain the complete report including the rank-eight health-backfill check, exit normally, and attach the newest console log. Identify the actual sorcerer encounter in the report."
+      ],
+      "assertions": [
+        "The initialized curse's missing rank-8 health entry is restored to 150 without overwriting an existing value, and a real Skulking Sorcerer spawns and fights normally. The named check and full regression report pass, with no health-clamp failure or secondary missing-health hit-reaction crash.",
+        "Load a mission at cataclysm_3 with curse_skulking_sorcerer; assert Breeds.curse_mutator_sorcerer.max_health[8] == 150; spawn the breed; no script error."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6693589276,
+    "card_date": "2026-11-06T19:31:31Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

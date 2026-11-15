@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "issue": 491,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh **Character Weapon Variants** and equip its **Sword and Mace** in the Keep.",
+        "2. Swap away and back, enter one Adventure mission, and return to the Keep.",
+        "3. Equip the vanilla **Mace and Sword** with a Character Weapon Variants pairing illusion, then repeat the swap and mission transition.",
+        "4. Run `/cwv_regression_test`, exit normally, and attach the newest console log."
+      ],
+      "assertions": [
+        "Neither item becomes invisible or loses its fallback packages, the regression suite passes, and the log contains no nil unit spawn, missing `slot_data`, or `NetworkLookup.weapon_skins` failure. This completes the solo floor; if it passes, the next card will cover a peer without Character Weapon Variants, hot join, and reversed roles.",
+        "Static: decompile has four variable weapon_skins encode sites; assert each is wrapped. Co-op: non-CWV peer survives equip, resync and hot join."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "Neither item becomes invisible or loses its fallback packages, the regression suite passes, and the log contains no nil unit spawn, missing `slot_data`, or `NetworkLookup.weapon_skins` failure. This completes the solo floor; if it passes, the next card will cover a peer without Character Weapon Variants, hot join, and reversed roles.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 5356481308,
+    "card_date": "2026-08-20T13:22:34Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 460,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "0.7.354-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In **Tweaker: Chaos Wastes**, enable **Progressive Difficulty** and its **Difficulty Increases with Progress** child. Set **Coin Multiplier Progress Reduction** to **-25**. Under **Pilgrim's Coin**, set **Coin Pickup Multiplier** to **2.00**.",
+        "2. Start a fresh ordinary **Legend** pilgrimage. Record the effective difficulty and representative coin awards on maps 1-2, maps 3-4, and map 5, comparing the same pickup kind where possible.",
+        "3. Confirm maps 1-2 stay **Legend** with the 2.00x configured coin multiplier; maps 3-4 use **Cataclysm** with 1.50x; map 5 uses **Cataclysm 2** with 1.50x. Difficulty must not advance again on map 4, and coin reduction must not begin before map 3.",
+        "4. Start a second fresh Legend pilgrimage. Confirm it begins at Legend rather than inheriting the previous run's increased tier.",
+        "5. Disable only **Difficulty Increases with Progress** for a fresh control run: difficulty must remain fixed, while the coin reduction still begins on map 3. Then disable the **Progressive Difficulty** master for a fresh control: difficulty stays at the selected baseline and the configured 2.00x coin multiplier is not reduced with progress.",
+        "6. On each recorded map boundary, run `/verify_ct_progression`. Keep the getter rows, coin-multiplier rows and native before/after coin-credit rows, then run `/ct_regression_test`. Exit normally and attach the newest complete log, reporting unavailable tiers, early/extra steps, inherited tiers and coin/statistics discrepancies."
+      ],
+      "assertions": [
+        "Only maps 3 and 5 introduce the intended tier steps, coin reduction begins on map 3, a new run starts cleanly, and the child and master controls remain independent. `ct_progression_readback_460` checks the fresh controller getter against the currently registered tier chain. Disabled or unavailable contexts report SKIP. Getter agreement alone is not proof that the world tier or a later coin award changed; retain those direct observations and the credit delta. If a required tier is unavailable, record it rather than treating an unexercised schedule as passed.",
+        "Scripted pilgrimage completing maps; read run difficulty and coin credit at 0, 2 and 4 completed maps; new run resets; toggles off keep baseline."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6693584751,
+    "card_date": "2026-11-06T19:31:16Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

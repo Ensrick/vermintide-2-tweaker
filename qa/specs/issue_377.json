@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "issue": 377,
+  "class": "V",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "0.9.230-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Open weapon illusion customization at your normal UI scale, select a glow-capable illusion, and press **Edit Glow**.",
+        "2. Confirm the editor replaces the right-side **Information** contents and does not cover the weapon model, illusion grid, or native Information frame.",
+        "3. Change RGB, press **Apply**, swap away and back, and confirm the saved glow and icon badge persist for only that item and illusion.",
+        "4. Reopen the editor, change RGB without applying, then close or select another illusion. Confirm the uncommitted preview rolls back. Use **Restore Default** and confirm the native glow returns and the badge clears.",
+        "5. Select a non-glow illusion. Confirm **Edit Glow** is unavailable and the normal Information contents return.",
+        "6. Repeat at a second UI scale or resolution. Test mouse navigation and, if available, controller navigation. Run `/cos_regression_test` and retain the newest log."
+      ],
+      "assertions": [
+        "The contextual editor remains fully inside the live right-side Information panel at both layouts; native frame/model/grid/navigation remain usable; Apply, rollback, Restore Default, exact-instance persistence, and badge behavior remain correct; closing the editor restores the normal Information contents without overlap or stale controls.",
+        "Automatable: editor never opens on select; editor rect inside info_window rect at two resolutions; badge pass present only after Apply. Overlap and legibility need eyes."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "The contextual editor remains fully inside the live right-side Information panel at both layouts; native frame/model/grid/navigation remain usable; Apply, rollback, Restore Default, exact-instance persistence, and badge behavior remain correct; closing the editor restores the normal Information contents without overlap or stale controls."
+  ],
+  "source": {
+    "card_comment_id": 5160466533,
+    "card_date": "2026-08-02T21:40:17Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

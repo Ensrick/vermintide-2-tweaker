@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 1107,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Equip the Old Musket in BOTH weapon slots (shared reserve capacity 20).",
+        "2. Wield the MELEE-slot musket, fire once, let the reload complete. Expect this printf needle verbatim: `[cwv:1107] melee-slot musket reload drained 1 round(s): reserve 20 -> 19`.",
+        "3. Swap to the ranged-slot musket: its reserve must read 19 (shared pool), not 20.",
+        "4. Keep firing and reloading from the melee slot until the reserve is empty: the reload must stop when reserve hits 0 - no free refill.",
+        "5. Optional exemption check as Huntsman: during the ult, fire and reload the melee-slot musket - the reserve must NOT drop and no `[cwv:1107]` line may appear for that reload.",
+        "6. Run `/cwv_regression_test` and confirm the melee-slot reload-drain check named under Expected PASSES. Attach the newest console log."
+      ],
+      "assertions": [
+        "the shared 20-round pool depletes identically from either slot; ranged-slot reloads behave exactly as before (vanilla drain, no double-charge); the drain needles count down consistently; the regression check `issue1107_melee_slot_reload_drains_reserve` passes.",
+        "Both slots Old Musket: fire and reload from melee slot; assert reserve 20 to 19 and the cwv:1107 line; drain to zero then reload refused; ranged reload drains exactly one."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5169677778,
+    "card_date": "2026-08-03T17:32:05Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

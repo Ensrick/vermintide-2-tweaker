@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "issue": 1684,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "modded_progression",
+      "min_version": "0.2.52-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh the authorized Modded Progression subscription normally, enable it after Vermintide Mod Framework, and start a fresh game session. Confirm the exact banner above. If it is absent or different, stop and send that log.",
+        "2. Enter the Keep. Use `/mp_login_diag` with argument `1`: type the command, a space, then `1`, and submit once. This reads the first reward row already cached by the game. Do not claim a login reward, reroll anything, reset your profile, or force a backend refresh.",
+        "3. Exit normally and attach the newest complete console log. Report any startup/command error; no reward or chat announcement is expected from this command."
+      ],
+      "assertions": [
+        "The `[mp:1684]` output records a status with `request=none` and `grant=none`. `status=observed_cache` supplies cached schema/row data only, not eligibility or a successful reward. `cache_unavailable`, `unsupported_schema`, `unsupported_data`, `realm_unavailable`, `invalid_index` or `projection_unavailable` are useful diagnostic/refusal outcomes, not passes. Submit the full output once; do not repeat/reset until it looks successful.",
+        "Bug half: issue1693_shared_native_realm_authority, issue1684_login_request_authority, issue1684_owned_daily_ui PASS in modded realm; feature half: /mp_login_diag 1 and parse [mp:1684] status."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6821885475,
+    "card_date": "2026-11-12T11:06:10Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

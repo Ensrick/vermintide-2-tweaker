@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "issue": 263,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "crafting_in_modded_dev",
+      "min_version": "0.8.148-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Open item customization for a normal vanilla-rarity item that can still be upgraded and inspect its existing upgrade copy and behavior.",
+        "2. Open the same surface for a Modded-rarity item and inspect both its upgrade option and detailed state.",
+        "3. Run `/cim_regression_test`."
+      ],
+      "assertions": [
+        "Both Modded-rarity states show the full-customization explanation without missing text. The vanilla control remains unchanged, and the copy change creates no recipe, cost, lock, or extra rarity transition. `issue263_modded_upgrade_copy` passes.",
+        "/cim_regression_test issue263_modded_upgrade_copy PASS (asserts Localize value, Modded widget text, vanilla exotic control untouched)."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5165069399,
+    "card_date": "2026-08-03T10:14:43Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

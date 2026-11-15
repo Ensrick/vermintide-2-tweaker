@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 917,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "0.7.354-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In Adventure mode, equip visibly distinct illusions on both your melee and ranged weapons. In **Tweaker: Chaos Wastes**, turn on **Preserve Weapon Illusions from Adventure Loadout** before starting a new expedition.",
+        "2. Start the expedition. Confirm each compatible starter weapon uses the illusion from its matching Adventure weapon instead of a random one.",
+        "3. Temper one of those weapons at a Weapon Upgrade Altar, including an upgrade to Unique if available. Confirm its current compatible illusion survives.",
+        "4. Use weapon-swap chests. A replacement in the same weapon family should keep the saved compatible illusion; a different-family replacement should keep its normal generated appearance. Bot weapons must remain unaffected.",
+        "5. Turn the option off and start another expedition. Starter generation, upgrades, and swaps must return to normal vanilla appearance selection.",
+        "6. Run `/ct_regression_test`, exit normally, and attach the newest complete log, identifying each starter, upgrade, same-family swap, and different-family control that was available."
+      ],
+      "assertions": [
+        "Only the local player's compatible melee/ranged illusions are preserved. Compatible starters, upgrades, and same-family swaps retain them; incompatible families, bots, and toggle-off play remain vanilla. Repeated generation does not leak a slot or weapon family's appearance into another, and the regression report passes.",
+        "Equip a known skin in Adventure; start a run with the option on; assert starter item.skin equals it when matching_item_key matches; after upgrade same; off not forced."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6693610401,
+    "card_date": "2026-11-06T19:32:37Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

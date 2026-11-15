@@ -1,0 +1,48 @@
+{
+  "schema": 1,
+  "issue": 661,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "weapon_tweaker",
+      "min_version": "0.12.344-dev",
+      "settings": null
+    },
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    },
+    {
+      "dir": "weapons_of_chaos",
+      "min_version": "0.1.62-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable **Tweaker: Weapons Dev**, **Character Weapon Variants**, and **Weapons of Chaos**; do not enable public Tweaker: Weapons at the same time.",
+        "2. Select **Bounty Hunter**, equip the Character Weapon Variants **Greataxe**, and use **Locked and Loaded** before and after swapping away, swapping back, and entering a mission.",
+        "3. Equip the **Imperial Crowbill** and use Locked and Loaded in both its pick and hammer combat styles.",
+        "4. Repeat with the **Old Musket** in rifle and bayonet styles, then with the **Outrider Grenade Launcher**.",
+        "5. Repeat once with Character Weapon Variants **Dual Axes** and once with the **Blightreaper** as controls.",
+        "6. Run `/wt_regression_test`, exit normally, and attach the newest console log."
+      ],
+      "assertions": [
+        "Locked and Loaded activates with every listed weapon and combat style before and after swaps and the Keep-to-mission transition. `issue661_effective_wield_action_contract` passes, and no pre-wield reconciliation, missing career-action, owner-conflict, or incomplete-action error appears. Independently owned Pusfume items remain untouched.",
+        "For every melee or ranged item row, each can_wield career and each effective template assert the career action table is present; then trigger the ability and assert cooldown starts."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5356532436,
+    "card_date": "2026-08-20T13:27:02Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

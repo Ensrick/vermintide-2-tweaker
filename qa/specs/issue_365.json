@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 365,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "general_tweaker_dev",
+      "min_version": "0.2.180",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Host with bots and enable **Bot Behavior Improvements** and **Bots Drink Surplus Ranger Ale**.",
+        "2. Place Ranger ale within normal follow range while any active teammate has fewer than three stacks. Repeat when the newest relevant stack has 50% duration or less; bots must leave both drops.",
+        "3. Give every active teammate all three defence and attack-speed stacks with strictly more than half their duration remaining, then place another ale in normal follow range. A bot may claim and drink this surplus drop.",
+        "4. Turn **Bots Drink Surplus Ranger Ale** off and repeat the surplus setup; the ale must remain human-reserved.",
+        "5. Run `/gt_regression_test`, exit normally, and attach the newest log."
+      ],
+      "assertions": [
+        "Only the fully stacked, over-half-duration all-team case permits consumption. Fewer-than-three, at-or-below-half, and child-disabled controls stay reserved, and the full regression report passes.",
+        "Harness: set team ale buff stacks/durations through BuffExtension, spawn ale, tick; assert consumption only in full-stack over-half case; policy table offline."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6681745198,
+    "card_date": "2026-11-06T09:33:05Z",
+    "ledger": "D5_ledger.tsv"
+  }
+}

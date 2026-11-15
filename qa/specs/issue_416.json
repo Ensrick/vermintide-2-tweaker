@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "issue": 416,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Before joining, Player A saves a visibly distinct offhand illusion on **Sword and Shield**. Player B joins cold and checks A before A opens Cosmetics again.",
+        "2. A changes only the shield, presses Apply, swaps weapons, enters a mission, respawns, and returns to the Keep. B checks every transition.",
+        "3. Repeat with **Mace and Shield**, **Spear and Shield**, **Imperial Longsword and Shield**, and one non-CWV paired-weapon control.",
+        "4. Hot-join once after a saved offhand is already active, then reverse host/client roles and repeat one shield case.",
+        "5. Run `/cos_regression_test` on both peers and attach both newest console logs."
+      ],
+      "assertions": [
+        "Both peers always render the same independently selected offhand while the primary illusion remains unchanged, including cold join, hot join, re-wield, respawn, mission transition, and reversed roles. This card intentionally excludes CWV Dual Axes, which are tracked by #579.",
+        "Two clients: A applies distinct offhand on 4 shield families; B asserts A husk left-hand unit name after cold join, hot join, swap, respawn; reverse roles."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "Both peers always render the same independently selected offhand while the primary illusion remains unchanged, including cold join, hot join, re-wield, respawn, mission transition, and reversed roles. This card intentionally excludes CWV Dual Axes, which are tracked by #579.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 5356897638,
+    "card_date": "2026-08-20T13:57:55Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

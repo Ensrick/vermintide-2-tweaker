@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 299,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "0.7.354-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable **Revive Team on Chest Completion** and start a Chaos Wastes expedition with at least one bot.",
+        "2. Through ordinary play, let a bot die completely or reach an awaiting-rescue point away from the surviving team. No damage, downing, or teleport debug command is required.",
+        "3. Complete a **Chest of Trials** with the surviving character. Watch the rescued bot's position and the other bots while recovery begins.",
+        "4. Continue until the rescued bot can move. Note whether it first moved beside the surviving team or instead began recovery at the distant beacon, and whether another bot ran toward that old beacon.",
+        "5. Run `/ct_regression_test`, retaining the complete report including the chest-rescue movement-before-recovery check. Exit normally and attach the newest console log."
+      ],
+      "assertions": [
+        "A successful rescue moves and broadcasts the still-disabled bot beside a living teammate before assisted-respawn recovery starts. A native collision-adjusted landing within three metres of the intended team position is accepted. The bot remains with the team after recovery, and the terminal `[ct:299] key=... ... move-before-free retained=true corrections=...` row records **PASS** without **FAILED**, **DROPPED**, or **DEGRADED** results.",
+        "Kill a bot far from the team by script; complete a chest; assert bot within 3 m of a teammate before respawn release and [ct:299] row PASS."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6693563130,
+    "card_date": "2026-11-06T19:30:07Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "issue": 598,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "crafting_in_modded_dev",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable Weapons of Chaos and leave **Enable Blightreaper** on. Enter the Keep with both exact banners confirmed.",
+        "2. Equip **Blightreaper**, the Cursed relic. Note the rarity frame on its inventory tile, then hold **Tab** and inspect your own melee frame.",
+        "3. Replace it with an ordinary vanilla melee weapon that was not crafted in the Athanor and is not from a custom-weapon provider. Hold Tab again.",
+        "4. Swap back to Blightreaper, inspect Tab, then swap to the ordinary weapon once more and inspect Tab.",
+        "5. With Blightreaper equipped, start an Adventure mission solo and inspect Tab in the level. Finish or leave the mission.",
+        "6. Back in the Keep, equip the ordinary weapon and inspect Tab again. Run `/cim_regression_test` and record the visible summary, if shown."
+      ],
+      "assertions": [
+        "Blightreaper uses the same Cursed frame on your own Tab row as on its inventory tile. Ordinary replacements show their ordinary frame with no leftover Cursed chrome. Swaps and the mission transition do not leak the previous frame. The relevant owner-frame and rarity-state checks pass; visible frame correctness remains the acceptance evidence.",
+        "Solo R: equip Modded/Cursed then ordinary, read own Tab row rarity texture each time; C: host/client reversal, hot join, peer without CIM sees no unknown ids."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "Blightreaper uses the same Cursed frame on your own Tab row as on its inventory tile. Ordinary replacements show their ordinary frame with no leftover Cursed chrome. Swaps and the mission transition do not leak the previous frame. The relevant owner-frame and rarity-state checks pass; visible frame correctness remains the acceptance evidence.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 6693597198,
+    "card_date": "2026-11-06T19:31:56Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

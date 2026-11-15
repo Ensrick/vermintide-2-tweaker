@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "issue": 243,
+  "class": "V",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "0.7.354-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Use **Single Mission Loader** to enter a dark interior with the Belakor curse theme.",
+        "2. Set **Curse Lighting Brightness** to its default and record a screenshot.",
+        "3. Move the setting lower and higher while remaining in the same scene.",
+        "4. Compare interior readability and confirm the atmosphere still reads as Belakor-cursed.",
+        "5. Run the Tweaker: Chaos Wastes regression suite and retain the closed issue 104 performance result."
+      ],
+      "assertions": [
+        "Brightness changes live and predictably, dark interior geometry becomes readable at the intended setting, curse identity remains intact, and the shared shading callback does not add per-frame warning or allocation spam.",
+        "Automatable part: load dlc_termite_2 with Belakor theme, read applied shading values equal profile x knob, compare screenshot mean luminance against uncursed control."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "Brightness changes live and predictably, dark interior geometry becomes readable at the intended setting, curse identity remains intact, and the shared shading callback does not add per-frame warning or allocation spam."
+  ],
+  "source": {
+    "card_comment_id": 5161354313,
+    "card_date": "2026-08-03T01:20:58Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

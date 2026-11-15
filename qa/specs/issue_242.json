@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 242,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "general_tweaker_dev",
+      "min_version": "0.2.180",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable **Disable Enemy Spawns** before loading a full Adventure mission.",
+        "2. Play through the entire level and cross ordinary pacing areas.",
+        "3. Start a fresh run with the option off and confirm normal enemy pacing resumes.",
+        "4. Run `/gt_regression_test`, exit normally, and attach the newest log."
+      ],
+      "assertions": [
+        "While enabled, no new ambient enemies, hordes, specials, patrols, monsters, bosses, or critters spawn. Existing units are not despawned. Disabling restores native spawning; queued entries may drain after a mid-mission disable, so the control uses a fresh run. Pickup and training-dummy spawns remain unaffected.",
+        "Harness: option on, load mission, tick 120 s through pacing; assert ConflictDirector._all_spawned_units stays empty and script_data flags set; option off: units appear."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6681732717,
+    "card_date": "2026-11-06T09:32:22Z",
+    "ledger": "D5_ledger.tsv"
+  }
+}

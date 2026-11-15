@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 257,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "0.2.369-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable **Skip Cutscenes** and **Auto-skip Cutscenes**.",
+        "2. Start **The Well of Dreams** from a fresh mission start and observe from before the first fade until control returns.",
+        "3. Record whether the intro played, whether the screen stayed black or faded incorrectly, and roughly how long control took to return.",
+        "4. Return to the Keep and repeat a second fresh mission start in the same launch.",
+        "5. Run `/gut_regression_test`, exit normally, and attach the newest console log plus every line containing `[gut:257]`."
+      ],
+      "assertions": [
+        "The bounded trace covers both starts and identifies the intro activation, skip disposition, fade timings, and automatic-skip decision without per-frame spam. The run distinguishes a working order-independent skip from a remaining fade owner; gameplay input and the camera recover normally after each start. `/gut_regression_test` reports the named cutscene checks. Zero `[gut:257]` rows for either start, an unidentifiable second start, or a capped trace before both starts makes the capture invalid rather than a pass.",
+        "Load the level with skip on; after the intro assert no active fade and player control within N seconds; collect bounded [gut:257] rows."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5357054569,
+    "card_date": "2026-08-20T14:10:44Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

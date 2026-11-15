@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 573,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "modded_progression",
+      "min_version": "0.2.52-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh the authorized subscription normally, enable Modded Progression after Vermintide Mod Framework, and start Modded Realm. Confirm the exact banner; report an absent/different version before continuing.",
+        "2. Open Okri's Challenges and its daily quests. Record objectives, progress and Silver Shillings. Choose a complete daily or one practical to complete naturally. Already-claimed rows may be absent. If none is available, report that without resetting.",
+        "3. Claim that completed daily once. Record the balance before/after, reopen the page, and confirm the same reward is no longer claimable.",
+        "4. Exit normally and restart Modded Realm with the same mods. Confirm the banner, persistent balance and continued duplicate refusal. Run `/mp_regression_test` once. Attach both complete session logs, the before/after observations and the named chat results below."
+      ],
+      "assertions": [
+        "Exactly five Silver Shillings once, with claimed state/balance retained after restart; only local daily rows are offered. Opening/reopening/claiming causes no quest/reward backend request, rejection or forced exit. Ignore unrelated earlier account-bootstrap traffic. Require explicit PASS for `mp573_quest_surface_is_owned_and_backend_free` and `issue1684_owned_daily_ui`; these checks do not replace visible claim/restart evidence.",
+        "Sandbox profile: complete a local daily, invoke claim: plus 5 once, second claim refused, zero PlayFab requests (queue spy), relaunch persists; mp573_* and issue1684_owned_daily_ui PASS."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6867214607,
+    "card_date": "2026-11-13T23:09:06Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

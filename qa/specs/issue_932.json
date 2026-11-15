@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "issue": 932,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Confirm the newest game log contains `[cwv:LOAD] v0.1.570-dev`.",
+        "2. Equip one Old Musket in the primary weapon slot and a normal weapon in the secondary slot; confirm it starts with one chambered round and 10 reserve rounds.",
+        "3. Fire and reload once, switch weapons and back, and confirm the reserve remains 9 without free ammunition.",
+        "4. In a fresh loadout, equip an Old Musket in both weapon slots; confirm separate one-round chambers and a shared 20-round reserve.",
+        "5. Fire and reload each Musket once; confirm both report the same remaining reserve of 18.",
+        "6. Spend several rounds and collect one normal ammunition pickup; confirm the shared reserve changes once.",
+        "7. Replace one Old Musket with a normal weapon; confirm the remaining Musket has a 10-round reserve cap.",
+        "8. Run `/cwv_musket_ammo_diag` and `/cwv_regression_test`."
+      ],
+      "assertions": [
+        "One Old Musket owns a 10-round reserve; two Old Muskets owned by the same player share 20 reserve while retaining separate chambers. Stance changes, weapon switches, pickups, and slot replacement neither duplicate nor lose ammunition, and `issue932_primary_slot_musket_ammo_pool_contract` passes.",
+        "Primary musket plus handgun: chamber 1 and reserve 10; both slots: shared reserve 20; fire and reload each gives 18; one ammo pickup changes reserve once."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5161336085,
+    "card_date": "2026-08-03T01:17:07Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

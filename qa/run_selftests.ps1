@@ -59,6 +59,8 @@ $worktreeLifecyclePs1 = Join-Path $repoRoot 'tools\worktrees\worktree.ps1'
 if (Test-Path $worktreeLifecyclePs1) { $targets += $worktreeLifecyclePs1 }
 $promotionStatusPs1 = Join-Path $repoRoot 'tools\promote\promotion-status.ps1'
 if (Test-Path $promotionStatusPs1) { $targets += $promotionStatusPs1 }
+$convertCardsPs1 = Join-Path $repoRoot 'tools\tracker\convert-cards.ps1'
+if (Test-Path $convertCardsPs1) { $targets += $convertCardsPs1 }
 $modLintPs1 = Join-Path $repoRoot 'tools\mod-lint\lint-mod.ps1'
 if (Test-Path $modLintPs1) { $targets += $modLintPs1 }
 

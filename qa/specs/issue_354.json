@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "issue": 354,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "weapon_tweaker",
+      "min_version": "0.12.343-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In **Equipment > Weapons > Weapon Availability > Melee: Handmaiden**, enable **Kruber: Tuskgor Spear** and leave it enabled throughout.",
+        "2. Equip the Tuskgor Spear on Handmaiden in one saved Equipment row; record its Roman numeral. Give a second row a different weapon.",
+        "3. Switch between both rows, recreate inventory, then return normally to the title screen and exit without re-equipping the spear.",
+        "4. Relaunch into the Modded Keep and inspect both rows. Repeat the normal exit/relaunch cycle twice more and retain the logs."
+      ],
+      "assertions": [
+        "The chosen Handmaiden row retains the enabled Tuskgor Spear through every switch, screen reconstruction and restart. The control row and official loadouts remain unchanged.",
+        "Three exit/relaunch cycles: assert stored Handmaiden melee row id resolves to the spear each launch, official rows unchanged, exit-snapshot receipts present."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6591480833,
+    "card_date": "2026-11-02T23:50:22Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}
