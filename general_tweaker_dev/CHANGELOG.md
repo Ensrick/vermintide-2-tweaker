@@ -1,5 +1,11 @@
 # General Tweaker Changelog
 
+## 0.2.283-dev (2026-11-15) -- Release-train re-version, no code change
+
+- Release-train re-version, no code change. Same source as 0.2.282-dev
+  below. Its version claim was released before it shipped, so the claim
+  broker allocated this fresh version (tools/ship/CLAIMS.md).
+
 ## 0.2.282-dev (2026-11-15) -- One owner for level-world and unit-position reads (WP-GT-03)
 
 - New `_gt_world.lua` (`mod._gt_world`): `live()` returns the level world only
