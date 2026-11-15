@@ -55,6 +55,14 @@
             )
         }
         @{
+            # WP-CIM-01 (#402, #1688). The stable crafting_in_modded consumer is
+            # added with the stable half of the card (PR #1824 holds that tree).
+            Source = "_lib_official_loadout_guard.lua"
+            Consumers = @(
+                "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_lib_official_loadout_guard.lua"
+            )
+        }
+        @{
             Source = "_lib_modded_realm_authority.lua"
             Consumers = @(
                 "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_lib_modded_realm_authority.lua"
