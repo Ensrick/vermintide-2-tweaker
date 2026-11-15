@@ -1,5 +1,21 @@
 # Crafting in Modded Changelog
 
+## 0.8.149-dev (2026-11-14) -- Keep crafted ids out of the career-data commit (#402, #1688)
+
+- New hook on `PlayFabMirrorAdventure._check_career_data` (one per tree): for
+  the vanilla call only, every crafted id in the career loadouts is swapped
+  for the server-side value of that slot (or loadout 1's), the returned
+  loadouts are detached, and the crafted id is put back so it stays equipped
+  for the session. An `updateHeroAttributes` request can no longer carry a
+  crafted id, with or without Tweaker: GUI installed (WP-CIM-01).
+- The guard is the new pure shared library `_lib_official_loadout_guard.lua`
+  (tools/shared_lib, byte-synced). Log line `[cim:402] scrubbed=N unsafe=N`,
+  at most 12 per session; regression check `issue402_career_commit_guard`.
+- Known consequence (OD-CIM-02): without Tweaker: GUI's modded loadouts a
+  crafted item is no longer equipped after a restart.
+- Not confirmed in game. The rig case is
+  `qa/runtime/cim/issue_402_career_commit_scrub.lua`.
+
 ## 0.8.148-dev (2026-11-06) -- Native retained preview Gui selection
 
 - Follow the actual native texture pass's `retained_mode` when proving the
