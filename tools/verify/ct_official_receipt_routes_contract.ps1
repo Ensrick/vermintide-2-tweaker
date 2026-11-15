@@ -156,9 +156,13 @@ function Test-VtCtOfficialReceiptRoutesContract {
         & $assert (@($errors|Where-Object{$_ -like ($case[1]+'*')}).Count -gt 0) ('unsafe selector admitted: '+$case[0]);$checks++
     }
     # Run actual installed helper bytes, not a copied implementation/ready stub.
-    $lua=Join-Path $Root 'qa/lua/vendor/lua-5.1.5-win64/lua5.1.exe'
-    & $assert ((Get-FileHash -LiteralPath $lua -Algorithm SHA256).Hash -ceq 'C9BF063327F6A719AA2D2C25A13A6FB006EBA3F23B53BCD6A629DC04507C18B6') 'vendored Lua executable changed'
-    $program=@'
+    # WP-P-01: the vendored Lua proof is a Windows binary. The Linux issue-lifecycle
+    # job skips only this process; the Windows qa-gate still runs it.
+    $luaAssertions=0
+    if([string][System.Environment]::OSVersion.Platform -ceq 'Win32NT'){
+        $lua=Join-Path $Root 'qa/lua/vendor/lua-5.1.5-win64/lua5.1.exe'
+        & $assert ((Get-FileHash -LiteralPath $lua -Algorithm SHA256).Hash -ceq 'C9BF063327F6A719AA2D2C25A13A6FB006EBA3F23B53BCD6A629DC04507C18B6') 'vendored Lua executable changed'
+        $program=@'
 local root=assert(arg[1]):gsub("\\","/")
 local path=root.."/chaos_wastes_tweaker/scripts/mods/chaos_wastes_tweaker/_ct_diag_official_apply_evidence.lua"
 local count=0
@@ -225,23 +229,27 @@ f.checks.ct_linked_pickup_identity_322()
 check(f.n("[ct:322]")==256 and f.n("[ct:ct_linked_pickups]")==1,"regression linked path has independent128 bound, no summary")
 print("CT_RECEIPT_LUA_PASS "..count)
 '@
-    & $assert (-not $Root.Contains('"') -and -not $Root.Contains([string][char]10) -and -not $Root.Contains([string][char]13)) 'unsafe Lua root argument'
-    $start=New-Object Diagnostics.ProcessStartInfo
-    $start.FileName=$lua;$start.Arguments='- "'+$Root+'"';$start.WorkingDirectory=$Root
-    $start.UseShellExecute=$false;$start.CreateNoWindow=$true
-    $start.RedirectStandardInput=$true;$start.RedirectStandardOutput=$true;$start.RedirectStandardError=$true
-    $null=$start.EnvironmentVariables.Remove('VT2_CT_EVIDENCE_OVERLAY_ROOT')
-    $process=New-Object Diagnostics.Process
-    $process.StartInfo=$start
-    try{
-        & $assert ($process.Start()) 'could not start owned Lua proof'
-        $outTask=$process.StandardOutput.ReadToEndAsync();$errTask=$process.StandardError.ReadToEndAsync()
-        $process.StandardInput.Write($program);$process.StandardInput.Close()
-        if(-not$process.WaitForExit(30000)){$process.Kill();throw 'CT receipt Lua proof timed out'}
-        $stdout=$outTask.Result;$stderr=$errTask.Result
-        & $assert ($process.ExitCode -eq 0 -and $stdout.Trim() -ceq 'CT_RECEIPT_LUA_PASS 15') ("actual Lua proof failed: "+$stderr+" "+$stdout)
-    }finally{$process.Dispose()}
-    $checks+=15
+        & $assert (-not $Root.Contains('"') -and -not $Root.Contains([string][char]10) -and -not $Root.Contains([string][char]13)) 'unsafe Lua root argument'
+        $start=New-Object Diagnostics.ProcessStartInfo
+        $start.FileName=$lua;$start.Arguments='- "'+$Root+'"';$start.WorkingDirectory=$Root
+        $start.UseShellExecute=$false;$start.CreateNoWindow=$true
+        $start.RedirectStandardInput=$true;$start.RedirectStandardOutput=$true;$start.RedirectStandardError=$true
+        $null=$start.EnvironmentVariables.Remove('VT2_CT_EVIDENCE_OVERLAY_ROOT')
+        $process=New-Object Diagnostics.Process
+        $process.StartInfo=$start
+        try{
+            & $assert ($process.Start()) 'could not start owned Lua proof'
+            $outTask=$process.StandardOutput.ReadToEndAsync();$errTask=$process.StandardError.ReadToEndAsync()
+            $process.StandardInput.Write($program);$process.StandardInput.Close()
+            if(-not$process.WaitForExit(30000)){$process.Kill();throw 'CT receipt Lua proof timed out'}
+            $stdout=$outTask.Result;$stderr=$errTask.Result
+            & $assert ($process.ExitCode -eq 0 -and $stdout.Trim() -ceq 'CT_RECEIPT_LUA_PASS 15') ("actual Lua proof failed: "+$stderr+" "+$stdout)
+        }finally{$process.Dispose()}
+        $luaAssertions=15
+    }else{
+        Write-Host '[live-test-contract] SKIP Lua expression oracle: needs the vendored Windows runtime; the Windows qa-gate runs it.'
+    }
+    $checks+=$luaAssertions
     Write-Host "[live-test-contract] CT official receipt routes passed:24 exact routes, $checks source/selector/adversarial/Lua assertions (not gameplay acceptance)."
-    return [pscustomobject]@{Routes=24;Assertions=$checks;LuaAssertions=15}
+    return [pscustomobject]@{Routes=24;Assertions=$checks;LuaAssertions=$luaAssertions}
 }
