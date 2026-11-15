@@ -58,6 +58,8 @@ The `T` helpers are listed in `docs/program/CONVENTIONS.md` section 3; the drive
 
 `arenas` run in the plan's order and may repeat: `["keep", "mission:military", "keep"]` loads Righteous Stand after the keep cases and returns to the keep before quitting. The run always starts in the keep; arenas of cases the plan does not list follow at the end. A level change goes through the host's `Managers.mechanism:debug_load_level(level, 0)` (`Vermintide-2-Source-Code/scripts/managers/game_mode/game_mechanism_manager.lua:880-892`; the keep is the hub level `inn_level`). The driver waits for `StateIngame` with that level and a live hero, prints `LEVEL READY level=<key> load_seconds=<s>`, and `summary.json` lists every load under `level_loads`. An arena other than `keep`, `mission:<key>` or `level:<key>` ends its cases INCONCLUSIVE.
 
+A case file may also return a `cleanup` function (it gets the case's `T`). The driver calls it once when a case that started ends, whatever the verdict, in the main update and before the helpers' own cleanups, and prints `CASE CLEANUP id=<case> ok=<true|false>`. An error in it becomes `NOTE id=<case> key=case_cleanup_error` and never changes the verdict. It must not wait (`T.wait`, `T.frames`, `T.wait_until` and `T.main` need the case coroutine), and it should be safe to call after the case already undid its work.
+
 Mission helpers. Each change is undone when the case ends, also after FAIL or ERROR, and is printed as `CLEANUP id=<case> actions=<n> errors=<n>`:
 
 | Helper | Does | Engine call |
