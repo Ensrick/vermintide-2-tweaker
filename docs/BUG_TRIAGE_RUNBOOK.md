@@ -381,30 +381,6 @@ shipping. Agent publication is headless and opens no interactive window.
     - Workshop item IDs and manifest IDs are optional, but when supplied they
       must bind to a named build and cannot contradict each other.
     Issue-body text and older method headings never qualify as fallbacks.
-  - **The lifecycle grammar is CI-enforced and fails wide; deployed-source
-    authority is staged.**
-    `tools/github/check-lifecycle-cardinality.ps1` is a blocking step in
-    `.github/workflows/qa.yml` (PRs AND master pushes) and
-    `.github/workflows/issue-lifecycle.yml` (tracker events, manual, daily). It
-    pages EVERY open issue and reads ready-issue comment histories in bounded
-    GraphQL batches, cursor-paginating any history beyond 100 comments. A single
-    issue carrying `verify-fix` or `diagnostics-armed` without exactly one
-    correctly formatted pinned card therefore fails qa-gate for the whole
-    repository - including PRs that never touched that mod. The stronger source
-    authority resolves the latest release manifest and tokenizes the recorded
-    immutable source commits with blob-filtered full history. Existing-card
-    findings (stale builds, invented commands, non-routes, unbounded receipts,
-    or inconsistent optional Workshop pairs) are report-only during backlog
-    repair. Canonical ship applies them strictly before a new ready label, and
-    the card refresher applies them strictly before a rewrite. The two legacy
-    rows without `source_commit` use reviewed Git tree pins, never current
-    working-tree text. The dedicated workflow's non-cone sparse checkout
-    includes `qa`, `tools`, and current `*/scripts/mods/` paths so shared Lua
-    blobs hydrate in the checkout pack rather than through repeated lazy
-    historical fetches; the authority batch-prefetches whatever deployed blobs
-    are still missing, and the guard logs per-phase timings against its
-    five-minute budget. Fix reported cards; do not weaken the scanner or retry
-    the build.
   - `gh issue edit <N> --remove-label not-started --add-label verify-fix` only
     when a **complete deployed fix** is runnable in-game now.
   - `gh issue edit <N> --remove-label not-started --add-label diagnostics-armed`
