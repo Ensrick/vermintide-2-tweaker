@@ -366,6 +366,21 @@ return function(H, repo_root)
         H.equal(policy.purchase_allowed("natural_bond", false), true)
     end)
 
+    -- WP-CW-03: the roll arrays keep every injected boon for lookup parity, so a
+    -- roll must ask pool membership AND the exact gate, not the arrays.
+    H.test("CT #426 a modded boon rolls only while pooled and the exact gate is open", function()
+        H.equal(policy.rollable(false, false, false), true)
+        H.equal(policy.rollable(true, true, true), true)
+        H.equal(policy.rollable(true, false, true), false)
+        H.equal(policy.rollable(true, true, false), false)
+    end)
+
+    H.test("CT #426 shrine purchases of modded boons need the exact gate", function()
+        H.equal(policy.purchase_allowed("ct_meta_health", false), false)
+        H.equal(policy.purchase_allowed("ct_meta_health", true), true)
+        H.equal(policy.purchase_allowed("deus_reckless_swings", false), true)
+    end)
+
     -- ---------------------------------------------------------- presentation
 
     H.test("CT #426 gated rows cover every control that enables wire content", function()

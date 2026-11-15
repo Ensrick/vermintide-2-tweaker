@@ -574,6 +574,8 @@ mod:hook("DeusPowerUpUtils", "generate_random_power_ups", function(func, ...)
 
     local function _should_strip(name)
         if not name then return false end
+        -- WP-CW-03 (#426): toggle-off or parity-unconfirmed custom boons.
+        if mod._ct_boon_rollable and not mod._ct_boon_rollable(name) then return true end
         -- v0.7.200-dev (#211): disable check routed through the shared mod._ct_boon_disabled
         -- helper (behavior-identical for boolean checkbox values).
         if mod._ct_boon_disabled(name) then return true end

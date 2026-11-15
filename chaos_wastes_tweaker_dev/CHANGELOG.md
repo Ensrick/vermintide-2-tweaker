@@ -1,5 +1,25 @@
 # Chaos Wastes Tweaker Changelog
 
+## 0.7.355-dev (2026-11-15) -- Custom boon rolls and purchases obey toggles and parity (WP-CW-03, #426, #1191)
+
+- `inject_dormant_boon` puts every custom boon into `DeusPowerUpsArray` and
+  `DeusPowerUpsArrayByRarity` at load, and the vanilla roller reads those arrays
+  (`deus_power_up_utils.lua:138-146`). The toggle path and the #426 eject only
+  edited `DeusPowerUpRarityPool`, so neither reached a roll.
+- New pure `_ct_wire_policy.rollable(is_modded, in_pool, exact_safe)` and
+  `mod._ct_boon_rollable(name)` (`_ct_boon_registry.lua`). The roll hook's
+  `_should_strip` and `mod._ct_bot_pick_random_for_rarity` now skip a custom boon
+  unless it is pooled (toggle on) and peer parity is confirmed. Stripping stays
+  inside the existing remove-then-restore window; no array or lookup row is
+  removed.
+- The `_try_buy_power_up` hook refuses a cataloged boon while parity is not
+  confirmed and logs `[ct:426] BLOCKED modded boon at purchase: <name>`. Vanilla
+  handles a refused purchase on both sides (`deus_run_controller.lua:989-1004`,
+  `:1058-1077`).
+- Offline: new cases in `test_ct_426_exact_catalog` and
+  `test_ct_run_creation_owner`. Rig cases `qa/runtime/ct_dev/issue_426_roll_gate.lua`
+  and `issue_426_purchase_gate.lua`.
+
 ## 0.7.354-dev (2026-11-06) -- Correct selected fix authority boundaries
 
 - Tighten the existing rescue success boolean: missing, throwing or far-away
