@@ -1,0 +1,15 @@
+{
+  "name": "api-selftest",
+  "mods": ["1369573612"],
+  "timeout": 600,
+  "host_expect_log": ["SET RESTORE id=api-set mod=VMF setting=vt2_rig_api_selftest", "SHOT id=api-core n=1 label=\"api selftest still\" captured=false", "EQUIP RESTORE id=api-inventory career=\\S+ slot=slot_melee item="],
+  "cases": [
+    { "id": "api-core", "arena": "keep", "file": "../_rig/api_core.lua" },
+    { "id": "api-set", "arena": "keep", "file": "../_rig/api_set.lua" },
+    { "id": "api-set-restored", "arena": "keep", "file": "../_rig/api_set_restored.lua" },
+    { "id": "api-ui", "arena": "keep", "file": "../_rig/api_ui.lua" },
+    { "id": "api-inventory", "arena": "keep", "file": "../_rig/api_inventory.lua" },
+    { "id": "api-inventory-restored", "arena": "keep", "file": "../_rig/api_inventory_restored.lua" },
+    { "id": "api-career", "arena": "keep", "file": "../_rig/api_career.lua" }
+  ]
+}

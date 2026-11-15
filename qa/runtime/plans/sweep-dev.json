@@ -1,0 +1,56 @@
+{
+  "name": "sweep-dev",
+  "generated_by": "tools/harness/New-SmokePlan.ps1 from tools/mod-inventory.psd1 (rows with Stream 'dev' or 'single'); do not edit by hand",
+  "mods": [
+    "1369573612",
+    "3712896117",
+    "3748824853",
+    "3733366926",
+    "3733367409",
+    "3751024698",
+    "3715714222",
+    "3721036701",
+    "3716286199",
+    "3716780252",
+    "3716869446",
+    "3765055148",
+    "3733366851",
+    "3721290755",
+    "3730422873",
+    "3733366748",
+    "3753880932"
+  ],
+  "expect_mods": [
+    "VMF",
+    "wt",
+    "wt_dev",
+    "ct_dev",
+    "gt_dev",
+    "gut_dev",
+    "cosmetics_tweaker",
+    "dynamic_cosmetic_portraits",
+    "crt",
+    "enemy_tweaker",
+    "character_weapon_variants",
+    "character_dialogue",
+    "cim_dev",
+    "event_tweaker",
+    "mp",
+    "verminious_dreams_lighting_dev",
+    "WOC"
+  ],
+  "timeout": 900,
+  "cases": [
+    {
+      "id": "smoke-keep",
+      "arena": "keep",
+      "file": "../_rig/smoke_keep.lua"
+    },
+    {
+      "id": "sweep-regression",
+      "arena": "keep",
+      "file": "../_rig/sweep_regression.lua"
+    }
+  ],
+  "sweep": true
+}
