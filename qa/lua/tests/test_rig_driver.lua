@@ -1,4 +1,4 @@
--- test_rig_driver.lua: offline run of the test rig driver (WP-H-01).
+-- test_rig_driver.lua: offline run of the test rig driver (WP-H-01) and its backend write shield (WP-H-14).
 --
 -- Loads the real bootstrap (tools/harness/bootstrap/vt2_rig_driver.mod) and lets it compile the real driver
 -- (tools/harness/driver/vt2_rig_driver.lua) from a plan that a stub Application.user_setting returns, exactly as
@@ -275,5 +275,202 @@ return {
         local realm_object, _, realm_lines = boot(plan, { modded_realm = false })
         H.equal(next(realm_object), nil, "bootstrap is inert outside the modded realm")
         H.equal(#realm_lines, 0, "nothing printed outside the modded realm")
+    end)
+
+    -- -----------------------------------------------------------------------------------------------------
+    -- WP-H-14: backend write shield. Stub classes stand in for PlayFabMirrorBase, PlayFabRequestQueue and the
+    -- keep_decorations interface; the shield must override the live INSTANCES only.
+    -- Engine shapes: _check_career_data(self, careers_data, career_data_mirror) returns dirty first
+    -- (Vermintide-2-Source-Code/scripts/managers/backend_playfab/playfab_mirror_base.lua:2885, :3409);
+    -- _commit_user_data(self, new_data, commit, commit_id) (:2111, called at :2911); the keep-decoration
+    -- comparison is a string compare against _read_only_data_mirror.keep_decorations (:2877-2883).
+    -- -----------------------------------------------------------------------------------------------------
+    local ACKED_DECORATIONS = '{"keep_painting_1":"painting_a","keep_painting_2":"painting_b"}'
+
+    local function flat_json_decode(text)
+        local out = {}
+        for key, value in text:gmatch('"([^"]+)"%s*:%s*"([^"]*)"') do
+            out[key] = value
+        end
+        return out
+    end
+
+    local function new_backend()
+        local classes = { mirror = {}, queue = {}, keep = {} }
+        for _, class in pairs(classes) do
+            class.__index = class
+        end
+        local originals = {
+            check = function()
+                return true, {}, { dirty = true }
+            end,
+            commit_user_data = function(self)
+                self.class_user_data_sent = true
+            end,
+            enqueue = function(self, request)
+                self.enqueued[#self.enqueued + 1] = request
+                return #self.enqueued
+            end,
+            keep_json = function()
+                return "class encoder ran"
+            end,
+        }
+        classes.mirror._check_career_data = originals.check
+        classes.mirror._commit_user_data = originals.commit_user_data
+        classes.queue.enqueue = originals.enqueue
+        classes.keep.get_keep_decorations_json = originals.keep_json
+
+        local function new_mirror()
+            return setmetatable({
+                _request_queue = setmetatable({ enqueued = {} }, classes.queue),
+                _characters_data_key = "characters_data",
+                _career_data = { es_mercenary = { { slot_melee = "id_a", slot_ranged = "id_r", talents = "1,1" } } },
+                _career_data_mirror = { es_mercenary = { { slot_melee = "id_a", slot_ranged = "id_r", talents = "1,1" } } },
+                _user_data = { tutorial = "done" },
+                _user_data_mirror = { tutorial = "done" },
+                _read_only_data_mirror = { keep_decorations = ACKED_DECORATIONS },
+                _inventory_items = { id_a = {}, id_r = {}, id_b = {} },
+            }, classes.mirror)
+        end
+        local mirror = new_mirror()
+        local keep = setmetatable({ _keep_decorations = { keep_painting_1 = "painting_a", keep_painting_2 = "painting_b" } }, classes.keep)
+        local backend = {
+            _interfaces = { keep_decorations = keep },
+            get_backend_mirror = function()
+                return mirror
+            end,
+        }
+        return { backend = backend, mirror = mirror, queue = mirror._request_queue, keep = keep,
+            classes = classes, originals = originals, new_mirror = new_mirror }
+    end
+
+    local function shield_opts(world)
+        return { backend = world.backend, cjson = { decode = flat_json_decode } }
+    end
+
+    local function shared_entry(name)
+        return { id = name, hex = hex(read(repo_root .. "/qa/runtime/_shared/" .. name .. ".lua")) }
+    end
+
+    H.test("rig shield: a changed career row is held back and reported", function()
+        local world = new_backend()
+        local object, env, lines = boot(make_plan({ { id = "pass", src = PASS_CASE } }), shield_opts(world))
+        callback(object, "update", 0.1)
+        H.equal(count(lines, tag .. "SHIELD installed t=0%.1 "), 1, "shield up on the first tick the mirror exists")
+        world.mirror._career_data.es_mercenary[1].slot_melee = "id_b"
+        local results = { world.mirror:_check_career_data(world.mirror._career_data, world.mirror._career_data_mirror) }
+        H.equal(#results, 1, "one return value")
+        H.equal(results[1], false, "_check_career_data answers not dirty")
+        H.equal(count(lines, tag .. "SHIELD blocked=characters_data changed_fields=1 case=%-"), 1, "SHIELD blocked=characters_data printed")
+        world.mirror._user_data.tutorial = "changed"
+        local new_data = { keep_decorations = "left over from the caller" }
+        world.mirror:_commit_user_data(new_data, {}, 7)
+        H.equal(next(new_data), nil, "user data request table emptied")
+        H.equal(world.mirror.class_user_data_sent, nil, "the class sender did not run")
+        H.equal(count(lines, tag .. "SHIELD blocked=user_data changed_keys=1"), 1, "SHIELD blocked=user_data printed")
+        H.truthy(run_to_end(object, env), "run still completes")
+    end)
+
+    H.test("rig shield: a changed painting slot is answered with the acknowledged layout", function()
+        local world = new_backend()
+        local object, _, lines = boot(make_plan({ { id = "pass", src = PASS_CASE } }), shield_opts(world))
+        callback(object, "update", 0.1)
+        H.equal(count(lines, tag .. "SHIELD keep_decorations installed"), 1, "keep decorations shield installed")
+        H.equal(world.keep:get_keep_decorations_json(), ACKED_DECORATIONS, "unchanged layout: acknowledged string")
+        H.equal(count(lines, "SHIELD blocked=keep_decorations"), 0, "nothing reported while unchanged")
+        world.keep._keep_decorations.keep_painting_2 = "painting_c"
+        H.equal(world.keep:get_keep_decorations_json(), ACKED_DECORATIONS, "changed layout: still the acknowledged string")
+        H.equal(count(lines, tag .. "SHIELD blocked=keep_decorations changed_slots=1 case=%-"), 1,
+            "SHIELD blocked=keep_decorations changed_slots=1 printed")
+    end)
+
+    H.test("rig shield: overrides live on the instances, the class tables are untouched", function()
+        local world = new_backend()
+        local object, env = boot(make_plan({ { id = "pass", src = PASS_CASE } }), shield_opts(world))
+        H.truthy(run_to_end(object, env), "run completed")
+        local c, o = world.classes, world.originals
+        H.equal(c.mirror._check_career_data, o.check, "mirror class _check_career_data untouched")
+        H.equal(c.mirror._commit_user_data, o.commit_user_data, "mirror class _commit_user_data untouched")
+        H.equal(c.queue.enqueue, o.enqueue, "request queue class enqueue untouched")
+        H.equal(c.keep.get_keep_decorations_json, o.keep_json, "keep decorations class encoder untouched")
+        H.truthy(rawget(world.mirror, "_check_career_data") ~= nil, "instance override on the mirror")
+        H.truthy(rawget(world.mirror, "_commit_user_data") ~= nil, "instance override for user data")
+        H.truthy(rawget(world.queue, "enqueue") ~= nil, "instance wrapper on the request queue")
+        H.truthy(rawget(world.keep, "get_keep_decorations_json") ~= nil, "instance override on keep decorations")
+        local other = world.new_mirror()
+        H.equal(other:_check_career_data(), true, "another instance of the class still runs the class method")
+    end)
+
+    H.test("rig shield: backend_shield = false replaces nothing", function()
+        local world = new_backend()
+        local plan = make_plan({ { id = "pass", src = PASS_CASE } }, { backend_shield = false, shared = { shared_entry("official_mirror") } })
+        local object, env, lines = boot(plan, shield_opts(world))
+        H.truthy(run_to_end(object, env), "run completed")
+        H.equal(rawget(world.mirror, "_check_career_data"), nil, "no mirror override")
+        H.equal(rawget(world.mirror, "_commit_user_data"), nil, "no user data override")
+        H.equal(rawget(world.queue, "enqueue"), nil, "no request queue wrapper")
+        H.equal(rawget(world.keep, "get_keep_decorations_json"), nil, "no keep decorations override")
+        H.equal(count(lines, tag .. "SHIELD "), 0, "no SHIELD line at all")
+    end)
+
+    H.test("rig shield: requests are observed and passed through; others are named after KEEP READY", function()
+        local world = new_backend()
+        local object, env, lines = boot(make_plan({ { id = "pass", src = PASS_CASE } }), shield_opts(world))
+        callback(object, "on_game_state_changed", "enter", "StateTitleScreen")
+        callback(object, "update", 0.1)
+        local hero_request = { FunctionName = "updateHeroAttributes",
+            FunctionParameter = { hero_attributes = { keep_decorations = "v1", characters_data = "secret value" } } }
+        H.equal(world.queue:enqueue(hero_request, nil, false), 1, "request passed through to the queue")
+        world.queue:enqueue({ FunctionName = "earlyCloudScript" }, nil, true)
+        H.equal(count(lines, tag .. "SHIELD saw request=updateHeroAttributes keys=\"characters_data,keep_decorations\""), 1,
+            "key names of updateHeroAttributes printed")
+        H.equal(count(lines, "secret value"), 0, "values never printed")
+        H.equal(count(lines, "earlyCloudScript"), 0, "other requests before KEEP READY are not named")
+        callback(object, "on_game_state_changed", "enter", "StateIngame")
+        callback(object, "update", 0.1)
+        H.equal(count(lines, tag .. "KEEP READY"), 1, "keep ready")
+        world.queue:enqueue({ FunctionName = "lateCloudScript" }, nil, true)
+        H.equal(count(lines, tag .. "SHIELD saw request=lateCloudScript case=%-"), 1, "other requests after KEEP READY are named")
+        H.equal(#world.queue.enqueued, 3, "every request reached the queue")
+        H.truthy(run_to_end(object, env), "run completed")
+    end)
+
+    H.test("rig shield: the driver restores the official rows from the KEEP READY snapshot before quitting", function()
+        local world = new_backend()
+        local LEAVE_CHANGED = [[
+return {
+    run = function(T)
+        local OM = T.shared("official_mirror")
+        T.expect(type(OM.snapshot) == "function" and type(OM.restore) == "function", "OM helper delivered")
+        local shield = T.shield()
+        T.expect(shield.installed, "T.shield reports the shield installed")
+        T.expect_eq(shield.blocked_characters_data, 0, "nothing blocked yet")
+        local mirror = Managers.backend:get_backend_mirror()
+        mirror._career_data.es_mercenary[1].slot_melee = "id_b"
+        T.wait(0.3)
+    end,
+}
+]]
+        local plan = make_plan({ { id = "leave", src = LEAVE_CHANGED } }, { shared = { shared_entry("official_mirror") } })
+        local object, env, lines = boot(plan, shield_opts(world))
+        H.truthy(run_to_end(object, env), "run completed")
+        H.equal(count(lines, tag .. "SHARED id=official_mirror ok=true"), 1, "shared helper loaded")
+        H.equal(count(lines, tag .. "SHIELD snapshot careers=1"), 1, "snapshot at KEEP READY")
+        H.equal(count(lines, tag .. "CASE END id=leave verdict=PASS"), 1, "case passed")
+        H.equal(count(lines, tag .. "SHIELD restore changed_fields=1 extra_fields=0 ok=true"), 1, "restore reports one changed field")
+        H.equal(world.mirror._career_data.es_mercenary[1].slot_melee, "id_a", "row restored to the snapshot")
+        local restore_at, end_at
+        for i, line in ipairs(lines) do
+            if line:find(tag .. "SHIELD restore") then restore_at = i end
+            if line:find(tag .. "RUN END") then end_at = i end
+        end
+        H.truthy(restore_at and end_at and restore_at < end_at, "restore runs before RUN END and the quit")
+    end)
+
+    H.test("rig driver: T.shared names a missing helper as INCONCLUSIVE", function()
+        local plan = make_plan({ { id = "need", src = "return { run = function(T) local OM = T.shared('official_mirror') T.expect(OM ~= nil, 'x') end }" } })
+        local object, env, lines = boot(plan)
+        H.truthy(run_to_end(object, env), "run completed")
+        H.truthy(first(lines, tag .. "CASE END id=need verdict=INCONCLUSIVE .*shared helper official_mirror"), "INCONCLUSIVE names the helper")
     end)
 end
