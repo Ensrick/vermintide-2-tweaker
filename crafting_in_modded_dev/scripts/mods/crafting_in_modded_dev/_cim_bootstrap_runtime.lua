@@ -80,6 +80,8 @@ return function(context)
     mod:info("Crafting in Modded v%s loaded", MOD_VERSION)
     mod:info("[cim:LOAD] v%s enabled fp=%s OK", MOD_VERSION,
         settings_fingerprint())
+    pcall(printf, "[cim:LOAD] v%s enabled fp=%s OK", MOD_VERSION,
+        settings_fingerprint())
 
     if MOD_VERSION:find("-dev$") or MOD_VERSION:find("-alpha$")
             or MOD_VERSION:find("-beta$") or MOD_VERSION:find("-rc%d*$")
@@ -136,6 +138,7 @@ return function(context)
         end)
 
     local checks = {}
+    mod._cim_rt_runner = mod:dofile("scripts/mods/crafting_in_modded_dev/_lib_rt_runner")
     local function rt_register(name, fn)
         checks[#checks + 1] = { name = name, fn = fn }
     end
@@ -155,29 +158,18 @@ return function(context)
 
     mod:command("cim_regression_test",
         "Run regression smoke checks for past bugs", function()
-            local pass, fail, skip = 0, 0, 0
             mod:echo("=== cim regression_test (v%s) ===", MOD_VERSION)
-            for _, check in ipairs(checks) do
-                local ok, err = pcall(check.fn)
-                if ok and err == nil then
-                    mod:echo("  PASS: %s", check.name)
-                    pass = pass + 1
-                    mod:info("[regression] PASS %s", check.name)
-                elseif ok and type(err) == "string"
-                        and err:sub(1, 5) == "skip:" then
-                    mod:echo("  SKIP: %s -- %s", check.name,
-                        err:sub(6):gsub("^%s+", ""))
-                    skip = skip + 1
-                    mod:info("[regression] SKIP %s: %s", check.name, err)
-                else
-                    local message = (not ok and tostring(err)) or tostring(err)
-                    mod:echo("  FAIL: %s -- %s", check.name, message)
-                    fail = fail + 1
-                    mod:warning("[regression] FAIL %s: %s", check.name, message)
-                end
-            end
+            -- WP-CIM-05: shared runner; every verdict also reaches the engine
+            -- log, which mod logging settings cannot hide.
+            local summary = mod._cim_rt_runner.run(checks, function(verdict, name, detail)
+                mod:echo("  %s: %s%s", verdict, name, detail and (" -- " .. detail) or "")
+                pcall(printf, "[cim:RT] %s %s %s", verdict, name, tostring(detail or ""))
+            end)
+            mod._cim_rt_last = summary
             mod:echo("=== %d passed, %d failed, %d skipped ===",
-                pass, fail, skip)
+                summary.pass, summary.fail, summary.skip)
+            pcall(printf, "[cim:RT] SUMMARY pass=%d fail=%d skip=%d version=%s",
+                summary.pass, summary.fail, summary.skip, MOD_VERSION)
         end)
     mod:info("[regression-test-command] registered as /cim_regression_test")
 

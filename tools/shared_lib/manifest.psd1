@@ -63,6 +63,15 @@
             )
         }
         @{
+            # WP-CIM-05. The stable crafting_in_modded consumer is added with the
+            # stable half of the card (PR #1824 holds that tree).
+            Source = "_lib_rt_runner.lua"
+            Consumers = @(
+                "career_tweaker/scripts/mods/career_tweaker/_lib_rt_runner.lua"
+                "crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/_lib_rt_runner.lua"
+            )
+        }
+        @{
             Source = "_lib_modded_realm_authority.lua"
             Consumers = @(
                 "cosmetics_tweaker/scripts/mods/cosmetics_tweaker/_lib_modded_realm_authority.lua"
