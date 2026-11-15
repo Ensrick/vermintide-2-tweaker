@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "issue": 881,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "character_dialogue",
+      "min_version": "0.1.14-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Open **Mod Tweaker > Dialogue**, search Markus Kruber's Chaos Wastes Bardin-song conversation, and choose a line that previously played silently.",
+        "2. Press Play once and wait for any package load to finish; confirm the line becomes audible.",
+        "3. Stop it, play it a second time, then leave the Dialogue tab.",
+        "4. Try one previously silent line outside that conversation family and record its visible line name.",
+        "5. Run `/cd_regression_test` and attach the newest console log."
+      ],
+      "assertions": [
+        "The first covered Morris-family play performs one bounded package acquisition and returns a real playing instance; the second is immediately audible; leaving releases the private reference once. No repeated load loop, timeout, leaked package reference, or crash occurs. The out-of-family control is reported separately rather than attributed to the audited package.",
+        "Play a Morris line: assert package acquired once, trigger_event playing id nonzero, is_playing true, private reference released once on tab exit. Audibility V."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5357118872,
+    "card_date": "2026-08-20T14:16:03Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

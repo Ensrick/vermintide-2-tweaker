@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 92,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "0.2.290",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In the Keep, open the game's **Options** display page. Hover both arrows on several arrow rows and the screen-mode/resolution dropdown arrows; note the glow without changing anything.",
+        "2. Open **Mod Tweaker > Tweaker: GUI > 3rd-Person Camera**. Hover the two **Camera Distance** arrows separately, then move away.",
+        "3. Under **HUD**, hover the **HUD Visibility Mode** dropdown arrow. Open its list, inspect the flipped arrow, then select its existing value to close it.",
+        "4. Compare size, position and fade-in/fade-out with the vanilla Options arrows. Attach screenshots and the log if any differ."
+      ],
+      "assertions": [
+        "Both slider-arrow glows and the open/closed dropdown-arrow glow match vanilla size and alignment, fade correctly, and never disappear. No unrelated setting changes or script error occurs.",
+        "/gut_regression_test: arrow_hover_native_size and mod_tweaker_dropdown_arrow_glow PASS (overlay 30x35 and 31x28 at native offsets)."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6591457220,
+    "card_date": "2026-11-02T23:48:52Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

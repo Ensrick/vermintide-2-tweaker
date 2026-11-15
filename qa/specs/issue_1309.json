@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "issue": 1309,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "event_tweaker",
+      "min_version": "0.4.54-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh **Tweaker: Events**, launch the game, and confirm the exact build banner in the newest log.",
+        "2. In the Cursed Adventure options, enable **Tzeentch Twins** and start a Chaos Wastes mission where that curse is active.",
+        "3. Kill at least 30 ordinary enemies, watching whether slain enemies split into smaller enemies.",
+        "4. Finish or leave the mission normally so the diagnostic summary is written.",
+        "5. Run `/event_tweaker_regression_test`, exit the game normally, and attach the newest log."
+      ],
+      "assertions": [
+        "The log contains the bounded `[et:1149t]` diagnostic family: one host activation row with a non-empty seed, no more than 10 host kill rows showing roll/verdict/enqueue data, and one host summary row. The regression suite reports `issue1309_tzeentch_diag_armed: PASS`.",
+        "Solo covers: enable curse, script 30 kills, assert activation row with non-nil seed and splits_spawned > 0. Client-kill path needs a real client."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "The log contains the bounded `[et:1149t]` diagnostic family: one host activation row with a non-empty seed, no more than 10 host kill rows showing roll/verdict/enqueue data, and one host summary row. The regression suite reports `issue1309_tzeentch_diag_armed: PASS`.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 5359015837,
+    "card_date": "2026-08-20T16:51:30Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

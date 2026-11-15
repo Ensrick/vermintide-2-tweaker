@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 300,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "general_tweaker_dev",
+      "min_version": "0.2.180",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Host with bots, enable **Bots Rescue Allies Awaiting Respawn**, and leave **Bots Drink Surplus Ranger Ale** off.",
+        "2. Leave **Ignore Follow Leash for Awaiting Rescues** on; enter assisted-respawn state more than 40 metres away and let the bots scan.",
+        "3. Turn Ignore Follow Leash off, leave **Use a Custom Awaiting-Rescue Range** off, set **Follow snap-back distance (meters)** to 20 metres, and repeat just inside and well outside that distance.",
+        "4. Enable **Use a Custom Awaiting-Rescue Range**, set **Custom Awaiting-Rescue Range (in meters)** to 40, and repeat inside and outside the limit.",
+        "5. Trigger an ordinary knockdown, ledge hang, and hook grab as controls. Run `/gt_regression_test`, exit normally, and attach the newest log."
+      ],
+      "assertions": [
+        "Unlimited mode can select an awaiting ally beyond the ordinary follow leash. Shared-follow and custom modes accept candidates at or inside their inclusive limit and refuse candidates beyond it. Ordinary rescue priorities remain native. Correct selection followed by unrelated pathing/interaction failure should be reported separately, not counted as proof that the distance filter failed.",
+        "Harness: put a player in assisted-respawn state at 30 m and 45 m, run three modes, read bot blackboard ally target; selection only at or inside limit."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6681737965,
+    "card_date": "2026-11-06T09:32:40Z",
+    "ledger": "D5_ledger.tsv"
+  }
+}

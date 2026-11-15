@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "issue": 682,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "crafting_in_modded_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "crafting_in_modded",
+      "min_version": "0.8.148",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In Crafting in Modded settings, enable **Automatically equip newly crafted weapons**. Play as **Mercenary Kruber** and record your currently equipped weapons before crafting.",
+        "2. Using mouse and keyboard, open the normal Keep forge and select **Craft Item**. Craft one **Greatsword** and one **Handgun**. After each press, confirm exactly one new Modded-rarity instance appears in inventory. Manually equip each exact new instance and confirm it is usable; do not mistake an unchanged held weapon for a missing inventory item.",
+        "3. Connect a controller and repeat through the gamepad **Craft Item** interface with one **Great Hammer** and one **Repeater Handgun**. Check the exact new instances in inventory, equip them manually, and confirm the screen acknowledges each craft without silently repeating or dropping it. If a controller is unavailable, report this cell as not exercised, not passed.",
+        "4. Use **Open Athanor Crafting Menu**. From its **Primary** weapon selection, craft one visible base-game melee weapon; from **Secondary**, craft one visible base-game ranged weapon. Record the names and identify each exact new instance. With the setting enabled, each of these Athanor results should immediately equip in its selected slot and update the live character. Craft one accessory as the control.",
+        "5. Close and reopen both crafting menus, enter and leave an Adventure mission, then fully exit and relaunch the game. Confirm every instance created above remains exactly once in inventory, and manually equip it again to confirm usability. Remaining automatically equipped after restart is not part of this test.",
+        "6. Run `/cim_regression_test` and record the visible passed/failed/skipped summary and first failure, if shown. Exit normally and attach the newest complete console log. Report mouse/keyboard, controller, normal **Craft Item**, Athanor weapons, accessory control, and restart results separately; unavailable output or an unexercised cell is not a pass."
+      ],
+      "assertions": [
+        "Every requested weapon craft creates exactly one usable inventory instance, the accessory control still works, and all created instances survive menu, mission, and game-restart boundaries without a duplicate grant, silent craft-button path, backend rejection, or script error. Automatic equip is required for the Athanor Primary/Secondary control only; standard-bench results are checked by inventory presence and manual equip. A regression summary does not override a wrong visible result.",
+        "No CWV/WOC: craft a Greatsword and a Handgun at the bench and the Athanor: exactly one new Modded instance each in mirror and forged store, equippable, relaunch persists."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6687612695,
+    "card_date": "2026-11-06T14:48:00Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 1009,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "general_tweaker_dev",
+      "min_version": "0.2.180",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Start an Adventure mission, enable **Godmode**, and spawn or find a Blightstormer.",
+        "2. Walk from the storm's outer pull into its centre and remain beyond the point where it normally captures a player.",
+        "3. Confirm the outer pull remains, but the centre does not capture, lift, hide weapons, or throw you.",
+        "4. Turn Godmode off and confirm a fresh storm captures and ejects normally.",
+        "5. Re-enable Godmode for one blocked attempt, turn it off again, and confirm a later legitimate capture still succeeds.",
+        "6. Run `/gt_regression_test`, exit normally, and attach the newest log."
+      ],
+      "assertions": [
+        "Only enemy Blightstorm entry is blocked under Godmode. Outer attraction, native capture/ejection with Godmode off, and Sister of the Thorn's separate vortex stay unchanged. No stale captured state survives a blocked attempt. No co-op stage is claimed.",
+        "Harness: spawn a Blightstorm vortex, call StatusUtils.set_in_vortex_network(player,true,vortex): returns false and status unchanged with godmode; captured with godmode off."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6681752403,
+    "card_date": "2026-11-06T09:33:29Z",
+    "ledger": "D5_ledger.tsv"
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "issue": 1656,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "crafting_in_modded_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [],
+      "assertions": [
+        "Run both regression commands on the live build with the tester's mod set, with and without Pusfume; assert zero FAIL and every SKIP carries a reason."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": null,
+    "card_date": null,
+    "ledger": "D1_ledger.tsv"
+  }
+}

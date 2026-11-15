@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 1149,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "event_tweaker",
+      "min_version": "0.4.54-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh **Tweaker: Events** from the Workshop and launch the game.",
+        "2. Open Mod Options for Tweaker: Events and scroll **Other Mutators (Chaos Wastes / Deus / misc)** and the Cursed Adventure curse groups.",
+        "3. Confirm every checkbox shows a clean game name, with no bracketed raw key text in any title or tooltip.",
+        "4. Enable **Preview Active Mutators on Tab**, check a curse with no art of its own (for example the Nurgle curse Corrupted Flesh), and hold Tab in the keep.",
+        "5. Run `/event_tweaker_regression_test`."
+      ],
+      "assertions": [
+        "All modifier labels localized; every curse row in the Tab preview shows an icon matching its in-game god or curse art; name-only rows appear only where the game itself ships no icon. `issue1149_modifier_loc_icon_coverage` passes in the regression run.",
+        "In the keep run issue1149_modifier_loc_icon_coverage: every discovered mutator has a non-bracketed name and a resolvable icon."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5306279039,
+    "card_date": "2026-08-16T07:15:32Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

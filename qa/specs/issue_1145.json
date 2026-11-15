@@ -1,0 +1,46 @@
+{
+  "schema": 1,
+  "issue": 1145,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Both players refresh **Tweaker: Cosmetics** and **Character Weapon Variants**, join the Keep, and confirm both current banners in their newest logs.",
+        "2. The host equips the **Imperial Longsword and Shield**.",
+        "3. The host opens its illusion picker and changes the illusion at least six times as quickly as the menu permits while the client watches the host.",
+        "4. The host closes the menu, repeats the rapid changes once, and leaves the final illusion selected.",
+        "5. Both players run `/cos_regression_test` and `/cwv_regression_test`, exit normally, and attach both newest console logs."
+      ],
+      "assertions": [
+        "The client does not crash, the client settles on the host's final illusion after the changes stop, neither log reports `Game object not found`, and both #1145 regression checks pass.",
+        "Offline: coalescer merges N pulses into one re-wield per wearer per frame and refuses mid-destroy. Co-op: host changes illusion twelve times fast; client log has no Game object not found."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "The client does not crash, the client settles on the host's final illusion after the changes stop, neither log reports `Game object not found`, and both #1145 regression checks pass.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 5356423632,
+    "card_date": "2026-08-20T13:17:33Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

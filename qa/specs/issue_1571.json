@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 1571,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "0.2.290",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Disable standalone **Tab Scoreboard**. Enable **Expanded Scoreboard (Live + End Screen)** and **Host Statistics**, then select **Page 2**.",
+        "2. Start Adventure SOLO with both melee and ranged weapons. Before fighting, **Melee Damage** and **Ranged Damage** after **Times Revived** must both show 0.",
+        "3. Kill enemies with only light/heavy melee attacks; confirm only Melee Damage rises. Then use only ranged attacks; confirm Ranged Damage rises without changing Melee Damage.",
+        "4. Check bot columns update as they fight and unrelated rows/sorting/page remain unchanged.",
+        "5. Finish and confirm both end-screen totals do not decrease. Start another mission and confirm both reset to 0 for everyone."
+      ],
+      "assertions": [
+        "Damage is separated by melee versus ranged origin, correctly attributed on live/end screens and reset per mission, with no changes to unrelated scoreboard presentation.",
+        "Deal light/heavy melee then ranged damage: Melee and Ranged ledgers rise by the damage_dealt delta per classifier; bots credited; reset next mission."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6591499939,
+    "card_date": "2026-11-02T23:51:35Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

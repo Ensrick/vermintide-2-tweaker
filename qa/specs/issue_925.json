@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "issue": 925,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "dynamic_cosmetic_portraits",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Open weapon-illusion customization with two visibly different icons. Apply a new primary illusion and watch the retained top-left item card without closing the screen.",
+        "2. Repeat for an offhand shield and, if installed, a Loremaster shield illusion.",
+        "3. On Mercenary Kruber, equip a tracked hat or outfit and watch the dynamic portrait update without reopening inventory.",
+        "4. Load a saved PUBLIC GUI loadout containing that cosmetic and check that its portrait refreshes once.",
+        "5. Retain the log and before/after images for any stale icon or portrait."
+      ],
+      "assertions": [
+        "Primary/offhand item icons and dynamic portraits update immediately after applied or loaded cosmetics, without menu recreation, stale images or duplicate refresh. The optional Loremaster control is reported separately if unavailable.",
+        "After Apply without closing: assert retained item-card texture equals the new skin icon; after hat equip or loadout load assert portrait texture changed and refresh generation +1."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6591490685,
+    "card_date": "2026-11-02T23:50:59Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

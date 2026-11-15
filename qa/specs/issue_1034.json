@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "issue": 1034,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "general_tweaker_dev",
+      "min_version": "0.2.180",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. On the host, leave **Host-side Melee Latency Compensation** on and **Maximum Compensation Window** at 250 ms.",
+        "2. Isolate an enemy with an ordinary blockable melee attack and let it hit the remote human client unanswered once.",
+        "3. On separate attacks, have the client block late and dodge late after commitment but within the measured latency window.",
+        "4. On another committed attack, have the client push or strike and stagger that exact attacker. Stagger a different nearby enemy as the negative control.",
+        "5. On the host, run `/gt_lag_comp_status` and `/gt_regression_test`, then repeat briefly with compensation off.",
+        "6. Confirm host players, bots, grabs/disablers, projectiles, hazards and unblockable attacks remain native. Exit normally and attach both logs."
+      ],
+      "assertions": [
+        "Valid late block, dodge and exact-attacker stagger cancel only the eligible queued hit. Host status counters record the cancelled cases and the unanswered applied hit; the bounded-queue regression passes. The different-enemy stagger, disabled mode and excluded damage/player classes remain native, without repeated hits, overflow, crash or RPC mismatch.",
+        "Automatable: queue/cancel policy offline (test_gt_host_lag_comp.lua) and host harness with synthetic remote-player block/dodge status; real latency timing needs a remote client."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "Valid late block, dodge and exact-attacker stagger cancel only the eligible queued hit. Host status counters record the cancelled cases and the unanswered applied hit; the bounded-queue regression passes. The different-enemy stagger, disabled mode and excluded damage/player classes remain native, without repeated hits, overflow, crash or RPC mismatch.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 6681754129,
+    "card_date": "2026-11-06T09:33:36Z",
+    "ledger": "D5_ledger.tsv"
+  }
+}

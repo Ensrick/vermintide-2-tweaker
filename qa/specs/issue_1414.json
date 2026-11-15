@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "issue": 1414,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "0.2.290",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Disable standalone **Tab Scoreboard**, enable **Expanded Scoreboard (Live + End Screen)** and keep the 13 native statistic rows visible.",
+        "2. In Adventure, hold Tab: page 1 must have the original 11 rows and page 2 **Aidings** and **Times Revived**, with all player columns intact.",
+        "3. Create nonzero Aidings and Times Revived by reviving a downed bot and being revived yourself. Check the correct player values on held Tab and after mission completion.",
+        "4. Use **Scoreboard Page** and **Next Scoreboard Page**; check no row is lost or duplicated.",
+        "5. Select **Damage Dealt** sorting, hide that row and reopen held Tab/end screen. Confirm fallback to **Player Name** without overwriting the saved preference; show Damage Dealt and confirm its preference returns.",
+        "6. Restart and check persisted page/visibility settings. Repeat layouts at 1080p, 1440p and ultrawide where available; record unavailable resolutions.",
+        "7. Run `/gut_regression_test` and retain the complete report and the fingerprint receipt described below. A missing receipt/check or failure is not a functional pass."
+      ],
+      "assertions": [
+        "Both native surfaces retain all 13 rows across two pages and preserve nonzero revive statistics through mission end. Sorting fallback, page/visibility persistence and tested aspect ratios remain usable without overlap or missing columns. The named synthetic check passes with its stable fingerprint verdict.",
+        "issue272_native_live_scoreboard_page PASS with [gut:1414] verdict; in mission the Tab model has 13 topics on 2 pages; revive a bot: value rises; end-screen model equals last Tab; settings persist."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6591854594,
+    "card_date": "2026-11-03T00:13:46Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

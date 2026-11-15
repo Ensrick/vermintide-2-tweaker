@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "issue": 485,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "0.9.230-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh **Tweaker: Cosmetics** from Steam Workshop, launch Vermintide 2 into the Modded Realm, and confirm the exact build banner above in the newest console log.",
+        "2. In the keep, open Mod Options, Tweaker: Cosmetics, and enable **Unlock Heroic Weapon Poses**.",
+        "3. Equip a vanilla weapon, for example Kruber's Great Hammer, and open the social wheel. Play one of the heroic poses it lists and confirm the pose animates and control returns normally. Repeat with a second vanilla weapon.",
+        "4. Equip a weapon added by another mod, such as a Character Weapon Variants weapon, and open the social wheel. Record the weapon and career you used. If no such mod is loaded, skip this step and say so in your report.",
+        "5. Disable **Unlock Heroic Weapon Poses** and open the social wheel again on the weapons from steps 3 and 4, then enable it once more and reopen the wheel on the first vanilla weapon.",
+        "6. Run `/cos_485_diag` once in chat and wait for the chat confirmation that the heroic pose gap summary was written to the console log.",
+        "7. Run `/cos_regression_test`, then exit the game normally and attach the newest console log."
+      ],
+      "assertions": [
+        "With the option on, each vanilla weapon lists its heroic poses on the social wheel, the chosen pose plays locally, and control returns cleanly. The weapon from another mod keeps its standard wheel with no blank icon, borrowed pose or missing animation. With the option off, every weapon shows the official wheel only. The log contains exactly one `[cos:485:diag] summary recorded=<n> suppressed=<m> cap=32 parents=<keys>` line for the run; report the printed values as they are, and the recorded count must never exceed 32. The regression run reports `PASS: issue485_authored_weapon_poses_local_only`. No Tweaker: Cosmetics script error appears. This card collects the identities of weapons without authored poses; no donor pose fallback is implemented or expected yet.",
+        "Option on: assert social-wheel pose list equals authored weapon_pose rows per parent; off restores vanilla; diag ledger capped at 32. Pose animation V."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5671618137,
+    "card_date": "2026-09-14T22:22:22Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

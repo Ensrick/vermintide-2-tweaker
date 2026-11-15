@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 402,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In Official, record Grail Knight's weapons, accessories, outfit, hat, equipped frame and pose across rows I-VI, including which row is bot-designated. Choose distinct reversible player and bot-designated test rows and retain their full baselines.",
+        "2. Enter the Modded Realm, open Hero View so the backend is ready, and run `/scrub_official_loadouts` with NO arguments. Keep this report as the pre-change official-mirror baseline; do not repair any older finding.",
+        "3. With **Use non-modded loadouts** off, save identifiable modded-only weapons, an equipped portrait frame and other available cosmetic slots in the separate player and bot-designated test rows. Change each row independently and record the exact IDs/names; ordinary vanilla slots remain controls.",
+        "4. Restart into Official and compare every recorded row and slot, including the bot designation. No modded-only weapon/frame/cosmetic may appear or cause a Blacksmith/base fallback. Then make one deliberate, reversible change in an Official test row and record the new valid Official baseline.",
+        "5. Return to Modded, open Hero View, and confirm both established modded test rows and their bot designation remain separate from that Official edit. Run `/scrub_official_loadouts` with NO arguments again; compare with the first report and the deliberate valid Official change, without repairing any finding.",
+        "6. Return to Official once more and confirm its deliberate valid change remains and no modded edits leaked into player or bot rows. Retain both reports and logs; restore only the test selections manually if desired, never by scrub/repair."
+      ],
+      "assertions": [
+        "Modded weapon/frame/other-cosmetic edits never alter Official player or bot rows; deliberate valid Official edits remain Official and do not overwrite the established separate modded rows. Reports show no NEW broken/modded Official slot. Historical findings are recorded, not repaired. A backend-not-ready report is not a clean scan; open Hero View and retry without arguments.",
+        "Modded realm: snapshot official characters_data; scripted modded equips (weapon, frame, cosmetics, bot row); commit; relaunch: JSON identical, no characters_data in updateHeroAttributes, [gut:402] boot lines."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6591482480,
+    "card_date": "2026-11-02T23:50:28Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

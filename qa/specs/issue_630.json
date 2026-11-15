@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "issue": 630,
+  "class": "X",
+  "status": "draft",
+  "vp": null,
+  "arena": "none",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "weapon_tweaker",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In the Keep, open **Mod Tweaker → Equipment → Weapons**.",
+        "2. Alt-tab away from the game and back once.",
+        "3. Collapse and reopen **Weapons**, switch to another Mod Tweaker tab and back, then close and reopen Mod Tweaker.",
+        "4. Repeat one alt-tab while the normal **Hero/Inventory** screen is open as a control.",
+        "5. Exit normally if responsive. If the game freezes, note the last action and preserve the complete log and matching crash dump."
+      ],
+      "assertions": [
+        "The game remains responsive. `[gut:630] frame_evidence` appears after the first draw and each focus/tab/Weapons-expansion edge, naming `visible_rows` and `resource_candidates`; steady frames do not emit it. A healthy close remains `balance=0`, `in_draw=false`, `anomalies=0`. If the DX12 timeout recurs, the final `frame_evidence` identifies the submitted UI set before the native fence wait.",
+        "Log watcher failing any console log with wait_for_fence or d3d12_render_device timeout; stress script opening and closing the Weapons tab 200 times under a frame-time budget."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "source": {
+    "card_comment_id": 5282066968,
+    "card_date": "2026-08-13T14:55:16Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

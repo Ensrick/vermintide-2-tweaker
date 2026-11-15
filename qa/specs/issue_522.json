@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "issue": 522,
+  "class": "V",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "0.2.290",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Open inventory and set **Character Preview Lighting** to **Vanilla**. Note its brightness, background, camera and interface.",
+        "2. Without leaving inventory, select **Dim**, then **Dark**; compare the progressively darker preview lighting while the same scene stays in place.",
+        "3. Return to **Vanilla** and compare with the baseline. Close/reopen inventory and confirm the selected value persists and original lighting is restored.",
+        "4. Enter a mission and inspect gameplay lighting as an unrelated-world control."
+      ],
+      "assertions": [
+        "Only the inventory preview lighting changes. Dim/Dark do not replace its scene, camera or package; Vanilla restores the prior lighting exactly and gameplay lighting is unaffected.",
+        "R part: shading callback installed on the preview world only, exposure 0.65/0.40, restored on Vanilla/exit, mission world untouched; darkness itself: screenshot mean-luminance diff."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "Only the inventory preview lighting changes. Dim/Dark do not replace its scene, camera or package; Vanilla restores the prior lighting exactly and gameplay lighting is unaffected."
+  ],
+  "source": {
+    "card_comment_id": 6591484244,
+    "card_date": "2026-11-02T23:50:35Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "issue": 61,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "enemy_tweaker",
+      "min_version": "0.7.65-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Host a mission with both players on **Auto** and compare repeatable hostile-enemy damage dealt and received.",
+        "2. Have only the client select one **Personal Difficulty** rung above the host and repeat the same controls.",
+        "3. Return the client to Auto, respawn once, then reconnect once.",
+        "4. Run `/et_regression_test` on both peers and attach both newest logs."
+      ],
+      "assertions": [
+        "Only the selected client deals less damage and receives more hostile-enemy damage. Host, bots, pets, enemy count and health, healing, friendly fire, environmental damage, and self damage remain unchanged. Auto restores native values and respawn or reconnect never stacks the factor.",
+        "Solo host covers: enable allow-gate and own preset, script hits on a spawned enemy, assert incoming/outgoing factors. Client preset transport and isolation need two clients."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "Only the selected client deals less damage and receives more hostile-enemy damage. Host, bots, pets, enemy count and health, healing, friendly fire, environmental damage, and self damage remain unchanged. Auto restores native values and respawn or reconnect never stacks the factor.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 5357039304,
+    "card_date": "2026-08-20T14:09:28Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "issue": 399,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Both players confirm the banner above in their own logs.",
+        "2. Owner check first: equip the Outrider Grenade Launcher on a Kruber career and confirm YOUR own view is correct in first person and third person, with no torpedo attached.",
+        "3. The other player watches your character while you equip it, and says what they see: the weapon model, whether it animates when you fire, and whether anything is sticking out of it.",
+        "4. Swap to another weapon and back, then have them look again.",
+        "5. Enter a mission together and repeat step 3 there.",
+        "6. Reverse the roles: the other player equips the Outrider Grenade Launcher and you observe.",
+        "7. Control case, so a real weapon is not broken by the fix: have someone play Bardin Ironbreaker with the actual Trollhammer Torpedo and confirm the observer still sees its torpedo ammunition normally.",
+        "8. Exit and attach both newest logs."
+      ],
+      "assertions": [
+        "The observer sees the blunderbuss model, animating when fired, with NO Trollhammer torpedo attached, in the keep and in a mission and in both role directions. The real Trollhammer in step 7 keeps its torpedo. Logs may contain bounded `[cwv husk-ammo-nil] SKIP` or `[cwv husk-ammo-strip] SKIP` lines; note them if present, they are diagnostic rather than automatic failures.",
+        "Observer client enumerates the owner husk slot units; assert no ammo unit for Outrider and an ammo unit present for a native Trollhammer control."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "The observer sees the blunderbuss model, animating when fired, with NO Trollhammer torpedo attached, in the keep and in a mission and in both role directions. The real Trollhammer in step 7 keeps its torpedo. Logs may contain bounded `[cwv husk-ammo-nil] SKIP` or `[cwv husk-ammo-strip] SKIP` lines; note them if present, they are diagnostic rather than automatic failures.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 5213769636,
+    "card_date": "2026-08-07T07:14:05Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

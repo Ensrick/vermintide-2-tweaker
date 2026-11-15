@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "issue": 526,
+  "class": "V",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "dynamic_cosmetic_portraits",
+      "min_version": "0.1.32-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Select Kruber's Mercenary and equip a hat or outfit tracked by Dynamic Cosmetic Portraits.",
+        "2. Complete any mission and remain on the mission-completion screen.",
+        "3. Inspect Kruber's portrait inside the octagonal frame, including its edges and transparent corners.",
+        "4. Run `/dcp_regression_test`, exit normally, and attach the newest log."
+      ],
+      "assertions": [
+        "Kruber's custom portrait is visible, uses the equipped cosmetic, and stays clipped inside the octagonal frame with no blank portrait, rectangular bleed, or overflow. The regression command passes without atlas-readiness errors.",
+        "Automatable: 24 atlas rows and material resident, sizes 86x108 and 60x70, deterministic atlas hash, alpha masks equal the canonical silhouette. Final clipping needs eyes or screenshot diff."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "Kruber's custom portrait is visible, uses the equipped cosmetic, and stays clipped inside the octagonal frame with no blank portrait, rectangular bleed, or overflow. The regression command passes without atlas-readiness errors."
+  ],
+  "source": {
+    "card_comment_id": 5043897748,
+    "card_date": "2026-07-22T08:58:42Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "issue": 1436,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "weapon_tweaker",
+      "min_version": "0.12.343-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh **Tweaker: Weapons** from Steam Workshop, launch the Modded Realm, and confirm the exact build banner above.",
+        "2. Open Mod Options, **Tweaker: Weapons**, **Pre-Patch Weapon Versions**. Confirm every dropdown there shows **Current (Game Version 6.12.1)**. Set **Bardin's Grudge-Raker** to **Game Version 6.10.0 (Ammunition Only)** and leave every other dropdown on Current.",
+        "3. Fully close and relaunch the game and confirm the build banner again. As Bardin Ranger Veteran or Ironbreaker (not Outcast Engineer, whose passive raises ammunition), equip the **Grudge-Raker** at full ammunition in the keep or an Adventure mission. The HUD ammunition counter must show 2 loaded and 14 remaining (16 in total, down from 20).",
+        "4. Set **Bardin's Grudge-Raker** back to **Current (Game Version 6.12.1)**, fully restart the game, and repeat step 3. The counter must show 2 loaded and 18 remaining (20 in total).",
+        "5. Set **Kerillian's Swiftbow** to **Game Version 6.10.0 (Ammunition Only)**, fully restart the game, and as any Kerillian career equip the **Swiftbow** at full ammunition in the keep or an Adventure mission. The counter must show 1 loaded and 49 remaining (50 in total, down from 60).",
+        "6. Set **Kerillian's Swiftbow** back to **Current (Game Version 6.12.1)**, fully restart the game, and repeat step 5. The counter must show 1 loaded and 59 remaining (60 in total).",
+        "7. Run `/wt_regression_test`, then close the game normally and attach the newest console log."
+      ],
+      "assertions": [
+        "Every Pre-Patch Weapon Versions dropdown defaults to Current and changes nothing. Each historical option lowers only the named weapon's maximum ammunition to its source-proven value after a restart, and setting it back to Current restores the vanilla value after a restart. Damage, pellets, reload, and every other weapon remain unchanged throughout. The regression run reports `PASS: issue1436_historical_weapon_patch_versions`. No Tweaker: Weapons script error occurs.",
+        "Per family option: set, restart, assert live template and profile values equal the catalog; Current restores the captured baseline exactly; parity unit tests for unknown profiles."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5659419134,
+    "card_date": "2026-09-14T05:23:20Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

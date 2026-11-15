@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 453,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "enemy_tweaker",
+      "min_version": "0.7.65-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Run `/et_modifier_audit` in the Keep before spawning anything, and keep its chat summary.",
+        "2. Play a lord-bearing mission and encounter, in the same session, at least one Special, one Elite, one Boss and the Lord.",
+        "3. Cross one transition, then encounter one more enemy of a category already sampled.",
+        "4. Run `/et_modifier_audit` again and then `/et_regression_test`.",
+        "5. Attach the newest log."
+      ],
+      "assertions": [
+        "bounded `[et:453]` rows carry the classification evidence - at most two live rows per category across Special, Elite, Boss and Lord - each naming the category, breed, eligibility, the rejection counts, and the exact skip reason; the two audit summaries agree on the modifier count and gap count; the audit applies no modifier, mutates no enemy and stacks no callback, and the enemies behave exactly as vanilla throughout. `/et_regression_test` reports no new failures. A category with zero rows means it was never encountered in this session, not that classification failed - say which categories were actually seen.",
+        "Script one spawn per category including a lord; run /et_modifier_audit; assert rows for all four categories and the gap list; then build per category."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5165084903,
+    "card_date": "2026-08-03T10:16:03Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

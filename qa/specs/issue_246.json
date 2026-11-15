@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "issue": 246,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "0.2.290",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In the Keep with public GUI enabled, equip a weapon with a distinctive owned illusion. Compare the actual equipped illusion with its held-Tab icon.",
+        "2. Change that exact weapon to a second owned illusion and Apply. Inspect held Tab, then restore the default/no-illusion skin and inspect again; the previous custom icon must clear.",
+        "3. Repeat with the other weapon slot, then re-wield each weapon and check its exact identity again.",
+        "4. Enter a solo mission and transition maps. Recheck both icons. If a solo respawn is practical, check after respawn too; otherwise record that control for the co-op stage."
+      ],
+      "assertions": [
+        "GUT shows each local weapon's exact applied illusion, including a correct default-skin reset, after Apply, re-wield and transitions. No previous illusion is carried over.",
+        "Solo R: change skin on equipped instance, assert Tab icon texture id; C: second client asserts the remote row icon id from a log line."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "GUT shows each local weapon's exact applied illusion, including a correct default-skin reset, after Apply, re-wield and transitions. No previous illusion is carried over.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 6591466230,
+    "card_date": "2026-11-02T23:49:26Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

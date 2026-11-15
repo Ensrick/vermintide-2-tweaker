@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "issue": 358,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "0.7.354-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Open **Tweaker: Chaos Wastes > Reworks > Reworks: Boons > Reworks: Existing Boons** and enable **Rework: Manann's Tempest: 8s cooldown (boon + trait)**. Equip a weapon with **Manann's Tempest**. Alternatively acquire the Manann's Tempest boon with **Rework: Manann's Tempest as Boon (Unique)** enabled.",
+        "2. With the source active and before a proc, confirm its ready icon appears on your buff bar within about half a second.",
+        "3. Trigger a critical strike that actually produces chain lightning. The ready icon must become an eight-second cooldown. Further critical strikes rejected during the cooldown must not restart it.",
+        "4. For the weapon-trait source, switch away about two seconds into the cooldown and switch back about one second later. The original cooldown must resume with about five seconds left, never showing ready early or restarting at eight seconds.",
+        "5. At the original deadline, confirm ready returns. If both boon and trait sources are available, trigger them at different times and confirm their ready/cooldown states remain independent. Report which source paths were exercised.",
+        "6. Disable the rework: ready and cooldown icons must disappear. Re-enable it, cross one mission or player-unit transition, and confirm the first eligible proc still works with no stale timer from the previous unit or mission.",
+        "7. Run `/ct_regression_test`, exit normally, and attach the newest complete log with the source and failed step, if any."
+      ],
+      "assertions": [
+        "Ready means the active owned source is genuinely off cooldown. Only a real accepted proc starts the timer; re-wielding preserves its original deadline; rejected hits do not refresh it. Source loss, setting changes, and transitions leave no stale presentation. `issue358_manann_tempest_cooldown_display` and the full regression report pass.",
+        "Own the trait; assert ready buff; trigger proc gives 8 s cooldown buff; unwield and re-wield at 2 s leaves about 5 s; expiry returns ready."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6693573440,
+    "card_date": "2026-11-06T19:30:41Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

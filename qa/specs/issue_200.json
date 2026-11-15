@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 200,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "0.9.230-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. On Kruber, open Cosmetics for **Mace and Shield**, select another shield, then leave without pressing Apply.",
+        "2. Confirm the equipped shield remains unchanged.",
+        "3. Reopen Cosmetics, select that shield, press Apply, and inspect the Cosmetics preview, inventory character preview, first person, and owner third person.",
+        "4. Repeat with **Spear and Shield** and one vanilla shield control, then attach the newest console log."
+      ],
+      "assertions": [
+        "Offhand selection is preview-only until Apply; Apply persists the chosen shield; no Loremaster texture wraps over the wrong mesh; and primary and offhand selections remain independent.",
+        "Select offhand, exit without Apply: assert stored selection equals baseline and no sync emit; with Apply: assert stored. Mesh-gate predicate over preview unit names."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5356901416,
+    "card_date": "2026-08-20T13:58:14Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}
