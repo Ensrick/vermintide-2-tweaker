@@ -30,4 +30,22 @@ function M.allow_join(vanilla_joinable, curse_session_locked)
     return vanilla_joinable == true and curse_session_locked ~= true
 end
 
+-- WP-CW-01: vanilla class() copies GameModeBase.is_joinable into every
+-- subclass when the subclass is defined (foundation/scripts/util/class.lua),
+-- and PeerStates.Connecting calls game_mode:is_joinable() on the live
+-- instance (scripts/network/peer_states.lua:116). A GameModeBase hook
+-- therefore never runs. Lock the derived classes the engine instantiates.
+M.JOIN_LOCK_CLASSES = { "GameModeAdventure", "GameModeDeus", "GameModeMapDeus", "GameModeWeave" }
+
+function M.install_join_lock(hook, is_locked)
+    local requested = 0
+    for _, name in ipairs(M.JOIN_LOCK_CLASSES) do
+        hook(name, "is_joinable", function(func, self, ...)
+            return M.allow_join(func(self, ...), is_locked())
+        end)
+        requested = requested + 1
+    end
+    return requested
+end
+
 return M
