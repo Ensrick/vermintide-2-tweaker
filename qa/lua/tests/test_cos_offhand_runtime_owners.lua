@@ -113,12 +113,18 @@ return function(H, repo_root)
     end)
 
     H.test("cos dual receiver compatibility fails closed for foreign units", function()
-        local mod = state_fixture()
+        local mod, _, options = state_fixture()
         mod._independent_dual_item_types = { dual = true }
-        mod._ensure_independent_dual_pool = function()
+        options.ordinary = { right_hand_unit = { { unit = "units/ordinary" } } }
+        mod._ensure_independent_dual_pool = function(item_type)
+            if item_type ~= "dual" then return options[item_type] end
             return { left_hand_unit = { { unit = "units/allowed" } } }
         end
-        H.equal(mod._dual_offhand_unit_allowed("ordinary", "right_hand_unit", "x"), true)
+        -- WP-COS-01: a non-dual type admits only a unit in its own hand pool.
+        H.equal(mod._dual_offhand_unit_allowed("ordinary", "right_hand_unit", "units/ordinary"), true)
+        H.equal(mod._dual_offhand_unit_allowed("ordinary", "right_hand_unit", "x"), false)
+        H.equal(mod._dual_offhand_unit_allowed("ordinary", "material_settings_name", "units/ordinary"),
+            false)
         H.equal(mod._dual_offhand_unit_allowed("dual", "right_hand_unit", "units/allowed"), false)
         H.equal(mod._dual_offhand_unit_allowed("dual", "left_hand_unit", "units/foreign"), false)
         H.equal(mod._dual_offhand_unit_allowed("dual", "left_hand_unit", "units/allowed"), true)

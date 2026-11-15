@@ -1,5 +1,20 @@
 # Crafting in Modded Changelog
 
+## 0.8.151-dev (2026-11-15) -- Standard bench opens through a real HeroView screen (#80)
+
+- `/cim_craft_standard` and the `standard_crafting_hotkey` keybind passed
+  `menu_state_name = "forge"`, which is not a HeroView screen, so HeroView
+  asserted ("Could not find state by name"). They now open the `overview`
+  screen with the `forge` window layout as its sub-state, the pair vanilla's
+  own bench interaction uses (WP-CIM-03).
+- The route lives in the new pure module `_cim_bench_route.lua`; regression
+  check `issue_cim_bench_route_is_real_screen`.
+- The scoped `HeroView.on_enter` hook still restores the inventory-access
+  flags when vanilla raises, then re-raises the error instead of only
+  logging a warning after vanilla had already blocked input.
+- Not confirmed in game. The rig case is
+  `qa/runtime/cim/issue_80_cim_standard_bench_opens.lua`.
+
 ## 0.8.150-dev (2026-11-15) -- Commit callbacks always reach vanilla (#80)
 
 - The `BackendManagerPlayFab.commit` hook no longer drops a commit that

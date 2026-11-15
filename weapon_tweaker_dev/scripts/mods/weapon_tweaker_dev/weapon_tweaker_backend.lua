@@ -25,6 +25,9 @@ end
 -- cannot drift across enable/disable/hot-reload.
 function M.install(mod, weapon_unlock_map, apply_weapon_unlocks, patch_career_actions_on_weapons)
     local cache_policy = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_loadout_cache_policy")
+    -- WP-WT-03: public wt yields to wt_dev; loaded once, ticked from update only.
+    local sibling_guard = mod:dofile("scripts/mods/weapon_tweaker_dev/_wt_sibling_guard")
+    local function _sibling_print(line) pcall(printf, "%s", line) end
     local previous_cache = mod.loadout_cache
     local cache_reset
     mod.loadout_cache, mod.loadout_cache_schema, cache_reset = cache_policy.ensure_schema(
@@ -595,6 +598,7 @@ function M.install(mod, weapon_unlock_map, apply_weapon_unlocks, patch_career_ac
     mod.update = function(dt)
         if prev_update then pcall(prev_update, dt) end
         if not mod._wt.is_active() then return end
+        if sibling_guard.tick(mod, dt, get_mod, _sibling_print) then return end
         if mod._wt368_deferred_availability then
             mod._wt368_deferred_availability = nil
             apply_weapon_unlocks()
