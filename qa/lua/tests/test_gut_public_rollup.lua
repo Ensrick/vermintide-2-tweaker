@@ -85,11 +85,11 @@ return function(H, repo_root)
 
     H.test("GUI public rollup retains identity and the complete issue inventory", function()
         local cfg = read("gui_tweaker/itemV2.cfg")
-        H.truthy(cfg:find('title = "Tweaker: GUI v0.2.290"', 1, true))
+        H.truthy(cfg:find('title = "Tweaker: GUI v0.2.291"', 1, true))
         H.truthy(cfg:find("published_id = 3732144878L", 1, true))
         H.truthy(cfg:find('visibility = "public"', 1, true))
         local main = read(public .. "gui_tweaker.lua")
-        H.truthy(main:find('local MOD_VERSION = "0.2.290"', 1, true))
+        H.truthy(main:find('local MOD_VERSION = "0.2.291"', 1, true))
         local notes = read("gui_tweaker/CHANGELOG.md"):match("## 0%.2%.290(.-)## 0%.2%.289")
         H.truthy(notes, "public release notes missing")
         for _, issue in ipairs({

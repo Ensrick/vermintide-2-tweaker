@@ -162,10 +162,11 @@ return function(H, repo_root)
 
     -- WP-GUT-01 (A7-F01): at an exit edge the live gear value for an unresolved stored id is
     -- already the official fallback, so the reconcile must be able to protect the stored id.
-    -- Every case below runs against each listed tree's pure core (the stable tree joins this
-    -- list in the WP-GUT-01 stable pull request).
+    -- Both trees carry the same pure core; every case below runs against each of them.
     local cores = {
         { name = "gui_tweaker_dev", core = Core },
+        { name = "gui_tweaker", core = assert(loadfile(repo_root
+            .. "/gui_tweaker/scripts/mods/gui_tweaker/_gut_exit_snapshot_core.lua"))() },
     }
 
     local function protect_case_inputs()
@@ -237,7 +238,7 @@ return function(H, repo_root)
     end)
 
     H.test("exit-snapshot callers pass the unresolved-gear protector", function()
-        for _, tree in ipairs({ "gui_tweaker_dev" }) do
+        for _, tree in ipairs({ "gui_tweaker_dev", "gui_tweaker" }) do
             local path = repo_root .. "/" .. tree .. "/scripts/mods/" .. tree .. "/_gut_native_loadouts.lua"
             local f = assert(io.open(path, "rb"))
             local src = f:read("*a")

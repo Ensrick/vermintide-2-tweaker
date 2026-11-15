@@ -269,6 +269,25 @@ return function(H, repo_root)
         H.equal(s.mirror._career_data.es_mercenary[1].slot_hat, "official_slot_hat")
     end)
 
+    H.test("GUT public exit snapshot keeps a stored gear id that does not resolve", function()
+        -- WP-GUT-01 (A7-F01): the live read of an unresolved stored gear id is the official
+        -- fallback; the exit snapshot must keep the stored id and still reconcile resolvable gear.
+        local s = fixture()
+        s:read("slot_melee")
+        local row = s.settings.native_loadouts.es_mercenary.loadouts[1]
+        row.slot_necklace = "unresolved_modded_necklace"
+        s.live.slot_ring = "official_slot_trinket_1"
+        local diverged, written = s.native.exit_snapshot("unload")
+        H.equal(diverged, 1); H.equal(written, true)
+        row = s.settings.native_loadouts.es_mercenary.loadouts[1]
+        H.equal(row.slot_necklace, "unresolved_modded_necklace", "unresolved stored gear id replaced")
+        H.equal(row.slot_ring, "official_slot_trinket_1", "resolvable live gear not reconciled")
+        H.truthy(s.lines[#s.lines]:find("skipped_unresolved=1", 1, true), "skip count missing from persist line")
+        H.equal(s.mirror._career_data.es_mercenary[1].slot_necklace, "official_slot_necklace")
+        diverged, written = s.native.exit_snapshot("unload")
+        H.equal(diverged, 0); H.equal(written, false)
+    end)
+
     H.test("GUT public commands resolve late realm/backend and official scrub remains report-only by default", function()
         local s = fixture()
         s.commands.scrub_official_loadouts("apply")

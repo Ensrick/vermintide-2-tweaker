@@ -38,58 +38,78 @@ function Core.slot_owned_by_items(slot_interface, items_interface)
     return slot_interface ~= nil and items_interface ~= nil and slot_interface == items_interface
 end
 
--- diff_row(live, stored, slot_names) -> merged_or_nil, diverged, changes
+-- diff_row(live, stored, slot_names, protect_slot) -> merged_or_nil, diverged, changes, skipped
 --   live       : { [slot] = value }  values already canonicalized to the store's format;
 --                a nil entry means "skip this slot" (unresolved / no live value).
 --   stored     : the store's selected loadout row (may be nil or empty).
 --   slot_names : ordered array of the slot keys to reconcile.
--- A slot diverges iff live[slot] ~= nil AND live[slot] ~= stored[slot]. Returns:
+--   protect_slot (optional): function(slot, stored_value) -> bool. When it returns true for a
+--                non-nil stored value, that slot is left untouched and counted in `skipped`
+--                (WP-GUT-01: an unresolved stored gear id whose live read is only the official
+--                fallback). It is never asked about a nil stored value.
+-- A slot diverges iff live[slot] ~= nil AND live[slot] ~= stored[slot] AND it is not protected.
+-- Returns:
 --   merged  = nil when nothing diverged (caller writes nothing); otherwise a shallow copy of
 --             `stored` with each diverged slot overwritten by its live value (all other stored
 --             keys preserved).
 --   diverged = number of slots that changed.
 --   changes  = array of { slot = <s>, from = <old>, to = <new> } for diagnostics/tests.
-function Core.diff_row(live, stored, slot_names)
+--   skipped  = number of differing slots the protector kept (0 without a protector).
+function Core.diff_row(live, stored, slot_names, protect_slot)
     if type(live) ~= "table" or type(slot_names) ~= "table" then
-        return nil, 0, {}
+        return nil, 0, {}, 0
     end
     stored = type(stored) == "table" and stored or {}
-    local diverged, changes, merged = 0, {}, nil
+    local protect = type(protect_slot) == "function" and protect_slot or nil
+    local diverged, changes, merged, skipped = 0, {}, nil, 0
     for i = 1, #slot_names do
         local slot = slot_names[i]
         local lv = live[slot]
         if lv ~= nil and lv ~= stored[slot] then
-            if merged == nil then
-                merged = {}
-                for k, v in pairs(stored) do merged[k] = v end
+            if protect and stored[slot] ~= nil and protect(slot, stored[slot]) then
+                skipped = skipped + 1
+            else
+                if merged == nil then
+                    merged = {}
+                    for k, v in pairs(stored) do merged[k] = v end
+                end
+                changes[#changes + 1] = { slot = slot, from = stored[slot], to = lv }
+                merged[slot] = lv
+                diverged = diverged + 1
             end
-            changes[#changes + 1] = { slot = slot, from = stored[slot], to = lv }
-            merged[slot] = lv
-            diverged = diverged + 1
         end
     end
-    return merged, diverged, changes
+    return merged, diverged, changes, skipped
 end
 
--- reconcile_selected(live_by_career, store, slot_names) -> total_diverged, merged_rows, per_career
+-- reconcile_selected(live_by_career, store, slot_names, protect)
+--     -> total_diverged, merged_rows, per_career, skipped
 --   live_by_career[career] = { [slot] = value }  the live SELECTED-row values for that career.
 --   store[career]          = { selected_index = i, loadouts = { [i] = row, ... }, ... }.
+--   protect (optional)     = function(career, slot, stored_value) -> bool, passed per career
+--                            into diff_row; `skipped` is the summed count of protected slots.
 -- PURE: mutates neither argument. Returns the merged selected row per diverged career so the
 -- engine caller can apply them to the live in-memory store and persist once. A career with no
 -- store entry, no selected row, or no live values is skipped (the backstop only reconciles
 -- careers the store already owns -- it never invents a career or a loadout index, keeping clear
 -- of the STORE-space vs official-space index hazard, #387/#372).
-function Core.reconcile_selected(live_by_career, store, slot_names)
-    local total, merged_rows, per_career = 0, {}, {}
+function Core.reconcile_selected(live_by_career, store, slot_names, protect)
+    local total, merged_rows, per_career, skipped = 0, {}, {}, 0
     if type(live_by_career) ~= "table" or type(store) ~= "table" then
-        return 0, merged_rows, per_career
+        return 0, merged_rows, per_career, 0
     end
+    local has_protect = type(protect) == "function"
     for career, live in pairs(live_by_career) do
         local entry = store[career]
         local idx = type(entry) == "table" and entry.selected_index or nil
         local stored_row = idx and type(entry.loadouts) == "table" and entry.loadouts[idx] or nil
         if stored_row ~= nil then
-            local merged, diverged = Core.diff_row(live, stored_row, slot_names)
+            local protect_slot = nil
+            if has_protect then
+                protect_slot = function(slot, value) return protect(career, slot, value) end
+            end
+            local merged, diverged, _, kept = Core.diff_row(live, stored_row, slot_names, protect_slot)
+            skipped = skipped + kept
             if diverged > 0 then
                 merged_rows[career] = merged
                 per_career[career] = diverged
@@ -97,7 +117,7 @@ function Core.reconcile_selected(live_by_career, store, slot_names)
             end
         end
     end
-    return total, merged_rows, per_career
+    return total, merged_rows, per_career, skipped
 end
 
 return Core
