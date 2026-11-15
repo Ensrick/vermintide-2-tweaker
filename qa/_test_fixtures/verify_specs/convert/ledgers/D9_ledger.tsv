@@ -1,0 +1,3 @@
+number	mod	author_class	type	lifecycle	priority	summary	cluster	fix_state	verification_class	auto_check	disposition	related	confidence	note
+9201	general_tweaker_dev	owner	bug	verify-fix	2-moderate	Fixture summary.	fixture-cluster	fixed-unverified	R	fixture auto check	RIG		H	fixture
+9203	repo	owner	tooling	not-started	3-low	Fixture tooling row.	fixture-cluster	n/a	S	fixture static check	CLOSE		H	fixture

@@ -1,0 +1,47 @@
+{
+  "schema": 1,
+  "issue": 87,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "crafting_in_modded_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. On a clean GUI settings profile, confirm **Enable In-Mission Inventory Access** and its tab setting default on.",
+        "2. Enter an Adventure mission with Cosmetics enabled and CIM disabled. Open inventory and use the weapon-customization gear button.",
+        "3. Relaunch with both providers and repeat the action; confirm it opens once.",
+        "4. Relaunch with GUI alone. Confirm the unsupported gear action is absent or inert, while safe inventory access remains available.",
+        "5. Turn customization off and reopen inventory. Confirm only customization is blocked. Attach the logs from each launch."
+      ],
+      "assertions": [
+        "Customization is exposed only with its owning provider. Cosmetics alone works; CIM does not duplicate or crash it; GUI alone cannot open an unsupported path. Clean defaults and the customization-off control behave as stated.",
+        "Three launches (GUT alone, +Cosmetics, +CIM): in mission assert customize-allowed gate value, open customization, assert view mounts once and log has zero Lua errors."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6591455618,
+    "card_date": "2026-11-02T23:48:46Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "issue": 922,
+  "class": "V",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In the Keep, equip the Encarmine Helmet and one custom Career Weapon Variants weapon.",
+        "2. Use third-person view and move the camera close enough that Kruber's body fades.",
+        "3. Confirm the helmet and custom weapon fade with the body, then swap away and back and repeat.",
+        "4. Enter any mission, repeat once after spawning, then exit normally and attach the newest log.",
+        "5. If Weapons of Chaos is enabled, repeat the camera-close check once with the Blightreaper."
+      ],
+      "assertions": [
+        "Every equipped custom helmet or weapon fades with the character instead of remaining opaque. Swapping and mission transition preserve the behavior, and the log contains bounded `922` applied receipts without per-frame spam.",
+        "Automatable part: after wield, respawn and husk reapply assert each custom unit is in the fade system's linked set for owner and husk. Shader response is visual."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "Every equipped custom helmet or weapon fades with the character instead of remaining opaque. Swapping and mission transition preserve the behavior, and the log contains bounded `922` applied receipts without per-frame spam."
+  ],
+  "source": {
+    "card_comment_id": 5161336552,
+    "card_date": "2026-08-03T01:17:14Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

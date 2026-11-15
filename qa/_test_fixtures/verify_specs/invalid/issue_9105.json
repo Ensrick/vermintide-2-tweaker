@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "issue": 9105,
+  "class": "V",
+  "status": "draft",
+  "vp": null,
+  "arena": "keep",
+  "mods": [
+    { "dir": "not_a_mod_folder", "min_version": null, "settings": null }
+  ],
+  "left_for_humans": ["Fixture: needs eyes."]
+}

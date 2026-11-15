@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 923,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "0.9.230-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable Loremaster's Armoury and Tweaker: Cosmetics, then enter the Keep as Kruber.",
+        "2. Open Inventory, customize Mace and Shield, and select the Myrmidia/Kotbs01 (LA) shield.",
+        "3. Confirm its item card shows the Mace and Shield version of the LA icon.",
+        "4. Customize Spear and Shield and select the same Myrmidia/Kotbs01 (LA) shield.",
+        "5. Confirm its item card shows the distinct Spear and Shield version of the LA icon.",
+        "6. Close and reopen Inventory and confirm both item cards keep their respective icons."
+      ],
+      "assertions": [
+        "Mace and Shield and Spear and Shield each use their own matching Loremaster icon. Neither borrows the other weapon family's icon or reverts after reopening Inventory.",
+        "With LA: select Kotbs01 on mace-shield and spear-shield items; assert resolved icon texture names differ and match the LA icons table per item type; persists after reopen."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5160467348,
+    "card_date": "2026-08-02T21:40:30Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

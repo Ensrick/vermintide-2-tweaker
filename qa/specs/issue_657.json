@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "issue": 657,
+  "class": "V",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Bind **Cycle Combat Style** in Career Weapon Variants options if needed. As **Mercenary or Foot Knight**, equip Kruber's ordinary **Sword and Shield**. Note its appearance and properties, then select **Bretonnian Sword and Shield Combat Style**.",
+        "2. Check entering/holding/releasing block, pushing, the complete light-attack chain and each charged heavy-attack release. Swap away and back, then reopen the inventory character preview. The sword and shield must remain present and usable.",
+        "3. As **Grail Knight**, equip **Bretonnian Sword and Shield**, select **Empire Sword and Shield Combat Style**, and repeat those checks.",
+        "4. In Tweaker: Cosmetics, apply a visibly different **non-glowing vanilla shield**. Repeat style changes and inventory/available cosmetic previews. Enter an Adventure mission and confirm the selected sword/shield pairing survives. Do not use Loremaster or custom-material shields for this test.",
+        "5. Run `/cwv_regression_test` once. Exit normally and attach the newest log; include screenshots/video and the exact career, weapon, style and action for any failure."
+      ],
+      "assertions": [
+        "Both directions retain the selected sword and shield, properties and functional attack/block chains through style changes and mission entry. The installed check `issue657_native_shield_style_identity` should pass. Its identity checks do not establish visible animation or multiplayer acceptance.",
+        "Automatable part: after each style switch assert both hand units alive with unchanged paths, effective template equals target, every action event passes has_animation_event; issue657 check."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "Both directions retain the selected sword and shield, properties and functional attack/block chains through style changes and mission entry. The installed check `issue657_native_shield_style_identity` should pass. Its identity checks do not establish visible animation or multiplayer acceptance."
+  ],
+  "source": {
+    "card_comment_id": 6815608658,
+    "card_date": "2026-11-12T05:33:39Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

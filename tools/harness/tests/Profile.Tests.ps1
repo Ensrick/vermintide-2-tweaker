@@ -30,6 +30,7 @@ function Read-PlanBlocks([string] $cfg) {
             driver = ConvertFrom-Hex ([regex]::Match($body, '(?m)^\tdriver_hex = "([0-9a-f]*)"$').Groups[1].Value)
             quit   = [regex]::IsMatch($body, '(?m)^\tquit = true$')
             shield_off = [regex]::IsMatch($body, '(?m)^\tbackend_shield = false$')
+            expect_mods = @([regex]::Matches([regex]::Match($body, '(?ms)^\texpect_mods = \[\n(.*?)^\t\]\n').Groups[1].Value, '(?m)^\t\t"([^"]*)"$') | ForEach-Object { $_.Groups[1].Value })
             cases  = @()
             shared = @()
         }
@@ -75,7 +76,7 @@ try {
     $driverText = "-- fixture driver`nlocal plan, nonce = ...`nreturn {}`n"
     $driverFile = Join-Path $root 'driver.lua'
     [System.IO.File]::WriteAllText($driverFile, $driverText, $utf8)
-    $planJson = '{ "name": "profile-test", "mods": ["1369573612"], "timeout": 120, "settle": 2,' +
+    $planJson = '{ "name": "profile-test", "mods": ["1369573612", "9000000099"], "expect_mods": ["VMF", "gt_dev"], "timeout": 120, "settle": 2,' +
         ' "cases": [ { "id": "a", "arena": "keep", "file": "case_a.lua" }, { "id": "b", "arena": "mission:military", "file": "case_b.lua" } ] }'
     $planPath = Join-Path $planDir 'plan.json'
     [System.IO.File]::WriteAllText($planPath, $planJson, $utf8)
@@ -117,8 +118,13 @@ try {
     Assert-True ($enabled[$driverId] -eq 'true') 'driver bootstrap enabled'
     Assert-True ($enabled['3733367409'] -eq 'false') 'mod outside the plan (was enabled) disabled'
     Assert-True ($enabled['1111111111'] -eq 'false') 'mod outside the plan (was disabled) stays disabled'
-    Assert-True (@($enabled.Keys | Where-Object { $enabled[$_] -eq 'true' }).Count -eq 2) 'only the plan mods and the driver are enabled'
+    Assert-True ($enabled['9000000099'] -eq 'true') 'plan mod missing from the copied list gets an entry, enabled'
+    Assert-True (@($enabled.Keys | Where-Object { $enabled[$_] -eq 'true' }).Count -eq 3) 'only the plan mods and the driver are enabled'
     Assert-True ([regex]::Matches($cfg, '(?m)^\t\tid = "' + $driverId + '"$').Count -eq 1) 'driver entry exists once after the first build'
+    Assert-True ([regex]::Matches($cfg, '(?m)^\t\tid = "9000000099"$').Count -eq 1) 'added plan mod entry exists once'
+    $order = @($enabled.Keys)
+    Assert-True ($order.IndexOf('9000000099') -lt $order.IndexOf($driverId) -and $order[0] -eq '1369573612') 'added plan mods come before the driver; VMF stays first'
+    Assert-True (($p.expect_mods -join ',') -eq 'VMF,gt_dev') "expect_mods parse back from the plan block (got $($p.expect_mods -join ','))"
 
     Assert-True ($cfg -match '(?m)^max_fps = 30$') 'max_fps forced to 30'
     Assert-True ($cfg -match '(?m)^fullscreen = false$' -and $cfg -match '(?m)^borderless_fullscreen = false$') 'windowed mode forced'

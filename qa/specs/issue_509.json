@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "issue": 509,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "dynamic_cosmetic_portraits",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "weapons_of_chaos",
+      "min_version": "0.1.52-dev",
+      "settings": null
+    },
+    {
+      "dir": "enemy_tweaker",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "modded_progression",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In the Keep, equip the **Blightreaper** once.",
+        "2. Run `/woc_regression_test` and read every result line.",
+        "3. Run `/dcp_regression_test`, `/mp_regression_test` and `/et_regression_test` in turn.",
+        "4. Confirm the enemy spawn-pacing hook check passes in the Keep while the mission-only mini-patrol check reports its context as absent rather than failing.",
+        "5. Exit normally and attach the newest log."
+      ],
+      "assertions": [
+        "all four suites execute and report zero failures - Weapons of Chaos runs 19 checks, Tweaker: Enemies 47, Dynamic Cosmetic Portraits 11, and Modded Progression 17. `PASS: issue509_registered_blightreaper_wire_contract` appears after the Blightreaper is equipped, and `PASS: spawn_pacing_hook_targets_present` appears in the enemy suite. Checks may legitimately skip when their live context is absent - in the Keep, `spawn_pacing_mini_patrol_runtime_path` must report the skip reason \"no live mission conflict director pacing (keep runs the disabled preset)\" rather than a failure. Any check that reports FAIL, or a suite that does not run at all, is the failure this card is looking for.",
+        "Run /dcp_ /woc_ /et_ /mp_regression_test, parse [regression] PASS/FAIL lines: zero FAIL. Static part: each mod registers a command and checks (12/20/54/26 today)."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5165088454,
+    "card_date": "2026-08-03T10:16:23Z",
+    "ledger": "D5_ledger.tsv"
+  }
+}

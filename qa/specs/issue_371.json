@@ -1,0 +1,56 @@
+{
+  "schema": 1,
+  "issue": 371,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "general_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "crafting_in_modded_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable the six builds above, enter the Keep alone, and confirm all six exact load-banner versions in the newest log.",
+        "2. Run `/cwv_regression_test` and wait for its final summary.",
+        "3. Run `/ct_regression_test`, `/crt_regression_test`, and `/event_tweaker_regression_test`, waiting for each final summary before starting the next.",
+        "4. Run `/wt_regression_test`, then `/gut_regression_test`, and wait for both final summaries.",
+        "5. Record the six final command summaries and state which command, if any, reported a failure."
+      ],
+      "assertions": [
+        "All six commands finish with 0 failed. No result says `beacon not installed`, `network_register failed`, or that a runtime gate is unavailable. The visible command summaries prove every peer-parity consumer committed its receiver/update transaction and GUI Dev's `issue371_runtime_gate_api` passed. Do not attempt the mixed-lobby stage yet; after this solo floor passes, #371 will receive a separate co-op recipe.",
+        "Solo floor: run six regression commands, assert zero failed and peer-parity installed. Co-op: two-client matrix (all-modded, missing-mod, mixed-version, hot join) with no disconnect."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "All six commands finish with 0 failed. No result says `beacon not installed`, `network_register failed`, or that a runtime gate is unavailable. The visible command summaries prove every peer-parity consumer committed its receiver/update transaction and GUI Dev's `issue371_runtime_gate_api` passed. Do not attempt the mixed-lobby stage yet; after this solo floor passes, #371 will receive a separate co-op recipe.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 5282134696,
+    "card_date": "2026-08-13T15:01:02Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 1802,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "general_tweaker_dev",
+      "min_version": "0.2.180",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Open Mod Tweaker > General > Cheats and Debug > Time Controls. Assign **Normal speed**, **Time faster**, **Time slower**, and **Freeze world toggle** to unused keys; press **Apply**.",
+        "2. Select **0.5x (50%)**, **1x (100%, normal)**, then **2x (200%)**, pressing **Apply** each time and closing the menu to observe the result. Confirm the speed changes as labeled.",
+        "3. At 1x, press **Time faster** once: the next preset must be **1.25x (125%)**. Press **Time slower** once: it must return to 1x. With a slow preset active, open Mod Tweaker and press the **Normal speed** key. Close the menu and confirm normal speed returns.",
+        "4. Apply 0.5x, enter a solo mission, and confirm the selected speed reapplies. Without normalizing first, disable Tweaker: General through the mod controls; confirm no leftover slow motion. Re-enable it before continuing.",
+        "5. In the Keep with keyboard/mouse, freeze, select another time preset and press **Apply**, then resume with the freeze key. Confirm the chosen preset becomes the running speed. Freeze again and use **Normal speed**: both freeze and slow motion must end."
+      ],
+      "assertions": [
+        "labels match speed, recovery works through menus, state transitions reapply the selected speed, and disable removes this control's slow motion. Multi-player and competing-mod ownership checks are separate follow-ups.",
+        "Harness: apply each preset, read Managers.state.debug.time_scale_index against the native table; non-host write refused; disable mod returns index to 100 percent."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6595750775,
+    "card_date": "2026-11-03T04:51:13Z",
+    "ledger": "D5_ledger.tsv"
+  }
+}

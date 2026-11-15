@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 1572,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "0.2.290",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Disable standalone **Tab Scoreboard**. Enable **Expanded Scoreboard (Live + End Screen)** and **Host Statistics**, then select **Page 2**.",
+        "2. Start Adventure SOLO. Before damage, **Permanent Health Restored** after **Times Revived** must show 0 for you and the bots.",
+        "3. Lose white health and heal yourself with **Medical Supplies**; confirm credit matches white health regained and cannot exceed what was missing. Repeat using a **Healing Draught**.",
+        "4. Gain temporary green health and confirm it gives no credit. Bandage a wounded bot and confirm the healer—you—gets credit, not the recipient. If a bot heals you, credit must go to that bot.",
+        "5. Finish and compare end-screen totals; they must not decrease. Start another mission and confirm everyone's row resets to 0."
+      ],
+      "assertions": [
+        "Only actual permanent health restored is counted, credited to the healer and preserved to mission end; temporary health gives no credit and the next mission starts at 0. Other rows/sorting/page remain unchanged.",
+        "Damage self, heal with medkit and draught: ledger delta equals current_health delta; temporary health gives none; bandaging a bot credits the healer."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6591501516,
+    "card_date": "2026-11-02T23:51:40Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

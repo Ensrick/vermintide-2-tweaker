@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "issue": 287,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In the Official Realm, record the career's melee/ranged weapons, outfit, hat, portrait frame, victory pose and weapon illusion.",
+        "2. With Cosmetics Tweaker disabled, enter the Modded Realm, open **Mod Tweaker > Tweaker: GUI**, and enable **Use non-modded loadouts**.",
+        "3. Change each cosmetic category, close and reopen Equipment, then exit normally and relaunch into the Modded Realm.",
+        "4. Confirm those cosmetics persisted separately while protected melee/ranged weapons still match the official baseline.",
+        "5. Return to the Official Realm and compare every recorded selection without modifying it.",
+        "6. Relaunch with public Cosmetics Tweaker enabled alongside public GUI. Repeat cosmetic changes and Apply through its normal cosmetics UI, including weapon illusion, hat, skin and frame; repeat the reopen/restart and Official visual comparisons. Confirm gameplay gear stays protected and the cosmetic selections neither snap back nor become duplicate writers."
+      ],
+      "assertions": [
+        "In both standalone-GUI and Cosmetics composition launches, cosmetics remain editable and persistent only on the modded side while protected gameplay gear and every official selection remain unchanged. No snap-back, repeated blocked/equip loop, error or crash occurs.",
+        "Readonly mode: set hat, skin, frame, pose, illusion; reopen and relaunch; assert overlay persists, weapon slots equal official snapshot, official mirror rows identical."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6591475864,
+    "card_date": "2026-11-02T23:50:04Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

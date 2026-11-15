@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "issue": 947,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "crafting_in_modded_dev",
+      "min_version": "0.8.148",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enter the Keep, enable **Allow Chaos Wastes traits on crafted weapons**, and use the Athanor to put **Addaioth's Splendour (Ranged Critical Explosion)** on a **Longbow** or **Blunderbuss**.",
+        "2. Fire at a Keep training dummy until the critical-hit explosion triggers at least twice.",
+        "3. Run `/cim_regression_test` and record its visible summary, if shown."
+      ],
+      "assertions": [
+        "Both explosions appear without a crash or missing-particle error. The trait-resource check passes. This is the existing solo cell; it does not establish peer parity or mixed-lobby safety.",
+        "Keep: put the trait on a Longbow, force the crit proc twice; assert morris_ingame package has_loaded before World.create_particles and the process is alive; /verify_cim_cw_trait_residency."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6693614695,
+    "card_date": "2026-11-06T19:32:51Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

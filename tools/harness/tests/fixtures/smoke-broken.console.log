@@ -1,0 +1,21 @@
+[Log version] 1
+[Session] 00000000-0000-0000-0000-000000000000
+UTC time stamps
+03:38:58.330 [Application] STARTUP: setup_crash_report
+03:39:20.554 [Lua] [ModManager] user_setting.mods =:
+03:39:20.554 [Lua] [ModManager] mods[1] = (id=1369573612, name="Vermintide Mod Framework", enabled="true", last_updated="7/10/2023 11:53:15 AM")
+03:39:20.554 [Lua] [ModManager] mods[2] = (id=3839345856, name="VT2 Rig Driver", enabled="true", last_updated="1/1/2026 12:00:00 AM")
+03:39:20.554 [Lua] [ModManager] mods[3] = (id=9000000099, name="Rig plan mod 9000000099", enabled="true", last_updated="1/1/2026 12:00:00 AM")
+03:39:20.554 [Lua] [ModManager][warning] Mod "Rig plan mod 9000000099" with id 9000000099 was not found in the workshop folder.
+03:39:20.554 [Lua] [ModManager][warning] Did you try loading an unsanctioned mod in Official?
+03:39:20.687 [Lua] Init VMF mod 'VMF' [workshop_name: 'Vermintide Mod Framework', workshop_id: 1369573612]
+03:39:21.100 [Lua] [MOD][gt_dev][INFO] [gt:LOAD] v0.2.300-dev enabled fp=abc123 OK
+03:39:29.000 [Lua] [vt2t:5a5a5a5a] RUN BEGIN driver=0.4.3 plan="smoke-keep" cases=1 arenas="keep" realm=modded
+03:39:30.505 [Lua] [PlayFabRequestQueue] Enqueuing ExecuteCloudScript request	verifyAccountData	1
+03:39:30.539 [Lua] [vt2t:5a5a5a5a] SHIELD installed t=9.2 state=StateTitleScreen
+03:39:50.549 [Lua] [PlayFabMirrorBase] _commit_internal "1"
+03:39:54.495 [Lua] [vt2t:5a5a5a5a] KEEP READY level=inn_level t=33.6
+03:39:58.000 [Lua] [vt2t:5a5a5a5a] NOTE id=smoke-keep key=probe value="a note that says Lua Stack is only text"
+03:39:58.100 [Lua] [vt2t:5a5a5a5a] CASE END id=smoke-keep verdict=PASS asserts=6 failed=0 t=3.6
+03:39:58.200 [Lua] [vt2t:5a5a5a5a] RUN END reason="plan complete" cases=1 pass=1 fail=0 error=0 timeout=0 inconclusive=0 t=37.7
+[Log end]

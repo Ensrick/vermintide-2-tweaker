@@ -44,8 +44,11 @@ return function(H, repo_root)
             register_fixture_checks(mod)
             H.equal(type(mod._wt.run_regression), "function", "run_regression is not exported")
             local rows, pass, fail, skip = mod._wt.run_regression()
-            H.equal(#rows, 4)
+            -- WP-WT-08 registers wt_no_swallowed_errors when the module loads,
+            -- so it is row 1; with no counters in this stub it PASSes.
+            H.equal(#rows, 5)
             local want = {
+                { "wt_no_swallowed_errors", "PASS" },
                 { "a_pass", "PASS" }, { "b_fail", "FAIL" },
                 { "c_skip", "SKIP" }, { "d_raise", "FAIL" },
             }
@@ -54,19 +57,21 @@ return function(H, repo_root)
                 H.equal(row.result, want[i][2], "row " .. i .. " result")
             end
             H.equal(rows[1].detail, nil)
-            H.equal(rows[2].detail, "boom")
-            H.equal(rows[3].detail, "skip: no engine")
-            H.truthy(type(rows[4].detail) == "string" and rows[4].detail:find("kaput", 1, true),
+            H.equal(rows[2].detail, nil)
+            H.equal(rows[3].detail, "boom")
+            H.equal(rows[4].detail, "skip: no engine")
+            H.truthy(type(rows[5].detail) == "string" and rows[5].detail:find("kaput", 1, true),
                 "raise detail lost the error text")
-            H.equal(pass, 1); H.equal(fail, 2); H.equal(skip, 1)
+            H.equal(pass, 2); H.equal(fail, 2); H.equal(skip, 1)
 
-            H.equal(#printed, 5)
-            H.equal(printed[1], "[wt:RT] check=a_pass result=PASS")
-            H.equal(printed[2], "[wt:RT] check=b_fail result=FAIL detail=boom")
-            H.equal(printed[3], "[wt:RT] check=c_skip result=SKIP detail=skip: no engine")
+            H.equal(#printed, 6)
+            H.equal(printed[1], "[wt:RT] check=wt_no_swallowed_errors result=PASS")
+            H.equal(printed[2], "[wt:RT] check=a_pass result=PASS")
+            H.equal(printed[3], "[wt:RT] check=b_fail result=FAIL detail=boom")
+            H.equal(printed[4], "[wt:RT] check=c_skip result=SKIP detail=skip: no engine")
             local prefix = "[wt:RT] check=d_raise result=FAIL detail="
-            H.equal(printed[4]:sub(1, #prefix), prefix)
-            H.equal(printed[5], "[wt:RT] summary pass=1 fail=2 skip=1 total=4 version=0.0.0-test")
+            H.equal(printed[5]:sub(1, #prefix), prefix)
+            H.equal(printed[6], "[wt:RT] summary pass=2 fail=2 skip=1 total=5 version=0.0.0-test")
         end)
 
         H.test(tree.mod_name .. " /wt_regression_test keeps its exact chat output", function()
@@ -78,10 +83,11 @@ return function(H, repo_root)
             command()
             local want = {
                 "=== wt regression_test (v0.0.0-test) ===",
+                "  PASS: wt_no_swallowed_errors",
                 "  PASS: a_pass",
                 "  FAIL: b_fail -- boom",
                 "  SKIP: c_skip -- skip: no engine",
-                "=== 1 passed, 2 failed, 1 skipped ===",
+                "=== 2 passed, 2 failed, 1 skipped ===",
             }
             local at = 1
             for _, line in ipairs(chat) do

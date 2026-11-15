@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "issue": 271,
+  "class": "V",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "0.7.354-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In the **Pilgrimage Chamber**, use **Single Mission Loader** to enter **Devious Delvings** with one curse selected under **Curses**; record that selection.",
+        "2. With **Curse Lighting Brightness** at its default **1.0**, record a dark interior and an exterior.",
+        "3. Move **Curse Lighting Brightness** lower and higher while staying in the scene. Compare interior readability with the unchanged exterior sky, direct sun, and fog treatment.",
+        "4. Repeat with a second curse if available. Record any new stutter or heavy log flooding separately from the visual result.",
+        "5. Run `/ct_regression_test`, retain the complete report, exit normally, and attach the newest log and comparison images."
+      ],
+      "assertions": [
+        "The interior lighting responds and remains readable without losing the curse's appearance. The map-specific change lifts interior fill, ambient light, top ambient light, and exposure for each tested curse; it adds no extra map-specific multiplier to exterior sky, direct sun, or fog. The full regression report has no failures. A twofold channel multiplier does not require perceived brightness to double.",
+        "Automatable part: on dlc_termite_2 assert the four interior multipliers 2.0 and exterior unchanged; luminance delta versus control screenshot."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "The interior lighting responds and remains readable without losing the curse's appearance. The map-specific change lifts interior fill, ambient light, top ambient light, and exposure for each tested curse; it adds no extra map-specific multiplier to exterior sky, direct sun, or fog. The full regression report has no failures. A twofold channel multiplier does not require perceived brightness to double."
+  ],
+  "source": {
+    "card_comment_id": 6693554831,
+    "card_date": "2026-11-06T19:29:40Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

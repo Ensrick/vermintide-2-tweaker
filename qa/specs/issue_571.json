@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 571,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Open the player list in one native Chaos Wastes mission.",
+        "2. Open it in an Adventure mission injected into Chaos Wastes with every collectible row visible. Enable **Inject Adventure Missions into CW Map Pool** and the selected mission's checkbox beforehand; restart the game if injection changed.",
+        "3. At **3840 by 2160**, watch **Pilgrim's Coins** and **Chests of Trials** throughout the panel's opening and closing animation.",
+        "4. Repeat at a non-default UI scale or safe-area setting, change the coin and chest counts through normal play, and transition to another map. Also retain an ordinary non-Chaos-Wastes Adventure player-list control.",
+        "5. Run `/ct_regression_test` and `/gut_regression_test`. Keep CT's collectible-wiring and safe-layout results, plus GUI's collectible-row suppression result. Exit normally and attach the newest console log plus a screenshot if containment fails."
+      ],
+      "assertions": [
+        "Both counters use native spacing, remain inside the right panel through animation and map transition, and update live. Ordinary Adventure remains vanilla; native Chaos Wastes retains its normal player-list behavior alongside the counters. The bounded `[ct:571] native collectible offsets` row reports `fit=true`. The `[ct:533] Tab-hold collectibles` construction row may use either source, `setup_mission_data` or `draw_recovery`. The named checks and full regression report pass.",
+        "Open the player list in CW; sample child widget rects across animation frames at 3840x2160 and a scaled UI; assert inside panel rect and fit=true."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6693595151,
+    "card_date": "2026-11-06T19:31:49Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

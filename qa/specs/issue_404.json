@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 404,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "crafting_in_modded_dev",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In Tweaker: GUI, open **In-Mission Menus** and enable **Allow crafting bench in mission**, then enter an Adventure mission.",
+        "2. Open the Athanor with its assigned hotkey (default **B**) and select a melee weapon.",
+        "3. Leave **Allow Chaos Wastes traits on crafted weapons** and **Allow any trait and property on any weapon** off. Open **Trait** and **Property** and confirm each lists that weapon's normal valid choices.",
+        "4. Stage a valid trait/property change and press **APPLY** for an already-owned crafted item; if using a Blacksmith template, use **CRAFT** to create a new item. Close and reopen the panels and confirm the committed choices remain represented. Repeat with one ranged weapon.",
+        "5. Turn each of the two freedom options on separately. Confirm normal choices remain and extra choices are added instead of replacing them.",
+        "6. Scroll and select several entries, close and reopen the Athanor, then run `/cim_regression_test` and record the visible summary, if shown."
+      ],
+      "assertions": [
+        "In-mission Trait and Property panels stay visible and populated by default; freedom choices are additive. There is no missing-material error, duplicate preview, or crash. Ranged placement belongs to #882 and is not a #404 failure.",
+        "Open Athanor in keep and mission for a melee and a ranged weapon: picker entry count above zero with freedom toggles off, superset when on; open/close N times without crash."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6693577896,
+    "card_date": "2026-11-06T19:30:55Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

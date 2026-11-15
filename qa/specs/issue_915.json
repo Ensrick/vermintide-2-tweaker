@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 915,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. On Kruber, open the illusion picker for the Character Weapon Variants **Maul** and browse every offered row.",
+        "2. Equip each distinct Maul illusion once. Confirm every model is a single mace or hammer head╬ô├ç├╢never a one-handed sword or a paired Sword-and-Mace model.",
+        "3. As controls, browse every row for Kruber's **Dual Maces**, Kruber's **Imperial Dual Swords**, and Saltzpyre's **Rapier**. Confirm no wrong-family model and no duplicate of the weapon's own default appears.",
+        "4. Reload the mods once, then reopen the Maul picker and browse it again to ensure an old generated entry does not return.",
+        "5. Run `/cwv_regression_test`. If any row/model is wrong or any check fails, exit and attach the newest full log."
+      ],
+      "assertions": [
+        "Every Maul picker row and equipped model is single-handed and mace-family. The old one-handed sword entry remains absent after reload. The control pickers remain clean. `issue915_maul_illusion_vanilla_provenance` passes; that exact census is the automated pass condition, not merely the visual scan.",
+        "Run issue915_maul_illusion_vanilla_provenance on the live build before and after a mod reload; every Maul picker row's right-hand unit is in the vanilla mace census."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5749489186,
+    "card_date": "2026-09-20T11:23:59Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

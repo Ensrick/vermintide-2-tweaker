@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 393,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "event_tweaker",
+      "min_version": "0.4.54-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Confirm the exact Tweaker: Events banner above in the newest log.",
+        "2. In Tweaker: Events, enable **High Intensity** mission injection.",
+        "3. Start any Adventure mission as host and play until normal enemy pacing has begun.",
+        "4. Exit cleanly and attach the newest log."
+      ],
+      "assertions": [
+        "One bounded `[event-inject:393]` settled verdict records whether the live Conflict Director pacing values remained intact or were overwritten (live and cached thresholds). It emits once per pacing instance, not continuously. `intact` combined with the vanilla intensity clamp analysis already in the probe means \"subtle by design\"; `settings_stomp` means a later mutator overwrote the injected values. No co-op participant or console command is required.",
+        "Start an Adventure mission with High Intensity injected; read the [event-inject:393] verdict and live pacing fields against mutator_high_intensity values."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5160384564,
+    "card_date": "2026-08-02T21:18:02Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

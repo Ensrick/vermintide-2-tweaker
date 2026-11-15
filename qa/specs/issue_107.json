@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 107,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "0.7.354-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Open **Tweaker: Chaos Wastes > Curses > Boss Grudge Marks Banlist**. With **Ban all Boss Grudge Marks** off, select **Ban: Commander** and leave **Ban: Warping** unselected. Record those two choices.",
+        "2. Turn **Ban all Boss Grudge Marks** on and run `/verify_grudge_marks`. All thirteen listed marks must report banned and absent from the live random-roll pool.",
+        "3. Start an ordinary Chaos Wastes pilgrimage, reach a Be'lakor mission, and fight a Shadow Lieutenant champion. Inspect its displayed Grudge Marks: none of the listed marks may appear. The champion must still spawn and fight normally; the master must not strip unrelated native enhancement behavior.",
+        "4. Turn **Ban all Boss Grudge Marks** off. Confirm **Ban: Commander** is still selected and **Ban: Warping** is still unselected. Run `/verify_grudge_marks` again: the saved individual configuration must be restored, rather than every mark remaining banned.",
+        "5. Keep the bounded incoming/kept/removed application-request row for the champion encounter. Run `/ct_regression_test`, exit normally, and attach the newest full log. Include a screenshot or the displayed mark names if the Shadow Lieutenant still has a banned mark."
+      ],
+      "assertions": [
+        "The master removes all thirteen listed Grudge Marks, including those chosen by the Shadow Lieutenant, without removing the champion's unrelated native enhancement setup. Turning it off restores the saved individual bans. `/verify_grudge_marks` has no failures, and `issue107_grudge_application_master` and the full regression report pass. The pool verifier checks only the random-roll table. The application-request row is not native retained-state proof. The mission-only displayed marks and preserved champion behavior in step3 are mandatory; no keep-only or generic check substitutes for them.",
+        "Unit: installed hook with base, banned and allowed enhancements removes only the banned. Runtime: spawn Shadow Lieutenant with ban-all; read applied enhancement names."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6693539350,
+    "card_date": "2026-11-06T19:28:51Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

@@ -1,6 +1,8 @@
 -- Mission arena smoke: Righteous Stand loads as host with bots, the hero is alive, an enemy can be spawned and killed.
 return {
 	issue = 0,
+	arena = "mission:military",
+	class = "R",
 	timeout = 90,
 	run = function(T)
 		T.step("mission loaded")

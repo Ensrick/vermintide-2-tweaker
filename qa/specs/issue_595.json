@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 595,
+  "class": "S",
+  "status": "draft",
+  "vp": null,
+  "arena": "none",
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh **Weapons of Chaos**, enable it with **More Items Library**, and launch Vermintide 2.",
+        "2. Enter the keep and confirm the exact load banner above in the newest log.",
+        "3. Run `/woc_regression_test` in chat.",
+        "4. Exit the game cleanly and attach the newest console log to this issue."
+      ],
+      "assertions": [
+        "Startup reaches the keep without a missing-resource error for `_lib_appearance_fade` or `_lib_resource_residency`, without a WOC initialization nil error, and `issue595_required_runtime_helpers_loaded` passes in `/woc_regression_test` with zero failures. The log must not contain a helper-unavailable warning for either required runtime helper.",
+        "qa/check_dofile_package_coverage.ps1 exit 0 (ran today: OK); enumerate published bundle for the Murmur64 of each packaged Lua; boot-to-Keep smoke shows no \"Resource not found\"."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "offline": [
+    {
+      "class": "S",
+      "command": "",
+      "expect": "qa/check_dofile_package_coverage.ps1 exit 0 (ran today: OK); enumerate published bundle for the Murmur64 of each packaged Lua; boot-to-Keep smoke shows no \"Resource not found\"."
+    }
+  ],
+  "source": {
+    "card_comment_id": 5474855768,
+    "card_date": "2026-08-31T06:56:30Z",
+    "ledger": "D5_ledger.tsv"
+  }
+}

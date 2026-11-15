@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "issue": 423,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Launch, land in the keep, confirm the banner, and run the CWV regression test command in chat.",
+        "2. Equip a profile-cloning variant (Imperial Longsword family or a shortsword variant), enter a mission with bots, and land hits normally.",
+        "3. Swap weapons and repeat briefly with a second variant."
+      ],
+      "assertions": [
+        "`/cwv_regression_test` reports 0 failed including `cwv_wire_safe_damage_profile_gate` (now pinned to the committed gate state, not the raw roster read); variants hit normally solo with no behavior change; the log carries no `[cwv:423] blocked unsafe hit` rows in a solo session.",
+        "Static: rpc_attack_hit has one encode site and it is hooked. Offline: test_cwv_damage_profile_wire. Co-op: non-CWV host survives 50 variant hits."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "`/cwv_regression_test` reports 0 failed including `cwv_wire_safe_damage_profile_gate` (now pinned to the committed gate state, not the raw roster read); variants hit normally solo with no behavior change; the log carries no `[cwv:423] blocked unsafe hit` rows in a solo session.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 5229156419,
+    "card_date": "2026-08-09T01:20:52Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

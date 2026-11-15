@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "issue": 430,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "event_tweaker",
+      "min_version": "0.4.54-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh **Tweaker: Events**, open its Mod Tweaker tab, and enable two Cursed Adventure curses, including **Blood Storm**.",
+        "2. Host an Adventure mission and play past the first horde.",
+        "3. Confirm each enabled curse is visibly active in the mission.",
+        "4. Run `/event_tweaker_regression_test`, return to the Keep, exit normally, and attach the newest console log."
+      ],
+      "assertions": [
+        "Each selected curse injects and behaves normally in a solo session, `issue430_peer_parity_beacon_installed`, `issue430_curse_floor_failsafe`, and `issue430_hotjoin_session_contract` pass, and no missing-resource or mutator error occurs. This completes the solo floor; if it passes, the next card will test a player without Tweaker: Events joining a curse-enabled host, where the curses must stay inert and nobody may crash.",
+        "Solo covers: loop each curse in an Adventure mission, assert mutator active, issue430 checks pass, no resource error. Non-ET joiner containment needs two clients."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "Each selected curse injects and behaves normally in a solo session, `issue430_peer_parity_beacon_installed`, `issue430_curse_floor_failsafe`, and `issue430_hotjoin_session_contract` pass, and no missing-resource or mutator error occurs. This completes the solo floor; if it passes, the next card will test a player without Tweaker: Events joining a curse-enabled host, where the curses must stay inert and nobody may crash.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 5356561422,
+    "card_date": "2026-08-20T13:29:34Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

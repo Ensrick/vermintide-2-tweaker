@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "issue": 427,
+  "class": "S",
+  "status": "draft",
+  "vp": null,
+  "arena": "none",
+  "cases": [
+    {
+      "script": "",
+      "steps": [],
+      "assertions": [
+        "qa/check_logging.ps1 -Quiet -WarnChatRegression prints debt remaining=0. Ran today: exit 0, remaining=3."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "offline": [
+    {
+      "class": "S",
+      "command": "",
+      "expect": "qa/check_logging.ps1 -Quiet -WarnChatRegression prints debt remaining=0. Ran today: exit 0, remaining=3."
+    }
+  ],
+  "source": {
+    "card_comment_id": null,
+    "card_date": null,
+    "ledger": "D5_ledger.tsv"
+  }
+}

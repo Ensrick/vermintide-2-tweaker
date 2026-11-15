@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "issue": 1211,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Both players refresh **Character Weapon Variants**, confirm `[cwv:LOAD] v0.1.570-dev` in their newest logs, and run `/cwv_regression_test` once.",
+        "2. The host equips the **Old Musket** in the keep and fires several shots while the client watches and listens.",
+        "3. The host switches the Old Musket to melee stance and back, then fires again.",
+        "4. Reverse roles: the client equips and fires the Old Musket while the host watches and listens.",
+        "5. Exit normally and attach both newest console logs."
+      ],
+      "assertions": [
+        "Neither player crashes, each observer hears the other player's Old Musket shot, and the regression check reports `issue1211_registered_wwise_world_guard` as passing.",
+        "Solo: registered wwise world resolver returns non-nil in Keep and mission; no Application.main_world callers. Co-op: client receives the fire op, no crash, played is true."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "Neither player crashes, each observer hears the other player's Old Musket shot, and the regression check reports `issue1211_registered_wwise_world_guard` as passing.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 5356347207,
+    "card_date": "2026-08-20T13:11:11Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 548,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "general_tweaker_dev",
+      "min_version": "0.2.180",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable **Godmode**.",
+        "2. In **Halescourge**, let the boss's fly swarm and fly projectile hit you. Neither may take control of your character.",
+        "3. In **The Enchanter's Lair**, let Nurgloth's fly projectile hit you. It must not disable or take control of your character.",
+        "4. With Godmode still on, fight a Bile Troll and stand in both its ground bile and face spray. Neither may blind or slow you.",
+        "5. Turn **Godmode** off and repeat one fly hit and one Bile Troll exposure; both must affect you normally.",
+        "6. Re-enable Godmode, run `/verify_godmode_flies`, then `/gt_regression_test`. Exit normally and attach the newest full log."
+      ],
+      "assertions": [
+        "Godmode blocks the two fly-authored control-loss routes and the catalogued Bile Troll debuffs; unrelated status effects remain native. Turning Godmode off restores the native fly and bile effects. Both commands report PASS. This is the solo stage, not co-op acceptance.",
+        "Harness: godmode on, call StatusUtils.set_overpowered_network(player,true,\"slow_bomb\"/\"fly_bomb\") from a blob source; assert not overpowered; godmode off applies; /verify_godmode_flies PASS."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6681747038,
+    "card_date": "2026-11-06T09:33:11Z",
+    "ledger": "D5_ledger.tsv"
+  }
+}
