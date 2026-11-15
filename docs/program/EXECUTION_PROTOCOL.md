@@ -59,7 +59,6 @@ First compare with master: `gh run list --branch master --workflow QA --limit 1`
 
 | Failing step or message | Cause | What you do |
 |---|---|---|
-| `check-lifecycle-cardinality.ps1` (`.github/workflows/qa.yml:125-141`) | Tracker state: a label, a pinned card or a tester comment on some issue | Not your diff. Do not edit the workflow, the guard or any label. Write the issue numbers and error codes in the pull request under "Blocked by", leave it as draft, take another card. WP-G-03 removes this step |
 | `census is older than 14 days` (`qa/check_branch_reconciliation_census.ps1:14`) | The committed branch census aged out (last refreshed 2026-11-11) | Separate pull request `chore: refresh branch census` using the command in `docs/generated/README.md`. Never hand-edit the generated files |
 | Merge blocked, branch behind | Strict up-to-date rule | `gh pr update-branch <n>` |
 | Network or GitHub error in a step | Transient | `gh run rerun <run-id> --failed`, once |

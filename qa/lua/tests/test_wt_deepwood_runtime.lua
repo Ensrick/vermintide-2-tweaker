@@ -200,11 +200,15 @@ return function(H, repo_root)
                 "if runtime.ready() then", 1, true))
             H.truthy(runtime_source:find(
                 "deps.on_residency_changed(now_ready)", 1, true))
-            local state_change = assert(entry:find("mod.on_game_state_changed = function", 1, true))
+            -- WP-WT-01 moved the state-change apply pass into _wt_apply_all.
+            local apply_pass = assert(entry:find("local function _wt_apply_all()", 1, true))
             local ensure = assert(entry:find(
-                "mod._force_load_deepwood_runtime_package(true)", state_change, true))
-            local apply = assert(entry:find("apply_weapon_unlocks()", state_change, true))
+                "mod._force_load_deepwood_runtime_package(true)", apply_pass, true))
+            local apply = assert(entry:find("apply_weapon_unlocks()", apply_pass, true))
             H.truthy(ensure < apply, "residency request must precede availability")
+            local state_change = assert(entry:find("mod.on_game_state_changed = function", apply_pass, true))
+            H.truthy(entry:find("    _wt_apply_all()\n", state_change, true),
+                "state change must run the apply pass")
             H.truthy(availability:find(
                 'if weapon_key ~= "we_life_staff" then return true end', 1, true))
             H.truthy(availability:find(

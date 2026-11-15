@@ -8,12 +8,15 @@
 #   .\qa\run_all.ps1 -FixStale    # auto-banner stale docs
 #   .\qa\run_all.ps1 -Quick -SkipLua -Staged   # pre-commit: change-set-scoped
 #                                 # checks read only the index (issue #1683)
+#   .\qa\run_all.ps1 -Full        # also run the change-set-scoped pipeline
+#                                 # suites when nothing in their scope changed
 
 [CmdletBinding()]
 param(
     [switch]$SkipLua,
     [switch]$Quick,
     [switch]$Staged,
+    [switch]$Full,
     [switch]$FixStale,
     [switch]$SkipBundleAtomicity,
     [switch]$SkipBuildReceipts,
@@ -115,6 +118,70 @@ function Write-Summary {
     } else {
         Write-Host "[run_all] FAILED - blocking errors (exit $($script:blockingExit)). Fix before shipping." -ForegroundColor Red
     }
+}
+
+# WP-P-06: change-set scope for the suites that test pipeline tooling rather
+# than the change. A scoped check runs when -Full is set, when the change set is
+# missing or indeterminate, or when any changed path starts with one of its
+# prefixes (ordinal, case-insensitive, '/' separators). Never scope
+# lua_unit_tests, check_lua_parse, check_published_ids, check_versions,
+# check_build_receipts, check_release_bundle_atomicity or lint-mod.
+$script:qaChangeSet = $null
+$script:qaScopeSelftests = @('qa/', 'tools/', '.github/')
+# run_bundle_output_set_host_matrix runs the -SelfTest of the nine checks it
+# lists under both hosts; those checks load tools/ship/ and
+# tools/publish-release/ helpers and qa/_test_fixtures/.
+$script:qaScopeBundleOutputSet = @(
+    'tools/ship/', 'tools/mod-inventory.psd1', 'tools/publish-release/',
+    'qa/check_bundle_output_set.ps1', 'qa/run_bundle_output_set_host_matrix.ps1',
+    'qa/check_bundle_authority.ps1', 'qa/check_build_output_normalization.ps1',
+    'qa/check_build_receipts.ps1', 'qa/check_publication_snapshot.ps1',
+    'qa/check_publication_receipt.ps1', 'qa/check_local_deployment_receipt.ps1',
+    'qa/check_release_recovery_record.ps1', 'qa/check_workshop_upload_evidence.ps1',
+    'qa/_test_fixtures/'
+)
+# The source host matrix runs check_wt_history_source_freshness -SelfTest
+# (its SELFTEST-OWNER), which also reads qa/run_all.ps1, qa/run_selftests.ps1,
+# tools/hooks/pre-commit.ps1 and the change-set helper and its fixtures.
+$script:qaScopeWtHistory = @(
+    'tools/weapon-history/', 'weapon_tweaker/', 'weapon_tweaker_dev/',
+    'qa/check_wt_history', 'qa/run_wt_history',
+    'qa/wt_history_freshness_scope.ps1', 'qa/fixtures/wt_history/',
+    'qa/run_all.ps1', 'qa/run_selftests.ps1', 'tools/hooks/pre-commit.ps1'
+)
+function Test-QaScope {
+    param(
+        [Parameter(Mandatory, Position = 0)][string[]]$Prefixes,
+        $ChangeSet = $script:qaChangeSet,
+        [bool]$FullRun = [bool]$Full
+    )
+    if ($FullRun) { return $true }
+    if ($null -eq $ChangeSet -or -not [bool]$ChangeSet.Determinate) { return $true }
+    foreach ($path in @($ChangeSet.Paths)) {
+        if ([string]::IsNullOrWhiteSpace([string]$path)) { continue }
+        $norm = ([string]$path).Trim().Replace('\', '/')
+        foreach ($prefix in $Prefixes) {
+            if ($norm.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) { return $true }
+        }
+    }
+    return $false
+}
+
+function Run-ScopedCheck {
+    [CmdletBinding()]
+    param(
+        [Parameter(Mandatory, Position = 0)][string[]]$Prefixes,
+        [Parameter(Mandatory, Position = 1)][string]$name,
+        [Parameter(Mandatory, Position = 2)][scriptblock]$action,
+        [ValidateSet('Standard', 'Blocking', 'Advisory')][string]$Policy = 'Standard'
+    )
+    if (Test-QaScope $Prefixes) {
+        Run-Check $name $action -Policy $Policy
+        return
+    }
+    Write-Host "===== $name =====" -ForegroundColor Cyan
+    Write-Host ("SKIP (scope): no changed path under {0}" -f ($Prefixes -join ', ')) -ForegroundColor DarkYellow
+    Write-Host ""
 }
 
 function Confirm-QAWorktreePurity {
@@ -221,6 +288,24 @@ function Invoke-PolicySelfTest {
         }
     }
 
+    # WP-P-06: Test-QaScope with the production run_selftests prefixes.
+    $selftestScope = $script:qaScopeSelftests
+    $modOnlyPath = 'general_tweaker_dev/scripts/mods/general_tweaker_dev/general_tweaker_dev.lua'
+    foreach ($scopeFixture in @(
+        @{ Name = 'mod-only change skips run_selftests'; Determinate = $true; Paths = @($modOnlyPath); Full = $false; Expected = $false },
+        @{ Name = 'tools/ship/claim.ps1 runs run_selftests'; Determinate = $true; Paths = @('tools/ship/claim.ps1'); Full = $false; Expected = $true },
+        @{ Name = 'indeterminate change set runs run_selftests'; Determinate = $false; Paths = @(); Full = $false; Expected = $true },
+        @{ Name = '-Full runs run_selftests'; Determinate = $true; Paths = @($modOnlyPath); Full = $true; Expected = $true }
+    )) {
+        $scopeChangeSet = [pscustomobject]@{ Determinate = $scopeFixture.Determinate; Paths = $scopeFixture.Paths }
+        $scopeActual = Test-QaScope $selftestScope -ChangeSet $scopeChangeSet -FullRun $scopeFixture.Full
+        if ($scopeActual -ne $scopeFixture.Expected) {
+            $failures += "qa scope fixture failed: $($scopeFixture.Name) (got $scopeActual)"
+        } else {
+            Write-Host "[qa-scope:selftest] PASS $($scopeFixture.Name)" -ForegroundColor Green
+        }
+    }
+
     try {
         Invoke-QAWorktreeStateSelfTest
     } catch {
@@ -245,6 +330,27 @@ if (-not $FixStale) {
     } catch {
         Write-Host "[worktree-purity] INFRASTRUCTURE FAILURE before QA: $_" -ForegroundColor Red
         exit 99
+    }
+}
+
+# WP-P-06: resolve the change set once (index + working tree + the hosted
+# PR/push range or origin/master...HEAD, plus untracked files off Actions).
+# Any failure leaves it indeterminate, and then every scoped check runs.
+try {
+    . (Join-Path $here 'wt_history_freshness_scope.ps1')
+    $script:qaChangeSet = Get-WtHistoryFreshnessChangeSet -RepoRoot $repoRoot -Staged:$Staged
+} catch {
+    Write-Host "[qa-scope] change set unavailable: $_" -ForegroundColor DarkYellow
+    $script:qaChangeSet = $null
+}
+if (-not $Quiet) {
+    if ($Full) {
+        Write-Host "[qa-scope] -Full: every scoped check runs." -ForegroundColor DarkGray
+    } elseif ($null -eq $script:qaChangeSet -or -not $script:qaChangeSet.Determinate) {
+        $scopeReason = if ($null -eq $script:qaChangeSet) { 'no change set' } else { $script:qaChangeSet.Reason }
+        Write-Host "[qa-scope] change set indeterminate ($scopeReason): every scoped check runs." -ForegroundColor DarkGray
+    } else {
+        Write-Host ("[qa-scope] change set from {0}: {1} path(s)." -f $script:qaChangeSet.Source, @($script:qaChangeSet.Paths).Count) -ForegroundColor DarkGray
     }
 }
 
@@ -374,7 +480,8 @@ Run-Check "check_retired_big_rebalance"        { & (Join-Path $here "check_retir
 # carry the maintainer's local agent/* refs, so this offline gate validates
 # schema, age, generator hash, and exact automatic-disposition proofs without
 # attempting to regenerate or infer from an incomplete CI ref inventory.
-Run-Check "check_branch_reconciliation_census" { & (Join-Path $here "check_branch_reconciliation_census.ps1") -Quiet:$Quiet }
+# Advisory: a stale generated census must not fail unrelated pull requests.
+Run-Check "check_branch_reconciliation_census" { & (Join-Path $here "check_branch_reconciliation_census.ps1") -Quiet:$Quiet } -Policy 'Advisory'
 Run-Check "check_in_progress"                 { & (Join-Path $here "check_in_progress.ps1")                 -Quiet:$Quiet } -Policy 'Advisory'
 # Blocking local-capacity guard. CI has no secondary worktrees, while maintainer
 # sessions fail closed before agent checkouts can grow without bound.
@@ -405,7 +512,15 @@ if ($Quick) {
 # (all fixture-based, offline, ~1s total). A self-test regression means a QA
 # check's own logic is broken - the gate must not trust a broken check, so
 # this is Standard policy (its exit 2 BLOCKS). Full pass only, not -Quick.
-Run-Check "run_selftests"      { & (Join-Path $here "run_selftests.ps1")      -Quiet:$Quiet }
+# WP-P-06: scoped to changes under qa/, tools/ or .github/ (or -Full).
+Run-ScopedCheck $script:qaScopeSelftests "run_selftests" { & (Join-Path $here "run_selftests.ps1") -Quiet:$Quiet }
+# The deployed-source live-test contract self-test reads real mod source
+# (tools/verify/ct_official_receipt_routes_contract.ps1 pins
+# chaos_wastes_tweaker receipt lines), so a product change must still run it
+# when run_selftests is out of scope. Inside run_selftests it already runs.
+if (-not (Test-QaScope $script:qaScopeSelftests)) {
+    Run-Check "check_live_test_contract" { & (Join-Path $here "check_live_test_contract.ps1") -SelfTest }
+}
 # The launcher resolver is a release boundary shared by pwsh 7 and Windows
 # PowerShell 5.1. Dynamic self-test discovery above covers the current host;
 # this dedicated blocking matrix makes both hosts mandatory in every full QA
@@ -413,61 +528,63 @@ Run-Check "run_selftests"      { & (Join-Path $here "run_selftests.ps1")      -Q
 Run-Check "vmb_launcher_path_host_matrix" { & (Join-Path $here "run_vmb_launcher_path_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
 # Issue #1400: the complete generated-output fingerprint is a release boundary
 # shared by PowerShell 7 and Windows PowerShell 5.1. Keep its canonical ordinal
-# byte contract mandatory in every full local and hosted QA run.
-Run-Check "bundle_output_set_host_matrix" { & (Join-Path $here "run_bundle_output_set_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
+# byte contract mandatory whenever its inputs change (WP-P-06 scope, or -Full).
+Run-ScopedCheck $script:qaScopeBundleOutputSet "bundle_output_set_host_matrix" { & (Join-Path $here "run_bundle_output_set_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
+# WP-P-06: the fourteen weapon-history checks below run only when a path in
+# $script:qaScopeWtHistory changed (or -Full, or an indeterminate change set).
 # Issue #1436: prove the offline evidence ledger and generated Patch 5.2
 # catalog are pinned; regenerate byte-exactly when the source checkout exists.
-Run-Check "check_wt_history_reproducibility" { & (Join-Path $here "check_wt_history_reproducibility.ps1") -Quiet:$Quiet }
+Run-ScopedCheck $script:qaScopeWtHistory "check_wt_history_reproducibility" { & (Join-Path $here "check_wt_history_reproducibility.ps1") -Quiet:$Quiet }
 # Issue #540: generic remote-freshness and incomplete-source adversaries have
 # one dual-host owner. Patch-specific matrices must not multiply these fixtures.
-Run-Check "wt_history_source_host_matrix" { & (Join-Path $here "run_wt_history_source_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
+Run-ScopedCheck $script:qaScopeWtHistory "wt_history_source_host_matrix" { & (Join-Path $here "run_wt_history_source_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
 # Issue #1436: Patch 2.0.6 projects the source-adjacent Handgun penetration
 # boundary onto both current gameplay-identical clones. Reproduce the exact
 # three-leaf evidence and six-operation catalog under both PowerShell hosts.
-Run-Check "wt_history_patch_2_0_6_host_matrix" { & (Join-Path $here "run_wt_history_patch_2_0_6_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
+Run-ScopedCheck $script:qaScopeWtHistory "wt_history_patch_2_0_6_host_matrix" { & (Join-Path $here "run_wt_history_patch_2_0_6_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
 # Issue #1436: Patch 2.0.9.1 repaired the Halberd push-follow-up overhead.
 # Reproduce its complete 20-leaf chain projection, current guards, and exact
 # transactional restoration under both supported PowerShell hosts.
-Run-Check "wt_history_patch_2_0_9_1_host_matrix" { & (Join-Path $here "run_wt_history_patch_2_0_9_1_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
+Run-ScopedCheck $script:qaScopeWtHistory "wt_history_patch_2_0_9_1_host_matrix" { & (Join-Path $here "run_wt_history_patch_2_0_9_1_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
 # Issue #1436: Patch 2.0.10 exchanges the two Sword-and-Dagger heavy-profile
 # melee-boost values. Reproduce two private current-schema profiles and their
 # four explicit, atomic hand routes under both supported PowerShell hosts.
-Run-Check "wt_history_patch_2_0_10_host_matrix" { & (Join-Path $here "run_wt_history_patch_2_0_10_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
+Run-ScopedCheck $script:qaScopeWtHistory "wt_history_patch_2_0_10_host_matrix" { & (Join-Path $here "run_wt_history_patch_2_0_10_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
 # Issue #1436: Patch 3.1's Blunderbuss selector is a one-leaf bounded delta,
 # not a complete 3.0 baseline. Reproduce the exact adjacent/current evidence,
 # current-only Versus exclusion, and completeness ledger on both hosts.
-Run-Check "wt_history_patch_3_1_host_matrix" { & (Join-Path $here "run_wt_history_patch_3_1_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
+Run-ScopedCheck $script:qaScopeWtHistory "wt_history_patch_3_1_host_matrix" { & (Join-Path $here "run_wt_history_patch_3_1_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
 # Issue #1436: Patch 3.2's Kerillian One-Handed Axe boundary uses an older
 # fallback-global source shape. Reproduce the adjacent/current evidence under
 # both PowerShell hosts and prove immutable evaluations cannot alias.
-Run-Check "wt_history_patch_3_2_host_matrix" { & (Join-Path $here "run_wt_history_patch_3_2_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
+Run-ScopedCheck $script:qaScopeWtHistory "wt_history_patch_3_2_host_matrix" { & (Join-Path $here "run_wt_history_patch_3_2_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
 # Issue #1436: reproduce Patch 6.0's bounded two-shield scalar slice and
 # Fireball private-profile leaf from the adjacent and current source anchors.
-Run-Check "check_wt_history_patch_6_0_reproducibility" { & (Join-Path $here "check_wt_history_patch_6_0_reproducibility.ps1") -Quiet:$Quiet }
+Run-ScopedCheck $script:qaScopeWtHistory "check_wt_history_patch_6_0_reproducibility" { & (Join-Path $here "check_wt_history_patch_6_0_reproducibility.ps1") -Quiet:$Quiet }
 # Issue #1436: reproduce the source-adjacent Patch 4.6 Hagbane finesse-DoT
 # profiles and current routes under both supported PowerShell hosts while
 # pinning the excluded Ricochet/refactor rows and source-selection adversaries.
-Run-Check "wt_history_patch_4_6_host_matrix" { & (Join-Path $here "run_wt_history_patch_4_6_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
+Run-ScopedCheck $script:qaScopeWtHistory "wt_history_patch_4_6_host_matrix" { & (Join-Path $here "run_wt_history_patch_4_6_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
 # Issue #1436: Patch 6.6's Deepwood Staff lift duration crosses weapon and
 # vortex runtime roots. Reproduce its adjacent/current evidence and catalog
 # under both supported PowerShell hosts before accepting either stream.
-Run-Check "wt_history_patch_6_6_host_matrix" { & (Join-Path $here "run_wt_history_patch_6_6_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
+Run-ScopedCheck $script:qaScopeWtHistory "wt_history_patch_6_6_host_matrix" { & (Join-Path $here "run_wt_history_patch_6_6_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
 # Issue #1436: independently select Patch 6.8's Kerillian Greatsword change
 # from the adjacent 6.7.2 -> 6.8.1 boundary, rehydrate its current guard, and
 # reproduce both evidence lanes and the generated catalog from immutable source.
-Run-Check "check_wt_history_patch_6_8_reproducibility" { & (Join-Path $here "check_wt_history_patch_6_8_reproducibility.ps1") -Quiet:$Quiet }
+Run-ScopedCheck $script:qaScopeWtHistory "check_wt_history_patch_6_8_reproducibility" { & (Join-Path $here "check_wt_history_patch_6_8_reproducibility.ps1") -Quiet:$Quiet }
 # Issue #1436: Patch 6.11.0 reduced Kruber Longbow automatic-zoom delay on
 # both source-evaluated templates. Reproduce the atomic two-route boundary and
 # exact current guards under both supported PowerShell hosts.
-Run-Check "wt_history_patch_6_11_0_host_matrix" { & (Join-Path $here "run_wt_history_patch_6_11_0_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
+Run-ScopedCheck $script:qaScopeWtHistory "wt_history_patch_6_11_0_host_matrix" { & (Join-Path $here "run_wt_history_patch_6_11_0_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
 # Issue #1436: Hotfix 6.11.2 reverted Sienna Dagger H2 and Axe & Falchion
 # H1/H2 damage-profile routes. Reproduce the exact three-route boundary,
 # native profile lookups, current guards, and catalogs under both PS hosts.
-Run-Check "wt_history_patch_6_11_2_host_matrix" { & (Join-Path $here "run_wt_history_patch_6_11_2_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
+Run-ScopedCheck $script:qaScopeWtHistory "wt_history_patch_6_11_2_host_matrix" { & (Join-Path $here "run_wt_history_patch_6_11_2_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
 # Issue #1436: Patch 4.1.1's Masterwork Pistol boolean boundary requires both
 # evaluators to preserve a present false current guard. Reproduce it under both
 # supported PowerShell hosts, including the adversarial source-checkout fixture.
-Run-Check "wt_history_patch_4_1_1_host_matrix" { & (Join-Path $here "run_wt_history_patch_4_1_1_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
+Run-ScopedCheck $script:qaScopeWtHistory "wt_history_patch_4_1_1_host_matrix" { & (Join-Path $here "run_wt_history_patch_4_1_1_host_matrix.ps1") -Quiet:$Quiet } -Policy 'Blocking'
 Run-Check "check_localization" { & (Join-Path $here "check_localization.ps1") -Quiet:$Quiet }
 # Player-facing lifecycle/issue metadata is forbidden in every active stream.
 # This is a blocking repository-wide gate; GitHub labels/changelogs remain the
