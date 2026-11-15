@@ -321,6 +321,19 @@ local function _remove_dormant_from_pool(power_up_name, rarity)
     _dbg("[dormant] removed %s from %s rarity pool (toggle now OFF)", power_up_name, rarity)
 end
 
+-- WP-CW-03 (#426): inject_dormant_boon puts every custom boon into
+-- DeusPowerUpsArray / DeusPowerUpsArrayByRarity at load, and the roller reads
+-- those arrays (deus_power_up_utils.lua:138-146), so the pool edits above never
+-- gated a roll. The roll hook and the bot picker read this predicate instead:
+-- `_added_to_pool` is set only when the toggle allows it under parity.
+mod._ct_boon_rollable = function(name)
+    local modded = _injected_dormants[name] ~= nil
+    local policy = mod._ct_wire_policy
+    if not policy then return not modded end
+    local safe = mod._ct_wire_safe ~= nil and mod._ct_wire_safe() == true
+    return policy.rollable(modded, _added_to_pool[name] == true, safe)
+end
+
 -- 2026-05-23 v0.7.100-dev FULLY PURGED: pre_register_dormant_lookups, sync_dormant_boons,
 -- and their apply-site calls. The functions iterated DORMANT_BOON_RARITY (which no longer
 -- exists). The trait-boon + meta-boon paths still call `inject_dormant_boon` directly with

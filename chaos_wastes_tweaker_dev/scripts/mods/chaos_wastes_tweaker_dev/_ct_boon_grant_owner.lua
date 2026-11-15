@@ -185,7 +185,8 @@ function mod._ct_bot_pick_random_for_rarity(rarity)
         local parity_blocked = name and mod._ct_is_modded_power_up
             and mod._ct_is_modded_power_up(name)
             and not (mod._ct_wire_safe and mod._ct_wire_safe())
-        if name and not mod._ct_boon_disabled(name) and not parity_blocked then
+        if name and not mod._ct_boon_disabled(name) and not parity_blocked
+                and (not mod._ct_boon_rollable or mod._ct_boon_rollable(name)) then
             eligible[#eligible + 1] = name
         end
     end
@@ -460,6 +461,16 @@ end)
 mod:hook("DeusRunController", "_try_buy_power_up", function(func, self, buyer, power_up, discount)
     -- _ct_consolidated_try_buy_power_up_hook: #458 must share this existing
     -- purchase choke point with #466. A second VMF hook on the pair is dropped.
+    -- WP-CW-03 (#426): vanilla writes a purchase straight into synchronized run
+    -- state as a lookup integer (deus_run_controller.lua:1725-1768,
+    -- deus_run_state_spec.lua:60). Refuse a cataloged boon while parity is
+    -- unconfirmed; vanilla handles false on both sides (:989-1004, :1058-1077).
+    local pu_name = power_up and power_up.name
+    if pu_name and mod._ct_wire_policy and not mod._ct_wire_policy.purchase_allowed(
+            pu_name, mod._ct_wire_safe ~= nil and mod._ct_wire_safe() == true) then
+        pcall(printf, "[ct:426] BLOCKED modded boon at purchase: %s (peer parity not confirmed)", tostring(pu_name))
+        return false
+    end
     local start_handled, bought = false, nil
     if mod._ct_start_shrine_runtime then
         start_handled, bought = mod._ct_start_shrine_runtime.try_buy(
