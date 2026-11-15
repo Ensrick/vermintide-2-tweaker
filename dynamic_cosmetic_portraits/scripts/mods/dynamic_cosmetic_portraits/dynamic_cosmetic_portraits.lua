@@ -21,7 +21,7 @@ end
 -- exposure is needed. Matches modded_progression.lua:27.
 local _MEM_PROBE_T0_DCP = collectgarbage("count")
 
-local MOD_VERSION = "0.1.32-dev"
+local MOD_VERSION = "0.1.33-dev"
 -- Startup banner: log-only, NOT chat. The applied marker line further down
 -- ([dcp] enabled v<X> settings_fp=<hash>) is the canonical version surface
 -- (PROJECT_STANDARDS.md § 3.6 "Chat-echo policy").
@@ -194,7 +194,7 @@ _rt_register("localization_format_safe", function()
     -- ship even if the static check is skipped. RULE: any literal % in a loc
     -- string must be doubled to %%.
     local ok, loc = pcall(mod.dofile, mod, "scripts/mods/dynamic_cosmetic_portraits/dynamic_cosmetic_portraits_localization")
-    if not ok or type(loc) ~= "table" then return end  -- can't reach loc; skip
+    if not ok or type(loc) ~= "table" then return _rt_note_skip("localization_format_safe", "can't reach the localization table") end
     for k, v in pairs(loc) do
         if type(v) == "table" and type(v.en) == "string" then
             local fmt_ok, fmt_err = pcall(string.format, v.en)
@@ -782,10 +782,10 @@ _rt_register("skin_map_overrides_hat_map", function()
     -- guard on THIS file (path via debug.getinfo on the file-local _rt_register);
     -- needles split so this check never self-matches; no-op when source unreadable.
     local ok, info = pcall(debug.getinfo, _rt_register, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
+    if not ok or type(info) ~= "table" or not info.source then return _rt_note_skip("skin_map_overrides_hat_map", "source path not available") end
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
     local txt = _rt_src_read(src_path)  -- (#511) io-safe; nil in retail sandbox => skip
-    if not txt then return end
+    if not txt then return _rt_note_skip("skin_map_overrides_hat_map", "source text not readable") end
     local skin_lookup = "_skin_portrait_map[" .. "skin_key]"
     local hat_lookup  = "_hat_portrait_map[" .. "hat_key]"
     local skin_at = txt:find(skin_lookup, 1, true)
@@ -826,14 +826,14 @@ _rt_register("hud_alpha_mask_conformance_pipeline", function()
     -- standalone Gui.bitmap renderer path. Lock the authoring invariant here;
     -- the atlas-render-path invariant is checked separately below.
     local ok, info = pcall(debug.getinfo, _rt_register, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
+    if not ok or type(info) ~= "table" or not info.source then return _rt_note_skip("hud_alpha_mask_conformance_pipeline", "source path not available") end
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
     local tool_path, n = src_path:gsub(
         "scripts[/\\]mods[/\\]dynamic_cosmetic_portraits[/\\]dynamic_cosmetic_portraits%.lua$",
         "tools/add_portrait.ps1")
-    if n == 0 then return end  -- cannot derive the tool path; skip
+    if n == 0 then return _rt_note_skip("hud_alpha_mask_conformance_pipeline", "cannot derive the tool path") end
     local txt = _rt_src_read(tool_path)  -- (#511) io-safe; nil in retail sandbox => skip
-    if not txt then return end
+    if not txt then return _rt_note_skip("hud_alpha_mask_conformance_pipeline", "tool source not readable") end
     local mask_needle = "vanilla_hud_alpha_mask" .. "_86x108.png"  -- split so this check never self-matches on OUR source
     if not txt:find(mask_needle, 1, true) then
         return "add_portrait.ps1 no longer references the canonical vanilla hud mask (frame-bleed regression risk)"
@@ -856,21 +856,27 @@ _rt_register("portrait_materials_use_visible_shader_526", function()
             #_PORTRAIT_STANDALONE_MATERIALS)
     end
     local ok, info = pcall(debug.getinfo, _rt_register, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
+    if not ok or type(info) ~= "table" or not info.source then return _rt_note_skip("portrait_materials_use_visible_shader_526", "source path not available, runtime half passed") end
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
     local root, n = src_path:gsub(
         "scripts[/\\]mods[/\\]dynamic_cosmetic_portraits[/\\]dynamic_cosmetic_portraits%.lua$", "")
-    if n == 0 then return end
+    if n == 0 then return _rt_note_skip("portrait_materials_use_visible_shader_526", "cannot derive the mod root, runtime half passed") end
+    local material_reads = 0
     for _, material_path in ipairs(_PORTRAIT_STANDALONE_MATERIALS) do
         local name = material_path:match("([^/]+)$")
         if name then
             local txt = _rt_src_read(root .. "materials/ui/" .. name .. ".material")
+            if txt then material_reads = material_reads + 1 end
             if txt and not txt:find('shader = "gui:DIFFUSE_MAP"', 1, true) then
                 return name .. " does not use the proven visible Gui shader"
             end
         end
     end
     local atlas_txt = _rt_src_read(root .. _PORTRAIT_ATLAS_MATERIAL_PATH .. ".material")
+    if material_reads == 0 and not atlas_txt then
+        return _rt_note_skip("portrait_materials_use_visible_shader_526",
+            "no material file readable, runtime half passed")
+    end
     if atlas_txt and not atlas_txt:find('dcp_portrait_atlas = {', 1, true) then
         return "portrait atlas normal material is missing"
     end
@@ -1366,10 +1372,10 @@ _rt_register("portrait_override_player_scoped", function()
         return "_resolve_portrait_set_for_player missing -- other players' frames fall back to the career-scoped global (leak)"
     end
     local ok, info = pcall(debug.getinfo, _rt_register, "S")
-    if not ok or type(info) ~= "table" or not info.source then return end
+    if not ok or type(info) ~= "table" or not info.source then return _rt_note_skip("portrait_override_player_scoped", "source path not available, runtime half passed") end
     local src_path = info.source:sub(1, 1) == "@" and info.source:sub(2) or info.source
     local txt = _rt_src_read(src_path)
-    if not txt then return end
+    if not txt then return _rt_note_skip("portrait_override_player_scoped", "source half not readable, runtime half passed") end
     local needles = {
         { 'mod:hook("UnitFramesHandler", ' .. '"_sync_player_stats"',
           "HUD unit-frame per-player seam hook missing (leak on team frames)" },

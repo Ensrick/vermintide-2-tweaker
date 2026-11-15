@@ -1,5 +1,14 @@
 # Character Dialogue Changelog
 
+## 0.1.16-dev (2026-11-15) -- Named regression checks (WP-COS-02)
+
+- `/cd_regression_test` now prints one `PASS:` / `FAIL:` line per named check
+  (`override_state_parsing`, `catalogue_unique_events`, `catalogue_durations`,
+  `browser_group_totals`, `browser_page_cap`, `morris_package_mapping`,
+  `isolation_owner_tokens`) before the existing summary line, so a failure
+  names its check (audit finding A3-F12). The checks themselves are unchanged.
+  Not confirmed in game.
+
 ## 0.1.15-dev (2026-11-13) -- Native async readiness and safe cleanup (#881)
 
 ### Why
