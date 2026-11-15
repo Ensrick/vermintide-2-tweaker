@@ -22,7 +22,15 @@ return {
 		local m = get_mod(mod_id)
 		T.require(m ~= nil, "gut or gut_dev loaded")
 		T.require(rawget(_G, "MODDED_REALM") == true, "modded realm")
-		T.set(mod_id, "gut_use_non_modded_loadouts", false)
+		-- The case needs STORE mode. T.set restores the value after the case; until the driver has
+		-- it, set directly (gut reads the setting per call; the rig profile is a copy and is never
+		-- written back).
+		if T.set then
+			T.set(mod_id, "gut_use_non_modded_loadouts", false)
+		else
+			T.note("t_set", "missing; used " .. mod_id .. ":set")
+			m:set("gut_use_non_modded_loadouts", false)
+		end
 		T.require(type(m._gut_exit_snapshot) == "function", "seam present")
 
 		local items = Managers.backend:get_interface("items")
