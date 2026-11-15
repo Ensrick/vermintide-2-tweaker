@@ -1,5 +1,14 @@
 # Weapon Tweaker Changelog
 
+## 0.12.351-dev (2026-11-15) -- Mirror pure 3P animation resolver (WP-WT-06) [not-started]
+
+- Mirror public 0.12.350-beta: the funnel decision lives in
+  `_wt_anim_resolver.lua`; the three Dev overlays in the hook (picker play
+  trace, probe outcomes, probe misses) keep running at their places, with the
+  remap-miss lookup passed through the decision's info table.
+- Runtime parity, Dev namespace and the friends-only overlay are unchanged.
+  No in-game acceptance is claimed.
+
 ## 0.12.350-dev (2026-11-15) -- Mirror dead preview guard removal (WP-WT-12) [not-started]
 
 - Mirror public 0.12.349-beta: the never-running pre-spawn preview validator is
