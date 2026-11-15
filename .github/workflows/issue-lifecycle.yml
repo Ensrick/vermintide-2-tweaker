@@ -43,12 +43,15 @@ jobs:
           # The sparse patterns below also land current active Lua in the
           # initial pack, and most deployed blobs are shared with it, so the
           # authority's batched prefetch has little left to hydrate (#750).
+          # The MP login contract reads HEAD:modded_progression/itemV2.cfg
+          # with lazy fetch disabled, so each mod's itemV2.cfg is checked out.
           filter: 'blob:none'
           sparse-checkout-cone-mode: false
           sparse-checkout: |
             /qa/
             /tools/
             /*/scripts/mods/
+            /*/itemV2.cfg
 
       - name: Validate tracker lifecycle and pinned test cards
         shell: pwsh
