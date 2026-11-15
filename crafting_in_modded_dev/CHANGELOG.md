@@ -1,5 +1,23 @@
 # Crafting in Modded Changelog
 
+## 0.8.157-dev (2026-11-15) -- Remove the dormant loadout-persistence path (WP-CIM-11)
+
+- Removed the modded-loadout persistence machinery that was forced off at
+  every load: the `modded_loadout` store with its migration and stale purge,
+  the two `set_loadout_item` capture hooks, the restore pass and its
+  per-state-change timer, the live-avatar re-equip, the per-frame capture
+  install, and the `/cim_restore_loadout` and `/cim_dump_loadout` commands.
+  Tweaker: GUI owns modded loadout persistence. The players' saved
+  `modded_loadout` setting is left untouched.
+- Removed the regression checks of that path, including
+  `modded_loadout_round_trip_save_then_clear`, which failed in a tester
+  session (#1654 body).
+- Unchanged: craft auto-equip, the exact five-slot loadout primitives used by
+  the Ranald importer, `/cim_craft_standard`, and
+  `mod._cim_register_restore_callback` for Tweaker: Cosmetics.
+- Not confirmed in game. The rig case is
+  `qa/runtime/cim/wp_cim_11_auto_equip.lua`.
+
 ## 0.8.156-dev (2026-11-15) -- Regression suite results on the engine log (WP-CIM-05)
 
 - `/cim_regression_test` runs through the new shared runner

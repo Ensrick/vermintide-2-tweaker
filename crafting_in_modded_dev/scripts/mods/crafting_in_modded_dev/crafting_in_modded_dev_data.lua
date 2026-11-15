@@ -199,12 +199,10 @@ local options_data = {
                 -- Children A->Z by display label: "Ignore items from inactive
                 -- mods" before "Show only modded weapons".
                 sub_widgets = {
-                    -- Loadout persistence toggles (persist_modded_loadouts /
-                    -- restore_modded_loadout) REMOVED 2026-06-30: the feature
-                    -- never worked reliably and a proper loadout system is being
-                    -- built in Tweaker: GUI (gut). cim no longer surfaces these
-                    -- and force-disables the machinery at load (see the master
-                    -- gate in crafting_in_modded_dev.lua).
+                    -- The two loadout persistence toggles were REMOVED 2026-06-30
+                    -- (the feature never worked reliably; Tweaker: GUI owns
+                    -- modded loadout persistence). WP-CIM-11 removed the dormant
+                    -- machinery itself.
                     -- When ON, saved crafts whose source mod isn't currently
                     -- active are skipped SILENTLY (logged via mod:info, not
                     -- echoed to chat). The deferred-injection retry still runs,

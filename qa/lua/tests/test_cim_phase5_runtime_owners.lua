@@ -150,7 +150,7 @@ return function(H, repo_root)
         H.equal(mod.settings.forged_weapons.fresh.item_key, "dr_1h_hammer")
         hooks._create_interfaces()
         H.equal(athanor_calls, 1)
-        H.equal(restore_calls, 1)
+        H.equal(restore_calls, 0, "WP-CIM-11: the dormant loadout restore is no longer called")
 
         -- #1141 single Temper-Craft registration uses the same candidate-state
         -- persistence boundary as batch import: no ghost is published when the
@@ -256,7 +256,8 @@ return function(H, repo_root)
                 print_line = function() end,
                 get_managers = function() return managers end,
             })
-            H.equal(mod.settings.persist_modded_loadouts, false)
+            H.equal(mod.settings.persist_modded_loadouts, nil,
+                "WP-CIM-11: the removed persistence toggle is no longer written")
             H.equal(owner.wire_safe_rarity("modded"), "unique")
             H.equal(owner.wire_safe_rarity("exotic"), "exotic")
 

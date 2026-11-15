@@ -18,10 +18,8 @@ return function(H, repo_root)
         "rpc_sync_loadout_unknown_id_guard",
         "wire_rarity_rewrite_ungated",
         "weave_forge_hides_cost_readout",
-        "modded_loadout_round_trip_save_then_clear",
         "issue1654_saved_crafts_restored",
         "forged_weapons_round_trip",
-        "restore_after_playfab_inventory_populated",
         "issue563_vanilla_skin_override_exact_backend_id",
         "inventory_property_count_within_cap",
         "cwv_bounded_seed_is_single_acquisition_selector",
@@ -34,7 +32,6 @@ return function(H, repo_root)
         "issue624_keep_forge_interaction",
         "issue617_athanor_icon_resource_closure",
         "issue787_cim_dual_axes_authored_icon",
-        "modded_loadout_has_no_stale_entries",
         "dbg_helpers_two_channel",
         "localization_format_safe",
         "issue244_athanor_literal_property_values",
@@ -56,9 +53,6 @@ return function(H, repo_root)
         "accessory_panel_module_loaded",
         "issue1117_bulk_accessory_button_layout",
         "accessory_panel_built_when_accessories_opened",
-        "backendutils_capture_installed",
-        "persist_loadouts_gate_off_is_passthrough",
-        "reequip_live_api_ok",
         "forge_preview_guard_present",
         "weave_category_pool_guard_present",
         "forge_freedom_settings_and_helpers_present",
@@ -136,9 +130,6 @@ return function(H, repo_root)
             get_custom_forge_active = function() return false end,
             get_forged_weapons = function() return {} end,
             set_forged_weapons = noop,
-            get_modded_loadout = function() return {} end,
-            set_modded_loadout = noop,
-            modded_loadout_load = noop,
             rpc_schema = 1,
         }
     end
@@ -170,7 +161,7 @@ return function(H, repo_root)
             "CIM entry exceeded its decomposition-contract ceiling")
     end)
 
-    H.test("CIM regression split preserves the exact 83-check stream", function()
+    H.test("CIM regression split preserves the exact 77-check stream", function()
         local cleanup_install = assert(loadfile(cleanup_module_path))()
         local core_install = assert(loadfile(core_module_path))()
         local surfaces_install = assert(loadfile(surfaces_module_path))()
@@ -188,7 +179,7 @@ return function(H, repo_root)
         cleanup_install(context)
         H.equal(#names, 3, "cleanup registration boundary changed")
         local support = core_install(context)
-        H.equal(#names, 37, "core registration boundary changed")
+        H.equal(#names, 34, "core registration boundary changed")
         H.equal(type(support), "table")
         H.equal(type(support.with_loadout_sandbox), "function")
         context.with_loadout_sandbox = support.with_loadout_sandbox
@@ -197,12 +188,13 @@ return function(H, repo_root)
         surfaces_install(context)
 
         H.deep_equal(names, expected_order, "ordered regression snapshot changed")
-        H.equal(#names, 83)
+        -- WP-CIM-11 removed six checks of the dormant loadout-persistence path.
+        H.equal(#names, 77)
         H.equal(names[3], "issue246_tab_preview_exact_skin_icon")
         H.equal(names[4], "weave_talent_forge_level_guard_present")
-        H.equal(names[37], "action_rejection_uses_warning_channel")
-        H.equal(names[38], "morris_hub_passes_open_forge_gate")
-        H.equal(names[83], "issue562_auto_equip_contract")
+        H.equal(names[34], "action_rejection_uses_warning_channel")
+        H.equal(names[35], "morris_hub_passes_open_forge_gate")
+        H.equal(names[77], "issue562_auto_equip_contract")
 
         local ok, result = pcall(checks[1])
         H.truthy(ok, "registered checks did not close over the supplied mod object")
@@ -218,11 +210,8 @@ return function(H, repo_root)
             "ensure_item_adventure_visible",
             "is_in_keep",
             "rpc_schema",
-            "with_loadout_sandbox",
             "get_custom_forge_active",
             "get_forged_weapons",
-            "get_modded_loadout",
-            "set_modded_loadout",
         }
 
         H.equal(pcall(install, nil), false)
