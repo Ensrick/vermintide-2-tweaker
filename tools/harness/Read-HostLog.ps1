@@ -28,7 +28,8 @@
   AllowErrors, ShieldInstalledBeforeFirstCommit (true, false, 'no commit in log', or $null),
   KeepReadySeconds (log timestamp of KEEP READY minus the first timestamped line, or $null),
   KeepReadyDriverT (the driver's own t= on that line, or $null), LoadedVersions (ordered tag -> version from
-  "[<tag>:LOAD] v<version>" banners).
+  "[<tag>:LOAD] v<version>" banners), LevelLoads (WP-H-04: @{ level; seconds } per driver LEVEL READY line,
+  @{ level; failed } per LOAD FAILED / LOAD TIMEOUT line).
 #>
 [CmdletBinding()]
 param(
@@ -122,6 +123,12 @@ foreach ($m in [regex]::Matches($Text, '\[(?<tag>[A-Za-z_]+):LOAD\] v(?<v>[0-9][
     if (-not $versions.Contains($m.Groups['tag'].Value)) { $versions[$m.Groups['tag'].Value] = $m.Groups['v'].Value }
 }
 
+$loads = [System.Collections.Generic.List[object]]::new()
+foreach ($m in [regex]::Matches($Text, $tag + '(?:LEVEL READY level=(?<l>\S+) t=[\d\.]+ load_seconds=(?<s>[\d\.]+)|LOAD (?<f>FAILED|TIMEOUT) (?:arena|level)=(?<a>\S+))')) {
+    if ($m.Groups['l'].Success) { $loads.Add([ordered]@{ level = $m.Groups['l'].Value; seconds = [double]$m.Groups['s'].Value }) }
+    else { $loads.Add([ordered]@{ level = $m.Groups['a'].Value; failed = $m.Groups['f'].Value }) }
+}
+
 $result = [pscustomobject]@{
     ForbidHits                       = $hits.ToArray()
     ExpectMisses                     = @($misses)
@@ -131,6 +138,7 @@ $result = [pscustomobject]@{
     KeepReadySeconds                 = $keepSeconds
     KeepReadyDriverT                 = $keepDriverT
     LoadedVersions                   = $versions
+    LevelLoads                       = $loads.ToArray()
 }
 if (-not $ExitCode) { return $result }
 
