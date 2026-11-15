@@ -1,5 +1,16 @@
 # General Tweaker Changelog
 
+## 0.2.282-dev (2026-11-15) -- One owner for level-world and unit-position reads (WP-GT-03)
+
+- New `_gt_world.lua` (`mod._gt_world`): `live()` returns the level world only
+  when it exists, `is_live(world)` tells whether a cached handle still belongs
+  to the current level world, and `unit_pos(unit)` reads a live unit's
+  position safely (audit finding A6-F08, advances #490).
+- The creature spawner's crosshair raycast no longer calls
+  `Managers.world:world("level_world")` unguarded; with no level loaded the
+  spawn commands say "No level is loaded." instead of faulting. Not confirmed
+  in game.
+
 ## 0.2.281-dev (2026-11-15) -- Host melee latency compensation off by default (WP-GT-02)
 
 - "Host-side Melee Latency Compensation" is now off by default (audit finding

@@ -5,12 +5,9 @@ local mod = get_mod("gt_dev")
 -- Ported from Aussiemon's CreatureSpawner (Workshop 1395132559, MIT). Spawn any
 -- breed at the crosshair, with a large suite of keep-navigation / boss-init /
 -- package-loader crash guards so spawning works in the Keep too. Spawning is
--- host-authoritative (only the host drains the ConflictDirector spawn queue -
--- state_ingame.lua:950-958 runs conflict:update on the server and
--- update_client on clients), so a CLIENT sends a schema-tagged VMF request
--- (`gt_cs_request`) that the host executes; the host acks the result back over
--- `gt_cs_ack` (#693). Schema constant `mod.GT_CS_RPC_SCHEMA` lives in main.
--- Extracted verbatim from main (Phase 4). Identifiers: `_gt_cs_*` / `gt_cs_*`.
+-- host-authoritative (only the host drains the spawn queue, state_ingame.lua:950-958),
+-- so a CLIENT sends a schema-tagged `gt_cs_request` the host executes and acks over
+-- `gt_cs_ack` (#693); schema `mod.GT_CS_RPC_SCHEMA` in main. Extracted from main (Phase 4).
 --
 -- Coupling with the main file (resolved at call time — this module dofiles
 -- AFTER the main chunk):
@@ -608,7 +605,8 @@ local function _gt_cs_position_at_cursor(local_player)
     local camera_rotation = Managers.state.camera:camera_rotation(viewport_name)
     local camera_direction = Quaternion.forward(camera_rotation)
     local range = 500
-    local world = Managers.world:world("level_world")
+    local world = mod._gt_world.live()
+    if not world then return nil end
     local physics_world = World.get_data(world, "physics_world")
     local new_position
     local result = PhysicsWorld.immediate_raycast(
@@ -793,6 +791,7 @@ local function _gt_cs_spawn_at_cursor()
 
     local final_rotation
     local final_position = _gt_cs_position_at_cursor(local_player)
+    if not final_position then mod:echo("[Spawn]: No level is loaded."); return end
     local local_player_unit = local_player.player_unit
     if Unit.alive(local_player_unit) then
         final_rotation = Quaternion.multiply(Unit.local_rotation(local_player_unit, 0), Quaternion(Vector3(0, 0, 1), math.pi))
@@ -881,6 +880,7 @@ local function _gt_cs_client_request_spawn(breed_name)
         return
     end
     local position = _gt_cs_position_at_cursor(local_player)
+    if not position then mod:echo("[Spawn]: No level is loaded."); return end
     -- The host-local path faces the spawn toward the spawner by flipping the
     -- player's rotation 180 degrees; the flipped FORWARD is what we ship.
     local direction
