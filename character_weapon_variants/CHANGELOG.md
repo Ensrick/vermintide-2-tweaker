@@ -1,5 +1,22 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.574-dev (2026-11-15) -- Keep CWV item ids out of the career-data commit (#402, #1688)
+
+- New hook on `PlayFabMirrorAdventure._check_career_data` through the shared
+  official loadout guard (`_lib_official_loadout_guard.lua`, the same library
+  Crafting in Modded uses): for the vanilla call only, every CWV backend id in
+  the career loadouts is swapped for the server-side value of that slot, the
+  returned loadouts are detached, and the CWV id is put back so it stays
+  equipped for the session. An `updateHeroAttributes` request can no longer
+  carry a CWV id, with or without Tweaker: GUI installed (WP-CIM-07).
+- New pure predicate `_cwv_acquisition.is_cwv_backend_id` (`cwv_<key>_NNN`).
+  Log line `[cwv:402] scrubbed=N unsafe=N`, at most 12 per session;
+  regression check `issue402_career_commit_guard`.
+- Known consequence: without Tweaker: GUI's modded loadouts a CWV item is no
+  longer equipped after a restart.
+- Not confirmed in game. The rig case is
+  `qa/runtime/cwv/issue_402_career_commit_scrub.lua`.
+
 ## 0.1.573-dev (2026-11-15) -- Regression verdicts always reach the game log (WP-CWV-06)
 
 - `/cwv_regression_test` now writes PASS and FAIL to the game log with
