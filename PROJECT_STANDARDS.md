@@ -1503,7 +1503,8 @@ says `public`. There is no suffix-vs-visibility contradiction to tie-break.
   diagnostic, with current deployed/source authority and the tester refresh
   and loaded-version confirmation required here. Publication/QA success is not
   gameplay acceptance or evidence that a runtime issue is fixed or complete.
-  Do not launch the game or restart Steam unsolicited. Genuine missing
+  The only permitted game launch is the unattended rig, `tools/harness/run.ps1`
+  (`docs/adr/0001-rig-launch-machine-evidence-no-cards.md`); never restart Steam. Genuine missing
   source-qualified empirical prerequisites (for example native 3P baseline
   captures needed to construct/admit the candidate) remain blockers; they are
   distinct from the agent host's installation state.
@@ -2312,6 +2313,10 @@ labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix
   VT2 now using the current live-test card.
 - `Fixed` and `verify-fix-coop` are invalid on OPEN issues. Verified work is
   hardened and closed; co-op readiness is expressed with `coop-required`.
+- **Cards stopped (2026-11-13).** Do not post, pin, unpin or edit a
+  `## CURRENT LIVE TEST` card and do not move an issue into `diagnostics-armed`
+  or `verify-fix` by hand. The prerequisite below describes only the cards that
+  already exist.
 - **Live-test card prerequisite:** before applying `diagnostics-armed` or
   `verify-fix`, post a high-visibility comment whose heading is exactly
   `## CURRENT LIVE TEST`, pin that comment, and unpin every older exact card.
@@ -2393,11 +2398,12 @@ labels, features untagged, `et`/`enemy` duplicated); the scheme below is the fix
   issue stays `not-started` until the spec is complete or the user
   explicitly re-scopes it - a tester filtering verify-fix must find only things
   that can pass in full. Partial progress lives in comments, not the label.
-- **Verified closure:** human confirmation by the user or designated playtester
-  RainReligion is first-class verification input. After verification, harden the
+- **Verified closure:** Machine evidence of class U, S or R closes an issue
+  (`docs/adr/0001-rig-launch-machine-evidence-no-cards.md`); so does confirmation
+  by the user or designated playtester RainReligion. Class V and C work goes to
+  the human list and never blocks. After verification, harden the
   path, update the owning prevention docs, add regression coverage, and close.
-  If the evidence does not verify the fix, return it to `not-started` or post a
-  replacement current card for the next genuinely ready diagnostic/test.
+  A failed check is recorded as an issue comment; do not change the label by hand.
 - **Designated-playtester watermark:** a RainReligion comment created or edited
   after a ready issue's current card consumes that test invitation until it is
   reconciled. The guard does not infer pass/fail from prose. Close after a
@@ -2841,8 +2847,7 @@ BEFORE shipping:
 
 AFTER shipping:
   - workshop_log.txt proves the bounded exact start/content/finish-OK transaction for the item
-  - CURRENT LIVE TEST card posted AND pinned; every older exact card unpinned
-    (CI cardinality guard fails the whole repo's qa-gate otherwise)
+  - No live-test card (stopped 2026-11-13); record machine evidence on the issue
   - Do not add a post-upload source commit or push; the uploaded bytes must remain bound to the already reviewed and merged source commit
 
 BEFORE a verify session:

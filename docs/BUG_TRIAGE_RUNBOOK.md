@@ -340,69 +340,7 @@ shipping. Agent publication is headless and opens no interactive window.
   (PROJECT_STANDARDS.md section 6.6). If either proof has expired or changed,
   follow the canonical fresh-candidate procedure; do not renew old evidence.
   Keep deployment and test readiness unclaimed until canonical verification passes.
-- [ ] **Add the status label to the Issue NOW (same pass, do NOT wait for STEP
-  9).** Shipping a fix or diagnostic is what flips an issue into "ready to test",
-  and that signal is a GitHub label, not just a comment. `PROJECT_STANDARDS.md`
-  §11 requires it "in the same pass as the CHANGELOG entry":
-  - **PREREQ: post the card, then PIN it, then unpin every older card.** The
-    newest exact `## CURRENT LIVE TEST` comment must be the one and only pinned
-    exact card on the issue. Pinning is a GraphQL `pinIssueComment` mutation -
-    the REST API cannot do it, and an unpinned card is a policy failure even if
-    its content is perfect. Required format (authoritative definition:
-    `tools/verify/lifecycle_method_policy.ps1`):
-    - `Build/banner:` every named build has an explicitly bound semantic version
-      plus either its backticked `[<id>:LOAD]` or a clearly labeled exact
-      versioned banner (`[WOC] v0.1.42-dev loaded`). Every build/version/tag pair
-      must resolve to exactly one latest-release row and the exact immutable source
-      commit recorded by that row. Dirty, duplicate, ambiguous, or source-version
-      drift fails closed. Do not append an unbound sibling version/tag.
-    - `**Topology:**` `Solo` or `Co-op` (solo first; `Co-op` needs a
-      `Solo status:` line recording passed/completed/exhausted).
-    - Numbered player-facing steps using the localized names players see
-      in-game. NO snake_case internal identifiers - the only exception is an
-      exact player-entered slash command wrapped in backticks.
-    - `**Expected:**` the observable in-game result. When a `diagnostics-armed`
-      card asks for log evidence, the numbered steps or Expected line must name
-      one exact stable receipt prefix or field route that the deployed source emits
-      through raw engine `printf`, directly or through a conservatively proven
-      one-hop binding. A marker alone is usable only when every exact deployed
-      route sharing it is individually finite; one unbounded sibling rejects the
-      family-wide claim. A later bare reference to the same line may reuse the
-      card's one exact route; a discriminating literal prefix may select several
-      routes only when all selected routes are finite. Each route must be finite
-      by direct, loop-free command-callback ownership or an immutable source-tree
-      override with literal emitter and guard-token anchors. `goto` is not a
-      loop-free proof, unreachable literal-false registrations do not count, and
-      any cross-file mutation of the global/environment `printf` binding rejects
-      raw-logger authority for the deployed record. A backticked slash command in
-      the steps must be registered by that same deployed source, and a
-      command-owned receipt must be paired with its exact owning command rather
-      than an unrelated registered command.
-    - Workshop item IDs and manifest IDs are optional, but when supplied they
-      must bind to a named build and cannot contradict each other.
-    Issue-body text and older method headings never qualify as fallbacks.
-  - `gh issue edit <N> --remove-label not-started --add-label verify-fix` only
-    when a **complete deployed fix** is runnable in-game now.
-  - `gh issue edit <N> --remove-label not-started --add-label diagnostics-armed`
-    only when a bounded deployed in-game diagnostic is runnable now.
-  - Test useful solo paths first. Add `coop-required` only after the current
-    co-op card records `Solo status: Passed/Completed/Exhausted`. Both fix and
-    diagnostic co-op cards retain their ordinary lifecycle plus this qualifier.
-  - Blocked, partial, tooling, docs, and otherwise unready work uses
-    `not-started`, without `coop-required`. Unpin every exact
-    `## CURRENT LIVE TEST` card in the same transition; an unready issue must
-    not retain a high-visibility stale test invitation. Verify tooling/docs
-    autonomously and close directly; never put them in the live in-game queue.
-  - Remove every competing lifecycle in the same `gh issue edit`; `Fixed` and
-    `verify-fix-coop` are invalid while open.
-  - Never more than one status label at a time, never invent a new one. Every open
-    issue carries exactly one lifecycle label -
-    a shipped-but-unlabeled fix is invisible to the user's backlog view. Label every
-    issue the ship addressed (here: the primary Issue AND any it corroborates/fixes
-    together).
-  - If the fix touched player-facing localization, run the localization leak gate
-    and keep lifecycle metadata exclusively on the GitHub issue. Localization
-    values never carry GitHub lifecycle labels (`LOCALIZATION_STANDARD.md` §13).
+- [ ] **Record the ship on the issue** in one comment: version, what shipped, and the test, check or rig case that will verify it. Do not post a card and do not change the lifecycle label by hand (cards stopped 2026-11-13, `docs/adr/0001-rig-launch-machine-evidence-no-cards.md`).
 - [ ] **Refresh by tester role.** The author on PC-A tests the hash-verified
   local deploy without restarting Steam. Volunteer testers unsubscribe and
   resubscribe through the designated dev collection, then confirm the loaded
@@ -414,14 +352,13 @@ shipping. Agent publication is headless and opens no interactive window.
 
 ## STEP 8 - VERIFY
 
-- [ ] **Provide ONE current live-test card, pinned, with every older exact card
-  unpinned** (format and CI consequences: STEP 7 PREREQ). Name the build/banner,
-  topology, player-visible steps, and expected in-game result.
-- [ ] **NEVER claim a runtime issue "fixed" until the user confirms in-game.**
+- [ ] **Verify by machine first.** Class U or S: run the named test or check. Class R: queue the rig case (`tools/harness/run.ps1`). Report `auto-verified (<class>) on <mod> <version> <commit>, run <id>`.
+- [ ] **NEVER claim a runtime issue "fixed" from a build or review alone.**
   Compile success and structural review are not runtime verification. Say
   "shipped v0.12.152-dev, please check X" - not "fixed". Repository-only work
   closes after its documented autonomous verification passes without entering
-  the live-test queue.
+  the live-test queue. A machine PASS of class U, S or R closes it; class V or C
+  remainders go to the human list.
 - [ ] **A FAIL/PASS that contradicts live logs enters through the
   Lying-instrument class** (`docs/BUG_CLASSES.md` § 85): suspect the check
   before re-fixing the code.
@@ -522,13 +459,12 @@ to short-circuit them.
   surprising crashes are already documented; grep for the literal signature.
 - **Inventing internals** (global CLAUDE.md). No field names, line numbers, or
   mechanic claims that were not grepped in source. Write `[unverified]` instead.
-- **Claiming "fixed" off a build.** Only the user's in-game confirmation closes
-  an item (STEP 8).
+- **Claiming "fixed" off a build.** Only machine evidence (class U, S, R) or a
+  human confirmation closes an item (STEP 8).
 - **Tunneling one suspect without a bisection** (STEP 4).
 - **Hot-reload assumption.** Ctrl+Shift+R is unsafe for wt / cosmetics_tweaker
   and risky in general - full game restart after redeploy.
-- **Auto-launching VT2** (global CLAUDE.md). Build, deploy, ship, THEN ask the
-  user before launching.
+- **Launching VT2 outside the rig.** The only permitted launch is `tools/harness/run.ps1`.
 
 ---
 
