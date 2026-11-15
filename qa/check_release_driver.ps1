@@ -4,7 +4,8 @@
 # no claim, no ship. Covers the land step's exit codes, the pull-request body
 # rule, the journal and session-id rules, skipped completed steps, the claim
 # stale/other-owner stop, the version step, the clean-version stop (exit 20),
-# the three-try head retry (exit 24) and a dry run that changes nothing.
+# the three-try head retry (exit 24), a dry run that changes nothing, and
+# -NoLand (exit 16 when ready, no update or merge, resume after a train merge).
 # run_selftests discovers the -SelfTest switch. Exit codes: 0 pass, 2 fail.
 # ASCII only; Windows PowerShell 5.1 and PowerShell 7.
 
@@ -52,7 +53,15 @@ function Invoke-ReleaseGh {
         default { return [pscustomobject]@{ ExitCode = 0; Output = '' } }
     }
 }
-function Invoke-ReleaseGit { param([string[]]$Arguments, [string]$RepoRoot = '') return [pscustomobject]@{ ExitCode = 0; Output = '' } }
+function Invoke-ReleaseGit {
+    param([string[]]$Arguments, [string]$RepoRoot = '')
+    $code = 0
+    if ($null -ne $script:fake) {
+        $script:fake.Calls.Add('git ' + $Arguments[0])
+        if ($Arguments[0] -ceq 'merge-base' -and $script:fake.ContainsKey('Ancestor')) { $code = [int]$script:fake.Ancestor }
+    }
+    return [pscustomobject]@{ ExitCode = $code; Output = '' }
+}
 function Invoke-ReleaseSleep { param([int]$Seconds) }
 function Write-ReleaseLog { param([string]$Message) }
 
@@ -70,9 +79,9 @@ $masterRunning = @([pscustomobject]@{ headSha = $merge; status = 'in_progress'; 
 $nightlyOnly = @([pscustomobject]@{ headSha = $merge; status = 'completed'; conclusion = 'failure'; databaseId = 4; event = 'schedule' })
 
 $failures = @()
-function Expect([string]$Name, [int]$Expected, [scriptblock]$Setup, [scriptblock]$Extra = $null) {
+function Expect([string]$Name, [int]$Expected, [scriptblock]$Setup, [scriptblock]$Extra = $null, [switch]$NoLand) {
     & $Setup
-    $code = Invoke-ReleaseLand -Pr 7 -PollSeconds 1 -TimeoutMinutes 1
+    $code = Invoke-ReleaseLand -Pr 7 -PollSeconds 1 -TimeoutMinutes 1 -NoLand:$NoLand
     $ok = ($code -eq $Expected)
     if ($ok -and $null -ne $Extra) { $ok = [bool](& $Extra) }
     if (-not $ok) { $script:failures += "land '$Name': expected exit $Expected, got $code (calls: $($script:fake.Calls -join ', '))" }
@@ -92,6 +101,20 @@ Expect 'master QA failed' 13 { Reset-Fake -View @((State 'OPEN' 'CLEAN'), (State
 Expect 'master QA running, then green' 0 { Reset-Fake -View @((State 'OPEN' 'CLEAN'), (State 'MERGED' 'UNKNOWN' -Commit $merge)) -Checks @(,$green) -Runs @($masterRunning, $masterOk) }
 Expect 'only a nightly run at the merge commit' 14 { Reset-Fake -View @((State 'OPEN' 'CLEAN'), (State 'MERGED' 'UNKNOWN' -Commit $merge)) -Checks @(,$green) -Runs @(,$nightlyOnly) }
 Expect 'already merged' 0 { Reset-Fake -View @(,(State 'MERGED' 'UNKNOWN' -Commit $merge)) -Runs @(,$masterOk) } { $script:fake.Calls -notcontains 'pr merge' }
+
+# -NoLand: never update or merge; exit 16 once ready; a train merge (merge
+# commit off master's first-parent line) is confirmed by the push run that contains it.
+$train = 'b' * 40
+$trainMasterOk = @([pscustomobject]@{ headSha = ('c' * 40); status = 'completed'; conclusion = 'success'; databaseId = 5; event = 'push' })
+Expect 'no-land: green, ready to land' 16 { Reset-Fake -View @(,(State 'OPEN' 'CLEAN')) -Checks @(,$green) } { $script:fake.Calls -notcontains 'pr merge' } -NoLand
+Expect 'no-land: behind and green, no update' 16 { Reset-Fake -View @(,(State 'OPEN' 'BEHIND')) -Checks @(,$green) } { $script:fake.Calls -notcontains 'pr update-branch' -and $script:fake.Calls -notcontains 'pr merge' } -NoLand
+Expect 'no-land: pending, then ready' 16 { Reset-Fake -View @(,(State 'OPEN' 'BLOCKED')) -Checks @($pending, $green) } { $script:fake.Calls -notcontains 'pr merge' } -NoLand
+Expect 'no-land: failed check' 12 { Reset-Fake -View @(,(State 'OPEN' 'BLOCKED')) -Checks @(,$red) } -NoLand
+Expect 'no-land: dirty' 11 { Reset-Fake -View @(,(State 'OPEN' 'DIRTY')) } -NoLand
+Expect 'no-land: merged by a train, a push run contains it' 0 { Reset-Fake -View @(,(State 'MERGED' 'UNKNOWN' -Commit $train)) -Runs @(,$trainMasterOk) } {
+    $script:ReleaseLastMergeCommit -ceq $train -and $script:fake.Calls -contains 'git merge-base' -and $script:fake.Calls -notcontains 'pr merge'
+} -NoLand
+Expect 'no-land: merged by a train, no push run contains it yet' 14 { Reset-Fake -View @(,(State 'MERGED' 'UNKNOWN' -Commit $train)) -Runs @(,$trainMasterOk); $script:fake.Ancestor = 1 } -NoLand
 
 # Pull-request body rule.
 foreach ($case in @(
@@ -250,6 +273,21 @@ try {
     if ($printed.Count -ne 9 -or (Test-Path -LiteralPath $journalPath) -or @($script:gitCalls | Where-Object { $_ -like 'fetch*' -or $_ -like 'checkout*' -or $_ -like 'commit*' }).Count -ne 0) {
         $failures += "dry run printed $($printed.Count) step lines or wrote state"
     } else { Write-Host '  [PASS] dry run prints nine steps and changes nothing' -ForegroundColor Green }
+
+    # -NoLand kept in the journal: a rerun without the switch still never merges,
+    # and once a train has merged the PR the rerun resumes and ships.
+    $j = Reset-Machine '0.1.3-dev' 0 $true
+    $j.pr = 7; $j.no_land = $true
+    Reset-Fake -View @(,(State 'OPEN' 'CLEAN')) -Checks @(,$green)
+    $code = Invoke-ReleaseSteps -Steps @('land', 'ship') -Journal $j -RepoRoot $machineRoot -Options $options
+    if ($code -ne 16 -or $script:fake.Calls -contains 'pr merge' -or @($script:tool.Calls | Where-Object { $_ -like 'ship.ps1*' }).Count -ne 0) {
+        $failures += "journal no_land: expected exit 16 with no merge and no ship, got $code ($($script:fake.Calls -join ', '))"
+    } else { Write-Host '  [PASS] no_land in the journal stops at ready to land (exit 16) without the switch' -ForegroundColor Green }
+    Reset-Fake -View @(,(State 'MERGED' 'UNKNOWN' -Commit $train)) -Runs @(,$trainMasterOk)
+    $code = Invoke-ReleaseSteps -Steps @('land', 'ship') -Journal $j -RepoRoot $machineRoot -Options $options
+    if ($code -ne 0 -or [string]$j.merge_commit -cne $train -or $script:fake.Calls -contains 'pr merge' -or @($script:tool.Calls | Where-Object { $_ -like 'ship.ps1*' }).Count -ne 1) {
+        $failures += "no_land resume after a train merge: expected exit 0, merge commit $train and one ship, got $code, $($j.merge_commit)"
+    } else { Write-Host '  [PASS] no_land resumes after a train merge: land done, one ship' -ForegroundColor Green }
 } catch {
     $failures += "step-machine fixture crashed: $($_.Exception.Message)"
 } finally {
@@ -261,5 +299,5 @@ if ($failures.Count -gt 0) {
     foreach ($failure in $failures) { Write-Host "  X $failure" -ForegroundColor Red }
     exit 2
 }
-Write-Host '[check_release_driver -SelfTest] OK -- land exit codes, body rule, journal, session id, skips, clean-version stop, head retry, dry run.' -ForegroundColor Green
+Write-Host '[check_release_driver -SelfTest] OK -- land exit codes, body rule, journal, session id, skips, clean-version stop, head retry, dry run, no-land.' -ForegroundColor Green
 exit 0

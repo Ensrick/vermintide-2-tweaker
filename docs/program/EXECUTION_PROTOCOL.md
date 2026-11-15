@@ -53,6 +53,8 @@ Run every command under the card's "Acceptance" in the worktree. Paste each comm
 4. Wait for the master run on the merge commit: `gh run list --branch master --workflow QA --limit 3`. A ship needs it green on the exact commit (`tools/ship/publication-authorization.ps1:56`).
 5. Close your worktree from the primary checkout, never from inside it (`tools/worktrees/worktree.ps1:174-221`): `pwsh -NoProfile -File tools/worktrees/worktree.ps1 -Action Close -TargetPath <path> -DeleteMergedBranch`.
 
+With several writers merging at the same time, land through a merge queue or the lead's merge train instead of steps 2 and 3: `tools/ship/release.ps1 -NoLand` stops when the pull request is ready to land (exit 16) and resumes at the ship once it shows `MERGED`.
+
 ## 6. When `qa-gate` fails for a reason outside your change
 
 First compare with master: `gh run list --branch master --workflow QA --limit 1`. If master fails on the same step, the cause is not yours.

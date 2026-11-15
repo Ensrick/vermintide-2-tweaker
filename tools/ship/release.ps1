@@ -9,6 +9,9 @@
 #   -Action finish -Mod <m> [-AllowPublic] [-NoRemote] [-ConfirmVersion <v>]
 #                  land, sync, ship, aftercare
 #   -Action run    all nine steps; -DryRun prints each step as done or pending
+#   -NoLand        (land, finish, run) never update or merge a PR: stop with
+#                  exit 16 once it is ready to land, and continue after a merge
+#                  queue or train has merged it. Remembered in the journal.
 #
 # Every step checks its postcondition against the real state first and is
 # skipped when it already holds, so any action can be rerun after an
@@ -16,7 +19,8 @@
 # the session id, so every process of one release is the same claim owner.
 #
 # Exit codes of land: 0 ok, 10 not merged, 11 merge conflict (DIRTY), 12 a
-# failed check, 13 master QA not success, 14 timed out, 15 gh failed.
+# failed check, 13 master QA not success, 14 timed out, 15 gh failed, 16 ready
+# to land (-NoLand: merge it through the merge queue or train, then rerun).
 # Other exits: 2 usage, 20 clean version without -ConfirmVersion (D-P-04),
 # 21 claim stale, 22 claim held by another session (never re-claimed),
 # 23 a step failed, 24 the head moved three times, 25 PR body has a closing keyword.
@@ -35,6 +39,7 @@ param(
     [string]$CommitMessageFile = '',
     [switch]$AllowPublic,
     [switch]$NoRemote,
+    [switch]$NoLand,
     [string]$ConfirmVersion = '',
     [switch]$DryRun,
     [int]$PollSeconds = 30,
@@ -53,12 +58,15 @@ if ($SelfTest) {
 switch ($Action) {
     'land' {
         if ($Pr -le 0) { Write-Host '[release] -Action land needs -Pr <number>.' -ForegroundColor Red; exit 2 }
+        $journal = $null
         if (-not [string]::IsNullOrWhiteSpace($Mod)) {
             $journal = Read-ReleaseJournal -Mod $Mod
             if ($null -ne $journal) { Set-ReleaseSession -Journal $journal }
         }
         if ($DryRun) { Write-Host "[release] land PR #${Pr}: pending (dry run, nothing changed)"; exit 0 }
-        $code = Invoke-ReleaseLand -Pr $Pr -PollSeconds $PollSeconds -TimeoutMinutes $TimeoutMinutes
+        $landNoLand = [bool]$NoLand -or ($null -ne $journal -and [bool]$journal.no_land)
+        $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+        $code = Invoke-ReleaseLand -Pr $Pr -PollSeconds $PollSeconds -TimeoutMinutes $TimeoutMinutes -NoLand:$landNoLand -RepoRoot $repoRoot
         if (-not [string]::IsNullOrWhiteSpace($Mod)) {
             $journal = Read-ReleaseJournal -Mod $Mod
             if ($null -ne $journal) {
@@ -95,10 +103,15 @@ switch ($Action) {
         }
         if (-not $DryRun -and $Action -ne 'finish' -and [string]::IsNullOrWhiteSpace([string]$journal.branch)) { Write-Host '[release] -Branch is required to start a release.' -ForegroundColor Red; exit 2 }
         if ($Pr -gt 0) { $journal.pr = $Pr }
+        if ($NoLand -and -not $DryRun -and -not [bool]$journal.no_land) {
+            # Saved at once, so a rerun after an interruption never merges.
+            $journal.no_land = $true
+            Save-ReleaseJournal -Journal $journal
+        }
         Set-ReleaseSession -Journal $journal
         $options = [pscustomobject]@{
             ChangelogFile = $ChangelogFile; CommitMessageFile = $CommitMessageFile; PrTitle = $PrTitle; PrBodyFile = $PrBodyFile
-            AllowPublic = [bool]$AllowPublic; NoRemote = [bool]$NoRemote; ConfirmVersion = $ConfirmVersion; DryRun = [bool]$DryRun
+            AllowPublic = [bool]$AllowPublic; NoRemote = [bool]$NoRemote; NoLand = [bool]$NoLand; ConfirmVersion = $ConfirmVersion; DryRun = [bool]$DryRun
             PollSeconds = $PollSeconds; TimeoutMinutes = $TimeoutMinutes
         }
         $steps = switch ($Action) {

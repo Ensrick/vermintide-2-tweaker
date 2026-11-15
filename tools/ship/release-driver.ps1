@@ -21,6 +21,7 @@ $script:ReleaseExit = @{
     MasterQaFailed = 13
     Timeout = 14
     GhFailed = 15
+    ReadyToLand = 16
 }
 $script:ReleasePollSeconds = 30
 $script:ReleaseTimeoutMinutes = 120
@@ -90,6 +91,7 @@ function New-ReleaseJournal {
         branch = $null
         pr = $null
         merge_commit = $null
+        no_land = $false
         steps = @()
     }
 }
@@ -135,6 +137,9 @@ function Test-ReleasePrBody {
 # Land: wait out UNKNOWN, stop on DIRTY, update a BEHIND branch, wait for a
 # green qa-gate with nothing pending, merge with a merge commit, confirm
 # MERGED, then wait for the QA run on master at the merge commit.
+# -NoLand (several writers merging): never update or merge; a green PR that
+# is not merged yet exits 16 (ready to land), and once a merge queue or train
+# has merged it the same call continues with the master QA wait.
 # ---------------------------------------------------------------------------
 function Get-ReleasePrState {
     param([Parameter(Mandatory)][int]$Pr)
@@ -143,11 +148,31 @@ function Get-ReleasePrState {
     return ($view.Output | ConvertFrom-Json)
 }
 
+# The push run for the merge commit decides; a nightly run on the same commit
+# does not. A PR merged by a merge queue or train has its merge commit off
+# master's first-parent line: then the oldest push run whose commit contains
+# it (the push that brought it in; `gh run list` is newest first) decides.
+function Find-ReleaseMasterRun {
+    param([object[]]$Runs, [Parameter(Mandatory)][string]$MergeCommit, [string]$RepoRoot = '')
+    $push = @($Runs | Where-Object { $null -ne $_ -and [string]$_.event -ceq 'push' })
+    $exact = @($push | Where-Object { [string]$_.headSha -ceq $MergeCommit })
+    if ($exact.Count -gt 0) { return $exact[0] }
+    if ($push.Count -eq 0) { return $null }
+    $null = Invoke-ReleaseGit -RepoRoot $RepoRoot -Arguments @('fetch', 'origin', 'master', '--quiet')
+    $containing = @($push | Where-Object {
+        (Invoke-ReleaseGit -RepoRoot $RepoRoot -Arguments @('merge-base', '--is-ancestor', $MergeCommit, [string]$_.headSha)).ExitCode -eq 0
+    })
+    if ($containing.Count -gt 0) { return $containing[$containing.Count - 1] }
+    return $null
+}
+
 function Invoke-ReleaseLand {
     param(
         [Parameter(Mandatory)][int]$Pr,
         [int]$PollSeconds = $script:ReleasePollSeconds,
-        [int]$TimeoutMinutes = $script:ReleaseTimeoutMinutes
+        [int]$TimeoutMinutes = $script:ReleaseTimeoutMinutes,
+        [switch]$NoLand,
+        [string]$RepoRoot = ''
     )
     $maxPolls = [Math]::Max(1, [int][Math]::Ceiling(($TimeoutMinutes * 60) / [Math]::Max(1, $PollSeconds)))
     $polls = 0
@@ -162,7 +187,7 @@ function Invoke-ReleaseLand {
         $status = [string]$state.mergeStateStatus
         if ($status -ceq 'UNKNOWN') { $polls++; Invoke-ReleaseSleep -Seconds $PollSeconds; continue }
         if ($status -ceq 'DIRTY') { Write-ReleaseLog "PR #${Pr}: merge conflict (DIRTY)"; return $script:ReleaseExit.Dirty }
-        if ($status -ceq 'BEHIND') {
+        if ($status -ceq 'BEHIND' -and -not $NoLand) {
             $oldHead = [string]$state.headRefOid
             $update = Invoke-ReleaseGh -Arguments @('pr', 'update-branch', [string]$Pr)
             if ($update.ExitCode -ne 0) { Write-ReleaseLog "PR #${Pr}: update-branch failed: $($update.Output)"; return $script:ReleaseExit.GhFailed }
@@ -190,7 +215,11 @@ function Invoke-ReleaseLand {
         $pending = @($rows | Where-Object { [string]$_.bucket -ceq 'pending' })
         $qaGate = @($rows | Where-Object { [string]$_.name -ceq 'qa-gate' -and [string]$_.bucket -ceq 'pass' })
         if ($pending.Count -gt 0 -or $qaGate.Count -ne 1) { $polls++; Invoke-ReleaseSleep -Seconds $PollSeconds; continue }
-        $merge = Invoke-ReleaseGh -Arguments @('pr', 'merge', [string]$Pr, '--merge', '--delete-branch')
+        if ($NoLand) {
+            Write-ReleaseLog "PR #${Pr}: ready to land (qa-gate green). Land it through the merge queue or train, then rerun; the driver resumes once it shows MERGED."
+            return $script:ReleaseExit.ReadyToLand
+        }
+        $merge =Invoke-ReleaseGh -Arguments @('pr', 'merge', [string]$Pr, '--merge', '--delete-branch')
         Write-ReleaseLog "PR #${Pr}: merge requested (exit $($merge.ExitCode))"
         $requestedMerge = $true
     }
@@ -204,9 +233,7 @@ function Invoke-ReleaseLand {
         $runs = Invoke-ReleaseGh -Arguments @('run', 'list', '--workflow', 'QA', '--branch', 'master', '--limit', '30', '--json', 'headSha,status,conclusion,databaseId,event')
         $run = $null
         if ($runs.ExitCode -eq 0 -and -not [string]::IsNullOrWhiteSpace($runs.Output)) {
-            # The push run for the merge commit decides; a nightly run on the same commit does not.
-            $matching = @($runs.Output | ConvertFrom-Json | ForEach-Object { $_ } | Where-Object { [string]$_.headSha -ceq $mergeCommit -and [string]$_.event -ceq 'push' })
-            if ($matching.Count -gt 0) { $run = $matching[0] }
+            $run = Find-ReleaseMasterRun -Runs @($runs.Output | ConvertFrom-Json | ForEach-Object { $_ }) -MergeCommit $mergeCommit -RepoRoot $RepoRoot
         }
         if ($null -ne $run -and [string]$run.status -ceq 'completed') {
             if ([string]$run.conclusion -ceq 'success') { Write-ReleaseLog "master QA passed for $mergeCommit (run $($run.databaseId))"; return $script:ReleaseExit.Ok }
@@ -353,6 +380,13 @@ function Test-ReleaseStepDone {
     return 'pending'
 }
 
+# -NoLand is remembered in the journal: a rerun without the switch still
+# leaves the merge to the merge queue or train.
+function Test-ReleaseNoLand {
+    param([Parameter(Mandatory)]$Journal, $Options)
+    return ([bool]$Journal.no_land -or ($null -ne $Options -and [bool]$Options.NoLand))
+}
+
 # --- actions -----------------------------------------------------------------
 function Invoke-ReleaseStep {
     param([Parameter(Mandatory)][string]$Step, [Parameter(Mandatory)]$Journal, [Parameter(Mandatory)][string]$RepoRoot, [Parameter(Mandatory)]$Options)
@@ -439,7 +473,7 @@ function Invoke-ReleaseStep {
             return 0
         }
         'land' {
-            $code = Invoke-ReleaseLand -Pr ([int]$Journal.pr) -PollSeconds ([int]$Options.PollSeconds) -TimeoutMinutes ([int]$Options.TimeoutMinutes)
+            $code = Invoke-ReleaseLand -Pr ([int]$Journal.pr) -PollSeconds ([int]$Options.PollSeconds) -TimeoutMinutes ([int]$Options.TimeoutMinutes) -NoLand:(Test-ReleaseNoLand -Journal $Journal -Options $Options) -RepoRoot $RepoRoot
             if ($code -eq 0) { $Journal.merge_commit = $script:ReleaseLastMergeCommit }
             return $code
         }
@@ -475,7 +509,7 @@ function Invoke-ReleaseStep {
             if ($create.ExitCode -ne 0) { return $script:ReleaseExit.StepFailed }
             $number = [regex]::Match($create.Output, '/pull/([0-9]+)')
             if (-not $number.Success) { return $script:ReleaseExit.StepFailed }
-            return (Invoke-ReleaseLand -Pr ([int]$number.Groups[1].Value) -PollSeconds ([int]$Options.PollSeconds) -TimeoutMinutes ([int]$Options.TimeoutMinutes))
+            return (Invoke-ReleaseLand -Pr ([int]$number.Groups[1].Value) -PollSeconds ([int]$Options.PollSeconds) -TimeoutMinutes ([int]$Options.TimeoutMinutes) -NoLand:(Test-ReleaseNoLand -Journal $Journal -Options $Options) -RepoRoot $RepoRoot)
         }
     }
     return $script:ReleaseExit.StepFailed
