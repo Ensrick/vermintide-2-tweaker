@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 364,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "general_tweaker_dev",
+      "min_version": "0.2.180",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Host with bots and enable **Bot Behavior Improvements** and its **Bots Aggressively Collect Nearby Passable Items** child. Leave **Bots Drink Surplus Ranger Ale** off. Instant targeted pickup is bundled with the master in this official menu; there is no separate instant-pickup child to enable.",
+        "2. Play Bardin's Ranger Veteran or otherwise produce Bardin's Survival Ale, and leave it reachable by idle nearby bots through several pickup-evaluation ticks.",
+        "3. Confirm no bot reserves, carries away, replaces another pickup with, or drinks that ale.",
+        "4. In the same session, leave ordinary health, ammunition, potion, and grenade pickups nearby and confirm normal pickup behaviour remains.",
+        "5. Run `/gt_regression_test`, exit normally, and attach the newest log."
+      ],
+      "assertions": [
+        "With surplus-ale drinking off, Survival Ale stays human-reserved through native mule-claim cleanup, greedy selection and instant pickup, while ordinary pickups remain eligible. The named Survival Ale regression and bot-pickup checks pass. This card uses the actual official menu labels, not retired Dev child names.",
+        "Harness: spawn bardin_survival_ale near idle bots for 30 s; assert no bot blackboard mule_pickup or inventory holds it; potion control still picked up."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6681743470,
+    "card_date": "2026-11-06T09:32:59Z",
+    "ledger": "D5_ledger.tsv"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 447,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "career_tweaker",
+      "min_version": "0.4.34-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Confirm the newest log reports the Flagellation census as 21 candidates, 21 resolved, 0 unresolved, 1 Devotion match, followed by **resolved Devotion**.",
+        "2. Select Zealot, enable **Replace Devotion with Flagellation**, equip Devotion, and test each level-five temporary-health talent. For a known realized gain such as 4 temporary health while enough green health remains, confirm 2 green health is additionally converted to temporary health, without recursion.",
+        "3. Select a different level-twenty-five talent and repeat, then gain temporary/permanent health from a non-level-five source. Neither control may convert green health. Confirm the talent displays **Flagellation** with the replacement description.",
+        "4. Run `/crt_regression_test` and retain the complete report."
+      ],
+      "assertions": [
+        "Exactly one Devotion identity resolves, only realized level-five temporary-health gains under Flagellation convert half as much green health, controls remain unchanged, presentation is localized, and the full regression report passes.",
+        "Log census 21/21/0/1; scripted level-5 THP proc: permanent health drops X/2, temporary rises X/2; controls (other talent, non-proc heal) unchanged; issue447 PASS."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5162502233,
+    "card_date": "2026-08-03T05:05:01Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

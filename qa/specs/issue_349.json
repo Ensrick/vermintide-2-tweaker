@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 349,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "0.7.354-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. As host in the Pilgrimage Chamber, set **Chests of Trials per Mission** to `2`.",
+        "2. Load Mission of Mercy with the single-mission loader `/ct_load_mission`, using the exact invocation in the loader reference below, and wait at least eight seconds after mission entry.",
+        "3. Count the physical Chests of Trials still standing.",
+        "4. Run `/ct_regression_test`.",
+        "5. Exit normally and attach the newest console log. The two rows to grep for are named under Expected below.",
+        "6. If the audit reports more chests than the cap, repeat the run once with **Chests of Trials per Mission** at `0`."
+      ],
+      "assertions": [
+        "- Exactly one `[ct:349] chest_count_audit level=dlc_dwarf_interior mission_of_mercy=... actual=N cap=2 pickup_census=N class=... is_server=true` line, emitted once per mission.\n- If `actual > cap`, a following `[ct:132] reconcile level=... alive=N cap=2 over=N pruned=N unprunable=N` line. A run already inside the cap legitimately has no reconcile line.\n- At most two Chests of Trials standing after the settle, and `cursed_chest_reconcile_132` passes.",
+        "/ct_load_mission dlc_dwarf_interior with cap 2; wait 8 s; read [ct:349] class and live chest count; over_cap_raw_level_units means a fix is needed."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5165078857,
+    "card_date": "2026-08-03T10:15:31Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

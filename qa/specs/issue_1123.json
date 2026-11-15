@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 1123,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "event_tweaker",
+      "min_version": "0.4.54-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In the Keep, run `/event_tweaker_regression_test` and confirm every reported Adventure Shadow isolation check passes.",
+        "2. Start a Chaos Wastes run with Be'lakor's Shadows active and fight concealed shadow enemies.",
+        "3. Confirm those enemies take normal Chaos Wastes damage rather than gaining Adventure Shadow's damage reduction.",
+        "4. Return to the Keep, enable **Shadow** for an Adventure mission, and start any mission.",
+        "5. Confirm enemies farther than 6 metres from every hero receive the intended 80 percent reduction while nearby enemies take full damage; end the mission, rerun `/event_tweaker_regression_test`, and attach the log."
+      ],
+      "assertions": [
+        "Chaos Wastes Shadows retain vanilla damage behavior. Adventure Shadow alone uses the private 80-percent-reduction clone for its session and restores the vanilla template afterward. The named regression check passes before and after; no shared-template mutation, 90-percent reduction, or lingering Adventure effect remains.",
+        "In keep and in a CW Belakor-shadows mission assert the shared template has no multiplier (issue413_shadow_adventure_adapter); a fixed hit deals vanilla damage."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5356828698,
+    "card_date": "2026-08-20T13:52:07Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

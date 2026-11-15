@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "issue": 786,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Both players confirm the banner above in their own logs.",
+        "2. Solo-leg check first: in the keep, equip a Combat Style weapon (Imperial Longsword or a shield family), switch its style once, swap away and back, and confirm YOUR OWN view is correct in first person, third person, and inventory preview.",
+        "3. Host equips the Imperial Longsword. Host switches Combat Style once while the client watches the host's character. Client says out loud what they see.",
+        "4. Repeat step 3 with a SHIELD family weapon (Sword and Shield or Spear and Shield), so the off-hand is exercised.",
+        "5. Reverse the roles: client equips the same weapons and switches style while the HOST watches.",
+        "6. Repeat one style switch after a keep-to-mission transition, and once more after a death and respawn.",
+        "7. Also switch the Imperial Crowbill between pick and hammer use, and the Old Musket between ranged and melee, each observed by the other player.",
+        "8. Exit and attach both newest logs."
+      ],
+      "assertions": [
+        "The observer sees the switched weapon change to the correct model within a second, every time, in both directions. Each observer log carries `[cwv:786] style rx`, `rebuild queued`, and a `verdict ok` row for each switch, with no `verdict partial`, `verdict wrong-template`, or `verdict failed` row surviving to `terminal=true`. Note whether any `[cwv:786] style residency ... resident=false` rows appear - that is data being collected, not a failure by itself.",
+        "Observer client after the owner's style switch: husk hand units alive and visible, unit path equals descriptor, effective template updated; repeat with roles reversed."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "The observer sees the switched weapon change to the correct model within a second, every time, in both directions. Each observer log carries `[cwv:786] style rx`, `rebuild queued`, and a `verdict ok` row for each switch, with no `verdict partial`, `verdict wrong-template`, or `verdict failed` row surviving to `terminal=true`. Note whether any `[cwv:786] style residency ... resident=false` rows appear - that is data being collected, not a failure by itself.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 5212578941,
+    "card_date": "2026-08-07T04:55:44Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

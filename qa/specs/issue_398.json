@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "issue": 398,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Both players refresh **Character Weapon Variants** and confirm its current banner in their newest logs.",
+        "2. As **Kruber**, the weapon owner equips Character Weapon Variants **Dual Axes** and an ordinary **Sword** as the vanilla control.",
+        "3. With the observer nearby, perform light, heavy, charged, and push attacks in the Keep, against training dummies, and again inside a mission. The observer watches and listens for swing, impact, and Kruber exertion sounds.",
+        "4. Swap away from Dual Axes and back, then repeat after a mission transition, respawn, and hot join where practical.",
+        "5. Reverse host/client owner and observer roles and repeat the attack test.",
+        "6. Both players run `/cwv_regression_test`, exit normally, and attach both newest logs."
+      ],
+      "assertions": [
+        "The observer sees receiver-correct attack animations and hears the corresponding swing, impact, and character-exertion timeline exactly once. There is no silence, duplicate audio, or donor/base sound, the ordinary Sword remains unchanged, and `issue398_cross_access_audio_uses_networked_receiver_event` passes on both peers.",
+        "Observer client: capture decoded rpc_anim_event names for the owner husk; assert each is receiver-native and Unit.has_animation_event is true. Offline: remote_audio_dispatch.invoke spy test."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "The observer sees receiver-correct attack animations and hears the corresponding swing, impact, and character-exertion timeline exactly once. There is no silence, duplicate audio, or donor/base sound, the ordinary Sword remains unchanged, and `issue398_cross_access_audio_uses_networked_receiver_event` passes on both peers.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 5356629019,
+    "card_date": "2026-08-20T13:35:23Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

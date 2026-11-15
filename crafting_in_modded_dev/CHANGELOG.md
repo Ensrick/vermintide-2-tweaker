@@ -1,5 +1,25 @@
 # Crafting in Modded Changelog
 
+## 0.8.152-dev (2026-11-15) -- Restore saved crafts without deleting them or re-saving (#1654)
+
+- The boot restore of saved crafts (`_athanor_inject_all`,
+  `_athanor_retry_pending`) now injects with `{ restore = true,
+  defer_refresh = true }`: no "new item" marker, no autosave of the game's
+  save file per item, and one item-cache refresh per pass instead of one per
+  item (WP-CIM-04).
+- A restored row that fails the mirror postcondition is kept and reported
+  once per `(bid, field)` as `[cim:1654] restore kept bid=... key=... field=...`
+  instead of being removed; `mod._cim_restore_warnings` holds the warning.
+  New crafts keep the strict postcondition and the "new" marker.
+- One line per restore pass: `[cim:restore] saved=N present=N
+  kept_with_warning=N failed=N`.
+- `issue1654_saved_crafts_restored` now also fails when the restore marked a
+  restored craft as new.
+- The refresh moved to `_cim_restore_pass.lua` with the warning report; the
+  entry stays under its line ceiling.
+- Not confirmed in game. The rig needs two boots on one profile, which it
+  does not support yet: #1654 stays open.
+
 ## 0.8.151-dev (2026-11-15) -- Standard bench opens through a real HeroView screen (#80)
 
 - `/cim_craft_standard` and the `standard_crafting_hotkey` keybind passed

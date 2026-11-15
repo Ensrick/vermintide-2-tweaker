@@ -149,15 +149,39 @@ function mod.safe_hook(self, class, method, handler)
         -- Fix: capture the actual return count via `select("#", ...)` and pass
         -- it as `j` to unpack so nil holes are preserved.
         local function _capture(...) return select("#", ...), { ... } end
-        local n, results = _capture(xpcall(handler, _error_handler, func, ...))
+        -- WP-WT-08: the handler gets a tracked original. A handler that runs
+        -- the original and raises afterwards must not make the fallback run
+        -- it a second time (weapon units spawned twice). The xpcall body is a
+        -- closure because PUC Lua 5.1 (the host tests) ignores extra xpcall
+        -- arguments; LuaJIT accepts them.
+        local n_args, args = select("#", ...), { ... }
+        local called, n_orig, orig_results = false, nil, nil
+        local function tracked(...)
+            called = true
+            n_orig, orig_results = _capture(func(...))
+            return unpack(orig_results, 1, n_orig)
+        end
+        local n, results = _capture(xpcall(function()
+            return handler(tracked, unpack(args, 1, n_args))
+        end, _error_handler))
         if results[1] then
             return unpack(results, 2, n)  -- explicit j preserves nil holes
         end
-        -- Body raised. Log + fall through to vanilla so the engine path and
-        -- every later consumer in the chain stays intact.
+        -- Body raised. Log, count, and keep the engine path and every later
+        -- consumer in the chain intact without a second original call.
+        local message = tostring(results[2])
         self:error("[wt:safe_hook] %s.%s raised: %s",
-            tostring(class), tostring(method), tostring(results[2]))
-        return func(...)
+            tostring(class), tostring(method), message)
+        -- Loaded before mod._wt exists: look the counter up at call time.
+        local wt = rawget(self, "_wt")
+        if wt and wt.note_swallowed then
+            wt.note_swallowed("safe_hook", tostring(class) .. "." .. tostring(method))
+        end
+        if called then
+            if orig_results then return unpack(orig_results, 1, n_orig) end
+            error(message, 0)  -- the original itself raised: do not run it again
+        end
+        return func(unpack(args, 1, n_args))
     end)
 end
 

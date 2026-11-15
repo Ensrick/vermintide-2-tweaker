@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "issue": 343,
+  "class": "X",
+  "status": "draft",
+  "vp": null,
+  "arena": "none",
+  "mods": [
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.536-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Load the keep and retain the automatic `[cwv:343]` smoke-bomb diagnostic row.",
+        "2. Enter one mission and run `/cwv_smoke_bomb_probe` once.",
+        "3. Run `/cwv_regression_test`, exit normally, and retain the log."
+      ],
+      "assertions": [
+        "The probe reports the base and area resources available and the specification healthy, while the exact vertical scale remains intentionally unverified and registration remains quarantined; no smoke bomb is spawned or registered, and `issue343_smoke_bomb_diagnostics` passes.",
+        "None until the owner picks stock uniform-scale smoke or supplies a custom FX asset; existing probe issue343_smoke_bomb_diagnostics only proves resources exist."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "source": {
+    "card_comment_id": 5162501023,
+    "card_date": "2026-08-03T05:04:50Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "issue": 1693,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "crafting_in_modded_dev",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [],
+      "assertions": [
+        "S: six consumer copies of _lib_modded_realm_authority.lua identical to tools/shared_lib (verified); R: after illusion select the menu input description equals generic_input_actions[state]."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": null,
+    "card_date": null,
+    "ledger": "D4_ledger.tsv"
+  }
+}

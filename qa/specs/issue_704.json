@@ -1,0 +1,42 @@
+{
+  "schema": 1,
+  "issue": 704,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "crafting_in_modded_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Equip Kruber's Character Weapon Variants **Sword and Mace**, then open Tweaker: Cosmetics for that exact weapon.",
+        "2. Browse the paired illusion row, the right-hand sword row, and the left-hand mace row.",
+        "3. Confirm that no Bardin or Dawi Mace model/name and no Cudgel model/name appears. Select an Empire sword for the right hand and an Empire mace for the left hand.",
+        "4. Close and reopen the menu three times, swap to another weapon and back, enter a mission, and return to the Keep.",
+        "5. Run `/cwv_regression_test` and `/cos_regression_test`. Exit and attach the newest complete console log if anything fails."
+      ],
+      "assertions": [
+        "Sword and Mace offers only vanilla-owned Empire sword and Empire mace sources; Dawi Mace and Cudgel never enter any picker row. The selected hands remain independent through every refresh and transition. `issue704_canonical_skin_owner_and_sword_mace_sources`, `issue483_cwv_sword_mace_individualized_cosmetics`, and `issue704_sword_mace_picker_family_diagnostics` pass, and the bounded `[cos:704] summary` reports `suspects=0`.",
+        "Run the three named checks on the live build; enumerate picker pools and assert every source skin owner is a vanilla Empire sword or mace; suspects equals zero."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5749483675,
+    "card_date": "2026-09-20T11:22:50Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

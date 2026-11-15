@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "issue": 408,
+  "class": "S",
+  "status": "draft",
+  "vp": null,
+  "arena": "none",
+  "mods": [
+    {
+      "dir": "weapon_tweaker",
+      "min_version": "0.12.344-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable only Tweaker: Weapons Dev and open **Weapon Availability** for Mercenary.",
+        "2. Read the complete melee list and confirm rows sort by their whole visible **Character: Weapon** label; for example, **Saltzpyre: Flail** belongs in the Saltzpyre block rather than under F.",
+        "3. Repeat on another career whose list mixes several characters and confirm the enable-all row remains present and functional.",
+        "4. Change one availability value, close and reopen the menu, and confirm it persists.",
+        "5. Run `/verify_wt_availability_sort` and `/wt_regression_test`, then attach the newest console log."
+      ],
+      "assertions": [
+        "Availability leaves are ordered alphabetically by full localized label, effectively grouping character first and weapon second. The enable-all control survives, saved choices are unchanged by sorting, and both commands finish without ordering errors.",
+        "Offline: load weapon_tweaker_data and localization, walk every career leaf, assert adjacent labels sorted and non-empty (same logic as the issue408 check)."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "offline": [
+    {
+      "class": "S",
+      "command": "",
+      "expect": "Offline: load weapon_tweaker_data and localization, walk every career leaf, assert adjacent labels sorted and non-empty (same logic as the issue408 check)."
+    }
+  ],
+  "source": {
+    "card_comment_id": 5357061797,
+    "card_date": "2026-08-20T14:11:20Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

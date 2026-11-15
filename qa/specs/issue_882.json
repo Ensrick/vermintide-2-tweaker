@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 882,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "crafting_in_modded_dev",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In Tweaker: GUI, open **In-Mission Menus** and enable **Allow crafting bench in mission**.",
+        "2. In the Keep, play Grail Knight with **Bretonnian Sword and Shield** in Primary and **Bretonnian Longsword** in Secondary. Open the Athanor and note the Secondary weapon's facing.",
+        "3. Enter an Adventure mission and open the Athanor (default **B**). Confirm both equipped-weapon previews are visible in separate positions with the Keep-facing orientation. Close and reopen once.",
+        "4. Return to the Keep, equip an ordinary melee Primary such as **Executioner Sword** and ranged Secondary such as **Handgun**, note the baseline, and repeat the mission open/close/reopen check.",
+        "5. Open the Handgun's Trait or Property editor. Rotate and zoom, then close and reopen it; confirm the Handgun stays centered.",
+        "6. Run `/cim_regression_test` and record the visible summary, if shown."
+      ],
+      "assertions": [
+        "Dual-melee and melee/ranged loadouts keep separate Primary/Secondary previews and their Keep-facing orientation. The ranged editor stays centered through zoom and reopen. The placement check passes, with no script error or repeated per-frame logging.",
+        "In a mission with a dual-melee loadout read previewer pivot x for primary and secondary (different); ranged picker x is 0 after rotate/zoom/reopen; issue882 PASS; facing: screenshot."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6693605907,
+    "card_date": "2026-11-06T19:32:23Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

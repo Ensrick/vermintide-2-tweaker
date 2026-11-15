@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "issue": 628,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "crafting_in_modded_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable Character Weapon Variants and Weapons of Chaos at the exact builds above. On Saltzpyre's **Bounty Hunter**, craft or locate **Dual Maces** (not **Dawi Dual Maces**). On Bardin's **Ranger Veteran**, craft or locate **Dawi Mace**, **Dawi Mace and Shield**, and **Dawi Dual Maces**. These are their normal character/career choices; no Weapon Tweaker or cross-career unlock is required.",
+        "2. Equip Saltzpyre's **Dual Maces** on Bounty Hunter, open **Salvage**, and confirm that exact equipped item is absent.",
+        "3. Equip another weapon but leave those same Dual Maces in a saved Bounty Hunter loadout. Switch to Kruber and reopen Salvage; the saved item must still be absent.",
+        "4. Return to Bounty Hunter and remove those Dual Maces from every saved loadout. Favorite them and confirm the item remains absent; unfavorite it and confirm it appears once.",
+        "5. On Ranger Veteran, confirm the three unequipped, unfavorited Dawi crafted weapons appear once each. **Blightreaper** must not be salvageable. If you already own an older **Imperial Longsword** family item, inspect it on Kruber and report its exact Inventory/Salvage state without selecting it for deletion; new crafting of that retired variant is not required or promised.",
+        "6. On Ranger Veteran, using only unwanted test items, queue two eligible Dawi crafted weapons plus an ordinary unequipped, unfavorited weapon and salvage the batch.",
+        "7. Reopen Inventory and Salvage, change careers, then restart. Only the exact selected instances may stay deleted; saved loadouts, favorites, skins, and unrelated items must remain intact.",
+        "8. Run `/cim_regression_test` and record the visible summary, if shown."
+      ],
+      "assertions": [
+        "One consistent identity governs every career and screen. Active/saved/favorite items and Blightreaper stay protected, eligible rows appear exactly once, and the mixed batch is all-or-nothing. There is no official-backend request, partial deletion, stale loadout, crash, or warning loop.",
+        "For a crafted unequipped unfavorited item assert the contract salvage verdict is eligible; equipped, favorited, seed and relic rows rejected; salvage removes mirror row and loadout references."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6693599402,
+    "card_date": "2026-11-06T19:32:03Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

@@ -1,0 +1,45 @@
+{
+  "schema": 1,
+  "issue": 918,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Open Kruber's Equipment screen, equip **Tuskgor Spear**, and select its custom spear illusion.",
+        "2. Wield it in the Keep, swap to another weapon, then back; confirm the custom spear remains visible.",
+        "3. Change back to a vanilla Tuskgor Spear illusion, swap away/back, enter an Adventure mission, and return to the Keep.",
+        "4. Run `/cos_regression_test`, exit normally, and attach the newest console log."
+      ],
+      "assertions": [
+        "The custom illusion applies locally; returning to vanilla clears the custom mesh through swaps and Keep/mission transitions; `issue918_custom_illusion_semantic_sync`, `wire_skin_null_ungated`, and `wire_skin_null_all_senders` pass; no repeated semantic-publish warning appears. Complete this solo lifecycle before the remote-render/hot-join co-op phase.",
+        "Observer: Application.can_get unit for each deus spear illusion path; husk unit path equals the custom illusion or a logged residency refusal."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "The custom illusion applies locally; returning to vanilla clears the custom mesh through swaps and Keep/mission transitions; `issue918_custom_illusion_semantic_sync`, `wire_skin_null_ungated`, and `wire_skin_null_all_senders` pass; no repeated semantic-publish warning appears. Complete this solo lifecycle before the remote-render/hot-join co-op phase.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 5356758103,
+    "card_date": "2026-08-20T13:46:19Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

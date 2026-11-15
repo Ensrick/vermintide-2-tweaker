@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 943,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "weapon_tweaker",
+      "min_version": "0.12.344-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh **Tweaker: Weapons (Dev)**, launch Vermintide 2, and confirm `[wt:LOAD] v0.12.344-dev` in the newest log.",
+        "2. As any Sienna career, equip the **Flaming Sword**. Under **Tweaker: Weapons → Weapon Tweaks**, leave **Flame Sword: Sweep Opens Heavies** and **Flame Sword: 10% Slower Nova Heavy** off. From idle, hold and release charged heavies: the burning nova opens, followed by the horizontal sweep.",
+        "3. Enable only **Flame Sword: Sweep Opens Heavies** without restarting. The sweep must open, the nova must follow, and both must retain normal speed.",
+        "4. Disable that option and enable only **Flame Sword: 10% Slower Nova Heavy**. The nova must open and take 10% longer, with its hit aligned to the slower animation; the sweep must retain normal timing.",
+        "5. Enable both options. The sweep must open, the nova must follow, and only the nova must be slower. Toggle both off and repeat step 2 to confirm exact restoration after repeated changes.",
+        "6. Confirm light attacks, push, block, and weapon special remain unchanged. Run `/wt_regression_test` and confirm every check passes."
+      ],
+      "assertions": [
+        "Both default-off options apply immediately and independently, compose correctly, never accumulate timing drift, and restore the exact vanilla Fire Sword graph and timing when disabled.",
+        "Toggle each option at runtime; assert template chain targets and nova timing equal baseline or the 1.10-scaled values; off restores the exact baseline after 10 cycles."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5468500256,
+    "card_date": "2026-08-30T11:48:45Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

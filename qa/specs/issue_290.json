@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 290,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "weapon_tweaker",
+      "min_version": "0.12.344-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Run `/wt_regression_test` and confirm the Billhook third-person coverage check passes.",
+        "2. On Kruber, exercise the full light chain, charged heavies, push, and special hook with Saltzpyre's Billhook.",
+        "3. Test one representative from Dual Axes, Crowbill, Flaming Flail, Rapier or shield, and a Sienna staff family.",
+        "4. Test Kerillian's Billhook charged stab and both heavies."
+      ],
+      "assertions": [
+        "Every tested action animates the third-person body without freezing, a T-pose, or a foreign unmapped action. The bounded Billhook rows report mapped or native polearm outcomes without an animation-call error.",
+        "For every (receiver, template) row assert remap present and Unit.has_animation_event on the receiver 3P unit for each target event; offline vocabulary fixture gate. Plausibility V."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5039345179,
+    "card_date": "2026-07-21T21:43:48Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

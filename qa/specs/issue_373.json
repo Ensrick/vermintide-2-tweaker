@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 373,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "0.9.230-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Equip Kruber's Bretonnian Sword and Shield.",
+        "2. Select a Weave-Forged or Shyish shield illusion, then choose one of the final Loremasters Armoury shield textures.",
+        "3. Preview it in the cosmetic editor and apply it.",
+        "4. Inspect the shield on the inventory character preview and the local third-person model, then swap away and back and enter a mission.",
+        "5. Exit normally and attach the newest log."
+      ],
+      "assertions": [
+        "The Loremasters Armoury texture resolves onto the matching Weave-Forged or Shyish shield model rather than wrapping around another shield or resolving to nothing. The log contains `[cos:373] receiver coverage OK: no magic/runed shield family gaps` and no `[cos:373] RECEIVER-GAP` row.",
+        "Assert boot log line 'receiver coverage OK'; select magic shield plus LA texture, assert resolved receiver equals the plain same-family unit; cross-family rejected (unit test)."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5165080683,
+    "card_date": "2026-08-03T10:15:41Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

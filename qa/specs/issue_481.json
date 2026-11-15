@@ -1,0 +1,41 @@
+{
+  "schema": 1,
+  "issue": 481,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "crafting_in_modded_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh both mods from the Workshop and confirm both exact startup banners in the newest console log.",
+        "2. At the Athanor, preview **Mace and Shield**, **Spear and Shield**, and one CWV shield weapon with a Loremaster's Armoury illusion selected.",
+        "3. Scroll each item out of view and back, close and reopen the Athanor, then inspect its list icon and tooltip.",
+        "4. Exit normally and attach the newest console log."
+      ],
+      "assertions": [
+        "Every preview shows the selected Loremaster's Armoury skin, or a safe base-model fallback when the requested resource is unavailable. No preview is empty, no shield overlaps or bleeds into another item, and no crash occurs.",
+        "At Athanor: preview 3 shield weapons with LA skin, assert preview units spawned with expected unit names or a logged base fallback; scroll and reopen. Paint V."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5356889371,
+    "card_date": "2026-08-20T13:57:14Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

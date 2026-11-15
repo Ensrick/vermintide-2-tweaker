@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "issue": 52,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "0.7.354-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Play **Tower of Treachery** as a normal Adventure mission; find and interact with a gargoyle skull if available, then leave normally.",
+        "2. In a separate run, use **Single Mission Loader** to load **Tower of Treachery** through the injected Chaos Wastes path and repeat the interaction.",
+        "3. Run `/ct_regression_test` and attach both complete logs."
+      ],
+      "assertions": [
+        "The native run provides the control, and bounded `[ct:skull52]` rows identify any injected-run loss at selection, spawn, identity, disablement, disappearance, or callback routing without modifying the skull.",
+        "Load dlc_wizards_tower natively and through the loader; count skull flow units and [ct:skull52] selection/spawn rows in both runs; assert identical sets."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5161341147,
+    "card_date": "2026-08-03T01:18:15Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

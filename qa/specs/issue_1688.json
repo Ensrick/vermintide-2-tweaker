@@ -1,0 +1,43 @@
+{
+  "schema": 1,
+  "issue": 1688,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "gui_tweaker",
+      "min_version": "0.2.290",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh the official Workshop item, start the Modded Realm, enter the Keep, and confirm the exact GUI version above. Open your inventory and wait for your owned equipment to appear.",
+        "2. In Tweaker: GUI's **Loadouts** options, note the current **Use non-modded loadouts** setting, then turn it off. Close and reopen the inventory.",
+        "3. In the disposable row, equip a different ordinary weapon you already own and that this career can use. Close and reopen the inventory, select the same row through the normal loadout bar, and confirm the chosen weapon remains. Run `/gut_loadout_status` and record its visible summary if shown: this should be the Modded Realm's separate-store mode.",
+        "4. Turn **Use non-modded loadouts** on, then close and reopen the inventory. Try a different eligible ordinary weapon, not a custom weapon or cosmetic. The ordinary gameplay loadout should be read-only: the attempted change must not persist. Run `/gut_loadout_status` again and record its visible summary if shown; it should now describe read-only mode.",
+        "5. Turn **Use non-modded loadouts** off, close and reopen the inventory, and select the same disposable modded row. Its saved choice from step 3 should still be there. Record the result before manually restoring your original equipment and setting if desired.",
+        "6. Run `/gut_regression_test`; record the visible passed/failed/skipped summary and first failure if shown. Exit normally and attach the newest complete log plus these step results."
+      ],
+      "assertions": [
+        "The separate modded store and read-only ordinary loadout behave differently as described instead of both remaining inactive. Returning to the separate store retains its saved test choice. No script error or unexpected loadout mutation occurs. If a command explicitly reports Official Realm in this Modded session, stop changing equipment and report that result.",
+        "Modded realm: in_modded_realm() true, mode is STORE, issue1688_modded_realm_authority PASS; equip in store mode leaves the official mirror unchanged; readonly mode blocks the write."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6684687137,
+    "card_date": "2026-11-06T12:20:40Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

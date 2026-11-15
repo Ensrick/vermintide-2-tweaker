@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 270,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh both mods, launch the Modded Realm, and confirm both exact load banners in the newest log. Ensure only one Weapons stream is enabled. Use an account that owns Sister of the Thorn.",
+        "2. In **Mod Tweaker > Weapons > Weapon Availability**, enable **Deepwood Staff** for **Huntsman**.",
+        "3. Equip **Deepwood Staff**, enter a mission, and fully charge and release its secondary attack at least five times. Confirm each vortex appears.",
+        "4. Return to the Keep, switch to **Foot Knight**, and change his helmet once in the inventory cosmetic screen.",
+        "5. Switch back to **Huntsman**, enter another mission, and cast one more fully charged Deepwood Staff vortex.",
+        "6. Return to the Keep, run `/wt_regression_test`, exit normally, and attach the newest console log."
+      ],
+      "assertions": [
+        "Every Deepwood vortex spawns; the helmet remains visible; the game does not crash. `issue201_deepwood_runtime_package_resident` and `issue282_deepwood_runtime_reference_bounded` pass. The log contains no `[cos-hat] SKIP` row naming `wpn_chaos_plague_vortex`, no nil-unit `EntityManager` failure, and no `j_head` node fatal. This completes only the solo containment stage.",
+        "Solo: request attachment with a non-resident headpiece path, assert nil-safe skip and current hat kept; vortex spawn returns live unit. Remote-viewer leg needs two clients."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5356724333,
+    "card_date": "2026-08-20T13:43:24Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

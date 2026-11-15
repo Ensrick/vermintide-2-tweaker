@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 1186,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Equip the **Outrider Grenade Launcher** on Kruber and fire at Keep training targets.",
+        "2. Compare impact and damage against Bardin's **Trollhammer Torpedo** on the same targets.",
+        "3. Fire the Outrider at long range and confirm it reaches and detonates.",
+        "4. Run `/cwv_regression_test` and attach the newest console log."
+      ],
+      "assertions": [
+        "The Outrider projectile uses its cloned action and authored damage, speed, and range rather than the donor Trollhammer's values. It hits noticeably softer, reaches its authored range, emits one bounded application receipt, and leaves Bardin's native Trollhammer unchanged. Projectile appearance is tracked separately by #1320.",
+        "Fire the Outrider; read the spawned projectile extension's speed, max range and impact profile; equals authored tunes; a native Trollhammer control equals donor values."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5357140746,
+    "card_date": "2026-08-20T14:17:38Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "issue": 281,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "0.2.290",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Launch A with stock **UI Tweaks** disabled. Open **Mod Tweaker > UI Tweaks** and change **Hide Portrait Frames**, one **Hide Active Buffs** option and **Hide Level Intro Tips**.",
+        "2. Enter a mission and return to the Keep; check that HUD and loading-screen settings work and stay applied.",
+        "3. Launch B with stock UI Tweaks enabled. Change the same three settings and repeat the transition; inspect for dead settings, flicker or duplicate application.",
+        "4. Run `/gut_regression_test` in both launches and retain both logs."
+      ],
+      "assertions": [
+        "All three features work once in each launch without missing-dependency errors or flicker. Required evidence: the one-shot `[gut:281] hb fork boot:` line says `SETTING_NAMES=ok` and `ubersreik_lvls=ok` in both; launch A has `stock_owns=false` and `fork_active=true`, launch B has `stock_owns=true` and the fork inactive. `hb_setting_names_guarded`, `hb_penlight_removed` and `hb_fork_dormancy_gate` pass.",
+        "Two launches (stock UI Tweaks off/on): assert [gut:281] boot line SETTING_NAMES=ok, stock_owns/fork_active values, hb_* checks PASS."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6591472545,
+    "card_date": "2026-11-02T23:49:51Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 361,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "chaos_wastes_tweaker_dev",
+      "min_version": "0.7.354-beta",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In the active CT profile, keep **Disable all listed curses** and **Disable: Nurgle: Rotten Miasma** off. Under **Rotten Miasma**, enable **Permanent Purifying Torch Carrier**, set **Safe Area Radius** to **12**, and **Miasma Stack Interval** to **0.5**.",
+        "2. In the **Pilgrimage Chamber**, use **Single Mission Loader** to choose a normal Chaos Wastes mission and **Rotten Miasma (Nurgle)** under **Curses**, then launch.",
+        "3. Confirm there is one protection sphere with the selected radius and faster stack gain/removal cadence. Pick up and drop the **Purifying Torch**; the same sphere should keep following your living character after the drop.",
+        "4. Turn **Permanent Purifying Torch Carrier** off and drop the torch again; confirm normal torch-following behavior returns. Restore **Safe Area Radius** to **8** and **Miasma Stack Interval** to **1.3** for the vanilla-value control.",
+        "5. Run `/ct_regression_test` and retain the complete report, including the Rotten Miasma customization check. If ordinary play naturally kills a carrier, record whether the permanent sphere stops using that dead carrier; do not force an injury or claim that live death case passed if it was not observed. Exit normally and attach the newest log."
+      ],
+      "assertions": [
+        "Exactly one native safe-area sphere follows the remembered living solo carrier, radius and stack timing follow the settings, and disabling permanent carry plus restoring the two numeric defaults returns the controls to vanilla values. A dead inventory holder must not become or remain the permanent carrier. The full regression report has no failures; bounded `[ct:361]` rows support the observed radius/owner changes, not a separate aura.",
+        "Load a mission with Rotten Miasma; set radius 12 and interval 0.5; assert one safe-area unit, its radius, tick field; move and kill carrier, owner follows policy."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6693575698,
+    "card_date": "2026-11-06T19:30:48Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

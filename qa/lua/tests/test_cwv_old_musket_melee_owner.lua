@@ -394,7 +394,7 @@ return function(H, root)
         local saved = { item_key = old.item_key, via_mirror = true, mod_data = { cwv_musket_stance = "melee" }, untouched = {} }
         local saved_shape, md_shape = T.shape(saved), T.shape(saved.mod_data)
         local source = T.read(root .. "/crafting_in_modded_dev/scripts/mods/crafting_in_modded_dev/crafting_in_modded_dev.lua")
-        local a = assert(source:find("local function _athanor_inject_item(weapon_data, backend_id)", 1, true))
+        local a = assert(source:find("local function _athanor_inject_item(weapon_data, backend_id, options)", 1, true))
         local b = assert(source:find("\nlocal _DIRECT_CRAFT_OWNER =", a, true))
         local inject = source:sub(a, b - 1)
         a = assert(source:find("local _pending_inject = {}", b, true))

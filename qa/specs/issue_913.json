@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 913,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "cosmetics_tweaker",
+      "min_version": "0.9.230-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh **Tweaker: Cosmetics** from Steam Workshop, launch Vermintide 2 into the Modded Realm as Kruber, and confirm the exact build banner above in the newest console log.",
+        "2. In the keep inventory, equip a Great Hammer, select it, and open its Illusions page from the gear icon on the equipped weapon slot.",
+        "3. Select **Prologue Wooden Mallet**, read the description shown for it on that page, and apply it.",
+        "4. Close the page and hover the equipped Great Hammer in the inventory. Read the name and description in its tooltip.",
+        "5. Equip a Mace and Shield, open its Illusions page the same way, select **Mace & Bretonnian Shield**, and read its description.",
+        "6. Run `/cos_regression_test`, then exit the game normally and attach the newest console log."
+      ],
+      "assertions": [
+        "The Prologue Wooden Mallet description reads exactly \"The wooden training mallet from Kruber's Prologue, swung as a Great Hammer.\" on the Illusions page and in the inventory tooltip, where the name reads \"Prologue Wooden Mallet\". The Mace & Bretonnian Shield description reads exactly \"An Empire mace paired with a Bretonnian shield.\" Neither description shows a key in angle brackets, blank text or different wording. The regression run reports `PASS: issue913_custom_illusion_descriptions`. No Tweaker: Cosmetics script error appears. The mallet model in inventory, first person and third person was already confirmed on 0.9.213-dev and is not collected again by this card.",
+        "Assert Localize of ct_es_2h_hammer_tut_01 name and description returns the authored strings through the installed hook; skin registered for Great Hammer; issue913 check passes."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 5671618409,
+    "card_date": "2026-09-14T22:22:23Z",
+    "ledger": "D2_ledger.tsv"
+  }
+}

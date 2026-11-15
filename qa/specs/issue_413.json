@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "issue": 413,
+  "class": "C",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "event_tweaker",
+      "min_version": "0.4.54-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable the **Shadow** event and launch an ordinary Adventure mission.",
+        "2. Observe enemies outside roughly six metres, then approach within the reveal radius.",
+        "3. Try to ping a distant enemy and compare damage dealt outside versus inside the radius.",
+        "4. Exit and attach the new log."
+      ],
+      "assertions": [
+        "Distant enemies fade, cannot be pinged, and take the intended damage reduction; approaching restores visibility and normal damage without Weave-only resource spawns or a crash.",
+        "Solo host covers: enable Shadow, assert no gargoyle-head spawn, far enemy carries -0.8 buff, near enemy none, template restored. Client crash path needs a real client."
+      ],
+      "pass_closes": false
+    }
+  ],
+  "left_for_humans": [
+    "Distant enemies fade, cannot be pinged, and take the intended damage reduction; approaching restores visibility and normal damage without Weave-only resource spawns or a crash.",
+    "needs two clients"
+  ],
+  "source": {
+    "card_comment_id": 5038774121,
+    "card_date": "2026-07-21T20:33:43Z",
+    "ledger": "D3_ledger.tsv"
+  }
+}

@@ -253,6 +253,27 @@ Cosmetics absent the blob remains inert and the resident vanilla material wins.
 
 ---
 
+## Loadout isolation contract
+
+Owner: Tweaker: GUI (`gut` and `gut_dev`), `_gut_loadout_isolation.lua`, published as `mod.loadout_isolation` (contract version 1). Decision D-GUT-07: two layers. Tweaker: GUI captures loadout writes in the modded realm and keeps them off official data; each mod that creates items also scrubs its own ids from the commit (WP-CIM-01), so it stays safe without Tweaker: GUI.
+
+Why it is needed: in the modded realm the game still commits loadout changes to the official account. The commit builds `updateHeroAttributes` from the difference between `_career_data` and `_career_data_mirror` (`Vermintide-2-Source-Code/scripts/managers/backend_playfab/playfab_mirror_base.lua:2885-2891`). A mod-minted id that reaches `_career_data` is pushed to the shared official data and is replaced by starting gear at the next official sign-in (#402).
+
+The consumer rule:
+
+A mod that wants its created item to stay equipped across restarts asks first: `local gut = get_mod("gut") or get_mod("gut_dev"); local iso = gut and gut.loadout_isolation; local kept = iso and iso.contract == 1 and iso.safe_to_write_loadout()`. When `kept` is false the mod may still equip for the session only if it scrubs its own ids from the commit (WP-CIM-01); otherwise it must not write, and prints one bounded `printf` line with the reason. A mod must never write a mod-minted id into a loadout in the official realm.
+
+What the answer means:
+
+| Call | Returns |
+|---|---|
+| `iso.contract` | `1` |
+| `iso.safe_to_write_loadout()` | `true` only in the modded realm, with the loadout store in `store` or `readonly` mode, with both Adventure loadout writers answered by Tweaker: GUI's live capture hooks, and with the live backend mirror on Adventure data (a Versus mirror, `vs_characters_data`, passes writes to vanilla: `playfab_mirror_adventure.lua:25-29`). Otherwise `false` and a reason string. Any error, missing class, unknown mode or unreadable mirror is `false` |
+| `iso.status()` | `{ contract = 1, realm_modded, mode = "off" / "store" / "readonly", chokepoint_owned, official_rows_clean = true / false / nil, reason }` |
+| `status().mode` | `store`: the write is kept in the modded loadout store. `readonly` ("Use non-modded loadouts" on): cosmetics and exact CWV instances go to the readonly overlay and every other gameplay write is blocked; nothing reaches official data, but a blocked gear id is not equipped (`_gut_native_loadouts.lua` `set_character_data` hook, `Policy.readonly_action`) |
+
+`chokepoint_owned` is a functional probe, not a self-declared list: `PlayFabMirrorAdventure.set_character_data` and `set_career_read_only_data` are called through the real hook dispatch on a throwaway table with the reserved career `__gut_isolation_probe__`. Live capture hooks answer `gut-captured` before touching anything. When they are not live (Tweaker: GUI absent, disabled, an older build, or the official realm), the vanilla writer runs on the throwaway table and errors at its first field read (`playfab_mirror_base.lua:1928-1930`, `:3631-3633`), which the probe catches. `official_rows_clean` compares the nine loadout slots and `talents` of every `_career_data` row with `_career_data_mirror`; `false` means something already changed official loadout data that the next commit would send. Tweaker: GUI adds no hook on `_check_career_data`.
+
 ## Loremaster's Armoury Bridge (cosmetics_tweaker ↔ LA)
 
 > LA doc ownership map (issue #432): THIS section owns the bridge end-to-end

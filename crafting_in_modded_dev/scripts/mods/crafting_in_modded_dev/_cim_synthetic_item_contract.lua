@@ -1075,7 +1075,14 @@ local function _cleanup_owned_mirror_row(mirror, backend_id, token)
     return true, nil
 end
 
-function M.inject_mirror_item(mirror, backend_id, payload, nonce_factory, record)
+-- `options.restore == true` (#1654, WP-CIM-04) is the boot restore of a saved
+-- craft: add_item skips the autosave and the "new item" marker
+-- (Vermintide-2-Source-Code/scripts/managers/backend_playfab/
+-- playfab_mirror_base.lua:2494-2545, scripts/helpers/item_helper.lua:128-158),
+-- and a postcondition mismatch keeps the row and returns the field as a sixth
+-- value instead of removing it. Crafts pass no options and stay strict.
+function M.inject_mirror_item(mirror, backend_id, payload, nonce_factory, record, options)
+    local restore = type(options) == "table" and options.restore == true
     if type(mirror) ~= "table" or type(mirror.add_item) ~= "function"
             or type(mirror.remove_item) ~= "function"
             or type(mirror._inventory_items) ~= "table" then
@@ -1110,7 +1117,12 @@ function M.inject_mirror_item(mirror, backend_id, payload, nonce_factory, record
     custom.cim_injection_owner = M.OWNER
     custom.cim_injection_schema = tostring(M.MIRROR_OWNERSHIP_SCHEMA)
     custom.cim_injection_nonce = nonce
-    local added, add_error = pcall(mirror.add_item, mirror, backend_id, payload)
+    local added, add_error
+    if restore then
+        added, add_error = pcall(mirror.add_item, mirror, backend_id, payload, true, true)
+    else
+        added, add_error = pcall(mirror.add_item, mirror, backend_id, payload)
+    end
     if not added then
         local cleaned, cleanup_error = _cleanup_injected_payload(
             mirror, backend_id, token)
@@ -1120,6 +1132,13 @@ function M.inject_mirror_item(mirror, backend_id, payload, nonce_factory, record
     end
     local matched_call, matched, mismatch_field = pcall(_mirror_row_matches,
         rawget(mirror._inventory_items, backend_id), token)
+    if (not matched_call or not matched) and restore then
+        local kept_rollback = function()
+            return M.rollback_mirror_item(mirror, backend_id, token)
+        end
+        return true, nil, token, false, kept_rollback, "mismatch:"
+            .. tostring(matched_call and mismatch_field or matched)
+    end
     if not matched_call or not matched then
         local cleaned, cleanup_error = _cleanup_injected_payload(
             mirror, backend_id, token)
@@ -1181,13 +1200,16 @@ end
 -- `inject_mirror_item` owns exact row identity; this wrapper additionally owns
 -- the engine caches that an add callback may partially rebuild before it
 -- throws.  A removed row is not contained until those caches refresh too.
+-- `options` passes through to inject_mirror_item; the restore warning is the
+-- fifth value. `options.defer_refresh == true` leaves the cache refresh to the
+-- caller (one refresh per restore pass, WP-CIM-04).
 function M.inject_and_refresh_mirror_item(mirror, backend_id, payload,
-        nonce_factory, record, refresh_backend)
+        nonce_factory, record, refresh_backend, options)
     if type(refresh_backend) ~= "function" then
         return nil, "mirror_refresh_contract_unavailable"
     end
-    local added, add_error, ownership_token, cleaned, rollback =
-        M.inject_mirror_item(mirror, backend_id, payload, nonce_factory, record)
+    local added, add_error, ownership_token, cleaned, rollback, warning =
+        M.inject_mirror_item(mirror, backend_id, payload, nonce_factory, record, options)
     if not added then
         local failure = tostring(add_error or "mirror_injection_failed")
         if cleaned == true then
@@ -1208,10 +1230,13 @@ function M.inject_and_refresh_mirror_item(mirror, backend_id, payload,
     local rollback_fn = type(rollback) == "function" and rollback or function()
         return M.rollback_mirror_item(mirror, backend_id, ownership_token)
     end
+    if type(options) == "table" and options.defer_refresh == true then
+        return true, nil, ownership_token, rollback_fn, warning
+    end
     local refreshed, refresh_error = M.complete_mirror_injection_refresh(
         refresh_backend, rollback_fn)
     if not refreshed then return nil, refresh_error end
-    return true, nil, ownership_token, rollback_fn
+    return true, nil, ownership_token, rollback_fn, warning
 end
 
 -- The native `can_craft_with` result is an acquisition-selector surface, not

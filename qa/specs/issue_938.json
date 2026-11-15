@@ -1,0 +1,38 @@
+{
+  "schema": 1,
+  "issue": 938,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Enable **Show Floating Damage Numbers**, then load the Keep so the setting takes effect. Enable General Dev's **Godmode** and **9999 Damage Per Strike**.",
+        "2. Hit an ordinary training dummy once and an armoured dummy once. For each, record the largest number, count of popups and readable text size.",
+        "3. Turn **9999 Damage Per Strike** off. Compare ordinary and observed critical hits on both dummies for normal size, colour, emphasis and popup count. Record a critical-hit control as unexercised if none occurs.",
+        "4. With the 9999 toggle still off, use a normal native burn/poison attack on a suitable target and observe its separate damage-over-time ticks. Their values, cadence and presentation must not be collapsed into a large direct-hit popup; record the weapon/target and any unavailable control.",
+        "5. Run `/gut_regression_test` and keep the complete report. If it reports that the native damage limit is unavailable and uses a fallback limit, record that limitation rather than claiming the live limit was tested.",
+        "6. Turn GUI damage numbers off, load another level/Keep as required by its next-map-load setting and repeat ordinary/critical/DoT controls where available; confirm vanilla presentation returns. Attach the newest log and the large-hit numbers/popup counts."
+      ],
+      "assertions": [
+        "The main popup shows the full summed hit near 9999, not a value capped near 255, while staying within readable HUD size. Ordinary, critical and DoT controls retain their normal values/style/timing, the named check passes, and off restores vanilla. A large correct popup plus one small dummy remainder popup is the documented acceptable caveat; a capped main value or oversized text fails.",
+        "issue938_damage_number_burst_aggregation PASS; deal 9999 to a dummy: one popup entry near 9999 (optional small remainder), font size bounded; DoT ticks stay separate."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6591492088,
+    "card_date": "2026-11-02T23:51:05Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}

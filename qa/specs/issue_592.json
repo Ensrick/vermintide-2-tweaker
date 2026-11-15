@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "issue": 592,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "crafting_in_modded_dev",
+      "min_version": "",
+      "settings": null
+    },
+    {
+      "dir": "crafting_in_modded",
+      "min_version": "0.8.148",
+      "settings": null
+    },
+    {
+      "dir": "character_weapon_variants",
+      "min_version": "0.1.570-dev",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. Refresh both subscriptions, start the Modded Realm, and enter the Keep as **Mercenary**. Confirm both exact version receipts above before testing. Report an unavailable version echo instead of inferring the loaded version from a Workshop title.",
+        "2. Before crafting, open Equipment and browse the active Character Weapon Variants weapons available to Mercenary, including **Old Musket** and **Imperial Crowbill**.",
+        "3. Hover and count their provider-owned base copies. Each available active weapon should have exactly one unskinned **Power 5 Blacksmith** copy with no rolled traits or properties, not a 300-power provider copy. Existing separately crafted copies must remain and do not count as extra provider seeds.",
+        "4. Open the Keep forge's native **Craft Item** menu and find Old Musket and Imperial Crowbill. Each should appear once in that picker; an already-crafted Modded-rarity copy must not become another base-item selector.",
+        "5. Craft one additional unwanted Old Musket through that native flow. Record the new exact item, its appearance, and chosen/equipped destination. Exit normally and relaunch the Modded Realm as Mercenary.",
+        "6. Confirm that new craft survives separately beside the Power 5 Blacksmith copy, with the recorded appearance and destination. Unequip only the new test craft from current and saved loadouts and remove its favorite flag if necessary; salvage only that new craft. The Blacksmith copy and all older items must remain.",
+        "7. Run `/cwv_regression_test`. Record the Blacksmith acquisition verdict and any first failure if shown. Exit normally and attach the newest complete log plus the step results."
+      ],
+      "assertions": [
+        "Every active available CWV weapon has one canonical Power 5 Blacksmith seed and one Craft Item selector. The additional exact CIM-owned craft survives restart and can be salvaged without replacing/deleting a seed or older craft. The named `issue592_bounded_blacksmith_acquisition` check reports PASS; a missing or skipped verdict remains pending, not passed. Existing Weapons of Chaos relics, if installed, remain unchanged; otherwise report that control as unexercised.",
+        "Per career enumerate backend items: each active CWV key has exactly one default-rarity power-5 row and none at 300; craft a copy, reload mirror, assert both persist."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6687610008,
+    "card_date": "2026-11-06T14:47:52Z",
+    "ledger": "D1_ledger.tsv"
+  }
+}

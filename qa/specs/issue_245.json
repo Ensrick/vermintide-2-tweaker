@@ -1,0 +1,37 @@
+{
+  "schema": 1,
+  "issue": 245,
+  "class": "R",
+  "status": "draft",
+  "vp": null,
+  "arena": "unknown",
+  "mods": [
+    {
+      "dir": "gui_tweaker_dev",
+      "min_version": "",
+      "settings": null
+    }
+  ],
+  "cases": [
+    {
+      "script": "",
+      "steps": [
+        "1. In a solo Adventure mission, wield a weapon whose properties/trait you can identify. Record the exact item and its held-Tab values.",
+        "2. Use public CIM's standard crafting bench with Allow Craft Bench enabled to reforge that same equipped instance. Do not swap, re-equip, change career or force a session refresh.",
+        "3. Compare the reforged item's actual properties/trait with held Tab immediately. Repeat the reforge and comparison once.",
+        "4. Reforge a different, unequipped instance of the same weapon type. Confirm this does not replace the currently wielded item's held-Tab values.",
+        "5. Only after those controls, swap away/back and transition maps; confirm the currently wielded item's values remain correct."
+      ],
+      "assertions": [
+        "Held Tab refreshes the exact equipped instance's properties/trait after reforge without re-equipping. A different instance cannot supply its values, and later swaps/transitions stay correct.",
+        "Mutate properties of the equipped backend instance, wait one refresh interval, read the Tab row widget: updated; mutate another instance: unchanged."
+      ],
+      "pass_closes": true
+    }
+  ],
+  "source": {
+    "card_comment_id": 6591464863,
+    "card_date": "2026-11-02T23:49:21Z",
+    "ledger": "D4_ledger.tsv"
+  }
+}
