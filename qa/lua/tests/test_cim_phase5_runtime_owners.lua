@@ -20,6 +20,10 @@ return function(H, repo_root)
                     return function() end, function() end
                 end
             end
+            -- WP-CIM-05: the bootstrap's suite runs through the shared runner.
+            if path:find("_lib_rt_runner", 1, true) then
+                return assert(loadfile(root .. "_lib_rt_runner.lua"))()
+            end
             return { options = { type = "group", sub_widgets = {
                 { setting_id = "alpha", type = "checkbox" },
                 { setting_id = "beta", type = "numeric" },
@@ -47,6 +51,8 @@ return function(H, repo_root)
         owner.rt_register("planted", function() ran = ran + 1 end)
         commands.cim_regression_test()
         H.equal(ran, 1)
+        H.equal(mod._cim_rt_last.pass, 1, "last results exposed as a table")
+        H.equal(#mod._cim_rt_last.results, 1)
         mod:warning("(hook_safe): Attempting to rehook active hook [x].")
         H.equal(#owner.rehook_warnings, 1)
         H.truthy(infos[1]:find("0.8.121%-dev"))
