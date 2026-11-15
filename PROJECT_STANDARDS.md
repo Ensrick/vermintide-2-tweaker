@@ -2535,8 +2535,8 @@ un-mergeable.
 | Never downgrade without failed-verify evidence | `verify-fix` may move to diagnostics only when the replacement current card cites failed verification. Otherwise move unready work to `not-started`. |
 | Comment every change | Each lifecycle edit gets an issue comment naming the evidence that drove it (shipped version, failed-verify log, user confirmation). An uncommented label change is presumed wrong and gets reverted to the last evidenced state. |
 
-**CI enforcement:** `tools/github/check-lifecycle-cardinality.ps1` runs as a
-blocking step in `.github/workflows/qa.yml` and `.github/workflows/issue-lifecycle.yml`
+**CI enforcement:** `tools/github/check-lifecycle-cardinality.ps1` runs in
+`.github/workflows/issue-lifecycle.yml` (tracker events, manual, daily); it is not part of the pull-request gate
 (contents:read + issues:read only). It pages open issues and fetches complete
 comment history only for ready issues through GraphQL so `IssueComment.isPinned`
 is authoritative. Ready-issue comment connections are read in batches of at

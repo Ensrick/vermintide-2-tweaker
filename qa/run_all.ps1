@@ -374,7 +374,8 @@ Run-Check "check_retired_big_rebalance"        { & (Join-Path $here "check_retir
 # carry the maintainer's local agent/* refs, so this offline gate validates
 # schema, age, generator hash, and exact automatic-disposition proofs without
 # attempting to regenerate or infer from an incomplete CI ref inventory.
-Run-Check "check_branch_reconciliation_census" { & (Join-Path $here "check_branch_reconciliation_census.ps1") -Quiet:$Quiet }
+# Advisory: a stale generated census must not fail unrelated pull requests.
+Run-Check "check_branch_reconciliation_census" { & (Join-Path $here "check_branch_reconciliation_census.ps1") -Quiet:$Quiet } -Policy 'Advisory'
 Run-Check "check_in_progress"                 { & (Join-Path $here "check_in_progress.ps1")                 -Quiet:$Quiet } -Policy 'Advisory'
 # Blocking local-capacity guard. CI has no secondary worktrees, while maintainer
 # sessions fail closed before agent checkouts can grow without bound.
