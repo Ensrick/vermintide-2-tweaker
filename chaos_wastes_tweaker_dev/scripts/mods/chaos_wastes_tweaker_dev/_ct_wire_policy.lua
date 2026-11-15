@@ -187,6 +187,14 @@ function M.purchase_allowed(name, exact_safe)
     return not M.is_power_up(name) or exact_safe == true
 end
 
+-- WP-CW-03 roll decision. The roll arrays keep every injected boon for lookup
+-- parity, so pool membership never reached a roll. A modded boon may be offered
+-- only while it is pooled (toggle on, parity held at insert) AND the exact gate
+-- is open; vanilla names are always rollable.
+function M.rollable(is_modded, in_pool, exact_safe)
+    return is_modded ~= true or (in_pool == true and exact_safe == true)
+end
+
 -- Two-way proof that the runtime injection registry and this catalog describe
 -- the same set. A name in one and not the other means a boon was added without
 -- updating the wire contract, which is precisely the drift #1191 is about.

@@ -36,7 +36,7 @@ mod._cim959_accessory_property_policy = mod:dofile(
 local _BULK_ACCESSORY_CRAFT = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_bulk_accessory_craft")
 _MEM_PROBE_T0_CIMD = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.8.148-dev"
+local MOD_VERSION = "0.8.150-dev"
 local _bootstrap = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_bootstrap_runtime")({
         mod = mod,
@@ -274,10 +274,9 @@ mod._cim_favorite_persistence = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_favorite_persistence")
 
 -- ============================================================
--- Forge state owner (persistence + item creation)
+-- Forge state owner (persistence + item creation) + #402 career commit guard
 -- ============================================================
--- These callbacks are bound later in the entry. The forge owner resolves them
--- only when BackendManagerPlayFab rebuilds its interfaces.
+-- These callbacks are bound later in the entry; the owner resolves them when BackendManagerPlayFab rebuilds interfaces.
 local _athanor_inject_all
 local _restore_modded_loadout
 local _bubble_cap
@@ -295,6 +294,7 @@ local _forge_create_item = _forge_state.create_item
 local _forge_detect_mil = _forge_state.detect_mil
 local _forge_load = _forge_state.load
 local _forge_save = _forge_state.save
+mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_career_commit_guard")({ mod = mod, guard = mod:dofile("scripts/mods/crafting_in_modded_dev/_lib_official_loadout_guard"), rt_register = _rt_register, print_line = printf })
 -- ============================================================
 -- Vanilla-safe loadout wire owner
 -- ============================================================
@@ -721,17 +721,14 @@ local _value_for_bubbles = _WEAVE_LOADOUT_OWNER.value_for_bubbles
 local _store_property_slot = _WEAVE_LOADOUT_OWNER.store_property_slot
 local _cap_grid_property_arrays = _WEAVE_LOADOUT_OWNER.cap_grid_property_arrays
 
--- CLARIFY: while either forge is open, suppress backend commits entirely so the
--- simulated mutations (Athanor property/trait edits, standard-forge salvage/upgrade/
--- skin/etc) don't leak to PlayFab and trigger the anti-tamper "Backend rejected
--- the challenge response -1" kick. The standard-forge module sets
--- `mod._cim_standard_forge_active` while its UI is open; we check both flags here.
--- Single registration: standard_forge.lua MUST NOT install its own commit hook,
--- otherwise VMF warns "Attempting to rehook active hook [commit]" and drops the
--- second registration → standard-forge mutations leak to PlayFab.
+-- While either forge is open, callback-less commits stay suppressed so simulated forge
+-- mutations don't reach PlayFab (anti-tamper "challenge response -1" kick). #80: a commit
+-- WITH a completion callback always reaches vanilla (end screen, mechanism switch run in
+-- it). Single registration: standard_forge.lua MUST NOT install its own commit hook.
+mod._cim_commit_gate = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_commit_gate")
+_rt_register("issue_cim_commit_callback_preserved", function() return mod._cim_commit_gate.self_check() end)
 mod:hook("BackendManagerPlayFab", "commit", function(func, self, skip_queue, commit_complete_callback)
-    if _custom_forge_active or mod._cim_standard_forge_active then return end
-    return func(self, skip_queue, commit_complete_callback)
+    return mod._cim_commit_gate.hook(func, self, skip_queue, commit_complete_callback, (_custom_forge_active or mod._cim_standard_forge_active) and true or false)
 end)
 
 -- --- Weapon list: show ALL weapons, not just weave "magic" rarity ---
@@ -1157,6 +1154,8 @@ end
 local _cim_loadout_restore_timer = nil
 
 mod.on_game_state_changed = function()
+    _custom_forge_active = false
+    mod._cim_standard_forge_active = false
     _cim947_trait_residency.ensure()
     _athanor_retry_pending()
     if mod._cim563_reset_vanilla_skin_rehydrate then

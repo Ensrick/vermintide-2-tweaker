@@ -1,5 +1,15 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.571-dev (2026-11-14) -- Outrider projectile wire name stays vanilla (WP-CWV-01)
+
+- A fired Outrider Grenade Launcher projectile now hands the donor's vanilla
+  template name (`dr_deus_01_template_1`) to the network game object, instead
+  of the cwv clone name that only peers with the same lookup tail can decode
+  (audit finding A2-F01). The local shot still resolves the cwv grenade
+  projectile (#1320). Done inside the existing projectile init hook; no new
+  hook. Offline tests and the `issue1320_outrider_projectile_unit_and_wire`
+  check cover it. Not confirmed in game.
+
 ## 0.1.570-dev (2026-11-05) -- Official CIM preview dependency reissue
 
 - Reissue the existing public-CIM preview provider compatibility from

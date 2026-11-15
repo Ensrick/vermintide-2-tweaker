@@ -599,7 +599,7 @@ function Test-IssueLifecycleCheckoutContract {
             $actualPatterns += $line.Trim()
         }
     }
-    $expectedPatterns = @('/qa/', '/tools/', '/*/scripts/mods/')
+    $expectedPatterns = @('/qa/', '/tools/', '/*/scripts/mods/', '/*/itemV2.cfg')
     $patternsMatch = $actualPatterns.Count -eq $expectedPatterns.Count
     if ($patternsMatch) {
         for ($i = 0; $i -lt $expectedPatterns.Count; $i++) {
@@ -610,7 +610,7 @@ function Test-IssueLifecycleCheckoutContract {
         }
     }
     if (-not $patternsMatch) {
-        $errors += "issue lifecycle checkout sparse patterns must be the exact /qa/, /tools/, /*/scripts/mods/ allowlist"
+        $errors += "issue lifecycle checkout sparse patterns must be the exact /qa/, /tools/, /*/scripts/mods/, /*/itemV2.cfg allowlist"
     }
     $guardSteps = @()
     if ($stepsStart -ge 0) {
@@ -939,6 +939,7 @@ jobs:
             /qa/
             /tools/
             /*/scripts/mods/
+            /*/itemV2.cfg
       - name: Validate tracker lifecycle and pinned test cards
         shell: pwsh
         env:
@@ -996,6 +997,19 @@ jobs:
     $badOutside = @(Test-IssueLifecycleCheckoutContract $badOutsideWorkflow)
     if (-not ($badOutside -match 'exact .+ allowlist')) {
         throw "issue lifecycle out-of-checkout hydration spoof was not detected"
+    }
+
+    # WP-P-01: the MP login contract reads HEAD:<mod>/itemV2.cfg with lazy
+    # fetch disabled; dropping or widening that one pattern must fail.
+    $badNoCfgWorkflow = $goodIssueLifecycleWorkflow -replace '(?m)^\s+/\*/itemV2\.cfg\s*\r?\n', ''
+    $badNoCfg = @(Test-IssueLifecycleCheckoutContract $badNoCfgWorkflow)
+    if (-not ($badNoCfg -match 'exact .+ allowlist')) {
+        throw "issue lifecycle missing itemV2.cfg hydration was not detected"
+    }
+    $badWideCfgWorkflow = $goodIssueLifecycleWorkflow -replace '(?m)^(\s+)/\*/itemV2\.cfg(\s*)$', '$1/*/*.cfg$2'
+    $badWideCfg = @(Test-IssueLifecycleCheckoutContract $badWideCfgWorkflow)
+    if (-not ($badWideCfg -match 'exact .+ allowlist')) {
+        throw "issue lifecycle widened cfg hydration was not detected"
     }
 
     $badRunScalarWorkflow = @'

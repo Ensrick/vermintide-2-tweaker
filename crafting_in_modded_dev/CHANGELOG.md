@@ -1,5 +1,36 @@
 # Crafting in Modded Changelog
 
+## 0.8.150-dev (2026-11-15) -- Commit callbacks always reach vanilla (#80)
+
+- The `BackendManagerPlayFab.commit` hook no longer drops a commit that
+  carries a completion callback while a forge is open. Vanilla fires the
+  end-of-mission screen and the mechanism switch from such callbacks, so a
+  forge open at that moment could soft-lock the game. Callback-less commits
+  are still suppressed while a forge is open (WP-CIM-02).
+- A game-state change now clears both forge flags (`_custom_forge_active` and
+  `mod._cim_standard_forge_active`): a view cannot survive it, so one missed
+  `on_exit` can no longer leave commits suppressed for the session.
+- The decision lives in the new pure module `_cim_commit_gate.lua`; regression
+  check `issue_cim_commit_callback_preserved`.
+- Not confirmed in game. The rig case is
+  `qa/runtime/cim/issue_80_cim_commit_callback.lua`.
+
+## 0.8.149-dev (2026-11-14) -- Keep crafted ids out of the career-data commit (#402, #1688)
+
+- New hook on `PlayFabMirrorAdventure._check_career_data` (one per tree): for
+  the vanilla call only, every crafted id in the career loadouts is swapped
+  for the server-side value of that slot (or loadout 1's), the returned
+  loadouts are detached, and the crafted id is put back so it stays equipped
+  for the session. An `updateHeroAttributes` request can no longer carry a
+  crafted id, with or without Tweaker: GUI installed (WP-CIM-01).
+- The guard is the new pure shared library `_lib_official_loadout_guard.lua`
+  (tools/shared_lib, byte-synced). Log line `[cim:402] scrubbed=N unsafe=N`,
+  at most 12 per session; regression check `issue402_career_commit_guard`.
+- Known consequence (OD-CIM-02): without Tweaker: GUI's modded loadouts a
+  crafted item is no longer equipped after a restart.
+- Not confirmed in game. The rig case is
+  `qa/runtime/cim/issue_402_career_commit_scrub.lua`.
+
 ## 0.8.148-dev (2026-11-06) -- Native retained preview Gui selection
 
 - Follow the actual native texture pass's `retained_mode` when proving the

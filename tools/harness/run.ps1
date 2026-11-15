@@ -13,13 +13,20 @@
       "arenas": ["keep", "mission:military"],       // optional; derived from cases when absent
       "timeout": 600,                               // whole-run limit inside the game, seconds
       "settings": { "max_fps": "30" },              // optional extra top-level user settings (SJSON values)
+      "backend_shield": false,                      // optional; only for cases that test commit behaviour itself,
+      "backend_shield_reason": "...",               //   and then with a reason (qa/check_runtime_scripts.ps1)
       "cases": [ { "id": "smoke-keep", "arena": "keep", "file": "../_rig/smoke_keep.lua" } ]
     }
   Case files are Lua source that returns a table { issue = <n>, timeout = <s>, run = function(T) ... end }.
-  Case file paths are relative to the plan file. See tools/harness/README.md.
+  Case file paths are relative to the plan file. Every qa/runtime/_shared/*.lua travels with the plan
+  (T.shared(<name>) in a case). See tools/harness/README.md.
 
-  Exit code: 0 = run completed and every case PASS; 1 = at least one FAIL; 2 = ERROR/TIMEOUT/INCONCLUSIVE or
-  the run did not complete; 3 = rig refused to start or isolation was broken.
+  Default host_forbid_log (backend write shield, WP-H-14): the game's own log must not show an
+  updateHeroAttributes cloud-script request or an UpdateUserData request. A hit makes a passing run exit 1 and
+  is listed in summary.json / summary.md. A plan with backend_shield false drops both defaults.
+
+  Exit code: 0 = run completed and every case PASS; 1 = at least one FAIL or a forbidden log line; 2 =
+  ERROR/TIMEOUT/INCONCLUSIVE or the run did not complete; 3 = rig refused to start or isolation was broken.
 
 .NOTES
   Never starts if any Vermintide process exists. Never kills a process it did not start (job object).
@@ -36,6 +43,7 @@ param(
     [string] $ExtraArgs = '',
     [string] $DriverFile = (Join-Path $PSScriptRoot 'driver/vt2_rig_driver.lua'),
     [string] $DriverId = '3839345856',      # private Workshop item: the rig bootstrap
+    [string] $SharedDir = (Join-Path $PSScriptRoot '..\..\qa\runtime\_shared'),
     [string] $RigRoot = (Join-Path $env:LOCALAPPDATA 'vt2-harness'),
     [string] $SteamApps = '',               # default: resolved from HKCU:\Software\Valve\Steam SteamPath
     [string] $StopOnLog = '',               # no-plan experiments: stop when this regex appears in the log
@@ -96,7 +104,7 @@ if ($planObj) {
 
 # ---------- profile ----------
 $profileArgs = @{ RealProfile = $realProfile; ProfileRoot = (Join-Path $RigRoot 'profile'); DriverId = $DriverId; KeepOwnerMods = $KeepOwnerMods }
-if ($planObj) { $profileArgs.PlanPath = $planPath; $profileArgs.Nonce = $nonce; $profileArgs.DriverFile = $DriverFile }
+if ($planObj) { $profileArgs.PlanPath = $planPath; $profileArgs.Nonce = $nonce; $profileArgs.DriverFile = $DriverFile; $profileArgs.SharedDir = $SharedDir }
 try { $rigProfile = & (Join-Path $here 'New-RigProfile.ps1') @profileArgs }
 catch { Write-Host "RIG REFUSED: profile: $($_.Exception.Message)"; $mutex.ReleaseMutex(); exit 3 }
 $profileRoot = $rigProfile.ProfileRoot
@@ -188,6 +196,14 @@ foreach ($l in $lines) {
 }
 $runEnd = [bool]($lines | Where-Object { $_ -match '^RUN END' })
 $scriptErrors = @([regex]::Matches($text, '(?m)^.*(\[Script Error\]|<<Script Error>>|Lua Stack).*$') | Select-Object -First 5 | ForEach-Object { $_.Value.Trim() })
+
+# default host_forbid_log of the backend write shield, and the shield timing (Read-HostLog.ps1, WP-H-14)
+$shieldOn = [bool]($planObj -and -not ($planObj.PSObject.Properties['backend_shield'] -and $planObj.backend_shield -eq $false))
+$hostLog = & (Join-Path $here 'Read-HostLog.ps1') -Text ([string]$text) -Nonce $nonce -ShieldOn:$shieldOn
+$forbidHits = @($hostLog.ForbidHits)
+$shieldFirst = $hostLog.ShieldInstalledBeforeFirstCommit
+foreach ($h in $forbidHits) { Write-Host "FORBIDDEN LOG LINE ($($h.rule)): $($h.line)" }
+
 $exit = 2
 if ($isolation -ne 'OK') { $exit = 3 }
 elseif ($planObj -and $runEnd -and $cases.Count -gt 0) {
@@ -196,15 +212,20 @@ elseif ($planObj -and $runEnd -and $cases.Count -gt 0) {
     else { $exit = 0 }
 }
 elseif (-not $planObj) { $exit = 0 }
+if ($forbidHits.Count -and $exit -eq 0) { $exit = 1 }
 $summary = [ordered]@{
     run = "$stamp-$Name-$nonce"; name = $Name; nonce = $nonce; verdict = $verdict; exit = $exit; isolation = $isolation
     private_desktop = (-not $Visible); renderer = $Renderer; arguments = $arguments; run_end_seen = $runEnd
+    backend_shield = [bool]$shieldOn; shield_installed_before_first_commit = $shieldFirst; host_forbid_hits = $forbidHits
     marks_seconds = $marks; cases = $cases; script_errors = $scriptErrors; evidence_lines = $lines.Count
     log = (Join-Path $run 'console.log'); notes = $notes
 }
 $summary | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath (Join-Path $run 'summary.json') -Encoding utf8
 $md = @("# Rig run $($summary.run)", '', "Verdict: $verdict | exit $exit | isolation $isolation | RUN END seen: $runEnd", '', '| Case | Verdict | Asserts | Failed | Seconds | Detail |', '|---|---|---|---|---|---|')
 foreach ($c in $cases) { $md += "| $($c.id) | $($c.verdict) | $($c.asserts) | $($c.failed) | $($c.seconds) | $($c.detail) |" }
+$md += ''
+$md += "Backend shield: $(if ($shieldOn) { 'on' } else { 'off' }) | installed before first commit: $shieldFirst"
+foreach ($h in $forbidHits) { $md += "Forbidden log line ($($h.rule)): ``$($h.line)``" }
 $md | Set-Content -LiteralPath (Join-Path $run 'summary.md') -Encoding utf8
 $summary | ConvertTo-Json -Depth 6
 exit $exit

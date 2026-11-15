@@ -1,5 +1,32 @@
 # Weapon Tweaker Changelog
 
+## 0.12.346-beta (2026-11-15) -- Pin the 3P animation funnel (WP-WT-04) [not-started]
+
+- Export four existing funnel tables for tests (`anim_redirect`,
+  `career_anim_redirect`, `three_p_key_remaps`, `three_p_remap_triggers`). No
+  table value, hook or branch changes.
+- Host test `test_wt_anim_funnel_golden` runs the real `Unit.animation_event`
+  hook under stubs over 7 careers, two animation-availability policies and
+  every template, key and redirect subject, and compares 1092 decision lines
+  with a committed golden. Any redirect or remap change now fails offline.
+- Mirrored in Dev 0.12.347-dev. No in-game acceptance is claimed.
+
+## 0.12.345-beta (2026-11-14) -- Scriptable regression runner (WP-WT-02) [not-started]
+
+- `mod._wt.run_regression()` runs the in-mod checks once and returns one row
+  per check (`name`, `result`, `detail`), and prints one engine-log line per
+  check plus a summary line: `[wt:RT] check=<name> result=<PASS|FAIL|SKIP>
+  [detail=...]`, `[wt:RT] summary pass= fail= skip= total= version=`. The lines
+  reach the console log even with mod logging off.
+- `/wt_regression_test` now uses that runner and keeps its exact chat output,
+  check order and check bodies.
+- `husk_extension_hooked` no longer passes on a string-length tautology: it
+  reports SKIP, because hook presence is not readable from Lua and the husk
+  remap needs two clients.
+- Mirrored in Dev 0.12.346-dev. Host test `test_wt_regression_runner`; rig case
+  `qa/runtime/wt/wp_wt_02_regression_runner.lua` is pending. No in-game
+  acceptance is claimed.
+
 ## 0.12.344-beta (2026-11-14) -- Restore native weapons on disable (WP-WT-01) [not-started]
 
 - Disabling Weapon Tweaker in the mod options returns every managed weapon to
