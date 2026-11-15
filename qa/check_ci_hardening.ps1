@@ -61,11 +61,16 @@ function Test-CiContract {
     if ($Workflow -notmatch '(?m)^\s+timeout-minutes:\s*\d+\s*\r?$') {
         $errors += "job timeout is required"
     }
-    if ($Workflow -notmatch '(?m)^\s+-?\s*shell:\s*powershell\s*\r?$' -or
-            $Workflow -notmatch 'check_promotion\.ps1\s+-SelfTest' -or
-            $Workflow -notmatch 'tools/ship/ship\.ps1\s+-SelfTest' -or
-            $Workflow -notmatch 'check_ps51_compatibility\.ps1\s+-SelfTest') {
-        $errors += "promised Windows PowerShell 5.1 release surfaces need CI self-tests"
+    # WP-P-06 stage B (D-P-01: tooling requires PowerShell 7): the three
+    # `shell: powershell` steps are gone. Pull requests and pushes scope the
+    # pipeline-tooling suites to the change, so a nightly schedule must run the
+    # complete gate with -Full, and manual dispatch must do the same.
+    if ($Workflow -notmatch '(?m)^\s{2}schedule:\s*\r?$' -or
+            $Workflow -notmatch "(?m)^\s+-\s*cron:\s*'[^']+'\s*\r?$" -or
+            $Workflow -notmatch "GITHUB_EVENT_NAME\s+-ceq\s+'schedule'" -or
+            $Workflow -notmatch "GITHUB_EVENT_NAME\s+-ceq\s+'workflow_dispatch'" -or
+            $Workflow -notmatch '(?m)^\s+\./qa/run_all\.ps1\s+-Full\s*\r?$') {
+        $errors += "a nightly schedule and manual dispatch must run the complete QA gate (run_all.ps1 -Full)"
     }
     if ($Workflow -notmatch 'check_promotion_authorization\.ps1\s+-WriteGitHubEnv' -or
             $Workflow -notmatch "if:\s*github\.event_name\s*==\s*'pull_request'" -or
@@ -725,12 +730,14 @@ on:
     branches: [master]
   pull_request:
   workflow_dispatch:
+  schedule:
+    - cron: '41 9 * * *'
 permissions:
   contents: read
   issues: read
   pull-requests: read
 concurrency:
-  group: qa
+  group: qa-${{ github.event_name }}
   cancel-in-progress: true
 jobs:
   qa-gate:
@@ -748,14 +755,16 @@ jobs:
         run: |
           $changed = @(git diff --name-only "origin/${{ github.base_ref }}...HEAD")
           ./qa/check_promotion_authorization.ps1 -ValidateAuthorizedEnvironment -ChangedPath $changed
-      - shell: powershell
-        run: ./qa/check_promotion.ps1 -SelfTest
-      - shell: powershell
-        run: ./tools/ship/ship.ps1 -SelfTest
-      - shell: powershell
-        run: ./qa/check_ps51_compatibility.ps1 -SelfTest
       - shell: pwsh
         run: ./qa/check_pr_autoclose.ps1
+      - shell: pwsh
+        run: |
+          if ($env:GITHUB_EVENT_NAME -ceq 'schedule' -or $env:GITHUB_EVENT_NAME -ceq 'workflow_dispatch') {
+            ./qa/run_all.ps1 -Full
+          } else {
+            ./qa/run_all.ps1
+          }
+          exit $LASTEXITCODE
 '@
     $goodTrustedWorkflow = @'
 on:
@@ -973,6 +982,20 @@ jobs:
     if ($bad.Count -lt 4) { throw "planted CI/protection failures were not detected" }
     if (-not ($bad -match 'immutable')) { throw "mutable action pin was not detected" }
     if (-not ($bad -match 'path filters')) { throw "fragile push path filter was not detected" }
+
+    # WP-P-06 stage B: the nightly -Full run is the only place every scoped
+    # suite still runs on a quiet day; dropping either half must fail.
+    $goodWorkflowLf = $goodWorkflow -replace '\r\n?', "`n"
+    $noScheduleWorkflow = $goodWorkflowLf -replace "(?m)^  schedule:\n    - cron: '41 9 \* \* \*'\n", ''
+    $noSchedule = @(Test-CiContract $noScheduleWorkflow $goodTrustedWorkflow $goodAutoCloseAuthWorkflow $goodAutoCloseAuditWorkflow $goodTool $goodPromotionAuthorizationTool)
+    if ($noScheduleWorkflow -ceq $goodWorkflowLf -or -not ($noSchedule -match 'nightly schedule')) {
+        throw "missing nightly QA schedule was not detected"
+    }
+    $noFullWorkflow = $goodWorkflowLf -replace '(?m)^(\s+\./qa/run_all\.ps1) -Full$', '$1'
+    $noFull = @(Test-CiContract $noFullWorkflow $goodTrustedWorkflow $goodAutoCloseAuthWorkflow $goodAutoCloseAuditWorkflow $goodTool $goodPromotionAuthorizationTool)
+    if ($noFullWorkflow -ceq $goodWorkflowLf -or -not ($noFull -match 'run_all\.ps1 -Full')) {
+        throw "scheduled QA without -Full was not detected"
+    }
 
     $badConeWorkflow = $goodIssueLifecycleWorkflow -replace '(?m)^\s+sparse-checkout-cone-mode:\s*false\s*\r?\n', ''
     $badCone = @(Test-IssueLifecycleCheckoutContract $badConeWorkflow)

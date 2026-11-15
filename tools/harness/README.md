@@ -20,7 +20,7 @@ pwsh -NoProfile -File tools/harness/run.ps1 -Plan qa/runtime/plans/smoke-keep.js
 
 Exit code: 0 every case PASS; 1 at least one FAIL; 2 ERROR, TIMEOUT or INCONCLUSIVE, or the run did not complete; 3 the rig refused to start or isolation broke. It refuses when a Vermintide process exists, Steam is not running, free RAM is under 6 GiB, the bootstrap item is not installed, or another rig run holds the lock.
 
-Offline tests (no game): `pwsh -File tools/harness/tests/<name>.Tests.ps1` for `GameProcess`, `Profile`, `HostLog`, `FindRunLog`, `SmokePlan` and `Slots`, and `qa/lua/tests/test_rig_driver.lua` inside `pwsh -File qa/check_lua_unit_tests.ps1`.
+Offline tests (no game): `pwsh -File tools/harness/tests/<name>.Tests.ps1` for `GameProcess`, `Profile`, `HostLog`, `FindRunLog`, `SmokePlan` and `Slots`, and `qa/lua/tests/test_rig_driver.lua` inside `pwsh -File qa/check_lua_unit_tests.ps1`. `pwsh -File qa/check_runtime_scripts.ps1` checks the shape of every case and plan in seconds (fields, file-name issue number, no engine access at the top level, every `T.<name>` in the stub `qa/runtime/_stub/T.lua`); it proves shape only, never that a case passes.
 
 ## Plan format
 

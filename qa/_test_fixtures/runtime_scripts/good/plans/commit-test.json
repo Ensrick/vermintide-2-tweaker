@@ -1,0 +1,7 @@
+{
+  "name": "commit-test",
+  "mods": ["1369573612"],
+  "backend_shield": false,
+  "backend_shield_reason": "fixture: this plan tests commit behaviour itself",
+  "cases": [ { "id": "rig", "arena": "keep", "file": "../_rig/rig_selfcheck.lua" } ]
+}

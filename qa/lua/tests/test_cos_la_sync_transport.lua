@@ -98,7 +98,15 @@ return function(H, repo_root)
         H.equal(phase1:gsub("%-%-[^\n]*", ""):find("mod:network_register(", 1, true), nil)
         H.equal(phase1:gsub("%-%-[^\n]*", ""):find("mod:hook", 1, true), nil)
         H.equal(source:gsub("%-%-[^\n]*", ""):find("mod:command(", 1, true), nil)
-        H.equal(source:gsub("%-%-[^\n]*", ""):find("mod:dofile(", 1, true), nil)
+        -- WP-COS-01: the one dofile loads the PURE payload policy, which itself
+        -- registers nothing and calls no mod API, so phase 1 stays order-safe.
+        local code = source:gsub("%-%-[^\n]*", "")
+        H.equal(occurrences(code, "mod:dofile("), 1)
+        H.equal(occurrences(code,
+            'mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_payload_policy")'), 1)
+        local policy_code = read(base .. "_cos_la_payload_policy.lua"):gsub("%-%-[^\n]*", "")
+        H.equal(policy_code:find("mod:", 1, true), nil)
+        H.equal(policy_code:find("mod%.", 1), nil)
         H.truthy(source:find("RESPONSIBILITY", 1, true))
         H.truthy(source:find("Consumed via:", 1, true))
     end)
@@ -213,6 +221,10 @@ return function(H, repo_root)
                 { name = name, target = target, schema = schema, payload = payload }
         end
         function mod:network_register(name, fn) handlers[name] = fn end
+        -- The payload policy is the one pure module the owner loads (WP-COS-01).
+        function mod:dofile(path)
+            return assert(loadfile(repo_root .. "/cosmetics_tweaker/" .. path .. ".lua"))()
+        end
         function mod:hook_safe(class_ref, method, fn)
             hooks[method] = fn
             hooks[#hooks + 1] = class_ref
@@ -342,6 +354,100 @@ return function(H, repo_root)
         })
         restore_globals()
         H.equal(next(la_equips_by_peer), nil)
+    end)
+
+
+    -- ---- A3-F04 / #416: peer payload field validation ------------------------
+    -- A peer payload is attacker data: hand_field becomes a key of the table
+    -- vanilla returns from BackendUtils.get_item_units (backend_utils.lua:144-146)
+    -- and offhand_unit a unit path on the next husk spawn. Every malformed
+    -- shape below must change no store and must not be rebroadcast.
+
+    local function offhand_payload(field, value)
+        local payload = { slot = "tpl", kind = "offhand", offhand_unit = "units/x",
+            hand_field = "left_hand_unit" }
+        if field then payload[field] = value end
+        return payload
+    end
+    local function bad_payloads()
+        return {
+            { "hand_field_unknown", offhand_payload("hand_field", "material_settings_name") },
+            { "hand_field_number", offhand_payload("hand_field", 42) },
+            { "offhand_unit_table", offhand_payload("offhand_unit", {}) },
+            { "slot_number", offhand_payload("slot", 7) },
+            { "kind_bogus", { slot = "tpl", kind = "bogus", armoury_key = "KruberPure" } },
+        }
+    end
+
+    H.test("cos #416 host refuses malformed apply requests without storing or rebroadcasting", function()
+        for _, case in ipairs(bad_payloads()) do
+            build({ is_server = true, host_peer = "local-peer" })
+            handlers["cos_la_apply_req"]("peerA", 2, case[2])
+            restore_globals()
+            H.equal(mod._offhand_mesh_by_peer.peerA, nil, case[1] .. ": offhand store")
+            H.equal(la_equips_by_peer.peerA, nil, case[1] .. ": LA store")
+            H.equal(#sends, 0, case[1] .. ": rebroadcast")
+        end
+    end)
+
+    H.test("cos #416 client refuses malformed host broadcasts without storing", function()
+        local cases = bad_payloads()
+        local numeric_wearer = offhand_payload()
+        numeric_wearer.wearer_peer_id = 9
+        cases[#cases + 1] = { "wearer_peer_id_number", numeric_wearer }
+        for _, case in ipairs(cases) do
+            build({ host_peer = "remote-host" })
+            local payload = case[2]
+            if payload.wearer_peer_id == nil then payload.wearer_peer_id = "peerA" end
+            handlers["cos_la_apply"]("remote-host", 2, payload)
+            restore_globals()
+            H.equal(mod._offhand_mesh_by_peer.peerA, nil, case[1] .. ": offhand store")
+            H.equal(mod._offhand_mesh_by_peer[9], nil, case[1] .. ": offhand store (numeric wearer)")
+            H.equal(la_equips_by_peer.peerA, nil, case[1] .. ": LA store")
+            H.equal(la_equips_by_peer[9], nil, case[1] .. ": LA store (numeric wearer)")
+            H.equal(#entry_pending, 0, case[1] .. ": retry queue")
+            H.equal(#sends, 0, case[1] .. ": send")
+        end
+    end)
+
+    H.test("cos #416 a valid hand payload and the empty CLEAR still store and rebroadcast", function()
+        build({ is_server = true, host_peer = "local-peer" })
+        handlers["cos_la_apply_req"]("peerA", 2, offhand_payload())
+        H.equal(mod._offhand_mesh_by_peer.peerA.tpl.left_hand_unit, "units/x")
+        H.equal(#sends, 1)
+        H.equal(sends[1].payload.offhand_unit, "units/x")
+        H.equal(sends[1].payload.hand_field, "left_hand_unit")
+        handlers["cos_la_apply_req"]("peerA", 2, offhand_payload("offhand_unit", ""))
+        H.equal(mod._offhand_mesh_by_peer.peerA.tpl.left_hand_unit, nil, "CLEAR removed the hand")
+        H.equal(#sends, 2)
+        H.equal(sends[2].payload.offhand_unit, "")
+        restore_globals()
+
+        build({ host_peer = "remote-host" })
+        local payload = offhand_payload("hand_field", "right_hand_unit")
+        payload.wearer_peer_id = "peerA"
+        handlers["cos_la_apply"]("remote-host", 2, payload)
+        restore_globals()
+        H.equal(mod._offhand_mesh_by_peer.peerA.tpl.right_hand_unit, "units/x")
+    end)
+
+    H.test("cos #416 policy keeps only known fields and reports a reason", function()
+        local Policy = assert(loadfile(repo_root .. "/" .. base .. "_cos_la_payload_policy.lua"))()
+        local clean, reason = Policy.clean({ slot = "tpl", kind = "hat", armoury_key = "KruberPure",
+            vanilla_key = "es_hat_01", wearer_career = "es_knight", extra = "x" }, false)
+        H.equal(reason, nil)
+        H.equal(clean.extra, nil, "unknown fields are dropped")
+        H.equal(clean.armoury_key, "KruberPure")
+        H.equal(select(2, Policy.clean("not a table", false)), "payload_type")
+        H.equal(select(2, Policy.clean({ slot = "a\nb" }, false)), "slot")
+        H.equal(select(2, Policy.clean({ slot = string.rep("s", 129) }, false)), "slot")
+        H.equal(select(2, Policy.clean({ slot = "tpl", offhand_unit = string.rep("u", 201) }, false)),
+            "offhand_unit")
+        H.equal(select(2, Policy.clean({ slot = "tpl", kind = "hat", revert = false }, false)), "revert")
+        H.equal(select(2, Policy.clean({ slot = "tpl", kind = "hat", revert = true }, true)),
+            "wearer_peer_id")
+        H.equal(Policy.clean({ slot = "tpl", kind = "hat", revert = true, wearer_peer_id = "p" }, true).revert,
+            true)
     end)
 
     -- ---- the matched pair: getter vs by-value -------------------------------

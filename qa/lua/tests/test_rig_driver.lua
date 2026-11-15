@@ -530,4 +530,94 @@ return {
         H.equal(count(banner, tag .. "NOTE id=smoke%-keep key=staged:VMF value=\"2%.0%.0 %(checked against the load banner by run%.ps1%)\""), 1,
             "a mod without MOD_VERSION is left to the host banner check")
     end)
+
+    -- OM.minted judges each slot the way vanilla's broken-slot rule does
+    -- (Vermintide-2-Source-Code/scripts/managers/backend_playfab/playfab_mirror_base.lua:1600-1631):
+    -- cosmetic slots (cosmetic_utils.lua:77-81,104) hold keys in _unlocked_cosmetics, slot_pose a key unlocked under
+    -- ItemMasterList[key].parent in _unlocked_weapon_poses, every other slot a backend id in _inventory_items.
+    local function load_om(mirror_state, forged)
+        local env = setmetatable({}, { __index = _G })
+        env.Managers = { backend = { get_backend_mirror = function() return mirror_state end } }
+        env.ItemMasterList = { pose_ok = { parent = "es_1h_sword" }, pose_locked = { parent = "es_1h_sword" } }
+        env.get_mod = function(mod_id)
+            if mod_id == "cim" then
+                return { get = function(_, key) return key == "forged_weapons" and forged or nil end }
+            end
+        end
+        local chunk = assert(loadfile(repo_root .. "/qa/runtime/_shared/official_mirror.lua"))
+        setfenv(chunk, env)
+        return chunk()
+    end
+
+    local function om_world()
+        local row = { slot_hat = "hat_ok", slot_frame = "frame_ok", slot_skin = "skin_ok", slot_pose = "pose_ok",
+            slot_melee = "id_ok", talents = "1,1,1" }
+        local acked = {}
+        for key, value in pairs(row) do
+            acked[key] = value
+        end
+        return {
+            _career_data = { es_mercenary = { row } },
+            _career_data_mirror = { es_mercenary = { acked } },
+            _unlocked_cosmetics = { hat_ok = true, frame_ok = true, skin_ok = true, cwv_es_hat_001 = true },
+            _unlocked_weapon_poses = { es_1h_sword = { pose_ok = true } },
+            _inventory_items = { id_ok = { CustomData = {} }, id_cim = { CustomData = { cim_provider = "forge" } }, id_forged = {} },
+        }
+    end
+
+    local function set_slot(world, slot, value)
+        world._career_data.es_mercenary[1][slot] = value
+        world._career_data_mirror.es_mercenary[1][slot] = value
+    end
+
+    H.test("rig OM: cosmetic, pose and inventory slots are judged the way the game does", function()
+        local world = om_world()
+        local OM = load_om(world, { id_forged = {} })
+        H.equal(OM.baseline_clean(), true, "owned cosmetic keys, an unlocked pose and an inventory id are clean")
+        for slot, value in pairs({ slot_hat = "hat_ok", slot_frame = "frame_ok", slot_skin = "skin_ok", slot_pose = "pose_ok", slot_melee = "id_ok" }) do
+            H.equal(OM.minted(value, slot), false, slot .. " " .. value .. " is owned")
+        end
+        H.equal(OM.minted("id_ok"), false, "no slot means a backend id")
+
+        local bad = {
+            { slot = "slot_hat", value = "hat_locked", why = "not in _unlocked_cosmetics" },
+            { slot = "slot_frame", value = "frame_locked", why = "not in _unlocked_cosmetics" },
+            { slot = "slot_skin", value = "skin_locked", why = "not in _unlocked_cosmetics" },
+            { slot = "slot_pose", value = "pose_locked", why = "pose not unlocked" },
+            { slot = "slot_pose", value = "pose_unknown", why = "unknown item key" },
+            { slot = "slot_melee", value = "id_missing", why = "not in _inventory_items" },
+            { slot = "slot_hat", value = "cwv_es_hat_001", why = "cwv id" },
+            { slot = "slot_melee", value = "id_cim", why = "cim row" },
+            { slot = "slot_melee", value = "id_forged", why = "cim forged_weapons" },
+        }
+        for _, case in ipairs(bad) do
+            local w = om_world()
+            set_slot(w, case.slot, case.value)
+            local om = load_om(w, { id_forged = {} })
+            local minted, why = om.minted(case.value, case.slot)
+            H.equal(minted, true, case.slot .. " " .. case.value .. " is minted")
+            H.equal(why, case.why, case.slot .. " " .. case.value .. " reason")
+            H.equal(om.baseline_clean(), false, case.slot .. " " .. case.value .. " makes the baseline dirty")
+        end
+        H.equal(OM.minted("hat_ok"), true, "a cosmetic key judged as a backend id is not in _inventory_items")
+    end)
+
+    H.test("rig OM: assert_clean passes the slot to OM.minted", function()
+        local world = om_world()
+        local OM = load_om(world, {})
+        local failed = {}
+        local T = {
+            expect = function(cond, label)
+                if not cond then
+                    failed[#failed + 1] = label
+                end
+            end,
+        }
+        OM.assert_clean(T, "clean")
+        H.equal(#failed, 0, "no INV-A or INV-B failure on owned keys: " .. table.concat(failed, " | "))
+        set_slot(world, "slot_skin", "skin_locked")
+        OM.assert_clean(T, "dirty")
+        H.equal(#failed, 1, "one failure for the locked skin")
+        H.truthy(failed[1] and failed[1]:find("INV%-A dirty es_mercenary%[1%]%.slot_skin .*not in _unlocked_cosmetics"), "INV-A names the slot and reason: " .. tostring(failed[1]))
+    end)
 end

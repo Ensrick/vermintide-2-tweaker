@@ -62,8 +62,10 @@
 --   `install(mod, deps)`      at former entry line 2378. Defines the identity,
 --                             send and queue layers. Registers NOTHING - no
 --                             mod:hook, mod:hook_safe, mod:hook_origin,
---                             mod:command, mod:network_register or mod:dofile -
---                             so this phase cannot move a registration even in
+--                             mod:command or mod:network_register, and its one
+--                             mod:dofile loads the pure payload policy
+--                             (_cos_la_payload_policy, WP-COS-01) - so this
+--                             phase cannot move a registration even in
 --                             principle.
 --   `owner.install_receivers()` at former entry line 3192. Runs the six
 --                             registrations (4 network_register + the
@@ -133,6 +135,10 @@
 local LaSyncTransport = {}
 
 function LaSyncTransport.install(mod, deps)
+    -- WP-COS-01 (A3-F04, #416): field validation for inbound peer payloads.
+    -- Pure module, registers nothing; also read by issue416_payload_policy.
+    local Policy = mod:dofile("scripts/mods/cosmetics_tweaker/_cos_la_payload_policy")
+    mod._cos_la_payload_policy = Policy
     deps = deps or {}
 
     local COS_RPC_SCHEMA     = assert(deps.rpc_schema, "rpc_schema is required")
@@ -151,6 +157,20 @@ function LaSyncTransport.install(mod, deps)
     -- The rebound LA retry queue crosses the chunk boundary as a late-binding
     -- accessor, never as an install-time value. See ENTRY-OWNED STATE above.
     local _get_la_pending_apply = assert(deps.get_la_pending_apply, "get_la_pending_apply is required")
+
+    -- WP-COS-01: both receivers clean an inbound payload right after their
+    -- schema check. A rejection prints one engine line (visible with mod
+    -- logging OFF), at most 16 per session.
+    local _payload_rejects = 0
+    local function _clean_payload(sender_peer_id, payload, from_host)
+        local clean, reason = Policy.clean(payload, from_host)
+        if not clean and _payload_rejects < 16 then
+            _payload_rejects = _payload_rejects + 1
+            if printf then printf("[cos:416] payload rejected peer=%s reason=%s",
+                tostring(sender_peer_id), tostring(reason)) end
+        end
+        return clean
+    end
 
     -- DEVIATION (#1159): forward declaration. In the entry `_send_la_apply` was
     -- declared `local` ~1700 lines above its assignment, so the lexically
@@ -703,6 +723,8 @@ function LaSyncTransport.install(mod, deps)
                     tostring(sender_peer_id), tostring(schema_version), COS_RPC_SCHEMA) end
                 return
             end
+            payload = _clean_payload(sender_peer_id, payload, false)  -- WP-COS-01
+            if not payload then return end
             if not _is_local_server() then return end  -- defense in depth
             if type(payload) ~= "table" or not sender_peer_id then return end
             local slot_name   = payload.slot
@@ -1017,6 +1039,7 @@ function LaSyncTransport.install(mod, deps)
                     tostring(sender_peer_id), tostring(schema_version), COS_RPC_SCHEMA) end
                 return
             end
+            payload = _clean_payload(sender_peer_id, payload, true)  -- WP-COS-01
             if type(payload) ~= "table" then return end
             local host = _host_peer_id()
             if host and sender_peer_id ~= host then
