@@ -353,6 +353,7 @@ local suites = {
     "test_cim_regression_harness_1656",
     "test_cim_forge_realm_diagnostic",
     "test_cim_favorite_persistence",
+    "test_cim_commit_gate",
     "test_woc_wire_policy",
 	"test_woc_boss_weapon_catalog",
 	"test_cim_external_trait_policy",
