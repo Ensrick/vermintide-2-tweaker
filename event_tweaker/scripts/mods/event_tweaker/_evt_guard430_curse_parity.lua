@@ -47,8 +47,8 @@ local mod = get_mod("event_tweaker")
 -- HOT-JOIN CONTRACT. A roster beacon is too late for a new peer: vanilla adds
 -- the peer to GameSession (which starts game-object replication) before
 -- PlayerManager.add_remote_player makes it visible to the beacon. While a
--- package-bearing curse is selected or active, GameModeBase.is_joinable is
--- therefore forced false. PeerStates.Connecting checks that method before it
+-- package-bearing curse is selected or active, is_joinable on the live game
+-- mode classes (JoinPolicy.JOIN_LOCK_CLASSES) is therefore forced false. PeerStates.Connecting checks that method before it
 -- sends rpc_notify_connected, well before GameSession.add_peer. Existing peers
 -- still need positive parity, and any already-pending, not-yet-represented peer
 -- makes the selection fail closed. This deliberately blocks ALL hot joins for
@@ -58,7 +58,7 @@ local mod = get_mod("event_tweaker")
 -- Owned by: event_tweaker.lua entry point (dofile'd before _evt_selection, which
 -- localizes ET.curse_wire_safe at its top). Consumed via mod._evt export:
 -- curse_wire_safe. Also publishes mod._et_peer_parity (the beacon instance) for
--- the regression suite. Owns GameModeBase.is_joinable and the
+-- the regression suite. Owns is_joinable on JoinPolicy.JOIN_LOCK_CLASSES and the
 -- GameNetworkManager.remove_peer retirement hook. The beacon polls the player
 -- roster and drives itself off the preserved mod.update chain.
 
@@ -127,12 +127,17 @@ ET.set_shadow_session_requested = _set_shadow_requested
 ET.set_shadow_session_active = _set_shadow_active
 ET.curse_session_locked = function() return _curse_session_locked end
 
--- Pre-flight completed before adding a new hook: event_tweaker had no existing
--- GameModeBase.is_joinable hook. Adventure inherits this implementation.
-mod:hook("GameModeBase", "is_joinable", function(func, self, ...)
-    local vanilla_joinable = func(self, ...)
-    return JoinPolicy.allow_join(vanilla_joinable, _curse_session_locked)
-end)
+-- Pre-flight completed before adding these hooks: event_tweaker has no other
+-- is_joinable hook on any of JoinPolicy.JOIN_LOCK_CLASSES. WP-CW-01: vanilla
+-- class() copied GameModeBase.is_joinable into each subclass at definition
+-- time, so the lock hooks the derived classes the engine instantiates.
+JoinPolicy.install_join_lock(function(class_name, method, handler)
+    if rawget(_G, class_name) then
+        mod:hook(class_name, method, handler)
+    else
+        pcall(printf, "[et:430] join lock class missing: %s", tostring(class_name))
+    end
+end, function() return _curse_session_locked end)
 
 -- Capture the complete local wire proof before the beacon exists. Presence is
 -- not compatibility: the same names may have different process-local numeric
@@ -386,4 +391,24 @@ rt_register("issue430_hotjoin_session_contract", function()
     if JoinPolicy.can_arm(true, nil) ~= false then return "unknown pending-peer state must fail closed" end
     if JoinPolicy.can_arm(true, true) ~= false then return "pending peer must block curse arming" end
     if JoinPolicy.can_arm(true, false) ~= true then return "confirmed closed peer set should arm" end
+end)
+
+rt_register("issue430_join_lock_reaches_instances", function()
+    -- WP-CW-01: the lock must be on the live derived classes, not GameModeBase.
+    -- Calls each class's installed is_joinable with the lock forced both ways
+    -- and restores the real lock state before returning.
+    for _, name in ipairs(JoinPolicy.JOIN_LOCK_CLASSES) do
+        local cls = rawget(_G, name)
+        if type(cls) ~= "table" then return name .. " missing" end
+        local saved = _curse_session_locked
+        _curse_session_locked = true
+        local ok, res = pcall(cls.is_joinable, {})
+        _curse_session_locked = saved
+        if not (ok and res == false) then return name .. " not locked" end
+        saved = _curse_session_locked
+        _curse_session_locked = false
+        ok, res = pcall(cls.is_joinable, {})
+        _curse_session_locked = saved
+        if not (ok and res == true) then return name .. " not open when unlocked" end
+    end
 end)
