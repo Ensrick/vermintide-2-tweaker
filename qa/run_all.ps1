@@ -204,6 +204,48 @@ function Run-ScopedCheck {
     Write-Host ""
 }
 
+# WP-P-06 step 7: run one check script on a thread job while the main thread
+# runs another; Complete-QaParallelCheck replays its captured output under its
+# own header and applies the normal Run-Check policy to its exit code. A job
+# crash surfaces as a Run-Check crash (blocking infrastructure failure).
+function Test-QaParallelAvailable {
+    return [bool](Get-Command Start-ThreadJob -ErrorAction SilentlyContinue)
+}
+
+function Start-QaParallelCheck {
+    param([Parameter(Mandatory)][string]$Script, [bool]$BeQuiet = $false)
+    return Start-ThreadJob -ArgumentList $Script, $BeQuiet, (Get-Location).Path -ScriptBlock {
+        param([string]$CheckScript, [bool]$CheckQuiet, [string]$Location)
+        Set-Location -LiteralPath $Location
+        $global:LASTEXITCODE = 0
+        $lines = @(& $CheckScript -Quiet:$CheckQuiet *>&1 | ForEach-Object { "$_" })
+        [pscustomobject]@{ Lines = $lines; ExitCode = [int]$global:LASTEXITCODE }
+    }
+}
+
+function Complete-QaParallelCheck {
+    param(
+        [Parameter(Mandatory)][string]$Name,
+        [Parameter(Mandatory)]$Job,
+        [ValidateSet('Standard', 'Blocking', 'Advisory')][string]$Policy = 'Standard'
+    )
+    $script:parallelResult = $null
+    $script:parallelError = $null
+    try {
+        $script:parallelResult = @(Receive-Job -Job $Job -Wait -ErrorAction Stop) | Select-Object -Last 1
+        if ($null -eq $script:parallelResult) { $script:parallelError = "thread job for $Name returned no result" }
+    } catch {
+        $script:parallelError = "thread job for ${Name} failed: $($_.Exception.Message)"
+    } finally {
+        Remove-Job -Job $Job -Force -ErrorAction SilentlyContinue
+    }
+    Run-Check $Name {
+        if ($null -ne $script:parallelError) { throw $script:parallelError }
+        foreach ($line in @($script:parallelResult.Lines)) { Write-Host $line }
+        $global:LASTEXITCODE = [int]$script:parallelResult.ExitCode
+    } -Policy $Policy
+}
+
 function Confirm-QAWorktreePurity {
     if ($FixStale) {
         Write-Host "[worktree-purity] SKIP - -FixStale explicitly authorizes documentation edits." -ForegroundColor DarkYellow
@@ -328,6 +370,39 @@ function Invoke-PolicySelfTest {
         }
     }
 
+    # WP-P-06 step 7: a thread-job check keeps its output and its exit-code
+    # policy, and a crash inside the job is still an infrastructure failure.
+    if (Test-QaParallelAvailable) {
+        $parallelDir = Join-Path ([IO.Path]::GetTempPath()) ('vt2-run-all-parallel-' + [guid]::NewGuid().ToString('N'))
+        try {
+            [void][IO.Directory]::CreateDirectory($parallelDir)
+            foreach ($parallelFixture in @(
+                @{ Name = 'error'; Body = "Write-Host 'fixture-parallel-line'`nexit 2"; Expected = 2; Infra = 0; Line = $true },
+                @{ Name = 'warning'; Body = "Write-Host 'fixture-parallel-line'`nexit 1"; Expected = 0; Infra = 0; Line = $true },
+                @{ Name = 'crash'; Body = "throw 'planted thread-job failure'"; Expected = 99; Infra = 1; Line = $false }
+            )) {
+                $fixtureScript = Join-Path $parallelDir ("fixture-{0}.ps1" -f $parallelFixture.Name)
+                [IO.File]::WriteAllText($fixtureScript, "param([switch]`$Quiet)`n" + $parallelFixture.Body + "`n")
+                $script:blockingExit = 0; $script:warnings = @(); $script:infrastructureFailures = @()
+                $parallelOutput = & {
+                    $job = Start-QaParallelCheck -Script $fixtureScript
+                    Complete-QaParallelCheck -Name ("parallel-fixture-" + $parallelFixture.Name) -Job $job
+                } 6>&1 | Out-String
+                $lineOk = (-not $parallelFixture.Line) -or $parallelOutput.Contains('fixture-parallel-line')
+                if ($script:blockingExit -ne $parallelFixture.Expected -or
+                        $script:infrastructureFailures.Count -ne $parallelFixture.Infra -or -not $lineOk) {
+                    $failures += "parallel check fixture '$($parallelFixture.Name)' gave exit $($script:blockingExit)"
+                } else {
+                    Write-Host "[qa-parallel:selftest] PASS $($parallelFixture.Name)" -ForegroundColor Green
+                }
+            }
+        } finally {
+            if (Test-Path -LiteralPath $parallelDir) { Remove-Item -LiteralPath $parallelDir -Recurse -Force }
+        }
+    } else {
+        Write-Host '[qa-parallel:selftest] SKIP - Start-ThreadJob is unavailable in this host; checks run in order.' -ForegroundColor DarkYellow
+    }
+
     try {
         Invoke-QAWorktreeStateSelfTest
     } catch {
@@ -418,10 +493,14 @@ Run-Check "check_wt_history_source_freshness" { & (Join-Path $here "check_wt_his
 # receipt binding it to the exact dirty source snapshot that will be committed.
 # BuildOnly skips the stale pre-build receipt, then writes and validates the new
 # one before returning. Ordinary local/hosted QA remains fail-closed.
-if (-not $SkipBuildReceipts) {
+# WP-P-06 step 7: where Start-ThreadJob exists (PowerShell 7) the check is
+# started next to lua_unit_tests below, so exactly those two overlap, and is
+# reported right after it. Without thread jobs it runs here, as before.
+$script:receiptJob = $null
+if (-not $SkipBuildReceipts -and -not (Test-QaParallelAvailable)) {
     Run-Check "check_build_receipts"           { & (Join-Path $here "check_build_receipts.ps1")               -Quiet:$Quiet }
 }
-elseif (-not $Quiet) {
+elseif ($SkipBuildReceipts -and -not $Quiet) {
     Write-Host "===== check_build_receipts =====" -ForegroundColor Cyan
     Write-Host "[check_build_receipts] SKIP - build-only pipeline fingerprints, generates, then validates the exact receipt." -ForegroundColor DarkYellow
     Write-Host ""
@@ -524,7 +603,24 @@ Run-Check "check_lua_parse"                    { & (Join-Path $here "check_lua_p
 # Pure Lua transformations run under the pinned, offline Lua 5.1 host runtime.
 # Keep this before the Quick return: it is deliberately part of both fast local
 # feedback and the full CI gate (issue #544).
-Run-Check "lua_unit_tests"                    { & (Join-Path $here "check_lua_unit_tests.ps1")               -Quiet:$Quiet }
+# WP-P-06 step 7: check_build_receipts (deferred above) overlaps this check on
+# a thread job and is replayed under its own header right after it. Optional
+# git index locks are off while both run, so neither refreshes the index.
+if (-not $SkipBuildReceipts -and (Test-QaParallelAvailable)) {
+    $previousOptionalLocks = $env:GIT_OPTIONAL_LOCKS
+    try {
+        $env:GIT_OPTIONAL_LOCKS = '0'
+        $script:receiptJob = Start-QaParallelCheck -Script (Join-Path $here "check_build_receipts.ps1") -BeQuiet ([bool]$Quiet)
+        Run-Check "lua_unit_tests"                    { & (Join-Path $here "check_lua_unit_tests.ps1")               -Quiet:$Quiet }
+        Complete-QaParallelCheck -Name "check_build_receipts" -Job $script:receiptJob
+    } finally {
+        if ($null -eq $previousOptionalLocks) { Remove-Item Env:GIT_OPTIONAL_LOCKS -ErrorAction SilentlyContinue }
+        else { $env:GIT_OPTIONAL_LOCKS = $previousOptionalLocks }
+    }
+}
+else {
+    Run-Check "lua_unit_tests"                    { & (Join-Path $here "check_lua_unit_tests.ps1")               -Quiet:$Quiet }
+}
 # WP-H-13: a malformed rig test script or plan fails here in seconds, not in a
 # rig run. Blocking, scoped to qa/runtime/** (and its own checker and fixtures).
 Run-ScopedCheck $script:qaScopeRuntimeScripts "check_runtime_scripts" { & (Join-Path $here "check_runtime_scripts.ps1") -Quiet:$Quiet } -Policy 'Blocking'

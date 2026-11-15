@@ -1,5 +1,5 @@
 local mod = get_mod("character_dialogue")
-local MOD_VERSION = "0.1.15-dev"
+local MOD_VERSION = "0.1.16-dev"
 -- Fatshark keeps DialogueQueries local to dialogue_system.lua; it is not a
 -- global like TagQueryDatabase.  Resolve the canonical module before asking
 -- VMF to install the hook, otherwise VMF receives nil and emits a startup
@@ -609,18 +609,7 @@ mod:command("cd_line", "Set a line: /cd_line <event> enable|disable|default", fu
 end)
 mod:command("cd_regression_test", "Character Dialogue self-check", function()
     local failures = 0
-    if Policy.parse_override_state("enable") ~= true
-       or Policy.parse_override_state("disable") ~= false
-       or Policy.parse_override_state("default") ~= nil then
-        failures = failures + 1
-    end
     local entries = catalogue()
-    local seen = {}
-    for i = 1, #entries do
-        local id = entries[i][1]
-        if type(id) ~= "string" or id == "" or seen[id] then failures = failures + 1; break end
-        seen[id] = true
-    end
     local groups = Browser.groups(entries, "")
     local grouped = 0
     for i = 1, #groups do grouped = grouped + groups[i].count end
@@ -629,30 +618,67 @@ mod:command("cd_regression_test", "Character Dialogue self-check", function()
         if Browser.is_browsable(entries[i]) then browsable = browsable + 1 end
         if type(entries[i][5]) == "number" and entries[i][5] > 0 then timed = timed + 1 end
     end
-    if timed ~= #entries then failures = failures + 1 end
-    if grouped ~= browsable then failures = failures + 1 end
     local page = Browser.page(entries, "kruber", "", 0, Browser.PAGE_LIMIT)
-    if #page > Browser.PAGE_LIMIT then failures = failures + 1 end
-    if PreviewResidency.package_for_source("hero_conversations_dlc_morris_ingame")
-       ~= PreviewResidency.MORRIS_PACKAGE
-       or PreviewResidency.package_for_source("hero_conversations_dlc_morris_pat_tower")
-       ~= PreviewResidency.MORRIS_PACKAGE
-       or PreviewResidency.package_for_source("hero_conversations_dlc_holly") ~= nil then
-        failures = failures + 1
-    end
-    -- #998 isolation ownership: mute on first owner, restore only on last,
-    -- replacement holds, pause holds, every termination edge releases.
-    local iso1, act1 = PreviewPolicy.isolation_acquire(PreviewPolicy.isolation_new(), PreviewPolicy.PREVIEW_OWNER)
-    local iso2, act2 = PreviewPolicy.isolation_acquire(iso1, PreviewPolicy.MANUAL_OWNER)
-    local iso3, act3 = PreviewPolicy.isolation_release(iso2, PreviewPolicy.PREVIEW_OWNER)
-    local _, act4 = PreviewPolicy.isolation_release(iso3, PreviewPolicy.MANUAL_OWNER)
-    if act1 ~= "mute" or act2 ~= "none" or act3 ~= "none" or act4 ~= "restore"
-       or PreviewPolicy.isolation_edge("replace", true) ~= "hold"
-       or PreviewPolicy.isolation_edge("replace", false) ~= "release"
-       or PreviewPolicy.isolation_edge("stop", true) ~= "release"
-       or PreviewPolicy.isolation_edge("play_failed", true) ~= "release"
-       or PreviewPolicy.isolation_edge("pause", true) ~= "none" then
-        failures = failures + 1
+    -- WP-COS-02: one named verdict line per check; the summary line below stays.
+    local checks = {
+        { "override_state_parsing", function()
+            if Policy.parse_override_state("enable") ~= true
+               or Policy.parse_override_state("disable") ~= false
+               or Policy.parse_override_state("default") ~= nil then
+                return "enable / disable / default do not parse to true / false / nil"
+            end
+        end },
+        { "catalogue_unique_events", function()
+            local seen = {}
+            for i = 1, #entries do
+                local id = entries[i][1]
+                if type(id) ~= "string" or id == "" or seen[id] then return "empty or duplicate event at entry " .. i end
+                seen[id] = true
+            end
+        end },
+        { "catalogue_durations", function()
+            if timed ~= #entries then return string.format("%d of %d entries carry a duration", timed, #entries) end
+        end },
+        { "browser_group_totals", function()
+            if grouped ~= browsable then return string.format("groups hold %d, browsable %d", grouped, browsable) end
+        end },
+        { "browser_page_cap", function()
+            if #page > Browser.PAGE_LIMIT then return string.format("page holds %d, cap %d", #page, Browser.PAGE_LIMIT) end
+        end },
+        { "morris_package_mapping", function()
+            if PreviewResidency.package_for_source("hero_conversations_dlc_morris_ingame")
+               ~= PreviewResidency.MORRIS_PACKAGE
+               or PreviewResidency.package_for_source("hero_conversations_dlc_morris_pat_tower")
+               ~= PreviewResidency.MORRIS_PACKAGE
+               or PreviewResidency.package_for_source("hero_conversations_dlc_holly") ~= nil then
+                return "Morris sources do not map to exactly the one Morris package"
+            end
+        end },
+        -- #998 isolation ownership: mute on first owner, restore only on last,
+        -- replacement holds, pause holds, every termination edge releases.
+        { "isolation_owner_tokens", function()
+            local iso1, act1 = PreviewPolicy.isolation_acquire(PreviewPolicy.isolation_new(), PreviewPolicy.PREVIEW_OWNER)
+            local iso2, act2 = PreviewPolicy.isolation_acquire(iso1, PreviewPolicy.MANUAL_OWNER)
+            local iso3, act3 = PreviewPolicy.isolation_release(iso2, PreviewPolicy.PREVIEW_OWNER)
+            local _, act4 = PreviewPolicy.isolation_release(iso3, PreviewPolicy.MANUAL_OWNER)
+            if act1 ~= "mute" or act2 ~= "none" or act3 ~= "none" or act4 ~= "restore"
+               or PreviewPolicy.isolation_edge("replace", true) ~= "hold"
+               or PreviewPolicy.isolation_edge("replace", false) ~= "release"
+               or PreviewPolicy.isolation_edge("stop", true) ~= "release"
+               or PreviewPolicy.isolation_edge("play_failed", true) ~= "release"
+               or PreviewPolicy.isolation_edge("pause", true) ~= "none" then
+                return "isolation owner tokens or termination edges changed"
+            end
+        end },
+    }
+    for _, check in ipairs(checks) do
+        local ok, err = pcall(check[2])
+        if ok and err == nil then
+            mod:echo("  PASS: %s", check[1])
+        else
+            failures = failures + 1
+            mod:echo("  FAIL: %s -- %s", check[1], tostring(err))
+        end
     end
     mod:echo("Character Dialogue v%s: catalogue=%d timed=%d browsable=%d grouped=%d visible_cap=%d overrides=%d failures=%d",
         MOD_VERSION, #entries, timed, browsable, grouped, #page, table.size(overrides), failures)

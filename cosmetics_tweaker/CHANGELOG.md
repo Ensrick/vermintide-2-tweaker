@@ -1,5 +1,15 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.232-dev (2026-11-15) -- Vacuous regression checks report SKIP (WP-COS-02)
+
+- `/cos_regression_test` now reads a check's `skip: <reason>` return as SKIP
+  (same line as the context-absent SKIP), and every PASS / FAIL / SKIP also
+  goes to the game log as `[cos-regression] ...` (audit finding A3-F12).
+- Seven checks that used to return a silent PASS when their subject was
+  missing (LA absent, dormant MH embed, unreachable unlock or localization
+  table, unregistered LA bridge, package manager not up) now return SKIP with
+  that reason. No check was renamed or removed. Not confirmed in game.
+
 ## 0.9.231-dev (2026-11-14) -- Validate peer cosmetic payloads before storing (WP-COS-01)
 
 - A lobby peer could send a `cos_la_apply_req` / `cos_la_apply` payload with a
