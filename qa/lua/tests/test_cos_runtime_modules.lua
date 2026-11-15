@@ -151,7 +151,8 @@ return function(H, repo_root)
         -- 62 -> 64: #696 prespawn-lease + #1147 surface-glow checks (2026-08-16).
         -- 64 -> 65: WP-COS-01 issue416_payload_policy (2026-11-14).
         -- 65 -> 66: WP-COS-04 husk_wield_no_swallowed_errors (2026-11-15).
-        H.equal(#checks, 66)
+        -- 66 -> 67: WP-COS-05 mil_provider_identity (2026-11-15).
+        H.equal(#checks, 67)
         H.equal(checks[1].name, "cos_la_reconcile_and_pull_wired")
         H.equal(checks[2].name, "cos_replay_reconciler_wired")
         -- #25: the cold-load contract must stay registered directly after the
@@ -257,7 +258,7 @@ return function(H, repo_root)
             end
         end, deps)
         H.equal(calls, 1)
-        H.equal(#names, 66)  -- WP-COS-01 issue416_payload_policy, WP-COS-04 husk_wield_no_swallowed_errors
+        H.equal(#names, 67)  -- WP-COS-01 issue416_payload_policy, WP-COS-04 husk_wield_no_swallowed_errors, WP-COS-05 mil_provider_identity
         local window = { "cos_la_revert_recv_deletes_entry", "cos_la_offhand_persistence_roundtrip",
             "cos_la_cosmetic_persistence_roundtrip", "cos_la_cold_load_contract_25",
             "cos_la_loadout_equip_capture_wired" }

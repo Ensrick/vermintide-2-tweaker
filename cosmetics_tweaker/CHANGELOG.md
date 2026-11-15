@@ -1,5 +1,18 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.234-dev (2026-11-15) -- Embedded MoreItemsLibrary retry restored and pinned (WP-COS-05)
+
+- The embedded MoreItemsLibrary retries its backend-mirror hook on every game
+  state change again. The lifecycle owner used to replace that handler
+  instead of chaining it, so the retry never ran (audit findings A3-F03,
+  A3-F08). An error in the chained handler is logged and never stops the
+  cosmetics lifecycle.
+- The embed now records which provider is active (standalone, sibling or
+  embedded) and prints `[cos:mil] backend mirror hooked ...` to the game log
+  when the hook lands. New `/cos_regression_test` check
+  `mil_provider_identity`. The embeds stay where they are. Not confirmed in
+  game.
+
 ## 0.9.233-dev (2026-11-15) -- Swallowed remote wield errors are visible (WP-COS-04)
 
 - The remote-player weapon wield hook still catches errors so a broken weapon

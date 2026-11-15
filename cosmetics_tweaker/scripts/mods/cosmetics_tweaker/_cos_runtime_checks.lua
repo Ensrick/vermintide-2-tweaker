@@ -1248,14 +1248,8 @@ _rt_register("filter_illusion_widgets_hides_named_mat", function()
 end)
 
 _rt_register("la_cache_self_heal_purge_helper", function()
-    -- v0.9.28-dev: the `_purge_stale_peer_slot` helper is the
-    -- self-healing primitive the spawn-monitor calls when it catches a
-    -- CROSS-SKELETON MISMATCH. Without it, `_la_equips_by_peer` accretes
-    -- stale entries when a peer switches career (host log 2026-05-26
-    -- showed Kerillian Maiden Guard hat sitting against the same peer's
-    -- subsequent WHC + Necromancer spawns until disconnect). Test the
-    -- helper directly so a future refactor that breaks the contract is
-    -- caught here, not in the next multiplayer session.
+    -- v0.9.28-dev: `_purge_stale_peer_slot` is the spawn-monitor's self-heal for a
+    -- CROSS-SKELETON MISMATCH (stale `_la_equips_by_peer` entries after a career switch).
     if type(mod._purge_stale_peer_slot) ~= "function" then
         return "mod._purge_stale_peer_slot helper missing"
     end
@@ -1997,6 +1991,13 @@ _rt_register("husk_wield_no_swallowed_errors", function()
     if type(owner) ~= "table" or type(owner.swallowed_errors) ~= "function" then return "husk wield owner missing" end
     if (owner.wields_observed and owner.wields_observed() or 0) == 0 then return "skip: no remote player wield observed" end
     if owner.swallowed_errors() > 0 then return string.format("%d husk wield error(s) swallowed this session ([cos:husk-wield] SWALLOWED)", owner.swallowed_errors()) end
+end)
+
+-- WP-COS-05 (A3-F03): MoreItemsLibrary resolves; an embedded provider is this mod with its mirror hooked.
+_rt_register("mil_provider_identity", function()
+    local mil, provider = get_mod("MoreItemsLibrary"), mod._cos_mil_provider
+    if type(mil) ~= "table" or type(mil.add_mod_items_to_masterlist) ~= "function" then return "MoreItemsLibrary unresolved or missing add_mod_items_to_masterlist" end
+    if provider and provider.state == "embedded" and (mil ~= mod or not (mod._cos_mil_mirror_hooked and mod._cos_mil_mirror_hooked())) then return "embedded MoreItemsLibrary: the handle is not cosmetics_tweaker or the backend mirror hook is not installed" end
 end)
 
 _rt_register("mh_package_single_reference", function()
