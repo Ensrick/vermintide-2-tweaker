@@ -1,5 +1,12 @@
 # Weapon Tweaker Changelog
 
+## 0.12.347-dev (2026-11-15) -- Mirror funnel table exports (WP-WT-04) [not-started]
+
+- Mirror public 0.12.346-beta: export `anim_redirect`, `career_anim_redirect`,
+  `three_p_key_remaps` and `three_p_remap_triggers` for tests. No behaviour
+  change.
+- Runtime parity, Dev namespace and the friends-only overlay are unchanged.
+
 ## 0.12.346-dev (2026-11-14) -- Mirror scriptable regression runner (WP-WT-02) [not-started]
 
 - Mirror public 0.12.345-beta: `mod._wt.run_regression()` returns per-check
