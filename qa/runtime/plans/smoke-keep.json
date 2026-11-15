@@ -1,6 +1,7 @@
 {
   "name": "smoke-keep",
   "mods": ["1369573612"],
+  "expect_mods": ["VMF"],
   "timeout": 300,
   "cases": [
     { "id": "smoke-keep", "arena": "keep", "file": "../_rig/smoke_keep.lua" }

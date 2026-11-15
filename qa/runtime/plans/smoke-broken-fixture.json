@@ -1,0 +1,10 @@
+{
+  "name": "smoke-broken-fixture",
+  "purpose": "WP-H-02 negative control: 9000000099 is not a subscribed Workshop item, so the game logs 'was not found in the workshop folder' (mod_manager.lua:297) and the run must exit 1 on that forbidden line. Never add an allow entry for it.",
+  "mods": ["1369573612", "9000000099"],
+  "expect_mods": ["VMF"],
+  "timeout": 300,
+  "cases": [
+    { "id": "smoke-keep", "arena": "keep", "file": "../_rig/smoke_keep.lua" }
+  ]
+}

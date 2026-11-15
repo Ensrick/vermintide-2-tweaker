@@ -474,6 +474,51 @@ return {
         H.truthy(first(lines, tag .. "CASE END id=need verdict=INCONCLUSIVE .*shared helper official_mirror"), "INCONCLUSIVE names the helper")
     end)
 
+    -- WP-H-02: the real smoke case asserts every VMF mod id of the plan's expect_mods, read from the plan block in
+    -- user settings (the table the bootstrap handed the driver).
+    local function run_smoke(expect_mods)
+        local plan = make_plan({ { id = "smoke-keep", src = read(repo_root .. "/qa/runtime/_rig/smoke_keep.lua") } },
+            { expect_mods = expect_mods })
+        local object, env, lines = boot(plan)
+        local hero = env.Managers.player:local_player().player_unit
+        env.Managers.player.local_player = function()
+            return {
+                player_unit = hero,
+                profile_index = function() return 5 end,
+                career_index = function() return 1 end,
+            }
+        end
+        env.ScriptUnit = {
+            has_extension = function(unit, system)
+                if unit == hero and system == "health_system" then
+                    return { current_health = function() return 150 end }
+                end
+            end,
+        }
+        local mods = {
+            VMF = { get_commands_list = function() return {} end },
+            gt_dev = { MOD_VERSION = "0.2.300-dev" },
+        }
+        env.get_mod = function(name)
+            return mods[name]
+        end
+        H.truthy(run_to_end(object, env), "smoke run completed")
+        return lines
+    end
+
+    H.test("rig smoke case: every expect_mods id loaded is a PASS with versions noted", function()
+        local lines = run_smoke({ "VMF", "gt_dev" })
+        H.equal(count(lines, tag .. "CASE END id=smoke%-keep verdict=PASS"), 1, "smoke case passes")
+        H.equal(count(lines, tag .. "ASSERT id=smoke%-keep n=%d+ PASS label=\"mod gt_dev is loaded\""), 1, "gt_dev asserted")
+        H.equal(count(lines, tag .. "NOTE id=smoke%-keep key=version:gt_dev value=\"0.2.300%-dev\""), 1, "gt_dev version noted")
+        H.equal(count(lines, tag .. "NOTE id=smoke%-keep key=expect_mods value=\"2\""), 1, "two expected mods")
+    end)
+
+    H.test("rig smoke case: an expect_mods id that is not loaded is a FAIL naming it", function()
+        local lines = run_smoke({ "VMF", "missing_mod" })
+        H.truthy(first(lines, tag .. "CASE END id=smoke%-keep verdict=FAIL .*detail=\"mod missing_mod is loaded\""), "FAIL names the missing mod")
+    end)
+
     -- OM.minted judges each slot the way vanilla's broken-slot rule does
     -- (Vermintide-2-Source-Code/scripts/managers/backend_playfab/playfab_mirror_base.lua:1600-1631):
     -- cosmetic slots (cosmetic_utils.lua:77-81,104) hold keys in _unlocked_cosmetics, slot_pose a key unlocked under
