@@ -62,7 +62,14 @@ return {
 		end
 
 		T.step("(b) enabled: cross-career toggle applies")
-		T.set("wt", "unlock_es_mercenary_wh_crossbow", true)
+		-- T.set restores the value after the case; until the driver has it, set
+		-- directly (the rig profile is a copy and is never written back).
+		if T.set then
+			T.set("wt", "unlock_es_mercenary_wh_crossbow", true)
+		else
+			T.note("t_set", "missing; used wt:set")
+			wt:set("unlock_es_mercenary_wh_crossbow", true)
+		end
 		wt.on_setting_changed("unlock_es_mercenary_wh_crossbow")
 		T.expect(contains(can_wield("wh_crossbow"), "es_mercenary"),
 			"enabled: es_mercenary in wh_crossbow.can_wield")
