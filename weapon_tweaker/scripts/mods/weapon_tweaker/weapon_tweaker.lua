@@ -91,7 +91,7 @@ mod:info("[mem-probe] wt weapon_backend: +%.1f MB lua (NOT in the boot_lua total
 -- definitions, lifecycle stub, and dead-only formula checks were deleted under
 -- #433. Saved br_* values remain untouched and the prefix stays reserved.
 
-local MOD_VERSION = "0.12.343-beta"
+local MOD_VERSION = "0.12.344-beta"
 _MEM_PROBE_T0_WT = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
 -- v0.12.73: source-pattern marker constant for the /wt_regression_test
@@ -261,6 +261,7 @@ _migrate_legacy_debug_setting()
 -- mod._wt_tf_*, ...) are a SEPARATE key namespace and are untouched.
 mod._wt = mod._wt or {}
 mod._wt.MOD_VERSION = MOD_VERSION
+mod._wt.is_active = function() return mod:is_enabled() == true end
 
 -- #348 retained producer begin: VMF dofile is not a singleton.
 local _wt348_source_owner = mod:dofile("scripts/mods/weapon_tweaker/_wt_sword_push_combo_owner")
@@ -924,17 +925,8 @@ local function _dbg_dump_local_player_loadout()
     end
 end
 
-mod.on_game_state_changed = function(status, state_name)
-    -- [heap-probe] v0.12.121-dev: per-state-transition lua_heap sampler for the
-    -- 1 GiB lua_heap OOM diagnosis (see memory reference_vt2_lua_heap_1gib_crash).
-    -- Fires on EVERY transition. Routed through mod:debug channel (VMF
-    -- output_mode_debug controls visibility). Instrument only — no fix shipped.
-    local _heap_pre = collectgarbage("count")
-    local since_last = mod._heap_probe_last_kb and (_heap_pre - mod._heap_probe_last_kb) or 0
-    mod:debug("[heap-probe] %s/%s pre-apply: %.1f MB (%.0f KB), since last transition: %+.0f KB",
-        tostring(state_name), tostring(status), _heap_pre / 1024, _heap_pre, since_last)
-    mod._heap_probe_last_kb = _heap_pre
-
+-- WP-WT-01: the one apply pass, shared by state changes and re-enable.
+local function _wt_apply_all()
     mod:info("Weapon Tweaker: Baseline Active")
     mod._force_load_deepwood_runtime_package(true)
     apply_weapon_unlocks()
@@ -957,6 +949,23 @@ mod.on_game_state_changed = function(status, state_name)
     -- so this guarantees bw_necromancer's soul_rip particles are resident before the
     -- staff can be wielded in a mission (2026-06-29 nicho create_particles crash).
     mod._force_load_necromancer_fx_package()
+end
+
+mod.on_game_state_changed = function(status, state_name)
+    -- [heap-probe] v0.12.121-dev: per-state-transition lua_heap sampler for the
+    -- 1 GiB lua_heap OOM diagnosis (see memory reference_vt2_lua_heap_1gib_crash).
+    -- Fires on EVERY transition. Routed through mod:debug channel (VMF
+    -- output_mode_debug controls visibility). Instrument only — no fix shipped.
+    local _heap_pre = collectgarbage("count")
+    local since_last = mod._heap_probe_last_kb and (_heap_pre - mod._heap_probe_last_kb) or 0
+    mod:debug("[heap-probe] %s/%s pre-apply: %.1f MB (%.0f KB), since last transition: %+.0f KB",
+        tostring(state_name), tostring(status), _heap_pre / 1024, _heap_pre, since_last)
+    mod._heap_probe_last_kb = _heap_pre
+
+    -- VMF keeps calling this while disabled, with every hook (and the node
+    -- crash guard) off: re-apply nothing until the mod is enabled again.
+    if not mod._wt.is_active() then return end
+    _wt_apply_all()
     -- Loadout dump on StateIngame entry (routed through mod:debug channel).
     if status == "enter" and state_name == "StateIngame" then
         _dbg_dump_local_player_loadout()
@@ -1011,8 +1020,17 @@ local _wt_rework_runtime = _wt_rework_master_runtime_module.new(
     end)
 mod._wt.rework_master_runtime = _wt_rework_runtime
 
+-- WP-WT-01: re-enable re-applies the saved settings. Must precede the #943
+-- Flame Sword owner install below, which wraps on_enabled.
+mod.on_enabled = function(initial_call)
+    if initial_call then return end
+    _wt_master_toggles.seed(mod)
+    _wt_rework_runtime:sync()
+    _wt_apply_all()
+end
+
 mod:dofile("scripts/mods/weapon_tweaker/_wt_settings_runtime").install({
-    mod = mod, rework_runtime = _wt_rework_runtime,
+    mod = mod, rework_runtime = _wt_rework_runtime, is_active = mod._wt.is_active,
     master_toggles = _wt_master_toggles, backend = weapon_backend,
     apply_weapon_unlocks = apply_weapon_unlocks,
     patch_career_actions = patch_career_actions_on_weapons,
