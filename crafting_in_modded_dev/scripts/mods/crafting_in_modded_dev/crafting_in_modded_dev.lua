@@ -36,7 +36,7 @@ mod._cim959_accessory_property_policy = mod:dofile(
 local _BULK_ACCESSORY_CRAFT = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_bulk_accessory_craft")
 _MEM_PROBE_T0_CIMD = collectgarbage("count")  -- [mem-probe] temp Lua-footprint baseline (lua_heap 1 GiB cap diagnostic)
 
-local MOD_VERSION = "0.8.152-dev"
+local MOD_VERSION = "0.8.153-dev"
 local _bootstrap = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_bootstrap_runtime")({
         mod = mod,
@@ -277,6 +277,7 @@ end
 -- store, persist function, and both engine seams.
 mod._cim_favorite_persistence = mod:dofile(
     "scripts/mods/crafting_in_modded_dev/_cim_favorite_persistence")
+mod._cim_store_policy = mod:dofile("scripts/mods/crafting_in_modded_dev/_cim_store_policy")
 
 -- ============================================================
 -- Forge state owner (persistence + item creation) + #402 career commit guard

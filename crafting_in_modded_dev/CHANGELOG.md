@@ -1,5 +1,22 @@
 # Crafting in Modded Changelog
 
+## 0.8.153-dev (2026-11-15) -- Never write a crafted store that breaks the settings save (#1654, #277)
+
+- Every write of the crafted collection (`forged_weapons`) is validated
+  first. A record holding a table with mixed array and map keys would make
+  VMF's settings save fail for every mod; such a write is now refused with
+  `[cim:store] REFUSED write: record <id> field <path> is not serializable;
+  previous save kept`, and a craft that would cause it fails with
+  `save:store_not_serializable` instead of being published (WP-CIM-06a).
+- A saved record that load rejects (for example a `woc_*` relic) is copied
+  into the new setting `forged_weapons_rejected` under its id (at most 200)
+  instead of being dropped for good.
+- Load writes the store back only when a record was rejected or migrated
+  (promo rarity, missing `via_mirror`); a clean store is left untouched.
+- New pure module `_cim_store_policy.lua`; regression check
+  `issue_cim_store_serializable`.
+- Not confirmed in game.
+
 ## 0.8.152-dev (2026-11-15) -- Restore saved crafts without deleting them or re-saving (#1654)
 
 - The boot restore of saved crafts (`_athanor_inject_all`,

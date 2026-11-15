@@ -23,8 +23,16 @@ return function(ctx)
         "CIM command owner requires legacy entry builder")
     local _forge_detect_mil = assert(ctx.forge_detect_mil,
         "CIM command owner requires MIL detector")
-    local _forge_save = assert(ctx.forge_save,
+    local _forge_save_checked = assert(ctx.forge_save,
         "CIM command owner requires craft persistence")
+    -- WP-CIM-06: the owner's save reports a refused write as `false, reason`
+    -- instead of raising. Owned deletion detects a failed write by a raise, so
+    -- turn the result back into one here.
+    local function _forge_save(source)
+        local saved, save_err = _forge_save_checked(source)
+        if saved == false then error(save_err, 0) end
+        return saved
+    end
     local _modded_loadout_save = assert(ctx.modded_loadout_save,
         "CIM command owner requires loadout persistence")
 

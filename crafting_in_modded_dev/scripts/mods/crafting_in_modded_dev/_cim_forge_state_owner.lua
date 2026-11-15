@@ -62,8 +62,13 @@ return function(context)
         return false
     end
 
-    local function save(source)
-        source = source or forged_weapons
+    -- WP-CIM-06: the pure store policy (loaded by the entry onto the mod). A
+    -- fixture without it keeps the old unvalidated write.
+    local store_policy = mod._cim_store_policy
+    local REJECTED_LIMIT = 200
+    local rejected_full_printed = false
+
+    local function build_save_data(source)
         local save_data = {}
         for backend_id, weapon in pairs(source) do
             save_data[backend_id] = {
@@ -86,14 +91,64 @@ return function(context)
                 favorite = weapon.favorite == true or nil,
             }
         end
+        return save_data
+    end
+
+    -- Throws "store_not_serializable" and keeps the previous save when one
+    -- record would break VMF's settings write for every mod
+    -- (Vermintide-Mod-Framework/vmf/scripts/mods/vmf/modules/core/settings.lua:5-6, 19-33).
+    local function save_strict(source)
+        local save_data = build_save_data(source or forged_weapons)
+        if store_policy then
+            local valid, bad_id, bad_path = store_policy.validate_store(save_data)
+            if not valid then
+                pcall(print_line, "[cim:store] REFUSED write: record %s field %s is not serializable; previous save kept",
+                    tostring(bad_id), tostring(bad_path))
+                error("store_not_serializable", 0)
+            end
+        end
         mod:set("forged_weapons", save_data)
+    end
+
+    -- Never throws: every caller outside the candidate-publish paths.
+    local function save(source)
+        return pcall(save_strict, source)
+    end
+
+    -- A record that load() rejects is kept in forged_weapons_rejected under its
+    -- id instead of being dropped for good (at most REJECTED_LIMIT entries).
+    local function keep_rejected(backend_id, weapon, reason)
+        local stored = mod:get("forged_weapons_rejected")
+        local rejected = {}
+        if type(stored) == "table" then
+            for id, entry in pairs(stored) do rejected[id] = entry end
+        end
+        if rejected[backend_id] ~= nil then return end
+        local count = 0
+        for _ in pairs(rejected) do count = count + 1 end
+        if count >= REJECTED_LIMIT then
+            if not rejected_full_printed then
+                rejected_full_printed = true
+                pcall(print_line, "[cim:store] forged_weapons_rejected is full (%d); later rejected records are not kept",
+                    REJECTED_LIMIT)
+            end
+            return
+        end
+        local entry = { record = weapon, reason = tostring(reason) }
+        if store_policy and not store_policy.is_serializable(entry) then
+            entry = { reason = tostring(reason), unserializable = true }
+        end
+        rejected[backend_id] = entry
+        mod:set("forged_weapons_rejected", rejected)
     end
 
     local function load()
         local save_data = mod:get("forged_weapons")
         if not save_data or type(save_data) ~= "table" then return end
         forged_weapons = {}
+        local rewrite = false
         for backend_id, weapon in pairs(save_data) do
+            if weapon.via_mirror == nil or weapon.rarity == "promo" then rewrite = true end
             local via_mirror = weapon.via_mirror
             if via_mirror == nil then
                 via_mirror = weapon.rarity == "promo"
@@ -124,6 +179,8 @@ return function(context)
             else
                 print_line("[cim:628] rejected saved synthetic item bid=%s reason=%s",
                     tostring(backend_id), tostring(err))
+                keep_rejected(backend_id, weapon, err)
+                rewrite = true
             end
         end
         local glow_count, should_log = mod._cim_custom_glow_notice:observe(
@@ -133,7 +190,9 @@ return function(context)
                 "[cim] %d weapon(s) have saved custom_glow blobs that won't apply (Tweaker: Cosmetics not installed); weavebound skin will render with vanilla defaults",
                 glow_count)
         end
-        save()
+        -- Write back only when a record was rejected or migrated (promo rarity,
+        -- missing via_mirror); a clean store is left untouched.
+        if rewrite then save() end
     end
 
     mod._cim_register_craft = function(backend_id, weapon_data)
@@ -159,7 +218,7 @@ return function(context)
         local candidate = {}
         for id, existing in pairs(forged_weapons) do candidate[id] = existing end
         candidate[backend_id] = entry
-        local saved, save_err = pcall(save, candidate)
+        local saved, save_err = pcall(save_strict, candidate)
         if not saved then return false, "save:" .. tostring(save_err) end
         forged_weapons = candidate
         return true, entry
@@ -206,7 +265,7 @@ return function(context)
         local candidate = {}
         for backend_id, entry in pairs(forged_weapons) do candidate[backend_id] = entry end
         for backend_id, entry in pairs(normalized) do candidate[backend_id] = entry end
-        local saved, save_err = pcall(save, candidate)
+        local saved, save_err = pcall(save_strict, candidate)
         if not saved then return false, "save:" .. tostring(save_err) end
         forged_weapons = candidate
         return true, normalized
@@ -225,7 +284,7 @@ return function(context)
             end
         end
         if changed then
-            local saved, save_err = pcall(save, candidate)
+            local saved, save_err = pcall(save_strict, candidate)
             if not saved then return false, "save:" .. tostring(save_err) end
             forged_weapons = candidate
         end
@@ -233,6 +292,13 @@ return function(context)
     end
     mod._cim_get_craft = function(backend_id) return forged_weapons[backend_id] end
     mod._cim_persist_crafts = save
+    rt_register("issue_cim_store_serializable", function()
+        if not store_policy then return "skip: store policy not loaded" end
+        local valid, bad_id, bad_path = store_policy.validate_store(build_save_data(forged_weapons))
+        if not valid then
+            return "record " .. tostring(bad_id) .. " field " .. tostring(bad_path) .. " is not serializable"
+        end
+    end)
 
     mod._cim_register_external_trait_provider = function(provider_id, spec)
         local policy = mod._cim_external_trait_policy
