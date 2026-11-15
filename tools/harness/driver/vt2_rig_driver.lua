@@ -21,10 +21,12 @@
 -- 0.4.6 (WP-H-06): helper groups under tools/harness/driver/lib/ travel in the plan (plan.libs) and add their
 -- helpers to every case's T (load_libs, install_libs); the first groups are T.set and the T.shot stub.
 -- tools/harness/API.md lists every helper.
+--
+-- 0.4.7 (WP-H-06 actor group): T.teleport takes { x, y, z } or a Vector3Box and builds the Vector3 in the main update.
 
 local plan, nonce = ...
 
-local DRIVER_VERSION = "0.4.6"
+local DRIVER_VERSION = "0.4.7"
 local driver = {}
 
 local function find_mod(name)
@@ -535,7 +537,8 @@ local function new_T(case)
 	end
 
 	-- Moves a unit that has a teleport_to locomotion (PlayerUnitLocomotionExtension.teleport_to,
-	-- default_player_unit/player_unit_locomotion_extension.lua:1005).
+	-- default_player_unit/player_unit_locomotion_extension.lua:1005). position: { x, y, z } or a Vector3Box (built into a
+	-- Vector3 inside the main update, like T.spawn's offset), or a Vector3 (it reaches the engine one update later).
 	function T.teleport(unit, position)
 		local moved = T.main(function ()
 			local locomotion = unit and ScriptUnit.has_extension(unit, "locomotion_system")
@@ -544,7 +547,22 @@ local function new_T(case)
 				return false
 			end
 
-			locomotion:teleport_to(position)
+			local target = position
+
+			if type(position) == "table" and position.unbox == nil then
+				target = Vector3(position[1] or position.x or 0, position[2] or position.y or 0, position[3] or position.z or 0)
+			else
+				-- a box (engine type, unbox method) gives its value; a plain Vector3 has no unbox and is used as it is
+				local unboxed, value = pcall(function ()
+					return position:unbox()
+				end)
+
+				if unboxed and value ~= nil then
+					target = value
+				end
+			end
+
+			locomotion:teleport_to(target)
 
 			return true
 		end)
