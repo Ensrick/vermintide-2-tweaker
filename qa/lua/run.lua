@@ -61,6 +61,7 @@ local suites = {
 	"test_shared_debug",
 	"test_shared_official_loadout_guard",
 	"test_shared_rt_runner",
+	"test_shared_regression_runner",
 	"test_shared_network_lookup",
 	"test_ui_presentation_refresh",
 	"test_wt_weapon_action_lifecycle",
