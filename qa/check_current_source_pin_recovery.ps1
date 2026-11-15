@@ -2,6 +2,11 @@
 [CmdletBinding()]
 param([switch]$SelfTest)
 $ErrorActionPreference = 'Stop'
+# WP-P-05: source pins are informational and the rewrite path is dormant in real
+# ships. This gate keeps testing it: enable it for this process, restore after.
+$previousPinRewriteSelfTest = $env:VT2_SOURCE_PIN_REWRITE_SELFTEST
+$env:VT2_SOURCE_PIN_REWRITE_SELFTEST = '1'
+try {
 $repo = Split-Path $PSScriptRoot -Parent
 . (Join-Path $repo 'qa\_test_fixtures\publication_handoff_fixture.ps1')
 $root = Join-Path ([IO.Path]::GetTempPath()) ('vt2-current-pins-' + [guid]::NewGuid().ToString('N'))
@@ -568,4 +573,8 @@ catch {
     Write-Host "[current-pin-recovery] FAIL: $_; retained fixture root: $root"
     if ($linkedCreated) { Write-Host "Fixture linked checkout retained for evidence: $linked (not a project worktree)." }
     exit 2
+}
+}
+finally {
+    $env:VT2_SOURCE_PIN_REWRITE_SELFTEST = $previousPinRewriteSelfTest
 }

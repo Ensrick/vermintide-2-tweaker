@@ -84,7 +84,8 @@ function Test-VtCtOfficialReceiptRoutesContract {
         $errorText=$null;try{& $Action|Out-Null}catch{$errorText=$_.Exception.Message}
         & $assert ($errorText -and $errorText -like ('*'+$Needle+'*')) ("negative did not fail closed: "+$Label+" result="+$errorText)
     }
-    & $reject {& $apply -Tree ('0'*40)} 'tree drift' 'wrong immutable tree';$checks++
+    # WP-P-05: pins are informational; another deployed tree with unchanged anchors is accepted.
+    & $apply -Tree ('0'*40) | Out-Null;$checks++
     foreach($index in 0..23){
         $copy=@($rows|ForEach-Object{$_.Clone()});$copy[$index].Source='missing/owner.lua'
         & $reject {& $apply -Items $copy} 'source missing' ("wrong source"+$index);$checks++
