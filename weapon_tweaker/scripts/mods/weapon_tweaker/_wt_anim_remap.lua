@@ -47,114 +47,15 @@ local _cwv_effective_template = mod:dofile(
     "scripts/mods/weapon_tweaker/_wt_cwv_effective_template")
 local _anim_state_policy = mod:dofile(
     "scripts/mods/weapon_tweaker/_wt_anim_state_policy")
+-- WP-WT-06: redirect/remap data and the pure decision live in the resolver;
+-- the names below alias them so /info, the template-remap builder, the
+-- exports and the dev overlays keep reading the same tables.
+local _resolver = mod:dofile("scripts/mods/weapon_tweaker/_wt_anim_resolver")
 
-local _anim_redirect = {
-    to_repeating_crossbow            = "to_repeating_crossbow_elf",
-    to_repeating_crossbow_noammo     = "to_repeating_crossbow_elf_noammo",
-    to_es_longbow                    = "to_longbow",
-    to_es_longbow_noammo             = "to_longbow_noammo",
-    attack_swing_down_left_axe       = "attack_swing_down_left",
-    push_stab                        = "attack_swing_stab",
-    attack_swing_stab_lh             = "attack_swing_stab",
-}
-
--- Career-aware redirects for events that are phantom entries on all skeletons.
--- Key = event to intercept, value = { alt, character_prefix }
--- When the career does NOT match the prefix, redirect to alt.
--- CLARIFY: `invert = true` flips the rule — redirect when the career DOES match
--- the prefix (used when the native skeleton lacks the wield event despite being
--- "this character's weapon", e.g. Saltzpyre's `to_1h_falchion` is missing on
--- the WHC skeleton itself, so we need to redirect ON wh_priest career).
--- `overrides` is a per-career-name (not prefix) override that takes precedence
--- over both the prefix rule and `alt`.
-local _career_anim_redirect = {
-    to_longbow                       = { alt = "to_es_longbow",                 prefix = "we_" },
-    to_longbow_noammo                = { alt = "to_es_longbow_noammo",          prefix = "we_" },
-    to_repeating_crossbow_elf        = { alt = "to_repeating_crossbow",         prefix = "we_" },
-    to_repeating_crossbow_elf_noammo = { alt = "to_repeating_crossbow_noammo",  prefix = "we_" },
-    -- Note: `wh_priest` here is a full career name acting as a prefix; safe
-    -- because no other `wh_*` career shares its first 9 chars.
-    to_1h_falchion                   = { alt = "to_1h_hammer",                  prefix = "wh_priest", invert = true },
-    to_1h_sword                      = { alt = "to_1h_hammer",                  prefix = "wh_priest", invert = true },
-    to_1h_axe                        = { alt = "to_1h_sword",                   prefix = "bw_", invert = true,
-                                         overrides = { wh_priest = "to_1h_hammer" } },
-    to_1h_crowbill                   = { alt = "to_1h_sword",                   prefix = "bw_",
-                                         overrides = { wh_priest = "to_1h_hammer" } },
-    to_1h_hammer                     = { alt = "to_1h_sword",                   prefix = "we_", invert = true },
-    to_1h_hammer_shield_priest       = { alt = "to_1h_hammer_shield",           prefix = "wh_priest" },
-    to_1h_spear_shield               = { alt = "to_es_deus_01",                 prefix = "we_",
-                                         overrides = { wh_priest = "to_1h_hammer_shield" } },
-    to_es_deus_01                    = { alt = "to_1h_spear_shield",           prefix = "es_",
-                                         overrides = { wh_priest = "to_1h_hammer_shield" } },
-    to_spear                         = { alt = "to_polearm",                   prefix = "we_",
-                                         overrides = { wh_captain = "to_2h_billhook", wh_bountyhunter = "to_2h_billhook", wh_zealot = "to_2h_billhook", wh_priest = "to_1h_hammer" } },
-    to_polearm                       = { alt = "to_spear",                     prefix = "es_",
-                                         overrides = { wh_captain = "to_2h_billhook", wh_bountyhunter = "to_2h_billhook", wh_zealot = "to_2h_billhook", wh_priest = "to_1h_hammer" } },
-    -- QUESTION: `prefix = "wh_"` here means "redirect when career does NOT
-    -- start with wh_". But ALL non-wh careers have explicit `overrides` entries
-    -- below, so the `alt = "to_polearm"` fallback only triggers for careers
-    -- not listed (none currently). The `alt` is effectively dead — every
-    -- non-wh career maps via overrides. Intentional defensive default, or
-    -- just leftover?
-    to_2h_billhook                   = { alt = "to_polearm",                   prefix = "wh_",
-                                         overrides = { es_mercenary = "to_polearm", es_huntsman = "to_polearm", es_knight = "to_polearm", es_questingknight = "to_polearm",
-                                                       we_waywatcher = "to_spear", we_maidenguard = "to_spear", we_shade = "to_spear", we_thornsister = "to_spear",
-                                                       wh_priest = "to_1h_hammer" } },
-    to_2h_sword                      = { alt = "to_2h_sword_we",                prefix = "we_", invert = true },
-    to_2h_sword_we                   = { alt = "to_bastard_sword",              prefix = "we_",
-                                         overrides = { wh_priest = "to_1h_hammer",
-                                                       wh_captain = "to_1h_sword", wh_bountyhunter = "to_1h_sword", wh_zealot = "to_1h_sword" } },
-    to_dual_hammers_priest           = { alt = "to_dual_hammers",               prefix = "wh_" },
-    to_dual_axes                     = { alt = "to_dual_hammers",               prefix = "dr_slayer" },
-    -- v0.12.119: Sienna's Flaming Flail (bw_1h_flail_flaming) wield on non-bw
-    -- receivers — DECISIONS:36 flagged the missing wield redirect as the cause
-    -- of the broken wield stance (the H2 attack redirect in the flail block
-    -- already existed; the wield event did not). `to_1h_flail` is the universal
-    -- Empire-flail wield that already works on every character via es_1h_flail.
-    to_1h_flail_flaming              = { alt = "to_1h_flail",                   prefix = "bw_",
-                                         overrides = { wh_priest = "to_1h_hammer" } },
-}
-
--- Suffix-based animation redirect: when an event ending in a weapon suffix
--- doesn't exist on the skeleton, swap the suffix based on career.
--- Checked longest-first to avoid e.g. "_spear" matching "_2h_heavy_spear".
--- CLARIFY: order matters because `event_name:sub(-#suffix) == suffix` is a
--- substring match — without longest-first, `to_es_deus_01` would match
--- `_es_deus_01` correctly but `to_1h_spear_shield` would match `_spear` first
--- (both 6 chars from end onwards differ but the shorter match wins by order).
-local _suffix_order = { "_2h_sword_we", "_bastard_sword", "_1h_spear_shield", "_es_deus_01", "_2h_billhook", "_polearm", "_spear" }
-local _suffix_career_map = {
-    ["_2h_sword_we"] = {
-        es_mercenary = "_bastard_sword", es_huntsman = "_bastard_sword", es_knight = "_bastard_sword", es_questingknight = "_bastard_sword",
-        wh_captain = "_1h_sword", wh_bountyhunter = "_1h_sword", wh_zealot = "_1h_sword",
-        wh_priest = "_1h_hammer",
-    },
-    ["_1h_spear_shield"] = {
-        es_mercenary = "_es_deus_01", es_huntsman = "_es_deus_01", es_knight = "_es_deus_01", es_questingknight = "_es_deus_01",
-        dr_ranger = "_1h_hammer_shield", dr_ironbreaker = "_1h_hammer_shield", dr_slayer = "_1h_hammer_shield", dr_engineer = "_1h_hammer_shield",
-        wh_captain = "_1h_sword_shield", wh_bountyhunter = "_1h_sword_shield", wh_zealot = "_1h_sword_shield",
-        wh_priest = "_1h_hammer_shield",
-    },
-    ["_es_deus_01"] = {
-        we_waywatcher = "_1h_spear_shield", we_maidenguard = "_1h_spear_shield", we_shade = "_1h_spear_shield", we_thornsister = "_1h_spear_shield",
-        wh_captain = "_1h_sword_shield", wh_bountyhunter = "_1h_sword_shield", wh_zealot = "_1h_sword_shield",
-        wh_priest = "_1h_hammer_shield",
-    },
-    ["_spear"] = {
-        wh_captain = "_2h_billhook", wh_bountyhunter = "_2h_billhook", wh_zealot = "_2h_billhook",
-        wh_priest = "_1h_hammer",
-    },
-    ["_polearm"] = {
-        we_waywatcher = "_spear", we_maidenguard = "_spear", we_shade = "_spear", we_thornsister = "_spear",
-        wh_captain = "_2h_billhook", wh_bountyhunter = "_2h_billhook", wh_zealot = "_2h_billhook",
-        wh_priest = "_1h_hammer",
-    },
-    ["_2h_billhook"] = {
-        es_mercenary = "_polearm", es_huntsman = "_polearm", es_knight = "_polearm", es_questingknight = "_polearm",
-        we_waywatcher = "_spear", we_maidenguard = "_spear", we_shade = "_spear", we_thornsister = "_spear",
-        wh_priest = "_1h_hammer",
-    },
-}
+local _anim_redirect        = _resolver.anim_redirect
+local _career_anim_redirect = _resolver.career_anim_redirect
+local _suffix_order         = _resolver.suffix_order
+local _suffix_career_map    = _resolver.suffix_career_map
 
 -- pcall-guarded `Unit.has_animation_event`. Returns true only if the unit has
 -- the named anim event. Used by every redirect/remap helper below — defined
@@ -166,232 +67,28 @@ local function _safe_has_anim(unit, event)
 end
 
 local function _try_suffix_redirect(unit, event_name, career)
-    for _, suffix in ipairs(_suffix_order) do
-        local slen = #suffix
-        if event_name:sub(-slen) == suffix then
-            local map = _suffix_career_map[suffix]
-            local target_suffix = map and map[career]
-            if target_suffix then
-                local base = event_name:sub(1, -(slen + 1))
-                local target = base .. target_suffix
-                if _safe_has_anim(unit, target) then
-                    return target
-                end
-            end
-            return nil
-        end
-    end
-    return nil
+    return _resolver.try_suffix_redirect(function(name)
+        return _safe_has_anim(unit, name)
+    end, event_name, career)
 end
 
--- ============================================================================
--- INVENTORY-PREVIEW WIELD POSE (3P-ONLY) — receiver-native stance correction
--- ============================================================================
--- v0.12.146-dev. The keep inventory previewer (MenuWorldPreviewer, derived
--- from HeroPreviewer) fires the wield anim on the 3P body directly at spawn:
---   wield = wield_anim_career_3p[career] or wield_anim_career[career]
---                                        or item_template.wield_anim
--- (world_hero_previewer.lua:1059-1066). It does NOT route that event through
--- our `Unit.animation_event` hook's `_career_anim_redirect` path, because the
--- preview `character_unit` has NO career_system / inventory_system extension —
--- so `_unit_career_name(unit)` returns nil in the hook and the redirect is a
--- no-op there (gated on a resolved career at line ~1544).
---
--- For cross-character ports whose `wt_wield_patches.lua` entry omits the
--- receiver's career prefix (e.g. `two_handed_swords_wood_elf_template` lists
--- only `wh_*`, so on a Kruber `es_*` career `wield_anim_career_3p[es_*]` is
--- nil), the previewer falls back to the elf template's base
--- `wield_anim = "to_2h_sword_we"` and fires it on Kruber's empire_soldier body,
--- which does not author that elf event -> no wield transition -> the body holds
--- its previous/idle stance (the "missing pose" symptom; no T-pose, see
--- feedback_vt2_no_tpose_default_stance). In-mission the same event is redirected
--- by `_career_anim_redirect.to_2h_sword_we` (alt = "to_bastard_sword" for the
--- non-we_ branch), which is why the mission render is correct.
---
--- This resolver re-uses the SAME `_career_anim_redirect` data the in-mission
--- hook uses (no parallel pose table) to compute the receiver-native wield event
--- for one (event, career) pair, WITHOUT firing. The spawn hook below then plays
--- it on the 3P preview body only if (a) it differs from what the engine already
--- fired and (b) the body actually authors it. Strictly 3P: the preview world has
--- no 1P unit, and we touch only `self.character_unit`.
---
--- Resolution mirrors the `_career_anim_redirect` branch in the animation_event
--- hook (overrides -> prefix/invert -> alt), then a suffix-redirect fallback:
+-- Inventory-preview wield pose (3P only): the receiver-native wield event for
+-- one (event, career) pair, without firing. Rule and rationale live with the
+-- data in _wt_anim_resolver.lua (resolve_preview_wield_event).
 local function _resolve_preview_wield_event(body, event_name, career)
-    if not event_name or not career then return nil end
-    local redir = _career_anim_redirect[event_name]
-    if redir then
-        if redir.overrides and redir.overrides[career]
-                and _safe_has_anim(body, redir.overrides[career]) then
-            return redir.overrides[career]
-        end
-        local matches_prefix = career:sub(1, #redir.prefix) == redir.prefix
-        local should_redirect = redir.invert and matches_prefix
-                                or (not redir.invert and not matches_prefix)
-        if should_redirect and _safe_has_anim(body, redir.alt) then
-            return redir.alt
-        end
-        return nil
-    end
-    -- Suffix-based fallback (e.g. *_2h_billhook -> *_polearm) for events not
-    -- listed in _career_anim_redirect. _try_suffix_redirect already verifies the
-    -- target is authored on the body before returning it.
-    return _try_suffix_redirect(body, event_name, career)
+    return _resolver.resolve_preview_wield_event(function(name)
+        return _safe_has_anim(body, name)
+    end, event_name, career)
 end
 
--- ============================================================================
--- ANIMATION REMAPPING — READ FIRST
--- ============================================================================
--- 1P (first-person) animations are UNIVERSAL across all six characters and
--- all weapons. The first_person_base unit is shared, so any weapon's 1P state
--- machine and clips play correctly on any character's first-person view by
--- default. We never override anim_event (1P), wield_anim (1P), or
--- state_machine per character — only 3P fields need cross-character work.
---
--- Every remap table and every redirect in this file targets the 3P body
--- (player_unit + husks). The 1P first_person_unit gets an early return in the
--- animation_event hook so it stays untouched. See feedback_animation_remap_rules
--- and feedback_1p_animations_universal memory notes for the full rule.
---
--- When a remap table key looks like a 1P event name (e.g.
--- "attack_swing_charge_stab" — authored for the elf spear's 1P state machine),
--- it's there because the SAME event-name string also fires on the 3P body
--- where the empire-soldier skeleton has no clip for it. The remap value is the
--- 3P-body substitute. The 1P side fires the unmodified event and plays
--- correctly on first_person_base — we don't touch it.
--- ============================================================================
-
--- 3P body event remapping: player_unit IS the 3P body (receives anim_event_3p).
--- The non-player unit is the 1P hands (receives anim_event) — universal,
--- never remapped here.
--- When a cross-career weapon is equipped, remap attack events on player_unit
--- to the target weapon's anim_event_3p values so proper 3P animations play.
-
--- Elf spear actions → billhook 3P events (for Saltzpyre wielding elf spear)
-local _3p_remap_spear_to_billhook = {
-    attack_swing_charge_right    = "attack_swing_charge_left_diagonal",
-    attack_swing_charge_left     = "attack_swing_stab_charge",
-    attack_swing_down_right      = "attack_swing_stab",
-    attack_swing_down_left_axe   = "attack_swing_left_diagonal",
-    attack_swing_down_left       = "attack_swing_stab",
-    attack_swing_right           = "attack_swing_left_diagonal",
-    attack_swing_heavy_right     = "attack_swing_heavy_left_diagonal",
-    attack_swing_heavy           = "attack_swing_heavy_stab",
-    push_stab                    = "attack_swing_left_diagonal",
-    attack_swing_stab_lh         = "attack_swing_stab",
-    attack_swing_charge          = "attack_swing_stab_charge",
-    attack_swing_charge_stab     = "attack_swing_charge_left_diagonal",
-}
-
--- Polearm/heavy spear → billhook 3P fixes (for Saltzpyre)
--- Only remap events that are MISSING or broken on billhook skeleton.
--- Leave working events alone — elf spear table remaps interfere if shared.
-local _3p_remap_polearm_to_billhook = {
-    attack_swing_stab_lh         = "attack_swing_stab",
-}
-
--- Elf spear 1P actions → Kruber polearm-compatible 3P events.
--- Only remap events that genuinely crash or don't exist on the
--- polearm skeleton. Let others play natively.
-local _3p_remap_spear_to_polearm = {
-    attack_swing_down_left_axe   = "attack_swing_down_left",
-    attack_swing_left            = "attack_swing_down_left",
-}
-
--- Billhook 1P events → polearm-compatible 3P events.
--- Cross-career equip sends the 1P anim_event (not anim_event_3p) to
--- both units. These billhook-specific events are phantom on the polearm
--- skeleton. Remap lights → lights, heavies → heavies, charges → charges.
-local _3p_remap_billhook_to_polearm = {
-    -- Heavy 1 (thrust): charge + release
-    attack_swing_charge_stab         = "attack_swing_charge_right",
-    attack_swing_stab_charge         = "attack_swing_charge_right",
-    attack_swing_heavy_stab          = "attack_swing_heavy_right",
-    -- Heavy 2 (overhead): charge + release
-    attack_swing_charge_down         = "attack_swing_charge",
-    attack_swing_charge_left_diagonal = "attack_swing_charge",
-    attack_swing_heavy_down          = "attack_swing_heavy",
-    attack_swing_heavy_left_diagonal = "attack_swing_heavy",
-    -- Lights
-    attack_swing_left_diagonal       = "attack_swing_down_left",
-    attack_swing_stab                = "attack_swing_right",
-    attack_swing_stab_02             = "attack_swing_right",
-    attack_swing_heavy_left          = "attack_swing_heavy",
-    attack_swing_down                = "attack_swing_down_right",
-    push_stab                        = "attack_swing_right",
-    attack_swing_left                = "attack_swing_down_left",
-}
-
--- Source-derived effective 3P vocabulary. For each Billhook action the engine fires
--- `anim_event_3p or anim_event` (weapon_unit_extension.lua:512). The Kruber polearm
--- vocabulary comes from halberds.lua. A Billhook event is complete when it is explicitly
--- remapped or is already native on the polearm body.
-local _billhook_effective_3p_events = {
-    "attack_swing_stab_charge", "attack_swing_charge_left_diagonal",
-    "attack_swing_heavy_left_diagonal", "attack_swing_heavy_stab",
-    "attack_swing_stab", "attack_swing_left_diagonal", "attack_swing_down",
-    "attack_push", "parry_pose",
-}
-local _polearm_native_3p_events = {
-    attack_swing_charge_left=true, attack_swing_charge_right=true,
-    attack_swing_down_left=true, attack_swing_down_right=true,
-    attack_swing_heavy_right=true, attack_swing_heavy=true,
-    attack_swing_right=true, attack_push=true, parry_pose=true,
-}
-
-local _3p_remap_spear_shield_to_deus = {
-    attack_swing_stab_lh             = "attack_swing_stab",
-}
-
-local _3p_remap_deus_to_spear_shield = {
-    attack_swing_up                  = "attack_swing_stab_lh",
-}
-
--- Career-aware remap triggers: event → { career_prefix = remap_table, ... }
--- "_default" key used when no career-specific entry matches.
-local _3p_remap_triggers = {
-    to_spear = {
-        _default = _3p_remap_spear_to_polearm,
-        wh_      = _3p_remap_spear_to_billhook,
-        -- Kerillian's elf skeleton authors the spear moveset natively; the
-        -- _default remap was built for Kruber's polearm skeleton and breaks
-        -- her down_left / left attacks if applied. Mirrors the wh_ = false
-        -- pattern on to_2h_billhook below.
-        we_      = false,
-    },
-    to_polearm = {
-        _default = _3p_remap_billhook_to_polearm,
-        es_      = _3p_remap_spear_to_polearm,
-        wh_      = _3p_remap_spear_to_billhook,
-    },
-    to_2h_billhook = {
-        _default = _3p_remap_billhook_to_polearm,
-        wh_      = false,
-    },
-    to_1h_spear_shield = {
-        _default = _3p_remap_spear_shield_to_deus,
-    },
-    to_es_deus_01 = {
-        _default = _3p_remap_spear_shield_to_deus,
-        we_      = _3p_remap_deus_to_spear_shield,
-    },
-}
-
--- CLARIFY: returns either a remap table (truthy) or `false` (a deliberate
--- "no remap" entry like `to_2h_billhook.wh_ = false`). Caller stores the
--- result on the per-unit state (see `_unit_state` below) — `false` correctly
--- clears any prior remap; only `nil` (no entry at all) preserves prior state.
-local function _resolve_3p_remap(event_name, career)
-    local trigger = _3p_remap_triggers[event_name]
-    if not trigger then return nil end
-    if not career then return trigger._default end
-    for prefix, tbl in pairs(trigger) do
-        if prefix ~= "_default" and career:sub(1, #prefix) == prefix then
-            return tbl
-        end
-    end
-    return trigger._default
-end
+local _3p_remap_spear_to_billhook    = _resolver.remap_spear_to_billhook
+local _3p_remap_polearm_to_billhook  = _resolver.remap_polearm_to_billhook
+local _3p_remap_spear_to_polearm     = _resolver.remap_spear_to_polearm
+local _3p_remap_billhook_to_polearm  = _resolver.remap_billhook_to_polearm
+local _billhook_effective_3p_events  = _resolver.billhook_effective_3p_events
+local _polearm_native_3p_events      = _resolver.polearm_native_3p_events
+local _3p_remap_triggers             = _resolver.remap_triggers
+local _resolve_3p_remap              = _resolver.resolve_3p_remap
 
 -- Per-unit 3P animation state, keyed by the 3P body unit (player_unit for
 -- the local player, husk units for remote players). Weak-keyed so dead units
@@ -432,68 +129,11 @@ local _3p_template_remaps = _build_3p_template_remaps(
     _3p_remap_triggers
 )
 local function _resolve_template_remap(template_name, career)
-    local entry = _3p_template_remaps[template_name]
-    if not entry then return nil end
-    if career then
-        for prefix, tbl in pairs(entry) do
-            if prefix ~= "_default" and career:sub(1, #prefix) == prefix then
-                return tbl
-            end
-        end
-    end
-    return entry._default
+    return _resolver.resolve_template_remap(_3p_template_remaps, template_name, career)
 end
 
-local _3p_key_remaps = {
-    we_1h_sword = {
-        we_ = false,
-        _default = {
-            attack_swing_stab          = "attack_swing_down",                 -- L4 stab → vertical
-            attack_swing_charge_down   = "attack_swing_charge_left_diagonal", -- H1 charge windup (also L1 charge gains a windup)
-            attack_swing_charge_left   = "attack_swing_charge_right_pose",    -- H2 charge windup
-            attack_swing_heavy_left_up = "attack_swing_heavy_right",          -- H2 release → heavy right swing
-            attack_swing_charge_right_diagonal_pose = "attack_swing_charge_left_diagonal", -- H3 charge → vertical (matches H1; also affects L2 charge — windup pose only, brief)
-            attack_swing_heavy_down_right = "attack_swing_heavy_down",        -- H3 release → vertical (was horizontal)
-        },
-    },
-    bw_sword = {
-        dr_ = {
-            -- 3-position heavy chain. Differentiate variants:
-            --   H1 from idle (charge_left/heavy)            → elf H2 (right swing)
-            --   H2 (charge_right_pose/heavy_right)          → elf H1 (vertical heavy)
-            --   H3+ (charge_left_pose/heavy) — release is the same event as H1
-            --   so it inherits the right-swing; charge gets right-pose windup to match.
-            attack_swing_charge_left       = "attack_swing_charge_right_pose",
-            attack_swing_heavy             = "attack_swing_heavy_right",
-            attack_swing_charge_right_pose = "attack_swing_charge_left_diagonal",
-            attack_swing_heavy_right       = "attack_swing_heavy_down",
-            attack_swing_charge_left_pose  = "attack_swing_charge_right_pose", -- H3+ chain windup matches right swing
-        },
-    },
-    es_1h_sword = {
-        -- one_handed_swords_template_1 (shared with bw_sword) — same heavy chain.
-        dr_ = {
-            attack_swing_charge_left       = "attack_swing_charge_right_pose",
-            attack_swing_heavy             = "attack_swing_heavy_right",
-            attack_swing_charge_right_pose = "attack_swing_charge_left_diagonal",
-            attack_swing_heavy_right       = "attack_swing_heavy_down",
-            attack_swing_charge_left_pose  = "attack_swing_charge_right_pose", -- H3+ chain windup matches right swing
-        },
-    },
-}
-
-local function _resolve_key_remap(weapon_key, career)
-    local entry = _3p_key_remaps[weapon_key]
-    if not entry then return nil end
-    if career then
-        for prefix, tbl in pairs(entry) do
-            if prefix ~= "_default" and career:sub(1, #prefix) == prefix then
-                return tbl
-            end
-        end
-    end
-    return entry._default
-end
+local _3p_key_remaps      = _resolver.key_remaps
+local _resolve_key_remap  = _resolver.resolve_key_remap
 
 local _log_anims = false
 local _last_3p_unit = nil
@@ -603,6 +243,19 @@ local function _note_anim_swallow(event, err)
     if note then note("anim_event", tostring(event) .. ": " .. tostring(err)) end
 end
 
+-- WP-WT-06: one decision context and one info table are reused for every
+-- call, so the hot path allocates nothing; the hook reads both before it calls
+-- the engine, so a re-entrant animation event cannot clobber them in use.
+local _decide_unit = nil
+local _decide_ctx = {
+    has_event = function(name) return _safe_has_anim(_decide_unit, name) end,
+    template_remaps = _3p_template_remaps,
+    remap_identity = function(template_name, item_key, career_name)
+        return _anim_state_policy.remap_identity(template_name, item_key, career_name)
+    end,
+    info = {},
+}
+
 local _ANIM_EVENT_SAMPLE_N = 60
 local _ANIM_EVENT_SAMPLE_REMAP_N = 30
 local _anim_event_call_count = 0
@@ -693,271 +346,88 @@ mod:hook("Unit", "animation_event", function(func, unit, event_name, ...)
         end
     end
 
-    -- Reset this UNIT's 3P weapon remap on actual weapon change. The
-    -- whitelist-by-template-change pattern from DEVELOPMENT.md "Non-Weapon
-    -- `to_` Events": non-weapon `to_` events (to_crouch / to_zoom / to_onground)
-    -- don't change state.template/key, so `remap_id == state.last_remap_id`
-    -- and we skip the clear. Only true weapon switches (which update those
-    -- via the wield hook) reach the clear-and-reset block.
-    --
-    -- v0.12.35 — was previously gated on `is_local`. The same logic applies
-    -- per-unit: husks switching weapons should re-resolve their own remap.
-    -- #112: receiver career is part of the state-machine identity. Character
-    -- selection can reuse a player unit and the same weapon/template; without
-    -- the career component the old receiver's remap survives and all subsequent
-    -- attacks can silently target the wrong vocabulary.
-    local remap_id = state and _anim_state_policy.remap_identity(
-        state.template, state.key, career)
-    if state and event_name:sub(1, 3) == "to_" and remap_id and remap_id ~= state.last_remap_id then
-        state.last_remap_id = remap_id
-        state.remap = nil
-        state.remap_origin = nil
-        if state.template then
-            local tmpl_remap = _resolve_template_remap(state.template, career)
-            if tmpl_remap then
-                state.remap = tmpl_remap
-                state.remap_origin = "template:" .. tostring(state.template)
-            end
+    -- WP-WT-06: the ordered decision is _wt_anim_resolver.decide (pure). The
+    -- hook keeps the call style per mode: flail and global_native return the
+    -- engine call; force calls the captured original; every other mode pcalls
+    -- and returns nothing (swallowed errors are counted, WP-WT-08).
+    _decide_unit = unit
+    local ctx = _decide_ctx
+    ctx.event, ctx.career, ctx.state = event_name, career, state
+    local mode, delivered, info = _resolver.decide(ctx)
+    _decide_unit = nil
+
+    if mode == "flail" then
+        return func(unit, delivered, ...)
+    end
+
+    if info.remap_miss then
+        -- The remap step's lookup, under the names the friends-only dev
+        -- overlay reads (it ran inside the remap step before WP-WT-06).
+        local target, target_capability = info.remap_target, info.remap_target_capability -- luacheck: ignore target target_capability
+    end
+
+    if _log_anims then
+        if info.redir_fail_override then
+            mod:info("  REDIR FAIL: " .. info.redir_fail_override .. " not on unit")
         end
-        if not state.remap and state.key then
-            local key_remap = _resolve_key_remap(state.key, career)
-            if key_remap then
-                state.remap = key_remap
-                state.remap_origin = "key:" .. tostring(state.key)
-            end
-        end
-        -- tmpl_remap / key_remap may be `false` (deliberate skip from
-        -- `_3p_template_remaps[name][prefix] = false`). `if tmpl_remap then`
-        -- treats false as "not found" and falls through to key_remap. Final
-        -- state.remap ends up nil if both were false — desired (native plays).
-        --
-        -- v0.12.64-dev — Fallback to `_resolve_3p_remap(event_name, career)`
-        -- when neither template nor key remap hits.
-        --
-        -- Bug: when `_WIELD_ANIM_CAREER_3P_PATCHES` (line 1931, added v0.12.55/56)
-        -- pre-rewrites a template's `wield_anim_career_3p[<career>]` at boot,
-        -- the ENGINE fires the rewritten event (e.g. `to_polearm` for Kruber-on-
-        -- billhook), not the original (`to_2h_billhook`). The
-        -- `_career_anim_redirect.to_polearm` override branch never installs
-        -- `state.remap` because that table's overrides[es_*] is nil — the
-        -- redirect was designed for the `to_2h_billhook → to_polearm` redirect
-        -- path, not the already-rewritten-by-patcher path.
-        --
-        -- Result before this fallback: Kruber-on-billhook reaches polearm
-        -- stance correctly via the patcher, but billhook-specific attack
-        -- events (`attack_swing_stab`, `attack_swing_left_diagonal`,
-        -- `attack_swing_charge_stab`, etc.) fire raw on Kruber's polearm SM
-        -- and silently no-op — visible as missing swing animations.
-        --
-        -- Fix: when template/key resolution doesn't hit, ask `_3p_remap_triggers`
-        -- whether the wield event (now potentially the patcher-rewritten value)
-        -- has an associated career-prefix remap. The same lookup already powers
-        -- the override branch at line ~1127 and the redirect branch at line
-        -- ~1156; we're now also calling it from the wield-event path so the
-        -- swing remap installs regardless of which path the wield event took.
-        --
-        -- Symmetric coverage: the elf-spear-on-Saltzpyre case (which the
-        -- patcher rewrites `to_spear → to_2h_billhook` for wh_*) gets the
-        -- same fallback for the inverse mapping.
-        if not state.remap then
-            local trigger_remap = _resolve_3p_remap(event_name, career)
-            if trigger_remap then
-                state.remap = trigger_remap
-                state.remap_origin = "trigger:" .. tostring(event_name)
-            end
+        if info.redir_fail_alt then
+            mod:info("  REDIR FAIL: " .. info.redir_fail_alt .. " not on unit")
         end
     end
 
-    -- Flails on non-native careers: certain release events either play the
-    -- wrong animation or play nothing on the cross-career 3P body, even
-    -- though has_animation_event reports them TRUE. attack_swing_heavy is
-    -- the only event that produces a visible heavy strike on both flails.
-    -- We can't use the remap table — adding these events to it corrupts the
-    -- SM chain (same pattern as billhook attack_swing_stab_02). Direct
-    -- func() call works.
-    --
-    -- v0.12.35 — was previously is_local-only because the global
-    -- `_current_weapon_key` tracked only the local viewer. Now uses
-    -- state.key (per-unit weapon) and unit career, so a remote Saltzpyre
-    -- husk wielding es_1h_flail also gets the fix on the local viewer's
-    -- screen. The flail-key gate is what keeps this from hijacking other
-    -- weapons that fire the same event names.
-    if state and career then
-        local target = nil
-        if state.key == "es_1h_flail" then
-            if career:sub(1, 3) ~= "wh_" then
-                -- Saltzpyre's flail on non-Saltzpyre. H1 release fires
-                -- attack_swing_left (light name → wrong anim), H2 release
-                -- fires attack_swing_heavy_left (plays nothing on the
-                -- cross skeleton).
-                if event_name == "attack_swing_left"
-                    or event_name == "attack_swing_heavy_left" then
-                    target = "attack_swing_heavy"
-                end
-            else
-                -- Saltzpyre native: push-attack release fires
-                -- attack_swing_right but doesn't visibly animate (vanilla
-                -- SM bug — confirmed via wt force3p from idle).
-                -- attack_swing_right_diagonal plays a visible L2-style
-                -- swing on Saltzpyre's flail SM, best stand-in.
-                if event_name == "attack_swing_right" then
-                    target = "attack_swing_right_diagonal"
-                end
-            end
-        elseif state.key == "bw_1h_flail_flaming"
-            and career:sub(1, 3) ~= "bw_" then
-            -- Sienna's flaming flail on non-Sienna. H1 release
-            -- (attack_swing_heavy_down) fires natively as the correct
-            -- overhead — DO NOT touch it. Only H2 (attack_swing_heavy_left)
-            -- is broken and needs the redirect.
-            if event_name == "attack_swing_heavy_left" then
-                target = "attack_swing_heavy"
-            end
+    if mode == "remap" then
+        local target = delivered
+        if _log_anims then
+            local msg = "  REMAP " .. event_name .. " -> " .. target
+            mod:info(msg)
+            mod:echo(msg)
         end
-        if target then
-            return func(unit, target, ...)
+        -- v0.12.88-dev: sampled _dbg trace (1-in-N) of the cross-character
+        -- REMAP path, with career so wrong-career remaps are visible.
+        _anim_event_remap_count = _anim_event_remap_count + 1
+        if _anim_event_remap_count % _ANIM_EVENT_SAMPLE_REMAP_N == 0 then
+            _dbg("[wt:anim] event=REMAP src=%s -> tgt=%s career=%s tmpl=%s key=%s sample=%d",
+                tostring(event_name), tostring(target), tostring(career),
+                tostring(state.template), tostring(state.key), _anim_event_remap_count)
         end
-    end
-
-    -- 3P attack remap (per-unit)
-    if state and state.remap then
-        local target = state.remap[event_name]
-        local target_capability = target and _safe_has_anim(unit, target)
-        if target and target_capability then
-            if _log_anims then
-                local msg = "  REMAP " .. event_name .. " -> " .. target
-                mod:info(msg)
-                mod:echo(msg)
-            end
-            -- v0.12.88-dev: sampled _dbg trace (1-in-N). Cross-character
-            -- anim REMAP path is rarer than the top-level hook fire rate
-            -- (only fires when state.remap is populated AND the source
-            -- event has a substitute), so 1-in-30 is enough to confirm
-            -- the path is hit without flooding mid-combat. Captures
-            -- career so combo bugs ("REMAP fires for the wrong career")
-            -- are visible.
-            _anim_event_remap_count = _anim_event_remap_count + 1
-            if _anim_event_remap_count % _ANIM_EVENT_SAMPLE_REMAP_N == 0 then
-                _dbg("[wt:anim] event=REMAP src=%s -> tgt=%s career=%s tmpl=%s key=%s sample=%d",
-                    tostring(event_name), tostring(target), tostring(career),
-                    tostring(state.template), tostring(state.key), _anim_event_remap_count)
-            end
-            local ok, err = pcall(func, unit, target, ...)
-            if not ok then _note_anim_swallow(target, err) end
-            return
-        end
-        -- Force-fire path for SM-corrupting events (see
-        -- feedback_animation_remap_rules). Adding `attack_swing_stab_02 ->
-        -- attack_swing_left_diagonal` to the remap table broke ALL
-        -- animations on the billhook SM (v0.9.43); calling
-        -- _original_animation_event directly with the same target works.
-        -- Block is GUARDED to only fire when the spear-to-billhook remap
-        -- is active (v0.9.56 — without this guard, the billhook force-fires
-        -- hijacked Kruber's spear+shield H1/H2).
-        local force_target = nil
-        if state.remap == _3p_remap_spear_to_billhook then
-            if event_name == "attack_swing_stab_02" then
-                force_target = "attack_swing_left_diagonal"
-            elseif event_name == "attack_swing_heavy_left" then
-                force_target = "attack_swing_heavy_stab"
-            elseif event_name == "attack_swing_heavy_stab" then
-                force_target = "attack_swing_heavy_left_diagonal"
-            end
-        end
-        if force_target and _original_animation_event and _safe_has_anim(unit, force_target) then
-            if _log_anims then
-                local msg = "  FORCE " .. event_name .. " -> " .. force_target
-                mod:info(msg)
-                mod:echo(msg)
-            end
-            local ok, err = pcall(_original_animation_event, unit, force_target)
-            if not ok then _note_anim_swallow(force_target, err) end
-            return
-        end
-    end
-
-    -- Career-aware redirects: phantom events exist on all skeletons but only
-    -- play real animations on the correct character. Redirect by career prefix.
-    local career_redir = _career_anim_redirect[event_name]
-    if career_redir then
-        if career_redir.overrides and career and career_redir.overrides[career] then
-            local target = career_redir.overrides[career]
-            if _safe_has_anim(unit, target) then
-                local remap = _resolve_3p_remap(event_name, career)
-                if remap and state then state.remap = remap end
-                if _log_anims then
-                    local msg = "  REDIR " .. event_name .. " -> " .. target
-                    mod:info(msg)
-                    mod:echo(msg)
-                end
-                local ok, err = pcall(func, unit, target, ...)
-                if not ok then _note_anim_swallow(target, err) end
-                return
-            elseif _log_anims then
-                mod:info("  REDIR FAIL: " .. target .. " not on unit")
-            end
-        end
-        local matches_prefix = career and career:sub(1, #career_redir.prefix) == career_redir.prefix
-        -- v0.12.60: gate redirect on a resolved career. When career=nil
-        -- (preview units — MenuWorldPreviewer's character_unit has no
-        -- career_system extension), `matches_prefix` is false, which made
-        -- the prior `should_redirect` formula evaluate true and fire the
-        -- cross-character redirect on any unit that happened to author the
-        -- alt event. Kruber's preview body authors BOTH `to_polearm` and
-        -- `to_spear`, so previewing halberd / Tuskgor / billhook (all
-        -- resolving to `to_polearm` via wield_anim_career_3p) silently
-        -- routed through `to_polearm → to_spear` and landed the body in
-        -- the wrong stance. The redirect mechanism is only meant for
-        -- in-mission cross-character ports where the wielder's career is
-        -- known; for anonymous units, fall through to native firing.
-        local should_redirect = career and (career_redir.invert and matches_prefix or (not career_redir.invert and not matches_prefix))
-        if should_redirect then
-            if _safe_has_anim(unit, career_redir.alt) then
-                local remap = _resolve_3p_remap(event_name, career)
-                if remap and state then state.remap = remap end
-                if _log_anims then
-                    local msg = "  REDIR " .. event_name .. " -> " .. career_redir.alt
-                    mod:info(msg)
-                    mod:echo(msg)
-                end
-                local ok, err = pcall(func, unit, career_redir.alt, ...)
-                if not ok then _note_anim_swallow(career_redir.alt, err) end
-                return
-            elseif _log_anims then
-                mod:info("  REDIR FAIL: " .. career_redir.alt .. " not on unit")
-            end
-        end
-        local ok, err = pcall(func, unit, event_name, ...)
-        if not ok then _note_anim_swallow(event_name, err) end
+        local ok, err = pcall(func, unit, target, ...)
+        if not ok then _note_anim_swallow(target, err) end
         return
     end
 
-    -- Standard redirect: only fire if original event is missing from skeleton.
-    local alt = _anim_redirect[event_name]
-    if alt then
-        if _safe_has_anim(unit, event_name) then
-            return func(unit, event_name, ...)
+    if mode == "force" then
+        -- Force-fire bypasses this hook: the remap-table path corrupts the
+        -- billhook state machine for these events (v0.9.43).
+        if _log_anims then
+            local msg = "  FORCE " .. event_name .. " -> " .. delivered
+            mod:info(msg)
+            mod:echo(msg)
         end
-        if _safe_has_anim(unit, alt) then
-            local ok, err = pcall(func, unit, alt, ...)
-            if not ok then _note_anim_swallow(alt, err) end
-            return
-        end
+        local ok, err = pcall(_original_animation_event, unit, delivered)
+        if not ok then _note_anim_swallow(delivered, err) end
+        return
     end
 
-    -- Suffix-based redirect: swap weapon suffix based on career.
-    if career then
-        local target = _try_suffix_redirect(unit, event_name, career)
-        if target then
-            if _log_anims then mod:info("  SUFFIX -> " .. target) end
-            local ok, err = pcall(func, unit, target, ...)
-            if not ok then _note_anim_swallow(target, err) end
-            return
+    if mode == "career" then
+        if _log_anims then
+            local msg = "  REDIR " .. event_name .. " -> " .. delivered
+            mod:info(msg)
+            mod:echo(msg)
         end
+        local ok, err = pcall(func, unit, delivered, ...)
+        if not ok then _note_anim_swallow(delivered, err) end
+        return
     end
 
-    local ok, err = pcall(func, unit, event_name, ...)
-    if not ok then _note_anim_swallow(event_name, err) end
+    if mode == "global_native" then
+        return func(unit, delivered, ...)
+    end
+
+    if mode == "suffix" and _log_anims then mod:info("  SUFFIX -> " .. delivered) end
+
+    -- career_pass, global, suffix and pass: pcall, return nothing.
+    local ok, err = pcall(func, unit, delivered, ...)
+    if not ok then _note_anim_swallow(delivered, err) end
 end)
 
 -- Pull item_data for the slot being wielded and copy template/key into the
