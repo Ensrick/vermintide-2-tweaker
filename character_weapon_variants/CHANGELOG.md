@@ -1,5 +1,14 @@
 # Character Weapon Variants — Changelog
 
+## 0.1.572-dev (2026-11-15) -- Character Weapon Variants can no longer be switched off (WP-CWV-02)
+
+- The mod is no longer togglable from the VMF options menu (audit finding
+  A2-F02). Switching it off turned every network-safety hook off while its
+  weapons, lookup rows and table edits stayed in the game, which reopens the
+  crash classes of #278, #423 and #491. The start-up work VMF used to run on
+  enable now runs once at load. To stop using the mod, unsubscribe or disable
+  it in the launcher. Not confirmed in game.
+
 ## 0.1.571-dev (2026-11-14) -- Outrider projectile wire name stays vanilla (WP-CWV-01)
 
 - A fired Outrider Grenade Launcher projectile now hands the donor's vanilla

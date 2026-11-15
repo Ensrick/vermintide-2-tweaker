@@ -56,6 +56,7 @@ local WTTraceCore = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_wt_loadout_tra
 local SelectedLoadoutTraceCore = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_selected_loadout_trace_core")
 local BackendCommit = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_backend_commit")
 local ExitSnapshotCore = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_exit_snapshot_core")
+local Isolation = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_loadout_isolation")
 local LoadoutLifecycle = mod:dofile("scripts/mods/gui_tweaker_dev/_gut_loadout_lifecycle_owner")
 local BootGuard = mod._gut_official_loadout_boot_guard or
     mod:dofile("scripts/mods/gui_tweaker_dev/_gut_official_loadout_boot_guard")
@@ -896,6 +897,7 @@ mod:hook("PlayFabMirrorAdventure", "set_character_data", function(func, self, ca
     if m == MODE_OFF or not career_name then
         return func(self, career_name, key, value, set_mirror, optional_loadout_index)
     end
+    if career_name == Isolation.PROBE_CAREER then return Isolation.PROBE_TOKEN end
     if m == MODE_READONLY then
         -- issue #287: mod-owned edits are captured into the readonly overlay, official data
         -- stays untouched. Ordinary gameplay/talent writes remain blocked.
@@ -1026,6 +1028,7 @@ mod:hook("PlayFabMirrorAdventure", "set_career_read_only_data", function(func, s
     if m == MODE_OFF or not career then
         return func(self, character, key, value, career, set_mirror, loadout_index)
     end
+    if career == Isolation.PROBE_CAREER then return Isolation.PROBE_TOKEN end
     if m == MODE_READONLY then
         -- issue #287: mirror the set_character_data mod-owned exemption on the LA-bypass
         -- write path too, so cosmetics/CWV instances through an LA-cloned interface persist.
@@ -1059,6 +1062,10 @@ mod:hook("PlayFabMirrorAdventure", "set_career_read_only_data", function(func, s
         tostring(career), tostring(idx), tostring(key))
     -- NO-OP vanilla: _characters_data stays clean => no cloud push.
 end)
+
+mod.loadout_isolation = Isolation.new({ class = rawget(_G, "PlayFabMirrorAdventure"), in_modded_realm = BootGuard.in_modded_realm, mode = _feature_mode,
+    keys = { "talents", unpack(LOADOUT_SLOT_NAMES, 1, #LOADOUT_SLOT_NAMES) }, mirror = function() return Managers.backend:get_interface("items")._backend_mirror end }) -- contract 1 (#402)
+if type(mod._gut_rt_register) == "function" then mod._gut_rt_register("issue402_isolation_contract", function() return Isolation.check(mod.loadout_isolation) end) end
 
 -- ==================================================================
 -- BOT LOADOUTS -- resolve bot designation from the store (issue #175 requirement 9).
@@ -1868,23 +1875,8 @@ M.rt_checks = {
         end
     end },
     { name = "native_loadouts_official_write_chokepoint", fn = function()
-        -- issue #402: ordinary equips funnel through the five write methods below, but boot
-        -- also owns three direct official-data writers plus the two requests feeding them.
-        -- The complete containment contract is therefore all ten concrete Adventure seams.
-        local want = { set_character_data = false, set_career_read_only_data = false,
-                       set_loadout_index = false, add_loadout = false, delete_loadout = false,
-                       _set_inital_career_data = false, _fix_career_data = false,
-                       fix_career_data_request_cb = false, _verify_career_loadouts = false,
-                       verify_career_loadouts_cb = false }
-        for _, t in ipairs(M.HOOK_TARGETS) do
-            if t[1] == "PlayFabMirrorAdventure" and want[t[2]] ~= nil then want[t[2]] = true end
-        end
-        for method, present in pairs(want) do
-            if not present then return "official write/boot boundary not hooked: " .. method end
-        end
-        if type(BootGuard.in_modded_realm) ~= "function" or type(BootGuard.active) ~= "function" then
-            return "official boot guard realm owner missing"
-        end
+        -- issue #402 / WP-GUT-04: the functional writer probe of loadout isolation contract 1.
+        return Isolation.check(mod.loadout_isolation)
     end },
     { name = "native_loadouts_hook_targets_unique", fn = function()
         -- Singleton invariant proxy (NON-NEGOTIABLE 8): each (Class, method) declared once.
