@@ -637,10 +637,17 @@ return { arena = "keep", run = function(T) T.expect_eq(T.level_key(), "inn_level
         world.alive[hero] = true
         world.alive[bot] = true
         world.health = { is_invincible = false }
+        -- engine stubs that take a unit record a call made inside a coroutine (the real engine fails there)
+        world.in_coroutine = {}
+        local function main_only(name)
+            if coroutine.running() then
+                world.in_coroutine[#world.in_coroutine + 1] = name
+            end
+        end
         env.HEALTH_ALIVE = {}
         env.Unit = {
             alive = function(unit) return unit ~= nil and world.alive[unit] == true end,
-            local_position = function() return env.Vector3(0, 0, 0) end,
+            local_position = function() main_only("Unit.local_position"); return env.Vector3(0, 0, 0) end,
         }
         local vector_mt = {}
         vector_mt.__add = function(a, b) return setmetatable({ a[1] + b[1], a[2] + b[2], a[3] + b[3] }, vector_mt) end
@@ -651,14 +658,18 @@ return { arena = "keep", run = function(T) T.expect_eq(T.level_key(), "inn_level
         env.Breeds = { skaven_slave = { name = "skaven_slave" } }
         env.AiUtils = {
             kill_unit = function(unit)
+                main_only("AiUtils.kill_unit")
                 env.HEALTH_ALIVE[unit] = nil
                 world.alive[unit] = nil
             end,
         }
         env.ScriptUnit = {
             has_extension = function(unit, system)
+                main_only("ScriptUnit.has_extension")
                 if unit == hero and system == "health_system" then return world.health end
-                if unit == hero and system == "buff_system" then return { has_buff_type = function() return false end } end
+                if unit == hero and system == "buff_system" then
+                    return { has_buff_type = function() main_only("buff:has_buff_type"); return false end }
+                end
             end,
         }
         env.Managers.player.bots = function() return { { player_unit = bot } } end
@@ -672,6 +683,7 @@ return { arena = "keep", run = function(T) T.expect_eq(T.level_key(), "inn_level
         env.Managers.state.conflict = {
             spawned_units_by_breed = function(_, name) return world.spawned[name] end,
             spawn_queued_unit = function(_, breed, position_box, rotation_box)
+                main_only("spawn_queued_unit")
                 world.queued[#world.queued + 1] = { breed = breed, position = position_box[1] }
             end,
         }
@@ -743,6 +755,7 @@ return { arena = "keep", run = function(T) T.expect_eq(T.level_key(), "inn_level
         end
         H.truthy(first(lines, tag .. "CLEANUP id=mission%-military actions=2 errors=0"), "the mission case's helper changes were cleaned up")
         H.equal(world.health.is_invincible, false, "invincibility restored after the case")
+        H.equal(table.concat(world.in_coroutine, ","), "", "spawn, kill, invincible and the buff read ran in the main update, not in the case coroutine")
     end)
 
     H.test("rig helpers: cleanup kills a spawned enemy and restores invincibility after an ERROR", function()
@@ -764,6 +777,7 @@ end }
         H.truthy(unit ~= nil, "the enemy was spawned")
         H.equal(env.HEALTH_ALIVE[unit], nil, "the enemy left alive by the case was killed at cleanup")
         H.equal(world.health.is_invincible, false, "invincibility restored")
+        H.equal(table.concat(world.in_coroutine, ","), "", "no unit-taking engine call ran inside the case coroutine")
     end)
 
     H.test("rig arenas: an arena the driver cannot load ends its cases as INCONCLUSIVE", function()
@@ -771,5 +785,27 @@ end }
         local lines = run_mission(plan)
         H.truthy(first(lines, tag .. "CASE END id=deus%-case verdict=INCONCLUSIVE .*arena not supported by this driver: deus"), "INCONCLUSIVE names the arena")
         H.truthy(first(lines, tag .. "RUN END"), "run still ends")
+    end)
+
+    H.test("rig T.main: runs the function outside the case coroutine and hands back its results and errors", function()
+        local plan = make_plan({
+            { id = "main-ok", src = [[
+return { run = function(T)
+    T.expect(coroutine.running() ~= nil, "the case itself runs in a coroutine")
+    local outside, a, b, c = T.main(function(x, y) return coroutine.running() == nil, x, nil, y end, 1, 3)
+    T.expect(outside, "T.main ran the function in the main update")
+    T.expect_eq(a, 1, "first result")
+    T.expect_eq(b, nil, "a nil result keeps its place")
+    T.expect_eq(c, 3, "third result")
+end }
+]] },
+            { id = "main-err", src = "return { run = function(T) T.main(function() error('planted main error') end) end }" },
+            { id = "main-require", src = "return { run = function(T) T.main(function() T.require(false, 'precondition inside main') end) end }" },
+        })
+        local object, env, lines = boot(plan)
+        H.truthy(run_to_end(object, env), "run completed")
+        H.equal(count(lines, tag .. "CASE END id=main%-ok verdict=PASS asserts=5 failed=0"), 1, "results returned in order")
+        H.truthy(first(lines, tag .. "CASE END id=main%-err verdict=ERROR .*planted main error"), "an error in main is the case's ERROR")
+        H.truthy(first(lines, tag .. "CASE END id=main%-require verdict=INCONCLUSIVE .*precondition inside main"), "a failed T.require in main stays INCONCLUSIVE")
     end)
 end

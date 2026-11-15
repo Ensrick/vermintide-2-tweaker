@@ -1,6 +1,7 @@
 -- Mission arena smoke (WP-H-04): Righteous Stand loads as host with bots, the hero is alive, an enemy can be
 -- spawned next to the hero and killed. The hero is made invincible for the case and the flag is restored after
--- it, like every helper change (driver cleanup). Plan: qa/runtime/plans/mission-smoke.json.
+-- it, like every helper change (driver cleanup). Plan: qa/runtime/plans/mission-smoke.json. Engine calls that take
+-- a unit run in the driver's main update (T.main), never in the case coroutine.
 -- Engine calls behind the helpers: T.spawn = ConflictDirector.spawn_queued_unit as the game's own test hook
 -- calls it (Vermintide-2-Source-Code/scripts/managers/conflict_director/conflict_director_testify.lua:18-22),
 -- read back through spawned_units_by_breed (conflict_director.lua:2144); T.kill = AiUtils.kill_unit
@@ -33,7 +34,10 @@ return {
 
 		T.step("buff extension readable on the hero")
 		local buff_ext = T.ext(hero, "buff_system")
-		local had = buff_ext:has_buff_type("twitch_speed_boost")
+		-- an extension method may touch the unit: run it in the main update, not in this coroutine
+		local had = T.main(function()
+			return buff_ext:has_buff_type("twitch_speed_boost")
+		end)
 		T.note("had_speed_boost_before", had)
 	end,
 }

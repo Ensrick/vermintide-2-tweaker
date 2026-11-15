@@ -12,7 +12,8 @@
 --
 -- 0.4.4 (WP-H-04): plan arenas run in order and may repeat (the keep is inn_level, reloaded when needed); T.spawn,
 -- T.kill, T.teleport, T.invincible, T.end_level and T.return_to_keep; each case's helper changes are undone
--- when it ends (run_cleanups).
+-- when it ends (run_cleanups). Engine calls that take a unit run in the main update through T.main, never inside
+-- the case coroutine (they fail there: "Attempting get_data with reference from another lua state").
 
 local plan, nonce = ...
 
@@ -77,6 +78,7 @@ local S = {
 	cases = {},
 	results = {},
 	current = nil,
+	main_jobs = {},
 	started_quit = false,
 	rt_capture = nil,
 	keep_ready = false,
@@ -384,25 +386,38 @@ local function new_T(case)
 		return units
 	end
 
+	-- Runs fn(...) in the driver's main update, outside this case's coroutine, and returns its results; an error
+	-- raised there is raised here. Engine calls that take a unit fail inside a coroutine (lead run
+	-- 20261115-144350-mission-smoke-75899d31: "Attempting get_data with reference from another lua state" in
+	-- AiUtils.kill_unit, scripts/helpers/damage_utils.lua:1917), so every helper below that hands a unit to the
+	-- engine goes through here, and a case does the same for its own such calls. Costs one update.
+	function T.main(fn, ...)
+		local job = { fn = fn, args = { n = select("#", ...), ... } }
+
+		S.main_jobs[#S.main_jobs + 1] = job
+
+		while not job.done do
+			coroutine.yield()
+		end
+
+		if not job.ok then
+			error(job.err, 0)
+		end
+
+		return unpack(job.results, 1, job.results.n)
+	end
+
 	function T.ext(unit, system_name)
-		local ext = unit and ScriptUnit.has_extension(unit, system_name)
+		local ext = unit and T.main(ScriptUnit.has_extension, unit, system_name)
 
 		T.require(ext, "extension " .. tostring(system_name))
 
 		return ext
 	end
 
-	-- WP-H-04 actor helpers (host side, no OS input). Whatever a helper changes is undone when the case ends:
-	-- case.cleanups runs newest first in finish_case.
+	-- WP-H-04 actor helpers (host side, no OS input), all run in the main update (T.main). Whatever a helper
+	-- changes is undone when the case ends: case.cleanups runs newest first in finish_case, in the main update.
 	case.cleanups = case.cleanups or {}
-
-	local function hero_position()
-		local hero = local_hero()
-
-		T.require(hero ~= nil, "local hero alive")
-
-		return Unit.local_position(hero, 0)
-	end
 
 	-- Queues one enemy next to the hero the way the game's own test hook does
 	-- (Vermintide-2-Source-Code/scripts/managers/conflict_director/conflict_director_testify.lua:18-22;
@@ -410,37 +425,52 @@ local function new_T(case)
 	-- (spawned_units_by_breed, conflict_director.lua:2144). The unit is killed at cleanup if still alive.
 	-- offset: a Vector3 or { x, y, z } relative to the hero.
 	function T.spawn(breed_name, offset, timeout)
-		local conflict = Managers.state.conflict
+		local queued, why = T.main(function ()
+			local conflict = Managers.state.conflict
+			local breed = Breeds[breed_name]
+			local hero = local_hero()
 
-		T.require(conflict ~= nil, "conflict director exists")
-
-		local breed = Breeds[breed_name]
-
-		T.require(breed ~= nil, "breed " .. tostring(breed_name) .. " exists")
-
-		local before = {}
-
-		for _, unit in pairs(conflict:spawned_units_by_breed(breed_name) or {}) do
-			before[unit] = true
-		end
-
-		local position = hero_position()
-
-		if type(offset) == "table" then
-			position = position + Vector3(offset[1] or offset.x or 0, offset[2] or offset.y or 0, offset[3] or offset.z or 0)
-		elseif offset ~= nil then
-			position = position + offset
-		end
-
-		conflict:spawn_queued_unit(breed, Vector3Box(position), QuaternionBox(Quaternion.identity()))
-
-		local unit = T.wait_until(function ()
-			for _, candidate in pairs(conflict:spawned_units_by_breed(breed_name) or {}) do
-				if not before[candidate] and Unit.alive(candidate) then
-					return candidate
-				end
+			if not conflict then
+				return nil, "conflict director exists"
+			elseif not breed then
+				return nil, "breed " .. tostring(breed_name) .. " exists"
+			elseif not hero then
+				return nil, "local hero alive"
 			end
-		end, timeout or 15, "spawned " .. tostring(breed_name))
+
+			local before = {}
+
+			for _, unit in pairs(conflict:spawned_units_by_breed(breed_name) or {}) do
+				before[unit] = true
+			end
+
+			local position = Unit.local_position(hero, 0)
+
+			if type(offset) == "table" then
+				position = position + Vector3(offset[1] or offset.x or 0, offset[2] or offset.y or 0, offset[3] or offset.z or 0)
+			elseif offset ~= nil then
+				position = position + offset
+			end
+
+			conflict:spawn_queued_unit(breed, Vector3Box(position), QuaternionBox(Quaternion.identity()))
+
+			return { conflict = conflict, before = before }
+		end)
+
+		T.require(queued ~= nil, why)
+
+		local deadline = S.t + (timeout or 15)
+		local unit
+
+		repeat
+			unit = T.main(function ()
+				for _, candidate in pairs(queued.conflict:spawned_units_by_breed(breed_name) or {}) do
+					if not queued.before[candidate] and Unit.alive(candidate) then
+						return candidate
+					end
+				end
+			end)
+		until unit ~= nil or S.t >= deadline
 
 		if unit then
 			case.cleanups[#case.cleanups + 1] = function ()
@@ -448,6 +478,8 @@ local function new_T(case)
 					AiUtils.kill_unit(unit)
 				end
 			end
+		else
+			T.expect(false, "spawned " .. tostring(breed_name) .. " within " .. tostring(timeout or 15) .. " s")
 		end
 
 		return unit
@@ -455,62 +487,91 @@ local function new_T(case)
 
 	-- Kills a unit with the game's own helper (AiUtils.kill_unit, ai_player_unit/ai_utils.lua:1326).
 	function T.kill(unit)
-		if unit and HEALTH_ALIVE[unit] then
-			AiUtils.kill_unit(unit)
+		return T.main(function ()
+			if unit and HEALTH_ALIVE[unit] then
+				AiUtils.kill_unit(unit)
 
-			return true
-		end
+				return true
+			end
 
-		return false
+			return false
+		end)
 	end
 
 	-- Moves a unit that has a teleport_to locomotion (PlayerUnitLocomotionExtension.teleport_to,
 	-- default_player_unit/player_unit_locomotion_extension.lua:1005).
 	function T.teleport(unit, position)
-		local locomotion = unit and ScriptUnit.has_extension(unit, "locomotion_system")
+		local moved = T.main(function ()
+			local locomotion = unit and ScriptUnit.has_extension(unit, "locomotion_system")
 
-		T.require(locomotion and locomotion.teleport_to, "unit can be teleported")
-		locomotion:teleport_to(position)
+			if not (locomotion and locomotion.teleport_to) then
+				return false
+			end
+
+			locomotion:teleport_to(position)
+
+			return true
+		end)
+
+		T.require(moved, "unit can be teleported")
 	end
 
 	-- The hero's health extension flag read by get_is_invincible (generic/generic_health_extension.lua:496-512;
 	-- the player damage gate at default_player_unit/player_unit_health_extension.lua:780). Restored at cleanup.
 	function T.invincible(on)
-		local hero = local_hero()
-		local health = hero and ScriptUnit.has_extension(hero, "health_system")
+		local done = T.main(function ()
+			local hero = local_hero()
+			local health = hero and ScriptUnit.has_extension(hero, "health_system")
 
-		T.require(health ~= nil, "hero health extension")
-
-		if not case.invincible_saved then
-			local previous = health.is_invincible
-
-			case.invincible_saved = true
-			case.cleanups[#case.cleanups + 1] = function ()
-				health.is_invincible = previous
+			if not health then
+				return false
 			end
-		end
 
-		health.is_invincible = on and true or false
+			if not case.invincible_saved then
+				local previous = health.is_invincible
+
+				case.invincible_saved = true
+				case.cleanups[#case.cleanups + 1] = function ()
+					health.is_invincible = previous
+				end
+			end
+
+			health.is_invincible = on and true or false
+
+			return true
+		end)
+
+		T.require(done, "hero health extension")
 	end
 
 	-- Ends the level as host: GameModeManager.complete_level / fail_level (game_mode/game_mode_manager.lua:636, 645).
 	function T.end_level(result)
-		local game_mode = Managers.state.game_mode
+		local done = T.main(function ()
+			local game_mode = Managers.state.game_mode
 
-		T.require(game_mode ~= nil, "game mode manager")
+			if not game_mode then
+				return false
+			end
 
-		if result == "fail" then
-			game_mode:fail_level()
-		else
-			game_mode:complete_level()
-		end
+			if result == "fail" then
+				game_mode:fail_level()
+			else
+				game_mode:complete_level()
+			end
+
+			return true
+		end)
+
+		T.require(done, "game mode manager")
 	end
 
 	-- Loads the keep and waits until it is ready (the hero alive in StateIngame on inn_level).
 	function T.return_to_keep(timeout)
-		if level_key() ~= KEEP_LEVEL then
-			load_level(KEEP_LEVEL)
-		end
+		T.main(function ()
+			if level_key() ~= KEEP_LEVEL then
+				load_level(KEEP_LEVEL)
+			end
+		end)
 
 		return T.wait_until(function ()
 			return world_ready() and level_key() == KEEP_LEVEL
@@ -634,7 +695,44 @@ local function run_cleanups(case)
 	case.cleanups = {}
 end
 
+-- T.main jobs (WP-H-04): queued by a case's coroutine, run here in the main update right after the resume, so
+-- engine calls that take a unit never run inside the coroutine.
+local function pack(...)
+	return { n = select("#", ...), ... }
+end
+
+local function run_main_jobs()
+	local jobs = S.main_jobs
+
+	if #jobs == 0 then
+		return
+	end
+
+	S.main_jobs = {}
+
+	for i = 1, #jobs do
+		local job = jobs[i]
+		local r = pack(pcall(job.fn, unpack(job.args, 1, job.args.n)))
+
+		job.ok = r[1]
+
+		if job.ok then
+			job.results = { n = r.n - 1 }
+
+			for k = 2, r.n do
+				job.results[k - 1] = r[k]
+			end
+		else
+			job.err = r[2]
+		end
+
+		job.done = true
+	end
+end
+
 local function finish_case(case, verdict, detail)
+	S.main_jobs = {}
+
 	run_cleanups(case)
 
 	case.status = verdict
@@ -1138,6 +1236,7 @@ driver.update = function (_, dt)
 	elseif S.phase == "RUN" then
 		if S.current then
 			step_case(S.current)
+			run_main_jobs()
 		else
 			local case = next_case_for(S.arenas[S.arena_index])
 

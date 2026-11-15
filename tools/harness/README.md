@@ -52,7 +52,7 @@ A case file returns a table:
 return { issue = 0, timeout = 60, run = function(T) T.step("x"); T.expect(cond, "label") end }
 ```
 
-The `T` helpers are listed in `docs/program/CONVENTIONS.md` section 3; the driver implements `step`, `note`, `wait`, `frames`, `wait_until`, `require`, `expect`, `expect_eq`, `expect_near`, `find_mod`, `local_player`, `local_hero`, `level_key`, `bots`, `ext`, `cmd`, `commands`, `shield`, `shared`, `spawn`, `kill`, `teleport`, `invincible`, `end_level`, `return_to_keep` today.
+The `T` helpers are listed in `docs/program/CONVENTIONS.md` section 3; the driver implements `step`, `note`, `wait`, `frames`, `wait_until`, `require`, `expect`, `expect_eq`, `expect_near`, `find_mod`, `local_player`, `local_hero`, `level_key`, `bots`, `ext`, `cmd`, `commands`, `shield`, `shared`, `main`, `spawn`, `kill`, `teleport`, `invincible`, `end_level`, `return_to_keep` today.
 
 ## Arenas and mission helpers (WP-H-04)
 
@@ -62,6 +62,7 @@ Mission helpers. Each change is undone when the case ends, also after FAIL or ER
 
 | Helper | Does | Engine call |
 |---|---|---|
+| `T.main(fn, ...)` | runs `fn(...)` in the driver's main update, outside the case coroutine, and returns its results (its error is raised in the case); one update | engine calls that take a unit fail inside a coroutine ("Attempting get_data with reference from another lua state", lead run 2026-11-15) |
 | `T.spawn(breed, offset[, timeout])` | queues one enemy next to the hero (`offset` a Vector3 or `{x, y, z}`), returns the unit once alive; killed at cleanup if still alive | `conflict_director_testify.lua:18-22`, `spawned_units_by_breed` `conflict_director.lua:2144` |
 | `T.kill(unit)` | kills a living unit | `AiUtils.kill_unit`, `ai_utils.lua:1326` |
 | `T.teleport(unit, position)` | moves a unit with a `teleport_to` locomotion | `player_unit_locomotion_extension.lua:1005` |
@@ -69,7 +70,7 @@ Mission helpers. Each change is undone when the case ends, also after FAIL or ER
 | `T.end_level(result)` | `"win"` completes, `"fail"` fails the level as host | `game_mode_manager.lua:636, 645` |
 | `T.return_to_keep([timeout])` | loads `inn_level` and waits until the keep is ready | as above |
 
-Use bots or these host-side calls as the actor; never OS input.
+Use bots or these host-side calls as the actor; never OS input. Every helper above that passes a unit to the engine runs through `T.main`; do the same in a case for any engine call that takes a unit or an extension method that may touch one (e.g. `T.main(function() return buff_ext:has_buff_type(name) end)`). Plain table reads such as `HEALTH_ALIVE[unit]` are fine in the coroutine.
 
 ## Verdicts
 

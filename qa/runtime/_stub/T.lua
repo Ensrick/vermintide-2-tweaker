@@ -11,7 +11,7 @@ local NAMES = {
     "step", "note", "wait", "frames", "wait_until", "require", "expect", "expect_eq", "expect_near",
     "find_mod", "local_player", "local_hero", "level_key", "bots", "ext", "cmd", "commands",
     "shield", "shared",
-    "spawn", "kill", "teleport", "invincible", "end_level", "return_to_keep",
+    "main", "spawn", "kill", "teleport", "invincible", "end_level", "return_to_keep",
     -- documented in docs/program/CONVENTIONS.md section 3, landing with WP-H-03, WP-H-06 and WP-H-10
     "expect_rt", "first_bot_unit", "set", "pickup", "as_bot", "open_view", "widget", "shot",
 }
