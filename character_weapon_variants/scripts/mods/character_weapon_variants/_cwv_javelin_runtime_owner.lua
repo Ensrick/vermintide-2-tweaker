@@ -507,6 +507,7 @@ local function install(mod, ctx)
 		--    the fired projectile: the engine re-resolves the DONOR template from
 		--    the base item key, and only the javelin family had an arm here.
 		pcall(_om._cwv_apply_renamed_projectile_template, self, extension_init_data)
+		if _om.outrider_projectile_wire_lib then pcall(_om.outrider_projectile_wire_lib.sanitize_projectile_lookup, self) end
 
 		-- 3) Post-fix: if this projectile belongs to one of our cwv javelin
 		--    variants, swap the action data references onto our cloned template.

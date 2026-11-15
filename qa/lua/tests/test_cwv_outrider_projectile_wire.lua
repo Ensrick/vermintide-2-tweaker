@@ -60,6 +60,32 @@ return function(H, repo_root)
 		H.equal(M.apply_restamp(rows, M.TEMPLATE_KEY), 0)
 	end)
 
+	-- A2-F01: the clone name is a LOCAL item_template_names append. The fired
+	-- projectile's own action_lookup_data copy is what the game-object
+	-- initializer encodes for every peer (game_object_initializers_extractors.lua:737,755),
+	-- and a peer decodes it with a strict lookup (:3284), so the wire must carry
+	-- the donor's vanilla name.
+	H.test("CWV A2-F01 wire_template_name maps only the clone name to the donor", function()
+		H.equal(M.wire_template_name(M.TEMPLATE_KEY), M.DONOR_TEMPLATE_KEY)
+		H.equal(M.wire_template_name("blunderbuss_template_1"), "blunderbuss_template_1")
+		H.equal(M.wire_template_name(M.DONOR_TEMPLATE_KEY), M.DONOR_TEMPLATE_KEY)
+		H.equal(M.wire_template_name(nil), nil)
+	end)
+
+	H.test("CWV A2-F01 sanitize_projectile_lookup leaves a vanilla-decodable name and the action names", function()
+		local ext = { action_lookup_data = { item_template_name = M.TEMPLATE_KEY,
+			action_name = "action_one", sub_action_name = "default" } }
+		H.equal(M.sanitize_projectile_lookup(ext), true)
+		local strict = setmetatable({ dr_deus_01_template_1 = 2, [2] = "dr_deus_01_template_1" },
+			{ __index = function(_, k) error("missing " .. tostring(k)) end })
+		H.equal(strict[ext.action_lookup_data.item_template_name], 2)
+		H.equal(ext.action_lookup_data.action_name, "action_one")
+		H.equal(ext.action_lookup_data.sub_action_name, "default")
+		H.equal(M.sanitize_projectile_lookup(ext), false, "a second call changes nothing")
+		H.equal(M.sanitize_projectile_lookup({}), false)
+		H.equal(M.sanitize_projectile_lookup(nil), false)
+	end)
+
 	H.test("CWV #1320 install registers a bidirectional id then stamps the clone", function()
 		local old_w, old_nl, old_at = _G.Weapons, _G.NetworkLookup, _G.ActionTemplates
 		local ok, err = pcall(function()
