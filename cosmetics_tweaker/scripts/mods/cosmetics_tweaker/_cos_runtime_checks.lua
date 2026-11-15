@@ -1773,17 +1773,10 @@ _rt_register("localization_format_safe", function()
 end)
 
 _rt_register("wire_skin_null_ungated", function()
-    -- issue 421 / issue 371 (BUG_CLASSES 31): the v0.9.74 skin-axis wire-safety hook
-    -- (SimpleInventoryExtension.game_object_initialized) nulls slot_data.skin for every
-    -- _custom_skin_keys entry BEFORE vanilla encodes weapon_skin_id =
-    -- NetworkLookup.weapon_skins[...] and broadcasts rpc_add_equipment, then restores the
-    -- real skin after the send so the LOCAL owner still spawns the custom illusion. A peer
-    -- WITHOUT cosmetics_tweaker cold-decodes an appended index and fatals; nulling to the
-    -- vanilla "n/a" index is the never-crash invariant and it must NOT be gated behind any
-    -- mod:get() toggle. Drives the SHIPPED helper (_cos_wire_null_custom_skins) with a fake
-    -- slot table so a future edit that gates the null (a default-off gate would leave the
-    -- custom skin non-nil at send time) OR drops the restore fails here, not in a stranger's
-    -- session. Mirrors cim's wire_rarity_rewrite_ungated.
+    -- issue 421 / 371 (BUG_CLASSES 31): the skin-axis wire-safety hook nulls every
+    -- _custom_skin_keys skin before vanilla encodes rpc_add_equipment and restores it after
+    -- (a peer without cosmetics fatals on an appended index); never gate it behind mod:get().
+    -- Drives the shipped _cos_wire_null_custom_skins; mirrors cim's wire_rarity_rewrite_ungated.
     if type(mod._cos_wire_null_custom_skins) ~= "function" then
         return "skin-axis wire-null helper missing (issue 421 crash regression)"
     end
@@ -1996,6 +1989,14 @@ _rt_register("issue416_payload_policy", function()
         if policy.clean(bad, false) ~= nil then return "malformed payload " .. i .. " accepted" end
     end
     if policy.clean(p(), false) == nil then return "valid offhand payload rejected" end
+end)
+
+-- WP-COS-04 (A3-F07): an error swallowed by the remote husk wield hook fails this check.
+_rt_register("husk_wield_no_swallowed_errors", function()
+    local owner = mod._cos_husk_wield_runtime_owner
+    if type(owner) ~= "table" or type(owner.swallowed_errors) ~= "function" then return "husk wield owner missing" end
+    if (owner.wields_observed and owner.wields_observed() or 0) == 0 then return "skip: no remote player wield observed" end
+    if owner.swallowed_errors() > 0 then return string.format("%d husk wield error(s) swallowed this session ([cos:husk-wield] SWALLOWED)", owner.swallowed_errors()) end
 end)
 
 _rt_register("mh_package_single_reference", function()

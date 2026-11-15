@@ -1,5 +1,17 @@
 # Cosmetics Tweaker — Changelog
 
+## 0.9.233-dev (2026-11-15) -- Swallowed remote wield errors are visible (WP-COS-04)
+
+- The remote-player weapon wield hook still catches errors so a broken weapon
+  never crashes the host (audit finding A3-F07), but every caught error is now
+  counted and logged with a traceback as `[cos:husk-wield] SWALLOWED ...`
+  (one line per distinct error, at most 8 per session). Errors from other
+  mods that hook the same method (Weapon Tweaker, Character Weapon Variants)
+  show up here too.
+- New `/cos_regression_test` check `husk_wield_no_swallowed_errors`: it fails
+  when any error was swallowed this session and reports SKIP when no remote
+  player wielded anything. Not confirmed in game.
+
 ## 0.9.232-dev (2026-11-15) -- Vacuous regression checks report SKIP (WP-COS-02)
 
 - `/cos_regression_test` now reads a check's `skip: <reason>` return as SKIP

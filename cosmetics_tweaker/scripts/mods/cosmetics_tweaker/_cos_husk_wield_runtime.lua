@@ -13,8 +13,31 @@ local function publish_owner(mod, state)
     for key in pairs(owner) do owner[key] = nil end
     owner.hook_count = state.hook_count or 0
     owner.current = function() return state.current end
+    -- WP-COS-04 (A3-F07): swallowed errors are counted so a named check can fail.
+    owner.swallowed_errors = function() return state.swallowed or 0 end
+    owner.wields_observed = function() return state.wields or 0 end
     mod._cos_husk_wield_runtime_owner = owner
     return owner
+end
+
+-- WP-COS-04: xpcall handler; the retail VM's `debug` table is guarded.
+local function swallow_traceback(err)
+    local dbg = rawget(_G, "debug")
+    local trace = dbg and type(dbg.traceback) == "function" and dbg.traceback() or ""
+    return tostring(err) .. "\n" .. tostring(trace)
+end
+
+-- One SWALLOWED line per distinct first message line, at most 8 per session.
+local function note_swallowed(state, wearer_peer, slot_name, message)
+    if not state.printf then return end
+    local first = tostring(message):match("^[^\n]*") or ""
+    state.swallowed_seen = state.swallowed_seen or {}
+    state.swallowed_logged = state.swallowed_logged or 0
+    if state.swallowed_seen[first] or state.swallowed_logged >= 8 then return end
+    state.swallowed_seen[first] = true
+    state.swallowed_logged = state.swallowed_logged + 1
+    state.printf("[cos:husk-wield] SWALLOWED n=%d wearer=%s slot=%s err=%s",
+        state.swallowed or 0, tostring(wearer_peer), tostring(slot_name), tostring(message))
 end
 
 function HuskWieldRuntime.current(mod)
@@ -26,7 +49,7 @@ function HuskWieldRuntime.install(mod, deps)
     deps = deps or {}
     local state = mod._cos_husk_wield_runtime_state
     if not state then
-        state = { installed = false, hook_count = 0, current = nil }
+        state = { installed = false, hook_count = 0, current = nil, swallowed = 0, wields = 0 }
         mod._cos_husk_wield_runtime_state = state
     end
 
@@ -176,10 +199,14 @@ function HuskWieldRuntime.install(mod, deps)
                 end
             end
 
-            local ok, r1, r2, r3, r4, r5, r6, r7, r8 = pcall(
-                func, self, world, equipment, slot_name, unit_1p, unit_3p)
+            state.wields = (state.wields or 0) + 1
+            local ok, r1, r2, r3, r4, r5, r6, r7, r8 = xpcall(function()
+                return func(self, world, equipment, slot_name, unit_1p, unit_3p)
+            end, swallow_traceback)
             state.current = previous
             if not ok then
+                state.swallowed = (state.swallowed or 0) + 1
+                note_swallowed(state, wearer_peer, slot_name, r1)
                 state.dbg_alert("[husk-wield-wrap] vanilla _wield_slot ERRORED wearer=%s slot=%s err=%s — pcall caught it. Husk visual likely missing/stale but host stays alive.",
                     tostring(wearer_peer), tostring(slot_name), tostring(r1))
                 return nil

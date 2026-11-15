@@ -23,7 +23,7 @@ return function(H, repo_root)
     end
 
     local function fixture()
-        local hooks, reconciles = {}, {}
+        local hooks, reconciles, printed = {}, {}, {}
         local glow = { binds = 0, applies = 0, completes = 0 }
         local player = { peer_id = "peer-a", local_player_id = 1 }
         local mod = {
@@ -74,12 +74,12 @@ return function(H, repo_root)
             end,
             dbg = function() end, dbg_alert = function() end,
             trace = function() end, glow_log = function() end,
-            printf = function() end,
+            printf = function(fmt, ...) printed[#printed + 1] = string.format(fmt, ...) end,
         }
         local owner = Runtime.install(mod, deps)
         return {
             mod = mod, deps = deps, owner = owner, hooks = hooks,
-            reconciles = reconciles, glow = glow,
+            reconciles = reconciles, glow = glow, printed = printed,
         }
     end
 
@@ -147,13 +147,34 @@ return function(H, repo_root)
                 },
             },
         }
+        local planted = function() error("planted") end
         local result = f.hooks[1].callback(
-            function() error("planted") end,
+            planted,
             { _unit = "husk", _career_name = "career-a" },
             "world", equipment, "slot_melee")
         H.equal(result, nil)
         H.equal(Runtime.current(f.mod), nil)
         H.equal(#f.reconciles, 0)
+        -- WP-COS-04 (A3-F07): the swallowed error is counted and logged once.
+        H.equal(f.owner.swallowed_errors(), 1)
+        f.hooks[1].callback(planted,
+            { _unit = "husk", _career_name = "career-a" }, "world", equipment, "slot_melee")
+        H.equal(f.owner.swallowed_errors(), 2)
+        f.hooks[1].callback(function() error("another failure") end,
+            { _unit = "husk", _career_name = "career-a" }, "world", equipment, "slot_melee")
+        H.equal(f.owner.swallowed_errors(), 3)
+        local swallowed_lines, planted_lines, other_lines = 0, 0, 0
+        for _, line in ipairs(f.printed) do
+            if line:find("[cos:husk-wield] SWALLOWED", 1, true) then
+                swallowed_lines = swallowed_lines + 1
+                if line:find("planted", 1, true) then planted_lines = planted_lines + 1 end
+                if line:find("another failure", 1, true) then other_lines = other_lines + 1 end
+            end
+        end
+        H.equal(planted_lines, 1, "one SWALLOWED line per distinct message")
+        H.equal(other_lines, 1)
+        H.equal(swallowed_lines, 2)
+        H.truthy(f.owner.wields_observed() >= 3, "every husk wield is counted")
         local again = Runtime.install(f.mod, f.deps)
         H.equal(again, f.owner)
         H.equal(#f.hooks, 1)
