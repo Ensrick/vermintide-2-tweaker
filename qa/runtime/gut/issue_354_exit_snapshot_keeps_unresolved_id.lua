@@ -15,6 +15,7 @@
 return {
 	issue = 354,
 	arena = "keep",
+	class = "R",
 	timeout = 60,
 	run = function(T)
 		local PROBE = "gut_rig_unresolvable_necklace"

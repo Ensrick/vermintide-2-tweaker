@@ -13,6 +13,7 @@
 return {
 	issue = 402,
 	arena = "keep",
+	class = "R",
 	timeout = 60,
 	run = function(T)
 		local mod_id = get_mod("gut_dev") and "gut_dev" or "gut"
