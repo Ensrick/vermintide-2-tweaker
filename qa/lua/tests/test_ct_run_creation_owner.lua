@@ -576,6 +576,36 @@ local function read(name)
         end)
     end)
 
+    -- WP-CW-03 (#426): a custom boon whose toggle is off or whose peer parity is
+    -- unconfirmed stays in both arrays (lookup parity) but must not be sampled.
+    H.test("a modded boon that is not rollable is absent during the roll and restored after", function()
+        with_globals({}, function()
+            local keep = boon("deus_keep")
+            local anvil = { name = "ct_boon_vauls_anvil", rarity = "unique" }
+            local main = { keep, anvil }
+            local unique = { keep, anvil }
+            local f = roll_fixture({}, { main = main, by_rarity = { unique = unique } })
+            f.mod._ct_boon_rollable = function(name) return name ~= "ct_boon_vauls_anvil" end
+            local during_main, during_unique
+            local function vanilla()
+                during_main, during_unique = {}, {}
+                for i, b in ipairs(rawget(_G, "DeusPowerUpsArray")) do during_main[i] = b.name end
+                for i, b in ipairs(rawget(_G, "DeusPowerUpsArrayByRarity").unique) do
+                    during_unique[i] = b.name
+                end
+                return "seed", {}
+            end
+            f.hooks["DeusPowerUpUtils.generate_random_power_ups"](
+                vanilla, 999999, 4, {}, "hard", 0.5, "shrine", "es_huntsman")
+            H.deep_equal(during_main, { "deus_keep" }, "not rollable: absent from the main array")
+            H.deep_equal(during_unique, { "deus_keep" }, "not rollable: absent from the rarity array")
+            H.deep_equal(rawget(_G, "DeusPowerUpsArray"), { keep, anvil })
+            H.deep_equal(unique, { keep, anvil })
+            H.equal(#rawget(_G, "DeusPowerUpsArray"), 2, "main array length unchanged")
+            H.equal(#unique, 2, "rarity array length unchanged")
+        end)
+    end)
+
     H.test("the Belakor temple forces unique AND extends the arity that carries it", function()
         with_globals({}, function()
             local f = roll_fixture({}, { main = {}, by_rarity = {} })
