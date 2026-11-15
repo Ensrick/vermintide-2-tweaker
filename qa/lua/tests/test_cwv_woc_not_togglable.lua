@@ -31,4 +31,11 @@ return function(H, repo_root)
         H.equal(type(data), "table")
         H.equal(data.is_togglable, false)
     end)
+
+    H.test("WOC A2-F02 data file declares the mod non-togglable", function()
+        local data = load_data("weapons_of_chaos",
+            "scripts/mods/weapons_of_chaos/weapons_of_chaos_data.lua")
+        H.equal(type(data), "table")
+        H.equal(data.is_togglable, false)
+    end)
 end

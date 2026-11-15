@@ -68,7 +68,7 @@ end
 return {
 	name           = "Weapons of Chaos",
 	description     = mod:localize("mod_description"),
-	is_togglable    = true,
+	is_togglable    = false,
 	custom_gui_textures = {
 		textures = {
 			"icon_bg_cursed",
