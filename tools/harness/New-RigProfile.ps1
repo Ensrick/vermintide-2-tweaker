@@ -11,7 +11,8 @@
     <ProfileRoot>\AppData\Local\
   In the copied user_settings.config it forces a windowed 1280x720 silent 30 fps game, removes the plan, results
   and progress blocks of any earlier run, enables only the plan's mods plus the driver bootstrap (adding the
-  driver's mods entry when missing), and prepends the plan block (nonce, driver text and case texts as hex).
+  driver's mods entry when missing), and prepends the plan block (nonce, driver text, case texts and the shared
+  helpers of -SharedDir as hex).
 
   run.ps1 calls this; tools/harness/tests/Profile.Tests.ps1 calls it against a fixture.
 
@@ -26,6 +27,7 @@ param(
     [string] $Nonce = '',
     [string] $DriverFile = '',
     [string] $DriverId = '3839345856',
+    [string] $SharedDir = '',                         # qa/runtime/_shared: every *.lua in it travels with the plan
     [switch] $KeepOwnerMods                           # no-plan experiments: leave the copied mod list as it is
 )
 $ErrorActionPreference = 'Stop'
@@ -105,7 +107,21 @@ if ($planObj) {
         $src = [System.IO.File]::ReadAllText($file)
         [void]$sb.Append("`t`t{`n`t`t`tid = $(ConvertTo-SjsonString $c.id)`n`t`t`tarena = $(ConvertTo-SjsonString ($c.arena ?? 'keep'))`n`t`t`thex = `"$(ConvertTo-Hex $src)`"`n`t`t}`n")
     }
-    [void]$sb.Append("`t]`n}`n")
+    [void]$sb.Append("`t]`n")
+    # shared helpers (WP-H-14): the driver compiles each into a table; cases get them with T.shared(<file name>)
+    $sharedFiles = @()
+    if ($SharedDir -and (Test-Path -LiteralPath $SharedDir -PathType Container)) {
+        $sharedFiles = @(Get-ChildItem -LiteralPath $SharedDir -File -Filter '*.lua' | Sort-Object Name)
+    }
+    if ($sharedFiles.Count) {
+        [void]$sb.Append("`tshared = [`n")
+        foreach ($f in $sharedFiles) {
+            $src = [System.IO.File]::ReadAllText($f.FullName)
+            [void]$sb.Append("`t`t{`n`t`t`tid = $(ConvertTo-SjsonString $f.BaseName)`n`t`t`thex = `"$(ConvertTo-Hex $src)`"`n`t`t}`n")
+        }
+        [void]$sb.Append("`t]`n")
+    }
+    [void]$sb.Append("}`n")
     $cfg = $sb.ToString() + $cfg
 }
 $userSettings = Join-Path $rigVt2 'user_settings.config'
